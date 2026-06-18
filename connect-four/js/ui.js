@@ -13,7 +13,7 @@ import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
 
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
-const HINT_BUDGET_MS = 2500;   // budget for the "show best moves" per-column analysis
+const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
 const DROP_MS = 360; // keep in sync with --cf-drop-time in the CSS
 
 /**
@@ -188,9 +188,9 @@ class ConnectFourUI {
         <section class="cf-game" hidden>
           <div class="cf-statusbar">
             <span class="cf-turn-dot" data-role="dot"></span>
-            <span class="cf-status" data-role="status">Your move</span>
+            <span class="cf-status" data-role="status" role="status" aria-live="polite">Your move</span>
             <span class="cf-bar-actions">
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="undo">↩ Undo</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="undo" title="Take back your last move">↩ Undo</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu">Menu</button>
             </span>
           </div>
@@ -209,7 +209,7 @@ class ConnectFourUI {
           </div>
 
           <div class="cf-board-wrap">
-            <div class="cf-board" data-role="board" role="grid" aria-label="Connect Four board"></div>
+            <div class="cf-board" data-role="board" role="grid" aria-label="Connect Four board — press number keys 1 to 7 to drop in a column"></div>
           </div>
 
           <div class="cf-result" data-role="result" hidden>
@@ -230,9 +230,9 @@ class ConnectFourUI {
               <span class="cf-switch-track"><span class="cf-switch-thumb"></span></span>
               <span class="cf-switch-text">Show best moves</span>
             </label>
-            <p class="cf-menu-note">The engine scores each column. Exact in the mid/endgame; a strong estimate in the wide-open opening.</p>
+            <p class="cf-menu-note">Rates each column and highlights your best move.</p>
             <div class="cf-menu-actions">
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">↩ Undo last move</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">↩ Undo your last move</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-restart">Restart game</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-quit">Quit to setup</button>
             </div>
@@ -282,12 +282,15 @@ class ConnectFourUI {
     this.el.undo.addEventListener('click', () => this.undo());
     root.querySelector('[data-role="menu"]').addEventListener('click', () => this.openMenu());
 
-    // Menu panel.
+    // Menu panel. Restart/Quit abandon the game, so they confirm-on-second-tap
+    // while a game is in progress (no friction once it's already over).
+    const restartBtn = root.querySelector('[data-role="menu-restart"]');
+    const quitBtn = root.querySelector('[data-role="menu-quit"]');
     root.querySelector('[data-role="menu-resume"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-scrim"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.undo(); });
-    root.querySelector('[data-role="menu-restart"]').addEventListener('click', () => { this.closeMenu(); this.startGame(); });
-    root.querySelector('[data-role="menu-quit"]').addEventListener('click', () => { this.closeMenu(); this.showSetup(); });
+    restartBtn.addEventListener('click', () => this.confirmDestructive(restartBtn, () => { this.closeMenu(); this.startGame(); }));
+    quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { this.closeMenu(); this.showSetup(); }));
     this.el.hintToggle.addEventListener('change', () => this.onHintToggle());
 
     // Board interaction (delegated).
@@ -314,11 +317,20 @@ class ConnectFourUI {
       const r = ROWS - 1 - vr;
       for (let c = 0; c < COLS; c++) {
         cells.push(
-          `<div class="cf-cell" data-col="${c}" data-row="${r}" style="--cf-vr:${vr}">` +
+          `<div class="cf-cell" data-col="${c}" data-row="${r}" role="gridcell"` +
+          ` aria-label="Column ${c + 1}, row ${r + 1}, empty" style="--cf-vr:${vr}">` +
           `<div class="cf-piece"></div></div>`);
       }
     }
     this.el.board.innerHTML = cells.join('');
+  }
+
+  /** Update a cell's accessible label to reflect its occupant. */
+  labelCell(col, row, who) {
+    const cell = this.el.board.querySelector(`.cf-cell[data-col="${col}"][data-row="${row}"]`);
+    if (!cell) return;
+    const occ = who === this.humanPlayer ? 'your disc' : who >= 0 ? 'computer disc' : 'empty';
+    cell.setAttribute('aria-label', `Column ${col + 1}, row ${row + 1}, ${occ}`);
   }
 
   // --- Screen transitions ---------------------------------------------------
@@ -344,6 +356,7 @@ class ConnectFourUI {
     this.buildBoardCells();
     this.el.result.hidden = true;
     this.hideHints();
+    this.clearEvalRow();
     this.closeMenu();
 
     this.el.setup.hidden = true;
@@ -358,19 +371,49 @@ class ConnectFourUI {
   // --- Menu panel -----------------------------------------------------------
 
   openMenu() {
+    this._menuReturnFocus = document.activeElement;
     this.el.hintToggle.checked = this.showBestMoves;
     this.el.menuPanel.querySelector('[data-role="menu-undo"]').disabled = !this.canUndo();
     this.el.menuPanel.hidden = false;
+    this.el.menuPanel.querySelector('[data-role="menu-resume"]').focus(); // focus into the dialog
   }
 
   closeMenu() {
+    this.resetConfirms();
     this.el.menuPanel.hidden = true;
+    if (this._menuReturnFocus && this._menuReturnFocus.focus) this._menuReturnFocus.focus();
+    this._menuReturnFocus = null;
+  }
+
+  /** Run `action` immediately if the game is over; otherwise require a second
+   *  confirming tap on `btn` (a guard against accidentally abandoning a game). */
+  confirmDestructive(btn, action) {
+    if (!this.game || this.game.isOver()) { action(); return; }
+    if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
+    this.resetConfirms();
+    btn.dataset.armed = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = 'Tap again to confirm';
+    btn.classList.add('is-confirm');
+    this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
+  }
+
+  resetConfirms() {
+    clearTimeout(this._confirmTimer);
+    for (const role of ['menu-restart', 'menu-quit']) {
+      const b = this.el.menuPanel.querySelector(`[data-role="${role}"]`);
+      if (b && b.dataset.armed === '1') {
+        b.textContent = b.dataset.label;
+        b.dataset.armed = '';
+        b.classList.remove('is-confirm');
+      }
+    }
   }
 
   onHintToggle() {
     this.showBestMoves = this.el.hintToggle.checked;
-    if (this.showBestMoves) this.refreshHints();
-    else this.hideHints();
+    if (this.showBestMoves) { this.clearEvalRow(); this.refreshHints(); }
+    else { this.hideHints(); this.clearEvalRow(); }
   }
 
   // --- Turn flow ------------------------------------------------------------
@@ -399,12 +442,17 @@ class ConnectFourUI {
   }
 
   async humanMove(col) {
-    if (!this.game.board.canPlay(col)) return;
+    if (this.busy || !this.game.board.canPlay(col)) return;
+    this.busy = true;          // lock input + undo through the drop animation
     this.clearHover();
     this.hideHints(); // about to be the computer's turn
     await this.applyMove(col);
-    if (!this.game.isOver() && this.game.currentPlayer === this.aiPlayer) {
-      this.aiTurn();
+    if (this.game.isOver()) return;
+    if (this.game.currentPlayer === this.aiPlayer) {
+      this.aiTurn();           // keeps busy = true until the AI has replied
+    } else {
+      this.busy = false;
+      this.updateStatus();
     }
   }
 
@@ -449,6 +497,7 @@ class ConnectFourUI {
       `.cf-cell[data-col="${col}"][data-row="${row}"] .cf-piece`);
     if (!piece) return Promise.resolve();
     piece.classList.add(player === PLAYER_ONE ? 'p1' : 'p2', 'is-dropping');
+    this.labelCell(col, row, player);
     return new Promise((resolve) => {
       let done = false;
       const finish = () => { if (done) return; done = true; piece.classList.remove('is-dropping'); resolve(); };
@@ -505,6 +554,8 @@ class ConnectFourUI {
     else if (turn === this.humanPlayer) text = 'Your move';
     else text = "Computer's move";
     this.el.status.textContent = text;
+    // Cue that the board isn't tappable unless it's your turn (no dead-tap mystery).
+    this.el.board.classList.toggle('is-locked', !(turn === this.humanPlayer && !this.busy));
     this.updateHint();
     this.updateUndoState();
   }
@@ -544,14 +595,17 @@ class ConnectFourUI {
       this.el.result.dataset.outcome = 'draw';
     }
 
-    // Top dot reflects the winner (not a flat grey); the result message lives in
-    // the banner below the board so the winning line stays visible.
+    // Show the outcome in the (always-visible) status bar — so you see who won
+    // without scrolling, and the top isn't an orphaned dot — and color the dot
+    // to the winner. The board (with its highlighted line) stays fully visible.
     this.el.dot.classList.toggle('p1', dot === 'p1');
     this.el.dot.classList.toggle('p2', dot === 'p2');
-    this.el.status.textContent = '';
+    this.el.status.textContent = msg;
     this.el.resultMsg.textContent = msg;
     this.el.result.hidden = false;
     this.updateUndoState(); // can still take back the final move
+    // Bring the Rematch / Change-settings actions into view on tall layouts.
+    this.el.result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // --- Undo -----------------------------------------------------------------
@@ -593,6 +647,7 @@ class ConnectFourUI {
         const who = this.game.board.cellAt(c, r);
         const piece = this.el.board.querySelector(`.cf-cell[data-col="${c}"][data-row="${r}"] .cf-piece`);
         if (piece) piece.classList.add(who === PLAYER_ONE ? 'p1' : 'p2');
+        this.labelCell(c, r, who);
       }
     }
   }
@@ -601,7 +656,16 @@ class ConnectFourUI {
 
   hideHints() {
     this.hintReqId++; // invalidate any in-flight analysis
-    if (this.el && this.el.hints) this.el.hints.hidden = true;
+    if (this.el && this.el.hints) {
+      this.el.hints.hidden = true;
+      this.el.hints.classList.remove('is-stale');
+    }
+  }
+
+  clearEvalRow() {
+    if (!this.el) return;
+    this.el.evalRow.innerHTML = '';
+    this.el.evalCaption.textContent = '';
   }
 
   /** Request and display per-column evaluations (only on the human's turn). */
@@ -612,12 +676,16 @@ class ConnectFourUI {
       return;
     }
     const reqId = ++this.hintReqId;
-    this.renderEvalRow(null);       // loading placeholders
     this.el.hints.hidden = false;
+    // Keep the previous chips visible but dimmed while recomputing (no flicker);
+    // only show placeholders the very first time, when there's nothing to dim.
+    if (this.el.evalRow.childElementCount === 0) this.renderEvalRow(null);
+    else this.el.hints.classList.add('is-stale');
     this.requestEval().then((data) => {
       if (reqId !== this.hintReqId || !this.showBestMoves) return; // stale or toggled off
+      this.el.hints.classList.remove('is-stale');
       this.renderEvalRow(data);
-    }).catch(() => { /* worker/inline failure — leave placeholders */ });
+    }).catch(() => { this.el.hints.classList.remove('is-stale'); });
   }
 
   renderEvalRow(data) {
@@ -633,13 +701,15 @@ class ConnectFourUI {
       if (!data) { cell.classList.add('is-loading'); cell.textContent = '·'; }
       else if (byCol.has(c)) {
         const s = byCol.get(c);
-        if (s === best) cell.classList.add('is-best');
+        if (s === best) cell.classList.add('is-best'); // unified recommendation accent
         if (data.exact) {
           cell.textContent = s > 0 ? `+${s}` : `${s}`;
           cell.classList.add(s > 0 ? 'is-win' : s < 0 ? 'is-loss' : 'is-draw');
         } else {
-          cell.textContent = s === best ? '★' : '';
-          if (s === best) cell.classList.add('is-win');
+          // Estimate mode: a clear ★ on the pick, a faint dot elsewhere (not blank,
+          // which read as "failed to load").
+          cell.textContent = s === best ? '★' : '·';
+          cell.classList.add(s === best ? 'is-pick' : 'is-faint');
         }
       } else {
         cell.classList.add('is-empty'); // full column
@@ -648,8 +718,9 @@ class ConnectFourUI {
     }
 
     this.el.evalCaption.textContent = !data ? 'Analyzing…'
-      : data.exact ? 'Perfect play — number = how soon you win (+) / lose (−). Best move highlighted.'
-      : 'Opening estimate — the engine’s preferred move is marked ★.';
+      : data.exact
+        ? 'Perfect: + wins, − loses, bigger = sooner. Your best move is ringed.'
+        : 'Estimate (exact once the board fills in) — the engine’s pick is ★.';
   }
 
   // --- Teardown -------------------------------------------------------------
