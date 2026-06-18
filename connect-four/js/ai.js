@@ -336,11 +336,23 @@ export function evaluateColumns(board, player, budgetMs) {
   const nbMoves = board.moveCount;
   const poss = possibleCells(mask);
   const winCells = computeWinningCells(position, mask);
+  const start = Date.now();
+  const finite = Number.isFinite(budgetMs);
 
-  // Pass 1: try to solve every legal column exactly within a shared budget.
+  // Evaluate one column for `player`: an immediate win is best; otherwise search
+  // the resulting position from the opponent's side and negate.
+  const evalColumn = (c, depth) => {
+    const b = board.clone();
+    b.play(c, player);
+    return b.isWin(player)
+      ? WIN_BASE - b.moveCount
+      : -searchHeuristic(b, player ^ 1, depth - 1, -Infinity, Infinity);
+  };
+
+  // Pass 1: try to solve every legal column exactly within ~half the budget.
   const exactScores = new Map();
   let exact = true;
-  searchDeadline = Number.isFinite(budgetMs) ? Date.now() + budgetMs : Infinity;
+  searchDeadline = finite ? start + Math.floor(budgetMs * 0.5) : Infinity;
   try {
     for (const c of COLUMN_ORDER) {
       if (!legal.includes(c)) continue;
@@ -362,15 +374,23 @@ export function evaluateColumns(board, player, budgetMs) {
   if (exact) {
     scores = legal.map((c) => ({ col: c, score: exactScores.get(c) }));
   } else {
-    // Pass 2: uniform heuristic so every column shares one scale.
-    scores = legal.map((c) => {
-      const b = board.clone();
-      b.play(c, player);
-      const val = b.isWin(player)
-        ? WIN_BASE - b.moveCount
-        : -searchHeuristic(b, player ^ 1, HARD_DEPTH - 1, -Infinity, Infinity);
-      return { col: c, score: val };
-    });
+    // Pass 2: iterative-deepening heuristic over the remaining budget. The old
+    // code did a single shallow (depth-8) pass that IGNORED the budget — far too
+    // weak, so its "best move" could quietly walk into a forced loss. Deepening
+    // until time runs out makes the recommendation much stronger.
+    scores = legal.map((c) => ({ col: c, score: 0 }));
+    searchDeadline = finite ? start + budgetMs : start + 1200; // cap unbudgeted calls
+    try {
+      for (let depth = 2; depth <= COLS * ROWS - nbMoves; depth++) {
+        const next = legal.map((c) => ({ col: c, score: evalColumn(c, depth) }));
+        scores = next; // this depth completed in full
+        if (Date.now() > searchDeadline) break;
+      }
+    } catch (e) {
+      if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; } // keep last full depth
+    } finally {
+      searchDeadline = Infinity;
+    }
   }
   scores.exact = exact;
   return scores;

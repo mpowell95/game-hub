@@ -209,7 +209,24 @@
 .cf-eval.is-faint { color: var(--cf-muted); opacity: 0.5; background: transparent; } /* estimate-mode others */
 /* Unified "recommended move" accent (both numeric and estimate modes). */
 .cf-eval.is-best { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
-.cf-eval-caption { margin: 5px 0 0; font-size: 0.74rem; color: var(--cf-muted); text-align: center; line-height: 1.3; }
+.cf-eval-caption {
+  margin: 5px 0 0;
+  font-size: clamp(0.66rem, 3vw, 0.74rem);
+  color: var(--cf-muted);
+  text-align: center;
+  white-space: nowrap;          /* keep the caption on a single line */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* Animated ellipsis shown while the analysis runs. */
+.cf-dots { display: inline-block; }
+.cf-dots i { font-style: normal; opacity: 0; animation: cf-dot 1.4s infinite; }
+.cf-dots i:nth-child(1) { animation-delay: 0s; }
+.cf-dots i:nth-child(2) { animation-delay: 0.25s; }
+.cf-dots i:nth-child(3) { animation-delay: 0.5s; }
+@keyframes cf-dot { 0% { opacity: 0; } 15% { opacity: 1; } 65% { opacity: 1; } 80%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cf-dots i { animation: none; opacity: 1; } }
 
 /* Board */
 .cf-board-wrap { position: relative; display: flex; justify-content: center; }

@@ -355,8 +355,9 @@ class ConnectFourUI {
     // Reset board visuals.
     this.buildBoardCells();
     this.el.result.hidden = true;
-    this.hideHints();
     this.clearEvalRow();
+    if (this.showBestMoves) { this.el.hints.hidden = false; this.renderEvalRow(null); }
+    else this.hideHints();
     this.closeMenu();
 
     this.el.setup.hidden = true;
@@ -445,7 +446,7 @@ class ConnectFourUI {
     if (this.busy || !this.game.board.canPlay(col)) return;
     this.busy = true;          // lock input + undo through the drop animation
     this.clearHover();
-    this.hideHints(); // about to be the computer's turn
+    this.dimHints(); // about to be the computer's turn — dim but keep reserved
     await this.applyMove(col);
     if (this.game.isOver()) return;
     if (this.game.currentPlayer === this.aiPlayer) {
@@ -458,7 +459,7 @@ class ConnectFourUI {
 
   async aiTurn() {
     this.busy = true;
-    this.hideHints();
+    this.dimHints();
     this.updateStatus();
     let col;
     try {
@@ -574,7 +575,7 @@ class ConnectFourUI {
   endGame() {
     this.busy = false;
     this.clearHover();
-    this.hideHints();
+    this.dimHints(); // keep the hint row reserved (dimmed) — no end-of-game shift
     this.el.hint.hidden = true;
 
     let msg, dot = null;
@@ -654,11 +655,25 @@ class ConnectFourUI {
 
   // --- Best-moves hints -----------------------------------------------------
 
+  // The hint area's on-screen presence is tied ONLY to the toggle — never to
+  // whose turn it is — so the board never shifts up/down between turns.
+
   hideHints() {
     this.hintReqId++; // invalidate any in-flight analysis
     if (this.el && this.el.hints) {
       this.el.hints.hidden = true;
       this.el.hints.classList.remove('is-stale');
+      this.setThinking(false);
+    }
+  }
+
+  /** Keep the hint row reserved + visible but dimmed (not the human's turn). */
+  dimHints() {
+    if (this.showBestMoves && this.el && this.el.hints) {
+      this.el.hints.hidden = false;
+      if (this.el.evalRow.childElementCount === 0) this.renderEvalRow(null);
+      this.el.hints.classList.add('is-stale');
+      this.setThinking(false); // the status bar already shows the computer thinking
     }
   }
 
@@ -670,22 +685,36 @@ class ConnectFourUI {
 
   /** Request and display per-column evaluations (only on the human's turn). */
   refreshHints() {
-    if (!this.showBestMoves || !this.game || this.game.isOver() || this.busy
+    if (!this.showBestMoves) { this.hideHints(); return; }
+    this.el.hints.hidden = false; // reserve the space whenever the toggle is on
+    if (!this.game || this.game.isOver() || this.busy
       || this.game.currentPlayer !== this.humanPlayer) {
-      this.hideHints();
+      this.dimHints();
       return;
     }
     const reqId = ++this.hintReqId;
-    this.el.hints.hidden = false;
     // Keep the previous chips visible but dimmed while recomputing (no flicker);
     // only show placeholders the very first time, when there's nothing to dim.
     if (this.el.evalRow.childElementCount === 0) this.renderEvalRow(null);
-    else this.el.hints.classList.add('is-stale');
+    this.el.hints.classList.add('is-stale');
+    this.setThinking(true); // animated "Analyzing…" so it's clear it's working
     this.requestEval().then((data) => {
       if (reqId !== this.hintReqId || !this.showBestMoves) return; // stale or toggled off
       this.el.hints.classList.remove('is-stale');
+      this.setThinking(false);
       this.renderEvalRow(data);
-    }).catch(() => { this.el.hints.classList.remove('is-stale'); });
+    }).catch(() => { this.el.hints.classList.remove('is-stale'); this.setThinking(false); });
+  }
+
+  /** Animated ellipsis in the caption while the analysis is running. */
+  setThinking(on) {
+    if (!this.el) return;
+    this._thinking = on;
+    if (on) {
+      this.el.evalCaption.innerHTML =
+        'Analyzing<span class="cf-dots"><i>.</i><i>.</i><i>.</i></span>';
+    }
+    // When off, the next renderEvalRow() writes the real caption.
   }
 
   renderEvalRow(data) {
@@ -717,10 +746,11 @@ class ConnectFourUI {
       row.appendChild(cell);
     }
 
-    this.el.evalCaption.textContent = !data ? 'Analyzing…'
+    if (this._thinking) return; // don't clobber the animated "Analyzing…"
+    this.el.evalCaption.textContent = !data ? ''
       : data.exact
-        ? 'Perfect: + wins, − loses, bigger = sooner. Your best move is ringed.'
-        : 'Estimate (exact once the board fills in) — the engine’s pick is ★.';
+        ? 'Solved · + wins, − loses · best ringed'
+        : 'Estimate · best move ★ (exact later)';
   }
 
   // --- Teardown -------------------------------------------------------------
