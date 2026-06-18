@@ -26,8 +26,12 @@ const GAMES = [
   {
     id: 'business-deal',
     title: 'Business Deal',
-    blurb: 'Coming soon.',
-    comingSoon: true,
+    blurb: 'Monopoly Deal–style card game vs. smart AI. 2–5 players.',
+    badge: 'PLAY',
+    // Business Deal is its own full-screen PWA deployed alongside the hub, so
+    // the card launches out to it (root-relative on the same domain) rather
+    // than mounting as an in-hub module.
+    href: '/business-deal/',
     accent: '#6a4cff',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
             <rect width="120" height="120" rx="20" fill="#6a4cff"/>
@@ -72,6 +76,8 @@ class Hub {
     this.el.grid.addEventListener('click', (e) => {
       const card = e.target.closest('.hub-card');
       if (!card || card.dataset.comingSoon === 'true') return;
+      // Launch-out games (their own deployed app) navigate; module games mount.
+      if (card.dataset.href) { window.location.href = card.dataset.href; return; }
       this.launch(card.dataset.id);
     });
   }
@@ -80,6 +86,7 @@ class Hub {
     return `
       <button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
               data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
+              ${g.href ? `data-href="${g.href}"` : ''}
               style="--card-accent:${g.accent}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>
         ${g.badge ? `<span class="hub-badge">${g.badge}</span>` : ''}
         <span class="hub-card-art">${g.art}</span>
