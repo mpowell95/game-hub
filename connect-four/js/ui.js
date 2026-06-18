@@ -12,7 +12,7 @@ import { Game, WIN, DRAW } from './game.js';
 import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
 
-const EXPERT_BUDGET_MS = 2000;
+const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const DROP_MS = 360; // keep in sync with --cf-drop-time in the CSS
 
 /**
@@ -133,7 +133,7 @@ class ConnectFourUI {
   mount() {
     this.container.innerHTML = `
       <div class="cf-root">
-        <header class="cf-header">
+        <header class="cf-header" data-role="header">
           <h1 class="cf-title">Connect Four</h1>
         </header>
 
@@ -164,14 +164,23 @@ class ConnectFourUI {
             <button type="button" class="cf-btn cf-btn-ghost" data-role="menu">Menu</button>
           </div>
 
+          <div class="cf-subbar">
+            <span class="cf-legend">
+              <span class="cf-legend-item"><span class="cf-chip p1"></span>You</span>
+              <span class="cf-legend-item"><span class="cf-chip p2"></span>Computer</span>
+            </span>
+            <span class="cf-hint" data-role="hint">Tap a column to drop ↓</span>
+          </div>
+
           <div class="cf-board-wrap">
             <div class="cf-board" data-role="board" role="grid" aria-label="Connect Four board"></div>
-            <div class="cf-result" data-role="result" hidden>
-              <p class="cf-result-msg" data-role="result-msg"></p>
-              <div class="cf-result-actions">
-                <button type="button" class="cf-btn cf-btn-primary" data-role="rematch">Rematch</button>
-                <button type="button" class="cf-btn cf-btn-ghost" data-role="change">Change settings</button>
-              </div>
+          </div>
+
+          <div class="cf-result" data-role="result" hidden>
+            <p class="cf-result-msg" data-role="result-msg"></p>
+            <div class="cf-result-actions">
+              <button type="button" class="cf-btn cf-btn-primary" data-role="rematch">Rematch</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="change">Change settings</button>
             </div>
           </div>
         </section>
@@ -179,11 +188,13 @@ class ConnectFourUI {
 
     const root = this.container.querySelector('.cf-root');
     this.el = {
+      header: root.querySelector('[data-role="header"]'),
       setup: root.querySelector('.cf-setup'),
       game: root.querySelector('.cf-game'),
       board: root.querySelector('[data-role="board"]'),
       status: root.querySelector('[data-role="status"]'),
       dot: root.querySelector('[data-role="dot"]'),
+      hint: root.querySelector('[data-role="hint"]'),
       result: root.querySelector('[data-role="result"]'),
       resultMsg: root.querySelector('[data-role="result-msg"]'),
       difficulty: root.querySelector('[data-role="difficulty"]'),
@@ -243,6 +254,7 @@ class ConnectFourUI {
     this.busy = false;
     this.clearHover();
     this.el.game.hidden = true;
+    this.el.header.hidden = false; // title belongs on the setup screen
     this.el.setup.hidden = false;
   }
 
@@ -251,12 +263,14 @@ class ConnectFourUI {
     this.game = new Game(firstPlayer);
     this.busy = false;
     this.hoverCol = -1;
+    this.humanHasMoved = false;
 
     // Reset board visuals.
     this.buildBoardCells();
     this.el.result.hidden = true;
 
     this.el.setup.hidden = true;
+    this.el.header.hidden = true;  // reclaim vertical space for the board
     this.el.game.hidden = false;
 
     this.updateStatus();
@@ -320,6 +334,10 @@ class ConnectFourUI {
     const player = this.game.currentPlayer;
     const row = this.game.board.heights[col]; // landing row (before the move)
     this.game.play(col);
+    if (player === this.humanPlayer) this.humanHasMoved = true;
+    // Flip the turn label the instant the disc starts dropping (avoids a stale
+    // "Computer is thinking…" while the AI's disc is already visibly falling).
+    if (!this.game.isOver()) this.updateStatus();
     await this.dropPiece(col, row, player);
     if (this.game.isOver()) this.endGame();
   }
@@ -385,12 +403,22 @@ class ConnectFourUI {
     else if (turn === this.humanPlayer) text = 'Your move';
     else text = "Computer's move";
     this.el.status.textContent = text;
+    this.updateHint();
+  }
+
+  /** Show the "tap a column" hint only while the human hasn't moved yet. */
+  updateHint() {
+    const show = this.game && !this.game.isOver() && !this.humanHasMoved
+      && this.game.currentPlayer === this.humanPlayer;
+    this.el.hint.hidden = !show;
   }
 
   endGame() {
     this.busy = false;
     this.clearHover();
-    let msg;
+    this.el.hint.hidden = true;
+
+    let msg, dot = null;
     if (this.game.status === WIN) {
       const line = this.game.board.findWinningLine(this.game.winner);
       if (line) {
@@ -399,12 +427,20 @@ class ConnectFourUI {
           if (p) p.classList.add('cf-win');
         });
       }
-      msg = this.game.winner === this.humanPlayer ? 'You win! 🎉' : 'Computer wins';
+      const youWon = this.game.winner === this.humanPlayer;
+      msg = youWon ? 'You win! 🎉' : 'Computer wins';
+      dot = this.game.winner === PLAYER_ONE ? 'p1' : 'p2';
+      this.el.result.dataset.outcome = youWon ? 'win' : 'loss';
     } else if (this.game.status === DRAW) {
       msg = "It's a draw";
+      this.el.result.dataset.outcome = 'draw';
     }
-    this.el.dot.classList.remove('p1', 'p2');
-    this.el.status.textContent = msg;
+
+    // Top dot reflects the winner (not a flat grey); the result message lives in
+    // the banner below the board so the winning line stays visible.
+    this.el.dot.classList.toggle('p1', dot === 'p1');
+    this.el.dot.classList.toggle('p2', dot === 'p2');
+    this.el.status.textContent = '';
     this.el.resultMsg.textContent = msg;
     this.el.result.hidden = false;
   }
