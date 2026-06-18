@@ -1,0 +1,119 @@
+/* hub.css — Game Hub shell: top bar + launcher grid. The game modules bring
+   their own styles; this only styles the shell chrome. */
+
+:root {
+  --hub-bg: #f4f6fb;
+  --hub-surface: #ffffff;
+  --hub-surface-2: #eef2f8;
+  --hub-ink: #16243a;
+  --hub-muted: #5b6b82;
+  --hub-accent: #1769d4;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; } /* must win over .hub-grid { display: grid } etc. */
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--hub-bg);
+  color: var(--hub-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* Top bar */
+.hub-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(1.2) blur(6px);
+  border-bottom: 1px solid var(--hub-surface-2);
+}
+.hub-top-title { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.01em; }
+.hub-back {
+  appearance: none;
+  border: 1px solid var(--hub-surface-2);
+  background: var(--hub-surface);
+  color: var(--hub-ink);
+  font: inherit;
+  font-weight: 700;
+  padding: 7px 13px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.hub-back:hover { background: var(--hub-surface-2); }
+
+.hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
+
+/* Launcher grid */
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+.hub-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  appearance: none;
+  border: 1px solid var(--hub-surface-2);
+  background: var(--hub-surface);
+  border-radius: 18px;
+  padding: 16px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.hub-card:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(20, 40, 80, 0.12); }
+.hub-card:active { transform: translateY(0); }
+.hub-card.is-soon { cursor: default; opacity: 0.7; }
+.hub-card.is-soon:hover { transform: none; box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06); }
+
+.hub-card-art { display: block; width: 64px; height: 64px; }
+.hub-card-art svg { width: 100%; height: 100%; border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+.hub-card-text { display: flex; flex-direction: column; gap: 4px; }
+.hub-card-title { font-weight: 800; font-size: 1.06rem; }
+.hub-card-blurb { font-size: 0.85rem; color: var(--hub-muted); line-height: 1.35; }
+
+.hub-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--card-accent, var(--hub-accent));
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.hub-soon-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--hub-surface-2);
+  color: var(--hub-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.hub-game { width: 100%; }
+.hub-error { color: #b3261e; text-align: center; padding: 32px 16px; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-card { transition: none; }
+}

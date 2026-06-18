@@ -1,0 +1,10 @@
+{
+  "name": "connect-four",
+  "version": "0.1.0",
+  "description": "Connect Four game module — bitboard engine (Session 1).",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node js/test.js"
+  }
+}

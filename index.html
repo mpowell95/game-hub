@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Game Hub</title>
+  <meta name="description" content="A small hub of self-contained games. No ads, fully offline.">
+  <meta name="theme-color" content="#1769d4">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/hub.css">
+</head>
+<body>
+  <div id="hub-root"></div>
+
+  <script type="module">
+    import { initHub } from './js/hub.js';
+    initHub(document.getElementById('hub-root'));
+
+    // Register the service worker (offline + installable). Ignored on file://.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
+      });
+    }
+  </script>
+</body>
+</html>

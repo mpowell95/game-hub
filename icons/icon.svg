@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Game Hub">
+  <rect width="512" height="512" rx="104" fill="#1769d4"/>
+  <circle cx="184" cy="184" r="78" fill="#e8463f"/>
+  <circle cx="328" cy="184" r="78" fill="#ffce3a"/>
+  <circle cx="184" cy="328" r="78" fill="#ffce3a"/>
+  <circle cx="328" cy="328" r="78" fill="#e8463f"/>
+</svg>
