@@ -4,7 +4,7 @@
 // worker is served from the site root, so it can cache /connect-four/** too.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v2';
+const CACHE = 'game-hub-v3';
 
 const ASSETS = [
   './',

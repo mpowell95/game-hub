@@ -5,21 +5,28 @@
 //   new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
 //
 // Protocol — main thread posts:
-//   { id, history, firstPlayer, difficulty, budgetMs }
+//   { id, kind: 'move', history, firstPlayer, difficulty, budgetMs }
+//   { id, kind: 'eval', history, firstPlayer, budgetMs }
 // worker replies:
-//   { id, col }                 on success
-//   { id, error: <string> }     on failure (caller falls back to main thread)
+//   { id, col }                        for a 'move' request
+//   { id, evals: [{col,score}], exact } for an 'eval' request
+//   { id, error: <string> }            on failure (caller falls back to main thread)
 
 import { Game } from './game.js';
-import { AI } from './ai.js';
+import { AI, evaluateColumns } from './ai.js';
 
 self.onmessage = (e) => {
-  const { id, history, firstPlayer, difficulty, budgetMs } = e.data;
+  const { id, kind, history, firstPlayer, difficulty, budgetMs } = e.data;
   try {
     const game = new Game(firstPlayer);
     for (const col of history) game.play(col);
-    const ai = new AI(difficulty, { expertBudgetMs: budgetMs });
-    self.postMessage({ id, col: ai.chooseMove(game) });
+    if (kind === 'eval') {
+      const evals = evaluateColumns(game.board, game.currentPlayer, budgetMs);
+      self.postMessage({ id, evals: evals.map((v) => ({ col: v.col, score: v.score })), exact: evals.exact });
+    } else {
+      const ai = new AI(difficulty, { expertBudgetMs: budgetMs });
+      self.postMessage({ id, col: ai.chooseMove(game) });
+    }
   } catch (err) {
     self.postMessage({ id, error: String(err && err.message ? err.message : err) });
   }

@@ -321,6 +321,61 @@ function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS) {
   return chooseSearchTimed(board, player, start + budgetMs);
 }
 
+/**
+ * Evaluate every legal column for the side to move (for the "show best moves"
+ * helper). Returns an array of { col, score } from the mover's perspective, with
+ * an `exact` flag: true when all columns were solved exactly within budgetMs
+ * (mid/endgame; Pons scale where + = the mover wins and a larger magnitude means
+ * sooner), false when the opening forced a uniform heuristic fallback so the
+ * displayed scores still share one scale (used only to rank, not as ground truth).
+ */
+export function evaluateColumns(board, player, budgetMs) {
+  const legal = board.legalMoves();
+  const mask = board.pieces[PLAYER_ONE] | board.pieces[PLAYER_TWO];
+  const position = board.pieces[player];
+  const nbMoves = board.moveCount;
+  const poss = possibleCells(mask);
+  const winCells = computeWinningCells(position, mask);
+
+  // Pass 1: try to solve every legal column exactly within a shared budget.
+  const exactScores = new Map();
+  let exact = true;
+  searchDeadline = Number.isFinite(budgetMs) ? Date.now() + budgetMs : Infinity;
+  try {
+    for (const c of COLUMN_ORDER) {
+      if (!legal.includes(c)) continue;
+      const move = poss & COLUMN_MASK[c];
+      if ((winCells & move) !== 0n) {
+        exactScores.set(c, (COLS * ROWS + 1 - (nbMoves + 1)) >> 1); // wins on this move
+      } else {
+        exactScores.set(c, -expertSolve(position ^ mask, mask | move, nbMoves + 1));
+      }
+    }
+  } catch (e) {
+    if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; }
+    exact = false;
+  } finally {
+    searchDeadline = Infinity;
+  }
+
+  let scores;
+  if (exact) {
+    scores = legal.map((c) => ({ col: c, score: exactScores.get(c) }));
+  } else {
+    // Pass 2: uniform heuristic so every column shares one scale.
+    scores = legal.map((c) => {
+      const b = board.clone();
+      b.play(c, player);
+      const val = b.isWin(player)
+        ? WIN_BASE - b.moveCount
+        : -searchHeuristic(b, player ^ 1, HARD_DEPTH - 1, -Infinity, Infinity);
+      return { col: c, score: val };
+    });
+  }
+  scores.exact = exact;
+  return scores;
+}
+
 // ---------------------------------------------------------------------------
 // Heuristic evaluation + depth-limited search (Medium / Hard).
 // ---------------------------------------------------------------------------
