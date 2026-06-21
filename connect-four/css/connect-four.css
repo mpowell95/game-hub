@@ -37,6 +37,9 @@
 .cf-root *::after { box-sizing: border-box; }
 /* Ensure the [hidden] attribute always wins over the display rules below. */
 .cf-root [hidden] { display: none !important; }
+/* Disable the mobile double-tap-zoom delay so rapid taps (e.g. picking a setting
+   then Start) always register. */
+.cf-root button, .cf-root .cf-seg, .cf-root .cf-cell { touch-action: manipulation; }
 
 /* Header */
 .cf-header { text-align: center; margin-bottom: 14px; }
@@ -261,14 +264,10 @@
   background: var(--cf-hole);
   box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.55);
 }
-.cf-piece.p1 {
-  background: radial-gradient(circle at 35% 30%, var(--cf-red-hi), var(--cf-red) 62%);
-  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-.cf-piece.p2 {
-  background: radial-gradient(circle at 35% 30%, var(--cf-yellow-hi), var(--cf-yellow) 62%);
-  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.25);
-}
+/* Flat, modern discs (no skeuomorphic gloss) — a subtle bottom inset gives just
+   a hint of depth without the early-2010s glassy look. */
+.cf-piece.p1 { background: var(--cf-red); box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.16); }
+.cf-piece.p2 { background: var(--cf-yellow); box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.14); }
 /* Landing preview (desktop hover): a clearly-translucent disc with a dashed ring
    so it reads as "this is where it'll drop", not a real piece. */
 .cf-piece.cf-ghost {

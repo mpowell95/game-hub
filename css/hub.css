@@ -12,6 +12,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* must win over .hub-grid { display: grid } etc. */
+.hub-card, .hub-back { touch-action: manipulation; }
 html, body { margin: 0; min-height: 100%; }
 body {
   background: var(--hub-bg);
@@ -52,18 +53,23 @@ body {
 
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 
-/* Launcher grid */
+/* Launcher grid — flex + centering so an odd last card centers instead of
+   sitting alone with a gap beside it. */
 .hub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
 }
 .hub-card {
   position: relative;
+  flex: 1 1 240px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   text-align: left;
+  text-decoration: none;
   appearance: none;
   border: 1px solid var(--hub-surface-2);
   background: var(--hub-surface);
@@ -86,18 +92,6 @@ body {
 .hub-card-title { font-weight: 800; font-size: 1.06rem; }
 .hub-card-blurb { font-size: 0.85rem; color: var(--hub-muted); line-height: 1.35; }
 
-.hub-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: var(--card-accent, var(--hub-accent));
-  color: #fff;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  padding: 3px 8px;
-  border-radius: 999px;
-}
 .hub-soon-tag {
   position: absolute;
   top: 12px;

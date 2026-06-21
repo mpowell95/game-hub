@@ -552,6 +552,8 @@ function chooseSearchTimed(board, player, deadline) {
 // ---------------------------------------------------------------------------
 // Easy.
 // ---------------------------------------------------------------------------
+const EASY_BLOCK_RATE = 0.6; // Easy blocks an immediate threat only this often
+
 function chooseEasy(board, player, rng) {
   const moves = board.legalMoves();
   const opp = player ^ 1;
@@ -563,12 +565,15 @@ function chooseEasy(board, player, rng) {
     board.undo(c, player);
     if (won) return c;
   }
-  // Always block an immediate opponent win.
-  for (const c of moves) {
-    board.play(c, opp);
-    const lost = board.isWin(opp);
-    board.undo(c, opp);
-    if (lost) return c;
+  // Usually — not always — block an immediate opponent win. Occasionally missing
+  // a block is what makes Easy actually beatable for a casual player.
+  if (rng() < EASY_BLOCK_RATE) {
+    for (const c of moves) {
+      board.play(c, opp);
+      const lost = board.isWin(opp);
+      board.undo(c, opp);
+      if (lost) return c;
+    }
   }
   // Otherwise random.
   return moves[Math.floor(rng() * moves.length)];

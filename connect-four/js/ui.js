@@ -230,7 +230,7 @@ class ConnectFourUI {
               <span class="cf-switch-track"><span class="cf-switch-thumb"></span></span>
               <span class="cf-switch-text">Show best moves</span>
             </label>
-            <p class="cf-menu-note">Rates each column and highlights your best move.</p>
+            <p class="cf-menu-note">Marks the engine's best column each turn. Exact + / − scores appear once the board is solvable.</p>
             <div class="cf-menu-actions">
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">↩ Undo your last move</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-restart">Restart game</button>
@@ -723,6 +723,12 @@ class ConnectFourUI {
     const byCol = new Map();
     let best = -Infinity;
     if (data) for (const e of data.evals) { byCol.set(e.col, e.score); best = Math.max(best, e.score); }
+    // Mark exactly ONE recommended move (center-most among ties) — "best" is
+    // singular, so multiple ★/rings is confusing.
+    let bestCol = -1;
+    if (data) for (const c of [3, 2, 4, 1, 5, 0, 6]) {
+      if (byCol.get(c) === best) { bestCol = c; break; }
+    }
 
     for (let c = 0; c < COLS; c++) {
       const cell = document.createElement('div');
@@ -730,15 +736,15 @@ class ConnectFourUI {
       if (!data) { cell.classList.add('is-loading'); cell.textContent = '·'; }
       else if (byCol.has(c)) {
         const s = byCol.get(c);
-        if (s === best) cell.classList.add('is-best'); // unified recommendation accent
+        if (c === bestCol) cell.classList.add('is-best'); // the single recommended move
         if (data.exact) {
           cell.textContent = s > 0 ? `+${s}` : `${s}`;
           cell.classList.add(s > 0 ? 'is-win' : s < 0 ? 'is-loss' : 'is-draw');
         } else {
-          // Estimate mode: a clear ★ on the pick, a faint dot elsewhere (not blank,
-          // which read as "failed to load").
-          cell.textContent = s === best ? '★' : '·';
-          cell.classList.add(s === best ? 'is-pick' : 'is-faint');
+          // Estimate mode: a ★ on the single pick, a faint dot elsewhere (blank
+          // pills read as "failed to load").
+          cell.textContent = c === bestCol ? '★' : '·';
+          cell.classList.add(c === bestCol ? 'is-pick' : 'is-faint');
         }
       } else {
         cell.classList.add('is-empty'); // full column
@@ -750,7 +756,7 @@ class ConnectFourUI {
     this.el.evalCaption.textContent = !data ? ''
       : data.exact
         ? 'Solved · + wins, − loses · best ringed'
-        : 'Estimate · best move ★ (exact later)';
+        : 'Estimate · best move marked ★';
   }
 
   // --- Teardown -------------------------------------------------------------

@@ -11,7 +11,6 @@ const GAMES = [
     id: 'connect-four',
     title: 'Connect Four',
     blurb: 'Drop discs, connect four. Four AI levels incl. a perfect endgame solver.',
-    badge: 'NEW',
     // Relative to this module (js/hub.js): up to root, then into the game folder.
     module: '../connect-four/js/ui.js',
     accent: '#1769d4',
@@ -27,7 +26,6 @@ const GAMES = [
     id: 'chinchon',
     title: 'Chinchón',
     blurb: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
-    badge: 'NEW',
     module: '../chinchon/js/ui.js',
     accent: '#d4a017',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
@@ -41,8 +39,7 @@ const GAMES = [
   {
     id: 'business-deal',
     title: 'Business Deal',
-    blurb: 'Monopoly Deal–style card game vs. smart AI. 2–5 players.',
-    badge: 'PLAY',
+    blurb: 'Cards, cash & schemes — collect property sets to win. vs. smart AI, 2–5 players.',
     // Business Deal is its own full-screen PWA deployed alongside the hub, so
     // the card launches out to it (root-relative on the same domain) rather
     // than mounting as an in-hub module.
@@ -90,27 +87,29 @@ class Hub {
     this.el.back.addEventListener('click', this._onBack);
     this.el.grid.addEventListener('click', (e) => {
       const card = e.target.closest('.hub-card');
-      if (!card || card.dataset.comingSoon === 'true') return;
-      // Launch-out games (their own deployed app) navigate; module games mount.
-      if (card.dataset.href) { window.location.href = card.dataset.href; return; }
-      this.launch(card.dataset.id);
+      if (!card) return;
+      if (card.tagName === 'A') return;            // launch-out: real link, native nav
+      if (card.dataset.comingSoon === 'true') return;
+      this.launch(card.dataset.id);                // in-hub module: mount in place
     });
   }
 
   cardHTML(g) {
-    return `
-      <button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
-              data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
-              ${g.href ? `data-href="${g.href}"` : ''}
-              style="--card-accent:${g.accent}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>
-        ${g.badge ? `<span class="hub-badge">${g.badge}</span>` : ''}
+    const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-text">
           <span class="hub-card-title">${g.title}</span>
           <span class="hub-card-blurb">${g.blurb}</span>
         </span>
-        ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}
-      </button>`;
+        ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}`;
+    // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
+    // modules are buttons that mount into the content area.
+    if (g.href) {
+      return `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}">${inner}</a>`;
+    }
+    return `<button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
+              data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
+              style="--card-accent:${g.accent}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>${inner}</button>`;
   }
 
   async launch(id) {
