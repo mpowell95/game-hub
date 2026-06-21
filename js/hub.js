@@ -58,7 +58,7 @@ class Hub {
   constructor(root) {
     this.root = root;
     this.current = null;     // { module, id } of the mounted game
-    this._onBack = () => this.showLauncher();
+    this._onBack = () => this.requestLeave();
     this.render();
   }
 
@@ -75,6 +75,16 @@ class Hub {
           </section>
           <section class="hub-game" data-role="game" hidden></section>
         </main>
+        <div class="hub-confirm" data-role="confirm" hidden>
+          <div class="hub-confirm-scrim" data-role="confirm-cancel"></div>
+          <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="Leave game">
+            <p class="hub-confirm-msg">Leave this game? Your current progress will be lost.</p>
+            <div class="hub-confirm-actions">
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="confirm-cancel">Keep playing</button>
+              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="confirm-leave">Leave game</button>
+            </div>
+          </div>
+        </div>
       </div>`;
 
     this.el = {
@@ -82,9 +92,16 @@ class Hub {
       title: this.root.querySelector('[data-role="title"]'),
       grid: this.root.querySelector('[data-role="grid"]'),
       game: this.root.querySelector('[data-role="game"]'),
+      confirm: this.root.querySelector('[data-role="confirm"]'),
     };
 
     this.el.back.addEventListener('click', this._onBack);
+    this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
+      el.addEventListener('click', () => { this.el.confirm.hidden = true; }));
+    this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
+      this.el.confirm.hidden = true;
+      this.showLauncher();
+    });
     this.el.grid.addEventListener('click', (e) => {
       const card = e.target.closest('.hub-card');
       if (!card) return;
@@ -134,6 +151,15 @@ class Hub {
       this.el.grid.hidden = true;
       this.el.back.hidden = false;
     }
+  }
+
+  /** Back-to-hub intent: confirm first if the game reports it's mid-play. */
+  requestLeave() {
+    const m = this.current && this.current.module;
+    let inProgress = false;
+    try { inProgress = !!(m && typeof m.isInProgress === 'function' && m.isInProgress()); } catch { /* ignore */ }
+    if (inProgress) { this.el.confirm.hidden = false; return; }
+    this.showLauncher();
   }
 
   async unmount() {

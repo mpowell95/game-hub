@@ -791,4 +791,10 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-export default { init, destroy };
+/** True if a game is mid-play (so the hub can confirm before unmounting). */
+export function isInProgress() {
+  return !!instance && !!instance.game && !instance.game.isOver()
+    && instance.humanHasMoved;
+}
+
+export default { init, destroy, isInProgress };

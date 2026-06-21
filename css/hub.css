@@ -108,6 +108,24 @@ body {
 .hub-game { width: 100%; }
 .hub-error { color: #b3261e; text-align: center; padding: 32px 16px; font-weight: 600; }
 
+/* "Leave game?" confirm — guards accidental loss of an in-progress game when
+   tapping ‹ Hub. */
+.hub-confirm { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+.hub-confirm-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, 0.55); }
+.hub-confirm-card {
+  position: relative; width: 100%; max-width: 380px; margin: 0 16px;
+  background: var(--hub-surface); border-radius: 16px; padding: 22px;
+  box-shadow: 0 16px 50px rgba(9, 24, 48, 0.4);
+  display: flex; flex-direction: column; gap: 16px;
+}
+.hub-confirm-msg { margin: 0; font-weight: 700; font-size: 1.02rem; line-height: 1.4; }
+.hub-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.hub-cbtn { appearance: none; border: 0; font: inherit; font-weight: 700; border-radius: 11px; padding: 11px 16px; cursor: pointer; touch-action: manipulation; }
+.hub-cbtn-ghost { background: var(--hub-surface-2); color: var(--hub-ink); }
+.hub-cbtn-ghost:hover { background: #e1e8f2; }
+.hub-cbtn-danger { background: #c2402f; color: #fff; }
+.hub-cbtn-danger:hover { background: #a83727; }
+
 @media (prefers-reduced-motion: reduce) {
   .hub-card { transition: none; }
 }

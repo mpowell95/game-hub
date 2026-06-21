@@ -217,6 +217,27 @@
 .cc-sheet-title { margin: 0; font-size: 1.3rem; font-weight: 800; text-align: center; }
 .cc-sheet-sub { margin: -6px 0 0; text-align: center; font-weight: 700; color: var(--cc-accent); }
 
+/* In-game menu: a top-bar trigger + a dismissible bottom sheet (parity with the
+   other games — gives a deliberate restart / quit path with a confirm). */
+.cc-btn, .cc-seg, .cc-icon-btn, .cc-pile, .cc-tool, .cc-step, .cc-switch { touch-action: manipulation; }
+.cc-gamebar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.cc-icon-btn {
+  appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  color: var(--cc-ink); font: inherit; font-weight: 700; font-size: 0.9rem;
+  padding: 7px 13px; border-radius: 10px; cursor: pointer;
+}
+.cc-icon-btn:hover { background: var(--cc-surface-2); }
+.cc-menu { position: fixed; inset: 0; z-index: 130; display: flex; align-items: flex-end; justify-content: center; }
+.cc-menu-sheet {
+  border-radius: 18px 18px 0 0;
+  margin: 0 10px;
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+  animation: cc-sheet-up 0.22s ease both;
+}
+@keyframes cc-sheet-up { from { transform: translateY(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+.cc-menu-sheet .cc-btn-ghost { text-align: left; }
+.cc-btn.cc-confirm { background: rgba(194, 64, 47, 0.12); color: var(--cc-bad); box-shadow: inset 0 0 0 1px var(--cc-bad); }
+
 .cc-score { width: 100%; border-collapse: collapse; }
 .cc-score th, .cc-score td { padding: 8px 10px; text-align: left; }
 .cc-score th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); border-bottom: 1px solid var(--cc-surface-2); }

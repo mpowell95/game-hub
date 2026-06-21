@@ -122,6 +122,9 @@ class ChinchonUI {
         <header class="cc-header" data-role="header"><h1 class="cc-title">Chinchón</h1></header>
         <section class="cc-setup" data-role="setup"></section>
         <section class="cc-game" data-role="game" hidden>
+          <div class="cc-gamebar">
+            <button class="cc-icon-btn" data-action="open-menu" aria-label="Game menu">☰ Menu</button>
+          </div>
           <div class="cc-opponents" data-role="opponents"></div>
           <div class="cc-mat">
             <div class="cc-piles" data-role="piles"></div>
@@ -135,6 +138,7 @@ class ChinchonUI {
           <div class="cc-actions" data-role="actions"></div>
         </section>
         <div class="cc-modal" data-role="modal" hidden></div>
+        <div class="cc-menu" data-role="menu" hidden></div>
         <div class="cc-toast" data-role="toast" hidden></div>
       </div>`;
 
@@ -144,7 +148,7 @@ class ChinchonUI {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), piles: q('piles'), status: q('status'),
       self: q('self'), handbar: q('handbar'), hand: q('hand'), actions: q('actions'),
-      modal: q('modal'), toast: q('toast'),
+      modal: q('modal'), menu: q('menu'), toast: q('toast'),
     };
 
     this.root.addEventListener('click', this._onClick);
@@ -159,6 +163,7 @@ class ChinchonUI {
     if (this.game) { this.game.abort(); this.game = null; }
     this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
     this._modalResolve = null; this._placeResolve = null; this._chartView = false;
+    this._matchEnded = false; this._closeMenu();
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
@@ -263,6 +268,7 @@ class ChinchonUI {
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._statsCommitted = false;
+    this._matchEnded = false; this._closeMenu();
 
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
@@ -345,6 +351,7 @@ class ChinchonUI {
         await this.showRoundModal();
         break;
       case 'matchEnd':
+        this._matchEnded = true;
         this._commitStats();
         this._chartView = false;
         await this.showMatchModal();
@@ -742,7 +749,49 @@ class ChinchonUI {
       case 'toggle-chart': this._chartView = !this._chartView; if (this._modalResolve) this._renderRoundModal(); else this._renderMatchModal(); break;
       case 'next-round': this._resolveModal(); break;
       case 'new-game': this.showSetup(); break;
+      // in-game menu
+      case 'open-menu': this._openMenu(); break;
+      case 'close-menu': case 'menu-resume': this._closeMenu(); break;
+      case 'menu-newgame': this._menuAction('newgame'); break;
+      case 'menu-quit': this._menuAction('quit'); break;
     }
+  }
+
+  // --- in-game menu ---------------------------------------------------------
+
+  /** A live match worth confirming before abandoning. */
+  _inProgress() {
+    return !!this.game && !this.el.game.hidden && !this._matchEnded;
+  }
+
+  _openMenu() { this._menuConfirm = null; this._renderMenu(); this.el.menu.hidden = false; }
+  _closeMenu() { this.el.menu.hidden = true; this._menuConfirm = null; }
+
+  _renderMenu() {
+    const btn = (which, label) => {
+      const confirming = this._menuConfirm === which;
+      return `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-${which}">${
+        confirming ? 'Tap again — you’ll lose this game' : label}</button>`;
+    };
+    this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
+      <div class="cc-sheet cc-menu-sheet">
+        <h2 class="cc-sheet-title">Menu</h2>
+        ${btn('newgame', 'New game (same settings)')}
+        ${btn('quit', 'Quit to setup')}
+        <button class="cc-btn cc-btn-primary" data-action="menu-resume">Resume game</button>
+      </div>`;
+  }
+
+  /** Destructive menu actions confirm-on-second-tap while a match is live. */
+  _menuAction(which) {
+    if (this._inProgress() && this._menuConfirm !== which) {
+      this._menuConfirm = which;
+      this._renderMenu();
+      return;
+    }
+    this._closeMenu();
+    if (which === 'newgame') this.startGame();
+    else this.showSetup();
   }
 
   _stepRule(field, d) {
@@ -795,4 +844,9 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-export default { init, destroy };
+/** True if a match is in progress (so the hub can confirm before unmounting). */
+export function isInProgress() {
+  return !!instance && instance._inProgress();
+}
+
+export default { init, destroy, isInProgress };
