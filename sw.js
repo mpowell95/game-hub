@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v6';
+const CACHE = 'game-hub-v8';
 
 const ASSETS = [
   './',
@@ -24,6 +24,14 @@ const ASSETS = [
   './connect-four/js/board.js',
   './connect-four/js/ai.js',
   './connect-four/css/connect-four.css',
+  // Chinchón module
+  './chinchon/index.html',
+  './chinchon/css/chinchon.css',
+  './chinchon/js/deck.js',
+  './chinchon/js/meld.js',
+  './chinchon/js/game.js',
+  './chinchon/js/ai.js',
+  './chinchon/js/ui.js',
 ];
 
 self.addEventListener('install', (event) => {

@@ -24,6 +24,21 @@ const GAMES = [
           </svg>`,
   },
   {
+    id: 'chinchon',
+    title: 'Chinchón',
+    blurb: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
+    badge: 'NEW',
+    module: '../chinchon/js/ui.js',
+    accent: '#d4a017',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" rx="20" fill="#1f7a52"/>
+            <rect x="30" y="34" width="40" height="56" rx="7" fill="#fff" transform="rotate(-9 50 62)"/>
+            <rect x="52" y="34" width="40" height="56" rx="7" fill="#fff" transform="rotate(9 72 62)"/>
+            <circle cx="50" cy="60" r="8" fill="#c8920f"/>
+            <circle cx="74" cy="60" r="8" fill="#d22f27"/>
+          </svg>`,
+  },
+  {
     id: 'business-deal',
     title: 'Business Deal',
     blurb: 'Monopoly Deal–style card game vs. smart AI. 2–5 players.',
