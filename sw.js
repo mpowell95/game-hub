@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v8';
+const CACHE = 'game-hub-v9';
 
 const ASSETS = [
   './',
@@ -29,6 +29,7 @@ const ASSETS = [
   './chinchon/css/chinchon.css',
   './chinchon/js/deck.js',
   './chinchon/js/meld.js',
+  './chinchon/js/cards.js',
   './chinchon/js/game.js',
   './chinchon/js/ai.js',
   './chinchon/js/ui.js',

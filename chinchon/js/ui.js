@@ -9,10 +9,11 @@ import { SUIT_META } from './deck.js';
 import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
+import { renderCardFace as cardFaceHTML, ensureSprite, removeSprite } from './cards.js';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
-const AI_AVATARS = ['🦊', '🐼', '🦉'];
-const HUMAN_AVATARS = ['🙂', '😎', '🦁', '🐯', '🐲', '👑', '🌟', '🐙'];
+const AI_AVATARS = ['💃', '🤠', '🎸'];
+const HUMAN_AVATARS = ['🤠', '💃', '🎸', '🐂', '🌹', '🏰', '🍷', '👑'];
 const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
 const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
 
@@ -42,26 +43,17 @@ function loadJSON(key, fallback) {
 }
 function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
 
-/** Build a card face as an HTML string. `opts`: {selected, melded, dead, faceDown, static, mini}. */
-function cardFaceHTML(card, opts = {}) {
-  if (opts.faceDown) return '<div class="cc-card cc-back"></div>';
-  const actionAttr = opts.static ? '' : ` data-action="card" data-id="${card.id}"`;
-  const extra = opts.mini ? ' cc-mini' : '';
-  if (card.isJoker) {
-    return `<div class="cc-card cc-joker${extra}"${actionAttr}><span class="cc-corner cc-tl">★</span><span class="cc-pip">★</span><span class="cc-corner cc-br">★</span></div>`;
-  }
-  const glyph = SUIT_META[card.suit].glyph;
-  const cls = ['cc-card', 'cc-suit-' + card.suit];
-  if (opts.selected) cls.push('is-selected');
-  if (opts.melded) cls.push('is-melded');
-  if (opts.dead) cls.push('is-dead');
-  if (opts.mini) cls.push('cc-mini');
-  const r = card.rank;
-  return `<div class="${cls.join(' ')}"${actionAttr}>` +
-    `<span class="cc-corner cc-tl">${r}<i>${glyph}</i></span>` +
-    `<span class="cc-pip">${glyph}</span>` +
-    `<span class="cc-corner cc-br">${r}<i>${glyph}</i></span></div>`;
+const SUIT_ORDER = { oros: 0, copas: 1, espadas: 2, bastos: 3 };
+function sortKey(c) { return c.isJoker ? { s: 9, r: 99 } : { s: SUIT_ORDER[c.suit], r: c.rank }; }
+/** Sort a hand by suit-then-rank or rank-then-suit (jokers last). */
+function sortHand(hand, mode) {
+  return hand.slice().sort((x, y) => {
+    const kx = sortKey(x), ky = sortKey(y);
+    return mode === 'suit' ? (kx.s - ky.s || kx.r - ky.r) : (kx.r - ky.r || kx.s - ky.s);
+  });
 }
+
+// Card faces are rendered by cards.js (imported above, aliased as cardFaceHTML).
 
 class ChinchonUI {
   constructor(container) {
@@ -74,6 +66,12 @@ class ChinchonUI {
     this._modalResolve = null;
     this._placeResolve = null;
     this._chartView = false;
+    this._sortMode = 'suit';        // 'suit' | 'rank' (cycled by the sort button)
+    this._highlightSets = false;    // colour-code melds in the hand
+    this._manualOrder = null;       // [cardId] once the player drag-reorders
+    this._displayOrder = [];        // ids in current on-screen order (for drag math)
+    this._drag = null;
+    this._justDragged = false;
 
     this._setup = this._loadSetup();
     this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0 });
@@ -88,9 +86,12 @@ class ChinchonUI {
     };
 
     this._onClick = (e) => this.onClick(e);
-    this._onResize = () => this.layoutFan();
+    this._onHandPointerDown = (e) => this.onHandPointerDown(e);
+    this._onPointerMove = (e) => this.onPointerMove(e);
+    this._onPointerUp = (e) => this.onPointerUp(e);
 
     ensureStylesheet();
+    ensureSprite();
     this.mount();
   }
 
@@ -126,7 +127,10 @@ class ChinchonUI {
             <div class="cc-piles" data-role="piles"></div>
             <div class="cc-status" data-role="status"></div>
           </div>
-          <div class="cc-self" data-role="self"></div>
+          <div class="cc-self-row">
+            <div class="cc-self" data-role="self"></div>
+            <div class="cc-handbar" data-role="handbar"></div>
+          </div>
           <div class="cc-hand" data-role="hand"></div>
           <div class="cc-actions" data-role="actions"></div>
         </section>
@@ -139,12 +143,12 @@ class ChinchonUI {
     this.el = {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), piles: q('piles'), status: q('status'),
-      self: q('self'), hand: q('hand'), actions: q('actions'),
+      self: q('self'), handbar: q('handbar'), hand: q('hand'), actions: q('actions'),
       modal: q('modal'), toast: q('toast'),
     };
 
     this.root.addEventListener('click', this._onClick);
-    window.addEventListener('resize', this._onResize);
+    this.el.hand.addEventListener('pointerdown', this._onHandPointerDown);
     this.showSetup();
   }
 
@@ -371,23 +375,29 @@ class ChinchonUI {
 
   render() {
     if (this._dead || !this.game || this.el.game.hidden) return;
+    const nOpp = this.game.players.filter((p) => !p.isHuman).length;
+    this.el.opponents.className = 'cc-opponents cc-opp-n' + nOpp;
     this.el.opponents.innerHTML = this.renderOpponents();
     this.el.piles.innerHTML = this.renderPiles();
     this.el.status.innerHTML = this.renderStatus();
     this.el.self.innerHTML = this.renderSelf();
+    this.el.handbar.innerHTML = this.renderHandbar();
     this.el.hand.innerHTML = this.renderHand();
     this.el.actions.innerHTML = this.renderActions();
-    this.layoutFan();
   }
 
   renderOpponents() {
     return this.game.players.filter((p) => !p.isHuman).map((p) => {
       const active = p.id === this.activePlayerId;
-      const backs = '<span class="cc-mini-back"></span>'.repeat(Math.min(p.hand.length, 7));
       return `<div class="cc-opp ${active ? 'is-active' : ''}">
-        <span class="cc-opp-av">${p.avatar}</span>
-        <span class="cc-opp-meta"><span class="cc-opp-name">${esc(p.name)}</span><span class="cc-opp-sub">${this._diffLabel(p)} · ${p.totalScore} pts</span></span>
-        <span class="cc-opp-hand"><span class="cc-mini-stack">${backs}</span><span class="cc-opp-count">${p.hand.length}</span></span>
+        <span class="cc-opp-av-wrap">
+          <span class="cc-opp-av">${p.avatar}</span>
+          <span class="cc-opp-count" title="cards in hand">${p.hand.length}</span>
+        </span>
+        <span class="cc-opp-meta">
+          <span class="cc-opp-name">${esc(p.name)}</span>
+          <span class="cc-opp-sub">${this._diffLabel(p)}${active ? ' · playing' : ' · ' + p.totalScore}</span>
+        </span>
       </div>`;
     }).join('');
   }
@@ -430,22 +440,43 @@ class ChinchonUI {
     const h = this._human();
     const active = this.activePlayerId === h.id || !!this._pending;
     return `<span class="cc-self-chip ${active ? 'is-active' : ''}">
-      <span class="cc-opp-av">${h.avatar}</span>
+      <span class="cc-self-av">${h.avatar}</span>
       <span class="cc-self-name">${esc(h.name)}</span>
       <span class="cc-self-score">${h.totalScore} pts</span></span>`;
   }
 
+  renderHandbar() {
+    const sortLabel = this._sortMode === 'suit' ? 'By suit' : 'By rank';
+    return `<button class="cc-tool" data-action="sort-cycle" title="Cycle sort order">↕ ${sortLabel}</button>
+      <button class="cc-tool ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="Highlight melds">✦ Highlight sets</button>`;
+  }
+
+  _computeHandOrder(hand) {
+    if (this._manualOrder) {
+      const byId = new Map(hand.map((c) => [c.id, c]));
+      const kept = this._manualOrder.filter((id) => byId.has(id));
+      const keptSet = new Set(kept);
+      const added = hand.filter((c) => !keptSet.has(c.id)).map((c) => c.id);
+      this._manualOrder = kept.concat(added);
+      return this._manualOrder.map((id) => byId.get(id));
+    }
+    return sortHand(hand, this._sortMode);
+  }
+
   renderHand() {
     const h = this._human();
-    const cfg = this.game.config;
-    const bp = meld.bestPartition(h.hand, cfg);
-    const meldedIdx = new Set();
-    bp.melds.forEach((m) => m.idx.forEach((i) => meldedIdx.add(i)));
-    const ordered = [];
-    bp.melds.forEach((m) => m.idx.forEach((i) => ordered.push({ card: h.hand[i], melded: true })));
-    h.hand.forEach((c, i) => { if (!meldedIdx.has(i)) ordered.push({ card: c, melded: false }); });
-    return ordered.map((o) => cardFaceHTML(o.card, {
-      selected: o.card.id === this._selectedCardId, melded: o.melded, dead: !o.melded,
+    const order = this._computeHandOrder(h.hand);
+    this._displayOrder = order.map((c) => c.id);
+    let colorOf = null;
+    if (this._highlightSets) {
+      const bp = meld.bestPartition(h.hand, this.game.config);
+      colorOf = new Map();
+      bp.melds.forEach((m, mi) => m.idx.forEach((i) => colorOf.set(h.hand[i].id, mi)));
+    }
+    return order.map((c) => cardFaceHTML(c, {
+      selected: c.id === this._selectedCardId,
+      meldColor: colorOf && colorOf.has(c.id) ? colorOf.get(c.id) : null,
+      draggable: true,
     })).join('');
   }
 
@@ -470,20 +501,61 @@ class ChinchonUI {
     return `${c.rank} ${SUIT_META[c.suit].label}`;
   }
 
-  /** Overlap the hand into a fan that fits the container width. */
-  layoutFan() {
-    if (this._dead || !this.el || !this.el.hand) return;
-    const cards = [...this.el.hand.querySelectorAll('.cc-card')];
-    const n = cards.length;
-    if (!n) return;
-    const cw = cards[0].offsetWidth || 60;
-    const avail = this.el.hand.clientWidth - 8;
-    const total = n * cw;
-    const overlap = total > avail ? (total - avail) / (n - 1) : 0;
-    cards.forEach((c, i) => {
-      c.style.marginLeft = i === 0 ? '0' : `${-overlap}px`;
-      c.style.zIndex = String(c.classList.contains('is-selected') ? 100 : i);
-    });
+  // --- hand drag-to-reorder (pointer events) --------------------------------
+
+  onHandPointerDown(e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const cardEl = e.target.closest('.cc-card[data-drag]');
+    if (!cardEl || !this.el.hand.contains(cardEl)) return;
+    this._justDragged = false;
+    this._drag = { id: cardEl.dataset.drag, el: cardEl, x0: e.clientX, y0: e.clientY, moved: false, targetIndex: -1 };
+    document.addEventListener('pointermove', this._onPointerMove, { passive: false });
+    document.addEventListener('pointerup', this._onPointerUp);
+    document.addEventListener('pointercancel', this._onPointerUp);
+  }
+
+  onPointerMove(e) {
+    const d = this._drag;
+    if (!d) return;
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    if (!d.moved) {
+      if (Math.hypot(dx, dy) < 8) return;   // still a tap, not a drag
+      d.moved = true;
+      d.el.classList.add('is-dragging');
+    }
+    e.preventDefault();
+    d.el.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
+    d.targetIndex = this._dropIndex(e.clientX, e.clientY, d.id);
+  }
+
+  onPointerUp() {
+    const d = this._drag;
+    this._drag = null;
+    document.removeEventListener('pointermove', this._onPointerMove);
+    document.removeEventListener('pointerup', this._onPointerUp);
+    document.removeEventListener('pointercancel', this._onPointerUp);
+    if (!d || !d.moved) return;
+    this._justDragged = true;        // swallow the click that follows a drag
+    this._applyDrop(d.id, d.targetIndex);
+    this.render();
+  }
+
+  /** Insertion index for the pointer among the non-dragged hand cards (row-aware). */
+  _dropIndex(x, y, dragId) {
+    const cards = [...this.el.hand.querySelectorAll('.cc-card[data-drag]')].filter((el) => el.dataset.drag !== dragId);
+    let idx = 0;
+    for (const el of cards) {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rowTol = r.height * 0.5;
+      if (cy < y - rowTol || (Math.abs(cy - y) <= rowTol && cx < x)) idx++;
+    }
+    return idx;
+  }
+
+  _applyDrop(id, idx) {
+    const without = this._displayOrder.filter((x) => x !== id);
+    without.splice(Math.max(0, Math.min(idx, without.length)), 0, id);
+    this._manualOrder = without;
   }
 
   // --- modals ---------------------------------------------------------------
@@ -657,7 +729,11 @@ class ChinchonUI {
       // game
       case 'draw-stock': if (pend && pend.kind === 'draw') this._resolvePending('stock'); break;
       case 'draw-discard': if (pend && pend.kind === 'draw') this._resolvePending('discard'); break;
-      case 'card': this.onCardTap(a.dataset.id); break;
+      case 'card':
+        if (this._justDragged) { this._justDragged = false; break; }
+        this.onCardTap(a.dataset.id); break;
+      case 'sort-cycle': this._sortMode = this._sortMode === 'suit' ? 'rank' : 'suit'; this._manualOrder = null; this.render(); break;
+      case 'toggle-highlight': this._highlightSets = !this._highlightSets; this.render(); break;
       case 'discard-confirm': if (pend && pend.kind === 'discard' && this._selectedCardId) this._resolvePending(this._selectedCardId); break;
       case 'close-yes': if (pend && pend.kind === 'close') this._resolvePending(true); break;
       case 'close-no': if (pend && pend.kind === 'close') this._resolvePending(false); break;
@@ -692,9 +768,12 @@ class ChinchonUI {
     this._resolvePlace([]);     // unblock any awaiting placement prompt
     this._resolveModal();       // unblock any awaiting round modal
     if (this.root) this.root.removeEventListener('click', this._onClick);
-    window.removeEventListener('resize', this._onResize);
+    document.removeEventListener('pointermove', this._onPointerMove);
+    document.removeEventListener('pointerup', this._onPointerUp);
+    document.removeEventListener('pointercancel', this._onPointerUp);
     clearTimeout(this._beatTimer);
     clearTimeout(this._toastTimer);
+    removeSprite();
     this.game = null;
     this.container.innerHTML = '';
   }

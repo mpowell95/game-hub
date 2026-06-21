@@ -73,28 +73,46 @@
 .cc-seg:hover { color: var(--cc-ink); }
 .cc-seg.is-selected { background: var(--cc-surface); color: var(--cc-accent); box-shadow: 0 2px 8px rgba(20, 40, 80, 0.12); }
 
-/* Game layout */
-.cc-game { display: flex; flex-direction: column; gap: 12px; }
-.cc-opponents { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+/* Game layout — a muted "table" backdrop so cards and gold frames pop */
+.cc-game {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px; border-radius: 18px;
+  background: linear-gradient(180deg, #7e91ba 0%, #95a6c9 45%, #aebad6 100%);
+}
+
+/* Opponents — gold-framed medallions, positioned by count */
+.cc-opponents { display: flex; align-items: flex-start; gap: 8px; min-height: 78px; }
+.cc-opp-n1 { justify-content: center; }
+.cc-opp-n2, .cc-opp-n3 { justify-content: space-between; }
 .cc-opp {
-  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
-  background: var(--cc-surface); border: 1px solid var(--cc-surface-2); border-radius: 12px;
-  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 10px 6px; border-radius: 14px;
+  background: linear-gradient(180deg, #fdf3d6, #f2e1ad);
+  border: 1px solid #e0c477;
+  box-shadow: 0 3px 10px rgba(120, 90, 20, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: box-shadow 0.15s, transform 0.15s;
 }
-.cc-opp.is-active { border-color: var(--cc-good); background: rgba(46, 139, 87, 0.07); box-shadow: 0 0 0 2px rgba(46, 139, 87, 0.3); }
-.cc-opp-av { font-size: 1.4rem; line-height: 1; }
-.cc-opp-meta { display: flex; flex-direction: column; }
-.cc-opp-name { font-weight: 700; font-size: 0.92rem; }
-.cc-opp-sub { font-size: 0.72rem; color: var(--cc-muted); }
-.cc-opp-hand { display: flex; align-items: center; gap: 4px; margin-left: 2px; }
-.cc-mini-stack { display: inline-flex; }
-.cc-mini-back {
-  width: 8px; height: 12px; margin-left: -3px; border-radius: 2px;
-  background: repeating-linear-gradient(45deg, #b9842a, #b9842a 2px, #9c6e1c 2px, #9c6e1c 4px);
-  border: 1px solid #8a6016;
+.cc-opp.is-active { box-shadow: 0 0 0 3px var(--cc-good), 0 7px 16px rgba(46, 139, 87, 0.45); transform: translateY(2px); }
+.cc-opp-av-wrap { position: relative; }
+.cc-opp-av {
+  display: flex; align-items: center; justify-content: center;
+  width: 2.7rem; height: 2.7rem; font-size: 1.55rem; line-height: 1;
+  border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fff, #f0e0b0);
+  border: 2px solid #c8920f; box-shadow: inset 0 0 0 2px #fff;
 }
-.cc-mini-back:first-child { margin-left: 0; }
-.cc-opp-count { font-size: 0.72rem; color: var(--cc-muted); font-weight: 700; }
+.cc-opp.is-active .cc-opp-av { border-color: var(--cc-good); }
+.cc-opp-count {
+  position: absolute; bottom: -3px; right: -6px; min-width: 18px; text-align: center;
+  background: var(--cc-ink); color: #fff; font-size: 0.66rem; font-weight: 800;
+  padding: 1px 5px; border-radius: 999px; border: 1.5px solid #fdf3d6;
+}
+.cc-opp-meta { display: flex; flex-direction: column; align-items: center; line-height: 1.12; }
+.cc-opp-name { font-weight: 800; font-size: 0.86rem; color: #5a3e0a; }
+.cc-opp-sub { font-size: 0.68rem; color: #8a6a2a; font-weight: 600; }
+/* 1 opponent: a wide banner across the whole top */
+.cc-opp-n1 .cc-opp { flex-direction: row; gap: 12px; width: 100%; justify-content: center; padding: 10px 18px; }
+.cc-opp-n1 .cc-opp-meta { align-items: flex-start; }
+.cc-opp-n1 .cc-opp-av { width: 3rem; height: 3rem; font-size: 1.8rem; }
 
 /* Mat: piles + status */
 .cc-mat {
@@ -119,18 +137,37 @@
 .cc-status-text { font-weight: 700; color: #fff; min-height: 1.2em; }
 .cc-meta { font-size: 0.72rem; color: rgba(255, 255, 255, 0.78); }
 
-/* Self chip */
-.cc-self { display: flex; justify-content: center; }
+/* Self chip + hand toolbar row */
+.cc-self-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cc-self { display: flex; }
 .cc-self-chip {
   display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
   background: var(--cc-surface); border: 1px solid var(--cc-surface-2); border-radius: 999px;
 }
 .cc-self-chip.is-active { border-color: var(--cc-good); box-shadow: 0 0 0 2px rgba(46, 139, 87, 0.3); }
+.cc-self-av { font-size: 1.4rem; line-height: 1; }
 .cc-self-name { font-weight: 700; }
 .cc-self-score { font-size: 0.8rem; color: var(--cc-muted); }
+.cc-handbar { display: flex; gap: 8px; }
+.cc-tool {
+  appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  color: var(--cc-ink); font: inherit; font-weight: 700; font-size: 0.8rem;
+  padding: 7px 11px; border-radius: 999px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.cc-tool:hover { background: var(--cc-surface-2); }
+.cc-tool.is-on { background: rgba(46, 139, 87, 0.14); border-color: var(--cc-good); color: var(--cc-good); }
 
-/* Hand (fanned) */
-.cc-hand { display: flex; justify-content: center; align-items: flex-end; min-height: calc(var(--cc-card-fs) * 7.4); padding: 6px 4px 4px; }
+/* Hand — larger cards that wrap into up to two rows of four */
+.cc-hand {
+  --cc-hand-fs: clamp(13px, 4.4vw, 21px);
+  display: flex; flex-wrap: wrap; justify-content: center; align-content: center;
+  gap: 7px 6px; padding: 8px 4px; margin: 0 auto;
+  max-width: calc(4.7em * 4 + 30px); font-size: var(--cc-hand-fs);
+  min-height: calc(6.6em + 16px);
+}
+.cc-hand .cc-card { font-size: var(--cc-hand-fs); cursor: grab; touch-action: none; }
+.cc-hand .cc-card.is-dragging { cursor: grabbing; box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4); }
 .cc-actions { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 46px; flex-wrap: wrap; }
 .cc-hint { color: var(--cc-muted); font-weight: 600; font-size: 0.88rem; }
 
@@ -139,7 +176,7 @@
   --fs: var(--cc-card-fs);
   font-size: var(--fs);
   position: relative; flex: 0 0 auto;
-  width: 4.5em; height: 6.6em; border-radius: 0.5em;
+  width: 4.7em; height: 6.6em; border-radius: 0.5em;
   background: #fff; border: 1px solid #d3dae6;
   box-shadow: 0 1px 3px rgba(20, 40, 80, 0.22);
   color: var(--cc-ink); overflow: hidden;
@@ -149,11 +186,12 @@
 .cc-suit-copas { color: var(--cc-suit-copas); }
 .cc-suit-espadas { color: var(--cc-suit-espadas); }
 .cc-suit-bastos { color: var(--cc-suit-bastos); }
-.cc-card .cc-pip { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.7em; line-height: 1; }
-.cc-card .cc-corner { position: absolute; display: flex; flex-direction: column; align-items: center; font-weight: 800; font-size: 1.15em; line-height: 0.95; }
-.cc-card .cc-corner i { font-style: normal; font-size: 0.9em; }
-.cc-card .cc-tl { top: 0.32em; left: 0.36em; }
-.cc-card .cc-br { bottom: 0.32em; right: 0.36em; transform: rotate(180deg); }
+.cc-card .cc-face { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cc-card .cc-idx { position: absolute; z-index: 2; display: flex; flex-direction: column; align-items: center; line-height: 0.8; }
+.cc-card .cc-idx b { font-weight: 800; font-size: 1.5em; }
+.cc-card .cc-mini-suit { width: 1em; height: 1em; display: block; margin-top: 0.06em; }
+.cc-card .cc-tl { top: 0.26em; left: 0.34em; }
+.cc-card .cc-br { bottom: 0.26em; right: 0.34em; transform: rotate(180deg); }
 .cc-hand .cc-card { cursor: default; }
 .cc-actions + * .cc-card, .cc-hand .cc-card { cursor: pointer; }
 .cc-card.is-melded { border-color: var(--cc-good); box-shadow: 0 0 0 1.5px rgba(46, 139, 87, 0.45), 0 1px 3px rgba(20, 40, 80, 0.22); }
@@ -258,6 +296,14 @@
 .cc-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; }
 .cc-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 600; }
 .cc-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ---- Revamp: meld-highlight colours (one per meld, like the breakdown) ---- */
+.cc-card.cc-meld-c0 { border-color: var(--cc-good); box-shadow: 0 0 0 2.5px var(--cc-good), 0 1px 3px rgba(20, 40, 80, 0.22); }
+.cc-card.cc-meld-c1 { border-color: var(--cc-suit-espadas); box-shadow: 0 0 0 2.5px var(--cc-suit-espadas), 0 1px 3px rgba(20, 40, 80, 0.22); }
+.cc-card.cc-meld-c2 { border-color: var(--cc-accent); box-shadow: 0 0 0 2.5px var(--cc-accent), 0 1px 3px rgba(20, 40, 80, 0.22); }
+.cc-card.cc-meld-c3 { border-color: var(--cc-suit-copas); box-shadow: 0 0 0 2.5px var(--cc-suit-copas), 0 1px 3px rgba(20, 40, 80, 0.22); }
+.cc-card.cc-meld-c4 { border-color: #7a5bd0; box-shadow: 0 0 0 2.5px #7a5bd0, 0 1px 3px rgba(20, 40, 80, 0.22); }
+.cc-card.cc-meld-c5 { border-color: #e07a2a; box-shadow: 0 0 0 2.5px #e07a2a, 0 1px 3px rgba(20, 40, 80, 0.22); }
 
 @media (prefers-reduced-motion: reduce) {
   .cc-card, .cc-btn, .cc-opp, .cc-switch, .cc-switch-thumb { transition: none; }
