@@ -9,7 +9,7 @@ import { SUIT_META } from './deck.js';
 import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
-import { renderCardFace as cardFaceHTML } from './cards.js';
+import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
@@ -91,6 +91,7 @@ class ChinchonUI {
     this._onPointerUp = (e) => this.onPointerUp(e);
 
     ensureStylesheet();
+    preloadDeck();
     this.mount();
   }
 
@@ -242,6 +243,7 @@ class ChinchonUI {
         </div>
 
         <button class="cc-btn cc-btn-primary" data-action="start">Start game</button>
+        <p class="cc-credit">Card art: Baraja Española · <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a></p>
       </div>`;
   }
 
