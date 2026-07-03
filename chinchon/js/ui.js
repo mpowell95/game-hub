@@ -9,7 +9,7 @@ import { SUIT_META } from './deck.js';
 import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
-import { renderCardFace as cardFaceHTML, ensureSprite, removeSprite } from './cards.js';
+import { renderCardFace as cardFaceHTML } from './cards.js';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
@@ -91,7 +91,6 @@ class ChinchonUI {
     this._onPointerUp = (e) => this.onPointerUp(e);
 
     ensureStylesheet();
-    ensureSprite();
     this.mount();
   }
 
@@ -822,7 +821,6 @@ class ChinchonUI {
     document.removeEventListener('pointercancel', this._onPointerUp);
     clearTimeout(this._beatTimer);
     clearTimeout(this._toastTimer);
-    removeSprite();
     this.game = null;
     this.container.innerHTML = '';
   }

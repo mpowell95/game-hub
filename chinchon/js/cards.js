@@ -2,61 +2,45 @@
 //
 // Renders the four real Spanish suits — oros (gold coins), copas (goblets),
 // espadas (swords), bastos (wooden batons) — with traditional pip layouts, the
-// special As de Oros, and stylized Sota/Caballo/Rey court figures. Exports:
-//   ensureSprite()           — inject the reusable suit-symbol sprite once
-//   removeSprite()           — remove it (teardown)
-//   renderCardFace(card,opts)— full card <div> HTML string
+// special As de Oros, and stylized Sota/Caballo/Rey court figures.
 //
-// The suit symbols are defined once as <symbol>s and referenced via <use>, so a
-// hand of cards is cheap. Colours are baked into the symbols (gold coin, red
-// goblet, steel-blue sword, green baton) to match the real deck.
+// The suit shapes are INLINED into each card (no shared <use>/<symbol> sprite):
+// a <use href="#sprite"> approach hung Chrome's screenshot rasterizer and is
+// fragile across browsers, so each pip embeds its own paths. Cards are cheap
+// enough (~7 in hand) that the extra markup is negligible.
+//
+// Exports: renderCardFace(card, opts) -> full card <div> HTML string.
 
-const SPRITE_ID = 'cc-suit-sprite';
+// Inner markup for each suit symbol, authored in a 0..100 local box.
+const SUIT_PATHS = {
+  oros:
+    '<circle cx="50" cy="50" r="46" fill="#f2c84b"/>' +
+    '<circle cx="50" cy="50" r="46" fill="none" stroke="#a9760c" stroke-width="5"/>' +
+    '<circle cx="50" cy="50" r="33" fill="none" stroke="#a9760c" stroke-width="3"/>' +
+    '<circle cx="50" cy="50" r="8" fill="#a9760c"/>' +
+    '<g fill="#a9760c"><circle cx="50" cy="18" r="3.4"/><circle cx="50" cy="82" r="3.4"/><circle cx="18" cy="50" r="3.4"/><circle cx="82" cy="50" r="3.4"/></g>',
+  copas:
+    '<path d="M27 23 H73 L67 49 Q50 62 33 49 Z" fill="#d22f27" stroke="#8f1c16" stroke-width="2.5"/>' +
+    '<ellipse cx="50" cy="23" rx="24" ry="6" fill="#f0c33c" stroke="#8f1c16" stroke-width="1.5"/>' +
+    '<rect x="45" y="55" width="10" height="18" fill="#e0a93a"/>' +
+    '<ellipse cx="50" cy="54" rx="9" ry="4" fill="#e0a93a"/>' +
+    '<path d="M30 86 Q50 76 70 86 L66 91 Q50 84 34 91 Z" fill="#e0a93a" stroke="#9c7a2a" stroke-width="1.5"/>' +
+    '<rect x="30" y="87" width="40" height="5" rx="2" fill="#e0a93a"/>',
+  espadas:
+    '<polygon points="50,5 57,22 50,64 43,22" fill="#c2d4f2" stroke="#3a5a9a" stroke-width="2.5"/>' +
+    '<line x1="50" y1="14" x2="50" y2="60" stroke="#7f9fd6" stroke-width="2"/>' +
+    '<rect x="29" y="63" width="42" height="8" rx="4" fill="#2f4f8f"/>' +
+    '<rect x="45.5" y="69" width="9" height="20" rx="3" fill="#6b4f2a"/>' +
+    '<circle cx="50" cy="91" r="6" fill="#caa24a" stroke="#9c7a2a" stroke-width="1.5"/>',
+  bastos:
+    '<path d="M37 93 Q41 62 49 33 Q53 18 61 8 Q72 14 65 27 Q55 47 51 71 Q48 86 49 93 Z" fill="#3f9a4f" stroke="#256630" stroke-width="2.5"/>' +
+    '<g fill="#62bd72"><circle cx="61" cy="13" r="4"/><circle cx="56" cy="32" r="3.6"/><circle cx="51" cy="54" r="3.4"/><circle cx="45" cy="78" r="3.2"/></g>',
+};
 
-const SUIT_SPRITE = `
-<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
-  <symbol id="ccs-oros" viewBox="0 0 100 100">
-    <circle cx="50" cy="50" r="46" fill="#f2c84b"/>
-    <circle cx="50" cy="50" r="46" fill="none" stroke="#a9760c" stroke-width="5"/>
-    <circle cx="50" cy="50" r="33" fill="none" stroke="#a9760c" stroke-width="3"/>
-    <circle cx="50" cy="50" r="8" fill="#a9760c"/>
-    <g fill="#a9760c"><circle cx="50" cy="18" r="3.4"/><circle cx="50" cy="82" r="3.4"/><circle cx="18" cy="50" r="3.4"/><circle cx="82" cy="50" r="3.4"/></g>
-  </symbol>
-  <symbol id="ccs-copas" viewBox="0 0 100 100">
-    <path d="M27 23 H73 L67 49 Q50 62 33 49 Z" fill="#d22f27" stroke="#8f1c16" stroke-width="2.5"/>
-    <ellipse cx="50" cy="23" rx="24" ry="6" fill="#f0c33c" stroke="#8f1c16" stroke-width="1.5"/>
-    <rect x="45" y="55" width="10" height="18" fill="#e0a93a"/>
-    <ellipse cx="50" cy="54" rx="9" ry="4" fill="#e0a93a"/>
-    <path d="M30 86 Q50 76 70 86 L66 91 Q50 84 34 91 Z" fill="#e0a93a" stroke="#9c7a2a" stroke-width="1.5"/>
-    <rect x="30" y="87" width="40" height="5" rx="2" fill="#e0a93a"/>
-  </symbol>
-  <symbol id="ccs-espadas" viewBox="0 0 100 100">
-    <polygon points="50,5 57,22 50,64 43,22" fill="#c2d4f2" stroke="#3a5a9a" stroke-width="2.5"/>
-    <line x1="50" y1="14" x2="50" y2="60" stroke="#7f9fd6" stroke-width="2"/>
-    <rect x="29" y="63" width="42" height="8" rx="4" fill="#2f4f8f"/>
-    <rect x="45.5" y="69" width="9" height="20" rx="3" fill="#6b4f2a"/>
-    <circle cx="50" cy="91" r="6" fill="#caa24a" stroke="#9c7a2a" stroke-width="1.5"/>
-  </symbol>
-  <symbol id="ccs-bastos" viewBox="0 0 100 100">
-    <path d="M37 93 Q41 62 49 33 Q53 18 61 8 Q72 14 65 27 Q55 47 51 71 Q48 86 49 93 Z" fill="#3f9a4f" stroke="#256630" stroke-width="2.5"/>
-    <g fill="#62bd72"><circle cx="61" cy="13" r="4"/><circle cx="56" cy="32" r="3.6"/><circle cx="51" cy="54" r="3.4"/><circle cx="45" cy="78" r="3.2"/></g>
-  </symbol>
-</defs></svg>`;
-
-/** Inject the suit-symbol sprite into the document once (idempotent). */
-export function ensureSprite() {
-  if (document.getElementById(SPRITE_ID)) return;
-  const div = document.createElement('div');
-  div.id = SPRITE_ID;
-  div.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
-  div.setAttribute('aria-hidden', 'true');
-  div.innerHTML = SUIT_SPRITE;
-  document.body.appendChild(div);
-}
-
-export function removeSprite() {
-  const el = document.getElementById(SPRITE_ID);
-  if (el) el.remove();
+/** Place a suit symbol centred at (cx,cy), scaled to `size`, optionally rotated. */
+function placeSuit(suit, cx, cy, size, rot = 0) {
+  const s = (size / 100).toFixed(3);
+  return `<g transform="translate(${cx} ${cy}) rotate(${rot}) scale(${s}) translate(-50 -50)">${SUIT_PATHS[suit]}</g>`;
 }
 
 // Pip centre positions within a 100×140 face viewBox.
@@ -72,16 +56,10 @@ const LAYOUTS = {
   9: { size: 21, pos: [[28, 40], [50, 40], [72, 40], [28, 70], [50, 70], [72, 70], [28, 100], [50, 100], [72, 100]] },
 };
 
-function useSym(suit, cx, cy, size, rot = 0) {
-  const t = rot ? ` transform="rotate(${rot} ${cx} ${cy})"` : '';
-  return `<use href="#ccs-${suit}" x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size}" height="${size}"${t}/>`;
-}
-
 function asDeOros() {
-  // The famous ornate Ace of Oros: one large coin with a decorative outer ring.
   return `<circle cx="50" cy="70" r="40" fill="none" stroke="#c8920f" stroke-width="2.5" opacity="0.6"/>` +
     `<circle cx="50" cy="70" r="36" fill="none" stroke="#c8920f" stroke-width="1.2" stroke-dasharray="3 4" opacity="0.6"/>` +
-    useSym('oros', 50, 70, 58);
+    placeSuit('oros', 50, 70, 58);
 }
 
 function pipSVG(card) {
@@ -91,7 +69,7 @@ function pipSVG(card) {
   const cross = suit === 'espadas' || suit === 'bastos';
   return L.pos.map(([x, y]) => {
     const rot = cross ? (x < 50 ? 15 : x > 50 ? -15 : 0) : 0;
-    return useSym(suit, x, y, L.size, rot);
+    return placeSuit(suit, x, y, L.size, rot);
   }).join('');
 }
 
@@ -104,7 +82,6 @@ function crown() {
 }
 
 function horse() {
-  // Stylized knight/horse-head silhouette.
   return `<g transform="translate(28 48)">
     <path d="M20 2 C12 5 9 13 12 21 L5 27 C3 31 7 33 10 31 L15 28 C12 36 9 42 9 54 L44 54 C46 41 44 29 39 21 C36 12 30 4 20 2 Z"
       fill="#7a5230" stroke="#3f2a18" stroke-width="2" stroke-linejoin="round"/>
@@ -129,7 +106,7 @@ function courtSVG(card) {
   const label = rank === 12 ? 'REY' : rank === 11 ? 'CABALLO' : 'SOTA';
   return `<rect x="9" y="10" width="82" height="120" rx="9" fill="currentColor" opacity="0.06"/>
     <rect x="9" y="10" width="82" height="120" rx="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
-    ${useSym(suit, 50, 30, 30)}
+    ${placeSuit(suit, 50, 30, 30)}
     ${figure}
     <text x="50" y="126" text-anchor="middle" font-size="10.5" font-weight="700" fill="currentColor" font-family="system-ui, sans-serif" letter-spacing="0.5">${label}</text>`;
 }
@@ -156,7 +133,7 @@ export function renderCardFace(card, opts = {}) {
   const drag = opts.draggable ? ` data-drag="${card.id}"` : '';
   const face = card.isJoker ? jokerSVG() : (card.rank >= 10 ? courtSVG(card) : pipSVG(card));
   const rk = card.isJoker ? '★' : String(card.rank);
-  const mini = card.isJoker ? '' : `<svg class="cc-mini-suit" viewBox="0 0 100 100" aria-hidden="true"><use href="#ccs-${card.suit}"/></svg>`;
+  const mini = card.isJoker ? '' : `<svg class="cc-mini-suit" viewBox="0 0 100 100" aria-hidden="true">${SUIT_PATHS[card.suit]}</svg>`;
   return `<div class="${cls.join(' ')}"${act}${drag}>` +
     `<span class="cc-idx cc-tl"><b>${rk}</b>${mini}</span>` +
     `<svg class="cc-face" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${face}</svg>` +
