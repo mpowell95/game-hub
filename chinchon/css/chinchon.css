@@ -61,6 +61,18 @@
 .cc-lead em { color: var(--cc-ink); font-style: normal; font-weight: 700; }
 .cc-credit { margin: 2px 0 0; text-align: center; font-size: 0.72rem; color: var(--cc-muted); }
 .cc-credit a { color: var(--cc-muted); text-decoration: underline; }
+
+/* Avatar picker (popup grid) */
+.cc-avatar-sheet { max-width: 380px; }
+.cc-av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; }
+.cc-av-opt {
+  appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  border-radius: 12px; aspect-ratio: 1; font-size: 1.55rem; cursor: pointer; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s, border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.cc-av-opt:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
+.cc-av-opt.is-sel { border-color: var(--cc-accent); background: rgba(212, 160, 23, 0.14); box-shadow: 0 0 0 2px var(--cc-accent); }
 .cc-field { display: flex; flex-direction: column; gap: 8px; }
 .cc-label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); }
 .cc-segmented {
@@ -128,7 +140,7 @@
   display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative;
 }
 .cc-pile.is-actionable { cursor: pointer; }
-.cc-pile.is-actionable .cc-card .cc-card-img { filter: drop-shadow(0 0 0 #e0a80f) drop-shadow(0 0 6px #ffce3a) drop-shadow(0 0 2px #ffce3a); }
+.cc-pile.is-actionable .cc-card { box-shadow: 0 0 0 3px #ffce3a, 0 2px 8px rgba(0, 0, 0, 0.3); }
 .cc-pile.is-actionable:hover .cc-card { transform: translateY(-3px); }
 .cc-pile-label { font-size: 0.7rem; font-weight: 700; color: rgba(255, 255, 255, 0.85); letter-spacing: 0.03em; }
 .cc-pile-count {
@@ -173,30 +185,28 @@
 .cc-actions { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 46px; flex-wrap: wrap; }
 .cc-hint { color: var(--cc-muted); font-weight: 600; font-size: 0.88rem; }
 
-/* Card face — real Spanish deck images (transparent WebP, 400x610, rounded) */
+/* Card face — real Spanish deck images (opaque WebP on white, rounded) */
 .cc-card {
   --fs: var(--cc-card-fs);
   font-size: var(--fs);
   position: relative; flex: 0 0 auto;
-  width: 4.55em; aspect-ratio: 40 / 61; border-radius: 0.45em;
-  color: var(--cc-ink);
-  transition: transform 0.12s, filter 0.12s;
+  width: 4.55em; aspect-ratio: 40 / 61; border-radius: 0.42em;
+  background: #fff; overflow: hidden; color: var(--cc-ink);
+  box-shadow: 0 1px 3px rgba(20, 40, 80, 0.3);
+  transition: transform 0.12s, box-shadow 0.12s;
 }
 .cc-card-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; display: block; pointer-events: none;
+  object-fit: cover; display: block; pointer-events: none;
   user-select: none; -webkit-user-drag: none;
-  filter: drop-shadow(0 1px 2px rgba(20, 40, 80, 0.32));
 }
 .cc-hand .cc-card { cursor: default; }
 .cc-actions + * .cc-card, .cc-hand .cc-card { cursor: pointer; }
-/* Highlight states — a coloured glow that traces the card silhouette */
-.cc-card.is-melded .cc-card-img { filter: drop-shadow(0 0 0 var(--cc-good)) drop-shadow(0 0 3px var(--cc-good)) drop-shadow(0 1px 2px rgba(20, 40, 80, 0.3)); }
+/* Highlight states — coloured ring hugging the rounded card */
+.cc-card.is-melded { box-shadow: 0 0 0 2.5px var(--cc-good), 0 1px 3px rgba(20, 40, 80, 0.3); }
 .cc-card.is-dead { opacity: 0.6; }
-.cc-card.is-selected { transform: translateY(-1.2em); z-index: 10; }
-.cc-card.is-selected .cc-card-img { filter: drop-shadow(0 9px 14px rgba(20, 40, 80, 0.45)); }
-.cc-card.cc-back .cc-card-img { filter: drop-shadow(0 1px 2px rgba(20, 40, 80, 0.4)); }
-.cc-card.cc-empty { border: 1px dashed rgba(255, 255, 255, 0.5); border-radius: 0.45em; background: rgba(255, 255, 255, 0.1); }
+.cc-card.is-selected { transform: translateY(-1.2em); z-index: 10; box-shadow: 0 9px 16px rgba(20, 40, 80, 0.4); }
+.cc-card.cc-empty { background: rgba(255, 255, 255, 0.1); border: 1px dashed rgba(255, 255, 255, 0.5); box-shadow: none; }
 /* Joker fallback (this deck has no joker face) */
 .cc-card.cc-joker {
   background: linear-gradient(160deg, #fff, #f4ead0); border: 2px solid var(--cc-accent);
@@ -328,9 +338,7 @@
 .cc-card.cc-meld-c3 { --meld: var(--cc-suit-copas); }
 .cc-card.cc-meld-c4 { --meld: #7a5bd0; }
 .cc-card.cc-meld-c5 { --meld: #e07a2a; }
-.cc-card[class*="cc-meld-c"] .cc-card-img {
-  filter: drop-shadow(0 0 0 var(--meld)) drop-shadow(0 0 3px var(--meld)) drop-shadow(0 0 2px var(--meld));
-}
+.cc-card[class*="cc-meld-c"] { box-shadow: 0 0 0 2.5px var(--meld), 0 1px 3px rgba(20, 40, 80, 0.3); }
 
 @media (prefers-reduced-motion: reduce) {
   .cc-card, .cc-btn, .cc-opp, .cc-switch, .cc-switch-thumb { transition: none; }

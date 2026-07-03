@@ -13,7 +13,7 @@ import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
-const HUMAN_AVATARS = ['🤠', '💃', '🎸', '🐂', '🌹', '🏰', '🍷', '👑'];
+const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
 const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
 const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
 
@@ -230,7 +230,7 @@ class ChinchonUI {
           <span class="cc-label">Players</span>
           ${seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
           <div class="cc-player-row">
-            <button class="cc-av cc-av-btn" data-action="cycle-avatar" title="Change avatar">${s.humanAvatar}</button>
+            <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
             <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
           </div>
           ${aiRows.join('')}
@@ -250,6 +250,22 @@ class ChinchonUI {
   syncSetupInputs() {
     const input = this.el.setup.querySelector('[data-field="humanName"]');
     if (input) this._setup.humanName = input.value.trim() || 'You';
+  }
+
+  _openAvatarPicker() {
+    const grid = HUMAN_AVATARS.map((av) =>
+      `<button class="cc-av-opt ${av === this._setup.humanAvatar ? 'is-sel' : ''}" data-action="pick-avatar" data-v="${av}" aria-label="Avatar ${av}">${av}</button>`).join('');
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-avatar"></div><div class="cc-sheet cc-avatar-sheet">
+      <h2 class="cc-sheet-title">Choose your avatar</h2>
+      <div class="cc-av-grid">${grid}</div>
+      <button class="cc-btn cc-btn-ghost" data-action="close-avatar">Close</button>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  _closeAvatarPicker() {
+    this.el.modal.hidden = true;
+    this.el.modal.innerHTML = '';
   }
 
   startGame() {
@@ -719,12 +735,9 @@ class ChinchonUI {
     switch (act) {
       // setup
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
-      case 'cycle-avatar': {
-        this.syncSetupInputs();
-        const i = HUMAN_AVATARS.indexOf(this._setup.humanAvatar);
-        this._setup.humanAvatar = HUMAN_AVATARS[(i + 1) % HUMAN_AVATARS.length];
-        this._saveSetup(); this.renderSetup(); break;
-      }
+      case 'open-avatar': this.syncSetupInputs(); this._openAvatarPicker(); break;
+      case 'pick-avatar': this._setup.humanAvatar = a.dataset.v; this._saveSetup(); this._closeAvatarPicker(); this.renderSetup(); break;
+      case 'close-avatar': this._closeAvatarPicker(); break;
       case 'set-aidiff': this.syncSetupInputs(); this._setup.aiDifficulty[+a.dataset.i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'toggle-rules': this.syncSetupInputs(); this._setup.rulesOpen = !this._setup.rulesOpen; this.renderSetup(); break;
       case 'rule-victory': this.syncSetupInputs(); this._setup.config.victoryCondition = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
