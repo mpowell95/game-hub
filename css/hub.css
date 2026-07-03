@@ -32,7 +32,10 @@ body {
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  padding-top: max(14px, env(safe-area-inset-top));
+  /* Add breathing room BELOW the status bar/notch (env + fixed), not max(): with
+     max() the title butts against the clock at exactly the inset height, which is
+     what made "Game Hub" collide with the status bar. */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: saturate(1.2) blur(6px);
   border-bottom: 1px solid var(--hub-surface-2);
