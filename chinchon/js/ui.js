@@ -9,7 +9,10 @@ import { SUIT_META } from './deck.js';
 import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
-import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
+import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
+
+const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
+const DEFAULT_DECK_ID = 'baraja-libre';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
@@ -91,6 +94,7 @@ class ChinchonUI {
     this._onPointerUp = (e) => this.onPointerUp(e);
 
     ensureStylesheet();
+    setDeck(this._setup.deck);
     preloadDeck();
     this.mount();
   }
@@ -104,6 +108,7 @@ class ChinchonUI {
       humanName: typeof saved.humanName === 'string' ? saved.humanName : 'You',
       humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar : HUMAN_AVATARS[0],
       aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 3) : ['normal', 'normal', 'normal'],
+      deck: DECKS_BY_ID[saved.deck] ? saved.deck : DEFAULT_DECK_ID,
       rulesOpen: false,
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
     };
@@ -111,7 +116,7 @@ class ChinchonUI {
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiDifficulty: s.aiDifficulty, config: s.config });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiDifficulty: s.aiDifficulty, deck: s.deck, config: s.config });
   }
 
   // --- DOM construction -----------------------------------------------------
@@ -237,13 +242,27 @@ class ChinchonUI {
         </div>
 
         <div class="cc-section">
+          <span class="cc-label">Card deck</span>
+          <button class="cc-deck-btn" data-action="open-deck" title="Choose a deck">
+            <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'oros-12')}" alt="">
+            <span class="cc-deck-meta">
+              <span class="cc-deck-name">${esc(DECKS_BY_ID[s.deck].name)}</span>
+              <span class="cc-deck-sub">Tap to change</span>
+            </span>
+            <span class="cc-deck-go">▸</span>
+          </button>
+        </div>
+
+        <div class="cc-section">
           <button class="cc-rules-toggle" data-action="toggle-rules" aria-expanded="${s.rulesOpen}">
             <span class="cc-label">Rules</span><span class="cc-chevron">${s.rulesOpen ? '▾' : '▸'}</span></button>
           <div class="cc-rules" ${s.rulesOpen ? '' : 'hidden'}>${rulesBody}</div>
         </div>
 
         <button class="cc-btn cc-btn-primary" data-action="start">Start game</button>
-        <p class="cc-credit">Card art: Baraja Española · <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a></p>
+        <p class="cc-credit">${s.deck === 'baraja-libre'
+          ? `Card art: Baraja Española · <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>`
+          : `Card art: ${esc(DECKS_BY_ID[s.deck].credit)}`}</p>
       </div>`;
   }
 
@@ -264,6 +283,30 @@ class ChinchonUI {
   }
 
   _closeAvatarPicker() {
+    this.el.modal.hidden = true;
+    this.el.modal.innerHTML = '';
+  }
+
+  _openDeckPicker() {
+    const opts = listDecks().map((d) => {
+      const sel = d.id === this._setup.deck ? 'is-sel' : '';
+      const prev = ['oros-1', 'oros-12', 'back'].map((n, i) =>
+        `<img class="cc-deck-prev-card cc-dp${i}" src="${deckAssetUrl(d.id, n)}" alt="" draggable="false">`).join('');
+      return `<button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
+        <span class="cc-deck-prev">${prev}</span>
+        <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
+        <span class="cc-deck-opt-credit">${esc(d.credit)}</span>
+      </button>`;
+    }).join('');
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-deck-sheet">
+      <h2 class="cc-sheet-title">Choose a deck</h2>
+      <div class="cc-deck-grid">${opts}</div>
+      <button class="cc-btn cc-btn-ghost" data-action="close-deck">Close</button>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  _closeDeckPicker() {
     this.el.modal.hidden = true;
     this.el.modal.innerHTML = '';
   }
@@ -738,6 +781,11 @@ class ChinchonUI {
       case 'open-avatar': this.syncSetupInputs(); this._openAvatarPicker(); break;
       case 'pick-avatar': this._setup.humanAvatar = a.dataset.v; this._saveSetup(); this._closeAvatarPicker(); this.renderSetup(); break;
       case 'close-avatar': this._closeAvatarPicker(); break;
+      case 'open-deck': this.syncSetupInputs(); this._openDeckPicker(); break;
+      case 'pick-deck':
+        this._setup.deck = a.dataset.v; setDeck(a.dataset.v); preloadDeck();
+        this._saveSetup(); this._closeDeckPicker(); this.renderSetup(); break;
+      case 'close-deck': this._closeDeckPicker(); break;
       case 'set-aidiff': this.syncSetupInputs(); this._setup.aiDifficulty[+a.dataset.i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'toggle-rules': this.syncSetupInputs(); this._setup.rulesOpen = !this._setup.rulesOpen; this.renderSetup(); break;
       case 'rule-victory': this.syncSetupInputs(); this._setup.config.victoryCondition = a.dataset.v; this._saveSetup(); this.renderSetup(); break;

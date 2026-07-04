@@ -73,6 +73,42 @@
 }
 .cc-av-opt:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
 .cc-av-opt.is-sel { border-color: var(--cc-accent); background: rgba(212, 160, 23, 0.14); box-shadow: 0 0 0 2px var(--cc-accent); }
+
+/* Deck chooser: setup row button + popup grid of decks */
+.cc-deck-btn {
+  appearance: none; width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  border-radius: 14px; cursor: pointer; text-align: left; transition: background 0.15s, transform 0.15s;
+}
+.cc-deck-btn:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
+.cc-deck-thumb { width: 40px; height: 62px; object-fit: cover; border-radius: 6px; border: 1px solid var(--cc-surface-2); box-shadow: 0 2px 6px rgba(9, 24, 48, 0.18); }
+.cc-deck-meta { display: flex; flex-direction: column; gap: 2px; }
+.cc-deck-name { font-weight: 700; }
+.cc-deck-sub { font-size: 0.72rem; color: var(--cc-muted); }
+.cc-deck-go { margin-left: auto; color: var(--cc-muted); font-size: 1.2rem; }
+
+.cc-deck-sheet { max-width: 460px; }
+.cc-deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.cc-deck-opt {
+  appearance: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 10px 12px; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  border-radius: 14px; cursor: pointer; transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.cc-deck-opt:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
+.cc-deck-opt.is-sel { border-color: var(--cc-accent); background: rgba(212, 160, 23, 0.12); box-shadow: 0 0 0 2px var(--cc-accent); }
+.cc-deck-prev { position: relative; width: 130px; height: 92px; }
+.cc-deck-prev-card {
+  position: absolute; left: 50%; top: 4px; width: 52px; height: 80px; margin-left: -26px;
+  object-fit: cover; border-radius: 6px; border: 1px solid rgba(9, 24, 48, 0.15);
+  box-shadow: 0 3px 8px rgba(9, 24, 48, 0.22); background: #fff;
+}
+.cc-deck-prev-card.cc-dp0 { transform: rotate(-13deg) translateX(-22px); }
+.cc-deck-prev-card.cc-dp2 { transform: rotate(13deg) translateX(22px); }
+.cc-deck-prev-card.cc-dp1 { z-index: 1; }
+.cc-deck-opt-name { font-weight: 700; }
+.cc-deck-tick { color: var(--cc-accent); }
+.cc-deck-opt-credit { font-size: 0.68rem; color: var(--cc-muted); text-align: center; line-height: 1.3; }
+
 .cc-field { display: flex; flex-direction: column; gap: 8px; }
 .cc-label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); }
 .cc-segmented {

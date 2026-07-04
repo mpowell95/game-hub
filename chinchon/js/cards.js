@@ -18,6 +18,13 @@ const DECKS = {
     hasJoker: false, // deck has no joker face; we render a styled fallback
     credit: 'Baraja Española · CC BY-SA 3.0',
   },
+  'naipe-fino': {
+    id: 'naipe-fino',
+    name: 'Naipe Fino',
+    ext: 'webp',
+    hasJoker: false, // no joker face; styled fallback
+    credit: 'Naipe Fino — gold medallion deck',
+  },
 };
 const DEFAULT_DECK = 'baraja-libre';
 let currentDeck = DEFAULT_DECK;
@@ -28,6 +35,12 @@ export function setDeck(id) { if (DECKS[id]) currentDeck = id; return DECKS[curr
 
 // Asset base, resolved relative to this module so it works standalone and in-hub.
 function base(id) { return new URL(`../decks/${id}/`, import.meta.url).href; }
+
+/** Resolved URL for one face of a specific deck (for previews in the picker). */
+export function deckAssetUrl(id, name) {
+  const d = DECKS[id]; if (!d) return '';
+  return `${base(id)}${name}.${d.ext}`;
+}
 
 const SUIT_LABEL = { oros: 'Oros', copas: 'Copas', espadas: 'Espadas', bastos: 'Bastos' };
 function cardLabel(card) {

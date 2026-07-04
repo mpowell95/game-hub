@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v16';
+const CACHE = 'game-hub-v17';
 
 const ASSETS = [
   './',
@@ -35,11 +35,14 @@ const ASSETS = [
   './chinchon/js/ui.js',
 ];
 
-// Chinchón default deck (Baraja Española) — 48 faces + back.
-// See chinchon/decks/baraja-libre/CREDITS.md (CC BY-SA 3.0).
-for (const s of ['oros', 'copas', 'espadas', 'bastos'])
-  for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/baraja-libre/${s}-${r}.webp`);
-ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
+// Chinchón decks — 48 faces + back each.
+//   baraja-libre  Baraja Española (CC BY-SA 3.0, see its CREDITS.md)
+//   naipe-fino    gold medallion deck (see its CREDITS.md)
+for (const deck of ['baraja-libre', 'naipe-fino']) {
+  for (const s of ['oros', 'copas', 'espadas', 'bastos'])
+    for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/${deck}/${s}-${r}.webp`);
+  ASSETS.push(`./chinchon/decks/${deck}/back.webp`);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
