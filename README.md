@@ -1,7 +1,6 @@
 # Game Hub
 
-A small, ad-free, installable PWA that hosts self-contained game modules. First
-game: **Connect Four**, with a genuinely strong AI.
+A small, ad-free, installable PWA that hosts self-contained game modules.
 
 **Play:** https://mpowell95.github.io/game-hub/
 
@@ -14,7 +13,12 @@ game: **Connect Four**, with a genuinely strong AI.
     transposition table, iterative-deepening null-window search) that plays the
     game-theoretically correct move once the position is tractable, falling back to
     a deep heuristic search under a time budget in the wide-open opening
-- **Business Deal** — coming soon
+- **Chinchón** — Spanish rummy (Rummy/Gin family) vs. smart AI, 2–4 players. Build
+  runs and sets, *close* on a light hand, lowest score wins. Full rules panel, three
+  AI tiers, a scoreboard chart, and an authentic Baraja Española deck (card art
+  CC&nbsp;BY-SA&nbsp;3.0 — see `chinchon/decks/baraja-libre/CREDITS.md`).
+- **Business Deal** — Monopoly-Deal-style card game vs. AI; its own deployed app,
+  launched out from the hub.
 
 ## Architecture
 
@@ -26,10 +30,15 @@ game-hub/
 ├── manifest.webmanifest    # installable PWA
 ├── sw.js                   # service worker — full offline caching
 ├── icons/
-└── connect-four/           # self-contained game module
+├── connect-four/           # self-contained game module (bitboard AI + Web Worker)
+│   ├── index.html          # also runs standalone
+│   ├── js/ (board, game, ai, ui, worker)
+│   └── css/
+└── chinchon/               # self-contained game module (Spanish rummy)
     ├── index.html          # also runs standalone
-    ├── js/ (board, game, ai, ui, worker)
-    └── css/
+    ├── js/ (deck, meld, game, ai, cards, ui)
+    ├── css/
+    └── decks/baraja-libre/ # card-face images (WebP) + CREDITS.md
 ```
 
 Each game implements a tiny contract — `init(container)` / `destroy()` — so the hub

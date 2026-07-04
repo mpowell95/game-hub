@@ -75,8 +75,8 @@ export default { init, destroy };
 
 Spanish rummy (Rummy/Gin family). Build runs/sets, keep your hand light, and **close**
 when your leftover is small; lowest cumulative score wins. Built to the spec in
-`../ChinChon/chinchon-game-spec.md`. Card art is simple, license-free (suit colour +
-numeral) — do not copy the reference app's licensed art.
+`../ChinChon/docs/chinchon-game-spec.md`. Cards use a real **Baraja Española** deck —
+open, freely-licensed images (CC BY-SA 3.0), rendered from `cards.js`. See "Card decks".
 
 ### Layout & responsibilities
 
@@ -85,9 +85,11 @@ chinchon/js/deck.js   pure card data: SUITS, SUIT_META, cardValue, makeDeck, shu
 chinchon/js/meld.js   PURE rules engine (no DOM/state/RNG): candidate melds + exact-cover partition + scoring
 chinchon/js/game.js   async turn/round/match state machine + agent interface (no DOM)
 chinchon/js/ai.js     synchronous heuristic AIAgent (blunder-rate tiers)
-chinchon/js/ui.js     DOM, HumanAgent, render loop, modals, hub init/destroy contract
+chinchon/js/ui.js     DOM, HumanAgent, render loop, modals, avatar picker, hub init/destroy contract
+chinchon/js/cards.js  card-face renderer + deck registry (image decks); preload + joker fallback
 chinchon/js/test.js   headless engine assertions (node) — not deployed/precached
 chinchon/js/sim.js    headless all-AI match simulation (node) — not deployed/precached
+chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CREDITS.md
 ```
 
 ### Key design decisions
@@ -121,18 +123,43 @@ chinchon/js/sim.js    headless all-AI match simulation (node) — not deployed/p
 - **Place-cards on ending** (`attachableCards`) only applies on a *normal* close (not
   chinchón/−10), greedily chaining run extensions to shed deadwood.
 
+### Card decks (`cards.js` + `decks/`)
+
+Card faces are **images**, rendered by `cards.js` through a small **deck registry**
+(`DECKS`) so more decks can be added and offered in a picker later. The default deck,
+`baraja-libre`, is a real Spanish (Baraja Española) deck under **CC BY-SA 3.0**
+(attribution in `decks/baraja-libre/CREDITS.md` + a visible credit on the setup screen;
+the game *code* is unaffected — bundled images are a collection, not a derivative).
+
+- `renderCardFace(card, opts)` builds `<div class="cc-card"><img …></div>`; the image IS
+  the whole face (no drawn overlays). `preloadDeck()` warms the cache; jokers have no
+  face in this deck → a styled fallback. Assets: `decks/<id>/<suit>-<rank>.webp`
+  (`oros/copas/espadas/bastos`, ranks 1–12) + `back.webp`.
+- **Cards are opaque** — `.cc-card` uses `object-fit: cover` on a white background. Do
+  NOT rely on transparency.
+
+**Adding a deck (gotcha — learned the hard way):** source card art is usually framed
+inconsistently (each card in a different-sized transparent canvas). Rasterize every card
+**at a fixed width and flatten onto white** (`resvg` → `sharp.flatten({background:'#fff'}).webp()`)
+for uniform opaque cards. Do NOT crop to the content bbox (per-card extents vary wildly
+→ inconsistent shapes) and do NOT ship transparent cards (the margin shows the table
+colour as a grey band). ~400px WebP, ~1.5 MB / 49 files. Then register it in `cards.js`,
+add the files to `sw.js` ASSETS, and bump `CACHE`.
+
 ### Scope status
 
 - **Pass 1 (done):** rules/meld engine, full turn loop (draw/discard/close/deck-resets),
   end-of-round + end-of-match modals with score tables, in-hub + standalone.
 - **Pass 2 (done):** full settings/rules panel for all ~11 rules + player count + human
-  name/avatar + per-AI difficulty (Easy/Average/Hard), persisted to `localStorage`
-  (`chinchon-settings`); inline-SVG scoreboard line chart (toggle on the round &
-  match modals, one polyline per player from `player.scoreHistory`, dashed line at the
-  score limit); closer meld breakdown; place-cards auto/manual/off (manual prompts the
-  human via `agent.choosePlacements`); session stats (`chinchon-stats`:
-  games/wins/losses/closes/chinchóns) shown on the setup screen.
-- **Possible later polish (not built):** one-undo affordance, deck/figure skins, sound.
+  name + per-AI difficulty, persisted to `localStorage` (`chinchon-settings`); inline-SVG
+  scoreboard chart; closer meld breakdown; place-cards auto/manual/off (manual prompts
+  the human via `agent.choosePlacements`); session stats (`chinchon-stats`).
+- **Pass 3 (done):** authentic **Baraja Española** deck (real WebP faces via the `cards.js`
+  registry, CC BY-SA 3.0); Spanish avatars with a **pop-up picker grid** (was a random
+  cycle); opponents by count (1 = full banner, 2 = corners, 3 = across the top); larger
+  two-row hand with drag-to-reorder, sort (suit/rank) + highlight-melds toggles; in-game ☰ menu.
+- **Multi-deck ready:** the registry supports more decks; a settings deck-picker is the
+  natural next step. **Later polish (not built):** one-undo affordance, sound.
 
 ### Tests
 

@@ -9,7 +9,7 @@ The Spanish-suited card faces in this folder are from an open, freely-licensed
 - **License:** Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0) —
   https://creativecommons.org/licenses/by-sa/3.0/
 - **Changes made:** files renamed to the game's `<suit>-<rank>` convention and
-  optimized for the web (precision reduction / re-encoding).
+  rasterized to WebP (~400px wide, flattened onto a white card background) for the web.
 
 Per CC BY-SA 3.0, these card images — and any modifications to them — remain
 licensed under CC BY-SA 3.0, with attribution as above. The game's own source
