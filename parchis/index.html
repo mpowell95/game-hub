@@ -38,13 +38,15 @@
 
   /* control strip */
   #control { display:flex; align-items:center; gap:14px; padding:12px 4px 4px; }
-  .pc-die { width:60px; height:60px; flex:none; border-radius:13px; background:#FBF7EC; border:1px solid #d8cbb0;
-    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); padding:8px; gap:1px;
-    cursor:pointer; box-shadow:0 4px 0 #b7a888, 0 6px 10px var(--shadow); }
-  .pc-die:active { transform:translateY(2px); box-shadow:0 2px 0 #b7a888; }
+  .pc-dice { flex:none; display:flex; gap:7px; background:transparent; border:none; padding:0; cursor:pointer; }
+  .pc-dice:active { transform:translateY(2px); }
+  .pc-die { width:46px; height:46px; border-radius:11px; background:#FBF7EC; border:1px solid #d8cbb0;
+    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); padding:6px; gap:1px;
+    box-shadow:0 4px 0 #b7a888, 0 6px 9px var(--shadow); transition:opacity .2s ease; }
+  .pc-die.used { opacity:.38; box-shadow:0 2px 0 #b7a888; }
   .pc-pip-slot { display:flex; align-items:center; justify-content:center; }
-  .pc-pip { width:10px; height:10px; border-radius:50%; background:#2A2115; }
-  .pc-die.pulse { animation:diepulse 1.15s ease-in-out infinite; }
+  .pc-pip { width:8px; height:8px; border-radius:50%; background:#2A2115; }
+  .pc-dice.pulse .pc-die { animation:diepulse 1.15s ease-in-out infinite; }
   @keyframes diepulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.07);} }
 
   .pc-info { flex:1; display:flex; flex-direction:column; gap:7px; min-width:0; }
@@ -341,67 +343,64 @@
     return isBarrier(state, color, { zone: pawn.zone, pos: pawn.pos });
   }
 
+  function uniqueValues(arr) {
+    var out = [];
+    for (var i = 0; i < arr.length; i++) if (out.indexOf(arr[i]) === -1) out.push(arr[i]);
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
-  // Public: legalMoves
+  // Public: legalMoves (two dice). Reads the unused dice from state.dice.
   // ---------------------------------------------------------------------------
-  function legalMoves(state, die) {
+  function legalMoves(state) {
     var phase = currentPhase(state);
-    if (phase === "gameover") return [];
+    if (phase === "gameover" || phase === "roll") return [];
 
     var playerIdx = state.turn;
     var player = state.players[playerIdx];
-    var color = player.color;
     var moves = [];
     var i, m, pawn;
 
-    // Bonus phase: any on-board pawn may take the head bonus. No entry, no forced break.
+    // Bonus phase: any on-board pawn may take the head bonus (consumes no die).
     if (phase === "bonus") {
       var amount = state.bonusQueue[0];
       for (i = 0; i < player.pawns.length; i++) {
         pawn = player.pawns[i];
         if (!isOnBoard(pawn)) continue;
         m = computeMove(state, playerIdx, pawn, amount, "bonus");
-        if (m) moves.push(m);
+        if (m) { m.usesDice = []; moves.push(m); }
       }
       return moves;
     }
 
-    // Roll phase.
-    // Third consecutive six: no move at all (penalty handled by resolveNoMove).
-    if (die === 6 && state.sixCount === 2) return [];
+    // Move phase: spend the unused dice.
+    var dice = state.dice;
+    var values = uniqueValues(dice);        // distinct faces still available
+    var canSum = dice.length === 2;         // both dice still available -> a sum move is possible
+    var sum = canSum ? dice[0] + dice[1] : 0;
 
-    var casaCount = 0;
-    for (i = 0; i < player.pawns.length; i++) {
-      if (player.pawns[i].zone === "casa") casaCount++;
-    }
-    // 6-as-7 only when zero pawns are in casa at the moment of the roll.
-    var effective = (die === 6 && casaCount === 0) ? 7 : die;
-
-    // Mandatory entry on a 5: if entry is legal it is the only move.
-    if (die === 5 && canEnter(state, playerIdx)) {
-      var enterer = firstCasaPawn(player);
-      return [buildEnterMove(state, playerIdx, enterer)];
-    }
-
-    // Forced barrier break on a 6 (or 6-as-7): if any barrier pawn can move, only
-    // barrier-pawn moves are allowed.
-    if (die === 6) {
-      var breakMoves = [];
-      for (i = 0; i < player.pawns.length; i++) {
-        pawn = player.pawns[i];
-        if (!pawnInBarrier(state, color, pawn)) continue;
-        m = computeMove(state, playerIdx, pawn, effective, "advance");
-        if (m) breakMoves.push(m);
-      }
-      if (breakMoves.length > 0) return breakMoves;
-    }
-
-    // Normal advance moves.
     for (i = 0; i < player.pawns.length; i++) {
       pawn = player.pawns[i];
       if (!isOnBoard(pawn)) continue;
-      m = computeMove(state, playerIdx, pawn, effective, "advance");
-      if (m) moves.push(m);
+      for (var vi = 0; vi < values.length; vi++) {         // one piece per die
+        m = computeMove(state, playerIdx, pawn, values[vi], "advance");
+        if (m) { m.usesDice = [values[vi]]; moves.push(m); }
+      }
+      if (canSum) {                                         // one piece by both dice (the sum)
+        m = computeMove(state, playerIdx, pawn, sum, "advance");
+        if (m) { m.usesDice = [dice[0], dice[1]]; moves.push(m); }
+      }
+    }
+
+    // Leaving casa: a die showing 5, or two dice summing to 5. Optional (not forced).
+    if (canEnter(state, playerIdx)) {
+      var enterer = firstCasaPawn(player);
+      if (values.indexOf(5) !== -1) {
+        var em = buildEnterMove(state, playerIdx, enterer); em.usesDice = [5]; moves.push(em);
+      }
+      if (canSum && sum === 5) {
+        var em2 = buildEnterMove(state, playerIdx, enterer); em2.usesDice = [dice[0], dice[1]]; moves.push(em2);
+      }
     }
     return moves;
   }
@@ -472,6 +471,15 @@
     }
   }
 
+  // Remove the used die value(s) from the roll.
+  function consumeDice(state, usesDice) {
+    if (!usesDice) return;
+    for (var i = 0; i < usesDice.length; i++) {
+      var idx = state.dice.indexOf(usesDice[i]);
+      if (idx !== -1) state.dice.splice(idx, 1);
+    }
+  }
+
   function applyMove(state, move) {
     var s = clone(state);
     var events = [];
@@ -481,17 +489,15 @@
 
     if (move.kind === "enter") {
       applyEnter(s, playerIdx, pawn, move, events, earned);
-      s.lastMovedPawnId = move.pawnId; // die-roll move
-      s.pendingReroll = false;         // a 5 never owes a re-roll
+      s.lastMovedPawnId = move.pawnId; // a die move
+      consumeDice(s, move.usesDice);
     } else if (move.kind === "advance") {
       applyAdvance(s, playerIdx, pawn, move, events, earned);
-      s.lastMovedPawnId = move.pawnId; // die-roll move
-      var isSix = (move.amount === 6 || move.amount === 7); // a raw 6 was rolled
-      s.pendingReroll = isSix;         // reflects this roll; a non-6 clears any owed re-roll
-      if (isSix) s.sixCount += 1;
+      s.lastMovedPawnId = move.pawnId; // a die move
+      consumeDice(s, move.usesDice);
     } else if (move.kind === "bonus") {
       applyAdvance(s, playerIdx, pawn, move, events, earned);
-      // A bonus is not a die roll: lastMovedPawnId, sixCount, pendingReroll untouched.
+      // A bonus consumes no die and does not change lastMovedPawnId.
     }
 
     // Bonus queue: for a bonus move remove the resolved head first, then append newly
@@ -520,19 +526,22 @@
       events.push({ type: "gameOver", winners: state.winners.slice() });
       return;
     }
-    if (state.bonusQueue.length > 0) return; // stay in bonus phase
-    finishRollResolution(state, events);
+    if (state.bonusQueue.length > 0) return; // resolve bonuses first
+    if (state.dice.length > 0) return;       // dice still to use: stay in the move phase
+    finishTurn(state, events);
   }
 
-  function finishRollResolution(state, events) {
+  function finishTurn(state, events) {
     var currentFinished = state.winners.indexOf(state.turn) !== -1;
     if (state.pendingReroll && !currentFinished) {
-      // Same player rolls again. pendingReroll stays true (a re-roll is owed) and is
-      // reset by the next die-roll move; sixCount is preserved for the consecutive count.
+      // Doubles: the same player rolls again. Clear the spent dice back to the roll phase;
+      // doublesCount persists so three doubles in a row can be detected.
+      state.dice = [];
       return;
     }
+    state.dice = [];
     state.pendingReroll = false;
-    state.sixCount = 0;
+    state.doublesCount = 0;
     state.bonusQueue = [];
     nextTurn(state);
     events.push({ type: "turnPassed", to: state.turn });
@@ -550,40 +559,28 @@
   // ---------------------------------------------------------------------------
   // Public: resolveNoMove
   // ---------------------------------------------------------------------------
-  function resolveNoMove(state, die) {
+  function resolveNoMove(state) {
     var s = clone(state);
     var events = [];
     var phase = currentPhase(state);
-    if (phase === "gameover") return { state: s, events: events };
+    if (phase === "gameover" || phase === "roll") return { state: s, events: events };
 
     if (phase === "bonus") {
       var forfeited = s.bonusQueue[0];
       s.bonusQueue = s.bonusQueue.slice(1);
       events.push({ type: "bonusForfeited", amount: forfeited });
-      if (s.bonusQueue.length === 0) finishRollResolution(s, events);
+      // Back to the move phase if dice remain; otherwise finish the turn.
+      if (s.bonusQueue.length === 0 && s.dice.length === 0) finishTurn(s, events);
       return { state: s, events: events };
     }
 
-    // Roll phase.
-    if (die === 6 && s.sixCount === 2) { // third consecutive six
-      applyThreeSixesPenalty(s, events);
-      return { state: s, events: events };
-    }
-    if (die === 6) {
-      // A 6 with no legal move still counts as a consecutive six and grants the re-roll.
-      s.sixCount += 1;
-      s.pendingReroll = true;
-      return { state: s, events: events }; // same player, no turnPassed
-    }
-    // Non-6 with no legal move: the turn passes.
-    s.sixCount = 0;
-    s.pendingReroll = false;
-    nextTurn(s);
-    events.push({ type: "turnPassed", to: s.turn });
+    // Move phase, no legal move for the remaining dice: forfeit them and resolve the turn.
+    s.dice = [];
+    finishTurn(s, events);
     return { state: s, events: events };
   }
 
-  function applyThreeSixesPenalty(state, events) {
+  function applyThreeDoublesPenalty(state, events) {
     var sentPawnId = null;
     if (state.lastMovedPawnId != null) {
       var found = findPawn(state, state.lastMovedPawnId);
@@ -592,12 +589,31 @@
         sentPawnId = found.pawn.id;
       }
     }
-    events.push({ type: "threeSixesPenalty", pawnId: sentPawnId });
+    events.push({ type: "threeDoublesPenalty", pawnId: sentPawnId });
+    state.dice = [];
     state.bonusQueue = [];
     state.pendingReroll = false;
-    state.sixCount = 0;
+    state.doublesCount = 0;
     nextTurn(state);
     events.push({ type: "turnPassed", to: state.turn });
+  }
+
+  // Public: record a two-dice roll (UI owns randomness). Handles the doubles re-roll and
+  // the three-consecutive-doubles penalty.
+  function applyRoll(state, d1, d2) {
+    var s = clone(state);
+    var events = [];
+    if (currentPhase(state) !== "roll") return { state: s, events: events };
+    var doubles = (d1 === d2);
+    if (doubles && s.doublesCount >= 2) { // third consecutive doubles
+      applyThreeDoublesPenalty(s, events);
+      return { state: s, events: events };
+    }
+    s.dice = [d1, d2];
+    if (doubles) s.doublesCount += 1;
+    s.pendingReroll = doubles;
+    events.push({ type: "rolled", dice: [d1, d2], doubles: doubles });
+    return { state: s, events: events };
   }
 
   // ---------------------------------------------------------------------------
@@ -606,6 +622,7 @@
   function currentPhase(state) {
     if (state.winners.length >= 3) return "gameover";
     if (state.bonusQueue.length > 0) return "bonus";
+    if (state.dice.length > 0) return "move"; // dice rolled, still to be used
     return "roll";
   }
 
@@ -624,7 +641,8 @@
     return {
       players: players,
       turn: 0,
-      sixCount: 0,
+      dice: [],            // unused dice of the current roll (empty in the roll phase)
+      doublesCount: 0,     // consecutive doubles this turn (third triggers the penalty)
       bonusQueue: [],
       pendingReroll: false,
       lastMovedPawnId: null,
@@ -642,6 +660,7 @@
   // ---------------------------------------------------------------------------
   var ParchisEngine = {
     newGame: newGame,
+    applyRoll: applyRoll,
     legalMoves: legalMoves,
     applyMove: applyMove,
     resolveNoMove: resolveNoMove,
@@ -1429,10 +1448,9 @@
   // A 5 is dropped when the opponent has a casa pawn (a 5 forces entry, not advance);
   // a 6 becomes 7 when all their pawns are out (6-as-7).
   function reachDistances(player) {
-    var hasCasa = player.pawns.some(function (p) { return p.zone === "casa"; });
-    var d = [1, 2, 3, 4];
-    if (hasCasa) { d.push(6); } else { d.push(5, 7); }
-    return d;
+    // Two dice: an opponent can reach a target with a single die (1..6) or the sum of both
+    // dice (2..12), so any distance from 1 to 12 is reachable by some roll.
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   }
 
   // How exposed is a pawn of color C sitting on track square X, on the given state?
@@ -1532,7 +1550,7 @@
     return threatAt(newState, C, move.to.pos, true);
   }
 
-  function chooseMove(state, die, moves, difficulty) {
+  function chooseMove(state, moves, difficulty) {
     if (!moves || !moves.length) return null;
     difficulty = difficulty || "normal";
     var fl = flags(difficulty);
@@ -1565,23 +1583,22 @@
   // ---- Self-play harness (headless, engine only, no animation) --------------
   // difficulties: array of 4 strings by seat. Returns the winner order or a stall.
   function playGame(difficulties, maxTurns) {
-    maxTurns = maxTurns || 2000;
+    maxTurns = maxTurns || 4000;
     var state = Engine.newGame([]);
     var steps = 0;
     while (Engine.currentPhase(state) !== "gameover") {
       if (++steps > maxTurns) return { stalled: true, steps: steps, state: Engine.serialize(state) };
       var phase = Engine.currentPhase(state);
-      var diff = difficulties[state.turn] || "normal";
-      if (phase === "bonus") {
-        var bmoves = Engine.legalMoves(state, 0);
-        if (bmoves.length === 0) { state = Engine.resolveNoMove(state, 0).state; continue; }
-        state = Engine.applyMove(state, chooseMove(state, 0, bmoves, diff)).state;
+      if (phase === "roll") {
+        var d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6);
+        state = Engine.applyRoll(state, d1, d2).state;
         continue;
       }
-      var d = 1 + Math.floor(Math.random() * 6);
-      var moves = Engine.legalMoves(state, d);
-      if (moves.length === 0) { state = Engine.resolveNoMove(state, d).state; continue; }
-      state = Engine.applyMove(state, chooseMove(state, d, moves, diff)).state;
+      // move or bonus phase
+      var diff = difficulties[state.turn] || "normal";
+      var moves = Engine.legalMoves(state);
+      if (moves.length === 0) { state = Engine.resolveNoMove(state).state; continue; }
+      state = Engine.applyMove(state, chooseMove(state, moves, diff)).state;
     }
     return { winners: state.winners.slice(), steps: steps };
   }
@@ -1608,20 +1625,151 @@
   if (typeof module !== "undefined" && module.exports) module.exports = AI;
 })();
 </script>
+<!-- module: i18n.js -->
+<script>
+/*
+ * Parchís i18n: Spanish (default) and English UI copy. Plain script; attaches
+ * window.ParchisI18n with t(key, params), setLang, getLang, and rules().
+ * No em dashes anywhere.
+ */
+(function () {
+  "use strict";
+
+  var STR = {
+    es: {
+      // header / menu
+      menu: "Menú", newGame: "Nueva partida", settings: "Ajustes", rules: "Reglas", close: "Cerrar",
+      rollHint: "Tirar los dados",
+      // settings
+      playerNames: "Nombres de jugadores",
+      seatControl: "Control de cada asiento",
+      human: "Humano", ai: "IA",
+      aiDifficulty: "Dificultad de la IA",
+      easy: "Fácil", normal: "Normal", hard: "Difícil",
+      sound: "Sonido (próximamente)",
+      language: "Idioma",
+      save: "Guardar",
+      // control strip
+      bonus: "Bono: {n}",
+      doublesLabel: "Dobles:",
+      thinking: "{name} piensa...",
+      turnOf: "Turno de {name}",
+      // toasts
+      noMove: "Sin movimiento",
+      bonusBanner: "¡Bono de {n}!",
+      bonusLost: "Bono perdido",
+      captured: "¡Te como!",
+      barrier: "¡Barrera!",
+      reachedMeta: "¡A la meta!",
+      finishes: "¡{name} termina!",
+      threeDoubles: "Tres dobles",
+      // illegal-move reasons
+      needFive: "Necesitas un 5 para salir",
+      exactCount: "Necesitas cuenta exacta",
+      barrierBlocks: "Barrera bloquea",
+      notAllowed: "Movimiento no permitido",
+      // prompt / game over
+      unfinished: "Hay una partida sin terminar.",
+      continueGame: "Continuar partida",
+      gameOver: "Fin de la partida",
+      finishOrder: "Orden de llegada:",
+      // color names
+      amarillo: "Amarillo", azul: "Azul", rojo: "Rojo", verde: "Verde",
+      langNameEs: "Español", langNameEn: "English"
+    },
+    en: {
+      menu: "Menu", newGame: "New game", settings: "Settings", rules: "Rules", close: "Close",
+      rollHint: "Roll the dice",
+      playerNames: "Player names",
+      seatControl: "Control for each seat",
+      human: "Human", ai: "AI",
+      aiDifficulty: "AI difficulty",
+      easy: "Easy", normal: "Normal", hard: "Hard",
+      sound: "Sound (coming soon)",
+      language: "Language",
+      save: "Save",
+      bonus: "Bonus: {n}",
+      doublesLabel: "Doubles:",
+      thinking: "{name} is thinking...",
+      turnOf: "{name}'s turn",
+      noMove: "No move",
+      bonusBanner: "Bonus of {n}!",
+      bonusLost: "Bonus forfeited",
+      captured: "Captured!",
+      barrier: "Barrier!",
+      reachedMeta: "Home!",
+      finishes: "{name} finishes!",
+      threeDoubles: "Three doubles",
+      needFive: "You need a 5 to leave home",
+      exactCount: "Exact count needed",
+      barrierBlocks: "A barrier blocks it",
+      notAllowed: "Move not allowed",
+      unfinished: "There is an unfinished game.",
+      continueGame: "Continue game",
+      gameOver: "Game over",
+      finishOrder: "Finish order:",
+      amarillo: "Yellow", azul: "Blue", rojo: "Red", verde: "Green",
+      langNameEs: "Español", langNameEn: "English"
+    }
+  };
+
+  // Rules screen: two-dice ruleset, per language.
+  var RULES = {
+    es: [
+      ["Dos dados", "Se juega con dos dados. Mueves una ficha con cada dado, o una sola ficha con la suma de ambos."],
+      ["Salir de casa", "Sales con un 5 en cualquier dado, o con dos dados que sumen 5. La ficha se coloca en tu salida."],
+      ["Dobles", "Si sacas dobles, repites tirada. Tres dobles seguidos: la última ficha que moviste vuelve a casa (a salvo en el pasillo o la meta)."],
+      ["Comer", "Si caes justo sobre una ficha rival en casilla normal, la comes y vuelve a su casa. Comer da un bono de 20."],
+      ["Seguros", "En los seguros no se come y pueden convivir fichas de distinto color. Las salidas son seguros."],
+      ["Barreras", "Dos fichas del mismo color forman barrera: nadie pasa ni cae en esa casilla."],
+      ["Meta y bonos", "Llegar a la meta requiere cuenta exacta y da un bono de 10. Los bonos (20 o 10) mueven cualquier ficha tuya."],
+      ["Ganar", "Gana quien lleve sus 4 fichas a la meta. La partida sigue para el resto de puestos."]
+    ],
+    en: [
+      ["Two dice", "Play with two dice. Move one piece with each die, or move one piece by the sum of both."],
+      ["Leaving home", "Come out with a 5 on either die, or with two dice that add up to 5. The piece goes to your start square."],
+      ["Doubles", "Rolling doubles lets you roll again. Three doubles in a row: the last piece you moved goes back home (safe in the corridor or on the meta)."],
+      ["Capturing", "Land exactly on an opponent on a normal square to send it home. A capture earns a 20-square bonus."],
+      ["Safe squares", "On safe squares nobody is captured and different colors can share the square. The start squares are safe."],
+      ["Barriers", "Two pieces of the same color form a barrier: no one may pass through or land on that square."],
+      ["Home and bonuses", "Reaching the meta needs an exact count and earns a 10-square bonus. Bonuses (20 or 10) can move any of your pieces."],
+      ["Winning", "The first to bring all 4 pieces to the meta wins. Play continues for the remaining places."]
+    ]
+  };
+
+  var lang = "es";
+
+  function t(key, params) {
+    var s = (STR[lang] && STR[lang][key] != null) ? STR[lang][key]
+      : (STR.en[key] != null ? STR.en[key] : key);
+    if (params) Object.keys(params).forEach(function (k) { s = s.split("{" + k + "}").join(params[k]); });
+    return s;
+  }
+  function setLang(l) { if (STR[l]) lang = l; }
+  function getLang() { return lang; }
+  function rules() { return RULES[lang] || RULES.en; }
+
+  var I18n = { t: t, setLang: setLang, getLang: getLang, rules: rules, langs: ["es", "en"] };
+  if (typeof window !== "undefined") window.ParchisI18n = I18n;
+  if (typeof globalThis !== "undefined") globalThis.ParchisI18n = I18n;
+})();
+</script>
 <!-- module: hud.js -->
 <script>
 /*
- * Parchís HUD: die, turn chip, bonus indicator, six pips, toasts, and overlay menus
- * (menu, settings, rules, prompts, game over). Presentation only; game.js owns logic and
- * calls these update methods. Attaches window.ParchisHUD.
+ * Parchís HUD: two dice, turn chip, bonus indicator, doubles pips, toasts, and overlay
+ * menus (menu, settings, rules, prompts, game over). Presentation only; game.js owns logic
+ * and calls these update methods. Text comes from window.ParchisI18n. Attaches window.ParchisHUD.
  */
 (function () {
   "use strict";
 
   var SHAPES = { amarillo: "circle", azul: "triangle", rojo: "square", verde: "diamond" };
-  var NAMES_ES = { amarillo: "Amarillo", azul: "Azul", rojo: "Rojo", verde: "Verde" };
+  var COLORS = ["amarillo", "azul", "rojo", "verde"];
 
   function T() { return (typeof window !== "undefined" && window.ParchisTheme) || globalThis.ParchisTheme; }
+  function t(key, params) { return window.ParchisI18n.t(key, params); }
+  function reduce() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
   function elh(tag, cls, parent, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -1630,7 +1778,7 @@
     return e;
   }
 
-  // Small inline shape marker for a color (used in the turn chip and menus).
+  // Small inline shape marker for a color (turn chip and menus).
   function shapeMarkup(color, px) {
     var c = T().colors[color], s = SHAPES[color], r = px * 0.42, cx = px / 2, cy = px / 2;
     var inner;
@@ -1665,15 +1813,17 @@
     var brand = elh("div", "pc-brand", dom.header);
     brand.innerHTML = '<span class="pc-word">Parchís</span>';
     var menuBtn = elh("button", "pc-iconbtn", dom.header, "☰");
-    menuBtn.setAttribute("aria-label", "Menú");
+    menuBtn.setAttribute("aria-label", t("menu"));
     menuBtn.onclick = function () { HUD.openMenu(); };
 
-    // Control strip: die | chip + bonus + pips
-    var die = elh("button", "pc-die", dom.control);
-    die.setAttribute("aria-label", "Tirar el dado");
-    die.onclick = function () { if (HUD.handlers.onRollTap) HUD.handlers.onRollTap(); };
-    dom.die = die;
-    paintDie(die, null);
+    // Control strip: two dice (tap to roll) | chip + bonus + doubles pips
+    var dice = elh("button", "pc-dice", dom.control);
+    dice.setAttribute("aria-label", t("rollHint"));
+    dice.onclick = function () { if (HUD.handlers.onRollTap) HUD.handlers.onRollTap(); };
+    dom.dice = dice;
+    dom.die1 = elh("span", "pc-die", dice);
+    dom.die2 = elh("span", "pc-die", dice);
+    paintDie(dom.die1, null); paintDie(dom.die2, null);
 
     var info = elh("div", "pc-info", dom.control);
     dom.chip = elh("div", "pc-chip", info);
@@ -1682,56 +1832,62 @@
     dom.pips = elh("div", "pc-pips", meta);
 
     HUD.setBonus(null);
-    HUD.setPips(0);
+    HUD.setDoubles(0);
+    HUD.setDice([], false);
     return HUD;
   };
 
-  HUD.setDie = function (value, pulsing) {
-    paintDie(dom.die, value);
-    dom.die.classList.toggle("pulse", !!pulsing);
-    dom.die.disabled = !pulsing && value != null ? false : false;
+  // rollDice: [{ v, used }] for the current roll, or [] for blank (awaiting a roll).
+  HUD.setDice = function (rollDice, pulsing) {
+    rollDice = rollDice || [];
+    [dom.die1, dom.die2].forEach(function (de, i) {
+      var rd = rollDice[i];
+      paintDie(de, rd ? rd.v : null);
+      de.classList.toggle("used", !!(rd && rd.used));
+    });
+    dom.dice.classList.toggle("pulse", !!pulsing);
   };
-  HUD.rollAnim = function (finalValue, cb) {
-    // quick shuffle then settle (skipped under reduced motion)
-    if (matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { HUD.setDie(finalValue, false); if (cb) cb(); return; }
+  HUD.rollDiceAnim = function (dd, cb) {
+    if (reduce()) { HUD.setDice([{ v: dd[0], used: false }, { v: dd[1], used: false }], false); if (cb) cb(); return; }
+    dom.dice.classList.remove("pulse");
+    dom.die1.classList.remove("used"); dom.die2.classList.remove("used");
     var n = 0, iv = setInterval(function () {
-      n++; paintDie(dom.die, 1 + Math.floor(Math.random() * 6));
-      if (n >= 6) { clearInterval(iv); paintDie(dom.die, finalValue); if (cb) cb(); }
+      n++;
+      paintDie(dom.die1, 1 + Math.floor(Math.random() * 6));
+      paintDie(dom.die2, 1 + Math.floor(Math.random() * 6));
+      if (n >= 6) { clearInterval(iv); paintDie(dom.die1, dd[0]); paintDie(dom.die2, dd[1]); if (cb) cb(); }
     }, 55);
   };
 
   HUD.setTurn = function (color, name) {
     dom.chip.innerHTML = shapeMarkup(color, 22);
-    var label = elh("span", "pc-chip-name", dom.chip, name || NAMES_ES[color]);
+    var label = elh("span", "pc-chip-name", dom.chip, name);
     label.style.color = T().colors[color].base;
     dom.chip.style.borderColor = T().colors[color].base;
   };
 
   HUD.setBonus = function (amount) {
     if (amount == null) { dom.bonus.textContent = ""; dom.bonus.style.display = "none"; }
-    else { dom.bonus.textContent = "Bono: " + amount; dom.bonus.style.display = "inline-flex"; }
+    else { dom.bonus.textContent = t("bonus", { n: amount }); dom.bonus.style.display = "inline-flex"; }
   };
 
-  HUD.setPips = function (six) {
+  HUD.setDoubles = function (count) {
     dom.pips.innerHTML = "";
-    elh("span", "pc-pips-label", dom.pips, "6:");
-    for (var i = 0; i < 2; i++) {
-      var p = elh("span", "pc-sixpip" + (i < six ? " on" : ""), dom.pips);
-    }
+    elh("span", "pc-pips-label", dom.pips, t("doublesLabel"));
+    for (var i = 0; i < 2; i++) elh("span", "pc-sixpip" + (i < count ? " on" : ""), dom.pips);
   };
 
   HUD.toast = function (msg, opts) {
     opts = opts || {};
     if (toastTimer) clearTimeout(toastTimer);
     dom.toast.innerHTML = "";
-    var t = elh("div", "pc-toast-msg" + (opts.kind ? " " + opts.kind : ""), dom.toast);
-    t.textContent = msg;
-    if (opts.badge) elh("span", "pc-toast-badge", t, opts.badge);
-    // reflow to restart animation
-    void t.offsetWidth; t.classList.add("show");
+    var el = elh("div", "pc-toast-msg" + (opts.kind ? " " + opts.kind : ""), dom.toast);
+    el.textContent = msg;
+    if (opts.badge) elh("span", "pc-toast-badge", el, opts.badge);
+    void el.offsetWidth; el.classList.add("show");
     var ms = opts.ms || 1800;
-    if (ms > 0) toastTimer = setTimeout(function () { t.classList.remove("show"); }, ms);
-    return t;
+    if (ms > 0) toastTimer = setTimeout(function () { el.classList.remove("show"); }, ms);
+    return el;
   };
   HUD.clearToast = function () { if (toastTimer) clearTimeout(toastTimer); dom.toast.innerHTML = ""; };
 
@@ -1743,10 +1899,7 @@
     var card = elh("div", "pc-card", dom.overlay);
     var head = elh("div", "pc-card-head", card);
     elh("h2", null, head, title);
-    if (!opts.noClose) {
-      var x = elh("button", "pc-iconbtn", head, "✕");
-      x.onclick = HUD.closeOverlay;
-    }
+    if (!opts.noClose) { var x = elh("button", "pc-iconbtn", head, "✕"); x.onclick = HUD.closeOverlay; }
     var body = elh("div", "pc-card-body", card);
     builder(body);
     return card;
@@ -1754,50 +1907,63 @@
   HUD.closeOverlay = function () { dom.overlay.style.display = "none"; dom.overlay.innerHTML = ""; };
 
   HUD.openMenu = function () {
-    overlay("Menú", function (body) {
-      mkBtn(body, "Nueva partida", function () { HUD.closeOverlay(); if (HUD.handlers.onNewGame) HUD.handlers.onNewGame(); });
-      mkBtn(body, "Ajustes", function () { HUD.openSettings(); });
-      mkBtn(body, "Reglas", function () { HUD.openRules(); });
-      mkBtn(body, "Cerrar", HUD.closeOverlay, "ghost");
+    overlay(t("menu"), function (body) {
+      mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); if (HUD.handlers.onNewGame) HUD.handlers.onNewGame(); });
+      mkBtn(body, t("settings"), function () { HUD.openSettings(); });
+      mkBtn(body, t("rules"), function () { HUD.openRules(); });
+      mkBtn(body, t("close"), HUD.closeOverlay, "ghost");
     });
   };
 
   HUD.openSettings = function () {
     var s = (HUD.handlers.getSettings && HUD.handlers.getSettings()) || {};
-    overlay("Ajustes", function (body) {
-      elh("p", "pc-hint", body, "Nombres de jugadores");
+    overlay(t("settings"), function (body) {
+      elh("p", "pc-hint", body, t("playerNames"));
       var names = {};
-      ["amarillo", "azul", "rojo", "verde"].forEach(function (color) {
+      COLORS.forEach(function (color) {
         var row = elh("label", "pc-field", body);
         row.innerHTML = shapeMarkup(color, 18);
         var inp = elh("input", null, row);
-        inp.type = "text"; inp.value = (s.names && s.names[color]) || NAMES_ES[color];
+        inp.type = "text"; inp.value = (s.names && s.names[color]) || ""; inp.placeholder = t(color);
         names[color] = inp;
       });
-      elh("p", "pc-hint", body, "Control de cada asiento");
+
+      elh("p", "pc-hint", body, t("seatControl"));
       var seatWrap = elh("div", "pc-seatrow", body);
       var human = {};
-      ["amarillo", "azul", "rojo", "verde"].forEach(function (color) {
+      COLORS.forEach(function (color) {
         var b = elh("button", "pc-seat" + (isHuman(s, color) ? " on" : ""), seatWrap);
-        b.innerHTML = shapeMarkup(color, 16) + '<span>' + (isHuman(s, color) ? "Humano" : "IA") + '</span>';
+        b.innerHTML = shapeMarkup(color, 16) + '<span>' + (isHuman(s, color) ? t("human") : t("ai")) + '</span>';
         human[color] = isHuman(s, color);
-        b.onclick = function () { human[color] = !human[color]; b.querySelector("span").textContent = human[color] ? "Humano" : "IA"; b.classList.toggle("on", human[color]); };
+        b.onclick = function () { human[color] = !human[color]; b.querySelector("span").textContent = human[color] ? t("human") : t("ai"); b.classList.toggle("on", human[color]); };
       });
-      elh("p", "pc-hint", body, "Dificultad de la IA");
+
+      elh("p", "pc-hint", body, t("aiDifficulty"));
       var diffWrap = elh("div", "pc-seatrow", body);
       var diff = s.difficulty || "normal", diffBtns = {};
-      [["facil", "Fácil"], ["normal", "Normal"], ["dificil", "Difícil"]].forEach(function (pair) {
+      [["facil", t("easy")], ["normal", t("normal")], ["dificil", t("hard")]].forEach(function (pair) {
         var b = elh("button", "pc-seat" + (diff === pair[0] ? " on" : ""), diffWrap, pair[1]);
         diffBtns[pair[0]] = b;
         b.onclick = function () { diff = pair[0]; Object.keys(diffBtns).forEach(function (k) { diffBtns[k].classList.toggle("on", k === diff); }); };
       });
+
+      elh("p", "pc-hint", body, t("language"));
+      var langWrap = elh("div", "pc-seatrow", body);
+      var lang = s.lang || "es", langBtns = {};
+      [["es", t("langNameEs")], ["en", t("langNameEn")]].forEach(function (pair) {
+        var b = elh("button", "pc-seat" + (lang === pair[0] ? " on" : ""), langWrap, pair[1]);
+        langBtns[pair[0]] = b;
+        b.onclick = function () { lang = pair[0]; Object.keys(langBtns).forEach(function (k) { langBtns[k].classList.toggle("on", k === lang); }); };
+      });
+
       var soundRow = elh("label", "pc-field pc-switch", body);
-      elh("span", null, soundRow, "Sonido (próximamente)");
+      elh("span", null, soundRow, t("sound"));
       var snd = elh("input", null, soundRow); snd.type = "checkbox"; snd.checked = !!s.sound; snd.disabled = true;
-      mkBtn(body, "Guardar", function () {
-        var out = { names: {}, humanSeats: [], difficulty: diff, sound: false };
-        ["amarillo", "azul", "rojo", "verde"].forEach(function (color) {
-          out.names[color] = names[color].value.trim() || NAMES_ES[color];
+
+      mkBtn(body, t("save"), function () {
+        var out = { names: {}, humanSeats: [], difficulty: diff, lang: lang, sound: false };
+        COLORS.forEach(function (color) {
+          out.names[color] = names[color].value.trim(); // empty -> falls back to the localized color name
           if (human[color]) out.humanSeats.push(idx(color));
         });
         if (out.humanSeats.length === 0) out.humanSeats = [0];
@@ -1806,12 +1972,12 @@
       });
     });
   };
-  function idx(color) { return ["amarillo", "azul", "rojo", "verde"].indexOf(color); }
+  function idx(color) { return COLORS.indexOf(color); }
   function isHuman(s, color) { return (s.humanSeats || [0, 1, 2, 3]).indexOf(idx(color)) !== -1; }
 
   HUD.openRules = function () {
-    overlay("Reglas", function (body) {
-      RULES_ES.forEach(function (sec) {
+    overlay(t("rules"), function (body) {
+      window.ParchisI18n.rules().forEach(function (sec) {
         elh("h3", "pc-rule-h", body, sec[0]);
         elh("p", "pc-rule-p", body, sec[1]);
       });
@@ -1826,14 +1992,14 @@
   };
 
   HUD.gameover = function (order, names, onNew) {
-    overlay("Fin de la partida", function (body) {
-      elh("p", "pc-rule-p", body, "Orden de llegada:");
+    overlay(t("gameOver"), function (body) {
+      elh("p", "pc-rule-p", body, t("finishOrder"));
       order.forEach(function (color, i) {
         var row = elh("div", "pc-result", body);
         row.innerHTML = '<span class="pc-place">' + (i + 1) + "º</span>" + shapeMarkup(color, 20);
-        elh("span", null, row, (names && names[color]) || NAMES_ES[color]);
+        elh("span", null, row, (names && names[color]) || t(color));
       });
-      mkBtn(body, "Nueva partida", function () { HUD.closeOverlay(); onNew(); });
+      mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); onNew(); });
     }, { noClose: true });
   };
 
@@ -1842,19 +2008,6 @@
     b.onclick = onClick; return b;
   }
 
-  // Compact Spanish rules summary (from 01-RULES.md; no em dashes).
-  var RULES_ES = [
-    ["Un dado", "Se juega con un solo dado (diferencia española). Tiras, mueves una ficha y, si sacas 6, vuelves a tirar."],
-    ["Salir de casa", "Solo sales con un 5, y salir es obligatorio si puedes. La ficha se coloca en tu salida."],
-    ["Seises", "Con un 6 repites tirada. Si tienes las 4 fichas fuera de casa, el 6 cuenta como 7. Tres seises seguidos: la última ficha movida vuelve a casa (a salvo en el pasillo o la meta)."],
-    ["Comer", "Si caes justo sobre una ficha rival en casilla normal, la comes y vuelve a su casa. Comer da un bono de 20."],
-    ["Seguros", "En las casillas de seguro no se come y pueden convivir fichas de distinto color. Las salidas son seguros."],
-    ["Barreras", "Dos fichas del mismo color forman barrera: nadie pasa ni cae ahí. Con un 6 debes romper tu barrera si puedes."],
-    ["Meta y bonos", "Llegar a la meta requiere cuenta exacta y da un bono de 10. Los bonos (20 o 10) mueven cualquier ficha tuya y se resuelven por orden."],
-    ["Ganar", "Gana quien lleve sus 4 fichas a la meta. La partida sigue para el resto de puestos."]
-  ];
-
-  HUD.NAMES_ES = NAMES_ES;
   if (typeof window !== "undefined") window.ParchisHUD = HUD;
   if (typeof globalThis !== "undefined") globalThis.ParchisHUD = HUD;
 })();
@@ -1878,24 +2031,26 @@
 
   var G = {
     state: null,
-    ui: "idle",     // idle | awaitRoll | rolling | showingMoves | animating | gameover
-    die: null,
+    ui: "idle",       // idle | awaitRoll | rolling | showingMoves | animating | gameover
+    rollDice: [],     // [{v, used}] for the current two-dice roll
     moves: [],
     settings: null
   };
 
+  function t(key, params) { return window.ParchisI18n.t(key, params); }
   function reduce() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
   function cell() { return Board.coords().cell; }
   function groupOffset() { return (Theme.layout.pad + Theme.layout.frameW) * cell(); }
   function color(idx) { return G.state.players[idx].color; }
   function curColor() { return color(G.state.turn); }
-  function nameOf(c) { return (G.settings.names && G.settings.names[c]) || HUD.NAMES_ES[c]; }
+  function nameOf(c) { var n = G.settings.names && G.settings.names[c]; return (n && n.trim()) ? n : t(c); }
 
   function defaultSettings() {
     return {
-      names: { amarillo: "Matt", azul: "Azul", rojo: "Rojo", verde: "Verde" },
+      names: { amarillo: "Matt" }, // azul/rojo/verde fall back to the localized color name
       humanSeats: [0],       // human amarillo vs 3 AI by default
       difficulty: "normal",  // facil | normal | dificil
+      lang: "es",
       sound: false
     };
   }
@@ -2013,7 +2168,7 @@
   // ---- HUD sync ------------------------------------------------------------
   function syncHud() {
     HUD.setTurn(curColor(), nameOf(curColor()));
-    HUD.setPips(G.state.sixCount);
+    HUD.setDoubles(G.state.doublesCount);
     HUD.setBonus(Engine.currentPhase(G.state) === "bonus" ? Engine.pendingBonus(G.state) : null);
   }
 
@@ -2024,86 +2179,77 @@
     var phase = Engine.currentPhase(G.state);
     if (phase === "gameover") { G.ui = "gameover"; onGameOver(); return; }
     if (phase === "bonus") { beginBonus(); return; }
+    if (phase === "move") { beginMove(); return; }
     beginRoll();
   }
 
   function beginRoll() {
     G.ui = "awaitRoll";
-    G.die = null;
+    G.rollDice = [];
+    HUD.setDice([], !isAI(G.state.turn)); // blank dice; pulse for a human to tap
     if (isAI(G.state.turn)) {
-      HUD.setDie(null, false);
-      HUD.toast(nameOf(curColor()) + " piensa...", { ms: 1100 });
-      var wait = 500 + Math.random() * 300;
+      HUD.toast(t("thinking", { name: nameOf(curColor()) }), { ms: 1100 });
+      var wait = 450 + Math.random() * 300;
       setTimeout(function () { if (G.ui === "awaitRoll" && isAI(G.state.turn)) aiRoll(); }, wait);
     } else {
-      HUD.setDie(null, true);
-      HUD.toast("Turno de " + nameOf(curColor()), { ms: 1200 });
+      HUD.toast(t("turnOf", { name: nameOf(curColor()) }), { ms: 1200 });
     }
   }
-  function aiRoll() {
-    G.ui = "rolling";
-    var d = 1 + Math.floor(Math.random() * 6);
-    HUD.rollAnim(d, function () { afterRoll(d); });
-  }
-
+  function rollTwo() { return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]; }
+  function aiRoll() { G.ui = "rolling"; var dd = rollTwo(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); }); }
   function onRollTap() {
     if (G.ui !== "awaitRoll" || isAI(G.state.turn)) return;
-    G.ui = "rolling";
-    var d = 1 + Math.floor(Math.random() * 6);
-    HUD.rollAnim(d, function () { afterRoll(d); });
+    G.ui = "rolling"; var dd = rollTwo(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); });
+  }
+  function afterRoll(dd) {
+    G.rollDice = [{ v: dd[0], used: false }, { v: dd[1], used: false }];
+    HUD.setDice(G.rollDice, false);
+    var res = Engine.applyRoll(G.state, dd[0], dd[1]);
+    var pen = res.events.filter(function (e) { return e.type === "threeDoublesPenalty"; })[0];
+    if (pen) {
+      HUD.toast(t("threeDoubles"), { kind: "warn", ms: 1600 });
+      G.ui = "animating";
+      var chain = Promise.resolve();
+      if (pen.pawnId) {
+        var g = pawnEl(pen.pawnId); markStart(g);
+        chain = flyHome(g, Board.pawnPlacement(Board.coords(), res.state)[pen.pawnId]);
+      }
+      chain.then(function () { G.rollDice = []; commit(res.state); });
+      return;
+    }
+    commit(res.state); // advance() routes to the move phase
   }
 
-  function afterRoll(d) {
-    G.die = d;
-    HUD.setDie(d, false);
-    var moves = Engine.legalMoves(G.state, d);
-    if (moves.length === 0) { handleNoMove(d); return; }
+  function beginMove() {
+    var moves = Engine.legalMoves(G.state);
+    if (moves.length === 0) { handleNoMove(); return; }
     G.moves = moves;
     if (isAI(G.state.turn)) { aiPlay(moves); return; }
     G.ui = "showingMoves";
     highlightMoves(moves);
-    if (moves.length === 1) setTimeout(function () { applyChosen(moves[0]); }, 400); // beat to read the die
+    if (moves.length === 1) setTimeout(function () { applyChosen(moves[0]); }, 400);
   }
   function aiPlay(moves) {
     G.ui = "showingMoves";
     highlightMoves(moves);
-    var move = window.ParchisAI.chooseMove(G.state, G.die || 0, moves, G.settings.difficulty);
-    var wait = 500 + Math.random() * 300;
+    var move = window.ParchisAI.chooseMove(G.state, moves, G.settings.difficulty);
+    var wait = 450 + Math.random() * 300;
     setTimeout(function () { if (G.ui === "showingMoves") applyChosen(move); }, wait);
   }
-
-  function handleNoMove(d) {
-    if (d === 6 && G.state.sixCount === 2) {
-      // three sixes: penalty (engine decides which pawn, if any)
-      var res = Engine.resolveNoMove(G.state, d);
-      var pen = res.events.filter(function (e) { return e.type === "threeSixesPenalty"; })[0];
-      HUD.toast("Tres seises", { kind: "warn", ms: 1600 });
-      G.ui = "animating";
-      var chain = Promise.resolve();
-      if (pen && pen.pawnId) {
-        var g = pawnEl(pen.pawnId); markStart(g);
-        var home = Board.pawnPlacement(Board.coords(), res.state)[pen.pawnId];
-        chain = flyHome(g, home);
-      }
-      chain.then(function () { commit(res.state); });
-      return;
-    }
-    HUD.toast("Sin movimiento", { ms: 1400 });
+  function handleNoMove() {
+    HUD.toast(t("noMove"), { ms: 1300 });
     G.ui = "animating";
-    setTimeout(function () {
-      var res = Engine.resolveNoMove(G.state, d);
-      commit(res.state);
-    }, 900);
+    setTimeout(function () { commit(Engine.resolveNoMove(G.state).state); }, 800);
   }
 
   function beginBonus() {
     var amount = Engine.pendingBonus(G.state);
-    HUD.toast("¡Bono de " + amount + "!", { kind: "bonus", ms: 1500 });
-    var moves = Engine.legalMoves(G.state, 0);
+    HUD.toast(t("bonusBanner", { n: amount }), { kind: "bonus", ms: 1500 });
+    var moves = Engine.legalMoves(G.state);
     if (moves.length === 0) {
       G.ui = "animating";
-      var res = Engine.resolveNoMove(G.state, 0);
-      HUD.toast("Bono perdido", { ms: 1400 });
+      var res = Engine.resolveNoMove(G.state);
+      HUD.toast(t("bonusLost"), { ms: 1400 });
       setTimeout(function () { commit(res.state); }, 700);
       return;
     }
@@ -2114,9 +2260,19 @@
   }
 
   // ---- applying a move + animating -----------------------------------------
+  function markDiceUsed(usesDice) {
+    if (!G.rollDice || !usesDice) return;
+    usesDice.forEach(function (v) {
+      for (var i = 0; i < G.rollDice.length; i++) {
+        if (!G.rollDice[i].used && G.rollDice[i].v === v) { G.rollDice[i].used = true; break; }
+      }
+    });
+  }
   function applyChosen(move) {
     if (G.ui !== "showingMoves") return;
     clearHighlights();
+    markDiceUsed(move.usesDice);
+    HUD.setDice(G.rollDice, false);
     G.ui = "animating";
     var oldState = G.state;
     var res = Engine.applyMove(oldState, move);
@@ -2143,19 +2299,19 @@
     // 2. capture (victim flies home) + toast
     var cap = events.filter(function (e) { return e.type === "captured"; })[0];
     if (cap) {
-      HUD.toast("¡Te como!", { kind: "capture", badge: "+20", ms: 1600 });
+      HUD.toast(t("captured"), { kind: "capture", badge: "+20", ms: 1600 });
       var vg = pawnEl(cap.victimPawnId);
       if (vg) { markStart(vg); await flyHome(vg, placeNew[cap.victimPawnId]); }
     }
 
     // 3. barrier / meta feedback
-    if (events.some(function (e) { return e.type === "barrierFormed"; })) HUD.toast("¡Barrera!", { kind: "barrier", ms: 1300 });
+    if (events.some(function (e) { return e.type === "barrierFormed"; })) HUD.toast(t("barrier"), { kind: "barrier", ms: 1300 });
     if (events.some(function (e) { return e.type === "reachedMeta"; })) {
-      HUD.toast("¡A la meta!", { kind: "meta", badge: "+10", ms: 1600 });
+      HUD.toast(t("reachedMeta"), { kind: "meta", badge: "+10", ms: 1600 });
       if (heroG) await celebrate(heroG);
     }
     if (events.some(function (e) { return e.type === "playerFinished"; })) {
-      HUD.toast("¡" + nameOf(c) + " termina!", { kind: "meta", ms: 1800 });
+      HUD.toast(t("finishes", { name: nameOf(c) }), { kind: "meta", ms: 1800 });
     }
   }
 
@@ -2205,20 +2361,23 @@
   }
   function explainIllegal(pawn) {
     jsShake(pawnEl(pawn.id));
-    var msg;
-    if (G.moves.length && G.moves[0].kind === "enter") msg = "Con 5 es obligatorio salir";
-    else if (G.moves.length && G.moves.every(function (m) { return m.breaksBarrier; })) msg = "Debes romper la barrera";
-    else {
-      var c = curColor();
-      if (pawn.zone === "casa") msg = "Necesitas un 5 para salir";
-      else {
-        var casaOut = G.state.players[G.state.turn].pawns.every(function (p) { return p.zone !== "casa"; });
-        var eff = (G.die === 6 && casaOut) ? 7 : G.die;
-        var path = Engine._internal.path(c, { zone: pawn.zone, pos: pawn.pos }, eff);
-        if (path === null) msg = "Necesitas cuenta exacta";
-        else if (path.some(function (sq) { return Engine._internal.isBarrier(G.state, c, sq); })) msg = "Barrera bloquea";
-        else msg = "Movimiento no permitido";
-      }
+    var msg, c = curColor();
+    if (pawn.zone === "casa") {
+      msg = t("needFive");
+    } else {
+      var vals = [], dice = G.state.dice || [];
+      dice.forEach(function (v) { if (vals.indexOf(v) === -1) vals.push(v); });
+      if (dice.length === 2) vals.push(dice[0] + dice[1]);
+      var barrierBlock = false, anyReaches = false;
+      vals.forEach(function (v) {
+        var path = Engine._internal.path(c, { zone: pawn.zone, pos: pawn.pos }, v);
+        if (path === null) return; // this value overshoots the meta
+        anyReaches = true;
+        if (path.some(function (sq) { return Engine._internal.isBarrier(G.state, c, sq); })) barrierBlock = true;
+      });
+      if (barrierBlock) msg = t("barrierBlocks");
+      else if (!anyReaches) msg = t("exactCount");
+      else msg = t("notAllowed");
     }
     HUD.toast(msg, { kind: "warn", ms: 1600 });
   }
@@ -2241,8 +2400,11 @@
   function clearSaved() { try { localStorage.removeItem(STORE_KEY); } catch (e) { } }
 
   // ---- lifecycle -----------------------------------------------------------
+  function applyLang() { window.ParchisI18n.setLang((G.settings && G.settings.lang) || "es"); }
+
   function startNewGame(settings) {
     G.settings = settings || G.settings || defaultSettings();
+    applyLang();
     G.state = Engine.newGame(G.settings.humanSeats);
     G.state.humanSeats = G.settings.humanSeats.slice();
     clearSaved(); save();
@@ -2251,7 +2413,9 @@
   }
   function continueGame(saved) {
     G.settings = saved.settings || defaultSettings();
+    applyLang();
     G.state = saved.state;
+    if (!G.state.dice) { G.state.dice = []; G.state.doublesCount = 0; } // migrate an old one-die save
     advance();
   }
 
@@ -2264,10 +2428,14 @@
     Engine = window.ParchisEngine; Board = window.ParchisBoard; HUD = window.ParchisHUD; Theme = window.ParchisTheme;
     svg = refs.svg;
     G.settings = defaultSettings();
+    applyLang();
     HUD.build(refs, {
       onRollTap: onRollTap,
       onNewGame: function () { startNewGame(G.settings); },
-      onSettings: function (s) { G.settings = s; if (G.state) { G.state.humanSeats = s.humanSeats.slice(); save(); syncHud(); } },
+      onSettings: function (s) {
+        G.settings = s; applyLang();
+        if (G.state) { G.state.humanSeats = s.humanSeats.slice(); save(); syncHud(); }
+      },
       getSettings: function () { return G.settings; }
     });
     // seed a static board so the frame is visible behind the prompt
@@ -2277,9 +2445,9 @@
 
     var saved = loadSaved();
     if (saved && saved.state && Engine.currentPhase(saved.state) !== "gameover") {
-      HUD.prompt("Parchís", "Hay una partida sin terminar.", [
-        { label: "Continuar partida", onClick: function () { continueGame(saved); } },
-        { label: "Nueva partida", kind: "ghost", onClick: function () { startNewGame(G.settings); } }
+      HUD.prompt("Parchís", t("unfinished"), [
+        { label: t("continueGame"), onClick: function () { continueGame(saved); } },
+        { label: t("newGame"), kind: "ghost", onClick: function () { startNewGame(G.settings); } }
       ]);
     } else {
       startNewGame(G.settings);
@@ -2288,7 +2456,7 @@
 
   function onGameOver() {
     clearHighlights();
-    HUD.setDie(null, false);
+    HUD.setDice([], false);
     clearSaved();
     HUD.gameover(G.state.winners.map(function (i) { return color(i); }), namesByColor(), function () { startNewGame(G.settings); });
   }
