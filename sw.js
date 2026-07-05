@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v17';
+const CACHE = 'game-hub-v18';
 
 const ASSETS = [
   './',
@@ -35,14 +35,15 @@ const ASSETS = [
   './chinchon/js/ui.js',
 ];
 
-// Chinchón decks — 48 faces + back each.
-//   baraja-libre  Baraja Española (CC BY-SA 3.0, see its CREDITS.md)
-//   naipe-fino    gold medallion deck (see its CREDITS.md)
-for (const deck of ['baraja-libre', 'naipe-fino']) {
-  for (const s of ['oros', 'copas', 'espadas', 'bastos'])
-    for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/${deck}/${s}-${r}.webp`);
-  ASSETS.push(`./chinchon/decks/${deck}/back.webp`);
-}
+// Chinchón decks.
+//   baraja-libre  Baraja Española — 48 faces + back (CC BY-SA 3.0, see its CREDITS.md)
+//   anita         Española skin — ships ONLY custom Oros pips 1–9; every other face
+//                 (and the back) falls back to baraja-libre at runtime, so nothing
+//                 else needs precaching here. See chinchon/decks/anita/CREDITS.md.
+for (const s of ['oros', 'copas', 'espadas', 'bastos'])
+  for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/baraja-libre/${s}-${r}.webp`);
+ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
+for (let r = 1; r <= 9; r++) ASSETS.push(`./chinchon/decks/anita/oros-${r}.webp`);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
