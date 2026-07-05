@@ -52,6 +52,26 @@ const GAMES = [
             <line x1="34" y1="66" x2="86" y2="66" stroke="#6a4cff" stroke-width="4"/>
           </svg>`,
   },
+  {
+    id: 'parchis',
+    title: 'Parchís',
+    blurb: 'Spanish Parchís vs. smart AI. One die, seguros, barreras & bonos. 2 to 4 players.',
+    // Self-contained single-file game living in this repo; launches out like Business Deal.
+    href: 'parchis/',
+    accent: '#c0632b',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" rx="20" fill="#6e4a29"/>
+            <rect x="7" y="7" width="106" height="106" rx="14" fill="#f4ead2"/>
+            <rect x="52" y="20" width="16" height="40" fill="#a6c4e4"/>
+            <rect x="60" y="52" width="40" height="16" fill="#f3b39c"/>
+            <rect x="52" y="60" width="16" height="40" fill="#93ccc2"/>
+            <rect x="20" y="52" width="40" height="16" fill="#fbe7a0"/>
+            <circle cx="32" cy="32" r="12" fill="#f2b705" stroke="#7a5a02" stroke-width="2.5"/>
+            <polygon points="88,20 100,42 76,42" fill="#1f5fa8"/>
+            <rect x="76" y="76" width="24" height="24" rx="3" fill="#e0532f"/>
+            <polygon points="32,76 44,88 32,100 20,88" fill="#178a7a"/>
+          </svg>`,
+  },
 ];
 
 class Hub {
