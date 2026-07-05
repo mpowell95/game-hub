@@ -24,7 +24,7 @@ const DECKS = {
     ext: 'webp',
     hasJoker: false, // no joker face; styled fallback
     base: 'baraja-libre', // fall back here for any face this deck doesn't ship…
-    own: new Set(['oros-1', 'oros-2', 'oros-3', 'oros-4', 'oros-5', 'oros-6', 'oros-7', 'oros-8', 'oros-9']), // …except these
+    own: new Set(['oros-1', 'oros-2', 'oros-3', 'oros-4', 'oros-5', 'oros-6', 'oros-7', 'oros-8', 'oros-9', 'back']), // …except these (custom Oros pips + a custom back)
     credit: 'Anita — Española deck with a custom Oros coin',
   },
 };

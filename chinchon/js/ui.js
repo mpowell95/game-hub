@@ -476,7 +476,7 @@ class ChinchonUI {
     const showCount = g.config.showRemaining;
     return `
       <button class="cc-pile cc-stock ${drawMode ? 'is-actionable' : ''}" data-action="draw-stock" ${drawMode ? '' : 'disabled'} aria-label="Draw from deck">
-        <div class="cc-card cc-back"></div>
+        ${cardFaceHTML({}, { faceDown: true, static: true })}
         ${showCount ? `<span class="cc-pile-count">${g.stock.length}</span>` : ''}
         <span class="cc-pile-label">Deck</span>
       </button>

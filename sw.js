@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v18';
+const CACHE = 'game-hub-v19';
 
 const ASSETS = [
   './',
@@ -37,13 +37,14 @@ const ASSETS = [
 
 // Chinchón decks.
 //   baraja-libre  Baraja Española — 48 faces + back (CC BY-SA 3.0, see its CREDITS.md)
-//   anita         Española skin — ships ONLY custom Oros pips 1–9; every other face
-//                 (and the back) falls back to baraja-libre at runtime, so nothing
-//                 else needs precaching here. See chinchon/decks/anita/CREDITS.md.
+//   anita         Española skin — ships custom Oros pips 1–9 + a custom back (Ana's
+//                 photo); every other face falls back to baraja-libre at runtime, so
+//                 nothing else needs precaching here. See chinchon/decks/anita/CREDITS.md.
 for (const s of ['oros', 'copas', 'espadas', 'bastos'])
   for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/baraja-libre/${s}-${r}.webp`);
 ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
 for (let r = 1; r <= 9; r++) ASSETS.push(`./chinchon/decks/anita/oros-${r}.webp`);
+ASSETS.push('./chinchon/decks/anita/back.webp');
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
