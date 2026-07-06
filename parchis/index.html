@@ -1101,7 +1101,7 @@
  *
  * Geometry: a single parametric arm loop (no hand-placed coordinate literals) builds a
  * 19x19 cell cross. The engine numbering 1..68 is laid COUNTERCLOCKWISE natively (the
- * round 1 mirror hack is gone) using the canonical configuration offset 56, dir -1,
+ * round 1 mirror hack is gone) using the canonical configuration offset 58, dir -1,
  * which puts amarillo bottom-left, azul bottom-right, rojo top-right, verde top-left and
  * travel counterclockwise. verifyCoords() asserts the numbering against the engine
  * constants (salidas, entries, seguros, corridor adjacency) and throws on any violation.
@@ -1109,11 +1109,14 @@
  * Human anchoring: coords(anchorColor) rotates the whole board so the human's color sits
  * bottom-left. The engine numbering never changes; only the render mapping rotates.
  *
- * Note (documented deviation, see HANDOFF-R2-2.md): the engine's fixed 7-cell home
- * corridors plus entry-5-before-salida force each color's salida and home column onto the
- * SAME arm, so the exact number-to-cell flow differs from the reference apps (which place
- * them on adjacent arms). Corner colors, counterclockwise travel, and the human-bottom-left
- * anchor all match the reference.
+ * Reference match (offset 58): with this offset every salida and every seguro renders on
+ * the exact cell used by the reference Ludo/Parchis boards in reference-images/ (each
+ * salida is the 4th cell out along its arm's outer lane; the four seguro "tips" fall on
+ * the arm tips: 17 bottom, 34 right, 51 top, 68 left; the four mid-arm seguros 12/29/46/63
+ * sit one step in from each tip). Each color's salida and its home corridor share the same
+ * arm (parallel lanes), exactly as the reference does. Corner colors, counterclockwise
+ * travel, and the human-bottom-left anchor also match. Printed numbers differ from the
+ * reference by a constant (ours = reference + 4), which is internal only.
  */
 (function () {
   "use strict";
@@ -1125,8 +1128,9 @@
   var TRACK_LEN = 68, PASILLO_LEN = 7, GRID = 19;
   var CELL = 40;
 
-  // Canonical numbering: amarillo bottom-left, counterclockwise.
-  var CANON_OFFSET = 56, CANON_DIR = -1;
+  // Canonical numbering: amarillo bottom-left, counterclockwise. Offset 58 lands every
+  // salida and seguro on the reference boards' exact cells (see header note).
+  var CANON_OFFSET = 58, CANON_DIR = -1;
   // Quarter-turns (90 deg clockwise) to bring each color to the bottom-left seat.
   var ROT = { amarillo: 0, azul: 1, rojo: 2, verde: 3 };
 
@@ -2060,6 +2064,7 @@
   "use strict";
 
   var COLORS = ["amarillo", "azul", "rojo", "verde"];
+  var CPU_NAMES = ["Señora Pollo", "Lilí", "María"]; // default computer opponent names, in opponent order
   var TIERS = ["beginner", "intermediate", "pro", "expert"];
   var TIER_KEY = { beginner: "tierBeginner", intermediate: "tierIntermediate", pro: "tierPro", expert: "tierExpert" };
 
@@ -2301,7 +2306,7 @@
     if (pre.prefNames && pre.prefNames[col]) return pre.prefNames[col];
     var op = pre.profileOpponents && pre.profileOpponents[idx - 1];
     if (op && op.name) return op.name;
-    return t("computerN", { n: idx });
+    return CPU_NAMES[idx - 1] || t("computerN", { n: idx });
   }
   function defaultSkill(col, idx, pre) {
     if (pre.prefSkills && pre.prefSkills[col]) return pre.prefSkills[col];
@@ -2320,7 +2325,7 @@
     });
   };
 
-  HUD.openSettings = function (snapshot, onSaved) {
+  HUD.openSettings = function (snapshot, onSaved, back) {
     overlay(t("settings"), function (body) {
       elh("p", "pc-hint", body, t("language"));
       var langWrap = elh("div", "pc-seatrow", body), lang = snapshot.lang || "en", langBtns = {};
@@ -2332,11 +2337,11 @@
       var soundRow = elh("label", "pc-field pc-switch", body);
       elh("span", null, soundRow, t("sound"));
       var snd = elh("input", null, soundRow); snd.type = "checkbox"; snd.checked = false; snd.disabled = true;
-      mkBtn(body, t("save"), function () { HUD.closeOverlay(); onSaved({ lang: lang, sound: false }); });
-    });
+      mkBtn(body, t("save"), function () { onSaved({ lang: lang, sound: false }); if (back) back(); else HUD.closeOverlay(); });
+    }, back ? { back: back } : {});
   };
 
-  HUD.openRules = function (mode) {
+  HUD.openRules = function (mode, back) {
     var cur = mode || "american";
     overlay(t("rules"), function (body) {
       var tabRow = elh("div", "pc-seatrow", body), tabs = {};
@@ -2354,7 +2359,7 @@
         });
       }
       paint();
-    });
+    }, back ? { back: back } : {});
   };
 
   HUD.gameover = function (order, names, onNew) {
@@ -2399,6 +2404,7 @@
   var Engine, Board, HUD, Theme;
   var svg;
   var COLORS = ["amarillo", "azul", "rojo", "verde"];
+  var CPU_NAMES = ["Señora Pollo", "Lilí", "María"]; // default computer opponent names, in opponent order
   var STORE_KEY = "parchis_r2_save";
   var PREFS_KEY = "parchis_r2_prefs";
   var PROFILE_KEY = "gamehub.profile";
@@ -2721,7 +2727,8 @@
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         mode: G.cfg.mode, humanColor: G.cfg.anchor, playerCount: G.cfg.active.length,
         vsMode: G.cfg.vsMode, lang: window.ParchisI18n.getLang(),
-        names: G.cfg.names, skills: G.cfg.skills, humanName: G.cfg.names[G.cfg.anchor]
+        skills: G.cfg.skills, humanName: G.cfg.names[G.cfg.anchor]
+        // opponent names are not persisted, so the default computer names always show
       }));
     } catch (e) { }
   }
@@ -2742,7 +2749,7 @@
       if (given && given.trim()) names[col] = given.trim();
       else if (col === setup.humanColor) names[col] = t("you");
       else if (setup.vsMode === "local") names[col] = t("playerN", { n: i + 1 });
-      else names[col] = t("computerN", { n: active.indexOf(col) }); // opponents numbered from 1
+      else names[col] = CPU_NAMES[i - 1] || t("computerN", { n: i }); // default computer names, in opponent order
       if (!isHuman) skills[col] = (setup.skills && setup.skills[col]) || "intermediate";
     });
     return { mode: setup.mode, vsMode: setup.vsMode, anchor: setup.humanColor, active: active, humans: humans, names: names, skills: skills };
@@ -2792,7 +2799,7 @@
       humanColor: validColor(profile.preferredColor) || prefs.humanColor || "amarillo",
       humanName: humanName,
       profileOpponents: profile.opponents || [],
-      prefNames: prefs.names || {}, prefSkills: prefs.skills || {},
+      prefSkills: prefs.skills || {},
       lang: getLang()
     };
   }
@@ -2805,8 +2812,8 @@
       onVsComputer: function () { HUD.showSetup("cpu", prefill(), onPlay, showTitle); },
       onLocal: function () { HUD.showSetup("local", prefill(), onPlay, showTitle); },
       onContinue: canContinue ? function () { continueGame(saved); } : null,
-      onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved); },
-      onRules: function () { HUD.openRules((loadPrefs().mode) || "american"); }
+      onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved, showTitle); },
+      onRules: function () { HUD.openRules((loadPrefs().mode) || "american", showTitle); }
     });
   }
   function onPlay(setup) { startNewGame(buildCfg(setup)); }
@@ -2844,8 +2851,8 @@
   function openInGameMenu() {
     HUD.openMenu({
       onNewGame: showTitle,
-      onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved); },
-      onRules: function () { HUD.openRules(G.cfg ? G.cfg.mode : "american"); }
+      onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved, openInGameMenu); },
+      onRules: function () { HUD.openRules(G.cfg ? G.cfg.mode : "american", openInGameMenu); }
     });
   }
 
