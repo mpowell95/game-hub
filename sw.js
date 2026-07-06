@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v29';
+const CACHE = 'game-hub-v30';
 
 const ASSETS = [
   './',
@@ -52,8 +52,8 @@ for (const s of ['oros', 'copas', 'espadas', 'bastos'])
 ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
 for (const s of ['oros', 'copas', 'espadas', 'bastos'])
   for (let r = 1; r <= 9; r++) ASSETS.push(`./chinchon/decks/anita/${s}-${r}.webp`);
-// Illustrated court cards done so far (Bastos/golf suit figures).
-for (const r of [10, 11, 12]) ASSETS.push(`./chinchon/decks/anita/bastos-${r}.webp`);
+// Illustrated court cards done so far (add each as its art lands).
+for (const f of ['bastos-10', 'bastos-11', 'bastos-12', 'copas-12']) ASSETS.push(`./chinchon/decks/anita/${f}.webp`);
 ASSETS.push('./chinchon/decks/anita/back.webp');
 // Anita end-of-match "Betty reaction" art (win/loss screens).
 ASSETS.push('./chinchon/decks/anita/betty-win.webp', './chinchon/decks/anita/betty-loss.webp');
