@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Business Deal</title>
+
+  <!-- Mobile / PWA -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Business Deal">
+  <meta name="theme-color" content="#0f5bd6">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Opponents (AI) across the top -->
+    <div id="opponents"></div>
+
+    <!-- Center table: piles, play indicator, pass button -->
+    <div id="table">
+      <div id="draw-pile" class="pile-stack"></div>
+      <div id="discard-pile" class="pile-stack"></div>
+      <div id="table-right">
+        <button id="pass-btn" type="button">Pass</button>
+        <div id="play-dots"></div>
+        <div id="plays-label"></div>
+      </div>
+      <div id="watermark">Matt's Monopoly</div>
+    </div>
+
+    <!-- You -->
+    <div id="me-area">
+      <div id="me-side">
+        <div id="me-avatar"></div>
+        <div id="me-name">You</div>
+        <div id="me-stats"></div>
+      </div>
+      <div id="me-bank" class="zone" title="Your bank"></div>
+      <div id="me-props" class="zone" title="Your properties"></div>
+    </div>
+
+    <!-- Hand -->
+    <div id="hand"></div>
+
+    <!-- Controls -->
+    <div id="controls">
+      <button id="new-game" class="pill" type="button">New Game</button>
+    </div>
+  </div>
+
+  <!-- Floating layers (built dynamically) -->
+  <div id="toast"></div>
+  <div id="card-detail"></div>
+  <div id="overlay"></div>
+  <div id="setup"></div>
+  <div id="winner"></div>
+
+  <!-- Engine + AI + UI (build order: deck -> game -> ai -> ui) -->
+  <script src="js/deck.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const ui = new UI.BusinessDealUI();
+      window.__bd = ui;
+      ui.showSetup(); // pick number of opponents, then start
+
+      // ---- PWA + "update available" prompt -------------------------------
+      // Surface a one-tap Reload ONLY when a genuinely newer build has installed
+      // (a new sw.js, which we byte-change every release by bumping CACHE). The
+      // old code also fired on a stale `reg.waiting` even when the version hadn't
+      // changed — that was the "banner says new version but reload still shows the
+      // same version" false positive. Clicking Reload nudges the waiting worker to
+      // take over, then a controllerchange reloads once it actually controls, so
+      // you always land on the fresh build (not the old cached one).
+      function showUpdate() {
+        if (document.getElementById('update-banner')) return;
+        var b = document.createElement('div');
+        b.id = 'update-banner';
+        b.innerHTML = '<span>New version ready</span><button type="button">Reload</button>';
+        b.querySelector('button').addEventListener('click', function () {
+          window.__bdReloading = true;
+          navigator.serviceWorker.getRegistration().then(function (reg) {
+            if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            else location.reload();
+          }).catch(function () { location.reload(); });
+        });
+        document.body.appendChild(b);
+      }
+      if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          // Only reload in response to the user's Reload tap — never auto-reload
+          // mid-game (clients.claim can fire on its own and would lose state).
+          if (window.__bdReloading) location.reload();
+        });
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          reg.addEventListener('updatefound', function () {
+            var nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', function () {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate();
+            });
+          });
+        }).catch(function (e) {
+          console.warn('Service worker registration failed:', e);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

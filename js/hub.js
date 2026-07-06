@@ -17,11 +17,15 @@ const GAMES = [
     module: '../connect-four/js/ui.js',
     accent: '#1769d4',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-            <rect width="120" height="120" rx="20" fill="#1769d4"/>
-            <circle cx="42" cy="42" r="17" fill="#e8463f"/>
-            <circle cx="78" cy="42" r="17" fill="#ffce3a"/>
-            <circle cx="42" cy="78" r="17" fill="#ffce3a"/>
-            <circle cx="78" cy="78" r="17" fill="#e8463f"/>
+            <rect width="120" height="120" fill="#1769d4"/>
+            <circle cx="21" cy="24" r="11" fill="#dbe8f8"/><circle cx="47" cy="24" r="11" fill="#dbe8f8"/>
+            <circle cx="73" cy="24" r="11" fill="#dbe8f8"/><circle cx="99" cy="24" r="11" fill="#dbe8f8"/>
+            <circle cx="21" cy="50" r="11" fill="#dbe8f8"/><circle cx="47" cy="50" r="11" fill="#dbe8f8"/>
+            <circle cx="73" cy="50" r="11" fill="#ffce3a"/><circle cx="99" cy="50" r="11" fill="#dbe8f8"/>
+            <circle cx="21" cy="76" r="11" fill="#dbe8f8"/><circle cx="47" cy="76" r="11" fill="#ffce3a"/>
+            <circle cx="73" cy="76" r="11" fill="#e8463f"/><circle cx="99" cy="76" r="11" fill="#dbe8f8"/>
+            <circle cx="21" cy="102" r="11" fill="#e8463f"/><circle cx="47" cy="102" r="11" fill="#ffce3a"/>
+            <circle cx="73" cy="102" r="11" fill="#e8463f"/><circle cx="99" cy="102" r="11" fill="#ffce3a"/>
           </svg>`,
   },
   {
@@ -31,27 +35,37 @@ const GAMES = [
     module: '../chinchon/js/ui.js',
     accent: '#d4a017',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-            <rect width="120" height="120" rx="20" fill="#1f7a52"/>
-            <rect x="30" y="34" width="40" height="56" rx="7" fill="#fff" transform="rotate(-9 50 62)"/>
-            <rect x="52" y="34" width="40" height="56" rx="7" fill="#fff" transform="rotate(9 72 62)"/>
-            <circle cx="50" cy="60" r="8" fill="#c8920f"/>
-            <circle cx="74" cy="60" r="8" fill="#d22f27"/>
+            <rect width="120" height="120" fill="#1f7a52"/>
+            <g transform="rotate(-16 60 66)">
+              <rect x="30" y="30" width="42" height="60" rx="6" fill="#f7edd4" stroke="#c9b485" stroke-width="1.5"/>
+              <polygon points="46,54 58,54 55,63 49,63" fill="#c0392b"/>
+              <rect x="52.5" y="63" width="3" height="6" fill="#c0392b"/>
+              <rect x="48" y="69" width="12" height="3" rx="1.5" fill="#c0392b"/>
+            </g>
+            <g transform="rotate(13 60 66)">
+              <rect x="50" y="28" width="42" height="60" rx="6" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.5"/>
+              <circle cx="71" cy="58" r="13" fill="#e8b53a" stroke="#a9791b" stroke-width="2"/>
+              <circle cx="71" cy="58" r="8.5" fill="none" stroke="#a9791b" stroke-width="1.3"/>
+              <circle cx="71" cy="58" r="2.6" fill="#a9791b"/>
+            </g>
           </svg>`,
   },
   {
     id: 'business-deal',
     title: 'Business Deal',
     blurb: 'Cards, cash & schemes. Collect property sets to win vs. smart AI. 2–5 players.',
-    // Business Deal is its own full-screen PWA deployed alongside the hub, so
-    // the card launches out to it (root-relative on the same domain) rather
-    // than mounting as an in-hub module.
-    href: '/business-deal/',
+    // Business Deal lives in this repo now (business-deal/) and launches out like
+    // Parchís, rather than mounting as an in-hub module. It keeps its own global-JS
+    // stack and service worker (nested under business-deal/); it is not an ES module.
+    href: 'business-deal/',
     accent: '#6a4cff',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-            <rect width="120" height="120" rx="20" fill="#6a4cff"/>
-            <rect x="34" y="50" width="52" height="36" rx="6" fill="#fff" opacity="0.92"/>
-            <rect x="50" y="40" width="20" height="12" rx="4" fill="#fff" opacity="0.92"/>
-            <line x1="34" y1="66" x2="86" y2="66" stroke="#6a4cff" stroke-width="4"/>
+            <rect width="120" height="120" fill="#6a4cff"/>
+            <g transform="rotate(-15 60 66)"><rect x="25" y="34" width="32" height="48" rx="4" fill="#fff"/><rect x="25" y="34" width="32" height="12" rx="4" fill="#e0532f"/></g>
+            <g transform="rotate(0 60 66)"><rect x="44" y="29" width="32" height="50" rx="4" fill="#fff"/><rect x="44" y="29" width="32" height="12" rx="4" fill="#178a7a"/></g>
+            <g transform="rotate(15 60 66)"><rect x="63" y="34" width="32" height="48" rx="4" fill="#fff"/><rect x="63" y="34" width="32" height="12" rx="4" fill="#1f5fa8"/></g>
+            <circle cx="84" cy="82" r="15" fill="#f2b705" stroke="#a9791b" stroke-width="2"/>
+            <text x="84" y="88.5" font-size="19" font-weight="900" text-anchor="middle" fill="#7a5502" font-family="system-ui, -apple-system, sans-serif">$</text>
           </svg>`,
   },
   {
@@ -62,16 +76,28 @@ const GAMES = [
     href: 'parchis/',
     accent: '#c0632b',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-            <rect width="120" height="120" rx="20" fill="#6e4a29"/>
-            <rect x="7" y="7" width="106" height="106" rx="14" fill="#f4ead2"/>
-            <rect x="52" y="20" width="16" height="40" fill="#a6c4e4"/>
-            <rect x="60" y="52" width="40" height="16" fill="#f3b39c"/>
-            <rect x="52" y="60" width="16" height="40" fill="#93ccc2"/>
-            <rect x="20" y="52" width="40" height="16" fill="#fbe7a0"/>
-            <circle cx="32" cy="32" r="12" fill="#f2b705" stroke="#7a5a02" stroke-width="2.5"/>
-            <polygon points="88,20 100,42 76,42" fill="#1f5fa8"/>
-            <rect x="76" y="76" width="24" height="24" rx="3" fill="#e0532f"/>
-            <polygon points="32,76 44,88 32,100 20,88" fill="#178a7a"/>
+            <rect width="120" height="120" fill="#7a5a34"/>
+            <rect x="5" y="5" width="110" height="110" rx="6" fill="#f5ecd6"/>
+            <rect x="47" y="5" width="26" height="110" fill="#ffffff"/>
+            <rect x="5" y="47" width="110" height="26" fill="#ffffff"/>
+            <rect x="11" y="11" width="33" height="33" rx="5" fill="#f2b705"/>
+            <rect x="76" y="11" width="33" height="33" rx="5" fill="#1f5fa8"/>
+            <rect x="11" y="76" width="33" height="33" rx="5" fill="#178a7a"/>
+            <rect x="76" y="76" width="33" height="33" rx="5" fill="#e0532f"/>
+            <g fill="#ffffff" stroke="rgba(0,0,0,0.22)">
+              <circle cx="21" cy="21" r="4"/><circle cx="34" cy="21" r="4"/><circle cx="21" cy="34" r="4"/><circle cx="34" cy="34" r="4"/>
+              <circle cx="86" cy="21" r="4"/><circle cx="99" cy="21" r="4"/><circle cx="86" cy="34" r="4"/><circle cx="99" cy="34" r="4"/>
+              <circle cx="21" cy="86" r="4"/><circle cx="34" cy="86" r="4"/><circle cx="21" cy="99" r="4"/><circle cx="34" cy="99" r="4"/>
+              <circle cx="86" cy="86" r="4"/><circle cx="99" cy="86" r="4"/><circle cx="86" cy="99" r="4"/><circle cx="99" cy="99" r="4"/>
+            </g>
+            <rect x="55" y="6" width="10" height="41" fill="#f2b705"/>
+            <rect x="73" y="55" width="41" height="10" fill="#1f5fa8"/>
+            <rect x="55" y="73" width="10" height="41" fill="#e0532f"/>
+            <rect x="6" y="55" width="41" height="10" fill="#178a7a"/>
+            <polygon points="49,49 71,49 60,60" fill="#f2b705"/>
+            <polygon points="71,49 71,71 60,60" fill="#1f5fa8"/>
+            <polygon points="71,71 49,71 60,60" fill="#e0532f"/>
+            <polygon points="49,71 49,49 60,60" fill="#178a7a"/>
           </svg>`,
   },
 ];
@@ -141,21 +167,21 @@ class Hub {
   }
 
   cardHTML(g) {
+    // Square tile: full-bleed art with the title in a caption. The blurb moves to
+    // the accessible label (it is no longer shown on the compact tile face).
     const inner = `
         <span class="hub-card-art">${g.art}</span>
-        <span class="hub-card-text">
-          <span class="hub-card-title">${g.title}</span>
-          <span class="hub-card-blurb">${g.blurb}</span>
-        </span>
+        <span class="hub-card-label">${g.title}</span>
         ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}`;
+    const aria = `${g.title}. ${g.blurb}`;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
     if (g.href) {
-      return `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}">${inner}</a>`;
+      return `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}" aria-label="${aria}">${inner}</a>`;
     }
     return `<button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
               data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
-              style="--card-accent:${g.accent}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>${inner}</button>`;
+              style="--card-accent:${g.accent}" aria-label="${aria}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>${inner}</button>`;
   }
 
   async launch(id) {

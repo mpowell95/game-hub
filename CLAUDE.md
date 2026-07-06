@@ -70,7 +70,7 @@ export default { init, destroy };
 |---|---|---|
 | Connect Four | in-hub `module:` | AI in a Web Worker (`new Worker(new URL('./worker.js', import.meta.url), {type:'module'})`) with a main-thread fallback; needs the worker for its multi-second Expert solver. |
 | Chinchón | in-hub `module:` | Spanish rummy vs AI. No worker (light heuristic AI). See below. |
-| Business Deal | launch-out `href:` | Its own full-screen PWA in a **separate repo** (`mpowell95/business-deal`); `window.*` globals, not ESM. A precedent, not the preferred pattern. |
+| Business Deal | launch-out `href:` | Full-screen PWA that lives **in this repo** (`business-deal/`), launched like Parchís; `window.*` globals + its own nested service worker, not ESM. A precedent, not the preferred pattern. |
 | Parchís | launch-out `href:` | Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See below. |
 
 ---
