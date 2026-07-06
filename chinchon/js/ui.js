@@ -37,6 +37,9 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
+/** URL for an Anita-deck outcome image (Betty win/loss art), resolved like the stylesheet. */
+function anitaImgUrl(file) { return new URL(`../decks/anita/${file}`, import.meta.url).href; }
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -693,8 +696,16 @@ class ChinchonUI {
       body = `<ol class="cc-standings">${standings.map((p, i) => `<li class="${p === winner ? 'is-winner' : ''}">
         <span class="cc-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('')}</ol>`;
     }
+    const humanWon = winner && winner.id === this._human().id;
+    const betty = (!this._chartView && this._setup.deck === 'anita')
+      ? `<div class="cc-betty is-${humanWon ? 'win' : 'loss'}">
+          <img class="cc-betty-img" src="${anitaImgUrl(humanWon ? 'betty-win.webp' : 'betty-loss.webp')}" alt="" draggable="false">
+          <p class="cc-betty-cap">${humanWon ? 'Betty approves 😎' : 'Betty is not impressed 😒'}</p>
+        </div>`
+      : '';
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
       <h2 class="cc-sheet-title">${winner.avatar} ${esc(winner.name)} wins${reason}!</h2>
+      ${betty}
       ${body}
       <div class="cc-sheet-actions">
         <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Standings' : '📈 Scoreboard'}</button>

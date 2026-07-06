@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v23';
+const CACHE = 'game-hub-v24';
 
 const ASSETS = [
   './',
@@ -49,6 +49,8 @@ ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
 for (const s of ['oros', 'copas', 'espadas', 'bastos'])
   for (let r = 1; r <= 9; r++) ASSETS.push(`./chinchon/decks/anita/${s}-${r}.webp`);
 ASSETS.push('./chinchon/decks/anita/back.webp');
+// Anita end-of-match "Betty reaction" art (win/loss screens).
+ASSETS.push('./chinchon/decks/anita/betty-win.webp', './chinchon/decks/anita/betty-loss.webp');
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
