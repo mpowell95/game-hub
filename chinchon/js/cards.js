@@ -11,9 +11,11 @@
 //   listDecks() / getDeck() / setDeck(id)
 
 // Anita ships a custom back + every numbered pip (ranks 1–9, all four suits); the
-// figure cards (10–12) fall back to baraja-libre until themed art exists.
+// figure cards (10–12) fall back to baraja-libre until custom art is added per suit.
 const ANITA_OWN = new Set(['back']);
 for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 9; r++) ANITA_OWN.add(`${s}-${r}`);
+// Illustrated court cards done so far: the Bastos (golf) suit figures (Sota/Caballo/Rey).
+for (const r of [10, 11, 12]) ANITA_OWN.add(`bastos-${r}`);
 
 const DECKS = {
   'baraja-libre': {
