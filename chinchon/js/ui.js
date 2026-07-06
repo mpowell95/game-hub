@@ -244,7 +244,7 @@ class ChinchonUI {
         <div class="cc-section">
           <span class="cc-label">Card deck</span>
           <button class="cc-deck-btn" data-action="open-deck" title="Choose a deck">
-            <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'oros-12')}" alt="">
+            <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'back')}" alt="">
             <span class="cc-deck-meta">
               <span class="cc-deck-name">${esc(DECKS_BY_ID[s.deck].name)}</span>
               <span class="cc-deck-sub">Tap to change</span>
@@ -290,10 +290,8 @@ class ChinchonUI {
   _openDeckPicker() {
     const opts = listDecks().map((d) => {
       const sel = d.id === this._setup.deck ? 'is-sel' : '';
-      const prev = ['oros-1', 'oros-12', 'back'].map((n, i) =>
-        `<img class="cc-deck-prev-card cc-dp${i}" src="${deckAssetUrl(d.id, n)}" alt="" draggable="false">`).join('');
       return `<button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
-        <span class="cc-deck-prev">${prev}</span>
+        <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
         <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
         <span class="cc-deck-opt-credit">${esc(d.credit)}</span>
       </button>`;

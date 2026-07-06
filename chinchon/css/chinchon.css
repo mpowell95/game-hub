@@ -96,15 +96,11 @@
 }
 .cc-deck-opt:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
 .cc-deck-opt.is-sel { border-color: var(--cc-accent); background: rgba(212, 160, 23, 0.12); box-shadow: 0 0 0 2px var(--cc-accent); }
-.cc-deck-prev { position: relative; width: 130px; height: 92px; }
-.cc-deck-prev-card {
-  position: absolute; left: 50%; top: 4px; width: 52px; height: 80px; margin-left: -26px;
-  object-fit: cover; border-radius: 6px; border: 1px solid rgba(9, 24, 48, 0.15);
-  box-shadow: 0 3px 8px rgba(9, 24, 48, 0.22); background: #fff;
+.cc-deck-back {
+  width: 96px; aspect-ratio: 400 / 611; object-fit: cover;
+  border-radius: 8px; border: 1px solid rgba(9, 24, 48, 0.15);
+  box-shadow: 0 4px 10px rgba(9, 24, 48, 0.28); background: #fff;
 }
-.cc-deck-prev-card.cc-dp0 { transform: rotate(-13deg) translateX(-22px); }
-.cc-deck-prev-card.cc-dp2 { transform: rotate(13deg) translateX(22px); }
-.cc-deck-prev-card.cc-dp1 { z-index: 1; }
 .cc-deck-opt-name { font-weight: 700; }
 .cc-deck-tick { color: var(--cc-accent); }
 .cc-deck-opt-credit { font-size: 0.68rem; color: var(--cc-muted); text-align: center; line-height: 1.3; }
