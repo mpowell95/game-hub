@@ -2,13 +2,14 @@
 
 A small, ad-free, installable **PWA that hosts self-contained game modules**. Vanilla
 JS (ES modules), **no build step, no dependencies, no framework**. Deploys as static
-files (e.g. GitHub Pages).
+files (e.g. GitHub Pages). A shared **user profile** prefills every game (see "The shared profile").
 
 ## Run it
 
 ```
 node server.mjs           # serves the repo root at http://localhost:8123
 #   http://localhost:8123/              hub launcher
+#   http://localhost:8123/profile/      the shared profile page
 #   http://localhost:8123/connect-four/ a game, standalone
 #   http://localhost:8123/chinchon/     a game, standalone
 ```
@@ -20,10 +21,12 @@ can't run from `file://`). It sends `Cache-Control: no-store` so dev edits aren'
 ```
 index.html              hub shell host
 js/hub.js               launcher grid + module mount/unmount  (the GAMES registry)
+js/profile-store.js     shared user-profile reader/writer (loadProfile/saveProfile/clearProfile)
 css/hub.css             shell chrome only
 sw.js                   shared service worker (network-first, precaches every game)
 manifest.webmanifest    one manifest for the whole hub
-<game>/                 one folder per game (connect-four/, chinchon/, …)
+profile/index.html      the shared profile page (name, emoji, color, opponents)
+<game>/                 one folder per game (connect-four/, chinchon/, parchis/)
 ```
 
 The hub shows a grid of game cards. Tapping a **module** game dynamically imports its
@@ -67,7 +70,56 @@ export default { init, destroy };
 |---|---|---|
 | Connect Four | in-hub `module:` | AI in a Web Worker (`new Worker(new URL('./worker.js', import.meta.url), {type:'module'})`) with a main-thread fallback; needs the worker for its multi-second Expert solver. |
 | Chinchón | in-hub `module:` | Spanish rummy vs AI. No worker (light heuristic AI). See below. |
-| Business Deal | launch-out `href:` | Its own full-screen PWA deployed alongside; uses `window.*` globals, not ESM. A precedent, not the preferred pattern. |
+| Business Deal | launch-out `href:` | Its own full-screen PWA in a **separate repo** (`mpowell95/business-deal`); `window.*` globals, not ESM. A precedent, not the preferred pattern. |
+| Parchís | launch-out `href:` | Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See below. |
+
+---
+
+## The shared profile
+
+A **user profile** (`profile/index.html`, backed by `js/profile-store.js`) stores a name, emoji,
+preferred color, and up to 3 computer opponents (name, emoji, skill 1-3) in
+`localStorage["gamehub.profile"]`. It is **defaults-only**: every game prefills from it, and every value
+stays editable in that game's own setup. A pill in the hub top bar links to the page ("Set up your
+profile", or "👤 Name" once set).
+
+### Contract (`localStorage["gamehub.profile"]`)
+
+```js
+{ version:1, name, emoji, preferredColor:"yellow"|"blue"|"red"|"green"|null,
+  opponents:[{name, emoji, skill:1|2|3}], updatedAt }
+```
+
+- **Only the profile page writes it;** games are read-only consumers.
+- Readers **try/catch** and treat missing or malformed data as "no profile", falling back silently to
+  built-in defaults. A profile must never crash a game.
+- **Extend additively; never rename fields.** `skill` tolerates a future 4; the UI emits 1-3.
+
+### `js/profile-store.js`
+
+ES module: `loadProfile()` returns a validated object or `null`; `saveProfile(p)` normalizes and stamps
+`version`/`updatedAt`; `clearProfile()` deletes the key. In-hub module games `import` it directly;
+single-file or non-ESM games (Business Deal, Parchís) inline the small read-only subset, kept in sync
+with this contract.
+
+### Consuming it in a game
+
+- Read once at setup-screen load. **Precedence:** a game's own saved last-used settings (e.g.
+  `chinchon-settings`) beat the profile, which beats built-in defaults. Games never write it back.
+- **Skill maps 1:1** (1 Beginner, 2 Intermediate, 3 Pro) onto each game's difficulty. Connect Four's 4th
+  "Expert" solver is not a profile tier (it is still chosen in Connect Four's own setup).
+- Use the profile name/emoji only where a game already shows player identity; do not add new avatar
+  surfaces to games that lack them.
+- Prefills today: **Connect Four** (difficulty plus "You"/opponent labels), **Chinchón** (human and
+  opponent identity plus per-AI difficulty), **Business Deal** (AI count, one global difficulty, human
+  and opponent identity). **Parchís** wires up in its own R2-3 (see below).
+
+### Accessibility + copy conventions
+
+- **Colorblind-safe** (Matt is red/green colorblind): wherever color is a choice, pair each hue with a
+  shape marker, never hue alone. Palette: yellow `#F2B705` circle, blue `#1F5FA8` triangle, vermilion
+  `#E0532F` square, teal `#178A7A` diamond.
+- **No em dashes** in user-facing game or profile copy (use commas, colons, or parentheses).
 
 ---
 
@@ -187,3 +239,20 @@ node chinchon/js/test.js   # engine unit assertions (deck + meld)
 node chinchon/js/sim.js     # 30 all-AI matches; checks termination, scoring, no exceptions
 ```
 Run requires Node ≥22.7 (ESM syntax detection; there is no package.json).
+
+---
+
+## Parchís (`parchis/`)
+
+Spanish Parchís (Parcheesi family) vs AI, a **launch-out** single-file game. Its source is **not in this
+repo**: it lives in the sibling project `../Parchís/` as `src/*.js` (engine, board, ai, hud, i18n, theme,
+game), combined by `node recombine.mjs` into one `parchis.html` that is copied here as
+`parchis/index.html` and precached in `sw.js`. **Do not hand-edit `parchis/index.html`;** edit the source
+and rebuild.
+
+- Spanish ruleset (seguros, barreras, bonos of 20 and 10). Round 2 adds two dice and an English/Spanish
+  i18n toggle. AI tiers are `facil|normal|dificil`; internal colors are `amarillo|azul|rojo|verde`.
+- **Profile:** Parchís reads `gamehub.profile` in its own Phase R2-3 (setup + i18n), mapping the generic
+  color names to Spanish and the skill tier to its own AI levels itself. That phase is not yet built or
+  deployed, so the current build does not prefill; the hub already writes a compatible shape, so it will
+  once R2-3 ships. Do not add a reader on the hub side.
