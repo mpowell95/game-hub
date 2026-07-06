@@ -10,6 +10,11 @@
 //   preloadDeck()              -> warm the image cache (no flash on first render)
 //   listDecks() / getDeck() / setDeck(id)
 
+// Anita ships a custom back + every numbered pip (ranks 1–9, all four suits); the
+// figure cards (10–12) fall back to baraja-libre until themed art exists.
+const ANITA_OWN = new Set(['back']);
+for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 9; r++) ANITA_OWN.add(`${s}-${r}`);
+
 const DECKS = {
   'baraja-libre': {
     id: 'baraja-libre',
@@ -24,7 +29,7 @@ const DECKS = {
     ext: 'webp',
     hasJoker: false, // no joker face; styled fallback
     base: 'baraja-libre', // fall back here for any face this deck doesn't ship…
-    own: new Set(['oros-1', 'oros-2', 'oros-3', 'oros-4', 'oros-5', 'oros-6', 'oros-7', 'oros-8', 'oros-9', 'back']), // …except these (custom Oros pips + a custom back)
+    own: ANITA_OWN,       // …except the custom pips (all suits, 1–9) + the custom back
     credit: 'Anita — Española deck with a custom Oros coin',
   },
 };
