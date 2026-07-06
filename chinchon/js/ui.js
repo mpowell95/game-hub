@@ -10,6 +10,7 @@ import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'baraja-libre';
@@ -18,6 +19,8 @@ const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
 const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
 const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
+// Profile skill tiers (1-3) -> Chinchón's three AI levels.
+const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
 
 const BEAT_TURN = 700, BEAT_DRAW = 650, BEAT_DISCARD = 550, BEAT_CLOSE = 800;
@@ -106,11 +109,28 @@ class ChinchonUI {
 
   _loadSetup() {
     const saved = loadJSON(STORE_SETTINGS, {});
+    // Shared hub profile: defaults-only, applied only where the game has no saved
+    // last-used value (precedence: last-used > profile > built-in). AI identity is
+    // read from the profile fresh each load (never persisted), so profile edits to
+    // opponents always show; humanName/avatar/difficulty are persisted, so once the
+    // player customizes them in-game their last-used choice wins.
+    const profile = loadProfile();
+    const opps = (profile && profile.opponents) || [];
+    const aiNames = [], aiAvatars = [];
+    for (let i = 0; i < 3; i++) {
+      aiNames.push((opps[i] && opps[i].name) || AI_NAMES[i]);
+      aiAvatars.push((opps[i] && opps[i].emoji) || AI_AVATARS[i]);
+    }
+    const profileDiff = (i) => (opps[i] && SKILL_TO_DIFF[opps[i].skill]) || 'normal';
     return {
-      count: clamp(saved.count || 3, 2, 4),
-      humanName: typeof saved.humanName === 'string' ? saved.humanName : 'You',
-      humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar : HUMAN_AVATARS[0],
-      aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 3) : ['normal', 'normal', 'normal'],
+      count: clamp(saved.count || (opps.length ? opps.length + 1 : 3), 2, 4),
+      humanName: typeof saved.humanName === 'string' ? saved.humanName
+        : (profile && profile.name) || 'You',
+      humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar
+        : (profile && profile.emoji) || HUMAN_AVATARS[0],
+      aiNames, aiAvatars,
+      aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 3)
+        : [profileDiff(0), profileDiff(1), profileDiff(2)],
       deck: DECKS_BY_ID[saved.deck] ? saved.deck : DEFAULT_DECK_ID,
       rulesOpen: false,
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
@@ -202,8 +222,8 @@ class ChinchonUI {
     const aiRows = [];
     for (let i = 0; i < s.count - 1; i++) {
       aiRows.push(`<div class="cc-player-row">
-        <span class="cc-av">${AI_AVATARS[i]}</span>
-        <span class="cc-player-name">${esc(AI_NAMES[i])}</span>
+        <span class="cc-av">${s.aiAvatars[i]}</span>
+        <span class="cc-player-name">${esc(s.aiNames[i])}</span>
         ${aiDiffSeg(i)}
       </div>`);
     }
@@ -320,8 +340,8 @@ class ChinchonUI {
     for (let i = 0; i < s.count - 1; i++) {
       const diff = s.aiDifficulty[i] || 'normal';
       players.push(makePlayer({
-        id: i + 1, name: AI_NAMES[i], avatar: AI_AVATARS[i], difficulty: diff,
-        agent: new AIAgent({ difficulty: diff, name: AI_NAMES[i] }),
+        id: i + 1, name: s.aiNames[i], avatar: s.aiAvatars[i], difficulty: diff,
+        agent: new AIAgent({ difficulty: diff, name: s.aiNames[i] }),
       }));
     }
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);

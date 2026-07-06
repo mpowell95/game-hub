@@ -6,6 +6,8 @@
 //
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
+import { loadProfile } from './profile-store.js';
+
 const GAMES = [
   {
     id: 'connect-four',
@@ -39,7 +41,7 @@ const GAMES = [
   {
     id: 'business-deal',
     title: 'Business Deal',
-    blurb: 'Cards, cash & schemes — collect property sets to win. vs. smart AI, 2–5 players.',
+    blurb: 'Cards, cash & schemes. Collect property sets to win vs. smart AI. 2–5 players.',
     // Business Deal is its own full-screen PWA deployed alongside the hub, so
     // the card launches out to it (root-relative on the same domain) rather
     // than mounting as an in-hub module.
@@ -55,7 +57,7 @@ const GAMES = [
   {
     id: 'parchis',
     title: 'Parchís',
-    blurb: 'Spanish Parchís vs. smart AI. One die, seguros, barreras & bonos. 2 to 4 players.',
+    blurb: 'Spanish Parchís vs. smart AI. One die, seguros, barreras & bonos. 2–4 players.',
     // Self-contained single-file game living in this repo; launches out like Business Deal.
     href: 'parchis/',
     accent: '#c0632b',
@@ -88,6 +90,7 @@ class Hub {
         <header class="hub-top">
           <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
           <h1 class="hub-top-title" data-role="title">Game Hub</h1>
+          <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
@@ -113,7 +116,13 @@ class Hub {
       grid: this.root.querySelector('[data-role="grid"]'),
       game: this.root.querySelector('[data-role="game"]'),
       confirm: this.root.querySelector('[data-role="confirm"]'),
+      profile: this.root.querySelector('[data-role="profile"]'),
     };
+
+    // Reflect any saved profile in the header entry (textContent keeps names XSS-safe).
+    const prof = loadProfile();
+    this.el.profile.textContent = prof && prof.name ? `👤 ${prof.name}` : 'Set up your profile';
+    this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
@@ -164,12 +173,14 @@ class Hub {
       this.el.back.hidden = false;
       this.el.grid.hidden = true;
       this.el.game.hidden = false;
+      this.el.profile.hidden = true;
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
       this.el.game.innerHTML = `<p class="hub-error">Couldn't load ${game.title}. Please try again.</p>`;
       this.el.game.hidden = false;
       this.el.grid.hidden = true;
       this.el.back.hidden = false;
+      this.el.profile.hidden = true;
     }
   }
 
@@ -196,6 +207,7 @@ class Hub {
     this.el.grid.hidden = false;
     this.el.back.hidden = true;
     this.el.title.textContent = 'Game Hub';
+    this.el.profile.hidden = false;
   }
 
   destroy() {

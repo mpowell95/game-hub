@@ -55,6 +55,26 @@ body {
 }
 .hub-back:hover { background: var(--hub-surface-2); }
 
+/* Profile entry in the top bar (profile project). Sits to the right; hidden while
+   a game is mounted so the game keeps focus. Long names ellipsize. */
+.hub-profile {
+  margin-left: auto;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--hub-ink);
+  background: var(--hub-surface);
+  border: 1px solid var(--hub-surface-2);
+  padding: 7px 13px;
+  border-radius: 999px;
+  white-space: nowrap;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hub-profile:hover { background: var(--hub-surface-2); }
+.hub-profile-empty { color: var(--hub-accent); border-color: var(--hub-accent); }
+
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 
 /* Launcher grid — flex + centering so an odd last card centers instead of

@@ -11,6 +11,7 @@
 import { Game, WIN, DRAW } from './game.js';
 import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
@@ -40,15 +41,31 @@ const DIFFICULTY_LABELS = [
   [Difficulty.EXPERT, 'Expert'],
 ];
 
+// Profile skill tiers (1-3) map onto the first three difficulties. Connect Four's
+// Expert (perfect solver) stays a manual, in-game choice, not a profile tier.
+const SKILL_TO_DIFFICULTY = { 1: Difficulty.EASY, 2: Difficulty.MEDIUM, 3: Difficulty.HARD };
+// Escape user-entered names before they go into innerHTML (setup screen + legend).
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 class ConnectFourUI {
   constructor(container) {
     this.container = container;
 
     // Settings (human is always red / PLAYER_ONE; turn order is configurable).
-    this.difficulty = Difficulty.MEDIUM;
+    // Prefill from the shared hub profile (defaults-only; still editable on setup).
+    const profile = loadProfile();
+    const opp = profile && profile.opponents && profile.opponents[0];
+    this.difficulty = (opp && SKILL_TO_DIFFICULTY[opp.skill]) || Difficulty.MEDIUM;
     this.humanFirst = true;
     this.humanPlayer = PLAYER_ONE;
     this.aiPlayer = PLAYER_TWO;
+
+    // Player identity for on-screen labels (profile-driven; falls back to the
+    // original "You" / "Computer" when there is no profile).
+    this.humanName = (profile && profile.name) || 'You';
+    this.humanEmoji = (profile && profile.emoji) || '';
+    this.oppName = (opp && opp.name) || 'Computer';
+    this.oppEmoji = (opp && opp.emoji) || '';
 
     // Runtime state.
     this.game = null;
@@ -178,7 +195,7 @@ class ConnectFourUI {
             <span class="cf-label">Who goes first</span>
             <div class="cf-segmented" data-role="first">
               <button type="button" class="cf-seg" data-value="you">You</button>
-              <button type="button" class="cf-seg" data-value="ai">Computer</button>
+              <button type="button" class="cf-seg" data-value="ai">${this.oppLabel()}</button>
             </div>
           </div>
 
@@ -197,8 +214,8 @@ class ConnectFourUI {
 
           <div class="cf-subbar">
             <span class="cf-legend">
-              <span class="cf-legend-item"><span class="cf-chip p1"></span>You</span>
-              <span class="cf-legend-item"><span class="cf-chip p2"></span>Computer</span>
+              <span class="cf-legend-item"><span class="cf-chip p1"></span>${this.humanLabel()}</span>
+              <span class="cf-legend-item"><span class="cf-chip p2"></span>${this.oppLabel()}</span>
             </span>
             <span class="cf-hint" data-role="hint">Tap a column to drop ↓</span>
           </div>
@@ -309,6 +326,10 @@ class ConnectFourUI {
     group.querySelectorAll('.cf-seg').forEach((b) =>
       b.classList.toggle('is-selected', b.dataset.value === value));
   }
+
+  /** Escaped "emoji name" (or just name) for the human / opponent, safe for innerHTML. */
+  humanLabel() { return this.humanEmoji ? `${esc(this.humanEmoji)} ${esc(this.humanName)}` : esc(this.humanName); }
+  oppLabel() { return this.oppEmoji ? `${esc(this.oppEmoji)} ${esc(this.oppName)}` : esc(this.oppName); }
 
   buildBoardCells() {
     const cells = [];
@@ -551,9 +572,9 @@ class ConnectFourUI {
     this.el.dot.classList.toggle('p1', turn === PLAYER_ONE);
     this.el.dot.classList.toggle('p2', turn === PLAYER_TWO);
     let text;
-    if (this.busy && turn === this.aiPlayer) text = 'Computer is thinking…';
+    if (this.busy && turn === this.aiPlayer) text = `${this.oppName} is thinking…`;
     else if (turn === this.humanPlayer) text = 'Your move';
-    else text = "Computer's move";
+    else text = `${this.oppName}'s move`;
     this.el.status.textContent = text;
     // Cue that the board isn't tappable unless it's your turn (no dead-tap mystery).
     this.el.board.classList.toggle('is-locked', !(turn === this.humanPlayer && !this.busy));
@@ -588,7 +609,7 @@ class ConnectFourUI {
         });
       }
       const youWon = this.game.winner === this.humanPlayer;
-      msg = youWon ? 'You win! 🎉' : 'Computer wins';
+      msg = youWon ? 'You win! 🎉' : `${this.oppName} wins`;
       dot = this.game.winner === PLAYER_ONE ? 'p1' : 'p2';
       this.el.result.dataset.outcome = youWon ? 'win' : 'loss';
     } else if (this.game.status === DRAW) {

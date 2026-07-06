@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Profile · Game Hub</title>
+  <meta name="description" content="Set your name, emoji, color, and computer opponents once. Every game uses them as defaults.">
+  <meta name="theme-color" content="#1769d4">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../css/hub.css">
+  <style>
+    .pf-main { max-width: 640px; }
+    .pf-intro { color: var(--hub-muted); font-size: .9rem; line-height: 1.45; margin: 0 0 18px; }
+
+    .pf-saved {
+      margin-left: auto; font-size: .8rem; font-weight: 800; letter-spacing: .01em;
+      color: #178A7A; opacity: 0; transform: translateY(-1px);
+      transition: opacity .18s ease;
+    }
+    .pf-saved.show { opacity: 1; }
+
+    .pf-section {
+      background: var(--hub-surface); border: 1px solid var(--hub-surface-2);
+      border-radius: 18px; padding: 18px; margin-bottom: 16px;
+      box-shadow: 0 4px 16px rgba(20, 40, 80, .06);
+    }
+    .pf-section > h2 { margin: 0 0 4px; font-size: 1.06rem; font-weight: 800; }
+    .pf-section > .pf-hint { margin: 0 0 14px; font-size: .82rem; color: var(--hub-muted); line-height: 1.4; }
+
+    .pf-label { display: block; font-size: .82rem; font-weight: 700; color: var(--hub-muted); margin-bottom: 6px; }
+    .pf-input {
+      font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2); color: var(--hub-ink);
+    }
+    .pf-input:focus { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: #fff; }
+
+    .pf-you-row { display: flex; align-items: flex-end; gap: 12px; }
+    .pf-you-row .pf-name-wrap { flex: 1; }
+
+    .pf-emoji-btn {
+      font-size: 1.9rem; line-height: 1; width: 58px; height: 58px; flex: 0 0 auto;
+      border-radius: 15px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
+      cursor: pointer; display: grid; place-items: center; touch-action: manipulation;
+    }
+    .pf-emoji-btn:hover { background: #e1e8f2; }
+    .pf-emoji-btn.sm { font-size: 1.5rem; width: 48px; height: 48px; border-radius: 13px; }
+
+    /* Color swatches: shape + label, never hue alone (colorblind-safe). */
+    .pf-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pf-swatch {
+      display: flex; align-items: center; gap: 8px; font: inherit; font-weight: 700; font-size: .9rem;
+      padding: 8px 12px 8px 9px; border-radius: 12px; cursor: pointer; touch-action: manipulation;
+      border: 2px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
+      position: relative;
+    }
+    .pf-swatch:hover { background: var(--hub-surface-2); }
+    .pf-swatch svg { display: block; }
+    .pf-swatch.is-selected { border-color: var(--hub-ink); background: var(--hub-surface-2); }
+    .pf-swatch.is-selected::after {
+      content: "\2713"; /* checkmark */ font-weight: 900; color: var(--hub-ink);
+      margin-left: 2px;
+    }
+    .pf-swatch-none { color: var(--hub-muted); }
+    .pf-swatch-none .pf-none-mark {
+      width: 22px; height: 22px; border-radius: 999px; border: 2px dashed var(--hub-muted);
+      display: inline-block;
+    }
+
+    /* Opponent rows */
+    .pf-opp { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hub-surface-2); }
+    .pf-opp:first-of-type { border-top: 0; }
+    .pf-opp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    .pf-opp-name { }
+    .pf-remove {
+      flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--hub-surface-2);
+      background: var(--hub-surface); color: var(--hub-muted); font-size: 1.2rem; line-height: 1;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .pf-remove:hover { background: #fbeae7; color: #c2402f; border-color: #f0ccc6; }
+
+    /* Skill segmented control */
+    .pf-seg { display: inline-flex; background: var(--hub-surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
+    .pf-seg button {
+      font: inherit; font-weight: 700; font-size: .82rem; border: 0; background: transparent;
+      color: var(--hub-muted); padding: 6px 10px; border-radius: 8px; cursor: pointer; touch-action: manipulation;
+    }
+    .pf-seg button.is-on { background: var(--hub-surface); color: var(--hub-ink); box-shadow: 0 1px 3px rgba(20,40,80,.14); }
+
+    .pf-add {
+      font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 14px; width: 100%;
+      border-radius: 11px; border: 1px dashed var(--hub-accent); background: transparent; color: var(--hub-accent);
+      cursor: pointer; touch-action: manipulation;
+    }
+    .pf-add:hover { background: rgba(23, 105, 212, .07); }
+    .pf-add[hidden] { display: none; }
+
+    .pf-foot { text-align: center; color: var(--hub-muted); font-size: .84rem; line-height: 1.5; }
+    .pf-reset-btn {
+      font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 16px; border-radius: 11px;
+      border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: #c2402f;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .pf-reset-btn:hover { background: #fbeae7; border-color: #f0ccc6; }
+
+    /* Emoji picker modal */
+    .pf-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+    .pf-modal[hidden] { display: none; }
+    .pf-modal-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, .55); }
+    .pf-modal-card {
+      position: relative; width: 100%; max-width: 380px; margin: 0 16px;
+      background: var(--hub-surface); border-radius: 16px; padding: 18px;
+      box-shadow: 0 16px 50px rgba(9, 24, 48, .4);
+    }
+    .pf-modal-head { display: flex; align-items: center; margin-bottom: 12px; }
+    .pf-modal-head strong { font-size: 1rem; }
+    .pf-x { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; border: 0; background: var(--hub-surface-2);
+      color: var(--hub-ink); font-size: 1.2rem; line-height: 1; cursor: pointer; }
+    .pf-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .pf-emoji-grid button {
+      font-size: 1.6rem; line-height: 1; aspect-ratio: 1; border-radius: 11px; border: 1px solid var(--hub-surface-2);
+      background: var(--hub-surface-2); cursor: pointer; touch-action: manipulation; display: grid; place-items: center;
+    }
+    .pf-emoji-grid button:hover { background: #e1e8f2; }
+    .pf-emoji-grid button.is-on { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: #fff; }
+  </style>
+</head>
+<body>
+  <div class="hub">
+    <header class="hub-top">
+      <a class="hub-back" href="../">&#8249; Hub</a>
+      <h1 class="hub-top-title">Profile</h1>
+      <span class="pf-saved" id="pf-saved" role="status" aria-live="polite">Saved</span>
+    </header>
+
+    <main class="hub-main pf-main">
+      <p class="pf-intro">Set yourself up once. Every game in the hub uses these as defaults, and you can still
+        change them inside each game. Saved on this device only, no account needed.</p>
+
+      <section class="pf-section">
+        <h2>You</h2>
+        <p class="pf-hint">Your name and emoji show up as the human player in games that display one.</p>
+        <div class="pf-you-row">
+          <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji">🙂</button>
+          <div class="pf-name-wrap">
+            <label class="pf-label" for="pf-you-name">Your name</label>
+            <input class="pf-input" id="pf-you-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+          </div>
+        </div>
+
+        <div style="margin-top:16px">
+          <span class="pf-label">Preferred color</span>
+          <div class="pf-swatches" id="pf-colors"></div>
+        </div>
+      </section>
+
+      <section class="pf-section">
+        <h2>Your opponents</h2>
+        <p class="pf-hint">Add up to three computer opponents. Their name, emoji, and skill prefill each game.</p>
+        <div id="pf-opps"></div>
+        <button type="button" class="pf-add" id="pf-add-opp">+ Add opponent</button>
+      </section>
+
+      <div class="pf-foot">
+        <p>Saved on this device only. No account, no sync, per browser.</p>
+        <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Emoji picker (shared by You and each opponent) -->
+  <div class="pf-modal" id="pf-picker" hidden>
+    <div class="pf-modal-scrim" data-picker-close></div>
+    <div class="pf-modal-card" role="dialog" aria-modal="true" aria-label="Choose an emoji">
+      <div class="pf-modal-head">
+        <strong>Choose an emoji</strong>
+        <button type="button" class="pf-x" data-picker-close aria-label="Close">&times;</button>
+      </div>
+      <div class="pf-emoji-grid" id="pf-emoji-grid"></div>
+    </div>
+  </div>
+
+  <!-- Reset confirm (reuses hub.css confirm styling) -->
+  <div class="hub-confirm" id="pf-reset" hidden>
+    <div class="hub-confirm-scrim" data-reset-cancel></div>
+    <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="Reset profile">
+      <p class="hub-confirm-msg">Reset your profile? This deletes your name, emoji, color, and opponents on this device.</p>
+      <div class="hub-confirm-actions">
+        <button type="button" class="hub-cbtn hub-cbtn-ghost" data-reset-cancel>Keep it</button>
+        <button type="button" class="hub-cbtn hub-cbtn-danger" id="pf-reset-confirm">Reset profile</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { loadProfile, saveProfile, clearProfile } from '../js/profile-store.js';
+
+    // Register the shared service worker so this page works offline too. Ignored on file://.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js').catch((e) => console.warn('SW registration failed', e));
+      });
+    }
+
+    const EMOJI = [
+      '🙂','😎','🤓','🥳','🤠','🧐','😺','🤖',
+      '🐶','🐱','🦊','🐼','🦁','🐯','🐸','🦉',
+      '🐢','🦄','🐙','🐝','🐧','🐨','🐵','🦖',
+      '⛳','🏌️','🏓','🎾','🏸','⚽','🎮','🏆',
+    ];
+    const COLORS = [
+      { id: 'yellow', label: 'Yellow', hex: '#F2B705', shape: 'circle' },
+      { id: 'blue',   label: 'Blue',   hex: '#1F5FA8', shape: 'triangle' },
+      { id: 'red',    label: 'Red',    hex: '#E0532F', shape: 'square' },
+      { id: 'green',  label: 'Green',  hex: '#178A7A', shape: 'diamond' },
+    ];
+    const SKILLS = [
+      { v: 1, label: 'Beginner' },
+      { v: 2, label: 'Intermediate' },
+      { v: 3, label: 'Pro' },
+    ];
+    const SHAPES = {
+      circle: '<circle cx="12" cy="12" r="8"/>',
+      triangle: '<polygon points="12,4 20,19 4,19"/>',
+      square: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+      diamond: '<polygon points="12,3 21,12 12,21 3,12"/>',
+    };
+    const shapeSVG = (shape, hex) =>
+      `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="${hex}">${SHAPES[shape]}</svg>`;
+
+    // Working state. Starts from the stored profile, or blank defaults if none.
+    const state = loadProfile() || { name: '', emoji: '🙂', preferredColor: null, opponents: [] };
+
+    const $ = (sel) => document.querySelector(sel);
+    const els = {
+      youEmoji: $('#pf-you-emoji'),
+      youName: $('#pf-you-name'),
+      colors: $('#pf-colors'),
+      opps: $('#pf-opps'),
+      addOpp: $('#pf-add-opp'),
+      saved: $('#pf-saved'),
+      picker: $('#pf-picker'),
+      grid: $('#pf-emoji-grid'),
+      reset: $('#pf-reset'),
+    };
+
+    // -- Saving (debounced for typing, immediate for discrete taps) --------------
+    let saveTimer = null, flashTimer = null;
+    function commitNow() {
+      clearTimeout(saveTimer);
+      if (saveProfile(state)) flashSaved();
+    }
+    function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(commitNow, 400); }
+    function flashSaved() {
+      els.saved.classList.add('show');
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => els.saved.classList.remove('show'), 1400);
+    }
+
+    // -- Emoji picker ------------------------------------------------------------
+    let pickTarget = null; // 'you' or an opponent index
+    function openPicker(target, current) {
+      pickTarget = target;
+      els.grid.innerHTML = EMOJI.map((e) =>
+        `<button type="button" data-emoji="${e}" class="${e === current ? 'is-on' : ''}">${e}</button>`).join('');
+      els.picker.hidden = false;
+    }
+    function closePicker() { els.picker.hidden = true; pickTarget = null; }
+    els.grid.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-emoji]');
+      if (!btn) return;
+      const emoji = btn.dataset.emoji;
+      if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; }
+      else { state.opponents[pickTarget].emoji = emoji; renderOpps(); }
+      closePicker();
+      commitNow();
+    });
+    els.picker.querySelectorAll('[data-picker-close]').forEach((n) => n.addEventListener('click', closePicker));
+
+    // -- Colors ------------------------------------------------------------------
+    function renderColors() {
+      const none = `<button type="button" class="pf-swatch pf-swatch-none ${state.preferredColor === null ? 'is-selected' : ''}"
+          data-color="none"><span class="pf-none-mark" aria-hidden="true"></span>No preference</button>`;
+      els.colors.innerHTML = COLORS.map((c) =>
+        `<button type="button" class="pf-swatch ${state.preferredColor === c.id ? 'is-selected' : ''}" data-color="${c.id}">
+           ${shapeSVG(c.shape, c.hex)}${c.label}
+         </button>`).join('') + none;
+    }
+    els.colors.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-color]');
+      if (!btn) return;
+      state.preferredColor = btn.dataset.color === 'none' ? null : btn.dataset.color;
+      renderColors();
+      commitNow();
+    });
+
+    // -- Opponents ---------------------------------------------------------------
+    function renderOpps() {
+      els.opps.innerHTML = state.opponents.map((o, i) => `
+        <div class="pf-opp" data-i="${i}">
+          <button type="button" class="pf-emoji-btn sm" data-opp-emoji="${i}" aria-label="Choose opponent emoji">${o.emoji}</button>
+          <div class="pf-opp-main">
+            <input class="pf-input pf-opp-name" data-opp-name="${i}" type="text" maxlength="20"
+                   value="${o.name.replace(/"/g, '&quot;')}" placeholder="Computer ${i + 1}" autocomplete="off">
+            <div class="pf-seg" role="group" aria-label="Skill for ${o.name.replace(/"/g, '&quot;')}">
+              ${SKILLS.map((s) => `<button type="button" data-opp-skill="${i}" data-v="${s.v}"
+                   class="${o.skill === s.v ? 'is-on' : ''}">${s.label}</button>`).join('')}
+            </div>
+          </div>
+          <button type="button" class="pf-remove" data-opp-remove="${i}" aria-label="Remove opponent">&times;</button>
+        </div>`).join('');
+      els.addOpp.hidden = state.opponents.length >= 3;
+    }
+    els.opps.addEventListener('click', (ev) => {
+      const emojiBtn = ev.target.closest('[data-opp-emoji]');
+      if (emojiBtn) { const i = +emojiBtn.dataset.oppEmoji; openPicker(i, state.opponents[i].emoji); return; }
+      const skillBtn = ev.target.closest('[data-opp-skill]');
+      if (skillBtn) { state.opponents[+skillBtn.dataset.oppSkill].skill = +skillBtn.dataset.v; renderOpps(); commitNow(); return; }
+      const rm = ev.target.closest('[data-opp-remove]');
+      if (rm) { state.opponents.splice(+rm.dataset.oppRemove, 1); renderOpps(); commitNow(); return; }
+    });
+    els.opps.addEventListener('input', (ev) => {
+      const nameInput = ev.target.closest('[data-opp-name]');
+      if (nameInput) { state.opponents[+nameInput.dataset.oppName].name = nameInput.value; scheduleSave(); }
+    });
+    els.addOpp.addEventListener('click', () => {
+      if (state.opponents.length >= 3) return;
+      state.opponents.push({ name: `Computer ${state.opponents.length + 1}`, emoji: '🤖', skill: 2 });
+      renderOpps();
+      commitNow();
+    });
+
+    // -- You fields --------------------------------------------------------------
+    els.youEmoji.addEventListener('click', () => openPicker('you', state.emoji));
+    els.youName.addEventListener('input', () => { state.name = els.youName.value; scheduleSave(); });
+
+    // -- Reset -------------------------------------------------------------------
+    $('#pf-reset-btn').addEventListener('click', () => { els.reset.hidden = false; });
+    els.reset.querySelectorAll('[data-reset-cancel]').forEach((n) =>
+      n.addEventListener('click', () => { els.reset.hidden = true; }));
+    $('#pf-reset-confirm').addEventListener('click', () => {
+      clearProfile();
+      state.name = ''; state.emoji = '🙂'; state.preferredColor = null; state.opponents = [];
+      hydrate();
+      els.reset.hidden = true;
+    });
+
+    // -- Initial paint -----------------------------------------------------------
+    function hydrate() {
+      els.youEmoji.textContent = state.emoji;
+      els.youName.value = state.name;
+      renderColors();
+      renderOpps();
+    }
+    hydrate();
+  </script>
+</body>
+</html>
