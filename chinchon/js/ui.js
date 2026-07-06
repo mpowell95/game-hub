@@ -700,7 +700,7 @@ class ChinchonUI {
     const betty = (!this._chartView && this._setup.deck === 'anita')
       ? `<div class="cc-betty is-${humanWon ? 'win' : 'loss'}">
           <img class="cc-betty-img" src="${anitaImgUrl(humanWon ? 'betty-win.webp' : 'betty-loss.webp')}" alt="" draggable="false">
-          <p class="cc-betty-cap">${humanWon ? 'Betty approves 😎' : 'Betty is not impressed 😒'}</p>
+          <p class="cc-betty-cap">${humanWon ? 'Betty approves 😎' : 'Betty is not impressed.'}</p>
         </div>`
       : '';
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
