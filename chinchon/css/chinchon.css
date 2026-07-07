@@ -112,6 +112,55 @@
 .cc-deck-tick { color: var(--cc-accent); }
 .cc-deck-opt-credit { font-size: 0.68rem; color: var(--cc-muted); text-align: center; line-height: 1.3; }
 
+.cc-deck-opt-wrap { display: flex; flex-direction: column; gap: 8px; }
+.cc-deck-view-btn {
+  appearance: none; font: inherit; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--cc-surface-2);
+  background: var(--cc-surface); color: var(--cc-ink); transition: background 0.15s;
+}
+.cc-deck-view-btn:hover { background: var(--cc-surface-2); }
+
+/* Deck viewer: full grid of every card in a deck */
+.cc-gallery-sheet { max-width: 680px; max-height: 88vh; }
+.cc-gallery-head { display: flex; align-items: center; gap: 8px; }
+.cc-gallery-head .cc-sheet-title { flex: 1; }
+.cc-gallery-head .cc-btn-ghost { flex: 0 0 auto; width: auto; padding: 8px 12px; }
+.cc-gallery-hint { margin: -6px 0 0; text-align: center; font-size: 0.8rem; color: var(--cc-muted); }
+.cc-gallery-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px;
+  overflow-y: auto; padding: 4px 2px 2px; -webkit-overflow-scrolling: touch;
+}
+.cc-gal-cell {
+  appearance: none; border: none; background: none; cursor: pointer; padding: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.cc-gal-img {
+  width: 100%; aspect-ratio: 400 / 616; object-fit: cover; border-radius: 7px;
+  border: 1px solid rgba(9, 24, 48, 0.15); box-shadow: 0 3px 8px rgba(9, 24, 48, 0.22);
+  background: #fff; transition: transform 0.12s, box-shadow 0.12s;
+}
+.cc-gal-cell:hover .cc-gal-img { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(9, 24, 48, 0.32); }
+.cc-gal-cap { font-size: 0.62rem; color: var(--cc-muted); text-align: center; line-height: 1.2; }
+
+/* Full-screen single-card zoom (layered above the gallery) */
+.cc-zoom { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+.cc-zoom-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, 0.82); }
+.cc-zoom-inner {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 16px; cursor: zoom-out; animation: cc-pop 0.2s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.cc-zoom-img {
+  max-width: min(92vw, 460px); max-height: 78vh; width: auto; height: auto;
+  border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.cc-zoom-cap { color: #fff; font-weight: 800; font-size: 1.1rem; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
+.cc-zoom-close {
+  position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; z-index: 1;
+  appearance: none; cursor: pointer; width: 44px; height: 44px; border-radius: 50%;
+  border: none; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 1.3rem; font-weight: 700;
+}
+.cc-zoom-close:hover { background: rgba(255, 255, 255, 0.28); }
+
 .cc-field { display: flex; flex-direction: column; gap: 8px; }
 .cc-label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); }
 .cc-segmented {

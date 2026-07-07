@@ -13,7 +13,7 @@ import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAs
 import { loadProfile } from '../../js/profile-store.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
-const DEFAULT_DECK_ID = 'baraja-libre';
+const DEFAULT_DECK_ID = 'anita';
 
 const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
@@ -42,6 +42,22 @@ function ensureStylesheet() {
 
 /** URL for an Anita-deck outcome image (Betty win/loss art), resolved like the stylesheet. */
 function anitaImgUrl(file) { return new URL(`../decks/anita/${file}`, import.meta.url).href; }
+
+/** Spanish label for a face name like 'oros-11' (used by the deck-viewer gallery). */
+const GAL_SUIT = { oros: 'Oros', copas: 'Copas', espadas: 'Espadas', bastos: 'Bastos' };
+function galleryLabel(name) {
+  if (name === 'back') return 'Reverso';
+  const [suit, rankStr] = name.split('-');
+  const rank = +rankStr;
+  const r = rank === 1 ? 'As' : rank === 10 ? 'Sota' : rank === 11 ? 'Caballo' : rank === 12 ? 'Rey' : rank;
+  return `${r} de ${GAL_SUIT[suit] || suit}`;
+}
+/** Face names for a full deck, back first, then each suit ace→rey. */
+function galleryNames() {
+  const names = ['back'];
+  for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 12; r++) names.push(`${s}-${r}`);
+  return names;
+}
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -313,11 +329,14 @@ class ChinchonUI {
   _openDeckPicker() {
     const opts = listDecks().map((d) => {
       const sel = d.id === this._setup.deck ? 'is-sel' : '';
-      return `<button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
-        <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
-        <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
-        <span class="cc-deck-opt-credit">${esc(d.credit)}</span>
-      </button>`;
+      return `<div class="cc-deck-opt-wrap ${sel}">
+        <button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
+          <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
+          <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
+          <span class="cc-deck-opt-credit">${esc(d.credit)}</span>
+        </button>
+        <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
+      </div>`;
     }).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-deck-sheet">
       <h2 class="cc-sheet-title">Choose a deck</h2>
@@ -330,6 +349,49 @@ class ChinchonUI {
   _closeDeckPicker() {
     this.el.modal.hidden = true;
     this.el.modal.innerHTML = '';
+  }
+
+  /** Gallery of every card in a deck; tap any card to view it full-screen. */
+  _openDeckGallery(deckId) {
+    const d = DECKS_BY_ID[deckId];
+    const cells = galleryNames().map((n) => {
+      const label = galleryLabel(n);
+      return `<button class="cc-gal-cell" data-action="zoom-card" data-deck="${deckId}" data-name="${n}">
+        <img class="cc-gal-img" src="${deckAssetUrl(deckId, n)}" alt="${esc(label)}" loading="lazy" draggable="false">
+        <span class="cc-gal-cap">${esc(label)}</span>
+      </button>`;
+    }).join('');
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-gallery-sheet">
+      <div class="cc-gallery-head">
+        <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
+        <h2 class="cc-sheet-title">${esc(d.name)}</h2>
+        <button class="cc-btn cc-btn-ghost" data-action="close-deck">Done</button>
+      </div>
+      <p class="cc-gallery-hint">Tap any card to zoom in.</p>
+      <div class="cc-gallery-grid">${cells}</div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  /** Full-screen view of a single card, layered above the gallery. */
+  _openCardZoom(deckId, name) {
+    this._closeCardZoom();
+    const label = galleryLabel(name);
+    const z = document.createElement('div');
+    z.className = 'cc-zoom';
+    z.dataset.role = 'zoom';
+    z.innerHTML = `<div class="cc-zoom-scrim" data-action="close-zoom"></div>
+      <div class="cc-zoom-inner" data-action="close-zoom">
+        <img class="cc-zoom-img" src="${deckAssetUrl(deckId, name)}" alt="${esc(label)}" draggable="false">
+        <span class="cc-zoom-cap">${esc(label)}</span>
+      </div>
+      <button class="cc-zoom-close" data-action="close-zoom" aria-label="Close">✕</button>`;
+    this.root.appendChild(z);
+  }
+
+  _closeCardZoom() {
+    const z = this.root.querySelector('[data-role="zoom"]');
+    if (z) z.remove();
   }
 
   startGame() {
@@ -814,7 +876,11 @@ class ChinchonUI {
       case 'pick-deck':
         this._setup.deck = a.dataset.v; setDeck(a.dataset.v); preloadDeck();
         this._saveSetup(); this._closeDeckPicker(); this.renderSetup(); break;
-      case 'close-deck': this._closeDeckPicker(); break;
+      case 'close-deck': this._closeCardZoom(); this._closeDeckPicker(); break;
+      case 'view-deck': this._openDeckGallery(a.dataset.v); break;
+      case 'back-to-decks': this._openDeckPicker(); break;
+      case 'zoom-card': this._openCardZoom(a.dataset.deck, a.dataset.name); break;
+      case 'close-zoom': this._closeCardZoom(); break;
       case 'set-aidiff': this.syncSetupInputs(); this._setup.aiDifficulty[+a.dataset.i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'toggle-rules': this.syncSetupInputs(); this._setup.rulesOpen = !this._setup.rulesOpen; this.renderSetup(); break;
       case 'rule-victory': this.syncSetupInputs(); this._setup.config.victoryCondition = a.dataset.v; this._saveSetup(); this.renderSetup(); break;

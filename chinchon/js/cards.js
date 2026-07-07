@@ -35,7 +35,7 @@ const DECKS = {
     credit: 'Anita — Española deck with a custom Oros coin',
   },
 };
-const DEFAULT_DECK = 'baraja-libre';
+const DEFAULT_DECK = 'anita';
 let currentDeck = DEFAULT_DECK;
 
 export function listDecks() { return Object.values(DECKS); }
