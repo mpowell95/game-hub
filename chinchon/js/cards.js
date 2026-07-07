@@ -14,8 +14,8 @@
 // figure cards (10–12) fall back to baraja-libre until custom art is added per suit.
 const ANITA_OWN = new Set(['back']);
 for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 9; r++) ANITA_OWN.add(`${s}-${r}`);
-// Illustrated court cards done so far (add each as its art lands).
-for (const f of ['bastos-10', 'bastos-11', 'bastos-12', 'copas-10', 'copas-11', 'copas-12', 'oros-12']) ANITA_OWN.add(f);
+// All 12 illustrated court cards (every suit, ranks 10-12) — Anita is now a full deck.
+for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (const r of [10, 11, 12]) ANITA_OWN.add(`${s}-${r}`);
 
 const DECKS = {
   'baraja-libre': {
