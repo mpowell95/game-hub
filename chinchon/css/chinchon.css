@@ -37,6 +37,17 @@
 .cc-header { text-align: center; margin-bottom: 12px; }
 .cc-title { margin: 0; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; letter-spacing: -0.01em; }
 
+/* Anita "joke edition" rebrand of the setup screen */
+.cc-title-anita { display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.05; }
+.cc-title-bonita {
+  font-family: "Brush Script MT", "Segoe Script", cursive;
+  font-size: 1.5em; font-weight: 700; letter-spacing: 0.01em;
+  background: linear-gradient(90deg, #d4a017, #e8552d, #d4a017);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+.cc-subtitle { margin: 4px 0 0; font-weight: 700; font-size: 0.9rem; color: var(--cc-muted); }
+
 /* Buttons (mirrors the hub's button system) */
 .cc-btn {
   appearance: none; border: 0; font: inherit; font-weight: 700;
@@ -260,16 +271,19 @@
 .cc-tool:hover { background: var(--cc-surface-2); }
 .cc-tool.is-on { background: rgba(46, 139, 87, 0.14); border-color: var(--cc-good); color: var(--cc-good); }
 
-/* Hand — larger cards that wrap into up to two rows of four */
+/* Hand — a single overlapping row (cards fan over each other, like a real hand) */
 .cc-hand {
-  --cc-hand-fs: clamp(13px, 4.4vw, 21px);
-  display: flex; flex-wrap: wrap; justify-content: center; align-content: center;
-  gap: 8px 7px; padding: 8px 4px; margin: 0 auto;
-  max-width: calc(4.55em * 4 + 34px); font-size: var(--cc-hand-fs);
-  min-height: calc(4.55em * 61 / 40 + 16px);
+  --cc-hand-fs: clamp(14px, 4.4vw, 22px);
+  --cc-hand-overlap: 2.5em;   /* how far each card slides over its left neighbour */
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end;
+  padding: 10px 6px 14px; margin: 0 auto; font-size: var(--cc-hand-fs);
+  min-height: calc(4.55em * 61 / 40 + 22px);
 }
 .cc-hand .cc-card { font-size: var(--cc-hand-fs); cursor: grab; touch-action: none; }
-.cc-hand .cc-card.is-dragging { cursor: grabbing; box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4); }
+.cc-hand .cc-card + .cc-card { margin-left: calc(-1 * var(--cc-hand-overlap)); }
+.cc-hand .cc-card:hover { z-index: 15; transform: translateY(-0.5em); }
+.cc-hand .cc-card.is-selected { z-index: 20; }
+.cc-hand .cc-card.is-dragging { z-index: 30; cursor: grabbing; box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4); }
 .cc-actions { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 46px; flex-wrap: wrap; }
 .cc-hint { color: var(--cc-muted); font-weight: 600; font-size: 0.88rem; }
 

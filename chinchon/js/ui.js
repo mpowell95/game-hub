@@ -52,10 +52,11 @@ function galleryLabel(name) {
   const r = rank === 1 ? 'As' : rank === 10 ? 'Sota' : rank === 11 ? 'Caballo' : rank === 12 ? 'Rey' : rank;
   return `${r} de ${GAL_SUIT[suit] || suit}`;
 }
-/** Face names for a full deck, back first, then each suit ace→rey. */
+/** Names shown in the deck viewer: the 12 face cards (Sota/Caballo/Rey) + the back. */
 function galleryNames() {
-  const names = ['back'];
-  for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 12; r++) names.push(`${s}-${r}`);
+  const names = [];
+  for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (const r of [10, 11, 12]) names.push(`${s}-${r}`);
+  names.push('back');
   return names;
 }
 
@@ -133,8 +134,10 @@ class ChinchonUI {
     const profile = loadProfile();
     const opps = (profile && profile.opponents) || [];
     const aiNames = [], aiAvatars = [];
+    const savedNames = Array.isArray(saved.aiNames) ? saved.aiNames : [];
     for (let i = 0; i < 3; i++) {
-      aiNames.push((opps[i] && opps[i].name) || AI_NAMES[i]);
+      // Precedence: last-used in-game rename > shared profile opponent > built-in.
+      aiNames.push(savedNames[i] || (opps[i] && opps[i].name) || AI_NAMES[i]);
       aiAvatars.push((opps[i] && opps[i].emoji) || AI_AVATARS[i]);
     }
     const profileDiff = (i) => (opps[i] && SKILL_TO_DIFF[opps[i].skill]) || 'normal';
@@ -155,7 +158,7 @@ class ChinchonUI {
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiDifficulty: s.aiDifficulty, deck: s.deck, config: s.config });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, config: s.config });
   }
 
   // --- DOM construction -----------------------------------------------------
@@ -239,7 +242,7 @@ class ChinchonUI {
     for (let i = 0; i < s.count - 1; i++) {
       aiRows.push(`<div class="cc-player-row">
         <span class="cc-av">${s.aiAvatars[i]}</span>
-        <span class="cc-player-name">${esc(s.aiNames[i])}</span>
+        <input class="cc-name-input" data-ai-name="${i}" value="${esc(s.aiNames[i])}" maxlength="14" aria-label="Opponent ${i + 1} name">
         ${aiDiffSeg(i)}
       </div>`);
     }
@@ -265,11 +268,16 @@ class ChinchonUI {
       ${toggleRow('aceOrosWild', 'Ace of Oros is wild')}
       ${toggleRow('showRemaining', 'Show remaining cards')}`;
 
+    // Themed title: the Anita deck rebrands the whole screen as a joke edition.
+    const anita = s.deck === 'anita';
+    this.el.header.innerHTML = anita
+      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Anita Bonita</span></h1>
+         <p class="cc-subtitle">💃 Edición oficial de la familia 🃏</p>`
+      : `<h1 class="cc-title">Chinchón</h1>`;
+
     this.el.setup.innerHTML = `
       <div class="cc-card-panel">
         ${statsLine}
-        <p class="cc-lead">Spanish rummy. Build runs and sets, keep your hand light, and <em>close</em> when your leftover is small. Lowest score wins.</p>
-
         <div class="cc-section">
           <span class="cc-label">Players</span>
           ${seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
@@ -308,6 +316,10 @@ class ChinchonUI {
   syncSetupInputs() {
     const input = this.el.setup.querySelector('[data-field="humanName"]');
     if (input) this._setup.humanName = input.value.trim() || 'You';
+    this.el.setup.querySelectorAll('[data-ai-name]').forEach((inp) => {
+      const i = +inp.dataset.aiName;
+      this._setup.aiNames[i] = inp.value.trim() || AI_NAMES[i] || `Player ${i + 2}`;
+    });
   }
 
   _openAvatarPicker() {
