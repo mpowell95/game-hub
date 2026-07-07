@@ -119,7 +119,8 @@
 
   /* full-screen cards (title, new game) */
   .pc-card-full { max-width:420px; }
-  .pc-card.pc-title { text-align:center; }
+  .pc-card.pc-title { text-align:center; position:relative; }
+  .pc-title-back { position:absolute; top:10px; left:10px; z-index:1; }
   .pc-title .pc-card-body { gap:12px; padding:22px 20px 24px; }
   .pc-title-hero { padding:14px 0 8px; }
   .pc-title-word { font-family:"Rockwell","Roboto Slab",Georgia,serif; font-size:46px; letter-spacing:1px; color:var(--gold); }
@@ -143,7 +144,11 @@
   .pc-swatch { background:var(--panel2); border:2px solid transparent; border-radius:12px; padding:8px; cursor:pointer;
     display:inline-flex; }
   .pc-swatch.on { background:#41341f; }
+  .pc-opptoggle { width:100%; text-align:left; font:inherit; font-size:13px; font-weight:600; color:var(--text);
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; margin-top:8px; }
+  .pc-opptoggle:hover { border-color:var(--muted); }
   .pc-opps { display:flex; flex-direction:column; gap:8px; }
+  .pc-opps.pc-collapsed { display:none; }
   .pc-opprow { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
   .pc-oppname { flex:1; min-width:110px; font:inherit; padding:8px 10px; border-radius:9px; border:1px solid var(--line);
     background:var(--panel2); color:var(--text); }
@@ -2278,6 +2283,7 @@
   HUD.showTitle = function (h) {
     overlay(null, function (body, card) {
       card.classList.add("pc-title");
+      if (h.onExit) { var xb = elh("button", "pc-iconbtn pc-title-back", body, "‹"); xb.setAttribute("aria-label", t("back")); xb.onclick = h.onExit; }
       var hero = elh("div", "pc-title-hero", body);
       hero.innerHTML = '<div class="pc-title-word">' + t("appName") + '</div>';
       var badges = elh("div", "pc-title-badges", hero);
@@ -2329,9 +2335,22 @@
         b.onclick = function () { sel.humanColor = c; COLORS.forEach(function (k) { cBtns[k].classList.toggle("on", k === c); cBtns[k].style.borderColor = k === c ? T().colors[k].base : "transparent"; }); renderOpponents(); };
       });
 
-      // opponents / players section (reactive)
-      var oppHead = elh("p", "pc-hint", body, vsMode === "local" ? t("playersHeading") : t("opponentsHeading"));
-      var oppWrap = elh("div", "pc-opps", body);
+      // opponents / players section (reactive). For vs-computer, the opponent
+      // settings are noisy, so tuck them behind a toggle that is collapsed by default.
+      var oppWrap;
+      if (vsMode === "local") {
+        elh("p", "pc-hint", body, t("playersHeading"));
+        oppWrap = elh("div", "pc-opps", body);
+      } else {
+        var oppToggle = elh("button", "pc-opptoggle", body);
+        oppWrap = elh("div", "pc-opps pc-collapsed", body);
+        var setToggleLabel = function () {
+          var collapsed = oppWrap.classList.contains("pc-collapsed");
+          oppToggle.textContent = (collapsed ? "▸ " : "▾ ") + t("opponentsHeading");
+        };
+        oppToggle.onclick = function () { oppWrap.classList.toggle("pc-collapsed"); setToggleLabel(); };
+        setToggleLabel();
+      }
 
       function renderOpponents() {
         oppWrap.innerHTML = "";
@@ -2724,18 +2743,26 @@
     if (G.ui !== "showingMoves" || isAI(G.state.turn)) return;
     var p = tapPoint(evt); if (!p) return; evt.preventDefault();
     var place = Board.pawnPlacement(CO(), G.state), TH = cell() * 1.5;
-    // 1. tap near a specific destination -> apply that exact move
+    // nearest legal-move destination to the tap
     var bestDest = null, bestDestD = Infinity;
     G.moves.forEach(function (m) { var d = destCenter(m); if (!d) return; var dd = dist(p, d); if (dd < bestDestD) { bestDestD = dd; bestDest = m; } });
-    if (bestDest && bestDestD <= TH) { applyChosen(bestDest); return; }
-    // 2. tap near a current-player pawn
+    // nearest current-player pawn to the tap
     var cur = G.state.players[G.state.turn], tapped = null, tapD = Infinity;
     cur.pawns.forEach(function (pw) { var c = place[pw.id]; if (!c) return; var d = dist(p, c); if (d < tapD) { tapD = d; tapped = pw; } });
-    if (!tapped || tapD > TH) return;
-    var movesFor = G.moves.filter(function (m) { return m.pawnId === tapped.id; });
-    if (movesFor.length === 0) { explainIllegal(tapped); return; }
+    // A tap ON a pawn wins when the pawn is at least as close as any destination. This is
+    // what makes a pawn with several die options (e.g. a 6 and a 1) open the picker instead
+    // of silently taking the adjacent short-die destination that sits one cell away.
+    if (tapped && tapD <= TH && tapD <= bestDestD) { selectPawn(tapped, place); return; }
+    // Otherwise a direct tap on a highlighted destination applies that exact move.
+    if (bestDest && bestDestD <= TH) { applyChosen(bestDest); return; }
+    // Pawn tapped but a destination was marginally closer yet out of range: still select it.
+    if (tapped && tapD <= TH) { selectPawn(tapped, place); }
+  }
+  function selectPawn(pawn, place) {
+    var movesFor = G.moves.filter(function (m) { return m.pawnId === pawn.id; });
+    if (movesFor.length === 0) { explainIllegal(pawn); return; }
     if (movesFor.length === 1) { applyChosen(movesFor[0]); return; }
-    showMoveChoice(tapped, movesFor, place[tapped.id]);
+    showMoveChoice(pawn, movesFor, place[pawn.id]);
   }
 
   function valuesOfMove(m) { return (m.usesDice || []).map(function (i) { return G.state.dice[i]; }); }
@@ -2886,7 +2913,8 @@
       onLocal: function () { HUD.showSetup("local", prefill(), onPlay, showTitle); },
       onContinue: canContinue ? function () { continueGame(saved); } : null,
       onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved, showTitle); },
-      onRules: function () { HUD.openRules((loadPrefs().mode) || "american", showTitle); }
+      onRules: function () { HUD.openRules((loadPrefs().mode) || "american", showTitle); },
+      onExit: function () { window.location.href = "../"; } // back to the game hub
     });
   }
   function onPlay(setup) { startNewGame(buildCfg(setup)); }

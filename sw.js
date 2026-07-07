@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v37';
+const CACHE = 'game-hub-v39';
 
 const ASSETS = [
   './',
@@ -72,9 +72,35 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Immutable static assets (images, fonts) — served cache-first so re-created
+// <img> elements resolve instantly instead of waiting on a network round-trip
+// (that latency made card boards flash blank on every re-render). These files
+// are versioned by the CACHE bump on each deploy, so cache-first is always safe.
+const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  const sameOrigin = new URL(req.url).origin === self.location.origin;
+
+  // Cache-first for immutable same-origin assets.
+  if (sameOrigin && STATIC_RE.test(new URL(req.url).pathname)) {
+    event.respondWith((async () => {
+      const cached = await caches.match(req, { ignoreSearch: true });
+      if (cached) return cached;
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+        return res;
+      } catch (err) {
+        const fallback = await caches.match(req, { ignoreSearch: true });
+        if (fallback) return fallback;
+        throw err;
+      }
+    })());
+    return;
+  }
 
   event.respondWith((async () => {
     // Network-first: always try the network so a new deploy is served when
