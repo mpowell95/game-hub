@@ -192,9 +192,10 @@ the game *code* is unaffected — bundled images are a collection, not a derivat
 - **Decks can be thin overrides.** A registry entry may set `base: '<deckId>'` plus an
   `own: Set` of the face names it actually ships (`'oros-1'`, `'back'`, …). `ownerDeck()`
   resolves every face to the deck that holds the file, so a *skin* can swap a few cards
-  and inherit the rest from its base — no asset duplication. `anita` overrides only
-  `oros-1..9` over `baraja-libre`. Plain decks (no `base`/`own`) resolve to themselves,
-  so existing behaviour is unchanged.
+  and inherit the rest from its base — no asset duplication. `anita` started as an Española
+  skin (only `oros-1..9`) and grew card-by-card until it now owns **all 48 faces + back** (a
+  full custom deck), so its `baraja-libre` fallback no longer fires. Plain decks (no
+  `base`/`own`) resolve to themselves, so existing behaviour is unchanged.
 
 **Adding a deck (gotcha — learned the hard way):** source card art is usually framed
 inconsistently (each card in a different-sized transparent canvas). Rasterize every card
@@ -216,21 +217,22 @@ add the files to `sw.js` ASSETS, and bump `CACHE`.
   registry, CC BY-SA 3.0); Spanish avatars with a **pop-up picker grid** (was a random
   cycle); opponents by count (1 = full banner, 2 = corners, 3 = across the top); larger
   two-row hand with drag-to-reorder, sort (suit/rank) + highlight-melds toggles; in-game ☰ menu.
-- **Pass 4 (done):** a second, additional deck **`anita`** — an Española *skin*. All four
-  suits' **numbered pips (ranks 1–9)** are custom — Oros = a supplied gold "Ana" coin,
-  Copas = a beer mug, Bastos = a golf driver, Espadas = a pickleball paddle (the group's
-  real pastimes) — plus a **custom card back** (Ana's photo, background-removed, on an
-  original green/gold 180°-symmetric design). Only the **figures** (Sota/Caballo/Rey,
-  10–12) fall back to standard Española art. It ships 37 WebP files (36 pips + back) and
-  inherits the figures via the `base`/`own` override (see "Card decks"); the default deck
-  stays `baraja-libre`. A **deck picker** in setup (mirrors the avatar picker:
-  `open-deck`/`pick-deck`/`close-deck`) calls `setDeck()` + `preloadDeck()`, persists
-  `deck` in `chinchon-settings`, and shows each deck by its **full card back**. `sw.js`
-  precaches baraja-libre's 49 files + anita's 36 pips + back. The custom art was made by
-  scratch `sharp` scripts (not in-repo): the Oros coin from `coin_clean.png`, the back from
-  `anita.jpg`, and the three object pips as original SVG emblems.
-- **Roadmap (not built):** themed **figure/court cards** (real friends as Sota/Caballo/Rey,
-  AI-illustrated) and **Betty** win/lose screens — pending art. Plus: one-undo, sound.
+- **Pass 4 (done):** a full second deck **`anita`** — a personal "friends" deck, complete.
+  **Pips (1–9, all suits):** Oros = a supplied gold "Ana" coin, Copas = a beer mug, Bastos =
+  a golf driver, Espadas = a pickleball paddle (original SVG emblems). **Court cards (10–12,
+  all suits):** 12 AI-illustrated *baraja española* court cards of real friends (Ana + Matt)
+  in period costume matched to each suit's theme, generated in ChatGPT/Gemini from a
+  face-first portrait + a pose reference, then fit to 400×616. **Back:** Ana's photo
+  (background-removed) on an original green/gold 180°-symmetric design. **Betty win/lose
+  screens:** the end-of-match modal shows a toddler-reaction photo when the Anita deck is
+  active (`decks/anita/betty-{win,loss}.webp`, gated in `ui.js`). A **deck picker** in setup
+  (`open-deck`/`pick-deck`/`close-deck`) calls `setDeck()` + `preloadDeck()`, persists `deck`
+  in `chinchon-settings`, and shows each deck by its full card back. `sw.js` precaches every
+  anita asset; the default deck stays `baraja-libre`. Pip/back art was built by scratch
+  `sharp` scripts (not in-repo); court cards were AI-generated per the prompts in
+  `../ChinChon/court-card-prompts.md`.
+- **Roadmap (not built):** optionally unify the flat pip style with the illustrated court
+  cards; one-undo affordance; sound.
 
 ### Tests
 
