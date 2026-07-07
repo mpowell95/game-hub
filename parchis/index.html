@@ -13,8 +13,16 @@
   :root {
     --bg:#241d17; --panel:#322820; --panel2:#3d3125; --text:#F4EAD2; --muted:#B6A488;
     --line:#4a3c2e; --gold:#F2B705; --shadow:rgba(0,0,0,.4);
-    --amarillo:#F2B705; --azul:#1F5FA8; --rojo:#E0532F; --verde:#178A7A;
+    --amarillo:#FEF200; --azul:#00A8F3; --rojo:#E63329; --verde:#92D051;
   }
+  /* Light theme: warm near-white chrome (board art stays the same, as in Matt's mockups). */
+  body.pc-light {
+    --bg:#EFE9DA; --panel:#FFFFFF; --panel2:#F4EFE2; --text:#2A2317; --muted:#6E6353;
+    --line:#DAD0BA; --shadow:rgba(60,45,20,.16);
+  }
+  body.pc-light #overlay { background:rgba(40,30,15,.5); }
+  body.pc-light .pc-modecard.on, body.pc-light .pc-swatch.on { background:#FBEFC8; }
+  body.pc-light .pc-toast-msg.warn { color:#8A6D00; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; }
   body {
@@ -1020,23 +1028,27 @@
     // Per-color tokens. `shape` is the marker drawn inside every pawn, nest, salida,
     // home row and center triangle. `base` vivid fill, `ink` dark line/detail, `light`
     // tint (salida runs, soft fills), `deep` a darker shade for edges.
+    // Palette chosen by Matt (Board Pics, 2026-07-06): vivid yellow, sky blue, pink, green.
+    // Shape markers still carry the signal for colorblind safety (Matt is red/green colorblind);
+    // pink/green were his deliberate pick and the square/diamond shapes keep them distinct.
     colors: {
-      amarillo: { base: "#F2B705", ink: "#7A5A02", light: "#FCE9A6", deep: "#C99503", shape: "circle" },
-      azul:     { base: "#1F5FA8", ink: "#0E2E57", light: "#AEC8E6", deep: "#16467E", shape: "triangle" },
-      rojo:     { base: "#E0532F", ink: "#7E2A13", light: "#F4B7A4", deep: "#B83E1E", shape: "square" },
-      verde:    { base: "#178A7A", ink: "#08433B", light: "#98CEC5", deep: "#0F6A5D", shape: "diamond" }
+      amarillo: { base: "#FEF200", ink: "#6E5A00", light: "#FFF7A8", pale: "#FFFCDD", deep: "#D8CC00", shape: "circle" },
+      azul:     { base: "#00A8F3", ink: "#0A4D72", light: "#B4E6FB", pale: "#E6F6FE", deep: "#0089CC", shape: "triangle" },
+      rojo:     { base: "#E63329", ink: "#801B14", light: "#F7C9C4", pale: "#FCEBEA", deep: "#C0271E", shape: "square" },
+      verde:    { base: "#92D051", ink: "#2E5A16", light: "#D7EDB9", pale: "#EFF7E4", deep: "#6FB03A", shape: "diamond" }
     },
 
-    // Board surfaces (the bright reference look).
+    // Board surfaces (Matt's mockup: clean white, no heavy frame).
     board: {
-      frame:     "#C79A3E",  // warm gold board border (reference has a tan/gold frame)
-      frameEdge: "#8A6A22",  // frame shadow line
-      field:     "#FCFBF6",  // near-white playing field behind the track
+      frame:     "#FFFFFF",  // no gold frame - blends into the white field
+      frameEdge: "#E4E4E4",  // faint hairline around the board
+      field:     "#FFFFFF",  // white playing field behind the track
       cell:      "#FFFFFF",  // track cell fill
       line:      "#3A3A3A",  // cell borders / linework
       lineSoft:  "#C9C6BC",  // secondary hairlines
-      nest:      "#FFFFFF",  // corner nest circle
-      nestRing:  "#E9E4D6",  // nest inner ring
+      nest:      "#F5F1E7",  // corner nest circle (cream, per Matt's home-base cards)
+      nestRing:  "#DAD3C2",  // nest inner ring
+      nameInk:   "#1A1A1A",  // bold player name across the top of each home-base card
       center:    "#FBF7EA"   // central hub backing behind the triangles
     },
 
@@ -1071,18 +1083,19 @@
     type: {
       display: "'Rockwell','Roboto Slab','Georgia','Times New Roman',serif",
       ui: "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif",
-      number: "#4A4A4A",     // printed track numbers
-      numberSize: 0.34,      // fraction of cell
+      number: "#6E6E6E",     // printed track numbers (soft gray, per Matt's mockup)
+      numberSize: 0.42,      // fraction of cell
+      numberWeight: "600",
       label: "#FFFFFF"       // quadrant name labels
     },
 
     // Layout knobs used by board.js.
     layout: {
-      gridUnits: 19,     // 8 + 3 + 8
-      pad: 0.35,         // outer padding in cells around the grid
-      frameW: 0.5,       // frame thickness in cells
-      cellRadius: 0.06,  // rounded cell corners (fraction of cell)
-      lineW: 0.045       // default stroke width (fraction of cell)
+      gridUnits: 19,       // 8 + 3 + 8
+      pad: 0.08,           // small outer padding
+      frameW: 0.06,        // minimal frame (Matt's mockup has no heavy border)
+      cellRadius: 0.06,    // rounded cell corners (fraction of cell)
+      lineW: 0.045         // default stroke width (fraction of cell)
     }
   };
 
@@ -1175,8 +1188,15 @@
     return { loop: loop, corridors: corridors };
   }
 
-  function px(g) { return g * CELL; }
-  function cellRect(cell) { return { x: px(cell.col), y: px(cell.row), w: CELL, h: CELL }; }
+  // Rectangular cells (Matt's mockup): the middle band (cols/rows 8,9,10 - the 3 track lanes) is
+  // WIDE, the outer 8 columns/rows are SHORT, so each arm cell is stretched ACROSS the path
+  // (widening the track), not along it. The grid is symmetric, so one cellDim() serves both axes.
+  var SHORT = CELL * 0.92, LONG = CELL * 1.28;
+  function cellDim(i) { return (i >= 8 && i <= 10) ? LONG : SHORT; }
+  var _EDGES = null;
+  function edges() { if (!_EDGES) { _EDGES = [0]; for (var i = 0; i < GRID; i++) _EDGES.push(_EDGES[i] + cellDim(i)); } return _EDGES; }
+  function px(g) { var e = edges(), f = Math.floor(g); if (f >= GRID) return e[GRID] + (g - GRID) * cellDim(GRID - 1); var k = Math.max(0, Math.min(f, GRID - 1)); return e[Math.max(0, f)] + (g - f) * cellDim(k); }
+  function cellRect(cell) { return { x: px(cell.col), y: px(cell.row), w: cellDim(cell.col), h: cellDim(cell.row) }; }
 
   function generateCoords(offset, dir) {
     offset = offset || 0; dir = dir || 1;
@@ -1230,20 +1250,45 @@
     return best;
   }
   function casaLayout(trackCoords) {
-    var out = {}, used = {};
+    var out = {}, used = {}, m = 0.28; // small margin: the card fills its 8x8 corner quadrant
     COLORS.forEach(function (color) {
       var t = trackCoords[SALIDA[color]];
       var corner = nearestCorner(t.col + 0.5, t.row + 0.5);
       if (used[corner]) Object.keys(CORNERS).forEach(function (k) { if (!used[k]) corner = k; });
       used[corner] = true;
       var cc = CORNERS[corner];
-      var slots = [];
-      [[2.55, 2.55], [5.45, 2.55], [2.55, 5.45], [5.45, 5.45]].forEach(function (o) {
-        slots.push({ x: px(cc.col + o[0]), y: px(cc.row + o[1]) });
-      });
-      out[color] = { corner: corner, x: px(cc.col), y: px(cc.row), w: px(8), h: px(8), slots: slots };
+      // The home-base CARD fills the quadrant (centered, small margin). casaGeom()/casaSlots()
+      // derive the internals in screen space so the name stays upright on top in every rotation.
+      var x0 = px(cc.col + m), y0 = px(cc.row + m), x1 = px(cc.col + 8 - m), y1 = px(cc.row + 8 - m);
+      out[color] = { corner: corner, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     });
     return out;
+  }
+
+  // Screen-space layout of a home-base card (Matt's full-board mockup): a light-tinted card, a
+  // centered frame in the PLAYER'S shape (circle/triangle/square/diamond) holding 4 slots, and a
+  // horizontal name on the card's OUTER edge (top for top-row corners, bottom for bottom-row).
+  // Derived from the (possibly rotated) rect so it stays upright in every board rotation.
+  function casaGeom(rect) {
+    var w = rect.w, h = rect.h, cx = rect.x + w / 2, s = Math.min(w, h);
+    var nameBottom = (rect.corner === "bl" || rect.corner === "br"), nameBand = h * 0.155;
+    var nameY = nameBottom ? (rect.y + h - nameBand * 0.5) : (rect.y + nameBand * 0.5);
+    var shapeTop = nameBottom ? (rect.y + h * 0.03) : (rect.y + nameBand);
+    var shapeBot = nameBottom ? (rect.y + h - nameBand) : (rect.y + h * 0.97);
+    var cy = (shapeTop + shapeBot) / 2, R = Math.min(w * 0.42, (shapeBot - shapeTop) * 0.5);
+    return { cx: cx, cy: cy, R: R, nameX: cx, nameY: nameY, nameSize: h * 0.092,
+      slotR: R * 0.27, ringW: R * 0.07, markerR: R * 0.15 };
+  }
+  // The 4 pawn-slot centers, arranged to fit each player's frame shape.
+  function casaSlots(rect, shape) {
+    var G = casaGeom(rect), cx = G.cx, cy = G.cy, R = G.R;
+    if (shape === "diamond") { var o = R * 0.5; return [{ x: cx, y: cy - o }, { x: cx + o, y: cy }, { x: cx, y: cy + o }, { x: cx - o, y: cy }]; }
+    if (shape === "triangle") { // pyramid, pulled inward so the pieces sit fully inside the triangle
+      return [{ x: cx, y: cy - R * 0.32 }, { x: cx, y: cy + R * 0.16 },
+        { x: cx - R * 0.4, y: cy + R * 0.54 }, { x: cx + R * 0.4, y: cy + R * 0.54 }];
+    }
+    var o2 = R * 0.42; // circle / square: 2x2
+    return [{ x: cx - o2, y: cy - o2 }, { x: cx + o2, y: cy - o2 }, { x: cx - o2, y: cy + o2 }, { x: cx + o2, y: cy + o2 }];
   }
 
   function metaLayout(pasilloCoords) {
@@ -1252,15 +1297,17 @@
       var cor = pasilloCoords[color];
       if (!cor) return;
       var inner = cor[cor.length - 1];
-      var dx = Math.sign(centerX - (inner.x + CELL / 2)), dy = Math.sign(centerY - (inner.y + CELL / 2));
-      out[color] = { x: inner.x + dx * CELL, y: inner.y + dy * CELL, w: CELL, h: CELL };
+      var dx = Math.sign(centerX - (inner.x + inner.w / 2)), dy = Math.sign(centerY - (inner.y + inner.h / 2));
+      out[color] = { x: inner.x + dx * inner.w, y: inner.y + dy * inner.h, w: inner.w, h: inner.h };
     });
     return out;
   }
 
   // ---- Verification -------------------------------------------------------
   function adjacent(a, b) { return Math.abs(a.col - b.col) + Math.abs(a.row - b.row) === 1; }
-  function adjacentPx(a, b) { return Math.abs(Math.abs(a.x - b.x) + Math.abs(a.y - b.y) - CELL) < 1e-6; }
+  // Pixel adjacency (used for pasillo->meta, which lack grid coords): centers are one cell apart.
+  // Cells can be rectangular, so accept a gap up to just over one long cell.
+  function adjacentPx(a, b) { var d = Math.abs(a.x - b.x) + Math.abs(a.y - b.y); return d > 1 && d < LONG * 1.3; }
 
   function verifyCoords(coords) {
     var problems = [], tc = coords.trackCoords, seen = {};
@@ -1315,9 +1362,8 @@
   function cornerOfRect(r, S) { return ((r.y + r.h / 2 < S / 2) ? "t" : "b") + ((r.x + r.w / 2 < S / 2) ? "l" : "r"); }
 
   function rotateOnce(c) {
-    var S = c.grid * c.cell;
+    var S = px(c.grid); // true (non-uniform) board span, for the rotation about center
     function rr(r) { return rot90CW(r, S); }
-    function rp(p) { return { x: S - p.y, y: p.x }; }
     var out = { cell: c.cell, grid: c.grid, offset: c.offset, dir: c.dir, armOfColor: c.armOfColor };
     out.trackCoords = {};
     Object.keys(c.trackCoords).forEach(function (n) { out.trackCoords[n] = rr(c.trackCoords[n]); });
@@ -1328,7 +1374,7 @@
     out.casaCoords = {};
     Object.keys(c.casaCoords).forEach(function (col) {
       var y = c.casaCoords[col], yr = rr({ x: y.x, y: y.y, w: y.w, h: y.h });
-      out.casaCoords[col] = { x: yr.x, y: yr.y, w: yr.w, h: yr.h, slots: y.slots.map(rp), corner: cornerOfRect(yr, S) };
+      out.casaCoords[col] = { x: yr.x, y: yr.y, w: yr.w, h: yr.h, corner: cornerOfRect(yr, S) };
     });
     return out;
   }
@@ -1398,12 +1444,48 @@
 
   function salidaColorOf(n) { var col = null; COLORS.forEach(function (c) { if (SALIDA[c] === n) col = c; }); return col; }
 
+  // ---- Home-base card drawers (Matt's mockup: FLAT and CLEAN) --------------
+  // Name in black, horizontal, on the card's outer edge (all four players the same).
+  function cardName(qg, rect, G, label, T) {
+    if (!label) return;
+    // Every name renders at the exact same font size (no per-name scaling or stretching).
+    var t = el("text", { x: G.nameX, y: G.nameY, "text-anchor": "middle", "dominant-baseline": "central",
+      "font-family": T.type.ui, "font-size": G.nameSize, "font-weight": "800", fill: "#1a1a1a" }, qg);
+    t.textContent = label;
+  }
+  // Empty-home markers only: a faint thin ring per slot. The actual piece is the PAWN drawn on
+  // top (one clean piece), so home spots never stack decoration + pawn into a ring pile.
+  function cardSlots(qg, col, slots, slotR, ringW, markerR) {
+    slots.forEach(function (sl) {
+      el("circle", { cx: sl.x, cy: sl.y, r: slotR, fill: "none", stroke: "rgba(40,32,16,0.18)", "stroke-width": ringW * 0.5 }, qg);
+    });
+  }
+  // The centered frame in the player's marker shape: FLAT solid base color, dark edge, no gradient.
+  function drawBigShape(qg, G, shape, col) {
+    var R = G.R, cx = G.cx, cy = G.cy;
+    var a = { fill: col.base, stroke: col.ink, "stroke-width": R * 0.05, "stroke-linejoin": "round" };
+    if (shape === "circle") el("circle", assign({ cx: cx, cy: cy, r: R }, a), qg);
+    else if (shape === "square") el("rect", assign({ x: cx - R, y: cy - R, width: 2 * R, height: 2 * R, rx: R * 0.16 }, a), qg);
+    else if (shape === "triangle") el("polygon", assign({ points: pts([[cx, cy - R], [cx + R * 1.06, cy + R * 0.82], [cx - R * 1.06, cy + R * 0.82]]) }, a), qg);
+    else el("polygon", assign({ points: pts([[cx, cy - R], [cx + R, cy], [cx, cy + R], [cx - R, cy]]) }, a), qg);
+  }
+  // A home-base card: near-white card, thin BLACK border, a flat frame in the PLAYER'S shape
+  // holding 4 white slots, and the name. Flat and clean, matching Matt's mockup.
+  function drawCasaCard(qg, rect, col, label, T, CELL) {
+    var G = casaGeom(rect); G.shape = col.shape;
+    el("rect", { x: rect.x, y: rect.y, width: rect.w, height: rect.h, rx: rect.w * 0.07,
+      fill: col.pale || col.light, stroke: col.ink, "stroke-width": CELL * 0.045 }, qg);
+    drawBigShape(qg, G, col.shape, col); // big frame in the player's shape (all four players)
+    // the home pieces (pawns) render on top; no separate slot decoration
+    cardName(qg, rect, G, label, T);
+  }
+
   // Build the static board into <g class="pc-static">. Idempotent unless opts.rebuild.
   function buildStatic(svg, c, T, opts) {
     opts = opts || {};
     if (!opts.rebuild && svg.querySelector(".pc-static")) return svg.querySelector(".pc-static");
     var old = svg.querySelector(".pc-static"); if (old) svg.removeChild(old);
-    var CELL = c.cell, span = c.grid * CELL;
+    var CELL = c.cell, span = px(c.grid); // px() is non-uniform; span is the true board size
     var pad = T.layout.pad * CELL, frameW = T.layout.frameW * CELL, total = span + 2 * pad + 2 * frameW;
     svg.setAttribute("viewBox", "0 0 " + total + " " + total);
     svg.setAttribute("width", "100%");
@@ -1415,58 +1497,45 @@
     el("rect", { x: -(pad + frameW), y: -(pad + frameW), width: total, height: total, rx: frameW * 1.3, fill: T.board.frame, stroke: T.board.frameEdge, "stroke-width": CELL * 0.05 }, g);
     el("rect", { x: -pad, y: -pad, width: span + 2 * pad, height: span + 2 * pad, rx: frameW * 0.8, fill: T.board.field }, g);
 
-    // Corner quadrants + nests. Inactive colors (fewer than 4 players) render dimmed
-    // with an empty nest and no name.
+    // Corner home-base cards: each holds a frame shaped like that player's marker
+    // (circle/triangle/square/diamond) with the 4 pawn slots. Inactive colors dim with no name.
     var activeList = opts.active || null;
     T.colorList.forEach(function (color) {
-      var y = c.casaCoords[color], col = T.colors[color];
+      var rect = c.casaCoords[color], col = T.colors[color];
       var inactive = activeList && activeList.indexOf(color) === -1;
       var qg = el("g", inactive ? { opacity: 0.4 } : {}, g);
-      el("rect", { x: y.x, y: y.y, width: y.w, height: y.h, rx: CELL * 0.5, fill: col.base, stroke: col.deep, "stroke-width": CELL * 0.06 }, qg);
-      // nest circle
-      var cc = center(y), nr = CELL * 3.05;
-      el("circle", { cx: cc.x, cy: cc.y, r: nr, fill: T.board.nest, stroke: col.deep, "stroke-width": CELL * 0.08 }, qg);
-      el("circle", { cx: cc.x, cy: cc.y, r: nr * 0.86, fill: "none", stroke: T.board.nestRing, "stroke-width": CELL * 0.05 }, qg);
-      shapeEl(cc.x, cc.y, CELL * 1.35, col.shape, { fill: col.base, opacity: 0.14 }, qg);
-      // four nest slots (empty pawn homes)
-      y.slots.forEach(function (sl) {
-        el("circle", { cx: sl.x, cy: sl.y, r: CELL * 0.4, fill: "#fff", stroke: col.base, "stroke-width": CELL * 0.09 }, qg);
-        shapeEl(sl.x, sl.y, CELL * 0.2, col.shape, { fill: col.base, opacity: 0.35 }, qg);
-      });
-      // name label (skip when empty or inactive)
-      var label = opts.names ? opts.names[color] : color;
-      if (label && !inactive) {
-        var lp = quadrantLabelPos(y, span);
-        var tx = el("text", assign({ "text-anchor": "middle", "dominant-baseline": "central",
-          "font-family": T.type.ui, "font-size": CELL * 0.42, "font-weight": "800", fill: col.ink }, { x: lp.x, y: lp.y }), qg);
-        tx.textContent = label;
-      }
+      var label = inactive ? "" : (opts.names ? opts.names[color] : color);
+      drawCasaCard(qg, rect, col, label, T, CELL);
     });
 
     // Home rows (corridors): solid color leading to the center.
     T.colorList.forEach(function (color) {
       var col = T.colors[color];
       (c.pasilloCoords[color] || []).forEach(function (p, i) {
-        el("rect", { x: p.x + CELL * 0.03, y: p.y + CELL * 0.03, width: CELL * 0.94, height: CELL * 0.94,
-          rx: CELL * T.layout.cellRadius, fill: col.base, stroke: col.deep, "stroke-width": CELL * T.layout.lineW }, g);
-        if (i === 6) { var pc = center(p); shapeEl(pc.x, pc.y, CELL * 0.2, col.shape, { fill: "#fff", opacity: 0.7 }, g); }
+        var cs = Math.min(p.w, p.h);
+        el("rect", { x: p.x + p.w * 0.04, y: p.y + p.h * 0.04, width: p.w * 0.92, height: p.h * 0.92,
+          rx: cs * T.layout.cellRadius, fill: col.base, stroke: col.deep, "stroke-width": cs * T.layout.lineW }, g);
       });
     });
 
     // Track cells + printed numbers.
     for (var n = 1; n <= 68; n++) {
       var t = c.trackCoords[n], sal = salidaColorOf(n), seg = SEGUROS.indexOf(n) !== -1;
+      var cs = Math.min(t.w, t.h); // content scale for a (possibly rectangular) cell
       var fill = T.board.cell;
-      if (sal) fill = T.colors[sal].light; else if (seg) fill = T.seguro.fill;
-      el("rect", { x: t.x + CELL * 0.03, y: t.y + CELL * 0.03, width: CELL * 0.94, height: CELL * 0.94,
-        rx: CELL * T.layout.cellRadius, fill: fill, stroke: T.board.line, "stroke-width": CELL * T.layout.lineW }, g);
+      if (sal) fill = T.colors[sal].base; else if (seg) fill = T.seguro.fill; // salida = solid color
+      el("rect", { x: t.x + t.w * 0.04, y: t.y + t.h * 0.04, width: t.w * 0.92, height: t.h * 0.92,
+        rx: cs * T.layout.cellRadius, fill: fill, stroke: T.board.line, "stroke-width": cs * T.layout.lineW }, g);
       var ce = center(t);
-      if (sal) shapeEl(ce.x, ce.y - CELL * 0.02, CELL * 0.28, T.colors[sal].shape, { fill: T.colors[sal].base, stroke: T.colors[sal].ink, "stroke-width": CELL * 0.03, opacity: 0.9 }, g);
-      else if (seg) starEl(ce.x, ce.y, CELL * 0.3, { fill: T.seguro.star, stroke: T.seguro.ring, "stroke-width": CELL * 0.02 }, g);
-      // number (upright, small, in the cell corner so it never hides a pawn)
-      var tx2 = el("text", { x: t.x + CELL * 0.2, y: t.y + CELL * 0.24, "text-anchor": "middle", "dominant-baseline": "central",
-        "font-family": T.type.ui, "font-size": CELL * T.type.numberSize, fill: T.type.number, "font-weight": "700" }, g);
-      tx2.textContent = String(n);
+      if (seg && !sal) starEl(ce.x, ce.y, cs * 0.3, { fill: T.seguro.star, stroke: T.seguro.ring, "stroke-width": cs * 0.02 }, g); // star only on non-start safe squares
+      // Salida squares are solid color (no marker); numbers hide on all salida AND star squares.
+      // Printed label is shifted so the yellow start square (engine 5) reads "1".
+      if (!sal && !seg) {
+        var displayNum = ((n + 63) % 68) + 1; // engine n -> printed n-4 (5 -> 1)
+        var tx2 = el("text", { x: t.x + t.w / 2, y: t.y + t.h / 2, "text-anchor": "middle", "dominant-baseline": "central",
+          "font-family": T.type.ui, "font-size": cs * T.type.numberSize, fill: T.type.number, "font-weight": T.type.numberWeight || "800" }, g);
+        tx2.textContent = String(displayNum);
+      }
     }
 
     // Center triangles (one meta per color) + hub.
@@ -1474,17 +1543,10 @@
     return g;
   }
 
-  // Position + rotation for a quadrant's name label (kept readable, along the outer edge).
-  function quadrantLabelPos(y, span) {
-    var cx = y.x + y.w / 2, top = (y.y + y.h / 2) < span / 2, left = cx < span / 2;
-    var yy = top ? (y.y + CELL * 0.7) : (y.y + y.h - CELL * 0.7);
-    return { x: cx, y: yy, rot: 0, top: top, left: left };
-  }
-
   function drawCenter(g, c, T) {
     var CELL = c.cell;
-    // Center 3x3 square spans cols 8..10 rows 8..10 => [8*CELL, 11*CELL].
-    var lo = 8 * CELL, hi = 11 * CELL, bc = { x: 9.5 * CELL, y: 9.5 * CELL };
+    // Center 3x3 square spans cols 8..10 rows 8..10 (short band); use px() for the actual bounds.
+    var lo = px(8), hi = px(11), bc = { x: px(9.5), y: px(9.5) };
     var cornersSq = { tl: [lo, lo], tr: [hi, lo], bl: [lo, hi], br: [hi, hi] };
     // Backing.
     el("rect", { x: lo, y: lo, width: hi - lo, height: hi - lo, fill: T.board.center, stroke: T.board.line, "stroke-width": CELL * 0.04 }, g);
@@ -1500,9 +1562,8 @@
       }
       var col = T.colors[color];
       el("polygon", { points: pts(tri), fill: col.base, stroke: col.deep, "stroke-width": CELL * 0.04, "stroke-linejoin": "round" }, g);
-      shapeEl(apex[0], apex[1], CELL * 0.24, col.shape, { fill: "#fff", opacity: 0.85 }, g);
     });
-    el("circle", { cx: bc.x, cy: bc.y, r: CELL * 0.2, fill: "#fff", stroke: T.board.line, "stroke-width": CELL * 0.04 }, g);
+    // clean pinwheel: no center dot, no markers on the triangles (per Matt's mockup)
   }
 
   // ---- pawn placement + render -------------------------------------------
@@ -1516,14 +1577,15 @@
     state.players.forEach(function (pl) {
       pl.pawns.forEach(function (pw, idx) {
         if (pw.zone === "casa") {
-          var slot = c.casaCoords[pl.color].slots[idx];
-          place[pw.id] = { x: slot.x, y: slot.y, barrier: false };
+          var rc = c.casaCoords[pl.color], gg = casaGeom(rc), shp = theme().colors[pl.color].shape;
+          var slot = casaSlots(rc, shp)[idx];
+          place[pw.id] = { x: slot.x, y: slot.y, barrier: false, r: shp === "triangle" ? gg.slotR * 0.8 : gg.slotR }; // triangle pieces smaller so they fit inside the triangle
         } else if (pw.zone === "track") {
           var t = c.trackCoords[pw.pos], ce = center(t), occ = byCell[pw.pos];
           var barrier = occ.length === 2 && occ[0].color === occ[1].color, offset = 0, dir = 0;
           if (occ.length === 2) {
             var order = occ[0].pw.id < occ[1].pw.id ? occ : [occ[1], occ[0]];
-            dir = (order[0].pw.id === pw.id) ? -1 : 1; offset = theme().pawn.offset * CELL;
+            dir = (order[0].pw.id === pw.id) ? -1 : 1; offset = theme().pawn.offset * SHORT;
           }
           var horiz = t.orientation === "h";
           place[pw.id] = { x: ce.x + (horiz ? 0 : dir * offset), y: ce.y + (horiz ? dir * offset : 0), barrier: barrier };
@@ -1559,13 +1621,12 @@
       pl.pawns.forEach(function (pw) {
         var p = place[pw.id];
         var gp = el("g", { "class": "pc-pawn", "data-pawn-id": pw.id, transform: "translate(" + p.x.toFixed(2) + "," + p.y.toFixed(2) + ")" }, layer);
-        var r = T.pawn.radius * CELL;
-        if (p.barrier) el("circle", { cx: 0, cy: 0, r: r * 1.36, fill: "none", stroke: T.pawn.barrierRing, "stroke-width": CELL * 0.08 }, gp);
-        el("ellipse", { cx: 0, cy: r * 0.72, rx: r * 0.85, ry: r * 0.3, fill: T.pawn.shadow }, gp);
-        el("circle", { cx: 0, cy: 0, r: r + CELL * 0.055, fill: "#fff" }, gp); // white rim so pawns read on same-color home ground / triangles
-        el("circle", { cx: 0, cy: 0, r: r, fill: col.base, stroke: T.pawn.stroke, "stroke-width": T.pawn.strokeW * CELL }, gp);
-        el("circle", { cx: -r * 0.28, cy: -r * 0.32, r: r * 0.48, fill: "#fff", opacity: 0.2 }, gp);
-        shapeEl(0, 0, r * T.pawn.markerScale, col.shape, { fill: T.pawn.markerInk, opacity: 0.96 }, gp);
+        // One clean piece: white circle, dark ring, solid colored shape (Matt's mockup piece).
+        // Home pieces (casa) are bigger to fill the card; track pieces fit the narrow cells.
+        var r = (p.r != null) ? p.r : T.pawn.radius * SHORT;
+        if (p.barrier) el("circle", { cx: 0, cy: 0, r: r * 1.34, fill: "none", stroke: col.ink, "stroke-width": r * 0.16 }, gp);
+        el("circle", { cx: 0, cy: 0, r: r, fill: "#ffffff", stroke: col.ink, "stroke-width": r * 0.14 }, gp);
+        shapeEl(0, 0, r * 0.6, col.shape, { fill: col.base, stroke: col.ink, "stroke-width": r * 0.05 }, gp); // solid colored shape
       });
     });
     return svg;
@@ -1937,6 +1998,7 @@
       seatEmpty: "Empty",
       // header / menu / settings
       menu: "Menu", close: "Close", language: "Language", sound: "Sound (coming soon)", save: "Save",
+      theme: "Appearance", themeDark: "Dark", themeLight: "Light",
       rollHint: "Roll the dice",
       // control strip
       bonus: "Bonus: {n}", doublesLabel: "Doubles:", sixesLabel: "Sixes:",
@@ -1971,6 +2033,7 @@
       you: "Tu", computerN: "Maquina {n}", playerN: "Jugador {n}",
       seatEmpty: "Vacio",
       menu: "Menu", close: "Cerrar", language: "Idioma", sound: "Sonido (proximamente)", save: "Guardar",
+      theme: "Apariencia", themeDark: "Oscuro", themeLight: "Claro",
       rollHint: "Tirar los dados",
       bonus: "Bono: {n}", doublesLabel: "Dobles:", sixesLabel: "Seises:",
       thinking: "{name} piensa...", turnOf: "Turno de {name}",
@@ -2321,8 +2384,7 @@
       mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); h.onNewGame(); });
       mkBtn(body, t("settings"), function () { h.onSettings(); }, "ghost");
       mkBtn(body, t("rules"), function () { h.onRules(); }, "ghost");
-      mkBtn(body, t("close"), HUD.closeOverlay, "ghost");
-    });
+    }, { back: HUD.closeOverlay }); // back arrow returns to the game
   };
 
   HUD.openSettings = function (snapshot, onSaved, back) {
@@ -2334,10 +2396,21 @@
         langBtns[pair[0]] = b;
         b.onclick = function () { lang = pair[0]; Object.keys(langBtns).forEach(function (k) { langBtns[k].classList.toggle("on", k === lang); }); };
       });
+      elh("p", "pc-hint", body, t("theme"));
+      var themeWrap = elh("div", "pc-seatrow", body), themeVal = snapshot.theme || "dark", themeBtns = {};
+      [["dark", t("themeDark")], ["light", t("themeLight")]].forEach(function (pair) {
+        var b = elh("button", "pc-seat" + (themeVal === pair[0] ? " on" : ""), themeWrap, pair[1]);
+        themeBtns[pair[0]] = b;
+        b.onclick = function () {
+          themeVal = pair[0];
+          Object.keys(themeBtns).forEach(function (k) { themeBtns[k].classList.toggle("on", k === themeVal); });
+          document.body.classList.toggle("pc-light", themeVal === "light"); // live preview
+        };
+      });
       var soundRow = elh("label", "pc-field pc-switch", body);
       elh("span", null, soundRow, t("sound"));
       var snd = elh("input", null, soundRow); snd.type = "checkbox"; snd.checked = false; snd.disabled = true;
-      mkBtn(body, t("save"), function () { onSaved({ lang: lang, sound: false }); if (back) back(); else HUD.closeOverlay(); });
+      mkBtn(body, t("save"), function () { onSaved({ lang: lang, theme: themeVal, sound: false }); if (back) back(); else HUD.closeOverlay(); });
     }, back ? { back: back } : {});
   };
 
@@ -2726,7 +2799,7 @@
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         mode: G.cfg.mode, humanColor: G.cfg.anchor, playerCount: G.cfg.active.length,
-        vsMode: G.cfg.vsMode, lang: window.ParchisI18n.getLang(),
+        vsMode: G.cfg.vsMode, lang: window.ParchisI18n.getLang(), theme: getTheme(),
         skills: G.cfg.skills, humanName: G.cfg.names[G.cfg.anchor]
         // opponent names are not persisted, so the default computer names always show
       }));
@@ -2818,11 +2891,20 @@
   }
   function onPlay(setup) { startNewGame(buildCfg(setup)); }
 
-  function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), sound: false }; }
+  function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), sound: false }; }
   function onSettingsSaved(s) {
     window.ParchisI18n.setLang(s.lang || "en");
-    try { var p = loadPrefs(); p.lang = s.lang; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
+    var theme = s.theme === "light" ? "light" : "dark";
+    applyTheme(theme);
+    try { var p = loadPrefs(); p.lang = s.lang; p.theme = theme; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
     if (G.state && G.cfg) { syncHud(); render(); if (G.ui === "showingMoves") highlightMoves(G.moves); }
+  }
+  function getTheme() { return loadPrefs().theme === "dark" ? "dark" : "light"; } // light default (matches the mockup)
+  function applyTheme(theme) {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("pc-light", theme === "light");
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute("content", theme === "light" ? "#EFE9DA" : "#241d17");
   }
 
   function onGameOver() {
@@ -2840,6 +2922,7 @@
     Engine = window.ParchisEngine; Board = window.ParchisBoard; HUD = window.ParchisHUD; Theme = window.ParchisTheme;
     svg = refs.svg;
     applyLang();
+    applyTheme(getTheme());
     HUD.build(refs, { onRollTap: onRollTap, onMenu: function () { openInGameMenu(); } });
     // static board backdrop behind the title screen
     G.cfg = { mode: "american", anchor: "amarillo", active: COLORS.slice(), humans: ["amarillo"], names: {}, skills: {} };
