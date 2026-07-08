@@ -23,9 +23,9 @@
 
   box-sizing: border-box;
   width: 100%;
-  max-width: 620px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 12px 12px 20px;
+  padding: 6px 6px 16px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--cc-ink);
   -webkit-tap-highlight-color: transparent;
@@ -46,7 +46,6 @@
   -webkit-background-clip: text; background-clip: text; color: transparent;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
 }
-.cc-subtitle { margin: 4px 0 0; font-weight: 700; font-size: 0.9rem; color: var(--cc-muted); }
 
 /* Buttons (mirrors the hub's button system) */
 .cc-btn {
@@ -188,44 +187,41 @@
 
 /* Game layout — a muted "table" backdrop so cards and gold frames pop */
 .cc-game {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 12px; border-radius: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px; border-radius: 18px;
   background: linear-gradient(180deg, #7e91ba 0%, #95a6c9 45%, #aebad6 100%);
 }
 
-/* Opponents — gold-framed medallions, positioned by count */
-.cc-opponents { display: flex; align-items: flex-start; gap: 8px; min-height: 78px; }
-.cc-opp-n1 { justify-content: center; }
-.cc-opp-n2, .cc-opp-n3 { justify-content: space-between; }
-.cc-opp {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 8px 10px 6px; border-radius: 14px;
+/* Top bar: opponent pills on the left, a small ☰ on the right (no full menu row) */
+.cc-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cc-menu-btn {
+  appearance: none; flex: 0 0 auto; cursor: pointer;
+  width: 36px; height: 36px; border-radius: 10px; line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.22);
+  color: var(--cc-ink); font: inherit; font-weight: 700; font-size: 1.05rem;
+}
+.cc-menu-btn:hover { background: rgba(255, 255, 255, 0.4); }
+
+/* Opponents — compact gold pills (no card-count badge, no difficulty line) */
+.cc-opponents { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.cc-opp-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 4px 11px 4px 7px; border-radius: 999px;
   background: linear-gradient(180deg, #fdf3d6, #f2e1ad);
   border: 1px solid #e0c477;
-  box-shadow: 0 3px 10px rgba(120, 90, 20, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transition: box-shadow 0.15s, transform 0.15s;
+  box-shadow: 0 2px 6px rgba(120, 90, 20, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: box-shadow 0.15s;
 }
-.cc-opp.is-active { box-shadow: 0 0 0 3px var(--cc-good), 0 7px 16px rgba(46, 139, 87, 0.45); transform: translateY(2px); }
-.cc-opp-av-wrap { position: relative; }
-.cc-opp-av {
-  display: flex; align-items: center; justify-content: center;
-  width: 2.7rem; height: 2.7rem; font-size: 1.55rem; line-height: 1;
-  border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fff, #f0e0b0);
-  border: 2px solid #c8920f; box-shadow: inset 0 0 0 2px #fff;
+.cc-opp-pill .cc-opp-av { font-size: 1.15rem; line-height: 1; }
+.cc-opp-pill .cc-opp-name {
+  font-weight: 800; font-size: 0.82rem; color: #5a3e0a;
+  max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.cc-opp.is-active .cc-opp-av { border-color: var(--cc-good); }
-.cc-opp-count {
-  position: absolute; bottom: -3px; right: -6px; min-width: 18px; text-align: center;
-  background: var(--cc-ink); color: #fff; font-size: 0.66rem; font-weight: 800;
-  padding: 1px 5px; border-radius: 999px; border: 1.5px solid #fdf3d6;
+.cc-opp-pill .cc-opp-score { font-size: 0.74rem; font-weight: 700; color: #8a6a2a; }
+.cc-opp-pill.is-active {
+  border-color: #ffce3a;
+  animation: cc-turn-pulse 1.4s ease-in-out infinite;
 }
-.cc-opp-meta { display: flex; flex-direction: column; align-items: center; line-height: 1.12; }
-.cc-opp-name { font-weight: 800; font-size: 0.86rem; color: #5a3e0a; }
-.cc-opp-sub { font-size: 0.68rem; color: #8a6a2a; font-weight: 600; }
-/* 1 opponent: a wide banner across the whole top */
-.cc-opp-n1 .cc-opp { flex-direction: row; gap: 12px; width: 100%; justify-content: center; padding: 10px 18px; }
-.cc-opp-n1 .cc-opp-meta { align-items: flex-start; }
-.cc-opp-n1 .cc-opp-av { width: 3rem; height: 3rem; font-size: 1.8rem; }
 
 /* Mat: piles + status */
 .cc-mat {
@@ -233,7 +229,8 @@
   padding: 14px; background: linear-gradient(180deg, #1f7a52, #18603f);
   border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), 0 8px 22px rgba(13, 71, 50, 0.35);
 }
-.cc-piles { display: flex; gap: 18px; align-items: flex-end; }
+.cc-piles { --cc-pile-fs: clamp(13px, 4.4vw, 20px); display: flex; gap: 20px; align-items: flex-end; }
+.cc-piles .cc-card { --fs: var(--cc-pile-fs); }
 .cc-pile {
   appearance: none; border: 0; background: transparent; padding: 0; cursor: default;
   display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative;
@@ -246,9 +243,15 @@
   position: absolute; top: -8px; right: -8px; background: var(--cc-ink); color: #fff;
   font-size: 0.68rem; font-weight: 800; padding: 2px 7px; border-radius: 999px;
 }
-.cc-status { margin: 0; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.cc-status { margin: 0; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .cc-status-text { font-weight: 700; color: #fff; min-height: 1.2em; }
-.cc-meta { font-size: 0.72rem; color: rgba(255, 255, 255, 0.78); }
+.cc-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.cc-pill {
+  display: inline-flex; align-items: center; line-height: 1.2;
+  font-size: 0.7rem; font-weight: 700; color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px; padding: 2px 9px;
+}
 
 /* Self chip + hand toolbar row */
 .cc-self-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -258,6 +261,15 @@
   background: var(--cc-surface); border: 1px solid var(--cc-surface-2); border-radius: 999px;
 }
 .cc-self-chip.is-active { border-color: var(--cc-good); box-shadow: 0 0 0 2px rgba(46, 139, 87, 0.3); }
+/* Your-turn prompt: the chip pulses (yellow — matches .is-actionable, colorblind-safe) */
+.cc-self-chip.is-myturn {
+  border-color: #ffce3a;
+  animation: cc-turn-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cc-turn-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 206, 58, 0.35); }
+  50%      { box-shadow: 0 0 0 5px rgba(255, 206, 58, 0.8); }
+}
 .cc-self-av { font-size: 1.4rem; line-height: 1; }
 .cc-self-name { font-weight: 700; }
 .cc-self-score { font-size: 0.8rem; color: var(--cc-muted); }
@@ -270,20 +282,53 @@
 }
 .cc-tool:hover { background: var(--cc-surface-2); }
 .cc-tool.is-on { background: rgba(46, 139, 87, 0.14); border-color: var(--cc-good); color: var(--cc-good); }
-
-/* Hand — a single overlapping row (cards fan over each other, like a real hand) */
-.cc-hand {
-  --cc-hand-fs: clamp(14px, 4.4vw, 22px);
-  --cc-hand-overlap: 2.5em;   /* how far each card slides over its left neighbour */
-  display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end;
-  padding: 10px 6px 14px; margin: 0 auto; font-size: var(--cc-hand-fs);
-  min-height: calc(4.55em * 61 / 40 + 22px);
+.cc-tool-icon { padding: 6px 10px; font-size: 1rem; line-height: 1; }
+.cc-tool-sm {
+  font-size: 0.74rem; font-weight: 600; padding: 6px 10px;
+  color: var(--cc-muted); background: rgba(255, 255, 255, 0.55); border-color: transparent;
 }
+.cc-tool-sm:hover { background: var(--cc-surface); border-color: var(--cc-surface-2); }
+.cc-tool-sm.is-on { background: rgba(255, 206, 58, 0.28); border-color: #d4a017; color: var(--cc-ink); }
+
+/* Hand — two overlapping rows: the break node pushes the last 4 cards to the
+   bottom row (7 cards = 3 top / 4 bottom; 8 after a draw = 4 / 4). */
+.cc-hand {
+  --cc-hand-fs: clamp(16px, 5vw, 26px);
+  /* Tunable if cards still overlap too much (acceptable range roughly 1.6em to 2.1em). */
+  --cc-hand-overlap: 2.1em;   /* how far each card slides over its left neighbour */
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+  row-gap: 10px;
+  padding: 8px 4px 12px; margin: 0 auto; font-size: var(--cc-hand-fs);
+  min-height: calc(2 * (4.55em * 61 / 40) + 30px);
+}
+.cc-hand-break { flex-basis: 100%; height: 0; margin: 0; padding: 0; }
+.cc-hand-break + .cc-card { margin-left: 0; }  /* bottom row starts without overlap */
 .cc-hand .cc-card { font-size: var(--cc-hand-fs); cursor: grab; touch-action: none; }
 .cc-hand .cc-card + .cc-card { margin-left: calc(-1 * var(--cc-hand-overlap)); }
 .cc-hand .cc-card:hover { z-index: 15; transform: translateY(-0.5em); }
 .cc-hand .cc-card.is-selected { z-index: 20; }
-.cc-hand .cc-card.is-dragging { z-index: 30; cursor: grabbing; box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4); }
+.cc-hand .cc-card.is-dragging {
+  z-index: 30; cursor: grabbing;
+  box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4);
+  transition: none;   /* transforms track the pointer 1:1 — no easing lag */
+}
+/* Sets toggle: non-set cards fall back in grayscale (set cards keep meld rings) */
+.cc-card.is-dimmed { filter: grayscale(1); opacity: 0.5; }
+/* Newly drawn card: yellow ring persists until that turn's discard resolves,
+   plus a brief lift/settle animation on arrival (ring only under reduced motion). */
+.cc-card.is-new { box-shadow: 0 0 0 3px #ffce3a, 0 2px 10px rgba(0, 0, 0, 0.3); }
+.cc-card.is-new { animation: cc-card-arrive 0.4s ease-out; }
+@keyframes cc-card-arrive {
+  0%   { transform: translateY(-16px) scale(1.08); }
+  60%  { transform: translateY(2px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+/* Drag-to-discard affordance */
+.cc-card.is-over-discard { opacity: 0.85; }
+.cc-discard.is-droptarget .cc-card {
+  box-shadow: 0 0 0 4px #ffce3a, 0 2px 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.06);
+}
 .cc-actions { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 46px; flex-wrap: wrap; }
 .cc-hint { color: var(--cc-muted); font-weight: 600; font-size: 0.88rem; }
 
@@ -332,16 +377,30 @@
 .cc-sheet-title { margin: 0; font-size: 1.3rem; font-weight: 800; text-align: center; }
 .cc-sheet-sub { margin: -6px 0 0; text-align: center; font-weight: 700; color: var(--cc-accent); }
 
+/* Chinchón win banner: leads the round/match summary so a chinchón win is unmissable. */
+.cc-chinchon-banner {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px 10px; border-radius: 14px; text-align: center;
+  background: linear-gradient(180deg, #fff6d8, #ffe28a);
+  border: 2px solid #ffce3a;
+  box-shadow: 0 6px 18px rgba(212, 160, 23, 0.4);
+  animation: cc-chinchon-pop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+}
+.cc-chinchon-headline { font-size: 2rem; font-weight: 900; letter-spacing: 0.02em; color: #8a5a00; }
+.cc-chinchon-sub { margin: 0; font-weight: 700; font-size: 0.85rem; color: #6b4a08; }
+@keyframes cc-chinchon-pop {
+  0%   { opacity: 0; transform: scale(0.55); }
+  65%  { opacity: 1; transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.cc-bonus-line {
+  margin: -4px 0 0; text-align: center; font-weight: 700; font-size: 0.85rem;
+  color: var(--cc-ink); background: rgba(255, 206, 58, 0.22); border-radius: 8px; padding: 5px 8px;
+}
+
 /* In-game menu: a top-bar trigger + a dismissible bottom sheet (parity with the
    other games — gives a deliberate restart / quit path with a confirm). */
-.cc-btn, .cc-seg, .cc-icon-btn, .cc-pile, .cc-tool, .cc-step, .cc-switch { touch-action: manipulation; }
-.cc-gamebar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
-.cc-icon-btn {
-  appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
-  color: var(--cc-ink); font: inherit; font-weight: 700; font-size: 0.9rem;
-  padding: 7px 13px; border-radius: 10px; cursor: pointer;
-}
-.cc-icon-btn:hover { background: var(--cc-surface-2); }
+.cc-btn, .cc-seg, .cc-menu-btn, .cc-pile, .cc-tool, .cc-step, .cc-switch { touch-action: manipulation; }
 .cc-menu { position: fixed; inset: 0; z-index: 130; display: flex; align-items: flex-end; justify-content: center; }
 .cc-menu-sheet {
   border-radius: 18px 18px 0 0;
@@ -443,6 +502,11 @@
 .cc-card[class*="cc-meld-c"] { box-shadow: 0 0 0 2.5px var(--meld), 0 1px 3px rgba(20, 40, 80, 0.3); }
 
 @media (prefers-reduced-motion: reduce) {
-  .cc-card, .cc-btn, .cc-opp, .cc-switch, .cc-switch-thumb { transition: none; }
+  .cc-card, .cc-btn, .cc-opp-pill, .cc-switch, .cc-switch-thumb { transition: none; }
   .cc-sheet, .cc-toast { animation: none; }
+  .cc-self-chip.is-myturn, .cc-opp-pill.is-active {
+    animation: none; box-shadow: 0 0 0 3px rgba(255, 206, 58, 0.6);
+  }
+  .cc-chinchon-banner { animation: none; }
+  .cc-card.is-new { animation: none; }
 }

@@ -88,6 +88,7 @@ class ChinchonUI {
     this.game = null;
     this._pending = null;        // { kind:'draw'|'discard'|'close', resolve }
     this._selectedCardId = null;
+    this._newCardId = null;      // id of the human's just-drawn card (cleared on discard)
     this.activePlayerId = null;
     this._modalResolve = null;
     this._placeResolve = null;
@@ -169,10 +170,10 @@ class ChinchonUI {
         <header class="cc-header" data-role="header"><h1 class="cc-title">Chinchón</h1></header>
         <section class="cc-setup" data-role="setup"></section>
         <section class="cc-game" data-role="game" hidden>
-          <div class="cc-gamebar">
-            <button class="cc-icon-btn" data-action="open-menu" aria-label="Game menu">☰ Menu</button>
+          <div class="cc-topbar">
+            <div class="cc-opponents" data-role="opponents"></div>
+            <button class="cc-menu-btn" data-action="open-menu" aria-label="Game menu">☰</button>
           </div>
-          <div class="cc-opponents" data-role="opponents"></div>
           <div class="cc-mat">
             <div class="cc-piles" data-role="piles"></div>
             <div class="cc-status" data-role="status"></div>
@@ -271,8 +272,7 @@ class ChinchonUI {
     // Themed title: the Anita deck rebrands the whole screen as a joke edition.
     const anita = s.deck === 'anita';
     this.el.header.innerHTML = anita
-      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Anita Bonita</span></h1>
-         <p class="cc-subtitle">💃 Edición oficial de la familia 🃏</p>`
+      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Anita Attack</span></h1>`
       : `<h1 class="cc-title">Chinchón</h1>`;
 
     this.el.setup.innerHTML = `
@@ -302,7 +302,7 @@ class ChinchonUI {
 
         <div class="cc-section">
           <button class="cc-rules-toggle" data-action="toggle-rules" aria-expanded="${s.rulesOpen}">
-            <span class="cc-label">Rules</span><span class="cc-chevron">${s.rulesOpen ? '▾' : '▸'}</span></button>
+            <span class="cc-label">Game Settings</span><span class="cc-chevron">${s.rulesOpen ? '▾' : '▸'}</span></button>
           <div class="cc-rules" ${s.rulesOpen ? '' : 'hidden'}>${rulesBody}</div>
         </div>
 
@@ -421,12 +421,13 @@ class ChinchonUI {
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
-    this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._statsCommitted = false;
     this._matchEnded = false; this._closeMenu();
 
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    this._buildPiles();
     this.render();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón match error', err); });
   }
@@ -480,17 +481,19 @@ class ChinchonUI {
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart':
-        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this.render();
+        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null; this.render();
         break;
       case 'turnStart':
         this.activePlayerId = payload.playerId; this.render();
         if (p && !p.isHuman) await this.beat(BEAT_TURN);
         break;
       case 'draw':
+        if (p && p.isHuman) this._newCardId = payload.card.id;
         this.render();
         if (p && !p.isHuman) { this.toast(`${p.name} drew from the ${payload.source === 'discard' ? 'discard pile' : 'deck'}`); await this.beat(BEAT_DRAW); }
         break;
       case 'discard':
+        if (p && p.isHuman) this._newCardId = null;
         this.render();
         if (p && !p.isHuman) await this.beat(BEAT_DISCARD);
         break;
@@ -530,66 +533,89 @@ class ChinchonUI {
   // --- rendering ------------------------------------------------------------
 
   _human() { return this.game.players.find((p) => p.isHuman); }
-  _diffLabel(p) {
-    const found = DIFFICULTIES.find(([v]) => v === p.difficulty);
-    return found ? found[1] : '';
-  }
 
   render() {
     if (this._dead || !this.game || this.el.game.hidden) return;
     const nOpp = this.game.players.filter((p) => !p.isHuman).length;
     this.el.opponents.className = 'cc-opponents cc-opp-n' + nOpp;
     this.el.opponents.innerHTML = this.renderOpponents();
-    this.el.piles.innerHTML = this.renderPiles();
+    this._syncPiles();
     this.el.status.innerHTML = this.renderStatus();
     this.el.self.innerHTML = this.renderSelf();
     this.el.handbar.innerHTML = this.renderHandbar();
-    this.el.hand.innerHTML = this.renderHand();
+    this._syncHand();
     this.el.actions.innerHTML = this.renderActions();
   }
 
   renderOpponents() {
     return this.game.players.filter((p) => !p.isHuman).map((p) => {
       const active = p.id === this.activePlayerId;
-      return `<div class="cc-opp ${active ? 'is-active' : ''}">
-        <span class="cc-opp-av-wrap">
-          <span class="cc-opp-av">${p.avatar}</span>
-          <span class="cc-opp-count" title="cards in hand">${p.hand.length}</span>
-        </span>
-        <span class="cc-opp-meta">
-          <span class="cc-opp-name">${esc(p.name)}</span>
-          <span class="cc-opp-sub">${this._diffLabel(p)}${active ? ' · playing' : ' · ' + p.totalScore}</span>
-        </span>
-      </div>`;
+      return `<span class="cc-opp-pill ${active ? 'is-active' : ''}">
+        <span class="cc-opp-av">${p.avatar}</span>
+        <span class="cc-opp-name">${esc(p.name)}</span>
+        <span class="cc-opp-score">${p.totalScore}</span>
+      </span>`;
     }).join('');
   }
 
-  renderPiles() {
-    const g = this.game;
-    const top = g.discardTop();
-    const drawMode = !!(this._pending && this._pending.kind === 'draw');
-    const showCount = g.config.showRemaining;
-    return `
-      <button class="cc-pile cc-stock ${drawMode ? 'is-actionable' : ''}" data-action="draw-stock" ${drawMode ? '' : 'disabled'} aria-label="Draw from deck">
+  /** One-time pile skeleton per game — the stock back <img> is created once and
+      never rebuilt, so it can't flash. Only the discard's top card is swapped. */
+  _buildPiles() {
+    this.el.piles.innerHTML = `
+      <button class="cc-pile cc-stock" data-action="draw-stock" disabled aria-label="Draw from deck">
         ${cardFaceHTML({}, { faceDown: true, static: true })}
-        ${showCount ? `<span class="cc-pile-count">${g.stock.length}</span>` : ''}
+        <span class="cc-pile-count" hidden></span>
         <span class="cc-pile-label">Deck</span>
       </button>
-      <button class="cc-pile cc-discard ${drawMode ? 'is-actionable' : ''}" data-action="draw-discard" ${drawMode ? '' : 'disabled'} aria-label="Take the discard">
-        ${top ? cardFaceHTML(top, { static: true }) : '<div class="cc-card cc-empty"></div>'}
+      <button class="cc-pile cc-discard" data-action="draw-discard" disabled aria-label="Take the discard">
+        <div class="cc-card cc-empty"></div>
         <span class="cc-pile-label">Discard</span>
       </button>`;
+    this._pilesEl = {
+      stock: this.el.piles.querySelector('.cc-stock'),
+      discard: this.el.piles.querySelector('.cc-discard'),
+      count: this.el.piles.querySelector('.cc-pile-count'),
+    };
+    this._discTopKey = 'empty';
+  }
+
+  _syncPiles() {
+    if (!this._pilesEl || !this.el.piles.contains(this._pilesEl.stock)) this._buildPiles();
+    const g = this.game;
+    const P = this._pilesEl;
+    const drawMode = !!(this._pending && this._pending.kind === 'draw');
+    P.stock.classList.toggle('is-actionable', drawMode);
+    P.stock.disabled = !drawMode;
+    P.discard.classList.toggle('is-actionable', drawMode);
+    P.discard.disabled = !drawMode;
+    if (g.config.showRemaining) { P.count.hidden = false; P.count.textContent = g.stock.length; }
+    else P.count.hidden = true;
+    this._setDiscardTop(g.discardTop());
+  }
+
+  /** Swap the discard's top card node only when the top card actually changes. */
+  _setDiscardTop(top) {
+    const P = this._pilesEl;
+    const key = top ? (top.isJoker ? 'joker' : `${top.suit}-${top.rank}`) : 'empty';
+    if (key === this._discTopKey) return;
+    this._discTopKey = key;
+    const node = this._cardNode(top || null, top ? { static: true } : null);
+    P.discard.querySelector('.cc-card').replaceWith(node);
   }
 
   renderStatus() {
     const g = this.game;
-    const meta = `Round ${g.round} · Resets ${g.resetsUsed}/${g.config.maxResets}${g.config.showRemaining ? ` · Deck ${g.stock.length}` : ''}`;
-    return `<span class="cc-status-text">${esc(this.statusText())}</span><span class="cc-meta">${meta}</span>`;
+    const pills = [
+      `<span class="cc-pill">Round ${g.round}</span>`,
+      `<span class="cc-pill">Resets ${g.resetsUsed}/${g.config.maxResets}</span>`,
+    ];
+    if (g.config.showRemaining) pills.push(`<span class="cc-pill">Deck ${g.stock.length}</span>`);
+    return `<span class="cc-status-text">${esc(this.statusText())}</span><span class="cc-pills">${pills.join('')}</span>`;
   }
 
   statusText() {
     if (this._pending) {
-      if (this._pending.kind === 'draw') return 'Your turn — draw from the deck or take the discard.';
+      // No draw prompt text: the glowing name chip + highlighted piles say it.
       if (this._pending.kind === 'discard') return this._selectedCardId ? 'Discard the selected card, or pick another.' : 'Choose a card to discard.';
       if (this._pending.kind === 'close') return 'You can close! Close the round, or keep playing.';
     }
@@ -601,16 +627,16 @@ class ChinchonUI {
   renderSelf() {
     const h = this._human();
     const active = this.activePlayerId === h.id || !!this._pending;
-    return `<span class="cc-self-chip ${active ? 'is-active' : ''}">
+    return `<span class="cc-self-chip ${active ? 'is-active is-myturn' : ''}">
       <span class="cc-self-av">${h.avatar}</span>
       <span class="cc-self-name">${esc(h.name)}</span>
       <span class="cc-self-score">${h.totalScore} pts</span></span>`;
   }
 
   renderHandbar() {
-    const sortLabel = this._sortMode === 'suit' ? 'By suit' : 'By rank';
-    return `<button class="cc-tool" data-action="sort-cycle" title="Cycle sort order">↕ ${sortLabel}</button>
-      <button class="cc-tool ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="Highlight melds">✦ Highlight sets</button>`;
+    const sortLabel = this._sortMode === 'suit' ? 'by suit' : 'by rank';
+    return `<button class="cc-tool cc-tool-icon" data-action="sort-cycle" title="Sorted ${sortLabel} — tap to cycle" aria-label="Sorted ${sortLabel}, tap to cycle">↕</button>
+      <button class="cc-tool cc-tool-sm ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="Highlight sets">Sets</button>`;
   }
 
   _computeHandOrder(hand) {
@@ -625,21 +651,55 @@ class ChinchonUI {
     return sortHand(hand, this._sortMode);
   }
 
-  renderHand() {
+  /** Build one detached card element from cardFaceHTML (null -> empty slot). */
+  _cardNode(card, opts) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = (card ? cardFaceHTML(card, opts || {}) : '<div class="cc-card cc-empty"></div>').trim();
+    return tpl.content.firstElementChild;
+  }
+
+  /** Sync the hand in place: card nodes are keyed by id and REUSED across renders,
+      so their <img> elements never reload (the old innerHTML rebuild made every
+      action flash). Also inserts the 2-row break so the last 4 cards sit on the
+      bottom row (7 cards -> 3 top / 4 bottom; 8 after a draw -> 4 / 4). */
+  _syncHand() {
+    const hand = this.el.hand;
     const h = this._human();
     const order = this._computeHandOrder(h.hand);
     this._displayOrder = order.map((c) => c.id);
+
     let colorOf = null;
     if (this._highlightSets) {
       const bp = meld.bestPartition(h.hand, this.game.config);
       colorOf = new Map();
       bp.melds.forEach((m, mi) => m.idx.forEach((i) => colorOf.set(h.hand[i].id, mi)));
     }
-    return order.map((c) => cardFaceHTML(c, {
-      selected: c.id === this._selectedCardId,
-      meldColor: colorOf && colorOf.has(c.id) ? colorOf.get(c.id) : null,
-      draggable: true,
-    })).join('');
+
+    const byId = new Map();
+    for (const el of hand.querySelectorAll('.cc-card[data-drag]')) byId.set(el.dataset.drag, el);
+    let brk = hand.querySelector('.cc-hand-break');
+    if (!brk) { brk = document.createElement('div'); brk.className = 'cc-hand-break'; }
+
+    const MELD_CLASSES = ['cc-meld-c0', 'cc-meld-c1', 'cc-meld-c2', 'cc-meld-c3', 'cc-meld-c4', 'cc-meld-c5'];
+    const breakAt = Math.max(0, order.length - 4);
+    const seq = [];
+    order.forEach((c, i) => {
+      if (i === breakAt && order.length > 4) seq.push(brk);
+      let el = byId.get(c.id);
+      if (!el) el = this._cardNode(c, { draggable: true });
+      byId.delete(c.id);
+      el.classList.toggle('is-selected', c.id === this._selectedCardId);
+      el.classList.toggle('is-new', c.id === this._newCardId);
+      for (const mc of MELD_CLASSES) el.classList.remove(mc);
+      const inSet = !!(colorOf && colorOf.has(c.id));
+      if (inSet) el.classList.add('cc-meld-c' + (colorOf.get(c.id) % 6));
+      el.classList.toggle('is-dimmed', !!colorOf && !inSet);
+      seq.push(el);
+    });
+    for (const el of byId.values()) el.remove();
+    if (order.length <= 4 && brk.parentNode) brk.remove();
+    // Appending an existing child moves it: order is applied without recreating nodes.
+    seq.forEach((el) => hand.appendChild(el));
   }
 
   renderActions() {
@@ -687,7 +747,13 @@ class ChinchonUI {
     }
     e.preventDefault();
     d.el.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
-    d.targetIndex = this._dropIndex(e.clientX, e.clientY, d.id);
+    const over = this._canDropDiscard() && this._overDiscard(e.clientX, e.clientY);
+    if (over !== d.overDiscard) {
+      d.overDiscard = over;
+      d.el.classList.toggle('is-over-discard', over);
+      if (this._pilesEl) this._pilesEl.discard.classList.toggle('is-droptarget', over);
+    }
+    d.targetIndex = over ? -1 : this._dropIndex(e.clientX, e.clientY, d.id);
   }
 
   onPointerUp() {
@@ -696,10 +762,27 @@ class ChinchonUI {
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
     document.removeEventListener('pointercancel', this._onPointerUp);
-    if (!d || !d.moved) return;
+    if (!d) return;
+    // Nodes persist across renders now, so drag styling must be cleared by hand.
+    d.el.classList.remove('is-dragging', 'is-over-discard');
+    d.el.style.transform = '';
+    if (this._pilesEl) this._pilesEl.discard.classList.remove('is-droptarget');
+    if (!d.moved) return;
     this._justDragged = true;        // swallow the click that follows a drag
+    if (d.overDiscard && this._canDropDiscard()) { this._resolvePending(d.id); return; }
     this._applyDrop(d.id, d.targetIndex);
     this.render();
+  }
+
+  /** Dropping on the discard is only a discard while the engine awaits one. */
+  _canDropDiscard() { return !!(this._pending && this._pending.kind === 'discard'); }
+
+  /** Pointer within the discard pile (small padding for fat fingers). */
+  _overDiscard(x, y) {
+    if (!this._pilesEl) return false;
+    const r = this._pilesEl.discard.getBoundingClientRect();
+    const pad = 10;
+    return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
   }
 
   /** Insertion index for the pointer among the non-dragged hand cards (row-aware). */
@@ -730,11 +813,10 @@ class ChinchonUI {
     const g = this.game;
     const closer = g.whoClosed != null ? g.byId(g.whoClosed) : null;
     const title = closer ? `${esc(closer.name)} closed the round` : 'Deck exhausted';
-    let sub = '';
-    if (closer && closer.closeInfo) {
-      const cat = closer.closeInfo.category;
-      sub = cat === 'chinchon' ? '¡Chinchón! 🎉' : cat === 'doubleMeld' ? 'Double meld · −10' : cat === 'sixAndOne' ? 'Six and one' : '';
-    }
+    const cat = closer && closer.closeInfo ? closer.closeInfo.category : null;
+    const isChinchon = cat === 'chinchon';
+    const sub = cat === 'doubleMeld' ? 'Double meld' : cat === 'sixAndOne' ? 'Six and one' : '';
+    const banner = isChinchon ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
       body = this.renderChartBlock();
@@ -746,10 +828,12 @@ class ChinchonUI {
           <td class="num">${this._sign(p.roundScore)}</td>
           <td class="num">${p.totalScore}</td></tr>`;
       }).join('');
+      const bonusLine = closer ? this._bonusLine(closer) : '';
       const breakdown = closer ? this._closerBreakdown(closer) : '';
-      body = `<table class="cc-score"><thead><tr><th>Player</th><th class="num">Round</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>${breakdown}`;
+      body = `<table class="cc-score"><thead><tr><th>Player</th><th class="num">Round</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>${bonusLine}${breakdown}`;
     }
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      ${banner}
       <h2 class="cc-sheet-title">${title}</h2>
       ${sub ? `<p class="cc-sheet-sub">${sub}</p>` : ''}
       ${body}
@@ -759,6 +843,24 @@ class ChinchonUI {
       </div>
     </div>`;
     this.el.modal.hidden = false;
+  }
+
+  /** Large, unmissable banner leading a round/match summary won via chinchón. */
+  _chinchonBanner() {
+    return `<div class="cc-chinchon-banner">
+      <div class="cc-chinchon-headline">¡CHINCHÓN!</div>
+      <p class="cc-chinchon-sub">Seven cards in a single run. Round won instantly.</p>
+    </div>`;
+  }
+
+  /** Explicit labeled line for a closer's scoring bonus (chinchón or all-cards-melded).
+      Always reads the value the engine actually recorded, never a hardcoded number. */
+  _bonusLine(closer) {
+    const info = closer.closeInfo;
+    if (!info) return '';
+    if (info.category === 'chinchon') return `<p class="cc-bonus-line">Chinchón bonus: ${this._sign(info.score)}</p>`;
+    if (info.category === 'doubleMeld') return `<p class="cc-bonus-line">All cards melded: ${this._sign(info.score)}</p>`;
+    return '';
   }
 
   _closerBreakdown(closer) {
@@ -782,7 +884,9 @@ class ChinchonUI {
     const g = this.game;
     const standings = g.standings || g.players;
     const winner = g.winner;
-    const reason = g.matchEndReason === 'chinchon' ? ' with a Chinchón' : '';
+    const isChinchonWin = g.matchEndReason === 'chinchon';
+    const reason = isChinchonWin ? ' with a Chinchón' : '';
+    const banner = isChinchonWin ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
       body = this.renderChartBlock();
@@ -798,6 +902,7 @@ class ChinchonUI {
         </div>`
       : '';
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      ${banner}
       <h2 class="cc-sheet-title">${winner.avatar} ${esc(winner.name)} wins${reason}!</h2>
       ${betty}
       ${body}
