@@ -52,10 +52,10 @@ function galleryLabel(name) {
   const r = rank === 1 ? 'As' : rank === 10 ? 'Sota' : rank === 11 ? 'Caballo' : rank === 12 ? 'Rey' : rank;
   return `${r} de ${GAL_SUIT[suit] || suit}`;
 }
-/** Names shown in the deck viewer: the 12 face cards (Sota/Caballo/Rey) + the back. */
+/** Names shown in the deck viewer: every card (ranks 1–12, all four suits) + the back. */
 function galleryNames() {
   const names = [];
-  for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (const r of [10, 11, 12]) names.push(`${s}-${r}`);
+  for (const s of ['oros', 'copas', 'espadas', 'bastos']) for (let r = 1; r <= 12; r++) names.push(`${s}-${r}`);
   names.push('back');
   return names;
 }
