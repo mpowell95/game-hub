@@ -1154,6 +1154,50 @@
   if (typeof module !== "undefined" && module.exports) module.exports = Theme;
 })();
 </script>
+<!-- module: speed.js -->
+<script>
+/*
+ * Parchis pacing. ONE multiplier over every game-driven delay: AI thinking, the auto-apply
+ * pause on a forced move, pawn hops, the dice tumble, toast dwell, and the no-move hold.
+ * Keeping them on a single factor means the whole turn loop stretches or tightens together
+ * instead of some beats moving while others stay put.
+ *
+ * Read at USE time (not cached), so changing the speed in Settings applies to the turn in
+ * progress. Plain script; attaches window.ParchisSpeed (plus a Node module.exports guard).
+ *
+ * Not scaled: reduced-motion fallbacks (a user who asked for less motion should not get MORE
+ * of it on Relaxed) and the illegal-move shake, which is a tap response rather than pacing.
+ */
+(function () {
+  "use strict";
+
+  // Factors chosen so Fast still leaves the "No legal move" message readable (1500 -> 975ms),
+  // and Relaxed roughly doubles a computer turn without feeling stalled.
+  var FACTORS = { fast: 0.65, normal: 1, relaxed: 1.9 };
+  var TIERS = ["fast", "normal", "relaxed"];
+  var LABEL_KEY = { fast: "speedFast", normal: "speedNormal", relaxed: "speedRelaxed" };
+  var DEFAULT = "normal";
+
+  var current = DEFAULT;
+
+  function has(name) { return Object.prototype.hasOwnProperty.call(FACTORS, name); }
+
+  var Speed = {
+    tiers: TIERS.slice(),
+    labelKey: LABEL_KEY,
+    DEFAULT: DEFAULT,
+    set: function (name) { current = has(name) ? name : DEFAULT; return current; },
+    get: function () { return current; },
+    factor: function () { return FACTORS[current]; },
+    // Scale a base duration in ms. Every literal delay in the turn loop goes through here.
+    ms: function (base) { return Math.round(base * FACTORS[current]); }
+  };
+
+  if (typeof globalThis !== "undefined") globalThis.ParchisSpeed = Speed;
+  if (typeof window !== "undefined") window.ParchisSpeed = Speed;
+  if (typeof module !== "undefined" && module.exports) module.exports = Speed;
+})();
+</script>
 <!-- module: board.js -->
 <script>
 /*
@@ -2056,6 +2100,7 @@
       menu: "Menu", close: "Close", language: "Language", save: "Save",
       resumeGame: "Resume game",
       theme: "Appearance", themeDark: "Dark", themeLight: "Light",
+      speedHeading: "Game speed", speedFast: "Fast", speedNormal: "Normal", speedRelaxed: "Relaxed",
       rollHint: "Roll the dice",
       // control strip
       bonus: "Bonus: {n}", doublesLabel: "Doubles:", sixesLabel: "Sixes:",
@@ -2104,6 +2149,7 @@
       menu: "Menu", close: "Cerrar", language: "Idioma", save: "Guardar",
       resumeGame: "Seguir jugando",
       theme: "Apariencia", themeDark: "Oscuro", themeLight: "Claro",
+      speedHeading: "Velocidad", speedFast: "Rapido", speedNormal: "Normal", speedRelaxed: "Tranquilo",
       rollHint: "Tirar los dados",
       bonus: "Bono: {n}", doublesLabel: "Dobles:", sixesLabel: "Seises:",
       thinking: "{name} piensa...", turnOf: "Turno de {name}", yourTurn: "Tu turno",
@@ -2328,7 +2374,7 @@
       paintDie(dom.die1, 1 + Math.floor(Math.random() * 6));
       if (diceCount === 2) paintDie(dom.die2, 1 + Math.floor(Math.random() * 6));
       if (n >= 6) { clearInterval(iv); paintDie(dom.die1, dd[0]); if (diceCount === 2) paintDie(dom.die2, dd[1]); if (cb) cb(); }
-    }, 55);
+    }, window.ParchisSpeed.ms(55));
   };
 
   // isYou: the seat about to play is the local human in a game against the computer.
@@ -2578,34 +2624,53 @@
     }, { back: HUD.closeOverlay }); // back arrow also returns to the game
   };
 
+  // A single-choice row of chips. Returns nothing; `onPick` owns the selected value.
+  function chipRow(parent, options, selected, onPick) {
+    var btns = {};
+    options.forEach(function (pair) {
+      var b = elh("button", "pc-seat" + (selected === pair[0] ? " on" : ""), parent, pair[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", selected === pair[0] ? "true" : "false");
+      btns[pair[0]] = b;
+      b.onclick = function () {
+        selected = pair[0];
+        Object.keys(btns).forEach(function (k) {
+          btns[k].classList.toggle("on", k === selected);
+          btns[k].setAttribute("aria-pressed", k === selected ? "true" : "false");
+        });
+        onPick(selected);
+      };
+    });
+  }
+
   HUD.openSettings = function (snapshot, onSaved, back) {
     var startTheme = snapshot.theme || "dark";
-    // Appearance previews live, so leaving without saving must roll the preview back.
+    var startSpeed = snapshot.speed || window.ParchisSpeed.DEFAULT;
+    var lang = snapshot.lang || "en";
+    var themeVal = startTheme;
+    var speedVal = startSpeed;
+    // Appearance and speed both preview live, so leaving without saving rolls them back.
     function leave() {
       document.body.classList.toggle("pc-light", startTheme === "light");
+      window.ParchisSpeed.set(startSpeed);
       if (back) back(); else HUD.closeOverlay();
     }
     overlay(t("settings"), function (body) {
       elh("p", "pc-hint", body, t("language"));
-      var langWrap = elh("div", "pc-seatrow", body), lang = snapshot.lang || "en", langBtns = {};
-      [["en", t("langNameEn")], ["es", t("langNameEs")]].forEach(function (pair) {
-        var b = elh("button", "pc-seat" + (lang === pair[0] ? " on" : ""), langWrap, pair[1]);
-        langBtns[pair[0]] = b;
-        b.onclick = function () { lang = pair[0]; Object.keys(langBtns).forEach(function (k) { langBtns[k].classList.toggle("on", k === lang); }); };
-      });
+      chipRow(elh("div", "pc-seatrow", body), [["en", t("langNameEn")], ["es", t("langNameEs")]], lang,
+        function (v) { lang = v; });
+
       elh("p", "pc-hint", body, t("theme"));
-      var themeWrap = elh("div", "pc-seatrow", body), themeVal = snapshot.theme || "dark", themeBtns = {};
-      [["dark", t("themeDark")], ["light", t("themeLight")]].forEach(function (pair) {
-        var b = elh("button", "pc-seat" + (themeVal === pair[0] ? " on" : ""), themeWrap, pair[1]);
-        themeBtns[pair[0]] = b;
-        b.onclick = function () {
-          themeVal = pair[0];
-          Object.keys(themeBtns).forEach(function (k) { themeBtns[k].classList.toggle("on", k === themeVal); });
-          document.body.classList.toggle("pc-light", themeVal === "light"); // live preview
-        };
-      });
+      chipRow(elh("div", "pc-seatrow", body), [["dark", t("themeDark")], ["light", t("themeLight")]], themeVal,
+        function (v) { themeVal = v; document.body.classList.toggle("pc-light", v === "light"); }); // live preview
+
+      elh("p", "pc-hint", body, t("speedHeading"));
+      var Speed = window.ParchisSpeed;
+      chipRow(elh("div", "pc-seatrow", body), Speed.tiers.map(function (tier) { return [tier, t(Speed.labelKey[tier])]; }), speedVal,
+        function (v) { speedVal = v; Speed.set(v); }); // applies immediately, even mid-turn
+
       // No Sound row until sound exists: a permanently disabled checkbox reads as broken.
-      mkBtn(body, t("save"), function () { onSaved({ lang: lang, theme: themeVal, sound: false }); if (back) back(); else HUD.closeOverlay(); });
+      mkBtn(body, t("save"), function () { onSaved({ lang: lang, theme: themeVal, speed: speedVal, sound: false }); if (back) back(); else HUD.closeOverlay(); });
     }, { back: leave });
   };
 
@@ -2669,7 +2734,7 @@
 (function () {
   "use strict";
 
-  var Engine, Board, HUD, Theme;
+  var Engine, Board, HUD, Theme, Speed;
   var svg;
   var COLORS = ["amarillo", "azul", "rojo", "verde"];
   var CPU_NAMES = ["Señora Pollo", "Lilí", "María"]; // default computer opponent names, in opponent order
@@ -2679,8 +2744,13 @@
 
   // How long the rolled dice stay on screen after a roll that cannot be played, so the
   // player can read what they rolled and why the turn moved on. Shorter for the AI so a
-  // run of computer turns does not crawl.
+  // run of computer turns does not crawl. Base values; ms() scales them by the speed setting.
   var NO_MOVE_HOLD_HUMAN = 1500, NO_MOVE_HOLD_AI = 950;
+
+  // Every game-driven delay goes through here, so the Settings speed chips move the whole
+  // turn loop at once. Reduced-motion fallbacks deliberately bypass it (see speed.js).
+  function ms(base) { return Speed.ms(base); }
+  function noMoveHold() { return ms(isAI(G.state.turn) ? NO_MOVE_HOLD_AI : NO_MOVE_HOLD_HUMAN); }
 
   var G = {
     state: null,
@@ -2727,10 +2797,12 @@
   // ---- animation primitives ------------------------------------------------
   function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function setT(g, x, y, extra) { g.setAttribute("transform", "translate(" + x.toFixed(2) + "," + y.toFixed(2) + ")" + (extra || "")); }
-  function tween(ms, onFrame) {
+  // `dur`, not `ms`: the module-level ms() scales durations, and a parameter named ms would
+  // shadow it inside this body. Callers pass an already-scaled duration.
+  function tween(dur, onFrame) {
     return new Promise(function (resolve) {
       var start = null;
-      function frame(ts) { if (start === null) start = ts; var t = ms <= 0 ? 1 : Math.min(1, (ts - start) / ms); onFrame(t); if (t < 1) requestAnimationFrame(frame); else resolve(); }
+      function frame(ts) { if (start === null) start = ts; var t = dur <= 0 ? 1 : Math.min(1, (ts - start) / dur); onFrame(t); if (t < 1) requestAnimationFrame(frame); else resolve(); }
       requestAnimationFrame(frame);
     });
   }
@@ -2739,20 +2811,20 @@
     if (reduce()) { var a = pts[0], b = pts[pts.length - 1]; await tween(150, function (t) { var e = easeInOut(t); setT(g, a.x + (b.x - a.x) * e, a.y + (b.y - a.y) * e); }); return; }
     for (var i = 1; i < pts.length; i++) {
       var s = pts[i - 1], d = pts[i];
-      await tween(perHop, function (t) { var e = easeInOut(t), lift = Math.sin(Math.PI * t) * cell() * 0.16; setT(g, s.x + (d.x - s.x) * e, s.y + (d.y - s.y) * e - lift); });
+      await tween(ms(perHop), function (t) { var e = easeInOut(t), lift = Math.sin(Math.PI * t) * cell() * 0.16; setT(g, s.x + (d.x - s.x) * e, s.y + (d.y - s.y) * e - lift); });
     }
   }
   async function flyHome(g, target) {
     if (reduce()) { await tween(150, function (t) { moveArc(g, g.__x0, g.__y0, target.x, target.y, t, 0); }); return; }
-    await tween(140, function (t) { setT(g, g.__x0, g.__y0, " scale(" + (1 + 0.35 * Math.sin(Math.PI * t)) + ")"); });
+    await tween(ms(140), function (t) { setT(g, g.__x0, g.__y0, " scale(" + (1 + 0.35 * Math.sin(Math.PI * t)) + ")"); });
     var x0 = g.__x0, y0 = g.__y0;
-    await tween(460, function (t) { moveArc(g, x0, y0, target.x, target.y, easeInOut(t), cell() * 1.2); });
+    await tween(ms(460), function (t) { moveArc(g, x0, y0, target.x, target.y, easeInOut(t), cell() * 1.2); });
   }
   function moveArc(g, x0, y0, x1, y1, t, lift) { setT(g, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t - Math.sin(Math.PI * t) * lift); }
   async function celebrate(g) {
     if (reduce()) return;
     var base = g.getAttribute("transform");
-    for (var k = 0; k < 2; k++) await tween(120, function (t) { g.setAttribute("transform", base + " scale(" + (1 + 0.25 * Math.sin(Math.PI * t)) + ")"); });
+    for (var k = 0; k < 2; k++) await tween(ms(120), function (t) { g.setAttribute("transform", base + " scale(" + (1 + 0.25 * Math.sin(Math.PI * t)) + ")"); });
     g.setAttribute("transform", base);
   }
   function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -2854,11 +2926,11 @@
     G.ui = "awaitRoll"; G.rollDice = [];
     HUD.setDice([], !isAI(G.state.turn));
     if (isAI(G.state.turn)) {
-      HUD.toast(t("thinking", { name: nameOf(curColor()) }), { ms: 1000 });
-      var wait = 450 + Math.random() * 300;
+      HUD.toast(t("thinking", { name: nameOf(curColor()) }), { ms: ms(1000) });
+      var wait = ms(450) + Math.random() * ms(300);
       setTimeout(function () { if (G.ui === "awaitRoll" && isAI(G.state.turn)) doRoll(); }, wait);
     } else {
-      HUD.toast(t("turnOf", { name: nameOf(curColor()) }), { ms: 1100 });
+      HUD.toast(t("turnOf", { name: nameOf(curColor()) }), { ms: ms(1100) });
     }
   }
   function doRoll() { G.ui = "rolling"; var dd = rollForMode(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); }); }
@@ -2874,11 +2946,11 @@
       // The penalty ends the turn. Name what happened, and hold the dice long enough to
       // read them (longer when there is no piece to fly home, since nothing else moves).
       var stem = G.cfg.mode === "spanish" ? "threeSixes" : "threeDoubles";
-      HUD.toast(t(stem + (pen.pawnId ? "Sent" : "None"), { name: nameOf(curColor()) }), { kind: "warn", ms: 1900 });
+      HUD.toast(t(stem + (pen.pawnId ? "Sent" : "None"), { name: nameOf(curColor()) }), { kind: "warn", ms: ms(1900) });
       G.ui = "animating";
       var chain = Promise.resolve();
       if (pen.pawnId) { var g = pawnEl(pen.pawnId); if (g) { markStart(g); chain = flyHome(g, Board.pawnPlacement(CO(), res.state)[pen.pawnId]); } }
-      var hold = pen.pawnId ? 550 : 1200;
+      var hold = ms(pen.pawnId ? 550 : 1200);
       chain.then(function () { setTimeout(function () { G.rollDice = []; commit(res.state); }, hold); });
       return;
     }
@@ -2891,7 +2963,7 @@
     G.moves = moves;
     if (isAI(G.state.turn)) { aiPlay(moves); return; }
     G.ui = "showingMoves"; highlightMoves(moves);
-    if (onlyOneChoice(moves)) setTimeout(function () { if (G.ui === "showingMoves") applyChosen(moves[0]); }, 380);
+    if (onlyOneChoice(moves)) setTimeout(function () { if (G.ui === "showingMoves") applyChosen(moves[0]); }, ms(380));
   }
   function onlyOneChoice(moves) {
     // auto-apply only when there is a single pawn with a single move
@@ -2901,7 +2973,7 @@
   function aiPlay(moves) {
     G.ui = "showingMoves"; highlightMoves(moves);
     var move = window.ParchisAI.chooseMove(G.state, moves, aiLevel(curColor()));
-    var wait = 430 + Math.random() * 280;
+    var wait = ms(430) + Math.random() * ms(280);
     setTimeout(function () { if (G.ui === "showingMoves") applyChosen(move); }, wait);
   }
   // The four skill tiers are implemented directly in ai.js (Phase R2-4).
@@ -2914,19 +2986,19 @@
     G.ui = "animating";
     var res = Engine.resolveNoMove(G.state);
     var samePlayer = res.state.turn === G.state.turn && Engine.currentPhase(res.state) !== "gameover";
-    var hold = isAI(G.state.turn) ? NO_MOVE_HOLD_AI : NO_MOVE_HOLD_HUMAN;
+    var hold = noMoveHold(); // already speed-scaled; do not wrap in ms() again
     HUD.toast(t(samePlayer ? "noMoveRollAgain" : "noMoveTurnPassed"), { kind: "warn", ms: hold });
     setTimeout(function () { commit(res.state); }, hold);
   }
 
   function beginBonus() {
     var amount = Engine.pendingBonus(G.state);
-    HUD.toast(t("bonusBanner", { n: amount }), { kind: "bonus", ms: 1400 });
+    HUD.toast(t("bonusBanner", { n: amount }), { kind: "bonus", ms: ms(1400) });
     var moves = Engine.legalMoves(G.state);
     if (moves.length === 0) {
       G.ui = "animating";
       var res = Engine.resolveNoMove(G.state);
-      var hold = isAI(G.state.turn) ? NO_MOVE_HOLD_AI : NO_MOVE_HOLD_HUMAN;
+      var hold = noMoveHold(); // already speed-scaled
       HUD.toast(t("bonusLost"), { kind: "warn", ms: hold });
       setTimeout(function () { commit(res.state); }, hold);
       return;
@@ -2934,7 +3006,7 @@
     G.moves = moves;
     if (isAI(G.state.turn)) { aiPlay(moves); return; }
     G.ui = "showingMoves"; highlightMoves(moves);
-    if (moves.length === 1) setTimeout(function () { if (G.ui === "showingMoves") applyChosen(moves[0]); }, 420);
+    if (moves.length === 1) setTimeout(function () { if (G.ui === "showingMoves") applyChosen(moves[0]); }, ms(420));
   }
 
   // ---- applying a move + animating -----------------------------------------
@@ -2965,14 +3037,14 @@
     var cap = events.filter(function (e) { return e.type === "captured"; })[0];
     if (cap) {
       var victim = colorOfPawn(oldState, cap.victimPawnId); // name the player who lost the piece
-      if (victim) HUD.toast(t("captured", { name: nameOf(victim) }), { kind: "capture", badge: "+20", ms: 1800 });
+      if (victim) HUD.toast(t("captured", { name: nameOf(victim) }), { kind: "capture", badge: "+20", ms: ms(1800) });
       var vg = pawnEl(cap.victimPawnId);
       if (vg) { markStart(vg); await flyHome(vg, placeNew[cap.victimPawnId]); }
-      await pause(450); // the +20 bonus banner lands next and would otherwise bury this
+      await pause(ms(450)); // the +20 bonus banner lands next and would otherwise bury this
     }
-    if (events.some(function (e) { return e.type === "barrierFormed"; })) HUD.toast(t("barrier"), { kind: "barrier", ms: 1200 });
-    if (events.some(function (e) { return e.type === "reachedMeta"; })) { HUD.toast(t("reachedMeta"), { kind: "meta", badge: "+10", ms: 1500 }); if (heroG) await celebrate(heroG); }
-    if (events.some(function (e) { return e.type === "playerFinished"; })) HUD.toast(t("finishes", { name: nameOf(c) }), { kind: "meta", ms: 1700 });
+    if (events.some(function (e) { return e.type === "barrierFormed"; })) HUD.toast(t("barrier"), { kind: "barrier", ms: ms(1200) });
+    if (events.some(function (e) { return e.type === "reachedMeta"; })) { HUD.toast(t("reachedMeta"), { kind: "meta", badge: "+10", ms: ms(1500) }); if (heroG) await celebrate(heroG); }
+    if (events.some(function (e) { return e.type === "playerFinished"; })) HUD.toast(t("finishes", { name: nameOf(c) }), { kind: "meta", ms: ms(1700) });
   }
 
   function commit(newState) { G.state = newState; save(); advance(); }
@@ -3025,6 +3097,7 @@
   function jsShake(g) {
     if (!g) return;
     var p = curTranslate(g), seq = [7, -7, 5, -5, 3, -3, 0], i = 0;
+    // Unscaled: this shake is a direct response to a tap, not part of the turn's pacing.
     var iv = setInterval(function () { setT(g, p.x + seq[i], p.y); i++; if (i >= seq.length) { clearInterval(iv); setT(g, p.x, p.y); } }, 38);
   }
   function hasRawMove(pawn) {
@@ -3062,7 +3135,7 @@
     else if (forcedBreakActive() && !pawnIsBreaker(pawn)) msg = G.cfg.mode === "spanish" ? t("mustBreak") : t("doublesMustBreak");
     else if (G.cfg.mode === "american" && hasRawMove(pawn)) msg = t("mustUseBoth");
     else msg = geometricReason(pawn);
-    HUD.toast(msg, { kind: "warn", ms: 1600 });
+    HUD.toast(msg, { kind: "warn", ms: ms(1600) });
   }
 
   // ---- persistence ---------------------------------------------------------
@@ -3074,6 +3147,7 @@
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         mode: G.cfg.mode, humanColor: G.cfg.anchor, playerCount: G.cfg.active.length,
         vsMode: G.cfg.vsMode, lang: window.ParchisI18n.getLang(), theme: getTheme(),
+        speed: Speed.get(), // this rewrites the whole prefs blob, so carry the speed over
         skills: G.cfg.skills, humanName: G.cfg.names[G.cfg.anchor]
         // opponent names are not persisted, so the default computer names always show
       }));
@@ -3171,16 +3245,18 @@
   }
   function onPlay(setup) { startNewGame(buildCfg(setup)); }
 
-  function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), sound: false }; }
+  function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), speed: Speed.get(), sound: false }; }
   function onSettingsSaved(s) {
     window.ParchisI18n.setLang(s.lang || "en");
     refreshStaticText();
     var theme = s.theme === "light" ? "light" : "dark";
     applyTheme(theme);
-    try { var p = loadPrefs(); p.lang = s.lang; p.theme = theme; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
+    var speed = Speed.set(s.speed); // normalises an unknown value back to the default
+    try { var p = loadPrefs(); p.lang = s.lang; p.theme = theme; p.speed = speed; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
     if (G.state && G.cfg) { syncHud(); render(); if (G.ui === "showingMoves") highlightMoves(G.moves); }
   }
   function getTheme() { return loadPrefs().theme === "dark" ? "dark" : "light"; } // light default (matches the mockup)
+  function getSpeed() { return loadPrefs().speed || Speed.DEFAULT; }
   function applyTheme(theme) {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("pc-light", theme === "light");
@@ -3218,9 +3294,11 @@
   var Game = {};
   Game.init = function (refs) {
     Engine = window.ParchisEngine; Board = window.ParchisBoard; HUD = window.ParchisHUD; Theme = window.ParchisTheme;
+    Speed = window.ParchisSpeed;
     svg = refs.svg;
     applyLang();
     applyTheme(getTheme());
+    Speed.set(getSpeed());
     HUD.build(refs, { onRollTap: onRollTap, onMenu: function () { openInGameMenu(); } });
     // static board backdrop behind the title screen
     G.cfg = { mode: "american", anchor: "amarillo", active: COLORS.slice(), humans: ["amarillo"], names: {}, skills: {} };
