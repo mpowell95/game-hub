@@ -134,6 +134,11 @@
   .pc-head-spacer { width:40px; }
   .pc-winner { margin:2px 0 6px; font-family:"Rockwell","Roboto Slab",Georgia,serif; font-size:18px; color:var(--gold); }
 
+  /* build stamp on the title screen and in-game menu, so you can always read which build
+     you are on (matches the .setup-version treatment in the hub's business-deal game) */
+  .pc-version { margin-top:10px; font-size:11px; font-weight:800; color:var(--muted); opacity:.65;
+    letter-spacing:.04em; text-align:center; }
+
   /* full-screen cards (title, new game) */
   .pc-card-full { max-width:420px; }
   .pc-card.pc-title { text-align:center; position:relative; }
@@ -2257,6 +2262,20 @@
   var TIERS = ["beginner", "intermediate", "pro", "expert"];
   var TIER_KEY = { beginner: "tierBeginner", intermediate: "tierIntermediate", pro: "tierPro", expert: "tierExpert" };
 
+  // Build identity, shown small on the title screen and the in-game menu so you can tell at a
+  // glance whether a deploy has reached your browser (the hub caches aggressively).
+  //
+  // APP_VERSION counts PARCHIS deploys. It is deliberately NOT the hub's shared sw.js cache
+  // number: that one also bumps when Chinchon or the hub shell change, so the two would drift.
+  // Bump it on every deploy (see the deploy checklist in CLAUDE.md).
+  //
+  // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
+  // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
+  var APP_VERSION = "v10";
+  var BUILD_DATE = "2026-07-08";
+  function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
+  function versionLabel() { return APP_VERSION + " · " + buildDate(); }
+
   function T() { return (typeof window !== "undefined" && window.ParchisTheme) || globalThis.ParchisTheme; }
   function t(key, params) { return window.ParchisI18n.t(key, params); }
   function reduce() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
@@ -2480,6 +2499,7 @@
       var rowu = elh("div", "pc-title-util", body);
       var sBtn = elh("button", "pc-utilbtn", rowu, t("settings")); sBtn.onclick = h.onSettings;
       var rBtn = elh("button", "pc-utilbtn", rowu, t("rules")); rBtn.onclick = h.onRules;
+      elh("div", "pc-version", body, versionLabel());
     }, { noClose: true, full: true });
   };
 
@@ -2621,6 +2641,7 @@
       mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); h.onNewGame(); }, "ghost");
       mkBtn(body, t("settings"), function () { h.onSettings(); }, "ghost");
       mkBtn(body, t("rules"), function () { h.onRules(); }, "ghost");
+      elh("div", "pc-version", body, versionLabel()); // readable mid-game, not just from the title
     }, { back: HUD.closeOverlay }); // back arrow also returns to the game
   };
 
@@ -2714,6 +2735,10 @@
       actions.forEach(function (a) { mkBtn(body, a.label, function () { HUD.closeOverlay(); a.onClick(); }, a.kind); });
     }, { noClose: true });
   };
+
+  // Reachable from the console and from a deploy check, so "is the new build live?" can be
+  // answered without eyeballing a screenshot.
+  HUD.version = function () { return { version: APP_VERSION, build: buildDate(), label: versionLabel() }; };
 
   if (typeof window !== "undefined") window.ParchisHUD = HUD;
   if (typeof globalThis !== "undefined") globalThis.ParchisHUD = HUD;
