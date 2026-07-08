@@ -294,6 +294,7 @@
    bottom row (7 cards = 3 top / 4 bottom; 8 after a draw = 4 / 4). */
 .cc-hand {
   --cc-hand-fs: clamp(16px, 5vw, 26px);
+  /* Tunable if cards still overlap too much (acceptable range roughly 1.6em to 2.1em). */
   --cc-hand-overlap: 2.1em;   /* how far each card slides over its left neighbour */
   display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
   row-gap: 10px;
@@ -313,6 +314,15 @@
 }
 /* Sets toggle: non-set cards fall back in grayscale (set cards keep meld rings) */
 .cc-card.is-dimmed { filter: grayscale(1); opacity: 0.5; }
+/* Newly drawn card: yellow ring persists until that turn's discard resolves,
+   plus a brief lift/settle animation on arrival (ring only under reduced motion). */
+.cc-card.is-new { box-shadow: 0 0 0 3px #ffce3a, 0 2px 10px rgba(0, 0, 0, 0.3); }
+.cc-card.is-new { animation: cc-card-arrive 0.4s ease-out; }
+@keyframes cc-card-arrive {
+  0%   { transform: translateY(-16px) scale(1.08); }
+  60%  { transform: translateY(2px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
 /* Drag-to-discard affordance */
 .cc-card.is-over-discard { opacity: 0.85; }
 .cc-discard.is-droptarget .cc-card {
@@ -366,6 +376,27 @@
 @keyframes cc-pop { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
 .cc-sheet-title { margin: 0; font-size: 1.3rem; font-weight: 800; text-align: center; }
 .cc-sheet-sub { margin: -6px 0 0; text-align: center; font-weight: 700; color: var(--cc-accent); }
+
+/* Chinchón win banner: leads the round/match summary so a chinchón win is unmissable. */
+.cc-chinchon-banner {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px 10px; border-radius: 14px; text-align: center;
+  background: linear-gradient(180deg, #fff6d8, #ffe28a);
+  border: 2px solid #ffce3a;
+  box-shadow: 0 6px 18px rgba(212, 160, 23, 0.4);
+  animation: cc-chinchon-pop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+}
+.cc-chinchon-headline { font-size: 2rem; font-weight: 900; letter-spacing: 0.02em; color: #8a5a00; }
+.cc-chinchon-sub { margin: 0; font-weight: 700; font-size: 0.85rem; color: #6b4a08; }
+@keyframes cc-chinchon-pop {
+  0%   { opacity: 0; transform: scale(0.55); }
+  65%  { opacity: 1; transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.cc-bonus-line {
+  margin: -4px 0 0; text-align: center; font-weight: 700; font-size: 0.85rem;
+  color: var(--cc-ink); background: rgba(255, 206, 58, 0.22); border-radius: 8px; padding: 5px 8px;
+}
 
 /* In-game menu: a top-bar trigger + a dismissible bottom sheet (parity with the
    other games — gives a deliberate restart / quit path with a confirm). */
@@ -476,4 +507,6 @@
   .cc-self-chip.is-myturn, .cc-opp-pill.is-active {
     animation: none; box-shadow: 0 0 0 3px rgba(255, 206, 58, 0.6);
   }
+  .cc-chinchon-banner { animation: none; }
+  .cc-card.is-new { animation: none; }
 }

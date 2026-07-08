@@ -88,6 +88,7 @@ class ChinchonUI {
     this.game = null;
     this._pending = null;        // { kind:'draw'|'discard'|'close', resolve }
     this._selectedCardId = null;
+    this._newCardId = null;      // id of the human's just-drawn card (cleared on discard)
     this.activePlayerId = null;
     this._modalResolve = null;
     this._placeResolve = null;
@@ -420,7 +421,7 @@ class ChinchonUI {
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
-    this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._statsCommitted = false;
     this._matchEnded = false; this._closeMenu();
 
@@ -480,17 +481,19 @@ class ChinchonUI {
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart':
-        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this.render();
+        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null; this.render();
         break;
       case 'turnStart':
         this.activePlayerId = payload.playerId; this.render();
         if (p && !p.isHuman) await this.beat(BEAT_TURN);
         break;
       case 'draw':
+        if (p && p.isHuman) this._newCardId = payload.card.id;
         this.render();
         if (p && !p.isHuman) { this.toast(`${p.name} drew from the ${payload.source === 'discard' ? 'discard pile' : 'deck'}`); await this.beat(BEAT_DRAW); }
         break;
       case 'discard':
+        if (p && p.isHuman) this._newCardId = null;
         this.render();
         if (p && !p.isHuman) await this.beat(BEAT_DISCARD);
         break;
@@ -686,6 +689,7 @@ class ChinchonUI {
       if (!el) el = this._cardNode(c, { draggable: true });
       byId.delete(c.id);
       el.classList.toggle('is-selected', c.id === this._selectedCardId);
+      el.classList.toggle('is-new', c.id === this._newCardId);
       for (const mc of MELD_CLASSES) el.classList.remove(mc);
       const inSet = !!(colorOf && colorOf.has(c.id));
       if (inSet) el.classList.add('cc-meld-c' + (colorOf.get(c.id) % 6));
@@ -809,11 +813,10 @@ class ChinchonUI {
     const g = this.game;
     const closer = g.whoClosed != null ? g.byId(g.whoClosed) : null;
     const title = closer ? `${esc(closer.name)} closed the round` : 'Deck exhausted';
-    let sub = '';
-    if (closer && closer.closeInfo) {
-      const cat = closer.closeInfo.category;
-      sub = cat === 'chinchon' ? '¡Chinchón! 🎉' : cat === 'doubleMeld' ? 'Double meld · −10' : cat === 'sixAndOne' ? 'Six and one' : '';
-    }
+    const cat = closer && closer.closeInfo ? closer.closeInfo.category : null;
+    const isChinchon = cat === 'chinchon';
+    const sub = cat === 'doubleMeld' ? 'Double meld' : cat === 'sixAndOne' ? 'Six and one' : '';
+    const banner = isChinchon ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
       body = this.renderChartBlock();
@@ -825,10 +828,12 @@ class ChinchonUI {
           <td class="num">${this._sign(p.roundScore)}</td>
           <td class="num">${p.totalScore}</td></tr>`;
       }).join('');
+      const bonusLine = closer ? this._bonusLine(closer) : '';
       const breakdown = closer ? this._closerBreakdown(closer) : '';
-      body = `<table class="cc-score"><thead><tr><th>Player</th><th class="num">Round</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>${breakdown}`;
+      body = `<table class="cc-score"><thead><tr><th>Player</th><th class="num">Round</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>${bonusLine}${breakdown}`;
     }
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      ${banner}
       <h2 class="cc-sheet-title">${title}</h2>
       ${sub ? `<p class="cc-sheet-sub">${sub}</p>` : ''}
       ${body}
@@ -838,6 +843,24 @@ class ChinchonUI {
       </div>
     </div>`;
     this.el.modal.hidden = false;
+  }
+
+  /** Large, unmissable banner leading a round/match summary won via chinchón. */
+  _chinchonBanner() {
+    return `<div class="cc-chinchon-banner">
+      <div class="cc-chinchon-headline">¡CHINCHÓN!</div>
+      <p class="cc-chinchon-sub">Seven cards in a single run. Round won instantly.</p>
+    </div>`;
+  }
+
+  /** Explicit labeled line for a closer's scoring bonus (chinchón or all-cards-melded).
+      Always reads the value the engine actually recorded, never a hardcoded number. */
+  _bonusLine(closer) {
+    const info = closer.closeInfo;
+    if (!info) return '';
+    if (info.category === 'chinchon') return `<p class="cc-bonus-line">Chinchón bonus: ${this._sign(info.score)}</p>`;
+    if (info.category === 'doubleMeld') return `<p class="cc-bonus-line">All cards melded: ${this._sign(info.score)}</p>`;
+    return '';
   }
 
   _closerBreakdown(closer) {
@@ -861,7 +884,9 @@ class ChinchonUI {
     const g = this.game;
     const standings = g.standings || g.players;
     const winner = g.winner;
-    const reason = g.matchEndReason === 'chinchon' ? ' with a Chinchón' : '';
+    const isChinchonWin = g.matchEndReason === 'chinchon';
+    const reason = isChinchonWin ? ' with a Chinchón' : '';
+    const banner = isChinchonWin ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
       body = this.renderChartBlock();
@@ -877,6 +902,7 @@ class ChinchonUI {
         </div>`
       : '';
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      ${banner}
       <h2 class="cc-sheet-title">${winner.avatar} ${esc(winner.name)} wins${reason}!</h2>
       ${betty}
       ${body}
