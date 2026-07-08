@@ -32,10 +32,21 @@
   }
   #app { width:100%; max-width:430px; min-height:100%; display:flex; flex-direction:column; padding:8px 10px 14px; }
 
+  /* Screen-reader-only live region (dice results and game events). */
+  .pc-sr { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+    clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
+
+  /* Keyboard focus. Board pieces are SVG groups, which take an outline like any element. */
+  :focus-visible { outline:3px solid var(--gold); outline-offset:2px; }
+  .pc-pawn.pc-actionable { cursor:pointer; }
+  .pc-pawn:focus { outline:none; }
+  .pc-pawn:focus-visible { outline:3px solid var(--gold); outline-offset:1px; border-radius:50%; }
+
   /* header */
   #hdr { display:flex; align-items:center; justify-content:space-between; padding:4px 4px 8px; }
   .pc-brand { display:flex; align-items:baseline; gap:8px; }
-  .pc-word { font-family:"Rockwell","Roboto Slab",Georgia,serif; font-size:26px; letter-spacing:.5px; color:var(--text); }
+  .pc-word { margin:0; font-family:"Rockwell","Roboto Slab",Georgia,serif; font-size:26px; font-weight:400;
+    letter-spacing:.5px; color:var(--text); }
   .pc-iconbtn { background:transparent; border:none; color:var(--text); font-size:22px; line-height:1;
     width:40px; height:40px; border-radius:10px; cursor:pointer; }
   .pc-iconbtn:hover { background:var(--panel); }
@@ -59,7 +70,13 @@
 
   .pc-info { flex:1; display:flex; flex-direction:column; gap:7px; min-width:0; }
   .pc-chip { display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
-    background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:5px 13px 5px 8px; }
+    background:var(--panel); border:2px solid var(--line); border-radius:999px; padding:5px 13px 5px 8px;
+    transition:box-shadow .18s ease; }
+  /* The active player is easy to lose track of while the AI seats cycle: ring the chip
+     and caption it when the seat about to play is the local human. */
+  .pc-chip.you { box-shadow:0 0 0 3px rgba(242,183,5,.30); }
+  .pc-chip-you { font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase;
+    color:var(--muted); white-space:nowrap; }
   .pc-chip svg { display:block; }
   .pc-chip-name { font-weight:700; font-size:15px; }
   .pc-meta { display:flex; align-items:center; gap:12px; min-height:22px; }
@@ -150,6 +167,7 @@
   .pc-opps { display:flex; flex-direction:column; gap:8px; }
   .pc-opps.pc-collapsed { display:none; }
   .pc-opprow { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .pc-rowshape { display:inline-flex; flex:none; }
   .pc-oppname { flex:1; min-width:110px; font:inherit; padding:8px 10px; border-radius:9px; border:1px solid var(--line);
     background:var(--panel2); color:var(--text); }
   .pc-skills { display:flex; gap:5px; flex-wrap:wrap; }
@@ -168,6 +186,28 @@
   .pc-choice-lbl { color:var(--text); font-weight:800; font-size:15px; padding:0 6px; }
   .pc-die-sm { width:38px; height:38px; border-radius:9px; box-shadow:0 2px 0 #b7a888; }
 
+  /* ---- larger screens -----------------------------------------------------
+     Phone stays a single 430px column. Above that the column widens and the board
+     grows with it. The board is square, so its width is also capped against the
+     viewport height (minus the header, control strip and toast) to keep the whole
+     game on one screen instead of scrolling. The header, control strip and toast
+     track the same width so they stay aligned with the board. */
+  #hdr, #boardWrap, #control, #toast { width:100%; max-width:var(--colw,100%); margin-left:auto; margin-right:auto; }
+  @media (min-width:560px) {
+    #app { --colw:max(300px, calc(100vh - 210px)); max-width:520px; }
+  }
+  @media (min-width:760px) {
+    #app { max-width:640px; }
+    .pc-word { font-size:30px; }
+    #control { gap:18px; padding:14px 4px 4px; }
+    .pc-dice { gap:9px; }
+    .pc-dice .pc-die { width:56px; height:56px; border-radius:13px; padding:7px; }
+    .pc-dice .pc-pip { width:10px; height:10px; }
+    .pc-chip-name { font-size:17px; }
+    .pc-toast-msg { font-size:15px; }
+  }
+  @media (min-width:1000px) { #app { max-width:720px; } }
+
   @media (prefers-reduced-motion: reduce) {
     .pc-die.pulse, .pc-destmark, .pc-pawnmark { animation:none; }
     .pc-toast-msg { transition:none; }
@@ -178,12 +218,15 @@
 <div id="app">
   <header id="hdr"></header>
   <div id="boardWrap">
-    <svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Parchis board"></svg>
+    <!-- role=group (not img) so the focusable, labelled pieces inside stay exposed to
+         assistive tech. The label is re-set from i18n on every language change. -->
+    <svg id="board" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Parchís board"></svg>
   </div>
   <div id="control"></div>
   <div id="toast"></div>
 </div>
 <div id="overlay"></div>
+<div id="live" class="pc-sr" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- module: engine.js -->
 <script>
@@ -1152,6 +1195,10 @@
   // Quarter-turns (90 deg clockwise) to bring each color to the bottom-left seat.
   var ROT = { amarillo: 0, azul: 1, rojo: 2, verde: 3 };
 
+  // The number PRINTED on a track cell: shifted so the yellow start (engine 5) reads "1".
+  // Screen-reader labels use it too, so they name the same square the player sees.
+  function printedNumber(n) { return ((n + 63) % 68) + 1; }
+
   // ==========================================================================
   // Parametric arm geometry (unchanged core: builds the 68-cell loop + corridors)
   // ==========================================================================
@@ -1495,7 +1542,9 @@
     svg.setAttribute("viewBox", "0 0 " + total + " " + total);
     svg.setAttribute("width", "100%");
 
-    var g = el("g", { "class": "pc-static", transform: "translate(" + (pad + frameW) + "," + (pad + frameW) + ")" }, svg);
+    // aria-hidden: the printed cell numbers and corner names are decoration for assistive
+    // tech. Only the pawns (and the turn chip) should speak.
+    var g = el("g", { "class": "pc-static", "aria-hidden": "true", transform: "translate(" + (pad + frameW) + "," + (pad + frameW) + ")" }, svg);
     if (svg.firstChild) svg.insertBefore(g, svg.firstChild);
 
     // Frame + field.
@@ -1536,7 +1585,7 @@
       // Salida squares are solid color (no marker); numbers hide on all salida AND star squares.
       // Printed label is shifted so the yellow start square (engine 5) reads "1".
       if (!sal && !seg) {
-        var displayNum = ((n + 63) % 68) + 1; // engine n -> printed n-4 (5 -> 1)
+        var displayNum = printedNumber(n);
         var tx2 = el("text", { x: t.x + t.w / 2, y: t.y + t.h / 2, "text-anchor": "middle", "dominant-baseline": "central",
           "font-family": T.type.ui, "font-size": cs * T.type.numberSize, fill: T.type.number, "font-weight": T.type.numberWeight || "800" }, g);
         tx2.textContent = String(displayNum);
@@ -1683,6 +1732,7 @@
     coords: coords, rotateCoords: rotateCoords, canon: canon, seatingFor: seatingFor,
     renderBoard: renderBoard, renderDebug: renderDebug, renderHighlights: renderHighlights,
     buildStatic: buildStatic, pawnPlacement: pawnPlacement, rawLoop: rawLoop, armCells: armCells,
+    printedNumber: printedNumber,
     CELL: CELL, GRID: GRID, ROT: ROT, CANON_OFFSET: CANON_OFFSET, CANON_DIR: CANON_DIR,
     SALIDA: SALIDA, ENTRY: ENTRY, SEGUROS: SEGUROS, COLORS: COLORS
   };
@@ -1989,7 +2039,7 @@
   var STR = {
     en: {
       // app / title screen
-      appName: "Parchis",
+      appName: "Parchís",
       playVsComputer: "Play vs Computer", localGame: "Local (pass and play)",
       continueLast: "Continue last game", settings: "Settings", rules: "Rules",
       // new game screen
@@ -1997,60 +2047,85 @@
       modeHeading: "Rules", americanMode: "American", spanishMode: "Spanish",
       americanDesc: "Two dice, doubles roll again", spanishDesc: "One die, sixes roll again",
       playersHeading: "Players", yourColorHeading: "Your color", opponentsHeading: "Opponents",
+      yourNameHeading: "Your name",
       nameLabel: "Name", skillHeading: "Skill",
       tierBeginner: "Beginner", tierIntermediate: "Intermediate", tierPro: "Pro", tierExpert: "Expert",
       you: "You", computerN: "Computer {n}", playerN: "Player {n}",
       seatEmpty: "Empty",
       // header / menu / settings
-      menu: "Menu", close: "Close", language: "Language", sound: "Sound (coming soon)", save: "Save",
+      menu: "Menu", close: "Close", language: "Language", save: "Save",
+      resumeGame: "Resume game",
       theme: "Appearance", themeDark: "Dark", themeLight: "Light",
       rollHint: "Roll the dice",
       // control strip
       bonus: "Bonus: {n}", doublesLabel: "Doubles:", sixesLabel: "Sixes:",
-      thinking: "{name} is thinking...", turnOf: "{name}'s turn",
+      thinking: "{name} is thinking...", turnOf: "{name}'s turn", yourTurn: "Your turn",
       // move choice + pruning toasts
       pickDie: "Move by which die?", sumEntryChip: "Out (5)",
       mustEnter: "You must move a piece out of your nest", mustUseBoth: "You must use both dice if possible",
       doublesMustBreak: "Doubles must break your blockade", mustBreak: "You must break your blockade",
       // outcome toasts
-      noMove: "No move", bonusBanner: "Bonus of {n}!", bonusLost: "Bonus forfeited",
-      captured: "Captured!", barrier: "Barrier!", reachedMeta: "Home!", finishes: "{name} finishes!",
-      threeDoubles: "Three doubles", threeSixes: "Three sixes",
+      noMoveTurnPassed: "No legal move, turn passed", noMoveRollAgain: "No legal move, roll again",
+      bonusBanner: "Bonus of {n}!", bonusLost: "No legal move, bonus forfeited",
+      captured: "Captured! {name} goes back to the nest",
+      barrier: "Barrier!", reachedMeta: "Home!", finishes: "{name} finishes!",
+      threeDoublesSent: "Three doubles: {name} sends a piece home",
+      threeDoublesNone: "Three doubles: {name} loses the turn",
+      threeSixesSent: "Three sixes: {name} sends a piece home",
+      threeSixesNone: "Three sixes: {name} loses the turn",
       // illegal-move reasons
-      needFive: "You need a 5 to leave home", exactCount: "Exact count needed",
+      needFive: "You need a 5 to leave home", exactCount: "Exact count needed to reach the center",
       barrierBlocks: "A barrier blocks it", safetyBlocks: "That safe square is taken", notAllowed: "Move not allowed",
       // game over
       gameOver: "Game over", finishOrder: "Finish order:", winnerIs: "{name} wins!",
+      // accessibility (screen readers)
+      boardLabel: "Parchís board", andWord: "and",
+      rolledDice: "Rolled {v}", diceLabel: "Dice: {v}",
+      pawnInNest: "{color} piece in the nest", pawnOnSquare: "{color} piece on square {n}",
+      pawnInHomeRow: "{color} piece in the home row, step {n}", pawnAtCenter: "{color} piece at the center",
+      pressEnterToMove: "{desc}. Press Enter to move.", moveByDie: "Move {n}",
       // colors + language names
       amarillo: "Yellow", azul: "Blue", rojo: "Red", verde: "Green",
       langNameEs: "Espanol", langNameEn: "English"
     },
     es: {
-      appName: "Parchis",
+      appName: "Parchís",
       playVsComputer: "Jugar contra la maquina", localGame: "Local (por turnos)",
       continueLast: "Continuar partida", settings: "Ajustes", rules: "Reglas",
       newGame: "Nueva partida", newGameTitle: "Nueva partida", back: "Atras", play: "Jugar",
       modeHeading: "Reglas", americanMode: "Americano", spanishMode: "Espanol",
       americanDesc: "Dos dados, dobles repiten", spanishDesc: "Un dado, seises repiten",
       playersHeading: "Jugadores", yourColorHeading: "Tu color", opponentsHeading: "Rivales",
+      yourNameHeading: "Tu nombre",
       nameLabel: "Nombre", skillHeading: "Nivel",
       tierBeginner: "Principiante", tierIntermediate: "Intermedio", tierPro: "Pro", tierExpert: "Experto",
       you: "Tu", computerN: "Maquina {n}", playerN: "Jugador {n}",
       seatEmpty: "Vacio",
-      menu: "Menu", close: "Cerrar", language: "Idioma", sound: "Sonido (proximamente)", save: "Guardar",
+      menu: "Menu", close: "Cerrar", language: "Idioma", save: "Guardar",
+      resumeGame: "Seguir jugando",
       theme: "Apariencia", themeDark: "Oscuro", themeLight: "Claro",
       rollHint: "Tirar los dados",
       bonus: "Bono: {n}", doublesLabel: "Dobles:", sixesLabel: "Seises:",
-      thinking: "{name} piensa...", turnOf: "Turno de {name}",
+      thinking: "{name} piensa...", turnOf: "Turno de {name}", yourTurn: "Tu turno",
       pickDie: "Mover con que dado?", sumEntryChip: "Salir (5)",
       mustEnter: "Debes sacar una ficha de casa", mustUseBoth: "Debes usar ambos dados si puedes",
       doublesMustBreak: "Con dobles debes romper tu barrera", mustBreak: "Debes romper tu barrera",
-      noMove: "Sin movimiento", bonusBanner: "Bono de {n}!", bonusLost: "Bono perdido",
-      captured: "Te como!", barrier: "Barrera!", reachedMeta: "A la meta!", finishes: "{name} termina!",
-      threeDoubles: "Tres dobles", threeSixes: "Tres seises",
-      needFive: "Necesitas un 5 para salir", exactCount: "Necesitas cuenta exacta",
+      noMoveTurnPassed: "Sin movimiento, pasa el turno", noMoveRollAgain: "Sin movimiento, tira otra vez",
+      bonusBanner: "Bono de {n}!", bonusLost: "Sin movimiento, bono perdido",
+      captured: "Comida! La ficha de {name} vuelve a casa",
+      barrier: "Barrera!", reachedMeta: "A la meta!", finishes: "{name} termina!",
+      threeDoublesSent: "Tres dobles: {name} manda una ficha a casa",
+      threeDoublesNone: "Tres dobles: {name} pierde el turno",
+      threeSixesSent: "Tres seises: {name} manda una ficha a casa",
+      threeSixesNone: "Tres seises: {name} pierde el turno",
+      needFive: "Necesitas un 5 para salir", exactCount: "Necesitas cuenta exacta para llegar al centro",
       barrierBlocks: "Una barrera lo bloquea", safetyBlocks: "Ese seguro esta ocupado", notAllowed: "Movimiento no permitido",
       gameOver: "Fin de la partida", finishOrder: "Orden de llegada:", winnerIs: "Gana {name}!",
+      boardLabel: "Tablero de Parchís", andWord: "y",
+      rolledDice: "Sacas {v}", diceLabel: "Dados: {v}",
+      pawnInNest: "Ficha {color} en casa", pawnOnSquare: "Ficha {color} en la casilla {n}",
+      pawnInHomeRow: "Ficha {color} en el pasillo, paso {n}", pawnAtCenter: "Ficha {color} en el centro",
+      pressEnterToMove: "{desc}. Pulsa Intro para mover.", moveByDie: "Mover {n}",
       amarillo: "Amarillo", azul: "Azul", rojo: "Rojo", verde: "Verde",
       langNameEs: "Espanol", langNameEn: "English"
     }
@@ -2159,17 +2234,19 @@
     dieEl.setAttribute("data-value", value || "");
   }
 
-  var HUD = {}, dom = {}, toastTimer = null, diceCount = 2;
+  var HUD = {}, dom = {}, toastTimer = null, liveTimer = null, diceCount = 2, dismissFn = null;
 
   HUD.build = function (containers, handlers) {
     dom = containers; HUD.handlers = handlers || {};
     var brand = elh("div", "pc-brand", dom.header);
-    brand.innerHTML = '<span class="pc-word">' + t("appName") + '</span>';
+    dom.title = elh("h1", "pc-word", brand, t("appName"));
     var menuBtn = elh("button", "pc-iconbtn", dom.header, "☰");
     menuBtn.setAttribute("aria-label", t("menu"));
     menuBtn.onclick = function () { if (HUD.handlers.onMenu) HUD.handlers.onMenu(); };
+    dom.menuBtn = menuBtn;
 
     var dice = elh("button", "pc-dice", dom.control);
+    dice.type = "button";
     dice.setAttribute("aria-label", t("rollHint"));
     dice.onclick = function () { if (HUD.handlers.onRollTap) HUD.handlers.onRollTap(); };
     dom.dice = dice;
@@ -2186,23 +2263,63 @@
     dom.choice = elh("div", "pc-choice", document.body);
     dom.choice.style.display = "none";
 
+    // Escape dismisses the die picker first, then a dismissible overlay.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (dom.choice && dom.choice.style.display !== "none") { HUD.closeChoice(); return; }
+      if (dismissFn && dom.overlay && dom.overlay.style.display !== "none") dismissFn();
+    });
+
     HUD.setBonus(null); HUD.setStreak(t("doublesLabel"), 0); HUD.configureDice(2); HUD.setDice([], false);
     return HUD;
+  };
+
+  // Re-label the chrome built once in HUD.build after a language change.
+  HUD.refreshStaticText = function () {
+    if (!dom.title) return;
+    dom.title.textContent = t("appName");
+    dom.menuBtn.setAttribute("aria-label", t("menu"));
+  };
+
+  // Screen-reader announcements. Queued rather than overwritten: a roll and its outcome
+  // land milliseconds apart ("Rolled 1 and 2", then "No legal move, turn passed"), and a
+  // plain overwrite would drop the first one. Clearing before each write makes an
+  // identical repeated string (rolling 3 and 4 twice) announce again.
+  var liveQueue = [];
+  function pumpLive() {
+    if (!liveQueue.length) { liveTimer = null; return; }
+    var msg = liveQueue.shift();
+    dom.live.textContent = "";
+    liveTimer = setTimeout(function () {
+      dom.live.textContent = msg;
+      liveTimer = setTimeout(function () { liveTimer = null; pumpLive(); }, 320);
+    }, 40);
+  }
+  HUD.announce = function (msg) {
+    if (!dom.live || !msg) return;
+    liveQueue.push(msg);
+    if (liveQueue.length > 4) liveQueue.shift(); // never let a fast AI run back up the queue
+    if (!liveTimer) pumpLive();
   };
 
   HUD.configureDice = function (count) { diceCount = count; dom.die2.style.display = count === 2 ? "grid" : "none"; };
 
   HUD.setDice = function (rollDice, pulsing) {
     rollDice = rollDice || [];
-    var dies = [dom.die1, dom.die2];
+    var dies = [dom.die1, dom.die2], shown = [];
     for (var i = 0; i < 2; i++) {
       if (i >= diceCount) continue;
       var rd = rollDice[i];
       paintDie(dies[i], rd ? rd.v : null);
       dies[i].classList.toggle("used", !!(rd && rd.used));
+      if (rd) shown.push(rd.v);
     }
     dom.dice.classList.toggle("pulse", !!pulsing);
+    // Kept focusable (never `disabled`) so a keyboard user does not lose their place.
+    dom.dice.setAttribute("aria-disabled", pulsing ? "false" : "true");
+    dom.dice.setAttribute("aria-label", shown.length ? t("diceLabel", { v: HUD.diceWords(shown) }) : t("rollHint"));
   };
+  HUD.diceWords = function (values) { return values.join(" " + t("andWord") + " "); };
   HUD.rollDiceAnim = function (dd, cb) {
     if (reduce()) { HUD.setDice(dd.map(function (v) { return { v: v, used: false }; }), false); if (cb) cb(); return; }
     dom.dice.classList.remove("pulse"); dom.die1.classList.remove("used"); dom.die2.classList.remove("used");
@@ -2214,11 +2331,16 @@
     }, 55);
   };
 
-  HUD.setTurn = function (color, name) {
+  // isYou: the seat about to play is the local human in a game against the computer.
+  // It gets a gold ring and a "Your turn" caption so the active player is unmistakable
+  // as the AI seats cycle past.
+  HUD.setTurn = function (color, name, isYou) {
     dom.chip.innerHTML = shapeMarkup(color, 22);
     var label = elh("span", "pc-chip-name", dom.chip, name);
     label.style.color = T().colors[color].base;
     dom.chip.style.borderColor = T().colors[color].base;
+    if (isYou) elh("span", "pc-chip-you", dom.chip, t("yourTurn"));
+    dom.chip.classList.toggle("you", !!isYou);
   };
   HUD.setBonus = function (amount) {
     if (amount == null) { dom.bonus.textContent = ""; dom.bonus.style.display = "none"; }
@@ -2238,6 +2360,7 @@
     el.textContent = msg;
     if (opts.badge) elh("span", "pc-toast-badge", el, opts.badge);
     void el.offsetWidth; el.classList.add("show");
+    HUD.announce(msg); // every toast is a game event worth speaking
     var ms = opts.ms || 1800;
     if (ms > 0) toastTimer = setTimeout(function () { el.classList.remove("show"); }, ms);
     return el;
@@ -2245,37 +2368,54 @@
   HUD.clearToast = function () { if (toastTimer) clearTimeout(toastTimer); dom.toast.innerHTML = ""; };
 
   // ---- move-choice popup (American: pick which die a piece uses) ------------
+  var choiceReturn = null;
   HUD.moveChoice = function (color, title, options, at, onPick) {
     dom.choice.innerHTML = ""; dom.choice.style.display = "flex";
+    choiceReturn = (document.activeElement && document.activeElement !== document.body) ? document.activeElement : null;
     elh("span", "pc-choice-title", dom.choice, title);
-    var row = elh("div", "pc-choice-row", dom.choice);
+    var row = elh("div", "pc-choice-row", dom.choice), first = null;
     options.forEach(function (o) {
       var chip = elh("button", "pc-choice-chip", row);
+      chip.type = "button";
       chip.style.borderColor = T().colors[color].base;
+      chip.setAttribute("aria-label", o.value ? t("moveByDie", { n: o.value }) : o.label);
       if (o.value) { var die = elh("span", "pc-die pc-die-sm", chip); paintDie(die, o.value); }
       else elh("span", "pc-choice-lbl", chip, o.label);
-      chip.onclick = function () { HUD.closeChoice(); onPick(o.move); };
+      chip.onclick = function () { choiceReturn = null; HUD.closeChoice(); onPick(o.move); };
+      if (!first) first = chip;
     });
+    // Focus the first option so the picker is operable from the keyboard. :focus-visible
+    // keeps the ring hidden for the mouse user who just tapped a piece.
+    if (first) first.focus({ preventScroll: true });
   };
-  HUD.closeChoice = function () { if (dom.choice) { dom.choice.style.display = "none"; dom.choice.innerHTML = ""; } };
+  HUD.closeChoice = function () {
+    if (!dom.choice) return;
+    dom.choice.style.display = "none"; dom.choice.innerHTML = "";
+    if (choiceReturn && choiceReturn.isConnected) choiceReturn.focus({ preventScroll: true });
+    choiceReturn = null;
+  };
 
   // ---- overlay infrastructure ---------------------------------------------
+  // opts.dismiss: what a click on the dimmed backdrop (or Escape) does. Screens with
+  // nothing behind them (title, game over) leave it unset and stay put.
   function overlay(title, builder, opts) {
     opts = opts || {};
     dom.overlay.innerHTML = ""; dom.overlay.style.display = "flex";
+    dismissFn = opts.dismiss || (opts.back || null);
+    dom.overlay.onclick = function (e) { if (e.target === dom.overlay && dismissFn) dismissFn(); };
     var card = elh("div", "pc-card" + (opts.full ? " pc-card-full" : ""), dom.overlay);
     if (title != null) {
       var head = elh("div", "pc-card-head", card);
       if (opts.back) { var b = elh("button", "pc-iconbtn", head, "‹"); b.setAttribute("aria-label", t("back")); b.onclick = opts.back; }
       elh("h2", null, head, title);
-      if (!opts.noClose && !opts.back) { var x = elh("button", "pc-iconbtn", head, "✕"); x.onclick = HUD.closeOverlay; }
+      if (!opts.noClose && !opts.back) { var x = elh("button", "pc-iconbtn", head, "✕"); x.setAttribute("aria-label", t("close")); x.onclick = HUD.closeOverlay; }
       else if (opts.back) { elh("span", "pc-head-spacer", head); }
     }
     var body = elh("div", "pc-card-body", card);
     builder(body, card);
     return card;
   }
-  HUD.closeOverlay = function () { dom.overlay.style.display = "none"; dom.overlay.innerHTML = ""; };
+  HUD.closeOverlay = function () { dismissFn = null; dom.overlay.onclick = null; dom.overlay.style.display = "none"; dom.overlay.innerHTML = ""; };
 
   function mkBtn(parent, label, onClick, kind) { var b = elh("button", "pc-btn" + (kind ? " " + kind : ""), parent, label); b.onclick = onClick; return b; }
 
@@ -2303,6 +2443,8 @@
       mode: pre.mode || "american",
       playerCount: pre.playerCount || 4,
       humanColor: pre.humanColor || "amarillo",
+      // Held apart from `names` so typing a name then switching color keeps the name.
+      humanName: pre.humanName || t("you"),
       names: {}, skills: {}
     };
     overlay(t("newGameTitle"), function (body) {
@@ -2331,9 +2473,29 @@
       COLORS.forEach(function (c) {
         var b = elh("button", "pc-swatch" + (sel.humanColor === c ? " on" : ""), cRow);
         b.innerHTML = shapeMarkup(c, 30); b.style.borderColor = sel.humanColor === c ? T().colors[c].base : "transparent";
+        b.setAttribute("aria-label", t(c));
         cBtns[c] = b;
-        b.onclick = function () { sel.humanColor = c; COLORS.forEach(function (k) { cBtns[k].classList.toggle("on", k === c); cBtns[k].style.borderColor = k === c ? T().colors[k].base : "transparent"; }); renderOpponents(); };
+        b.onclick = function () {
+          sel.humanColor = c;
+          COLORS.forEach(function (k) { cBtns[k].classList.toggle("on", k === c); cBtns[k].style.borderColor = k === c ? T().colors[k].base : "transparent"; });
+          if (youShape) youShape.innerHTML = shapeMarkup(c, 22);
+          renderOpponents();
+        };
       });
+
+      // Your own name gets its own section. It used to be the first row under the
+      // "Opponents" heading, which read as if you were one of the opponents.
+      var youShape = null;
+      if (vsMode === "cpu") {
+        elh("p", "pc-hint", body, t("yourNameHeading"));
+        var youRow = elh("div", "pc-opprow", body);
+        youShape = elh("span", "pc-rowshape", youRow);
+        youShape.innerHTML = shapeMarkup(sel.humanColor, 22);
+        var youInp = elh("input", "pc-oppname", youRow); youInp.type = "text";
+        youInp.value = sel.humanName;
+        youInp.setAttribute("aria-label", t("yourNameHeading"));
+        youInp.oninput = function () { sel.humanName = youInp.value; };
+      }
 
       // opponents / players section (reactive). For vs-computer, the opponent
       // settings are noisy, so tuck them behind a toggle that is collapsed by default.
@@ -2347,20 +2509,25 @@
         var setToggleLabel = function () {
           var collapsed = oppWrap.classList.contains("pc-collapsed");
           oppToggle.textContent = (collapsed ? "▸ " : "▾ ") + t("opponentsHeading");
+          oppToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
         };
         oppToggle.onclick = function () { oppWrap.classList.toggle("pc-collapsed"); setToggleLabel(); };
         setToggleLabel();
       }
 
+      // vs-computer: the human's seat is handled above, so only the AI seats land here.
       function renderOpponents() {
         oppWrap.innerHTML = "";
         var active = window.ParchisBoard.seatingFor(sel.humanColor, sel.playerCount).active;
         active.forEach(function (col, idx) {
           var isHuman = (vsMode === "local") || (col === sel.humanColor);
+          if (vsMode === "cpu" && isHuman) return;
           var row = elh("div", "pc-opprow", oppWrap);
-          row.innerHTML = shapeMarkup(col, 22);
+          var shape = elh("span", "pc-rowshape", row);
+          shape.innerHTML = shapeMarkup(col, 22);
           var inp = elh("input", "pc-oppname", row); inp.type = "text";
           inp.value = sel.names[col] || defaultName(col, idx, vsMode, sel.humanColor, pre);
+          inp.setAttribute("aria-label", t("nameLabel") + " " + t(col));
           inp.oninput = function () { sel.names[col] = inp.value; };
           sel.names[col] = inp.value;
           if (!isHuman) {
@@ -2378,12 +2545,14 @@
 
       mkBtn(body, t("play"), function () {
         HUD.closeOverlay();
-        onPlay({ mode: sel.mode, vsMode: vsMode, playerCount: sel.playerCount, humanColor: sel.humanColor, names: sel.names, skills: sel.skills });
+        var names = {};
+        Object.keys(sel.names).forEach(function (k) { names[k] = sel.names[k]; });
+        if (vsMode === "cpu") names[sel.humanColor] = sel.humanName; // the seat the human took
+        onPlay({ mode: sel.mode, vsMode: vsMode, playerCount: sel.playerCount, humanColor: sel.humanColor, names: names, skills: sel.skills });
       });
     }, { back: onBack });
   };
   function defaultName(col, idx, vsMode, humanColor, pre) {
-    if (col === humanColor && vsMode === "cpu") return pre.humanName || t("you");
     if (vsMode === "local") return (col === humanColor && pre.humanName) ? pre.humanName : t("playerN", { n: idx + 1 });
     if (pre.prefNames && pre.prefNames[col]) return pre.prefNames[col];
     var op = pre.profileOpponents && pre.profileOpponents[idx - 1];
@@ -2398,15 +2567,24 @@
   }
 
   // ---- in-game menu / settings / rules / game over ------------------------
+  // Resume is the primary action: the menu is usually opened by accident, and the back
+  // arrow alone was not a discoverable way out. Backdrop click and Escape also resume.
   HUD.openMenu = function (h) {
     overlay(t("menu"), function (body) {
-      mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); h.onNewGame(); });
+      mkBtn(body, t("resumeGame"), function () { HUD.closeOverlay(); });
+      mkBtn(body, t("newGame"), function () { HUD.closeOverlay(); h.onNewGame(); }, "ghost");
       mkBtn(body, t("settings"), function () { h.onSettings(); }, "ghost");
       mkBtn(body, t("rules"), function () { h.onRules(); }, "ghost");
-    }, { back: HUD.closeOverlay }); // back arrow returns to the game
+    }, { back: HUD.closeOverlay }); // back arrow also returns to the game
   };
 
   HUD.openSettings = function (snapshot, onSaved, back) {
+    var startTheme = snapshot.theme || "dark";
+    // Appearance previews live, so leaving without saving must roll the preview back.
+    function leave() {
+      document.body.classList.toggle("pc-light", startTheme === "light");
+      if (back) back(); else HUD.closeOverlay();
+    }
     overlay(t("settings"), function (body) {
       elh("p", "pc-hint", body, t("language"));
       var langWrap = elh("div", "pc-seatrow", body), lang = snapshot.lang || "en", langBtns = {};
@@ -2426,11 +2604,9 @@
           document.body.classList.toggle("pc-light", themeVal === "light"); // live preview
         };
       });
-      var soundRow = elh("label", "pc-field pc-switch", body);
-      elh("span", null, soundRow, t("sound"));
-      var snd = elh("input", null, soundRow); snd.type = "checkbox"; snd.checked = false; snd.disabled = true;
+      // No Sound row until sound exists: a permanently disabled checkbox reads as broken.
       mkBtn(body, t("save"), function () { onSaved({ lang: lang, theme: themeVal, sound: false }); if (back) back(); else HUD.closeOverlay(); });
-    }, back ? { back: back } : {});
+    }, { back: leave });
   };
 
   HUD.openRules = function (mode, back) {
@@ -2451,7 +2627,7 @@
         });
       }
       paint();
-    }, back ? { back: back } : {});
+    }, back ? { back: back } : { dismiss: HUD.closeOverlay });
   };
 
   HUD.gameover = function (order, names, onNew) {
@@ -2501,12 +2677,18 @@
   var PREFS_KEY = "parchis_r2_prefs";
   var PROFILE_KEY = "gamehub.profile";
 
+  // How long the rolled dice stay on screen after a roll that cannot be played, so the
+  // player can read what they rolled and why the turn moved on. Shorter for the AI so a
+  // run of computer turns does not crawl.
+  var NO_MOVE_HOLD_HUMAN = 1500, NO_MOVE_HOLD_AI = 950;
+
   var G = {
     state: null,
     ui: "idle",       // idle | title | awaitRoll | rolling | showingMoves | animating | gameover
     rollDice: [],     // [{v, used}] for the current roll (1 or 2 entries)
     moves: [],
-    cfg: null
+    cfg: null,
+    kbd: false        // last board interaction came from the keyboard (drives focus handoff)
   };
 
   function t(key, params) { return window.ParchisI18n.t(key, params); }
@@ -2520,6 +2702,12 @@
   function curColor() { return color(G.state.turn); }
   function isAI(idx) { return G.cfg.humans.indexOf(color(idx)) === -1; }
   function nameOf(c) { var n = G.cfg && G.cfg.names && G.cfg.names[c]; return (n && n.trim()) ? n : t(c); }
+  function colorOfPawn(state, id) {
+    for (var i = 0; i < state.players.length; i++) {
+      for (var j = 0; j < state.players[i].pawns.length; j++) if (state.players[i].pawns[j].id === id) return state.players[i].color;
+    }
+    return null;
+  }
   function boardNames() { var o = {}; COLORS.forEach(function (c) { o[c] = (G.cfg.active.indexOf(c) !== -1) ? nameOf(c) : ""; }); return o; }
 
   // ---- geometry helpers ----------------------------------------------------
@@ -2567,6 +2755,7 @@
     for (var k = 0; k < 2; k++) await tween(120, function (t) { g.setAttribute("transform", base + " scale(" + (1 + 0.25 * Math.sin(Math.PI * t)) + ")"); });
     g.setAttribute("transform", base);
   }
+  function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function markStart(g) { var p = curTranslate(g); g.__x0 = p.x; g.__y0 = p.y; }
   function curTranslate(g) { var m = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(g.getAttribute("transform") || ""); return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 0, y: 0 }; }
 
@@ -2577,6 +2766,7 @@
     if (!marksLayer) {
       marksLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
       marksLayer.setAttribute("class", "pc-marks");
+      marksLayer.setAttribute("aria-hidden", "true"); // purely visual hints
       marksLayer.setAttribute("transform", "translate(" + groupOffset() + "," + groupOffset() + ")");
       svg.appendChild(marksLayer);
     }
@@ -2598,19 +2788,50 @@
     ring.setAttribute("cx", c.x); ring.setAttribute("cy", c.y); ring.setAttribute("r", r); ring.setAttribute("class", cls);
     marksLayer.appendChild(ring);
   }
+  // A pawn's spoken position, using the number PRINTED on the board so a sighted helper
+  // and a screen-reader user are talking about the same square.
+  function describePawn(pawn, colorName) {
+    if (pawn.zone === "casa") return t("pawnInNest", { color: colorName });
+    if (pawn.zone === "track") return t("pawnOnSquare", { color: colorName, n: Board.printedNumber(pawn.pos) });
+    if (pawn.zone === "pasillo") return t("pawnInHomeRow", { color: colorName, n: pawn.pos });
+    return t("pawnAtCenter", { color: colorName });
+  }
+  function ownPawn(id) {
+    var pawns = G.state.players[G.state.turn].pawns;
+    for (var i = 0; i < pawns.length; i++) if (pawns[i].id === id) return pawns[i];
+    return null;
+  }
+  // Every pawn the human may move becomes a focusable, labelled button. render() rebuilds
+  // the pawn layer from scratch, so these attributes never need clearing.
+  function makeMovable(pawnId) {
+    var g = pawnEl(pawnId), pawn = ownPawn(pawnId);
+    if (!g || !pawn) return null;
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("role", "button");
+    g.setAttribute("aria-label", t("pressEnterToMove", { desc: describePawn(pawn, t(curColor())) }));
+    g.classList.add("pc-actionable");
+    return g;
+  }
   function highlightMoves(moves) {
     ensureMarks();
-    var place = Board.pawnPlacement(CO(), G.state), seen = {};
+    var place = Board.pawnPlacement(CO(), G.state), seen = {}, first = null, human = !isAI(G.state.turn);
     moves.forEach(function (m) {
-      if (!seen[m.pawnId]) { seen[m.pawnId] = true; if (place[m.pawnId]) addRing(place[m.pawnId], "pc-pawnmark", cell() * 0.5); }
+      if (!seen[m.pawnId]) {
+        seen[m.pawnId] = true;
+        if (place[m.pawnId]) addRing(place[m.pawnId], "pc-pawnmark", cell() * 0.5);
+        if (human) { var g = makeMovable(m.pawnId); if (g && !first) first = g; }
+      }
       var d = destCenter(m); if (d) addRing(d, "pc-destmark", cell() * 0.42);
     });
+    // Hand the keyboard player straight to a movable piece; the mouse player keeps focus.
+    if (first && human && G.kbd) first.focus({ preventScroll: true });
   }
   function clearHighlights() { clearMarks(); }
 
   // ---- HUD sync ------------------------------------------------------------
   function syncHud() {
-    HUD.setTurn(curColor(), nameOf(curColor()));
+    // "Your turn" only reads right when some seats are not yours (hot-seat: everyone is).
+    HUD.setTurn(curColor(), nameOf(curColor()), G.cfg.vsMode === "cpu" && !isAI(G.state.turn));
     if (G.cfg.mode === "spanish") HUD.setStreak(t("sixesLabel"), G.state.sixCount);
     else HUD.setStreak(t("doublesLabel"), G.state.doublesCount);
     HUD.setBonus(Engine.currentPhase(G.state) === "bonus" ? Engine.pendingBonus(G.state) : null);
@@ -2646,14 +2867,19 @@
   function afterRoll(dd) {
     G.rollDice = dd.map(function (v) { return { v: v, used: false }; });
     HUD.setDice(G.rollDice, false);
+    HUD.announce(t("rolledDice", { v: HUD.diceWords(dd) }));
     var res = Engine.applyRoll(G.state, dd);
     var pen = res.events.filter(function (e) { return e.type === "threeDoublesPenalty" || e.type === "threeSixesPenalty"; })[0];
     if (pen) {
-      HUD.toast(t(G.cfg.mode === "spanish" ? "threeSixes" : "threeDoubles"), { kind: "warn", ms: 1600 });
+      // The penalty ends the turn. Name what happened, and hold the dice long enough to
+      // read them (longer when there is no piece to fly home, since nothing else moves).
+      var stem = G.cfg.mode === "spanish" ? "threeSixes" : "threeDoubles";
+      HUD.toast(t(stem + (pen.pawnId ? "Sent" : "None"), { name: nameOf(curColor()) }), { kind: "warn", ms: 1900 });
       G.ui = "animating";
       var chain = Promise.resolve();
       if (pen.pawnId) { var g = pawnEl(pen.pawnId); if (g) { markStart(g); chain = flyHome(g, Board.pawnPlacement(CO(), res.state)[pen.pawnId]); } }
-      chain.then(function () { G.rollDice = []; commit(res.state); });
+      var hold = pen.pawnId ? 550 : 1200;
+      chain.then(function () { setTimeout(function () { G.rollDice = []; commit(res.state); }, hold); });
       return;
     }
     commit(res.state);
@@ -2680,17 +2906,31 @@
   }
   // The four skill tiers are implemented directly in ai.js (Phase R2-4).
   function aiLevel(c) { return (G.cfg.skills && G.cfg.skills[c]) || "intermediate"; }
+  // An unplayable roll used to blank the dice and jump to the next player within 700ms,
+  // which read as the turn being skipped for no reason. Leave the rolled dice on screen,
+  // say what happened, and only then resolve. A pending re-roll (Spanish 6 / American
+  // doubles) keeps the same player, so the message must not claim the turn passed.
   function handleNoMove() {
-    HUD.toast(t("noMove"), { ms: 1200 });
     G.ui = "animating";
-    setTimeout(function () { commit(Engine.resolveNoMove(G.state).state); }, 700);
+    var res = Engine.resolveNoMove(G.state);
+    var samePlayer = res.state.turn === G.state.turn && Engine.currentPhase(res.state) !== "gameover";
+    var hold = isAI(G.state.turn) ? NO_MOVE_HOLD_AI : NO_MOVE_HOLD_HUMAN;
+    HUD.toast(t(samePlayer ? "noMoveRollAgain" : "noMoveTurnPassed"), { kind: "warn", ms: hold });
+    setTimeout(function () { commit(res.state); }, hold);
   }
 
   function beginBonus() {
     var amount = Engine.pendingBonus(G.state);
     HUD.toast(t("bonusBanner", { n: amount }), { kind: "bonus", ms: 1400 });
     var moves = Engine.legalMoves(G.state);
-    if (moves.length === 0) { G.ui = "animating"; var res = Engine.resolveNoMove(G.state); HUD.toast(t("bonusLost"), { ms: 1300 }); setTimeout(function () { commit(res.state); }, 650); return; }
+    if (moves.length === 0) {
+      G.ui = "animating";
+      var res = Engine.resolveNoMove(G.state);
+      var hold = isAI(G.state.turn) ? NO_MOVE_HOLD_AI : NO_MOVE_HOLD_HUMAN;
+      HUD.toast(t("bonusLost"), { kind: "warn", ms: hold });
+      setTimeout(function () { commit(res.state); }, hold);
+      return;
+    }
     G.moves = moves;
     if (isAI(G.state.turn)) { aiPlay(moves); return; }
     G.ui = "showingMoves"; highlightMoves(moves);
@@ -2723,7 +2963,13 @@
     if (heroG) await hopThrough(heroG, pts, 72);
 
     var cap = events.filter(function (e) { return e.type === "captured"; })[0];
-    if (cap) { HUD.toast(t("captured"), { kind: "capture", badge: "+20", ms: 1600 }); var vg = pawnEl(cap.victimPawnId); if (vg) { markStart(vg); await flyHome(vg, placeNew[cap.victimPawnId]); } }
+    if (cap) {
+      var victim = colorOfPawn(oldState, cap.victimPawnId); // name the player who lost the piece
+      if (victim) HUD.toast(t("captured", { name: nameOf(victim) }), { kind: "capture", badge: "+20", ms: 1800 });
+      var vg = pawnEl(cap.victimPawnId);
+      if (vg) { markStart(vg); await flyHome(vg, placeNew[cap.victimPawnId]); }
+      await pause(450); // the +20 bonus banner lands next and would otherwise bury this
+    }
     if (events.some(function (e) { return e.type === "barrierFormed"; })) HUD.toast(t("barrier"), { kind: "barrier", ms: 1200 });
     if (events.some(function (e) { return e.type === "reachedMeta"; })) { HUD.toast(t("reachedMeta"), { kind: "meta", badge: "+10", ms: 1500 }); if (heroG) await celebrate(heroG); }
     if (events.some(function (e) { return e.type === "playerFinished"; })) HUD.toast(t("finishes", { name: nameOf(c) }), { kind: "meta", ms: 1700 });
@@ -2740,6 +2986,7 @@
     return { x: p.x - off, y: p.y - off };
   }
   function onBoardPointer(evt) {
+    G.kbd = false;
     if (G.ui !== "showingMoves" || isAI(G.state.turn)) return;
     var p = tapPoint(evt); if (!p) return; evt.preventDefault();
     var place = Board.pawnPlacement(CO(), G.state), TH = cell() * 1.5;
@@ -2856,7 +3103,12 @@
   }
 
   // ---- lifecycle -----------------------------------------------------------
-  function applyLang() { window.ParchisI18n.setLang(getLang()); }
+  function applyLang() { window.ParchisI18n.setLang(getLang()); refreshStaticText(); }
+  // Chrome that is built once (header title, board label) and so misses a language change.
+  function refreshStaticText() {
+    if (svg) svg.setAttribute("aria-label", t("boardLabel"));
+    if (HUD && HUD.refreshStaticText) HUD.refreshStaticText();
+  }
   function getLang() {
     var prefs = loadPrefs();
     return prefs.lang || (readProfile() && null) || "en"; // English default; saved pref wins
@@ -2922,6 +3174,7 @@
   function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), sound: false }; }
   function onSettingsSaved(s) {
     window.ParchisI18n.setLang(s.lang || "en");
+    refreshStaticText();
     var theme = s.theme === "light" ? "light" : "dark";
     applyTheme(theme);
     try { var p = loadPrefs(); p.lang = s.lang; p.theme = theme; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
@@ -2943,7 +3196,24 @@
   }
   function namesByColor() { var o = {}; G.cfg.active.forEach(function (c) { o[c] = nameOf(c); }); return o; }
 
-  function bindInput() { svg.addEventListener("pointerdown", onBoardPointer); }
+  // Enter / Space on a focused piece plays it, exactly as a tap does: one legal move
+  // applies immediately, several open the die picker (whose chips are real buttons).
+  function onBoardKey(evt) {
+    if (evt.key !== "Enter" && evt.key !== " " && evt.key !== "Spacebar") return;
+    if (G.ui !== "showingMoves" || isAI(G.state.turn)) return;
+    var host = evt.target && evt.target.closest ? evt.target.closest("[data-pawn-id]") : null;
+    if (!host) return;
+    var pawn = ownPawn(host.getAttribute("data-pawn-id"));
+    if (!pawn) return;
+    evt.preventDefault();
+    G.kbd = true;
+    selectPawn(pawn, Board.pawnPlacement(CO(), G.state));
+  }
+  function bindInput() {
+    svg.addEventListener("pointerdown", onBoardPointer);
+    svg.addEventListener("keydown", onBoardKey);
+    document.addEventListener("keydown", function (e) { if (e.key === "Tab") G.kbd = true; });
+  }
 
   var Game = {};
   Game.init = function (refs) {
@@ -2976,6 +3246,7 @@
     control: document.getElementById("control"),
     toast: document.getElementById("toast"),
     overlay: document.getElementById("overlay"),
+    live: document.getElementById("live"),
     svg: document.getElementById("board")
   });
 </script>
