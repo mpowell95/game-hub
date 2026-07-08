@@ -115,7 +115,7 @@ class Hub {
       <div class="hub">
         <header class="hub-top">
           <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
-          <h1 class="hub-top-title" data-role="title">Game Hub</h1>
+          <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
           <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
         </header>
         <main class="hub-main">
@@ -232,7 +232,7 @@ class Hub {
     this.el.game.hidden = true;
     this.el.grid.hidden = false;
     this.el.back.hidden = true;
-    this.el.title.textContent = 'Game Hub';
+    this.el.title.textContent = "Matt's Game Hub";
     this.el.profile.hidden = false;
   }
 

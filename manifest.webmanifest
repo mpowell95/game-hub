@@ -1,6 +1,6 @@
 {
-  "name": "Game Hub",
-  "short_name": "Game Hub",
+  "name": "Matt's Game Hub",
+  "short_name": "Matt's Game Hub",
   "description": "A small hub of self-contained games. No ads, fully offline.",
   "id": "./",
   "start_url": "./",
