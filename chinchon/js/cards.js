@@ -62,6 +62,16 @@ export function deckAssetUrl(id, name) {
 }
 
 const SUIT_LABEL = { oros: 'Oros', copas: 'Copas', espadas: 'Espadas', bastos: 'Bastos' };
+// Suit pip glyphs for the always-readable corner index (rank + suit) laid over
+// the card art. The rank is baked into each image, but shrinks to near-illegible
+// on a small or fanned-in card — this DOM overlay keeps every card readable.
+const SUIT_GLYPH = { oros: '●', copas: '♥', espadas: '♠', bastos: '♣' };
+function cornerIndex(card) {
+  const g = SUIT_GLYPH[card.suit] || '';
+  const chip = `<b class="cc-idx-r">${card.rank}</b><i class="cc-idx-s">${g}</i>`;
+  return `<span class="cc-idx cc-idx-tl cc-idx-${card.suit}">${chip}</span>`
+    + `<span class="cc-idx cc-idx-br cc-idx-${card.suit}">${chip}</span>`;
+}
 function cardLabel(card) {
   if (card.isJoker) return 'Comodín';
   const r = card.rank === 1 ? 'As' : card.rank === 10 ? 'Sota'
@@ -112,6 +122,6 @@ export function renderCardFace(card, opts = {}) {
   const drag = opts.draggable ? ` data-drag="${card.id}"` : '';
   const inner = card.isJoker
     ? '<span class="cc-joker-face"><span class="cc-joker-star">★</span><span class="cc-joker-txt">COMODÍN</span></span>'
-    : `<img class="cc-card-img" src="${faceSrc(card, deck)}" alt="${cardLabel(card)}" draggable="false">`;
+    : `<img class="cc-card-img" src="${faceSrc(card, deck)}" alt="${cardLabel(card)}" draggable="false">${cornerIndex(card)}`;
   return `<div class="${cls.join(' ')}"${act}${drag}>${inner}</div>`;
 }

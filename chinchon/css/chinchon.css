@@ -347,6 +347,27 @@
   object-fit: cover; display: block; pointer-events: none;
   user-select: none; -webkit-user-drag: none;
 }
+/* Corner index (rank + suit) overlaid on the art so every card stays legible
+   when small or fanned — it covers the tiny baked-in number with a bold, high
+   contrast chip. Sized in em, so it scales with the card. Hidden on mini
+   previews and card backs. */
+.cc-idx {
+  position: absolute; z-index: 2; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; line-height: 0.86;
+  padding: 0.1em 0.2em 0.16em; border-radius: 0.3em;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0.5px 2px rgba(20, 40, 80, 0.3);
+  font-weight: 800; letter-spacing: -0.03em;
+}
+.cc-idx-r { font-size: 1.35em; font-style: normal; }
+.cc-idx-s { font-size: 1em; font-style: normal; margin-top: 0.04em; }
+.cc-idx-tl { top: 0.16em; left: 0.18em; }
+.cc-idx-br { bottom: 0.16em; right: 0.18em; transform: rotate(180deg); }
+.cc-idx-oros    { color: #9a6f00; }
+.cc-idx-copas   { color: #c62828; }
+.cc-idx-espadas { color: #1747b0; }
+.cc-idx-bastos  { color: #2e7d32; }
+.cc-mini .cc-idx, .cc-back .cc-idx { display: none; }
 .cc-hand .cc-card { cursor: default; }
 .cc-actions + * .cc-card, .cc-hand .cc-card { cursor: pointer; }
 /* Highlight states — coloured ring hugging the rounded card */
