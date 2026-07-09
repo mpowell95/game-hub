@@ -34,17 +34,26 @@
 .cc-root [hidden] { display: none !important; }
 
 /* Header */
-.cc-header { text-align: center; margin-bottom: 12px; }
+.cc-header { position: relative; text-align: center; margin-bottom: 12px; }
 .cc-title { margin: 0; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; letter-spacing: -0.01em; }
+.cc-theme-btn {
+  position: absolute; top: 0; right: 0; appearance: none; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 12px; line-height: 1; font-size: 1.2rem;
+  border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
+  transition: transform 0.12s, background 0.15s;
+}
+.cc-theme-btn:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
+.cc-theme-btn:active { transform: translateY(1px); }
 
-/* Anita "joke edition" rebrand of the setup screen */
+/* "Ana Banana" joke-edition rebrand of the setup screen */
 .cc-title-anita { display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.05; }
 .cc-title-bonita {
-  font-family: "Brush Script MT", "Segoe Script", cursive;
-  font-size: 1.5em; font-weight: 700; letter-spacing: 0.01em;
-  background: linear-gradient(90deg, #d4a017, #e8552d, #d4a017);
+  font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", "Segoe Print", cursive;
+  font-size: 1.75em; font-weight: 800; letter-spacing: 0.01em;
+  background: linear-gradient(92deg, #e0a010, #ffd84d, #f7b500, #ffe680, #e0a010);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+  transform: rotate(-2.5deg);
 }
 
 /* Buttons (mirrors the hub's button system) */
@@ -229,8 +238,10 @@
   padding: 14px; background: linear-gradient(180deg, #1f7a52, #18603f);
   border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), 0 8px 22px rgba(13, 71, 50, 0.35);
 }
-.cc-piles { --cc-pile-fs: clamp(13px, 4.4vw, 20px); display: flex; gap: 20px; align-items: flex-end; }
+.cc-piles { --cc-pile-fs: clamp(15px, 5vw, 23px); display: flex; gap: 24px; align-items: flex-end; }
 .cc-piles .cc-card { --fs: var(--cc-pile-fs); }
+/* The deck (stock) back is drawn larger so it's easy to read across the table. */
+.cc-stock .cc-card { --fs: calc(var(--cc-pile-fs) * 1.28); }
 .cc-pile {
   appearance: none; border: 0; background: transparent; padding: 0; cursor: default;
   display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative;
@@ -509,4 +520,50 @@
   }
   .cc-chinchon-banner { animation: none; }
   .cc-card.is-new { animation: none; }
+  .cc-nudge { animation: none; }
+  .cc-confetti { display: none; }
 }
+
+/* ---- "Try another deck" bouncing nudge ---- */
+.cc-deck-btn-wrap { position: relative; }
+.cc-nudge {
+  position: absolute; top: -13px; right: 10px; z-index: 5; pointer-events: none;
+  background: var(--cc-accent); color: #fff; font-size: 0.72rem; font-weight: 800;
+  padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(200, 146, 15, 0.45);
+  animation: cc-bounce 1s ease-in-out infinite;
+}
+.cc-nudge::after {
+  content: ''; position: absolute; bottom: -5px; right: 20px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-top: 6px solid var(--cc-accent);
+}
+@keyframes cc-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+/* Gallery variant: sits above the "← Decks" button */
+.cc-gallery-back-wrap { position: relative; display: inline-flex; }
+.cc-nudge-left { top: -13px; left: 4px; right: auto; }
+.cc-nudge-left::after { left: 22px; right: auto; }
+
+/* ---- Confetti celebration (Ana Banana chosen) ---- */
+.cc-confetti { position: fixed; inset: 0; z-index: 200; pointer-events: none; overflow: hidden; }
+.cc-confetti i {
+  position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px; opacity: 0;
+  animation-name: cc-fall; animation-timing-function: cubic-bezier(0.3, 0.6, 0.6, 1); animation-fill-mode: forwards;
+}
+@keyframes cc-fall {
+  0%   { opacity: 1; transform: translate(0, -10px) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--drift, 0), 105vh) rotate(560deg); }
+}
+
+/* ---- Dark mode ---- */
+.cc-root.cc-dark {
+  --cc-surface: #1b2333;
+  --cc-surface-2: #2b3547;
+  --cc-ink: #e9eef6;
+  --cc-muted: #9db0c9;
+  background: #0e1420;
+  border-radius: 14px;
+}
+.cc-dark .cc-btn-ghost:hover:not(:disabled) { background: #333f54; }
+.cc-dark .cc-toast { background: #060c16; }
+.cc-dark .cc-pile-count { background: #060c16; }

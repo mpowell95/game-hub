@@ -15,7 +15,7 @@ import { loadProfile } from '../../js/profile-store.js';
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
 
-const AI_NAMES = ['Lucía', 'Mateo', 'Sofía'];
+const AI_NAMES = ['Lucía', 'Diego', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
 const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
 const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
@@ -138,7 +138,9 @@ class ChinchonUI {
     const savedNames = Array.isArray(saved.aiNames) ? saved.aiNames : [];
     for (let i = 0; i < 3; i++) {
       // Precedence: last-used in-game rename > shared profile opponent > built-in.
-      aiNames.push(savedNames[i] || (opps[i] && opps[i].name) || AI_NAMES[i]);
+      // 'Mateo' was a former built-in default; drop it so it can't stick around.
+      const savedName = savedNames[i] === 'Mateo' ? '' : savedNames[i];
+      aiNames.push(savedName || (opps[i] && opps[i].name) || AI_NAMES[i]);
       aiAvatars.push((opps[i] && opps[i].emoji) || AI_AVATARS[i]);
     }
     const profileDiff = (i) => (opps[i] && SKILL_TO_DIFF[opps[i].skill]) || 'normal';
@@ -153,13 +155,20 @@ class ChinchonUI {
         : [profileDiff(0), profileDiff(1), profileDiff(2)],
       deck: DECKS_BY_ID[saved.deck] ? saved.deck : DEFAULT_DECK_ID,
       rulesOpen: false,
+      dark: !!saved.dark,
+      deckNudgeSeen: !!saved.deckNudgeSeen,
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, config: s.config });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, deckNudgeSeen: s.deckNudgeSeen, config: s.config });
+  }
+
+  /** Apply the dark-mode class to the root (idempotent; safe before mount). */
+  _applyTheme() {
+    if (this.root) this.root.classList.toggle('cc-dark', !!(this._setup && this._setup.dark));
   }
 
   // --- DOM construction -----------------------------------------------------
@@ -201,6 +210,7 @@ class ChinchonUI {
 
     this.root.addEventListener('click', this._onClick);
     this.el.hand.addEventListener('pointerdown', this._onHandPointerDown);
+    this._applyTheme();
     this.showSetup();
   }
 
@@ -269,11 +279,12 @@ class ChinchonUI {
       ${toggleRow('aceOrosWild', 'Ace of Oros is wild')}
       ${toggleRow('showRemaining', 'Show remaining cards')}`;
 
-    // Themed title: the Anita deck rebrands the whole screen as a joke edition.
+    // Themed title: the Ana Banana deck rebrands the whole screen as a joke edition.
     const anita = s.deck === 'anita';
-    this.el.header.innerHTML = anita
-      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Anita Attack</span></h1>`
-      : `<h1 class="cc-title">Chinchón</h1>`;
+    const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="Toggle dark mode" title="${s.dark ? 'Light mode' : 'Dark mode'}">${s.dark ? '☀️' : '🌙'}</button>`;
+    this.el.header.innerHTML = (anita
+      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Ana Banana</span></h1>`
+      : `<h1 class="cc-title">Chinchón</h1>`) + themeBtn;
 
     this.el.setup.innerHTML = `
       <div class="cc-card-panel">
@@ -290,14 +301,17 @@ class ChinchonUI {
 
         <div class="cc-section">
           <span class="cc-label">Card deck</span>
-          <button class="cc-deck-btn" data-action="open-deck" title="Choose a deck">
-            <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'back')}" alt="">
-            <span class="cc-deck-meta">
-              <span class="cc-deck-name">${esc(DECKS_BY_ID[s.deck].name)}</span>
-              <span class="cc-deck-sub">Tap to change</span>
-            </span>
-            <span class="cc-deck-go">▸</span>
-          </button>
+          <div class="cc-deck-btn-wrap">
+            <button class="cc-deck-btn" data-action="open-deck" title="Choose a deck">
+              <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'back')}" alt="">
+              <span class="cc-deck-meta">
+                <span class="cc-deck-name">${esc(DECKS_BY_ID[s.deck].name)}</span>
+                <span class="cc-deck-sub">Tap to change</span>
+              </span>
+              <span class="cc-deck-go">▸</span>
+            </button>
+            ${s.deckNudgeSeen ? '' : `<span class="cc-nudge" aria-hidden="true">Try another deck! 👀</span>`}
+          </div>
         </div>
 
         <div class="cc-section">
@@ -307,9 +321,6 @@ class ChinchonUI {
         </div>
 
         <button class="cc-btn cc-btn-primary" data-action="start">Start game</button>
-        <p class="cc-credit">${s.deck === 'baraja-libre'
-          ? `Card art: Baraja Española · <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>`
-          : `Card art: ${esc(DECKS_BY_ID[s.deck].credit)}`}</p>
       </div>`;
   }
 
@@ -339,13 +350,14 @@ class ChinchonUI {
   }
 
   _openDeckPicker() {
+    // Opening the picker satisfies the "try another deck" nudge for good.
+    if (!this._setup.deckNudgeSeen) { this._setup.deckNudgeSeen = true; this._saveSetup(); }
     const opts = listDecks().map((d) => {
       const sel = d.id === this._setup.deck ? 'is-sel' : '';
       return `<div class="cc-deck-opt-wrap ${sel}">
         <button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
           <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
           <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
-          <span class="cc-deck-opt-credit">${esc(d.credit)}</span>
         </button>
         <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
       </div>`;
@@ -375,7 +387,10 @@ class ChinchonUI {
     }).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-gallery-sheet">
       <div class="cc-gallery-head">
-        <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
+        <span class="cc-gallery-back-wrap">
+          <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
+          <span class="cc-nudge cc-nudge-left" aria-hidden="true">See the other deck!</span>
+        </span>
         <h2 class="cc-sheet-title">${esc(d.name)}</h2>
         <button class="cc-btn cc-btn-ghost" data-action="close-deck">Done</button>
       </div>
@@ -976,6 +991,26 @@ class ChinchonUI {
     this._toastTimer = setTimeout(() => { if (this.el && this.el.toast) this.el.toast.hidden = true; }, 1600);
   }
 
+  /** Confetti burst — a short, self-contained celebration (no libraries). */
+  _celebrate() {
+    if (this._dead || !this.root) return;
+    const layer = document.createElement('div');
+    layer.className = 'cc-confetti';
+    const colors = ['#f7b500', '#ff5c4d', '#2878ff', '#22a84f', '#ffd84d', '#ff8ad0'];
+    for (let i = 0; i < 70; i++) {
+      const p = document.createElement('i');
+      const left = Math.round((i / 70) * 100);           // spread across, seed-free
+      const hue = colors[i % colors.length];
+      const delay = (i % 10) * 30;
+      const dur = 1100 + (i % 7) * 130;
+      const drift = ((i % 11) - 5) * 14;
+      p.style.cssText = `left:${left}%;background:${hue};animation-delay:${delay}ms;animation-duration:${dur}ms;--drift:${drift}px`;
+      layer.appendChild(p);
+    }
+    this.root.appendChild(layer);
+    setTimeout(() => layer.remove(), 2400);
+  }
+
   // --- input ----------------------------------------------------------------
 
   onClick(e) {
@@ -990,9 +1025,21 @@ class ChinchonUI {
       case 'pick-avatar': this._setup.humanAvatar = a.dataset.v; this._saveSetup(); this._closeAvatarPicker(); this.renderSetup(); break;
       case 'close-avatar': this._closeAvatarPicker(); break;
       case 'open-deck': this.syncSetupInputs(); this._openDeckPicker(); break;
-      case 'pick-deck':
+      case 'pick-deck': {
+        const wasOther = this._setup.deck !== a.dataset.v;
         this._setup.deck = a.dataset.v; setDeck(a.dataset.v); preloadDeck();
-        this._saveSetup(); this._closeDeckPicker(); this.renderSetup(); break;
+        this._saveSetup(); this._closeDeckPicker(); this.renderSetup();
+        // Reward picking the Ana Banana deck with a little celebration.
+        if (a.dataset.v === 'anita' && wasOther) { this._celebrate(); this.toast('Nice choice! 🎉'); }
+        break;
+      }
+      case 'toggle-theme':
+        if (!this.el.setup.hidden) this.syncSetupInputs();
+        this._setup.dark = !this._setup.dark;
+        this._applyTheme(); this._saveSetup();
+        if (!this.el.menu.hidden) this._renderMenu();
+        if (!this.el.setup.hidden) this.renderSetup();
+        break;
       case 'close-deck': this._closeCardZoom(); this._closeDeckPicker(); break;
       case 'view-deck': this._openDeckGallery(a.dataset.v); break;
       case 'back-to-decks': this._openDeckPicker(); break;
@@ -1050,6 +1097,7 @@ class ChinchonUI {
     this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
       <div class="cc-sheet cc-menu-sheet">
         <h2 class="cc-sheet-title">Menu</h2>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${this._setup.dark ? '☀️ Light mode' : '🌙 Dark mode'}</button>
         ${btn('newgame', 'New game (same settings)')}
         ${btn('quit', 'Quit to setup')}
         <button class="cc-btn cc-btn-primary" data-action="menu-resume">Resume game</button>

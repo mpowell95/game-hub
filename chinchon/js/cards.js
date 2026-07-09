@@ -27,7 +27,7 @@ const DECKS = {
   },
   'anita': {
     id: 'anita',
-    name: 'Anita',
+    name: 'Ana Banana',
     ext: 'webp',
     hasJoker: false, // no joker face; styled fallback
     base: 'baraja-libre', // fall back here for any face this deck doesn't ship…
