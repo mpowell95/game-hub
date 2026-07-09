@@ -727,7 +727,8 @@ class ChinchonUI {
       return `<button class="cc-btn cc-btn-primary" data-action="close-yes">Close round ✓</button>
               <button class="cc-btn cc-btn-ghost" data-action="close-no">Keep playing</button>`;
     }
-    if (this._pending.kind === 'draw') return '<span class="cc-hint">Tap the deck or the discard pile.</span>';
+    // Draw phase intentionally shows no text — the glowing name chip and the
+    // highlighted piles already signal "your turn; tap a pile".
     return '';
   }
 
