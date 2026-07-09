@@ -359,7 +359,10 @@ class ChinchonUI {
           <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
           <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
         </button>
-        <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
+        <span class="cc-deck-view-wrap">
+          <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
+          ${d.base ? `<span class="cc-nudge cc-nudge-view" aria-hidden="true">See all the cards! 👀</span>` : ''}
+        </span>
       </div>`;
     }).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-deck-sheet">
@@ -387,10 +390,7 @@ class ChinchonUI {
     }).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-gallery-sheet">
       <div class="cc-gallery-head">
-        <span class="cc-gallery-back-wrap">
-          <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
-          <span class="cc-nudge cc-nudge-left" aria-hidden="true">See the other deck!</span>
-        </span>
+        <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
         <h2 class="cc-sheet-title">${esc(d.name)}</h2>
         <button class="cc-btn cc-btn-ghost" data-action="close-deck">Done</button>
       </div>
@@ -631,7 +631,7 @@ class ChinchonUI {
   statusText() {
     if (this._pending) {
       // No draw prompt text: the glowing name chip + highlighted piles say it.
-      if (this._pending.kind === 'discard') return this._selectedCardId ? 'Discard the selected card, or pick another.' : 'Choose a card to discard.';
+      if (this._pending.kind === 'discard') return '';
       if (this._pending.kind === 'close') return 'You can close! Close the round, or keep playing.';
     }
     const ap = this.activePlayerId != null ? this.game.byId(this.activePlayerId) : null;

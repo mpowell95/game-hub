@@ -53,7 +53,6 @@
   background: linear-gradient(92deg, #e0a010, #ffd84d, #f7b500, #ffe680, #e0a010);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
-  transform: rotate(-2.5deg);
 }
 
 /* Buttons (mirrors the hub's button system) */
@@ -241,7 +240,6 @@
 .cc-piles { --cc-pile-fs: clamp(15px, 5vw, 23px); display: flex; gap: 24px; align-items: flex-end; }
 .cc-piles .cc-card { --fs: var(--cc-pile-fs); }
 /* The deck (stock) back is drawn larger so it's easy to read across the table. */
-.cc-stock .cc-card { --fs: calc(var(--cc-pile-fs) * 1.28); }
 .cc-pile {
   appearance: none; border: 0; background: transparent; padding: 0; cursor: default;
   display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative;
@@ -450,7 +448,13 @@
 .cc-section { display: flex; flex-direction: column; gap: 10px; }
 .cc-player-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cc-av { font-size: 1.5rem; line-height: 1; }
-.cc-av-btn { appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface); border-radius: 10px; padding: 4px 8px; cursor: pointer; }
+/* Human (button) and AI (span) avatars share one footprint so the name
+   inputs beside them line up column-straight down the players list. */
+.cc-player-row > .cc-av, .cc-player-row > .cc-av-btn {
+  flex: 0 0 auto; width: 46px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cc-av-btn { appearance: none; border: 1px solid var(--cc-surface-2); background: var(--cc-surface); border-radius: 10px; padding: 0; cursor: pointer; }
 .cc-av-btn:hover { background: var(--cc-surface-2); }
 .cc-player-name { font-weight: 700; min-width: 54px; }
 .cc-name-input {
@@ -539,10 +543,12 @@
   border-top: 6px solid var(--cc-accent);
 }
 @keyframes cc-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-/* Gallery variant: sits above the "← Decks" button */
-.cc-gallery-back-wrap { position: relative; display: inline-flex; }
-.cc-nudge-left { top: -13px; left: 4px; right: auto; }
-.cc-nudge-left::after { left: 22px; right: auto; }
+/* "View all cards" variant: bounces above the view button (custom decks only) */
+.cc-deck-view-wrap { position: relative; display: block; }
+.cc-nudge-view { top: -15px; right: 50%; transform: translateX(50%); left: auto; }
+.cc-nudge-view::after { right: 50%; transform: translateX(50%); }
+@keyframes cc-bounce-c { 0%, 100% { transform: translateX(50%) translateY(0); } 50% { transform: translateX(50%) translateY(-6px); } }
+.cc-nudge-view { animation-name: cc-bounce-c; }
 
 /* ---- Confetti celebration (Ana Banana chosen) ---- */
 .cc-confetti { position: fixed; inset: 0; z-index: 200; pointer-events: none; overflow: hidden; }
