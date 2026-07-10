@@ -20,6 +20,7 @@ function empty() {
     selfie: { status: 'none', submissionId: null, reason: null, rejects: 0 },
     unlockSeen: false,              // full-screen unlock announcement played
     areaUnlocked: false,            // personal question answered on this device
+    adminUnlocked: false,           // Mission Control PIN entered on this device
     updatedAt: null,
   };
 }
@@ -40,6 +41,7 @@ function normalize(o) {
   }
   e.unlockSeen = !!o.unlockSeen;
   e.areaUnlocked = !!o.areaUnlocked;
+  e.adminUnlocked = !!o.adminUnlocked;
   e.updatedAt = typeof o.updatedAt === 'string' ? o.updatedAt : null;
   return e;
 }
@@ -82,6 +84,7 @@ export function redeemSlot(slot) {
 
 export function markUnlockSeen() { return updateChallenge((st) => { st.unlockSeen = true; }); }
 export function unlockArea() { return updateChallenge((st) => { st.areaUnlocked = true; }); }
+export function unlockAdmin() { return updateChallenge((st) => { st.adminUnlocked = true; }); }
 export function setSelfie(patch) { return updateChallenge((st) => { Object.assign(st.selfie, patch); }); }
 
 /** Pieces earned so far (0..5), by redemption order. */
@@ -153,5 +156,5 @@ export function mergeRemote(remote) {
 
 export default {
   loadChallenge, saveChallenge, updateChallenge, recordWin, redeemSlot,
-  markUnlockSeen, unlockArea, setSelfie, pieceCount, remoteView, mergeRemote,
+  markUnlockSeen, unlockArea, unlockAdmin, setSelfie, pieceCount, remoteView, mergeRemote,
 };

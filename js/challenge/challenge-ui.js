@@ -11,7 +11,7 @@ import { loadProfile } from '../profile-store.js';
 import { ensureChallengeCss, playUnlock } from './unlock.js';
 import * as S from './secrets.js';
 import {
-  loadChallenge, redeemSlot, unlockArea, markUnlockSeen, setSelfie,
+  loadChallenge, redeemSlot, unlockArea, unlockAdmin, markUnlockSeen, setSelfie,
   remoteView, mergeRemote,
 } from './challenge-store.js';
 import { isAdmin, checkAnswer, checkPin, codeFor, slotForCode } from './hooks.js';
@@ -62,6 +62,7 @@ class ChallengeUI {
     this._onSubmit = (e) => this.onSubmit(e);
     this._onChange = (e) => this.onChange(e);
     this.admin = isAdmin(this.name);
+    this._pinOk = this.admin && loadChallenge().adminUnlocked === true;   // persisted: enter PIN once per device
     this._pendingSelfie = null;   // compressed data URL awaiting submit
     this._progressUnsub = null;   // Ana's live sync listener
     this._adminUnsubs = [];       // Mission Control listeners
@@ -446,9 +447,10 @@ class ChallengeUI {
       statusEl.innerHTML = amAdmin
         ? `<p class="ch-msg is-ok">Admin verified. You have Mission Control.</p>`
         : `<p class="ch-msg is-bad">Not yet an admin on this device.</p>
-           <p class="ch-hint">One-time step: in the Firebase console open Realtime Database and add
-             <code>admins/${esc(myUid)}: true</code>, then reload. Until then, selfie review and flight
-             edits are blocked by the security rules.</p>
+           <p class="ch-hint">One-time step. In the Firebase console open Realtime Database and click the
+             <b>Data</b> tab (not Rules). Under a node called <code>admins</code>, add a child whose KEY is
+             the ID below and whose VALUE is <code>true</code>, then reload this page. This tells Firebase
+             this device is the admin; until then selfie review and flight edits are blocked by the rules.</p>
            <div class="ch-adm-uid"><code data-role="uid">${esc(myUid)}</code>
              <button type="button" class="ch-btn ch-btn-ghost" data-role="copy-uid">Copy ID</button></div>`;
     }
@@ -552,7 +554,7 @@ class ChallengeUI {
 
     if (role === 'pin-form') {
       const val = form.querySelector('#ch-pin').value;
-      if (checkPin(val)) { this._pinOk = true; this.render(); }
+      if (checkPin(val)) { unlockAdmin(); this._pinOk = true; this.render(); }   // persist: no re-prompt on this device
       else this.setMsg('[data-role="pin-msg"]', 'Access denied.', false);
       return;
     }
