@@ -6,7 +6,7 @@
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v21';
+const CACHE = 'business-deal-hub-v22';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.
@@ -18,6 +18,7 @@ const ASSETS = [
   './js/deck.js',
   './js/game.js',
   './js/ai.js',
+  './js/challenge-hook.js',
   './js/ui.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

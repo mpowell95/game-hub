@@ -11,6 +11,9 @@ import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
+import { recordWin } from '../../js/challenge/challenge-store.js';
+import { showCodeReveal } from '../../js/challenge/reveal.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
@@ -528,6 +531,7 @@ class ChinchonUI {
         this._commitStats();
         this._chartView = false;
         await this.showMatchModal();
+        this._onChallengeMatchEnd(); // hidden challenge: reveal the code after the match modal
         break;
     }
   }
@@ -543,6 +547,24 @@ class ChinchonUI {
     this.stats.closes += this._matchCloses || 0;
     this.stats.chinchons += this._matchChinchons || 0;
     saveJSON(STORE_STATS, this.stats);
+  }
+
+  /** Hidden challenge: on a qualifying human match win (exactly 1 opponent at Average or
+   *  higher), record the win and reveal the code. Inert unless the profile name matches. */
+  _onChallengeMatchEnd() {
+    try {
+      const prof = loadProfile();
+      if (!isChallengeActive(prof && prof.name)) return;
+      const human = this._human();
+      const humanWon = !!(this.game.winner && this.game.winner.id === human.id);
+      const opps = this.game.players.filter((p) => !p.isHuman);
+      const aiDifficulty = (opps[0] && opps[0].difficulty)
+        || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || null;
+      if (qualifyChinchon({ humanWon, opponentCount: opps.length, aiDifficulty })) {
+        recordWin('chinchon');
+        showCodeReveal(codeFor('chinchon'), 'Chinchón');
+      }
+    } catch { /* never break the game */ }
   }
 
   // --- rendering ------------------------------------------------------------

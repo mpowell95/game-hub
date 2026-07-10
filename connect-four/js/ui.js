@@ -12,6 +12,9 @@ import { Game, WIN, DRAW } from './game.js';
 import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { isChallengeActive, cfForcedDifficulty, cfInEasyPhase, codeFor } from '../../js/challenge/hooks.js';
+import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
+import { showCodeReveal } from '../../js/challenge/reveal.js';
 
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
@@ -66,6 +69,9 @@ class ConnectFourUI {
     this.humanEmoji = (profile && profile.emoji) || '';
     this.oppName = (opp && opp.name) || 'Computer';
     this.oppEmoji = (opp && opp.emoji) || '';
+
+    // Hidden challenge: active only for the trigger profile name (inert otherwise).
+    this.challengeActive = isChallengeActive(this.humanName);
 
     // Runtime state.
     this.game = null;
@@ -124,6 +130,14 @@ class ConnectFourUI {
     });
   }
 
+  /** The difficulty the AI actually plays. Normally this.difficulty; during the hidden
+   *  challenge it is silently forced (Expert while hazing, then Easy) with the visible
+   *  label left untouched, so the switch is invisible. */
+  effectiveDifficulty() {
+    if (!this.challengeActive) return this.difficulty;
+    try { return cfForcedDifficulty(loadChallenge().cf.completed); } catch { return this.difficulty; }
+  }
+
   /** Resolve to the AI's chosen column, via worker if possible, else inline. */
   async requestAIMove() {
     const params = {
@@ -131,7 +145,7 @@ class ConnectFourUI {
       kind: 'move',
       history: this.game.history.slice(),
       firstPlayer: this.game.firstPlayer,
-      difficulty: this.difficulty,
+      difficulty: this.effectiveDifficulty(),
       budgetMs: EXPERT_BUDGET_MS,
     };
     if (this.worker) {
@@ -316,10 +330,21 @@ class ConnectFourUI {
     this.el.board.addEventListener('pointerleave', this._onBoardLeave);
     document.addEventListener('keydown', this._onKeyDown);
 
+    if (this.challengeActive) this.applyChallengeLockdown();
     this.syncSegmented(this.el.difficulty, this.difficulty);
     this.syncSegmented(this.el.first, this.humanFirst ? 'you' : 'ai');
     this.buildBoardCells();
     this.showSetup();
+  }
+
+  /** Hidden challenge lockdown: hide the best-moves assist and block undo so the hazing
+   *  actually bites. The visible difficulty label is deliberately left untouched. */
+  applyChallengeLockdown() {
+    this.showBestMoves = false;
+    const sw = this.el.hintToggle.closest('.cf-switch'); if (sw) sw.hidden = true;
+    const note = this.el.menuPanel.querySelector('.cf-menu-note'); if (note) note.hidden = true;
+    this.el.undo.hidden = true;
+    const mu = this.el.menuPanel.querySelector('[data-role="menu-undo"]'); if (mu) mu.hidden = true;
   }
 
   syncSegmented(group, value) {
@@ -490,7 +515,7 @@ class ConnectFourUI {
       col = await this.computeInline({
         history: this.game.history.slice(),
         firstPlayer: this.game.firstPlayer,
-        difficulty: this.difficulty,
+        difficulty: this.effectiveDifficulty(),
         budgetMs: EXPERT_BUDGET_MS,
       });
     }
@@ -628,13 +653,30 @@ class ConnectFourUI {
     this.updateUndoState(); // can still take back the final move
     // Bring the Rematch / Change-settings actions into view on tall layouts.
     this.el.result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    if (this.challengeActive) {
+      this.onChallengeGameEnd(this.game.status === WIN && this.game.winner === this.humanPlayer);
+    }
+  }
+
+  /** Count the completed game for the hazing and, once past it, award the Connect Four
+   *  code on a genuine win. Only difficulty was ever forced; this win is real. */
+  onChallengeGameEnd(youWon) {
+    try {
+      const before = loadChallenge().cf.completed;
+      updateChallenge((st) => { st.cf.completed = (st.cf.completed | 0) + 1; });
+      if (youWon && cfInEasyPhase(before)) {
+        recordWin('connect4');
+        showCodeReveal(codeFor('connect4'), 'Connect Four');
+      }
+    } catch { /* never break the game */ }
   }
 
   // --- Undo -----------------------------------------------------------------
 
   /** True if there's a human move to take back (and we're not mid-think). */
   canUndo() {
-    return !!this.game && !this.busy && this.humanHasMoved;
+    return !this.challengeActive && !!this.game && !this.busy && this.humanHasMoved;
   }
 
   /**

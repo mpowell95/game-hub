@@ -1564,6 +1564,15 @@
       // The board's bottom "New Game" sits under this overlay (dead tap); hide it
       // so "Play Again" is the single, working restart.
       document.getElementById('app').classList.add('game-over');
+
+      // Hidden challenge: on a qualifying human win (2+ AI at Normal or higher), record
+      // it and reveal the code. Inert unless the profile name matches the trigger.
+      try {
+        if (window.__bdChallenge && window.__bdChallenge.active() && w.id === 0
+            && (this._lastNumAI | 0) >= 2 && (this.difficulty === 'normal' || this.difficulty === 'hard')) {
+          window.__bdChallenge.recordWinAndReveal();
+        }
+      } catch (e) { /* never break the game */ }
     }
 
     /* ---- stats (persisted wins/losses) --------------------------------- */

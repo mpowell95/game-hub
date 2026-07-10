@@ -7,6 +7,8 @@
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
 import { loadProfile } from './profile-store.js';
+import { isChallengeActive, isAdmin, loadChallenge } from './challenge/hooks.js';
+import { markUnlockSeen } from './challenge/challenge-store.js';
 
 const GAMES = [
   {
@@ -102,6 +104,37 @@ const GAMES = [
   },
 ];
 
+// Hidden entries appended only when the profile name matches (see render()). The
+// challenge card is Ana's mission; the admin card is Matt's Mission Control. Both
+// mount the same module, which decides which face to show from the profile name.
+const CHALLENGE_CARD = {
+  id: 'challenge',
+  title: 'Challenge',
+  blurb: 'A classified mission awaits.',
+  module: './challenge/challenge-ui.js',
+  accent: '#f2b705',
+  art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+          <rect width="120" height="120" fill="#12151c"/>
+          <circle cx="60" cy="55" r="30" fill="none" stroke="#f2b705" stroke-width="6"/>
+          <text x="60" y="72" font-size="46" font-weight="900" text-anchor="middle" fill="#f2b705" font-family="system-ui, -apple-system, sans-serif">?</text>
+          <g fill="#f2b705"><circle cx="22" cy="26" r="3"/><circle cx="99" cy="30" r="2.5"/><circle cx="28" cy="98" r="2.5"/><circle cx="96" cy="92" r="3"/></g>
+        </svg>`,
+};
+const ADMIN_CARD = {
+  id: 'challenge',
+  title: 'Mission Control',
+  blurb: 'Commander access only.',
+  module: './challenge/challenge-ui.js',
+  accent: '#178a7a',
+  art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+          <rect width="120" height="120" fill="#0e1b19"/>
+          <circle cx="60" cy="60" r="34" fill="none" stroke="#178a7a" stroke-width="4"/>
+          <circle cx="60" cy="60" r="20" fill="none" stroke="#178a7a" stroke-width="3"/>
+          <line x1="60" y1="60" x2="90" y2="42" stroke="#f2b705" stroke-width="4"/>
+          <circle cx="60" cy="60" r="5" fill="#f2b705"/>
+        </svg>`,
+};
+
 class Hub {
   constructor(root) {
     this.root = root;
@@ -111,6 +144,11 @@ class Hub {
   }
 
   render() {
+    // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
+    const prof = loadProfile();
+    const active = !!(prof && isChallengeActive(prof.name));
+    const admin = !active && !!(prof && isAdmin(prof.name));
+    this.games = GAMES.concat(active ? [CHALLENGE_CARD] : admin ? [ADMIN_CARD] : []);
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -120,7 +158,7 @@ class Hub {
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
-            ${GAMES.map((g) => this.cardHTML(g)).join('')}
+            ${this.games.map((g) => this.cardHTML(g)).join('')}
           </section>
           <section class="hub-game" data-role="game" hidden></section>
         </main>
@@ -146,7 +184,6 @@ class Hub {
     };
 
     // Reflect any saved profile in the header entry (textContent keeps names XSS-safe).
-    const prof = loadProfile();
     this.el.profile.textContent = prof && prof.name ? `👤 ${prof.name}` : 'Set up your profile';
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
@@ -164,6 +201,18 @@ class Hub {
       if (card.dataset.comingSoon === 'true') return;
       this.launch(card.dataset.id);                // in-hub module: mount in place
     });
+
+    this.maybePlayUnlock(active);
+  }
+
+  /** On first activation for the challenge profile, play the unlock announcement once. */
+  maybePlayUnlock(active) {
+    if (!active) return;
+    try {
+      if (loadChallenge().unlockSeen) return;
+      markUnlockSeen();
+      import('./challenge/unlock.js').then((m) => m.playUnlock()).catch(() => {});
+    } catch { /* never break the hub */ }
   }
 
   cardHTML(g) {
@@ -185,7 +234,7 @@ class Hub {
   }
 
   async launch(id) {
-    const game = GAMES.find((g) => g.id === id);
+    const game = this.games.find((g) => g.id === id);
     if (!game || game.comingSoon) return;
 
     // Tear down any previously mounted game first.

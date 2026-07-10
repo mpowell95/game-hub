@@ -1,0 +1,192 @@
+/* challenge.css - scoped styles for the hidden challenge.
+   Every selector is under .ch-root or .ch-unlock so it never leaks into the hub or a
+   game. Dossier aesthetic: dark panels, gold accent. Colorblind-safe: every status
+   uses a glyph or label plus color, never color alone. No em dashes. */
+
+.ch-root {
+  --ch-bg: #12151c;
+  --ch-panel: #1b1f2a;
+  --ch-line: #2c3340;
+  --ch-ink: #eef2f8;
+  --ch-muted: #9aa7bd;
+  --ch-gold: #f2b705;
+  --ch-teal: #178a7a;
+  --ch-red: #e0532f;
+  color: var(--ch-ink);
+  background: var(--ch-bg);
+  min-height: 100%;
+  padding: 12px 14px 40px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  border-radius: 16px;
+}
+
+.ch-head { display: flex; align-items: center; gap: 12px; margin: 6px 2px 14px; }
+.ch-title { margin: 0; font-size: 1.35rem; font-weight: 900; letter-spacing: 0.01em; color: var(--ch-gold); }
+.ch-h2 { margin: 0 0 8px; font-size: 1.02rem; font-weight: 800; }
+.ch-h2 .ch-count { float: right; font-weight: 800; color: var(--ch-gold); }
+.ch-lead { margin: 0 0 6px; line-height: 1.5; color: var(--ch-ink); font-size: 0.95rem; }
+.ch-hint { margin: 6px 0 0; line-height: 1.5; color: var(--ch-muted); font-size: 0.86rem; }
+
+.ch-card {
+  background: var(--ch-panel);
+  border: 1px solid var(--ch-line);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 0 auto 14px;
+  max-width: 620px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.ch-form { display: flex; flex-direction: column; gap: 10px; }
+.ch-form-row { flex-direction: row; }
+.ch-label { font-weight: 700; font-size: 0.9rem; }
+.ch-input {
+  font: inherit; flex: 1; padding: 11px 13px; border-radius: 10px;
+  border: 1px solid var(--ch-line); background: #0e1117; color: var(--ch-ink);
+}
+.ch-input:focus { outline: 2px solid var(--ch-gold); outline-offset: 1px; }
+
+.ch-btn {
+  font: inherit; font-weight: 800; border: 0; border-radius: 11px; padding: 11px 16px;
+  cursor: pointer; touch-action: manipulation; white-space: nowrap;
+}
+.ch-btn-go { background: var(--ch-gold); color: #2a2200; }
+.ch-btn-go:hover { filter: brightness(1.06); }
+.ch-btn-ghost { margin-left: auto; background: transparent; color: var(--ch-ink); border: 1px solid var(--ch-line); font-weight: 700; }
+.ch-btn-ghost:hover { background: #232937; }
+.ch-btn-finale { width: 100%; margin-top: 12px; background: var(--ch-teal); color: #fff; font-size: 1.05rem; padding: 14px; }
+.ch-btn-finale:disabled { background: #2c3340; color: var(--ch-muted); cursor: default; }
+
+.ch-msg { margin: 4px 0 0; font-size: 0.88rem; font-weight: 700; min-height: 1.1em; }
+.ch-msg.is-ok::before { content: "\2713 "; }   /* check */
+.ch-msg.is-bad::before { content: "\2715 "; }   /* cross */
+.ch-msg.is-ok { color: #6fd3bf; }
+.ch-msg.is-bad { color: #ff9d84; }
+
+.ch-list { margin: 0; padding-left: 18px; line-height: 1.7; }
+
+.ch-vault { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ch-vault-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px dashed var(--ch-line); border-radius: 10px; background: #0e1117;
+}
+.ch-vault-item.is-redeemed { border-style: solid; opacity: 0.85; }
+.ch-vault-code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-weight: 800; letter-spacing: 0.06em; color: var(--ch-gold); }
+.ch-vault-tag { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ch-vault-item.is-redeemed .ch-vault-tag::before { content: "\2713 "; }
+
+.ch-gallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.ch-piece { position: relative; aspect-ratio: 3 / 4; border-radius: 8px; display: grid; place-items: center; }
+.ch-piece.is-off { background: #0e1117; border: 1px dashed var(--ch-line); }
+.ch-piece.is-on { background: linear-gradient(135deg, #3a2f05, #f2b705); border: 1px solid var(--ch-gold); }
+.ch-piece-mark { font-weight: 900; color: #2a2200; font-size: 1.1rem; }
+.ch-piece-lock { color: var(--ch-muted); font-weight: 900; font-size: 1.1rem; }
+
+/* Full-screen unlock announcement */
+.ch-unlock { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
+.ch-unlock.is-in { opacity: 1; }
+.ch-unlock.is-leaving { opacity: 0; animation: ch-unlock-out 0.45s forwards; }
+.ch-unlock-scrim { position: absolute; inset: 0; background: radial-gradient(circle at 50% 40%, rgba(30, 26, 5, 0.86), rgba(6, 8, 12, 0.96)); }
+.ch-unlock-card {
+  position: relative; width: 100%; max-width: 420px; margin: 0 18px; text-align: center;
+  background: #12151c; border: 1px solid var(--ch-gold, #f2b705); border-radius: 20px; padding: 30px 22px 26px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.ch-unlock.is-in .ch-unlock-card { transform: scale(1); }
+.ch-unlock-kicker { margin: 8px 0 0; text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.72rem; font-weight: 800; color: #9aa7bd; }
+.ch-unlock-title { margin: 6px 0 10px; font-size: 2rem; line-height: 1.05; font-weight: 900; color: #f2b705; }
+.ch-unlock-sub { margin: 0 0 6px; color: #eef2f8; font-weight: 600; line-height: 1.45; }
+.ch-unlock-fine { margin: 0 0 20px; color: #9aa7bd; font-size: 0.82rem; font-style: italic; }
+.ch-unlock .ch-btn-go { background: #f2b705; color: #2a2200; padding: 13px 20px; font-size: 1rem; }
+.ch-unlock-sparkles { display: flex; justify-content: center; gap: 10px; font-size: 1.2rem; color: #f2b705; }
+.ch-unlock-sparkles span { animation: ch-twinkle 1.4s infinite; }
+.ch-unlock-sparkles span:nth-child(2n) { animation-delay: 0.5s; opacity: 0.7; }
+.ch-unlock-sparkles span:nth-child(3n) { animation-delay: 0.9s; }
+
+@keyframes ch-twinkle { 0%, 100% { transform: translateY(0) scale(1); opacity: 1; } 50% { transform: translateY(-3px) scale(1.25); opacity: 0.5; } }
+@keyframes ch-unlock-out { to { opacity: 0; transform: scale(1.04); } }
+
+/* Code-earned reveal overlay (shown by a game on a qualifying win) */
+.ch-reveal { position: fixed; inset: 0; z-index: 310; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
+.ch-reveal.is-in { opacity: 1; }
+.ch-reveal .ch-unlock-card { transform: scale(1); }
+.ch-reveal-card { text-align: center; }
+.ch-reveal-title { margin: 4px 0 8px; font-size: 1.5rem; font-weight: 900; color: #f2b705; }
+.ch-reveal-code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-weight: 800; font-size: 1.4rem; letter-spacing: 0.1em; color: #2a2200; background: #f2b705; border-radius: 12px; padding: 14px 12px; margin: 14px 0; word-break: break-all; }
+.ch-reveal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.ch-reveal-actions .ch-btn-ghost { margin-left: 0; }
+.ch-reveal-msg { margin: 10px 0 0; min-height: 1.1em; font-size: 0.85rem; font-weight: 700; color: #9aa7bd; }
+
+/* Piece teaser fragments (slices of the boarding pass) */
+.ch-frag { display: grid; place-items: center; width: 100%; height: 100%; color: #2a2200; font-weight: 900; font-size: 0.6rem; letter-spacing: 0.04em; text-align: center; line-height: 1.1; }
+.ch-frag-corner { background: linear-gradient(135deg, transparent 44%, #2a2200 44%, #2a2200 56%, transparent 56%); }
+.ch-frag-bars { width: 66%; height: 58%; background: repeating-linear-gradient(90deg, #2a2200 0 2px, transparent 2px 5px); }
+.ch-frag-route { font-size: 0.72rem; }
+.ch-frag-stamp { border: 2px solid #2a2200; border-radius: 50%; width: 66%; height: 66%; transform: rotate(-12deg); font-size: 0.56rem; }
+
+/* Finale overlay + code-built boarding pass */
+.ch-finale { position: fixed; inset: 0; z-index: 320; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
+.ch-finale.is-in { opacity: 1; }
+.ch-finale-inner { position: relative; width: 100%; max-width: 440px; margin: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ch-finale-stage { width: 100%; min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.ch-finale-printing { color: #f2b705; font-weight: 800; font-size: 1.1rem; margin: 0; }
+.ch-finale-tada { color: #f2b705; font-weight: 900; font-size: 1.15rem; text-align: center; margin: 2px 0 0; }
+
+.ch-pass { width: 100%; background: #fbf6e8; color: #1a1a1a; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); }
+.ch-pass-head { display: flex; align-items: center; justify-content: space-between; background: #178a7a; color: #fff; padding: 12px 16px; font-weight: 800; }
+.ch-pass-airline { font-size: 1rem; }
+.ch-pass-tag { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.92; }
+.ch-pass-route { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 2px dashed #d8cba6; }
+.ch-pass-end { text-align: center; }
+.ch-pass-code { display: block; font-size: 1.7rem; font-weight: 900; color: #178a7a; letter-spacing: 0.04em; }
+.ch-pass-city { font-size: 0.72rem; color: #6b6357; }
+.ch-pass-plane { color: #178a7a; font-size: 1.4rem; }
+.ch-pass-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 14px 16px; }
+.ch-pass-cell label { display: block; font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: #9a8f79; }
+.ch-pass-cell span { font-weight: 800; font-size: 0.84rem; }
+.ch-pass-msg { padding: 0 16px 12px; font-style: italic; color: #3a3a3a; line-height: 1.4; }
+.ch-pass-barcode { height: 40px; margin: 0 16px 16px; background: repeating-linear-gradient(90deg, #1a1a1a 0 2px, transparent 2px 5px); }
+
+.ch-anim { opacity: 0; animation: ch-fade-up 0.5s ease forwards; animation-delay: calc(var(--d, 0) * 0.32s); }
+@keyframes ch-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.ch-frag-seat { font-size: 0.56rem; }
+
+/* Inline code chips (Mission Control instructions) */
+.ch-card code, .ch-hint code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: #0e1117; padding: 1px 5px; border-radius: 5px; color: var(--ch-gold); font-size: 0.85em; word-break: break-all; }
+
+/* Celebration overlay (asset image on answer-correct and each code redemption) */
+.ch-cele { position: fixed; inset: 0; z-index: 315; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
+.ch-cele.is-in { opacity: 1; }
+.ch-cele-card {
+  position: relative; width: 100%; max-width: 440px; margin: 0 16px; text-align: center;
+  background: #12151c; border: 1px solid var(--ch-gold); border-radius: 20px; padding: 24px 20px 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); transform: scale(0.92); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  max-height: 90vh; overflow-y: auto;
+}
+.ch-cele.is-in .ch-cele-card { transform: scale(1); }
+.ch-cele-title { margin: 6px 0 12px; font-size: 1.4rem; font-weight: 900; color: var(--ch-gold); line-height: 1.15; }
+.ch-cele-media { display: flex; justify-content: center; margin: 0 0 12px; }
+.ch-cele-img { max-width: 100%; max-height: 52vh; border-radius: 12px; object-fit: contain; background: #0e1117; }
+.ch-cele-note { margin: 0 0 16px; color: var(--ch-muted); font-size: 0.9rem; line-height: 1.4; }
+
+/* Selfie capture card */
+.ch-file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
+.ch-file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
+.ch-selfie-preview { display: block; max-width: 100%; max-height: 40vh; border-radius: 12px; margin: 4px 0 10px; }
+.ch-selfie-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ch-selfie-actions .ch-btn-ghost { margin-left: 0; }
+
+/* Mission Control admin panel */
+.ch-adm-uid { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.ch-adm-uid .ch-btn-ghost { margin-left: 0; }
+.ch-adm-selfie { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--ch-line); border-radius: 10px; margin-bottom: 10px; background: #0e1117; }
+.ch-adm-thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; flex: none; background: #12151c; }
+.ch-adm-selfie-actions { display: flex; flex-direction: column; gap: 8px; }
+.ch-adm-selfie-actions .ch-btn-ghost { margin-left: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-unlock, .ch-unlock-card, .ch-unlock-sparkles span { transition: none; animation: none; }
+  .ch-anim { animation: none; opacity: 1; transform: none; }
+  .ch-cele, .ch-cele-card { transition: none; }
+}

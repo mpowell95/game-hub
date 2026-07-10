@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v50';
+const CACHE = 'game-hub-v55';
 
 const ASSETS = [
   './',
@@ -15,9 +15,25 @@ const ASSETS = [
   './css/hub.css',
   './js/hub.js',
   './js/profile-store.js',
+  './js/firebase-config.js',
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
+  // Hidden challenge - inert unless the active profile name matches the hashed trigger
+  './js/challenge/crypt.js',
+  './js/challenge/secrets.js',
+  './js/challenge/challenge-store.js',
+  './js/challenge/hooks.js',
+  './js/challenge/unlock.js',
+  './js/challenge/reveal.js',
+  './js/challenge/challenge-ui.js',
+  './js/challenge/challenge-net.js',
+  './css/challenge.css',
+  // NOTE: the challenge celebration images (js/challenge/assets/*) are deliberately NOT
+  // precached. They are ~9 MB of one-person gift content; forcing every PWA installer to
+  // download them would violate the "inert for everyone else" guardrail. The fetch handler
+  // below is cache-first for images, so they cache on Ana's first online view and then
+  // replay offline. The challenge redemption still works without them (image hidden on error).
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

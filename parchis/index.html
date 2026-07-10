@@ -2272,7 +2272,7 @@
   // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
   // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
   var APP_VERSION = "v10";
-  var BUILD_DATE = "2026-07-08";
+  var BUILD_DATE = "2026-07-10";
   function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
   function versionLabel() { return APP_VERSION + " · " + buildDate(); }
 
@@ -3289,11 +3289,86 @@
     if (m) m.setAttribute("content", theme === "light" ? "#EFE9DA" : "#241d17");
   }
 
+  // Hidden challenge, gated in the hub. Self-contained because the built single file
+  // cannot import modules; mirrors js/challenge crypt and secrets. Inert unless the
+  // gamehub.profile name matches the trigger hash. No plaintext name, answer, or code.
+  var CH_TRIGGER = "1cabdac0", CH_SALT = "gh-v1-9c3f", CH_XK = "gh-xk-7q2z9";
+  var CH_CODE = "NykANS55dlx2O2ov";
+  function chNorm(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+  function chHash(str) {
+    var s = CH_SALT + String(str == null ? "" : str), h = 0x811c9dc5, i;
+    for (i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+  function chObf(str) {
+    var s = String(str == null ? "" : str), o = "", i;
+    for (i = 0; i < s.length; i++) o += String.fromCharCode((s.charCodeAt(i) ^ CH_XK.charCodeAt(i % CH_XK.length)) & 0xff);
+    try { return btoa(o); } catch (e) { return ""; }
+  }
+  function chDeobf(b) {
+    try {
+      var bin = atob(String(b == null ? "" : b)), o = "", i;
+      for (i = 0; i < bin.length; i++) o += String.fromCharCode(bin.charCodeAt(i) ^ CH_XK.charCodeAt(i % CH_XK.length));
+      return o;
+    } catch (e) { return ""; }
+  }
+  function chEsc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
+  function chActive() { var p = readProfile(); return !!p && chHash(chNorm(p.name)) === CH_TRIGGER; }
+  function chRecordWin() {
+    try {
+      var raw = localStorage.getItem("gamehub.challenge");
+      var st = raw ? JSON.parse(chDeobf(raw)) : null;
+      if (!st || typeof st !== "object") st = {};
+      if (!st.wins || typeof st.wins !== "object") st.wins = {};
+      st.wins.parchis = true; st.v = 1; st.updatedAt = new Date().toISOString();
+      localStorage.setItem("gamehub.challenge", chObf(JSON.stringify(st)));
+    } catch (e) {}
+  }
+  function chShowReveal(code, label) {
+    var prev = document.getElementById("pa-ch-reveal"); if (prev) prev.remove();
+    var el = document.createElement("div");
+    el.id = "pa-ch-reveal";
+    el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "Secret code earned");
+    el.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;";
+    el.innerHTML =
+      '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(30,26,5,.86),rgba(6,8,12,.96));"></div>' +
+      '<div style="position:relative;max-width:420px;margin:0 18px;text-align:center;background:#12151c;border:1px solid #f2b705;border-radius:20px;padding:28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.6);">' +
+      '<p style="margin:0;text-transform:uppercase;letter-spacing:.22em;font-size:.72rem;font-weight:800;color:#9aa7bd;">' + chEsc(label) + ' cleared</p>' +
+      '<h1 style="margin:6px 0 8px;font-size:1.5rem;font-weight:900;color:#f2b705;">Secret code earned</h1>' +
+      '<p style="margin:0 0 4px;color:#eef2f8;font-weight:600;line-height:1.45;">Guard it with your life. Enter it in the Challenge Area to claim a piece.</p>' +
+      '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.4rem;letter-spacing:.1em;color:#2a2200;background:#f2b705;border-radius:12px;padding:14px 12px;margin:14px 0;word-break:break-all;">' + chEsc(code) + '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+      '<button id="pa-ch-copy" style="font:inherit;font-weight:800;border:0;border-radius:11px;padding:11px 16px;cursor:pointer;background:#f2b705;color:#2a2200;">Copy code</button>' +
+      '<button id="pa-ch-close" style="font:inherit;font-weight:700;border:1px solid #2c3340;border-radius:11px;padding:11px 16px;cursor:pointer;background:transparent;color:#eef2f8;">Onward</button>' +
+      '</div><p id="pa-ch-msg" style="margin:10px 0 0;min-height:1.1em;font-size:.85rem;font-weight:700;color:#9aa7bd;"></p></div>';
+    document.body.appendChild(el);
+    el.querySelector("#pa-ch-close").addEventListener("click", function () { el.remove(); });
+    el.querySelector("#pa-ch-copy").addEventListener("click", function () {
+      var msg = el.querySelector("#pa-ch-msg");
+      try { navigator.clipboard.writeText(code).then(function () { msg.textContent = "Copied. Do not lose it."; }, function () { msg.textContent = "Copy blocked. Write it down: " + code; }); }
+      catch (e) { msg.textContent = "Copy blocked. Write it down: " + code; }
+    });
+  }
+  function challengeOnGameOver(winnerColor) {
+    try {
+      if (!chActive()) return;
+      var humans = G.cfg.humans || [], active = G.cfg.active || [];
+      var humanWon = winnerColor === G.cfg.anchor || humans.indexOf(winnerColor) !== -1;
+      var aiColors = active.filter(function (c) { return humans.indexOf(c) === -1; });
+      var okSkill = aiColors.length === 3 && aiColors.every(function (c) {
+        var s = (G.cfg.skills && G.cfg.skills[c]) || "intermediate";
+        return s === "intermediate" || s === "pro" || s === "expert";
+      });
+      if (humanWon && G.cfg.mode === "spanish" && okSkill) { chRecordWin(); chShowReveal(chDeobf(CH_CODE), "Parchis"); }
+    } catch (e) {}
+  }
+
   function onGameOver() {
     clearHighlights(); HUD.setDice([], false); clearSaved();
     var winners = G.state.winners.filter(function (i) { return G.cfg.active.indexOf(color(i)) !== -1; }).map(function (i) { return color(i); });
     var remaining = G.cfg.active.filter(function (c) { return winners.indexOf(c) === -1; });
     HUD.gameover(winners.concat(remaining), namesByColor(), showTitle);
+    challengeOnGameOver(winners[0]);
   }
   function namesByColor() { var o = {}; G.cfg.active.forEach(function (c) { o[c] = nameOf(c); }); return o; }
 
