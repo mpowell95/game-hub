@@ -47,4 +47,31 @@ export function showCodeReveal(code, taskLabel) {
   return close;
 }
 
-export default { showCodeReveal };
+/** Show a taunt (used on each Connect Four rigged loss). Returns a force-close fn. */
+export function showTaunt(message) {
+  ensureChallengeCss();
+  const prev = document.querySelector('.ch-reveal'); if (prev) prev.remove();
+
+  const el = document.createElement('div');
+  el.className = 'ch-reveal';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-label', 'A message for you');
+  el.innerHTML = `
+    <div class="ch-unlock-scrim"></div>
+    <div class="ch-unlock-card ch-reveal-card">
+      <p class="ch-reveal-taunt">${esc(message)}</p>
+      <div class="ch-reveal-actions">
+        <button type="button" class="ch-btn ch-btn-go" data-role="close">Okay</button>
+      </div>
+    </div>`;
+
+  const close = () => el.remove();
+  el.querySelector('[data-role="close"]').addEventListener('click', close);
+  el.querySelector('.ch-unlock-scrim').addEventListener('click', close);
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('is-in'));
+  return close;
+}
+
+export default { showCodeReveal, showTaunt };

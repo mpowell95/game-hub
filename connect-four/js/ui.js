@@ -12,9 +12,9 @@ import { Game, WIN, DRAW } from './game.js';
 import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { isChallengeActive, cfForcedDifficulty, cfInEasyPhase, codeFor } from '../../js/challenge/hooks.js';
+import { isChallengeActive, cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
-import { showCodeReveal } from '../../js/challenge/reveal.js';
+import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
 
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
@@ -673,6 +673,8 @@ class ConnectFourUI {
       if (youWon && cfInEasyPhase(before)) {
         recordWin('connect4');
         showCodeReveal(codeFor('connect4'), 'Connect Four');
+      } else if (!youWon) {
+        showTaunt(taunt(before));   // Matt's escalating taunt on each rigged loss
       }
     } catch { /* never break the game */ }
   }

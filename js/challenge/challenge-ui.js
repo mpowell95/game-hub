@@ -14,7 +14,7 @@ import {
   loadChallenge, redeemSlot, unlockArea, unlockAdmin, markUnlockSeen, setSelfie,
   remoteView, mergeRemote,
 } from './challenge-store.js';
-import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode } from './hooks.js';
+import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode, TAUNTS } from './hooks.js';
 import * as net from './challenge-net.js';
 
 const WIN_SLOTS = ['connect4', 'chinchon', 'business', 'parchis'];
@@ -36,14 +36,9 @@ const CELE = {
 // Shown the moment she answers the personal question correctly (not tied to a code).
 const ANSWER_ASSET = 'sexy-potato.png';
 
-// Escalating selfie-rejection lines, fixed order. Mission Control picks by how many
-// times this agent has already been rejected (1st, 2nd, 3rd, then 4th-and-after).
-const REJECT_LINES = [
-  'Better luck next time!',
-  '\u{1F62C} oh no....',
-  'uhh.... should I have built a how-to-play section..?',
-  'Come on! You got this!!',
-];
+// Selfie rejections reuse Matt's shared escalating taunt lines (hooks.TAUNTS), picked by
+// how many times this selfie has already been rejected (1st, 2nd, 3rd, then 4th-and-after).
+const REJECT_LINES = TAUNTS;
 
 // Flight-editor fields (Mission Control). These map 1:1 onto the boarding pass.
 const FLIGHT_FIELDS = [

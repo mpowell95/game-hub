@@ -40,6 +40,17 @@ export function slotForCode(input) {
   return null;
 }
 
+// Escalating taunt lines Matt wrote, fixed order. Shown on each Connect Four rigged
+// loss (loss 1 -> [0], loss 2 -> [1], ...) AND reused for the selfie rejections.
+export const TAUNTS = [
+  'Better luck next time!',
+  '\u{1F62C} oh no....',
+  'uhh.... should I have built a how-to-play section..?',
+  'Come on! You got this!!',
+];
+/** The taunt for the Nth loss/rejection (0-based), clamped to the last line. */
+export function taunt(n) { return TAUNTS[Math.min(Math.max(0, n | 0), TAUNTS.length - 1)]; }
+
 // --- Connect Four hazing --------------------------------------------------------
 /** Forced AI difficulty for the hazing: Expert for the first N completed games, then Easy. */
 export function cfForcedDifficulty(completed) {
@@ -71,5 +82,5 @@ export const N = S.N;
 export default {
   isChallengeActive, isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode,
   cfForcedDifficulty, cfInEasyPhase, qualifyChinchon, qualifyBusiness, qualifyParchis,
-  loadChallenge, recordWin, redeemSlot, N,
+  loadChallenge, recordWin, redeemSlot, N, TAUNTS, taunt,
 };
