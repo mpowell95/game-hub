@@ -41,11 +41,11 @@ export function playUnlock(onDone) {
       <div class="ch-unlock-sparkles" aria-hidden="true">
         <span>✦</span><span>✧</span><span>✦</span><span>✧</span><span>✦</span><span>✧</span>
       </div>
-      <p class="ch-unlock-kicker">hi, you</p>
+      <p class="ch-unlock-kicker">for you</p>
       <h1 class="ch-unlock-title">Operation<br>${name}</h1>
-      <p class="ch-unlock-sub">You found it. Of course you found it. I made you a ridiculous little game, and there's a real prize at the end.</p>
-      <p class="ch-unlock-fine">(It's a lot. I know it's a lot. Humor me.)</p>
-      <button type="button" class="ch-btn ch-btn-go" data-role="accept">Okay, show me</button>
+      <p class="ch-unlock-sub">You found it. I made this whole thing for you, and there's a real surprise waiting at the end.</p>
+      <p class="ch-unlock-fine">Five to solve. Then it's yours.</p>
+      <button type="button" class="ch-btn ch-btn-go" data-role="accept">Let's go</button>
     </div>`;
 
   let closed = false;

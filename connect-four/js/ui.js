@@ -345,6 +345,11 @@ class ConnectFourUI {
     const note = this.el.menuPanel.querySelector('.cf-menu-note'); if (note) note.hidden = true;
     this.el.undo.hidden = true;
     const mu = this.el.menuPanel.querySelector('[data-role="menu-undo"]'); if (mu) mu.hidden = true;
+    // Lock the setup: the config is fixed for the challenge, so gray out the choices and
+    // turn the start button into a single "Begin challenge" bar.
+    const startBtn = this.el.setup && this.el.setup.querySelector('[data-role="start"]');
+    if (startBtn) { startBtn.textContent = 'Begin challenge'; startBtn.classList.add('cf-btn-challenge'); }
+    [this.el.difficulty, this.el.first].forEach((g) => { if (g) g.classList.add('is-locked'); });
   }
 
   syncSegmented(group, value) {

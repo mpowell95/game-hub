@@ -115,6 +115,11 @@
   box-shadow: 0 4px 14px rgba(23, 105, 212, 0.35);
 }
 .cf-btn-primary:hover { background: #1257b3; }
+/* Challenge mode: the start button becomes a solid black "Begin challenge" bar,
+   and the (fixed) setup choices are grayed out and non-interactive. */
+.cf-btn-challenge { background: #0e1117; color: #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.cf-btn-challenge:hover { background: #000; }
+.cf-segmented.is-locked { opacity: 0.45; pointer-events: none; }
 .cf-btn-ghost {
   background: transparent;
   color: var(--cf-ink);

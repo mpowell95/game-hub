@@ -120,9 +120,9 @@ class ChallengeUI {
 
       <section class="ch-card">
         <h2 class="ch-h2">Here's the deal</h2>
-        <p class="ch-lead">Five codes, five pieces. Win four by beating each game under my (admittedly ridiculous)
-          conditions, and earn the fifth by sending me a selfie I approve. Type each code in below. Get all five
-          pieces and you can put the thing together.</p>
+        <p class="ch-lead">Five codes, five pieces. Win four by beating each game the way I set it up, and earn
+          the fifth by sending me a selfie I approve. Type each code in below. Get all five pieces and the last
+          screen is yours.</p>
       </section>
 
       <section class="ch-card">

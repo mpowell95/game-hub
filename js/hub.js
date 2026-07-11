@@ -109,8 +109,8 @@ const GAMES = [
 // mount the same module, which decides which face to show from the profile name.
 const CHALLENGE_CARD = {
   id: 'challenge',
-  title: 'Challenge',
-  blurb: 'A silly thing I made for you.',
+  title: 'Hidden Challenge',
+  blurb: 'Something I made just for you.',
   module: './challenge/challenge-ui.js',
   accent: '#f2b705',
   art: `<svg viewBox="0 0 120 120" aria-hidden="true">
