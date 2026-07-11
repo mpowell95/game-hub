@@ -120,6 +120,7 @@
 .cf-btn-challenge { background: #0e1117; color: #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 .cf-btn-challenge:hover { background: #000; }
 .cf-segmented.is-locked { opacity: 0.45; pointer-events: none; }
+.cf-challenge-note { margin: 0 0 4px; font-weight: 800; color: #178a7a; font-size: 0.95rem; text-align: center; }
 .cf-btn-ghost {
   background: transparent;
   color: var(--cf-ink);

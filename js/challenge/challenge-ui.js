@@ -235,17 +235,18 @@ class ChallengeUI {
   }
 
   /** Codes to show in the vault: one per recorded win, plus the selfie code if approved. */
+  /** Codes shown in the vault: ONLY after redemption (never reveal an un-redeemed code). */
   earnedCodes(st) {
     const out = [];
-    for (const slot of WIN_SLOTS) if (st.wins[slot]) out.push({ slot, code: codeFor(slot), redeemed: !!st.redeemed[slot] });
-    if (st.selfie.status === 'approved') out.push({ slot: 'selfie', code: codeFor('selfie'), redeemed: !!st.redeemed.selfie });
+    for (const slot of WIN_SLOTS) if (st.redeemed[slot]) out.push({ slot, code: codeFor(slot), redeemed: true });
+    if (st.redeemed.selfie) out.push({ slot: 'selfie', code: codeFor('selfie'), redeemed: true });
     return out;
   }
 
   // --- celebration overlay (asset image) --------------------------------------
   /** Full-screen celebration with a big image. Used on answer-correct and on each
    *  code redemption. The image degrades gracefully (hidden) if not yet cached offline. */
-  showCelebration({ kicker, title, asset, note }) {
+  showCelebration({ kicker, title, asset, note, delayOk }) {
     const host = document.createElement('div');
     host.className = 'ch-cele';
     host.setAttribute('role', 'dialog');
@@ -258,16 +259,18 @@ class ChallengeUI {
         ${title ? `<h2 class="ch-cele-title">${esc(title)}</h2>` : ''}
         <div class="ch-cele-media"><img class="ch-cele-img" alt="" src="${esc(asset)}"></div>
         ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
-        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">OK</button>
+        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close"${delayOk ? ' hidden' : ''}>OK</button>
       </div>`;
     document.body.appendChild(host);
     const img = host.querySelector('.ch-cele-img');
     img.addEventListener('error', () => { img.style.display = 'none'; });
-    const close = () => host.remove();
-    host.querySelector('[data-role="cele-close"]').addEventListener('click', close);
-    host.querySelector('.ch-unlock-scrim').addEventListener('click', close);
+    const okBtn = host.querySelector('[data-role="cele-close"]');
+    let dismissable = !delayOk;   // can't dismiss until the OK appears
+    okBtn.addEventListener('click', () => host.remove());
+    host.querySelector('.ch-unlock-scrim').addEventListener('click', () => { if (dismissable) host.remove(); });
+    if (delayOk) setTimeout(() => { okBtn.hidden = false; dismissable = true; }, delayOk);
     requestAnimationFrame(() => host.classList.add('is-in'));
-    return close;
+    return () => host.remove();
   }
 
   // --- selfie compression ------------------------------------------------------
@@ -524,9 +527,14 @@ class ChallengeUI {
       if (st.redeemed[slot]) return this.setMsg('[data-role="code-msg"]', 'Already redeemed.', true);
       redeemSlot(slot);
       this.pushSync();
+      const layerN = loadChallenge().order.length;   // 1st redemption -> layer 1, etc.
       this.render();
       const c = CELE[slot];
-      if (c) this.showCelebration({ asset: assetUrl(c.asset) });
+      if (c) this.showCelebration({
+        title: `Layer ${layerN} unlocked via "${codeFor(slot)}"`,
+        asset: assetUrl(c.asset),
+        delayOk: 1200,
+      });
       return;
     }
 

@@ -134,7 +134,7 @@ class ConnectFourUI {
    *  challenge it is silently forced (Expert while hazing, then Easy) with the visible
    *  label left untouched, so the switch is invisible. */
   effectiveDifficulty() {
-    if (!this.challengeActive) return this.difficulty;
+    if (!this.challengeLive) return this.difficulty;
     try { return cfForcedDifficulty(loadChallenge().cf.completed); } catch { return this.difficulty; }
   }
 
@@ -197,6 +197,7 @@ class ConnectFourUI {
         </header>
 
         <section class="cf-setup" aria-label="Game setup">
+          <p class="cf-challenge-note" data-role="challenge-note" hidden></p>
           <div class="cf-field">
             <span class="cf-label">Difficulty</span>
             <div class="cf-segmented" data-role="difficulty">
@@ -330,31 +331,40 @@ class ConnectFourUI {
     this.el.board.addEventListener('pointerleave', this._onBoardLeave);
     document.addEventListener('keydown', this._onKeyDown);
 
-    if (this.challengeActive) this.applyChallengeLockdown();
     this.syncSegmented(this.el.difficulty, this.difficulty);
     this.syncSegmented(this.el.first, this.humanFirst ? 'you' : 'ai');
     this.buildBoardCells();
-    this.showSetup();
+    this.showSetup();   // showSetup() calls syncChallengeUi() for the current state
   }
 
-  /** Hidden challenge lockdown: hide the best-moves assist and block undo so the hazing
-   *  actually bites. The visible difficulty label is deliberately left untouched. */
-  applyChallengeLockdown() {
-    this.showBestMoves = false;
-    const sw = this.el.hintToggle.closest('.cf-switch'); if (sw) sw.hidden = true;
-    const note = this.el.menuPanel.querySelector('.cf-menu-note'); if (note) note.hidden = true;
-    this.el.undo.hidden = true;
-    const mu = this.el.menuPanel.querySelector('[data-role="menu-undo"]'); if (mu) mu.hidden = true;
-    // Lock the setup: the config is fixed for the challenge, so gray out the choices and
-    // turn the start button into a single "Begin challenge" bar.
-    const startBtn = this.el.setup && this.el.setup.querySelector('[data-role="start"]');
-    if (startBtn) { startBtn.textContent = 'Begin challenge'; startBtn.classList.add('cf-btn-challenge'); }
-    [this.el.difficulty, this.el.first].forEach((g) => { if (g) g.classList.add('is-locked'); });
-    // End screen: relabel Rematch and drop "Change settings" (the config is fixed).
+  /** Still working on the Connect Four challenge? (active AND not yet won). Once won, the
+   *  game reverts to fully normal play. Dynamic, re-read each time. */
+  get challengeLive() {
+    if (!this.challengeActive) return false;
+    try { return !loadChallenge().wins.connect4; } catch { return true; }
+  }
+
+  /** Configure the challenge UI for the CURRENT state; called each time the setup shows
+   *  or a game starts. While the challenge is unwon: hide assist + undo, gray out the
+   *  fixed setup choices, and use a "Begin challenge" bar / "Retry Challenge" end button.
+   *  Once won: normal play, with a "completed, play anyways?" note. No-op for others. */
+  syncChallengeUi() {
+    if (!this.challengeActive) return;
+    const live = this.challengeLive;
+    if (live) this.showBestMoves = false;
+    const sw = this.el.hintToggle.closest('.cf-switch'); if (sw) sw.hidden = live;
+    const menuNote = this.el.menuPanel.querySelector('.cf-menu-note'); if (menuNote) menuNote.hidden = live;
+    this.el.undo.hidden = live;
+    const mu = this.el.menuPanel.querySelector('[data-role="menu-undo"]'); if (mu) mu.hidden = live;
+    const startBtn = this.el.setup.querySelector('[data-role="start"]');
+    if (startBtn) { startBtn.textContent = live ? 'Begin challenge' : 'Start game'; startBtn.classList.toggle('cf-btn-challenge', live); }
+    [this.el.difficulty, this.el.first].forEach((g) => { if (g) g.classList.toggle('is-locked', live); });
+    const cnote = this.el.setup.querySelector('[data-role="challenge-note"]');
+    if (cnote) { cnote.hidden = live; cnote.textContent = live ? '' : 'Connect 4 challenge completed. Play anyways?'; }
     const rematch = this.el.result.querySelector('[data-role="rematch"]');
-    if (rematch) rematch.textContent = 'Retry Challenge';
+    if (rematch) rematch.textContent = live ? 'Retry Challenge' : 'Rematch';
     const change = this.el.result.querySelector('[data-role="change"]');
-    if (change) change.hidden = true;
+    if (change) change.hidden = live;
   }
 
   syncSegmented(group, value) {
@@ -399,9 +409,11 @@ class ConnectFourUI {
     this.el.game.hidden = true;
     this.el.header.hidden = false; // title belongs on the setup screen
     this.el.setup.hidden = false;
+    this.syncChallengeUi();
   }
 
   startGame() {
+    this.syncChallengeUi();   // reflect current challenge state (assist/undo, etc.)
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
     this.busy = false;
@@ -664,7 +676,7 @@ class ConnectFourUI {
     // Bring the Rematch / Change-settings actions into view on tall layouts.
     this.el.result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-    if (this.challengeActive) {
+    if (this.challengeLive) {
       this.onChallengeGameEnd(this.game.status === WIN && this.game.winner === this.humanPlayer);
     }
   }
@@ -688,7 +700,7 @@ class ConnectFourUI {
 
   /** True if there's a human move to take back (and we're not mid-think). */
   canUndo() {
-    return !this.challengeActive && !!this.game && !this.busy && this.humanHasMoved;
+    return !this.challengeLive && !!this.game && !this.busy && this.humanHasMoved;
   }
 
   /**

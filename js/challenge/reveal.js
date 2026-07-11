@@ -22,6 +22,7 @@ export function showCodeReveal(code, taskLabel) {
   el.innerHTML = `
     <div class="ch-unlock-scrim"></div>
     <div class="ch-unlock-card ch-reveal-card">
+      <p class="ch-reveal-label">Your code</p>
       <div class="ch-reveal-code" data-role="code">${esc(code)}</div>
       <div class="ch-reveal-actions">
         <button type="button" class="ch-btn ch-btn-go" data-role="copy">Copy</button>
