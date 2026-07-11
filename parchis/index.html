@@ -117,6 +117,10 @@
   .pc-btn { font:inherit; font-size:15px; font-weight:700; color:#241c00; background:var(--gold);
     border:none; border-radius:11px; padding:12px 14px; cursor:pointer; }
   .pc-btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  /* Challenge mode: fixed config grayed out + non-interactive; start becomes a black bar. */
+  .pc-btn-challenge { background:#12151c; color:#fff; }
+  .pc-locked { opacity:.45; pointer-events:none; }
+  .pc-challenge-note { margin:0 0 10px; font-weight:800; color:#178a7a; font-size:15px; text-align:center; }
   .pc-hint { color:var(--muted); font-size:12.5px; margin:8px 0 2px; }
   .pc-field { display:flex; align-items:center; gap:10px; }
   .pc-field input[type=text] { flex:1; font:inherit; padding:9px 11px; border-radius:9px; border:1px solid var(--line);
@@ -2271,8 +2275,8 @@
   //
   // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
   // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
-  var APP_VERSION = "v10";
-  var BUILD_DATE = "2026-07-10";
+  var APP_VERSION = "v11";
+  var BUILD_DATE = "2026-07-11";
   function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
   function versionLabel() { return APP_VERSION + " · " + buildDate(); }
 
@@ -2505,15 +2509,22 @@
 
   // ---- new game setup ------------------------------------------------------
   HUD.showSetup = function (vsMode, pre, onPlay, onBack) {
+    // Hidden challenge: while unwon, force the qualifying config (Spanish rules, 4 players
+    // = 3 CPU at Intermediate or higher), gray out those choices, and a "Begin challenge"
+    // button. Once won, normal play with a "completed, play anyways?" note.
+    var chLive = !!(pre.challenge && pre.challenge.live);
+    var chDone = !!(pre.challenge && pre.challenge.done);
+    if (chLive) vsMode = "cpu";   // the challenge requires 3 CPU opponents
     var sel = {
-      mode: pre.mode || "american",
-      playerCount: pre.playerCount || 4,
+      mode: chLive ? "spanish" : (pre.mode || "american"),
+      playerCount: chLive ? 4 : (pre.playerCount || 4),
       humanColor: pre.humanColor || "amarillo",
       // Held apart from `names` so typing a name then switching color keeps the name.
       humanName: pre.humanName || t("you"),
       names: {}, skills: {}
     };
     overlay(t("newGameTitle"), function (body) {
+      if (chDone) elh("p", "pc-challenge-note", body, "Parchis challenge completed. Play anyways?");
       // mode cards
       elh("p", "pc-hint", body, t("modeHeading"));
       var modeRow = elh("div", "pc-modes", body), modeBtns = {};
@@ -2523,6 +2534,7 @@
         modeBtns[m[0]] = b;
         b.onclick = function () { sel.mode = m[0]; Object.keys(modeBtns).forEach(function (k) { modeBtns[k].classList.toggle("on", k === sel.mode); }); };
       });
+      if (chLive) modeRow.classList.add("pc-locked");
 
       // players
       elh("p", "pc-hint", body, t("playersHeading"));
@@ -2532,6 +2544,7 @@
         pBtns[n] = b;
         b.onclick = function () { sel.playerCount = n; Object.keys(pBtns).forEach(function (k) { pBtns[k].classList.toggle("on", +k === n); }); renderOpponents(); };
       });
+      if (chLive) pRow.classList.add("pc-locked");
 
       // your color
       elh("p", "pc-hint", body, t("yourColorHeading"));
@@ -2599,7 +2612,9 @@
           if (!isHuman) {
             var skillWrap = elh("div", "pc-skills", row);
             var cur = sel.skills[col] || defaultSkill(col, idx, pre);
+            if (chLive && ["intermediate", "pro", "expert"].indexOf(cur) === -1) cur = "intermediate";
             sel.skills[col] = cur;
+            if (chLive) skillWrap.classList.add("pc-locked");
             TIERS.forEach(function (tier) {
               var sb = elh("button", "pc-skill" + (cur === tier ? " on" : ""), skillWrap, t(TIER_KEY[tier]));
               sb.onclick = function () { sel.skills[col] = tier; skillWrap.querySelectorAll(".pc-skill").forEach(function (x) { x.classList.remove("on"); }); sb.classList.add("on"); };
@@ -2609,13 +2624,13 @@
       }
       renderOpponents();
 
-      mkBtn(body, t("play"), function () {
+      mkBtn(body, chLive ? "Begin challenge" : t("play"), function () {
         HUD.closeOverlay();
         var names = {};
         Object.keys(sel.names).forEach(function (k) { names[k] = sel.names[k]; });
         if (vsMode === "cpu") names[sel.humanColor] = sel.humanName; // the seat the human took
         onPlay({ mode: sel.mode, vsMode: vsMode, playerCount: sel.playerCount, humanColor: sel.humanColor, names: names, skills: sel.skills });
-      });
+      }, chLive ? "pc-btn-challenge" : null);
     }, { back: onBack });
   };
   function defaultName(col, idx, vsMode, humanColor, pre) {
@@ -3251,6 +3266,7 @@
       humanName: humanName,
       profileOpponents: profile.opponents || [],
       prefSkills: prefs.skills || {},
+      challenge: { live: chLive(), done: chDone() },
       lang: getLang()
     };
   }
@@ -3292,7 +3308,7 @@
   // Hidden challenge, gated in the hub. Self-contained because the built single file
   // cannot import modules; mirrors js/challenge crypt and secrets. Inert unless the
   // gamehub.profile name matches the trigger hash. No plaintext name, answer, or code.
-  var CH_TRIGGER = "1cabdac0", CH_SALT = "gh-v1-9c3f", CH_XK = "gh-xk-7q2z9";
+  var CH_TRIGGERS = ["1cabdac0", "39b28c49"], CH_SALT = "gh-v1-9c3f", CH_XK = "gh-xk-7q2z9";
   var CH_CODE = "NykANS55dlx2O2ov";
   function chNorm(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
   function chHash(str) {
@@ -3313,7 +3329,9 @@
     } catch (e) { return ""; }
   }
   function chEsc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
-  function chActive() { var p = readProfile(); return !!p && chHash(chNorm(p.name)) === CH_TRIGGER; }
+  function chActive() { var p = readProfile(); return !!p && CH_TRIGGERS.indexOf(chHash(chNorm(p.name))) !== -1; }
+  function chDone() { try { var raw = localStorage.getItem("gamehub.challenge"); var st = raw ? JSON.parse(chDeobf(raw)) : null; return !!(st && st.wins && st.wins.parchis); } catch (e) { return false; } }
+  function chLive() { return chActive() && !chDone(); }
   function chRecordWin() {
     try {
       var raw = localStorage.getItem("gamehub.challenge");
@@ -3333,25 +3351,23 @@
     el.innerHTML =
       '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(30,26,5,.86),rgba(6,8,12,.96));"></div>' +
       '<div style="position:relative;max-width:420px;margin:0 18px;text-align:center;background:#12151c;border:1px solid #f2b705;border-radius:20px;padding:28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.6);">' +
-      '<p style="margin:0;text-transform:uppercase;letter-spacing:.22em;font-size:.72rem;font-weight:800;color:#9aa7bd;">' + chEsc(label) + ' cleared</p>' +
-      '<h1 style="margin:6px 0 8px;font-size:1.5rem;font-weight:900;color:#f2b705;">Secret code earned</h1>' +
-      '<p style="margin:0 0 4px;color:#eef2f8;font-weight:600;line-height:1.45;">Guard it with your life. Enter it in the Challenge Area to claim a piece.</p>' +
-      '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.4rem;letter-spacing:.1em;color:#2a2200;background:#f2b705;border-radius:12px;padding:14px 12px;margin:14px 0;word-break:break-all;">' + chEsc(code) + '</div>' +
-      '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
-      '<button id="pa-ch-copy" style="font:inherit;font-weight:800;border:0;border-radius:11px;padding:11px 16px;cursor:pointer;background:#f2b705;color:#2a2200;">Copy code</button>' +
-      '<button id="pa-ch-close" style="font:inherit;font-weight:700;border:1px solid #2c3340;border-radius:11px;padding:11px 16px;cursor:pointer;background:transparent;color:#eef2f8;">Onward</button>' +
+      '<p style="margin:8px 0 0;text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:800;color:#9aa7bd;">Your code</p>' +
+      '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.05rem;letter-spacing:.04em;color:#2a2200;background:#f2b705;border-radius:12px;padding:13px 12px;margin:6px 0 14px;white-space:nowrap;overflow-x:auto;">' + chEsc(code) + '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center;">' +
+      '<button id="pa-ch-copy" style="flex:1;font:inherit;font-weight:800;border:0;border-radius:11px;padding:14px 16px;cursor:pointer;background:#f2b705;color:#2a2200;">Copy</button>' +
+      '<button id="pa-ch-close" style="flex:1;font:inherit;font-weight:700;border:1px solid #2c3340;border-radius:11px;padding:14px 16px;cursor:pointer;background:transparent;color:#eef2f8;">Close</button>' +
       '</div><p id="pa-ch-msg" style="margin:10px 0 0;min-height:1.1em;font-size:.85rem;font-weight:700;color:#9aa7bd;"></p></div>';
     document.body.appendChild(el);
     el.querySelector("#pa-ch-close").addEventListener("click", function () { el.remove(); });
     el.querySelector("#pa-ch-copy").addEventListener("click", function () {
       var msg = el.querySelector("#pa-ch-msg");
-      try { navigator.clipboard.writeText(code).then(function () { msg.textContent = "Copied. Do not lose it."; }, function () { msg.textContent = "Copy blocked. Write it down: " + code; }); }
-      catch (e) { msg.textContent = "Copy blocked. Write it down: " + code; }
+      try { navigator.clipboard.writeText(code).then(function () { msg.textContent = "Copied."; }, function () { msg.textContent = code; }); }
+      catch (e) { msg.textContent = code; }
     });
   }
   function challengeOnGameOver(winnerColor) {
     try {
-      if (!chActive()) return;
+      if (!chLive()) return;
       var humans = G.cfg.humans || [], active = G.cfg.active || [];
       var humanWon = winnerColor === G.cfg.anchor || humans.indexOf(winnerColor) !== -1;
       var aiColors = active.filter(function (c) { return humans.indexOf(c) === -1; });
