@@ -3,7 +3,10 @@
    game. Dossier aesthetic: dark panels, gold accent. Colorblind-safe: every status
    uses a glyph or label plus color, never color alone. No em dashes. */
 
-.ch-root {
+/* Overlays (.ch-unlock/.ch-cele/.ch-reveal/.ch-finale) are appended to <body>, OUTSIDE
+   .ch-root, so they must carry these vars too or var(--ch-gold) resolves to nothing
+   (e.g. a transparent, invisible "OK" button). Keep this selector list in sync. */
+.ch-root, .ch-unlock, .ch-cele, .ch-reveal, .ch-finale {
   --ch-bg: #12151c;
   --ch-panel: #1b1f2a;
   --ch-line: #2c3340;
@@ -12,6 +15,9 @@
   --ch-gold: #f2b705;
   --ch-teal: #178a7a;
   --ch-red: #e0532f;
+}
+
+.ch-root {
   color: var(--ch-ink);
   background: var(--ch-bg);
   min-height: 100%;
@@ -38,7 +44,7 @@
 }
 
 .ch-form { display: flex; flex-direction: column; gap: 10px; }
-.ch-form-row { flex-direction: row; }
+.ch-form-row { flex-direction: row; align-items: center; }
 .ch-label { font-weight: 700; font-size: 0.9rem; }
 .ch-input {
   font: inherit; flex: 1; padding: 11px 13px; border-radius: 10px;
@@ -170,6 +176,8 @@
 .ch-cele-media { display: flex; justify-content: center; margin: 0 0 12px; }
 .ch-cele-img { max-width: 100%; max-height: 52vh; border-radius: 12px; object-fit: contain; background: #0e1117; }
 .ch-cele-note { margin: 0 0 16px; color: var(--ch-muted); font-size: 0.9rem; line-height: 1.4; }
+/* The dismiss button must be unmistakable: full-width, solid, large. */
+.ch-cele .ch-btn-go { width: 100%; padding: 15px; font-size: 1.08rem; }
 
 /* Selfie capture card */
 .ch-file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-align: center; }

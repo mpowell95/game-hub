@@ -38,7 +38,7 @@ export function playUnlock(onDone) {
   el.innerHTML = `
     <div class="ch-unlock-scrim"></div>
     <div class="ch-unlock-card">
-      <h1 class="ch-unlock-title">Operation<br>${name}</h1>
+      <h1 class="ch-unlock-title">Challenge Mode<br>Unlocked</h1>
       <button type="button" class="ch-btn ch-btn-go" data-role="accept">Enter</button>
     </div>`;
 

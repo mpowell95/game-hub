@@ -107,10 +107,30 @@ class ChallengeUI {
     const earned = this.earnedCodes(st);
     this.mount(`
       <header class="ch-head">
-        <h1 class="ch-title">Operation ${esc(this.name)}</h1>
+        <h1 class="ch-title">Challenge Mode</h1>
         ${progressKeyFor(this.name) !== S.PROGRESS_KEY
           ? '<button type="button" class="ch-btn ch-btn-ghost" data-role="reset-test">Reset (test)</button>' : ''}
       </header>
+
+      <section class="ch-card">
+        <h2 class="ch-h2">How to Play</h2>
+        <p class="ch-lead">There are 5 parts to this challenge. You must complete the following tasks.</p>
+        <p class="ch-label">Win a game of:</p>
+        <ol class="ch-list">
+          <li>Connect 4</li>
+          <li>Chinch&oacute;n</li>
+          <li>Business Deal</li>
+          <li>Parch&iacute;s</li>
+        </ol>
+        <p class="ch-label">And submit:</p>
+        <ol class="ch-list">
+          <li>A selfie taken in the moment</li>
+        </ol>
+        <p class="ch-lead">For each task you complete, you will receive a code or phrase. When you receive a code,
+          come back to the Challenge area, enter your code, and click Redeem.</p>
+        <p class="ch-lead">Each code unlocks a piece of an image. Once you have unlocked all 5 pieces, you can
+          assemble the image. The image, and the information displayed within it, is the prize.</p>
+      </section>
 
       <section class="ch-card">
         <h2 class="ch-h2">Enter a code</h2>
@@ -136,12 +156,12 @@ class ChallengeUI {
       </section>
 
       <section class="ch-card">
-        <h2 class="ch-h2">The pass, in pieces <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
+        <h2 class="ch-h2">Pieces <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
         <div class="ch-gallery" data-role="gallery">
           ${this.galleryHTML(st)}
         </div>
         <button type="button" class="ch-btn ch-btn-finale" data-role="assemble" ${pieces >= PIECE_TOTAL ? '' : 'disabled'}>
-          ${pieces >= PIECE_TOTAL ? 'Assemble the pass' : `Assemble the pass (${PIECE_TOTAL - pieces} to go)`}
+          ${pieces >= PIECE_TOTAL ? 'Assemble the image' : `Assemble the image (${PIECE_TOTAL - pieces} to go)`}
         </button>
       </section>`);
   }
@@ -526,7 +546,7 @@ class ChallengeUI {
         unlockArea();
         this.pushSync();
         this.render();
-        this.showCelebration({ asset: assetUrl(ANSWER_ASSET) });
+        this.showCelebration({ title: 'Correct', asset: assetUrl(ANSWER_ASSET) });
       } else {
         this.setMsg('[data-role="answer-msg"]', 'Try again.', false);
       }

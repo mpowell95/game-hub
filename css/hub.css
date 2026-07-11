@@ -86,6 +86,18 @@ body {
   max-width: 460px;
   margin: 0 auto;
 }
+
+/* The hidden-challenge (or Mission Control) card sits on its own, centered below the
+   games with a divider, so it reads as separate from the four game tiles. */
+.hub-extra {
+  max-width: 460px;
+  margin: 26px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--hub-surface-2);
+  display: flex;
+  justify-content: center;
+}
+.hub-extra .hub-card { width: 224px; }
 .hub-card {
   position: relative;
   aspect-ratio: 1 / 1;

@@ -148,7 +148,8 @@ class Hub {
     const prof = loadProfile();
     const active = !!(prof && isChallengeActive(prof.name));
     const admin = !active && !!(prof && isAdmin(prof.name));
-    this.games = GAMES.concat(active ? [CHALLENGE_CARD] : admin ? [ADMIN_CARD] : []);
+    const extra = active ? CHALLENGE_CARD : admin ? ADMIN_CARD : null;   // hidden card, shown apart from the games
+    this.games = GAMES.concat(extra ? [extra] : []);                     // includes `extra` for launch() lookup
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -158,8 +159,9 @@ class Hub {
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
-            ${this.games.map((g) => this.cardHTML(g)).join('')}
+            ${GAMES.map((g) => this.cardHTML(g)).join('')}
           </section>
+          ${extra ? `<section class="hub-extra">${this.cardHTML(extra)}</section>` : ''}
           <section class="hub-game" data-role="game" hidden></section>
         </main>
         <div class="hub-confirm" data-role="confirm" hidden>
@@ -178,6 +180,7 @@ class Hub {
       back: this.root.querySelector('[data-role="back"]'),
       title: this.root.querySelector('[data-role="title"]'),
       grid: this.root.querySelector('[data-role="grid"]'),
+      extra: this.root.querySelector('.hub-extra'),
       game: this.root.querySelector('[data-role="game"]'),
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
@@ -194,7 +197,9 @@ class Hub {
       this.el.confirm.hidden = true;
       this.showLauncher();
     });
-    this.el.grid.addEventListener('click', (e) => {
+    // Delegate from .hub-main so it catches both the grid cards and the separate
+    // hidden-challenge card below the grid.
+    this.el.grid.parentElement.addEventListener('click', (e) => {
       const card = e.target.closest('.hub-card');
       if (!card) return;
       if (card.tagName === 'A') return;            // launch-out: real link, native nav
@@ -247,6 +252,7 @@ class Hub {
       this.el.title.textContent = game.title;
       this.el.back.hidden = false;
       this.el.grid.hidden = true;
+      if (this.el.extra) this.el.extra.hidden = true;
       this.el.game.hidden = false;
       this.el.profile.hidden = true;
     } catch (e) {
@@ -254,6 +260,7 @@ class Hub {
       this.el.game.innerHTML = `<p class="hub-error">Couldn't load ${game.title}. Please try again.</p>`;
       this.el.game.hidden = false;
       this.el.grid.hidden = true;
+      if (this.el.extra) this.el.extra.hidden = true;
       this.el.back.hidden = false;
       this.el.profile.hidden = true;
     }
@@ -280,6 +287,7 @@ class Hub {
     await this.unmount();
     this.el.game.hidden = true;
     this.el.grid.hidden = false;
+    if (this.el.extra) this.el.extra.hidden = false;
     this.el.back.hidden = true;
     this.el.title.textContent = "Matt's Game Hub";
     this.el.profile.hidden = false;
