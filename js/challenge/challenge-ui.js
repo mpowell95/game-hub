@@ -91,12 +91,10 @@ class ChallengeUI {
   // --- personal-question gate --------------------------------------------------
   renderQuestionGate() {
     this.mount(`
-      <header class="ch-head"><h1 class="ch-title">Okay, prove it's you</h1></header>
       <section class="ch-card">
-        <p class="ch-lead">One question only the real ${esc(this.name)} would get right.</p>
         <form data-role="answer-form" class="ch-form">
           <label class="ch-label" for="ch-answer">${esc(S.QUESTION)}</label>
-          <input class="ch-input" id="ch-answer" name="answer" type="text" autocomplete="off" placeholder="Your answer">
+          <input class="ch-input" id="ch-answer" name="answer" type="text" autocomplete="off" placeholder="Answer">
           <button type="submit" class="ch-btn ch-btn-go">Enter</button>
           <p class="ch-msg" data-role="answer-msg" role="status" aria-live="polite"></p>
         </form>
@@ -110,15 +108,7 @@ class ChallengeUI {
     this.mount(`
       <header class="ch-head">
         <h1 class="ch-title">Operation ${esc(this.name)}</h1>
-        <button type="button" class="ch-btn ch-btn-ghost" data-role="replay">Replay intro</button>
       </header>
-
-      <section class="ch-card">
-        <h2 class="ch-h2">Here's the deal</h2>
-        <p class="ch-lead">Five codes, five pieces. Win four by beating each game the way I set it up, and earn
-          the fifth by sending me a selfie I approve. Type each code in below. Get all five pieces and the last
-          screen is yours.</p>
-      </section>
 
       <section class="ch-card">
         <h2 class="ch-h2">Enter a code</h2>
@@ -140,8 +130,7 @@ class ChallengeUI {
                 <span class="ch-vault-code">${esc(e.code)}</span>
                 <span class="ch-vault-tag">${e.redeemed ? 'redeemed' : 'earned, enter it above'}</span>
               </li>`).join('')}</ul>`
-          : `<p class="ch-hint">Codes you earn from wins and your approved selfie show up here, so you can never
-              really lose one. Nothing yet. Go win something.</p>`}
+          : `<p class="ch-hint">Nothing yet.</p>`}
       </section>
 
       <section class="ch-card">
@@ -160,29 +149,25 @@ class ChallengeUI {
     const s = st.selfie;
     let inner;
     if (s.status === 'approved') {
-      inner = `<p class="ch-msg is-ok">I approved your selfie.</p>
-        <p class="ch-hint">Your selfie code is now in the vault below. Type it in above to claim your piece.</p>`;
+      inner = `<p class="ch-msg is-ok">Approved.</p>`;
     } else if (s.status === 'pending') {
-      inner = `<p class="ch-lead">Selfie sent. I'm looking at it with great seriousness.</p>
-        <p class="ch-hint" data-role="selfie-live">Waiting on me. This updates on its own.</p>`;
+      inner = `<p class="ch-hint" data-role="selfie-live">Submitted. Waiting for approval.</p>`;
     } else {
       const rejected = s.status === 'rejected';
       const capture = this._pendingSelfie
         ? `<img class="ch-selfie-preview" alt="Your selfie preview" src="${esc(this._pendingSelfie)}">
            <div class="ch-selfie-actions">
-             <button type="button" class="ch-btn ch-btn-go" data-role="selfie-submit">Send it to me</button>
+             <button type="button" class="ch-btn ch-btn-go" data-role="selfie-submit">Submit</button>
              <label class="ch-btn ch-btn-ghost ch-file-btn">Retake
                <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>
            </div>`
-        : `<label class="ch-btn ch-btn-go ch-file-btn">Take your selfie
+        : `<label class="ch-btn ch-btn-go ch-file-btn">Take selfie
              <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>`;
-      inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Nope, again.')}</p>` : ''}
-        <p class="ch-lead">Take a selfie. Front camera, maximum drama. I have to approve it before the fifth
-          code is yours.</p>
+      inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Not approved.')}</p>` : ''}
         ${capture}
         <p class="ch-msg" data-role="selfie-msg" role="status" aria-live="polite"></p>`;
     }
-    return `<section class="ch-card"><h2 class="ch-h2">The selfie</h2>${inner}</section>`;
+    return `<section class="ch-card"><h2 class="ch-h2">Selfie</h2>${inner}</section>`;
   }
 
   galleryHTML(st) {
@@ -224,21 +209,19 @@ class ChallengeUI {
     host.querySelector('[data-role="fin-close"]').addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => host.remove());
     const stage = host.querySelector('[data-role="stage"]');
+    const fallback = () => {
+      stage.innerHTML = `<p class="ch-finale-printing">Not ready yet.</p>
+        <button type="button" class="ch-btn ch-btn-go" data-role="fin-retry">Try again</button>`;
+      const r = stage.querySelector('[data-role="fin-retry"]'); if (r) r.addEventListener('click', attempt);
+    };
     const attempt = () => {
-      stage.innerHTML = '<p class="ch-finale-printing">Printing your pass<span class="ch-dots"><i>.</i><i>.</i><i>.</i></span></p>';
+      stage.innerHTML = '<p class="ch-finale-printing">Loading<span class="ch-dots"><i>.</i><i>.</i><i>.</i></span></p>';
       this.loadFlight().then((flight) => {
         if (flight) { this.renderPass(stage, flight); return; }
-        stage.innerHTML = `<p class="ch-finale-printing">The pass is printing<span class="ch-dots"><i>.</i><i>.</i><i>.</i></span></p>
-          <p class="ch-hint">The airline is being dramatic (the flight details are not ready yet). Try again in a moment.</p>
-          <button type="button" class="ch-btn ch-btn-go" data-role="fin-retry">Try again</button>`;
-        const r = stage.querySelector('[data-role="fin-retry"]'); if (r) r.addEventListener('click', attempt);
-      }).catch(() => {
-        stage.innerHTML = `<p class="ch-finale-printing">The printer jammed. Very dramatic.</p>
-          <button type="button" class="ch-btn ch-btn-go" data-role="fin-retry">Try again</button>`;
-        const r = stage.querySelector('[data-role="fin-retry"]'); if (r) r.addEventListener('click', attempt);
-      });
+        fallback();
+      }).catch(fallback);
     };
-    setTimeout(attempt, 850); // a beat of drama before it prints
+    setTimeout(attempt, 300);
   }
 
   /** Flight data source: a test injection (window.__chFlight), else the Firebase
@@ -268,10 +251,9 @@ class ChallengeUI {
           <div class="ch-pass-cell ch-anim" style="--d:3"><label>Dates</label><span>${g(f.dates, 'To be revealed')}</span></div>
           <div class="ch-pass-cell ch-anim" style="--d:4"><label>Flight</label><span>${g(f.flightNumbers, '--')}</span></div>
         </div>
-        <div class="ch-pass-msg ch-anim" style="--d:5">${g(f.message, 'See you very soon.')}</div>
+        <div class="ch-pass-msg ch-anim" style="--d:5">${g(f.message, '')}</div>
         <div class="ch-pass-barcode ch-anim" style="--d:6" aria-hidden="true"></div>
-      </div>
-      <p class="ch-finale-tada ch-anim" style="--d:7">He is coming to Spain.</p>`;
+      </div>`;
   }
 
   /** Codes to show in the vault: one per recorded win, plus the selfie code if approved. */
@@ -295,10 +277,10 @@ class ChallengeUI {
       <div class="ch-unlock-scrim"></div>
       <div class="ch-cele-card">
         ${kicker ? `<p class="ch-unlock-kicker">${esc(kicker)}</p>` : ''}
-        <h2 class="ch-cele-title">${esc(title || '')}</h2>
+        ${title ? `<h2 class="ch-cele-title">${esc(title)}</h2>` : ''}
         <div class="ch-cele-media"><img class="ch-cele-img" alt="" src="${esc(asset)}"></div>
         ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
-        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">Nice</button>
+        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">OK</button>
       </div>`;
     document.body.appendChild(host);
     const img = host.querySelector('.ch-cele-img');
@@ -542,14 +524,9 @@ class ChallengeUI {
         unlockArea();
         this.pushSync();
         this.render();
-        this.showCelebration({
-          kicker: 'Correct',
-          title: "That's the one.",
-          asset: assetUrl(ANSWER_ASSET),
-          note: 'Behold: the sexiest starchy vegetable. Obviously. Off we go.',
-        });
+        this.showCelebration({ asset: assetUrl(ANSWER_ASSET) });
       } else {
-        this.setMsg('[data-role="answer-msg"]', 'Nope. Try again.', false);
+        this.setMsg('[data-role="answer-msg"]', 'Try again.', false);
       }
       return;
     }
@@ -565,21 +542,13 @@ class ChallengeUI {
       const val = form.querySelector('#ch-code').value;
       const slot = slotForCode(val);
       const st = loadChallenge();
-      if (!slot) return this.setMsg('[data-role="code-msg"]', 'That is not one of the five codes.', false);
-      if (st.redeemed[slot]) return this.setMsg('[data-role="code-msg"]', 'Already redeemed. Nice try, completist.', true);
+      if (!slot) return this.setMsg('[data-role="code-msg"]', 'Not a valid code.', false);
+      if (st.redeemed[slot]) return this.setMsg('[data-role="code-msg"]', 'Already redeemed.', true);
       redeemSlot(slot);
       this.pushSync();
-      const pieceNo = loadChallenge().order.length;
       this.render();
       const c = CELE[slot];
-      if (c) {
-        this.showCelebration({
-          kicker: 'Code redeemed',
-          title: c.line,
-          asset: assetUrl(c.asset),
-          note: `Piece ${pieceNo} of ${PIECE_TOTAL} secured.`,
-        });
-      }
+      if (c) this.showCelebration({ asset: assetUrl(c.asset) });
       return;
     }
 
@@ -632,7 +601,7 @@ class ChallengeUI {
     const id = await net.submitSelfie(this._pendingSelfie);
     if (this._destroyed) return;
     if (!id) {
-      this.setMsg('[data-role="selfie-msg"]', "Couldn't send it (are you offline?). Try again in a bit.", false);
+      this.setMsg('[data-role="selfie-msg"]', "Couldn't send. Try again.", false);
       return;
     }
     setSelfie({ status: 'pending', submissionId: id });

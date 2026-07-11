@@ -38,12 +38,8 @@ export function playUnlock(onDone) {
   el.innerHTML = `
     <div class="ch-unlock-scrim"></div>
     <div class="ch-unlock-card">
-      <div class="ch-unlock-sparkles" aria-hidden="true">
-        <span>✦</span><span>✧</span><span>✦</span><span>✧</span><span>✦</span><span>✧</span>
-      </div>
       <h1 class="ch-unlock-title">Operation<br>${name}</h1>
-      <p class="ch-unlock-sub">Okay. I made you something and I'm genuinely excited about it. Five challenges, then a surprise I've been sitting on for weeks.</p>
-      <button type="button" class="ch-btn ch-btn-go" data-role="accept">Start</button>
+      <button type="button" class="ch-btn ch-btn-go" data-role="accept">Enter</button>
     </div>`;
 
   let closed = false;
