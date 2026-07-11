@@ -108,6 +108,8 @@ class ChallengeUI {
     this.mount(`
       <header class="ch-head">
         <h1 class="ch-title">Operation ${esc(this.name)}</h1>
+        ${progressKeyFor(this.name) !== S.PROGRESS_KEY
+          ? '<button type="button" class="ch-btn ch-btn-ghost" data-role="reset-test">Reset (test)</button>' : ''}
       </header>
 
       <section class="ch-card">
@@ -587,7 +589,7 @@ class ChallengeUI {
     const btn = e.target.closest('button');
     if (!btn) return;
     const role = btn.dataset.role;
-    if (role === 'replay') { markUnlockSeen(); playUnlock(); return; }
+    if (role === 'reset-test') { this.resetTest(); return; }
     if (role === 'assemble') { this.showFinale(); return; }
     if (role === 'selfie-submit') { this.submitSelfie(); return; }
     if (role === 'download-selfie') { this.downloadSelfie(btn.dataset.id); return; }
@@ -608,6 +610,14 @@ class ChallengeUI {
     this._pendingSelfie = null;
     this.pushSync();
     this.render();
+  }
+
+  /** Tester-only: wipe local + remote progress and reload, so the intro, question gate,
+   *  and everything replay from scratch. Never shown for the real recipient. */
+  async resetTest() {
+    try { localStorage.removeItem('gamehub.challenge'); } catch { /* ignore */ }
+    try { await net.resetProgress(); } catch { /* ignore */ }
+    location.reload();
   }
 
   setMsg(sel, text, ok) {

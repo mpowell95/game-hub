@@ -68,6 +68,13 @@ export async function pull() {
   catch { return null; }
 }
 
+/** Delete the active persona's remote progress record (tester reset). */
+export async function resetProgress() {
+  if (!(await init())) return false;
+  try { await _api.remove(path('challenge/' + _key)); return true; }
+  catch { return false; }
+}
+
 /** Submit a compressed selfie data URL. Tags it with the submitter's progress key so
  *  Mission Control credits the right persona. Returns the pushId or null. */
 export async function submitSelfie(dataUrl) {
@@ -131,6 +138,6 @@ export async function watchAllProgress(cb) {
 }
 
 export default {
-  init, uid, setProgressKey, fetchFlight, syncUp, pull, submitSelfie, watchMySelfie,
+  init, uid, setProgressKey, fetchFlight, syncUp, pull, resetProgress, submitSelfie, watchMySelfie,
   watchSelfies, decideSelfie, saveFlight, watchProgress, watchAllProgress,
 };
