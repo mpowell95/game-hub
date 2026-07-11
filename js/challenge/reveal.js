@@ -54,7 +54,7 @@ export function showTaunt(message) {
   el.className = 'ch-reveal';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-label', 'A message for you');
+  el.setAttribute('aria-label', 'Game result');
   el.innerHTML = `
     <div class="ch-unlock-scrim"></div>
     <div class="ch-unlock-card ch-reveal-card">

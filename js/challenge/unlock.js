@@ -34,7 +34,7 @@ export function playUnlock(onDone) {
   el.className = 'ch-unlock';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-label', 'A little something for you');
+  el.setAttribute('aria-label', 'Challenge Mode Unlocked');
   el.innerHTML = `
     <div class="ch-unlock-scrim"></div>
     <div class="ch-unlock-card">

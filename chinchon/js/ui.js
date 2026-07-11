@@ -251,7 +251,9 @@ class ChinchonUI {
     const s = this._setup;
     const c = s.config;
     const st = this.stats;
-    const statsLine = st.games > 0
+    // In challenge mode the setup is fixed and the app runs "straight"; suppress the joke
+    // flavor (Ana Banana title, lifetime stats, deck nudge). Normal play keeps all of it.
+    const statsLine = (!this.challengeActive && st.games > 0)
       ? `<p class="cc-stats">🏆 ${st.games} played · ${st.wins} won · ${st.closes} closes · ${st.chinchons} chinchón</p>`
       : '';
 
@@ -302,7 +304,7 @@ class ChinchonUI {
     // Themed title: the Ana Banana deck rebrands the whole screen as a joke edition.
     const anita = s.deck === 'anita';
     const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="Toggle dark mode" title="${s.dark ? 'Light mode' : 'Dark mode'}">${s.dark ? '☀️' : '🌙'}</button>`;
-    this.el.header.innerHTML = (anita
+    this.el.header.innerHTML = ((anita && !this.challengeActive)
       ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Ana Banana</span></h1>`
       : `<h1 class="cc-title">Chinchón</h1>`) + themeBtn;
 
@@ -331,7 +333,7 @@ class ChinchonUI {
               </span>
               <span class="cc-deck-go">▸</span>
             </button>
-            ${s.deckNudgeSeen ? '' : `<span class="cc-nudge" aria-hidden="true">Try another deck! 👀</span>`}
+            ${(s.deckNudgeSeen || this.challengeActive) ? '' : `<span class="cc-nudge" aria-hidden="true">Try another deck! 👀</span>`}
           </div>
         </div>
 

@@ -51,6 +51,7 @@ class ChallengeUI {
   constructor(container) {
     this.container = container;
     ensureChallengeCss();
+    document.body.classList.add('ch-active');   // commit the whole hub shell to the dark route
     const prof = loadProfile();
     this.name = (prof && prof.name) || '';
     this._onClick = (e) => this.onClick(e);
@@ -127,9 +128,9 @@ class ChallengeUI {
               <li>Parch&iacute;s</li>
             </ol>
             <p class="ch-label">And submit:</p>
-            <ol class="ch-list">
+            <ul class="ch-list ch-list-selfie">
               <li>A selfie taken in the moment</li>
-            </ol>
+            </ul>
             <p class="ch-lead">For each task you complete, you will receive a code or phrase.</p>
             <p class="ch-lead">When you receive a code, come back to the Challenge area, enter your code, and click Redeem.</p>
             <p class="ch-lead">Each code unlocks a piece of an image. Once you have unlocked all 5 pieces, you can assemble the image.</p>
@@ -150,16 +151,18 @@ class ChallengeUI {
 
       ${this.selfieCardHTML(st)}
 
-      <section class="ch-card">
-        <h2 class="ch-h2">Your codes vault</h2>
-        ${earned.length
-          ? `<ul class="ch-vault">${earned.map((e) => `
+      ${earned.length ? `<section class="ch-card ch-collapse">
+        <details>
+          <summary class="ch-h2">Your codes vault</summary>
+          <div class="ch-howto-body">
+            <ul class="ch-vault">${earned.map((e) => `
               <li class="ch-vault-item ${st.redeemed[e.slot] ? 'is-redeemed' : ''}">
                 <span class="ch-vault-code">${esc(e.code)}</span>
                 <span class="ch-vault-tag">${e.redeemed ? 'redeemed' : 'earned, enter it above'}</span>
-              </li>`).join('')}</ul>`
-          : `<p class="ch-hint">Nothing yet.</p>`}
-      </section>
+              </li>`).join('')}</ul>
+          </div>
+        </details>
+      </section>` : ''}
 
       <section class="ch-card">
         <h2 class="ch-h2">Pieces <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
@@ -259,16 +262,41 @@ class ChallengeUI {
         ${title ? `<h2 class="ch-cele-title">${esc(title)}</h2>` : ''}
         <div class="ch-cele-media"><img class="ch-cele-img" alt="" src="${esc(asset)}"></div>
         ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
-        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close"${delayOk ? ' hidden' : ''}>OK</button>
+        <div class="ch-cele-foot">
+          <span class="ch-cele-wait" aria-hidden="true"><i></i><i></i><i></i></span>
+          <button type="button" class="ch-btn ch-btn-go ch-cele-ok" data-role="cele-close" hidden>OK</button>
+        </div>
       </div>`;
     document.body.appendChild(host);
     const img = host.querySelector('.ch-cele-img');
-    img.addEventListener('error', () => { img.style.display = 'none'; });
     const okBtn = host.querySelector('[data-role="cele-close"]');
-    let dismissable = !delayOk;   // can't dismiss until the OK appears
+    const waitHint = host.querySelector('.ch-cele-wait');
+    let dismissable = false;   // can't dismiss until the OK appears
     okBtn.addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => { if (dismissable) host.remove(); });
-    if (delayOk) setTimeout(() => { okBtn.hidden = false; dismissable = true; }, delayOk);
+
+    // Fade the image in once it has decoded, so it does not pop in abruptly.
+    const showImg = () => img.classList.add('is-loaded');
+    // Keep OK hidden until the image has claimed its space (loaded or failed), then honor any
+    // minimum on-screen beat. The wait dots make that pause read as intentional; OK then fades
+    // in rather than snapping, and never jumps since the image is already in place.
+    const revealOk = () => {
+      if (waitHint) waitHint.remove();
+      okBtn.hidden = false;
+      requestAnimationFrame(() => okBtn.classList.add('is-in'));
+      dismissable = true;
+    };
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      if (delayOk) setTimeout(revealOk, delayOk); else revealOk();
+    };
+    img.addEventListener('load', () => { showImg(); settle(); });
+    img.addEventListener('error', () => { img.style.display = 'none'; settle(); });
+    if (img.complete) { if (img.naturalWidth) showImg(); else img.style.display = 'none'; settle(); }
+    setTimeout(settle, 4000);   // never trap her behind an image that never loads
+
     requestAnimationFrame(() => host.classList.add('is-in'));
     return () => host.remove();
   }
@@ -614,6 +642,7 @@ class ChallengeUI {
 
   destroy() {
     this._destroyed = true;
+    document.body.classList.remove('ch-active');   // revert the hub shell to its light theme
     if (this.root) {
       this.root.removeEventListener('click', this._onClick);
       this.root.removeEventListener('submit', this._onSubmit);

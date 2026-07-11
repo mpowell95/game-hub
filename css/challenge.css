@@ -26,6 +26,15 @@
   border-radius: 16px;
 }
 
+/* Full-bleed dark route: while the challenge (or Mission Control) is mounted, commit the
+   whole hub shell to the dark treatment so the panels sit on one designed surface instead
+   of a dark card floating on the light hub page. The <body> flag is set by challenge-ui.js. */
+body.ch-active { background: #12151c; }
+body.ch-active .hub-top { background: rgba(15, 18, 25, 0.94); border-bottom-color: #2c3340; }
+body.ch-active .hub-top-title { color: #eef2f8; }
+body.ch-active .hub-back { background: #1b1f2a; border-color: #2c3340; color: #eef2f8; }
+body.ch-active .hub-back:hover { background: #232937; }
+
 .ch-head { display: flex; align-items: center; gap: 12px; margin: 6px 2px 14px; }
 .ch-title { margin: 0; font-size: 1.35rem; font-weight: 900; letter-spacing: 0.01em; color: var(--ch-gold); }
 .ch-h2 { margin: 0 0 8px; font-size: 1.02rem; font-weight: 800; }
@@ -106,12 +115,12 @@
 .ch-unlock-scrim { position: absolute; inset: 0; background: radial-gradient(circle at 50% 40%, rgba(30, 26, 5, 0.86), rgba(6, 8, 12, 0.96)); }
 .ch-unlock-card {
   position: relative; width: 100%; max-width: 420px; margin: 0 18px; text-align: center;
-  background: #12151c; border: 1px solid var(--ch-gold, #f2b705); border-radius: 20px; padding: 30px 22px 26px;
+  background: #12151c; border: 1px solid var(--ch-gold, #f2b705); border-radius: 20px; padding: 32px 22px 30px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3);
 }
 .ch-unlock.is-in .ch-unlock-card { transform: scale(1); }
 .ch-unlock-kicker { margin: 8px 0 0; text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.72rem; font-weight: 800; color: #9aa7bd; }
-.ch-unlock-title { margin: 6px 0 10px; font-size: 2rem; line-height: 1.05; font-weight: 900; color: #f2b705; }
+.ch-unlock-title { margin: 8px 0 26px; font-size: 2rem; line-height: 1.05; font-weight: 900; color: #f2b705; }
 .ch-unlock-sub { margin: 0 0 6px; color: #eef2f8; font-weight: 600; line-height: 1.45; }
 .ch-unlock-fine { margin: 0 0 20px; color: #9aa7bd; font-size: 0.82rem; font-style: italic; }
 .ch-unlock .ch-btn-go { background: #f2b705; color: #2a2200; padding: 13px 20px; font-size: 1rem; }
@@ -126,7 +135,8 @@
 /* Code-earned reveal overlay (shown by a game on a qualifying win) */
 .ch-reveal { position: fixed; inset: 0; z-index: 310; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
 .ch-reveal.is-in { opacity: 1; }
-.ch-reveal .ch-unlock-card { transform: scale(1); }
+.ch-reveal .ch-unlock-card { transform: scale(0.92); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+.ch-reveal.is-in .ch-unlock-card { transform: scale(1); }
 .ch-reveal-card { text-align: center; }
 .ch-reveal-title { margin: 4px 0 8px; font-size: 1.5rem; font-weight: 900; color: #f2b705; }
 .ch-reveal-taunt { margin: 6px 0 18px; font-size: 1.5rem; font-weight: 900; line-height: 1.25; color: #f2b705; }
@@ -146,7 +156,8 @@
 /* Finale overlay + code-built boarding pass */
 .ch-finale { position: fixed; inset: 0; z-index: 320; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
 .ch-finale.is-in { opacity: 1; }
-.ch-finale-inner { position: relative; width: 100%; max-width: 440px; margin: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ch-finale-inner { position: relative; width: 100%; max-width: 440px; margin: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; transform: scale(0.96); transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+.ch-finale.is-in .ch-finale-inner { transform: scale(1); }
 .ch-finale-stage { width: 100%; min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
 .ch-finale-printing { color: #f2b705; font-weight: 800; font-size: 1.1rem; margin: 0; }
 .ch-finale-tada { color: #f2b705; font-weight: 900; font-size: 1.15rem; text-align: center; margin: 2px 0 0; }
@@ -186,20 +197,44 @@
 .ch-cele.is-in .ch-cele-card { transform: scale(1); }
 .ch-cele-title { margin: 6px 0 12px; font-size: 1.4rem; font-weight: 900; color: var(--ch-gold); line-height: 1.15; }
 .ch-cele-media { display: flex; justify-content: center; margin: 0 0 12px; }
-.ch-cele-img { max-width: 100%; max-height: 52vh; border-radius: 12px; object-fit: contain; background: #0e1117; }
+/* Match the media corners to the card, and fade the image in so it does not pop. */
+.ch-cele-img { max-width: 100%; max-height: 52vh; border-radius: 16px; object-fit: contain; background: #0e1117; opacity: 0; transition: opacity 0.35s ease; }
+.ch-cele-img.is-loaded { opacity: 1; }
 .ch-cele-note { margin: 0 0 16px; color: var(--ch-muted); font-size: 0.9rem; line-height: 1.4; }
 /* The dismiss button must be unmistakable: full-width, solid, large. */
 .ch-cele .ch-btn-go { width: 100%; padding: 15px; font-size: 1.08rem; }
+/* The OK row reserves its height up front (min-height) so nothing shifts. While the image
+   settles, pulsing dots show the wait is intentional; then OK fades into that reserved space. */
+.ch-cele-foot { min-height: 54px; display: flex; align-items: center; justify-content: center; }
+.ch-cele-wait { display: inline-flex; gap: 7px; }
+.ch-cele-wait i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch-gold); opacity: 0.35; animation: ch-wait 1.1s ease-in-out infinite; }
+.ch-cele-wait i:nth-child(2) { animation-delay: 0.18s; }
+.ch-cele-wait i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes ch-wait { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }
+.ch-cele-ok { opacity: 0; transition: opacity 0.4s ease; }
+.ch-cele-ok.is-in { opacity: 1; }
 /* Same for the taunt / code-reveal overlay buttons (a single "Okay" goes full-width). */
 .ch-reveal-actions .ch-btn { flex: 1 1 auto; padding: 14px; font-size: 1.04rem; }
 
 /* How to Win: collapsible section; auto-open the first time, click to reopen after. */
-.ch-howto summary { cursor: pointer; list-style: none; user-select: none; }
-.ch-howto summary::marker, .ch-howto summary::-webkit-details-marker { display: none; }
-.ch-howto summary::after { content: "\25BE"; float: right; color: var(--ch-gold); }
-.ch-howto details:not([open]) summary::after { content: "\25B8"; }
-.ch-howto-body { margin-top: 10px; }
-.ch-howto-body .ch-list { margin: 4px 0 10px; }
+.ch-howto summary, .ch-collapse summary { cursor: pointer; list-style: none; user-select: none; }
+.ch-howto summary::marker, .ch-howto summary::-webkit-details-marker,
+.ch-collapse summary::marker, .ch-collapse summary::-webkit-details-marker { display: none; }
+.ch-howto summary::after, .ch-collapse summary::after {
+  content: "\25BE"; float: right; display: inline-block; color: var(--ch-gold);
+  font-size: 1.3em; line-height: 1; margin-left: 8px; transition: transform 0.25s ease;
+}
+.ch-howto details:not([open]) summary::after, .ch-collapse details:not([open]) summary::after { transform: rotate(-90deg); }
+.ch-howto-body { margin-top: 12px; }
+/* Roomier "How to Win": more line-height and breathing room between blocks. */
+.ch-howto-body .ch-lead { margin: 0 0 12px; line-height: 1.6; }
+.ch-howto-body .ch-label { margin: 14px 0 4px; }
+.ch-howto-body .ch-list { margin: 6px 0 12px; line-height: 1.85; }
+/* The selfie is the 5th task but sits under its own heading; a camera marker keeps its lone
+   "1." from reading as a broken restart of the games list. */
+.ch-howto-body .ch-list-selfie { list-style: none; padding-left: 0; }
+.ch-list-selfie li { position: relative; padding-left: 30px; }
+.ch-list-selfie li::before { content: "\01F4F7"; position: absolute; left: 0; top: -1px; font-size: 1.1em; }
 
 /* Selfie capture card */
 .ch-file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
@@ -220,7 +255,12 @@
 .ch-adm-selfie-actions .ch-btn-ghost { margin-left: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ch-unlock, .ch-unlock-card, .ch-unlock-sparkles span { transition: none; animation: none; }
+  /* Keep the gentle one-shot fade + scale-in on modals (the brief's core ask; a mild
+     <=10% zoom) even under Reduce Motion, but drop the looping/bouncing/spinning motion:
+     sparkle twinkle, wait-dot bounce, boarding-pass slide-up, the leaving scale-out, and
+     the chevron spin. */
+  .ch-unlock-sparkles span, .ch-cele-wait i { animation: none; }
   .ch-anim { animation: none; opacity: 1; transform: none; }
-  .ch-cele, .ch-cele-card { transition: none; }
+  .ch-unlock.is-leaving { animation: none; }
+  .ch-howto summary::after, .ch-collapse summary::after { transition: none; }
 }

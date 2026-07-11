@@ -110,7 +110,7 @@ const GAMES = [
 const CHALLENGE_CARD = {
   id: 'challenge',
   title: 'Hidden Challenge',
-  blurb: 'Something I made just for you.',
+  blurb: '',
   module: './challenge/challenge-ui.js',
   accent: '#f2b705',
   art: `<svg viewBox="0 0 120 120" aria-hidden="true">
@@ -227,7 +227,7 @@ class Hub {
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
         ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}`;
-    const aria = `${g.title}. ${g.blurb}`;
+    const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
     if (g.href) {

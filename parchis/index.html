@@ -3421,7 +3421,10 @@
     G.state = Engine.newGame({ mode: "american", seats: [0, 1, 2, 3] });
     render();
     bindInput();
-    showTitle();
+    // Challenge mode: open straight on the (locked) new-game setup with the "Begin
+    // challenge" bar, skipping the title menu, so the mission is the first thing shown.
+    if (chLive()) HUD.showSetup("cpu", prefill(), onPlay, showTitle);
+    else showTitle();
   };
   function openInGameMenu() {
     HUD.openMenu({

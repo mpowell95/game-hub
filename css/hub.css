@@ -98,6 +98,15 @@ body {
   justify-content: center;
 }
 .hub-extra .hub-card { width: 224px; }
+/* The hidden-challenge card is the payoff: a soft gold ring + glow so it reads as special,
+   not just another tile below a faint divider. */
+.hub-extra .hub-card {
+  border-color: rgba(242, 183, 5, 0.55);
+  box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.25), 0 8px 26px rgba(242, 183, 5, 0.22);
+}
+.hub-extra .hub-card:hover {
+  box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.4), 0 14px 34px rgba(242, 183, 5, 0.32);
+}
 .hub-card {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -126,13 +135,16 @@ body {
 .hub-card-label {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  padding: 18px 11px 9px;
+  padding: 26px 12px 10px;
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: -0.01em;
+  text-align: left;
   color: #fff;
-  background: linear-gradient(to top, rgba(8, 16, 30, 0.82), rgba(8, 16, 30, 0.1) 70%, rgba(8, 16, 30, 0));
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  /* Consistent, tall scrim so labels stay crisp over busy artwork (Parchís, Business Deal),
+     not just the clean tiles. */
+  background: linear-gradient(to top, rgba(6, 12, 24, 0.92) 0%, rgba(6, 12, 24, 0.78) 30%, rgba(6, 12, 24, 0.28) 68%, rgba(6, 12, 24, 0));
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.7);
 }
 
 .hub-soon-tag {
