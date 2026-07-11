@@ -12,7 +12,7 @@ import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
-import { recordWin } from '../../js/challenge/challenge-store.js';
+import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
@@ -105,6 +105,8 @@ class ChinchonUI {
 
     this._setup = this._loadSetup();
     this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0 });
+    // Hidden challenge: active only for the trigger profile name (inert otherwise).
+    this.challengeActive = isChallengeActive((loadProfile() || {}).name);
 
     const ui = this;
     this.humanAgent = {
@@ -230,7 +232,22 @@ class ChinchonUI {
     this.renderSetup();
   }
 
+  /** Still working on the Chinchón challenge? (active AND not yet won). Once won, the game
+   *  reverts to fully normal play. Dynamic, re-read each render. */
+  get challengeLive() {
+    if (!this.challengeActive) return false;
+    try { return !loadChallenge().wins.chinchon; } catch { return true; }
+  }
+
   renderSetup() {
+    // While the challenge is unwon, force the qualifying config (exactly 1 opponent at
+    // Average or Hard) so the locked setup she plays actually counts.
+    if (this.challengeLive) {
+      this._setup.count = 2;
+      if (!['normal', 'hard'].includes(this._setup.aiDifficulty[0])) this._setup.aiDifficulty[0] = 'normal';
+    }
+    const live = this.challengeLive;
+    const done = this.challengeActive && !live;
     const s = this._setup;
     const c = s.config;
     const st = this.stats;
@@ -290,7 +307,8 @@ class ChinchonUI {
       : `<h1 class="cc-title">Chinchón</h1>`) + themeBtn;
 
     this.el.setup.innerHTML = `
-      <div class="cc-card-panel">
+      <div class="cc-card-panel ${live ? 'cc-locked' : ''}">
+        ${done ? '<p class="cc-challenge-note">Chinch&oacute;n challenge completed. Play anyways?</p>' : ''}
         ${statsLine}
         <div class="cc-section">
           <span class="cc-label">Players</span>
@@ -323,7 +341,7 @@ class ChinchonUI {
           <div class="cc-rules" ${s.rulesOpen ? '' : 'hidden'}>${rulesBody}</div>
         </div>
 
-        <button class="cc-btn cc-btn-primary" data-action="start">Start game</button>
+        <button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? 'Begin challenge' : 'Start game'}</button>
       </div>`;
   }
 
@@ -553,8 +571,7 @@ class ChinchonUI {
    *  higher), record the win and reveal the code. Inert unless the profile name matches. */
   _onChallengeMatchEnd() {
     try {
-      const prof = loadProfile();
-      if (!isChallengeActive(prof && prof.name)) return;
+      if (!this.challengeLive) return;   // active AND not yet won
       const human = this._human();
       const humanWon = !!(this.game.winner && this.game.winner.id === human.id);
       const opps = this.game.players.filter((p) => !p.isHuman);
@@ -946,7 +963,7 @@ class ChinchonUI {
       ${body}
       <div class="cc-sheet-actions">
         <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Standings' : '📈 Scoreboard'}</button>
-        <button class="cc-btn cc-btn-primary" data-action="new-game">New game</button>
+        <button class="cc-btn cc-btn-primary" data-action="new-game">${this.challengeLive ? 'Retry Challenge' : 'New game'}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;

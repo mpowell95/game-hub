@@ -65,6 +65,12 @@
 .cc-btn:disabled { opacity: 0.45; cursor: default; }
 .cc-btn-primary { background: var(--cc-accent); color: #fff; box-shadow: 0 4px 14px rgba(200, 146, 15, 0.35); }
 .cc-btn-primary:hover:not(:disabled) { background: #bd870c; }
+/* Challenge mode: fixed config is grayed out and non-interactive; start becomes a
+   solid black "Begin challenge" bar. Once the challenge is won, a completed note shows. */
+.cc-btn-challenge { background: #12151c; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.cc-btn-challenge:hover:not(:disabled) { background: #000; }
+.cc-locked .cc-section, .cc-locked .cc-stats { opacity: 0.45; pointer-events: none; }
+.cc-challenge-note { margin: 0 0 4px; font-weight: 800; color: #178a7a; font-size: 0.95rem; text-align: center; }
 .cc-btn-ghost { background: var(--cc-surface-2); color: var(--cc-ink); }
 .cc-btn-ghost:hover:not(:disabled) { background: #e1e8f2; }
 
