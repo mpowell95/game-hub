@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var TRIGGER_HASH = '1cabdac0';
+  var TRIGGER_HASHES = ['1cabdac0', '39b28c49']; // recipient + test1 tester (mirror js/challenge/secrets.js)
   var SALT = 'gh-v1-9c3f';
   var XORKEY = 'gh-xk-7q2z9';
   var CODE = 'JSwAPj5he1x6NWw0LQ=='; // obf of the Business Deal code
@@ -36,6 +36,15 @@
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
 
+  // Has the Business Deal challenge already been won? (reads the shared record).
+  function isDone() {
+    try {
+      var raw = localStorage.getItem('gamehub.challenge');
+      var st = raw ? JSON.parse(deobf(raw)) : null;
+      return !!(st && st.wins && st.wins.business);
+    } catch (e) { return false; }
+  }
+
   // Read-modify-write the shared record so we never clobber Ana's other progress.
   function recordWin() {
     try {
@@ -59,13 +68,11 @@
     el.innerHTML =
       '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(30,26,5,.86),rgba(6,8,12,.96));"></div>' +
       '<div style="position:relative;max-width:420px;margin:0 18px;text-align:center;background:#12151c;border:1px solid #f2b705;border-radius:20px;padding:28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.6);">' +
-      '<p style="margin:0;text-transform:uppercase;letter-spacing:.22em;font-size:.72rem;font-weight:800;color:#9aa7bd;">' + esc(label) + ' cleared</p>' +
-      '<h1 style="margin:6px 0 8px;font-size:1.5rem;font-weight:900;color:#f2b705;">Secret code earned</h1>' +
-      '<p style="margin:0 0 4px;color:#eef2f8;font-weight:600;line-height:1.45;">Guard it with your life. Enter it in the Challenge Area to claim a piece.</p>' +
-      '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.4rem;letter-spacing:.1em;color:#2a2200;background:#f2b705;border-radius:12px;padding:14px 12px;margin:14px 0;word-break:break-all;">' + esc(code) + '</div>' +
-      '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
-      '<button id="bd-ch-copy" style="font:inherit;font-weight:800;border:0;border-radius:11px;padding:11px 16px;cursor:pointer;background:#f2b705;color:#2a2200;">Copy code</button>' +
-      '<button id="bd-ch-close" style="font:inherit;font-weight:700;border:1px solid #2c3340;border-radius:11px;padding:11px 16px;cursor:pointer;background:transparent;color:#eef2f8;">Onward</button>' +
+      '<p style="margin:8px 0 0;text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:800;color:#9aa7bd;">Your code</p>' +
+      '<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.05rem;letter-spacing:.04em;color:#2a2200;background:#f2b705;border-radius:12px;padding:13px 12px;margin:6px 0 14px;white-space:nowrap;overflow-x:auto;">' + esc(code) + '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center;">' +
+      '<button id="bd-ch-copy" style="flex:1;font:inherit;font-weight:800;border:0;border-radius:11px;padding:14px 16px;cursor:pointer;background:#f2b705;color:#2a2200;">Copy</button>' +
+      '<button id="bd-ch-close" style="flex:1;font:inherit;font-weight:700;border:1px solid #2c3340;border-radius:11px;padding:14px 16px;cursor:pointer;background:transparent;color:#eef2f8;">Close</button>' +
       '</div><p id="bd-ch-msg" style="margin:10px 0 0;min-height:1.1em;font-size:.85rem;font-weight:700;color:#9aa7bd;"></p></div>';
     document.body.appendChild(el);
     el.querySelector('#bd-ch-close').addEventListener('click', function () { el.remove(); });
@@ -73,14 +80,17 @@
       var msg = el.querySelector('#bd-ch-msg');
       try {
         navigator.clipboard.writeText(code).then(
-          function () { msg.textContent = 'Copied. Do not lose it.'; },
-          function () { msg.textContent = 'Copy blocked. Write it down: ' + code; });
-      } catch (e) { msg.textContent = 'Copy blocked. Write it down: ' + code; }
+          function () { msg.textContent = 'Copied.'; },
+          function () { msg.textContent = code; });
+      } catch (e) { msg.textContent = code; }
     });
   }
 
+  function isActive() { return TRIGGER_HASHES.indexOf(hash(norm(profileName()))) >= 0; }
   window.__bdChallenge = {
-    active: function () { return hash(norm(profileName())) === TRIGGER_HASH; },
+    active: isActive,
+    done: function () { return isDone(); },
+    live: function () { return isActive() && !isDone(); },
     recordWinAndReveal: function () { recordWin(); showReveal(deobf(CODE), 'Business Deal'); }
   };
 })();

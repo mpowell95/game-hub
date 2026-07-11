@@ -564,6 +564,11 @@ html, body {
   font-size: 22px; font-weight: 900; color: #143a72; background: linear-gradient(180deg,#fff,#dfeaff); box-shadow: 0 3px 0 #9fb7e6;
 }
 .count-btn.sel { color: #6b4e00; background: linear-gradient(180deg,#ffe79a,var(--coin)); box-shadow: 0 3px 0 var(--coin-edge); }
+/* Challenge mode: fixed config is grayed out + non-interactive; start becomes a solid
+   black "Begin challenge" bar. Once won, a completed note shows and play is normal. */
+.count-row.bd-locked { opacity: .45; pointer-events: none; }
+.bd-cta-challenge { background: #12151c !important; color: #fff !important; box-shadow: 0 3px 0 #000 !important; }
+.bd-challenge-note { margin: 0 0 8px; font-weight: 800; color: #178a7a; font-size: 15px; text-align: center; }
 /* version stamp on the setup screen so you can always read which build you're on */
 .setup-version { margin-top: 12px; font-size: 11px; font-weight: 800; color: var(--ink-soft); opacity: .65; letter-spacing: .04em; }
 

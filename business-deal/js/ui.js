@@ -30,7 +30,7 @@
 
   // Bump alongside the sw.js cache name on every release so the visible stamp
   // and the cached build always match.
-  const APP_VERSION = 'v21';
+  const APP_VERSION = 'v22';
 
   const LIGHT_BANDS = ['lightblue', 'yellow', 'utility']; // need dark text on band
 
@@ -278,22 +278,33 @@
       let chosen = this._lastNumAI || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 3);
       let diff = this._lastDiff || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
       const root = this.$('setup');
+      // Hidden challenge: while unwon, force the qualifying config (2+ opponents at
+      // Normal/Hard), gray out the choices, and show a "Begin challenge" bar. Once won,
+      // normal play with a "completed, play anyways?" note.
+      const bd = window.__bdChallenge;
+      const live = !!(bd && bd.live && bd.live());
+      const done = !!(bd && bd.active && bd.active() && bd.done && bd.done());
       const render = () => {
+        if (live) { if (chosen < 2) chosen = 3; if (diff === 'easy') diff = 'normal'; }
+        const lock = live ? ' bd-locked' : '';
         root.innerHTML =
           '<div class="scrim"></div><div class="sheet">' +
+          (done ? '<p class="bd-challenge-note">Business Deal challenge completed. Play anyways?</p>' : '') +
           "<h3>Matt's Monopoly</h3><p>How many AI opponents?</p>" +
-          '<div class="count-row">' +
+          '<div class="count-row' + lock + '">' +
           [1, 2, 3, 4].map(n => `<button class="count-btn${n === chosen ? ' sel' : ''}" data-n="${n}">${n}</button>`).join('') +
-          '</div><p style="margin-top:14px">Difficulty</p><div class="count-row">' +
+          '</div><p style="margin-top:14px">Difficulty</p><div class="count-row' + lock + '">' +
           ['easy', 'normal', 'hard'].map(d => `<button class="count-btn diff${d === diff ? ' sel' : ''}" data-d="${d}" style="width:auto;padding:0 16px;font-size:15px">${d[0].toUpperCase() + d.slice(1)}</button>`).join('') +
-          '</div><button class="cta" id="start-btn">Start Game</button>' +
+          '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : 'Start Game') + '</button>' +
           '<button class="cta ghost-cta" id="setup-stats">Stats</button>' +
           '<button class="cta ghost-cta" id="setup-hub">← Game Hub</button>' +
           `<div class="setup-version">${APP_VERSION}</div></div>`;
-        root.querySelectorAll('.count-btn[data-n]').forEach(b =>
-          b.addEventListener('click', () => { chosen = +b.dataset.n; render(); }));
-        root.querySelectorAll('.count-btn[data-d]').forEach(b =>
-          b.addEventListener('click', () => { diff = b.dataset.d; render(); }));
+        if (!live) {
+          root.querySelectorAll('.count-btn[data-n]').forEach(b =>
+            b.addEventListener('click', () => { chosen = +b.dataset.n; render(); }));
+          root.querySelectorAll('.count-btn[data-d]').forEach(b =>
+            b.addEventListener('click', () => { diff = b.dataset.d; render(); }));
+        }
         this.$('start-btn').addEventListener('click', () => { root.classList.remove('show'); this.newGame(chosen, diff); });
         this.$('setup-stats').addEventListener('click', () => this.showStats('setup'));
         this.$('setup-hub').addEventListener('click', () => this._toHub());
@@ -1554,7 +1565,7 @@
         `<h1>${w.id === 0 ? 'You Win! 🎉' : esc(w.name) + ' wins'}</h1>` +
         `<p>Winning sets: ${esc(sets)}</p>` +
         `<p class="win-stats">Record: ${s.won}W – ${s.lost}L</p>` +
-        '<button class="cta" id="again">Play Again</button>' +
+        '<button class="cta" id="again">' + (window.__bdChallenge && window.__bdChallenge.live() ? 'Retry Challenge' : 'Play Again') + '</button>' +
         '<button class="cta ghost-cta" id="win-stats">View Stats</button>' +
         '<button class="cta ghost-cta" id="win-hub">← Game Hub</button></div>';
       root.querySelector('#again').addEventListener('click', () => this.showSetup());
@@ -1568,7 +1579,7 @@
       // Hidden challenge: on a qualifying human win (2+ AI at Normal or higher), record
       // it and reveal the code. Inert unless the profile name matches the trigger.
       try {
-        if (window.__bdChallenge && window.__bdChallenge.active() && w.id === 0
+        if (window.__bdChallenge && window.__bdChallenge.live() && w.id === 0
             && (this._lastNumAI | 0) >= 2 && (this.difficulty === 'normal' || this.difficulty === 'hard')) {
           window.__bdChallenge.recordWinAndReveal();
         }
