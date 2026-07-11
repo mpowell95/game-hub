@@ -110,7 +110,7 @@ const GAMES = [
 const CHALLENGE_CARD = {
   id: 'challenge',
   title: 'Challenge',
-  blurb: 'A classified mission awaits.',
+  blurb: 'A silly thing I made for you.',
   module: './challenge/challenge-ui.js',
   accent: '#f2b705',
   art: `<svg viewBox="0 0 120 120" aria-hidden="true">
@@ -123,7 +123,7 @@ const CHALLENGE_CARD = {
 const ADMIN_CARD = {
   id: 'challenge',
   title: 'Mission Control',
-  blurb: 'Commander access only.',
+  blurb: 'Matt only.',
   module: './challenge/challenge-ui.js',
   accent: '#178a7a',
   art: `<svg viewBox="0 0 120 120" aria-hidden="true">

@@ -96,9 +96,9 @@ class ChallengeUI {
   // --- personal-question gate --------------------------------------------------
   renderQuestionGate() {
     this.mount(`
-      <header class="ch-head"><h1 class="ch-title">Clearance required</h1></header>
+      <header class="ch-head"><h1 class="ch-title">Okay, prove it's you</h1></header>
       <section class="ch-card">
-        <p class="ch-lead">Only the real ${esc(this.name)} gets in. One question, agent.</p>
+        <p class="ch-lead">One question only the real ${esc(this.name)} would get right.</p>
         <form data-role="answer-form" class="ch-form">
           <label class="ch-label" for="ch-answer">${esc(S.QUESTION)}</label>
           <input class="ch-input" id="ch-answer" name="answer" type="text" autocomplete="off" placeholder="Your answer">
@@ -119,11 +119,10 @@ class ChallengeUI {
       </header>
 
       <section class="ch-card">
-        <h2 class="ch-h2">The mission</h2>
-        <p class="ch-lead">Five secret codes stand between you and the most over-hyped reveal of your life.
-          Earn four by winning each game under its (frankly dramatic) conditions, and one by submitting a
-          selfie Mission Control deigns to approve. Enter each code below. Collect all five pieces to assemble
-          the pass.</p>
+        <h2 class="ch-h2">Here's the deal</h2>
+        <p class="ch-lead">Five codes, five pieces. Win four by beating each game under my (admittedly ridiculous)
+          conditions, and earn the fifth by sending me a selfie I approve. Type each code in below. Get all five
+          pieces and you can put the thing together.</p>
       </section>
 
       <section class="ch-card">
@@ -146,8 +145,8 @@ class ChallengeUI {
                 <span class="ch-vault-code">${esc(e.code)}</span>
                 <span class="ch-vault-tag">${e.redeemed ? 'redeemed' : 'earned, enter it above'}</span>
               </li>`).join('')}</ul>`
-          : `<p class="ch-hint">Codes you earn from wins and your approved selfie appear here, so a code is
-              never truly lost. Nothing earned yet. Go win something dramatic.</p>`}
+          : `<p class="ch-hint">Codes you earn from wins and your approved selfie show up here, so you can never
+              really lose one. Nothing yet. Go win something.</p>`}
       </section>
 
       <section class="ch-card">
@@ -166,29 +165,29 @@ class ChallengeUI {
     const s = st.selfie;
     let inner;
     if (s.status === 'approved') {
-      inner = `<p class="ch-msg is-ok">Selfie approved by Mission Control.</p>
-        <p class="ch-hint">Your selfie code is now in the vault below. Enter it above to claim your piece.</p>`;
+      inner = `<p class="ch-msg is-ok">I approved your selfie.</p>
+        <p class="ch-hint">Your selfie code is now in the vault below. Type it in above to claim your piece.</p>`;
     } else if (s.status === 'pending') {
-      inner = `<p class="ch-lead">Selfie sent. Mission Control is deliberating with tremendous seriousness.</p>
-        <p class="ch-hint" data-role="selfie-live">Awaiting the verdict. This updates live.</p>`;
+      inner = `<p class="ch-lead">Selfie sent. I'm looking at it with great seriousness.</p>
+        <p class="ch-hint" data-role="selfie-live">Waiting on me. This updates on its own.</p>`;
     } else {
       const rejected = s.status === 'rejected';
       const capture = this._pendingSelfie
         ? `<img class="ch-selfie-preview" alt="Your selfie preview" src="${esc(this._pendingSelfie)}">
            <div class="ch-selfie-actions">
-             <button type="button" class="ch-btn ch-btn-go" data-role="selfie-submit">Submit for approval</button>
+             <button type="button" class="ch-btn ch-btn-go" data-role="selfie-submit">Send it to me</button>
              <label class="ch-btn ch-btn-ghost ch-file-btn">Retake
                <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>
            </div>`
         : `<label class="ch-btn ch-btn-go ch-file-btn">Take your selfie
              <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>`;
-      inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Rejected. Try again.')}</p>` : ''}
-        <p class="ch-lead">Strike a pose worthy of the mission. Front camera, maximum drama. Mission Control
-          must approve it before the fifth code is yours.</p>
+      inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Nope, again.')}</p>` : ''}
+        <p class="ch-lead">Take a selfie. Front camera, maximum drama. I have to approve it before the fifth
+          code is yours.</p>
         ${capture}
         <p class="ch-msg" data-role="selfie-msg" role="status" aria-live="polite"></p>`;
     }
-    return `<section class="ch-card"><h2 class="ch-h2">Selfie mission</h2>${inner}</section>`;
+    return `<section class="ch-card"><h2 class="ch-h2">The selfie</h2>${inner}</section>`;
   }
 
   galleryHTML(st) {
@@ -304,7 +303,7 @@ class ChallengeUI {
         <h2 class="ch-cele-title">${esc(title || '')}</h2>
         <div class="ch-cele-media"><img class="ch-cele-img" alt="" src="${esc(asset)}"></div>
         ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
-        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">Onward</button>
+        <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">Nice</button>
       </div>`;
     document.body.appendChild(host);
     const img = host.querySelector('.ch-cele-img');
@@ -378,7 +377,7 @@ class ChallengeUI {
       this.mount(`
         <header class="ch-head"><h1 class="ch-title">Mission Control</h1></header>
         <section class="ch-card">
-          <p class="ch-lead">Restricted. Enter your PIN, commander.</p>
+          <p class="ch-lead">Enter your PIN.</p>
           <form data-role="pin-form" class="ch-form">
             <input class="ch-input" id="ch-pin" name="pin" type="password" inputmode="numeric"
                    autocomplete="off" placeholder="PIN">
@@ -549,13 +548,13 @@ class ChallengeUI {
         this.pushSync();
         this.render();
         this.showCelebration({
-          kicker: 'Clearance granted',
-          title: 'Correct, agent.',
+          kicker: 'Correct',
+          title: "That's the one.",
           asset: assetUrl(ANSWER_ASSET),
-          note: 'Behold: the sexiest starchy vegetable. Your mission begins.',
+          note: 'Behold: the sexiest starchy vegetable. Obviously. Off we go.',
         });
       } else {
-        this.setMsg('[data-role="answer-msg"]', 'Not quite, agent. Try again.', false);
+        this.setMsg('[data-role="answer-msg"]', 'Nope. Try again.', false);
       }
       return;
     }
@@ -563,7 +562,7 @@ class ChallengeUI {
     if (role === 'pin-form') {
       const val = form.querySelector('#ch-pin').value;
       if (checkPin(val)) { unlockAdmin(); this._pinOk = true; this.render(); }   // persist: no re-prompt on this device
-      else this.setMsg('[data-role="pin-msg"]', 'Access denied.', false);
+      else this.setMsg('[data-role="pin-msg"]', "That's not it.", false);
       return;
     }
 
@@ -634,11 +633,11 @@ class ChallengeUI {
 
   async submitSelfie() {
     if (!this._pendingSelfie) return;
-    this.setMsg('[data-role="selfie-msg"]', 'Sending to Mission Control...', true);
+    this.setMsg('[data-role="selfie-msg"]', 'Sending...', true);
     const id = await net.submitSelfie(this._pendingSelfie);
     if (this._destroyed) return;
     if (!id) {
-      this.setMsg('[data-role="selfie-msg"]', 'Could not reach Mission Control (offline or not set up yet). Try again later.', false);
+      this.setMsg('[data-role="selfie-msg"]', "Couldn't send it (are you offline?). Try again in a bit.", false);
       return;
     }
     setSelfie({ status: 'pending', submissionId: id });
