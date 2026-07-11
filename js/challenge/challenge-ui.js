@@ -11,7 +11,7 @@ import { loadProfile } from '../profile-store.js';
 import { ensureChallengeCss, playUnlock } from './unlock.js';
 import * as S from './secrets.js';
 import {
-  loadChallenge, redeemSlot, unlockArea, unlockAdmin, markUnlockSeen, setSelfie,
+  loadChallenge, redeemSlot, unlockArea, unlockAdmin, markUnlockSeen, markHowToSeen, setSelfie,
   remoteView, mergeRemote,
 } from './challenge-store.js';
 import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode, TAUNTS } from './hooks.js';
@@ -105,6 +105,8 @@ class ChallengeUI {
   renderArea(st) {
     const pieces = st.order.length;
     const earned = this.earnedCodes(st);
+    // How to Win: auto-expanded the first time on this device, collapsed after.
+    if (this._firstHowTo === undefined) { this._firstHowTo = !st.howToSeen; if (this._firstHowTo) markHowToSeen(); }
     this.mount(`
       <header class="ch-head">
         <h1 class="ch-title">Challenge Mode</h1>
@@ -112,24 +114,28 @@ class ChallengeUI {
           ? '<button type="button" class="ch-btn ch-btn-ghost" data-role="reset-test">Reset (test)</button>' : ''}
       </header>
 
-      <section class="ch-card">
-        <h2 class="ch-h2">How to Play</h2>
-        <p class="ch-lead">There are 5 parts to this challenge. You must complete the following tasks.</p>
-        <p class="ch-label">Win a game of:</p>
-        <ol class="ch-list">
-          <li>Connect 4</li>
-          <li>Chinch&oacute;n</li>
-          <li>Business Deal</li>
-          <li>Parch&iacute;s</li>
-        </ol>
-        <p class="ch-label">And submit:</p>
-        <ol class="ch-list">
-          <li>A selfie taken in the moment</li>
-        </ol>
-        <p class="ch-lead">For each task you complete, you will receive a code or phrase. When you receive a code,
-          come back to the Challenge area, enter your code, and click Redeem.</p>
-        <p class="ch-lead">Each code unlocks a piece of an image. Once you have unlocked all 5 pieces, you can
-          assemble the image. The image, and the information displayed within it, is the prize.</p>
+      <section class="ch-card ch-howto">
+        <details ${this._firstHowTo ? 'open' : ''}>
+          <summary class="ch-h2">How to Win</summary>
+          <div class="ch-howto-body">
+            <p class="ch-lead">There are 5 parts to this challenge. You must complete the following tasks:</p>
+            <p class="ch-label">Win a game of:</p>
+            <ol class="ch-list">
+              <li>Connect 4</li>
+              <li>Chinch&oacute;n</li>
+              <li>Business Deal</li>
+              <li>Parch&iacute;s</li>
+            </ol>
+            <p class="ch-label">And submit:</p>
+            <ol class="ch-list">
+              <li>A selfie taken in the moment</li>
+            </ol>
+            <p class="ch-lead">For each task you complete, you will receive a code or phrase.</p>
+            <p class="ch-lead">When you receive a code, come back to the Challenge area, enter your code, and click Redeem.</p>
+            <p class="ch-lead">Each code unlocks a piece of an image. Once you have unlocked all 5 pieces, you can assemble the image.</p>
+            <p class="ch-lead">The image, and the information displayed within it, is the prize.</p>
+          </div>
+        </details>
       </section>
 
       <section class="ch-card">
@@ -157,7 +163,7 @@ class ChallengeUI {
 
       <section class="ch-card">
         <h2 class="ch-h2">Pieces <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
-        <div class="ch-gallery" data-role="gallery">
+        <div class="ch-layers" data-role="gallery">
           ${this.galleryHTML(st)}
         </div>
         <button type="button" class="ch-btn ch-btn-finale" data-role="assemble" ${pieces >= PIECE_TOTAL ? '' : 'disabled'}>
@@ -192,90 +198,40 @@ class ChallengeUI {
     return `<section class="ch-card"><h2 class="ch-h2">Selfie</h2>${inner}</section>`;
   }
 
-  galleryHTML(st) {
-    // Each earned piece is a teaser fragment of the boarding-pass finale. PIECE_ORDER
-    // ids without art fall back to a numbered tile (placeholders reward-pt-1..5).
-    const FRAG = {
-      corner: '<span class="ch-frag ch-frag-corner"></span>',
-      barcode: '<span class="ch-frag ch-frag-bars"></span>',
-      route: '<span class="ch-frag ch-frag-route">&middot;&middot;&middot; &#10230; ?</span>',
-      seat: '<span class="ch-frag ch-frag-seat">SEAT<br>&middot;&middot;</span>',
-      stamp: '<span class="ch-frag ch-frag-stamp">VISA</span>',
-    };
+  /** The prize image as stacked layers: each redeemed code adds the next layer, so the
+   *  image builds up as she goes. Real layer art (assets/reward-layer-1..5.png, transparent
+   *  PNGs) drops in later; until then a tinted numbered placeholder shows the stacking. */
+  layerHTML(count) {
     let out = '';
     for (let i = 0; i < PIECE_TOTAL; i++) {
-      const fragment = st.order.length > i ? S.PIECE_ORDER[i] : null;
-      out += fragment
-        ? `<div class="ch-piece is-on" data-fragment="${esc(fragment)}">${FRAG[fragment] || `<span class="ch-piece-mark">${i + 1}</span>`}</div>`
-        : `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">?</span></div>`;
+      const on = i < count;
+      out += `<div class="ch-layer ${on ? 'is-on' : 'is-off'}">
+        <img class="ch-layer-img" alt="" src="${assetUrl('reward-layer-' + (i + 1) + '.png')}" onerror="this.remove()">
+        <span class="ch-layer-ph" aria-hidden="true">${i + 1}</span>
+      </div>`;
     }
     return out;
   }
+  galleryHTML(st) { return this.layerHTML(st.order.length); }
 
-  // --- Finale: the animated boarding pass -------------------------------------
+  // --- Finale: the assembled image (all layers stacked) -----------------------
   showFinale() {
     if (loadChallenge().order.length < PIECE_TOTAL) return;
     const host = document.createElement('div');
     host.className = 'ch-finale';
     host.setAttribute('role', 'dialog');
     host.setAttribute('aria-modal', 'true');
-    host.setAttribute('aria-label', 'Your boarding pass');
+    host.setAttribute('aria-label', 'The assembled image');
     host.innerHTML = `
       <div class="ch-unlock-scrim"></div>
       <div class="ch-finale-inner">
-        <div class="ch-finale-stage" data-role="stage"></div>
-        <button type="button" class="ch-btn ch-btn-ghost ch-finale-close" data-role="fin-close">Close</button>
+        <div class="ch-layers ch-layers-full">${this.layerHTML(PIECE_TOTAL)}</div>
+        <button type="button" class="ch-btn ch-btn-go ch-finale-close" data-role="fin-close">Close</button>
       </div>`;
     document.body.appendChild(host);
     requestAnimationFrame(() => host.classList.add('is-in'));
     host.querySelector('[data-role="fin-close"]').addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => host.remove());
-    const stage = host.querySelector('[data-role="stage"]');
-    const fallback = () => {
-      stage.innerHTML = `<p class="ch-finale-printing">Not ready yet.</p>
-        <button type="button" class="ch-btn ch-btn-go" data-role="fin-retry">Try again</button>`;
-      const r = stage.querySelector('[data-role="fin-retry"]'); if (r) r.addEventListener('click', attempt);
-    };
-    const attempt = () => {
-      stage.innerHTML = '<p class="ch-finale-printing">Loading<span class="ch-dots"><i>.</i><i>.</i><i>.</i></span></p>';
-      this.loadFlight().then((flight) => {
-        if (flight) { this.renderPass(stage, flight); return; }
-        fallback();
-      }).catch(fallback);
-    };
-    setTimeout(attempt, 300);
-  }
-
-  /** Flight data source: a test injection (window.__chFlight), else the Firebase
-   *  flight node via challenge-net (null when unconfigured -> the printing fallback). */
-  async loadFlight() {
-    try {
-      if (window.__chFlight) return window.__chFlight;
-      return await net.fetchFlight();
-    } catch { return null; }
-  }
-
-  renderPass(stage, f) {
-    const g = (v, fb) => esc(v != null && v !== '' ? v : fb);
-    stage.innerHTML = `
-      <div class="ch-pass">
-        <div class="ch-pass-head">
-          <span class="ch-pass-airline">&#9992; ${g(f.airline, 'Anita Air')}</span>
-          <span class="ch-pass-tag">Boarding Pass</span>
-        </div>
-        <div class="ch-pass-route ch-anim" style="--d:1">
-          <div class="ch-pass-end"><span class="ch-pass-code">${g(f.fromCode, 'MAD')}</span><span class="ch-pass-city">${g(f.fromCity, 'Madrid')}</span></div>
-          <span class="ch-pass-plane" aria-hidden="true">&#9992;</span>
-          <div class="ch-pass-end"><span class="ch-pass-code">${g(f.toCode, '???')}</span><span class="ch-pass-city">${g(f.toCity, 'Somewhere')}</span></div>
-        </div>
-        <div class="ch-pass-grid">
-          <div class="ch-pass-cell ch-anim" style="--d:2"><label>Passenger</label><span>${g(f.name, this.name || 'Passenger')}</span></div>
-          <div class="ch-pass-cell ch-anim" style="--d:3"><label>Dates</label><span>${g(f.dates, 'To be revealed')}</span></div>
-          <div class="ch-pass-cell ch-anim" style="--d:4"><label>Flight</label><span>${g(f.flightNumbers, '--')}</span></div>
-        </div>
-        <div class="ch-pass-msg ch-anim" style="--d:5">${g(f.message, '')}</div>
-        <div class="ch-pass-barcode ch-anim" style="--d:6" aria-hidden="true"></div>
-      </div>`;
   }
 
   /** Codes to show in the vault: one per recorded win, plus the selfie code if approved. */

@@ -81,12 +81,23 @@
 .ch-vault-tag { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .ch-vault-item.is-redeemed .ch-vault-tag::before { content: "\2713 "; }
 
-.ch-gallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.ch-piece { position: relative; aspect-ratio: 3 / 4; border-radius: 8px; display: grid; place-items: center; }
-.ch-piece.is-off { background: #0e1117; border: 1px dashed var(--ch-line); }
-.ch-piece.is-on { background: linear-gradient(135deg, #3a2f05, #f2b705); border: 1px solid var(--ch-gold); }
-.ch-piece-mark { font-weight: 900; color: #2a2200; font-size: 1.1rem; }
-.ch-piece-lock { color: var(--ch-muted); font-weight: 900; font-size: 1.1rem; }
+/* Prize image, built from stacked layers: each redeemed code reveals the next layer,
+   so the image builds up as she goes. Real art (assets/reward-layer-1..5.png, transparent
+   PNGs) drops in later; until then each layer is a tinted numbered placeholder. */
+.ch-layers {
+  position: relative; width: 100%; max-width: 320px; margin: 0 auto; aspect-ratio: 3 / 4;
+  border-radius: 12px; overflow: hidden; background: #0e1117; border: 1px solid var(--ch-line);
+}
+.ch-layer { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 0.45s ease; }
+.ch-layer.is-on { opacity: 1; }
+.ch-layer-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.ch-layer-ph { font-weight: 900; font-size: 2rem; color: rgba(255, 255, 255, 0.28); }
+.ch-layer:nth-child(1) { background: rgba(31, 95, 168, 0.40); }
+.ch-layer:nth-child(2) { background: rgba(23, 138, 122, 0.30); }
+.ch-layer:nth-child(3) { background: rgba(242, 183, 5, 0.22); }
+.ch-layer:nth-child(4) { background: rgba(224, 83, 47, 0.22); }
+.ch-layer:nth-child(5) { background: rgba(255, 255, 255, 0.12); }
+.ch-layers-full { max-width: 380px; max-height: 70vh; }
 
 /* Full-screen unlock announcement */
 .ch-unlock { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
@@ -178,6 +189,16 @@
 .ch-cele-note { margin: 0 0 16px; color: var(--ch-muted); font-size: 0.9rem; line-height: 1.4; }
 /* The dismiss button must be unmistakable: full-width, solid, large. */
 .ch-cele .ch-btn-go { width: 100%; padding: 15px; font-size: 1.08rem; }
+/* Same for the taunt / code-reveal overlay buttons (a single "Okay" goes full-width). */
+.ch-reveal-actions .ch-btn { flex: 1 1 auto; padding: 14px; font-size: 1.04rem; }
+
+/* How to Win: collapsible section; auto-open the first time, click to reopen after. */
+.ch-howto summary { cursor: pointer; list-style: none; user-select: none; }
+.ch-howto summary::marker, .ch-howto summary::-webkit-details-marker { display: none; }
+.ch-howto summary::after { content: "\25BE"; float: right; color: var(--ch-gold); }
+.ch-howto details:not([open]) summary::after { content: "\25B8"; }
+.ch-howto-body { margin-top: 10px; }
+.ch-howto-body .ch-list { margin: 4px 0 10px; }
 
 /* Selfie capture card */
 .ch-file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-align: center; }

@@ -350,6 +350,11 @@ class ConnectFourUI {
     const startBtn = this.el.setup && this.el.setup.querySelector('[data-role="start"]');
     if (startBtn) { startBtn.textContent = 'Begin challenge'; startBtn.classList.add('cf-btn-challenge'); }
     [this.el.difficulty, this.el.first].forEach((g) => { if (g) g.classList.add('is-locked'); });
+    // End screen: relabel Rematch and drop "Change settings" (the config is fixed).
+    const rematch = this.el.result.querySelector('[data-role="rematch"]');
+    if (rematch) rematch.textContent = 'Retry Challenge';
+    const change = this.el.result.querySelector('[data-role="change"]');
+    if (change) change.hidden = true;
   }
 
   syncSegmented(group, value) {
