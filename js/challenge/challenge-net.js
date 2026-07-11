@@ -10,11 +10,14 @@
 
 import { PROGRESS_KEY } from './secrets.js';
 
-// TODO(C4): verify the current Firebase JS SDK version against the official docs at build
-// time (the MP standing rule) and pin it here.
 const SDK = '10.12.2';
 
 let _db = null, _uid = null, _api = null, _tried = false, _ok = false;
+
+// The progress record key for the ACTIVE persona (recipient or a tester). Defaults to
+// the recipient's; challenge-ui sets it per active profile name so testers stay isolated.
+let _key = PROGRESS_KEY;
+export function setProgressKey(k) { if (typeof k === 'string' && k) _key = k; }
 
 async function readConfig() {
   try { const m = await import('../firebase-config.js'); return m.firebaseConfig || (m.default && m.default.firebaseConfig) || m.default || null; }
@@ -51,24 +54,25 @@ export async function fetchFlight() {
   catch { return null; }
 }
 
-/** Mirror local progress up to challenge/{PROGRESS_KEY}. */
+/** Mirror local progress up to challenge/{active key}. */
 export async function syncUp(state) {
   if (!(await init())) return false;
-  try { const o = Object.assign({}, state); o.updatedAt = _api.serverTimestamp(); await _api.update(path('challenge/' + PROGRESS_KEY), o); return true; }
+  try { const o = Object.assign({}, state); o.updatedAt = _api.serverTimestamp(); await _api.update(path('challenge/' + _key), o); return true; }
   catch { return false; }
 }
 
 /** Pull the remote progress record (recovery / cross-device). Null if none. */
 export async function pull() {
   if (!(await init())) return null;
-  try { const s = await _api.get(path('challenge/' + PROGRESS_KEY)); return s.exists() ? s.val() : null; }
+  try { const s = await _api.get(path('challenge/' + _key)); return s.exists() ? s.val() : null; }
   catch { return null; }
 }
 
-/** Submit a compressed selfie data URL. Returns the pushId or null. */
+/** Submit a compressed selfie data URL. Tags it with the submitter's progress key so
+ *  Mission Control credits the right persona. Returns the pushId or null. */
 export async function submitSelfie(dataUrl) {
   if (!(await init())) return null;
-  try { const r = _api.push(path('selfies')); await _api.set(r, { by: _uid, at: _api.serverTimestamp(), status: 'pending', image: dataUrl }); return r.key; }
+  try { const r = _api.push(path('selfies')); await _api.set(r, { by: _uid, key: _key, at: _api.serverTimestamp(), status: 'pending', image: dataUrl }); return r.key; }
   catch { return null; }
 }
 
@@ -79,55 +83,54 @@ export async function watchMySelfie(submissionId, cb) {
   catch { return () => {}; }
 }
 
-// --- Mission Control (admin) ---------------------------------------------------
+// --- Mission Control (admin; gated only by the in-app PIN) ----------------------
 
-/** Whether this anonymous uid is on the admins allowlist. */
-export async function isAdminUid() {
-  if (!(await init())) return false;
-  try { const s = await _api.get(path('admins/' + _uid)); return s.val() === true; }
-  catch { return false; }
-}
-/** Watch all pending selfies (admin only). cb(selfiesObject). Returns unsubscribe. */
+/** Watch all selfies. cb(selfiesObject). Returns unsubscribe. */
 export async function watchSelfies(cb) {
   if (!(await init())) return () => {};
   try { return _api.onValue(path('selfies'), (s) => cb(s.val() || {})); }
   catch { return () => {}; }
 }
 /**
- * Record a selfie decision, then delete the image immediately (privacy hardening).
- * `selfiePatch` is merged onto challenge/{PROGRESS_KEY}/selfie (Mission Control builds
- * it: { status, reason, submissionId, rejects? } - `rejects` carries the escalating
- * rejection counter). Only { status, reason } persist on selfies/{id}; the image is
- * removed so no photo lingers server-side after a decision.
+ * Record a selfie decision. Writes the verdict onto the SUBMITTER's progress record
+ * challenge/{key}/selfie (Mission Control passes the selfie's own `key`, so testers and
+ * the recipient stay separate) and mirrors { status, reason } onto selfies/{id}. The
+ * image is intentionally KEPT (Matt wants to download it), not deleted.
+ * `selfiePatch`: { status, reason, submissionId, rejects? }.
  */
-export async function decideSelfie(id, selfiePatch) {
+export async function decideSelfie(id, key, selfiePatch) {
   if (!(await init())) return false;
   const patch = selfiePatch || {};
+  const target = key || _key;
   try {
-    await _api.update(path('challenge/' + PROGRESS_KEY + '/selfie'), patch);
+    await _api.update(path('challenge/' + target + '/selfie'), patch);
     await _api.update(path('selfies/' + id), { status: patch.status || 'rejected', reason: patch.reason || null });
-    await _api.remove(path('selfies/' + id + '/image'));
     return true;
   } catch { return false; }
 }
-/** Save/edit the flight node (admin only; keeps real details out of the repo). */
+/** Save/edit the flight node. */
 export async function saveFlight(flight) {
   if (!(await init())) return false;
   try { await _api.set(path('flight'), flight); return true; }
   catch { return false; }
 }
 /**
- * Live-watch the single progress record challenge/{PROGRESS_KEY}. Used BOTH by Ana's
- * device (cross-device sync + live selfie verdicts) and by Mission Control's dashboard;
- * the record is readable by any authed client. cb(record|null). Returns unsubscribe.
+ * Live-watch the active persona's progress record challenge/{active key}. Used by a
+ * player's device for cross-device sync + live selfie verdicts. cb(record|null).
  */
 export async function watchProgress(cb) {
   if (!(await init())) return () => {};
-  try { return _api.onValue(path('challenge/' + PROGRESS_KEY), (s) => cb(s.val() || null)); }
+  try { return _api.onValue(path('challenge/' + _key), (s) => cb(s.val() || null)); }
+  catch { return () => {}; }
+}
+/** Live-watch EVERY persona's progress record (Mission Control dashboard). cb({key:record}). */
+export async function watchAllProgress(cb) {
+  if (!(await init())) return () => {};
+  try { return _api.onValue(path('challenge'), (s) => cb(s.val() || {})); }
   catch { return () => {}; }
 }
 
 export default {
-  init, uid, fetchFlight, syncUp, pull, submitSelfie, watchMySelfie,
-  isAdminUid, watchSelfies, decideSelfie, saveFlight, watchProgress,
+  init, uid, setProgressKey, fetchFlight, syncUp, pull, submitSelfie, watchMySelfie,
+  watchSelfies, decideSelfie, saveFlight, watchProgress, watchAllProgress,
 };

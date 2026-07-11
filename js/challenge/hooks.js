@@ -11,7 +11,14 @@ import { loadChallenge, recordWin, redeemSlot } from './challenge-store.js';
 
 /** True when this profile name unlocks the challenge (case-insensitive/trimmed). */
 export function isChallengeActive(name) {
-  return hash(norm(name)) === S.TRIGGER_HASH;
+  const list = S.TRIGGER_HASHES || [S.TRIGGER_HASH];
+  return list.includes(hash(norm(name)));
+}
+
+/** The Firebase progress-record key for an active name: 'gh-' + its hash. Each unlock
+ *  name (recipient or tester) gets its own isolated record. */
+export function progressKeyFor(name) {
+  return 'gh-' + hash(norm(name));
 }
 
 /** True when this profile name is Matt (Mission Control gate; still needs the PIN). */
@@ -62,7 +69,7 @@ export { loadChallenge, recordWin, redeemSlot };
 export const N = S.N;
 
 export default {
-  isChallengeActive, isAdmin, checkAnswer, checkPin, codeFor, slotForCode,
+  isChallengeActive, isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode,
   cfForcedDifficulty, cfInEasyPhase, qualifyChinchon, qualifyBusiness, qualifyParchis,
   loadChallenge, recordWin, redeemSlot, N,
 };

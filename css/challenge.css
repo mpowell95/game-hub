@@ -178,6 +178,9 @@
 .ch-selfie-actions .ch-btn-ghost { margin-left: 0; }
 
 /* Mission Control admin panel */
+.ch-dash-player { padding: 8px 0; border-top: 1px solid var(--ch-line); }
+.ch-dash-player:first-child { border-top: 0; padding-top: 0; }
+.ch-dash-player .ch-label { color: var(--ch-gold); margin-bottom: 2px; }
 .ch-adm-uid { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .ch-adm-uid .ch-btn-ghost { margin-left: 0; }
 .ch-adm-selfie { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--ch-line); border-radius: 10px; margin-bottom: 10px; background: #0e1117; }

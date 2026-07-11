@@ -14,7 +14,7 @@ import {
   loadChallenge, redeemSlot, unlockArea, unlockAdmin, markUnlockSeen, setSelfie,
   remoteView, mergeRemote,
 } from './challenge-store.js';
-import { isAdmin, checkAnswer, checkPin, codeFor, slotForCode } from './hooks.js';
+import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode } from './hooks.js';
 import * as net from './challenge-net.js';
 
 const WIN_SLOTS = ['connect4', 'chinchon', 'business', 'parchis'];
@@ -67,10 +67,13 @@ class ChallengeUI {
     this._progressUnsub = null;   // Ana's live sync listener
     this._adminUnsubs = [];       // Mission Control listeners
     this._adminLiveStarted = false;
-    this._dash = null;            // latest synced record (admin: to compute reject count)
+    this._dashAll = {};           // latest all-personas records (admin: dashboard + reject counts)
     this._destroyed = false;
     this.render();
-    if (!this.admin) this.startSync();   // Ana: pull + live-sync progress (no-op offline)
+    if (!this.admin) {
+      net.setProgressKey(progressKeyFor(this.name));   // isolate this persona (recipient or tester)
+      this.startSync();                                // pull + live-sync progress (no-op offline)
+    }
   }
 
   // --- routing -----------------------------------------------------------------
@@ -390,18 +393,11 @@ class ChallengeUI {
 
       <section class="ch-card">
         <h2 class="ch-h2">Status</h2>
-        <div data-role="adm-status"><p class="ch-hint">Checking Firebase...</p></div>
+        <div data-role="adm-status"><p class="ch-hint">Connecting...</p></div>
       </section>
 
       <section class="ch-card">
-        <h2 class="ch-h2">Agent progress</h2>
-        <p class="ch-label">Local snapshot</p>
-        <ul class="ch-list">
-          <li>Wins recorded: ${WIN_SLOTS.filter((s) => st.wins[s]).join(', ') || 'none yet'}</li>
-          <li>Pieces: ${st.order.length} / ${PIECE_TOTAL}</li>
-          <li>Selfie: ${esc(st.selfie.status)}</li>
-        </ul>
-        <p class="ch-label" style="margin-top:10px">Live (synced)</p>
+        <h2 class="ch-h2">Players (live)</h2>
         <div data-role="adm-dash"><p class="ch-hint">Connecting...</p></div>
       </section>
 
@@ -432,90 +428,102 @@ class ChallengeUI {
     if (this._destroyed) return;
     const statusEl = q('[data-role="adm-status"]');
     if (!ok) {
-      if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-bad">Firebase is not configured yet (or you are offline).</p>
-        <p class="ch-hint">Mission Control's live features (selfie review, flight editor, cross-device dashboard)
-          need the shared Firebase project. Paste the console config into <code>js/firebase-config.js</code>
-          (MP-01), then reload. The local snapshot above still works offline.</p>`;
+      if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-bad">Offline (or Firebase not configured).</p>
+        <p class="ch-hint">The players dashboard, selfie review, and flight editor need a connection. They light up when you are online.</p>`;
       const dash = q('[data-role="adm-dash"]'); if (dash) dash.innerHTML = `<p class="ch-hint">Offline: no synced data.</p>`;
       const sel = q('[data-role="adm-selfies"]'); if (sel) sel.innerHTML = `<p class="ch-hint">Offline: selfie review unavailable.</p>`;
       return;
     }
-    const myUid = net.uid();
-    const amAdmin = await net.isAdminUid();
-    if (this._destroyed) return;
-    if (statusEl) {
-      statusEl.innerHTML = amAdmin
-        ? `<p class="ch-msg is-ok">Admin verified. You have Mission Control.</p>`
-        : `<p class="ch-msg is-bad">Not yet an admin on this device.</p>
-           <p class="ch-hint">One-time step. In the Firebase console open Realtime Database and click the
-             <b>Data</b> tab (not Rules). Under a node called <code>admins</code>, add a child whose KEY is
-             the ID below and whose VALUE is <code>true</code>, then reload this page. This tells Firebase
-             this device is the admin; until then selfie review and flight edits are blocked by the rules.</p>
-           <div class="ch-adm-uid"><code data-role="uid">${esc(myUid)}</code>
-             <button type="button" class="ch-btn ch-btn-ghost" data-role="copy-uid">Copy ID</button></div>`;
-    }
+    if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-ok">Connected. Mission Control is live.</p>`;
 
-    // The progress record is readable by any authed client, so the dashboard works
-    // even before admin enrollment. Selfie review and flight edits need admin rules.
-    const u1 = await net.watchProgress((rec) => { this._dash = rec; this.renderDash(rec); });
+    // Any signed-in visitor can read/write (rules are auth-only now), so the PIN is the
+    // only gate and there is no per-device enrollment. Watch every persona + all selfies.
+    const u1 = await net.watchAllProgress((all) => { this._dashAll = all || {}; this.renderDash(all); });
     if (this._destroyed) { if (typeof u1 === 'function') u1(); return; }
     this._adminUnsubs.push(u1);
-
-    if (amAdmin) {
-      const u2 = await net.watchSelfies((all) => this.renderSelfies(all));
-      if (this._destroyed) { if (typeof u2 === 'function') u2(); return; }
-      this._adminUnsubs.push(u2);
-      this.loadFlightForm();
-    } else {
-      const sel = q('[data-role="adm-selfies"]');
-      if (sel) sel.innerHTML = `<p class="ch-hint">Selfie review unlocks once your admin ID is added (see Status).</p>`;
-    }
+    const u2 = await net.watchSelfies((all) => { this._selfies = all || {}; this.renderSelfies(all); });
+    if (this._destroyed) { if (typeof u2 === 'function') u2(); return; }
+    this._adminUnsubs.push(u2);
+    this.loadFlightForm();
   }
 
-  renderDash(rec) {
+  /** Human label for a progress key (admin view only; no real name in the label). */
+  personaLabel(key) {
+    if (key === S.PROGRESS_KEY) return 'Recipient';
+    return 'Tester (' + key + ')';
+  }
+
+  renderDash(all) {
     const el = this.root && this.root.querySelector('[data-role="adm-dash"]');
     if (!el) return;
-    if (!rec) { el.innerHTML = `<p class="ch-hint">No synced progress yet. It appears here once the agent plays online.</p>`; return; }
-    const wins = WIN_SLOTS.filter((s) => rec.wins && rec.wins[s]);
-    const pieces = Array.isArray(rec.order) ? rec.order.length : 0;
-    const sel = rec.selfie || {};
-    el.innerHTML = `<ul class="ch-list">
-      <li>Wins: ${wins.length ? esc(wins.join(', ')) : 'none yet'}</li>
-      <li>Pieces: ${pieces} / ${PIECE_TOTAL}</li>
-      <li>Selfie: ${esc(sel.status || 'none')}${sel.rejects ? ` (rejections: ${sel.rejects | 0})` : ''}</li>
-    </ul>`;
+    const keys = Object.keys(all || {});
+    if (!keys.length) { el.innerHTML = `<p class="ch-hint">No players yet. A record appears here once someone plays online.</p>`; return; }
+    el.innerHTML = keys.map((k) => {
+      const rec = all[k] || {};
+      const wins = WIN_SLOTS.filter((s) => rec.wins && rec.wins[s]);
+      const pieces = Array.isArray(rec.order) ? rec.order.length : (rec.order ? Object.keys(rec.order).length : 0);
+      const sel = rec.selfie || {};
+      return `<div class="ch-dash-player">
+        <p class="ch-label">${esc(this.personaLabel(k))}</p>
+        <ul class="ch-list">
+          <li>Wins: ${wins.length ? esc(wins.join(', ')) : 'none yet'}</li>
+          <li>Pieces: ${pieces} / ${PIECE_TOTAL}</li>
+          <li>Selfie: ${esc(sel.status || 'none')}${sel.rejects ? ` (rejections: ${sel.rejects | 0})` : ''}</li>
+        </ul>
+      </div>`;
+    }).join('');
   }
 
   renderSelfies(all) {
     const el = this.root && this.root.querySelector('[data-role="adm-selfies"]');
     if (!el) return;
-    const entries = Object.entries(all || {}).filter(([, v]) => v && v.status === 'pending' && v.image);
-    if (!entries.length) { el.innerHTML = `<p class="ch-hint">No selfies awaiting review.</p>`; return; }
-    el.innerHTML = entries.map(([id, v]) => `
-      <div class="ch-adm-selfie">
-        <img class="ch-adm-thumb" alt="Pending selfie" src="${esc(v.image)}">
+    // Show every selfie that still has an image, newest first; decide only on pending ones.
+    const entries = Object.entries(all || {}).filter(([, v]) => v && v.image);
+    if (!entries.length) { el.innerHTML = `<p class="ch-hint">No selfies yet.</p>`; return; }
+    el.innerHTML = entries.map(([id, v]) => {
+      const pending = v.status === 'pending';
+      const tag = pending ? 'awaiting review' : (v.status || 'unknown');
+      return `<div class="ch-adm-selfie">
+        <img class="ch-adm-thumb" alt="Selfie" src="${esc(v.image)}" data-id="${esc(id)}">
         <div class="ch-adm-selfie-actions">
-          <button type="button" class="ch-btn ch-btn-go" data-role="approve" data-id="${esc(id)}">Approve</button>
-          <button type="button" class="ch-btn ch-btn-ghost" data-role="reject" data-id="${esc(id)}">Reject (snark)</button>
+          <span class="ch-vault-tag">${esc(tag)}</span>
+          <button type="button" class="ch-btn ch-btn-ghost" data-role="download-selfie" data-id="${esc(id)}">Download</button>
+          ${pending ? `<button type="button" class="ch-btn ch-btn-go" data-role="approve" data-id="${esc(id)}">Approve</button>
+          <button type="button" class="ch-btn ch-btn-ghost" data-role="reject" data-id="${esc(id)}">Reject (snark)</button>` : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   async decideSelfie(id, approved) {
+    const selfie = (this._selfies && this._selfies[id]) || {};
+    const key = selfie.key || S.PROGRESS_KEY;   // credit the submitter's own record
     let patch;
     if (approved) {
       patch = { status: 'approved', reason: null, submissionId: id };
     } else {
-      const prev = (this._dash && this._dash.selfie && this._dash.selfie.rejects) | 0;
-      const n = prev + 1;
+      const cur = (this._dashAll && this._dashAll[key] && this._dashAll[key].selfie && this._dashAll[key].selfie.rejects) | 0;
+      const n = cur + 1;
       patch = { status: 'rejected', reason: REJECT_LINES[Math.min(n - 1, REJECT_LINES.length - 1)], submissionId: id, rejects: n };
     }
-    const ok = await net.decideSelfie(id, patch);
+    const ok = await net.decideSelfie(id, key, patch);
     if (!ok) {
       const el = this.root && this.root.querySelector('[data-role="adm-selfies"]');
-      if (el) { const p = document.createElement('p'); p.className = 'ch-msg is-bad'; p.textContent = 'Decision failed (are you an admin uid?).'; el.appendChild(p); }
+      if (el) { const p = document.createElement('p'); p.className = 'ch-msg is-bad'; p.textContent = 'Decision failed (offline?).'; el.appendChild(p); }
     }
-    // watchSelfies + watchProgress refresh the panel automatically.
+    // watchSelfies + watchAllProgress refresh the panel automatically.
+  }
+
+  /** Download a selfie image (Matt keeps it). Reads the data URL straight off the thumbnail. */
+  downloadSelfie(id) {
+    const img = this.root && this.root.querySelector(`.ch-adm-thumb[data-id="${id}"]`);
+    if (!img || !img.src) return;
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = 'selfie-' + id + '.jpg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   async loadFlightForm() {
@@ -619,13 +627,7 @@ class ChallengeUI {
     if (role === 'replay') { markUnlockSeen(); playUnlock(); return; }
     if (role === 'assemble') { this.showFinale(); return; }
     if (role === 'selfie-submit') { this.submitSelfie(); return; }
-    if (role === 'copy-uid') {
-      const uidEl = this.root && this.root.querySelector('[data-role="uid"]');
-      const t = uidEl ? uidEl.textContent : '';
-      if (t && navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {});
-      btn.textContent = 'Copied';
-      return;
-    }
+    if (role === 'download-selfie') { this.downloadSelfie(btn.dataset.id); return; }
     if (role === 'approve') { this.decideSelfie(btn.dataset.id, true); return; }
     if (role === 'reject') { this.decideSelfie(btn.dataset.id, false); return; }
   }

@@ -1,28 +1,6 @@
 {
   "rules": {
-    ".read": false,
-    ".write": false,
-    "challenge": {
-      "$agent": {
-        ".read": "auth != null",
-        ".write": "auth != null"
-      }
-    },
-    "flight": {
-      ".read": "auth != null",
-      ".write": "root.child('admins').child(auth.uid).val() === true"
-    },
-    "selfies": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
-      "$id": {
-        ".read": "auth != null && (data.child('by').val() === auth.uid || root.child('admins').child(auth.uid).val() === true)",
-        ".write": "auth != null && ((!data.exists() && newData.child('by').val() === auth.uid) || data.child('by').val() === auth.uid || root.child('admins').child(auth.uid).val() === true)",
-        "image": { ".validate": "newData.isString() && newData.val().length < 200000" }
-      }
-    },
-    "admins": {
-      ".read": "auth != null",
-      ".write": false
-    }
+    ".read": "auth != null",
+    ".write": "auth != null"
   }
 }

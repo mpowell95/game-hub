@@ -17,8 +17,12 @@
 // (CHALLENGE-HANDOFF docs), NEVER in this public repo. Do not paste plaintext here.
 // ================================================================================
 
-// Who unlocks the challenge (hash of the profile name, case-insensitive/trimmed).
-export const TRIGGER_HASH = '1cabdac0';
+// Who unlocks the challenge (hashes of the profile names, case-insensitive/trimmed).
+// The first is the real recipient; the rest are testers who can walk the whole challenge
+// under their OWN isolated progress record (each active name gets key 'gh-' + its hash),
+// so testing never touches the recipient's data.
+export const TRIGGER_HASH = '1cabdac0';                     // primary recipient
+export const TRIGGER_HASHES = ['1cabdac0', '39b28c49'];     // all names that unlock (incl. test1)
 
 // Who sees Mission Control (Matt's own profile name, case-insensitive/trimmed).
 export const MATT_HASH = '9439b002';
@@ -54,4 +58,4 @@ export const N = 3;
 // recovery (it equals 'gh-' + TRIGGER_HASH), so no plaintext name is ever stored.
 export const PROGRESS_KEY = 'gh-1cabdac0';
 
-export default { TRIGGER_HASH, MATT_HASH, QUESTION, ANSWER_HASH, PIN_HASH, CODES, PIECE_ORDER, N, PROGRESS_KEY };
+export default { TRIGGER_HASH, TRIGGER_HASHES, MATT_HASH, QUESTION, ANSWER_HASH, PIN_HASH, CODES, PIECE_ORDER, N, PROGRESS_KEY };
