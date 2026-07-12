@@ -62,7 +62,7 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-input:focus { outline: 2px solid var(--ch-gold); outline-offset: 1px; }
 
 .ch-btn {
-  font: inherit; font-weight: 800; border: 0; border-radius: 11px; padding: 11px 16px;
+  font: inherit; font-weight: 800; border: 1px solid transparent; border-radius: 11px; padding: 11px 16px;
   cursor: pointer; touch-action: manipulation; white-space: nowrap;
 }
 .ch-btn-go { background: var(--ch-gold); color: #2a2200; }
@@ -90,6 +90,14 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-vault-tag { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .ch-vault-item.is-redeemed .ch-vault-tag::before { content: "\2713 "; }
 
+/* Prizes: five separate tiles that fill in order as codes are redeemed. */
+.ch-gallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.ch-piece { position: relative; aspect-ratio: 3 / 4; border-radius: 8px; display: grid; place-items: center; }
+.ch-piece.is-off { background: #0e1117; border: 1px dashed var(--ch-line); }
+.ch-piece.is-on { background: linear-gradient(135deg, #3a2f05, #f2b705); border: 1px solid var(--ch-gold); }
+.ch-piece-mark { font-weight: 900; color: #2a2200; font-size: 1.1rem; }
+.ch-piece-lock { color: var(--ch-muted); font-weight: 900; font-size: 1.1rem; }
+
 /* Prize image, built from stacked layers: each redeemed code reveals the next layer,
    so the image builds up as she goes. Real art (assets/reward-layer-1..5.png, transparent
    PNGs) drops in later; until then each layer is a tinted numbered placeholder. */
@@ -107,6 +115,10 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-layer:nth-child(4) { background: rgba(224, 83, 47, 0.22); }
 .ch-layer:nth-child(5) { background: rgba(255, 255, 255, 0.12); }
 .ch-layers-full { max-width: 380px; max-height: 70vh; }
+/* Assemble popup: a chip per layer to flip it on/off and watch the image build. */
+.ch-toggles { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.ch-toggle { font: inherit; font-weight: 800; width: 42px; height: 42px; border-radius: 10px; cursor: pointer; background: #0e1117; color: var(--ch-muted); border: 1px solid var(--ch-line); touch-action: manipulation; }
+.ch-toggle.is-on { background: linear-gradient(135deg, #3a2f05, #f2b705); color: #2a2200; border-color: var(--ch-gold); }
 
 /* Full-screen unlock announcement */
 .ch-unlock { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease; }
@@ -251,6 +263,11 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-selfie-preview { display: block; max-width: 100%; max-height: 40vh; border-radius: 12px; margin: 4px 0 10px; }
 .ch-selfie-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .ch-selfie-actions .ch-btn-ghost { margin-left: 0; }
+.ch-selfie-capture { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 22px 16px; border-radius: 14px; background: #0e1117; border: 1px dashed var(--ch-line); color: var(--ch-ink); }
+.ch-selfie-capture:hover { border-color: var(--ch-gold); }
+.ch-selfie-cam { font-size: 2rem; line-height: 1; }
+.ch-selfie-cta { font-weight: 800; font-size: 1.05rem; }
+.ch-selfie-sub { font-size: 0.82rem; color: var(--ch-muted); font-weight: 600; }
 
 /* Mission Control admin panel */
 .ch-dash-player { padding: 8px 0; border-top: 1px solid var(--ch-line); }

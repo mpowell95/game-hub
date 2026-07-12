@@ -165,8 +165,8 @@ class ChallengeUI {
       </section>` : ''}
 
       <section class="ch-card">
-        <h2 class="ch-h2">Pieces <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
-        <div class="ch-layers" data-role="gallery">
+        <h2 class="ch-h2">Prizes <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
+        <div class="ch-gallery" data-role="gallery">
           ${this.galleryHTML(st)}
         </div>
         <button type="button" class="ch-btn ch-btn-finale" data-role="assemble" ${pieces >= PIECE_TOTAL ? '' : 'disabled'}>
@@ -192,7 +192,10 @@ class ChallengeUI {
              <label class="ch-btn ch-btn-ghost ch-file-btn">Retake
                <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>
            </div>`
-        : `<label class="ch-btn ch-btn-go ch-file-btn">Take selfie
+        : `<label class="ch-selfie-capture ch-file-btn">
+             <span class="ch-selfie-cam" aria-hidden="true">&#128247;</span>
+             <span class="ch-selfie-cta">Take a selfie</span>
+             <span class="ch-selfie-sub">Opens the camera</span>
              <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>`;
       inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Not approved.')}</p>` : ''}
         ${capture}
@@ -215,9 +218,21 @@ class ChallengeUI {
     }
     return out;
   }
-  galleryHTML(st) { return this.layerHTML(st.order.length); }
+  /** The prizes as 5 separate tiles that fill in order as codes are redeemed: an earned
+   *  tile shows its number on gold, an unearned one is a dashed "?". */
+  galleryHTML(st) {
+    let out = '';
+    for (let i = 0; i < PIECE_TOTAL; i++) {
+      out += st.order.length > i
+        ? `<div class="ch-piece is-on"><span class="ch-piece-mark">${i + 1}</span></div>`
+        : `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">?</span></div>`;
+    }
+    return out;
+  }
 
-  // --- Finale: the assembled image (all layers stacked) -----------------------
+  // --- Finale: the assembled image, with a toggle per layer -------------------
+  /** All five layers stacked into the image, plus a chip per layer she can flip on/off to
+   *  see how it is built (live). Placeholder tints now; the real art slots in unchanged. */
   showFinale() {
     if (loadChallenge().order.length < PIECE_TOTAL) return;
     const host = document.createElement('div');
@@ -228,10 +243,23 @@ class ChallengeUI {
     host.innerHTML = `
       <div class="ch-unlock-scrim"></div>
       <div class="ch-finale-inner">
-        <div class="ch-layers ch-layers-full">${this.layerHTML(PIECE_TOTAL)}</div>
+        <div class="ch-layers ch-layers-full" data-role="stack">${this.layerHTML(PIECE_TOTAL)}</div>
+        <div class="ch-toggles" data-role="toggles" aria-label="Toggle layers">
+          ${Array.from({ length: PIECE_TOTAL }, (_, i) =>
+            `<button type="button" class="ch-toggle is-on" data-layer="${i}" aria-pressed="true">${i + 1}</button>`).join('')}
+        </div>
         <button type="button" class="ch-btn ch-btn-go ch-finale-close" data-role="fin-close">Close</button>
       </div>`;
     document.body.appendChild(host);
+    const layers = [...host.querySelectorAll('[data-role="stack"] .ch-layer')];
+    host.querySelector('[data-role="toggles"]').addEventListener('click', (e) => {
+      const btn = e.target.closest('.ch-toggle');
+      if (!btn) return;
+      const on = btn.classList.toggle('is-on');
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const layer = layers[+btn.dataset.layer];
+      if (layer) layer.classList.toggle('is-on', on);   // reuses the layer's opacity fade
+    });
     requestAnimationFrame(() => host.classList.add('is-in'));
     host.querySelector('[data-role="fin-close"]').addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => host.remove());
