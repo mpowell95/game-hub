@@ -203,16 +203,25 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-cele-note { margin: 0 0 16px; color: var(--ch-muted); font-size: 0.9rem; line-height: 1.4; }
 /* The dismiss button must be unmistakable: full-width, solid, large. */
 .ch-cele .ch-btn-go { width: 100%; padding: 15px; font-size: 1.08rem; }
-/* The OK row reserves its height up front (min-height) so nothing shifts. While the image
-   settles, pulsing dots show the wait is intentional; then OK fades into that reserved space. */
-.ch-cele-foot { min-height: 54px; display: flex; align-items: center; justify-content: center; }
+/* Phase 1: the "Verifying" screen (word + pulsing dots, no image) while the asset preloads. */
+.ch-cele-verify { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 22px 0 10px; }
+.ch-cele-verify-text { margin: 0; font-size: 1.2rem; font-weight: 800; color: var(--ch-muted); letter-spacing: 0.03em; }
 .ch-cele-wait { display: inline-flex; gap: 7px; }
 .ch-cele-wait i { width: 8px; height: 8px; border-radius: 50%; background: var(--ch-gold); opacity: 0.35; animation: ch-wait 1.1s ease-in-out infinite; }
 .ch-cele-wait i:nth-child(2) { animation-delay: 0.18s; }
 .ch-cele-wait i:nth-child(3) { animation-delay: 0.36s; }
 @keyframes ch-wait { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }
-.ch-cele-ok { opacity: 0; transition: opacity 0.4s ease; }
-.ch-cele-ok.is-in { opacity: 1; }
+/* Phase 2: the reveal (word + image + button) fades up together. */
+.ch-cele-reveal { position: relative; opacity: 0; transform: translateY(6px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.ch-cele-reveal.is-in { opacity: 1; transform: none; }
+.ch-cele-phrase { margin: 0 0 14px; font-size: 1.02rem; font-weight: 800; color: var(--ch-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Fireworks burst behind the "Correct!" headline (an achievement moment). */
+.ch-fw { position: absolute; top: 30px; left: 50%; width: 0; height: 0; pointer-events: none; z-index: 2; }
+.ch-fw i { --a: 0deg; position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--ch-gold); opacity: 0; animation: ch-fw 0.9s ease-out 0.05s 1; }
+.ch-fw i:nth-child(2n) { background: #fff; }
+.ch-fw i:nth-child(1) { --a: 0deg; } .ch-fw i:nth-child(2) { --a: 45deg; } .ch-fw i:nth-child(3) { --a: 90deg; } .ch-fw i:nth-child(4) { --a: 135deg; }
+.ch-fw i:nth-child(5) { --a: 180deg; } .ch-fw i:nth-child(6) { --a: 225deg; } .ch-fw i:nth-child(7) { --a: 270deg; } .ch-fw i:nth-child(8) { --a: 315deg; }
+@keyframes ch-fw { 0% { opacity: 1; transform: rotate(var(--a)) translateY(-6px) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-54px) scale(0.35); } }
 /* Same for the taunt / code-reveal overlay buttons (a single "Okay" goes full-width). */
 .ch-reveal-actions .ch-btn { flex: 1 1 auto; padding: 14px; font-size: 1.04rem; }
 
@@ -260,6 +269,7 @@ body.ch-active .hub-back:hover { background: #232937; }
      sparkle twinkle, wait-dot bounce, boarding-pass slide-up, the leaving scale-out, and
      the chevron spin. */
   .ch-unlock-sparkles span, .ch-cele-wait i { animation: none; }
+  .ch-fw { display: none; }
   .ch-anim { animation: none; opacity: 1; transform: none; }
   .ch-unlock.is-leaving { animation: none; }
   .ch-howto summary::after, .ch-collapse summary::after { transition: none; }

@@ -60,7 +60,7 @@ export function showTaunt(message) {
     <div class="ch-unlock-card ch-reveal-card">
       <p class="ch-reveal-taunt">${esc(message)}</p>
       <div class="ch-reveal-actions">
-        <button type="button" class="ch-btn ch-btn-go" data-role="close">Okay</button>
+        <button type="button" class="ch-btn ch-btn-go" data-role="close">Try Again?</button>
       </div>
     </div>`;
 

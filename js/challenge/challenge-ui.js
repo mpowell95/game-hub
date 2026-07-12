@@ -247,9 +247,11 @@ class ChallengeUI {
   }
 
   // --- celebration overlay (asset image) --------------------------------------
-  /** Full-screen celebration with a big image. Used on answer-correct and on each
-   *  code redemption. The image degrades gracefully (hidden) if not yet cached offline. */
-  showCelebration({ kicker, title, asset, note, delayOk }) {
+  /** Full-screen celebration. Two phases: a brief "Verifying" screen (word + pulsing dots)
+   *  while the asset preloads, then the reveal (word + image + button) fades in TOGETHER, so
+   *  the headline never shows on a half-loaded screen. Optional fireworks for the big moment.
+   *  Params: { kicker, title, phrase, asset, note, fireworks, button, minVerifyMs }. */
+  showCelebration({ kicker, title, phrase, asset, note, fireworks = false, button = 'Continue', minVerifyMs = 700 }) {
     const host = document.createElement('div');
     host.className = 'ch-cele';
     host.setAttribute('role', 'dialog');
@@ -258,47 +260,50 @@ class ChallengeUI {
     host.innerHTML = `
       <div class="ch-unlock-scrim"></div>
       <div class="ch-cele-card">
-        ${kicker ? `<p class="ch-unlock-kicker">${esc(kicker)}</p>` : ''}
-        ${title ? `<h2 class="ch-cele-title">${esc(title)}</h2>` : ''}
-        <div class="ch-cele-media"><img class="ch-cele-img" alt="" src="${esc(asset)}"></div>
-        ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
-        <div class="ch-cele-foot">
+        <div class="ch-cele-verify" data-role="verify">
+          <p class="ch-cele-verify-text">Verifying</p>
           <span class="ch-cele-wait" aria-hidden="true"><i></i><i></i><i></i></span>
-          <button type="button" class="ch-btn ch-btn-go ch-cele-ok" data-role="cele-close" hidden>OK</button>
+        </div>
+        <div class="ch-cele-reveal" data-role="reveal" hidden>
+          ${fireworks ? '<span class="ch-fw" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>' : ''}
+          ${kicker ? `<p class="ch-unlock-kicker">${esc(kicker)}</p>` : ''}
+          ${title ? `<h2 class="ch-cele-title">${esc(title)}</h2>` : ''}
+          ${phrase ? `<p class="ch-cele-phrase">&ldquo;${esc(phrase)}&rdquo;</p>` : ''}
+          <div class="ch-cele-media"><img class="ch-cele-img" alt=""></div>
+          ${note ? `<p class="ch-cele-note">${esc(note)}</p>` : ''}
+          <button type="button" class="ch-btn ch-btn-go" data-role="cele-close">${esc(button)}</button>
         </div>
       </div>`;
     document.body.appendChild(host);
+    const verify = host.querySelector('[data-role="verify"]');
+    const reveal = host.querySelector('[data-role="reveal"]');
     const img = host.querySelector('.ch-cele-img');
-    const okBtn = host.querySelector('[data-role="cele-close"]');
-    const waitHint = host.querySelector('.ch-cele-wait');
-    let dismissable = false;   // can't dismiss until the OK appears
-    okBtn.addEventListener('click', () => host.remove());
-    host.querySelector('.ch-unlock-scrim').addEventListener('click', () => { if (dismissable) host.remove(); });
+    let dismissable = false;   // scrim can't dismiss until the reveal is up
+    const close = () => host.remove();
+    host.querySelector('[data-role="cele-close"]').addEventListener('click', close);
+    host.querySelector('.ch-unlock-scrim').addEventListener('click', () => { if (dismissable) close(); });
 
-    // Fade the image in once it has decoded, so it does not pop in abruptly.
-    const showImg = () => img.classList.add('is-loaded');
-    // Keep OK hidden until the image has claimed its space (loaded or failed), then honor any
-    // minimum on-screen beat. The wait dots make that pause read as intentional; OK then fades
-    // in rather than snapping, and never jumps since the image is already in place.
-    const revealOk = () => {
-      if (waitHint) waitHint.remove();
-      okBtn.hidden = false;
-      requestAnimationFrame(() => okBtn.classList.add('is-in'));
-      dismissable = true;
+    // Preload the asset, then swap Verifying -> reveal only once BOTH the image is ready
+    // (loaded or failed) AND a short minimum beat has passed, so word + image land together.
+    let imgReady = false, imgOk = true, beat = false, revealed = false;
+    const doReveal = () => {
+      if (revealed || !imgReady || !beat) return;
+      revealed = true;
+      if (imgOk) img.classList.add('is-loaded'); else img.style.display = 'none';
+      verify.remove();
+      reveal.hidden = false;
+      requestAnimationFrame(() => { reveal.classList.add('is-in'); dismissable = true; });
     };
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      if (delayOk) setTimeout(revealOk, delayOk); else revealOk();
-    };
-    img.addEventListener('load', () => { showImg(); settle(); });
-    img.addEventListener('error', () => { img.style.display = 'none'; settle(); });
-    if (img.complete) { if (img.naturalWidth) showImg(); else img.style.display = 'none'; settle(); }
-    setTimeout(settle, 4000);   // never trap her behind an image that never loads
+    const onImg = (ok) => { imgReady = true; imgOk = ok; doReveal(); };
+    img.addEventListener('load', () => onImg(true));
+    img.addEventListener('error', () => onImg(false));
+    img.src = asset;
+    if (img.complete) onImg(!!img.naturalWidth);
+    setTimeout(() => { beat = true; doReveal(); }, minVerifyMs);
+    setTimeout(() => { if (!revealed) { imgReady = true; beat = true; doReveal(); } }, 4000);   // safety
 
     requestAnimationFrame(() => host.classList.add('is-in'));
-    return () => host.remove();
+    return close;
   }
 
   // --- selfie compression ------------------------------------------------------
@@ -533,7 +538,7 @@ class ChallengeUI {
         unlockArea();
         this.pushSync();
         this.render();
-        this.showCelebration({ title: 'Correct', asset: assetUrl(ANSWER_ASSET) });
+        this.showCelebration({ title: 'Correct!', asset: assetUrl(ANSWER_ASSET), fireworks: true });
       } else {
         this.setMsg('[data-role="answer-msg"]', 'Try again.', false);
       }
@@ -559,9 +564,9 @@ class ChallengeUI {
       this.render();
       const c = CELE[slot];
       if (c) this.showCelebration({
-        title: `Layer ${layerN} unlocked via "${codeFor(slot)}"`,
+        title: `Prize ${layerN} unlocked`,
+        phrase: codeFor(slot),
         asset: assetUrl(c.asset),
-        delayOk: 1200,
       });
       return;
     }
