@@ -1,12 +1,12 @@
 /* =============================================================================
- * sw.js — Service worker for "Business Deal" / Matt's Monopoly.
+ * sw.js — Service worker for "Business Deal" / Monopoly Deal.
  *
  * NETWORK-FIRST for code so a freshly deployed build is always served when the
  * device is online (the old cache-first strategy left players stuck on stale
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v23';
+const CACHE = 'business-deal-hub-v24';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.
@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
   // when offline. Guarantees the latest deployed build whenever there's a
   // connection (no more "stuck on an old version").
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((resp) => {
         if (resp && resp.status === 200 && resp.type === 'basic') {
           const copy = resp.clone();

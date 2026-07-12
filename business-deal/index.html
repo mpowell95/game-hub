@@ -17,6 +17,12 @@
 </head>
 <body>
   <div id="app">
+    <!-- In-game top bar: quit (left) + settings (right) -->
+    <div id="topbar">
+      <button id="quit-btn" class="tb-btn" type="button" aria-label="Quit game">‹</button>
+      <button id="settings-btn" class="tb-btn tb-settings" type="button">Settings</button>
+    </div>
+
     <!-- Opponents (AI) across the top -->
     <div id="opponents"></div>
 
@@ -29,7 +35,7 @@
         <div id="play-dots"></div>
         <div id="plays-label"></div>
       </div>
-      <div id="watermark">Matt's Monopoly</div>
+      <div id="watermark">Monopoly Deal</div>
     </div>
 
     <!-- You -->
@@ -45,11 +51,6 @@
 
     <!-- Hand -->
     <div id="hand"></div>
-
-    <!-- Controls -->
-    <div id="controls">
-      <button id="new-game" class="pill" type="button">New Game</button>
-    </div>
   </div>
 
   <!-- Floating layers (built dynamically) -->
@@ -93,23 +94,32 @@
         });
         document.body.appendChild(b);
       }
+      // Is a game actually in progress? (Auto-refresh is safe on the setup/win
+      // screens but must NOT throw away a live game.)
+      function midGame() {
+        var app = document.getElementById('app');
+        return app && app.classList.contains('playing') && !app.classList.contains('game-over');
+      }
       if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        var hadController = !!navigator.serviceWorker.controller;
         navigator.serviceWorker.addEventListener('controllerchange', function () {
-          // Only reload in response to the user's Reload tap — never auto-reload
-          // mid-game (clients.claim can fire on its own and would lose state).
-          if (window.__bdReloading) location.reload();
+          if (!hadController) { hadController = true; return; }
+          if (window.__bdReloading || !midGame()) { location.reload(); return; }
+          showUpdate();
         });
         navigator.serviceWorker.register('sw.js').then(function (reg) {
+          reg.update();
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') reg.update();
+          });
           reg.addEventListener('updatefound', function () {
             var nw = reg.installing;
             if (!nw) return;
             nw.addEventListener('statechange', function () {
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate();
+              if (nw.state === 'installed' && navigator.serviceWorker.controller && midGame()) showUpdate();
             });
           });
-        }).catch(function (e) {
-          console.warn('Service worker registration failed:', e);
-        });
+        }).catch(function (e) { console.warn('Service worker registration failed:', e); });
       }
     });
   </script>

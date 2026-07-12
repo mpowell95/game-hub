@@ -30,7 +30,7 @@
 
   // Bump alongside the sw.js cache name on every release so the visible stamp
   // and the cached build always match.
-  const APP_VERSION = 'v22';
+  const APP_VERSION = 'v24';
 
   const LIGHT_BANDS = ['lightblue', 'yellow', 'utility']; // need dark text on band
 
@@ -255,12 +255,84 @@
       this._bubbles = {};
       this.$ = (id) => document.getElementById(id);
       this.$('pass-btn').addEventListener('click', () => this._passClicked());
-      this.$('new-game').addEventListener('click', () => this.showSetup());
+      this.$('quit-btn').addEventListener('click', () => this._quitDialog());
+      this.$('settings-btn').addEventListener('click', () => this._openSettings());
     }
 
     /** Return to the Game Hub launcher (root-relative — mirrors how the hub links
      *  out to /business-deal/). Available on setup + win screens (#11/#12). */
     _toHub() { window.location.href = '/game-hub/'; }
+
+    _menuItem(id, icon, title, sub) {
+      return `<button class="menu-item" id="${id}" type="button">` +
+        `<span class="mi-ic">${icon}</span>` +
+        `<span class="mi-tx"><span class="mi-t">${esc(title)}</span>` +
+        (sub ? `<span class="mi-s">${esc(sub)}</span>` : '') + '</span></button>';
+    }
+
+    _openSettings() {
+      const sheet = this._sheet(
+        '<h3>Settings</h3>' +
+        '<div class="menu-list">' +
+          this._menuItem('set-new', '🔄', 'New Game', 'Restart with the same opponents') +
+          this._menuItem('set-stats', '📊', 'Stats', 'All-time wins, losses and win rate') +
+          this._menuItem('set-setup', '↩️', 'Quit to New Game screen', 'Change opponents or difficulty') +
+          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', 'Leave Business Deal') +
+          this._menuItem('set-credits', '🎉', 'Credits', '') +
+        '</div>' +
+        '<button class="cta ghost-cta" id="set-close">Close</button>');
+      sheet.querySelector('#set-new').addEventListener('click', () => this._restartGame());
+      sheet.querySelector('#set-stats').addEventListener('click', () => this.showStats('settings'));
+      sheet.querySelector('#set-setup').addEventListener('click', () => this.showSetup());
+      sheet.querySelector('#set-hub').addEventListener('click', () => this._toHub());
+      sheet.querySelector('#set-credits').addEventListener('click', () => this._showCredits());
+      sheet.querySelector('#set-close').addEventListener('click', () => this._closeOverlay());
+      this._scrimCloses();
+    }
+
+    _quitDialog() {
+      const sheet = this._sheet(
+        '<h3>Where do you wanna go?</h3><p>Your current game will be lost</p>' +
+        '<div class="menu-list">' +
+          this._menuItem('q-setup', '↩️', 'New Game screen', 'Pick opponents and difficulty') +
+          this._menuItem('q-hub', '🏠', 'Game Hub', 'Leave Business Deal') +
+        '</div>' +
+        '<button class="cta ghost-cta" id="q-cancel">Keep playing</button>');
+      sheet.querySelector('#q-setup').addEventListener('click', () => this.showSetup());
+      sheet.querySelector('#q-hub').addEventListener('click', () => this._toHub());
+      sheet.querySelector('#q-cancel').addEventListener('click', () => this._closeOverlay());
+      this._scrimCloses();
+    }
+
+    _restartGame() { this.newGame(this._lastNumAI || 3, this._lastDiff || 'normal'); }
+
+    _showCredits() {
+      const root = this.$('overlay');
+      root.innerHTML = '<div class="scrim"></div>';
+      const screen = elNew('div', 'credits-screen');
+      const COLORS = ['#ffd23f', '#ff5a52', '#36c06a', '#4aa3ff', '#e23b9a', '#f08a1d'];
+      let bursts = '';
+      for (let i = 0; i < 9; i++) {
+        let sparks = '';
+        for (let d = 0; d < 12; d++) sparks += `<i style="--a:${d * 30}deg;--c:${COLORS[(i + d) % COLORS.length]}"></i>`;
+        bursts += `<div class="fw" style="--x:${6 + (i * 23) % 88}%;--y:${10 + (i * 31) % 70}%;--d:${(i * 0.28).toFixed(2)}s">${sparks}</div>`;
+      }
+      screen.innerHTML =
+        `<div class="fw-layer">${bursts}</div>` +
+        '<div class="credits-emoji">🎉 🎊 🥳 🎆 ✨</div>' +
+        '<div class="credits-title">Matt is Awesome!</div>' +
+        '<div class="credits-sub">…and he built this whole game</div>' +
+        '<button class="cta" id="cr-close" type="button">Close</button>';
+      root.append(screen);
+      screen.querySelector('#cr-close').addEventListener('click', () => this._openSettings());
+      root.querySelector('.scrim').addEventListener('click', () => this._openSettings());
+      root.classList.add('show');
+    }
+
+    _scrimCloses() {
+      const s = this.$('overlay').querySelector('.scrim');
+      if (s) s.addEventListener('click', () => this._closeOverlay());
+    }
 
     /* ---- setup chooser -------------------------------------------------- */
     showSetup() {
@@ -290,7 +362,7 @@
         root.innerHTML =
           '<div class="scrim"></div><div class="sheet">' +
           (done ? '<p class="bd-challenge-note">Business Deal challenge completed. Play anyways?</p>' : '') +
-          "<h3>Matt's Monopoly</h3><p>How many AI opponents?</p>" +
+          "<h3>Monopoly Deal</h3><p>How many AI opponents?</p>" +
           '<div class="count-row' + lock + '">' +
           [1, 2, 3, 4].map(n => `<button class="count-btn${n === chosen ? ' sel' : ''}" data-n="${n}">${n}</button>`).join('') +
           '</div><p style="margin-top:14px">Difficulty</p><div class="count-row' + lock + '">' +
@@ -1623,7 +1695,7 @@
     _statsBack(origin) {
       this._closeOverlay();
       if (origin === 'win' && this.game && this.game.winner) this.showWinner();
-      else if (origin === 'setup') this.showSetup();
+      else if (origin === 'settings') this._openSettings();
       else this.showSetup();
     }
   }

@@ -211,12 +211,11 @@ html, body {
 #app:not(.playing) #table,
 #app:not(.playing) #me-area,
 #app:not(.playing) #hand,
-#app:not(.playing) #controls,
+#app:not(.playing) #topbar,
 #app:not(.playing) #opponents { visibility: hidden; }
 
-/* On the win screen the bottom "New Game" sits under the overlay (a dead tap);
-   hide it so "Play Again" is the one working restart. */
-#app.game-over #controls { visibility: hidden; }
+/* Hide the top bar on the win screen (Play Again is the working restart there). */
+#app.game-over #topbar { visibility: hidden; }
 
 /* =============================================================================
  * You
@@ -260,7 +259,7 @@ html, body {
  * ===========================================================================*/
 #hand {
   flex: 0 0 auto;
-  display: flex; gap: 4px; padding: 8px 8px;
+  display: flex; gap: 4px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   justify-content: center;
   overflow: hidden;            /* all cards scaled to fit — no sideways scroll */
   background: rgba(0,0,0,.28);
@@ -269,18 +268,25 @@ html, body {
 #hand .cardface { flex: 0 0 auto; transition: transform .12s ease; }
 #hand .cardface:active { transform: translateY(-4px); }
 
-#controls {
-  flex: 0 0 auto; display: flex; gap: 8px; justify-content: center;
-  padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
-  background: rgba(0,0,0,.28);
+#topbar {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px 2px;
 }
-.pill {
-  border: none; cursor: pointer; border-radius: 22px; padding: 9px 20px;
-  font-weight: 900; font-size: 13px; color: #163a72;
-  background: linear-gradient(180deg,#fff,#dfeaff);
-  box-shadow: 0 3px 0 #9fb7e6;
+.tb-btn {
+  border: none; cursor: pointer; font-weight: 900; color: #fff;
+  box-shadow: 0 3px 0 rgba(0,0,0,.28); -webkit-tap-highlight-color: transparent;
 }
-.pill.primary { color: #fff; background: linear-gradient(180deg,#ffb05a,var(--pass)); box-shadow: 0 3px 0 var(--pass-edge); }
+.tb-btn:active { transform: translateY(1px); box-shadow: 0 2px 0 rgba(0,0,0,.28); }
+#quit-btn {
+  width: 34px; height: 34px; border-radius: 50%; font-size: 22px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; padding: 0 2px 3px 0;
+  background: linear-gradient(180deg,#ff9a4a,var(--pass));
+}
+.tb-settings {
+  border-radius: 16px; padding: 7px 16px; font-size: 13.5px;
+  background: linear-gradient(180deg,#ff7a45,#e0431f);
+  border: 2px solid rgba(255,255,255,.55);
+}
 
 /* =============================================================================
  * Authentic card faces (em-scaled)
@@ -400,15 +406,10 @@ html, body {
    absolute) so it can never overlap the ACTION CARD / RENT label — the recurring
    "1M is covering the text" complaint. */
 .cardface .c-head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: .4em;
-  padding: .3em .5em; background: rgba(255,255,255,.26);
+  flex: 0 0 auto; display: flex; align-items: center; gap: .3em;
+  padding: .3em .4em; background: rgba(255,255,255,.26);
 }
 .cardface .c-head .v-pill { position: static; top: auto; left: auto; }
-/* A slightly smaller inline pill in the header so [pill] + [ACTION CARD] always
-   fit the card width — the enlarged Debt Collector was clipping the final "D". */
-.cardface .c-head .v-pill { padding: .08em .28em .16em; }
-.cardface .c-head .v-pill .v-num { font-size: 1.5em; }
-.cardface .c-head .v-pill .v-m { font-size: .62em; margin-top: .24em; }
 .cardface .c-head-label {
   flex: 1 1 auto; min-width: 0; text-align: right; font-size: .76em; font-weight: 900;
   color: #3a2c1a; letter-spacing: .015em; white-space: nowrap;
@@ -810,3 +811,52 @@ html, body {
 .stat { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 12px; text-align: center; }
 .stat-n { font-size: 30px; font-weight: 900; color: var(--coin); line-height: 1; }
 .stat-l { font-size: 12px; color: var(--ink-soft); font-weight: 800; margin-top: 4px; }
+
+/* In-game menus (Settings / "Where do you wanna go?") + Credits party */
+.menu-list { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: none; cursor: pointer; border-radius: 13px; padding: 11px 13px; text-align: left;
+  background: linear-gradient(180deg,#fff,#eef3fb); box-shadow: 0 2px 0 #9fb7e6; color: #143a72;
+}
+.menu-item:active { transform: translateY(1px); box-shadow: 0 1px 0 #9fb7e6; }
+.menu-item .mi-ic {
+  width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto; font-size: 19px;
+  display: flex; align-items: center; justify-content: center; background: rgba(23,105,214,.12);
+}
+.menu-item .mi-tx { display: flex; flex-direction: column; min-width: 0; }
+.menu-item .mi-t { font-size: 15px; font-weight: 900; line-height: 1.15; }
+.menu-item .mi-s { font-size: 11.5px; font-weight: 700; color: #5b6b82; }
+
+.credits-screen {
+  position: absolute; inset: 3% 4%; border-radius: 22px; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 22px; text-align: center;
+  background: radial-gradient(120% 90% at 50% 15%, #2b1a6b, #140b38 60%, #0a0620 100%);
+  box-shadow: 0 20px 60px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.12);
+  animation: cr-in .22s ease;
+}
+@keyframes cr-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+.fw-layer { position: absolute; inset: 0; pointer-events: none; }
+.fw { position: absolute; left: var(--x); top: var(--y); width: 0; height: 0; }
+.fw i {
+  position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--c);
+  transform-origin: 50% 50%; opacity: 0;
+  animation: fw-burst 1.8s ease-out infinite; animation-delay: var(--d);
+  box-shadow: 0 0 8px var(--c);
+}
+@keyframes fw-burst {
+  0%   { transform: rotate(var(--a)) translateY(0) scale(1);     opacity: 1; }
+  70%  { opacity: .9; }
+  100% { transform: rotate(var(--a)) translateY(-52px) scale(.25); opacity: 0; }
+}
+.credits-emoji { font-size: 30px; letter-spacing: 2px; position: relative; animation: cr-bob 2.2s ease-in-out infinite; }
+@keyframes cr-bob { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-7px);} }
+.credits-title {
+  position: relative; font-size: 34px; font-weight: 900; line-height: 1.05; color: #fff;
+  text-shadow: 0 3px 0 #b07d00, 0 0 22px rgba(255,210,63,.85);
+  animation: cr-pulse 1.5s ease-in-out infinite;
+}
+@keyframes cr-pulse { 0%,100% { transform: scale(1);} 50% { transform: scale(1.06);} }
+.credits-sub { position: relative; font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+.credits-screen .cta { position: relative; max-width: 220px; }
