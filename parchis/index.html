@@ -5,14 +5,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#241d17">
+<meta name="theme-color" content="#12151c">
 <title>Parchís</title>
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTMnIGZpbGw9JyM2RTRBMjknLz48cmVjdCB4PSc0JyB5PSc0JyB3aWR0aD0nNTYnIGhlaWdodD0nNTYnIHJ4PScxMCcgZmlsbD0nI0Y0RUFEMicvPjxyZWN0IHg9JzI3JyB5PSc5JyB3aWR0aD0nMTAnIGhlaWdodD0nMjQnIGZpbGw9JyNBNkM0RTQnLz48cmVjdCB4PSczMScgeT0nMjcnIHdpZHRoPScyNCcgaGVpZ2h0PScxMCcgZmlsbD0nI0YzQjM5QycvPjxyZWN0IHg9JzI3JyB5PSczMScgd2lkdGg9JzEwJyBoZWlnaHQ9JzI0JyBmaWxsPScjOTNDQ0MyJy8+PHJlY3QgeD0nOScgeT0nMjcnIHdpZHRoPScyNCcgaGVpZ2h0PScxMCcgZmlsbD0nI0ZCRTdBMCcvPjxjaXJjbGUgY3g9JzE4JyBjeT0nMTgnIHI9JzgnIGZpbGw9JyNGMkI3MDUnIHN0cm9rZT0nIzdBNUEwMicgc3Ryb2tlLXdpZHRoPScxLjYnLz48cG9seWdvbiBwb2ludHM9JzQ2LDExIDUzLDI1IDM5LDI1JyBmaWxsPScjMUY1RkE4Jy8+PHJlY3QgeD0nMzgnIHk9JzM4JyB3aWR0aD0nMTUnIGhlaWdodD0nMTUnIHJ4PScyJyBmaWxsPScjRTA1MzJGJy8+PHBvbHlnb24gcG9pbnRzPScxOCwzOCAyNSw0NiAxOCw1NCAxMSw0NicgZmlsbD0nIzE3OEE3QScvPjwvc3ZnPg==">
 
 <style>
   :root {
-    --bg:#241d17; --panel:#322820; --panel2:#3d3125; --text:#F4EAD2; --muted:#B6A488;
-    --line:#4a3c2e; --gold:#F2B705; --shadow:rgba(0,0,0,.4);
+    /* Dark chrome matched to the Game Hub's challenge theme (#12151c family), so the
+       Parchis shell meshes with the hub instead of the old maroon. Board colors below
+       are the game pieces and stay as-is. */
+    --bg:#12151c; --panel:#1b1f2a; --panel2:#232937; --text:#eef2f8; --muted:#9aa7bd;
+    --line:#2c3340; --gold:#F2B705; --shadow:rgba(0,0,0,.5);
     --amarillo:#FEF200; --azul:#00A8F3; --rojo:#E63329; --verde:#92D051;
   }
   /* Light theme: warm near-white chrome (board art stays the same, as in Matt's mockups). */
@@ -50,6 +53,8 @@
   .pc-iconbtn { background:transparent; border:none; color:var(--text); font-size:22px; line-height:1;
     width:40px; height:40px; border-radius:10px; cursor:pointer; }
   .pc-iconbtn:hover { background:var(--panel); }
+  /* The challenge setup's top-left control reads "‹ Hub" (matches the hub's back chip). */
+  .pc-back-hub { width:auto; font-size:15px; font-weight:700; padding:6px 12px; border:1px solid var(--line); }
 
   /* board */
   #boardWrap { width:100%; position:relative; }
@@ -117,8 +122,8 @@
   .pc-btn { font:inherit; font-size:15px; font-weight:700; color:#241c00; background:var(--gold);
     border:none; border-radius:11px; padding:12px 14px; cursor:pointer; }
   .pc-btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
-  /* Challenge mode: fixed config grayed out + non-interactive; start becomes a black bar. */
-  .pc-btn-challenge { background:#12151c; color:#fff; }
+  /* Challenge mode: fixed config grayed out; the "Begin challenge" CTA is a bright gold bar. */
+  .pc-btn-challenge { background:var(--gold); color:#241c00; font-weight:800; box-shadow:0 0 0 1px rgba(242,183,5,.5), 0 10px 26px rgba(242,183,5,.28); }
   .pc-locked { opacity:.45; pointer-events:none; }
   .pc-challenge-note { margin:0 0 10px; font-weight:800; color:#178a7a; font-size:15px; text-align:center; }
   .pc-hint { color:var(--muted); font-size:12.5px; margin:8px 0 2px; }
@@ -160,7 +165,7 @@
   .pc-modes { display:flex; gap:10px; }
   .pc-modecard { flex:1; display:flex; flex-direction:column; gap:3px; text-align:left; background:var(--panel2);
     border:2px solid var(--line); border-radius:12px; padding:11px 12px; cursor:pointer; color:var(--muted); }
-  .pc-modecard.on { border-color:var(--gold); color:var(--text); background:#41341f; }
+  .pc-modecard.on { border-color:var(--gold); color:var(--text); background:rgba(242,183,5,.14); }
   .pc-modename { font-weight:800; font-size:15px; color:var(--text); }
   .pc-modedesc { font-size:12px; line-height:1.3; }
 
@@ -169,7 +174,7 @@
   .pc-colorrow { display:flex; gap:12px; }
   .pc-swatch { background:var(--panel2); border:2px solid transparent; border-radius:12px; padding:8px; cursor:pointer;
     display:inline-flex; }
-  .pc-swatch.on { background:#41341f; }
+  .pc-swatch.on { background:rgba(242,183,5,.14); }
   .pc-opptoggle { width:100%; text-align:left; font:inherit; font-size:13px; font-weight:600; color:var(--text);
     background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; margin-top:8px; }
   .pc-opptoggle:hover { border-color:var(--muted); }
@@ -2475,7 +2480,7 @@
     var card = elh("div", "pc-card" + (opts.full ? " pc-card-full" : ""), dom.overlay);
     if (title != null) {
       var head = elh("div", "pc-card-head", card);
-      if (opts.back) { var b = elh("button", "pc-iconbtn", head, "‹"); b.setAttribute("aria-label", t("back")); b.onclick = opts.back; }
+      if (opts.back) { var b = elh("button", "pc-iconbtn" + (opts.backLabel ? " pc-back-hub" : ""), head, opts.backLabel || "‹"); b.setAttribute("aria-label", opts.backAria || t("back")); b.onclick = opts.back; }
       elh("h2", null, head, title);
       if (!opts.noClose && !opts.back) { var x = elh("button", "pc-iconbtn", head, "✕"); x.setAttribute("aria-label", t("close")); x.onclick = HUD.closeOverlay; }
       else if (opts.back) { elh("span", "pc-head-spacer", head); }
@@ -2546,21 +2551,25 @@
       });
       if (chLive) pRow.classList.add("pc-locked");
 
-      // your color
-      elh("p", "pc-hint", body, t("yourColorHeading"));
-      var cRow = elh("div", "pc-colorrow", body), cBtns = {};
-      COLORS.forEach(function (c) {
-        var b = elh("button", "pc-swatch" + (sel.humanColor === c ? " on" : ""), cRow);
-        b.innerHTML = shapeMarkup(c, 30); b.style.borderColor = sel.humanColor === c ? T().colors[c].base : "transparent";
-        b.setAttribute("aria-label", t(c));
-        cBtns[c] = b;
-        b.onclick = function () {
-          sel.humanColor = c;
-          COLORS.forEach(function (k) { cBtns[k].classList.toggle("on", k === c); cBtns[k].style.borderColor = k === c ? T().colors[k].base : "transparent"; });
-          if (youShape) youShape.innerHTML = shapeMarkup(c, 22);
-          renderOpponents();
-        };
-      });
+      // your color -- hidden in challenge mode: the color is a free cosmetic pick, and the
+      // bright shape swatches distract from the one action (Begin challenge) when everything
+      // else is fixed. Normal play keeps the full picker.
+      if (!chLive) {
+        elh("p", "pc-hint", body, t("yourColorHeading"));
+        var cRow = elh("div", "pc-colorrow", body), cBtns = {};
+        COLORS.forEach(function (c) {
+          var b = elh("button", "pc-swatch" + (sel.humanColor === c ? " on" : ""), cRow);
+          b.innerHTML = shapeMarkup(c, 30); b.style.borderColor = sel.humanColor === c ? T().colors[c].base : "transparent";
+          b.setAttribute("aria-label", t(c));
+          cBtns[c] = b;
+          b.onclick = function () {
+            sel.humanColor = c;
+            COLORS.forEach(function (k) { cBtns[k].classList.toggle("on", k === c); cBtns[k].style.borderColor = k === c ? T().colors[k].base : "transparent"; });
+            if (youShape) youShape.innerHTML = shapeMarkup(c, 22);
+            renderOpponents();
+          };
+        });
+      }
 
       // Your own name gets its own section. It used to be the first row under the
       // "Opponents" heading, which read as if you were one of the opponents.
@@ -2568,8 +2577,7 @@
       if (vsMode === "cpu") {
         elh("p", "pc-hint", body, t("yourNameHeading"));
         var youRow = elh("div", "pc-opprow", body);
-        youShape = elh("span", "pc-rowshape", youRow);
-        youShape.innerHTML = shapeMarkup(sel.humanColor, 22);
+        if (!chLive) { youShape = elh("span", "pc-rowshape", youRow); youShape.innerHTML = shapeMarkup(sel.humanColor, 22); }
         var youInp = elh("input", "pc-oppname", youRow); youInp.type = "text";
         youInp.value = sel.humanName;
         youInp.setAttribute("aria-label", t("yourNameHeading"));
@@ -2631,7 +2639,7 @@
         if (vsMode === "cpu") names[sel.humanColor] = sel.humanName; // the seat the human took
         onPlay({ mode: sel.mode, vsMode: vsMode, playerCount: sel.playerCount, humanColor: sel.humanColor, names: names, skills: sel.skills });
       }, chLive ? "pc-btn-challenge" : null);
-    }, { back: onBack });
+    }, { back: onBack, backLabel: chLive ? "‹ Hub" : null, backAria: chLive ? "Back to hub" : null });
   };
   function defaultName(col, idx, vsMode, humanColor, pre) {
     if (vsMode === "local") return (col === humanColor && pre.humanName) ? pre.humanName : t("playerN", { n: idx + 1 });
@@ -3302,7 +3310,7 @@
     if (typeof document === "undefined") return;
     document.body.classList.toggle("pc-light", theme === "light");
     var m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute("content", theme === "light" ? "#EFE9DA" : "#241d17");
+    if (m) m.setAttribute("content", theme === "light" ? "#EFE9DA" : "#12151c");
   }
 
   // Hidden challenge, gated in the hub. Self-contained because the built single file
@@ -3413,7 +3421,7 @@
     Speed = window.ParchisSpeed;
     svg = refs.svg;
     applyLang();
-    applyTheme(getTheme());
+    applyTheme(chActive() ? "dark" : getTheme());   // challenge mode always matches the dark hub
     Speed.set(getSpeed());
     HUD.build(refs, { onRollTap: onRollTap, onMenu: function () { openInGameMenu(); } });
     // static board backdrop behind the title screen
@@ -3423,7 +3431,8 @@
     bindInput();
     // Challenge mode: open straight on the (locked) new-game setup with the "Begin
     // challenge" bar, skipping the title menu, so the mission is the first thing shown.
-    if (chLive()) HUD.showSetup("cpu", prefill(), onPlay, showTitle);
+    // Back from here goes STRAIGHT to the hub (not the title menu she never saw).
+    if (chLive()) HUD.showSetup("cpu", prefill(), onPlay, function () { window.location.href = "../"; });
     else showTitle();
   };
   function openInGameMenu() {
