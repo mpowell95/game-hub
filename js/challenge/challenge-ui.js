@@ -97,7 +97,7 @@ class ChallengeUI {
       <section class="ch-card">
         <form data-role="answer-form" class="ch-form">
           <label class="ch-label" for="ch-answer">${esc(S.QUESTION)}</label>
-          <input class="ch-input" id="ch-answer" name="answer" type="text" autocomplete="off" placeholder="Answer">
+          <input class="ch-input" id="ch-answer" name="answer" type="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Answer">
           <button type="submit" class="ch-btn ch-btn-go">Enter</button>
           <p class="ch-msg" data-role="answer-msg" role="status" aria-live="polite"></p>
         </form>
@@ -165,7 +165,8 @@ class ChallengeUI {
         <h2 class="ch-h2">Enter a code</h2>
         <form data-role="code-form" class="ch-form ch-form-row">
           <input class="ch-input" id="ch-code" name="code" type="text" autocomplete="off"
-                 placeholder="Type a secret code" spellcheck="false">
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
+                 placeholder="Type a secret code">
           <button type="submit" class="ch-btn ch-btn-go">Redeem</button>
         </form>
         <p class="ch-msg" data-role="code-msg" role="status" aria-live="polite"></p>
