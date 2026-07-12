@@ -53,7 +53,7 @@ body.ch-active .hub-back:hover { background: #232937; }
 }
 
 .ch-form { display: flex; flex-direction: column; gap: 10px; }
-.ch-form-row { flex-direction: row; align-items: center; }
+.ch-form-row { flex-direction: row; align-items: stretch; }
 .ch-label { font-weight: 700; font-size: 0.9rem; }
 .ch-input {
   font: inherit; flex: 1; padding: 11px 13px; border-radius: 10px;
@@ -263,11 +263,11 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-selfie-preview { display: block; max-width: 100%; max-height: 40vh; border-radius: 12px; margin: 4px 0 10px; }
 .ch-selfie-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .ch-selfie-actions .ch-btn-ghost { margin-left: 0; }
-.ch-selfie-capture { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 22px 16px; border-radius: 14px; background: #0e1117; border: 1px dashed var(--ch-line); color: var(--ch-ink); }
-.ch-selfie-capture:hover { border-color: var(--ch-gold); }
-.ch-selfie-cam { font-size: 2rem; line-height: 1; }
+/* Just the capture button, centered: gold pill with the label + camera hint (no outer box). */
+.ch-selfie-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; width: fit-content; margin: 6px auto 0; padding: 14px 26px; }
+.ch-selfie-cam { font-size: 1.15rem; }
 .ch-selfie-cta { font-weight: 800; font-size: 1.05rem; }
-.ch-selfie-sub { font-size: 0.82rem; color: var(--ch-muted); font-weight: 600; }
+.ch-selfie-sub { font-size: 0.8rem; font-weight: 600; opacity: 0.85; }
 
 /* Mission Control admin panel */
 .ch-dash-player { padding: 8px 0; border-top: 1px solid var(--ch-line); }

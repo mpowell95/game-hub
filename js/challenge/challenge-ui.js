@@ -35,6 +35,8 @@ const CELE = {
 };
 // Shown the moment she answers the personal question correctly (not tied to a code).
 const ANSWER_ASSET = 'sexy-potato.png';
+// Ordinal words for the "Your <nth> Clue has been unlocked!" celebration (1..5).
+const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth'];
 
 // Selfie rejections reuse Matt's shared escalating taunt lines (hooks.TAUNTS), picked by
 // how many times this selfie has already been rejected (1st, 2nd, 3rd, then 4th-and-after).
@@ -165,13 +167,11 @@ class ChallengeUI {
       </section>` : ''}
 
       <section class="ch-card">
-        <h2 class="ch-h2">Prizes <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
+        <h2 class="ch-h2">Clues <span class="ch-count">${pieces} / ${PIECE_TOTAL}</span></h2>
         <div class="ch-gallery" data-role="gallery">
           ${this.galleryHTML(st)}
         </div>
-        <button type="button" class="ch-btn ch-btn-finale" data-role="assemble" ${pieces >= PIECE_TOTAL ? '' : 'disabled'}>
-          ${pieces >= PIECE_TOTAL ? 'Assemble the image' : `Assemble the image (${PIECE_TOTAL - pieces} to go)`}
-        </button>
+        <button type="button" class="ch-btn ch-btn-finale" data-role="assemble">Assemble the image</button>
       </section>`);
   }
 
@@ -192,9 +192,8 @@ class ChallengeUI {
              <label class="ch-btn ch-btn-ghost ch-file-btn">Retake
                <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>
            </div>`
-        : `<label class="ch-selfie-capture ch-file-btn">
-             <span class="ch-selfie-cam" aria-hidden="true">&#128247;</span>
-             <span class="ch-selfie-cta">Take a selfie</span>
+        : `<label class="ch-btn ch-btn-go ch-file-btn ch-selfie-btn">
+             <span class="ch-selfie-cta"><span class="ch-selfie-cam" aria-hidden="true">&#128247;</span> Take a selfie</span>
              <span class="ch-selfie-sub">Opens the camera</span>
              <input class="ch-file-input" data-role="selfie-file" type="file" accept="image/*" capture="user"></label>`;
       inner = `${rejected ? `<p class="ch-msg is-bad">${esc(s.reason || 'Not approved.')}</p>` : ''}
@@ -230,11 +229,12 @@ class ChallengeUI {
     return out;
   }
 
-  // --- Finale: the assembled image, with a toggle per layer -------------------
-  /** All five layers stacked into the image, plus a chip per layer she can flip on/off to
-   *  see how it is built (live). Placeholder tints now; the real art slots in unchanged. */
+  // --- Finale: the assembled image, with a toggle per unlocked clue -----------
+  /** The clues unlocked SO FAR, stacked into the image, plus a chip per unlocked layer she
+   *  can flip on/off (live) to see how it builds. Always openable, even partway through.
+   *  Placeholder tints now; the real art slots in unchanged. */
   showFinale() {
-    if (loadChallenge().order.length < PIECE_TOTAL) return;
+    const unlocked = loadChallenge().order.length;   // always openable; shows the clues so far
     const host = document.createElement('div');
     host.className = 'ch-finale';
     host.setAttribute('role', 'dialog');
@@ -243,16 +243,19 @@ class ChallengeUI {
     host.innerHTML = `
       <div class="ch-unlock-scrim"></div>
       <div class="ch-finale-inner">
-        <div class="ch-layers ch-layers-full" data-role="stack">${this.layerHTML(PIECE_TOTAL)}</div>
-        <div class="ch-toggles" data-role="toggles" aria-label="Toggle layers">
-          ${Array.from({ length: PIECE_TOTAL }, (_, i) =>
-            `<button type="button" class="ch-toggle is-on" data-layer="${i}" aria-pressed="true">${i + 1}</button>`).join('')}
-        </div>
+        <div class="ch-layers ch-layers-full" data-role="stack">${this.layerHTML(unlocked)}</div>
+        ${unlocked
+          ? `<div class="ch-toggles" data-role="toggles" aria-label="Toggle layers">
+              ${Array.from({ length: unlocked }, (_, i) =>
+                `<button type="button" class="ch-toggle is-on" data-layer="${i}" aria-pressed="true">${i + 1}</button>`).join('')}
+            </div>`
+          : `<p class="ch-hint">No clues unlocked yet.</p>`}
         <button type="button" class="ch-btn ch-btn-go ch-finale-close" data-role="fin-close">Close</button>
       </div>`;
     document.body.appendChild(host);
     const layers = [...host.querySelectorAll('[data-role="stack"] .ch-layer')];
-    host.querySelector('[data-role="toggles"]').addEventListener('click', (e) => {
+    const toggles = host.querySelector('[data-role="toggles"]');
+    if (toggles) toggles.addEventListener('click', (e) => {
       const btn = e.target.closest('.ch-toggle');
       if (!btn) return;
       const on = btn.classList.toggle('is-on');
@@ -592,7 +595,7 @@ class ChallengeUI {
       this.render();
       const c = CELE[slot];
       if (c) this.showCelebration({
-        title: `Prize ${layerN} unlocked`,
+        title: `Your ${ORDINALS[layerN - 1] || layerN} Clue has been unlocked!`,
         phrase: codeFor(slot),
         asset: assetUrl(c.asset),
       });
