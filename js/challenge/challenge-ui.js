@@ -129,7 +129,7 @@ class ChallengeUI {
                 <ol class="ch-list">
                   <li>Connect 4</li>
                   <li>Chinch&oacute;n</li>
-                  <li>Business Deal</li>
+                  <li>Monopoly Deal</li>
                   <li>Parch&iacute;s</li>
                 </ol>
                 <p class="ch-label">And submit:</p>

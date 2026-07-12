@@ -58,7 +58,7 @@ const GAMES = [
   },
   {
     id: 'business-deal',
-    title: 'Business Deal',
+    title: 'Monopoly Deal',
     blurb: 'Cards, cash & schemes. Collect property sets to win vs. smart AI. 2–5 players.',
     // Business Deal lives in this repo now (business-deal/) and launches out like
     // Parchís, rather than mounting as an in-hub module. It keeps its own global-JS

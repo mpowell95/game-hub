@@ -30,7 +30,7 @@
 
   // Bump alongside the sw.js cache name on every release so the visible stamp
   // and the cached build always match.
-  const APP_VERSION = 'v24';
+  const APP_VERSION = 'v25';
 
   const LIGHT_BANDS = ['lightblue', 'yellow', 'utility']; // need dark text on band
 
@@ -277,7 +277,7 @@
           this._menuItem('set-new', '🔄', 'New Game', 'Restart with the same opponents') +
           this._menuItem('set-stats', '📊', 'Stats', 'All-time wins, losses and win rate') +
           this._menuItem('set-setup', '↩️', 'Quit to New Game screen', 'Change opponents or difficulty') +
-          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', 'Leave Business Deal') +
+          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', 'Leave Monopoly Deal') +
           this._menuItem('set-credits', '🎉', 'Credits', '') +
         '</div>' +
         '<button class="cta ghost-cta" id="set-close">Close</button>');
@@ -295,7 +295,7 @@
         '<h3>Where do you wanna go?</h3><p>Your current game will be lost</p>' +
         '<div class="menu-list">' +
           this._menuItem('q-setup', '↩️', 'New Game screen', 'Pick opponents and difficulty') +
-          this._menuItem('q-hub', '🏠', 'Game Hub', 'Leave Business Deal') +
+          this._menuItem('q-hub', '🏠', 'Game Hub', 'Leave Monopoly Deal') +
         '</div>' +
         '<button class="cta ghost-cta" id="q-cancel">Keep playing</button>');
       sheet.querySelector('#q-setup').addEventListener('click', () => this.showSetup());
@@ -361,7 +361,7 @@
         const lock = live ? ' bd-locked' : '';
         root.innerHTML =
           '<div class="scrim"></div><div class="sheet">' +
-          (done ? '<p class="bd-challenge-note">Business Deal challenge completed. Play anyways?</p>' : '') +
+          (done ? '<p class="bd-challenge-note">Monopoly Deal challenge completed. Play anyways?</p>' : '') +
           "<h3>Monopoly Deal</h3><p>How many AI opponents?</p>" +
           '<div class="count-row' + lock + '">' +
           [1, 2, 3, 4].map(n => `<button class="count-btn${n === chosen ? ' sel' : ''}" data-n="${n}">${n}</button>`).join('') +

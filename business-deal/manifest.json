@@ -1,6 +1,6 @@
 {
-  "name": "Business Deal",
-  "short_name": "Business Deal",
+  "name": "Monopoly Deal",
+  "short_name": "Monopoly Deal",
   "description": "A single-player-vs-AI card game based on the Monopoly Deal ruleset.",
   "start_url": "./",
   "scope": "./",
