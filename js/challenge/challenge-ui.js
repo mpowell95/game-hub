@@ -249,43 +249,110 @@ class ChallengeUI {
     return out;
   }
 
-  // --- Finale: the assembled image, with a toggle per unlocked clue -----------
-  /** The clues unlocked SO FAR, stacked into the image, plus a chip per unlocked layer she
-   *  can flip on/off (live) to see how it builds. Always openable, even partway through.
-   *  Placeholder tints now; the real art slots in unchanged. */
-  showFinale() {
-    const unlocked = loadChallenge().order.length;   // always openable; shows the clues so far
+  // --- Finale: the code-built boarding pass (revealed from the Firebase flight) --
+  /** Opens the boarding pass. It fills in as clues are collected (the destination is held
+   *  until all five are in), and at 5/5 offers "Add to Google Calendar". Always openable;
+   *  the flight is read live from Firebase, so a connection is needed to reveal it. */
+  async showFinale() {
+    const n = loadChallenge().order.length;
     const host = document.createElement('div');
     host.className = 'ch-finale';
     host.setAttribute('role', 'dialog');
     host.setAttribute('aria-modal', 'true');
-    host.setAttribute('aria-label', 'The assembled image');
+    host.setAttribute('aria-label', 'Boarding pass');
     host.innerHTML = `
       <div class="ch-unlock-scrim"></div>
       <div class="ch-finale-inner">
-        <div class="ch-layers ch-layers-full" data-role="stack">${this.layerHTML(unlocked)}</div>
-        ${unlocked
-          ? `<div class="ch-toggles" data-role="toggles" aria-label="Toggle layers">
-              ${Array.from({ length: unlocked }, (_, i) =>
-                `<button type="button" class="ch-toggle is-on" data-layer="${i}" aria-pressed="true">${i + 1}</button>`).join('')}
-            </div>`
-          : `<p class="ch-hint">No clues unlocked yet.</p>`}
-        <button type="button" class="ch-btn ch-btn-go ch-finale-close" data-role="fin-close">Close</button>
+        <div class="ch-finale-stage" data-role="stage"><p class="ch-finale-printing">Assembling&hellip;</p></div>
+        <button type="button" class="ch-btn ch-btn-ghost ch-finale-close" data-role="fin-close">Close</button>
       </div>`;
     document.body.appendChild(host);
-    const layers = [...host.querySelectorAll('[data-role="stack"] .ch-layer')];
-    const toggles = host.querySelector('[data-role="toggles"]');
-    if (toggles) toggles.addEventListener('click', (e) => {
-      const btn = e.target.closest('.ch-toggle');
-      if (!btn) return;
-      const on = btn.classList.toggle('is-on');
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      const layer = layers[+btn.dataset.layer];
-      if (layer) layer.classList.toggle('is-on', on);   // reuses the layer's opacity fade
-    });
     requestAnimationFrame(() => host.classList.add('is-in'));
     host.querySelector('[data-role="fin-close"]').addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => host.remove());
+
+    // Read the flight live, holding the "assembling" beat for at least a moment.
+    const [flight] = await Promise.all([
+      net.fetchFlight().catch(() => null),
+      new Promise((r) => setTimeout(r, 800)),
+    ]);
+    if (this._destroyed || !host.isConnected) return;
+    const stage = host.querySelector('[data-role="stage"]');
+    if (!stage) return;
+    if (!flight) {
+      stage.innerHTML = `<p class="ch-finale-printing">Couldn&rsquo;t reach the server. Connect to the internet and reopen to reveal your flight.</p>`;
+      return;
+    }
+    stage.innerHTML = this.passHTML(flight, n);
+    const cal = stage.querySelector('[data-role="add-cal"]');
+    if (cal) cal.addEventListener('click', () => window.open(this.calendarUrl(flight), '_blank', 'noopener'));
+  }
+
+  /** The boarding pass, revealing more as clues come in; the route (where it lands) is the
+   *  climax, held until all five clues are redeemed. Functional labels + the real flight. */
+  passHTML(flight, n) {
+    const f = flight || {};
+    const val = (v) => (v != null && v !== '') ? esc(String(v)) : '';
+    const lock = '<span class="ch-pass-lock" aria-hidden="true">&#8226;&#8226;&#8226;</span>';
+    const done = n >= PIECE_TOTAL;
+    const airline = n >= 1 ? ('&#9992;&#65039; ' + (val(f.airline) || 'Flight')) : lock;
+    const passenger = n >= 2 ? (val(f.name) || lock) : lock;
+    const flightNo = n >= 3 ? (val(f.flightNumbers) || lock) : lock;
+    const dates = n >= 4 ? (val(f.dates) || lock) : lock;
+    const route = done
+      ? `<div class="ch-pass-end"><span class="ch-pass-code">${val(f.fromCode) || lock}</span><span class="ch-pass-city">${val(f.fromCity)}</span></div>
+         <span class="ch-pass-plane" aria-hidden="true">&#9992;&#65039;</span>
+         <div class="ch-pass-end"><span class="ch-pass-code">${val(f.toCode) || lock}</span><span class="ch-pass-city">${val(f.toCity)}</span></div>`
+      : `<div class="ch-pass-end"><span class="ch-pass-code">${lock}</span></div>
+         <span class="ch-pass-plane" aria-hidden="true">&#9992;&#65039;</span>
+         <div class="ch-pass-end"><span class="ch-pass-code">${lock}</span></div>`;
+    const message = (done && val(f.message)) ? `<p class="ch-pass-msg ch-anim" style="--d:6">${val(f.message)}</p>` : '';
+    const pass = `
+      <div class="ch-pass">
+        <div class="ch-pass-head ch-anim" style="--d:1">
+          <span class="ch-pass-airline">${airline}</span>
+          <span class="ch-pass-tag">Boarding Pass</span>
+        </div>
+        <div class="ch-pass-route ch-anim" style="--d:5">${route}</div>
+        <div class="ch-pass-grid">
+          <div class="ch-pass-cell ch-anim" style="--d:2"><label>Passenger</label><span>${passenger}</span></div>
+          <div class="ch-pass-cell ch-anim" style="--d:3"><label>Flight</label><span>${flightNo}</span></div>
+          <div class="ch-pass-cell ch-anim" style="--d:4"><label>Dates</label><span>${dates}</span></div>
+        </div>
+        ${message}
+        <div class="ch-pass-barcode ch-anim" style="--d:6" aria-hidden="true"></div>
+      </div>`;
+    const footer = done
+      ? `<button type="button" class="ch-btn ch-btn-go ch-finale-cal" data-role="add-cal">Add to Google Calendar</button>`
+      : `<p class="ch-finale-hint">${n} / ${PIECE_TOTAL} clues unlocked. Collect all five to reveal the flight.</p>`;
+    return pass + footer;
+  }
+
+  /** Google Calendar template link for the visit (all-day span; the recipient can adjust it
+   *  before saving). Parses the free-text "M/D - M/D" dates best-effort. */
+  calendarUrl(flight) {
+    const f = flight || {};
+    const params = new URLSearchParams({ action: 'TEMPLATE' });
+    params.set('text', [f.name, f.toCity].filter(Boolean).join(' in ') || 'Trip');
+    const m = String(f.dates || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})\D+?(\d{1,2})\s*\/\s*(\d{1,2})/);
+    if (m) {
+      const now = new Date();
+      let year = now.getFullYear();
+      let start = new Date(year, +m[1] - 1, +m[2]);
+      if (start.getTime() < now.getTime() - 2 * 864e5) { year += 1; start = new Date(year, +m[1] - 1, +m[2]); }
+      const endYear = (+m[3] < +m[1]) ? year + 1 : year;
+      const endExcl = new Date(endYear, +m[3] - 1, +m[4] + 1);   // Google's end date is exclusive
+      const fmt = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      params.set('dates', `${fmt(start)}/${fmt(endExcl)}`);
+    }
+    if (f.toCity) params.set('location', f.toCity);
+    const details = [
+      [f.airline, f.flightNumbers].filter(Boolean).join(' '),
+      (f.fromCity && f.toCity) ? `${f.fromCity} (${f.fromCode || ''}) to ${f.toCity} (${f.toCode || ''})` : '',
+      f.dates ? `Dates: ${f.dates}` : '',
+    ].filter(Boolean).join('\n');
+    if (details) params.set('details', details);
+    return 'https://calendar.google.com/calendar/render?' + params.toString();
   }
 
   /** Codes to show in the vault: one per recorded win, plus the selfie code if approved. */
