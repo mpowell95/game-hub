@@ -56,12 +56,14 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-form-row { flex-direction: row; align-items: stretch; }
 .ch-label { font-weight: 700; font-size: 0.9rem; }
 .ch-input {
+  appearance: none; -webkit-appearance: none;
   font: inherit; flex: 1; padding: 11px 13px; border-radius: 10px;
   border: 1px solid var(--ch-line); background: #0e1117; color: var(--ch-ink);
 }
 .ch-input:focus { outline: 2px solid var(--ch-gold); outline-offset: 1px; }
 
 .ch-btn {
+  appearance: none; -webkit-appearance: none;
   font: inherit; font-weight: 800; border: 1px solid transparent; border-radius: 11px; padding: 11px 16px;
   cursor: pointer; touch-action: manipulation; white-space: nowrap;
 }
