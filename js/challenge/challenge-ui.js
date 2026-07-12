@@ -121,22 +121,42 @@ class ChallengeUI {
         <details ${this._firstHowTo ? 'open' : ''}>
           <summary class="ch-h2">How to Win</summary>
           <div class="ch-howto-body">
-            <p class="ch-lead">There are 5 parts to this challenge. You must complete the following tasks:</p>
-            <p class="ch-label">Win a game of:</p>
-            <ol class="ch-list">
-              <li>Connect 4</li>
-              <li>Chinch&oacute;n</li>
-              <li>Business Deal</li>
-              <li>Parch&iacute;s</li>
-            </ol>
-            <p class="ch-label">And submit:</p>
-            <ul class="ch-list ch-list-selfie">
-              <li>A selfie taken in the moment</li>
-            </ul>
-            <p class="ch-lead">For each task you complete, you will receive a code or phrase.</p>
-            <p class="ch-lead">When you receive a code, come back to the Challenge area, enter your code, and click Redeem.</p>
-            <p class="ch-lead">Each code unlocks a piece of an image. Once you have unlocked all 5 pieces, you can assemble the image.</p>
-            <p class="ch-lead">The image, and the information displayed within it, is the prize.</p>
+            <div class="ch-steps" data-role="steps">
+              <div class="ch-step is-active" data-step="0">
+                <div class="ch-step-icon" aria-hidden="true">&#127942;</div>
+                <p class="ch-lead">There are 5 parts to this challenge. You must complete the following tasks:</p>
+                <p class="ch-label">Win a game of:</p>
+                <ol class="ch-list">
+                  <li>Connect 4</li>
+                  <li>Chinch&oacute;n</li>
+                  <li>Business Deal</li>
+                  <li>Parch&iacute;s</li>
+                </ol>
+                <p class="ch-label">And submit:</p>
+                <ul class="ch-list ch-list-selfie">
+                  <li>A selfie taken in the moment</li>
+                </ul>
+              </div>
+              <div class="ch-step" data-step="1">
+                <div class="ch-step-icon" aria-hidden="true">&#127903;</div>
+                <p class="ch-lead">For each task you complete, you will receive a code or phrase.</p>
+              </div>
+              <div class="ch-step" data-step="2">
+                <div class="ch-step-icon" aria-hidden="true">&#128273;</div>
+                <p class="ch-lead">When you receive a code, come back to the Challenge area, enter your code, and click Redeem.</p>
+                <p class="ch-lead">Each code unlocks a clue.</p>
+              </div>
+              <div class="ch-step" data-step="3">
+                <div class="ch-step-icon" aria-hidden="true">&#127873;</div>
+                <p class="ch-lead">Once you have unlocked all 5 clues, you can assemble the image.</p>
+                <p class="ch-lead">The image, and the information displayed within it, is the prize.</p>
+              </div>
+            </div>
+            <div class="ch-steps-nav">
+              <button type="button" class="ch-btn ch-btn-ghost" data-role="step-prev" disabled>Back</button>
+              <span class="ch-dots" data-role="dots" aria-hidden="true"><i class="is-on"></i><i></i><i></i><i></i></span>
+              <button type="button" class="ch-btn ch-btn-go" data-role="step-next">Next</button>
+            </div>
           </div>
         </details>
       </section>
@@ -639,10 +659,33 @@ class ChallengeUI {
     const role = btn.dataset.role;
     if (role === 'reset-test') { this.resetTest(); return; }
     if (role === 'assemble') { this.showFinale(); return; }
+    if (role === 'step-prev') { this.stepHowTo(-1); return; }
+    if (role === 'step-next') { this.stepHowTo(1); return; }
     if (role === 'selfie-submit') { this.submitSelfie(); return; }
     if (role === 'download-selfie') { this.downloadSelfie(btn.dataset.id); return; }
     if (role === 'approve') { this.decideSelfie(btn.dataset.id, true); return; }
     if (role === 'reject') { this.decideSelfie(btn.dataset.id, false); return; }
+  }
+
+  /** How-to-Win slideshow: advance/retreat one step; on the last step, "Next" (Got it)
+   *  collapses the card. Self-contained (reads/writes the live DOM, no re-render). */
+  stepHowTo(dir) {
+    const wrap = this.root && this.root.querySelector('[data-role="steps"]');
+    if (!wrap) return;
+    const slides = [...wrap.querySelectorAll('.ch-step')];
+    let i = slides.findIndex((s) => s.classList.contains('is-active'));
+    if (dir > 0 && i === slides.length - 1) {   // "Got it" on the last step closes How to Win
+      const d = this.root.querySelector('.ch-howto details');
+      if (d) d.open = false;
+      return;
+    }
+    i = Math.max(0, Math.min(slides.length - 1, i + dir));
+    slides.forEach((s, k) => s.classList.toggle('is-active', k === i));
+    this.root.querySelectorAll('[data-role="dots"] i').forEach((d, k) => d.classList.toggle('is-on', k === i));
+    const prev = this.root.querySelector('[data-role="step-prev"]');
+    const next = this.root.querySelector('[data-role="step-next"]');
+    if (prev) prev.disabled = i === 0;
+    if (next) next.textContent = i === slides.length - 1 ? 'Got it' : 'Next';
   }
 
   async submitSelfie() {

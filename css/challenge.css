@@ -256,6 +256,18 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-howto-body .ch-list-selfie { list-style: none; padding-left: 0; }
 .ch-list-selfie li { position: relative; padding-left: 30px; }
 .ch-list-selfie li::before { content: "\01F4F7"; position: absolute; left: 0; top: -1px; font-size: 1.1em; }
+/* How to Win as a stepped slideshow: one simple step per slide, with Back / dots / Next. */
+.ch-steps { position: relative; }
+.ch-step { display: none; }
+.ch-step.is-active { display: block; animation: ch-step-in 0.28s ease; }
+.ch-step-icon { font-size: 2.3rem; text-align: center; margin: 2px 0 12px; }
+.ch-steps-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.ch-steps-nav .ch-btn { flex: 0 0 auto; min-width: 82px; margin: 0; }
+.ch-steps-nav .ch-btn:disabled { opacity: 0.4; cursor: default; }
+.ch-dots { display: inline-flex; gap: 7px; }
+.ch-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ch-line); transition: background 0.2s ease; }
+.ch-dots i.is-on { background: var(--ch-gold); }
+@keyframes ch-step-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 
 /* Selfie capture card */
 .ch-file-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
@@ -287,6 +299,7 @@ body.ch-active .hub-back:hover { background: #232937; }
      the chevron spin. */
   .ch-unlock-sparkles span, .ch-cele-wait i { animation: none; }
   .ch-fw { display: none; }
+  .ch-step.is-active { animation: none; }
   .ch-anim { animation: none; opacity: 1; transform: none; }
   .ch-unlock.is-leaving { animation: none; }
   .ch-howto summary::after, .ch-collapse summary::after { transition: none; }
