@@ -10,6 +10,10 @@ import { loadProfile } from './profile-store.js';
 import { isChallengeActive, isAdmin, loadChallenge } from './challenge/hooks.js';
 import { markUnlockSeen } from './challenge/challenge-store.js';
 
+// Which challenge win-slot each of the four games maps to, for the challenge-mode task
+// markers on the launcher cards (star = still to win, check = won). Other cards map to none.
+const CHALLENGE_SLOT = { 'connect-four': 'connect4', 'chinchon': 'chinchon', 'business-deal': 'business', 'parchis': 'parchis' };
+
 const GAMES = [
   {
     id: 'connect-four',
@@ -147,6 +151,7 @@ class Hub {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
     const prof = loadProfile();
     const active = !!(prof && isChallengeActive(prof.name));
+    this._chWins = active ? (loadChallenge().wins || {}) : null;   // challenge task markers on the cards
     const admin = !active && !!(prof && isAdmin(prof.name));
     const extra = active ? CHALLENGE_CARD : admin ? ADMIN_CARD : null;   // hidden card, shown apart from the games
     this.games = GAMES.concat(extra ? [extra] : []);                     // includes `extra` for launch() lookup
@@ -223,9 +228,15 @@ class Hub {
   cardHTML(g) {
     // Square tile: full-bleed art with the title in a caption. The blurb moves to
     // the accessible label (it is no longer shown on the compact tile face).
+    // Challenge mode: mark each of the four games as a task (star = to win, check = won).
+    const slot = this._chWins ? CHALLENGE_SLOT[g.id] : null;
+    const badge = slot
+      ? `<span class="hub-card-badge${this._chWins[slot] ? ' is-won' : ''}" aria-hidden="true">${this._chWins[slot] ? '✓' : '★'}</span>`
+      : '';
     const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
+        ${badge}
         ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}`;
     const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub

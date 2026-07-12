@@ -159,6 +159,16 @@ body {
   padding: 3px 8px;
   border-radius: 999px;
 }
+/* Challenge mode: a task marker on each of the four game cards (star = to win, check = won). */
+.hub-card-badge {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; line-height: 1;
+  background: rgba(12, 15, 22, 0.72); color: #f2b705; border: 1.5px solid #f2b705;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.hub-card-badge.is-won { background: #f2b705; color: #12151c; }
 
 .hub-game { width: 100%; }
 .hub-error { color: #b3261e; text-align: center; padding: 32px 16px; font-weight: 600; }
