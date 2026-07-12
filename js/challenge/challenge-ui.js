@@ -238,26 +238,30 @@ class ChallengeUI {
     }
     return out;
   }
-  /** The prizes as 5 separate tiles that fill in order as codes are redeemed: an earned
-   *  tile shows its number on gold, an unearned one is a dashed "?". */
+  /** The boarding pass as 5 slices that fill in order as codes are redeemed: an earned
+   *  slice shows its piece of the assembled image, an unearned one is a numbered placeholder.
+   *  Flush proportional columns (see .ch-gallery CSS) so the 5 slices reassemble the pass. */
   galleryHTML(st) {
+    const n = st.order.length;
     let out = '';
     for (let i = 0; i < PIECE_TOTAL; i++) {
-      out += st.order.length > i
-        ? `<div class="ch-piece is-on"><span class="ch-piece-mark">${i + 1}</span></div>`
-        : `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">?</span></div>`;
+      out += i < n
+        ? `<div class="ch-piece is-on"><img class="ch-piece-img" alt="" src="${assetUrl('reward-pt-' + (i + 1) + '.jpg')}" onerror="this.remove()"></div>`
+        : `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">${i + 1}</span></div>`;
     }
     return out;
   }
 
-  // --- Finale: the code-built boarding pass (revealed from the Firebase flight) --
-  /** Opens the boarding pass. It fills in as clues are collected (the destination is held
-   *  until all five are in), and at 5/5 offers "Add to Google Calendar". Always openable;
-   *  the flight is read live from Firebase, so a connection is needed to reveal it. */
+  // --- Finale: the assembled boarding-pass image (sliced into the 5 collected pieces) --
+  /** Opens the finale. Before 5/5 it shows the pieces assembled so far; at 5/5 it reveals
+   *  the full boarding-pass image (a local asset, so it always works) with a tap-to-enlarge
+   *  view plus a best-effort "Add to Google Calendar" built from the Firebase flight. */
   async showFinale() {
-    const n = loadChallenge().order.length;
+    const st = loadChallenge();
+    const n = st.order.length;
+    const complete = n >= PIECE_TOTAL;
     const host = document.createElement('div');
-    host.className = 'ch-finale';
+    host.className = 'ch-finale' + (complete ? ' ch-finale-photo' : '');
     host.setAttribute('role', 'dialog');
     host.setAttribute('aria-modal', 'true');
     host.setAttribute('aria-label', 'Boarding pass');
@@ -272,21 +276,55 @@ class ChallengeUI {
     host.querySelector('[data-role="fin-close"]').addEventListener('click', () => host.remove());
     host.querySelector('.ch-unlock-scrim').addEventListener('click', () => host.remove());
 
-    // Read the flight live, holding the "assembling" beat for at least a moment.
-    const [flight] = await Promise.all([
-      net.fetchFlight().catch(() => null),
-      new Promise((r) => setTimeout(r, 800)),
-    ]);
+    // Hold the "assembling" beat for a moment of drama.
+    await new Promise((r) => setTimeout(r, 700));
     if (this._destroyed || !host.isConnected) return;
     const stage = host.querySelector('[data-role="stage"]');
     if (!stage) return;
-    if (!flight) {
-      stage.innerHTML = `<p class="ch-finale-printing">Couldn&rsquo;t reach the server. Connect to the internet and reopen to reveal your flight.</p>`;
+
+    if (!complete) {
+      stage.innerHTML =
+        `<div class="ch-gallery ch-finale-strip">${this.galleryHTML(st)}</div>
+         <p class="ch-finale-hint">${n} / ${PIECE_TOTAL} pieces assembled. Collect all five clues to reveal your boarding pass.</p>`;
       return;
     }
-    stage.innerHTML = this.passHTML(flight, n);
-    const cal = stage.querySelector('[data-role="add-cal"]');
-    if (cal) cal.addEventListener('click', () => window.open(this.calendarUrl(flight), '_blank', 'noopener'));
+
+    // Complete: reveal the full assembled boarding pass.
+    stage.innerHTML =
+      `<p class="ch-finale-tada">Your boarding pass is complete!</p>
+       <img class="ch-finale-img" alt="Your boarding pass" src="${assetUrl('reward-full.jpg')}">
+       <p class="ch-finale-hint">Tap the pass to view it larger.</p>`;
+    const img = stage.querySelector('.ch-finale-img');
+    if (img) img.addEventListener('click', () => this.zoomImage(img.getAttribute('src')));
+
+    // Best-effort "Add to Google Calendar" from the Firebase flight (destination stays out of
+    // the public repo; the button just does not appear when Firebase is unreachable).
+    net.fetchFlight().then((flight) => {
+      if (!flight || this._destroyed || !stage.isConnected) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ch-btn ch-btn-go ch-finale-cal';
+      btn.textContent = 'Add to Google Calendar';
+      btn.addEventListener('click', () => window.open(this.calendarUrl(flight), '_blank', 'noopener'));
+      stage.appendChild(btn);
+    }).catch(() => {});
+  }
+
+  /** Full-screen lightbox for the finished boarding pass. Tap anywhere to close. On portrait
+   *  phones the wide pass is rotated to fill the screen so every detail is legible. */
+  zoomImage(src) {
+    const z = document.createElement('div');
+    z.className = 'ch-zoom';
+    z.setAttribute('role', 'dialog');
+    z.setAttribute('aria-label', 'Boarding pass, enlarged');
+    const img = document.createElement('img');
+    img.className = 'ch-zoom-img';
+    img.alt = 'Your boarding pass';
+    img.src = src;
+    z.appendChild(img);
+    z.addEventListener('click', () => z.remove());
+    document.body.appendChild(z);
+    requestAnimationFrame(() => z.classList.add('is-in'));
   }
 
   /** The boarding pass, revealing more as clues come in; the route (where it lands) is the

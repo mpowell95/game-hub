@@ -91,12 +91,15 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-vault-item.is-redeemed .ch-vault-tag::before { content: "\2713 "; }
 
 /* Prizes: five separate tiles that fill in order as codes are redeemed. */
-.ch-gallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.ch-piece { position: relative; aspect-ratio: 3 / 4; border-radius: 8px; display: grid; place-items: center; }
-.ch-piece.is-off { background: #0e1117; border: 1px dashed var(--ch-line); }
-.ch-piece.is-on { background: linear-gradient(135deg, #3a2f05, #f2b705); border: 1px solid var(--ch-gold); }
-.ch-piece-mark { font-weight: 900; color: #2a2200; font-size: 1.1rem; }
-.ch-piece-lock { color: var(--ch-muted); font-weight: 900; font-size: 1.1rem; }
+/* Flush proportional columns (widths of the 5 designed pieces) so the earned slices
+   reassemble into the full boarding pass as they fill in left to right. */
+.ch-gallery { display: grid; grid-template-columns: 265fr 240fr 290fr 335fr 470fr; gap: 0; aspect-ratio: 1600 / 640; border-radius: 10px; overflow: hidden; background: #0e1117; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); }
+.ch-piece { position: relative; overflow: hidden; display: grid; place-items: center; }
+.ch-piece.is-off { background: #0e1117; }
+.ch-piece.is-off + .ch-piece.is-off { box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05); }
+.ch-piece-img { width: 100%; height: 100%; object-fit: fill; display: block; animation: ch-piece-in 0.55s ease; }
+.ch-piece-lock { color: rgba(255, 255, 255, 0.16); font-weight: 900; font-size: 1.2rem; }
+@keyframes ch-piece-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* Prize image, built from stacked layers: each redeemed code reveals the next layer,
    so the image builds up as she goes. Real art (assets/reward-layer-1..5.png, transparent
@@ -192,6 +195,18 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-pass-lock { letter-spacing: 0.16em; color: #b8ac93; font-weight: 900; }
 .ch-finale-cal { width: 100%; }
 .ch-finale-hint { color: var(--ch-muted); font-size: 0.86rem; text-align: center; margin: 4px 0 0; line-height: 1.4; }
+
+/* Assembled-image finale: the sliced boarding pass, reunited. */
+.ch-finale-photo .ch-finale-inner { max-width: min(96vw, 900px); }
+.ch-finale-img { width: 100%; display: block; border-radius: 12px; cursor: zoom-in; box-shadow: 0 0 0 3px var(--ch-gold), 0 26px 70px rgba(0, 0, 0, 0.72); animation: ch-piece-in 0.6s ease; }
+.ch-finale-strip { width: 100%; }
+/* Tap-to-enlarge lightbox (rotates to fill portrait phones so fine print is legible). */
+.ch-zoom { position: fixed; inset: 0; z-index: 340; background: rgba(0, 0, 0, 0.94); display: grid; place-items: center; overflow: hidden; cursor: zoom-out; opacity: 0; transition: opacity 0.25s ease; }
+.ch-zoom.is-in { opacity: 1; }
+.ch-zoom-img { max-width: 98vw; max-height: 96vh; object-fit: contain; border-radius: 6px; }
+@media (max-aspect-ratio: 1 / 1) {
+  .ch-zoom-img { max-width: none; max-height: none; width: 96vh; height: auto; transform: rotate(90deg); border-radius: 10px; }
+}
 
 .ch-anim { opacity: 0; animation: ch-fade-up 0.5s ease forwards; animation-delay: calc(var(--d, 0) * 0.32s); }
 @keyframes ch-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
