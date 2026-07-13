@@ -2281,7 +2281,7 @@
   // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
   // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
   var APP_VERSION = "v11";
-  var BUILD_DATE = "2026-07-11";
+  var BUILD_DATE = "2026-07-12";
   function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
   function versionLabel() { return APP_VERSION + " · " + buildDate(); }
 
@@ -3317,7 +3317,7 @@
   // cannot import modules; mirrors js/challenge crypt and secrets. Inert unless the
   // gamehub.profile name matches the trigger hash. No plaintext name, answer, or code.
   var CH_TRIGGERS = ["1cabdac0", "39b28c49"], CH_SALT = "gh-v1-9c3f", CH_XK = "gh-xk-7q2z9";
-  var CH_CODE = "NykANS55dlx2O2ov";
+  var CH_CODE = "LkhaGQVDVlFeE08CSEQWS2xaFEATWgZISxcZSEEUQFs=";
   function chNorm(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
   function chHash(str) {
     var s = CH_SALT + String(str == null ? "" : str), h = 0x811c9dc5, i;

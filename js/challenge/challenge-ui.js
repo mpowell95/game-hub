@@ -108,8 +108,11 @@ class ChallengeUI {
   renderArea(st) {
     const pieces = st.order.length;
     const earned = this.earnedCodes(st);
-    // How to Win: auto-expanded the first time on this device, collapsed after.
-    if (this._firstHowTo === undefined) { this._firstHowTo = !st.howToSeen; if (this._firstHowTo) markHowToSeen(); }
+    // How to Win: auto-expanded only the FIRST time it renders on this device, collapsed
+    // after. Guard on a per-instance "rendered once" flag, not just howToSeen, so later
+    // re-renders in the same session (e.g. after redeeming a code) do not pop it open again.
+    const openHowTo = !this._howToRendered && !st.howToSeen;
+    if (!this._howToRendered) { this._howToRendered = true; if (!st.howToSeen) markHowToSeen(); }
     this.mount(`
       <header class="ch-head">
         <h1 class="ch-title">Challenge Mode</h1>
@@ -118,7 +121,7 @@ class ChallengeUI {
       </header>
 
       <section class="ch-card ch-howto">
-        <details ${this._firstHowTo ? 'open' : ''}>
+        <details ${openHowTo ? 'open' : ''}>
           <summary class="ch-h2">How to Win</summary>
           <div class="ch-howto-body">
             <div class="ch-steps" data-role="steps">
@@ -201,7 +204,15 @@ class ChallengeUI {
     const s = st.selfie;
     let inner;
     if (s.status === 'approved') {
-      inner = `<p class="ch-msg is-ok">Approved.</p>`;
+      // Approved: surface the selfie code right here so it is unmissable (the games reveal
+      // their code on the win screen; the selfie's only reveal is this card + the vault).
+      inner = st.redeemed.selfie
+        ? `<p class="ch-msg is-ok">Approved. Code redeemed.</p>`
+        : `<p class="ch-msg is-ok">Approved! Here is your code:</p>
+           <div class="ch-vault-item">
+             <span class="ch-vault-code">${esc(codeFor('selfie'))}</span>
+             <span class="ch-vault-tag">enter it above</span>
+           </div>`;
     } else if (s.status === 'pending') {
       inner = `<p class="ch-hint" data-role="selfie-live">Submitted. Waiting for approval.</p>`;
     } else {
@@ -224,20 +235,6 @@ class ChallengeUI {
     return `<section class="ch-card"><h2 class="ch-h2">Selfie</h2>${inner}</section>`;
   }
 
-  /** The prize image as stacked layers: each redeemed code adds the next layer, so the
-   *  image builds up as she goes. Real layer art (assets/reward-layer-1..5.png, transparent
-   *  PNGs) drops in later; until then a tinted numbered placeholder shows the stacking. */
-  layerHTML(count) {
-    let out = '';
-    for (let i = 0; i < PIECE_TOTAL; i++) {
-      const on = i < count;
-      out += `<div class="ch-layer ${on ? 'is-on' : 'is-off'}">
-        <img class="ch-layer-img" alt="" src="${assetUrl('reward-layer-' + (i + 1) + '.png')}" onerror="this.remove()">
-        <span class="ch-layer-ph" aria-hidden="true">${i + 1}</span>
-      </div>`;
-    }
-    return out;
-  }
   /** The boarding pass as 5 slices that fill in order as codes are redeemed: an earned
    *  slice shows its piece of the assembled image, an unearned one is a numbered placeholder.
    *  Flush proportional columns (see .ch-gallery CSS) so the 5 slices reassemble the pass. */
@@ -327,46 +324,6 @@ class ChallengeUI {
     requestAnimationFrame(() => z.classList.add('is-in'));
   }
 
-  /** The boarding pass, revealing more as clues come in; the route (where it lands) is the
-   *  climax, held until all five clues are redeemed. Functional labels + the real flight. */
-  passHTML(flight, n) {
-    const f = flight || {};
-    const val = (v) => (v != null && v !== '') ? esc(String(v)) : '';
-    const lock = '<span class="ch-pass-lock" aria-hidden="true">&#8226;&#8226;&#8226;</span>';
-    const done = n >= PIECE_TOTAL;
-    const airline = n >= 1 ? ('&#9992;&#65039; ' + (val(f.airline) || 'Flight')) : lock;
-    const passenger = n >= 2 ? (val(f.name) || lock) : lock;
-    const flightNo = n >= 3 ? (val(f.flightNumbers) || lock) : lock;
-    const dates = n >= 4 ? (val(f.dates) || lock) : lock;
-    const route = done
-      ? `<div class="ch-pass-end"><span class="ch-pass-code">${val(f.fromCode) || lock}</span><span class="ch-pass-city">${val(f.fromCity)}</span></div>
-         <span class="ch-pass-plane" aria-hidden="true">&#9992;&#65039;</span>
-         <div class="ch-pass-end"><span class="ch-pass-code">${val(f.toCode) || lock}</span><span class="ch-pass-city">${val(f.toCity)}</span></div>`
-      : `<div class="ch-pass-end"><span class="ch-pass-code">${lock}</span></div>
-         <span class="ch-pass-plane" aria-hidden="true">&#9992;&#65039;</span>
-         <div class="ch-pass-end"><span class="ch-pass-code">${lock}</span></div>`;
-    const message = (done && val(f.message)) ? `<p class="ch-pass-msg ch-anim" style="--d:6">${val(f.message)}</p>` : '';
-    const pass = `
-      <div class="ch-pass">
-        <div class="ch-pass-head ch-anim" style="--d:1">
-          <span class="ch-pass-airline">${airline}</span>
-          <span class="ch-pass-tag">Boarding Pass</span>
-        </div>
-        <div class="ch-pass-route ch-anim" style="--d:5">${route}</div>
-        <div class="ch-pass-grid">
-          <div class="ch-pass-cell ch-anim" style="--d:2"><label>Passenger</label><span>${passenger}</span></div>
-          <div class="ch-pass-cell ch-anim" style="--d:3"><label>Flight</label><span>${flightNo}</span></div>
-          <div class="ch-pass-cell ch-anim" style="--d:4"><label>Dates</label><span>${dates}</span></div>
-        </div>
-        ${message}
-        <div class="ch-pass-barcode ch-anim" style="--d:6" aria-hidden="true"></div>
-      </div>`;
-    const footer = done
-      ? `<button type="button" class="ch-btn ch-btn-go ch-finale-cal" data-role="add-cal">Add to Google Calendar</button>`
-      : `<p class="ch-finale-hint">${n} / ${PIECE_TOTAL} clues unlocked. Collect all five to reveal the flight.</p>`;
-    return pass + footer;
-  }
-
   /** Google Calendar template link for the visit (all-day span; the recipient can adjust it
    *  before saving). Parses the free-text "M/D - M/D" dates best-effort. */
   calendarUrl(flight) {
@@ -394,12 +351,15 @@ class ChallengeUI {
     return 'https://calendar.google.com/calendar/render?' + params.toString();
   }
 
-  /** Codes to show in the vault: one per recorded win, plus the selfie code if approved. */
-  /** Codes shown in the vault: ONLY after redemption (never reveal an un-redeemed code). */
+  /** Codes shown in the vault: one per recorded game win, plus the selfie code once it is
+   *  approved. Each is tagged redeemed or "earned, enter it above". This is what makes a
+   *  code recoverable if it was lost (plan decision 6) AND is the ONLY path by which the
+   *  selfie code reaches her (games reveal their code in-play; the selfie has no in-game
+   *  reveal, so hiding un-redeemed codes here left the selfie task impossible to complete). */
   earnedCodes(st) {
     const out = [];
-    for (const slot of WIN_SLOTS) if (st.redeemed[slot]) out.push({ slot, code: codeFor(slot), redeemed: true });
-    if (st.redeemed.selfie) out.push({ slot: 'selfie', code: codeFor('selfie'), redeemed: true });
+    for (const slot of WIN_SLOTS) if (st.wins[slot]) out.push({ slot, code: codeFor(slot), redeemed: !!st.redeemed[slot] });
+    if (st.selfie.status === 'approved') out.push({ slot: 'selfie', code: codeFor('selfie'), redeemed: !!st.redeemed.selfie });
     return out;
   }
 

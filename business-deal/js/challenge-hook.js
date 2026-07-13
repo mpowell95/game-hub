@@ -10,7 +10,7 @@
   var TRIGGER_HASHES = ['1cabdac0', '39b28c49']; // recipient + test1 tester (mirror js/challenge/secrets.js)
   var SALT = 'gh-v1-9c3f';
   var XORKEY = 'gh-xk-7q2z9';
-  var CODE = 'JSwAPj5he1x6NWw0LQ=='; // obf of the Business Deal code
+  var CODE = 'IRpMFghCFwZTCRkXGkIaB0haEEYTWg=='; // obf of the Business Deal code (mirrors js/challenge/secrets.js)
 
   function norm(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
   function hash(str) {
