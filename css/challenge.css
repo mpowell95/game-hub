@@ -54,6 +54,12 @@ body.ch-active .hub-back:hover { background: #232937; }
 
 .ch-form { display: flex; flex-direction: column; gap: 10px; }
 .ch-form-row { flex-direction: row; align-items: stretch; }
+/* iOS Safari does NOT reliably stretch a <button> to an <input>'s height in a flex row
+   (Chromium does, which hid this in preview). Pin the code input + Redeem button to one
+   explicit height so they always match, exactly like the games pin their control heights. */
+.ch-form-row > .ch-input,
+.ch-form-row > .ch-btn { height: 46px; }
+.ch-form-row > .ch-btn { display: flex; align-items: center; justify-content: center; }
 .ch-label { font-weight: 700; font-size: 0.9rem; }
 .ch-input {
   appearance: none; -webkit-appearance: none;
