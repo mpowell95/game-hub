@@ -63,6 +63,7 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-label { font-weight: 700; font-size: 0.9rem; }
 .ch-input {
   appearance: none; -webkit-appearance: none;
+  min-width: 0;   /* let the flex input shrink so the code row fits the card (else the Redeem button overflows past the card's right edge on narrow screens) */
   font: inherit; flex: 1; padding: 11px 13px; border-radius: 10px;
   border: 1px solid var(--ch-line); background: #0e1117; color: var(--ch-ink);
 }
