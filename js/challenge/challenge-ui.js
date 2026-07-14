@@ -195,6 +195,7 @@ class ChallengeUI {
         <div class="ch-gallery" data-role="gallery">
           ${this.galleryHTML(st)}
         </div>
+        ${pieces ? '<p class="ch-hint ch-gallery-hint">Tap a clue to see it full screen.</p>' : ''}
         <button type="button" class="ch-btn ch-btn-finale" data-role="assemble">Assemble the image</button>
       </section>`);
   }
@@ -325,6 +326,25 @@ class ChallengeUI {
     z.setAttribute('role', 'dialog');
     z.setAttribute('aria-label', 'Boarding pass, enlarged');
     z.innerHTML = `<div class="ch-gallery ch-zoom-pass">${this.galleryHTML(loadChallenge())}</div>`;
+    z.addEventListener('click', () => z.remove());
+    document.body.appendChild(z);
+    requestAnimationFrame(() => z.classList.add('is-in'));
+  }
+
+  /** Full-screen view of a single unlocked piece, so each can be enjoyed as it is earned.
+   *  Panels are portrait, so (unlike the finished pass) this one is not rotated. Tap to close. */
+  zoomPanel(pieceEl) {
+    const img = pieceEl.querySelector('.ch-piece-img');
+    if (!img || !img.getAttribute('src')) return;
+    const z = document.createElement('div');
+    z.className = 'ch-zoom';
+    z.setAttribute('role', 'dialog');
+    z.setAttribute('aria-label', 'Clue, enlarged');
+    const big = document.createElement('img');
+    big.className = 'ch-zoom-panel-img';
+    big.alt = '';
+    big.src = img.getAttribute('src');
+    z.appendChild(big);
     z.addEventListener('click', () => z.remove());
     document.body.appendChild(z);
     requestAnimationFrame(() => z.classList.add('is-in'));
@@ -726,6 +746,9 @@ class ChallengeUI {
   }
 
   onClick(e) {
+    // Tap an unlocked clue to see that single panel full screen (savor each as it lands).
+    const piece = e.target.closest('.ch-piece.is-on');
+    if (piece) { this.zoomPanel(piece); return; }
     const btn = e.target.closest('button');
     if (!btn) return;
     const role = btn.dataset.role;

@@ -107,7 +107,7 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-piece { position: relative; overflow: hidden; display: grid; place-items: center; }
 .ch-piece.is-off { background: #0e1117; }
 .ch-piece.is-off + .ch-piece.is-off { box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05); }
-.ch-piece.is-on { animation: ch-piece-in 0.55s ease; }
+.ch-piece.is-on { animation: ch-piece-in 0.55s ease; cursor: zoom-in; }
 .ch-piece-img { width: 100%; height: 100%; object-fit: fill; display: block; }
 /* Panel 5 has two versions: v1 (reward-pt-5) sits under v2 (reward-pt-5b), which slowly
    crossfades in and back out. Both fill the cell, so they register exactly. */
@@ -219,6 +219,9 @@ body.ch-active .hub-back:hover { background: #232937; }
 /* Tap-to-enlarge lightbox (rotates to fill portrait phones so fine print is legible). */
 .ch-zoom { position: fixed; inset: 0; z-index: 340; background: rgba(0, 0, 0, 0.94); display: grid; place-items: center; overflow: hidden; cursor: zoom-out; opacity: 0; transition: opacity 0.25s ease; }
 .ch-zoom.is-in { opacity: 1; }
+/* A single unlocked panel, enlarged. Panels are portrait, so they fit the screen as-is (no rotate). */
+.ch-zoom-panel-img { max-width: 96vw; max-height: 96vh; object-fit: contain; border-radius: 8px; }
+.ch-gallery-hint { text-align: center; }
 .ch-zoom-pass { width: min(98vw, calc(96vh * 2.028)); box-shadow: none; }
 @media (max-aspect-ratio: 1 / 1) {
   .ch-zoom-pass { width: 96vh; transform: rotate(90deg); }
