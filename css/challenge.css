@@ -99,16 +99,23 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-vault-tag { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .ch-vault-item.is-redeemed .ch-vault-tag::before { content: "\2713 "; }
 
-/* Prizes: five separate tiles that fill in order as codes are redeemed. */
-/* Flush proportional columns (widths of the 5 designed pieces) so the earned slices
-   reassemble into the full boarding pass as they fill in left to right. */
-.ch-gallery { display: grid; grid-template-columns: 265fr 240fr 290fr 335fr 470fr; gap: 0; aspect-ratio: 1600 / 640; border-radius: 10px; overflow: hidden; background: #0e1117; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); }
+/* Prizes: five separate ticket panels that fill in order as codes are redeemed. */
+/* Column widths are the panels' aspect ratios so, at the grid's shared height, the earned
+   tickets assemble edge to edge into the full boarding pass. The navy shows behind panel 2
+   (whose stub is partly transparent) and any seams. */
+.ch-gallery { display: grid; grid-template-columns: 480fr 163fr 444fr 415fr 526fr; gap: 0; aspect-ratio: 2028 / 1000; border-radius: 10px; overflow: hidden; background: #0a0e16; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); }
 .ch-piece { position: relative; overflow: hidden; display: grid; place-items: center; }
 .ch-piece.is-off { background: #0e1117; }
 .ch-piece.is-off + .ch-piece.is-off { box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05); }
-.ch-piece-img { width: 100%; height: 100%; object-fit: fill; display: block; animation: ch-piece-in 0.55s ease; }
+.ch-piece.is-on { animation: ch-piece-in 0.55s ease; }
+.ch-piece-img { width: 100%; height: 100%; object-fit: fill; display: block; }
+/* Panel 5 has two versions: v1 (reward-pt-5) sits under v2 (reward-pt-5b), which slowly
+   crossfades in and back out. Both fill the cell, so they register exactly. */
+.ch-piece-5 .ch-piece-img { position: absolute; inset: 0; }
+.ch-piece-5b { opacity: 0; animation: ch-x5 11s ease-in-out infinite; }
 .ch-piece-lock { color: rgba(255, 255, 255, 0.16); font-weight: 900; font-size: 1.2rem; }
 @keyframes ch-piece-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-x5 { 0%, 27% { opacity: 0; } 42%, 73% { opacity: 1; } 88%, 100% { opacity: 0; } }
 
 /* Prize image, built from stacked layers: each redeemed code reveals the next layer,
    so the image builds up as she goes. Real art (assets/reward-layer-1..5.png, transparent
@@ -205,16 +212,16 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-finale-cal { width: 100%; }
 .ch-finale-hint { color: var(--ch-muted); font-size: 0.86rem; text-align: center; margin: 4px 0 0; line-height: 1.4; }
 
-/* Assembled-image finale: the sliced boarding pass, reunited. */
+/* Assembled finale: the five ticket panels, reunited into the full pass. */
 .ch-finale-photo .ch-finale-inner { max-width: min(96vw, 900px); }
-.ch-finale-img { width: 100%; display: block; border-radius: 12px; cursor: zoom-in; box-shadow: 0 0 0 3px var(--ch-gold), 0 26px 70px rgba(0, 0, 0, 0.72); animation: ch-piece-in 0.6s ease; }
 .ch-finale-strip { width: 100%; }
+.ch-finale-pass { cursor: zoom-in; box-shadow: 0 0 0 3px var(--ch-gold), 0 26px 70px rgba(0, 0, 0, 0.72); animation: ch-piece-in 0.6s ease; }
 /* Tap-to-enlarge lightbox (rotates to fill portrait phones so fine print is legible). */
 .ch-zoom { position: fixed; inset: 0; z-index: 340; background: rgba(0, 0, 0, 0.94); display: grid; place-items: center; overflow: hidden; cursor: zoom-out; opacity: 0; transition: opacity 0.25s ease; }
 .ch-zoom.is-in { opacity: 1; }
-.ch-zoom-img { max-width: 98vw; max-height: 96vh; object-fit: contain; border-radius: 6px; }
+.ch-zoom-pass { width: min(98vw, calc(96vh * 2.028)); box-shadow: none; }
 @media (max-aspect-ratio: 1 / 1) {
-  .ch-zoom-img { max-width: none; max-height: none; width: 96vh; height: auto; transform: rotate(90deg); border-radius: 10px; }
+  .ch-zoom-pass { width: 96vh; transform: rotate(90deg); }
 }
 
 .ch-anim { opacity: 0; animation: ch-fade-up 0.5s ease forwards; animation-delay: calc(var(--d, 0) * 0.32s); }
@@ -329,6 +336,8 @@ body.ch-active .hub-back:hover { background: #232937; }
   .ch-fw { display: none; }
   .ch-step.is-active { animation: none; }
   .ch-anim { animation: none; opacity: 1; transform: none; }
+  .ch-piece.is-on { animation: none; }
+  .ch-piece-5b { animation: none; opacity: 0; }
   .ch-unlock.is-leaving { animation: none; }
   .ch-howto summary::after, .ch-collapse summary::after { transition: none; }
 }

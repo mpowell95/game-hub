@@ -235,16 +235,26 @@ class ChallengeUI {
     return `<section class="ch-card"><h2 class="ch-h2">Selfie</h2>${inner}</section>`;
   }
 
-  /** The boarding pass as 5 slices that fill in order as codes are redeemed: an earned
-   *  slice shows its piece of the assembled image, an unearned one is a numbered placeholder.
-   *  Flush proportional columns (see .ch-gallery CSS) so the 5 slices reassemble the pass. */
+  /** The boarding pass, five separate ticket panels that fill in order as codes are redeemed.
+   *  An earned piece shows its panel image (reward-pt-1..5.png); an unearned one is an opaque
+   *  numbered placeholder. The .ch-gallery columns are the panels' aspect ratios, so at a shared
+   *  height they assemble seamlessly. Panel 5 has two versions (reward-pt-5 + reward-pt-5b) that
+   *  slowly crossfade. Each <img> self-removes on error, so a missing panel never breaks the pass. */
   galleryHTML(st) {
     const n = st.order.length;
     let out = '';
     for (let i = 0; i < PIECE_TOTAL; i++) {
-      out += i < n
-        ? `<div class="ch-piece is-on"><img class="ch-piece-img" alt="" src="${assetUrl('reward-pt-' + (i + 1) + '.jpg')}" onerror="this.remove()"></div>`
-        : `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">${i + 1}</span></div>`;
+      if (i >= n) {
+        out += `<div class="ch-piece is-off"><span class="ch-piece-lock" aria-hidden="true">${i + 1}</span></div>`;
+      } else if (i === PIECE_TOTAL - 1) {
+        // Panel 5: two versions stacked; reward-pt-5 (v1) under reward-pt-5b (v2), which crossfades.
+        out += `<div class="ch-piece is-on ch-piece-5">`
+          + `<img class="ch-piece-img" alt="" src="${assetUrl('reward-pt-5.png')}" onerror="this.remove()">`
+          + `<img class="ch-piece-img ch-piece-5b" alt="" aria-hidden="true" src="${assetUrl('reward-pt-5b.png')}" onerror="this.remove()">`
+          + `</div>`;
+      } else {
+        out += `<div class="ch-piece is-on"><img class="ch-piece-img" alt="" src="${assetUrl('reward-pt-' + (i + 1) + '.png')}" onerror="this.remove()"></div>`;
+      }
     }
     return out;
   }
@@ -286,13 +296,13 @@ class ChallengeUI {
       return;
     }
 
-    // Complete: reveal the full assembled boarding pass.
+    // Complete: reveal the full assembled boarding pass (the five panels, reunited).
     stage.innerHTML =
       `<p class="ch-finale-tada">Your boarding pass is complete!</p>
-       <img class="ch-finale-img" alt="Your boarding pass" src="${assetUrl('reward-full.jpg')}">
+       <div class="ch-gallery ch-finale-strip ch-finale-pass" data-role="finale-pass">${this.galleryHTML(st)}</div>
        <p class="ch-finale-hint">Tap the pass to view it larger.</p>`;
-    const img = stage.querySelector('.ch-finale-img');
-    if (img) img.addEventListener('click', () => this.zoomImage(img.getAttribute('src')));
+    const pass = stage.querySelector('[data-role="finale-pass"]');
+    if (pass) pass.addEventListener('click', () => this.zoomPass());
 
     // Best-effort "Add to Google Calendar" from the Firebase flight (destination stays out of
     // the public repo; the button just does not appear when Firebase is unreachable).
@@ -307,18 +317,14 @@ class ChallengeUI {
     }).catch(() => {});
   }
 
-  /** Full-screen lightbox for the finished boarding pass. Tap anywhere to close. On portrait
-   *  phones the wide pass is rotated to fill the screen so every detail is legible. */
-  zoomImage(src) {
+  /** Full-screen lightbox for the finished pass (the assembled panels). Tap anywhere to close.
+   *  On portrait phones the wide pass is rotated to fill the screen so every detail is legible. */
+  zoomPass() {
     const z = document.createElement('div');
     z.className = 'ch-zoom';
     z.setAttribute('role', 'dialog');
     z.setAttribute('aria-label', 'Boarding pass, enlarged');
-    const img = document.createElement('img');
-    img.className = 'ch-zoom-img';
-    img.alt = 'Your boarding pass';
-    img.src = src;
-    z.appendChild(img);
+    z.innerHTML = `<div class="ch-gallery ch-zoom-pass">${this.galleryHTML(loadChallenge())}</div>`;
     z.addEventListener('click', () => z.remove());
     document.body.appendChild(z);
     requestAnimationFrame(() => z.classList.add('is-in'));
