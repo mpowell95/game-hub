@@ -75,6 +75,17 @@ body {
 .hub-profile:hover { background: var(--hub-surface-2); }
 .hub-profile-empty { color: var(--hub-accent); border-color: var(--hub-accent); }
 
+/* Right-side header cluster: the Stats button + the profile pill. */
+.hub-top-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-top-right { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hub-top-right .hub-profile { margin-left: 0; max-width: 50vw; }
+.hub-statsbtn {
+  appearance: none; border: 1px solid var(--hub-surface-2); background: var(--hub-surface);
+  color: var(--hub-ink); font: inherit; font-size: 0.85rem; font-weight: 700;
+  padding: 7px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none;
+}
+.hub-statsbtn:hover { background: var(--hub-surface-2); }
+
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 
 /* Launcher grid — a 2x2 grid of SQUARE game tiles, so all four games are visible

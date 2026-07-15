@@ -2767,6 +2767,7 @@
   if (typeof globalThis !== "undefined") globalThis.ParchisHUD = HUD;
 })();
 </script>
+<script src="../js/game-stats-global.js"></script>
 <!-- module: game.js -->
 <script>
 /*
@@ -3393,6 +3394,16 @@
     var remaining = G.cfg.active.filter(function (c) { return winners.indexOf(c) === -1; });
     HUD.gameover(winners.concat(remaining), namesByColor(), showTitle);
     challengeOnGameOver(winners[0]);
+    try {
+      if (window.__ghStats && G.cfg.vsMode === "cpu") {
+        var humans = G.cfg.humans || [G.cfg.anchor];
+        var rank = { beginner: 1, intermediate: 2, pro: 3, expert: 4 }, best = 0, diff = "intermediate";
+        G.cfg.active.forEach(function (c) {
+          if (humans.indexOf(c) === -1) { var t = (G.cfg.skills && G.cfg.skills[c]) || "intermediate"; if ((rank[t] || 0) > best) { best = rank[t] || 0; diff = t; } }
+        });
+        window.__ghStats.record("parchis", diff, winners[0] === G.cfg.anchor);
+      }
+    } catch (e) {}
   }
   function namesByColor() { var o = {}; G.cfg.active.forEach(function (c) { o[c] = nameOf(c); }); return o; }
 

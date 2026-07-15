@@ -1664,6 +1664,9 @@
       catch (e) { return { played: 0, won: 0, lost: 0 }; }
     }
     _recordResult(humanWon) {
+      // Unified Game Stats (per difficulty), recorded BEFORE the bd-stats increment so the
+      // one-time bd-stats fold reads the pre-game value. bd-stats is still kept as-is below.
+      try { if (window.__ghStats) window.__ghStats.record('business', this.difficulty, humanWon); } catch (e) {}
       const s = this._loadStats();
       s.played++; if (humanWon) s.won++; else s.lost++;
       try { localStorage.setItem('bd-stats', JSON.stringify(s)); } catch (e) {}

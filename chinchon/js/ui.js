@@ -14,6 +14,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
+import { recordResult } from '../../js/game-stats.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
@@ -567,6 +568,10 @@ class ChinchonUI {
     this.stats.closes += this._matchCloses || 0;
     this.stats.chinchons += this._matchChinchons || 0;
     saveJSON(STORE_STATS, this.stats);
+    // Also record into the unified Game Stats (per difficulty), kept alongside chinchon-stats.
+    const opp0 = this.game.players.find((p) => !p.isHuman);
+    recordResult('chinchon', (opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal',
+      !!(this.game.winner && this.game.winner.id === human.id));
   }
 
   /** Hidden challenge: on a qualifying human match win (exactly 1 opponent at Average or

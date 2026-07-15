@@ -9,6 +9,7 @@
 import { loadProfile } from './profile-store.js';
 import { isChallengeActive, isAdmin, loadChallenge } from './challenge/hooks.js';
 import { markUnlockSeen } from './challenge/challenge-store.js';
+import { syncMyStats } from './stats-net.js';
 
 // Which challenge win-slot each of the four games maps to, for the challenge-mode task
 // markers on the launcher cards (star = still to win, check = won). Other cards map to none.
@@ -145,7 +146,15 @@ class Hub {
     this.current = null;     // { module, id } of the mounted game
     this._onBack = () => this.requestLeave();
     this.render();
+    // Family-wide stats sync: best-effort, guarded, no-op offline. On load, on tab-hide, and on
+    // returning to the launcher (a game may have just updated the stats).
+    this._onVis = () => { if (document.visibilityState === 'hidden') this._syncStats(); };
+    document.addEventListener('visibilitychange', this._onVis);
+    this._syncStats();
   }
+
+  /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured). */
+  _syncStats() { try { syncMyStats(); } catch { /* never block the hub */ } }
 
   render() {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
@@ -160,7 +169,10 @@ class Hub {
         <header class="hub-top">
           <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
           <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
-          <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
+          <div class="hub-top-right">
+            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="Your game stats">Stats</button>
+            <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
+          </div>
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
@@ -189,6 +201,8 @@ class Hub {
       game: this.root.querySelector('[data-role="game"]'),
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
+      stats: this.root.querySelector('[data-role="stats"]'),
+      topRight: this.root.querySelector('.hub-top-right'),
     };
 
     // Reflect any saved profile in the header entry (textContent keeps names XSS-safe).
@@ -210,6 +224,10 @@ class Hub {
       if (card.tagName === 'A') return;            // launch-out: real link, native nav
       if (card.dataset.comingSoon === 'true') return;
       this.launch(card.dataset.id);                // in-hub module: mount in place
+    });
+
+    this.el.stats.addEventListener('click', () => {
+      import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
     });
 
     this.maybePlayUnlock(active);
@@ -266,6 +284,7 @@ class Hub {
       if (this.el.extra) this.el.extra.hidden = true;
       this.el.game.hidden = false;
       this.el.profile.hidden = true;
+      if (this.el.topRight) this.el.topRight.hidden = true;
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
       this.el.game.innerHTML = `<p class="hub-error">Couldn't load ${game.title}. Please try again.</p>`;
@@ -274,6 +293,7 @@ class Hub {
       if (this.el.extra) this.el.extra.hidden = true;
       this.el.back.hidden = false;
       this.el.profile.hidden = true;
+      if (this.el.topRight) this.el.topRight.hidden = true;
     }
   }
 
@@ -302,11 +322,14 @@ class Hub {
     this.el.back.hidden = true;
     this.el.title.textContent = "Matt's Game Hub";
     this.el.profile.hidden = false;
+    if (this.el.topRight) this.el.topRight.hidden = false;
+    this._syncStats();   // a game may have just updated the stats
   }
 
   destroy() {
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
+    if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     this.root.innerHTML = '';
   }
 }
