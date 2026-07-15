@@ -14,7 +14,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordChinchon } from '../../js/game-stats.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
@@ -105,7 +105,7 @@ class ChinchonUI {
     this._justDragged = false;
 
     this._setup = this._loadSetup();
-    this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0 });
+    this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0, minusTen: 0 });
     // Hidden challenge: active only for the trigger profile name (inert otherwise).
     this.challengeActive = isChallengeActive((loadProfile() || {}).name);
 
@@ -461,7 +461,7 @@ class ChinchonUI {
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
-    this._matchCloses = 0; this._matchChinchons = 0; this._statsCommitted = false;
+    this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
     this._matchEnded = false; this._closeMenu();
 
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
@@ -543,7 +543,11 @@ class ChinchonUI {
         this.toast('Deck reshuffled'); this.render();
         break;
       case 'roundScored':
-        if (this.game.whoClosed === 0) { this._matchCloses++; if (this.game.closeType === 'chinchon') this._matchChinchons++; }
+        if (this.game.whoClosed === 0) {
+          this._matchCloses++;
+          if (this.game.closeType === 'chinchon') this._matchChinchons++;
+          else if (this.game.closeType === 'doubleMeld') this._matchMinusTens++;   // a -10 close (menos diez)
+        }
         this._chartView = false;
         await this.showRoundModal();
         break;
@@ -567,11 +571,18 @@ class ChinchonUI {
     if (this.game.winner && this.game.winner.id === human.id) this.stats.wins += 1; else this.stats.losses += 1;
     this.stats.closes += this._matchCloses || 0;
     this.stats.chinchons += this._matchChinchons || 0;
+    this.stats.minusTen = (this.stats.minusTen | 0) + (this._matchMinusTens || 0);
     saveJSON(STORE_STATS, this.stats);
-    // Also record into the unified Game Stats (per difficulty), kept alongside chinchon-stats.
+    // Also record into the unified Game Stats (per difficulty + close-quality counters), kept
+    // alongside chinchon-stats.
     const opp0 = this.game.players.find((p) => !p.isHuman);
-    recordResult('chinchon', (opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal',
-      !!(this.game.winner && this.game.winner.id === human.id));
+    const difficulty = (opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal';
+    const won = !!(this.game.winner && this.game.winner.id === human.id);
+    recordChinchon(difficulty, won, {
+      closed: this._matchCloses || 0,
+      minusTen: this._matchMinusTens || 0,
+      chinchons: this._matchChinchons || 0,
+    });
   }
 
   /** Hidden challenge: on a qualifying human match win (exactly 1 opponent at Average or

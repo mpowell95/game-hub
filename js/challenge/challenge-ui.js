@@ -43,13 +43,6 @@ const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth'];
 // how many times this selfie has already been rejected (1st, 2nd, 3rd, then 4th-and-after).
 const REJECT_LINES = TAUNTS;
 
-// Flight-editor fields (Mission Control). These map 1:1 onto the boarding pass.
-const FLIGHT_FIELDS = [
-  ['airline', 'Airline'], ['fromCode', 'From (code)'], ['fromCity', 'From (city)'],
-  ['toCode', 'To (code)'], ['toCity', 'To (city)'], ['name', 'Passenger'],
-  ['dates', 'Dates'], ['flightNumbers', 'Flight number(s)'], ['message', 'Message from Matt'],
-];
-
 class ChallengeUI {
   constructor(container) {
     this.container = container;
@@ -491,7 +484,7 @@ class ChallengeUI {
       const remote = await net.pull();
       if (this._destroyed) return;
       if (remote) { mergeRemote(remote); this.render(); }
-      net.syncUp(remoteView(loadChallenge()));   // push local-only progress up
+      net.syncUp(this._syncState());   // push local-only progress up (with the profile name)
       const unsub = await net.watchProgress((rec) => {
         if (!rec || this._destroyed) return;
         const before = JSON.stringify(remoteView(loadChallenge()));
@@ -503,8 +496,16 @@ class ChallengeUI {
     } catch { /* offline / unconfigured: stay purely local */ }
   }
 
+  /** The mirrorable progress subset plus the profile name, so Mission Control can label the record
+   *  with a real name. The name lives only in private, auth-gated Firebase (never the public repo). */
+  _syncState() {
+    const prof = loadProfile();
+    const name = (prof && prof.name ? String(prof.name) : '').trim();
+    return Object.assign(remoteView(loadChallenge()), name ? { name } : {});
+  }
+
   /** Mirror the current local record up (called after every local mutation). */
-  pushSync() { try { net.syncUp(remoteView(loadChallenge())); } catch { /* no-op */ } }
+  pushSync() { try { net.syncUp(this._syncState()); } catch { /* no-op */ } }
 
   // --- Mission Control (admin) -------------------------------------------------
   renderAdmin(st) {
@@ -544,18 +545,6 @@ class ChallengeUI {
       <section class="ch-card">
         <h2 class="ch-h2">Selfie review</h2>
         <div data-role="adm-selfies"><p class="ch-hint">Loading...</p></div>
-      </section>
-
-      <section class="ch-card">
-        <h2 class="ch-h2">Flight editor</h2>
-        <p class="ch-hint">The ONLY place the real flight lives (never in the repo). The finale fetches it at reveal.</p>
-        <form data-role="flight-form" class="ch-form">
-          ${FLIGHT_FIELDS.map(([k, label]) => k === 'message'
-            ? `<label class="ch-label" for="ch-f-${k}">${label}</label><textarea class="ch-input" id="ch-f-${k}" name="${k}" rows="3"></textarea>`
-            : `<label class="ch-label" for="ch-f-${k}">${label}</label><input class="ch-input" id="ch-f-${k}" name="${k}" type="text" autocomplete="off">`).join('')}
-          <button type="submit" class="ch-btn ch-btn-go">Save flight</button>
-          <p class="ch-msg" data-role="flight-msg" role="status" aria-live="polite"></p>
-        </form>
       </section>`);
     this.initAdminLive();
   }
@@ -569,7 +558,7 @@ class ChallengeUI {
     const statusEl = q('[data-role="adm-status"]');
     if (!ok) {
       if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-bad">Offline (or Firebase not configured).</p>
-        <p class="ch-hint">The players dashboard, selfie review, and flight editor need a connection. They light up when you are online.</p>`;
+        <p class="ch-hint">The players dashboard and selfie review need a connection. They light up when you are online.</p>`;
       const dash = q('[data-role="adm-dash"]'); if (dash) dash.innerHTML = `<p class="ch-hint">Offline: no synced data.</p>`;
       const sel = q('[data-role="adm-selfies"]'); if (sel) sel.innerHTML = `<p class="ch-hint">Offline: selfie review unavailable.</p>`;
       const pl = q('[data-role="adm-players"]'); if (pl) pl.innerHTML = `<p class="ch-hint">Offline: player insights unavailable.</p>`;
@@ -588,7 +577,6 @@ class ChallengeUI {
     const u3 = await watchPlayers((all) => { this._players = all || {}; this.renderPlayers(all); });
     if (this._destroyed) { if (typeof u3 === 'function') u3(); return; }
     this._adminUnsubs.push(u3);
-    this.loadFlightForm();
   }
 
   /** Human label for a progress key (admin view only; no real name in the label). */
@@ -621,9 +609,10 @@ class ChallengeUI {
         else if (isWon) sub = 'code out';
         return `<li class="${state}"><span class="ch-dash-ic" aria-hidden="true">${glyph}</span><span class="ch-dash-task">${label}</span>${sub ? `<span class="ch-dash-sub">${sub}</span>` : ''}</li>`;
       }).join('');
+      const label = (rec.name && String(rec.name).trim()) || this.personaLabel(k);
       return `<div class="ch-dash-player">
         <div class="ch-dash-head">
-          <span class="ch-dash-name">${esc(this.personaLabel(k))}</span>
+          <span class="ch-dash-name">${esc(label)}</span>
           <span class="ch-dash-count"><b>${pieces}</b> / ${PIECE_TOTAL}</span>
         </div>
         <div class="ch-dash-bar"><span style="width:${Math.round((pieces / PIECE_TOTAL) * 100)}%"></span></div>
@@ -727,16 +716,6 @@ class ChallengeUI {
     requestAnimationFrame(() => z.classList.add('is-in'));
   }
 
-  async loadFlightForm() {
-    const flight = await net.fetchFlight();
-    if (this._destroyed || !this.root) return;
-    if (!flight) return;
-    for (const [k] of FLIGHT_FIELDS) {
-      const input = this.root.querySelector(`[name="${k}"]`);
-      if (input && flight[k] != null) input.value = flight[k];
-    }
-  }
-
   // --- events ------------------------------------------------------------------
   onSubmit(e) {
     e.preventDefault();
@@ -778,19 +757,6 @@ class ChallengeUI {
         title: `Your ${ORDINALS[layerN - 1] || layerN} Clue has been unlocked!`,
         phrase: codeFor(slot),
         asset: assetUrl(c.asset),
-      });
-      return;
-    }
-
-    if (role === 'flight-form') {
-      const flight = {};
-      for (const [k] of FLIGHT_FIELDS) {
-        const input = form.querySelector(`[name="${k}"]`);
-        flight[k] = input ? input.value.trim() : '';
-      }
-      this.setMsg('[data-role="flight-msg"]', 'Saving...', true);
-      net.saveFlight(flight).then((ok) => {
-        this.setMsg('[data-role="flight-msg"]', ok ? 'Flight saved.' : 'Save failed (Firebase not ready or not an admin).', ok);
       });
       return;
     }

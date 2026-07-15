@@ -15,7 +15,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { isChallengeActive, cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordConnect4 } from '../../js/game-stats.js';
 
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
@@ -679,11 +679,13 @@ class ConnectFourUI {
 
     // Record the finished game for Game Stats (every player, not just the challenge). Guard on the
     // game object so a stray re-entry can't double-count. this.difficulty is the player's pick
-    // (never the hazing's forced level). A draw records as played-only (won = null).
+    // (never the hazing's forced level). firstMove tracks WHO MOVED FIRST (humanPlayer === PLAYER_ONE).
+    // A draw records as played-only (won = null), which the stats grid leaves out (W/L only).
     if (this.game && !this.game._statsRecorded) {
       this.game._statsRecorded = true;
       const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
-      recordResult('connect4', this.difficulty, won);
+      const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
+      recordConnect4(this.difficulty, firstMove, won);
     }
 
     if (this.challengeLive) {
