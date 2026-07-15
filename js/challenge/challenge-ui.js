@@ -16,6 +16,7 @@ import {
 } from './challenge-store.js';
 import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode, TAUNTS } from './hooks.js';
 import * as net from './challenge-net.js';
+import { watchPlayers } from '../stats-net.js';
 
 const WIN_SLOTS = ['connect4', 'chinchon', 'business', 'parchis'];
 const PIECE_TOTAL = 5;
@@ -535,6 +536,12 @@ class ChallengeUI {
       </section>
 
       <section class="ch-card">
+        <h2 class="ch-h2">Player Insights</h2>
+        <p class="ch-hint">Every device that has opened the hub (all profiles, not just the challenge).</p>
+        <div data-role="adm-players"><p class="ch-hint">Connecting...</p></div>
+      </section>
+
+      <section class="ch-card">
         <h2 class="ch-h2">Selfie review</h2>
         <div data-role="adm-selfies"><p class="ch-hint">Loading...</p></div>
       </section>
@@ -565,6 +572,7 @@ class ChallengeUI {
         <p class="ch-hint">The players dashboard, selfie review, and flight editor need a connection. They light up when you are online.</p>`;
       const dash = q('[data-role="adm-dash"]'); if (dash) dash.innerHTML = `<p class="ch-hint">Offline: no synced data.</p>`;
       const sel = q('[data-role="adm-selfies"]'); if (sel) sel.innerHTML = `<p class="ch-hint">Offline: selfie review unavailable.</p>`;
+      const pl = q('[data-role="adm-players"]'); if (pl) pl.innerHTML = `<p class="ch-hint">Offline: player insights unavailable.</p>`;
       return;
     }
     if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-ok">Connected. Challenge Control is live.</p>`;
@@ -577,6 +585,9 @@ class ChallengeUI {
     const u2 = await net.watchSelfies((all) => { this._selfies = all || {}; this.renderSelfies(all); });
     if (this._destroyed) { if (typeof u2 === 'function') u2(); return; }
     this._adminUnsubs.push(u2);
+    const u3 = await watchPlayers((all) => { this._players = all || {}; this.renderPlayers(all); });
+    if (this._destroyed) { if (typeof u3 === 'function') u3(); return; }
+    this._adminUnsubs.push(u3);
     this.loadFlightForm();
   }
 
@@ -617,6 +628,34 @@ class ChallengeUI {
         </div>
         <div class="ch-dash-bar"><span style="width:${Math.round((pieces / PIECE_TOTAL) * 100)}%"></span></div>
         <ul class="ch-dash-tasks">${rows}</ul>
+      </div>`;
+    }).join('');
+  }
+
+  /** Admin Insights: every device that has synced (all profiles across the family), newest first,
+   *  with per-game played/won/lost. Reads the players/ node (game-stats sync), separate from the
+   *  challenge personas above. */
+  renderPlayers(all) {
+    const el = this.root && this.root.querySelector('[data-role="adm-players"]');
+    if (!el) return;
+    const ids = Object.keys(all || {});
+    if (!ids.length) { el.innerHTML = `<p class="ch-hint">No players yet. A device appears here after it opens the hub online.</p>`; return; }
+    const GN = { connect4: 'Connect 4', chinchon: 'Chinchón', business: 'Monopoly Deal', parchis: 'Parchís' };
+    ids.sort((a, b) => ((all[b] && all[b].updatedAt | 0) - (all[a] && all[a].updatedAt | 0)));
+    el.innerHTML = ids.map((id) => {
+      const rec = all[id] || {};
+      const prof = rec.profile || {};
+      const name = esc((prof.name || '').trim() || 'Unnamed');
+      const emoji = esc(prof.emoji || '\u{1F3AE}');
+      const games = (rec.stats && rec.stats.games) || {};
+      const rows = ['connect4', 'chinchon', 'business', 'parchis'].map((g) => {
+        const t = (games[g] && games[g].total) || {};
+        if (!(t.played | 0)) return '';
+        return `<li>${GN[g]}: <b>${t.played | 0}</b> played &middot; ${t.won | 0}W ${t.lost | 0}L</li>`;
+      }).filter(Boolean).join('');
+      return `<div class="ch-ins-player">
+        <p class="ch-ins-name">${emoji} ${name}</p>
+        ${rows ? `<ul class="ch-list">${rows}</ul>` : '<p class="ch-hint">No games played yet.</p>'}
       </div>`;
     }).join('');
   }
