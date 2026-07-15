@@ -349,6 +349,7 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-ins-name { margin: 0 0 4px; font-weight: 800; color: var(--ch-gold); font-size: 0.98rem; }
 .ch-ins-player .ch-list b { color: var(--ch-ink); }
 .ch-ins-sub { display: block; color: var(--ch-muted); font-size: 0.82rem; font-weight: 600; }
+.ch-ins-dev { color: var(--ch-muted); font-size: 0.8rem; font-weight: 600; }
 .ch-adm-uid { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .ch-adm-uid .ch-btn-ghost { margin-left: 0; }
 .ch-adm-selfie { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--ch-line); border-radius: 10px; margin-bottom: 10px; background: #0e1117; }

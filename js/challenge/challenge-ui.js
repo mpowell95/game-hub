@@ -621,33 +621,71 @@ class ChallengeUI {
     }).join('');
   }
 
-  /** Admin Insights: every device that has synced (all profiles across the family), newest first,
-   *  with per-game played/won/lost. Reads the players/ node (game-stats sync), separate from the
-   *  challenge personas above. */
+  /** Admin Insights: ONE line per person (grouped by profile name), summed across all of that
+   *  person's devices, newest-active first. Reads the players/ node (game-stats sync), separate from
+   *  the challenge personas above.
+   *
+   *  Aggregation is DISPLAY ONLY: the per-device players/<id> records are never written or merged, so
+   *  nothing stored can be lost. Every device is counted in exactly one group and counts are SUMMED (a
+   *  game is only recorded on the device it was played on, so summing never double-counts). Devices
+   *  with no profile name each stay their own row (two unnamed devices cannot be proven to be one
+   *  person). Older-build devices simply lack grid/cc, so those sub-lines just do not render. */
   renderPlayers(all) {
     const el = this.root && this.root.querySelector('[data-role="adm-players"]');
     if (!el) return;
     const ids = Object.keys(all || {});
     if (!ids.length) { el.innerHTML = `<p class="ch-hint">No players yet. A device appears here after it opens the hub online.</p>`; return; }
     const GN = { connect4: 'Connect 4', chinchon: 'Chinchón', business: 'Monopoly Deal', parchis: 'Parchís' };
-    ids.sort((a, b) => ((all[b] && all[b].updatedAt | 0) - (all[a] && all[a].updatedAt | 0)));
-    el.innerHTML = ids.map((id) => {
+    const GAMES = ['connect4', 'chinchon', 'business', 'parchis'];
+    const DIFFS = ['easy', 'medium', 'hard', 'expert'];
+    const emptyGrid = () => ({
+      player: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
+      computer: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
+    });
+
+    const groups = new Map();
+    for (const id of ids) {
       const rec = all[id] || {};
       const prof = rec.profile || {};
-      const name = esc((prof.name || '').trim() || 'Unnamed');
-      const emoji = esc(prof.emoji || '\u{1F3AE}');
+      const rawName = (prof.name || '').trim();
+      const key = rawName ? 'n:' + rawName.toLowerCase() : 'd:' + id;   // unnamed -> unique per device
+      let grp = groups.get(key);
+      if (!grp) { grp = { name: rawName || 'Unnamed', emoji: prof.emoji || '', updatedAt: 0, devices: 0, games: {} }; groups.set(key, grp); }
+      grp.devices += 1;
+      const upd = +rec.updatedAt || 0;   // NOT `| 0` (server timestamps overflow 32 bits); show newest device's name/emoji
+      if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (rawName) grp.name = rawName; if (prof.emoji) grp.emoji = prof.emoji; }
       const games = (rec.stats && rec.stats.games) || {};
-      const rows = ['connect4', 'chinchon', 'business', 'parchis'].map((g) => {
-        const gr = games[g] || {};
+      for (const g of GAMES) {
+        const src = games[g] || {};
+        const dst = grp.games[g] || (grp.games[g] = { total: { played: 0, won: 0, lost: 0 }, grid: null, cc: null });
+        const t = src.total || {};
+        dst.total.played += t.played | 0; dst.total.won += t.won | 0; dst.total.lost += t.lost | 0;
+        if (g === 'connect4' && src.grid) {
+          if (!dst.grid) dst.grid = emptyGrid();
+          for (const side of ['player', 'computer']) for (const d of DIFFS) {
+            const c = (src.grid[side] && src.grid[side][d]) || {};
+            dst.grid[side][d].w += c.w | 0; dst.grid[side][d].l += c.l | 0;
+          }
+        }
+        if (g === 'chinchon' && src.cc) {
+          if (!dst.cc) dst.cc = { closed: 0, minusTen: 0, chinchons: 0 };
+          dst.cc.closed += src.cc.closed | 0; dst.cc.minusTen += src.cc.minusTen | 0; dst.cc.chinchons += src.cc.chinchons | 0;
+        }
+      }
+    }
+
+    const list = [...groups.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    el.innerHTML = list.map((grp) => {
+      const name = esc(grp.name || 'Unnamed');
+      const emoji = esc(grp.emoji || '\u{1F3AE}');
+      const devTag = grp.devices > 1 ? ` <span class="ch-ins-dev">(${grp.devices} devices)</span>` : '';
+      const rows = GAMES.map((g) => {
+        const gr = grp.games[g] || {};
         const t = gr.total || {};
         if (!(t.played | 0)) return '';
-        // Per-game detail from the richer dimensions the store now syncs (defensive: a device still on
-        // an older build has no grid/cc, so the sub-line just does not appear for it).
         let extra = '';
         if (g === 'connect4' && gr.grid) {
-          const sum = (side) => ['easy', 'medium', 'hard', 'expert'].reduce((a, d) => {
-            const c = (side && side[d]) || {}; a.w += c.w | 0; a.l += c.l | 0; return a;
-          }, { w: 0, l: 0 });
+          const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d] || {}; a.w += c.w | 0; a.l += c.l | 0; return a; }, { w: 0, l: 0 });
           const p = sum(gr.grid.player), c = sum(gr.grid.computer);
           extra = `<span class="ch-ins-sub">first: you ${p.w}-${p.l}, cpu ${c.w}-${c.l}</span>`;
         } else if (g === 'chinchon' && gr.cc) {
@@ -656,7 +694,7 @@ class ChallengeUI {
         return `<li>${GN[g]}: <b>${t.played | 0}</b> played &middot; ${t.won | 0}W ${t.lost | 0}L${extra}</li>`;
       }).filter(Boolean).join('');
       return `<div class="ch-ins-player">
-        <p class="ch-ins-name">${emoji} ${name}</p>
+        <p class="ch-ins-name">${emoji} ${name}${devTag}</p>
         ${rows ? `<ul class="ch-list">${rows}</ul>` : '<p class="ch-hint">No games played yet.</p>'}
       </div>`;
     }).join('');
