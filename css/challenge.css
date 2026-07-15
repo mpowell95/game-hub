@@ -326,9 +326,23 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-selfie-sub { font-size: 0.8rem; font-weight: 600; opacity: 0.85; }
 
 /* Mission Control admin panel */
-.ch-dash-player { padding: 8px 0; border-top: 1px solid var(--ch-line); }
-.ch-dash-player:first-child { border-top: 0; padding-top: 0; }
-.ch-dash-player .ch-label { color: var(--ch-gold); margin-bottom: 2px; }
+.ch-dash-player { padding: 14px 0; border-top: 1px solid var(--ch-line); }
+.ch-dash-player:first-child { border-top: 0; padding-top: 2px; }
+.ch-dash-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ch-dash-name { font-weight: 800; font-size: 0.98rem; color: var(--ch-gold); }
+.ch-dash-count { font-weight: 700; font-size: 0.85rem; color: var(--ch-muted); white-space: nowrap; }
+.ch-dash-count b { font-weight: 900; font-size: 1.05rem; color: var(--ch-ink); }
+.ch-dash-bar { height: 8px; border-radius: 6px; background: #0e1117; border: 1px solid var(--ch-line); overflow: hidden; margin-bottom: 11px; }
+.ch-dash-bar > span { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #3a2f05, var(--ch-gold)); transition: width 0.4s ease; }
+.ch-dash-tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.ch-dash-tasks li { display: flex; align-items: center; gap: 9px; font-size: 0.9rem; color: var(--ch-muted); }
+.ch-dash-task { font-weight: 600; }
+.ch-dash-ic { flex: none; width: 19px; height: 19px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.72rem; font-weight: 900; border: 1.5px solid var(--ch-line); color: transparent; }
+.ch-dash-tasks li.is-done { color: var(--ch-ink); }
+.ch-dash-tasks li.is-done .ch-dash-ic { background: var(--ch-gold); border-color: var(--ch-gold); color: #2a2200; }
+.ch-dash-tasks li.is-earned { color: var(--ch-ink); }
+.ch-dash-tasks li.is-earned .ch-dash-ic { border-color: var(--ch-gold); color: var(--ch-gold); font-size: 0.6rem; }
+.ch-dash-sub { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .ch-adm-uid { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .ch-adm-uid .ch-btn-ghost { margin-left: 0; }
 .ch-adm-selfie { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--ch-line); border-radius: 10px; margin-bottom: 10px; background: #0e1117; }

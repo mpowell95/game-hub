@@ -591,19 +591,32 @@ class ChallengeUI {
     if (!el) return;
     const keys = Object.keys(all || {});
     if (!keys.length) { el.innerHTML = `<p class="ch-hint">No players yet. A record appears here once someone plays online.</p>`; return; }
+    const TASKS = [['connect4', 'Connect 4'], ['chinchon', 'Chinch&oacute;n'], ['business', 'Monopoly Deal'], ['parchis', 'Parch&iacute;s'], ['selfie', 'Selfie']];
     el.innerHTML = keys.map((k) => {
       const rec = all[k] || {};
-      const wins = WIN_SLOTS.filter((s) => rec.wins && rec.wins[s]);
-      const pieces = Array.isArray(rec.order) ? rec.order.length : (rec.order ? Object.keys(rec.order).length : 0);
+      const redeemed = rec.redeemed || {};
+      const wins = rec.wins || {};
       const sel = rec.selfie || {};
+      const pieces = Array.isArray(rec.order) ? rec.order.length : Object.keys(rec.order || {}).length;
+      const rows = TASKS.map(([slot, label]) => {
+        const isRedeemed = !!redeemed[slot];
+        const isWon = slot === 'selfie' ? sel.status === 'approved' : !!wins[slot];
+        const state = isRedeemed ? 'is-done' : (isWon ? 'is-earned' : 'is-todo');
+        const glyph = isRedeemed ? '&#10003;' : (isWon ? '&#9679;' : '');
+        let sub = '';
+        if (slot === 'connect4') sub = `${(rec.cf && rec.cf.completed) | 0} plays`;
+        else if (slot === 'selfie' && sel.status && sel.status !== 'none') sub = esc(sel.status) + (sel.rejects ? ` (${sel.rejects | 0} rejected)` : '');
+        else if (isRedeemed) sub = 'redeemed';
+        else if (isWon) sub = 'code out';
+        return `<li class="${state}"><span class="ch-dash-ic" aria-hidden="true">${glyph}</span><span class="ch-dash-task">${label}</span>${sub ? `<span class="ch-dash-sub">${sub}</span>` : ''}</li>`;
+      }).join('');
       return `<div class="ch-dash-player">
-        <p class="ch-label">${esc(this.personaLabel(k))}</p>
-        <ul class="ch-list">
-          <li>Wins: ${wins.length ? esc(wins.join(', ')) : 'none yet'}</li>
-          <li>Connect 4 games played: ${(rec.cf && rec.cf.completed) | 0}</li>
-          <li>Pieces: ${pieces} / ${PIECE_TOTAL}</li>
-          <li>Selfie: ${esc(sel.status || 'none')}${sel.rejects ? ` (rejections: ${sel.rejects | 0})` : ''}</li>
-        </ul>
+        <div class="ch-dash-head">
+          <span class="ch-dash-name">${esc(this.personaLabel(k))}</span>
+          <span class="ch-dash-count"><b>${pieces}</b> / ${PIECE_TOTAL}</span>
+        </div>
+        <div class="ch-dash-bar"><span style="width:${Math.round((pieces / PIECE_TOTAL) * 100)}%"></span></div>
+        <ul class="ch-dash-tasks">${rows}</ul>
       </div>`;
     }).join('');
   }
