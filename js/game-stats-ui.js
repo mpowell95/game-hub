@@ -17,10 +17,22 @@ const TABS = [
   { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
 ];
 const C4_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['expert', 'Expert']];
-const SOON_LABEL = { business: 'Monopoly Deal', parchis: 'Parchís' };
+const LABEL = Object.fromEntries(TABS.map((t) => [t.id, t.label]));
+
+// Map each game's own difficulty vocabulary onto the hub's shared tier names, so the by-difficulty
+// tables read consistently (Monopoly Deal uses easy/normal/hard, Parchis uses beginner/intermediate/
+// pro/expert). 'legacy' is the folded-in pre-unified history (shown as "Earlier games").
+const DIFF_META = {
+  easy: { label: 'Beginner', order: 1 }, beginner: { label: 'Beginner', order: 1 }, facil: { label: 'Beginner', order: 1 },
+  normal: { label: 'Intermediate', order: 2 }, medium: { label: 'Intermediate', order: 2 }, intermediate: { label: 'Intermediate', order: 2 }, average: { label: 'Intermediate', order: 2 },
+  hard: { label: 'Pro', order: 3 }, pro: { label: 'Pro', order: 3 }, dificil: { label: 'Pro', order: 3 },
+  expert: { label: 'Expert', order: 4 },
+  legacy: { label: 'Earlier games', order: 9 },
+};
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }
+function titleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
 // --- Connect 4 --------------------------------------------------------------
 function c4Totals(grid) {
@@ -89,12 +101,37 @@ function chinchonScreen(rec) {
   </div>`;
 }
 
-// --- Monopoly Deal / Parchis (stub) -----------------------------------------
-function comingSoonScreen(id, rec) {
+// --- Monopoly Deal / Parchis (record vs AI, by difficulty) ------------------
+// Both are "win the table vs AI" games: the meaningful stat is the win rate overall and per
+// opponent difficulty. Built from total + byDiff (what the classic recorder already tracks).
+function diffTable(byDiff) {
+  const meta = (k) => DIFF_META[k] || { label: titleCase(k), order: 8 };
+  const keys = Object.keys(byDiff || {}).filter((k) => ((byDiff[k] || {}).played | 0) > 0);
+  if (!keys.length) return '';
+  keys.sort((a, b) => meta(a).order - meta(b).order);
+  const rows = keys.map((k) => {
+    const d = byDiff[k]; const w = d.won | 0, l = d.lost | 0, p = d.played | 0;
+    return `<tr><th scope="row">${esc(meta(k).label)}</th><td>${w}-${l}</td><td>${pct(w, p)}%</td></tr>`;
+  }).join('');
+  return `<h4 class="gs-tbl-h">Record by difficulty</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">W-L</th><th scope="col">Win rate</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function recordScreen(id, rec) {
   const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
-  const played = total.played | 0;
-  const note = played ? `<p class="gs-cs-note">${played} played so far (${total.won | 0}W ${total.lost | 0}L).</p>` : '';
-  return `<div class="gs-soon"><p class="gs-soon-lead">A tailored ${esc(SOON_LABEL[id])} view is coming soon.</p>${note}</div>`;
+  const played = total.played | 0, won = total.won | 0, lost = total.lost | 0;
+  if (!played) return emptyState(LABEL[id] || 'These');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${won}</b><span>Wins</span></div>
+      <div class="gs-tally"><b>${lost}</b><span>Losses</span></div>
+      <div class="gs-tally"><b>${played}</b><span>Plays</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>Win rate</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
 }
 
 function emptyState(label) { return `<p class="gs-none">No ${esc(label)} games recorded yet.</p>`; }
@@ -103,7 +140,7 @@ function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
-  return comingSoonScreen(id, rec);
+  return recordScreen(id, rec);   // business, parchis
 }
 
 // --- overlay shell ----------------------------------------------------------
@@ -178,6 +215,7 @@ function ensureCss() {
     '.gs-tab.is-active{color:var(--hub-ink,#16243a);font-weight:900;border-bottom-color:var(--gs-accent,#1769d4)}',
     '.gs-body{padding:14px 16px 8px;display:grid;gap:14px}',
     '.gs-tallies{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}',
+    '.gs-tallies.is-4{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}',
     '.gs-tally{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:12px 4px;text-align:center;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
     '.gs-tally b{display:block;font-size:1.5rem;font-weight:900;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
     '.gs-tally span{font-size:.72rem;font-weight:700;color:var(--hub-muted,#5b6b82);text-transform:uppercase;letter-spacing:.04em}',
@@ -197,9 +235,6 @@ function ensureCss() {
     '.gs-cc-k{color:#c9d6cf;font-size:.92rem;font-weight:600}',
     '.gs-cc-v{color:#f4f6fb;font-size:1.05rem;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap}',
     '.gs-cc-v em{color:#9fb4aa;font-style:normal;font-size:.82rem;font-weight:700}',
-    '.gs-soon{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
-    '.gs-soon-lead{margin:0;font-weight:800;color:var(--hub-ink,#16243a)}',
-    '.gs-cs-note{margin:8px 0 0;color:var(--hub-muted,#5b6b82);font-size:.85rem;font-weight:600}',
     '.gs-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.9rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
     '.gs-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.78rem;padding:10px 16px 40px;margin:0}',
   ].join('');
