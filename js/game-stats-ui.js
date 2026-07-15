@@ -3,7 +3,7 @@
 //   Connect 4 - Wins/Losses/Plays totals + a WHO-MOVED-FIRST grid (player vs computer, per level).
 //   Chinchon  - Games played (finished/victories/draws/defeats + %) and close-quality stats
 //               (total closed by you, total minus ten, total chinchons), on a dark panel.
-//   Monopoly Deal / Parchis - a "coming soon" stub until their own tailored screens land.
+//   Monopoly Deal / Parchis - Wins/Losses/Plays + win rate, and a record-by-difficulty table.
 // Reads the local unified stats (game-stats.js); self-contained (injects its own CSS once). Opened
 // from the hub header. Colorblind-safe: the active tab is marked by weight + ink + an accent
 // underline together, never hue alone.
