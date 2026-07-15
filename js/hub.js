@@ -109,7 +109,7 @@ const GAMES = [
 ];
 
 // Hidden entries appended only when the profile name matches (see render()). The
-// challenge card is Ana's mission; the admin card is Matt's Mission Control. Both
+// challenge card is Ana's mission; the admin card is Matt's Challenge Control. Both
 // mount the same module, which decides which face to show from the profile name.
 const CHALLENGE_CARD = {
   id: 'challenge',
@@ -126,7 +126,7 @@ const CHALLENGE_CARD = {
 };
 const ADMIN_CARD = {
   id: 'challenge',
-  title: 'Mission Control',
+  title: 'Challenge Control',
   blurb: 'Matt only.',
   module: './challenge/challenge-ui.js',
   accent: '#178a7a',

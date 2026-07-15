@@ -509,7 +509,7 @@ class ChallengeUI {
   renderAdmin(st) {
     if (!this._pinOk) {
       this.mount(`
-        <header class="ch-head"><h1 class="ch-title">Mission Control</h1></header>
+        <header class="ch-head"><h1 class="ch-title">Challenge Control</h1></header>
         <section class="ch-card">
           <p class="ch-lead">Enter your PIN.</p>
           <form data-role="pin-form" class="ch-form">
@@ -522,7 +522,7 @@ class ChallengeUI {
       return;
     }
     this.mount(`
-      <header class="ch-head"><h1 class="ch-title">Mission Control</h1></header>
+      <header class="ch-head"><h1 class="ch-title">Challenge Control</h1></header>
 
       <section class="ch-card">
         <h2 class="ch-h2">Status</h2>
@@ -567,7 +567,7 @@ class ChallengeUI {
       const sel = q('[data-role="adm-selfies"]'); if (sel) sel.innerHTML = `<p class="ch-hint">Offline: selfie review unavailable.</p>`;
       return;
     }
-    if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-ok">Connected. Mission Control is live.</p>`;
+    if (statusEl) statusEl.innerHTML = `<p class="ch-msg is-ok">Connected. Challenge Control is live.</p>`;
 
     // Any signed-in visitor can read/write (rules are auth-only now), so the PIN is the
     // only gate and there is no per-device enrollment. Watch every persona + all selfies.
@@ -600,6 +600,7 @@ class ChallengeUI {
         <p class="ch-label">${esc(this.personaLabel(k))}</p>
         <ul class="ch-list">
           <li>Wins: ${wins.length ? esc(wins.join(', ')) : 'none yet'}</li>
+          <li>Connect 4 games played: ${(rec.cf && rec.cf.completed) | 0}</li>
           <li>Pieces: ${pieces} / ${PIECE_TOTAL}</li>
           <li>Selfie: ${esc(sel.status || 'none')}${sel.rejects ? ` (rejections: ${sel.rejects | 0})` : ''}</li>
         </ul>
@@ -647,16 +648,31 @@ class ChallengeUI {
     // watchSelfies + watchAllProgress refresh the panel automatically.
   }
 
-  /** Download a selfie image (Matt keeps it). Reads the data URL straight off the thumbnail. */
+  /** Save a selfie (Matt keeps it). iOS Safari ignores <a download> for data URLs, so instead open
+   *  the full-size photo in a tap-to-close overlay with a Blob-backed Save link (works on desktop)
+   *  plus a "press and hold -> Save to Photos" hint (the reliable iPhone path). */
   downloadSelfie(id) {
-    const img = this.root && this.root.querySelector(`.ch-adm-thumb[data-id="${id}"]`);
-    if (!img || !img.src) return;
-    const a = document.createElement('a');
-    a.href = img.src;
-    a.download = 'selfie-' + id + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const rec = (this._selfies && this._selfies[id]) || {};
+    const thumb = this.root && this.root.querySelector(`.ch-adm-thumb[data-id="${id}"]`);
+    const src = rec.image || (thumb && thumb.src);
+    if (!src) return;
+    let href = src, blobUrl = null;
+    try { blobUrl = URL.createObjectURL(dataUrlToBlob(src)); href = blobUrl; } catch { /* fall back to the data URL */ }
+    const z = document.createElement('div');
+    z.className = 'ch-zoom ch-selfie-save';
+    z.setAttribute('role', 'dialog');
+    z.setAttribute('aria-label', 'Selfie, full size');
+    z.innerHTML =
+      `<img class="ch-zoom-panel-img" alt="Selfie" src="${esc(src)}">
+       <div class="ch-selfie-save-bar">
+         <a class="ch-btn ch-btn-go ch-selfie-dl" href="${esc(href)}" download="ana-selfie-${esc(id)}.jpg">Save / Download</a>
+         <button type="button" class="ch-btn ch-btn-ghost" data-role="selfie-save-close">Close</button>
+         <p class="ch-hint">On iPhone: press and hold the photo, then &ldquo;Save to Photos&rdquo;.</p>
+       </div>`;
+    const close = () => { if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch { /* ignore */ } } z.remove(); };
+    z.addEventListener('click', (e) => { if (e.target === z || e.target.closest('[data-role="selfie-save-close"]')) close(); });
+    document.body.appendChild(z);
+    requestAnimationFrame(() => z.classList.add('is-in'));
   }
 
   async loadFlightForm() {
@@ -833,6 +849,17 @@ class ChallengeUI {
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/** data:image/...;base64,XXXX -> Blob, so a selfie can be saved via an object URL (more reliable
+ *  than a giant data: URL in an <a download>, especially on iOS). */
+function dataUrlToBlob(dataUrl) {
+  const parts = String(dataUrl).split(',');
+  const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bin = atob(parts[1] || '');
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
 }
 
 let instance = null;
