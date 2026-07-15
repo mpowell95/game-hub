@@ -638,9 +638,22 @@ class ChallengeUI {
       const emoji = esc(prof.emoji || '\u{1F3AE}');
       const games = (rec.stats && rec.stats.games) || {};
       const rows = ['connect4', 'chinchon', 'business', 'parchis'].map((g) => {
-        const t = (games[g] && games[g].total) || {};
+        const gr = games[g] || {};
+        const t = gr.total || {};
         if (!(t.played | 0)) return '';
-        return `<li>${GN[g]}: <b>${t.played | 0}</b> played &middot; ${t.won | 0}W ${t.lost | 0}L</li>`;
+        // Per-game detail from the richer dimensions the store now syncs (defensive: a device still on
+        // an older build has no grid/cc, so the sub-line just does not appear for it).
+        let extra = '';
+        if (g === 'connect4' && gr.grid) {
+          const sum = (side) => ['easy', 'medium', 'hard', 'expert'].reduce((a, d) => {
+            const c = (side && side[d]) || {}; a.w += c.w | 0; a.l += c.l | 0; return a;
+          }, { w: 0, l: 0 });
+          const p = sum(gr.grid.player), c = sum(gr.grid.computer);
+          extra = `<span class="ch-ins-sub">first: you ${p.w}-${p.l}, cpu ${c.w}-${c.l}</span>`;
+        } else if (g === 'chinchon' && gr.cc) {
+          extra = `<span class="ch-ins-sub">closed ${gr.cc.closed | 0}, chinch&oacute;n ${gr.cc.chinchons | 0}, -10 x${gr.cc.minusTen | 0}</span>`;
+        }
+        return `<li>${GN[g]}: <b>${t.played | 0}</b> played &middot; ${t.won | 0}W ${t.lost | 0}L${extra}</li>`;
       }).filter(Boolean).join('');
       return `<div class="ch-ins-player">
         <p class="ch-ins-name">${emoji} ${name}</p>
