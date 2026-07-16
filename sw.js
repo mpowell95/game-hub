@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v99';
+const CACHE = 'game-hub-v100';
 
 const ASSETS = [
   './',
@@ -60,11 +60,13 @@ const ASSETS = [
   // Parchís (self-contained single file)
   './parchis/',
   './parchis/index.html',
-  // NOTE: Nuts & Bolts (nuts-bolts/*) is deliberately NOT precached while it is devOnly.
-  // Only Matt and the tester can even see its card, so making every PWA installer download
-  // it would be waste; and a wrong path here would reject the whole cache.addAll() and
-  // break the precache for everyone. The network-first fetch handler still caches it at
-  // runtime for whoever actually plays it. Add it here when the game is released.
+  // Nuts & Bolts
+  './nuts-bolts/',
+  './nuts-bolts/index.html',
+  './nuts-bolts/css/nuts-bolts.css',
+  './nuts-bolts/js/ui.js',
+  './nuts-bolts/js/game.js',
+  './nuts-bolts/js/generator.js',
 ];
 
 // Chinchón decks.

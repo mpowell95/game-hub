@@ -8,7 +8,7 @@ export const CAP = 4;
 export const PALETTE = [
   { key: 'yellow', name: 'Yellow', hex: '#F2B705' },
   { key: 'blue', name: 'Blue', hex: '#1F5FA8' },
-  { key: 'orange', name: 'Orange', hex: '#E0532F' },
+  { key: 'orange', name: 'Orange', hex: '#C24420' },
   { key: 'teal', name: 'Teal', hex: '#178A7A' },
   { key: 'purple', name: 'Purple', hex: '#7A3FE0' },
   { key: 'pink', name: 'Pink', hex: '#E88BC4' },

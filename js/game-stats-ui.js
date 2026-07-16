@@ -17,9 +17,7 @@ const TABS = [
   { id: 'chinchon', label: 'Chinchón', accent: '#d4a017' },
   { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
   { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
-  // In development: gated exactly like its hub card (see js/hub.js). Without this the
-  // unreleased game would leak to every player through the Stats screen.
-  { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b', devOnly: true },
+  { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */

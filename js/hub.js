@@ -111,9 +111,6 @@ const GAMES = [
     id: 'nuts-bolts',
     title: 'Nuts & Bolts',
     blurb: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
-    // In development: `devOnly` keeps this card off every hub except Matt's and the
-    // tester's (see DEV_HASHES / isDevProfile). Drop the flag to release it to everyone.
-    devOnly: true,
     module: '../nuts-bolts/js/ui.js',
     accent: '#607d8b',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
@@ -129,9 +126,9 @@ const GAMES = [
               <polygon points="16,60 22.5,53.5 35.5,53.5 42,60 35.5,66.5 22.5,66.5" fill="#1f5fa8"/>
               <polygon points="47,90 53.5,83.5 66.5,83.5 73,90 66.5,96.5 53.5,96.5" fill="#1f5fa8"/>
               <polygon points="47,75 53.5,68.5 66.5,68.5 73,75 66.5,81.5 53.5,81.5" fill="#178a7a"/>
-              <polygon points="78,90 84.5,83.5 97.5,83.5 104,90 97.5,96.5 84.5,96.5" fill="#e0532f"/>
-              <polygon points="78,75 84.5,68.5 97.5,68.5 104,75 97.5,81.5 84.5,81.5" fill="#e0532f"/>
-              <polygon points="78,60 84.5,53.5 97.5,53.5 104,60 97.5,66.5 84.5,66.5" fill="#e0532f"/>
+              <polygon points="78,90 84.5,83.5 97.5,83.5 104,90 97.5,96.5 84.5,96.5" fill="#c24420"/>
+              <polygon points="78,75 84.5,68.5 97.5,68.5 104,75 97.5,81.5 84.5,81.5" fill="#c24420"/>
+              <polygon points="78,60 84.5,53.5 97.5,53.5 104,60 97.5,66.5 84.5,66.5" fill="#c24420"/>
             </g>
             <rect x="12" y="100" width="96" height="8" rx="4" fill="#6b7688"/>
           </svg>`,
