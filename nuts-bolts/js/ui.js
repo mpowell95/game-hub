@@ -10,8 +10,22 @@ const COLOR_NAME = Object.fromEntries(PALETTE.map((p) => [p.key, p.name]));
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP = 10;
 
+const ICON_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>';
+const ICON_RESTART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
+const ICON_HELP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.6 1.4c0 1.6-2.1 1.9-2.1 3.6"/><path d="M12 17.5v.01"/></svg>';
+
+const CONFETTI_COLORS = ['#f2b705', '#1f5fa8', '#e0532f', '#178a7a', '#7a3fe0', '#e88bc4'];
+
+function isBoltFull(stack) {
+  return stack.length === CAP && stack.every((n) => n.color === stack[0].color);
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function pluralMoves(n) {
+  return `${n} move${n === 1 ? '' : 's'}`;
 }
 
 function ensureStylesheet() {
@@ -96,12 +110,15 @@ class NutsBoltsUI {
     root.innerHTML = `
       <div class="nb-topbar">
         <div class="nb-title">Level <span data-role="level"></span></div>
-        <div class="nb-moves"><span data-role="moves"></span> moves</div>
-        <button type="button" class="nb-btn nb-btn-icon" data-action="undo" aria-label="Undo">&#8617;</button>
-        <button type="button" class="nb-btn nb-btn-icon" data-action="restart" aria-label="Restart">&#8635;</button>
-        <button type="button" class="nb-btn nb-btn-icon" data-action="help" aria-label="Help">?</button>
+        <div class="nb-moves" data-role="moves"></div>
+        <button type="button" class="nb-btn nb-btn-icon" data-action="help" aria-label="Help">${ICON_HELP}</button>
       </div>
       <div class="nb-board" data-role="board"></div>
+      <div class="nb-fx-layer" data-role="fx-layer"></div>
+      <div class="nb-actionbar">
+        <button type="button" class="nb-btn nb-btn-icon" data-action="undo" aria-label="Undo">${ICON_UNDO}</button>
+        <button type="button" class="nb-btn nb-btn-icon" data-action="restart" aria-label="Restart">${ICON_RESTART}</button>
+      </div>
       <div class="nb-toast" role="status" aria-live="polite" data-role="toast"></div>
       <div class="nb-assist" role="status" aria-live="polite" data-role="assist" hidden></div>
       <div class="nb-confirm" data-role="restart-confirm" hidden>
@@ -113,6 +130,7 @@ class NutsBoltsUI {
       </div>
       <div class="nb-overlay" data-role="win-overlay" hidden>
         <div class="nb-panel">
+          <div class="nb-confetti-layer" data-role="confetti"></div>
           <h2 data-role="win-title"></h2>
           <p data-role="win-detail"></p>
           <div class="nb-panel-actions">
@@ -122,6 +140,7 @@ class NutsBoltsUI {
       </div>
       <div class="nb-overlay" data-role="help-overlay" hidden>
         <div class="nb-panel">
+          <button type="button" class="nb-panel-close" data-action="close-help" aria-label="Close">&times;</button>
           <h2>How to play</h2>
           <div class="nb-help-body">
             <ul>
@@ -146,6 +165,8 @@ class NutsBoltsUI {
     this.container.appendChild(root);
     this.root = root;
     this.boardEl = root.querySelector('[data-role="board"]');
+    this.fxLayer = root.querySelector('[data-role="fx-layer"]');
+    this.confettiLayer = root.querySelector('[data-role="confetti"]');
     this.toastEl = root.querySelector('[data-role="toast"]');
     this.assistEl = root.querySelector('[data-role="assist"]');
     this.winOverlay = root.querySelector('[data-role="win-overlay"]');
@@ -163,11 +184,20 @@ class NutsBoltsUI {
 
     this.renderBoard();
     this.updateTopbar();
+    this.boardEl.classList.add('nb-fade-in');
   }
 
-  updateTopbar() {
+  updateTopbar(pulseMoves) {
     this.root.querySelector('[data-role="level"]').textContent = String(this.level);
-    this.root.querySelector('[data-role="moves"]').textContent = String(this.game.moves);
+    const movesEl = this.root.querySelector('[data-role="moves"]');
+    movesEl.textContent = pluralMoves(this.game.moves);
+    if (pulseMoves) {
+      movesEl.classList.remove('nb-pulse');
+      // eslint-disable-next-line no-unused-expressions
+      movesEl.offsetWidth; // restart the animation
+      movesEl.classList.add('nb-pulse');
+      setTimeout(() => movesEl.classList.remove('nb-pulse'), 180);
+    }
     this.root.querySelector('[data-action="undo"]').disabled = !this.game.canUndo();
   }
 
@@ -190,6 +220,7 @@ class NutsBoltsUI {
         nutEl.className = 'nb-nut';
         const lifted = this.game.selected === index && i >= stack.length - run.length;
         if (lifted) nutEl.classList.add('nb-lifted');
+        if (i === stack.length - 1) nutEl.classList.add('nb-top-nut');
         if (nut.hidden) {
           nutEl.dataset.hidden = 'true';
           nutEl.textContent = '?';
@@ -202,6 +233,12 @@ class NutsBoltsUI {
         }
         stackEl.appendChild(nutEl);
       });
+
+      for (let i = stack.length; i < CAP; i++) {
+        const ghost = document.createElement('div');
+        ghost.className = 'nb-slot-ghost';
+        stackEl.appendChild(ghost);
+      }
 
       bolt.addEventListener('pointerdown', (e) => this.onBoltPointerDown(e, index));
       this.boardEl.appendChild(bolt);
@@ -270,6 +307,11 @@ class NutsBoltsUI {
   }
 
   handleBoltTap(index) {
+    // Capture the pre-move DOM rects before `select()` mutates state, so the
+    // move can be replayed as a visible travel animation after re-render.
+    const pendingFrom = this.game.selected;
+    const preRects = pendingFrom !== null && pendingFrom !== index ? this.captureTopRunRects(pendingFrom) : null;
+
     const result = this.game.select(index);
     if (result.reason) {
       this.showToast(result.reason);
@@ -277,10 +319,95 @@ class NutsBoltsUI {
     }
     if (result.changed) {
       this.renderBoard();
-      this.updateTopbar();
-      if (result.isMove) this.persist();
+      this.updateTopbar(result.isMove);
+      if (result.isMove) {
+        this.persist();
+        if (preRects && preRects.length) this.animateMove(preRects, result.to, result.count);
+        const destStack = this.game.stacks[result.to];
+        if (isBoltFull(destStack)) this.flashCompleted(result.to);
+      }
       if (result.won) this.showWin();
     }
+  }
+
+  // The topmost run currently visible on `boltIndex`, captured as DOM rects
+  // (relative to the root) before the move mutates the model.
+  captureTopRunRects(boltIndex) {
+    const stack = this.game.stacks[boltIndex];
+    const run = getTopRun(stack);
+    if (!run.length) return [];
+    const boltEl = this.boardEl.querySelector(`[data-index="${boltIndex}"]`);
+    if (!boltEl) return [];
+    const nutEls = [...boltEl.querySelectorAll('.nb-nut')].slice(-run.length);
+    const rootRect = this.root.getBoundingClientRect();
+    return nutEls.map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left - rootRect.left,
+        top: r.top - rootRect.top,
+        width: r.width,
+        height: r.height,
+        color: el.dataset.color,
+        hidden: el.dataset.hidden === 'true',
+      };
+    });
+  }
+
+  // Only the last `count` captured nuts actually moved (a partial group takes
+  // the topmost portion of the run, see game.js). Fly clones from their old
+  // position to where the destination bolt just rendered them, arcing up and
+  // over like nuts physically sliding off one bolt and onto another.
+  animateMove(preRects, toIndex, count) {
+    const moved = preRects.slice(-count);
+    const boltEl = this.boardEl.querySelector(`[data-index="${toIndex}"]`);
+    if (!boltEl) return;
+    const newEls = [...boltEl.querySelectorAll('.nb-nut')].slice(-count);
+    const rootRect = this.root.getBoundingClientRect();
+
+    newEls.forEach((el, i) => {
+      const from = moved[i];
+      if (!from) return;
+      const to = el.getBoundingClientRect();
+      const newLeft = to.left - rootRect.left;
+      const newTop = to.top - rootRect.top;
+      const dx = newLeft - from.left;
+      const dy = newTop - from.top;
+
+      el.classList.add('nb-fx-hidden');
+
+      const clone = document.createElement('div');
+      clone.className = 'nb-nut nb-fx-nut';
+      if (from.hidden) clone.dataset.hidden = 'true';
+      else clone.dataset.color = from.color;
+      clone.style.left = `${from.left}px`;
+      clone.style.top = `${from.top}px`;
+      clone.style.width = `${from.width}px`;
+      clone.style.height = `${from.height}px`;
+      this.fxLayer.appendChild(clone);
+
+      const anim = clone.animate([
+        { transform: 'translate(0px, 0px) rotate(0deg)', easing: 'cubic-bezier(.34,1.56,.64,1)' },
+        { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 24}px) rotate(10deg)`, offset: 0.5, easing: 'cubic-bezier(.4,0,.2,1)' },
+        { transform: `translate(${dx}px, ${dy}px) rotate(0deg)` },
+      ], { duration: 480, fill: 'forwards' });
+
+      anim.finished.then(() => {
+        clone.remove();
+        el.classList.remove('nb-fx-hidden');
+        el.classList.add('nb-just-landed');
+        setTimeout(() => el.classList.remove('nb-just-landed'), 200);
+      }).catch(() => {
+        clone.remove();
+        el.classList.remove('nb-fx-hidden');
+      });
+    });
+  }
+
+  flashCompleted(boltIndex) {
+    const boltEl = this.boardEl.querySelector(`[data-index="${boltIndex}"]`);
+    if (!boltEl) return;
+    boltEl.classList.add('nb-just-completed');
+    setTimeout(() => boltEl.classList.remove('nb-just-completed'), 320);
   }
 
   shakeBolt(index) {
@@ -311,10 +438,27 @@ class NutsBoltsUI {
     }
     const name = this.profile && this.profile.name;
     const title = `Level ${this.level} complete`;
-    const detail = name ? `Nice one, ${esc(name)}! ${this.game.moves} moves.` : `${this.game.moves} moves.`;
+    const detail = name ? `Nice one, ${esc(name)}! ${pluralMoves(this.game.moves)}.` : `${pluralMoves(this.game.moves)}.`;
     this.root.querySelector('[data-role="win-title"]').textContent = title;
     this.root.querySelector('[data-role="win-detail"]').innerHTML = detail;
     this.winOverlay.hidden = false;
+    this.launchConfetti();
+  }
+
+  // A single restrained burst, not a persistent effect: capped piece count,
+  // fires once per win, cleans itself up after the fall animation ends.
+  launchConfetti() {
+    if (!this.confettiLayer) return;
+    this.confettiLayer.innerHTML = '';
+    const pieceCount = 16;
+    for (let i = 0; i < pieceCount; i++) {
+      const piece = document.createElement('div');
+      piece.className = 'nb-confetti-piece';
+      piece.style.left = `${(i / pieceCount) * 100 + (Math.random() * 6 - 3)}%`;
+      piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      piece.style.animationDelay = `${(i % 5) * 60}ms`;
+      this.confettiLayer.appendChild(piece);
+    }
   }
 
   // --- Long-press color assist ---

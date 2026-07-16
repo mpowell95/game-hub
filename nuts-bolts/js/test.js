@@ -1,4 +1,4 @@
-// test.js — headless tests for the Nuts & Bolts engine (game.js + generator.js).
+// test.js: headless tests for the Nuts & Bolts engine (game.js + generator.js).
 //
 // Run with:  node js/test.js   (from the nuts-bolts/ folder)
 //
