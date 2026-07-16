@@ -223,7 +223,10 @@ class NutsBoltsUI {
         if (i === stack.length - 1) nutEl.classList.add('nb-top-nut');
         if (nut.hidden) {
           nutEl.dataset.hidden = 'true';
-          nutEl.textContent = '?';
+          const mark = document.createElement('span');
+          mark.className = 'nb-hidden-mark';
+          mark.textContent = '?';
+          nutEl.appendChild(mark);
         } else {
           nutEl.dataset.color = nut.color;
           const letter = document.createElement('span');

@@ -270,8 +270,18 @@
 .nb-nut[data-color="pink"] { background: linear-gradient(180deg, color-mix(in srgb, var(--nb-pink) 78%, white) 0%, var(--nb-pink) 46%, color-mix(in srgb, var(--nb-pink) 82%, black) 100%); }
 .nb-nut[data-color="slate"] { background: linear-gradient(180deg, color-mix(in srgb, var(--nb-slate) 78%, white) 0%, var(--nb-slate) 46%, color-mix(in srgb, var(--nb-slate) 82%, black) 100%); color: rgba(255, 255, 255, 0.85); }
 .nb-nut[data-hidden="true"] {
-  background: var(--nb-hidden) !important;
-  color: rgba(0, 0, 0, 0.6) !important;
+  background: repeating-linear-gradient(135deg, var(--nb-hidden) 0 6px, #9da2ac 6px 12px) !important;
+  border-color: rgba(0, 0, 0, 0.4);
+  border-style: dashed;
+}
+.nb-nut[data-hidden="true"]::after { display: none; }
+.nb-hidden-mark {
+  position: relative;
+  z-index: 1;
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .nb-nut.nb-reveal {
   animation: nb-flip 0.35s ease;
