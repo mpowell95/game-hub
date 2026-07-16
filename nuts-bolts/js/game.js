@@ -12,6 +12,11 @@ function topRun(stack) {
   const color = stack[stack.length - 1].color;
   let len = 0;
   for (let i = stack.length - 1; i >= 0; i--) {
+    // A still-hidden nut's true color is unknown to the player, so it can
+    // never be swept into a run just because it happens to match the
+    // revealed nut sitting on top of it. The run stops there; that nut only
+    // becomes movable once it is itself revealed on some later top.
+    if (stack[i].hidden) break;
     if (stack[i].color === color) len++;
     else break;
   }
