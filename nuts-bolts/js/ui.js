@@ -1,6 +1,7 @@
 import { NutsBoltsGame, getTopRun } from './game.js';
 import { CAP, PALETTE } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { recordNutsBolts } from '../../js/game-stats.js';
 
 const STORAGE_KEY = 'gamehub.nutsbolts.v1';
 const LETTER_MAP = { yellow: 'Y', blue: 'B', orange: 'O', teal: 'T', purple: 'P', pink: 'K', slate: 'S' };
@@ -68,6 +69,7 @@ class NutsBoltsUI {
     this.level = saved.data.level;
     this.settings = saved.data.settings;
     this.game = new NutsBoltsGame(this.level, saved.data.board);
+    this._winRecorded = false;   // one stats record per board (see showWin)
     this.showHelpOnStart = saved.fresh;
 
     this.toastTimer = null;
@@ -237,6 +239,7 @@ class NutsBoltsUI {
         break;
       case 'restart-confirm':
         this.game.restart();
+        this._winRecorded = false;
         this.restartConfirm.hidden = true;
         this.persist();
         this.renderBoard();
@@ -252,6 +255,7 @@ class NutsBoltsUI {
         this.winOverlay.hidden = true;
         this.level += 1;
         this.game = new NutsBoltsGame(this.level, null);
+        this._winRecorded = false;
         this.persist();
         this.renderBoard();
         this.updateTopbar();
@@ -298,6 +302,13 @@ class NutsBoltsUI {
   }
 
   showWin() {
+    // Record the solve exactly once per level instance. `_winRecorded` resets wherever a new
+    // board is started (constructor / restart / next-level), so undoing past the winning move
+    // and re-solving the same board cannot double-count. Never break the game over stats.
+    if (!this._winRecorded) {
+      this._winRecorded = true;
+      try { recordNutsBolts(this.level, this.game.moves); } catch { /* ignore */ }
+    }
     const name = this.profile && this.profile.name;
     const title = `Level ${this.level} complete`;
     const detail = name ? `Nice one, ${esc(name)}! ${this.game.moves} moves.` : `${this.game.moves} moves.`;

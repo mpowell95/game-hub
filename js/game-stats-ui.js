@@ -9,13 +9,25 @@
 // underline together, never hue alone.
 
 import { loadStats } from './game-stats.js';
+import { loadProfile } from './profile-store.js';
+import { isDevProfile } from './challenge/hooks.js';
 
 const TABS = [
   { id: 'connect4', label: 'Connect 4', accent: '#1769d4' },
   { id: 'chinchon', label: 'Chinchón', accent: '#d4a017' },
   { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
   { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
+  // In development: gated exactly like its hub card (see js/hub.js). Without this the
+  // unreleased game would leak to every player through the Stats screen.
+  { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b', devOnly: true },
 ];
+
+/** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
+function visibleTabs() {
+  let dev = false;
+  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
+  return TABS.filter((t) => !t.devOnly || dev);
+}
 const C4_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['expert', 'Expert']];
 const LABEL = Object.fromEntries(TABS.map((t) => [t.id, t.label]));
 
@@ -136,10 +148,26 @@ function recordScreen(id, rec) {
 
 function emptyState(label) { return `<p class="gs-none">No ${esc(label)} games recorded yet.</p>`; }
 
+/** Nuts & Bolts: a solo puzzle, so no wins/losses/win-rate (you cannot lose, only keep going).
+ *  Levels solved, how far you got, and the moves it took are the honest numbers. */
+function nutsBoltsScreen(rec) {
+  const nb = (rec && rec.nb) || {};
+  const solved = nb.solved | 0, moves = nb.moves | 0, best = nb.bestLevel | 0;
+  if (!solved) return emptyState('Nuts & Bolts');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>Levels solved</span></div>
+      <div class="gs-tally"><b>${best}</b><span>Best level</span></div>
+      <div class="gs-tally"><b>${moves}</b><span>Total moves</span></div>
+      <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>Avg moves</span></div>
+    </div>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
+  if (id === 'nutsbolts') return nutsBoltsScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 
@@ -148,7 +176,7 @@ let _host = null;
 let _active = 'connect4';
 
 function tabsHTML() {
-  return TABS.map((t) =>
+  return visibleTabs().map((t) =>
     `<button type="button" class="gs-tab${t.id === _active ? ' is-active' : ''}" data-game="${t.id}" style="--gs-accent:${t.accent}"${t.id === _active ? ' aria-current="true"' : ''}>${esc(t.label)}</button>`
   ).join('');
 }

@@ -17,7 +17,10 @@
 //         total, byDiff,
 //         cc: { closed, minusTen, chinchons },   // seeded ONCE from chinchon-stats (_ccSeeded guard)
 //         _leg, _ccSeeded },
-//       business|parchis: { total, byDiff, _leg } },
+//       business|parchis: { total, byDiff, _leg },
+//       nutsbolts: {
+//         total, byDiff,
+//         nb: { solved, moves, bestLevel } } },   // a solo puzzle: no loss state, no difficulty picker
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -25,7 +28,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -62,6 +65,15 @@ function ensureCc(g) {
   if (!Number.isFinite(g.cc.chinchons)) g.cc.chinchons = 0;
 }
 
+/** Nuts & Bolts: the solo-puzzle counters. A puzzle has no opponent and no loss state, so the
+ *  real story is levels solved, moves spent, and how far you got. */
+function ensureNb(g) {
+  if (!g.nb || typeof g.nb !== 'object') g.nb = { solved: 0, moves: 0, bestLevel: 0 };
+  if (!Number.isFinite(g.nb.solved)) g.nb.solved = 0;
+  if (!Number.isFinite(g.nb.moves)) g.nb.moves = 0;
+  if (!Number.isFinite(g.nb.bestLevel)) g.nb.bestLevel = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -74,6 +86,7 @@ function normalize(raw) {
   }
   ensureGrid(st.games.connect4);
   ensureCc(st.games.chinchon);
+  ensureNb(st.games.nutsbolts);
   return st;
 }
 
@@ -183,5 +196,24 @@ export function recordChinchon(difficulty, won, extras) {
   return st;
 }
 
+/** Nuts & Bolts: record ONE solved level. A solo puzzle has no opponent and no loss state, so a
+ *  solve counts as played+won and `lost` is never touched (the shared readers - family sync and
+ *  admin Player Insights - only read `total`). `byDiff` stays empty on purpose: the game has no
+ *  difficulty picker, its levels just get harder. The tailored `nb` dimension carries the real
+ *  story. Additive; never overwrites. Its own save (gamehub.nutsbolts.v1) is never read here. */
+export function recordNutsBolts(level, moves) {
+  const st = loadStats();
+  const g = st.games.nutsbolts;
+  ensureNb(g);
+  g.total.played += 1;
+  g.total.won += 1;
+  g.nb.solved += 1;
+  g.nb.moves += Math.max(0, moves | 0);
+  g.nb.bestLevel = Math.max(g.nb.bestLevel | 0, level | 0);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
-export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, GAMES, STATS_KEY, DEVICE_KEY };
+export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, GAMES, STATS_KEY, DEVICE_KEY };
