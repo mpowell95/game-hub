@@ -22,10 +22,16 @@
 // under their OWN isolated progress record (each active name gets key 'gh-' + its hash),
 // so testing never touches the recipient's data.
 export const TRIGGER_HASH = '1cabdac0';                     // primary recipient
-export const TRIGGER_HASHES = ['1cabdac0', '39b28c49'];     // all names that unlock (incl. test1)
+export const TESTER_HASH = '39b28c49';                      // the tester persona (test1)
+export const TRIGGER_HASHES = [TRIGGER_HASH, TESTER_HASH];  // all names that unlock the challenge
 
 // Who sees Mission Control (Matt's own profile name, case-insensitive/trimmed).
 export const MATT_HASH = '9439b002';
+
+// Who may see unreleased, in-development games (hub cards marked devOnly): Matt and the
+// tester persona. Deliberately EXCLUDES the recipient, so a half-built game never appears
+// in her challenge. Everyone else never renders the card at all (see js/hub.js).
+export const DEV_HASHES = [MATT_HASH, TESTER_HASH];
 
 // Gate into the Challenge Area: one personal question. The QUESTION text is not a
 // secret (it is shown on screen); only the answer is hashed.
@@ -58,4 +64,4 @@ export const N = 3;
 // recovery (it equals 'gh-' + TRIGGER_HASH), so no plaintext name is ever stored.
 export const PROGRESS_KEY = 'gh-1cabdac0';
 
-export default { TRIGGER_HASH, TRIGGER_HASHES, MATT_HASH, QUESTION, ANSWER_HASH, PIN_HASH, CODES, PIECE_ORDER, N, PROGRESS_KEY };
+export default { TRIGGER_HASH, TESTER_HASH, TRIGGER_HASHES, MATT_HASH, DEV_HASHES, QUESTION, ANSWER_HASH, PIN_HASH, CODES, PIECE_ORDER, N, PROGRESS_KEY };

@@ -26,6 +26,14 @@ export function isAdmin(name) {
   return hash(norm(name)) === S.MATT_HASH;
 }
 
+/** True when this profile may see unreleased, in-development games (Matt or the tester).
+ *  Deliberately EXCLUDES the recipient: her hub only ever shows finished games. Used by
+ *  js/hub.js to gate any GAMES entry flagged `devOnly` (the card is never rendered for
+ *  anyone else, so an unreleased game stays invisible). */
+export function isDevProfile(name) {
+  return (S.DEV_HASHES || []).includes(hash(norm(name)));
+}
+
 export function checkAnswer(input) { return hash(norm(input)) === S.ANSWER_HASH; }
 export function checkPin(input) { return hash(norm(input)) === S.PIN_HASH; }
 
@@ -80,7 +88,7 @@ export { loadChallenge, recordWin, redeemSlot };
 export const N = S.N;
 
 export default {
-  isChallengeActive, isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode,
+  isChallengeActive, isAdmin, isDevProfile, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode,
   cfForcedDifficulty, cfInEasyPhase, qualifyChinchon, qualifyBusiness, qualifyParchis,
   loadChallenge, recordWin, redeemSlot, N, TAUNTS, taunt,
 };

@@ -7,7 +7,7 @@
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
 import { loadProfile } from './profile-store.js';
-import { isChallengeActive, isAdmin, loadChallenge } from './challenge/hooks.js';
+import { isChallengeActive, isAdmin, isDevProfile, loadChallenge } from './challenge/hooks.js';
 import { markUnlockSeen } from './challenge/challenge-store.js';
 import { syncMyStats } from './stats-net.js';
 
@@ -107,6 +107,35 @@ const GAMES = [
             <polygon points="49,71 49,49 60,60" fill="#178a7a"/>
           </svg>`,
   },
+  {
+    id: 'nuts-bolts',
+    title: 'Nuts & Bolts',
+    blurb: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
+    // In development: `devOnly` keeps this card off every hub except Matt's and the
+    // tester's (see DEV_HASHES / isDevProfile). Drop the flag to release it to everyone.
+    devOnly: true,
+    module: '../nuts-bolts/js/ui.js',
+    accent: '#607d8b',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#3f4652"/>
+            <g fill="#9aa7bd">
+              <rect x="26" y="30" width="6" height="70" rx="3"/>
+              <rect x="57" y="30" width="6" height="70" rx="3"/>
+              <rect x="88" y="30" width="6" height="70" rx="3"/>
+            </g>
+            <g stroke="rgba(0,0,0,0.25)" stroke-width="1.5">
+              <polygon points="16,90 22.5,83.5 35.5,83.5 42,90 35.5,96.5 22.5,96.5" fill="#f2b705"/>
+              <polygon points="16,75 22.5,68.5 35.5,68.5 42,75 35.5,81.5 22.5,81.5" fill="#f2b705"/>
+              <polygon points="16,60 22.5,53.5 35.5,53.5 42,60 35.5,66.5 22.5,66.5" fill="#1f5fa8"/>
+              <polygon points="47,90 53.5,83.5 66.5,83.5 73,90 66.5,96.5 53.5,96.5" fill="#1f5fa8"/>
+              <polygon points="47,75 53.5,68.5 66.5,68.5 73,75 66.5,81.5 53.5,81.5" fill="#178a7a"/>
+              <polygon points="78,90 84.5,83.5 97.5,83.5 104,90 97.5,96.5 84.5,96.5" fill="#e0532f"/>
+              <polygon points="78,75 84.5,68.5 97.5,68.5 104,75 97.5,81.5 84.5,81.5" fill="#e0532f"/>
+              <polygon points="78,60 84.5,53.5 97.5,53.5 104,60 97.5,66.5 84.5,66.5" fill="#e0532f"/>
+            </g>
+            <rect x="12" y="100" width="96" height="8" rx="4" fill="#6b7688"/>
+          </svg>`,
+  },
 ];
 
 // Hidden entries appended only when the profile name matches (see render()). The
@@ -163,7 +192,11 @@ class Hub {
     this._chWins = active ? (loadChallenge().wins || {}) : null;   // challenge task markers on the cards
     const admin = !active && !!(prof && isAdmin(prof.name));
     const extra = active ? CHALLENGE_CARD : admin ? ADMIN_CARD : null;   // hidden card, shown apart from the games
-    this.games = GAMES.concat(extra ? [extra] : []);                     // includes `extra` for launch() lookup
+    // In-development games (devOnly) render only for Matt and the tester. Everyone else,
+    // including the challenge recipient, never sees the card at all.
+    const dev = !!(prof && isDevProfile(prof.name));
+    const visible = GAMES.filter((g) => !g.devOnly || dev);
+    this.games = visible.concat(extra ? [extra] : []);                   // includes `extra` for launch() lookup
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -176,7 +209,7 @@ class Hub {
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
-            ${GAMES.map((g) => this.cardHTML(g)).join('')}
+            ${visible.map((g) => this.cardHTML(g)).join('')}
           </section>
           ${extra ? `<section class="hub-extra">${this.cardHTML(extra)}</section>` : ''}
           <section class="hub-game" data-role="game" hidden></section>
@@ -255,7 +288,8 @@ class Hub {
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
         ${badge}
-        ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>' : ''}`;
+        ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>'
+          : g.devOnly ? '<span class="hub-soon-tag">Test</span>' : ''}`;
     const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
