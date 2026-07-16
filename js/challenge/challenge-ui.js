@@ -638,6 +638,7 @@ class ChallengeUI {
     const GN = { connect4: 'Connect 4', chinchon: 'Chinchón', business: 'Monopoly Deal', parchis: 'Parchís' };
     const GAMES = ['connect4', 'chinchon', 'business', 'parchis'];
     const DIFFS = ['easy', 'medium', 'hard', 'expert'];
+    const rate = (w, p) => (p > 0 ? Math.round((w / p) * 100) : 0);
     const emptyGrid = () => ({
       player: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
       computer: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
@@ -650,10 +651,10 @@ class ChallengeUI {
       const rawName = (prof.name || '').trim();
       const key = rawName ? 'n:' + rawName.toLowerCase() : 'd:' + id;   // unnamed -> unique per device
       let grp = groups.get(key);
-      if (!grp) { grp = { name: rawName || 'Unnamed', emoji: prof.emoji || '', updatedAt: 0, devices: 0, games: {} }; groups.set(key, grp); }
+      if (!grp) { grp = { name: rawName || 'Unnamed', updatedAt: 0, devices: 0, games: {} }; groups.set(key, grp); }
       grp.devices += 1;
-      const upd = +rec.updatedAt || 0;   // NOT `| 0` (server timestamps overflow 32 bits); show newest device's name/emoji
-      if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (rawName) grp.name = rawName; if (prof.emoji) grp.emoji = prof.emoji; }
+      const upd = +rec.updatedAt || 0;   // NOT `| 0` (server timestamps overflow 32 bits); show newest device's name
+      if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (rawName) grp.name = rawName; }
       const games = (rec.stats && rec.stats.games) || {};
       for (const g of GAMES) {
         const src = games[g] || {};
@@ -674,28 +675,39 @@ class ChallengeUI {
       }
     }
 
-    const list = [...groups.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    // Overall per-person totals, then sort the busiest people first (empty devices sink to the bottom).
+    const list = [...groups.values()].map((g) => {
+      let P = 0, W = 0, L = 0;
+      for (const k of GAMES) { const t = g.games[k].total; P += t.played; W += t.won; L += t.lost; }
+      g.P = P; g.W = W; g.L = L; return g;
+    }).sort((a, b) => (b.P - a.P) || (b.updatedAt - a.updatedAt));
+
     el.innerHTML = list.map((grp) => {
       const name = esc(grp.name || 'Unnamed');
-      const emoji = esc(grp.emoji || '\u{1F3AE}');
-      const devTag = grp.devices > 1 ? ` <span class="ch-ins-dev">(${grp.devices} devices)</span>` : '';
-      const rows = GAMES.map((g) => {
-        const gr = grp.games[g] || {};
-        const t = gr.total || {};
+      const devTag = grp.devices > 1 ? `<span class="ch-ins-dev">${grp.devices} devices</span>` : '';
+      const head = `<div class="ch-ins-head"><span class="ch-ins-name">${name}</span>${devTag}</div>`;
+      if (!grp.P) return `<div class="ch-ins-player">${head}<p class="ch-ins-none">No games played yet.</p></div>`;
+      const gameRows = GAMES.map((g) => {
+        const gr = grp.games[g], t = gr.total;
         if (!(t.played | 0)) return '';
-        let extra = '';
+        let sub = '';
         if (g === 'connect4' && gr.grid) {
-          const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d] || {}; a.w += c.w | 0; a.l += c.l | 0; return a; }, { w: 0, l: 0 });
+          const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d]; a.w += c.w; a.l += c.l; return a; }, { w: 0, l: 0 });
           const p = sum(gr.grid.player), c = sum(gr.grid.computer);
-          extra = `<span class="ch-ins-sub">first: you ${p.w}-${p.l}, cpu ${c.w}-${c.l}</span>`;
+          sub = `first move: you ${p.w}-${p.l}, computer ${c.w}-${c.l}`;
         } else if (g === 'chinchon' && gr.cc) {
-          extra = `<span class="ch-ins-sub">closed ${gr.cc.closed | 0}, chinch&oacute;n ${gr.cc.chinchons | 0}, -10 x${gr.cc.minusTen | 0}</span>`;
+          sub = `closed ${gr.cc.closed} &middot; chinch&oacute;n ${gr.cc.chinchons} &middot; minus-ten ${gr.cc.minusTen}`;
         }
-        return `<li>${GN[g]}: <b>${t.played | 0}</b> played &middot; ${t.won | 0}W ${t.lost | 0}L${extra}</li>`;
+        return `<div class="ch-ins-g">
+          <span class="ch-ins-g-name">${GN[g]}</span>
+          <span class="ch-ins-g-rec">${t.won}-${t.lost} <em>${rate(t.won, t.played)}%</em></span>
+          ${sub ? `<span class="ch-ins-g-sub">${sub}</span>` : ''}
+        </div>`;
       }).filter(Boolean).join('');
       return `<div class="ch-ins-player">
-        <p class="ch-ins-name">${emoji} ${name}${devTag}</p>
-        ${rows ? `<ul class="ch-list">${rows}</ul>` : '<p class="ch-hint">No games played yet.</p>'}
+        ${head}
+        <p class="ch-ins-summary">${grp.P} game${grp.P === 1 ? '' : 's'} &middot; ${grp.W}W ${grp.L}L &middot; ${rate(grp.W, grp.P)}% win rate</p>
+        <div class="ch-ins-games">${gameRows}</div>
       </div>`;
     }).join('');
   }

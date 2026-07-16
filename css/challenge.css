@@ -344,12 +344,19 @@ body.ch-active .hub-back:hover { background: #232937; }
 .ch-dash-tasks li.is-earned .ch-dash-ic { border-color: var(--ch-gold); color: var(--ch-gold); font-size: 0.6rem; }
 .ch-dash-sub { margin-left: auto; font-size: 0.76rem; font-weight: 700; color: var(--ch-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 /* Player Insights (all devices, from the players/ sync). */
-.ch-ins-player { padding: 10px 0; border-top: 1px solid var(--ch-line); }
+.ch-ins-player { padding: 12px 0; border-top: 1px solid var(--ch-line); }
 .ch-ins-player:first-child { border-top: 0; padding-top: 0; }
-.ch-ins-name { margin: 0 0 4px; font-weight: 800; color: var(--ch-gold); font-size: 0.98rem; }
-.ch-ins-player .ch-list b { color: var(--ch-ink); }
-.ch-ins-sub { display: block; color: var(--ch-muted); font-size: 0.82rem; font-weight: 600; }
-.ch-ins-dev { color: var(--ch-muted); font-size: 0.8rem; font-weight: 600; }
+.ch-ins-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ch-ins-name { font-weight: 800; color: var(--ch-gold); font-size: 1rem; }
+.ch-ins-dev { color: var(--ch-muted); font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
+.ch-ins-summary { margin: 3px 0 9px; color: var(--ch-ink); font-size: 0.85rem; font-weight: 700; }
+.ch-ins-none { margin: 3px 0 0; color: var(--ch-muted); font-size: 0.85rem; font-weight: 600; }
+.ch-ins-games { display: grid; gap: 9px; }
+.ch-ins-g { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; align-items: baseline; }
+.ch-ins-g-name { color: var(--ch-ink); font-weight: 700; font-size: 0.9rem; }
+.ch-ins-g-rec { color: var(--ch-ink); font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; white-space: nowrap; }
+.ch-ins-g-rec em { color: var(--ch-muted); font-style: normal; font-weight: 700; margin-left: 5px; }
+.ch-ins-g-sub { grid-column: 1 / -1; color: var(--ch-muted); font-size: 0.8rem; font-weight: 600; margin-top: 2px; }
 .ch-adm-uid { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .ch-adm-uid .ch-btn-ghost { margin-left: 0; }
 .ch-adm-selfie { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--ch-line); border-radius: 10px; margin-bottom: 10px; background: #0e1117; }
