@@ -30,7 +30,7 @@
 
   // Bump alongside the sw.js cache name on every release so the visible stamp
   // and the cached build always match.
-  const APP_VERSION = 'v25';
+  const APP_VERSION = 'v26';
 
   const LIGHT_BANDS = ['lightblue', 'yellow', 'utility']; // need dark text on band
 
@@ -1325,7 +1325,9 @@
       this._pickStealPlayer('Deal Breaker — steal a full set', moves, (list, opp, back) => {
         const items = list.map(m => {
           const g = opp.properties[m.targetColor];
-          const value = g ? g.cards.reduce((s, c) => s + (c.value || 0), 0) : 0;
+          // Only ONE complete set is stolen, so price up just those cards — an
+          // over-full color's extras stay with the owner (see _stealCompleteSet).
+          const value = g ? g.cards.slice(0, REQ[m.targetColor]).reduce((s, c) => s + (c.value || 0), 0) : 0;
           const rentTop = RENT[m.targetColor] ? RENT[m.targetColor][RENT[m.targetColor].length - 1] : null;
           // Stealing a whole set gives me a complete set of that color — true win
           // only if it's a NEW distinct complete color reaching 3 total.

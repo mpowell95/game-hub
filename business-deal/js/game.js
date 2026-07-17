@@ -520,19 +520,32 @@
     _stealCompleteSet(player, target, color) {
       const g = target.properties[color];
       if (!g || !this.isSetComplete(target, color)) return;
-      delete target.properties[color];
+      // Take exactly ONE complete set — no more. An over-full color (e.g. a 3rd
+      // Utility sitting beside a complete 2-card set) keeps its extras: Deal
+      // Breaker steals the SET, not the leftovers too. The first REQ cards are
+      // the set the UI rings in gold, so take those and leave the remainder.
+      const req = REQ[color];
+      const taken = g.cards.slice(0, req);
+      const left = g.cards.slice(req);
+      const house = g.house, hotel = g.hotel;
+      if (left.length) {
+        // Buildings go with the stolen set, so the leftover keeps none.
+        g.cards = left; g.house = null; g.hotel = null;
+      } else {
+        delete target.properties[color];
+      }
       const dest = this.ensureGroup(player, color);
-      for (const c of g.cards) {
+      for (const c of taken) {
         if (c.type === T.PROPERTY_WILD) c.assignedColor = color;
         dest.cards.push(c);
       }
       // Buildings travel with the set; if the destination slot is taken, the
       // extra building is banked (it can't legally sit without a slot).
-      for (const slot of ['house', 'hotel']) {
-        if (!g[slot]) continue;
-        if (!dest[slot]) dest[slot] = g[slot];
-        else player.bank.push(g[slot]);
-      }
+      [['house', house], ['hotel', hotel]].forEach(([slot, card]) => {
+        if (!card) return;
+        if (!dest[slot]) dest[slot] = card;
+        else player.bank.push(card);
+      });
       this.log(`  ${player.name} DEAL BREAKS ${target.name}'s ${Deck.COLOR_META[color].label} set!`);
     }
 

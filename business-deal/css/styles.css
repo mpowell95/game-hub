@@ -607,6 +607,10 @@ html, body {
 .pay-banner {
   flex: 0 0 auto; background: linear-gradient(180deg, #ff5a52, #d92b25);
   text-align: center; padding: 12px 14px; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.35);
+  /* The payment panel lives in #overlay (fixed, inset:0), so it does NOT inherit
+     #app's safe-area padding — the notch / Dynamic Island was sitting right on
+     "Pay NM to X" and you couldn't see what you owed. Clear it, same as #app. */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
 }
 .pay-banner .main { font-size: 18px; font-weight: 900; }
 .pay-banner .sub { font-size: 12.5px; font-weight: 700; opacity: .95; margin-top: 2px; }
