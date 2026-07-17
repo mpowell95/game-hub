@@ -21,7 +21,10 @@
 //       filler: { total, byDiff },   // classic recordResult (beginner/intermediate/pro)
 //       nutsbolts: {
 //         total, byDiff,
-//         nb: { solved, moves, bestLevel } } },   // a solo puzzle: no loss state, no difficulty picker
+//         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
+//       escoba: {
+//         total, byDiff,
+//         es: { escobas } } },                    // escobas the human made
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -29,7 +32,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'filler'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -75,6 +78,12 @@ function ensureNb(g) {
   if (!Number.isFinite(g.nb.bestLevel)) g.nb.bestLevel = 0;
 }
 
+/** Escoba: the capture-quality counter (escobas the human made). */
+function ensureEs(g) {
+  if (!g.es || typeof g.es !== 'object') g.es = { escobas: 0 };
+  if (!Number.isFinite(g.es.escobas)) g.es.escobas = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -88,6 +97,7 @@ function normalize(raw) {
   ensureGrid(st.games.connect4);
   ensureCc(st.games.chinchon);
   ensureNb(st.games.nutsbolts);
+  ensureEs(st.games.escoba);
   return st;
 }
 
@@ -216,5 +226,18 @@ export function recordNutsBolts(level, moves) {
   return st;
 }
 
+/** Escoba: record a finished match. Maintains total/byDiff (as recordResult) AND the escoba
+ *  counter from this match. `extras` = { escobas }. Additive; never overwrites. */
+export function recordEscoba(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.escoba;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureEs(g);
+  g.es.escobas += (extras && extras.escobas) | 0;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
-export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, GAMES, STATS_KEY, DEVICE_KEY };
+export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba, GAMES, STATS_KEY, DEVICE_KEY };

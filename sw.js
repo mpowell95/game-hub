@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v103';
+const CACHE = 'game-hub-v104';
 
 const ASSETS = [
   './',
@@ -67,6 +67,14 @@ const ASSETS = [
   './filler/js/ui.js',
   './filler/js/game.js',
   './filler/js/ai.js',
+  // Escoba module (card faces come from the shared Anita deck, precached below)
+  './escoba/index.html',
+  './escoba/css/escoba.css',
+  './escoba/js/deck.js',
+  './escoba/js/cards.js',
+  './escoba/js/game.js',
+  './escoba/js/ai.js',
+  './escoba/js/ui.js',
   // Nuts & Bolts
   './nuts-bolts/',
   './nuts-bolts/index.html',

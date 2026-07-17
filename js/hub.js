@@ -108,6 +108,41 @@ const GAMES = [
           </svg>`,
   },
   {
+    id: 'escoba',
+    title: 'Escoba',
+    blurb: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',
+    module: '../escoba/js/ui.js',
+    accent: '#1c7a4f',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#175c3b"/>
+            <g transform="rotate(-16 42 62)">
+              <rect x="22" y="34" width="36" height="55" rx="5" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.5"/>
+              <circle cx="40" cy="61" r="9" fill="#e8b53a" stroke="#a9791b" stroke-width="1.8"/>
+              <circle cx="40" cy="61" r="5.5" fill="none" stroke="#a9791b" stroke-width="1.1"/>
+            </g>
+            <g transform="rotate(2 60 60)">
+              <rect x="43" y="26" width="36" height="55" rx="5" fill="#ffffff" stroke="#c9b485" stroke-width="1.5"/>
+              <circle cx="54" cy="43" r="6.5" fill="#e8b53a" stroke="#a9791b" stroke-width="1.5"/>
+              <circle cx="68" cy="64" r="6.5" fill="#e8b53a" stroke="#a9791b" stroke-width="1.5"/>
+            </g>
+            <g transform="rotate(19 80 60)">
+              <rect x="66" y="32" width="36" height="55" rx="5" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.5"/>
+              <polygon points="79,49 89,49 86.5,57 81.5,57" fill="#c0392b"/>
+              <rect x="82.7" y="57" width="2.6" height="5" fill="#c0392b"/>
+              <rect x="79" y="62" width="10" height="2.6" rx="1.3" fill="#c0392b"/>
+            </g>
+            <circle cx="88" cy="92" r="17" fill="#f2b705" stroke="#a9791b" stroke-width="2"/>
+            <text x="88" y="99" font-size="19" font-weight="900" text-anchor="middle" fill="#7a5502" font-family="system-ui, -apple-system, sans-serif">15</text>
+            <g transform="rotate(-38 30 96)">
+              <rect x="27" y="70" width="5" height="34" rx="2.5" fill="#a9791b"/>
+              <path d="M22 104 L37 104 L41 118 L18 118 Z" fill="#e8b53a" stroke="#a9791b" stroke-width="1.5"/>
+              <line x1="24" y1="107" x2="23" y2="116" stroke="#a9791b" stroke-width="1.4"/>
+              <line x1="29.5" y1="107" x2="29.5" y2="116" stroke="#a9791b" stroke-width="1.4"/>
+              <line x1="35" y1="107" x2="36" y2="116" stroke="#a9791b" stroke-width="1.4"/>
+            </g>
+          </svg>`,
+  },
+  {
     id: 'filler',
     title: 'Filler',
     blurb: 'Flood-fill duel vs. smart AI. Pick colors, grow your corner, capture the majority.',

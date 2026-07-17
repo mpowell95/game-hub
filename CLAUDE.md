@@ -72,6 +72,7 @@ export default { init, destroy };
 | Chinchón | in-hub `module:` | Spanish rummy vs AI. No worker (light heuristic AI). See below. |
 | Business Deal | launch-out `href:` | Full-screen PWA that lives **in this repo** (`business-deal/`), launched like Parchís; `window.*` globals + its own nested service worker, not ESM. A precedent, not the preferred pattern. |
 | Parchís | launch-out `href:` | Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See below. |
+| Escoba | in-hub `module:` | Spanish fishing card game (capture cards summing to 15) vs AI, 2-3 players, Fournier rules. Engine mirrors Chinchón's async agent pattern (`escoba/js/game.js` + `ai.js`, no DOM; `ui.js` owns the DOM). Card faces reuse the shared Anita deck from `chinchon/decks/anita/` (no deck picker, no copied assets). Settings in `escoba-settings`; results recorded via `recordEscoba` in `js/game-stats.js`. |
 
 ---
 

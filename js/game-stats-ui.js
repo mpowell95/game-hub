@@ -18,6 +18,7 @@ const TABS = [
   { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
   { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
   { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
+  { id: 'escoba', label: 'Escoba', accent: '#1c7a4f' },
   { id: 'filler', label: 'Filler', accent: '#c2557f' },
 ];
 
@@ -162,11 +163,23 @@ function nutsBoltsScreen(rec) {
     </div>`;
 }
 
+/** Escoba: the standard record-vs-AI screen plus the escoba counter. */
+function escobaScreen(rec) {
+  const total = (rec && rec.total) || { played: 0 };
+  if (!(total.played | 0)) return emptyState('Escoba');
+  const es = (rec && rec.es) || {};
+  return recordScreen('escoba', rec) + `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${es.escobas | 0}</b><span>Escobas made</span></div>
+    </div>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
+  if (id === 'escoba') return escobaScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 
