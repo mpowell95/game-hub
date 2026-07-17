@@ -161,15 +161,12 @@ class NutsBoltsUI {
     this.onDocPointerUp = this.onDocPointerUp.bind(this);
     this.onDocPointerMove = this.onDocPointerMove.bind(this);
 
-    if (saved.data.board) {
-      const tier = TIER_ORDER.includes(saved.data.board.difficulty) ? saved.data.board.difficulty : this.currentDifficulty;
-      this.currentDifficulty = tier;
-      this.game = new NutsBoltsGame(tier, this.levels[tier], saved.data.board);
-      this.screen = 'game';
-    } else {
-      this.game = null;
-      this.screen = 'menu';
-    }
+    // The difficulty menu is always the entry point. A persisted in-progress
+    // board (if any) is kept aside and only restored when the player taps
+    // the matching tier card (see startTier), not auto-resumed on load.
+    this.game = null;
+    this.savedBoard = saved.data.board || null;
+    this.screen = 'menu';
 
     this.render();
   }
@@ -213,15 +210,20 @@ class NutsBoltsUI {
 
   startTier(tier) {
     // "Start/continue that tier": only one board slot exists in storage (see
-    // the v2 schema), so if it already belongs to this same tier and is
-    // still in memory (the player just backed out to the menu), resume it
-    // rather than discarding progress and generating a fresh level.
-    const resuming = this.game && this.currentDifficulty === tier;
+    // the v2 schema). Resume it if it already belongs to this same tier,
+    // either still in memory (the player just backed out to the menu) or
+    // persisted from a previous session; otherwise generate a fresh level.
+    const resumingInMemory = this.game && this.currentDifficulty === tier;
+    const resumingFromDisk = !resumingInMemory && this.savedBoard && this.savedBoard.difficulty === tier;
     this.currentDifficulty = tier;
-    if (!resuming) {
+    if (resumingFromDisk) {
+      this.game = new NutsBoltsGame(tier, this.levels[tier], this.savedBoard);
+      this._winRecorded = false;
+    } else if (!resumingInMemory) {
       this.game = new NutsBoltsGame(tier, this.levels[tier], null);
       this._winRecorded = false;
     }
+    this.savedBoard = null; // consumed either way; a fresh level replaces it either way
     this.screen = 'game';
     this.persist();
     this.renderGame();
