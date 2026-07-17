@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v107';
+const CACHE = 'game-hub-v108';
 
 const ASSETS = [
   './',
@@ -110,6 +110,16 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
   );
+});
+
+// The hub header's version pill asks the ACTIVE worker which build it runs.
+// Reply over the provided MessageChannel port so the answer reaches the caller
+// even with multiple clients open.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'GET_VERSION') {
+    const port = event.ports && event.ports[0];
+    if (port) port.postMessage({ type: 'VERSION', cache: CACHE });
+  }
 });
 
 self.addEventListener('activate', (event) => {

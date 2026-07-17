@@ -86,6 +86,17 @@ body {
 }
 .hub-statsbtn:hover { background: var(--hub-surface-2); }
 
+/* Version pill: shows the running build; tap = SW update check + reload.
+   Stale state (a newer build is deployed) switches to the accent color. */
+.hub-version {
+  appearance: none; border: 1px solid var(--hub-surface-2); background: var(--hub-surface);
+  color: var(--hub-muted); font: inherit; font-size: 0.75rem; font-weight: 700;
+  padding: 7px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none;
+}
+.hub-version:hover { background: var(--hub-surface-2); }
+.hub-version:disabled { cursor: wait; }
+.hub-version.is-stale { color: var(--hub-accent); border-color: var(--hub-accent); font-weight: 800; }
+
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 
 /* Launcher grid — a 2x2 grid of SQUARE game tiles, so all four games are visible

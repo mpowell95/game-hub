@@ -305,6 +305,7 @@ class Hub {
           <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
           <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
           <div class="hub-top-right">
+            <button type="button" class="hub-version" data-role="version" hidden></button>
             <button type="button" class="hub-statsbtn" data-role="stats" aria-label="Your game stats">Stats</button>
             <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
           </div>
@@ -337,6 +338,7 @@ class Hub {
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
       stats: this.root.querySelector('[data-role="stats"]'),
+      version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
     };
 
@@ -365,7 +367,73 @@ class Hub {
       import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
     });
 
+    this.el.version.addEventListener('click', () => this._forceUpdate());
+    this._initVersionPill();
+
     this.maybePlayUnlock(active);
+  }
+
+  // --- version pill: shows the running build; tap = update check + reload ----
+
+  /** 'game-hub-v108' -> 'v108' (null passes through). */
+  _shortVersion(cache) {
+    const m = /game-hub-(v\d+)/.exec(cache || '');
+    return m ? m[1] : null;
+  }
+
+  /** Ask the ACTIVE service worker which cache version it runs. Null when unknown. */
+  _runningVersion() {
+    return new Promise((resolve) => {
+      try {
+        const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
+        if (!ctrl) { resolve(null); return; }
+        const ch = new MessageChannel();
+        const t = setTimeout(() => resolve(null), 1500);
+        ch.port1.onmessage = (e) => { clearTimeout(t); resolve(this._shortVersion(e.data && e.data.cache)); };
+        ctrl.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
+      } catch { resolve(null); }
+    });
+  }
+
+  /** Read the deployed sw.js from the network and parse its version. Null offline. */
+  async _latestVersion() {
+    try {
+      const res = await fetch('sw.js', { cache: 'no-store' });
+      if (!res.ok) return null;
+      return this._shortVersion(await res.text());
+    } catch { return null; }
+  }
+
+  /** Fill the pill: running version, plus "-> vN" styling when a newer build is deployed. */
+  async _initVersionPill() {
+    try {
+      const el = this.el.version;
+      if (!el) return;
+      const [running, latest] = await Promise.all([this._runningVersion(), this._latestVersion()]);
+      const cur = running || latest;
+      if (!cur) return;   // no service worker and offline: nothing truthful to show
+      el.hidden = false;
+      if (running && latest && latest !== running) {
+        el.textContent = `${running} → ${latest}`;
+        el.classList.add('is-stale');
+        el.setAttribute('aria-label', `Update available: ${latest}. Tap to update.`);
+      } else {
+        el.textContent = cur;
+        el.setAttribute('aria-label', `Version ${cur}. Tap to check for updates.`);
+      }
+    } catch { /* never break the hub */ }
+  }
+
+  /** Refresh the service worker registration, then hard-reload the page. */
+  async _forceUpdate() {
+    const el = this.el.version;
+    try {
+      el.disabled = true;
+      el.textContent = '…';
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();   // fetches the new sw.js; skipWaiting activates it
+    } catch { /* still reload: network-first serves fresh files regardless */ }
+    location.reload();
   }
 
   /** On first activation for the challenge profile, play the unlock announcement once. */
