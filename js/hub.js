@@ -307,6 +307,7 @@ class Hub {
           <div class="hub-top-right">
             <button type="button" class="hub-version" data-role="version" hidden></button>
             <button type="button" class="hub-statsbtn" data-role="stats" aria-label="Your game stats">Stats</button>
+            <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboard">Leaderboard</button>
             <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
           </div>
         </header>
@@ -338,6 +339,7 @@ class Hub {
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
       stats: this.root.querySelector('[data-role="stats"]'),
+      leaderboard: this.root.querySelector('[data-role="leaderboard"]'),
       version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
     };
@@ -365,6 +367,10 @@ class Hub {
 
     this.el.stats.addEventListener('click', () => {
       import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
+    });
+
+    this.el.leaderboard.addEventListener('click', () => {
+      import('./leaderboard-ui.js').then((m) => m.openLeaderboard()).catch(() => {});
     });
 
     this.el.version.addEventListener('click', () => this._forceUpdate());

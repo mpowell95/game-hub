@@ -17,6 +17,7 @@ import {
 import { isAdmin, progressKeyFor, checkAnswer, checkPin, codeFor, slotForCode, TAUNTS } from './hooks.js';
 import * as net from './challenge-net.js';
 import { watchPlayers } from '../stats-net.js';
+import { aggregatePlayers } from '../players-agg.js';
 
 const WIN_SLOTS = ['connect4', 'chinchon', 'business', 'parchis'];
 const PIECE_TOTAL = 5;
@@ -633,70 +634,37 @@ class ChallengeUI {
   renderPlayers(all) {
     const el = this.root && this.root.querySelector('[data-role="adm-players"]');
     if (!el) return;
-    const ids = Object.keys(all || {});
-    if (!ids.length) { el.innerHTML = `<p class="ch-hint">No players yet. A device appears here after it opens the hub online.</p>`; return; }
-    const GN = { connect4: 'Connect 4', chinchon: 'Chinchón', business: 'Monopoly Deal', parchis: 'Parchís' };
-    const GAMES = ['connect4', 'chinchon', 'business', 'parchis'];
+    if (!all || !Object.keys(all).length) { el.innerHTML = `<p class="ch-hint">No players yet. A device appears here after it opens the hub online.</p>`; return; }
+    const GN = { connect4: 'Connect 4', chinchon: 'Chinchón', business: 'Monopoly Deal', parchis: 'Parchís', escoba: 'Escoba', filler: 'Filler', mancala: 'Mancala', nutsbolts: 'Nuts & Bolts' };
+    const ORDER = ['connect4', 'chinchon', 'business', 'parchis', 'escoba', 'filler', 'mancala', 'nutsbolts'];
     const DIFFS = ['easy', 'medium', 'hard', 'expert'];
     const rate = (w, p) => (p > 0 ? Math.round((w / p) * 100) : 0);
-    const emptyGrid = () => ({
-      player: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
-      computer: { easy: { w: 0, l: 0 }, medium: { w: 0, l: 0 }, hard: { w: 0, l: 0 }, expert: { w: 0, l: 0 } },
-    });
 
-    const groups = new Map();
-    for (const id of ids) {
-      const rec = all[id] || {};
-      const prof = rec.profile || {};
-      const rawName = (prof.name || '').trim();
-      const key = rawName ? 'n:' + rawName.toLowerCase() : 'd:' + id;   // unnamed -> unique per device
-      let grp = groups.get(key);
-      if (!grp) { grp = { name: rawName || 'Unnamed', updatedAt: 0, devices: 0, games: {} }; groups.set(key, grp); }
-      grp.devices += 1;
-      const upd = +rec.updatedAt || 0;   // NOT `| 0` (server timestamps overflow 32 bits); show newest device's name
-      if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (rawName) grp.name = rawName; }
-      const games = (rec.stats && rec.stats.games) || {};
-      for (const g of GAMES) {
-        const src = games[g] || {};
-        const dst = grp.games[g] || (grp.games[g] = { total: { played: 0, won: 0, lost: 0 }, grid: null, cc: null });
-        const t = src.total || {};
-        dst.total.played += t.played | 0; dst.total.won += t.won | 0; dst.total.lost += t.lost | 0;
-        if (g === 'connect4' && src.grid) {
-          if (!dst.grid) dst.grid = emptyGrid();
-          for (const side of ['player', 'computer']) for (const d of DIFFS) {
-            const c = (src.grid[side] && src.grid[side][d]) || {};
-            dst.grid[side][d].w += c.w | 0; dst.grid[side][d].l += c.l | 0;
-          }
-        }
-        if (g === 'chinchon' && src.cc) {
-          if (!dst.cc) dst.cc = { closed: 0, minusTen: 0, chinchons: 0 };
-          dst.cc.closed += src.cc.closed | 0; dst.cc.minusTen += src.cc.minusTen | 0; dst.cc.chinchons += src.cc.chinchons | 0;
-        }
-      }
-    }
-
-    // Overall per-person totals, then sort the busiest people first (empty devices sink to the bottom).
-    const list = [...groups.values()].map((g) => {
-      let P = 0, W = 0, L = 0;
-      for (const k of GAMES) { const t = g.games[k].total; P += t.played; W += t.won; L += t.lost; }
-      g.P = P; g.W = W; g.L = L; return g;
-    }).sort((a, b) => (b.P - a.P) || (b.updatedAt - a.updatedAt));
+    // Shared aggregator: ONE row per person by player code (then name, then device), all 8 games.
+    const list = aggregatePlayers(all).sort((a, b) => (b.totalPlays - a.totalPlays) || (b.updatedAt - a.updatedAt));
 
     el.innerHTML = list.map((grp) => {
-      const name = esc(grp.name || 'Unnamed');
-      const devTag = grp.devices > 1 ? `<span class="ch-ins-dev">${grp.devices} devices</span>` : '';
-      const head = `<div class="ch-ins-head"><span class="ch-ins-name">${name}</span>${devTag}</div>`;
-      if (!grp.P) return `<div class="ch-ins-player">${head}<p class="ch-ins-none">No games played yet.</p></div>`;
-      const gameRows = GAMES.map((g) => {
+      const name = esc(grp.name || (grp.playerId ? 'Player ' + grp.playerId : 'Unnamed'));
+      const tag = grp.devices > 1 ? `<span class="ch-ins-dev">${grp.devices} devices</span>`
+        : grp.playerId ? `<span class="ch-ins-dev">code ${esc(grp.playerId)}</span>` : '';
+      const head = `<div class="ch-ins-head"><span class="ch-ins-name">${name}</span>${tag}</div>`;
+      if (!grp.totalPlays) return `<div class="ch-ins-player">${head}<p class="ch-ins-none">No games played yet.</p></div>`;
+      const gameRows = ORDER.map((g) => {
         const gr = grp.games[g], t = gr.total;
         if (!(t.played | 0)) return '';
+        if (g === 'nutsbolts') {   // solo puzzle: no W/L, show solved + best level
+          const nb = gr.nb || { solved: t.played | 0, bestLevel: 0 };
+          return `<div class="ch-ins-g"><span class="ch-ins-g-name">${GN[g]}</span><span class="ch-ins-g-rec">${nb.solved} solved</span><span class="ch-ins-g-sub">best level ${nb.bestLevel | 0}</span></div>`;
+        }
         let sub = '';
         if (g === 'connect4' && gr.grid) {
-          const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d]; a.w += c.w; a.l += c.l; return a; }, { w: 0, l: 0 });
+          const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d] || {}; a.w += c.w | 0; a.l += c.l | 0; return a; }, { w: 0, l: 0 });
           const p = sum(gr.grid.player), c = sum(gr.grid.computer);
           sub = `first move: you ${p.w}-${p.l}, computer ${c.w}-${c.l}`;
         } else if (g === 'chinchon' && gr.cc) {
           sub = `closed ${gr.cc.closed} &middot; chinch&oacute;n ${gr.cc.chinchons} &middot; minus-ten ${gr.cc.minusTen}`;
+        } else if (g === 'escoba' && gr.es) {
+          sub = `escobas ${gr.es.escobas}`;
         }
         return `<div class="ch-ins-g">
           <span class="ch-ins-g-name">${GN[g]}</span>
@@ -704,9 +672,13 @@ class ChallengeUI {
           ${sub ? `<span class="ch-ins-g-sub">${sub}</span>` : ''}
         </div>`;
       }).filter(Boolean).join('');
+      const c = grp.comp;
+      const summary = c.played > 0
+        ? `${c.played} game${c.played === 1 ? '' : 's'} &middot; ${c.won}W ${c.lost}L &middot; ${rate(c.won, c.played)}% win rate${grp.solo.solved > 0 ? ` &middot; ${grp.solo.solved} solved` : ''}`
+        : `${grp.solo.solved} Nuts &amp; Bolts solved &middot; best level ${grp.solo.bestLevel}`;
       return `<div class="ch-ins-player">
         ${head}
-        <p class="ch-ins-summary">${grp.P} game${grp.P === 1 ? '' : 's'} &middot; ${grp.W}W ${grp.L}L &middot; ${rate(grp.W, grp.P)}% win rate</p>
+        <p class="ch-ins-summary">${summary}</p>
         <div class="ch-ins-games">${gameRows}</div>
       </div>`;
     }).join('');

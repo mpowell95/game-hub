@@ -8,7 +8,7 @@
 // from the hub header. Colorblind-safe: the active tab is marked by weight + ink + an accent
 // underline together, never hue alone.
 
-import { loadStats } from './game-stats.js';
+import { loadStats, deviceId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 
@@ -187,11 +187,37 @@ function screenFor(id, st) {
 // --- overlay shell ----------------------------------------------------------
 let _host = null;
 let _active = 'connect4';
+let _st = null;               // the stats to render: local first, then combined-across-devices when online
+let _combinedDevices = 1;
 
 function tabsHTML() {
   return visibleTabs().map((t) =>
     `<button type="button" class="gs-tab${t.id === _active ? ' is-active' : ''}" data-game="${t.id}" style="--gs-accent:${t.accent}"${t.id === _active ? ' aria-current="true"' : ''}>${esc(t.label)}</button>`
   ).join('');
+}
+
+function rerender() {
+  if (!_host) return;
+  const tabsEl = _host.querySelector('[data-role="gs-tabs"]');
+  const bodyEl = _host.querySelector('[data-role="gs-body"]');
+  const foot = _host.querySelector('[data-role="gs-foot"]');
+  if (tabsEl) tabsEl.innerHTML = tabsHTML();
+  if (bodyEl) bodyEl.innerHTML = screenFor(_active, _st || { games: {} });
+  if (foot) foot.textContent = _combinedDevices > 1
+    ? `Combined across your ${_combinedDevices} devices. Counts every game you finish.`
+    : 'Saved on this device. Counts every game you finish.';
+}
+
+/** Fetch every device record and re-render from THIS player's combined (code-aggregated) stats.
+ *  Best-effort: offline / unconfigured leaves the local view in place. */
+async function refreshCombined() {
+  try {
+    const [net, agg] = await Promise.all([import('./stats-net.js'), import('./players-agg.js')]);
+    const all = await net.readPlayersOnce();
+    if (!_host) return;
+    const me = agg.aggregateForViewer(all, loadProfile() || {}, deviceId(), loadStats());
+    if (me && me.games) { _st = { games: me.games }; _combinedDevices = me.devices || 1; rerender(); }
+  } catch { /* stay local */ }
 }
 
 function onKey(e) { if (e.key === 'Escape') closeStats(); }
@@ -201,11 +227,7 @@ function onClick(e) {
   const tab = e.target.closest('.gs-tab');
   if (tab && tab.dataset.game && tab.dataset.game !== _active) {
     _active = tab.dataset.game;
-    const st = loadStats();
-    const tabsEl = _host && _host.querySelector('[data-role="gs-tabs"]');
-    const bodyEl = _host && _host.querySelector('[data-role="gs-body"]');
-    if (tabsEl) tabsEl.innerHTML = tabsHTML();
-    if (bodyEl) bodyEl.innerHTML = screenFor(_active, st);
+    rerender();
   }
 }
 
@@ -215,7 +237,8 @@ export function openStatsOverlay() {
   ensureCss();
   closeStats();
   _active = 'connect4';
-  const st = loadStats();
+  _st = loadStats();
+  _combinedDevices = 1;
   const host = document.createElement('div');
   host.className = 'gs-overlay';
   host.setAttribute('role', 'dialog');
@@ -229,14 +252,15 @@ export function openStatsOverlay() {
         <button type="button" class="gs-x" data-role="gs-close" aria-label="Close">&times;</button>
       </header>
       <nav class="gs-tabs" data-role="gs-tabs" aria-label="Choose a game">${tabsHTML()}</nav>
-      <div class="gs-body" data-role="gs-body">${screenFor(_active, st)}</div>
-      <p class="gs-foot">Saved on this device. Counts every game you finish.</p>
+      <div class="gs-body" data-role="gs-body">${screenFor(_active, _st)}</div>
+      <p class="gs-foot" data-role="gs-foot">Saved on this device. Counts every game you finish.</p>
     </div>`;
   host.addEventListener('click', onClick);
   document.body.appendChild(host);
   _host = host;
   document.addEventListener('keydown', onKey);
   requestAnimationFrame(() => host.classList.add('is-in'));
+  refreshCombined();
 }
 
 function ensureCss() {
