@@ -215,8 +215,6 @@
 }
 .fl-flag {
   position: absolute;
-  top: -5px;
-  left: -5px;
   z-index: 2;
   width: 18px;
   height: 18px;
@@ -228,7 +226,8 @@
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
-.fl-tile:last-child .fl-flag { top: auto; left: auto; bottom: -5px; right: -5px; }
+.fl-flag-1 { bottom: -5px; left: -5px; }   /* human corner: bottom-left */
+.fl-flag-2 { top: -5px; right: -5px; }     /* computer corner: top-right */
 
 @media (prefers-reduced-motion: no-preference) {
   .fl-tile.is-pop { animation: fl-pop 0.26s ease-out both; }

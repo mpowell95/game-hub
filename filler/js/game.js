@@ -4,7 +4,7 @@
 // is always one connected block of a single color (their "current color").
 //
 // Rules (classic Filler):
-//   - Player 1 starts on the top-left tile, Player 2 on the bottom-right tile.
+//   - Player 1 starts on the bottom-left tile, Player 2 on the top-right tile.
 //   - On a turn you pick any color except your own current color and the
 //     opponent's current color (4 options per turn).
 //   - Your whole territory becomes the picked color, and every neutral tile of
@@ -26,8 +26,8 @@ export const P2 = 2;
 const DRY_LIMIT = 24;
 
 export const idx = (c, r) => r * COLS + c;
-export const P1_START = idx(0, 0);
-export const P2_START = idx(COLS - 1, ROWS - 1);
+export const P1_START = idx(0, ROWS - 1);   // bottom-left: the human
+export const P2_START = idx(COLS - 1, 0);   // top-right: the computer
 
 const NEIGHBORS = (() => {
   const out = [];
@@ -61,7 +61,8 @@ export function generateColors(rng = Math.random) {
     }
   }
   if (colors[P1_START] === colors[P2_START]) {
-    const banned = [colors[P2_START], colors[idx(1, 0)], colors[idx(0, 1)]];
+    // Re-pick the human corner, avoiding its own neighbors (right + above).
+    const banned = [colors[P2_START], colors[idx(1, ROWS - 1)], colors[idx(0, ROWS - 2)]];
     const options = [];
     for (let k = 0; k < COLOR_COUNT; k++) if (banned.indexOf(k) < 0) options.push(k);
     colors[P1_START] = options[Math.floor(rng() * options.length)];

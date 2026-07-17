@@ -177,8 +177,8 @@ const GAMES = [
               <rect x="73" y="95" width="18" height="18" rx="4" fill="#E0532F"/>
               <rect x="95" y="95" width="18" height="18" rx="4" fill="#1F5FA8"/>
             </g>
-            <circle cx="16" cy="16" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
-            <circle cx="104" cy="104" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+            <circle cx="16" cy="104" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+            <circle cx="104" cy="16" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
           </svg>`,
   },
   {

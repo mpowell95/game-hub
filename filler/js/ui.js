@@ -219,8 +219,8 @@ class FillerUI {
           <div class="fl-board" role="img" aria-label="Filler board" data-role="board">
             ${Array.from({ length: TILES }, (_, i) => `
               <span class="fl-tile" data-i="${i}" data-color="${s.colors[i]}">${
-                i === P1_START ? `<span class="fl-flag">${esc(this.humanEmoji)}</span>`
-                : i === P2_START ? `<span class="fl-flag">${esc(this.oppEmoji)}</span>` : ''
+                i === P1_START ? `<span class="fl-flag fl-flag-1">${esc(this.humanEmoji)}</span>`
+                : i === P2_START ? `<span class="fl-flag fl-flag-2">${esc(this.oppEmoji)}</span>` : ''
               }</span>`).join('')}
           </div>
 
@@ -377,7 +377,7 @@ class FillerUI {
         </section>
         <section>
           <h4>Setup</h4>
-          <p>You start from the top-left tile. ${esc(this.oppName)} starts from the bottom-right tile. You move first.</p>
+          <p>You start from the bottom-left tile. ${esc(this.oppName)} starts from the top-right tile. You move first.</p>
         </section>
         <section>
           <h4>Your turn</h4>
