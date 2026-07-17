@@ -108,6 +108,45 @@ const GAMES = [
           </svg>`,
   },
   {
+    id: 'filler',
+    title: 'Filler',
+    blurb: 'Flood-fill duel vs. smart AI. Pick colors, grow your corner, capture the majority.',
+    module: '../filler/js/ui.js',
+    accent: '#c2557f',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#202a3c"/>
+            <g>
+              <rect x="7" y="7" width="18" height="18" rx="4" fill="#F2B705"/>
+              <rect x="29" y="7" width="18" height="18" rx="4" fill="#E0532F"/>
+              <rect x="51" y="7" width="18" height="18" rx="4" fill="#8155BA"/>
+              <rect x="73" y="7" width="18" height="18" rx="4" fill="#1F5FA8"/>
+              <rect x="95" y="7" width="18" height="18" rx="4" fill="#178A7A"/>
+              <rect x="7" y="29" width="18" height="18" rx="4" fill="#178A7A"/>
+              <rect x="29" y="29" width="18" height="18" rx="4" fill="#D06E9F"/>
+              <rect x="51" y="29" width="18" height="18" rx="4" fill="#F2B705"/>
+              <rect x="73" y="29" width="18" height="18" rx="4" fill="#E0532F"/>
+              <rect x="95" y="29" width="18" height="18" rx="4" fill="#1F5FA8"/>
+              <rect x="7" y="51" width="18" height="18" rx="4" fill="#1F5FA8"/>
+              <rect x="29" y="51" width="18" height="18" rx="4" fill="#F2B705"/>
+              <rect x="51" y="51" width="18" height="18" rx="4" fill="#178A7A"/>
+              <rect x="73" y="51" width="18" height="18" rx="4" fill="#D06E9F"/>
+              <rect x="95" y="51" width="18" height="18" rx="4" fill="#8155BA"/>
+              <rect x="7" y="73" width="18" height="18" rx="4" fill="#8155BA"/>
+              <rect x="29" y="73" width="18" height="18" rx="4" fill="#E0532F"/>
+              <rect x="51" y="73" width="18" height="18" rx="4" fill="#1F5FA8"/>
+              <rect x="73" y="73" width="18" height="18" rx="4" fill="#F2B705"/>
+              <rect x="95" y="73" width="18" height="18" rx="4" fill="#D06E9F"/>
+              <rect x="7" y="95" width="18" height="18" rx="4" fill="#F2B705"/>
+              <rect x="29" y="95" width="18" height="18" rx="4" fill="#D06E9F"/>
+              <rect x="51" y="95" width="18" height="18" rx="4" fill="#178A7A"/>
+              <rect x="73" y="95" width="18" height="18" rx="4" fill="#E0532F"/>
+              <rect x="95" y="95" width="18" height="18" rx="4" fill="#1F5FA8"/>
+            </g>
+            <circle cx="16" cy="16" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+            <circle cx="104" cy="104" r="5" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+          </svg>`,
+  },
+  {
     id: 'nuts-bolts',
     title: 'Nuts & Bolts',
     blurb: 'Colour-sort puzzle. Stack matching nuts onto bolts.',

@@ -1,0 +1,358 @@
+/* filler.css - Filler module. All rules scoped under .filler; fl- prefix.
+   Colorblind-safe: each of the six colors always carries its own shape glyph
+   (masked ::after) on tiles, color buttons, and swatches. Glyph ink is picked
+   per color for contrast (dark ink on light colors, light ink on dark ones). */
+
+.filler {
+  --fl-c0: #F2B705;   /* yellow    - circle   */
+  --fl-c1: #1F5FA8;   /* blue      - triangle */
+  --fl-c2: #E0532F;   /* vermilion - square   */
+  --fl-c3: #178A7A;   /* teal      - diamond  */
+  --fl-c4: #8155BA;   /* purple    - star     */
+  --fl-c5: #D06E9F;   /* pink      - cross    */
+  --fl-ink: #16243a;
+  --fl-muted: #5b6b82;
+  --fl-surface: #ffffff;
+  --fl-edge: #e3e9f2;
+  --fl-well: #202a3c;
+  --fl-accent: #1769d4;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--fl-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fl-shell {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 14px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- color + glyph system --------------------------------------------------- */
+
+.filler [data-color="0"] { background-color: var(--fl-c0); --fl-glyph-ink: rgba(0, 0, 0, 0.32); }
+.filler [data-color="1"] { background-color: var(--fl-c1); --fl-glyph-ink: rgba(255, 255, 255, 0.5); }
+.filler [data-color="2"] { background-color: var(--fl-c2); --fl-glyph-ink: rgba(255, 255, 255, 0.5); }
+.filler [data-color="3"] { background-color: var(--fl-c3); --fl-glyph-ink: rgba(255, 255, 255, 0.5); }
+.filler [data-color="4"] { background-color: var(--fl-c4); --fl-glyph-ink: rgba(255, 255, 255, 0.5); }
+.filler [data-color="5"] { background-color: var(--fl-c5); --fl-glyph-ink: rgba(0, 0, 0, 0.3); }
+
+.fl-tile::after, .fl-cbtn::after, .fl-swatch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--fl-glyph-ink, rgba(0, 0, 0, 0.3));
+  -webkit-mask: var(--fl-glyph) center / 48% 48% no-repeat;
+  mask: var(--fl-glyph) center / 48% 48% no-repeat;
+  pointer-events: none;
+}
+
+.filler [data-color="0"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3C/svg%3E"); }
+.filler [data-color="1"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3.5 21.5 20h-19z'/%3E%3C/svg%3E"); }
+.filler [data-color="2"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='5' width='14' height='14' rx='2'/%3E%3C/svg%3E"); }
+.filler [data-color="3"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.5 21.5 12 12 21.5 2.5 12z'/%3E%3C/svg%3E"); }
+.filler [data-color="4"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.6l2.5 6.3 6.8.4-5.3 4.4 1.8 6.6-5.8-3.8-5.8 3.8 1.8-6.6-5.3-4.4 6.8-.4z'/%3E%3C/svg%3E"); }
+.filler [data-color="5"] { --fl-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.2 3.6h5.6v5.6h5.6v5.6h-5.6v5.6H9.2v-5.6H3.6V9.2h5.6z'/%3E%3C/svg%3E"); }
+
+.fl-swatch {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  vertical-align: middle;
+  flex: 0 0 auto;
+}
+
+/* --- setup ------------------------------------------------------------------ */
+
+.fl-setup { align-items: center; text-align: center; padding-top: 26px; gap: 14px; }
+.fl-logo { display: flex; gap: 6px; }
+.fl-logo-tile { width: 26px; height: 26px; border-radius: 8px; box-shadow: 0 3px 8px rgba(20, 40, 80, 0.18); }
+.fl-title { margin: 0; font-size: 1.9rem; font-weight: 900; letter-spacing: -0.02em; }
+.fl-sub { margin: -8px 0 0; color: var(--fl-muted); font-weight: 600; font-size: 0.92rem; }
+
+.fl-vscard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--fl-surface);
+  border: 1px solid var(--fl-edge);
+  border-radius: 16px;
+  padding: 14px 12px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.fl-vsside { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; flex: 1; }
+.fl-vsemoji { font-size: 1.9rem; line-height: 1.15; }
+.fl-vsname { font-weight: 800; font-size: 0.95rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-vslabel { color: var(--fl-muted); font-weight: 800; font-size: 0.8rem; text-transform: uppercase; }
+
+.fl-field { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.fl-fieldlabel { font-size: 0.75rem; font-weight: 800; color: var(--fl-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; }
+.fl-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: var(--fl-surface);
+  border: 1px solid var(--fl-edge);
+  border-radius: 14px;
+  padding: 4px;
+}
+.fl-segbtn {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--fl-muted);
+  padding: 10px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.fl-segbtn.is-active { background: var(--fl-accent); color: #fff; font-weight: 800; box-shadow: 0 3px 10px rgba(23, 105, 212, 0.35); }
+
+.fl-primary {
+  appearance: none;
+  border: 0;
+  width: 100%;
+  background: var(--fl-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  padding: 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(23, 105, 212, 0.35);
+}
+.fl-primary:active { transform: translateY(1px); }
+
+.fl-ghost {
+  appearance: none;
+  border: 1px solid var(--fl-edge);
+  background: var(--fl-surface);
+  color: var(--fl-ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.fl-ghost:hover { background: #f1f5fb; }
+.fl-ghost.fl-small { font-size: 0.82rem; padding: 8px 12px; }
+
+/* --- HUD ---------------------------------------------------------------------- */
+
+.fl-hud { display: flex; gap: 8px; }
+.fl-player {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--fl-surface);
+  border: 1px solid var(--fl-edge);
+  border-radius: 14px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+  transition: box-shadow 0.2s ease;
+}
+.fl-p2 { justify-content: flex-end; text-align: right; }
+.fl-player.is-turn { box-shadow: 0 0 0 2px var(--fl-accent), 0 4px 16px rgba(20, 40, 80, 0.1); }
+.fl-pemoji { font-size: 1.5rem; line-height: 1; }
+.fl-pmeta { display: flex; flex-direction: column; min-width: 0; }
+.fl-pname { font-weight: 800; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-pcount { font-size: 0.75rem; color: var(--fl-muted); font-weight: 600; }
+.fl-pcount b { font-size: 0.9rem; color: var(--fl-ink); font-variant-numeric: tabular-nums; }
+.fl-hudswatch { width: 22px; height: 22px; border-radius: 7px; }
+
+/* --- progress bar ------------------------------------------------------------- */
+
+.fl-progress {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: #dde4ef;
+  overflow: hidden;
+}
+.fl-prog-1, .fl-prog-2 { position: absolute; top: 0; bottom: 0; transition: width 0.35s ease, background-color 0.35s ease; }
+.fl-prog-1 { left: 0; }
+.fl-prog-2 { right: 0; }
+.fl-prog-mid { position: absolute; top: -1px; bottom: -1px; left: 50%; width: 2px; margin-left: -1px; background: rgba(22, 36, 58, 0.55); }
+
+.fl-status {
+  margin: 0;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--fl-muted);
+  min-height: 1.2em;
+}
+
+/* --- board ---------------------------------------------------------------------- */
+
+.fl-board {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  background: var(--fl-well);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.35), 0 6px 20px rgba(20, 40, 80, 0.12);
+}
+.fl-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  transition: background-color 0.22s ease;
+}
+.fl-flag {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.fl-tile:last-child .fl-flag { top: auto; left: auto; bottom: -5px; right: -5px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .fl-tile.is-pop { animation: fl-pop 0.26s ease-out both; }
+  @keyframes fl-pop {
+    0% { transform: scale(0.6); }
+    70% { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+}
+
+/* --- color buttons --------------------------------------------------------------- */
+
+.fl-colors { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; padding: 2px; }
+.fl-cbtn {
+  position: relative;
+  appearance: none;
+  border: 0;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 10px rgba(20, 40, 80, 0.22);
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+.fl-cbtn:not(:disabled):active { transform: scale(0.94); }
+.fl-cbtn.is-held { opacity: 0.35; transform: scale(0.88); box-shadow: none; cursor: default; }
+.fl-cbtn:disabled:not(.is-held) { cursor: default; }
+.fl-hold {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.fl-bar { display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
+
+/* --- overlays (end card + how to play) -------------------------------------------- */
+
+.fl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.fl-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, 0.55); }
+.fl-card {
+  position: relative;
+  width: 100%;
+  max-width: 330px;
+  background: var(--fl-surface);
+  border-radius: 18px;
+  padding: 22px 20px;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(9, 24, 48, 0.35);
+}
+.fl-card-emoji { font-size: 2.4rem; line-height: 1.2; display: block; }
+.fl-card-title { margin: 6px 0 0; font-size: 1.35rem; font-weight: 900; letter-spacing: -0.01em; }
+.fl-card-score {
+  margin: 10px 0 16px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  color: var(--fl-muted);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.fl-card-score b { color: var(--fl-ink); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.fl-card-dash { color: var(--fl-muted); }
+.fl-card-actions { display: grid; gap: 8px; }
+
+.fl-help {
+  max-width: 420px;
+  max-height: min(82vh, 640px);
+  overflow-y: auto;
+  text-align: left;
+  -webkit-overflow-scrolling: touch;
+}
+.fl-help section { margin-top: 12px; }
+.fl-help h4 {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fl-accent);
+}
+.fl-help p, .fl-help li { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--fl-ink); }
+.fl-help ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.fl-x {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  appearance: none;
+  border: 1px solid var(--fl-edge);
+  background: var(--fl-surface);
+  color: var(--fl-ink);
+  font-size: 1.3rem;
+  line-height: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.fl-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.fl-legend li { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; }
+
+/* Wider screens: cap the board so tiles stay finger-sized, not enormous. */
+@media (min-width: 700px) {
+  .fl-shell { max-width: 460px; }
+}
