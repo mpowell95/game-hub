@@ -1,0 +1,563 @@
+/* mancala.css - scoped under .mancala (hub rule: no global selectors).
+   Look modeled on the reference: cartoon wood board, thick ink outlines,
+   blue side (you, bottom) vs vermilion side (opponent, top), cream stones.
+   The shell background tints toward the color of whoever is to move; the
+   score bar's turn marker and the status line carry the same information,
+   so hue is never the only signal. */
+
+.mancala {
+  --mc-ink: #241609;
+  --mc-wood: #f5b963;
+  --mc-wood-hi: #fbca7e;
+  --mc-wood-lo: #e6a44f;
+  --mc-p1: #29a8dd;          /* you: blue */
+  --mc-p1-deep: #1780ad;
+  --mc-p2: #ef5544;          /* opponent: vermilion */
+  --mc-p2-deep: #c23a2c;
+  --mc-stonefill: #faf0d8;
+  --mc-count: #a06a1f;
+  --mc-card: #ffffff;
+  --mc-dark: #453c44;
+  --mc-accent: #8a5fc9;
+
+  --mc-bg-a: #e9b394;
+  --mc-bg-b: #e2a17f;
+  display: block;
+  border-radius: 18px;
+  padding: 14px 10px 22px;
+  background: linear-gradient(180deg, var(--mc-bg-a), var(--mc-bg-b));
+  transition: background 600ms ease;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--mc-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.mancala[data-turn='p1'] { --mc-bg-a: #a7cbe4; --mc-bg-b: #8fb9d8; }
+.mancala[data-turn='p2'] { --mc-bg-a: #e9b394; --mc-bg-b: #e2a17f; }
+
+.mancala .mc-shell {
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- setup ------------------------------------------------------------- */
+
+.mancala .mc-setup {
+  max-width: 360px;
+  padding: 26px 8px 12px;
+  text-align: center;
+  gap: 14px;
+}
+
+.mancala .mc-logo {
+  width: 92px;
+  margin: 0 auto;
+  padding: 9px 8px;
+  background: var(--mc-wood);
+  border: 3px solid var(--mc-ink);
+  border-radius: 20px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.12), 0 6px 14px rgba(36, 22, 9, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mancala .mc-logo-store {
+  height: 14px;
+  border-radius: 8px;
+  border: 2.5px solid var(--mc-ink);
+}
+.mancala .mc-logo-store--p2 { background: var(--mc-p2); }
+.mancala .mc-logo-store--p1 { background: var(--mc-p1); }
+.mancala .mc-logo-pits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  justify-items: center;
+}
+.mancala .mc-logo-pit {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid var(--mc-ink);
+}
+.mancala .mc-logo-pit:nth-child(odd) { background: var(--mc-p1); }
+.mancala .mc-logo-pit:nth-child(even) { background: var(--mc-p2); }
+
+.mancala .mc-title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mancala .mc-sub {
+  margin: -6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(36, 22, 9, 0.75);
+}
+
+.mancala .mc-vscard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 2px solid rgba(36, 22, 9, 0.25);
+  border-radius: 14px;
+}
+.mancala .mc-vsside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 86px;
+}
+.mancala .mc-vsemoji { font-size: 26px; line-height: 1; }
+.mancala .mc-vsname {
+  font-size: 13px;
+  font-weight: 800;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mancala .mc-vslabel {
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: rgba(36, 22, 9, 0.6);
+}
+
+.mancala .mc-field { display: flex; flex-direction: column; gap: 7px; }
+.mancala .mc-fieldlabel {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(36, 22, 9, 0.65);
+}
+.mancala .mc-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  background: rgba(36, 22, 9, 0.14);
+  border-radius: 12px;
+  padding: 5px;
+}
+.mancala .mc-segbtn {
+  appearance: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(36, 22, 9, 0.7);
+  background: transparent;
+  cursor: pointer;
+}
+.mancala .mc-segbtn.is-active {
+  background: #fff;
+  color: var(--mc-ink);
+  box-shadow: 0 2px 6px rgba(36, 22, 9, 0.25);
+}
+
+.mancala .mc-primary,
+.mancala .mc-secondary,
+.mancala .mc-ghost {
+  appearance: none;
+  font: inherit;
+  font-weight: 800;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.mancala .mc-primary {
+  border: 3px solid var(--mc-ink);
+  background: linear-gradient(180deg, #ffcf3f, #f2b705);
+  color: #4a3502;
+  padding: 14px 18px;
+  font-size: 17px;
+  box-shadow: 0 5px 0 rgba(36, 22, 9, 0.55);
+}
+.mancala .mc-secondary {
+  border: 3px solid var(--mc-ink);
+  background: linear-gradient(180deg, #b795e8, #8a5fc9);
+  color: #fff;
+  padding: 12px 18px;
+  font-size: 15px;
+  box-shadow: 0 5px 0 rgba(36, 22, 9, 0.55);
+}
+.mancala .mc-primary:active,
+.mancala .mc-secondary:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(36, 22, 9, 0.55); }
+.mancala .mc-ghost {
+  border: 2px solid rgba(36, 22, 9, 0.4);
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--mc-ink);
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.mancala .mc-ghost:hover { filter: brightness(1.05); }
+.mancala .mc-small { padding: 7px 12px; font-size: 13px; }
+
+/* --- score bar --------------------------------------------------------- */
+
+.mancala .mc-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--mc-dark);
+  color: #fff;
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 10px rgba(36, 22, 9, 0.3);
+}
+.mancala .mc-scoreside {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+}
+.mancala .mc-scoreside.is-turn { border-color: #ffd75e; background: rgba(255, 215, 94, 0.12); }
+.mancala .mc-scoreemoji { font-size: 20px; line-height: 1; }
+.mancala .mc-scorename {
+  font-size: 13px;
+  font-weight: 800;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mancala .mc-scoreside--p1 .mc-scorename { color: #7fd8f7; }
+.mancala .mc-scoreside--p2 .mc-scorename { color: #ff9d8f; }
+.mancala .mc-scorenum {
+  font-size: 19px;
+  font-weight: 900;
+  min-width: 24px;
+  text-align: center;
+}
+.mancala .mc-scorenum.is-pop { animation: mc-pop-plain 360ms ease; }
+.mancala .mc-scorechip {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* --- board ------------------------------------------------------------- */
+
+.mancala .mc-boardwrap { display: flex; justify-content: center; }
+.mancala .mc-board {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    's13 s13'
+    'p0  p12'
+    'p1  p11'
+    'p2  p10'
+    'p3  p9'
+    'p4  p8'
+    'p5  p7'
+    's6  s6';
+  gap: 6px 30px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, var(--mc-wood-hi), var(--mc-wood) 30%, var(--mc-wood-lo));
+  border: 4px solid var(--mc-ink);
+  border-radius: 34px;
+  box-shadow:
+    inset 0 -6px 0 rgba(0, 0, 0, 0.1),
+    inset 0 4px 0 rgba(255, 255, 255, 0.25),
+    0 10px 24px rgba(36, 22, 9, 0.35);
+}
+
+.mancala .mc-store {
+  position: relative;
+  height: 58px;
+  border-radius: 29px;
+  border: 3.5px solid var(--mc-ink);
+  box-shadow: inset 0 5px 8px rgba(0, 0, 0, 0.28), inset 0 -2px 0 rgba(255, 255, 255, 0.2);
+  margin: 4px 0;
+}
+.mancala .mc-store--p2 { background: linear-gradient(180deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
+.mancala .mc-store--p1 { background: linear-gradient(180deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
+.mancala .mc-storecount {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 9px;
+  padding: 2px 7px;
+  z-index: 3;
+}
+.mancala .mc-store.is-hit { animation: mc-hit 420ms ease; }
+
+.mancala .mc-pit {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font: inherit;
+}
+.mancala .mc-pit:disabled { cursor: default; }
+.mancala .mc-hole {
+  display: block;
+  width: clamp(48px, 15.5vw, 62px);
+  height: clamp(48px, 15.5vw, 62px);
+  border-radius: 50%;
+  border: 3.5px solid var(--mc-ink);
+  box-shadow: inset 0 5px 7px rgba(0, 0, 0, 0.3), inset 0 -2px 0 rgba(255, 255, 255, 0.18);
+  transition: box-shadow 160ms ease, filter 160ms ease;
+}
+.mancala .mc-pit--p1 .mc-hole { background: radial-gradient(circle at 38% 30%, #56c7ef, var(--mc-p1) 60%, var(--mc-p1-deep)); }
+.mancala .mc-pit--p2 .mc-hole { background: radial-gradient(circle at 38% 30%, #ff8172, var(--mc-p2) 60%, var(--mc-p2-deep)); }
+
+/* Selectable pits invite the tap; the ring is a light halo plus scale. */
+.mancala .mc-pit.is-live .mc-hole {
+  box-shadow:
+    inset 0 5px 7px rgba(0, 0, 0, 0.3),
+    0 0 0 3px rgba(255, 255, 255, 0.55),
+    0 0 14px rgba(255, 244, 200, 0.55);
+}
+.mancala .mc-pit.is-live:hover .mc-hole,
+.mancala .mc-pit.is-live:focus-visible .mc-hole { filter: brightness(1.1); }
+.mancala .mc-pit.is-hit .mc-hole { animation: mc-hit 420ms ease; }
+.mancala .mc-pit:focus-visible { outline: none; }
+.mancala .mc-pit:focus-visible .mc-hole { outline: 3px solid #fff; outline-offset: 2px; }
+
+.mancala .mc-count {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--mc-count);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  min-width: 18px;
+  text-align: center;
+}
+.mancala .mc-pit--p1 .mc-count { left: 100%; margin-left: 6px; }
+.mancala .mc-pit--p2 .mc-count { right: 100%; margin-right: 6px; }
+.mancala .mc-countnum { display: inline-block; font: inherit; }
+.mancala .mc-countnum.is-pop { animation: mc-pop-plain 320ms ease; }
+
+/* --- stones ------------------------------------------------------------ */
+
+.mancala .mc-stones {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  --mc-stone: 13px;
+}
+.mancala .mc-stone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--mc-stone);
+  height: var(--mc-stone);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fffdf4, var(--mc-stonefill) 55%, #dcc394);
+  border: 1.5px solid rgba(74, 53, 24, 0.55);
+  box-shadow: 0 1.5px 2px rgba(36, 22, 9, 0.35);
+  transition: transform 240ms ease;
+  will-change: transform;
+}
+.mancala .mc-stone[data-tone='1'] { background: radial-gradient(circle at 35% 30%, #fffdf4, #f3e3c0 55%, #d3b789); }
+.mancala .mc-stone[data-tone='2'] { background: radial-gradient(circle at 35% 30%, #fffef8, #fdf4e0 55%, #e2cb9e); }
+.mancala .mc-stone.mc-nomove { transition: none; }
+.mancala .mc-stone.is-flying { z-index: 5; box-shadow: 0 8px 10px rgba(36, 22, 9, 0.3); }
+.mancala .mc-stone.is-held { transform-origin: center; filter: brightness(1.12); }
+
+/* --- board overlays (thinking, toast) ---------------------------------- */
+
+.mancala .mc-think {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(36, 22, 9, 0.55);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  padding: 5px 10px;
+  z-index: 6;
+  white-space: nowrap;
+}
+.mancala .mc-dots { display: inline-flex; gap: 3px; }
+.mancala .mc-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(36, 22, 9, 0.55);
+  animation: mc-dot 1s infinite ease-in-out;
+}
+.mancala .mc-dots i:nth-child(2) { animation-delay: 160ms; }
+.mancala .mc-dots i:nth-child(3) { animation-delay: 320ms; }
+
+.mancala .mc-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  background: rgba(36, 22, 9, 0.82);
+  border-radius: 14px;
+  padding: 10px 18px;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+}
+.mancala .mc-toast.is-in { animation: mc-toast 1400ms ease forwards; }
+
+.mancala .mc-status {
+  margin: 0;
+  min-height: 20px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: rgba(36, 22, 9, 0.8);
+}
+
+.mancala .mc-bar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* --- overlays (end card, help) ----------------------------------------- */
+
+.mancala .mc-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 18px; }
+.mancala .mc-scrim { position: absolute; inset: 0; background: rgba(20, 12, 4, 0.55); }
+.mancala .mc-card {
+  position: relative;
+  background: var(--mc-card);
+  border-radius: 20px;
+  padding: 24px 22px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 18px 44px rgba(20, 12, 4, 0.4);
+  animation: mc-card-in 260ms ease;
+}
+.mancala .mc-card-emoji { font-size: 44px; line-height: 1; display: block; }
+.mancala .mc-card-title { margin: 10px 0 4px; font-size: 24px; font-weight: 900; }
+.mancala .mc-card-score {
+  margin: 4px 0 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #5a4a33;
+}
+.mancala .mc-card-score b { font-size: 18px; color: var(--mc-ink); }
+.mancala .mc-card-dash { color: rgba(36, 22, 9, 0.45); }
+.mancala .mc-card-actions { display: flex; flex-direction: column; gap: 9px; }
+
+.mancala .mc-help {
+  text-align: left;
+  max-width: 400px;
+  max-height: min(78vh, 620px);
+  overflow-y: auto;
+}
+.mancala .mc-help h4 { margin: 14px 0 4px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+.mancala .mc-help p { margin: 0; font-size: 14px; line-height: 1.5; color: #4a3d2c; }
+.mancala .mc-x {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  color: rgba(36, 22, 9, 0.6);
+}
+
+/* --- landscape / desktop: classic horizontal board --------------------- */
+
+@media (min-width: 720px) {
+  .mancala .mc-shell { max-width: 780px; }
+  .mancala .mc-board {
+    max-width: 760px;
+    grid-template-columns: 92px repeat(6, 1fr) 92px;
+    grid-template-rows: 1fr 1fr;
+    grid-template-areas:
+      's13 p12 p11 p10 p9 p8 p7 s6'
+      's13 p0  p1  p2  p3 p4 p5 s6';
+    gap: 26px 10px;
+    padding: 22px 20px;
+  }
+  .mancala .mc-store { height: auto; margin: 0; border-radius: 40px; }
+  .mancala .mc-store--p2 { background: linear-gradient(90deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
+  .mancala .mc-store--p1 { background: linear-gradient(90deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
+  .mancala .mc-storecount { right: 50%; transform: translate(50%, 0); top: auto; bottom: 8px; }
+  .mancala .mc-hole { width: clamp(54px, 8vw, 74px); height: clamp(54px, 8vw, 74px); }
+  .mancala .mc-pit--p1 .mc-count { left: 50%; transform: translateX(-50%); top: 100%; margin: 2px 0 0; }
+  .mancala .mc-pit--p2 .mc-count { right: auto; left: 50%; transform: translateX(-50%); bottom: 100%; top: auto; margin: 0 0 2px; }
+}
+
+/* --- animations -------------------------------------------------------- */
+
+@keyframes mc-pop-plain {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.45); }
+  100% { transform: scale(1); }
+}
+@keyframes mc-hit {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes mc-dot {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+@keyframes mc-toast {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  30% { transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.95); }
+}
+@keyframes mc-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mancala .mc-stone { transition: none; }
+  .mancala .mc-card { animation: none; }
+}

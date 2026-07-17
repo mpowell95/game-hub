@@ -19,6 +19,7 @@
 //         _leg, _ccSeeded },
 //       business|parchis: { total, byDiff, _leg },
 //       filler: { total, byDiff },   // classic recordResult (beginner/intermediate/pro)
+//       mancala: { total, byDiff },  // classic recordResult (beginner/intermediate/pro)
 //       nutsbolts: {
 //         total, byDiff,
 //         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
@@ -32,7 +33,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }

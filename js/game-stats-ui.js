@@ -20,6 +20,7 @@ const TABS = [
   { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
   { id: 'escoba', label: 'Escoba', accent: '#1c7a4f' },
   { id: 'filler', label: 'Filler', accent: '#c2557f' },
+  { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */

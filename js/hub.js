@@ -182,6 +182,31 @@ const GAMES = [
           </svg>`,
   },
   {
+    id: 'mancala',
+    title: 'Mancala',
+    blurb: 'Sow stones, chain extra turns, capture the most. Vs. AI or a friend.',
+    module: '../mancala/js/ui.js',
+    accent: '#e08a3c',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#b96f35"/>
+            <rect x="14" y="6" width="92" height="108" rx="22" fill="#f5b963" stroke="#241609" stroke-width="4"/>
+            <rect x="26" y="14" width="68" height="16" rx="8" fill="#ef5544" stroke="#241609" stroke-width="3"/>
+            <rect x="26" y="90" width="68" height="16" rx="8" fill="#29a8dd" stroke="#241609" stroke-width="3"/>
+            <g stroke="#241609" stroke-width="3">
+              <circle cx="43" cy="45" r="10.5" fill="#29a8dd"/><circle cx="77" cy="45" r="10.5" fill="#ef5544"/>
+              <circle cx="43" cy="70" r="10.5" fill="#29a8dd"/><circle cx="77" cy="70" r="10.5" fill="#ef5544"/>
+            </g>
+            <g fill="#faf0d8" stroke="rgba(74,53,24,0.55)" stroke-width="1">
+              <circle cx="39.5" cy="42" r="3"/><circle cx="46.5" cy="44" r="3"/><circle cx="42" cy="49" r="3"/>
+              <circle cx="74" cy="42.5" r="3"/><circle cx="80" cy="46" r="3"/>
+              <circle cx="40" cy="67" r="3"/><circle cx="46" cy="71" r="3"/>
+              <circle cx="73.5" cy="67" r="3"/><circle cx="80" cy="69.5" r="3"/><circle cx="76.5" cy="73.5" r="3"/>
+              <circle cx="38" cy="96" r="3"/><circle cx="47" cy="99" r="3"/><circle cx="56" cy="96.5" r="3"/>
+              <circle cx="65" cy="99.5" r="3"/><circle cx="74" cy="96" r="3"/><circle cx="83" cy="99" r="3"/>
+            </g>
+          </svg>`,
+  },
+  {
     id: 'nuts-bolts',
     title: 'Nuts & Bolts',
     blurb: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
