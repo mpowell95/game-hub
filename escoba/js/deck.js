@@ -5,22 +5,30 @@
 //
 //   { id:'o7', suit:'oros', rank:7, value:7 }
 //
-// `rank` is the Spanish face number: 1-7 for pip cards, then 10 (Sota),
-// 11 (Caballo), 12 (Rey). `value` is the capture value used to sum to 15:
-// pips count their face, Sota is 8, Caballo is 9, Rey is 10.
+// Two numbering modes build the 40-card deck (one card of every value 1-10 per
+// suit either way, so the game math is identical):
+//   'spanish'  : ranks 1-7 plus the figures 10 (Sota), 11 (Caballo), 12 (Rey),
+//                which count 8, 9 and 10. The traditional deck.
+//   'american' : ranks 1-9 plus the Sota, every card counting exactly the
+//                number printed on it (the Sota is printed 10). The Caballo
+//                and Rey sit out.
 
 /** Suit ids, in canonical order. */
 export const SUITS = ['oros', 'copas', 'espadas', 'bastos'];
 
-/** The 40-card deck ranks (no 8s or 9s). */
-export const RANKS = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
+/** Ranks per numbering mode. */
+export const RANKS = {
+  spanish: [1, 2, 3, 4, 5, 6, 7, 10, 11, 12],
+  american: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+};
 
 export const SUIT_LABEL = { oros: 'Oros', copas: 'Copas', espadas: 'Espadas', bastos: 'Bastos' };
 
 const SUIT_INITIAL = { oros: 'o', copas: 'c', espadas: 'e', bastos: 'b' };
 
-/** Capture value of a rank: pips 1-7 count their face, Sota 8, Caballo 9, Rey 10. */
-export function captureValue(rank) {
+/** Capture value of a rank. American: as printed. Spanish: figures count 8/9/10. */
+export function captureValue(rank, mode) {
+  if (mode === 'american') return rank;
   return rank >= 10 ? rank - 2 : rank;
 }
 
@@ -34,14 +42,15 @@ export function cardLabel(card) {
   return `${rankName(card.rank)} de ${SUIT_LABEL[card.suit]}`;
 }
 
-function makeCard(suit, rank) {
-  return { id: SUIT_INITIAL[suit] + rank, suit, rank, value: captureValue(rank) };
+function makeCard(suit, rank, mode) {
+  return { id: SUIT_INITIAL[suit] + rank, suit, rank, value: captureValue(rank, mode) };
 }
 
-/** Build a fresh, unshuffled 40-card deck. */
-export function makeDeck() {
+/** Build a fresh, unshuffled 40-card deck for the given numbering mode. */
+export function makeDeck(mode = 'american') {
+  const ranks = RANKS[mode] || RANKS.american;
   const deck = [];
-  for (const suit of SUITS) for (const rank of RANKS) deck.push(makeCard(suit, rank));
+  for (const suit of SUITS) for (const rank of ranks) deck.push(makeCard(suit, rank, mode));
   return deck;
 }
 

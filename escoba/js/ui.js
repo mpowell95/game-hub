@@ -100,6 +100,7 @@ class EscobaUI {
       aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 2)
         : [profileDiff(0), profileDiff(1)],
       targetScore: saved.targetScore === 31 ? 31 : 21,
+      deckMode: saved.deckMode === 'spanish' ? 'spanish' : 'american',
     };
   }
 
@@ -108,6 +109,7 @@ class EscobaUI {
     saveJSON(STORE_SETTINGS, {
       count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
+      deckMode: s.deckMode,
     });
   }
 
@@ -205,6 +207,13 @@ class EscobaUI {
           <span class="eb-label">Play to</span>
           ${seg('set-target', s.targetScore, [[21, '21 points'], [31, '31 points']])}
         </div>
+        <div class="eb-section">
+          <span class="eb-label">Card numbering</span>
+          ${seg('set-deckmode', s.deckMode, [['american', 'American'], ['spanish', 'Spanish']])}
+          <p class="eb-hint">${s.deckMode === 'american'
+            ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
+            : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>
+        </div>
         <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
         <button class="eb-btn eb-btn-primary" data-action="start">Start game</button>
       </div>`;
@@ -251,7 +260,10 @@ class EscobaUI {
           </section>
           <section>
             <h3>Card values</h3>
-            <p>The Spanish 40-card deck is used. Pip cards (1 to 7) count their face value. The <b>Sota counts 8</b>, the <b>Caballo counts 9</b> and the <b>Rey counts 10</b>. Every card shows its value in the corner badge.</p>
+            ${this._setup.deckMode === 'american'
+    ? `<p>The deck has cards 1 to 10 in each suit and <b>every card counts exactly the number printed on it</b>. (This is the American numbering; the Caballo and Rey sit out. Switch to the traditional Spanish figures in the setup screen.)</p>`
+    : `<p>The traditional Spanish 40-card deck is used. Pip cards (1 to 7) count their face value. The figure cards keep their printed numbers 10, 11 and 12, but they capture as <b>Sota 8</b>, <b>Caballo 9</b> and <b>Rey 10</b>: trust the corner badge, not the big printed number. (Prefer cards that count as printed? Switch to American numbering in the setup screen.)</p>`}
+            <p>Every card shows its capture value in the corner badge.</p>
           </section>
           <section>
             <h3>Your turn</h3>
@@ -309,7 +321,7 @@ class EscobaUI {
       }));
     }
     this._resolvePending(null);
-    this.game = new Game({ players, config: { targetScore: s.targetScore } });
+    this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._selHand = null; this._selTable.clear(); this.activePlayerId = null;
     this._matchEnded = false; this._matchEscobas = 0; this._statsCommitted = false;
@@ -781,6 +793,7 @@ class EscobaUI {
       // setup
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
+      case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-aidiff': {
         this.syncSetupInputs();
         const i = +a.closest('.eb-segmented').dataset.i;

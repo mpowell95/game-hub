@@ -25,6 +25,7 @@ import { makeDeck, shuffle, sumValues, captureOptions } from './deck.js';
 
 export const DEFAULT_CONFIG = {
   targetScore: 21,       // 21 or 31
+  deckMode: 'american',  // 'american' (1-10 as printed) | 'spanish' (figures count 8/9/10)
 };
 
 export function makePlayer({ id, name, avatar, isHuman = false, agent = null, difficulty = null }) {
@@ -91,7 +92,7 @@ export class Game {
     const n = this.players.length;
     for (const p of this.players) { p.hand = []; p.captured = []; p.escobas = 0; }
     this.table = [];
-    this.stock = shuffle(makeDeck(), this.rng);
+    this.stock = shuffle(makeDeck(this.config.deckMode), this.rng);
     this.lastCapturer = null;
     this.lastCards = false;
 
@@ -166,6 +167,7 @@ export class Game {
         escobas: x.escobas, totalScore: x.totalScore,
       })),
       targetScore: this.config.targetScore,
+      deckMode: this.config.deckMode,
     };
   }
 

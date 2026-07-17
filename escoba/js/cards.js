@@ -11,11 +11,12 @@ const BASE = new URL('../../chinchon/decks/anita/', import.meta.url).href;
 export function faceUrl(card) { return `${BASE}${card.suit}-${card.rank}.webp`; }
 export function backUrl() { return `${BASE}back.webp`; }
 
-/** Warm the browser cache for every face so cards render without a flash. */
+/** Warm the browser cache for every face (both numbering modes) so cards render
+ *  without a flash. */
 export function preloadDeck() {
   const urls = [backUrl()];
   for (const s of ['oros', 'copas', 'espadas', 'bastos'])
-    for (const r of [1, 2, 3, 4, 5, 6, 7, 10, 11, 12]) urls.push(`${BASE}${s}-${r}.webp`);
+    for (let r = 1; r <= 12; r++) urls.push(`${BASE}${s}-${r}.webp`);
   for (const u of urls) { const img = new Image(); img.src = u; }
 }
 

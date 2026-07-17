@@ -91,6 +91,8 @@
 }
 .eb-name-input:focus { outline: 2px solid var(--eb-accent); outline-offset: -1px; }
 
+.eb-hint { margin: 0; font-size: 0.78rem; line-height: 1.45; color: var(--eb-muted); }
+
 .eb-howto-link {
   appearance: none; border: 0; background: none; font: inherit; font-weight: 700;
   color: var(--eb-accent); cursor: pointer; padding: 4px; text-align: center;

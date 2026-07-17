@@ -74,7 +74,7 @@ export class AIAgent {
     view.others.forEach((o) => o.captured.forEach(mark));
     const counts = new Array(11).fill(0);
     let total = 0;
-    for (const c of makeDeck()) {
+    for (const c of makeDeck(view.deckMode)) {
       if (!seen.has(c.id)) { counts[c.value] += 1; total += 1; }
     }
     return { counts, total };
