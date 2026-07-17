@@ -2,16 +2,20 @@
   --nb-bg: #1c1730;
   --nb-surface: #2a2340;
   --nb-surface-raised: #342c4e;
+  --nb-header-btn: #231a38;
   --nb-ink: #f4f2fb;
   --nb-muted: #b7b0d1;
   --nb-accent: #ffce3a;
   --nb-danger: #c0392b;
-  --nb-rod: #6b6480;
-  --nb-cap: #cfd3da;
+  --nb-hidden: #b9bdc4;
+
+  /* Size tier (nb-size-l/m/s, set on .nb-board) drives every dependent metric. */
   --nb-nut-h: 30px;
   --nb-nut-w: 56px;
-  --nb-cap-h: 34px;
-  --nb-hidden: #b9bdc4;
+  --nb-rod-h: 34px;
+  --nb-bolt-w: 64px;
+  --nb-washer-w: 40px;
+  --nb-washer-h: 10px;
 
   --nb-yellow: #f2b705;
   --nb-blue: #1f5fa8;
@@ -20,17 +24,22 @@
   --nb-purple: #7a3fe0;
   --nb-pink: #e88bc4;
   --nb-slate: #3a4454;
+  --nb-sky: #4fc3f7;
+  --nb-red: #d32f2f;
+  --nb-green: #43a047;
+  --nb-lime: #9ccc65;
+  --nb-brown: #8d6e63;
 
   box-sizing: border-box;
   min-height: 100%;
-  background: radial-gradient(120% 100% at 50% 0%, #241d3e 0%, #1c1730 60%, #171326 100%);
+  background: #2a1e3f;
   color: var(--nb-ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-  gap: 16px;
+  gap: 12px;
   border-radius: 20px;
   box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -38,41 +47,113 @@
 }
 .nb-root *, .nb-root *::before, .nb-root *::after { box-sizing: border-box; }
 
+/* ---------- Difficulty menu ---------- */
+
+.nb-root.nb-menu {
+  background: radial-gradient(120% 90% at 50% 0%, #362a52 0%, #2a1e3f 70%);
+  gap: 20px;
+  padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+}
+.nb-menu-header { text-align: center; }
+.nb-menu-header h1 { margin: 0 0 4px; font-size: 1.4rem; font-weight: 800; }
+.nb-menu-header p { margin: 0; color: var(--nb-muted); font-size: 0.9rem; }
+
+.nb-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  justify-content: center;
+}
+.nb-tier-card {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: var(--nb-surface);
+  color: var(--nb-ink);
+  text-align: left;
+  padding: 16px 18px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s ease, transform 0.09s ease;
+}
+.nb-tier-card:active { transform: scale(0.98); }
+@media (hover: hover) {
+  .nb-tier-card:hover { background: var(--nb-surface-raised); }
+}
+.nb-tier-name { font-size: 1.1rem; font-weight: 800; color: var(--nb-accent); }
+.nb-tier-level { font-size: 0.85rem; color: var(--nb-ink); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.nb-tier-desc { font-size: 0.82rem; color: var(--nb-muted); margin-top: 4px; }
+
+/* ---------- Header ---------- */
+
 .nb-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
 }
-.nb-topbar .nb-title {
-  margin-right: auto;
+.nb-headerbtn {
+  appearance: none;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: var(--nb-header-btn);
+  color: var(--nb-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s ease, transform 0.09s ease;
+}
+.nb-headerbtn svg { width: 18px; height: 18px; }
+@media (hover: hover) {
+  .nb-headerbtn:hover { background: var(--nb-surface-raised); }
+}
+.nb-headerbtn:active { transform: scale(0.92); }
+
+.nb-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   line-height: 1.15;
 }
-.nb-topbar .nb-eyebrow {
-  display: block;
+.nb-eyebrow {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 8px;
+  background: var(--nb-header-btn);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--nb-muted);
+  margin-bottom: 4px;
 }
-.nb-topbar .nb-level-num {
-  font-size: 18px;
+.nb-level-num {
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: 0.3px;
   font-variant-numeric: tabular-nums;
 }
-.nb-topbar .nb-moves {
+
+.nb-moves {
+  text-align: center;
   color: var(--nb-muted);
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   transition: transform 0.15s ease;
 }
-.nb-topbar .nb-moves.nb-pulse {
+.nb-moves.nb-pulse {
   transform: scale(1.15);
   color: var(--nb-ink);
 }
+
+/* ---------- Shared buttons (overlays) ---------- */
 
 .nb-btn {
   appearance: none;
@@ -81,7 +162,7 @@
   padding: 10px 14px;
   font-size: 0.95rem;
   font-weight: 600;
-  background: var(--nb-surface);
+  background: var(--nb-surface-raised);
   color: var(--nb-ink);
   cursor: pointer;
   min-height: 44px;
@@ -92,20 +173,12 @@
   opacity: 0.45;
   cursor: default;
 }
-.nb-btn.nb-btn-icon {
-  padding: 10px;
-  min-width: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.nb-btn.nb-btn-icon svg { display: block; width: 20px; height: 20px; }
 .nb-btn.nb-btn-primary {
   background: var(--nb-accent);
   color: #26210a;
 }
 @media (hover: hover) {
-  .nb-btn:not(:disabled):hover { background: var(--nb-surface-raised); }
+  .nb-btn:not(:disabled):hover { background: var(--nb-header-btn); }
   .nb-btn.nb-btn-primary:not(:disabled):hover { background: #ffd75c; }
 }
 .nb-btn:not(:disabled):active {
@@ -113,11 +186,55 @@
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-.nb-actionbar {
+/* ---------- Bottom bar ---------- */
+
+.nb-bottombar {
   display: flex;
-  justify-content: center;
-  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 8px;
 }
+.nb-bottombtn-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.nb-bottombtn {
+  appearance: none;
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nb-surface);
+  color: var(--nb-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.09s ease;
+}
+.nb-bottombtn svg { width: 24px; height: 24px; }
+.nb-bottombtn:not(:disabled):active { transform: scale(0.92); }
+[data-action="undo"].nb-bottombtn:not(:disabled) {
+  background: var(--nb-accent);
+  color: #26210a;
+}
+.nb-bottombtn:disabled { opacity: 0.5; cursor: default; }
+@media (hover: hover) {
+  .nb-bottombtn:not(:disabled):hover { background: var(--nb-surface-raised); }
+  [data-action="undo"].nb-bottombtn:not(:disabled):hover { background: #ffd75c; }
+}
+.nb-bottombtn-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nb-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ---------- Board ---------- */
 
 .nb-board {
   display: flex;
@@ -137,7 +254,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(140% 120% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.25));
+  background: radial-gradient(140% 120% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.3));
   z-index: 0;
 }
 .nb-board.nb-fade-in { animation: nb-board-fade 0.15s ease; }
@@ -146,16 +263,36 @@
   100% { opacity: 1; }
 }
 
+/* Three size tiers (WP2e): up to 8 bolts large, 9-12 medium, 13-17 compact.
+   Every dependent metric derives from these custom properties. */
+.nb-board.nb-size-l {
+  --nb-nut-h: 30px; --nb-nut-w: 56px; --nb-rod-h: 34px;
+  --nb-bolt-w: 72px; --nb-washer-w: 44px; --nb-washer-h: 11px;
+  gap: 22px 26px;
+}
+.nb-board.nb-size-m {
+  --nb-nut-h: 28px; --nb-nut-w: 52px; --nb-rod-h: 30px;
+  --nb-bolt-w: 64px; --nb-washer-w: 40px; --nb-washer-h: 10px;
+  gap: 16px 18px;
+}
+.nb-board.nb-size-s {
+  --nb-nut-h: 25px; --nb-nut-w: 46px; --nb-rod-h: 26px;
+  --nb-bolt-w: 58px; --nb-washer-w: 36px; --nb-washer-h: 9px;
+  gap: 12px 14px;
+}
+
+/* ---------- Bolt: washer, ridged rod, dome cap ---------- */
+
 .nb-bolt {
   position: relative;
-  width: 64px;
+  width: var(--nb-bolt-w);
   min-width: 56px;
-  height: calc(var(--nb-nut-h) * 4 + var(--nb-cap-h));
+  height: calc(var(--nb-nut-h) * 4 + var(--nb-rod-h));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  padding-top: var(--nb-cap-h);
+  padding-top: var(--nb-rod-h);
   cursor: pointer;
   touch-action: manipulation;
   z-index: 1;
@@ -167,32 +304,32 @@
   }
 }
 .nb-bolt::before {
-  /* Floor shadow: soft and blurred, sits behind the base plate. */
+  /* Floor shadow: soft and blurred, sits behind the washer. */
   content: '';
   position: absolute;
   bottom: -6px;
   left: 50%;
-  width: 30px;
-  height: 8px;
+  width: calc(var(--nb-washer-w) * 0.75);
+  height: calc(var(--nb-washer-h) * 0.8);
   transform: translateX(-50%);
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.4);
   filter: blur(6px);
   z-index: -1;
   pointer-events: none;
 }
 .nb-bolt::after {
-  /* Base plate the rod sits in. */
+  /* Washer the rod sits in: bright silver, per the reference. */
   content: '';
   position: absolute;
   bottom: -4px;
   left: 50%;
-  width: 40px;
-  height: 10px;
+  width: var(--nb-washer-w);
+  height: var(--nb-washer-h);
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(closest-side, #3a3358, #2a2340);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, #edeff2 0%, #c9ced6 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45), inset 0 -1px 2px rgba(0, 0, 0, 0.25);
   z-index: 0;
   pointer-events: none;
 }
@@ -202,32 +339,36 @@
   top: 6px;
   bottom: 0;
   left: 50%;
-  width: 10px;
+  width: 9px;
   transform: translateX(-50%);
   background:
-    repeating-linear-gradient(-30deg, rgba(0, 0, 0, 0.25) 0 3px, transparent 3px 6px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 40%, rgba(0, 0, 0, 0.35)),
-    var(--nb-rod);
-  border-radius: 5px;
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 5px),
+    linear-gradient(90deg, #ffffff, #c9ced6 45%, #9aa1ab 100%);
+  border-radius: 4px;
   z-index: 0;
+  pointer-events: none;
 }
 
-.nb-bolt-cap {
+.nb-bolt-dome {
+  /* Small dome cap at the very top of the rod, always present; gold when
+     the bolt is selected (moved here from the round-3 flat cap). */
   position: absolute;
   top: 0;
   left: 50%;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 14px;
   transform: translateX(-50%);
-  background: linear-gradient(180deg, #eef0f3 0%, var(--nb-cap) 55%, #a7adb8 100%);
-  border-radius: 6px;
+  border-radius: 50% 50% 45% 45% / 65% 65% 35% 35%;
+  background: radial-gradient(120% 100% at 35% 25%, #ffffff 0%, #d6dbe1 45%, #9aa1ab 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
   z-index: 1;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  pointer-events: none;
 }
-.nb-bolt.nb-selected .nb-bolt-cap {
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 0 3px var(--nb-accent);
+.nb-bolt.nb-selected .nb-bolt-dome {
+  background: radial-gradient(120% 100% at 35% 25%, #fff6d8 0%, var(--nb-accent) 55%, #d69f10 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(255, 206, 58, 0.35);
 }
-.nb-bolt.nb-just-completed .nb-bolt-cap {
+.nb-bolt.nb-just-completed .nb-bolt-dome {
   animation: nb-cap-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes nb-cap-pop {
@@ -256,20 +397,16 @@
   100% { filter: brightness(1); }
 }
 
+/* ---------- Nut: hex face, top band, 3-facet body, embossed symbol ---------- */
+
 .nb-nut {
   height: var(--nb-nut-h);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: rgba(0, 0, 0, 0.55);
-  transition: transform 0.15s ease;
   position: relative;
+  transition: transform 0.15s ease;
 }
-.nb-nut .nb-letter, .nb-nut .nb-hidden-mark { position: relative; z-index: 2; }
-.nb-nut .nb-letter { display: none; }
-.nb-root.nb-show-letters .nb-nut .nb-letter { display: inline; }
 
 /* The face carries the clip-path. clip-path clips box-shadow entirely, so
    elevation/contact shadows live on filter: drop-shadow() (follows the hex
@@ -278,12 +415,13 @@
 .nb-nut-face {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   /* Elongated hex-nut silhouette: full-height flat left/right edges, chamfered
-     top/bottom corners. Percentage points so it scales at the 700px+ breakpoint. */
+     top/bottom corners. Percentage points so it scales across size tiers. */
   clip-path: polygon(18% 0%, 82% 0%, 100% 22%, 100% 78%, 82% 100%, 18% 100%, 0% 78%, 0% 22%);
   border: 2px solid rgba(0, 0, 0, 0.25);
   box-shadow:
-    inset 0 2px 1px rgba(255, 255, 255, 0.45),
+    inset 0 2px 1px rgba(255, 255, 255, 0.35),
     inset 0 -2px 3px rgba(0, 0, 0, 0.3);
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
 }
@@ -293,11 +431,11 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14px;
-  height: 9px;
+  width: 12px;
+  height: 8px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), transparent);
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.5), transparent);
   z-index: 1;
 }
 .nb-nut-face::after {
@@ -306,68 +444,90 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 19px;
-  height: 13px;
+  width: 17px;
+  height: 11px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--nb-nut-color, #888) 85%, black);
+  border: 1.5px solid color-mix(in srgb, var(--nb-nut-color, #888) 85%, black);
   z-index: 1;
 }
 
-.nb-nut[data-color] .nb-nut-face {
-  background-image: var(--nb-nut-pattern, none), linear-gradient(105deg, color-mix(in srgb, var(--nb-nut-color) 70%, white) 0%, var(--nb-nut-color) 45%, color-mix(in srgb, var(--nb-nut-color) 78%, black) 100%);
-  background-size: var(--nb-nut-pattern-size, auto), auto;
+/* Top face: a lightened band across the top of the hex, clipped to the
+   parent's silhouette, with a soft specular highlight blob. */
+.nb-nut-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42%;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--nb-nut-color, #888) 82%, white) 0%, color-mix(in srgb, var(--nb-nut-color, #888) 65%, white) 100%);
+}
+.nb-nut-top::after {
+  content: '';
+  position: absolute;
+  top: 8%;
+  left: 14%;
+  width: 34%;
+  height: 55%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.6), transparent);
 }
 
-.nb-nut[data-color="yellow"] { --nb-nut-color: var(--nb-yellow); --nb-nut-pattern: none; }
-.nb-nut[data-color="blue"] {
-  --nb-nut-color: var(--nb-blue);
-  --nb-nut-pattern: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1px, transparent 1.6px);
-  --nb-nut-pattern-size: 5px 5px;
-  color: rgba(255, 255, 255, 0.9);
+/* Three vertical facet bands (front face), hard edges for a machined look. */
+.nb-nut[data-color] .nb-nut-face {
+  background-image: linear-gradient(90deg,
+    color-mix(in srgb, var(--nb-nut-color) 65%, black) 0%, color-mix(in srgb, var(--nb-nut-color) 65%, black) 32%,
+    color-mix(in srgb, var(--nb-nut-color) 76%, white) 32%, color-mix(in srgb, var(--nb-nut-color) 76%, white) 68%,
+    color-mix(in srgb, var(--nb-nut-color) 70%, black) 68%, color-mix(in srgb, var(--nb-nut-color) 70%, black) 100%
+  );
 }
-.nb-nut[data-color="orange"] {
-  --nb-nut-color: var(--nb-orange);
-  --nb-nut-pattern: repeating-linear-gradient(45deg, transparent 0 3px, rgba(255, 255, 255, 0.12) 3px 6px);
-  color: rgba(255, 255, 255, 0.9);
+
+.nb-nut[data-color="yellow"] { --nb-nut-color: var(--nb-yellow); }
+.nb-nut[data-color="blue"]   { --nb-nut-color: var(--nb-blue); }
+.nb-nut[data-color="orange"] { --nb-nut-color: var(--nb-orange); }
+.nb-nut[data-color="teal"]   { --nb-nut-color: var(--nb-teal); }
+.nb-nut[data-color="purple"] { --nb-nut-color: var(--nb-purple); }
+.nb-nut[data-color="pink"]   { --nb-nut-color: var(--nb-pink); }
+.nb-nut[data-color="slate"]  { --nb-nut-color: var(--nb-slate); }
+.nb-nut[data-color="sky"]    { --nb-nut-color: var(--nb-sky); }
+.nb-nut[data-color="red"]    { --nb-nut-color: var(--nb-red); }
+.nb-nut[data-color="green"]  { --nb-nut-color: var(--nb-green); }
+.nb-nut[data-color="lime"]   { --nb-nut-color: var(--nb-lime); }
+.nb-nut[data-color="brown"]  { --nb-nut-color: var(--nb-brown); }
+
+/* Embossed symbol: darkened same-hue fill (a lightness difference, so it
+   still separates for red-green CVD) plus a 1px light bottom edge to fake
+   the emboss. Always on; this is the primary colorblind channel (WP3b). */
+.nb-nut-symbol {
+  position: relative;
+  z-index: 2;
+  width: 55%;
+  height: 55%;
+  color: color-mix(in srgb, var(--nb-nut-color, #888) 78%, black);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.4));
 }
-.nb-nut[data-color="teal"] {
-  --nb-nut-color: var(--nb-teal);
-  --nb-nut-pattern: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(255, 255, 255, 0.12) 3px 4px);
-  color: rgba(255, 255, 255, 0.9);
-}
-.nb-nut[data-color="purple"] {
-  --nb-nut-color: var(--nb-purple);
-  --nb-nut-pattern: repeating-linear-gradient(-45deg, transparent 0 3px, rgba(255, 255, 255, 0.12) 3px 6px);
-  color: rgba(255, 255, 255, 0.9);
-}
-.nb-nut[data-color="pink"] { --nb-nut-color: var(--nb-pink); --nb-nut-pattern: none; }
-.nb-nut[data-color="slate"] {
-  --nb-nut-color: var(--nb-slate);
-  --nb-nut-pattern: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1.6px);
-  --nb-nut-pattern-size: 5px 5px;
-  color: rgba(255, 255, 255, 0.9);
-}
+.nb-nut-symbol svg { width: 100%; height: 100%; display: block; }
+
 .nb-nut[data-hidden="true"] .nb-nut-face {
-  background-image: repeating-linear-gradient(135deg, var(--nb-hidden) 0 6px, #9da2ac 6px 12px);
+  background-image: none;
+  background-color: var(--nb-hidden);
   border-color: rgba(0, 0, 0, 0.4);
   border-style: dashed;
+}
+.nb-nut[data-hidden="true"] .nb-nut-top {
+  background: linear-gradient(180deg, #d3d6db 0%, #b9bdc4 100%);
 }
 .nb-nut[data-hidden="true"] .nb-nut-face::before,
 .nb-nut[data-hidden="true"] .nb-nut-face::after { display: none; }
 .nb-hidden-mark {
+  position: relative;
+  z-index: 2;
   font-size: 1.15rem;
   font-weight: 900;
   color: rgba(0, 0, 0, 0.7);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.nb-nut.nb-reveal {
-  animation: nb-flip 0.35s ease;
-}
-@keyframes nb-flip {
-  0% { transform: scaleY(0.2); }
-  100% { transform: scaleY(1); }
-}
+
 .nb-nut.nb-fx-hidden { visibility: hidden; }
 
 .nb-bolt.nb-selected .nb-nut.nb-lifted {
@@ -502,11 +662,10 @@
   gap: 6px;
 }
 .nb-assist-swatch {
-  width: 16px;
-  height: 12px;
+  width: 18px;
+  height: 13px;
   flex-shrink: 0;
 }
-.nb-root .nb-assist-swatch .nb-letter, .nb-assist-swatch .nb-hidden-mark { display: none !important; }
 
 .nb-overlay {
   position: absolute;
@@ -642,19 +801,19 @@
   text-align: center;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   animation: nb-confirm-in 0.14s ease;
-  transform-origin: bottom center;
+  transform-origin: top center;
 }
 .nb-confirm::before {
   content: '';
   position: absolute;
-  bottom: -6px;
-  left: 50%;
+  top: -6px;
+  right: 24px;
   width: 12px;
   height: 12px;
   background: var(--nb-surface);
-  border-right: 1px solid rgba(255, 255, 255, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-  transform: translateX(-50%) rotate(45deg);
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  transform: rotate(45deg);
 }
 @keyframes nb-confirm-in {
   0% { opacity: 0; transform: scale(0.95); }
@@ -663,38 +822,20 @@
 .nb-confirm p { margin: 0 0 10px; font-size: 0.9rem; }
 .nb-confirm .nb-panel-actions { display: flex; gap: 8px; justify-content: center; }
 
-.nb-settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 0.9rem;
-}
-.nb-settings-row-top {
-  margin-top: 4px;
-  margin-bottom: 10px;
-  padding-top: 0;
-  padding-bottom: 10px;
-  border-top: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-@media (min-width: 600px) and (max-width: 699px) {
-  .nb-bolt { width: 72px; }
-  .nb-board { gap: 24px 28px; }
-}
-
 @media (min-width: 700px) {
-  .nb-root {
-    --nb-nut-h: 34px;
-    --nb-nut-w: 64px;
-    --nb-cap-h: 40px;
+  .nb-board.nb-size-l {
+    --nb-nut-h: 34px; --nb-nut-w: 64px; --nb-rod-h: 40px;
+    --nb-bolt-w: 88px; --nb-washer-w: 48px; --nb-washer-h: 12px;
+    gap: 28px 32px;
   }
-  .nb-bolt { width: 88px; min-width: 88px; }
-  .nb-board { gap: 28px 32px; }
-  .nb-bolt::before { width: 36px; height: 10px; bottom: -7px; }
-  .nb-bolt::after { width: 48px; height: 12px; bottom: -5px; }
+  .nb-board.nb-size-m {
+    --nb-nut-h: 31px; --nb-nut-w: 58px; --nb-rod-h: 34px;
+    --nb-bolt-w: 76px; --nb-washer-w: 44px; --nb-washer-h: 11px;
+    gap: 22px 24px;
+  }
+  .nb-board.nb-size-s {
+    --nb-nut-h: 28px; --nb-nut-w: 50px; --nb-rod-h: 30px;
+    --nb-bolt-w: 66px; --nb-washer-w: 40px; --nb-washer-h: 10px;
+    gap: 16px 18px;
+  }
 }

@@ -1,7 +1,7 @@
 // Nuts & Bolts game state: legality, move application, undo, win detection.
 // No DOM access here; ui.js owns rendering.
 
-import { CAP, generateLevel, isSolved } from './generator.js';
+import { CAP, generateLevel, isSolved, isBoltComplete } from './generator.js';
 
 function cloneStacks(stacks) {
   return stacks.map((s) => s.map((n) => ({ color: n.color, hidden: n.hidden, id: n.id })));
@@ -28,12 +28,9 @@ export function getTopRun(stack) {
   return topRun(stack);
 }
 
-function isBoltFull(stack) {
-  return stack.length === CAP && stack.every((n) => n.color === stack[0].color);
-}
-
 export class NutsBoltsGame {
-  constructor(levelNumber, savedBoard) {
+  constructor(tier, levelNumber, savedBoard) {
+    this.tier = tier;
     this.level = levelNumber;
     if (savedBoard) {
       this.stacks = cloneStacks(savedBoard.stacks);
@@ -42,7 +39,7 @@ export class NutsBoltsGame {
       this.history = savedBoard.history || [];
       this.revealedIds = new Set(savedBoard.revealedIds || []);
     } else {
-      const gen = generateLevel(levelNumber);
+      const gen = generateLevel(tier, levelNumber);
       this.stacks = gen.stacks;
       this.initial = gen.initial;
       this.moves = 0;
@@ -84,7 +81,7 @@ export class NutsBoltsGame {
     if (this.selected === null) {
       const stack = this.stacks[index];
       if (!stack.length) return { changed: false, reason: 'That bolt is empty' };
-      if (isBoltFull(stack)) return { changed: false, reason: 'That bolt is locked' };
+      if (isBoltComplete(stack)) return { changed: false, reason: 'That bolt is locked' };
       this.selected = index;
       return { changed: true };
     }
@@ -105,7 +102,7 @@ export class NutsBoltsGame {
       this.selected = null;
       return { legal: false, changed: true, reason: '' };
     }
-    if (isBoltFull(source)) {
+    if (isBoltComplete(source)) {
       return { legal: false, changed: false, reason: 'That bolt is locked' };
     }
     const run = topRun(source);
@@ -113,7 +110,7 @@ export class NutsBoltsGame {
       this.selected = null;
       return { legal: false, changed: true, reason: 'That bolt is empty' };
     }
-    if (isBoltFull(dest)) {
+    if (dest.length === CAP) {
       return { legal: false, changed: false, reason: 'That bolt is full' };
     }
     const destTop = dest.length ? dest[dest.length - 1].color : null;
@@ -121,10 +118,6 @@ export class NutsBoltsGame {
       return { legal: false, changed: false, reason: "Colors don't match" };
     }
     const freeSpace = CAP - dest.length;
-    if (freeSpace <= 0) {
-      return { legal: false, changed: false, reason: 'That bolt is full' };
-    }
-
     const count = Math.min(run.length, freeSpace);
     this.history.push({ stacks: cloneStacks(this.stacks), moves: this.moves });
 
@@ -171,6 +164,7 @@ export class NutsBoltsGame {
   // Serializable snapshot for persistence.
   toSaved() {
     return {
+      difficulty: this.tier,
       stacks: cloneStacks(this.stacks),
       initial: cloneStacks(this.initial),
       moves: this.moves,

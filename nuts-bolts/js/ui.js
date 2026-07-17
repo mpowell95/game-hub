@@ -1,10 +1,9 @@
 import { NutsBoltsGame, getTopRun } from './game.js';
-import { CAP, PALETTE } from './generator.js';
+import { CAP, PALETTE, isBoltComplete, TIER_ORDER, TIER_LABELS, TIER_DESCRIPTIONS } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordNutsBolts } from '../../js/game-stats.js';
 
 const STORAGE_KEY = 'gamehub.nutsbolts.v1';
-const LETTER_MAP = { yellow: 'Y', blue: 'B', orange: 'O', teal: 'T', purple: 'P', pink: 'K', slate: 'S' };
 const COLOR_NAME = Object.fromEntries(PALETTE.map((p) => [p.key, p.name]));
 
 const LONG_PRESS_MS = 450;
@@ -13,21 +12,58 @@ const LONG_PRESS_SLOP = 10;
 const ICON_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>';
 const ICON_RESTART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 const ICON_HELP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.6 1.4c0 1.6-2.1 1.9-2.1 3.6"/><path d="M12 17.5v.01"/></svg>';
+const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 
-const CONFETTI_COLORS = ['#f2b705', '#1f5fa8', '#c24420', '#178a7a', '#7a3fe0', '#e88bc4'];
+// One simple, chunky, filled inline glyph per color (WP3b). fill="currentColor"
+// throughout so the emboss color (see .nb-nut-symbol CSS) applies uniformly.
+const SYMBOLS = {
+  yellow: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1.5" x2="12" y2="4.7"/><line x1="12" y1="19.3" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="4.7" y2="12"/><line x1="19.3" y1="12" x2="22.5" y2="12"/><line x1="4.6" y1="4.6" x2="6.9" y2="6.9"/><line x1="17.1" y1="17.1" x2="19.4" y2="19.4"/><line x1="4.6" y1="19.4" x2="6.9" y2="17.1"/><line x1="17.1" y1="6.9" x2="19.4" y2="4.6"/></g></svg>',
+  blue: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C12 2 5 11.2 5 15.3a7 7 0 0 0 14 0C19 11.2 12 2 12 2z"/></svg>',
+  orange: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M13 1.5 4 14h6l-1.2 8.5L20 10h-6.3z"/></svg>',
+  teal: '<svg viewBox="0 0 24 24"><circle cx="7" cy="18" r="3.4" fill="currentColor"/><rect x="9.2" y="3" width="2" height="14" fill="currentColor"/><path fill="currentColor" d="M11.2 3c3.4 0 5.6 2.1 5.6 5.1-1.1-1.1-3.2-1.2-5.6-.1z"/></svg>',
+  purple: '<svg viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M12.8 2.1a10 10 0 1 0 8.8 15.6A8.2 8.2 0 0 1 12.8 2.1z"/></svg>',
+  pink: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 8l4.2 3.6L12 4.3l4.8 7.3L21 8l-2 10.5H5z"/></svg>',
+  slate: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.7l2.9 6.7 7.2.6-5.5 4.8 1.7 7.1L12 17l-6.3 3.9 1.7-7.1L1.9 9l7.2-.6z"/></svg>',
+  sky: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.8 22 12 12 22.2 2 12z"/></svg>',
+  red: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.2s-7.6-4.7-10.1-9.5C.2 8.6 2 4 6.1 4c2.2 0 3.6 1.3 4.5 2.7C11.5 5.3 12.9 4 15.1 4c4 0 5.9 4.6 4.1 7.7-2.6 4.8-7.2 9.5-7.2 9.5z"/></svg>',
+  green: '<svg viewBox="0 0 24 24"><circle cx="8" cy="9.5" r="3.9" fill="currentColor"/><circle cx="16" cy="9.5" r="3.9" fill="currentColor"/><circle cx="12" cy="15" r="3.9" fill="currentColor"/><path fill="currentColor" d="M10.3 15.6h3.4l1.6 5.9H8.7z"/></svg>',
+  lime: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20.5 3.5C10.8 3.8 4.3 10.1 4 19.8c9.7-.3 16.2-6.6 16.5-16.3z"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5" stroke="rgba(0,0,0,0.25)" stroke-width="1.4"/></svg>',
+  brown: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M6.2 6.6a2.6 2.6 0 1 0-3.6 3.7 2.6 2.6 0 1 0 3.6 3.7c.9 0 1.7-.4 2.2-1.1h7.2c.5.7 1.3 1.1 2.2 1.1a2.6 2.6 0 1 0 3.6-3.7 2.6 2.6 0 1 0-3.6-3.7c-.9 0-1.7.4-2.2 1.1H8.4c-.5-.7-1.3-1.1-2.2-1.1z"/></svg>',
+};
 
-function isBoltFull(stack) {
-  return stack.length === CAP && stack.every((n) => n.color === stack[0].color);
+const CONFETTI_COLORS = PALETTE.map((p) => p.hex);
+
+const DEFAULT_LEVELS = { easy: 1, medium: 1, hard: 1, extraHard: 1 };
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-// Builds one nut element (outer wrapper + clipped hex face + letter/hidden-mark).
-// Shared by the real board render and the fx-layer's flying clones so both stay
+function pluralMoves(n) {
+  return `${n} move${n === 1 ? '' : 's'}`;
+}
+
+// Boards range 5 to 17 bolts; three CSS size tiers, switched by one class on
+// the board root so every dependent metric (nut size, base plates, rod
+// height) scales together via custom properties, not hardcoded per-element.
+function sizeClassFor(boltCount) {
+  if (boltCount <= 8) return 'nb-size-l';
+  if (boltCount <= 12) return 'nb-size-m';
+  return 'nb-size-s';
+}
+
+// Builds one nut element: outer wrapper, clipped hex face (top-face band +
+// 3-facet body + bore), and a centered symbol (or "?" for hidden). Shared by
+// the real board render and the fx-layer's flying clones so both stay
 // visually identical.
 function buildNutEl(nut) {
   const nutEl = document.createElement('div');
   nutEl.className = 'nb-nut';
   const face = document.createElement('div');
   face.className = 'nb-nut-face';
+  const top = document.createElement('div');
+  top.className = 'nb-nut-top';
+  face.appendChild(top);
   nutEl.appendChild(face);
   if (nut.hidden) {
     nutEl.dataset.hidden = 'true';
@@ -37,20 +73,12 @@ function buildNutEl(nut) {
     nutEl.appendChild(mark);
   } else {
     nutEl.dataset.color = nut.color;
-    const letter = document.createElement('span');
-    letter.className = 'nb-letter';
-    letter.textContent = LETTER_MAP[nut.color] || '';
-    nutEl.appendChild(letter);
+    const symbol = document.createElement('span');
+    symbol.className = 'nb-nut-symbol';
+    symbol.innerHTML = SYMBOLS[nut.color] || '';
+    nutEl.appendChild(symbol);
   }
   return nutEl;
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
-function pluralMoves(n) {
-  return `${n} move${n === 1 ? '' : 's'}`;
 }
 
 function ensureStylesheet() {
@@ -64,34 +92,48 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
+function freshState() {
+  return { version: 2, currentDifficulty: 'easy', levels: { ...DEFAULT_LEVELS }, board: null, settings: {} };
+}
+
+// Persistence schema v2 (see WP2d). Migrates a v1 blob (single endless level,
+// no tiers) by mapping its level/board onto the 'easy' tier. Any unknown or
+// corrupt data falls back to a fresh v2 default; this never crashes.
 function loadSaved() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { fresh: true, data: { version: 1, level: 1, board: null, settings: { letters: false } } };
+    if (!raw) return { fresh: true, data: freshState() };
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || typeof parsed.level !== 'number') {
-      return { fresh: true, data: { version: 1, level: 1, board: null, settings: { letters: false } } };
+    if (!parsed || typeof parsed !== 'object') return { fresh: true, data: freshState() };
+
+    if (parsed.version === 1) {
+      const migrated = freshState();
+      migrated.levels.easy = typeof parsed.level === 'number' && parsed.level > 0 ? parsed.level : 1;
+      migrated.currentDifficulty = 'easy';
+      if (parsed.board && typeof parsed.board === 'object') {
+        migrated.board = { difficulty: 'easy', ...parsed.board };
+      }
+      return { fresh: false, data: migrated };
     }
-    return {
-      fresh: false,
-      data: {
-        version: 1,
-        level: parsed.level || 1,
-        board: parsed.board || null,
-        settings: { letters: !!(parsed.settings && parsed.settings.letters) },
-      },
-    };
+
+    if (parsed.version === 2) {
+      const fresh = freshState();
+      const levels = { ...fresh.levels, ...(parsed.levels && typeof parsed.levels === 'object' ? parsed.levels : {}) };
+      const currentDifficulty = TIER_ORDER.includes(parsed.currentDifficulty) ? parsed.currentDifficulty : 'easy';
+      const board = parsed.board && typeof parsed.board === 'object' ? parsed.board : null;
+      return { fresh: false, data: { version: 2, currentDifficulty, levels, board, settings: {} } };
+    }
+
+    return { fresh: true, data: freshState() };
   } catch {
-    return { fresh: true, data: { version: 1, level: 1, board: null, settings: { letters: false } } };
+    return { fresh: true, data: freshState() };
   }
 }
 
-function saveState(level, game, settings) {
+function saveState(ui) {
   try {
-    const board = game.hasProgress() || game.moves > 0
-      ? game.toSaved()
-      : null;
-    const data = { version: 1, level, board: game.isWon() ? null : board, settings };
+    const board = ui.game && ui.game.moves > 0 && !ui.game.isWon() ? ui.game.toSaved() : null;
+    const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, board, settings: {} };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
     // Storage can fail (quota, private mode); the game continues in-memory.
@@ -105,11 +147,10 @@ class NutsBoltsUI {
     this.profile = loadProfile();
 
     const saved = loadSaved();
-    this.level = saved.data.level;
-    this.settings = saved.data.settings;
-    this.game = new NutsBoltsGame(this.level, saved.data.board);
-    this._winRecorded = false;   // one stats record per board (see showWin)
+    this.levels = saved.data.levels;
+    this.currentDifficulty = saved.data.currentDifficulty;
     this.showHelpOnStart = saved.fresh;
+    this._winRecorded = false;
 
     this.toastTimer = null;
     this.longPressTimer = null;
@@ -120,32 +161,103 @@ class NutsBoltsUI {
     this.onDocPointerUp = this.onDocPointerUp.bind(this);
     this.onDocPointerMove = this.onDocPointerMove.bind(this);
 
+    if (saved.data.board) {
+      const tier = TIER_ORDER.includes(saved.data.board.difficulty) ? saved.data.board.difficulty : this.currentDifficulty;
+      this.currentDifficulty = tier;
+      this.game = new NutsBoltsGame(tier, this.levels[tier], saved.data.board);
+      this.screen = 'game';
+    } else {
+      this.game = null;
+      this.screen = 'menu';
+    }
+
     this.render();
-    if (this.showHelpOnStart) this.openHelp();
   }
 
   persist() {
-    saveState(this.level, this.game, this.settings);
+    saveState(this);
   }
 
   render() {
+    if (this.screen === 'game') this.renderGame();
+    else this.renderMenu();
+  }
+
+  // --- Difficulty menu ---
+
+  renderMenu() {
     this.container.innerHTML = '';
     const root = document.createElement('div');
-    root.className = 'nb-root' + (this.settings.letters ? ' nb-show-letters' : '');
+    root.className = 'nb-root nb-menu';
+    const cards = TIER_ORDER.map((tier) => `
+      <button type="button" class="nb-tier-card" data-tier="${tier}">
+        <div class="nb-tier-name">${esc(TIER_LABELS[tier])}</div>
+        <div class="nb-tier-level">Level ${this.levels[tier]}</div>
+        <div class="nb-tier-desc">${esc(TIER_DESCRIPTIONS[tier])}</div>
+      </button>
+    `).join('');
+    root.innerHTML = `
+      <div class="nb-menu-header">
+        <h1>Nuts &amp; Bolts</h1>
+        <p>Choose a difficulty</p>
+      </div>
+      <div class="nb-tier-list">${cards}</div>
+    `;
+    this.container.appendChild(root);
+    this.root = root;
+    root.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-tier]');
+      if (card) this.startTier(card.dataset.tier);
+    });
+  }
+
+  startTier(tier) {
+    // "Start/continue that tier": only one board slot exists in storage (see
+    // the v2 schema), so if it already belongs to this same tier and is
+    // still in memory (the player just backed out to the menu), resume it
+    // rather than discarding progress and generating a fresh level.
+    const resuming = this.game && this.currentDifficulty === tier;
+    this.currentDifficulty = tier;
+    if (!resuming) {
+      this.game = new NutsBoltsGame(tier, this.levels[tier], null);
+      this._winRecorded = false;
+    }
+    this.screen = 'game';
+    this.persist();
+    this.renderGame();
+    if (this.showHelpOnStart) {
+      this.showHelpOnStart = false;
+      this.openHelp();
+    }
+  }
+
+  // --- Game screen ---
+
+  renderGame() {
+    this.container.innerHTML = '';
+    const root = document.createElement('div');
+    root.className = 'nb-root';
     root.innerHTML = `
       <div class="nb-topbar">
+        <button type="button" class="nb-headerbtn" data-action="back-to-menu" aria-label="Back to difficulty menu">${ICON_BACK}</button>
         <div class="nb-title">
-          <span class="nb-eyebrow">Level</span>
+          <span class="nb-eyebrow" data-role="tier-label"></span>
           <span class="nb-level-num" data-role="level"></span>
         </div>
-        <div class="nb-moves" data-role="moves"></div>
-        <button type="button" class="nb-btn nb-btn-icon" data-action="help" aria-label="Help">${ICON_HELP}</button>
+        <button type="button" class="nb-headerbtn" data-action="restart" aria-label="Restart">${ICON_RESTART}</button>
       </div>
+      <div class="nb-moves" data-role="moves"></div>
       <div class="nb-board" data-role="board"></div>
       <div class="nb-fx-layer" data-role="fx-layer"></div>
-      <div class="nb-actionbar">
-        <button type="button" class="nb-btn nb-btn-icon" data-action="undo" aria-label="Undo">${ICON_UNDO}</button>
-        <button type="button" class="nb-btn nb-btn-icon" data-action="restart" aria-label="Restart">${ICON_RESTART}</button>
+      <div class="nb-bottombar">
+        <div class="nb-bottombtn-wrap">
+          <button type="button" class="nb-bottombtn" data-action="undo" aria-label="Undo">${ICON_UNDO}</button>
+          <span class="nb-bottombtn-label">Undo</span>
+        </div>
+        <div class="nb-bottombtn-wrap">
+          <button type="button" class="nb-bottombtn" data-action="help" aria-label="Help">${ICON_HELP}</button>
+          <span class="nb-bottombtn-label">Help</span>
+        </div>
       </div>
       <div class="nb-toast" role="status" aria-live="polite" data-role="toast">
         <span class="nb-toast-chip" data-role="toast-chip"></span>
@@ -176,10 +288,6 @@ class NutsBoltsUI {
         <div class="nb-panel">
           <button type="button" class="nb-panel-close" data-action="close-help" aria-label="Close">&times;</button>
           <h2>How to play</h2>
-          <label class="nb-settings-row nb-settings-row-top">
-            <span>Show color letters</span>
-            <input type="checkbox" data-role="letters-toggle">
-          </label>
           <div class="nb-help-body">
             <ul>
               <li>Tap a bolt to select its top group of same-colored nuts.</li>
@@ -188,6 +296,7 @@ class NutsBoltsUI {
               <li>Some levels have hidden nuts (shown with a "?"). Their color is revealed once they reach the top.</li>
               <li>Undo is free and unlimited.</li>
               <li>Press and hold a bolt to hear its colors by name.</li>
+              <li>Harder levels repeat colors: three orange bolts means twelve orange nuts.</li>
             </ul>
           </div>
           <div class="nb-panel-actions">
@@ -209,15 +318,8 @@ class NutsBoltsUI {
     this.winOverlay = root.querySelector('[data-role="win-overlay"]');
     this.helpOverlay = root.querySelector('[data-role="help-overlay"]');
     this.restartOverlay = root.querySelector('[data-role="restart-overlay"]');
-    this.lettersToggle = root.querySelector('[data-role="letters-toggle"]');
-    this.lettersToggle.checked = this.settings.letters;
 
     root.addEventListener('click', this.onClick.bind(this));
-    this.lettersToggle.addEventListener('change', () => {
-      this.settings.letters = this.lettersToggle.checked;
-      root.classList.toggle('nb-show-letters', this.settings.letters);
-      this.persist();
-    });
 
     this.renderBoard();
     this.updateTopbar();
@@ -225,7 +327,8 @@ class NutsBoltsUI {
   }
 
   updateTopbar(pulseMoves) {
-    this.root.querySelector('[data-role="level"]').textContent = String(this.level);
+    this.root.querySelector('[data-role="tier-label"]').textContent = TIER_LABELS[this.currentDifficulty] || '';
+    this.root.querySelector('[data-role="level"]').textContent = `Level ${this.game.level}`;
     const movesEl = this.root.querySelector('[data-role="moves"]');
     movesEl.textContent = pluralMoves(this.game.moves);
     if (pulseMoves) {
@@ -240,15 +343,16 @@ class NutsBoltsUI {
 
   renderBoard() {
     this.boardEl.innerHTML = '';
+    this.boardEl.className = 'nb-board ' + sizeClassFor(this.game.stacks.length);
     this.game.stacks.forEach((stack, index) => {
-      const locked = stack.length === CAP && stack.every((n) => n.color === stack[0].color);
+      const locked = isBoltComplete(stack);
       const bolt = document.createElement('div');
       bolt.className = 'nb-bolt' + (locked ? ' nb-locked' : '') + (this.game.selected === index ? ' nb-selected' : '');
       bolt.dataset.index = String(index);
       bolt.setAttribute('role', 'button');
       bolt.setAttribute('tabindex', '0');
       bolt.setAttribute('aria-label', `Bolt ${index + 1}`);
-      bolt.innerHTML = '<div class="nb-bolt-rod"></div><div class="nb-bolt-cap"></div><div class="nb-bolt-stack"></div><div class="nb-bolt-badge">&#10003;</div>';
+      bolt.innerHTML = '<div class="nb-bolt-rod"></div><div class="nb-bolt-dome"></div><div class="nb-bolt-stack"></div><div class="nb-bolt-badge">&#10003;</div>';
       const stackEl = bolt.querySelector('.nb-bolt-stack');
 
       const run = this.game.selected === index ? getTopRun(stack) : { length: 0 };
@@ -287,6 +391,10 @@ class NutsBoltsUI {
 
   handleAction(action) {
     switch (action) {
+      case 'back-to-menu':
+        this.screen = 'menu';
+        this.renderMenu();
+        break;
       case 'undo':
         if (this.game.undo()) {
           this.persist();
@@ -316,8 +424,8 @@ class NutsBoltsUI {
         break;
       case 'next-level':
         this.winOverlay.hidden = true;
-        this.level += 1;
-        this.game = new NutsBoltsGame(this.level, null);
+        this.levels[this.currentDifficulty] += 1;
+        this.game = new NutsBoltsGame(this.currentDifficulty, this.levels[this.currentDifficulty], null);
         this._winRecorded = false;
         this.persist();
         this.renderBoard();
@@ -355,7 +463,7 @@ class NutsBoltsUI {
         this.persist();
         if (preRects && preRects.length) this.animateMove(preRects, result.to, result.count);
         const destStack = this.game.stacks[result.to];
-        if (isBoltFull(destStack)) this.flashCompleted(result.to);
+        if (isBoltComplete(destStack)) this.flashCompleted(result.to);
       }
       if (result.won) this.showWin();
     }
@@ -487,10 +595,10 @@ class NutsBoltsUI {
     // and re-solving the same board cannot double-count. Never break the game over stats.
     if (!this._winRecorded) {
       this._winRecorded = true;
-      try { recordNutsBolts(this.level, this.game.moves); } catch { /* ignore */ }
+      try { recordNutsBolts(this.game.level, this.game.moves); } catch { /* ignore */ }
     }
     const name = this.profile && this.profile.name;
-    const title = `Level ${this.level} complete`;
+    const title = `Level ${this.game.level} complete`;
     const detail = name ? `Nice one, ${esc(name)}! ${pluralMoves(this.game.moves)}.` : `${pluralMoves(this.game.moves)}.`;
     this.root.querySelector('[data-role="win-title"]').textContent = title;
     this.root.querySelector('[data-role="win-detail"]').innerHTML = detail;
@@ -611,7 +719,7 @@ class NutsBoltsUI {
   }
 
   isInProgress() {
-    return this.game.hasProgress();
+    return this.screen === 'game' && !!this.game && this.game.hasProgress();
   }
 }
 
