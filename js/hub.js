@@ -266,7 +266,13 @@ class Hub {
     // In-development games (devOnly) render only for Matt and the tester. Everyone else,
     // including the challenge recipient, never sees the card at all.
     const dev = !!(prof && isDevProfile(prof.name));
-    const visible = GAMES.filter((g) => !g.devOnly || dev);
+    // Games are always listed ALPHABETICALLY by display title (project rule). Sorting at
+    // render time keeps it self-maintaining: a new GAMES entry lands in the right place no
+    // matter where it is added to the array. localeCompare so accents (Chinchón, Parchís)
+    // sort correctly. The hidden challenge/admin card is deliberately NOT sorted in; it
+    // renders apart in .hub-extra below the grid.
+    const visible = GAMES.filter((g) => !g.devOnly || dev)
+      .sort((a, b) => a.title.localeCompare(b.title));
     this.games = visible.concat(extra ? [extra] : []);                   // includes `extra` for launch() lookup
     this.root.innerHTML = `
       <div class="hub">

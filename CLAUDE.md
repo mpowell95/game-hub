@@ -61,6 +61,9 @@ export default { init, destroy };
    - in-hub module → `module: '../<game>/js/ui.js'`
    - separately-deployed app → `href: '/<game>/'`
    - plus `id, title, blurb, badge, accent, art` (inline SVG).
+   - Array position is irrelevant: the launcher grid is sorted **alphabetically by display `title`**
+     at render time (`localeCompare`). Games are always listed alphabetically, no exceptions. (The
+     hidden challenge/admin card is the sole exception; it renders apart in `.hub-extra`.)
 5. Add the game's files to the `ASSETS` precache list in `sw.js` and **bump `CACHE`**
    (`game-hub-vN` → `vN+1`), or the new files won't be cached for offline.
 
