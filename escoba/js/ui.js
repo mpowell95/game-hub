@@ -100,7 +100,11 @@ class EscobaUI {
       aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 2)
         : [profileDiff(0), profileDiff(1)],
       targetScore: saved.targetScore === 31 ? 31 : 21,
-      deckMode: saved.deckMode === 'spanish' ? 'spanish' : 'american',
+      // Spanish is the default. American only sticks when the player actually
+      // tapped the toggle (deckModeChosen); an earlier build wrote 'american'
+      // as a default, and that must not survive as if it were a choice.
+      deckMode: (saved.deckModeChosen && saved.deckMode === 'american') ? 'american' : 'spanish',
+      deckModeChosen: !!saved.deckModeChosen,
     };
   }
 
@@ -109,7 +113,7 @@ class EscobaUI {
     saveJSON(STORE_SETTINGS, {
       count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
-      deckMode: s.deckMode,
+      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen,
     });
   }
 
@@ -209,7 +213,7 @@ class EscobaUI {
         </div>
         <div class="eb-section">
           <span class="eb-label">Card numbering</span>
-          ${seg('set-deckmode', s.deckMode, [['american', 'American'], ['spanish', 'Spanish']])}
+          ${seg('set-deckmode', s.deckMode, [['spanish', 'Spanish'], ['american', 'American']])}
           <p class="eb-hint">${s.deckMode === 'american'
             ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
             : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>
@@ -793,7 +797,7 @@ class EscobaUI {
       // setup
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
-      case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
+      case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._setup.deckModeChosen = true; this._saveSetup(); this.renderSetup(); break;
       case 'set-aidiff': {
         this.syncSetupInputs();
         const i = +a.closest('.eb-segmented').dataset.i;

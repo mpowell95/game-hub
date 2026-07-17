@@ -47,8 +47,8 @@ function makeCard(suit, rank, mode) {
 }
 
 /** Build a fresh, unshuffled 40-card deck for the given numbering mode. */
-export function makeDeck(mode = 'american') {
-  const ranks = RANKS[mode] || RANKS.american;
+export function makeDeck(mode = 'spanish') {
+  const ranks = RANKS[mode] || RANKS.spanish;
   const deck = [];
   for (const suit of SUITS) for (const rank of ranks) deck.push(makeCard(suit, rank, mode));
   return deck;

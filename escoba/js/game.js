@@ -25,7 +25,7 @@ import { makeDeck, shuffle, sumValues, captureOptions } from './deck.js';
 
 export const DEFAULT_CONFIG = {
   targetScore: 21,       // 21 or 31
-  deckMode: 'american',  // 'american' (1-10 as printed) | 'spanish' (figures count 8/9/10)
+  deckMode: 'spanish',   // 'spanish' (figures count 8/9/10) | 'american' (1-10 as printed)
 };
 
 export function makePlayer({ id, name, avatar, isHuman = false, agent = null, difficulty = null }) {
