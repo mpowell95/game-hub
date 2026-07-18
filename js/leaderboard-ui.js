@@ -5,10 +5,14 @@
 //
 // Colorblind-safe: rank + the viewer's own highlighted row use weight/border, never hue alone.
 
-import { aggregatePlayers, identityKey } from './players-agg.js';
+import { aggregatePlayers, identityKey, nameCodeMap } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { deviceId } from './game-stats.js';
+
+// Old test/debug device records. They stay in Firebase untouched (no data is ever deleted); they are
+// simply never rendered. Matched by deviceId prefix.
+const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test1", preview bot
 
 const TABS = [
   { id: 'overall', label: 'Overall', accent: '#5b6b82' },
@@ -28,20 +32,15 @@ function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }
 const cmp = (...fns) => (a, b) => { for (const f of fns) { const d = f(b) - f(a); if (d) return d; } return 0; };
 
 // --- ranking rows per tab ---------------------------------------------------
-function rankName(g) {
-  const name = esc(g.name || (g.playerId ? 'Player ' + g.playerId : 'Unnamed'));
-  const dev = g.devices > 1 ? ` <em class="lb-dev">${g.devices} devices</em>` : '';
-  return name + dev;
-}
+function rankName(g) { return esc(g.name || 'Unnamed'); }
 
 function overallRows(list) {
-  const rows = list.filter((g) => g.comp.played > 0 || g.solo.solved > 0)
+  // Competitive record only. Nuts & Bolts is solo (no W/L) and has its own tab.
+  const rows = list.filter((g) => g.comp.played > 0)
     .sort(cmp((g) => g.comp.won, (g) => pct(g.comp.won, g.comp.played), (g) => g.comp.played, (g) => g.updatedAt));
   if (!rows.length) return emptyRows('No games recorded yet.');
-  return table(['#', 'Player', 'W-L', 'Win rate', 'Plays'], rows.map((g, i) => {
-    const solo = g.solo.solved > 0 ? ` <em class="lb-dev">${g.solo.solved} solved</em>` : '';
-    return rowHTML(g, i, [`${g.comp.won}-${g.comp.lost}`, `${pct(g.comp.won, g.comp.played)}%`, `${g.comp.played}`], solo);
-  }));
+  return table(['#', 'Player', 'W-L', 'Win rate', 'Plays'], rows.map((g, i) =>
+    rowHTML(g, i, [`${g.comp.won}-${g.comp.lost}`, `${pct(g.comp.won, g.comp.played)}%`, `${g.comp.played}`])));
 }
 
 function gameRows(list, id) {
@@ -77,8 +76,22 @@ function table(head, bodyRows) {
 function emptyRows(msg) { return `<p class="lb-none">${esc(msg)}</p>`; }
 function labelOf(id) { const t = TABS.find((x) => x.id === id); return t ? t.label : id; }
 
+/** Records to render: everything except the old test/debug devices (which stay stored, just hidden). */
+function visibleRecords() {
+  const out = {};
+  for (const id of Object.keys(_all || {})) {
+    if (HIDDEN_PREFIX.some((p) => id.startsWith(p))) continue;
+    out[id] = _all[id];
+  }
+  return out;
+}
+
 function bodyFor(id) {
-  const list = aggregatePlayers(_all);
+  const recs = visibleRecords();
+  // Only players who have set a profile name are listed. Devices with no name keep every game they
+  // recorded; that history joins a player automatically the moment the device sets a name.
+  const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
+  try { _meKey = identityKey(loadProfile() || {}, deviceId(), nameCodeMap(recs)).key; } catch { /* keep */ }
   if (id === 'overall') return overallRows(list);
   if (id === 'nutsbolts') return nutsBoltsRows(list);
   return gameRows(list, id);
@@ -145,7 +158,6 @@ export async function openLeaderboard() {
       </header>
       <nav class="lb-tabs" data-role="lb-tabs" aria-label="Choose a game">${tabsHTML()}</nav>
       <div class="lb-body" data-role="lb-body"><p class="lb-none">Connecting...</p></div>
-      <p class="lb-foot">Everyone who has opened the hub online. One row per player (link devices with your code in your profile).</p>
     </div>`;
   host.addEventListener('click', onClick);
   document.body.appendChild(host);

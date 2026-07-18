@@ -200,12 +200,8 @@ function rerender() {
   if (!_host) return;
   const tabsEl = _host.querySelector('[data-role="gs-tabs"]');
   const bodyEl = _host.querySelector('[data-role="gs-body"]');
-  const foot = _host.querySelector('[data-role="gs-foot"]');
   if (tabsEl) tabsEl.innerHTML = tabsHTML();
   if (bodyEl) bodyEl.innerHTML = screenFor(_active, _st || { games: {} });
-  if (foot) foot.textContent = _combinedDevices > 1
-    ? `Combined across your ${_combinedDevices} devices. Counts every game you finish.`
-    : 'Saved on this device. Counts every game you finish.';
 }
 
 /** Fetch every device record and re-render from THIS player's combined (code-aggregated) stats.
@@ -253,7 +249,6 @@ export function openStatsOverlay() {
       </header>
       <nav class="gs-tabs" data-role="gs-tabs" aria-label="Choose a game">${tabsHTML()}</nav>
       <div class="gs-body" data-role="gs-body">${screenFor(_active, _st)}</div>
-      <p class="gs-foot" data-role="gs-foot">Saved on this device. Counts every game you finish.</p>
     </div>`;
   host.addEventListener('click', onClick);
   document.body.appendChild(host);

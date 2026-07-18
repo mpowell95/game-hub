@@ -6,10 +6,10 @@
 //
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
-import { loadProfile } from './profile-store.js';
+import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile, loadChallenge } from './challenge/hooks.js';
 import { markUnlockSeen } from './challenge/challenge-store.js';
-import { syncMyStats } from './stats-net.js';
+import { syncMyStats, usernameStatus, claimUsername } from './stats-net.js';
 
 // Which challenge win-slot each of the four games maps to, for the challenge-mode task
 // markers on the launcher cards (star = still to win, check = won). Other cards map to none.
@@ -190,6 +190,9 @@ const GAMES = [
     title: 'Mancala',
     blurb: 'Sow stones, chain extra turns, capture the most. Vs. AI or a friend.',
     module: '../mancala/js/ui.js',
+    // The board wants every vertical pixel it can get on a phone, and the game
+    // shows its own title/avatars, so the hub's header row is wasted space here.
+    immersive: true,
     accent: '#e08a3c',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
             <rect width="120" height="120" fill="#b96f35"/>
@@ -334,6 +337,23 @@ class Hub {
             </div>
           </div>
         </div>
+        <div class="hub-fr" data-role="firstrun" hidden>
+          <div class="hub-fr-scrim"></div>
+          <div class="hub-fr-card" role="dialog" aria-modal="true" aria-label="Choose a name">
+            <h2 class="hub-fr-h">Choose a name</h2>
+            <div class="hub-fr-row">
+              <input class="hub-fr-input" data-role="fr-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="fr-save">Save</button>
+            </div>
+            <div class="hub-fr-or">or</div>
+            <div class="hub-fr-row">
+              <input class="hub-fr-input" data-role="fr-code" type="text" maxlength="5" placeholder="Enter a code"
+                     autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.16em">
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-link">Link</button>
+            </div>
+            <p class="hub-fr-msg" data-role="fr-msg" role="status" aria-live="polite"></p>
+          </div>
+        </div>
       </div>`;
 
     this.el = {
@@ -383,6 +403,8 @@ class Hub {
     });
 
     this.el.version.addEventListener('click', () => this._forceUpdate());
+
+    this.initFirstRun(prof);
     this._initVersionPill();
 
     this.maybePlayUnlock(active);
@@ -449,6 +471,45 @@ class Hub {
       if (reg) await reg.update();   // fetches the new sw.js; skipWaiting activates it
     } catch { /* still reload: network-first serves fresh files regardless */ }
     location.reload();
+  }
+
+  /** A device with no profile name is invisible on the leaderboard, so gate it once: pick a name, or
+   *  link an existing player code. Nothing is lost either way - games already recorded on this device
+   *  join that player the moment the name or code lands. Also catches devices that played unnamed. */
+  initFirstRun(prof) {
+    const box = this.root.querySelector('[data-role="firstrun"]');
+    if (!box) return;
+    if (prof && (prof.name || '').trim()) { box.hidden = true; return; }
+    const nameIn = box.querySelector('[data-role="fr-name"]');
+    const codeIn = box.querySelector('[data-role="fr-code"]');
+    const msgEl = box.querySelector('[data-role="fr-msg"]');
+    const say = (t) => { msgEl.textContent = t || ''; };
+    box.hidden = false;
+    setTimeout(() => { try { nameIn.focus(); } catch { /* ignore */ } }, 60);
+
+    const finish = () => { box.hidden = true; this.render(); this._syncStats(); };
+
+    box.querySelector('[data-role="fr-save"]').addEventListener('click', async () => {
+      const name = (nameIn.value || '').trim();
+      if (!name) { say('Enter a name.'); return; }
+      const cur = loadProfile() || {};
+      const code = cur.playerId || newPlayerCode();
+      say('Checking...');
+      let status = 'offline';
+      try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
+      if (status === 'taken') { say('Taken. Use that code instead.'); return; }
+      saveProfile(Object.assign({}, cur, { name, playerId: code }));
+      try { claimUsername(name, code, ''); } catch { /* best-effort */ }
+      finish();
+    });
+
+    box.querySelector('[data-role="fr-link"]').addEventListener('click', () => {
+      const code = canonicalizeCode(codeIn.value);
+      if (!code) { say('Invalid code.'); return; }
+      const cur = loadProfile() || {};
+      saveProfile(Object.assign({}, cur, { playerId: code }));
+      finish();
+    });
   }
 
   /** On first activation for the challenge profile, play the unlock announcement once. */

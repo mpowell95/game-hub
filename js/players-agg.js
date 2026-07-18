@@ -20,13 +20,34 @@ const emptyGrid = () => {
   return { player: side(), computer: side() };
 };
 
-/** Grouping key for a profile-like object, precedence code -> name -> device. Returns {key, playerId}. */
-export function identityKey(profileLike, fallbackId) {
+/** nameLower -> CODE, from records that carry a code (a coded player owns their name). When two codes
+ *  claim one name, the most recently active wins. */
+export function nameCodeMap(all) {
+  const m = new Map(), seen = new Map();
+  for (const id of Object.keys(all || {})) {
+    const rec = all[id] || {}, p = rec.profile || {};
+    const code = (typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase();
+    const name = (typeof p.name === 'string' ? p.name : '').trim().toLowerCase();
+    if (!code || !name) continue;
+    const upd = +rec.updatedAt || 0;
+    if (!m.has(name) || upd >= (seen.get(name) || 0)) { m.set(name, code); seen.set(name, upd); }
+  }
+  return m;
+}
+
+/** Grouping key for a profile-like object, precedence code -> name -> device. Returns {key, playerId}.
+ *  An UNCODED device whose name is owned by a coded player joins that player: this is how a device
+ *  that never entered the code (or one that only just set its name) reunites with its own history. */
+export function identityKey(profileLike, fallbackId, nameToCode) {
   const p = profileLike || {};
   const code = (typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase();
   if (code) return { key: 'code:' + code, playerId: code };
   const name = (typeof p.name === 'string' ? p.name : '').trim();
-  if (name) return { key: 'name:' + name.toLowerCase(), playerId: null };
+  if (name) {
+    const owned = nameToCode && nameToCode.get(name.toLowerCase());
+    if (owned) return { key: 'code:' + owned, playerId: owned };
+    return { key: 'name:' + name.toLowerCase(), playerId: null };
+  }
   return { key: 'device:' + fallbackId, playerId: null };
 }
 
@@ -37,10 +58,11 @@ export function identityKey(profileLike, fallbackId) {
  *  solo:{solved,bestLevel,moves}, totalPlays }. */
 export function aggregatePlayers(all) {
   const groups = new Map();
+  const nameToCode = nameCodeMap(all);
   for (const id of Object.keys(all || {})) {
     const rec = all[id] || {};
     const prof = rec.profile || {};
-    const { key, playerId } = identityKey(prof, id);
+    const { key, playerId } = identityKey(prof, id, nameToCode);
     let grp = groups.get(key);
     if (!grp) {
       grp = { key, playerId, name: '', emoji: '', devices: 0, updatedAt: 0, games: {} };
@@ -108,7 +130,7 @@ export function aggregateForViewer(all, profileLike, myDeviceId, localStats) {
     playerId: (profileLike && profileLike.playerId) || baseProf.playerId || '',
   });
   merged[myDeviceId] = { profile: myProf, stats: localStats, updatedAt: Number.MAX_SAFE_INTEGER };
-  const myKey = identityKey(myProf, myDeviceId).key;
+  const myKey = identityKey(myProf, myDeviceId, nameCodeMap(merged)).key;
   return aggregatePlayers(merged).find((g) => g.key === myKey) || null;
 }
 
