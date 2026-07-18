@@ -127,17 +127,26 @@ function showSheet(p) {
 
 // After the initial delay, another hub overlay (most commonly the first-run
 // name gate on a brand-new browser/device) may still be covering the
-// launcher. Don't just give up — that silently skipped the prompt for every
-// first-time visitor, exactly the audience it's most worth showing to. Wait
-// for the gate to clear (it's a DOM swap from Hub.render(), so a body-level
-// observer catches it) and show as soon as the launcher is actually clear.
+// launcher, or the user may be mid-game. Don't just give up — that silently
+// skipped the prompt for every first-time visitor, exactly the audience it's
+// most worth showing to. Wait for the launcher to clear and show then.
+//
+// This used to be a MutationObserver on document.body's whole subtree, but
+// that stayed attached for the rest of the session whenever the check landed
+// mid-game (onLauncherScreen() never goes true until the user backs out), and
+// every game rebuilds DOM via innerHTML on nearly every move — so the
+// callback (a localStorage read, a matchMedia call, three document-wide
+// querySelectors) fired constantly on the main thread while cards animated.
+// Nothing here needs mutation-level latency; a slow poll is effectively free
+// and can't scale with gameplay DOM churn.
+let waitTimer = null;
 function whenOnLauncher(cb) {
   if (onLauncherScreen()) { cb(); return; }
-  const obs = new MutationObserver(() => {
-    if (isDismissed() || isStandalone()) { obs.disconnect(); return; }
-    if (onLauncherScreen()) { obs.disconnect(); cb(); }
-  });
-  obs.observe(document.body, { attributes: true, attributeFilter: ['hidden'], subtree: true, childList: true });
+  if (waitTimer !== null) clearInterval(waitTimer);
+  waitTimer = setInterval(() => {
+    if (isDismissed() || isStandalone()) { clearInterval(waitTimer); waitTimer = null; return; }
+    if (onLauncherScreen()) { clearInterval(waitTimer); waitTimer = null; cb(); }
+  }, 2000);
 }
 
 /** Mount the hub-wide Add-to-Home-Screen prompt. Call once at page load. */
