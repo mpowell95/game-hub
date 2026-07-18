@@ -38,6 +38,15 @@
   --eb-hand-w: clamp(92px, 27vw, 128px);
   --eb-row-h: calc(var(--eb-card-w) * 1.54);   /* one table-card row, incl. aspect ratio */
 
+  /* Table-card capacity contract: sized by JS (see _sizeTableRows in ui.js)
+     to the exact width that fits 4 cards per row in the mat's actual table
+     zone, and the row height that matches. These two defaults (mirroring
+     --eb-card-w/--eb-row-h) only apply for the first paint before JS
+     measures the real zone; JS overrides both as inline custom properties
+     on .eb-mat on every resize. Table cards NEVER shrink below this once
+     set: rows beyond 4 cards fan with overlap instead (see .eb-table-row). */
+  --eb-table-card-w: var(--eb-card-w);
+
   /* Overhang budget: how far the lift + ring (selected) or the value badge
      bleeds past a card's own box. Card zones pad by these so nothing clips. */
   --eb-lift-overhang: 12px;     /* table-card select lift (7px) + ring (3px) + margin */
@@ -226,15 +235,13 @@
 }
 .eb-mat-announce.is-in { opacity: 1; transform: none; }
 
-/* The mat: a floor of exactly two card rows, always. Padded by the overhang
-   budget so lifted / ringed / bled adornments never clip against the felt's
-   own edges; the inner .eb-table is sized so exactly two card rows plus that
-   padding fit, so a 4-card table growing to 5+ never grows the mat or
-   shoves anything below it. The rare overflow beyond two rows fans cards
-   with a tighter overlap (.eb-table-compact) and is clipped as a last
-   resort -- only the felt background is ever allowed to clip; the card
-   layer never is. It flex-grows to absorb any leftover viewport height
-   (Task E: extra room becomes more felt, not a dead gap below the game). */
+/* The mat: a floor of exactly two card rows, always -- a HARD rule, never a
+   3rd row. Padded by the overhang budget so lifted / ringed / bled
+   adornments never clip against the felt's own edges; the inner .eb-table
+   is sized so exactly two card rows plus that padding fit, so a 4-card
+   table growing to 5+ never grows the mat or shoves anything below it. It
+   flex-grows to absorb any leftover viewport height (Task E: extra room
+   becomes more felt, not a dead gap below the game). */
 .eb-mat {
   position: relative; display: flex; align-items: flex-start; gap: 10px;
   flex: 1 1 auto;
@@ -255,13 +262,34 @@
 }
 .eb-stock-empty { width: var(--eb-card-w); aspect-ratio: 400 / 616; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
 
+/* Table zone: exactly two DETERMINISTIC rows (see splitRows()/renderTable()
+   in ui.js), never flex-wrap-decided. Row assignment always balances the
+   cards 50/50 (row 1 gets the ceil half beyond 4 cards), so a 5-card table
+   is 3+2, not 4+1-that-wraps-to-a-3rd-row. Each row is sized to hold
+   exactly 4 cards at --eb-table-card-w; a row that must hold more than 4
+   fans its cards with overlap (.is-overlap) instead of ever adding a 3rd
+   row or shrinking the cards. */
 .eb-table {
-  flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
-  gap: 6px; align-self: center; overflow: hidden;
+  flex: 1; display: flex; flex-direction: column; justify-content: flex-start;
+  gap: 8px; align-self: center; overflow: hidden; width: 100%;
   height: calc(var(--eb-row-h) * 2 + 8px + var(--eb-lift-overhang) + var(--eb-badge-overhang));
   padding: var(--eb-lift-overhang) var(--eb-badge-overhang) var(--eb-badge-overhang);
 }
-.eb-table-cell { display: flex; }
+.eb-table-row {
+  flex: none; display: flex; align-items: flex-start; justify-content: center;
+  gap: 6px; height: var(--eb-row-h);
+}
+.eb-table-row.is-overlap { gap: 0; }
+/* Overlap fan: later cards stack above earlier ones via plain DOM order
+   (each .eb-card is position:relative, so normal-flow stacking order
+   already puts later siblings on top -- no explicit z-index needed). The
+   selected/hinted lift (translateY + ring) still applies per-card, so a
+   partially covered card becomes fully readable the moment it's tapped. */
+.eb-table-row.is-overlap .eb-table-cell:not(:first-child) {
+  margin-left: calc(var(--eb-table-card-w) * -0.42);
+}
+.eb-table-cell { display: flex; flex: none; }
+.eb-table .eb-card { width: var(--eb-table-card-w); }
 
 /* Cards */
 .eb-card {
@@ -360,20 +388,46 @@
    motion reads as an in-place sweeping/dust flourish, not a full-width
    traversal, so the container itself supplies the actual across-the-felt
    motion). Absolutely positioned inside the mat: zero reflow, and it
-   layers above the cards but below the fixed banner/modal overlays. */
+   layers above the cards but below the fixed banner/modal overlays.
+   Positioned low (top: 78%) so the head travels through the lower card row
+   near the felt's bottom edge; may slightly overhang the mat's own rounded
+   bottom edge, which is fine since it's an overlay, not layout. A second,
+   concurrent animation (eb-broom-strokes) oscillates translateX/rotate on
+   top of the baked-in traversal so it reads as sweeping strokes rather than
+   a single flight across the screen: fast strokes, slower overall crossing. */
 .eb-broom {
-  position: absolute; top: 50%; left: -38%; z-index: 15;
+  position: absolute; top: 78%; left: -38%; z-index: 15;
   width: 46%; aspect-ratio: 480 / 360;
-  transform: translateY(-46%);
+  transform: translateY(-50%);
+  transform-origin: 50% 22%;   /* near the top of the broom's handle */
   background-repeat: no-repeat; background-size: 1000% 100%; background-position: 0 0;
   opacity: 0; pointer-events: none;
 }
 .eb-broom.is-sweeping {
   opacity: 1;
-  animation: eb-broom-frames 0.95s steps(9) forwards, eb-broom-travel 0.95s cubic-bezier(0.3, 0, 0.4, 1) forwards;
+  animation:
+    eb-broom-frames 1.5s steps(9) forwards,
+    eb-broom-travel 1.5s cubic-bezier(0.3, 0, 0.4, 1) forwards,
+    eb-broom-strokes 1.5s ease-in-out forwards;
 }
 @keyframes eb-broom-frames { from { background-position: 0% 0; } to { background-position: 100% 0; } }
 @keyframes eb-broom-travel { from { left: -38%; } to { left: 108%; } }
+/* ~4 strokes over the crossing: translateX swings ~4% of the MAT's width,
+   which (since the broom itself is 46% of the mat) is ~8.5% of the broom's
+   own width (transform % is relative to the element's own box, not its
+   containing block). Paired with a small rotation from the handle-top origin
+   so each stroke arcs like a real sweep, not a slide. */
+@keyframes eb-broom-strokes {
+  0%   { transform: translateY(-50%) translateX(0)      rotate(0deg); }
+  12%  { transform: translateY(-50%) translateX(8.5%)   rotate(4deg); }
+  25%  { transform: translateY(-50%) translateX(-8.5%)  rotate(-4deg); }
+  37%  { transform: translateY(-50%) translateX(8.5%)   rotate(4deg); }
+  50%  { transform: translateY(-50%) translateX(-8.5%)  rotate(-4deg); }
+  62%  { transform: translateY(-50%) translateX(8.5%)   rotate(4deg); }
+  75%  { transform: translateY(-50%) translateX(-8.5%)  rotate(-4deg); }
+  87%  { transform: translateY(-50%) translateX(4%)     rotate(2deg); }
+  100% { transform: translateY(-50%) translateX(0)      rotate(0deg); }
+}
 
 /* Self chip: same big-score anchor as the opponent cards. */
 .eb-self-row { display: flex; justify-content: center; }

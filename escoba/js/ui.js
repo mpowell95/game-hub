@@ -27,10 +27,12 @@ const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#e8b53a', '#d22f27', '#1f5fd4', '#2e8b57'];
 
 const BEAT_TURN = 650, BEAT_PLAY = 800, BEAT_CAPTURE = 520, BEAT_ESCOBA = 1250, BEAT_ANNOUNCE = 1500;
-// Escoba sweep sequence: broom starts immediately, the capture's cards fly a
-// beat later, the banner pops as the sweep tail lands. Kept under ~1s total
-// so the pacing added to a very common event (an escoba) doesn't drag.
-const BROOM_MS = 950, BROOM_TO_FLYOUT_MS = 150, BROOM_TO_BANNER_MS = 450;
+// Escoba sweep sequence: broom starts immediately, the capture's cards fly
+// partway through the (now slower, ~1.5s) crossing, and the banner pops
+// around the halfway point rather than waiting for the full sweep to
+// finish, so the total moment stays well under ~1.8s even though the sweep
+// itself now takes longer to register as a sweep rather than a flight.
+const BROOM_MS = 1500, BROOM_TO_FLYOUT_MS = 480, BROOM_TO_BANNER_MS = 720;
 const STORE_SETTINGS = 'escoba-settings';
 const STORE_SAVE = 'escoba-save';
 const SAVE_SCHEMA_V = 1;
@@ -168,7 +170,7 @@ class EscobaUI {
           <div class="eb-announce-row">
             <div class="eb-mat-announce" data-role="announce" aria-live="polite"></div>
           </div>
-          <div class="eb-mat">
+          <div class="eb-mat" data-role="mat">
             <div class="eb-mat-side">
               <div class="eb-stock" data-role="stock"></div>
               <span class="eb-stock-count" data-role="stockcount"></span>
@@ -192,14 +194,45 @@ class EscobaUI {
     this.el = {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), matchinfo: q('matchinfo'), stock: q('stock'), stockcount: q('stockcount'),
-      table: q('table'), announce: q('announce'), lasthand: q('lasthand'), sumchip: q('sumchip'), broom: q('broom'),
+      mat: q('mat'), table: q('table'), announce: q('announce'), lasthand: q('lasthand'), sumchip: q('sumchip'), broom: q('broom'),
       self: q('self'), hand: q('hand'), actions: q('actions'),
       modal: q('modal'), menu: q('menu'), banner: q('banner'),
     };
 
     this.el.broom.style.backgroundImage = `url("${BROOM_URL}")`;
     this.root.addEventListener('click', this._onClick);
+    this._sizeTableRows();
+    if (typeof ResizeObserver !== 'undefined') {
+      this._matResizeObserver = new ResizeObserver(() => this._sizeTableRows());
+      this._matResizeObserver.observe(this.el.mat);
+    } else {
+      this._onWinResize = () => this._sizeTableRows();
+      window.addEventListener('resize', this._onWinResize);
+    }
     this.showSetup();
+  }
+
+  /** Capacity contract: measure the table zone's actual rendered width (the
+   *  mat minus the stock column, already fixed by the mat's own flex layout
+   *  regardless of card content) and compute the table-card width that fits
+   *  exactly 4 cards per row, plus the matching row height. Written as inline
+   *  custom properties on .eb-mat so every descendant (.eb-table, its two
+   *  rows, every .eb-card inside) picks it up via normal CSS cascade. Cards
+   *  never shrink dynamically beyond this baseline; rows holding more than 4
+   *  cards fan with overlap instead (see renderTable/.eb-table-row.is-overlap). */
+  _sizeTableRows() {
+    if (this._dead || !this.el || !this.el.table) return;
+    // clientWidth includes the table zone's own left/right padding (the
+    // badge-overhang reserve); rows lay out inside the content box, so that
+    // padding has to come back out before dividing into 4 card columns.
+    const cs = getComputedStyle(this.el.table);
+    const zoneW = this.el.table.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    if (!zoneW) return;
+    const GAP = 6;
+    const cardW = Math.max(40, Math.floor((zoneW - GAP * 3) / 4));
+    const rowH = Math.round(cardW * 1.54);
+    this.el.mat.style.setProperty('--eb-table-card-w', `${cardW}px`);
+    this.el.mat.style.setProperty('--eb-row-h', `${rowH}px`);
   }
 
   // --- setup screen ---------------------------------------------------------
@@ -414,6 +447,7 @@ class EscobaUI {
 
   _enterGameScreen() {
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this._sizeTableRows();   // the mat was display:none until now, so re-measure its now-real width
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.render();
   }
@@ -465,7 +499,8 @@ class EscobaUI {
             t.innerHTML = cardFaceHTML(c, { static: true, value: true }).trim();
             return t.content.firstElementChild;
           });
-          nodes.forEach((n) => this.el.table.appendChild(n));
+          const anchorRow = this._lastTableRow();
+          nodes.forEach((n) => anchorRow.appendChild(n));
           await this.beat(60);
           this._startBroomSweep();
           await this.beat(BROOM_TO_FLYOUT_MS);
@@ -523,7 +558,7 @@ class EscobaUI {
     node.innerHTML = cardFaceHTML(card, { static: true, value: true }).trim();
     const el = node.content.firstElementChild;
     el.classList.add('is-played');
-    this.el.table.appendChild(el);
+    this._lastTableRow().appendChild(el);
     if (isAI) {
       this.announce(captured.length
         ? `${p.name} plays ${cardLabel(card)} · captures ${captured.length}`
@@ -688,6 +723,16 @@ class EscobaUI {
     this.el.stockcount.textContent = String(g.stock.length);
   }
 
+  /** Deterministic 2-row split, never left to flex-wrap: row 1 gets the
+   *  ceil half once there are more than 4 cards, so e.g. 5 cards become 3+2
+   *  (both under the 4-per-row capacity) rather than 4+1, where that lone
+   *  5th card would otherwise wrap into an invisible 3rd row. */
+  _splitTableRows(n) {
+    if (n <= 4) return [n, 0];
+    const row1 = Math.ceil(n / 2);
+    return [row1, n - row1];
+  }
+
   renderTable() {
     const g = this.game;
     const selCard = this._selCard();
@@ -702,20 +747,40 @@ class EscobaUI {
       }
     }
     if (!g.table.length) return '';
-    // Fixed mat geometry holds two comfortable rows; the rare overflow beyond
-    // that fans cards with a tighter overlap instead of growing the mat.
-    const compact = g.table.length > 8;
-    const cls = compact ? ' eb-table-compact' : '';
-    return g.table.map((c, i) => {
-      const style = compact && i > 0 ? ` style="margin-left:calc(-1 * var(--eb-card-w) * 0.4)"` : '';
+    const cardHTML = (c) => {
       const isSel = this._selTable.has(c.id);
-      return `<span class="eb-table-cell${cls}"${style}>${cardFaceHTML(c, {
+      return `<span class="eb-table-cell">${cardFaceHTML(c, {
         selected: isSel,
         hinted: hintIds.has(c.id) && !isSel,
         dim: remaining != null && !isSel && c.value > remaining,
         value: true,
       })}</span>`;
-    }).join('');
+    };
+    const [count1, count2] = this._splitTableRows(g.table.length);
+    const rows = [];
+    let idx = 0;
+    for (const count of [count1, count2]) {
+      if (!count) continue;
+      const cards = g.table.slice(idx, idx + count);
+      idx += count;
+      const overlap = count > 4;
+      rows.push(`<div class="eb-table-row${overlap ? ' is-overlap' : ''}">${cards.map(cardHTML).join('')}</div>`);
+    }
+    return rows.join('');
+  }
+
+  /** The most recently rendered table row (for animatePlay's transient
+   *  pre-render append of the just-played card). Synthesizes a fresh row
+   *  wrapper when the table is currently empty (e.g. the initial-table
+   *  escoba flourish re-shows already-captured cards), so appended cards
+   *  still lay out side by side instead of stacking as bare column items. */
+  _lastTableRow() {
+    const rows = this.el.table.querySelectorAll('.eb-table-row');
+    if (rows.length) return rows[rows.length - 1];
+    const row = document.createElement('div');
+    row.className = 'eb-table-row';
+    this.el.table.appendChild(row);
+    return row;
   }
 
   renderSelf() {
@@ -1124,6 +1189,8 @@ class EscobaUI {
     this._resolvePending(null);
     this._resolveModal();
     if (this.root) this.root.removeEventListener('click', this._onClick);
+    if (this._matResizeObserver) this._matResizeObserver.disconnect();
+    if (this._onWinResize) window.removeEventListener('resize', this._onWinResize);
     clearTimeout(this._beatTimer);
     clearTimeout(this._announceTimer);
     clearTimeout(this._bannerTimer);
