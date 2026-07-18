@@ -125,14 +125,32 @@ function showSheet(p) {
   }
 }
 
+// After the initial delay, another hub overlay (most commonly the first-run
+// name gate on a brand-new browser/device) may still be covering the
+// launcher. Don't just give up — that silently skipped the prompt for every
+// first-time visitor, exactly the audience it's most worth showing to. Wait
+// for the gate to clear (it's a DOM swap from Hub.render(), so a body-level
+// observer catches it) and show as soon as the launcher is actually clear.
+function whenOnLauncher(cb) {
+  if (onLauncherScreen()) { cb(); return; }
+  const obs = new MutationObserver(() => {
+    if (isDismissed() || isStandalone()) { obs.disconnect(); return; }
+    if (onLauncherScreen()) { obs.disconnect(); cb(); }
+  });
+  obs.observe(document.body, { attributes: true, attributeFilter: ['hidden'], subtree: true, childList: true });
+}
+
 /** Mount the hub-wide Add-to-Home-Screen prompt. Call once at page load. */
 export function initA2HSPrompt() {
   if (isDismissed() || isStandalone() || !isMobileDevice()) return;
   const p = platform();
   if (!p) return;
   setTimeout(() => {
-    if (isDismissed() || isStandalone() || !onLauncherScreen()) return;
-    showSheet(p);
+    if (isDismissed() || isStandalone()) return;
+    whenOnLauncher(() => {
+      if (isDismissed() || isStandalone()) return;
+      showSheet(p);
+    });
   }, SHOW_DELAY_MS);
 }
 
