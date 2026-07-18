@@ -20,6 +20,11 @@
 //     most 7s 1. Ties score nothing. First to the target with the sole lead
 //     wins; a player who captures nothing all round loses the match outright
 //     (2-player only).
+//
+// Resume support: snapshot()/Game.fromSnapshot() serialize/restore full match
+// state (cards are plain JSON-safe objects already). The turn loop is split
+// out as runTurnLoop() so a restored mid-round game can re-enter it at the
+// saved player index instead of replaying the round from its start.
 
 import { makeDeck, shuffle, sumValues, captureOptions } from './deck.js';
 
@@ -58,6 +63,68 @@ export class Game {
     this.winner = null;
     this.standings = null;
     this.matchEndReason = null; // 'target' | 'whitewash'
+
+    this._midRound = false;    // true while a round's cards are live (safe to snapshot+resume mid-round)
+    this._nextTurn = null;     // player index due to act next (checkpoint for resume)
+    this._resumeMidRound = false;
+    this._resumeNextTurn = null;
+  }
+
+  /**
+   * Rebuild a Game from a snapshot() payload. `agentsById` maps each saved
+   * player's id to a live agent (the human agent instance, or a fresh
+   * AIAgent) since agents aren't serializable.
+   */
+  static fromSnapshot(snap, agentsById) {
+    const g = Object.create(Game.prototype);
+    g.config = snap.config;
+    g.rng = Math.random;
+    g.onEvent = null;
+    g.aborted = false;
+    g.round = snap.round;
+    g.dealer = snap.dealer;
+    g.table = snap.table;
+    g.stock = snap.stock;
+    g.lastCapturer = snap.lastCapturer;
+    g.lastCards = snap.lastCards;
+    g.winner = null;
+    g.standings = null;
+    g.matchEndReason = null;
+    g._whitewash = null;
+    g._midRound = !!snap.midRound;
+    g._nextTurn = snap.nextTurn;
+    g._resumeMidRound = !!snap.midRound;
+    g._resumeNextTurn = snap.nextTurn;
+    g.players = snap.players.map((sp) => ({
+      id: sp.id, name: sp.name, avatar: sp.avatar, isHuman: sp.isHuman, difficulty: sp.difficulty,
+      agent: agentsById[sp.id],
+      hand: sp.hand, captured: sp.captured, escobas: sp.escobas,
+      totalScore: sp.totalScore, scoreHistory: sp.scoreHistory,
+      roundScore: sp.roundScore, roundItems: sp.roundItems,
+    }));
+    return g;
+  }
+
+  /** Plain-JSON snapshot of the full match. Card objects are already plain
+   *  data (id/suit/rank/value), so no id-based rehydration is needed. */
+  snapshot() {
+    return {
+      v: 1,
+      midRound: this._midRound,
+      nextTurn: this._nextTurn,
+      config: this.config,
+      round: this.round,
+      dealer: this.dealer,
+      table: this.table,
+      stock: this.stock,
+      lastCapturer: this.lastCapturer,
+      lastCards: this.lastCards,
+      players: this.players.map((p) => ({
+        id: p.id, name: p.name, avatar: p.avatar, isHuman: p.isHuman, difficulty: p.difficulty,
+        hand: p.hand, captured: p.captured, escobas: p.escobas, totalScore: p.totalScore,
+        scoreHistory: p.scoreHistory, roundScore: p.roundScore, roundItems: p.roundItems,
+      })),
+    };
   }
 
   byId(id) { return this.players.find((p) => p.id === id); }
@@ -73,23 +140,41 @@ export class Game {
 
   async playMatch() {
     await this.emit('matchStart', {});
+    if (this._resumeMidRound) {
+      this._resumeMidRound = false;
+      await this.resumeRound();
+      if (this.aborted) return;
+      await this.finishRoundAfterPlay();
+    }
     while (!this.aborted && !this.winner) {
       this.round += 1;
       await this.playRound();
       if (this.aborted) return;
-      this.scoreRound();
-      await this.emit('roundScored', { round: this.round });
-      this.checkMatchEnd();
-      this.dealer = (this.dealer + 1) % this.players.length;
+      await this.finishRoundAfterPlay();
     }
     if (this.aborted) return;
     await this.emit('matchEnd', { winner: this.winner });
+  }
+
+  /** Score the just-finished round, resolve match end, advance the dealer for
+   *  the next round (only if the match continues), then emit 'roundScored'.
+   *  Ordering matters for resume: by the time the UI can snapshot here, the
+   *  dealer/round/winner all already reflect the state a fresh restore should
+   *  continue from. */
+  async finishRoundAfterPlay() {
+    if (this.aborted) return;
+    this.scoreRound();
+    this._midRound = false;
+    this.checkMatchEnd();
+    if (!this.winner) this.dealer = (this.dealer + 1) % this.players.length;
+    await this.emit('roundScored', { round: this.round });
   }
 
   // --- one round (one full deck) ----------------------------------------------
 
   async playRound() {
     const n = this.players.length;
+    this._midRound = true;
     for (const p of this.players) { p.hand = []; p.captured = []; p.escobas = 0; }
     this.table = [];
     this.stock = shuffle(makeDeck(this.config.deckMode), this.rng);
@@ -98,9 +183,13 @@ export class Game {
 
     await this.emit('roundStart', { round: this.round, dealer: this.dealer });
 
-    // First deal: 3 to each player, then 4 face up on the table.
+    // First deal: 3 to each player, then 4 face up on the table. The turn
+    // loop starts left of the dealer, so a snapshot taken here is already
+    // stamped with the correct resume point (the initial-escoba check right
+    // below hasn't run an await yet, so it can't be interrupted mid-way).
     this.dealHands();
     this.table = this.stock.splice(0, 4);
+    this._nextTurn = (this.dealer + 1) % n;
     await this.emit('deal', { first: true });
 
     // Dealer's luck: table summing to 15 (or 30) goes straight to the dealer.
@@ -116,17 +205,30 @@ export class Game {
       await this.emit('initialEscoba', { playerId: d.id, cards, count });
     }
 
-    // Turns run left of the dealer until every card is played.
-    let turn = (this.dealer + 1) % n;
+    await this.runTurnLoop((this.dealer + 1) % n);
+  }
+
+  /** Play turns starting at player index `startTurn` until every card is
+   *  played, then sweep any leftover table cards. Shared by a fresh round and
+   *  by resumeRound() (which re-enters mid-round from a saved checkpoint). */
+  async runTurnLoop(startTurn) {
+    const n = this.players.length;
+    let turn = startTurn;
     while (!this.aborted) {
       if (this.players.every((p) => p.hand.length === 0)) {
         if (this.stock.length === 0) break;
         this.dealHands();
         this.lastCards = this.stock.length === 0;
+        this._nextTurn = turn;   // dealing doesn't consume a turn; `turn` still acts next
         await this.emit('deal', { first: false, lastCards: this.lastCards });
       }
       const p = this.players[turn];
       if (p.hand.length > 0) {
+        // Set the resume checkpoint to the FOLLOWING player before this turn
+        // plays out: by the time 'play' fires (mid playTurn), this player's
+        // move is fully committed, so a snapshot taken then should resume
+        // with whoever is next.
+        this._nextTurn = (turn + 1) % n;
         await this.playTurn(p);
         if (this.aborted) return;
       }
@@ -142,6 +244,13 @@ export class Game {
       this.table = [];
       await this.emit('sweepLeftovers', { playerId: p.id, cards });
     }
+  }
+
+  /** Resume a mid-round match: replay only the remaining turn loop, using the
+   *  restored table/stock/hands and the saved next-turn checkpoint. */
+  async resumeRound() {
+    const start = this._resumeNextTurn != null ? this._resumeNextTurn : (this.dealer + 1) % this.players.length;
+    await this.runTurnLoop(start);
   }
 
   dealHands() {

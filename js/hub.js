@@ -112,6 +112,10 @@ const GAMES = [
     title: 'Escoba',
     blurb: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',
     module: '../escoba/js/ui.js',
+    // Escoba's own screens (setup + game mat) already show its title and back
+    // affordance; the hub's own header row is pure wasted vertical space for
+    // this one. Opt-in only, so every other game's chrome is untouched.
+    immersive: true,
     accent: '#1c7a4f',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
             <rect width="120" height="120" fill="#175c3b"/>
@@ -331,6 +335,8 @@ class Hub {
       </div>`;
 
     this.el = {
+      top: this.root.querySelector('.hub-top'),
+      main: this.root.querySelector('.hub-main'),
       back: this.root.querySelector('[data-role="back"]'),
       title: this.root.querySelector('[data-role="title"]'),
       grid: this.root.querySelector('[data-role="grid"]'),
@@ -495,6 +501,7 @@ class Hub {
       this.el.game.hidden = false;
       this.el.profile.hidden = true;
       if (this.el.topRight) this.el.topRight.hidden = true;
+      this._setImmersive(!!game.immersive);
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
       this.el.game.innerHTML = `<p class="hub-error">Couldn't load ${game.title}. Please try again.</p>`;
@@ -504,7 +511,14 @@ class Hub {
       this.el.back.hidden = false;
       this.el.profile.hidden = true;
       if (this.el.topRight) this.el.topRight.hidden = true;
+      this._setImmersive(!!game.immersive);
     }
+  }
+
+  /** Toggle the floating-back-button chrome for immersive games (see hub.css). */
+  _setImmersive(on) {
+    if (this.el.top) this.el.top.classList.toggle('hub-top-immersive', on);
+    if (this.el.main) this.el.main.classList.toggle('hub-main-immersive', on);
   }
 
   /** Back-to-hub intent: confirm first if the game reports it's mid-play. */
@@ -531,6 +545,7 @@ class Hub {
     if (this.el.extra) this.el.extra.hidden = false;
     this.el.back.hidden = true;
     this.el.title.textContent = "Matt's Game Hub";
+    this._setImmersive(false);
     this.el.profile.hidden = false;
     if (this.el.topRight) this.el.topRight.hidden = false;
     this._syncStats();   // a game may have just updated the stats

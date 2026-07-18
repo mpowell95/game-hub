@@ -4,6 +4,12 @@
 // promise resolved on tap, so the engine's async turn loop blocks on the human
 // exactly as it resolves instantly on the AI. "Thinking" delays for AI turns
 // are added here (never in the engine), in the awaited onEvent hook.
+//
+// Design rules this file follows throughout (a professional-app pass, not a
+// tutorial): no instructional or narrating sentences in gameplay (turn state
+// is shown by the active-player ring; the action button IS the instruction);
+// zero layout shift once a match is on screen (every region has fixed
+// geometry; transient content lives in overlays or reserved-width chips).
 
 import { Game, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
@@ -20,8 +26,10 @@ const DIFFICULTIES = [['easy', 'Beginner'], ['normal', 'Intermediate'], ['hard',
 const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#e8b53a', '#d22f27', '#1f5fd4', '#2e8b57'];
 
-const BEAT_TURN = 650, BEAT_PLAY = 800, BEAT_CAPTURE = 520, BEAT_ESCOBA = 1250;
+const BEAT_TURN = 650, BEAT_PLAY = 800, BEAT_CAPTURE = 520, BEAT_ESCOBA = 1250, BEAT_ANNOUNCE = 1500;
 const STORE_SETTINGS = 'escoba-settings';
+const STORE_SAVE = 'escoba-save';
+const SAVE_SCHEMA_V = 1;
 
 /** Idempotently ensure the module's stylesheet is on the page (hub or standalone). */
 function ensureStylesheet() {
@@ -56,6 +64,7 @@ class EscobaUI {
     this._modalResolve = null;
     this._chartView = false;
     this._matchEnded = false;
+    this._matchEscobas = 0;
 
     this._setup = this._loadSetup();
 
@@ -117,6 +126,25 @@ class EscobaUI {
     });
   }
 
+  // --- resume-match persistence ---------------------------------------------
+
+  /** Snapshot the live match to localStorage. Called after every engine event
+   *  that changes state; cheap at this size, and means backgrounding the tab
+   *  or tapping the hub's back button never loses progress. */
+  _saveSnapshot() {
+    if (!this.game) return;
+    try {
+      saveJSON(STORE_SAVE, { v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobas, snap: this.game.snapshot() });
+    } catch { /* private mode / quota */ }
+  }
+
+  _loadSave() {
+    const raw = loadJSON(STORE_SAVE, null);
+    return (raw && raw.v === SAVE_SCHEMA_V && raw.snap) ? raw : null;
+  }
+
+  _clearSave() { try { localStorage.removeItem(STORE_SAVE); } catch { /* ignore */ } }
+
   // --- DOM construction -----------------------------------------------------
 
   mount() {
@@ -127,22 +155,25 @@ class EscobaUI {
         <section class="eb-game" data-role="game" hidden>
           <div class="eb-topbar">
             <div class="eb-opponents" data-role="opponents"></div>
+            <div class="eb-matchinfo" data-role="matchinfo"></div>
             <button class="eb-menu-btn" data-action="open-menu" aria-label="Game menu">☰</button>
+          </div>
+          <div class="eb-announce-row">
+            <div class="eb-mat-announce" data-role="announce" aria-live="polite"></div>
           </div>
           <div class="eb-mat">
             <div class="eb-mat-side">
               <div class="eb-stock" data-role="stock"></div>
+              <span class="eb-stock-count" data-role="stockcount"></span>
             </div>
             <div class="eb-table" data-role="table" aria-label="Table cards"></div>
           </div>
-          <div class="eb-status" data-role="status"></div>
           <div class="eb-self-row" data-role="self"></div>
           <div class="eb-hand" data-role="hand"></div>
           <div class="eb-actions" data-role="actions"></div>
         </section>
         <div class="eb-modal" data-role="modal" hidden></div>
         <div class="eb-menu" data-role="menu" hidden></div>
-        <div class="eb-toast" data-role="toast" hidden></div>
         <div class="eb-banner" data-role="banner" hidden></div>
       </div>`;
 
@@ -150,9 +181,10 @@ class EscobaUI {
     const q = (r) => this.root.querySelector(`[data-role="${r}"]`);
     this.el = {
       header: q('header'), setup: q('setup'), game: q('game'),
-      opponents: q('opponents'), stock: q('stock'), table: q('table'),
-      status: q('status'), self: q('self'), hand: q('hand'), actions: q('actions'),
-      modal: q('modal'), menu: q('menu'), toast: q('toast'), banner: q('banner'),
+      opponents: q('opponents'), matchinfo: q('matchinfo'), stock: q('stock'), stockcount: q('stockcount'),
+      table: q('table'), announce: q('announce'),
+      self: q('self'), hand: q('hand'), actions: q('actions'),
+      modal: q('modal'), menu: q('menu'), banner: q('banner'),
     };
 
     this.root.addEventListener('click', this._onClick);
@@ -195,8 +227,13 @@ class EscobaUI {
       </div>`);
     }
 
+    const save = this._loadSave();
+    const resumeBtn = save
+      ? `<button class="eb-btn eb-btn-primary" data-action="resume-game">Resume game</button>` : '';
+
     this.el.setup.innerHTML = `
       <div class="eb-panel">
+        ${resumeBtn}
         ${statsLine}
         <div class="eb-section">
           <span class="eb-label">Players</span>
@@ -219,7 +256,7 @@ class EscobaUI {
             : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>
         </div>
         <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
-        <button class="eb-btn eb-btn-primary" data-action="start">Start game</button>
+        <button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>
       </div>`;
   }
 
@@ -315,6 +352,7 @@ class EscobaUI {
   startGame() {
     this.syncSetupInputs();
     this._saveSetup();
+    this._clearSave();   // an explicit (re)start replaces any resumable match
     const s = this._setup;
     const players = [makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
     for (let i = 0; i < s.count - 1; i++) {
@@ -326,15 +364,41 @@ class EscobaUI {
     }
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
+    this._bindGame();
+    this._matchEscobas = 0;
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba match error', err); });
+  }
+
+  /** Rebuild a Game from the saved snapshot and rejoin the match loop where it
+   *  left off (mid-round or at a fresh round boundary; the engine handles
+   *  both from the same restored state). */
+  _resumeGame() {
+    const save = this._loadSave();
+    if (!save) return;
+    const agentsById = {};
+    for (const sp of save.snap.players) {
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : new AIAgent({ difficulty: sp.difficulty });
+    }
+    this._resolvePending(null);
+    this.game = Game.fromSnapshot(save.snap, agentsById);
+    this._bindGame();
+    this._matchEscobas = save.matchEscobas | 0;
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba resume error', err); });
+  }
+
+  _bindGame() {
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._selHand = null; this._selTable.clear(); this.activePlayerId = null;
-    this._matchEnded = false; this._matchEscobas = 0; this._statsCommitted = false;
+    this._matchEnded = false; this._statsCommitted = false; this._celebrated = false;
     this._closeMenu();
+  }
 
+  _enterGameScreen() {
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.render();
-    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba match error', err); });
   }
 
   // --- human agent ------------------------------------------------------------
@@ -355,26 +419,27 @@ class EscobaUI {
     resolve(value);
   }
 
-  // --- engine event hook (rendering + pacing) ----------------------------------
+  // --- engine event hook (rendering + pacing + persistence) --------------------
 
   async onEvent(type, payload) {
     if (this._dead) return;
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
-      case 'roundStart': {
+      case 'roundStart':
         this.activePlayerId = null;
-        const dealer = this.game.byId(payload.dealer);
         this.render();
-        this.toast(`Round ${payload.round} · ${dealer.name} deals`);
-        await this.beat(BEAT_TURN);
         break;
-      }
       case 'deal':
         this.render();
-        if (payload.lastCards) { this.toast('Last cards'); await this.beat(BEAT_TURN); }
+        // Skip the snapshot on the very first deal of a round: the initial-
+        // escoba check runs synchronously right after with no further await,
+        // so there is no useful mid-step to resume into there.
+        if (!payload.first) this._saveSnapshot();
+        if (payload.lastCards) { this.announce('Last cards'); await this.beat(BEAT_TURN); }
         break;
       case 'initialEscoba':
         this.render();
+        this._saveSnapshot();
         await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', `${p.name} takes the opening table`);
         break;
       case 'turnStart':
@@ -385,20 +450,24 @@ class EscobaUI {
       case 'play':
         await this.animatePlay(p, payload);
         this.render();
+        this._saveSnapshot();
         if (payload.escoba) await this.showBanner('¡ESCOBA!', `${p.name} clears the table`);
         break;
       case 'sweepLeftovers':
         this.render();
-        this.toast(`${p.name} takes the leftover cards`);
+        this._saveSnapshot();
+        this.announce(`${p.name} takes the leftover cards`);
         await this.beat(BEAT_PLAY);
         break;
       case 'roundScored':
         this._chartView = false;
         this._matchEscobas += this.game.byId(0).escobas;
+        if (!this.game.winner) this._saveSnapshot();   // a won boundary isn't resumable; matchEnd clears it
         await this.showRoundModal();
         break;
       case 'matchEnd':
         this._matchEnded = true;
+        this._clearSave();
         this._commitStats();
         this._chartView = false;
         this.showMatchModal();
@@ -419,8 +488,8 @@ class EscobaUI {
     el.classList.add('is-played');
     this.el.table.appendChild(el);
     if (isAI) {
-      this.toast(captured.length
-        ? `${p.name} plays ${cardLabel(card)} and captures ${captured.length}`
+      this.announce(captured.length
+        ? `${p.name} plays ${cardLabel(card)} · captures ${captured.length}`
         : `${p.name} plays ${cardLabel(card)}`);
     }
     await this.beat(isAI ? BEAT_PLAY : 380);
@@ -468,9 +537,9 @@ class EscobaUI {
     const nOpp = this.game.players.length - 1;
     this.el.opponents.className = 'eb-opponents eb-opp-n' + nOpp;
     this.el.opponents.innerHTML = this.renderOpponents();
-    this.el.stock.innerHTML = this.renderStock();
+    this.el.matchinfo.innerHTML = this.renderMatchInfo();
+    this._syncStock();
     this.el.table.innerHTML = this.renderTable();
-    this.el.status.innerHTML = this.renderStatus();
     this.el.self.innerHTML = this.renderSelf();
     this.el.hand.innerHTML = this.renderHand();
     this.el.actions.innerHTML = this.renderActions();
@@ -499,11 +568,29 @@ class EscobaUI {
     }).join('');
   }
 
-  renderStock() {
+  /** Round/target/last-cards chips, merged into the top bar (Task 6) instead
+   *  of a separate status row. All three chips always render (never
+   *  conditionally inserted) so their fixed-width slot never shifts anything;
+   *  "Last cards" just switches from a dim to a lit style when active. */
+  renderMatchInfo() {
     const g = this.game;
-    if (!g.stock.length) return `<div class="eb-stock-empty"></div>`;
-    return `${cardFaceHTML({}, { faceDown: true, static: true })}
-      <span class="eb-stock-count">${g.stock.length}</span>`;
+    return `<span class="eb-mi-pill">R${g.round} · ${g.config.targetScore}</span>
+      <span class="eb-mi-pill eb-mi-last ${g.lastCards ? 'is-on' : ''}">Last</span>`;
+  }
+
+  /** One-time pile skeleton is unnecessary here (the stock is a single static
+   *  card); just keep the back art stable and only touch the count text. */
+  _syncStock() {
+    const g = this.game;
+    if (!g.stock.length) {
+      this.el.stock.innerHTML = `<div class="eb-stock-empty"></div>`;
+      this.el.stockcount.textContent = '';
+      return;
+    }
+    if (!this.el.stock.querySelector('.eb-card')) {
+      this.el.stock.innerHTML = cardFaceHTML({}, { faceDown: true, static: true });
+    }
+    this.el.stockcount.textContent = String(g.stock.length);
   }
 
   renderTable() {
@@ -513,32 +600,19 @@ class EscobaUI {
     if (selCard) {
       for (const combo of this._optsFor(selCard)) for (const c of combo) hintIds.add(c.id);
     }
-    if (!g.table.length) return `<div class="eb-table-empty">Table is clear</div>`;
-    return g.table.map((c) => cardFaceHTML(c, {
-      selected: this._selTable.has(c.id),
-      hinted: hintIds.has(c.id) && !this._selTable.has(c.id),
-      value: true,
-    })).join('');
-  }
-
-  renderStatus() {
-    const g = this.game;
-    let text = '';
-    if (this._pending) {
-      const selCard = this._selCard();
-      if (!selCard) text = 'Your turn: play a card';
-      else if (this._optsFor(selCard).length) {
-        const sum = selCard.value + sumValues(g.table.filter((c) => this._selTable.has(c.id)));
-        text = `Pick table cards to make 15 · now ${sum}`;
-      } else text = 'No capture: this card goes to the table';
-    } else {
-      const ap = this.activePlayerId != null ? g.byId(this.activePlayerId) : null;
-      if (ap && !ap.isHuman) text = `${ap.name} is playing…`;
-    }
-    const pills = [`<span class="eb-pill">Round ${g.round}</span>`,
-      `<span class="eb-pill">Target ${g.config.targetScore}</span>`];
-    if (g.lastCards) pills.push('<span class="eb-pill eb-pill-last">Last cards</span>');
-    return `<span class="eb-status-text">${esc(text)}</span><span class="eb-pills">${pills.join('')}</span>`;
+    if (!g.table.length) return '';
+    // Fixed mat geometry holds two comfortable rows; the rare overflow beyond
+    // that fans cards with a tighter overlap instead of growing the mat.
+    const compact = g.table.length > 8;
+    const cls = compact ? ' eb-table-compact' : '';
+    return g.table.map((c, i) => {
+      const style = compact && i > 0 ? ` style="margin-left:calc(-1 * var(--eb-card-w) * 0.4)"` : '';
+      return `<span class="eb-table-cell${cls}"${style}>${cardFaceHTML(c, {
+        selected: this._selTable.has(c.id),
+        hinted: hintIds.has(c.id) && !this._selTable.has(c.id),
+        value: true,
+      })}</span>`;
+    }).join('');
   }
 
   renderSelf() {
@@ -561,7 +635,14 @@ class EscobaUI {
     })).join('');
   }
 
+  /** The action bar IS the instruction: no separate status sentence anywhere.
+   *  Fixed min-width and tabular numerals keep the button from resizing as
+   *  its label changes ("Capture 9/15" building up to "Capture"). */
   renderActions() {
+    if (this._matchEnded) {
+      return `<button class="eb-btn eb-btn-ghost" data-action="show-results">Results</button>
+        <button class="eb-btn eb-btn-primary" data-action="new-game">New game</button>`;
+    }
     if (!this._pending) return '';
     const selCard = this._selCard();
     if (!selCard) return '';
@@ -573,7 +654,7 @@ class EscobaUI {
     const sum = selCard.value + sumValues(picked);
     const valid = picked.length > 0 && sum === 15;
     return `<button class="eb-btn eb-btn-primary" data-action="capture" ${valid ? '' : 'disabled'}>
-        Capture ${valid ? `(${picked.length + 1} cards)` : `· ${sum} of 15`}</button>`;
+        ${valid ? 'Capture' : `Capture ${sum}/15`}</button>`;
   }
 
   _selCard() {
@@ -634,44 +715,83 @@ class EscobaUI {
     return new Promise((resolve) => { this._modalResolve = resolve; this._renderRoundModal(); });
   }
 
-  _captureSummary(p) {
-    const coins = p.captured.filter((c) => c.suit === 'oros').length;
-    const sevens = p.captured.filter((c) => c.rank === 7).length;
-    const guindis = p.captured.some((c) => c.suit === 'oros' && c.rank === 7);
-    return `<span class="eb-sum-chips">
-      <span class="eb-sum-chip">${p.captured.length} cards</span>
-      <span class="eb-sum-chip">${coins} coins</span>
-      <span class="eb-sum-chip">${sevens} sevens</span>
-      ${guindis ? '<span class="eb-sum-chip eb-sum-guindis">guindis</span>' : ''}
-      ${p.escobas ? `<span class="eb-sum-chip eb-sum-escoba">🧹 ${p.escobas}</span>` : ''}
-    </span>`;
+  /** Per-player capture stats for the round comparison table. */
+  _roundStats(p) {
+    return {
+      escobas: p.escobas,
+      cards: p.captured.length,
+      coins: p.captured.filter((c) => c.suit === 'oros').length,
+      sevens: p.captured.filter((c) => c.rank === 7).length,
+      guindis: p.captured.some((c) => c.suit === 'oros' && c.rank === 7),
+    };
+  }
+
+  /** Index of the sole player with the strict max of `key`, or -1 on a tie or
+   *  all-zero (mirrors the engine's soleMax in scoreRound()). */
+  _soleMaxIdx(stats, key) {
+    let best = -1, idx = -1, tie = false;
+    stats.forEach((s, i) => {
+      if (s[key] > best) { best = s[key]; idx = i; tie = false; }
+      else if (s[key] === best) tie = true;
+    });
+    return (best > 0 && !tie) ? idx : -1;
+  }
+
+  /** Comparison-table round summary: one row per category, one column per
+   *  player, the sole category leader's cell highlighted (never by hue alone:
+   *  a tint plus bold weight). Escobas has no "leader" (it isn't a compared
+   *  category, just an additive count) so it is never highlighted. */
+  _renderScoreTable(g) {
+    const players = g.players;
+    const stats = players.map((p) => this._roundStats(p));
+    const cardsIdx = this._soleMaxIdx(stats, 'cards');
+    const coinsIdx = this._soleMaxIdx(stats, 'coins');
+    const sevensIdx = this._soleMaxIdx(stats, 'sevens');
+    const guindisIdx = stats.findIndex((s) => s.guindis);
+
+    const head = players.map((p) => `<th scope="col">${p.avatar} ${esc(p.name)}</th>`).join('');
+    const row = (label, cells) => `<tr><th scope="row">${label}</th>${cells.join('')}</tr>`;
+    const cell = (val, hit) => `<td class="${hit ? 'is-lead' : ''}">${val}</td>`;
+
+    const rows = [
+      row('Escobas', stats.map((s) => cell(s.escobas))),
+      row('Cards', stats.map((s, i) => cell(s.cards, i === cardsIdx))),
+      row('Coin cards', stats.map((s, i) => cell(s.coins, i === coinsIdx))),
+      row('7 de Oros', stats.map((s, i) => cell(s.guindis ? '✓' : '✕', i === guindisIdx))),
+      row('Sevens', stats.map((s, i) => cell(s.sevens, i === sevensIdx))),
+    ].join('');
+
+    const footnotes = players.map((p, i) => {
+      const bonus = p.roundItems.filter((it) => it.key === 'cardsBonus' || it.key === 'allCoins' || it.key === 'allSevens');
+      if (!bonus.length) return '';
+      return `<p class="eb-score-footnote">${p.avatar} ${esc(p.name)}: ${bonus.map((b) => esc(b.label)).join(' · ')}</p>`;
+    }).join('');
+
+    return `<div class="eb-score-tablewrap"><table class="eb-score-table">
+        <thead><tr><th scope="col"><span class="eb-visually-hidden">Category</span></th>${head}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${footnotes}
+      <div class="eb-score-summary">
+        <div class="eb-score-summary-row">
+          <span class="eb-score-summary-label">Round ${g.round} points</span>
+          ${players.map((p) => `<span class="eb-score-summary-val">${this._sign(p.roundScore)}</span>`).join('')}
+        </div>
+        <div class="eb-score-summary-row">
+          <span class="eb-score-summary-label">Total scores</span>
+          ${players.map((p) => `<span class="eb-score-summary-val eb-score-summary-total">${p.totalScore}</span>`).join('')}
+        </div>
+      </div>`;
   }
 
   _renderRoundModal() {
     const g = this.game;
-    let body;
-    if (this._chartView) {
-      body = this.renderChartBlock();
-    } else {
-      body = g.players.map((p) => {
-        const items = p.roundItems.length
-          ? p.roundItems.map((it) => `<li><span>${esc(it.label)}</span><b>+${it.points}</b></li>`).join('')
-          : '<li class="eb-noitems"><span>No points this round</span><b>0</b></li>';
-        return `<div class="eb-score-block">
-          <div class="eb-score-head">
-            <span class="eb-score-who">${p.avatar} ${esc(p.name)}</span>
-            <span class="eb-score-nums"><b>+${p.roundScore}</b> · total ${p.totalScore}</span>
-          </div>
-          ${this._captureSummary(p)}
-          <ul class="eb-score-items">${items}</ul>
-        </div>`;
-      }).join('');
-    }
+    const body = this._chartView ? this.renderChartBlock() : this._renderScoreTable(g);
     this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
       <h2 class="eb-sheet-title">Round ${g.round}</h2>
       ${body}
       <div class="eb-sheet-actions">
-        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Scores' : '📈 Scoreboard'}</button>
+        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Table' : '📈 Scoreboard'}</button>
         <button class="eb-btn eb-btn-primary" data-action="next-round">Next round</button>
       </div>
     </div>`;
@@ -681,23 +801,19 @@ class EscobaUI {
   showMatchModal() {
     this._renderMatchModal();
     const humanWon = this.game.winner && this.game.winner.id === 0;
-    if (humanWon) this._celebrate();
+    if (humanWon && !this._celebrated) { this._celebrate(); this._celebrated = true; }
   }
 
   _renderMatchModal() {
     const g = this.game;
     const standings = g.standings || g.players;
     const winner = g.winner;
-    let body;
-    if (this._chartView) {
-      body = this.renderChartBlock();
-    } else {
-      body = `<ol class="eb-standings">${standings.map((p, i) => `<li class="${p === winner ? 'is-winner' : ''}">
+    const body = this._chartView ? this.renderChartBlock() : `<ol class="eb-standings">${standings.map((p, i) => `<li class="${p === winner ? 'is-winner' : ''}">
         <span class="eb-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('')}</ol>`;
-    }
     const reason = g.matchEndReason === 'whitewash'
       ? `<p class="eb-sheet-sub">Opponent captured no cards: instant win</p>` : '';
-    this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
+    this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-match"></div><div class="eb-sheet">
+      <button class="eb-sheet-x" data-action="close-match" aria-label="Close">✕</button>
       <h2 class="eb-sheet-title">${winner.avatar} ${esc(winner.name)} wins!</h2>
       ${reason}
       ${body}
@@ -758,14 +874,21 @@ class EscobaUI {
     r();
   }
 
-  // --- toast + confetti -------------------------------------------------------
+  _sign(n) { return n > 0 ? `+${n}` : `${n}`; }
 
-  toast(msg) {
-    if (this._dead || !this.el || !this.el.toast) return;
-    this.el.toast.textContent = msg;
-    this.el.toast.hidden = false;
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => { if (this.el && this.el.toast) this.el.toast.hidden = true; }, 1600);
+  // --- mat-anchored announcements + confetti ---------------------------------
+
+  /** Transient, absolutely-positioned pill anchored to the mat (never the
+   *  page bottom): announces AI plays, deals and leftovers without disturbing
+   *  the fixed game geometry (Task 5). */
+  announce(msg) {
+    if (this._dead || !this.el || !this.el.announce) return;
+    this.el.announce.textContent = msg;
+    this.el.announce.classList.add('is-in');
+    clearTimeout(this._announceTimer);
+    this._announceTimer = setTimeout(() => {
+      if (this.el && this.el.announce) this.el.announce.classList.remove('is-in');
+    }, BEAT_ANNOUNCE);
   }
 
   /** Confetti burst: a short, self-contained celebration (no libraries). */
@@ -810,6 +933,7 @@ class EscobaUI {
       case 'open-howto': if (!this.el.setup.hidden) this.syncSetupInputs(); this._closeMenu(); this._openHowTo(); break;
       case 'close-howto': this._closeModal(); break;
       case 'start': this.startGame(); break;
+      case 'resume-game': this._resumeGame(); break;
       // game
       case 'card': this.onCardTap(a.dataset.id); break;
       case 'capture': this._confirmCapture(); break;
@@ -817,6 +941,8 @@ class EscobaUI {
       case 'toggle-chart': this._chartView = !this._chartView; if (this._modalResolve) this._renderRoundModal(); else this._renderMatchModal(); break;
       case 'next-round': this._resolveModal(); break;
       case 'new-game': this.startGame(); break;
+      case 'show-results': this.showMatchModal(); break;
+      case 'close-match': this._closeModal(); this.render(); break;
       // in-game menu
       case 'open-menu': this._openMenu(); break;
       case 'close-menu': case 'menu-resume': this._closeMenu(); break;
@@ -850,6 +976,9 @@ class EscobaUI {
       </div>`;
   }
 
+  /** Destructive menu actions confirm-on-second-tap while a match is live.
+   *  Both actually clear the resumable save (an explicit in-game abandon),
+   *  unlike leaving via the hub's own back button, which now preserves it. */
   _menuAction(which) {
     if (this._inProgress() && this._menuConfirm !== which) {
       this._menuConfirm = which;
@@ -858,19 +987,23 @@ class EscobaUI {
     }
     this._closeMenu();
     if (which === 'newgame') this.startGame();
-    else this.showSetup();
+    else { this._clearSave(); this.showSetup(); }
   }
 
   // --- teardown -------------------------------------------------------------
 
   destroy() {
     this._dead = true;
+    // Deliberately do NOT clear the resumable save here: destroy() runs when
+    // the hub tears the module down for ANY reason, including the player
+    // just navigating back to the launcher mid-match, which is exactly the
+    // case resume exists for.
     if (this.game) this.game.abort();
     this._resolvePending(null);
     this._resolveModal();
     if (this.root) this.root.removeEventListener('click', this._onClick);
     clearTimeout(this._beatTimer);
-    clearTimeout(this._toastTimer);
+    clearTimeout(this._announceTimer);
     clearTimeout(this._bannerTimer);
     this.game = null;
     this.container.innerHTML = '';
@@ -893,9 +1026,13 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-/** True if a match is in progress (so the hub can confirm before unmounting). */
+/** Escoba persists its match on every state change and can resume after being
+ *  unmounted (see _saveSnapshot/_resumeGame), so leaving via the hub's back
+ *  button never loses progress: the hub never needs its "you'll lose your
+ *  progress" confirm for this game. The in-game menu's own "Quit to setup"
+ *  still warns and clears the save, since that IS an explicit abandon. */
 export function isInProgress() {
-  return !!instance && instance._inProgress();
+  return false;
 }
 
 export default { init, destroy, isInProgress };

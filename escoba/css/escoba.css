@@ -2,7 +2,13 @@
    All rules are scoped to .eb-root so the hub can host it without collisions.
    Classes are prefixed .eb-, custom properties --eb-.
    Colorblind-safe: selection and hint states pair color with lift, rings and
-   dashed outlines, never hue alone. */
+   dashed outlines, never hue alone.
+
+   Zero-layout-shift design: every region below the top bar has FIXED
+   geometry (.eb-mat, .eb-hand, .eb-actions all use height/min-height, never
+   auto-growing content). Transient state (selection sums, opponent-move
+   announcements) lives inside that fixed geometry or in an absolutely
+   positioned overlay, never in flow content that pushes siblings around. */
 
 .eb-root {
   --eb-surface: #ffffff;
@@ -12,20 +18,23 @@
   --eb-accent: #1c7a4f;          /* table green */
   --eb-gold: #d4a017;            /* oros gold */
   --eb-bad: #c2402f;
+  --eb-lead-tint: rgba(31, 95, 212, 0.14);
 
   /* Felt table */
   --eb-felt: radial-gradient(120% 130% at 50% 12%, #2c8a5d 0%, #1c6a45 52%, #124a30 100%);
   --eb-felt-edge: #0d3a25;
 
-  /* Card sizing (shared aspect ratio with the deck art) */
-  --eb-card-w: clamp(56px, 16vw, 84px);
-  --eb-hand-w: clamp(82px, 24vw, 116px);
+  /* Card sizing (shared aspect ratio with the deck art). Table/stock cards
+     share --eb-card-w; hand cards are a size class up for legibility. */
+  --eb-card-w: clamp(60px, 17vw, 90px);
+  --eb-hand-w: clamp(88px, 26vw, 124px);
+  --eb-row-h: calc(var(--eb-card-w) * 1.54);   /* one table-card row, incl. aspect ratio */
 
   box-sizing: border-box;
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 6px 6px 16px;
+  padding: 6px 6px 14px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--eb-ink);
   -webkit-tap-highlight-color: transparent;
@@ -41,7 +50,7 @@
 .eb-btn {
   appearance: none; border: 0; font: inherit; font-weight: 700;
   border-radius: 12px; padding: 12px 18px; cursor: pointer;
-  touch-action: manipulation;
+  touch-action: manipulation; font-variant-numeric: tabular-nums;
   transition: transform 0.08s, background 0.15s, box-shadow 0.15s;
 }
 .eb-btn:active { transform: translateY(1px); }
@@ -112,30 +121,43 @@
 .eb-av-opt.is-sel { border-color: var(--eb-accent); background: rgba(28, 122, 79, 0.12); box-shadow: 0 0 0 2px var(--eb-accent); }
 
 /* --- game screen ----------------------------------------------------------- */
+/* A cohesive single surface, not floating tiles: tight consistent gaps. */
+.eb-game { display: flex; flex-direction: column; gap: 8px; }
 
-.eb-game { display: flex; flex-direction: column; gap: 10px; }
-
-.eb-topbar { display: flex; align-items: flex-start; gap: 8px; }
-.eb-opponents { flex: 1; display: flex; gap: 8px; min-width: 0; }
+.eb-topbar { display: flex; align-items: center; gap: 6px; }
+.eb-opponents { flex: 1; display: flex; gap: 6px; min-width: 0; }
 .eb-opp-pill {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
   background: var(--eb-surface); border: 1px solid var(--eb-surface-2);
-  border-radius: 14px; padding: 8px 10px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
+  border-radius: 13px; padding: 6px 8px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
 }
-.eb-opp-pill.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); }
-.eb-opp-av { position: relative; flex: none; font-size: 1.45rem; line-height: 1; }
-.eb-opp-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.eb-opp-name { font-weight: 800; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eb-opp-sub { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; color: var(--eb-muted); white-space: nowrap; }
+.eb-opp-pill.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); animation: eb-active-pulse 1.6s ease-in-out infinite; }
+.eb-opp-av { position: relative; flex: none; font-size: 1.3rem; line-height: 1; }
+.eb-opp-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.eb-opp-name { font-weight: 800; font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-opp-sub { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 700; color: var(--eb-muted); white-space: nowrap; }
 .eb-opp-hand { margin-left: auto; display: flex; gap: 2px; flex: none; }
 .eb-opp-cardback {
-  width: 11px; height: 17px; border-radius: 2.5px;
+  width: 10px; height: 15px; border-radius: 2.5px;
   background: linear-gradient(160deg, #38598b, #233c5e);
   border: 1px solid rgba(255, 255, 255, 0.35);
 }
+
+/* Round/target/last-cards, merged into the top bar (never a separate status
+   row). All chips always render; "Last cards" only changes STYLE when live,
+   so its slot never appears/disappears and nothing reflows. */
+.eb-matchinfo { flex: none; display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+.eb-mi-pill {
+  min-width: 58px; text-align: center; font-size: 0.62rem; font-weight: 800;
+  color: var(--eb-muted); background: var(--eb-surface-2); border-radius: 999px;
+  padding: 3px 8px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.eb-mi-last { opacity: 0.4; }
+.eb-mi-last.is-on { opacity: 1; background: var(--eb-ink); color: #fff; }
+
 .eb-menu-btn {
   flex: none; appearance: none; border: 1px solid var(--eb-surface-2); background: var(--eb-surface);
-  color: var(--eb-ink); width: 42px; height: 42px; border-radius: 12px; font-size: 1.05rem; cursor: pointer;
+  color: var(--eb-ink); width: 40px; height: 40px; border-radius: 12px; font-size: 1.05rem; cursor: pointer;
 }
 .eb-menu-btn:hover { background: var(--eb-surface-2); }
 
@@ -146,36 +168,39 @@
   display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff;
 }
 
-/* The mat: stock on the side, table cards in the middle of the felt. */
+@keyframes eb-active-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); }
+  50% { box-shadow: 0 0 0 3px var(--eb-gold), 0 2px 16px rgba(212, 160, 23, 0.55); }
+}
+
+/* The mat: fixed height, always. Sized for exactly two comfortable rows of
+   table cards so a 4-card table growing to 5+ never grows the mat or shoves
+   anything below it; the rare overflow beyond two rows fans cards with a
+   tighter overlap (see .eb-table-compact) and is clipped as a last resort. */
 .eb-mat {
-  position: relative; display: flex; align-items: center; gap: 10px;
-  min-height: calc(var(--eb-card-w) * 2.6);
+  position: relative; display: flex; align-items: flex-start; gap: 10px;
+  height: calc(var(--eb-row-h) * 2 + 8px + 26px);
   background: var(--eb-felt);
   border: 3px solid var(--eb-felt-edge);
   border-radius: 20px;
-  padding: 14px 12px;
+  padding: 13px 12px;
   box-shadow: inset 0 2px 18px rgba(0, 0, 0, 0.35), 0 6px 22px rgba(13, 58, 37, 0.28);
 }
-.eb-mat-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.eb-stock { position: relative; width: calc(var(--eb-card-w) * 0.82); }
+.eb-mat-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.eb-stock { position: relative; width: var(--eb-card-w); }
 .eb-stock .eb-card { width: 100%; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.28), 4px 4px 0 rgba(0, 0, 0, 0.18); }
 .eb-stock-count {
-  position: absolute; right: -6px; top: -6px; z-index: 2;
-  min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px;
-  background: var(--eb-ink); color: #fff; font-size: 0.72rem; font-weight: 800;
-  display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem; font-weight: 800; color: #fff; background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px; padding: 2px 9px; min-width: 20px; text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.eb-stock-empty { width: calc(var(--eb-card-w) * 0.82); aspect-ratio: 400 / 616; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
+.eb-stock-empty { width: var(--eb-card-w); aspect-ratio: 400 / 616; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
 
 .eb-table {
-  flex: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-  gap: 8px; min-height: calc(var(--eb-card-w) * 1.54 + 16px);
+  flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
+  gap: 6px; height: calc(var(--eb-row-h) * 2 + 8px); overflow: hidden; align-self: center;
 }
-.eb-table-empty {
-  color: rgba(255, 255, 255, 0.55); font-size: 0.82rem; font-weight: 700;
-  letter-spacing: 0.04em; text-transform: uppercase;
-}
+.eb-table-cell { display: flex; }
 
 /* Cards */
 .eb-card {
@@ -213,36 +238,41 @@
 }
 .eb-card.is-taken { transform: translateY(-14px) scale(0.82); opacity: 0; }
 
-/* Status strip */
-.eb-status { display: flex; align-items: center; gap: 10px; min-height: 26px; padding: 0 4px; }
-.eb-status-text { flex: 1; font-size: 0.9rem; font-weight: 700; color: var(--eb-ink); min-height: 1.2em; }
-.eb-pills { display: flex; gap: 6px; flex: none; }
-.eb-pill {
-  font-size: 0.68rem; font-weight: 800; color: var(--eb-muted);
-  background: var(--eb-surface-2); border-radius: 999px; padding: 4px 9px; white-space: nowrap;
+/* Opponent-move announcement: a fixed-height row between the top bar and the
+   mat (never inside it, so it can never cover a table card no matter how
+   many are in play). The ROW always occupies the same space; only the pill's
+   opacity/transform inside it changes, so nothing below it ever reflows
+   (Task 5). */
+.eb-announce-row { min-height: 30px; display: flex; align-items: center; justify-content: center; }
+.eb-mat-announce {
+  max-width: min(92%, 380px);
+  background: rgba(9, 24, 20, 0.88); color: #fff; font-size: 0.78rem; font-weight: 700;
+  padding: 6px 14px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15);
+  opacity: 0; transform: translateY(-3px); transition: opacity 0.18s ease, transform 0.18s ease;
 }
-.eb-pill-last { background: var(--eb-ink); color: #fff; }
+.eb-mat-announce.is-in { opacity: 1; transform: none; }
 
 /* Self chip */
 .eb-self-row { display: flex; justify-content: center; }
 .eb-self-chip {
   display: flex; align-items: center; gap: 8px; max-width: 100%;
   background: var(--eb-surface); border: 1px solid var(--eb-surface-2);
-  border-radius: 999px; padding: 7px 14px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
+  border-radius: 999px; padding: 6px 13px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
 }
-.eb-self-chip.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); }
-.eb-self-av { position: relative; font-size: 1.3rem; line-height: 1; }
-.eb-self-name { font-weight: 800; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eb-self-score { font-weight: 800; font-size: 0.85rem; color: var(--eb-muted); white-space: nowrap; }
+.eb-self-chip.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); animation: eb-active-pulse 1.6s ease-in-out infinite; }
+.eb-self-av { position: relative; font-size: 1.25rem; line-height: 1; }
+.eb-self-name { font-weight: 800; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-self-score { font-weight: 800; font-size: 0.82rem; color: var(--eb-muted); white-space: nowrap; }
 .eb-self-piles { display: flex; gap: 6px; }
 .eb-pile-chip {
-  font-size: 0.72rem; font-weight: 800; color: var(--eb-muted);
+  font-size: 0.7rem; font-weight: 800; color: var(--eb-muted);
   background: var(--eb-surface-2); border-radius: 999px; padding: 3px 8px; white-space: nowrap;
 }
 .eb-pile-escoba { background: rgba(212, 160, 23, 0.18); color: #7a5502; }
 
-/* Hand */
-.eb-hand { display: flex; justify-content: center; gap: 12px; min-height: calc(var(--eb-hand-w) * 1.54); padding: 6px 0 2px; }
+/* Hand: fixed-height row regardless of card count (3-8ish cards typical). */
+.eb-hand { display: flex; justify-content: center; align-items: flex-end; gap: 10px; min-height: calc(var(--eb-hand-w) * 1.54); padding: 4px 0 2px; }
 .eb-hand .eb-card { width: var(--eb-hand-w); }
 .eb-hand .eb-card:hover { transform: translateY(-4px); }
 .eb-hand .eb-card.is-selected {
@@ -250,9 +280,9 @@
   box-shadow: 0 0 0 3px #ffce3a, 0 10px 20px rgba(0, 0, 0, 0.35);
 }
 
-/* Action bar */
+/* Action bar: fixed height whether empty, one button, or two (post-match). */
 .eb-actions { display: flex; justify-content: center; gap: 10px; min-height: 50px; }
-.eb-actions .eb-btn { min-width: 200px; }
+.eb-actions .eb-btn { min-width: 180px; }
 
 /* --- overlays ---------------------------------------------------------------- */
 
@@ -273,30 +303,43 @@
 .eb-sheet-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .eb-menu-sheet { max-width: 360px; }
 .eb-menu-sheet .eb-btn { width: 100%; }
+.eb-sheet-x {
+  position: absolute; top: 12px; right: 12px; appearance: none; border: 0;
+  width: 32px; height: 32px; border-radius: 50%; background: var(--eb-surface-2);
+  color: var(--eb-muted); font-size: 1rem; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.eb-sheet-x:hover { background: #e1e8f2; color: var(--eb-ink); }
 
-/* Round scoring blocks */
-.eb-score-block {
-  border: 1px solid var(--eb-surface-2); border-radius: 14px; padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 8px;
+.eb-visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.eb-score-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.eb-score-who { font-weight: 800; }
-.eb-score-nums { color: var(--eb-muted); font-size: 0.88rem; font-weight: 700; white-space: nowrap; }
-.eb-score-nums b { color: var(--eb-ink); font-size: 1.05rem; }
-.eb-sum-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.eb-sum-chip {
-  font-size: 0.7rem; font-weight: 800; color: var(--eb-muted);
-  background: var(--eb-surface-2); border-radius: 999px; padding: 3px 8px;
+
+/* Round comparison table (Task 4): one row per scoring category, one column
+   per player, the sole category leader's cell tinted AND bold (never hue
+   alone). Escobas is additive, not compared, so it is never highlighted. */
+.eb-score-tablewrap { overflow-x: auto; }
+.eb-score-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.eb-score-table th, .eb-score-table td { padding: 8px 10px; text-align: center; white-space: nowrap; }
+.eb-score-table thead th {
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.68rem;
+  color: var(--eb-muted); border-bottom: 2px solid var(--eb-surface-2); text-align: center;
 }
-.eb-sum-guindis { background: rgba(212, 160, 23, 0.2); color: #7a5502; }
-.eb-sum-escoba { background: rgba(28, 122, 79, 0.14); color: #14573a; }
-.eb-score-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.eb-score-items li {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-  padding: 5px 0; border-top: 1px solid var(--eb-surface-2); font-size: 0.88rem; font-weight: 600;
-}
-.eb-score-items li b { font-variant-numeric: tabular-nums; }
-.eb-score-items .eb-noitems span { color: var(--eb-muted); }
+.eb-score-table thead th:first-child { text-align: left; }
+.eb-score-table tbody th { text-align: left; font-weight: 700; color: var(--eb-ink); font-size: 0.84rem; }
+.eb-score-table tbody tr + tr th, .eb-score-table tbody tr + tr td { border-top: 1px solid var(--eb-surface-2); }
+.eb-score-table td { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--eb-ink); }
+.eb-score-table td.is-lead { background: var(--eb-lead-tint); font-weight: 900; border-radius: 6px; }
+
+.eb-score-footnote { margin: 0; font-size: 0.78rem; color: var(--eb-muted); font-weight: 600; }
+
+.eb-score-summary { border: 1.5px solid var(--eb-ink); border-radius: 12px; overflow: hidden; }
+.eb-score-summary-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+.eb-score-summary-row + .eb-score-summary-row { border-top: 1.5px solid var(--eb-ink); }
+.eb-score-summary-label { flex: 1; font-weight: 800; font-size: 0.86rem; }
+.eb-score-summary-val { min-width: 52px; text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
+.eb-score-summary-total { font-size: 1.08rem; }
 
 /* Standings */
 .eb-standings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -336,14 +379,6 @@
 .eb-howto-table td { padding: 6px 8px; font-size: 0.88rem; border-top: 1px solid var(--eb-surface-2); }
 .eb-howto-table td:last-child { text-align: right; font-weight: 800; white-space: nowrap; }
 
-/* Toast */
-.eb-toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 240;
-  background: var(--eb-ink); color: #fff; font-size: 0.86rem; font-weight: 700;
-  padding: 10px 18px; border-radius: 999px; box-shadow: 0 8px 24px rgba(9, 24, 48, 0.4);
-  max-width: min(90vw, 420px); text-align: center;
-}
-
 /* Escoba banner */
 .eb-banner {
   position: fixed; inset: 0; z-index: 230; pointer-events: none;
@@ -380,7 +415,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eb-card, .eb-btn { transition: none; }
+  .eb-card, .eb-btn, .eb-mat-announce { transition: none; }
   .eb-card.is-played, .eb-banner-card { animation: none; }
+  .eb-opp-pill.is-active, .eb-self-chip.is-active { animation: none; }
   .eb-confetti { display: none; }
 }

@@ -41,6 +41,29 @@ body {
   backdrop-filter: saturate(1.2) blur(6px);
   border-bottom: 1px solid var(--hub-surface-2);
 }
+
+/* Immersive mode (opt-in per game via GAMES[].immersive): the game's own
+   screens already show its title and back affordance, so the hub's own
+   header row is pure wasted vertical space while that game is mounted. It
+   collapses to a small floating back button instead of a sticky full-width
+   bar, so `.hub-main` reclaims the row's height entirely. */
+.hub-top.hub-top-immersive {
+  position: absolute;
+  left: 0; right: auto;
+  background: none;
+  backdrop-filter: none;
+  border-bottom: 0;
+  padding: max(env(safe-area-inset-top, 0px), 54px) 0 0 10px;
+  pointer-events: none;
+}
+.hub-top.hub-top-immersive .hub-top-title,
+.hub-top.hub-top-immersive .hub-top-right { display: none; }
+.hub-top.hub-top-immersive .hub-back {
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(1.2) blur(6px);
+  box-shadow: 0 2px 10px rgba(20, 40, 80, 0.18);
+}
 .hub-top-title { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.01em; }
 .hub-back {
   appearance: none;
@@ -98,6 +121,10 @@ body {
 .hub-version.is-stale { color: var(--hub-accent); border-color: var(--hub-accent); font-weight: 800; }
 
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
+/* The floating immersive back button (above) overlays .hub-main since
+   .hub-top is taken out of flow; reserve enough top clearance so it never
+   sits on top of the mounted game's own content. */
+.hub-main.hub-main-immersive { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
 
 /* Launcher grid — a 2x2 grid of SQUARE game tiles, so all four games are visible
    at a glance without scrolling. Each tile is full-bleed art with a title caption. */
