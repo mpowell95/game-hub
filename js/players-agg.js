@@ -12,6 +12,9 @@
 import { GAMES } from './game-stats.js';
 
 export const SOLO = new Set(['nutsbolts']);                 // solo puzzle: win-only, no loss axis
+
+/** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
+export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
 export const COMPETITIVE = GAMES.filter((g) => !SOLO.has(g));
 
 const DIFFS = ['easy', 'medium', 'hard', 'expert'];
@@ -87,7 +90,16 @@ export function aggregatePlayers(all) {
     if (playerId && !grp.playerId) grp.playerId = playerId;
     const upd = +rec.updatedAt || 0;                       // NOT `| 0` (server timestamps overflow 32 bits)
     const rawName = (prof.name || '').trim();
-    if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (rawName) grp.name = rawName; if (prof.emoji) grp.emoji = prof.emoji; }
+    if (upd >= grp.updatedAt) { grp.updatedAt = upd; if (prof.emoji) grp.emoji = prof.emoji; }
+    // Display name: a real name ALWAYS beats the 'You' placeholder (a freshly linked device saves
+    // blank -> 'You', and being newest would otherwise rename the whole player); within the same
+    // class, the most recently active device wins.
+    if (rawName) {
+      const curPlace = isPlaceholderName(grp.name), newPlace = isPlaceholderName(rawName);
+      if (!grp.name || (curPlace && !newPlace) || (curPlace === newPlace && upd >= (grp._nameAt || 0))) {
+        grp.name = rawName; grp._nameAt = upd;
+      }
+    }
     const games = (rec.stats && rec.stats.games) || {};
     for (const g of GAMES) {
       const src = games[g] || {};

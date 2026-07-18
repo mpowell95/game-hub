@@ -67,6 +67,25 @@ export async function readPlayersOnce() {
   catch { return {}; }
 }
 
+/** Who owns `code`: { name, emoji } from that player's most recently active NAMED device, or null.
+ *  Linking a new device to a code adopts this, so a second phone inherits the player's real name
+ *  instead of syncing the 'You' placeholder (which would rename the whole player on the board). */
+export async function lookupCodeOwner(playerCode) {
+  const want = (typeof playerCode === 'string' ? playerCode : '').trim().toUpperCase();
+  if (!want) return null;
+  const all = await readPlayersOnce();
+  let best = null, bestAt = -1;
+  for (const id of Object.keys(all)) {
+    const rec = all[id] || {}, p = rec.profile || {};
+    const name = (typeof p.name === 'string' ? p.name : '').trim();
+    if (!name || name.toLowerCase() === 'you') continue;                       // skip the placeholder
+    if ((typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase() !== want) continue;
+    const at = +rec.updatedAt || 0;
+    if (at >= bestAt) { bestAt = at; best = { name, emoji: p.emoji || '' }; }
+  }
+  return best;
+}
+
 // --- Username reservation (soft, family-grade) -----------------------------------------------------
 // Registry: usernames/<encoded-lowercased-name> = { code, at }. Enforced client-side (the DB rules are
 // open), so it is a courtesy lock for a trusted family, not tamper-proof. The leaderboard groups by

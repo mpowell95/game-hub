@@ -9,7 +9,7 @@
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile, loadChallenge } from './challenge/hooks.js';
 import { markUnlockSeen } from './challenge/challenge-store.js';
-import { syncMyStats, usernameStatus, claimUsername } from './stats-net.js';
+import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
 
 // Which challenge win-slot each of the four games maps to, for the challenge-mode task
 // markers on the launcher cards (star = still to win, check = won). Other cards map to none.
@@ -503,11 +503,18 @@ class Hub {
       finish();
     });
 
-    box.querySelector('[data-role="fr-link"]').addEventListener('click', () => {
+    box.querySelector('[data-role="fr-link"]').addEventListener('click', async () => {
       const code = canonicalizeCode(codeIn.value);
       if (!code) { say('Invalid code.'); return; }
+      say('Linking...');
       const cur = loadProfile() || {};
-      saveProfile(Object.assign({}, cur, { playerId: code }));
+      // Adopt the player's existing name/emoji so this device joins as THEM. Without this the blank
+      // name normalizes to 'You' and, being the newest device, would rename the whole player.
+      let owner = null;
+      try { owner = await lookupCodeOwner(code); } catch { owner = null; }
+      const next = Object.assign({}, cur, { playerId: code });
+      if (owner && owner.name) { next.name = owner.name; if (owner.emoji) next.emoji = owner.emoji; }
+      saveProfile(next);
       finish();
     });
   }

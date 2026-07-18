@@ -414,11 +414,19 @@
       try { await navigator.clipboard.writeText(c); msg(els.codeMsg, 'Copied ' + c); }
       catch { msg(els.codeMsg, 'Long-press the code to copy.'); }
     });
-    els.codeLinkBtn.addEventListener('click', () => {
+    els.codeLinkBtn.addEventListener('click', async () => {
       const c = canonicalizeCode(els.codeLink.value);
       if (!c) { msg(els.codeMsg, 'Invalid code.'); return; }
       if (c === state.playerId) { msg(els.codeMsg, 'Already linked to that code.'); return; }
-      state.playerId = c; commitNow();
+      msg(els.codeMsg, 'Linking...');
+      // Adopt that player's name/emoji so this device joins as THEM (a blank name would normalize
+      // to 'You' and, being newest, rename the whole player on the leaderboard).
+      let owner = null;
+      try { owner = await net.lookupCodeOwner(c); } catch { owner = null; }
+      state.playerId = c;
+      if (owner && owner.name) { state.name = owner.name; if (owner.emoji) state.emoji = owner.emoji; prevName = owner.name; }
+      commitNow();
+      hydrate();
       els.code.textContent = c; els.codeLink.value = '';
       msg(els.codeMsg, 'Linked to ' + c + '. Stats will combine.');
       try { net.claimUsername(state.name, c, ''); } catch { /* best-effort */ }
