@@ -22,9 +22,13 @@
 
   --mc-bg-a: #e9b394;
   --mc-bg-b: #e2a17f;
+  /* Pit and store sizes are height-aware so the whole board + chrome fits a
+     phone viewport without scrolling (the dvh forms win where supported). */
+  --mc-hole: clamp(38px, 13.5vw, 60px);
+  --mc-storeh: 46px;
   display: block;
   border-radius: 18px;
-  padding: 14px 10px 22px;
+  padding: 8px 8px 10px;
   background: linear-gradient(180deg, var(--mc-bg-a), var(--mc-bg-b));
   transition: background 600ms ease;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -34,12 +38,19 @@
 .mancala[data-turn='p1'] { --mc-bg-a: #a7cbe4; --mc-bg-b: #8fb9d8; }
 .mancala[data-turn='p2'] { --mc-bg-a: #e9b394; --mc-bg-b: #e2a17f; }
 
+@supports (height: 1dvh) {
+  .mancala {
+    --mc-hole: clamp(36px, min(13.5vw, 6.6dvh), 60px);
+    --mc-storeh: clamp(32px, 5dvh, 52px);
+  }
+}
+
 .mancala .mc-shell {
   max-width: 440px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 /* --- setup ------------------------------------------------------------- */
@@ -214,7 +225,7 @@
   background: var(--mc-dark);
   color: #fff;
   border-radius: 14px;
-  padding: 8px 12px;
+  padding: 5px 10px;
   box-shadow: 0 4px 10px rgba(36, 22, 9, 0.3);
 }
 .mancala .mc-scoreside {
@@ -239,9 +250,9 @@
 .mancala .mc-scoreside--p1 .mc-scorename { color: #7fd8f7; }
 .mancala .mc-scoreside--p2 .mc-scorename { color: #ff9d8f; }
 .mancala .mc-scorenum {
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 900;
-  min-width: 24px;
+  min-width: 22px;
   text-align: center;
 }
 .mancala .mc-scorenum.is-pop { animation: mc-pop-plain 360ms ease; }
@@ -275,8 +286,8 @@
     'p4  p8'
     'p5  p7'
     's6  s6';
-  gap: 6px 30px;
-  padding: 16px 18px;
+  gap: 4px 16px;
+  padding: 12px 16px;
   background: linear-gradient(180deg, var(--mc-wood-hi), var(--mc-wood) 30%, var(--mc-wood-lo));
   border: 4px solid var(--mc-ink);
   border-radius: 34px;
@@ -288,11 +299,11 @@
 
 .mancala .mc-store {
   position: relative;
-  height: 58px;
-  border-radius: 29px;
+  height: var(--mc-storeh);
+  border-radius: 999px;
   border: 3.5px solid var(--mc-ink);
   box-shadow: inset 0 5px 8px rgba(0, 0, 0, 0.28), inset 0 -2px 0 rgba(255, 255, 255, 0.2);
-  margin: 4px 0;
+  margin: 2px 0;
 }
 .mancala .mc-store--p2 { background: linear-gradient(180deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
 .mancala .mc-store--p1 { background: linear-gradient(180deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
@@ -326,8 +337,8 @@
 .mancala .mc-pit:disabled { cursor: default; }
 .mancala .mc-hole {
   display: block;
-  width: clamp(48px, 15.5vw, 62px);
-  height: clamp(48px, 15.5vw, 62px);
+  width: var(--mc-hole);
+  height: var(--mc-hole);
   border-radius: 50%;
   border: 3.5px solid var(--mc-ink);
   box-shadow: inset 0 5px 7px rgba(0, 0, 0, 0.3), inset 0 -2px 0 rgba(255, 255, 255, 0.18);
@@ -349,19 +360,27 @@
 .mancala .mc-pit:focus-visible { outline: none; }
 .mancala .mc-pit:focus-visible .mc-hole { outline: 3px solid #fff; outline-offset: 2px; }
 
+/* One count badge per pit, riding the bottom rim of its own hole. It sits
+   above the stones layer (z-index 3) so the number always stays readable.
+   (Putting the two sides' numbers in the shared middle gutter stacked them
+   on top of each other on narrow screens.) */
 .mancala .mc-count {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 15px;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-size: 12px;
   font-weight: 900;
-  color: var(--mc-count);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
-  min-width: 18px;
+  line-height: 1.3;
+  color: #fff;
+  background: rgba(36, 22, 9, 0.85);
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 24px;
   text-align: center;
+  pointer-events: none;
 }
-.mancala .mc-pit--p1 .mc-count { left: 100%; margin-left: 6px; }
-.mancala .mc-pit--p2 .mc-count { right: 100%; margin-right: 6px; }
 .mancala .mc-countnum { display: inline-block; font: inherit; }
 .mancala .mc-countnum.is-pop { animation: mc-pop-plain 320ms ease; }
 
@@ -442,9 +461,9 @@
 
 .mancala .mc-status {
   margin: 0;
-  min-height: 20px;
+  min-height: 17px;
   text-align: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   color: rgba(36, 22, 9, 0.8);
 }
@@ -525,8 +544,6 @@
   .mancala .mc-store--p1 { background: linear-gradient(90deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
   .mancala .mc-storecount { right: 50%; transform: translate(50%, 0); top: auto; bottom: 8px; }
   .mancala .mc-hole { width: clamp(54px, 8vw, 74px); height: clamp(54px, 8vw, 74px); }
-  .mancala .mc-pit--p1 .mc-count { left: 50%; transform: translateX(-50%); top: 100%; margin: 2px 0 0; }
-  .mancala .mc-pit--p2 .mc-count { right: auto; left: 50%; transform: translateX(-50%); bottom: 100%; top: auto; margin: 0 0 2px; }
 }
 
 /* --- animations -------------------------------------------------------- */

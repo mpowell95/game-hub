@@ -129,10 +129,21 @@ class MancalaUI {
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    // Belt and braces with the board ResizeObserver: some embedded browsers
+    // never deliver RO callbacks, and rotation always fires window resize.
+    // Re-place twice: right away, and again once the media-query relayout has
+    // settled (the event can fire before the new grid geometry is final).
+    this._onResize = () => {
+      if (this.view !== 'game') return;
+      this.placeAllStones(false);
+      clearTimeout(this._resizeSettle);
+      this._resizeSettle = setTimeout(() => this.placeAllStones(false), 140);
+    };
 
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
+    window.addEventListener('resize', this._onResize);
     this.renderSetup();
   }
 
@@ -147,6 +158,8 @@ class MancalaUI {
     if (this.resizeObs) { this.resizeObs.disconnect(); this.resizeObs = null; }
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
+    window.removeEventListener('resize', this._onResize);
+    clearTimeout(this._resizeSettle);
     this.container.innerHTML = '';
     this.state = null;
     this.stones = [];
@@ -610,10 +623,32 @@ class MancalaUI {
     el.classList.add('is-hit');
   }
 
+  /** Reassign stone objects to pits so sprite clusters match the engine state.
+   *  The animated path keeps them in sync stone by stone (flyStone); this is
+   *  for the reduced-motion path, which skips the flights entirely. */
+  syncStonesToState() {
+    if (!this.state) return;
+    const pool = [];
+    for (let pit = 0; pit < 14; pit++) {
+      const list = this.stonesIn(pit);
+      for (let i = this.state.pits[pit]; i < list.length; i++) {
+        list[i].pit = -1;
+        pool.push(list[i]);
+      }
+    }
+    for (let pit = 0; pit < 14; pit++) {
+      let have = this.stonesIn(pit).length;
+      while (have < this.state.pits[pit] && pool.length) {
+        pool.pop().pit = pit;
+        have += 1;
+      }
+    }
+  }
+
   finishMove(events, gen) {
     if (gen !== this.gen) return;
     this.busy = false;
-    if (!this.motionOK) this.placeAllStones(false);
+    if (!this.motionOK) { this.syncStonesToState(); this.placeAllStones(false); }
     this.refresh();
 
     if (events.over) {
