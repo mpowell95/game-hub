@@ -306,13 +306,15 @@ class Hub {
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
-          <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
-          <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
-          <div class="hub-top-right">
+          <div class="hub-top-info">
+            <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
+            <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
             <button type="button" class="hub-version" data-role="version" hidden></button>
-            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="Your game stats">Stats</button>
-            <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboard">Leaderboard</button>
-            <a class="hub-profile" data-role="profile" href="profile/">Set up your profile</a>
+          </div>
+          <div class="hub-top-right">
+            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="My game stats">My Stats</button>
+            <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboards">Leaderboards</button>
+            <a class="hub-profile" data-role="profile" href="profile/">My Profile</a>
           </div>
         </header>
         <main class="hub-main">
@@ -350,8 +352,9 @@ class Hub {
       topRight: this.root.querySelector('.hub-top-right'),
     };
 
-    // Reflect any saved profile in the header entry (textContent keeps names XSS-safe).
-    this.el.profile.textContent = prof && prof.name ? `👤 ${prof.name}` : 'Set up your profile';
+    // The profile pill reads "My Profile" (consistent with My Stats / Leaderboards); the accent
+    // highlight still nudges setup when no profile exists yet.
+    this.el.profile.textContent = 'My Profile';
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
@@ -501,6 +504,7 @@ class Hub {
       this.el.game.hidden = false;
       this.el.profile.hidden = true;
       if (this.el.topRight) this.el.topRight.hidden = true;
+      if (this.el.top) this.el.top.classList.add('hub-top-ingame');
       this._setImmersive(!!game.immersive);
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
@@ -511,6 +515,7 @@ class Hub {
       this.el.back.hidden = false;
       this.el.profile.hidden = true;
       if (this.el.topRight) this.el.topRight.hidden = true;
+      if (this.el.top) this.el.top.classList.add('hub-top-ingame');
       this._setImmersive(!!game.immersive);
     }
   }
@@ -546,6 +551,7 @@ class Hub {
     this.el.back.hidden = true;
     this.el.title.textContent = "Matt's Game Hub";
     this._setImmersive(false);
+    if (this.el.top) this.el.top.classList.remove('hub-top-ingame');
     this.el.profile.hidden = false;
     if (this.el.topRight) this.el.topRight.hidden = false;
     this._syncStats();   // a game may have just updated the stats

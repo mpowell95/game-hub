@@ -29,7 +29,8 @@ body {
   top: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   padding: 14px 16px;
   /* Clear the iOS status bar/notch in EVERY context. `env(safe-area-inset-top)`
@@ -57,7 +58,10 @@ body {
   pointer-events: none;
 }
 .hub-top.hub-top-immersive .hub-top-title,
+.hub-top.hub-top-immersive .hub-version,
 .hub-top.hub-top-immersive .hub-top-right { display: none; }
+/* Immersive: the info row collapses to just the floating back button. */
+.hub-top.hub-top-immersive .hub-top-info { display: block; }
 .hub-top.hub-top-immersive .hub-back {
   pointer-events: auto;
   background: rgba(255, 255, 255, 0.92);
@@ -98,10 +102,16 @@ body {
 .hub-profile:hover { background: var(--hub-surface-2); }
 .hub-profile-empty { color: var(--hub-accent); border-color: var(--hub-accent); }
 
-/* Right-side header cluster: the Stats button + the profile pill. */
-.hub-top-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hub-top-right { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.hub-top-right .hub-profile { margin-left: 0; max-width: 50vw; }
+/* Header is two rows: an info row (back + title + version) and, below it, the interactive
+   controls row (My Stats / Leaderboards / My Profile). */
+.hub-top-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hub-top-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-top-info .hub-version { margin-left: auto; }
+/* The version pill is informational chrome; keep it out of the way while a game is mounted. */
+.hub-top-ingame .hub-version { display: none; }
+
+.hub-top-right { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.hub-top-right .hub-profile { margin-left: 0; max-width: 60vw; }
 .hub-statsbtn {
   appearance: none; border: 1px solid var(--hub-surface-2); background: var(--hub-surface);
   color: var(--hub-ink); font: inherit; font-size: 0.85rem; font-weight: 700;
