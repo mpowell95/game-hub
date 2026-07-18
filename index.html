@@ -19,7 +19,9 @@
 
   <script type="module">
     import { initHub } from './js/hub.js';
+    import { initA2HSPrompt } from './js/a2hs.js';
     initHub(document.getElementById('hub-root'));
+    initA2HSPrompt();
 
     // Register the service worker (offline + installable). Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

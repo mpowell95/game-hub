@@ -274,6 +274,48 @@ body {
 .hub-cbtn-danger { background: #c2402f; color: #fff; }
 .hub-cbtn-danger:hover { background: #a83727; }
 
+.hub-cbtn-primary { background: var(--hub-accent); color: #fff; }
+.hub-cbtn-primary:hover { background: #125bb5; }
+
+/* Add-to-Home-Screen bottom sheet (mobile browser tab only, hub launcher screen —
+   see js/a2hs.js). Fixed overlay, so it never shifts the launcher underneath. */
+.hub-a2hs { position: fixed; inset: 0; z-index: 250; display: flex; align-items: flex-end; justify-content: center; }
+.hub-a2hs-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, 0.55); }
+.hub-a2hs-sheet {
+  position: relative; width: 100%; max-width: 480px;
+  background: var(--hub-surface); border-radius: 20px 20px 0 0;
+  padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 40px rgba(9, 24, 48, 0.35);
+  display: flex; flex-direction: column; gap: 12px;
+  animation: hub-a2hs-up 0.22s ease-out;
+}
+@keyframes hub-a2hs-up { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.hub-a2hs-close {
+  position: absolute; top: 12px; right: 14px; appearance: none; border: 0; background: var(--hub-surface-2);
+  color: var(--hub-muted); width: 30px; height: 30px; border-radius: 50%; font-size: 1.15rem; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.hub-a2hs-close:hover { background: #e1e8f2; }
+.hub-a2hs-title { margin: 0; padding-right: 34px; font-size: 1.08rem; font-weight: 800; color: var(--hub-ink); }
+.hub-a2hs-line { margin: 0; color: var(--hub-muted); font-size: 0.92rem; line-height: 1.4; }
+/* Steps are numbered via a CSS counter (not color) so the ordering reads fine
+   for colorblind users; the badge color is purely decorative accent, not a signal. */
+.hub-a2hs-steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 10px; counter-reset: hub-a2hs-step; }
+.hub-a2hs-step {
+  flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  font-size: 0.82rem; font-weight: 600; color: var(--hub-ink); counter-increment: hub-a2hs-step;
+}
+.hub-a2hs-step::before {
+  content: counter(hub-a2hs-step); width: 20px; height: 20px; border-radius: 50%;
+  background: var(--hub-accent); color: #fff; font-size: 0.72rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.hub-a2hs-shot { width: 100%; max-width: 140px; border-radius: 10px; border: 1px solid var(--hub-surface-2); display: block; }
+.hub-a2hs-steps-text { flex-direction: column; align-items: stretch; }
+.hub-a2hs-steps-text .hub-a2hs-step { flex-direction: row; text-align: left; justify-content: flex-start; }
+.hub-a2hs-install { margin-top: 4px; text-align: center; }
+
 @media (prefers-reduced-motion: reduce) {
   .hub-card { transition: none; }
+  .hub-a2hs-sheet { animation: none; }
 }

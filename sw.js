@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v127';
+const CACHE = 'game-hub-v128';
 
 const ASSETS = [
   './',
@@ -14,6 +14,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './css/hub.css',
   './js/hub.js',
+  './js/a2hs.js',
   './js/profile-store.js',
   './js/firebase-config.js',
   './js/game-stats.js',
@@ -92,6 +93,13 @@ const ASSETS = [
   './nuts-bolts/js/game.js',
   './nuts-bolts/js/generator.js',
 ];
+
+// NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,
+// referenced from js/a2hs.js) are deliberately NOT precached here yet — those
+// files don't exist in the repo until real screenshots are supplied. The fetch
+// handler below is cache-first for images, so once the files land, add their
+// paths to ASSETS and bump CACHE (until then a missing image just fails to
+// load and the <img> removes itself; the sheet still works, minus the picture).
 
 // Chinchón decks.
 //   baraja-libre  Baraja Española — 48 faces + back (CC BY-SA 3.0, see its CREDITS.md)
