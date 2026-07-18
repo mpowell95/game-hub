@@ -7,15 +7,18 @@
 
 .mancala {
   --mc-ink: #241609;
-  --mc-wood: #f5b963;
-  --mc-wood-hi: #fbca7e;
-  --mc-wood-lo: #e6a44f;
-  --mc-p1: #29a8dd;          /* you: blue */
+  /* Natural pine board (was a flat cartoon orange). */
+  --mc-wood: #d3a068;
+  --mc-wood-hi: #e8c795;
+  --mc-wood-lo: #b3824c;
+  --mc-wood-deep: #9a6a3a;   /* carved-pit interior */
+  --mc-woodedge: #7a5228;    /* thin board rim */
+  --mc-p1: #29a8dd;          /* you: blue (score bar + subtle store tint) */
   --mc-p1-deep: #1780ad;
   --mc-p2: #ef5544;          /* opponent: vermilion */
   --mc-p2-deep: #c23a2c;
   --mc-stonefill: #faf0d8;
-  --mc-count: #a06a1f;
+  --mc-count: #5f3c11;       /* carved-in-wood numerals */
   --mc-card: #ffffff;
   --mc-dark: #453c44;
   --mc-accent: #8a5fc9;
@@ -299,27 +302,38 @@
     'p4  p8'
     'p5  p7'
     's6  s6';
-  gap: 4px 16px;
-  padding: 12px 16px;
-  background: linear-gradient(180deg, var(--mc-wood-hi), var(--mc-wood) 30%, var(--mc-wood-lo));
-  border: 4px solid var(--mc-ink);
-  border-radius: 34px;
+  gap: 4px 14px;
+  padding: 12px 14px;
+  /* Real-wood board: faint vertical grain over a warm pine gradient, a thin
+     dark rim (not a thick cartoon outline), and layered inner shadows so the
+     surface reads as a solid carved plank. */
+  background:
+    repeating-linear-gradient(92deg, rgba(103, 66, 30, 0.06) 0 2px, rgba(103, 66, 30, 0) 2px 10px),
+    radial-gradient(130% 90% at 50% -10%, var(--mc-wood-hi), var(--mc-wood) 46%, var(--mc-wood-lo));
+  border: 2.5px solid var(--mc-woodedge);
+  border-radius: 40px;
   box-shadow:
-    inset 0 -6px 0 rgba(0, 0, 0, 0.1),
-    inset 0 4px 0 rgba(255, 255, 255, 0.25),
-    0 10px 24px rgba(36, 22, 9, 0.35);
+    inset 0 3px 6px rgba(255, 241, 216, 0.45),
+    inset 0 -12px 24px rgba(92, 56, 22, 0.32),
+    0 12px 26px rgba(40, 24, 8, 0.4);
 }
 
 .mancala .mc-store {
   position: relative;
   height: var(--mc-storeh);
   border-radius: 999px;
-  border: 3.5px solid var(--mc-ink);
-  box-shadow: inset 0 5px 8px rgba(0, 0, 0, 0.28), inset 0 -2px 0 rgba(255, 255, 255, 0.2);
+  border: none;
   margin: 2px 0;
+  /* Carved wood trough; a subtle colored inner glow (below) still tells the two
+     sides apart without painting the whole store a flat color. */
+  background: radial-gradient(120% 160% at 50% 0%, var(--mc-wood) 0%, var(--mc-wood-deep) 70%, #855a2f 100%);
+  box-shadow:
+    inset 0 7px 13px rgba(50, 28, 8, 0.55),
+    inset 0 -3px 5px rgba(255, 238, 205, 0.32),
+    0 1px 0 rgba(255, 244, 220, 0.4);
 }
-.mancala .mc-store--p2 { background: linear-gradient(180deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
-.mancala .mc-store--p1 { background: linear-gradient(180deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
+.mancala .mc-store--p1 { box-shadow: inset 0 7px 13px rgba(50, 28, 8, 0.55), inset 0 -3px 5px rgba(255, 238, 205, 0.32), inset 0 0 22px rgba(41, 168, 221, 0.3), 0 1px 0 rgba(255, 244, 220, 0.4); }
+.mancala .mc-store--p2 { box-shadow: inset 0 7px 13px rgba(50, 28, 8, 0.55), inset 0 -3px 5px rgba(255, 238, 205, 0.32), inset 0 0 22px rgba(239, 85, 68, 0.28), 0 1px 0 rgba(255, 244, 220, 0.4); }
 /* The mancala's score sits on a centered plaque that rides ABOVE the stones
    layer (z-index 4 > stones' 2), so a full mancala never buries its own count. */
 .mancala .mc-storecount {
@@ -353,26 +367,34 @@
   justify-content: center;
   cursor: pointer;
   font: inherit;
+  /* Shrink the button to the hole (was stretching to fill the grid cell, which
+     pushed the carved number way out toward the board edge). Now the number
+     sits right against the pit rim. */
+  justify-self: center;
 }
 .mancala .mc-pit:disabled { cursor: default; }
+/* Pits are carved wood depressions: a darker interior, a strong top-inner
+   shadow, and a light lower rim so they read as scooped out of the plank. */
 .mancala .mc-hole {
   display: block;
   width: var(--mc-hole);
   height: var(--mc-hole);
   border-radius: 50%;
-  border: 3.5px solid var(--mc-ink);
-  box-shadow: inset 0 5px 7px rgba(0, 0, 0, 0.3), inset 0 -2px 0 rgba(255, 255, 255, 0.18);
+  border: none;
+  background: radial-gradient(circle at 50% 40%, #855a30 0%, var(--mc-wood-deep) 48%, var(--mc-wood) 84%, var(--mc-wood-hi) 100%);
+  box-shadow:
+    inset 0 7px 11px rgba(48, 26, 6, 0.55),
+    inset 0 -4px 6px rgba(255, 238, 205, 0.4),
+    0 1px 0 rgba(255, 244, 220, 0.5);
   transition: box-shadow 160ms ease, filter 160ms ease;
 }
-.mancala .mc-pit--p1 .mc-hole { background: radial-gradient(circle at 38% 30%, #56c7ef, var(--mc-p1) 60%, var(--mc-p1-deep)); }
-.mancala .mc-pit--p2 .mc-hole { background: radial-gradient(circle at 38% 30%, #ff8172, var(--mc-p2) 60%, var(--mc-p2-deep)); }
 
-/* Selectable pits invite the tap; the ring is a light halo plus scale. */
+/* Selectable pits invite the tap: a warm gold rim + glow that suits the wood. */
 .mancala .mc-pit.is-live .mc-hole {
   box-shadow:
-    inset 0 5px 7px rgba(0, 0, 0, 0.3),
-    0 0 0 3px rgba(255, 255, 255, 0.55),
-    0 0 14px rgba(255, 244, 200, 0.55);
+    inset 0 7px 11px rgba(48, 26, 6, 0.5),
+    inset 0 0 0 3px rgba(255, 213, 120, 0.7),
+    0 0 16px rgba(255, 205, 120, 0.6);
 }
 .mancala .mc-pit.is-live:hover .mc-hole,
 .mancala .mc-pit.is-live:focus-visible .mc-hole { filter: brightness(1.1); }
@@ -388,14 +410,14 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: clamp(13px, 4.4vw, 17px);
-  font-weight: 900;
-  color: #7c4e15;
-  text-shadow: 0 1px 0 rgba(255, 246, 224, 0.6), 0 -1px 1px rgba(58, 33, 7, 0.35);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--mc-count);
+  text-shadow: 0 1px 0 rgba(255, 246, 224, 0.55);
   pointer-events: none;
 }
-.mancala .mc-pit--p1 .mc-count { right: 100%; margin-right: 4px; }
-.mancala .mc-pit--p2 .mc-count { left: 100%; margin-left: 4px; }
+.mancala .mc-pit--p1 .mc-count { right: 100%; margin-right: 3px; }
+.mancala .mc-pit--p2 .mc-count { left: 100%; margin-left: 3px; }
 .mancala .mc-countnum { display: inline-block; font: inherit; }
 .mancala .mc-countnum.is-pop { animation: mc-pop-plain 320ms ease; }
 
@@ -408,6 +430,9 @@
   z-index: 2;
   --mc-stone: 13px;
 }
+/* Glossy 3D marbles: a bright off-centre specular highlight, a colored body,
+   and a soft inner shade + drop shadow so they read as round glass, not flat
+   discs. Three neutral tones (ivory / slate grey / blue) mixed at random. */
 .mancala .mc-stone {
   position: absolute;
   top: 0;
@@ -415,16 +440,28 @@
   width: var(--mc-stone);
   height: var(--mc-stone);
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fffdf4, var(--mc-stonefill) 55%, #dcc394);
-  border: 1.5px solid rgba(74, 53, 24, 0.55);
-  box-shadow: 0 1.5px 2px rgba(36, 22, 9, 0.35);
+  border: none;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 62% 74%, #a99c84 0%, #d8cdb6 40%, #f3ecdd 100%);
+  box-shadow: 0 2px 3px rgba(30, 18, 6, 0.45), inset -2px -3px 5px rgba(70, 50, 25, 0.28);
   transition: transform 240ms ease;
   will-change: transform;
 }
-.mancala .mc-stone[data-tone='1'] { background: radial-gradient(circle at 35% 30%, #fffdf4, #f3e3c0 55%, #d3b789); }
-.mancala .mc-stone[data-tone='2'] { background: radial-gradient(circle at 35% 30%, #fffef8, #fdf4e0 55%, #e2cb9e); }
+.mancala .mc-stone[data-tone='1'] {
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 62% 74%, #5f6a7c 0%, #8a94a4 42%, #c3cbd8 100%);
+  box-shadow: 0 2px 3px rgba(20, 26, 36, 0.45), inset -2px -3px 5px rgba(30, 40, 55, 0.35);
+}
+.mancala .mc-stone[data-tone='2'] {
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 62% 74%, #3f76ac 0%, #6ba3d6 44%, #b6ddf6 100%);
+  box-shadow: 0 2px 3px rgba(14, 34, 56, 0.45), inset -2px -3px 5px rgba(20, 55, 90, 0.35);
+}
 .mancala .mc-stone.mc-nomove { transition: none; }
-.mancala .mc-stone.is-flying { z-index: 5; box-shadow: 0 8px 10px rgba(36, 22, 9, 0.3); }
+.mancala .mc-stone.is-flying { z-index: 5; box-shadow: 0 8px 11px rgba(20, 12, 4, 0.4); }
 .mancala .mc-stone.is-held { transform-origin: center; filter: brightness(1.12); }
 
 /* --- board overlays (thinking, toast) ---------------------------------- */

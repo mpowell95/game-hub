@@ -40,6 +40,17 @@ const SPEEDS = [
   { key: 'slow', label: 'Relaxed' },
 ];
 
+// The bot's default identity. The hub's other games give the AI a real name +
+// person avatar rather than "Computer" (Chinchón/Escoba share this exact
+// roster); Mancala follows suit. A profile opponent still wins when one is set.
+const AI_ROSTER = [
+  { name: 'Lucía', emoji: '💃' },
+  { name: 'Diego', emoji: '🤠' },
+  { name: 'Sofía', emoji: '🎸' },
+  { name: 'Mateo', emoji: '🧢' },
+  { name: 'Elena', emoji: '🌹' },
+];
+
 const SOW_STAGGER_MS = 115;    // launch interval between sown stones
 const FLIGHT_MS = 300;         // one stone's pit-to-pit flight
 const CAPTURE_STAGGER_MS = 55; // interval between captured stones leaving
@@ -122,10 +133,11 @@ class MancalaUI {
     this.hasProfileName = !!(profile && profile.name);
     this.humanName = (profile && profile.name) || 'You';
     this.humanEmoji = (profile && profile.emoji) || '🙂';
-    // Give the bot a name + emoji so it reads as a character, not "Computer".
-    // A profile opponent (if the user set one up) wins over the built-in default.
-    this.botName = (opp && opp.name) || 'Robo';
-    this.botEmoji = (opp && opp.emoji) || '🤖';
+    // A profile opponent wins; otherwise the bot is a named character from the
+    // shared roster (a random one per session, so the opponent varies game to game).
+    const cast = AI_ROSTER[Math.floor(Math.random() * AI_ROSTER.length)];
+    this.botName = (opp && opp.name) || cast.name;
+    this.botEmoji = (opp && opp.emoji) || cast.emoji;
 
     this.mode = 'bot';
     this.view = 'setup';
