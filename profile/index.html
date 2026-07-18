@@ -14,7 +14,35 @@
   <link rel="stylesheet" href="../css/hub.css">
   <style>
     .pf-main { max-width: 640px; }
-    .pf-intro { color: var(--hub-muted); font-size: .9rem; line-height: 1.45; margin: 0 0 18px; }
+
+    /* Collapsible sections (native <details>): the summary is the header + a chevron. */
+    details.pf-collapse > summary {
+      cursor: pointer; list-style: none; user-select: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      font-size: 1.06rem; font-weight: 800; color: var(--hub-ink);
+    }
+    details.pf-collapse > summary::-webkit-details-marker { display: none; }
+    details.pf-collapse > summary::after {
+      content: ""; flex: 0 0 auto; width: 9px; height: 9px;
+      border-right: 2px solid var(--hub-muted); border-bottom: 2px solid var(--hub-muted);
+      transform: rotate(45deg); transition: transform .15s ease;
+    }
+    details.pf-collapse[open] > summary::after { transform: rotate(-135deg); }
+    details.pf-collapse[open] > summary { margin-bottom: 14px; }
+    /* Sub-collapse (preferred color, inside You): a muted label, not a section header. */
+    details.pf-subcollapse { margin-top: 16px; }
+    details.pf-subcollapse > summary { font-size: .82rem; font-weight: 700; color: var(--hub-muted); }
+    details.pf-subcollapse[open] > summary { margin-bottom: 10px; }
+
+    /* Sync code rows: value/input flexes, the button hugs. */
+    .pf-code-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .pf-code {
+      flex: 1 1 auto; min-width: 0; text-align: center;
+      font: 800 1.5rem/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .22em;
+      padding: 12px 10px; border-radius: 12px; background: var(--hub-surface-2); color: var(--hub-ink);
+    }
+    .pf-code-row .pf-input { flex: 1 1 auto; min-width: 0; width: auto; }
+    .pf-code-row .pf-code-btn { width: auto; margin-top: 0; flex: 0 0 auto; }
 
     .pf-saved {
       margin-left: auto; font-size: .8rem; font-weight: 800; letter-spacing: .01em;
@@ -131,18 +159,16 @@
 <body>
   <div class="hub">
     <header class="hub-top">
-      <a class="hub-back" href="../">&#8249; Hub</a>
-      <h1 class="hub-top-title">Profile</h1>
-      <span class="pf-saved" id="pf-saved" role="status" aria-live="polite">Saved</span>
+      <div class="hub-top-info">
+        <a class="hub-back" href="../">&#8249; Hub</a>
+        <h1 class="hub-top-title">Profile</h1>
+        <span class="pf-saved" id="pf-saved" role="status" aria-live="polite">Saved</span>
+      </div>
     </header>
 
     <main class="hub-main pf-main">
-      <p class="pf-intro">Set yourself up once. Every game in the hub uses these as defaults, and you can still
-        change them inside each game. Saved on this device only, no account needed.</p>
-
       <section class="pf-section">
         <h2>You</h2>
-        <p class="pf-hint">Your name and emoji show up as the human player in games that display one.</p>
         <div class="pf-you-row">
           <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji">🙂</button>
           <div class="pf-name-wrap">
@@ -152,41 +178,33 @@
         </div>
         <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
 
-        <div style="margin-top:16px">
-          <span class="pf-label">Preferred color</span>
+        <details class="pf-collapse pf-subcollapse">
+          <summary>Preferred color</summary>
           <div class="pf-swatches" id="pf-colors"></div>
-        </div>
+        </details>
       </section>
 
       <section class="pf-section">
-        <h2>Your player code</h2>
-        <p class="pf-hint">This is your identity across devices. To count your phone and your computer as
-          ONE player on the leaderboard: open this page on your other device and type this same code into
-          &ldquo;Link this device&rdquo; below. Nobody else can take your name while you hold this code, and
-          your stats stay yours even if you rename yourself.</p>
-        <div style="display:flex;align-items:center;gap:12px;margin:12px 0 4px;flex-wrap:wrap">
-          <code id="pf-code" aria-label="Your player code"
-                style="font:800 1.6rem/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.22em;padding:11px 16px;border-radius:12px;background:var(--hub-surface-2,#eef2f8);color:var(--hub-ink,#16243a)">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
-          <button type="button" class="pf-add" id="pf-code-copy">Copy code</button>
+        <h2>Sync devices</h2>
+        <div class="pf-code-row">
+          <code id="pf-code" class="pf-code" aria-label="Your code">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
+          <button type="button" class="pf-add pf-code-btn" id="pf-code-copy">Copy</button>
         </div>
-        <label class="pf-label" for="pf-code-link-input" style="margin-top:14px;display:block">Have a code from another device? Enter it to link them</label>
-        <div class="pf-you-row" style="align-items:flex-start;margin-top:6px">
-          <input class="pf-input" id="pf-code-link-input" type="text" maxlength="5" placeholder="ABCDE"
-                 autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.18em;max-width:170px">
-          <button type="button" class="pf-add" id="pf-code-link-btn">Link this device</button>
+        <div class="pf-code-row">
+          <input class="pf-input" id="pf-code-link-input" type="text" maxlength="5" placeholder="Enter a code"
+                 autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.18em">
+          <button type="button" class="pf-add pf-code-btn" id="pf-code-link-btn">Link</button>
         </div>
         <p class="pf-hint" id="pf-code-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
       </section>
 
-      <section class="pf-section">
-        <h2>Your opponents</h2>
-        <p class="pf-hint">Add up to three computer opponents. Their name, emoji, and skill prefill each game.</p>
+      <details class="pf-section pf-collapse">
+        <summary>Customize Computer Players</summary>
         <div id="pf-opps"></div>
         <button type="button" class="pf-add" id="pf-add-opp">+ Add opponent</button>
-      </section>
+      </details>
 
       <div class="pf-foot">
-        <p>Saved on this device only. No account, no sync, per browser.</p>
         <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
       </div>
     </main>
@@ -376,12 +394,12 @@
     els.youName.addEventListener('change', async () => {
       const name = els.youName.value.trim();
       if (!name || name.toLowerCase() === prevName.toLowerCase()) { prevName = name; return; }
-      msg(els.nameMsg, 'Checking the name...');
+      msg(els.nameMsg, 'Checking...');
       let status = 'offline';
       try { status = await net.usernameStatus(name, state.playerId); } catch { status = 'offline'; }
       if (status === 'taken') {
         els.youName.value = prevName; state.name = prevName; commitNow();
-        msg(els.nameMsg, 'Taken: "' + name + '" belongs to another player. Enter their player code below to use it, or pick another name.');
+        msg(els.nameMsg, 'Taken. Enter that player\'s code to use it.');
       } else {
         const old = prevName; prevName = name;
         msg(els.nameMsg, '');
@@ -393,16 +411,16 @@
     els.codeCopy.addEventListener('click', async () => {
       const c = state.playerId || '';
       if (!c) return;
-      try { await navigator.clipboard.writeText(c); msg(els.codeMsg, 'Copied your code: ' + c); }
-      catch { msg(els.codeMsg, 'Your code is ' + c + ' (long-press the code to copy).'); }
+      try { await navigator.clipboard.writeText(c); msg(els.codeMsg, 'Copied ' + c); }
+      catch { msg(els.codeMsg, 'Long-press the code to copy.'); }
     });
     els.codeLinkBtn.addEventListener('click', () => {
       const c = canonicalizeCode(els.codeLink.value);
-      if (!c) { msg(els.codeMsg, 'That code is not valid. It is 5 letters or numbers, no spaces (for example ABCDE).'); return; }
-      if (c === state.playerId) { msg(els.codeMsg, 'This device already uses that code.'); return; }
+      if (!c) { msg(els.codeMsg, 'Invalid code.'); return; }
+      if (c === state.playerId) { msg(els.codeMsg, 'Already linked to that code.'); return; }
       state.playerId = c; commitNow();
       els.code.textContent = c; els.codeLink.value = '';
-      msg(els.codeMsg, 'Linked. This device now shares one player with code ' + c + '. Your stats will combine on the leaderboard.');
+      msg(els.codeMsg, 'Linked to ' + c + '. Stats will combine.');
       try { net.claimUsername(state.name, c, ''); } catch { /* best-effort */ }
       try { net.syncMyStats(); } catch { /* best-effort */ }
     });

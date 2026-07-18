@@ -110,8 +110,12 @@ body {
 /* The version pill is informational chrome; keep it out of the way while a game is mounted. */
 .hub-top-ingame .hub-version { display: none; }
 
-.hub-top-right { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.hub-top-right .hub-profile { margin-left: 0; max-width: 60vw; }
+/* Three controls pinned left / center / right. */
+.hub-top-right { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.hub-top-right > :nth-child(1) { justify-self: start; }
+.hub-top-right > :nth-child(2) { justify-self: center; }
+.hub-top-right > :nth-child(3) { justify-self: end; }
+.hub-top-right .hub-profile { margin-left: 0; max-width: 100%; }
 .hub-statsbtn {
   appearance: none; border: 1px solid var(--hub-surface-2); background: var(--hub-surface);
   color: var(--hub-ink); font: inherit; font-size: 0.85rem; font-weight: 700;
