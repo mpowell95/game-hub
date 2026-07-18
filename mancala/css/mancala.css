@@ -533,7 +533,15 @@
 .mancala .mc-bar {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+/* Note under the setup screen's Resume button. */
+.mancala .mc-resumenote {
+  margin: -6px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(36, 22, 9, 0.6);
 }
 
 /* --- overlays (end card, help) ----------------------------------------- */

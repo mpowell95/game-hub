@@ -12,7 +12,7 @@
 // by name and emoji on the score bar, and by the turn marker, never hue alone.
 
 import {
-  P1, P2, P1_STORE, P2_STORE,
+  P1, P2, P1_STORE, P2_STORE, PITS_PER_SIDE, START_STONES,
   pitsOf, storeOf, ownerOf, isStore,
   newGame, legalMoves, applyMove,
 } from './game.js';
@@ -21,6 +21,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
 
 const SETTINGS_KEY = 'gamehub.mancala.v1';
+const GAME_KEY = 'gamehub.mancala.game.v1';   // the one in-progress game (see saveGame)
 
 const LEVELS = [
   { level: 1, key: 'beginner', label: 'Beginner' },
@@ -86,6 +87,46 @@ function loadSettings() {
 function saveSettings(level, speed) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level, speed })); } catch { /* ignore */ }
 }
+
+/** Persist the in-progress game so leaving (hub, Setup, a reload, or closing the
+ *  PWA) never loses it. Only ever holds ONE unfinished game; cleared the moment
+ *  it finishes or a new one starts. */
+function saveGame(ui) {
+  try {
+    if (!ui.state || ui.state.over || ui.view !== 'game') { clearGame(); return; }
+    localStorage.setItem(GAME_KEY, JSON.stringify({
+      v: 1,
+      pits: ui.state.pits,
+      turn: ui.state.turn,
+      mode: ui.mode,
+      level: ui.level,
+      movesMade: ui.movesMade,
+    }));
+  } catch { /* a full quota must never break the game */ }
+}
+
+/** Read back a saved game, or null. Validates hard: a corrupt or non-standard
+ *  board is treated as "no saved game" rather than crashing the module. */
+function loadGame() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GAME_KEY) || 'null');
+    if (!raw || raw.v !== 1 || !Array.isArray(raw.pits) || raw.pits.length !== 14) return null;
+    const pits = raw.pits.map((n) => Math.round(Number(n)));
+    if (!pits.every((n) => Number.isFinite(n) && n >= 0)) return null;
+    // A standard Kalah board always holds exactly 6*2*4 = 48 stones.
+    if (pits.reduce((a, b) => a + b, 0) !== PITS_PER_SIDE * 2 * START_STONES) return null;
+    const lvl = Math.round(Number(raw.level));
+    return {
+      pits,
+      turn: raw.turn === P2 ? P2 : P1,
+      mode: raw.mode === 'friend' ? 'friend' : 'bot',
+      level: lvl >= 1 && lvl <= 3 ? lvl : 2,
+      movesMade: Math.max(0, Math.round(Number(raw.movesMade)) || 0),
+    };
+  } catch { return null; }
+}
+
+function clearGame() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
 
 /** Small deterministic hash for per-stone jitter (stable across re-layouts). */
 function hash(n) {
@@ -175,12 +216,21 @@ class MancalaUI {
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
     window.addEventListener('resize', this._onResize);
-    this.renderSetup();
+
+    // Come back to exactly where you left off: an unfinished game (from the hub
+    // back button, the Setup screen, a reload, or closing the PWA) resumes
+    // straight onto the board. Otherwise start at setup.
+    const inProgress = loadGame();
+    if (inProgress) this.resumeGame(inProgress); else this.renderSetup();
   }
 
   // --- lifecycle -------------------------------------------------------------
 
   destroy() {
+    // Leaving mid-game keeps the board. If a move is still animating, `this.state`
+    // is the position BEFORE it (playMove only commits at the end), so the worst
+    // case is that the in-flight move is rolled back, never a half-applied board.
+    saveGame(this);
     this.gen += 1;
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
@@ -219,6 +269,9 @@ class MancalaUI {
     this.state = null;
     this.busy = false;
     this.stones = [];
+    // Coming here from a live game (e.g. to change the speed) must not lose it:
+    // the saved game is still on disk, so offer to go straight back to it.
+    const paused = !!loadGame();
     this.container.innerHTML = `
       <div class="mancala">
         <div class="mc-shell mc-setup">
@@ -264,7 +317,10 @@ class MancalaUI {
             </div>
           </div>
 
-          <button type="button" class="mc-primary" data-action="start-bot">Play vs ${esc(this.botName)}</button>
+          ${paused ? `
+          <button type="button" class="mc-primary" data-action="resume">Resume game</button>
+          <p class="mc-resumenote">Starting a new game below ends it.</p>` : ''}
+          <button type="button" class="${paused ? 'mc-secondary' : 'mc-primary'}" data-action="start-bot">Play vs ${esc(this.botName)}</button>
           <button type="button" class="mc-secondary" data-action="start-friend">Two players</button>
           <button type="button" class="mc-ghost" data-action="help">How to play</button>
         </div>
@@ -290,11 +346,27 @@ class MancalaUI {
     this.gen += 1;
     this.mode = mode;
     saveSettings(this.level, this.speed);
+    clearGame();                 // a new game replaces any saved one
     this.state = newGame(P1);
     this.view = 'game';
     this.busy = false;
     this.movesMade = 0;
     this.renderGame();
+    saveGame(this);
+  }
+
+  /** Rebuild the board from a saved game and hand the turn back to whoever had it. */
+  resumeGame(saved) {
+    this.gen += 1;
+    this.mode = saved.mode;
+    this.level = saved.level;
+    this.state = { pits: saved.pits.slice(), turn: saved.turn, over: false, winner: null };
+    this.view = 'game';
+    this.busy = false;
+    this.movesMade = saved.movesMade;
+    this.renderGame();
+    // If we left while the bot was on move, it picks up where it left off.
+    if (this.mode === 'bot' && this.state.turn === P2) this.botTurn();
   }
 
   renderGame() {
@@ -344,7 +416,11 @@ class MancalaUI {
           <p class="mc-status" data-role="status" aria-live="polite"></p>
 
           <footer class="mc-bar">
-            <button type="button" class="mc-ghost mc-small" data-action="help">How to play</button>
+            <button type="button" class="mc-ghost mc-small" data-action="help">Help</button>
+            <!-- Speed is togglable IN the game: changing it used to mean going out
+                 to Setup, which threw the match away. Applies to the next move. -->
+            <button type="button" class="mc-ghost mc-small" data-action="speed-toggle"
+              data-role="speedbtn" aria-label="Animation speed">${this.speed === 'slow' ? '½&times;' : '1&times;'}</button>
             <button type="button" class="mc-ghost mc-small" data-action="restart">Restart</button>
             <button type="button" class="mc-ghost mc-small" data-action="newgame">Setup</button>
           </footer>
@@ -676,6 +752,7 @@ class MancalaUI {
     this.busy = false;
     if (!this.motionOK) { this.syncStonesToState(); this.placeAllStones(false); }
     this.refresh();
+    saveGame(this);   // checkpoint after every settled move (clears itself once over)
 
     if (events.over) {
       this.later(() => { if (gen === this.gen) this.finish(); }, this.motionOK ? 650 * this.speedFactor : 250);
@@ -817,6 +894,18 @@ class MancalaUI {
         el.setAttribute('aria-checked', String(on));
       });
       saveSettings(this.level, this.speed);
+    } else if (action === 'speed-toggle') {
+      // In-game toggle: flip the speed and relabel in place. No re-render, so
+      // the board and the match are untouched.
+      this.speed = this.speed === 'slow' ? 'normal' : 'slow';
+      this.speedFactor = this.speed === 'slow' ? 2 : 1;
+      const label = this.container.querySelector('[data-role="speedbtn"]');
+      if (label) label.innerHTML = this.speed === 'slow' ? '½&times;' : '1&times;';
+      this.toast(this.speed === 'slow' ? 'Relaxed' : 'Normal');
+      saveSettings(this.level, this.speed);
+    } else if (action === 'resume') {
+      const saved = loadGame();
+      if (saved) this.resumeGame(saved); else this.startGame('bot');
     } else if (action === 'start-bot') {
       this.startGame('bot');
     } else if (action === 'start-friend') {
@@ -851,9 +940,11 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-/** The hub asks before navigating away mid-game. */
+/** The hub shows a "progress will be lost" confirm when this is true. Mancala
+ *  saves an unfinished game on teardown and resumes it on the next mount, so
+ *  leaving costs nothing and the warning would be a lie. */
 export function isInProgress() {
-  return !!(instance && instance.inProgress());
+  return false;
 }
 
 export default { init, destroy, isInProgress };
