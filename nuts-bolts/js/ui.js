@@ -597,7 +597,7 @@ class NutsBoltsUI {
     // and re-solving the same board cannot double-count. Never break the game over stats.
     if (!this._winRecorded) {
       this._winRecorded = true;
-      try { recordNutsBolts(this.game.level, this.game.moves); } catch { /* ignore */ }
+      try { recordNutsBolts(this.game.level, this.game.moves, this.currentDifficulty); } catch { /* ignore */ }
     }
     const name = this.profile && this.profile.name;
     const title = `Level ${this.game.level} complete`;

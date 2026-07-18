@@ -35,6 +35,8 @@ const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
 const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
+// Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
+export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -210,10 +212,12 @@ export function recordChinchon(difficulty, won, extras) {
 
 /** Nuts & Bolts: record ONE solved level. A solo puzzle has no opponent and no loss state, so a
  *  solve counts as played+won and `lost` is never touched (the shared readers - family sync and
- *  admin Player Insights - only read `total`). `byDiff` stays empty on purpose: the game has no
- *  difficulty picker, its levels just get harder. The tailored `nb` dimension carries the real
- *  story. Additive; never overwrites. Its own save (gamehub.nutsbolts.v1) is never read here. */
-export function recordNutsBolts(level, moves) {
+ *  admin Player Insights - only read `total`). `tier` is the difficulty the level was solved on
+ *  (easy|medium|hard|extraHard); it lands in `byDiff` so levels-beaten-per-tier aggregates across a
+ *  person's devices for free, and `nb.bestByTier` keeps the furthest level reached in each. Solves
+ *  recorded before tiers were tracked simply have no byDiff entry; `nb.solved` stays the true total.
+ *  Additive; never overwrites. Its own save (gamehub.nutsbolts.v1) is never read here. */
+export function recordNutsBolts(level, moves, tier) {
   const st = loadStats();
   const g = st.games.nutsbolts;
   ensureNb(g);
@@ -222,6 +226,13 @@ export function recordNutsBolts(level, moves) {
   g.nb.solved += 1;
   g.nb.moves += Math.max(0, moves | 0);
   g.nb.bestLevel = Math.max(g.nb.bestLevel | 0, level | 0);
+  const t = NB_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
+  if (t) {
+    if (!g.byDiff[t]) g.byDiff[t] = bucket();
+    g.byDiff[t].played += 1; g.byDiff[t].won += 1;
+    if (!g.nb.bestByTier || typeof g.nb.bestByTier !== 'object') g.nb.bestByTier = {};
+    g.nb.bestByTier[t] = Math.max(g.nb.bestByTier[t] | 0, level | 0);
+  }
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

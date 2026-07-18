@@ -5,7 +5,7 @@
 //
 // Colorblind-safe: rank + the viewer's own highlighted row use weight/border, never hue alone.
 
-import { aggregatePlayers, identityKey, nameCodeMap } from './players-agg.js';
+import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { deviceId } from './game-stats.js';
@@ -53,13 +53,18 @@ function gameRows(list, id) {
   }));
 }
 
+// Nuts & Bolts difficulty tiers (byDiff keys are lowercased by the recorder).
+const NB_TIERS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['extrahard', 'Extra']];
+
 function nutsBoltsRows(list) {
+  // Levels beaten, overall and per difficulty. Best level / average moves are properties of the
+  // puzzle rather than the player, so they are not ranked.
   const rows = list.filter((g) => g.solo.solved > 0)
-    .sort(cmp((g) => g.solo.solved, (g) => g.solo.bestLevel, (g) => -g.solo.moves, (g) => g.updatedAt));
+    .sort(cmp((g) => g.solo.solved, (g) => g.updatedAt));
   if (!rows.length) return emptyRows('No Nuts & Bolts levels solved yet.');
-  return table(['#', 'Player', 'Solved', 'Best', 'Avg moves'], rows.map((g, i) => {
-    const avg = g.solo.solved > 0 ? Math.round(g.solo.moves / g.solo.solved) : 0;
-    return rowHTML(g, i, [`${g.solo.solved}`, `${g.solo.bestLevel}`, `${avg}`]);
+  return table(['#', 'Player', 'Solved', ...NB_TIERS.map(([, l]) => l)], rows.map((g, i) => {
+    const bd = g.games.nutsbolts.byDiff || {};
+    return rowHTML(g, i, [`${g.solo.solved}`, ...NB_TIERS.map(([k]) => `${(bd[k] && bd[k].played) | 0}`)]);
   }));
 }
 
@@ -69,9 +74,12 @@ function rowHTML(g, i, metrics, nameExtra) {
   return `<tr class="lb-r${me}"${me ? ' aria-current="true"' : ''}><td class="lb-rank">${i + 1}</td><th scope="row" class="lb-name">${rankName(g)}${nameExtra || ''}</th>${cells}</tr>`;
 }
 function table(head, bodyRows) {
-  return `<div class="lb-tblwrap"><table class="lb-table">
-    <thead><tr>${head.map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : ''} scope="col">${h}</th>`).join('')}</tr></thead>
-    <tbody>${bodyRows}</tbody></table></div>`;
+  // join('') matters: interpolating an ARRAY stringifies it with commas, and any stray text inside
+  // <table> (commas OR the template's own newlines) is foster-parented out by the HTML parser and
+  // renders as a blank row of junk above the table. Keep this markup whitespace-free.
+  const body = Array.isArray(bodyRows) ? bodyRows.join('') : bodyRows;
+  const th = head.map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : ''} scope="col">${h}</th>`).join('');
+  return `<div class="lb-tblwrap"><table class="lb-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function emptyRows(msg) { return `<p class="lb-none">${esc(msg)}</p>`; }
 function labelOf(id) { const t = TABS.find((x) => x.id === id); return t ? t.label : id; }
@@ -91,7 +99,7 @@ function bodyFor(id) {
   // Only players who have set a profile name are listed. Devices with no name keep every game they
   // recorded; that history joins a player automatically the moment the device sets a name.
   const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
-  try { _meKey = identityKey(loadProfile() || {}, deviceId(), nameCodeMap(recs)).key; } catch { /* keep */ }
+  try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, deviceId()); } catch { /* keep */ }
   if (id === 'overall') return overallRows(list);
   if (id === 'nutsbolts') return nutsBoltsRows(list);
   return gameRows(list, id);
@@ -105,8 +113,20 @@ let _meKey = '';
 let _unsub = null;
 let _connected = false;
 
+/** Overall first, then games by TOTAL plays across everyone (busiest game first), so the game a
+ *  player actually cares about is the nearest tab. Falls back to alphabetical before data loads. */
+function orderedTabs() {
+  const list = aggregatePlayers(visibleRecords()).filter((g) => (g.name || '').trim());
+  const totals = {};
+  for (const t of TABS) if (t.id !== 'overall') totals[t.id] = 0;
+  for (const g of list) for (const id of Object.keys(totals)) totals[id] += g.games[id].total.played | 0;
+  const games = TABS.filter((t) => t.id !== 'overall')
+    .sort((a, b) => (totals[b.id] - totals[a.id]) || a.label.localeCompare(b.label));
+  return [TABS.find((t) => t.id === 'overall'), ...games];
+}
+
 function tabsHTML() {
-  return TABS.map((t) =>
+  return orderedTabs().map((t) =>
     `<button type="button" class="lb-tab${t.id === _active ? ' is-active' : ''}" data-tab="${t.id}" style="--lb-accent:${t.accent}"${t.id === _active ? ' aria-current="true"' : ''}>${esc(t.label)}</button>`
   ).join('');
 }
@@ -143,7 +163,7 @@ export async function openLeaderboard() {
   _active = 'overall';
   _all = {};
   _connected = false;
-  try { _meKey = identityKey(loadProfile() || {}, deviceId()).key; } catch { _meKey = ''; }
+  _meKey = '';   // resolved in bodyFor() once records load (identity needs the whole graph)
   const host = document.createElement('div');
   host.className = 'lb-overlay';
   host.setAttribute('role', 'dialog');
