@@ -1,0 +1,320 @@
+/* ball-run.css — scoped entirely under .br-root (build guide section 9). */
+
+.br-root {
+  --br-void: #000000;
+  --br-panel: #17141f;
+  --br-panel-2: #1f1b2b;
+  --br-ink: #eef0ff;
+  --br-ink-dim: #b9bad0;
+  --br-magenta: #e91ec4;
+  --br-purple: #a34ce8;
+  --br-orange: #f0942e;
+  --br-attention: #ffce3a;
+  --br-radius: 18px;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  background: var(--br-void);
+  color: var(--br-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.br-root button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.br-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 14px 22px;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  color: var(--br-ink);
+  background: var(--br-panel-2);
+  touch-action: manipulation;
+}
+.br-btn-primary { background: var(--br-orange); color: #211200; }
+.br-btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.25); }
+.br-btn-help {
+  background: var(--br-purple);
+  width: 52px;
+  padding: 14px 0;
+  font-size: 1.3rem;
+}
+.br-btn-nav { background: var(--br-panel-2); padding: 12px 16px; }
+
+/* --- Pre-game setup screen --- */
+
+.br-setup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: max(24px, env(safe-area-inset-top)) 24px 32px;
+  text-align: center;
+}
+
+.br-title {
+  margin: 8px 0 0;
+  font-size: clamp(1.8rem, 8vw, 2.4rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--br-ink);
+}
+
+.br-blurb {
+  margin: 0;
+  color: var(--br-ink-dim);
+  font-weight: 600;
+  line-height: 1.4;
+  max-width: 340px;
+}
+
+.br-best {
+  font-weight: 700;
+  color: var(--br-attention);
+  min-height: 1.2em; /* reserved so switching difficulty never shifts layout */
+}
+
+.br-diff-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.br-diff-face {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--br-orange);
+}
+.br-diff-face svg { width: 56px; height: 56px; }
+
+.br-diff-label {
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: var(--br-orange);
+}
+
+.br-diff-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--br-orange) 0 50%, rgba(255,255,255,0.12) 50% 100%);
+  outline: none;
+}
+.br-diff-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--br-orange);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.br-diff-slider::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--br-orange);
+}
+
+.br-setup-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+  width: 100%;
+  max-width: 280px;
+}
+.br-setup-actions .br-btn-primary { flex: 1; }
+
+/* --- Game screen --- */
+
+.br-game {
+  position: absolute;
+  inset: 0;
+}
+
+.br-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.br-hud {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.br-hud-distance {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--br-ink);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  font-variant-numeric: tabular-nums;
+}
+.br-hud-unit { font-size: 0.9rem; margin-left: 2px; opacity: 0.7; }
+
+.br-hud-tiers {
+  display: flex;
+  gap: 4px;
+  min-height: 8px; /* reserved even at zero tiers, no layout shift */
+}
+.br-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #39f4ff;
+  box-shadow: 0 0 6px #39f4ff;
+}
+
+/* [hidden] must win over the flex layout below (class specificity otherwise beats the UA default). */
+.br-gate[hidden], .br-overlay[hidden], .br-help-overlay[hidden] { display: none; }
+
+.br-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.7);
+}
+
+.br-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.72);
+  padding: 20px;
+}
+
+.br-panel {
+  background: var(--br-panel);
+  border-radius: var(--br-radius);
+  padding: 28px 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+.br-panel h2 { margin: 0 0 10px; font-size: 1.4rem; font-weight: 900; }
+.br-go-distance { margin: 4px 0; font-weight: 700; color: var(--br-ink-dim); }
+.br-go-best { margin: 4px 0 20px; font-weight: 800; color: var(--br-attention); }
+.br-star { color: var(--br-attention); }
+.br-panel-actions { display: flex; flex-direction: column; gap: 10px; }
+
+/* --- Help carousel --- */
+
+.br-help-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgba(6, 2, 10, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.br-help-panel {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.br-help-close {
+  position: absolute;
+  top: -6px;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--br-ink);
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 8px;
+}
+
+.br-help-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.br-help-card {
+  background: #fff;
+  color: #16243a;
+  border-radius: 16px;
+  padding: 12px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.br-help-still {
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  background: #000;
+}
+.br-help-still svg { width: 100%; height: 100%; display: block; }
+
+.br-help-text {
+  margin: 0 4px 4px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.br-help-dots { display: flex; gap: 8px; }
+.br-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.35); }
+.br-dot.is-active { background: var(--br-orange); }
+
+.br-help-nav {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.br-help-nav .br-btn-primary { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .br-root * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

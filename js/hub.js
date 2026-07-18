@@ -239,6 +239,20 @@ const GAMES = [
             <rect x="12" y="100" width="96" height="8" rx="4" fill="#6b7688"/>
           </svg>`,
   },
+  {
+    id: 'ball-run',
+    title: 'Ball Run',
+    blurb: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',
+    module: '../ball-run/js/ui.js',
+    accent: '#c22e8f',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#0a0a12"/>
+            <path d="M10 105 L60 45 L110 105 Z" fill="none" stroke="#8f9aef" stroke-width="2.5"/>
+            <path d="M35 78 L85 78" stroke="#8f9aef" stroke-width="1.5"/>
+            <circle cx="60" cy="55" r="17" fill="#e91ec4"/>
+            <ellipse cx="54" cy="49" rx="5" ry="3.5" fill="#ff9fe6" opacity="0.7"/>
+          </svg>`,
+  },
 ];
 
 // Hidden entries appended only when the profile name matches (see render()). The

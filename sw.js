@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v131';
+const CACHE = 'game-hub-v132';
 
 const ASSETS = [
   './',
@@ -92,6 +92,16 @@ const ASSETS = [
   './nuts-bolts/js/ui.js',
   './nuts-bolts/js/game.js',
   './nuts-bolts/js/generator.js',
+  // Ball Run module
+  './ball-run/index.html',
+  './ball-run/css/ball-run.css',
+  './ball-run/js/ui.js',
+  './ball-run/js/config.js',
+  './ball-run/js/track.js',
+  './ball-run/js/sim.js',
+  './ball-run/js/input.js',
+  './ball-run/js/render.js',
+  './ball-run/vendor/three.module.min.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,
