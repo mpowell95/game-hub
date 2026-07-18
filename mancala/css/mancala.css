@@ -153,7 +153,8 @@
 }
 .mancala .mc-seg {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 6px;
   background: rgba(36, 22, 9, 0.14);
   border-radius: 12px;
@@ -231,18 +232,22 @@
 .mancala .mc-scoreside {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  /* Sides never shrink: they hold their content (name capped by max-width), so
+     the difficulty chip is the ONLY element that gives up width when it's tight.
+     That stops names collapsing to "M..." on a narrow phone. */
+  flex: 0 0 auto;
   min-width: 0;
-  padding: 4px 8px;
+  padding: 4px 7px;
   border-radius: 10px;
   border: 2px solid transparent;
 }
 .mancala .mc-scoreside.is-turn { border-color: #ffd75e; background: rgba(255, 215, 94, 0.12); }
-.mancala .mc-scoreemoji { font-size: 20px; line-height: 1; }
+.mancala .mc-scoreemoji { font-size: 20px; line-height: 1; flex: none; }
 .mancala .mc-scorename {
   font-size: 13px;
   font-weight: 800;
-  max-width: 92px;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -252,20 +257,28 @@
 .mancala .mc-scorenum {
   font-size: 17px;
   font-weight: 900;
-  min-width: 22px;
+  min-width: 20px;
   text-align: center;
+  flex: none;
 }
 .mancala .mc-scorenum.is-pop { animation: mc-pop-plain 360ms ease; }
 .mancala .mc-scorechip {
-  font-size: 10px;
+  /* Lowest-priority element in the bar: it shrinks (and ellipsizes) before the
+     names do, so long real names stay readable on a narrow phone. */
+  flex: 0 4 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 9.5px;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.75);
   background: rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  padding: 4px 8px;
+  padding: 4px 7px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- board ------------------------------------------------------------- */
@@ -307,18 +320,25 @@
 }
 .mancala .mc-store--p2 { background: linear-gradient(180deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
 .mancala .mc-store--p1 { background: linear-gradient(180deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
+/* The mancala's score sits on a centered plaque that rides ABOVE the stones
+   layer (z-index 4 > stones' 2), so a full mancala never buries its own count. */
 .mancala .mc-storecount {
   position: absolute;
   top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  font-size: 13px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  min-width: 26px;
+  text-align: center;
+  font-size: 16px;
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.22);
-  border-radius: 9px;
-  padding: 2px 7px;
-  z-index: 3;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.34);
+  border-radius: 999px;
+  padding: 2px 11px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.14);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 .mancala .mc-store.is-hit { animation: mc-hit 420ms ease; }
 
@@ -360,27 +380,22 @@
 .mancala .mc-pit:focus-visible { outline: none; }
 .mancala .mc-pit:focus-visible .mc-hole { outline: 3px solid #fff; outline-offset: 2px; }
 
-/* One count badge per pit, riding the bottom rim of its own hole. It sits
-   above the stones layer (z-index 3) so the number always stays readable.
-   (Putting the two sides' numbers in the shared middle gutter stacked them
-   on top of each other on narrow screens.) */
+/* Pit counts are numbers carved into the wood on the OUTER edge of each pit:
+   the left column's numbers sit to their left, the right column's to their
+   right, so the two sides never share a gutter and never overlap. The carved
+   look is a dark wood ink with a light lower highlight + dark upper shade. */
 .mancala .mc-count {
   position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  font-size: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: clamp(13px, 4.4vw, 17px);
   font-weight: 900;
-  line-height: 1.3;
-  color: #fff;
-  background: rgba(36, 22, 9, 0.85);
-  border-radius: 999px;
-  padding: 1px 7px;
-  min-width: 24px;
-  text-align: center;
+  color: #7c4e15;
+  text-shadow: 0 1px 0 rgba(255, 246, 224, 0.6), 0 -1px 1px rgba(58, 33, 7, 0.35);
   pointer-events: none;
 }
+.mancala .mc-pit--p1 .mc-count { right: 100%; margin-right: 4px; }
+.mancala .mc-pit--p2 .mc-count { left: 100%; margin-left: 4px; }
 .mancala .mc-countnum { display: inline-block; font: inherit; }
 .mancala .mc-countnum.is-pop { animation: mc-pop-plain 320ms ease; }
 
@@ -542,8 +557,11 @@
   .mancala .mc-store { height: auto; margin: 0; border-radius: 40px; }
   .mancala .mc-store--p2 { background: linear-gradient(90deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
   .mancala .mc-store--p1 { background: linear-gradient(90deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
-  .mancala .mc-storecount { right: 50%; transform: translate(50%, 0); top: auto; bottom: 8px; }
   .mancala .mc-hole { width: clamp(54px, 8vw, 74px); height: clamp(54px, 8vw, 74px); }
+  /* Horizontal board: the two rows of pits are stacked, so the carved counts
+     sit above the top row (P2) and below the bottom row (P1), not left/right. */
+  .mancala .mc-pit--p1 .mc-count { right: auto; left: 50%; top: 100%; transform: translateX(-50%); margin: 1px 0 0; }
+  .mancala .mc-pit--p2 .mc-count { left: 50%; right: auto; top: auto; bottom: 100%; transform: translateX(-50%); margin: 0 0 1px; }
 }
 
 /* --- animations -------------------------------------------------------- */

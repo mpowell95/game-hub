@@ -28,7 +28,17 @@ const LEVELS = [
   { level: 3, key: 'pro', label: 'Pro' },
 ];
 const LEVEL_KEY = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
-const LEVEL_LABEL = { 1: 'Beginner', 2: 'Intermediate', 3: 'Pro' };
+// Short difficulty word for the compact in-game chip (the setup screen keeps the
+// full Beginner/Intermediate/Pro tier names). These are the same tiers, just the
+// space-saving synonym, so the score bar never has to truncate a player's name.
+const CHIP_LABEL = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
+
+// Animation speed. 'slow' doubles every duration/stagger (half speed) for a
+// calmer pace over a full game; 'normal' is the default.
+const SPEEDS = [
+  { key: 'normal', label: 'Normal' },
+  { key: 'slow', label: 'Relaxed' },
+];
 
 const SOW_STAGGER_MS = 115;    // launch interval between sown stones
 const FLIGHT_MS = 300;         // one stone's pit-to-pit flight
@@ -52,15 +62,18 @@ function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
     if (raw && typeof raw === 'object') {
+      const out = {};
       const lvl = Math.round(Number(raw.level));
-      if (lvl >= 1 && lvl <= 3) return { level: lvl };
+      if (lvl >= 1 && lvl <= 3) out.level = lvl;
+      if (raw.speed === 'slow' || raw.speed === 'normal') out.speed = raw.speed;
+      return Object.keys(out).length ? out : null;
     }
   } catch { /* treat as no settings */ }
   return null;
 }
 
-function saveSettings(level) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level })); } catch { /* ignore */ }
+function saveSettings(level, speed) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level, speed })); } catch { /* ignore */ }
 }
 
 /** Small deterministic hash for per-stone jitter (stable across re-layouts). */
@@ -102,10 +115,16 @@ class MancalaUI {
     const opp = profile && profile.opponents && profile.opponents[0];
     const saved = loadSettings();
     this.level = (saved && saved.level) || (opp && opp.skill) || 2;
+    // Animation speed: 'normal' (default) or 'slow' (half speed). speedFactor
+    // multiplies every animation duration/stagger in the move sequence.
+    this.speed = (saved && saved.speed) || 'normal';
+    this.speedFactor = this.speed === 'slow' ? 2 : 1;
     this.hasProfileName = !!(profile && profile.name);
     this.humanName = (profile && profile.name) || 'You';
     this.humanEmoji = (profile && profile.emoji) || '🙂';
-    this.botName = (opp && opp.name) || 'Computer';
+    // Give the bot a name + emoji so it reads as a character, not "Computer".
+    // A profile opponent (if the user set one up) wins over the built-in default.
+    this.botName = (opp && opp.name) || 'Robo';
     this.botEmoji = (opp && opp.emoji) || '🤖';
 
     this.mode = 'bot';
@@ -223,6 +242,16 @@ class MancalaUI {
             </div>
           </div>
 
+          <div class="mc-field">
+            <span class="mc-fieldlabel" id="mc-speedlabel">Animation speed</span>
+            <div class="mc-seg" role="radiogroup" aria-labelledby="mc-speedlabel">
+              ${SPEEDS.map((s) => `
+                <button type="button" class="mc-segbtn${s.key === this.speed ? ' is-active' : ''}"
+                  data-action="speed" data-speed="${s.key}" role="radio"
+                  aria-checked="${s.key === this.speed}">${s.label}</button>`).join('')}
+            </div>
+          </div>
+
           <button type="button" class="mc-primary" data-action="start-bot">Play vs ${esc(this.botName)}</button>
           <button type="button" class="mc-secondary" data-action="start-friend">Two players</button>
           <button type="button" class="mc-ghost" data-action="help">How to play</button>
@@ -248,7 +277,7 @@ class MancalaUI {
   startGame(mode) {
     this.gen += 1;
     this.mode = mode;
-    if (mode === 'bot') saveSettings(this.level);
+    saveSettings(this.level, this.speed);
     this.state = newGame(P1);
     this.view = 'game';
     this.busy = false;
@@ -258,7 +287,7 @@ class MancalaUI {
 
   renderGame() {
     const n = this.names();
-    const chip = this.mode === 'bot' ? LEVEL_LABEL[this.level] : 'Two players';
+    const chip = this.mode === 'bot' ? CHIP_LABEL[this.level] : '2 Players';
 
     // Portrait sow order runs up the right column and down the left, so the
     // right column lists P2's pits bottom-up and the left column P1's top-down.
@@ -524,6 +553,7 @@ class MancalaUI {
 
   async playMove(pit) {
     const gen = this.gen;
+    const SF = this.speedFactor;   // 1 = normal, 2 = relaxed (half speed)
     const result = applyMove(this.state, pit);
     if (!result) return;
     const { state: next, events } = result;
@@ -545,7 +575,7 @@ class MancalaUI {
 
     // Lift the handful, then sow: one stone per target pit, staggered.
     for (const s of moving) s.el.classList.add('is-held');
-    await this.sleep(140);
+    await this.sleep(140 * SF);
     if (gen !== this.gen) return;
 
     const flights = moving.map((s, k) => new Promise((res) => {
@@ -553,21 +583,21 @@ class MancalaUI {
         if (gen !== this.gen) { res(); return; }
         s.el.classList.remove('is-held');
         const target = events.path[k];
-        this.flyStone(s, target, FLIGHT_MS).then(() => {
+        this.flyStone(s, target, FLIGHT_MS * SF).then(() => {
           if (gen !== this.gen) { res(); return; }
           counts[target] += 1;
           this.setCount(target, counts[target], true);
           this.pulsePit(target);
           res();
         });
-      }, k * SOW_STAGGER_MS);
+      }, k * SOW_STAGGER_MS * SF);
     }));
     await Promise.all(flights);
     if (gen !== this.gen) return;
 
     // Capture: the landing stone plus the opposite pit sweep into the store.
     if (events.capture) {
-      await this.sleep(230);
+      await this.sleep(230 * SF);
       if (gen !== this.gen) return;
       const grabbed = [...this.stonesIn(events.capture.pit), ...this.stonesIn(events.capture.opposite)];
       this.setCount(events.capture.pit, 0, false);
@@ -576,13 +606,13 @@ class MancalaUI {
       await Promise.all(grabbed.map((s, k) => new Promise((res) => {
         this.later(() => {
           if (gen !== this.gen) { res(); return; }
-          this.flyStone(s, events.capture.store, FLIGHT_MS + 60).then(() => {
+          this.flyStone(s, events.capture.store, (FLIGHT_MS + 60) * SF).then(() => {
             if (gen !== this.gen) { res(); return; }
             landed += 1;
             this.setCount(events.capture.store, landed, true);
             res();
           });
-        }, k * CAPTURE_STAGGER_MS);
+        }, k * CAPTURE_STAGGER_MS * SF);
       })));
       if (gen !== this.gen) return;
       this.toast(`+${events.capture.count}`);
@@ -590,7 +620,7 @@ class MancalaUI {
 
     // End of game: the side with stones left sweeps them home.
     if (events.sweep) {
-      await this.sleep(320);
+      await this.sleep(320 * SF);
       if (gen !== this.gen) return;
       const swept = events.sweep.pits.flatMap((p) => {
         this.setCount(p, 0, false);
@@ -600,13 +630,13 @@ class MancalaUI {
       await Promise.all(swept.map((s, k) => new Promise((res) => {
         this.later(() => {
           if (gen !== this.gen) { res(); return; }
-          this.flyStone(s, events.sweep.store, FLIGHT_MS + 60).then(() => {
+          this.flyStone(s, events.sweep.store, (FLIGHT_MS + 60) * SF).then(() => {
             if (gen !== this.gen) { res(); return; }
             landed += 1;
             this.setCount(events.sweep.store, landed, true);
             res();
           });
-        }, k * CAPTURE_STAGGER_MS);
+        }, k * CAPTURE_STAGGER_MS * SF);
       })));
       if (gen !== this.gen) return;
     }
@@ -652,7 +682,7 @@ class MancalaUI {
     this.refresh();
 
     if (events.over) {
-      this.later(() => { if (gen === this.gen) this.finish(); }, this.motionOK ? 650 : 250);
+      this.later(() => { if (gen === this.gen) this.finish(); }, this.motionOK ? 650 * this.speedFactor : 250);
       return;
     }
     if (events.extraTurn) {
@@ -781,6 +811,16 @@ class MancalaUI {
         el.classList.toggle('is-active', on);
         el.setAttribute('aria-checked', String(on));
       });
+      saveSettings(this.level, this.speed);
+    } else if (action === 'speed') {
+      this.speed = btn.dataset.speed === 'slow' ? 'slow' : 'normal';
+      this.speedFactor = this.speed === 'slow' ? 2 : 1;
+      this.container.querySelectorAll('[data-action="speed"]').forEach((el) => {
+        const on = el.dataset.speed === this.speed;
+        el.classList.toggle('is-active', on);
+        el.setAttribute('aria-checked', String(on));
+      });
+      saveSettings(this.level, this.speed);
     } else if (action === 'start-bot') {
       this.startGame('bot');
     } else if (action === 'start-friend') {
