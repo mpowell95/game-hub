@@ -27,6 +27,12 @@ const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#e8b53a', '#d22f27', '#1f5fd4', '#2e8b57'];
 
 const BEAT_TURN = 650, BEAT_PLAY = 800, BEAT_CAPTURE = 520, BEAT_ESCOBA = 1250, BEAT_ANNOUNCE = 1500;
+// The played card + whatever it captures are held highlighted together
+// before anything exits, so the play always reads before it disappears
+// (fixes captures being effectively invisible on AI turns). Humans already
+// watched themselves pick the cards, so their hold is short, just enough
+// to register the capture visually rather than snapping straight to exit.
+const HOLD_AI_MS = 750, HOLD_HUMAN_MS = 380;
 // Escoba sweep sequence: broom starts immediately, the capture's cards fly
 // partway through the (now slower, ~1.5s) crossing, and the banner pops
 // around the halfway point rather than waiting for the full sweep to
@@ -201,38 +207,22 @@ class EscobaUI {
 
     this.el.broom.style.backgroundImage = `url("${BROOM_URL}")`;
     this.root.addEventListener('click', this._onClick);
-    this._sizeTableRows();
+    this._tableCells = new Map();   // card.id -> .eb-table-cell, kept across renders for the FLIP-ish transition
     if (typeof ResizeObserver !== 'undefined') {
-      this._matResizeObserver = new ResizeObserver(() => this._sizeTableRows());
+      this._matResizeObserver = new ResizeObserver(() => this._relayoutTable());
       this._matResizeObserver.observe(this.el.mat);
     } else {
-      this._onWinResize = () => this._sizeTableRows();
+      this._onWinResize = () => this._relayoutTable();
       window.addEventListener('resize', this._onWinResize);
     }
     this.showSetup();
   }
 
-  /** Capacity contract: measure the table zone's actual rendered width (the
-   *  mat minus the stock column, already fixed by the mat's own flex layout
-   *  regardless of card content) and compute the table-card width that fits
-   *  exactly 4 cards per row, plus the matching row height. Written as inline
-   *  custom properties on .eb-mat so every descendant (.eb-table, its two
-   *  rows, every .eb-card inside) picks it up via normal CSS cascade. Cards
-   *  never shrink dynamically beyond this baseline; rows holding more than 4
-   *  cards fan with overlap instead (see renderTable/.eb-table-row.is-overlap). */
-  _sizeTableRows() {
-    if (this._dead || !this.el || !this.el.table) return;
-    // clientWidth includes the table zone's own left/right padding (the
-    // badge-overhang reserve); rows lay out inside the content box, so that
-    // padding has to come back out before dividing into 4 card columns.
-    const cs = getComputedStyle(this.el.table);
-    const zoneW = this.el.table.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    if (!zoneW) return;
-    const GAP = 6;
-    const cardW = Math.max(40, Math.floor((zoneW - GAP * 3) / 4));
-    const rowH = Math.round(cardW * 1.54);
-    this.el.mat.style.setProperty('--eb-table-card-w', `${cardW}px`);
-    this.el.mat.style.setProperty('--eb-row-h', `${rowH}px`);
+  /** Re-lay the current table state after a viewport/zone size change (the
+   *  mat was resized, not the card count) -- a no-op outside a live game. */
+  _relayoutTable() {
+    if (this._dead || !this.game || this.el.game.hidden) return;
+    this._layoutTable(this.game.table);
   }
 
   // --- setup screen ---------------------------------------------------------
@@ -447,7 +437,6 @@ class EscobaUI {
 
   _enterGameScreen() {
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
-    this._sizeTableRows();   // the mat was display:none until now, so re-measure its now-real width
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.render();
   }
@@ -492,21 +481,19 @@ class EscobaUI {
         this.render();   // the engine already moved these into the dealer's pile
         this._saveSnapshot();
         if (!reducedMotion()) {
-          // Briefly re-show the swept cards so the broom has something to
-          // act on, mirroring a played-card escoba's fly-out.
-          const nodes = payload.cards.map((c) => {
-            const t = document.createElement('template');
-            t.innerHTML = cardFaceHTML(c, { static: true, value: true }).trim();
-            return t.content.firstElementChild;
-          });
-          const anchorRow = this._lastTableRow();
-          nodes.forEach((n) => anchorRow.appendChild(n));
+          // Briefly re-show the swept cards (render() just cleared the table
+          // since game.table is already empty) so the broom has something
+          // to act on, mirroring a played-card escoba's fly-out.
+          this._layoutTable(payload.cards);
+          const cardEls = payload.cards
+            .map((c) => this._tableCells.get(c.id))
+            .filter(Boolean).map((cell) => cell.querySelector('.eb-card')).filter(Boolean);
           await this.beat(60);
           this._startBroomSweep();
           await this.beat(BROOM_TO_FLYOUT_MS);
-          nodes.forEach((n) => n.classList.add('is-swept'));
+          cardEls.forEach((el) => el.classList.add('is-swept'));
           await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
-          nodes.forEach((n) => n.remove());
+          this._layoutTable(this.game.table);   // drops the now-stale temp cells
         }
         await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', `${p.name} takes the opening table`);
         break;
@@ -546,19 +533,26 @@ class EscobaUI {
 
   beat(ms) { return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, ms); }); }
 
-  /** Show the AI's played card landing on the table, then fly captures out.
-   *  An escoba gets its own sequence: the broom sweeps first, the capture
-   *  flies out to the right partway through the sweep, and control returns
-   *  in time for the banner to pop as the sweep's tail lands. */
+  /** Show the played card landing on the table, then -- for a capture --
+   *  hold it and what it captures highlighted together before anything
+   *  exits, so the play is always legible instead of vanishing before the
+   *  player registers it. An escoba's exit is the broom sweep (started
+   *  right after the hold); an ordinary capture just flies its cards off.
+   *  `game.table` already excludes both the captured cards AND the played
+   *  card at this point (the engine removed the former and only pushes the
+   *  latter for a non-capturing play), so a capturing play is displayed via
+   *  a temporary augmented list: the current table plus the cards it's
+   *  about to take plus the card itself, laid out together exactly like a
+   *  real (about-to-shrink) table. */
   async animatePlay(p, { card, captured, escoba }) {
     if (this._dead) return;
     const isAI = p && !p.isHuman;
-    // Drop the played card onto the table so both players see what was played.
-    const node = document.createElement('template');
-    node.innerHTML = cardFaceHTML(card, { static: true, value: true }).trim();
-    const el = node.content.firstElementChild;
-    el.classList.add('is-played');
-    this._lastTableRow().appendChild(el);
+    const displayList = captured.length ? [...this.game.table, ...captured, card] : this.game.table;
+    this._layoutTable(displayList);
+    const playedCell = this._tableCells.get(card.id);
+    const playedCardEl = playedCell && playedCell.querySelector('.eb-card');
+    if (playedCardEl) playedCardEl.classList.add('is-played');
+
     if (isAI) {
       this.announce(captured.length
         ? `${p.name} plays ${cardLabel(card)} · captures ${captured.length}`
@@ -566,29 +560,42 @@ class EscobaUI {
     }
     if (!captured.length) { await this.beat(isAI ? BEAT_PLAY : 380); return; }
 
+    const capturedEls = captured
+      .map((c) => this._tableCells.get(c.id))
+      .filter(Boolean)
+      .map((cell) => cell.querySelector('.eb-card'))
+      .filter(Boolean);
+    const highlightEls = playedCardEl ? [playedCardEl, ...capturedEls] : capturedEls;
+    highlightEls.forEach((el) => el.classList.add('is-hinted'));
+    await this.beat(isAI ? HOLD_AI_MS : HOLD_HUMAN_MS);
+    highlightEls.forEach((el) => el.classList.remove('is-hinted'));
+
     if (escoba && !reducedMotion()) {
-      await this.beat(isAI ? 260 : 180);   // a brief beat for the card to register, then the sweep takes over
       this._startBroomSweep();
       await this.beat(BROOM_TO_FLYOUT_MS);
-      this._flyOutCaptured(captured, el, true);
+      this._flyOutCaptured(captured, playedCardEl, true);
       await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
     } else {
-      await this.beat(isAI ? BEAT_PLAY : 380);
-      this._flyOutCaptured(captured, el, false);
+      this._flyOutCaptured(captured, playedCardEl, false);
       await this.beat(BEAT_CAPTURE);
     }
   }
 
-  /** Exit the captured cards (plus the card that was just played). `swept`
-   *  picks the escoba variant: fly right + rotate, matching the broom's
-   *  travel, instead of the plain lift-and-fade used for an ordinary capture. */
-  _flyOutCaptured(captured, playedEl, swept) {
-    const ids = new Set(captured.map((c) => c.id));
+  /** Exit the captured cards (plus the card that was just played, if any).
+   *  `swept` picks the escoba variant: fly right + rotate, matching the
+   *  broom's travel, instead of the plain lift-and-fade used for an
+   *  ordinary capture. The elements are left in place after this -- the
+   *  next _layoutTable(game.table) call (from the caller's this.render())
+   *  drops their now-stale ids once the exit transition has had time to
+   *  finish, per the beat this method's caller awaits afterward. */
+  _flyOutCaptured(captured, playedCardEl, swept) {
     const exitCls = swept ? 'is-swept' : 'is-taken';
-    for (const cardEl of this.el.table.querySelectorAll('.eb-card')) {
-      if (ids.has(cardEl.dataset.id) || cardEl === playedEl) cardEl.classList.add(exitCls);
+    for (const c of captured) {
+      const cell = this._tableCells.get(c.id);
+      const cardEl = cell && cell.querySelector('.eb-card');
+      if (cardEl) cardEl.classList.add(exitCls);
     }
-    playedEl.classList.add(exitCls);
+    if (playedCardEl) playedCardEl.classList.add(exitCls);
   }
 
   /** Play the broom spritesheet once across the felt. Restarts cleanly if a
@@ -640,7 +647,7 @@ class EscobaUI {
     this.el.matchinfo.innerHTML = this.renderMatchInfo();
     this._syncStock();
     this._syncLastHand();
-    this.el.table.innerHTML = this.renderTable();
+    this._layoutTable(this.game.table);
     this._syncSumChip();
     this.el.self.innerHTML = this.renderSelf();
     this.el.hand.innerHTML = this.renderHand();
@@ -723,18 +730,76 @@ class EscobaUI {
     this.el.stockcount.textContent = String(g.stock.length);
   }
 
-  /** Deterministic 2-row split, never left to flex-wrap: row 1 gets the
-   *  ceil half once there are more than 4 cards, so e.g. 5 cards become 3+2
-   *  (both under the 4-per-row capacity) rather than 4+1, where that lone
-   *  5th card would otherwise wrap into an invisible 3rd row. */
-  _splitTableRows(n) {
-    if (n <= 4) return [n, 0];
-    const row1 = Math.ceil(n / 2);
-    return [row1, n - row1];
+  /** The table layout contract: given N cards and the (fixed-size) zone they
+   *  render into, compute a per-card {x, y, z} position plus a shared card
+   *  size, so the table always reads as a deliberate 2-row grid rather than
+   *  wherever flex-wrap happened to break lines.
+   *    cols = clamp(ceil(N/2), 2, 5); row 1 gets min(N, cols), row 2 the
+   *    rest -- so N never needs a 3rd row (row 2 can only exceed cols by
+   *    overlapping, never by adding another line).
+   *    cardW = min(widthFit, heightFit): whichever of "N/cols across the
+   *    zone width" or "2 rows down the zone height" is tighter. This alone
+   *    produces the three visible size tiers (N 1-6 is height-limited so
+   *    2 and 3 columns render the SAME large size; 7-8 and 9-10 each step
+   *    down once as cols grows to 4 then 5) with no tier boundaries hand-
+   *    coded anywhere.
+   *    Rows beyond 5 cards (only possible for row 2, since row 1 is capped
+   *    at cols) keep the 5-column size and fan with overlap instead of
+   *    shrinking further or adding a 3rd row: `step` spaces the row's cards
+   *    evenly across the full zone width, so overlap only ever eats into
+   *    each card's right edge -- the left/top-left index corner, and the
+   *    tap target, are never covered. */
+  _computeTableLayout(n, zoneW, zoneH) {
+    // The exact aspect ratio of the deck art itself (400x616), not a rough
+    // approximation: using the real ratio for the height-fit math is what
+    // guarantees a card can never render taller than its row budget.
+    const ASPECT = 616 / 400;
+    const GAP = 8;
+    if (!n || zoneW <= 0 || zoneH <= 0) return { cardW: 0, cardH: 0, positions: [] };
+    const cols = Math.min(5, Math.max(2, Math.ceil(n / 2)));
+    const row1n = Math.min(n, cols);
+    const row2n = n - row1n;
+    const rows = row2n > 0 ? [row1n, row2n] : [row1n];
+
+    const widthFit = (zoneW - (cols - 1) * GAP) / cols;
+    const heightFit = ((zoneH - GAP) / 2) / ASPECT;
+    const cardW = Math.max(24, Math.min(widthFit, heightFit));
+    const cardH = cardW * ASPECT;
+
+    const rowsTotalH = rows.length === 2 ? cardH * 2 + GAP : cardH;
+    const startY = (zoneH - rowsTotalH) / 2;
+
+    const positions = [];
+    rows.forEach((count, ri) => {
+      const y = startY + ri * (cardH + GAP);
+      if (count <= cols) {
+        const rowW = count * cardW + (count - 1) * GAP;
+        const startX = (zoneW - rowW) / 2;
+        for (let i = 0; i < count; i++) positions.push({ x: startX + i * (cardW + GAP), y, z: i + 1 });
+      } else {
+        const step = (zoneW - cardW) / (count - 1);
+        for (let i = 0; i < count; i++) positions.push({ x: i * step, y, z: i + 1 });
+      }
+    });
+    return { cardW, cardH, positions };
   }
 
-  renderTable() {
-    const g = this.game;
+  /** Reconciling table renderer: keyed by card.id (this._tableCells), so an
+   *  existing card's .eb-table-cell persists across calls and its own CSS
+   *  transition (not a manual FLIP invert/play) animates it to its new
+   *  slot. A brand-new id snaps to position immediately (no stale rect to
+   *  animate from); a tracked id no longer present is dropped, which is
+   *  exactly the point where a captured card's already-finished exit
+   *  animation gets cleaned up (see animatePlay/_flyOutCaptured -- this is
+   *  only ever called after their exit transition has had time to finish). */
+  _layoutTable(cardList) {
+    if (this._dead || !this.el || !this.el.table) return;
+    const table = this.el.table;
+    const cs = getComputedStyle(table);
+    const zoneW = table.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    const zoneH = table.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    const { cardW, cardH, positions } = this._computeTableLayout(cardList.length, zoneW, zoneH);
+
     const selCard = this._selCard();
     const hintIds = new Set();
     let remaining = null;
@@ -742,45 +807,41 @@ class EscobaUI {
       const opts = this._optsFor(selCard);
       for (const combo of opts) for (const c of combo) hintIds.add(c.id);
       if (opts.length) {
-        const picked = g.table.filter((c) => this._selTable.has(c.id));
+        const picked = this.game.table.filter((c) => this._selTable.has(c.id));
         remaining = 15 - selCard.value - sumValues(picked);
       }
     }
-    if (!g.table.length) return '';
-    const cardHTML = (c) => {
+
+    const seen = new Set();
+    cardList.forEach((c, i) => {
+      seen.add(c.id);
+      let cell = this._tableCells.get(c.id);
+      const isNew = !cell;
+      if (isNew) {
+        cell = document.createElement('span');
+        cell.className = 'eb-table-cell';
+        cell.dataset.id = c.id;
+        table.appendChild(cell);
+        this._tableCells.set(c.id, cell);
+      }
       const isSel = this._selTable.has(c.id);
-      return `<span class="eb-table-cell">${cardFaceHTML(c, {
+      cell.innerHTML = cardFaceHTML(c, {
         selected: isSel,
         hinted: hintIds.has(c.id) && !isSel,
         dim: remaining != null && !isSel && c.value > remaining,
         value: true,
-      })}</span>`;
-    };
-    const [count1, count2] = this._splitTableRows(g.table.length);
-    const rows = [];
-    let idx = 0;
-    for (const count of [count1, count2]) {
-      if (!count) continue;
-      const cards = g.table.slice(idx, idx + count);
-      idx += count;
-      const overlap = count > 4;
-      rows.push(`<div class="eb-table-row${overlap ? ' is-overlap' : ''}">${cards.map(cardHTML).join('')}</div>`);
+      });
+      if (isNew) cell.style.transitionProperty = 'none';
+      const pos = positions[i];
+      cell.style.width = `${cardW}px`;
+      cell.style.height = `${cardH}px`;
+      cell.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+      cell.style.zIndex = String(pos.z);
+      if (isNew) { void cell.offsetWidth; cell.style.transitionProperty = ''; }
+    });
+    for (const [id, cell] of this._tableCells) {
+      if (!seen.has(id)) { cell.remove(); this._tableCells.delete(id); }
     }
-    return rows.join('');
-  }
-
-  /** The most recently rendered table row (for animatePlay's transient
-   *  pre-render append of the just-played card). Synthesizes a fresh row
-   *  wrapper when the table is currently empty (e.g. the initial-table
-   *  escoba flourish re-shows already-captured cards), so appended cards
-   *  still lay out side by side instead of stacking as bare column items. */
-  _lastTableRow() {
-    const rows = this.el.table.querySelectorAll('.eb-table-row');
-    if (rows.length) return rows[rows.length - 1];
-    const row = document.createElement('div');
-    row.className = 'eb-table-row';
-    this.el.table.appendChild(row);
-    return row;
   }
 
   renderSelf() {

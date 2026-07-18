@@ -36,16 +36,12 @@
      empty margin at phone widths). */
   --eb-card-w: clamp(64px, 18vw, 94px);
   --eb-hand-w: clamp(92px, 27vw, 128px);
-  --eb-row-h: calc(var(--eb-card-w) * 1.54);   /* one table-card row, incl. aspect ratio */
-
-  /* Table-card capacity contract: sized by JS (see _sizeTableRows in ui.js)
-     to the exact width that fits 4 cards per row in the mat's actual table
-     zone, and the row height that matches. These two defaults (mirroring
-     --eb-card-w/--eb-row-h) only apply for the first paint before JS
-     measures the real zone; JS overrides both as inline custom properties
-     on .eb-mat on every resize. Table cards NEVER shrink below this once
-     set: rows beyond 4 cards fan with overlap instead (see .eb-table-row). */
-  --eb-table-card-w: var(--eb-card-w);
+  /* Fixed vertical budget for the table's two-row card zone. This is a pure
+     design constant (mat outer geometry never changes) -- NOT derived from
+     table-card count: JS (_computeTableLayout in ui.js) reads the actual
+     rendered .eb-table box each layout pass and fits cards INTO this fixed
+     budget, rather than the budget being sized to fit the cards. */
+  --eb-row-h: calc(var(--eb-card-w) * 1.54);
 
   /* Overhang budget: how far the lift + ring (selected) or the value badge
      bleeds past a card's own box. Card zones pad by these so nothing clips. */
@@ -262,34 +258,27 @@
 }
 .eb-stock-empty { width: var(--eb-card-w); aspect-ratio: 400 / 616; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
 
-/* Table zone: exactly two DETERMINISTIC rows (see splitRows()/renderTable()
-   in ui.js), never flex-wrap-decided. Row assignment always balances the
-   cards 50/50 (row 1 gets the ceil half beyond 4 cards), so a 5-card table
-   is 3+2, not 4+1-that-wraps-to-a-3rd-row. Each row is sized to hold
-   exactly 4 cards at --eb-table-card-w; a row that must hold more than 4
-   fans its cards with overlap (.is-overlap) instead of ever adding a 3rd
-   row or shrinking the cards. */
+/* Table zone: a fixed-size stage (never grows/shrinks with card count --
+   see the --eb-row-h comment above) that JS lays cards INTO. Every card is
+   an absolutely positioned .eb-table-cell (see _computeTableLayout/
+   _layoutTable in ui.js), sized and placed in JS: cols = clamp(ceil(N/2),
+   2, 5), max 2 rows always, card size derived from whichever of width-fit
+   or height-fit is tighter (so 1-6 cards share one large height-limited
+   size, 7-8 and 9-10 step down once each as columns grow), and 11+ cards
+   fan with overlap at the 5-column size instead of ever shrinking further
+   or adding a 3rd row. .eb-table-cell's own transition (not manual FLIP)
+   animates a card to its new slot whenever the layout changes; reduced
+   motion turns that off below so it snaps instead. */
 .eb-table {
-  flex: 1; display: flex; flex-direction: column; justify-content: flex-start;
-  gap: 8px; align-self: center; overflow: hidden; width: 100%;
+  position: relative; flex: 1; align-self: center; overflow: hidden; width: 100%;
   height: calc(var(--eb-row-h) * 2 + 8px + var(--eb-lift-overhang) + var(--eb-badge-overhang));
   padding: var(--eb-lift-overhang) var(--eb-badge-overhang) var(--eb-badge-overhang);
 }
-.eb-table-row {
-  flex: none; display: flex; align-items: flex-start; justify-content: center;
-  gap: 6px; height: var(--eb-row-h);
+.eb-table-cell {
+  position: absolute; left: 0; top: 0; display: block;
+  transition: transform 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out;
 }
-.eb-table-row.is-overlap { gap: 0; }
-/* Overlap fan: later cards stack above earlier ones via plain DOM order
-   (each .eb-card is position:relative, so normal-flow stacking order
-   already puts later siblings on top -- no explicit z-index needed). The
-   selected/hinted lift (translateY + ring) still applies per-card, so a
-   partially covered card becomes fully readable the moment it's tapped. */
-.eb-table-row.is-overlap .eb-table-cell:not(:first-child) {
-  margin-left: calc(var(--eb-table-card-w) * -0.42);
-}
-.eb-table-cell { display: flex; flex: none; }
-.eb-table .eb-card { width: var(--eb-table-card-w); }
+.eb-table-cell .eb-card { width: 100%; height: 100%; }
 
 /* Cards */
 .eb-card {
@@ -615,7 +604,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eb-card, .eb-btn, .eb-mat-announce, .eb-lasthand-chip, .eb-sum-chip { transition: none; }
+  .eb-card, .eb-btn, .eb-mat-announce, .eb-lasthand-chip, .eb-sum-chip, .eb-table-cell { transition: none; }
   .eb-card.is-played, .eb-banner-card { animation: none; }
   .eb-opp-pill.is-active, .eb-self-chip.is-active { animation: none; }
   .eb-card.eb-shake { animation: none; }
