@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v115';
+const CACHE = 'game-hub-v117';
 
 const ASSETS = [
   './',
@@ -77,6 +77,7 @@ const ASSETS = [
   './escoba/js/game.js',
   './escoba/js/ai.js',
   './escoba/js/ui.js',
+  './escoba/img/broom-sprite.webp',
   // Mancala module
   './mancala/index.html',
   './mancala/css/mancala.css',

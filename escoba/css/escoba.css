@@ -7,9 +7,14 @@
    Zero-layout-shift design: every region below the top bar has FIXED
    geometry (.eb-mat, .eb-hand, .eb-actions all use height/min-height, never
    auto-growing content). Transient state (selection sums, opponent-move
-   announcements) lives inside that fixed geometry or in an absolutely
-   positioned overlay, never in flow content that pushes siblings around. */
+   announcements, the last-hand flag) lives inside that fixed geometry or in
+   an absolutely positioned overlay, never in flow content that pushes
+   siblings around.
 
+   Overhang system: selected/hinted cards lift and ring outside their own
+   box, and every card's value badge bleeds past its corner. Rather than
+   solve each clipping symptom separately, the card zones (.eb-table,
+   .eb-hand) reserve padding sized to these three constants up front. */
 .eb-root {
   --eb-surface: #ffffff;
   --eb-surface-2: #eef2f8;
@@ -17,6 +22,7 @@
   --eb-muted: #5b6b82;
   --eb-accent: #1c7a4f;          /* table green */
   --eb-gold: #d4a017;            /* oros gold */
+  --eb-attn: #ffce3a;            /* the one attention color; never used alone for meaning */
   --eb-bad: #c2402f;
   --eb-lead-tint: rgba(31, 95, 212, 0.14);
 
@@ -25,16 +31,24 @@
   --eb-felt-edge: #0d3a25;
 
   /* Card sizing (shared aspect ratio with the deck art). Table/stock cards
-     share --eb-card-w; hand cards are a size class up for legibility. */
-  --eb-card-w: clamp(60px, 17vw, 90px);
-  --eb-hand-w: clamp(88px, 26vw, 124px);
+     share --eb-card-w; hand cards are a size class up for legibility. Sized
+     to use the available width rather than minimize it (bigger cards beat
+     empty margin at phone widths). */
+  --eb-card-w: clamp(64px, 18vw, 94px);
+  --eb-hand-w: clamp(92px, 27vw, 128px);
   --eb-row-h: calc(var(--eb-card-w) * 1.54);   /* one table-card row, incl. aspect ratio */
+
+  /* Overhang budget: how far the lift + ring (selected) or the value badge
+     bleeds past a card's own box. Card zones pad by these so nothing clips. */
+  --eb-lift-overhang: 12px;     /* table-card select lift (7px) + ring (3px) + margin */
+  --eb-badge-overhang: 11px;    /* value-badge corner bleed + its shadow */
+  --eb-hand-lift-overhang: 13px; /* hand-card select lift (10px) + ring (3px) */
 
   box-sizing: border-box;
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 6px 6px 14px;
+  padding: 6px 6px 6px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--eb-ink);
   -webkit-tap-highlight-color: transparent;
@@ -121,43 +135,68 @@
 .eb-av-opt.is-sel { border-color: var(--eb-accent); background: rgba(28, 122, 79, 0.12); box-shadow: 0 0 0 2px var(--eb-accent); }
 
 /* --- game screen ----------------------------------------------------------- */
-/* A cohesive single surface, not floating tiles: tight consistent gaps. */
-.eb-game { display: flex; flex-direction: column; gap: 8px; }
+/* Distribute the viewport deliberately: the mat and hand get the lion's
+   share, the self-row/hand gap is designed headroom (not accidental waste),
+   and the whole column stretches to fill whatever height the hub or the
+   standalone page actually gives it, so a taller phone spends the extra
+   height on the game instead of leaving a dead band under the actions row. */
+.eb-game {
+  display: flex; flex-direction: column; gap: 5px;
+  min-height: calc(100dvh - 158px);   /* rough chrome budget; content still governs on shorter viewports */
+}
+.eb-hand { flex: 0 0 auto; }
+.eb-self-row { flex: 0 0 auto; }
+.eb-actions { flex: 0 0 auto; margin-top: auto; }   /* any true leftover settles as bottom breathing room, never a mid-page gap */
 
-.eb-topbar { display: flex; align-items: center; gap: 6px; }
+.eb-topbar { display: flex; align-items: stretch; gap: 6px; }
 .eb-opponents { flex: 1; display: flex; gap: 6px; min-width: 0; }
+
+/* Player card: shared visual language for opponents and self. Match points
+   are the anchor (large, bold, labeled "pts"), never a small muted suffix. */
 .eb-opp-pill {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;
   background: var(--eb-surface); border: 1px solid var(--eb-surface-2);
-  border-radius: 13px; padding: 6px 8px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
+  border-radius: 14px; padding: 8px 10px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
 }
 .eb-opp-pill.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); animation: eb-active-pulse 1.6s ease-in-out infinite; }
+.eb-opp-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .eb-opp-av { position: relative; flex: none; font-size: 1.3rem; line-height: 1; }
-.eb-opp-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.eb-opp-name { font-weight: 800; font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eb-opp-sub { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 700; color: var(--eb-muted); white-space: nowrap; }
-.eb-opp-hand { margin-left: auto; display: flex; gap: 2px; flex: none; }
-.eb-opp-cardback {
-  width: 10px; height: 15px; border-radius: 2.5px;
-  background: linear-gradient(160deg, #38598b, #233c5e);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+.eb-opp-name { flex: 1; min-width: 0; font-weight: 800; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-opp-score, .eb-self-score {
+  display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums;
 }
+.eb-opp-score b, .eb-self-score b { font-size: 1.5rem; font-weight: 900; line-height: 1; color: var(--eb-ink); }
+.eb-opp-score span, .eb-self-score span { font-size: 0.68rem; font-weight: 800; color: var(--eb-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.eb-opp-foot { display: flex; align-items: center; gap: 6px; min-height: 21px; }
 
-/* Round/target/last-cards, merged into the top bar (never a separate status
-   row). All chips always render; "Last cards" only changes STYLE when live,
-   so its slot never appears/disappears and nothing reflows. */
-.eb-matchinfo { flex: none; display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
-.eb-mi-pill {
-  min-width: 58px; text-align: center; font-size: 0.62rem; font-weight: 800;
-  color: var(--eb-muted); background: var(--eb-surface-2); border-radius: 999px;
-  padding: 3px 8px; white-space: nowrap; font-variant-numeric: tabular-nums;
+/* Mini card-back fan: proper card proportions (2:3-ish) so opponents' hand
+   size reads as "cards" at a glance, not abstract rectangles. Capped at 3
+   fanned backs; the numeral carries the exact count beyond that. */
+.eb-mini-cards { display: flex; align-items: center; }
+.eb-mini-cards i {
+  display: block; width: 13px; height: 19px; border-radius: 2.5px; flex: none;
+  background: linear-gradient(160deg, #3f6199, #233c5e);
+  border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
-.eb-mi-last { opacity: 0.4; }
-.eb-mi-last.is-on { opacity: 1; background: var(--eb-ink); color: #fff; }
+.eb-mini-cards i + i { margin-left: -7px; }
+.eb-mini-cards em {
+  font-style: normal; font-weight: 800; font-size: 0.74rem; color: var(--eb-ink);
+  margin-left: 5px; font-variant-numeric: tabular-nums;
+}
+.eb-pile-chip {
+  font-size: 0.72rem; font-weight: 800; color: var(--eb-muted);
+  background: var(--eb-surface-2); border-radius: 999px; padding: 3px 8px; white-space: nowrap;
+}
+.eb-pile-escoba { background: rgba(212, 160, 23, 0.18); color: #7a5502; }
+
+/* Round / target: full words now that the crammed abbreviation is gone
+   (the old "Last" pill moved to the mat as a stateful chip, see below). */
+.eb-matchinfo { flex: none; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 2px; }
+.eb-mi-line { font-size: 0.72rem; font-weight: 800; color: var(--eb-muted); white-space: nowrap; text-align: right; }
 
 .eb-menu-btn {
   flex: none; appearance: none; border: 1px solid var(--eb-surface-2); background: var(--eb-surface);
-  color: var(--eb-ink); width: 40px; height: 40px; border-radius: 12px; font-size: 1.05rem; cursor: pointer;
+  color: var(--eb-ink); width: 40px; height: 40px; border-radius: 12px; font-size: 1.05rem; cursor: pointer; align-self: center;
 }
 .eb-menu-btn:hover { background: var(--eb-surface-2); }
 
@@ -173,20 +212,40 @@
   50% { box-shadow: 0 0 0 3px var(--eb-gold), 0 2px 16px rgba(212, 160, 23, 0.55); }
 }
 
-/* The mat: fixed height, always. Sized for exactly two comfortable rows of
-   table cards so a 4-card table growing to 5+ never grows the mat or shoves
-   anything below it; the rare overflow beyond two rows fans cards with a
-   tighter overlap (see .eb-table-compact) and is clipped as a last resort. */
+/* Opponent-move announcement: a fixed-height row between the top bar and the
+   mat (never inside it, so it can never cover a table card no matter how
+   many are in play). The ROW always occupies the same space; only the pill's
+   opacity/transform inside it changes, so nothing below it ever reflows. */
+.eb-announce-row { min-height: 30px; display: flex; align-items: center; justify-content: center; }
+.eb-mat-announce {
+  max-width: min(92%, 380px);
+  background: rgba(9, 24, 20, 0.88); color: #fff; font-size: 0.78rem; font-weight: 700;
+  padding: 6px 14px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15);
+  opacity: 0; transform: translateY(-3px); transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.eb-mat-announce.is-in { opacity: 1; transform: none; }
+
+/* The mat: a floor of exactly two card rows, always. Padded by the overhang
+   budget so lifted / ringed / bled adornments never clip against the felt's
+   own edges; the inner .eb-table is sized so exactly two card rows plus that
+   padding fit, so a 4-card table growing to 5+ never grows the mat or
+   shoves anything below it. The rare overflow beyond two rows fans cards
+   with a tighter overlap (.eb-table-compact) and is clipped as a last
+   resort -- only the felt background is ever allowed to clip; the card
+   layer never is. It flex-grows to absorb any leftover viewport height
+   (Task E: extra room becomes more felt, not a dead gap below the game). */
 .eb-mat {
   position: relative; display: flex; align-items: flex-start; gap: 10px;
-  height: calc(var(--eb-row-h) * 2 + 8px + 26px);
+  flex: 1 1 auto;
+  min-height: calc(var(--eb-row-h) * 2 + 8px + var(--eb-lift-overhang) + var(--eb-badge-overhang) + 20px);
   background: var(--eb-felt);
   border: 3px solid var(--eb-felt-edge);
   border-radius: 20px;
-  padding: 13px 12px;
+  padding: 10px 12px;
   box-shadow: inset 0 2px 18px rgba(0, 0, 0, 0.35), 0 6px 22px rgba(13, 58, 37, 0.28);
 }
-.eb-mat-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.eb-mat-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; padding-top: var(--eb-lift-overhang); }
 .eb-stock { position: relative; width: var(--eb-card-w); }
 .eb-stock .eb-card { width: 100%; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.28), 4px 4px 0 rgba(0, 0, 0, 0.18); }
 .eb-stock-count {
@@ -198,7 +257,9 @@
 
 .eb-table {
   flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
-  gap: 6px; height: calc(var(--eb-row-h) * 2 + 8px); overflow: hidden; align-self: center;
+  gap: 6px; align-self: center; overflow: hidden;
+  height: calc(var(--eb-row-h) * 2 + 8px + var(--eb-lift-overhang) + var(--eb-badge-overhang));
+  padding: var(--eb-lift-overhang) var(--eb-badge-overhang) var(--eb-badge-overhang);
 }
 .eb-table-cell { display: flex; }
 
@@ -220,68 +281,130 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
-/* Table selection states: ring + lift + check-style dash, never hue alone. */
+/* Table selection states: ring + lift + check-style dash, never hue alone.
+   The hinted outline sits just at the card's edge (not floating outside it)
+   so two adjacent hinted cards can never collide. */
 .eb-table .eb-card.is-selected {
   transform: translateY(-7px);
-  box-shadow: 0 0 0 3px #ffce3a, 0 8px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px var(--eb-attn), 0 8px 16px rgba(0, 0, 0, 0.4);
+  z-index: 5;
 }
 .eb-table .eb-card.is-hinted { box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.85), 0 2px 8px rgba(0, 0, 0, 0.35); }
 .eb-table .eb-card.is-hinted::after {
-  content: ''; position: absolute; inset: -7px; border-radius: 12px;
+  content: ''; position: absolute; inset: -2px; border-radius: 9px;
   border: 2px dashed rgba(255, 255, 255, 0.75);
   pointer-events: none;
 }
-.eb-card.is-played { animation: eb-drop-in 0.32s ease-out; box-shadow: 0 0 0 3px #ffce3a, 0 6px 16px rgba(0, 0, 0, 0.4); }
+/* Dimmed: this card can't join the active partial selection (too high for
+   the remaining amount). Opacity + no lift affordance, never color alone. */
+.eb-card.is-dim { opacity: 0.42; }
+
+.eb-card.is-played { animation: eb-drop-in 0.32s ease-out; box-shadow: 0 0 0 3px var(--eb-attn), 0 6px 16px rgba(0, 0, 0, 0.4); }
 @keyframes eb-drop-in {
   from { transform: translateY(-26px) scale(1.12); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
 .eb-card.is-taken { transform: translateY(-14px) scale(0.82); opacity: 0; }
-
-/* Opponent-move announcement: a fixed-height row between the top bar and the
-   mat (never inside it, so it can never cover a table card no matter how
-   many are in play). The ROW always occupies the same space; only the pill's
-   opacity/transform inside it changes, so nothing below it ever reflows
-   (Task 5). */
-.eb-announce-row { min-height: 30px; display: flex; align-items: center; justify-content: center; }
-.eb-mat-announce {
-  max-width: min(92%, 380px);
-  background: rgba(9, 24, 20, 0.88); color: #fff; font-size: 0.78rem; font-weight: 700;
-  padding: 6px 14px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.15);
-  opacity: 0; transform: translateY(-3px); transition: opacity 0.18s ease, transform 0.18s ease;
+/* Escoba capture exit: cards fly off to the right with a rotation, matching
+   the broom's left-to-right sweep, as though swept away rather than merely
+   collected. */
+.eb-card.is-swept {
+  transition: transform 0.55s cubic-bezier(0.3, 0.6, 0.35, 1), opacity 0.5s ease-in;
+  transform: translateX(150%) translateY(10px) rotate(24deg);
+  opacity: 0;
 }
-.eb-mat-announce.is-in { opacity: 1; transform: none; }
 
-/* Self chip */
+/* Rejected pick (would push the running sum past 15): a brief shake, no
+   text. Values are all positive, so an over-15 tap can never silently
+   become part of the combo. */
+@keyframes eb-shake {
+  10%, 90% { transform: translateX(-3px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+.eb-card.eb-shake { animation: eb-shake 0.4s; }
+
+/* Last-hand chip: a stateful flag on the mat (Task C), not a mystery
+   abbreviation buried in the top bar. #ffce3a paired with an icon + bold
+   label, not color alone. Always rendered; only its own opacity/scale
+   toggle, so it causes no reflow and can persist for the rest of the round
+   (a state, not a one-off toast). */
+.eb-lasthand-chip {
+  position: absolute; top: 8px; right: 8px; z-index: 6;
+  background: var(--eb-attn); color: #4a3200; font-weight: 900; font-size: 0.7rem;
+  padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+.eb-lasthand-chip.is-on { opacity: 1; transform: none; }
+
+/* Running capture sum: anchored to the mat where the player is already
+   looking, not the action bar far below (Task D). Only visible mid-
+   selection; the Capture button itself just reads "Capture". */
+.eb-sum-chip {
+  position: absolute; left: 50%; bottom: 8px; z-index: 6;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(9, 24, 20, 0.88); color: #fff; font-weight: 800; font-size: 0.82rem;
+  padding: 5px 14px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0; transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+.eb-sum-chip.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.eb-sum-chip.is-valid { background: var(--eb-attn); color: #4a3200; }
+
+/* Broom sweep overlay: a 10-frame spritesheet cycled via steps(), its own
+   left-to-right travel handled by animating `left` (the sprite's baked-in
+   motion reads as an in-place sweeping/dust flourish, not a full-width
+   traversal, so the container itself supplies the actual across-the-felt
+   motion). Absolutely positioned inside the mat: zero reflow, and it
+   layers above the cards but below the fixed banner/modal overlays. */
+.eb-broom {
+  position: absolute; top: 50%; left: -38%; z-index: 15;
+  width: 46%; aspect-ratio: 480 / 360;
+  transform: translateY(-46%);
+  background-repeat: no-repeat; background-size: 1000% 100%; background-position: 0 0;
+  opacity: 0; pointer-events: none;
+}
+.eb-broom.is-sweeping {
+  opacity: 1;
+  animation: eb-broom-frames 0.95s steps(9) forwards, eb-broom-travel 0.95s cubic-bezier(0.3, 0, 0.4, 1) forwards;
+}
+@keyframes eb-broom-frames { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+@keyframes eb-broom-travel { from { left: -38%; } to { left: 108%; } }
+
+/* Self chip: same big-score anchor as the opponent cards. */
 .eb-self-row { display: flex; justify-content: center; }
 .eb-self-chip {
-  display: flex; align-items: center; gap: 8px; max-width: 100%;
+  display: flex; align-items: center; gap: 12px; max-width: 100%;
   background: var(--eb-surface); border: 1px solid var(--eb-surface-2);
-  border-radius: 999px; padding: 6px 13px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
+  border-radius: 16px; padding: 8px 16px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
 }
 .eb-self-chip.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); animation: eb-active-pulse 1.6s ease-in-out infinite; }
-.eb-self-av { position: relative; font-size: 1.25rem; line-height: 1; }
-.eb-self-name { font-weight: 800; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eb-self-score { font-weight: 800; font-size: 0.82rem; color: var(--eb-muted); white-space: nowrap; }
-.eb-self-piles { display: flex; gap: 6px; }
-.eb-pile-chip {
-  font-size: 0.7rem; font-weight: 800; color: var(--eb-muted);
-  background: var(--eb-surface-2); border-radius: 999px; padding: 3px 8px; white-space: nowrap;
-}
-.eb-pile-escoba { background: rgba(212, 160, 23, 0.18); color: #7a5502; }
+.eb-self-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.eb-self-av { position: relative; font-size: 1.4rem; line-height: 1; }
+.eb-self-name { font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-self-piles { display: flex; gap: 6px; margin-left: 4px; }
 
-/* Hand: fixed-height row regardless of card count (3-8ish cards typical). */
-.eb-hand { display: flex; justify-content: center; align-items: flex-end; gap: 10px; min-height: calc(var(--eb-hand-w) * 1.54); padding: 4px 0 2px; }
+/* Hand: fixed-height row regardless of card count (3-8ish cards typical).
+   Extra top padding is the reserved headroom for a lifted selected card
+   clearing the self-row pill above it (designed space, not waste). */
+.eb-hand {
+  display: flex; justify-content: center; align-items: flex-end; gap: 10px;
+  min-height: calc(var(--eb-hand-w) * 1.54 + var(--eb-hand-lift-overhang));
+  padding: var(--eb-hand-lift-overhang) 0 2px;
+}
 .eb-hand .eb-card { width: var(--eb-hand-w); }
 .eb-hand .eb-card:hover { transform: translateY(-4px); }
 .eb-hand .eb-card.is-selected {
   transform: translateY(-10px);
-  box-shadow: 0 0 0 3px #ffce3a, 0 10px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px var(--eb-attn), 0 10px 20px rgba(0, 0, 0, 0.35);
 }
 
 /* Action bar: fixed height whether empty, one button, or two (post-match). */
-.eb-actions { display: flex; justify-content: center; gap: 10px; min-height: 50px; }
+.eb-actions { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 50px; padding-bottom: 4px; }
 .eb-actions .eb-btn { min-width: 180px; }
 
 /* --- overlays ---------------------------------------------------------------- */
@@ -316,30 +439,53 @@
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* Round comparison table (Task 4): one row per scoring category, one column
-   per player, the sole category leader's cell tinted AND bold (never hue
-   alone). Escobas is additive, not compared, so it is never highlighted. */
+/* Round comparison sheet (Task B): every row (the category table, the
+   round-points row, the total-scores band) independently declares the SAME
+   grid-template-columns from --eb-players. Because every track's minimum is
+   0 (a bare Nfr share of the row's own width, not content-sized), rows with
+   different label lengths still compute pixel-identical column widths, so
+   every number lands in a straight line under its player header without
+   needing subgrid (Safari/older WebView support is not guaranteed). */
+.eb-score-grid { --eb-score-cols: minmax(0, 1.3fr) repeat(var(--eb-players, 2), minmax(0, 1fr)); }
 .eb-score-tablewrap { overflow-x: auto; }
-.eb-score-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-.eb-score-table th, .eb-score-table td { padding: 8px 10px; text-align: center; white-space: nowrap; }
-.eb-score-table thead th {
-  font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.68rem;
-  color: var(--eb-muted); border-bottom: 2px solid var(--eb-surface-2); text-align: center;
+.eb-score-head, .eb-score-row, .eb-score-points-row, .eb-score-total-row {
+  display: grid; grid-template-columns: var(--eb-score-cols); column-gap: 6px;
+  align-items: center;
 }
-.eb-score-table thead th:first-child { text-align: left; }
-.eb-score-table tbody th { text-align: left; font-weight: 700; color: var(--eb-ink); font-size: 0.84rem; }
-.eb-score-table tbody tr + tr th, .eb-score-table tbody tr + tr td { border-top: 1px solid var(--eb-surface-2); }
-.eb-score-table td { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--eb-ink); }
-.eb-score-table td.is-lead { background: var(--eb-lead-tint); font-weight: 900; border-radius: 6px; }
+.eb-score-head {
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.68rem;
+  color: var(--eb-muted); border-bottom: 2px solid var(--eb-surface-2); padding-bottom: 8px;
+}
+.eb-score-head span:first-child { text-align: left; }
+.eb-score-head span { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-score-row { padding: 8px 0; border-top: 1px solid var(--eb-surface-2); }
+.eb-score-row .eb-score-cat { text-align: left; font-weight: 700; color: var(--eb-ink); font-size: 0.84rem; }
+.eb-score-row .eb-score-cell {
+  text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--eb-ink); font-size: 0.86rem;
+}
+.eb-score-row .eb-score-cell.is-lead { background: var(--eb-lead-tint); font-weight: 900; border-radius: 6px; }
+
+/* Round-N-points: the final row of the SAME grid, visually emphasized as a
+   total of the rows above it. */
+.eb-score-points-row {
+  padding: 10px 0 8px; border-top: 2.5px solid var(--eb-ink); margin-top: 2px;
+}
+.eb-score-points-row .eb-score-cat { text-align: left; font-weight: 800; font-size: 0.86rem; }
+.eb-score-points-row .eb-score-cell { text-align: center; font-weight: 900; font-size: 1rem; font-variant-numeric: tabular-nums; }
+
+/* Total score: its own distinct tinted band, but built on the identical
+   grid so it still lands exactly under each player column. Padding is
+   vertical-only: any horizontal inset here would shift its columns away
+   from the category rows above, breaking the straight vertical line the
+   acceptance bar asks for. The tint + radius alone read as a distinct band. */
+.eb-score-total-row {
+  background: var(--eb-surface-2); border-radius: 10px; padding: 10px 0; margin-top: 8px;
+}
+.eb-score-total-row .eb-score-cat { padding-left: 8px; }   /* label only; numeric columns stay untouched so they still align exactly */
+.eb-score-total-row .eb-score-cat { text-align: left; font-weight: 800; font-size: 0.9rem; }
+.eb-score-total-row .eb-score-cell { text-align: center; font-weight: 900; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 
 .eb-score-footnote { margin: 0; font-size: 0.78rem; color: var(--eb-muted); font-weight: 600; }
-
-.eb-score-summary { border: 1.5px solid var(--eb-ink); border-radius: 12px; overflow: hidden; }
-.eb-score-summary-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
-.eb-score-summary-row + .eb-score-summary-row { border-top: 1.5px solid var(--eb-ink); }
-.eb-score-summary-label { flex: 1; font-weight: 800; font-size: 0.86rem; }
-.eb-score-summary-val { min-width: 52px; text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
-.eb-score-summary-total { font-size: 1.08rem; }
 
 /* Standings */
 .eb-standings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -415,8 +561,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eb-card, .eb-btn, .eb-mat-announce { transition: none; }
+  .eb-card, .eb-btn, .eb-mat-announce, .eb-lasthand-chip, .eb-sum-chip { transition: none; }
   .eb-card.is-played, .eb-banner-card { animation: none; }
   .eb-opp-pill.is-active, .eb-self-chip.is-active { animation: none; }
+  .eb-card.eb-shake { animation: none; }
+  .eb-broom, .eb-broom.is-sweeping { display: none; animation: none; }
   .eb-confetti { display: none; }
 }

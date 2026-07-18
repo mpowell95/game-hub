@@ -22,9 +22,11 @@ export function preloadDeck() {
 
 /**
  * One card face as HTML.
- * opts: { faceDown, selected, hinted, mini, static, value }
+ * opts: { faceDown, selected, hinted, dim, mini, static, value }
  *   - static: no data-action (not tappable)
  *   - value:  show the capture-value pip (used on table + hand cards)
+ *   - dim:    this card can't join the current partial selection (too high
+ *             to fit the remaining 15); a heads-up, never the only signal
  */
 export function renderCardFace(card, opts = {}) {
   if (opts.faceDown) {
@@ -34,6 +36,7 @@ export function renderCardFace(card, opts = {}) {
   const cls = ['eb-card'];
   if (opts.selected) cls.push('is-selected');
   if (opts.hinted) cls.push('is-hinted');
+  if (opts.dim) cls.push('is-dim');
   if (opts.mini) cls.push('eb-mini');
   const act = opts.static ? '' : ` data-action="card" data-id="${card.id}"`;
   const pip = opts.value ? `<span class="eb-card-val" aria-hidden="true">${card.value}</span>` : '';

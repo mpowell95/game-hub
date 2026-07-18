@@ -27,9 +27,15 @@ const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#e8b53a', '#d22f27', '#1f5fd4', '#2e8b57'];
 
 const BEAT_TURN = 650, BEAT_PLAY = 800, BEAT_CAPTURE = 520, BEAT_ESCOBA = 1250, BEAT_ANNOUNCE = 1500;
+// Escoba sweep sequence: broom starts immediately, the capture's cards fly a
+// beat later, the banner pops as the sweep tail lands. Kept under ~1s total
+// so the pacing added to a very common event (an escoba) doesn't drag.
+const BROOM_MS = 950, BROOM_TO_FLYOUT_MS = 150, BROOM_TO_BANNER_MS = 450;
 const STORE_SETTINGS = 'escoba-settings';
 const STORE_SAVE = 'escoba-save';
 const SAVE_SCHEMA_V = 1;
+const BROOM_URL = new URL('../img/broom-sprite.webp', import.meta.url).href;
+const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
 /** Idempotently ensure the module's stylesheet is on the page (hub or standalone). */
 function ensureStylesheet() {
@@ -78,6 +84,7 @@ class EscobaUI {
 
     ensureStylesheet();
     preloadDeck();
+    { const img = new Image(); img.src = BROOM_URL; }   // warm the sweep sprite so the first escoba doesn't flash
     this.mount();
   }
 
@@ -167,6 +174,9 @@ class EscobaUI {
               <span class="eb-stock-count" data-role="stockcount"></span>
             </div>
             <div class="eb-table" data-role="table" aria-label="Table cards"></div>
+            <div class="eb-lasthand-chip" data-role="lasthand" aria-hidden="true">🧹 Last hand</div>
+            <div class="eb-sum-chip" data-role="sumchip" aria-hidden="true"></div>
+            <div class="eb-broom" data-role="broom" aria-hidden="true"></div>
           </div>
           <div class="eb-self-row" data-role="self"></div>
           <div class="eb-hand" data-role="hand"></div>
@@ -182,11 +192,12 @@ class EscobaUI {
     this.el = {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), matchinfo: q('matchinfo'), stock: q('stock'), stockcount: q('stockcount'),
-      table: q('table'), announce: q('announce'),
+      table: q('table'), announce: q('announce'), lasthand: q('lasthand'), sumchip: q('sumchip'), broom: q('broom'),
       self: q('self'), hand: q('hand'), actions: q('actions'),
       modal: q('modal'), menu: q('menu'), banner: q('banner'),
     };
 
+    this.el.broom.style.backgroundImage = `url("${BROOM_URL}")`;
     this.root.addEventListener('click', this._onClick);
     this.showSetup();
   }
@@ -350,6 +361,11 @@ class EscobaUI {
   // --- game start -------------------------------------------------------------
 
   startGame() {
+    // A live match can still be running here (e.g. the in-game menu's own
+    // "New game" calls this directly, without going through showSetup()
+    // first): abort it before replacing this.game, or its onEvent callback
+    // keeps firing against the SAME UI instance and corrupts the new match.
+    if (this.game) this.game.abort();
     this.syncSetupInputs();
     this._saveSetup();
     this._clearSave();   // an explicit (re)start replaces any resumable match
@@ -376,6 +392,7 @@ class EscobaUI {
   _resumeGame() {
     const save = this._loadSave();
     if (!save) return;
+    if (this.game) this.game.abort();   // same zombie-loop guard as startGame()
     const agentsById = {};
     for (const sp of save.snap.players) {
       agentsById[sp.id] = sp.isHuman ? this.humanAgent : new AIAgent({ difficulty: sp.difficulty });
@@ -437,11 +454,28 @@ class EscobaUI {
         if (!payload.first) this._saveSnapshot();
         if (payload.lastCards) { this.announce('Last cards'); await this.beat(BEAT_TURN); }
         break;
-      case 'initialEscoba':
-        this.render();
+      case 'initialEscoba': {
+        this.render();   // the engine already moved these into the dealer's pile
         this._saveSnapshot();
+        if (!reducedMotion()) {
+          // Briefly re-show the swept cards so the broom has something to
+          // act on, mirroring a played-card escoba's fly-out.
+          const nodes = payload.cards.map((c) => {
+            const t = document.createElement('template');
+            t.innerHTML = cardFaceHTML(c, { static: true, value: true }).trim();
+            return t.content.firstElementChild;
+          });
+          nodes.forEach((n) => this.el.table.appendChild(n));
+          await this.beat(60);
+          this._startBroomSweep();
+          await this.beat(BROOM_TO_FLYOUT_MS);
+          nodes.forEach((n) => n.classList.add('is-swept'));
+          await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
+          nodes.forEach((n) => n.remove());
+        }
         await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', `${p.name} takes the opening table`);
         break;
+      }
       case 'turnStart':
         this.activePlayerId = payload.playerId;
         this.render();
@@ -477,8 +511,11 @@ class EscobaUI {
 
   beat(ms) { return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, ms); }); }
 
-  /** Show the AI's played card landing on the table, then fly captures out. */
-  async animatePlay(p, { card, captured }) {
+  /** Show the AI's played card landing on the table, then fly captures out.
+   *  An escoba gets its own sequence: the broom sweeps first, the capture
+   *  flies out to the right partway through the sweep, and control returns
+   *  in time for the banner to pop as the sweep's tail lands. */
+  async animatePlay(p, { card, captured, escoba }) {
     if (this._dead) return;
     const isAI = p && !p.isHuman;
     // Drop the played card onto the table so both players see what was played.
@@ -492,15 +529,43 @@ class EscobaUI {
         ? `${p.name} plays ${cardLabel(card)} · captures ${captured.length}`
         : `${p.name} plays ${cardLabel(card)}`);
     }
-    await this.beat(isAI ? BEAT_PLAY : 380);
-    if (captured.length) {
-      const ids = new Set(captured.map((c) => c.id));
-      for (const cardEl of this.el.table.querySelectorAll('.eb-card')) {
-        if (ids.has(cardEl.dataset.id) || cardEl === el) cardEl.classList.add('is-taken');
-      }
-      el.classList.add('is-taken');
+    if (!captured.length) { await this.beat(isAI ? BEAT_PLAY : 380); return; }
+
+    if (escoba && !reducedMotion()) {
+      await this.beat(isAI ? 260 : 180);   // a brief beat for the card to register, then the sweep takes over
+      this._startBroomSweep();
+      await this.beat(BROOM_TO_FLYOUT_MS);
+      this._flyOutCaptured(captured, el, true);
+      await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
+    } else {
+      await this.beat(isAI ? BEAT_PLAY : 380);
+      this._flyOutCaptured(captured, el, false);
       await this.beat(BEAT_CAPTURE);
     }
+  }
+
+  /** Exit the captured cards (plus the card that was just played). `swept`
+   *  picks the escoba variant: fly right + rotate, matching the broom's
+   *  travel, instead of the plain lift-and-fade used for an ordinary capture. */
+  _flyOutCaptured(captured, playedEl, swept) {
+    const ids = new Set(captured.map((c) => c.id));
+    const exitCls = swept ? 'is-swept' : 'is-taken';
+    for (const cardEl of this.el.table.querySelectorAll('.eb-card')) {
+      if (ids.has(cardEl.dataset.id) || cardEl === playedEl) cardEl.classList.add(exitCls);
+    }
+    playedEl.classList.add(exitCls);
+  }
+
+  /** Play the broom spritesheet once across the felt. Restarts cleanly if a
+   *  second escoba lands before the first sweep's timer has cleared. */
+  _startBroomSweep() {
+    const b = this.el.broom;
+    if (!b) return;
+    b.classList.remove('is-sweeping');
+    void b.offsetWidth;   // restart the animation from frame 1
+    b.classList.add('is-sweeping');
+    clearTimeout(this._broomTimer);
+    this._broomTimer = setTimeout(() => { if (this.el && this.el.broom) this.el.broom.classList.remove('is-sweeping'); }, BROOM_MS + 80);
   }
 
   showBanner(headline, sub) {
@@ -539,7 +604,9 @@ class EscobaUI {
     this.el.opponents.innerHTML = this.renderOpponents();
     this.el.matchinfo.innerHTML = this.renderMatchInfo();
     this._syncStock();
+    this._syncLastHand();
     this.el.table.innerHTML = this.renderTable();
+    this._syncSumChip();
     this.el.self.innerHTML = this.renderSelf();
     this.el.hand.innerHTML = this.renderHand();
     this.el.actions.innerHTML = this.renderActions();
@@ -550,32 +617,60 @@ class EscobaUI {
       (p.escobas ? `<span class="eb-pile-chip eb-pile-escoba" title="Escobas this round">🧹 ${p.escobas}</span>` : '');
   }
 
+  /** Mini card-back fan (capped at 3) + an exact-count numeral, so an
+   *  opponent's hand size reads as recognizable cards at a glance rather
+   *  than an abstract row of rectangles. */
+  _miniCards(count) {
+    const shown = Math.min(count, 3);
+    const backs = Array.from({ length: shown }, () => '<i></i>').join('');
+    return `<span class="eb-mini-cards" title="Cards in hand">${backs}<em>${count}</em></span>`;
+  }
+
   renderOpponents() {
     const g = this.game;
     return g.players.filter((p) => !p.isHuman).map((p) => {
       const active = p.id === this.activePlayerId;
       const dealer = g.dealer === p.id;
-      const cardsBack = Array.from({ length: p.hand.length }, () =>
-        `<span class="eb-opp-cardback"></span>`).join('');
       return `<div class="eb-opp-pill ${active ? 'is-active' : ''}">
-        <span class="eb-opp-av">${p.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
-        <span class="eb-opp-meta">
+        <div class="eb-opp-top">
+          <span class="eb-opp-av">${p.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
           <span class="eb-opp-name">${esc(p.name)}</span>
-          <span class="eb-opp-sub">${p.totalScore} pts ${this._pileChips(p)}</span>
-        </span>
-        <span class="eb-opp-hand">${cardsBack}</span>
+        </div>
+        <div class="eb-opp-score"><b>${p.totalScore}</b><span>pts</span></div>
+        <div class="eb-opp-foot">${this._miniCards(p.hand.length)}${this._pileChips(p)}</div>
       </div>`;
     }).join('');
   }
 
-  /** Round/target/last-cards chips, merged into the top bar (Task 6) instead
-   *  of a separate status row. All three chips always render (never
-   *  conditionally inserted) so their fixed-width slot never shifts anything;
-   *  "Last cards" just switches from a dim to a lit style when active. */
+  /** Round/target, merged into the top bar as full words now that the old
+   *  "Last" abbreviation is gone (it's a stateful chip on the mat now, see
+   *  _syncLastHand). Always renders both lines so the slot never shifts. */
   renderMatchInfo() {
     const g = this.game;
-    return `<span class="eb-mi-pill">R${g.round} · ${g.config.targetScore}</span>
-      <span class="eb-mi-pill eb-mi-last ${g.lastCards ? 'is-on' : ''}">Last</span>`;
+    return `<span class="eb-mi-line">Round ${g.round}</span>
+      <span class="eb-mi-line">First to ${g.config.targetScore}</span>`;
+  }
+
+  /** The last-hand flag is a persistent state chip on the mat (Task C), not
+   *  a fading toast: it stays lit for the rest of the round once the final
+   *  deal happens. Always rendered; only its opacity/scale toggles. */
+  _syncLastHand() {
+    this.el.lasthand.classList.toggle('is-on', !!(this.game && this.game.lastCards));
+  }
+
+  /** Running capture sum anchored to the mat (Task D): visible only while a
+   *  capture-capable hand card is selected, so feedback lives where the
+   *  player is already looking instead of only in the action button. */
+  _syncSumChip() {
+    const chip = this.el.sumchip;
+    const selCard = this._selCard();
+    const opts = selCard ? this._optsFor(selCard) : [];
+    if (!selCard || !opts.length) { chip.classList.remove('is-on', 'is-valid'); return; }
+    const picked = this.game.table.filter((c) => this._selTable.has(c.id));
+    const sum = selCard.value + sumValues(picked);
+    chip.textContent = `${sum} / 15`;
+    chip.classList.add('is-on');
+    chip.classList.toggle('is-valid', sum === 15);
   }
 
   /** One-time pile skeleton is unnecessary here (the stock is a single static
@@ -597,8 +692,14 @@ class EscobaUI {
     const g = this.game;
     const selCard = this._selCard();
     const hintIds = new Set();
+    let remaining = null;
     if (selCard) {
-      for (const combo of this._optsFor(selCard)) for (const c of combo) hintIds.add(c.id);
+      const opts = this._optsFor(selCard);
+      for (const combo of opts) for (const c of combo) hintIds.add(c.id);
+      if (opts.length) {
+        const picked = g.table.filter((c) => this._selTable.has(c.id));
+        remaining = 15 - selCard.value - sumValues(picked);
+      }
     }
     if (!g.table.length) return '';
     // Fixed mat geometry holds two comfortable rows; the rare overflow beyond
@@ -607,9 +708,11 @@ class EscobaUI {
     const cls = compact ? ' eb-table-compact' : '';
     return g.table.map((c, i) => {
       const style = compact && i > 0 ? ` style="margin-left:calc(-1 * var(--eb-card-w) * 0.4)"` : '';
+      const isSel = this._selTable.has(c.id);
       return `<span class="eb-table-cell${cls}"${style}>${cardFaceHTML(c, {
-        selected: this._selTable.has(c.id),
-        hinted: hintIds.has(c.id) && !this._selTable.has(c.id),
+        selected: isSel,
+        hinted: hintIds.has(c.id) && !isSel,
+        dim: remaining != null && !isSel && c.value > remaining,
         value: true,
       })}</span>`;
     }).join('');
@@ -620,9 +723,11 @@ class EscobaUI {
     const active = !!this._pending || this.activePlayerId === 0;
     const dealer = this.game.dealer === 0;
     return `<div class="eb-self-chip ${active ? 'is-active' : ''}">
-      <span class="eb-self-av">${h.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
-      <span class="eb-self-name">${esc(h.name)}</span>
-      <span class="eb-self-score">${h.totalScore} pts</span>
+      <div class="eb-self-top">
+        <span class="eb-self-av">${h.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
+        <span class="eb-self-name">${esc(h.name)}</span>
+      </div>
+      <div class="eb-self-score"><b>${h.totalScore}</b><span>pts</span></div>
       <span class="eb-self-piles">${this._pileChips(h)}</span>
     </div>`;
   }
@@ -653,8 +758,9 @@ class EscobaUI {
     const picked = this.game.table.filter((c) => this._selTable.has(c.id));
     const sum = selCard.value + sumValues(picked);
     const valid = picked.length > 0 && sum === 15;
-    return `<button class="eb-btn eb-btn-primary" data-action="capture" ${valid ? '' : 'disabled'}>
-        ${valid ? 'Capture' : `Capture ${sum}/15`}</button>`;
+    // The running sum lives in the mat-anchored chip now (_syncSumChip), not
+    // the button label: feedback stays where the player is already looking.
+    return `<button class="eb-btn eb-btn-primary" data-action="capture" ${valid ? '' : 'disabled'}>Capture</button>`;
   }
 
   _selCard() {
@@ -688,9 +794,29 @@ class EscobaUI {
     const card = this._selCard();
     if (!card) return;
     if (!this._optsFor(card).length) return;
-    if (this._selTable.has(id)) this._selTable.delete(id);
-    else this._selTable.add(id);
+    if (this._selTable.has(id)) { this._selTable.delete(id); this.render(); return; }
+    // Values are all positive, so a pick that would push the running sum
+    // past 15 can never become part of a valid combo without deselecting
+    // something first: reject it outright rather than allow, then disable.
+    const tableCard = this.game.table.find((c) => c.id === id);
+    if (!tableCard) return;
+    const picked = this.game.table.filter((c) => this._selTable.has(c.id));
+    if (card.value + sumValues(picked) + tableCard.value > 15) { this._rejectPick(id); return; }
+    this._selTable.add(id);
     this.render();
+  }
+
+  /** Brief shake on an over-15 tap: no text, just feedback where the tap
+   *  happened. A transient class on the existing node, no re-render needed. */
+  _rejectPick(id) {
+    if (reducedMotion()) return;
+    const el = this.el.table.querySelector(`.eb-card[data-id="${id}"]`);
+    if (!el) return;
+    el.classList.remove('eb-shake');
+    void el.offsetWidth;   // restart the animation if it was still running
+    el.classList.add('eb-shake');
+    clearTimeout(this._shakeTimer);
+    this._shakeTimer = setTimeout(() => el.classList.remove('eb-shake'), 420);
   }
 
   _confirmCapture() {
@@ -737,10 +863,13 @@ class EscobaUI {
     return (best > 0 && !tie) ? idx : -1;
   }
 
-  /** Comparison-table round summary: one row per category, one column per
-   *  player, the sole category leader's cell highlighted (never by hue alone:
-   *  a tint plus bold weight). Escobas has no "leader" (it isn't a compared
-   *  category, just an additive count) so it is never highlighted. */
+  /** Comparison-table round summary (Task B): one shared column grid (a
+   *  category label column plus one column per player) used by EVERY row,
+   *  including the round-points and total-scores summary rows, so every
+   *  number lands in a straight line under its player header. The sole
+   *  category leader's cell is tinted + bold (never hue alone). Escobas has
+   *  no "leader" (it isn't a compared category, just an additive count) so
+   *  it is never highlighted. */
   _renderScoreTable(g) {
     const players = g.players;
     const stats = players.map((p) => this._roundStats(p));
@@ -749,10 +878,10 @@ class EscobaUI {
     const sevensIdx = this._soleMaxIdx(stats, 'sevens');
     const guindisIdx = stats.findIndex((s) => s.guindis);
 
-    const head = players.map((p) => `<th scope="col">${p.avatar} ${esc(p.name)}</th>`).join('');
-    const row = (label, cells) => `<tr><th scope="row">${label}</th>${cells.join('')}</tr>`;
-    const cell = (val, hit) => `<td class="${hit ? 'is-lead' : ''}">${val}</td>`;
+    const cell = (val, hit) => `<span class="eb-score-cell ${hit ? 'is-lead' : ''}">${val}</span>`;
+    const row = (label, cells) => `<div class="eb-score-row"><span class="eb-score-cat">${label}</span>${cells.join('')}</div>`;
 
+    const head = `<div class="eb-score-head"><span></span>${players.map((p) => `<span>${p.avatar} ${esc(p.name)}</span>`).join('')}</div>`;
     const rows = [
       row('Escobas', stats.map((s) => cell(s.escobas))),
       row('Cards', stats.map((s, i) => cell(s.cards, i === cardsIdx))),
@@ -760,28 +889,21 @@ class EscobaUI {
       row('7 de Oros', stats.map((s, i) => cell(s.guindis ? '✓' : '✕', i === guindisIdx))),
       row('Sevens', stats.map((s, i) => cell(s.sevens, i === sevensIdx))),
     ].join('');
+    const pointsRow = `<div class="eb-score-points-row"><span class="eb-score-cat">Round ${g.round} points</span>
+      ${players.map((p) => `<span class="eb-score-cell">${this._sign(p.roundScore)}</span>`).join('')}</div>`;
+    const totalRow = `<div class="eb-score-total-row"><span class="eb-score-cat">Total scores</span>
+      ${players.map((p) => `<span class="eb-score-cell">${p.totalScore}</span>`).join('')}</div>`;
 
-    const footnotes = players.map((p, i) => {
+    const footnotes = players.map((p) => {
       const bonus = p.roundItems.filter((it) => it.key === 'cardsBonus' || it.key === 'allCoins' || it.key === 'allSevens');
       if (!bonus.length) return '';
       return `<p class="eb-score-footnote">${p.avatar} ${esc(p.name)}: ${bonus.map((b) => esc(b.label)).join(' · ')}</p>`;
     }).join('');
 
-    return `<div class="eb-score-tablewrap"><table class="eb-score-table">
-        <thead><tr><th scope="col"><span class="eb-visually-hidden">Category</span></th>${head}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-      ${footnotes}
-      <div class="eb-score-summary">
-        <div class="eb-score-summary-row">
-          <span class="eb-score-summary-label">Round ${g.round} points</span>
-          ${players.map((p) => `<span class="eb-score-summary-val">${this._sign(p.roundScore)}</span>`).join('')}
-        </div>
-        <div class="eb-score-summary-row">
-          <span class="eb-score-summary-label">Total scores</span>
-          ${players.map((p) => `<span class="eb-score-summary-val eb-score-summary-total">${p.totalScore}</span>`).join('')}
-        </div>
-      </div>`;
+    return `<div class="eb-score-tablewrap"><div class="eb-score-grid" style="--eb-players:${players.length}">
+        ${head}${rows}${pointsRow}${totalRow}
+      </div></div>
+      ${footnotes}`;
   }
 
   _renderRoundModal() {
@@ -1005,6 +1127,8 @@ class EscobaUI {
     clearTimeout(this._beatTimer);
     clearTimeout(this._announceTimer);
     clearTimeout(this._bannerTimer);
+    clearTimeout(this._broomTimer);
+    clearTimeout(this._shakeTimer);
     this.game = null;
     this.container.innerHTML = '';
   }
