@@ -129,6 +129,9 @@ class EscobaUI {
       // as a default, and that must not survive as if it were a choice.
       deckMode: (saved.deckModeChosen && saved.deckMode === 'american') ? 'american' : 'spanish',
       deckModeChosen: !!saved.deckModeChosen,
+      // Capture hints on by default (today's behavior); off = unassisted
+      // (no hint highlighting, no auto-pick, no sum chip -- see _matchAssist).
+      assist: saved.assist !== false,
     };
   }
 
@@ -137,7 +140,7 @@ class EscobaUI {
     saveJSON(STORE_SETTINGS, {
       count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
-      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen,
+      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist,
     });
   }
 
@@ -149,7 +152,10 @@ class EscobaUI {
   _saveSnapshot() {
     if (!this.game) return;
     try {
-      saveJSON(STORE_SAVE, { v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobas, snap: this.game.snapshot() });
+      saveJSON(STORE_SAVE, {
+        v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobas, assist: this._matchAssist,
+        snap: this.game.snapshot(),
+      });
     } catch { /* private mode / quota */ }
   }
 
@@ -289,6 +295,13 @@ class EscobaUI {
             ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
             : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>
         </div>
+        <div class="eb-section">
+          <span class="eb-label">Capture hints</span>
+          ${seg('set-assist', s.assist ? 'on' : 'off', [['on', 'On'], ['off', 'Off']])}
+          <p class="eb-hint">${s.assist
+            ? 'Combinable table cards are highlighted and a running sum shows as you build a capture.'
+            : 'Unassisted: nothing is highlighted, no running sum. You work out the 15 yourself.'}</p>
+        </div>
         <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
         <button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>
       </div>`;
@@ -405,6 +418,10 @@ class EscobaUI {
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
     this._matchEscobas = 0;
+    // Frozen for the life of this match (see _saveSnapshot/_resumeGame): a
+    // setup-screen change to the toggle should never retroactively alter a
+    // match already in progress, only future ones.
+    this._matchAssist = !!s.assist;
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba match error', err); });
   }
@@ -424,6 +441,7 @@ class EscobaUI {
     this.game = Game.fromSnapshot(save.snap, agentsById);
     this._bindGame();
     this._matchEscobas = save.matchEscobas | 0;
+    this._matchAssist = save.assist !== false;
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba resume error', err); });
   }
@@ -702,9 +720,11 @@ class EscobaUI {
 
   /** Running capture sum anchored to the mat (Task D): visible only while a
    *  capture-capable hand card is selected, so feedback lives where the
-   *  player is already looking instead of only in the action button. */
+   *  player is already looking instead of only in the action button.
+   *  Unassisted mode hides it outright -- the player counts. */
   _syncSumChip() {
     const chip = this.el.sumchip;
+    if (!this._matchAssist) { chip.classList.remove('is-on', 'is-valid'); return; }
     const selCard = this._selCard();
     const opts = selCard ? this._optsFor(selCard) : [];
     if (!selCard || !opts.length) { chip.classList.remove('is-on', 'is-valid'); return; }
@@ -750,10 +770,15 @@ class EscobaUI {
    *    each card's right edge -- the left/top-left index corner, and the
    *    tap target, are never covered. */
   _computeTableLayout(n, zoneW, zoneH) {
-    // The exact aspect ratio of the deck art itself (400x616), not a rough
-    // approximation: using the real ratio for the height-fit math is what
-    // guarantees a card can never render taller than its row budget.
-    const ASPECT = 616 / 400;
+    // The exact aspect ratio of the shipped Anita deck art (480x720,
+    // verified against the actual webp files -- NOT the 400x616 the docs
+    // used to claim), not a rough approximation: using the real ratio here
+    // is what guarantees a card can never render taller than its row
+    // budget, and (via .eb-card's matching CSS aspect-ratio) that
+    // object-fit:cover never has to crop the art, which was quietly
+    // shaving a couple percent off the sides -- right where the corner
+    // index digit sits -- whenever this drifted from the real asset shape.
+    const ASPECT = 720 / 480;
     const GAP = 8;
     if (!n || zoneW <= 0 || zoneH <= 0) return { cardW: 0, cardH: 0, positions: [] };
     const cols = Math.min(5, Math.max(2, Math.ceil(n / 2)));
@@ -792,15 +817,47 @@ class EscobaUI {
    *  exactly the point where a captured card's already-finished exit
    *  animation gets cleaned up (see animatePlay/_flyOutCaptured -- this is
    *  only ever called after their exit transition has had time to finish). */
+  /** Headroom band reserved on each side of the card zone for adornments
+   *  that bleed past a card's own box (lift + ring on top, ring alone on
+   *  the left, the value-badge bleed on the right/bottom). REGRESSION GUARD:
+   *  `.eb-table-cell` is `position:absolute` inside `.eb-table`, so its
+   *  `top:0/left:0` resolves against the PADDING BOX, not the content box --
+   *  CSS `padding` on `.eb-table` does NOT push absolutely positioned
+   *  children inward the way it would normal-flow content. That is exactly
+   *  how this clipped twice before: the headroom looked reserved (padding
+   *  was there) but was never actually applied to card positions. Zone
+   *  dimensions returned here (and by _computeTableLayout, which only ever
+   *  sees this already-shrunk zoneW/zoneH) are POST-headroom; every x/y this
+   *  method assigns is then explicitly offset by (left, top) below, so a
+   *  card's own box always starts inside the reserved band, never at the
+   *  table's outer edge. Read from the CSS custom properties (not
+   *  hardcoded px) so this can never silently drift out of sync with the
+   *  values escoba.css actually uses for the adornments themselves. */
+  _tableHeadroom() {
+    const cs = getComputedStyle(this.el.table);
+    const px = (name, fallback) => parseFloat(cs.getPropertyValue(name)) || fallback;
+    return {
+      top: px('--eb-lift-overhang', 12),
+      right: px('--eb-badge-overhang', 11),
+      bottom: px('--eb-badge-overhang', 11),
+      left: px('--eb-ring-overhang', 3),
+    };
+  }
+
   _layoutTable(cardList) {
     if (this._dead || !this.el || !this.el.table) return;
     const table = this.el.table;
-    const cs = getComputedStyle(table);
-    const zoneW = table.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    const zoneH = table.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    const headroom = this._tableHeadroom();
+    const zoneW = table.clientWidth - headroom.left - headroom.right;
+    const zoneH = table.clientHeight - headroom.top - headroom.bottom;
     const { cardW, cardH, positions } = this._computeTableLayout(cardList.length, zoneW, zoneH);
 
-    const selCard = this._selCard();
+    // Hint highlighting and the over-15 dim are assists: unassisted mode
+    // leaves hintIds empty and remaining null, so every card below renders
+    // with hinted/dim both false regardless of what's selected (the
+    // player's own is-selected marks still show -- that's their pick, not
+    // a hint from the game).
+    const selCard = this._matchAssist ? this._selCard() : null;
     const hintIds = new Set();
     let remaining = null;
     if (selCard) {
@@ -835,7 +892,7 @@ class EscobaUI {
       const pos = positions[i];
       cell.style.width = `${cardW}px`;
       cell.style.height = `${cardH}px`;
-      cell.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+      cell.style.transform = `translate(${pos.x + headroom.left}px, ${pos.y + headroom.top}px)`;
       cell.style.zIndex = String(pos.z);
       if (isNew) { void cell.offsetWidth; cell.style.transitionProperty = ''; }
     });
@@ -877,6 +934,17 @@ class EscobaUI {
     if (!this._pending) return '';
     const selCard = this._selCard();
     if (!selCard) return '';
+    if (!this._matchAssist) {
+      // Unassisted: which button shows is driven ONLY by whether the player
+      // has picked any table cards, never by whether a capture is actually
+      // legal or mandatory (that would itself be a hint). Capture is never
+      // pre-disabled either -- an invalid sum is rejected at tap time (see
+      // _confirmCapture), same wordless shake as an over-mandatory place.
+      if (this._selTable.size > 0) {
+        return `<button class="eb-btn eb-btn-primary" data-action="capture">Capture</button>`;
+      }
+      return `<button class="eb-btn eb-btn-primary" data-action="lay">Place ${esc(cardLabel(selCard))}</button>`;
+    }
     const opts = this._optsFor(selCard);
     if (!opts.length) {
       return `<button class="eb-btn eb-btn-primary" data-action="lay">Place ${esc(cardLabel(selCard))}</button>`;
@@ -907,9 +975,11 @@ class EscobaUI {
     if (inHand) {
       this._selTable.clear();
       this._selHand = this._selHand === id ? null : id;
-      // Convenience: a single possible combo is preselected, ready to confirm.
+      // Convenience: a single possible combo is preselected, ready to
+      // confirm. Assisted only -- unassisted never pre-selects anything,
+      // that's the whole point of the mode.
       const card = this._selCard();
-      if (card) {
+      if (card && this._matchAssist) {
         const opts = this._optsFor(card);
         if (opts.length === 1) for (const c of opts[0]) this._selTable.add(c.id);
       }
@@ -919,6 +989,13 @@ class EscobaUI {
     // Table card: toggle within the current hand selection.
     const card = this._selCard();
     if (!card) return;
+    if (!this._matchAssist) {
+      // Free selection: no gating on whether a combo exists, no over-15
+      // rejection. Legality is enforced only at Capture tap.
+      if (this._selTable.has(id)) this._selTable.delete(id); else this._selTable.add(id);
+      this.render();
+      return;
+    }
     if (!this._optsFor(card).length) return;
     if (this._selTable.has(id)) { this._selTable.delete(id); this.render(); return; }
     // Values are all positive, so a pick that would push the running sum
@@ -945,11 +1022,36 @@ class EscobaUI {
     this._shakeTimer = setTimeout(() => el.classList.remove('eb-shake'), 420);
   }
 
+  /** Same wordless shake, on the action button itself -- used when the
+   *  button's own action turns out to be illegal at tap time (unassisted
+   *  mode's only legality feedback: an invalid-sum Capture, or a Place
+   *  attempted while a capture was actually mandatory). */
+  _shakeActionButton() {
+    if (reducedMotion()) return;
+    const btn = this.el.actions.querySelector('.eb-btn');
+    if (!btn) return;
+    btn.classList.remove('eb-shake');
+    void btn.offsetWidth;
+    btn.classList.add('eb-shake');
+    clearTimeout(this._actionShakeTimer);
+    this._actionShakeTimer = setTimeout(() => btn.classList.remove('eb-shake'), 420);
+  }
+
+  /** IMPORTANT: game.js's legalize() silently coerces an illegal human move
+   *  into opts[0] (its first valid capture) rather than rejecting it -- a
+   *  safety net for AI agents, never meant to be relied on for the human.
+   *  In unassisted mode the Capture button is never pre-disabled (that
+   *  would itself be a hint), so this is the ONLY gate: a picked set that
+   *  doesn't sum to exactly 15 must never reach _resolvePending, or the
+   *  engine would silently substitute a combo the player never chose. */
   _confirmCapture() {
     const card = this._selCard();
     if (!card || !this._pending) return;
     const picked = this.game.table.filter((c) => this._selTable.has(c.id));
-    if (card.value + sumValues(picked) !== 15 || !picked.length) return;
+    if (card.value + sumValues(picked) !== 15 || !picked.length) {
+      this._shakeActionButton();
+      return;
+    }
     const move = { cardId: card.id, captureIds: picked.map((c) => c.id) };
     this._resolvePending(move);
   }
@@ -957,7 +1059,7 @@ class EscobaUI {
   _confirmLay() {
     const card = this._selCard();
     if (!card || !this._pending) return;
-    if (this._optsFor(card).length) return;   // capture is mandatory for this card
+    if (this._optsFor(card).length) { this._shakeActionButton(); return; }   // capture is mandatory for this card
     this._resolvePending({ cardId: card.id, captureIds: [] });
   }
 
@@ -1169,6 +1271,7 @@ class EscobaUI {
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._setup.deckModeChosen = true; this._saveSetup(); this.renderSetup(); break;
+      case 'set-assist': this.syncSetupInputs(); this._setup.assist = a.dataset.v === 'on'; this._saveSetup(); this.renderSetup(); break;
       case 'set-aidiff': {
         this.syncSetupInputs();
         const i = +a.closest('.eb-segmented').dataset.i;
@@ -1257,6 +1360,7 @@ class EscobaUI {
     clearTimeout(this._bannerTimer);
     clearTimeout(this._broomTimer);
     clearTimeout(this._shakeTimer);
+    clearTimeout(this._actionShakeTimer);
     this.game = null;
     this.container.innerHTML = '';
   }

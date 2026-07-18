@@ -41,13 +41,14 @@
      table-card count: JS (_computeTableLayout in ui.js) reads the actual
      rendered .eb-table box each layout pass and fits cards INTO this fixed
      budget, rather than the budget being sized to fit the cards. */
-  --eb-row-h: calc(var(--eb-card-w) * 1.54);
+  --eb-row-h: calc(var(--eb-card-w) * 1.5);   /* 720/480, the real card art aspect */
 
   /* Overhang budget: how far the lift + ring (selected) or the value badge
      bleeds past a card's own box. Card zones pad by these so nothing clips. */
   --eb-lift-overhang: 12px;     /* table-card select lift (7px) + ring (3px) + margin */
   --eb-badge-overhang: 11px;    /* value-badge corner bleed + its shadow */
   --eb-hand-lift-overhang: 13px; /* hand-card select lift (10px) + ring (3px) */
+  --eb-ring-overhang: 3px;      /* table-card select/hint ring alone (no lift, no badge) -- the left-edge case */
 
   box-sizing: border-box;
   width: 100%;
@@ -256,7 +257,7 @@
   border-radius: 999px; padding: 2px 9px; min-width: 20px; text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.eb-stock-empty { width: var(--eb-card-w); aspect-ratio: 400 / 616; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
+.eb-stock-empty { width: var(--eb-card-w); aspect-ratio: 480 / 720; border-radius: 8px; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
 
 /* Table zone: a fixed-size stage (never grows/shrinks with card count --
    see the --eb-row-h comment above) that JS lays cards INTO. Every card is
@@ -268,11 +269,19 @@
    fan with overlap at the 5-column size instead of ever shrinking further
    or adding a 3rd row. .eb-table-cell's own transition (not manual FLIP)
    animates a card to its new slot whenever the layout changes; reduced
-   motion turns that off below so it snaps instead. */
+   motion turns that off below so it snaps instead.
+   NO padding here on purpose (regression guard, see _tableHeadroom in
+   ui.js): .eb-table-cell is position:absolute, so CSS padding on this
+   element would NOT push it inward (absolute children position against the
+   padding box, ignoring padding as an inward offset) -- that mismatch is
+   exactly what let selected/hinted top-row cards clip against the mat
+   twice before. The adornment headroom is reserved entirely in JS instead:
+   _computeTableLayout only ever sees an already-shrunk zoneW/zoneH, and
+   _layoutTable then explicitly offsets every card's x/y by that same
+   headroom, so cards are inset from every edge for real. */
 .eb-table {
   position: relative; flex: 1; align-self: center; overflow: hidden; width: 100%;
   height: calc(var(--eb-row-h) * 2 + 8px + var(--eb-lift-overhang) + var(--eb-badge-overhang));
-  padding: var(--eb-lift-overhang) var(--eb-badge-overhang) var(--eb-badge-overhang);
 }
 .eb-table-cell {
   position: absolute; left: 0; top: 0; display: block;
@@ -280,10 +289,16 @@
 }
 .eb-table-cell .eb-card { width: 100%; height: 100%; }
 
-/* Cards */
+/* Cards. Aspect ratio is the shipped Anita deck art's REAL dimensions
+   (480x720 -- verified against the actual webp files; the 400x616 this used
+   to say was stale and never matched the assets, so object-fit:cover was
+   always cropping a couple of percent off the sides, exactly where the
+   corner index digit sits). Every place that sizes a table card (JS
+   _computeTableLayout's ASPECT constant, .eb-stock-empty above) must use
+   this same ratio or cover starts cropping again. */
 .eb-card {
-  position: relative; width: var(--eb-card-w); aspect-ratio: 400 / 616;
-  border-radius: 8px; background: #fff;
+  position: relative; width: var(--eb-card-w); aspect-ratio: 480 / 720;
+  border-radius: 6px; background: #fff;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition: transform 0.14s, box-shadow 0.14s, opacity 0.3s;
 }
@@ -333,14 +348,17 @@
 
 /* Rejected pick (would push the running sum past 15): a brief shake, no
    text. Values are all positive, so an over-15 tap can never silently
-   become part of the combo. */
+   become part of the combo. Also reused on the action button itself (see
+   _shakeActionButton in ui.js) for unassisted mode's only legality
+   feedback: an invalid-sum Capture or a Place attempted when a capture was
+   actually mandatory. */
 @keyframes eb-shake {
   10%, 90% { transform: translateX(-3px); }
   20%, 80% { transform: translateX(4px); }
   30%, 50%, 70% { transform: translateX(-6px); }
   40%, 60% { transform: translateX(6px); }
 }
-.eb-card.eb-shake { animation: eb-shake 0.4s; }
+.eb-card.eb-shake, .eb-btn.eb-shake { animation: eb-shake 0.4s; }
 
 /* Last-hand chip: a stateful flag on the mat (Task C), not a mystery
    abbreviation buried in the top bar. #ffce3a paired with an icon + bold
@@ -436,7 +454,7 @@
    clearing the self-row pill above it (designed space, not waste). */
 .eb-hand {
   display: flex; justify-content: center; align-items: flex-end; gap: 10px;
-  min-height: calc(var(--eb-hand-w) * 1.54 + var(--eb-hand-lift-overhang));
+  min-height: calc(var(--eb-hand-w) * 1.5 + var(--eb-hand-lift-overhang));
   padding: var(--eb-hand-lift-overhang) 0 2px;
 }
 .eb-hand .eb-card { width: var(--eb-hand-w); }
@@ -607,7 +625,7 @@
   .eb-card, .eb-btn, .eb-mat-announce, .eb-lasthand-chip, .eb-sum-chip, .eb-table-cell { transition: none; }
   .eb-card.is-played, .eb-banner-card { animation: none; }
   .eb-opp-pill.is-active, .eb-self-chip.is-active { animation: none; }
-  .eb-card.eb-shake { animation: none; }
+  .eb-card.eb-shake, .eb-btn.eb-shake { animation: none; }
   .eb-broom, .eb-broom.is-sweeping { display: none; animation: none; }
   .eb-confetti { display: none; }
 }
