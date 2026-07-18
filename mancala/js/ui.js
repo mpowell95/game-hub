@@ -313,23 +313,13 @@ class MancalaUI {
     this.container.innerHTML = `
       <div class="mancala" data-turn="p1">
         <div class="mc-shell mc-game">
-          <header class="mc-top">
-            <div class="mc-score" data-role="score">
-              <div class="mc-scoreside mc-scoreside--p1" data-role="side-p1">
-                <span class="mc-scoreemoji">${esc(n.p1.emoji)}</span>
-                <span class="mc-scorename">${esc(n.p1.name)}</span>
-                <b class="mc-scorenum" data-role="score-p1">0</b>
-              </div>
-              <span class="mc-scorechip">${esc(chip)}</span>
-              <div class="mc-scoreside mc-scoreside--p2" data-role="side-p2">
-                <b class="mc-scorenum" data-role="score-p2">0</b>
-                <span class="mc-scorename">${esc(n.p2.name)}</span>
-                <span class="mc-scoreemoji">${esc(n.p2.emoji)}</span>
-              </div>
-            </div>
-          </header>
-
           <div class="mc-boardwrap">
+            <!-- Opponent identity sits with their mancala (the top store). -->
+            <div class="mc-id mc-id--opp" data-role="id-p2">
+              <span class="mc-id-emoji">${esc(n.p2.emoji)}</span>
+              <span class="mc-id-name">${esc(n.p2.name)}</span>
+              <span class="mc-id-chip">${esc(chip)}</span>
+            </div>
             <div class="mc-board" data-role="board">
               <div class="mc-store mc-store--p2" style="grid-area:s13" data-pit="13">
                 <span class="mc-storecount"><b class="mc-countnum" data-role="count-13">0</b></span>
@@ -343,6 +333,11 @@ class MancalaUI {
                 <span>${esc(n.p2.name)} thinking</span><span class="mc-dots"><i></i><i></i><i></i></span>
               </div>
               <div class="mc-toast" data-role="toast" hidden></div>
+            </div>
+            <!-- Your identity sits with your mancala (the bottom store). -->
+            <div class="mc-id mc-id--you" data-role="id-p1">
+              <span class="mc-id-emoji">${esc(n.p1.emoji)}</span>
+              <span class="mc-id-name">${esc(n.p1.name)}</span>
             </div>
           </div>
 
@@ -504,29 +499,18 @@ class MancalaUI {
       void el.offsetWidth;
       el.classList.add('is-pop');
     }
-    if (pit === P1_STORE) this.setScore('p1', value, pop);
-    if (pit === P2_STORE) this.setScore('p2', value, pop);
+    // The mancala stores ARE the score display now (centered plaques), so there
+    // is no separate scoreboard number to mirror.
   }
 
-  setScore(side, value, pop) {
-    const el = this.container.querySelector(`[data-role="score-${side}"]`);
-    if (!el) return;
-    el.textContent = value;
-    if (pop && this.motionOK) {
-      el.classList.remove('is-pop');
-      void el.offsetWidth;
-      el.classList.add('is-pop');
-    }
-  }
-
-  /** Sync counts, scores, turn tint, and pit affordances from the engine. */
+  /** Sync counts, turn highlight, and pit affordances from the engine. */
   refresh() {
     const s = this.state;
     for (let i = 0; i < 14; i++) this.setCount(i, s.pits[i], false);
     const root = this.container.querySelector('.mancala');
     if (root) root.dataset.turn = s.turn === P1 ? 'p1' : 'p2';
-    this.container.querySelector('[data-role="side-p1"]').classList.toggle('is-turn', !s.over && s.turn === P1);
-    this.container.querySelector('[data-role="side-p2"]').classList.toggle('is-turn', !s.over && s.turn === P2);
+    this.container.querySelector('[data-role="id-p1"]').classList.toggle('is-turn', !s.over && s.turn === P1);
+    this.container.querySelector('[data-role="id-p2"]').classList.toggle('is-turn', !s.over && s.turn === P2);
     const live = new Set(!s.over && !this.busy ? legalMoves(s) : []);
     const humanTurn = this.mode === 'friend' || s.turn === P1;
     for (let i = 0; i < 14; i++) {

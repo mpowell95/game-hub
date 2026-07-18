@@ -43,8 +43,8 @@
 
 @supports (height: 1dvh) {
   .mancala {
-    --mc-hole: clamp(36px, min(13.5vw, 6.6dvh), 60px);
-    --mc-storeh: clamp(32px, 5dvh, 52px);
+    --mc-hole: clamp(34px, min(13.5vw, 6dvh), 60px);
+    --mc-storeh: clamp(30px, 4.6dvh, 52px);
   }
 }
 
@@ -219,74 +219,60 @@
 .mancala .mc-ghost:hover { filter: brightness(1.05); }
 .mancala .mc-small { padding: 7px 12px; font-size: 13px; }
 
-/* --- score bar --------------------------------------------------------- */
+/* --- board ------------------------------------------------------------- */
 
-.mancala .mc-score {
+.mancala .mc-boardwrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+
+/* Player identity chips ride with each mancala: the opponent above the top
+   store, you below the bottom store (like GamePigeon's home-base labels). The
+   running score lives on the store plaque, so these are just avatar + name. */
+.mancala .mc-id {
+  width: 100%;
+  max-width: 340px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  background: var(--mc-dark);
-  color: #fff;
-  border-radius: 14px;
-  padding: 5px 10px;
-  box-shadow: 0 4px 10px rgba(36, 22, 9, 0.3);
+  padding: 1px 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
 }
-.mancala .mc-scoreside {
+.mancala .mc-id-emoji {
+  flex: none;
+  width: 27px;
+  height: 27px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  /* Sides never shrink: they hold their content (name capped by max-width), so
-     the difficulty chip is the ONLY element that gives up width when it's tight.
-     That stops names collapsing to "M..." on a narrow phone. */
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: 4px 7px;
-  border-radius: 10px;
-  border: 2px solid transparent;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(40, 24, 8, 0.28), inset 0 0 0 1.5px rgba(255, 255, 255, 0.5);
 }
-.mancala .mc-scoreside.is-turn { border-color: #ffd75e; background: rgba(255, 215, 94, 0.12); }
-.mancala .mc-scoreemoji { font-size: 20px; line-height: 1; flex: none; }
-.mancala .mc-scorename {
-  font-size: 13px;
+.mancala .mc-id--you .mc-id-emoji { background: rgba(41, 168, 221, 0.3); }
+.mancala .mc-id--opp .mc-id-emoji { background: rgba(239, 85, 68, 0.26); }
+.mancala .mc-id-name {
+  font-size: 15px;
   font-weight: 800;
-  max-width: 104px;
+  color: var(--mc-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mancala .mc-scoreside--p1 .mc-scorename { color: #7fd8f7; }
-.mancala .mc-scoreside--p2 .mc-scorename { color: #ff9d8f; }
-.mancala .mc-scorenum {
-  font-size: 17px;
-  font-weight: 900;
-  min-width: 20px;
-  text-align: center;
+.mancala .mc-id-chip {
+  margin-left: auto;
   flex: none;
-}
-.mancala .mc-scorenum.is-pop { animation: mc-pop-plain 360ms ease; }
-.mancala .mc-scorechip {
-  /* Lowest-priority element in the bar: it shrinks (and ellipsizes) before the
-     names do, so long real names stay readable on a narrow phone. */
-  flex: 0 4 auto;
-  min-width: 0;
-  text-align: center;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.75);
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 4px 7px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: rgba(36, 22, 9, 0.7);
+  background: rgba(36, 22, 9, 0.12);
+  border-radius: 999px;
+  padding: 3px 9px;
 }
-
-/* --- board ------------------------------------------------------------- */
-
-.mancala .mc-boardwrap { display: flex; justify-content: center; }
+/* The player to move lights up (a second turn cue alongside the status line). */
+.mancala .mc-id.is-turn { border-color: #ffce4a; background: rgba(255, 206, 74, 0.22); }
 .mancala .mc-board {
   position: relative;
   width: 100%;
