@@ -675,6 +675,16 @@
 .eb-mp-msg {
   margin: 0; min-height: 1.1em; text-align: center; font-size: 0.85rem; font-weight: 700; color: var(--eb-bad);
 }
+
+/* Locked-config summary (host lobby only): informational, not an attention
+   state, so muted text -- never --eb-attn. Reserved one-line height from
+   first render (present whether or not the room echo has arrived yet);
+   compact labels are chosen to fit 320px, ellipsis is the fallback rather
+   than wrapping if a future config value runs long. */
+.eb-mp-summary {
+  margin: 0; min-height: 1.1em; text-align: center; font-size: 0.78rem; font-weight: 600;
+  color: var(--eb-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .eb-mp-msg-action {
   appearance: none; border: none; background: none; padding: 0; cursor: pointer;
   text-decoration: underline; text-underline-offset: 2px;

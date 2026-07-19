@@ -48,6 +48,12 @@ const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Human labels for the room's locked config, host-lobby summary line only.
+// Unknown keys (a future config field) are skipped, not shown raw.
+const MP_CONFIG_LABELS = {
+  targetScore: (v) => `${v} pts`,
+  deckMode: (v) => (v === 'american' ? 'American deck' : 'Spanish deck'),
+};
 const BROOM_URL = new URL('../img/broom-sprite.webp', import.meta.url).href;
 const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
@@ -92,6 +98,7 @@ class EscobaUI {
     this._screen = 'setup';      // 'setup' | 'host-lobby' | 'join-lobby'
     this._mpBusy = false;
     this._mpError = '';
+    this._mpJoinCode = '';       // retained across a failed join attempt
     this._mpStatusMsg = '';
 
     this._setup = this._loadSetup();
@@ -264,7 +271,7 @@ class EscobaUI {
     // torn down by its own cancel/leave path -- disconnect it defensively.
     // A live match's own room stays connected until an explicit leave.
     if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
-    this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = '';
+    this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
     this.mp = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
@@ -343,6 +350,20 @@ class EscobaUI {
 
   // --- multiplayer lobby (M1 pilot) ------------------------------------------
 
+  /** Mid-dot summary of the room's locked config for the host lobby (e.g.
+   *  "21 pts · Spanish deck"). Maps over MP_CONFIG_LABELS's own key order
+   *  (not config's) so the summary reads in a fixed, deliberate order
+   *  regardless of how RTDB happens to key-order the echoed object (observed
+   *  alphabetical on the wire); a config key with no label (a future field)
+   *  is silently skipped rather than shown raw. */
+  _mpConfigSummary(config) {
+    if (!config) return '';
+    return Object.keys(MP_CONFIG_LABELS)
+      .filter((k) => config[k] !== undefined)
+      .map((k) => MP_CONFIG_LABELS[k](config[k]))
+      .join(' · ');
+  }
+
   _renderMpLobby() {
     const back = `<button class="eb-btn eb-btn-ghost" data-action="mp-cancel">Back</button>`;
     if (this._screen === 'host-lobby') {
@@ -357,6 +378,7 @@ class EscobaUI {
         <div class="eb-mp-oppslot">${guest
           ? `<span class="eb-av">${guest.avatar}</span><span class="eb-mp-oppname">${esc(guest.name)}</span>`
           : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
+        <p class="eb-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
         <p class="eb-mp-msg" data-role="mp-msg">${esc(msg)}</p>
         <button class="eb-btn eb-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>Start</button>
         ${back}
@@ -385,6 +407,7 @@ class EscobaUI {
     return `<div class="eb-mp-lobby">
       <span class="eb-label">Enter code</span>
       <input class="eb-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
+        value="${esc(this._mpJoinCode)}"
         autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
       ${msg}
       <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">Join</button>
@@ -1417,7 +1440,7 @@ class EscobaUI {
       case 'resume-game': this._resumeGame(); break;
       // multiplayer lobby
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
-      case 'mp-join-open': this.syncSetupInputs(); this._screen = 'join-lobby'; this._mpError = ''; this.renderSetup(); break;
+      case 'mp-join-open': this.syncSetupInputs(); this._screen = 'join-lobby'; this._mpError = ''; this._mpJoinCode = ''; this.renderSetup(); break;
       case 'mp-join-submit': this._mpJoinSubmit(); break;
       case 'mp-start': this._mpHostStart(); break;
       case 'mp-cancel': this._mpCancelLobby(); break;
@@ -1442,13 +1465,30 @@ class EscobaUI {
 
   /** Delegated `input` listener (mirrors the click delegation above): the
    *  join-code field auto-uppercases, filters to the code alphabet, and
-   *  submits itself once a full code is typed. */
+   *  submits itself once a full code is typed. A prior error's TEXT clears
+   *  the moment the player edits the code (the code itself is never cleared
+   *  by a failed attempt -- see _mpJoinSubmit); done via a targeted DOM patch
+   *  rather than a full renderSetup() so the input never loses focus/caret
+   *  mid-keystroke. */
   onInput(e) {
     const el = e.target;
     if (!(el && el.dataset && el.dataset.role === 'mp-code-input')) return;
     const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
     if (clean !== el.value) el.value = clean;
+    this._mpJoinCode = clean;
+    if (this._mpError) { this._mpError = ''; this._syncMpMsgSlot(); }
     if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
+  }
+
+  /** Patches the reserved message slot in place (see onInput above). Handles
+   *  both renderings that can occupy it: the plain <p> and the version-error
+   *  <button> (mp-update-required) -- always replaced with an empty/busy <p>
+   *  since this is only ever called to clear or reflect a non-version state. */
+  _syncMpMsgSlot() {
+    if (!this.el || !this.el.setup) return;
+    const slot = this.el.setup.querySelector('.eb-mp-msg');
+    if (!slot) return;
+    slot.outerHTML = `<p class="eb-mp-msg" data-role="mp-msg">${esc(this._mpError || (this._mpBusy ? 'Joining…' : ''))}</p>`;
   }
 
   // --- in-game menu ---------------------------------------------------------
@@ -1791,8 +1831,7 @@ class EscobaUI {
 
   async _mpJoinSubmit() {
     if (this._mpBusy) return;
-    const input = this.el.setup.querySelector('[data-role="mp-code-input"]');
-    const code = ((input && input.value) || '').trim().toUpperCase();
+    const code = this._mpJoinCode;
     if (code.length !== MP_CODE_LEN) return;
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
@@ -1845,7 +1884,7 @@ class EscobaUI {
     const code = this._mpPendingCode;
     const role = this._screen === 'host-lobby' ? 'host' : 'guest';
     this._screen = 'setup';
-    this._mpError = ''; this._mpBusy = false;
+    this._mpError = ''; this._mpBusy = false; this._mpJoinCode = '';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
     if (code) net.leaveRoom(code, role).catch(() => {});
     else net.disconnect();
@@ -1919,6 +1958,16 @@ class EscobaUI {
     if (this.game) this.game.abort();
     this._resolvePending(null);
     this._resolveModal();
+    // A hosted room that never reached a match (still 'waiting' when the hub
+    // tears this module down, e.g. the player backed out via the hub's own
+    // nav rather than the lobby's own Back button) has no opponent depending
+    // on it and no resumable match to preserve -- unlike an in-match
+    // destroy() (backgrounding, room left alive), abandon it here too so it
+    // doesn't sit occupying a code until its 24h TTL. Fire-and-forget: never
+    // let an offline write block or throw during teardown.
+    if (!this.mp && this._screen === 'host-lobby' && this._mpPendingCode) {
+      net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
+    }
     net.disconnect();
     this.mp = null;
     if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
