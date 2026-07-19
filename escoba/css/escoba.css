@@ -128,6 +128,39 @@
 }
 .eb-howto-link:hover { text-decoration: underline; }
 
+/* --- setup screen redesign (M1.2): mode selector + accordion summary card --- */
+/* Reserves enough height for the tallest mode's content (the 5-row summary
+   card) so switching to the much shorter Join body doesn't yank the action
+   button upward; the shorter mode's content just sits at the top of the
+   reserved space instead of the box collapsing to fit it. */
+.eb-setup-content { display: flex; flex-direction: column; gap: 14px; min-height: 360px; }
+
+.eb-summary-card {
+  display: flex; flex-direction: column; border: 1px solid var(--eb-surface-2); border-radius: 14px; overflow: hidden;
+}
+.eb-summary-item + .eb-summary-item { border-top: 1px solid var(--eb-surface-2); }
+.eb-summary-row {
+  appearance: none; border: 0; background: var(--eb-surface); width: 100%; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 14px; font: inherit; text-align: left;
+}
+.eb-summary-row:hover { background: var(--eb-surface-2); }
+.eb-summary-item.is-open .eb-summary-row { background: var(--eb-surface-2); }
+.eb-summary-label { font-weight: 700; color: var(--eb-ink); font-size: 0.9rem; }
+.eb-summary-value {
+  color: var(--eb-muted); font-weight: 600; font-size: 0.86rem; text-align: right;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%;
+}
+.eb-summary-expand { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--eb-surface-2); }
+
+.eb-diff-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.eb-diff-name { font-weight: 600; font-size: 0.85rem; color: var(--eb-ink); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eb-diff-row .eb-segmented { flex: 0 0 auto; width: 190px; }
+
+/* Join mode: no summary card, just the relocated code entry (M1.1's input,
+   error-retention behavior unchanged -- see onInput/_mpJoinSubmit). */
+.eb-join-body { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+
 /* Avatar picker */
 .eb-avatar-sheet { max-width: 380px; }
 .eb-av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; }
@@ -578,13 +611,59 @@
 .eb-howto-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .eb-howto-head .eb-sheet-title { text-align: left; }
 .eb-howto-body { display: flex; flex-direction: column; gap: 14px; }
-.eb-howto-body section { display: flex; flex-direction: column; gap: 4px; }
-.eb-howto-body h3 { margin: 0; font-size: 0.95rem; font-weight: 800; color: var(--eb-accent); }
-.eb-howto-body p, .eb-howto-body li { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--eb-ink); }
-.eb-howto-body ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.eb-howto-body p { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--eb-ink); }
 .eb-howto-table { width: 100%; border-collapse: collapse; }
 .eb-howto-table td { padding: 6px 8px; font-size: 0.88rem; border-top: 1px solid var(--eb-surface-2); }
 .eb-howto-table td:last-child { text-align: right; font-weight: 800; white-space: nowrap; }
+
+/* Quick-start panels: scroll-snap carousel, no JS gesture library. Fixed
+   height across all three panels so swiping never shifts anything below. */
+.eb-howto-panels { border-radius: 14px; background: var(--eb-surface-2); }
+.eb-howto-track {
+  display: flex; overflow-x: scroll; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; height: 190px;
+}
+.eb-howto-track::-webkit-scrollbar { display: none; }
+.eb-howto-panel {
+  flex: 0 0 100%; scroll-snap-align: start; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; padding: 14px 18px; text-align: center;
+}
+.eb-howto-demo { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.eb-howto-cardwrap .eb-card { width: 62px; }
+/* The one attention state in this modal: #ffce3a ring PLUS a dashed outline
+   (never color alone), marking "this table card completes the 15". */
+.eb-howto-cardwrap.is-attn .eb-card { box-shadow: 0 0 0 3px var(--eb-attn), 0 4px 10px rgba(0, 0, 0, 0.25); }
+.eb-howto-cardwrap.is-attn .eb-card::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 9px; border: 2px dashed var(--eb-gold); pointer-events: none;
+}
+.eb-howto-plus, .eb-howto-arrow { font-size: 1.3rem; font-weight: 800; color: var(--eb-muted); }
+.eb-howto-minicards { display: flex; }
+.eb-howto-minicards .eb-card { width: 44px; }
+.eb-howto-minicards .eb-card + .eb-card { margin-left: -12px; }
+.eb-howto-broom { font-size: 2rem; }
+.eb-howto-caption { margin: 0; font-weight: 700; font-size: 0.92rem; color: var(--eb-ink); }
+.eb-howto-fine { margin: 0; font-size: 0.76rem; color: var(--eb-muted); font-weight: 600; }
+
+.eb-howto-dots { display: flex; justify-content: center; gap: 8px; }
+.eb-howto-dot {
+  appearance: none; border: 0; padding: 0; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--eb-surface-2); cursor: pointer;
+}
+.eb-howto-dot.is-active { background: var(--eb-accent); width: 20px; border-radius: 5px; }
+
+/* Detail rows: multiple open at once (unlike the setup card's accordion). */
+.eb-howto-details { display: flex; flex-direction: column; border: 1px solid var(--eb-surface-2); border-radius: 12px; overflow: hidden; }
+.eb-howto-detail + .eb-howto-detail { border-top: 1px solid var(--eb-surface-2); }
+.eb-howto-detail-head {
+  appearance: none; border: 0; background: var(--eb-surface); width: 100%; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 14px;
+  font: inherit; font-weight: 700; font-size: 0.88rem; color: var(--eb-ink); text-align: left;
+}
+.eb-howto-detail-head:hover { background: var(--eb-surface-2); }
+.eb-howto-chevron { transition: transform 0.15s; color: var(--eb-muted); }
+.eb-howto-detail.is-open .eb-howto-chevron { transform: rotate(180deg); }
+.eb-howto-detail-body { display: none; padding: 0 14px 14px; }
+.eb-howto-detail.is-open .eb-howto-detail-body { display: block; }
 
 /* Escoba banner */
 .eb-banner {

@@ -13,7 +13,7 @@
 
 import { Game, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
-import { captureOptions, sumValues, cardLabel } from './deck.js';
+import { captureOptions, sumValues, cardLabel, captureValue } from './deck.js';
 import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -91,6 +91,8 @@ class EscobaUI {
     this._chartView = false;
     this._matchEnded = false;
     this._matchEscobas = 0;
+    this._setupExpanded = null;   // which settings-card row is open (M1.2 accordion), one at a time
+    this._howtoOpen = new Set();  // which how-to-play detail rows are open (multiple allowed)
 
     // Multiplayer (M1 pilot). null in solo -- every MP code path is gated
     // behind this single field so solo play is byte-identical to before.
@@ -155,6 +157,9 @@ class EscobaUI {
       // Capture hints on by default (today's behavior); off = unassisted
       // (no hint highlighting, no auto-pick, no sum chip -- see _matchAssist).
       assist: saved.assist !== false,
+      // Last-used setup-screen mode (M1.2). Additive field: absent on an
+      // older save simply defaults to 'solo', same as today's only screen.
+      mode: ['solo', 'host', 'join'].includes(saved.mode) ? saved.mode : 'solo',
     };
   }
 
@@ -163,7 +168,7 @@ class EscobaUI {
     saveJSON(STORE_SETTINGS, {
       count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
-      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist,
+      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist, mode: s.mode,
     });
   }
 
@@ -272,10 +277,107 @@ class EscobaUI {
     // A live match's own room stays connected until an explicit leave.
     if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
     this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
+    this._setupExpanded = null;
     this.mp = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
+  }
+
+  /** Shared `.eb-segmented` builder, used by the mode selector, every
+   *  settings-card row's expanded control, and the join screen. */
+  _seg(action, value, opts, cls = '', attrs = '') {
+    return `<div class="eb-segmented${cls}"${attrs}>${opts.map(([v, lbl]) =>
+      `<button class="eb-seg ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
+  }
+
+  /** One accordion row of the settings summary card: a label + collapsed
+   *  value, tap to expand the actual control in place. Only `content` (the
+   *  live controls) is rendered when open, so a collapsed row costs nothing
+   *  and the captions under Card numbering/Capture hints (part of `content`)
+   *  only exist in the DOM while that row is expanded, per spec. */
+  _summaryRow(key, label, value, content) {
+    const open = this._setupExpanded === key;
+    return `<div class="eb-summary-item ${open ? 'is-open' : ''}">
+      <button class="eb-summary-row" data-action="toggle-row" data-row="${key}">
+        <span class="eb-summary-label">${label}</span>
+        <span class="eb-summary-value">${value}</span>
+      </button>
+      ${open ? `<div class="eb-summary-expand">${content}</div>` : ''}
+    </div>`;
+  }
+
+  /** The settings summary card: Solo and Host-online modes share this
+   *  verbatim (same fields, same persistence, same controls -- Host online
+   *  is simply the screen where the host locks in these values before
+   *  creating the room). */
+  _renderSettingsCard() {
+    const s = this._setup;
+    const seg = this._seg.bind(this);
+
+    const opponentNames = s.aiNames.slice(0, s.count - 1);
+    const playersValue = esc([s.humanName, ...opponentNames].join(' vs '));
+    const aiNameRows = opponentNames.map((name, i) => `<div class="eb-player-row eb-player-row-ai">
+      <span class="eb-av">${s.aiAvatars[i]}</span>
+      <input class="eb-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="Opponent ${i + 1} name">
+    </div>`).join('');
+    const playersContent = `
+      ${seg('set-count', s.count, [[2, '2'], [3, '3']])}
+      <div class="eb-player-row">
+        <button class="eb-av eb-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
+        <input class="eb-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
+      </div>
+      ${aiNameRows}`;
+
+    const diffLabel = (d) => (DIFFICULTIES.find(([v]) => v === d) || DIFFICULTIES[1])[1];
+    const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
+    const diffContent = opponentNames.map((name, i) => `<div class="eb-diff-row">
+      <span class="eb-diff-name">${esc(name)}</span>
+      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES, ' eb-seg-sm', ` data-i="${i}"`)}
+    </div>`).join('');
+
+    const targetContent = seg('set-target', s.targetScore, [[21, '21 points'], [31, '31 points']]);
+
+    const deckModeValue = s.deckMode === 'american' ? 'American' : 'Spanish';
+    const deckModeContent = `
+      ${seg('set-deckmode', s.deckMode, [['spanish', 'Spanish'], ['american', 'American']])}
+      <p class="eb-hint">${s.deckMode === 'american'
+        ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
+        : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>`;
+
+    const assistValue = s.assist ? 'On' : 'Off';
+    const assistContent = `
+      ${seg('set-assist', s.assist ? 'on' : 'off', [['on', 'On'], ['off', 'Off']])}
+      <p class="eb-hint">${s.assist
+        ? 'Combinable table cards are highlighted and a running sum shows as you build a capture.'
+        : 'Unassisted: nothing is highlighted, no running sum. You work out the 15 yourself.'}</p>`;
+
+    return `<div class="eb-summary-card">
+      ${this._summaryRow('players', 'Players', `${s.count} · ${playersValue}`, playersContent)}
+      ${this._summaryRow('difficulty', 'Difficulty', diffValue, diffContent)}
+      ${this._summaryRow('target', 'Play to', `${s.targetScore} pts`, targetContent)}
+      ${this._summaryRow('deckmode', 'Card numbering', deckModeValue, deckModeContent)}
+      ${this._summaryRow('assist', 'Capture hints', assistValue, assistContent)}
+    </div>`;
+  }
+
+  /** Join mode's body: the code input relocated onto the main setup screen
+   *  (no longer its own pre-join lobby screen -- see _mpJoinSubmit, which
+   *  now only switches _screen to 'join-lobby' once the join actually
+   *  succeeds). Settings summary card is absent entirely in this mode. */
+  _renderJoinModeBody() {
+    const err = this._mpError;
+    const msg = err === 'version'
+      ? `<button class="eb-mp-msg eb-mp-msg-action" data-action="mp-update-required">Update required</button>`
+      : `<p class="eb-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+    return `<div class="eb-join-body">
+      <span class="eb-label">Enter code</span>
+      <input class="eb-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
+        value="${esc(this._mpJoinCode)}"
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+      ${msg}
+      <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">Join</button>
+    </div>`;
   }
 
   renderSetup() {
@@ -291,60 +393,31 @@ class EscobaUI {
     const statsLine = played > 0
       ? `<p class="eb-stats">🧹 ${played} played · ${won} won · ${escobas} escobas</p>` : '';
 
-    const seg = (action, value, opts, cls = '', attrs = '') =>
-      `<div class="eb-segmented${cls}"${attrs}>${opts.map(([v, lbl]) =>
-        `<button class="eb-seg ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
-
-    const aiRows = [];
-    for (let i = 0; i < s.count - 1; i++) {
-      aiRows.push(`<div class="eb-player-row eb-player-row-ai">
-        <span class="eb-av">${s.aiAvatars[i]}</span>
-        <input class="eb-name-input" data-ai-name="${i}" value="${esc(s.aiNames[i])}" maxlength="14" aria-label="Opponent ${i + 1} name">
-        ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES, ' eb-seg-sm', ` data-i="${i}"`)}
-      </div>`);
-    }
-
     const save = this._loadSave();
     const resumeBtn = save
       ? `<button class="eb-btn eb-btn-primary" data-action="resume-game">Resume game</button>` : '';
+
+    const modeSeg = this._seg('set-mode', s.mode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']]);
+
+    let body;
+    if (s.mode === 'join') {
+      body = `${this._renderJoinModeBody()}
+        <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>`;
+    } else {
+      const actionBtn = s.mode === 'host'
+        ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">Host game</button>`
+        : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>`;
+      body = `${this._renderSettingsCard()}
+        <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
+        ${actionBtn}`;
+    }
 
     this.el.setup.innerHTML = `
       <div class="eb-panel">
         ${resumeBtn}
         ${statsLine}
-        <div class="eb-section">
-          <span class="eb-label">Players</span>
-          ${seg('set-count', s.count, [[2, '2'], [3, '3']])}
-          <div class="eb-player-row">
-            <button class="eb-av eb-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
-            <input class="eb-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
-          </div>
-          ${aiRows.join('')}
-        </div>
-        <div class="eb-section">
-          <span class="eb-label">Play to</span>
-          ${seg('set-target', s.targetScore, [[21, '21 points'], [31, '31 points']])}
-        </div>
-        <div class="eb-section">
-          <span class="eb-label">Card numbering</span>
-          ${seg('set-deckmode', s.deckMode, [['spanish', 'Spanish'], ['american', 'American']])}
-          <p class="eb-hint">${s.deckMode === 'american'
-            ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
-            : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>
-        </div>
-        <div class="eb-section">
-          <span class="eb-label">Capture hints</span>
-          ${seg('set-assist', s.assist ? 'on' : 'off', [['on', 'On'], ['off', 'Off']])}
-          <p class="eb-hint">${s.assist
-            ? 'Combinable table cards are highlighted and a running sum shows as you build a capture.'
-            : 'Unassisted: nothing is highlighted, no running sum. You work out the 15 yourself.'}</p>
-        </div>
-        <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
-        <button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>
-        <div class="eb-mp-entry">
-          <button class="eb-btn eb-btn-ghost" data-action="mp-host">Play online</button>
-          <button class="eb-btn eb-btn-ghost" data-action="mp-join-open">Join with code</button>
-        </div>
+        ${modeSeg}
+        <div class="eb-setup-content">${body}</div>
       </div>`;
   }
 
@@ -384,33 +457,21 @@ class EscobaUI {
         ${back}
       </div>`;
     }
-    if (this._mpJoinedCode) {
-      // Already joined -- waiting on the host to tap Start. Same shape as the
-      // host lobby's opponent slot, mirrored (the host is who we're waiting on).
-      const room = this._mpLobbyRoom;
-      const host = room && room.host;
-      return `<div class="eb-mp-lobby">
-        <span class="eb-label">Room code</span>
-        <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
-        <span class="eb-label">Host</span>
-        <div class="eb-mp-oppslot">${host
-          ? `<span class="eb-av">${host.avatar}</span><span class="eb-mp-oppname">${esc(host.name)}</span>`
-          : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
-        <p class="eb-mp-msg" data-role="mp-msg">Waiting for host</p>
-        ${back}
-      </div>`;
-    }
-    const err = this._mpError;
-    const msg = err === 'version'
-      ? `<button class="eb-mp-msg eb-mp-msg-action" data-action="mp-update-required">Update required</button>`
-      : `<p class="eb-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+    // The only other lobby state is 'join-lobby', which (as of M1.2) is only
+    // ever entered once a join has actually succeeded -- the pre-join code
+    // entry now lives on the main setup screen's Join mode (_renderJoinModeBody),
+    // so _mpJoinedCode is always set here. Same shape as the host lobby's
+    // opponent slot, mirrored (the host is who we're waiting on).
+    const room = this._mpLobbyRoom;
+    const host = room && room.host;
     return `<div class="eb-mp-lobby">
-      <span class="eb-label">Enter code</span>
-      <input class="eb-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
-        value="${esc(this._mpJoinCode)}"
-        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
-      ${msg}
-      <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">Join</button>
+      <span class="eb-label">Room code</span>
+      <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
+      <span class="eb-label">Host</span>
+      <div class="eb-mp-oppslot">${host
+        ? `<span class="eb-av">${host.avatar}</span><span class="eb-mp-oppname">${esc(host.name)}</span>`
+        : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
+      <p class="eb-mp-msg" data-role="mp-msg">Waiting for host</p>
       ${back}
     </div>`;
   }
@@ -442,7 +503,65 @@ class EscobaUI {
 
   // --- how to play ------------------------------------------------------------
 
+  /** Two demo cards for the quick-start panels: a 7 and a card whose CAPTURE
+   *  value is 8 (so 7+8=15 reads as a real, mode-correct example), built
+   *  directly rather than off a live game/table (the how-to modal has none). */
+  _howtoDemoCards() {
+    const mode = this._setup.deckMode;
+    const eightRank = mode === 'american' ? 8 : 10;   // Sota captures as 8 in Spanish
+    return {
+      seven: { id: 'e7', suit: 'espadas', rank: 7, value: captureValue(7, mode) },
+      eight: { id: 'o' + eightRank, suit: 'oros', rank: eightRank, value: captureValue(eightRank, mode) },
+      filler: { id: 'c3', suit: 'copas', rank: 3, value: captureValue(3, mode) },
+      lay: { id: 'b5', suit: 'bastos', rank: 5, value: captureValue(5, mode) },
+      sweepA: { id: 'e2', suit: 'espadas', rank: 2, value: captureValue(2, mode) },
+      sweepB: { id: 'b1', suit: 'bastos', rank: 1, value: captureValue(1, mode) },
+    };
+  }
+
+  _howtoPanels() {
+    const c = this._howtoDemoCards();
+    const wrap = (card, cls = '') => `<div class="eb-howto-cardwrap ${cls}">${cardFaceHTML(card, { value: true, static: true })}</div>`;
+    return [
+      `<div class="eb-howto-panel">
+        <div class="eb-howto-demo">
+          ${wrap(c.seven)}<span class="eb-howto-plus">+</span>${wrap(c.eight, 'is-attn')}
+        </div>
+        <p class="eb-howto-caption">Make 15 with one hand card + table cards</p>
+        <p class="eb-howto-fine">Capturing is required when your card can make 15</p>
+      </div>`,
+      `<div class="eb-howto-panel">
+        <div class="eb-howto-demo">
+          ${wrap(c.lay)}<span class="eb-howto-arrow">→</span>${wrap(c.lay)}
+        </div>
+        <p class="eb-howto-caption">No 15 possible? Your card joins the table</p>
+      </div>`,
+      `<div class="eb-howto-panel">
+        <div class="eb-howto-demo">
+          <div class="eb-howto-minicards">${cardFaceHTML(c.sweepA, { value: true, mini: true, static: true })}${cardFaceHTML(c.sweepB, { value: true, mini: true, static: true })}${cardFaceHTML(c.filler, { value: true, mini: true, static: true })}</div>
+          <span class="eb-howto-arrow">→</span>
+          <span class="eb-howto-broom" aria-hidden="true">🧹</span>
+        </div>
+        <p class="eb-howto-caption">Cleared the table? Escoba, 1 point</p>
+      </div>`,
+    ].join('');
+  }
+
+  _howtoDetailRow(key, label, bodyHtml) {
+    const open = this._howtoOpen.has(key);
+    return `<div class="eb-howto-detail ${open ? 'is-open' : ''}" data-key="${key}">
+      <button class="eb-howto-detail-head" data-action="howto-toggle">
+        <span>${label}</span><span class="eb-howto-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="eb-howto-detail-body">${bodyHtml}</div>
+    </div>`;
+  }
+
   _openHowTo() {
+    const s = this._setup;
+    const valuesBody = s.deckMode === 'american'
+      ? `<p>Cards 1 to 10 as printed, no Caballo or Rey. Corner badge matches the printed number. (Traditional Spanish figures: switch numbering in setup.)</p>`
+      : `<p>Traditional 40-card deck. 1 to 7 as printed. Sota, Caballo, Rey count 8, 9, 10, not the printed 10/11/12. Corner badge always shows the true capture value. (Prefer cards as printed? Switch to American numbering in setup.)</p>`;
     this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-howto"></div>
       <div class="eb-sheet eb-howto">
         <div class="eb-howto-head">
@@ -450,56 +569,66 @@ class EscobaUI {
           <button class="eb-btn eb-btn-ghost" data-action="close-howto">Done</button>
         </div>
         <div class="eb-howto-body">
-          <section>
-            <h3>Goal</h3>
-            <p>Capture cards from the table by making combinations that add up to <b>15</b> with one card from your hand. Captured coins, sevens and escobas score points at the end of each round. First to ${this._setup.targetScore} points wins.</p>
-          </section>
-          <section>
-            <h3>Card values</h3>
-            ${this._setup.deckMode === 'american'
-    ? `<p>The deck has cards 1 to 10 in each suit and <b>every card counts exactly the number printed on it</b>. (This is the American numbering; the Caballo and Rey sit out. Switch to the traditional Spanish figures in the setup screen.)</p>`
-    : `<p>The traditional Spanish 40-card deck is used. Pip cards (1 to 7) count their face value. The figure cards keep their printed numbers 10, 11 and 12, but they capture as <b>Sota 8</b>, <b>Caballo 9</b> and <b>Rey 10</b>: trust the corner badge, not the big printed number. (Prefer cards that count as printed? Switch to American numbering in the setup screen.)</p>`}
-            <p>Every card shows its capture value in the corner badge.</p>
-          </section>
-          <section>
-            <h3>Your turn</h3>
-            <p>Play one card from your hand:</p>
-            <ul>
-              <li>If your card plus one or more table cards adds up to exactly 15, you <b>capture</b> those cards. Tap a hand card, tap table cards to reach 15, then confirm. Capturing is required when your played card can make 15.</li>
-              <li>If your card cannot make 15 with anything on the table, it is <b>placed on the table</b>.</li>
-            </ul>
-          </section>
-          <section>
-            <h3>Escoba</h3>
-            <p>If your capture clears <b>every</b> card off the table, that is an <b>escoba</b> ("broom"): 1 point. The next player can only place a card.</p>
-          </section>
-          <section>
-            <h3>Dealing</h3>
-            <p>Everyone gets 3 cards and 4 go face up on the table. If those 4 cards happen to add up to 15 the dealer captures them for an escoba (30: two escobas). When hands are empty, 3 more cards are dealt each until the deck runs out ("last cards"). Any cards left on the table at the end go to the last player who captured.</p>
-          </section>
-          <section>
-            <h3>Scoring a round</h3>
-            <table class="eb-howto-table">
-              <tbody>
-                <tr><td>Each escoba</td><td>1 pt</td></tr>
-                <tr><td>Most cards</td><td>1 pt</td></tr>
-                <tr><td>Opponent under 10 cards (2 players)</td><td>+2 pts</td></tr>
-                <tr><td>Most coins (Oros)</td><td>1 pt</td></tr>
-                <tr><td>All 10 coins</td><td>+2 pts</td></tr>
-                <tr><td>The guindis (7 of Oros)</td><td>1 pt</td></tr>
-                <tr><td>All four 7s (includes the guindis point)</td><td>3 pts</td></tr>
-                <tr><td>Most 7s</td><td>1 pt</td></tr>
-              </tbody>
-            </table>
-            <p>Ties in a "most" category score nothing. A player who captures no cards at all in a round loses the match outright (2 players).</p>
-          </section>
-          <section>
-            <h3>Winning</h3>
-            <p>Rounds are played until someone reaches the target score with the sole lead.</p>
-          </section>
+          <div class="eb-howto-panels">
+            <div class="eb-howto-track" data-role="howto-track">${this._howtoPanels()}</div>
+          </div>
+          <div class="eb-howto-dots" data-role="howto-dots">
+            <button class="eb-howto-dot is-active" data-action="howto-dot" data-i="0" aria-label="Panel 1"></button>
+            <button class="eb-howto-dot" data-action="howto-dot" data-i="1" aria-label="Panel 2"></button>
+            <button class="eb-howto-dot" data-action="howto-dot" data-i="2" aria-label="Panel 3"></button>
+          </div>
+          <table class="eb-howto-table">
+            <tbody>
+              <tr><td>Each escoba</td><td>1 pt</td></tr>
+              <tr><td>Most cards</td><td>1 pt</td></tr>
+              <tr><td>Opponent under 10 cards (2 players)</td><td>+2 pts</td></tr>
+              <tr><td>Most coins (Oros)</td><td>1 pt</td></tr>
+              <tr><td>All 10 coins</td><td>+2 pts</td></tr>
+              <tr><td>The guindis (7 of Oros)</td><td>1 pt</td></tr>
+              <tr><td>All four 7s (includes the guindis point)</td><td>3 pts</td></tr>
+              <tr><td>Most 7s</td><td>1 pt</td></tr>
+            </tbody>
+          </table>
+          <div class="eb-howto-details">
+            ${this._howtoDetailRow('dealing', 'Dealing and last cards',
+              `<p>3 cards each, 4 face up. Table sums to 15 (or 30)? Dealer takes it as an escoba (or two). Hands empty: 3 more dealt each until the deck runs out (last cards). Leftover table cards at the end go to whoever captured last.</p>`)}
+            ${this._howtoDetailRow('values', 'Card values and numbering', valuesBody)}
+            ${this._howtoDetailRow('edge', 'Ties, sole lead, and edge cases',
+              `<p>Ties in a "most" category score nobody. Capture zero cards all round (2 players)? Instant loss. First to the target score with the sole lead wins the match.</p>`)}
+          </div>
         </div>
       </div>`;
     this.el.modal.hidden = false;
+    this._wireHowtoPanels();
+  }
+
+  /** Native scroll-snap drives the swipe itself (no gesture library); this
+   *  only keeps the dots in sync and adds edge-tap advance, both via the
+   *  track's own scrollLeft, never a custom drag handler. */
+  _wireHowtoPanels() {
+    const track = this.el.modal.querySelector('[data-role="howto-track"]');
+    if (!track) return;
+    const dots = [...this.el.modal.querySelectorAll('.eb-howto-dot')];
+    const panelCount = track.children.length;
+    const syncDots = () => {
+      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      dots.forEach((d, idx) => d.classList.toggle('is-active', idx === i));
+    };
+    track.addEventListener('scroll', () => {
+      clearTimeout(this._howtoScrollTimer);
+      this._howtoScrollTimer = setTimeout(syncDots, 80);
+    });
+    track.addEventListener('click', (e) => {
+      const rect = track.getBoundingClientRect();
+      const frac = (e.clientX - rect.left) / rect.width;
+      const cur = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      let target = cur;
+      if (frac < 0.15) target = Math.max(0, cur - 1);
+      else if (frac > 0.85) target = Math.min(panelCount - 1, cur + 1);
+      else return;
+      track.scrollTo({ left: target * track.clientWidth, behavior: 'smooth' });
+      dots.forEach((d, idx) => d.classList.toggle('is-active', idx === target));   // see the howto-dot case for why this isn't left to the scroll listener alone
+    });
   }
 
   // --- game start -------------------------------------------------------------
@@ -1421,6 +1550,8 @@ class EscobaUI {
     if (!a) return;
     switch (a.dataset.action) {
       // setup
+      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
+      case 'toggle-row': { this.syncSetupInputs(); const row = a.dataset.row; this._setupExpanded = this._setupExpanded === row ? null : row; this.renderSetup(); break; }
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._setup.deckModeChosen = true; this._saveSetup(); this.renderSetup(); break;
@@ -1436,11 +1567,31 @@ class EscobaUI {
       case 'close-modal': this._closeModal(); break;
       case 'open-howto': if (!this.el.setup.hidden) this.syncSetupInputs(); this._closeMenu(); this._openHowTo(); break;
       case 'close-howto': this._closeModal(); break;
+      case 'howto-dot': {
+        const track = this.el.modal.querySelector('[data-role="howto-track"]');
+        if (!track) break;
+        const i = +a.dataset.i;
+        track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+        // Update optimistically rather than solely via the track's own scroll
+        // listener: a programmatic smooth-scroll doesn't reliably fire
+        // 'scroll' events in every environment (this repo's preview browser
+        // forces prefers-reduced-motion, which some engines use to collapse
+        // a smooth scroll to a single non-eventing jump).
+        this.el.modal.querySelectorAll('.eb-howto-dot').forEach((d, idx) => d.classList.toggle('is-active', idx === i));
+        break;
+      }
+      case 'howto-toggle': {
+        const row = a.closest('.eb-howto-detail');
+        if (!row) break;
+        const key = row.dataset.key;
+        if (this._howtoOpen.has(key)) this._howtoOpen.delete(key); else this._howtoOpen.add(key);
+        row.classList.toggle('is-open');
+        break;
+      }
       case 'start': this.startGame(); break;
       case 'resume-game': this._resumeGame(); break;
       // multiplayer lobby
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
-      case 'mp-join-open': this.syncSetupInputs(); this._screen = 'join-lobby'; this._mpError = ''; this._mpJoinCode = ''; this.renderSetup(); break;
       case 'mp-join-submit': this._mpJoinSubmit(); break;
       case 'mp-start': this._mpHostStart(); break;
       case 'mp-cancel': this._mpCancelLobby(); break;
@@ -1850,6 +2001,7 @@ class EscobaUI {
     }
     this._mpPendingCode = code;
     this._mpJoinedCode = code;
+    this._screen = 'join-lobby';   // only now: a failed attempt stays on the setup screen's Join mode (see above)
     net.heartbeat(code, 'guest');
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this._mpLobbyRoom = res.room;
