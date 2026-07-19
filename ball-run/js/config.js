@@ -25,7 +25,10 @@ export const MIN_TRACK_WIDTH = 3; // never narrower than this
 export const NARROW_STEP = 1; // width steps down/up by this many ball-widths
 
 // Curves: gentle arcs spread across several segments, not instant kinks.
-export const CURVES_ENABLED = true; // Matt's A/B switch for the item-1 curve-camera fix; false = straight-only track
+// Matt's third-playthrough item 1: both curve-camera presentations (world-aligned, then
+// track-frame) were rejected. Curves default OFF; the generation/camera code paths stay intact
+// behind this flag for whenever curves are revisited, they're just not selected by default.
+export const CURVES_ENABLED = false;
 export const CURVE_SEGMENTS = 10; // how many segments an arc is spread across
 export const CURVE_LATERAL_PER_SEGMENT = { easy: 0.16, medium: 0.24, hard: 0.34 }; // world units of centerline drift per segment while curving
 
@@ -36,14 +39,27 @@ export const OBSTACLE_MIN_GAP = 2; // ball-widths of guaranteed clear gap
 // out of ratio from BALL_DIAMETER again.
 export const OBSTACLE_SIZE_MULTIPLIER = 1.5;
 export const OBSTACLE_SIZE = BALL_DIAMETER * OBSTACLE_SIZE_MULTIPLIER;
-// Safety margin applied to the theoretical max lateral reach when chaining
-// gap centers between consecutive obstacle rows (brief section 6, item 4):
-// lateral velocity ramps up rather than snapping to max, so the true reachable
-// distance in one row-to-row interval is less than max-speed * time.
-export const OBSTACLE_REACH_SAFETY_FACTOR = 0.6;
 // Forced clean (obstacle-free) segments after an obstacle event ends, so
 // consecutive obstacle events read as a slalom rather than a solid wall.
 export const OBSTACLE_MIN_STRAIGHT_AFTER = 2;
+
+// Row-to-row reachability spacing (Matt's third-playthrough item 3, the "46m wall"): the old
+// per-row-pair reach clamp floored its reach distance at OBSTACLE_MIN_GAP (a GAP-WIDTH constant,
+// not a reach-distance constant), which made the floor bigger than the entire addressable gap-center
+// range for most track widths - the clamp was mathematically unable to ever constrain anything.
+// Replaced with an explicit time-derived minimum spacing: minSpacing = (lateralDistanceBetweenCorridor
+// Centers / maxLateralSpeed) * forwardSpeed * OBSTACLE_SPACING_SAFETY_FACTOR, evaluated at the
+// difficulty's effective speed where the row actually lands (see Track.estimateSpeedAt).
+export const OBSTACLE_SPACING_SAFETY_FACTOR = 1.5; // Matt's suggested starting value
+// Any two obstacle rows closer together than this (ball-diameters) longitudinally must share one
+// contiguous corridor at least OBSTACLE_COMBINE_MIN_CORRIDOR_BW wide (item 3c): this categorically
+// rules out the offset-double-wall shape even in edge cases where the time-based formula alone,
+// with a very small lateral offset, might not flag it.
+export const OBSTACLE_COMBINE_SPAN_BW = 6; // ball-diameters
+export const OBSTACLE_COMBINE_MIN_CORRIDOR_BW = 2.0; // ball-diameters
+// Auto-repair (item 3b): how many extra single-segment pushes downtrack to try before giving up
+// and dropping the row rather than shipping a spacing violation.
+export const OBSTACLE_ROW_MAX_PUSH_ATTEMPTS = 6;
 
 // Obstacle distance-pacing (Matt's second-playthrough item 2: first obstacle landed at 281m under
 // pure weighted-random occurrence, since a run could roll many non-obstacle events before ever
@@ -52,7 +68,9 @@ export const OBSTACLE_MIN_STRAIGHT_AFTER = 2;
 // one happens here.
 export const OBSTACLE_FIRST_EVENT_MIN_M = 40; // first obstacle event must land in this window, every run, every difficulty
 export const OBSTACLE_FIRST_EVENT_MAX_M = 60;
-export const OBSTACLE_EVENT_GAP_BASE_M = { easy: 55, medium: 35, hard: 22 }; // meters between events, before jitter/speed-tier shrink
+// hard: 22 -> 19 (third-playthrough item 1: Hard's other difficulty compensation nudge for losing
+// curves as a lever, tighter obstacle-event cadence).
+export const OBSTACLE_EVENT_GAP_BASE_M = { easy: 55, medium: 35, hard: 19 }; // meters between events, before jitter/speed-tier shrink
 export const OBSTACLE_EVENT_GAP_JITTER_FRAC = 0.3; // +/- fraction of the base gap
 export const OBSTACLE_EVENT_GAP_SHRINK_PER_TIER = 0.94; // multiplicative shrink of the gap per estimated speed tier passed
 export const OBSTACLE_EVENT_GAP_MIN_M = 12; // floor so shrink-per-tier can't collapse cadence into a wall
@@ -98,7 +116,11 @@ export const DIFFICULTIES = {
     baseSpeed: 25,
     speedRampPerSec: 0.25,
     tierBonus: 6.5,
-    maxSpeed: 75,
+    // Curves were one of Hard's three difficulty levers (brief section 13: frequency & sharpness
+    // scale with difficulty); with CURVES_ENABLED false Hard loses that lever entirely. Compensated
+    // with a small nudge here rather than a wholesale retune (Matt's third-playthrough item 1):
+    // maxSpeed 75 -> 78.
+    maxSpeed: 78,
     tunnelSpacingMeters: 185,
     weights: { straight: 0.4, curve: 0.35, narrow: 0.25 },
     obstacleRowsPerEvent: [2, 3],

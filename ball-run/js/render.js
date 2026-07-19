@@ -346,6 +346,15 @@ export class Renderer {
    * camera's yaw with the track's tangent (via lookAt on two points that both sit on the curving
    * centerline) instead of holding a fixed world-Z heading, so the world turns around a visually
    * planted ball; only CAMERA_LAG's small easing produces on-screen lateral motion.
+   *
+   * Third-playthrough item 1 (camera roll through curves): camera.up is NEVER set anywhere in
+   * this file, so it stays Three.js's default world-up (0, 1, 0). lookAt() with that up produces
+   * yaw+pitch only, never roll, by construction - verified headlessly against real generated
+   * curve data (sharpest hard-difficulty curve): the camera's local right axis stays horizontal
+   * (right.y ~ 0 to float precision) through the whole track. Do not derive `up` from the track's
+   * local frame (localFrameAt's nx/nz, or any future Frenet/binormal vector) - that is what would
+   * introduce the bank Matt saw; up must stay world-up always, only heading (yaw) may follow the
+   * tangent.
    */
   _layoutCamera(sim, reducedMotion) {
     const track = sim.track;

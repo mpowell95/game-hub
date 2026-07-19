@@ -10,12 +10,17 @@
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BASE_TRACK_WIDTH, MIN_TRACK_WIDTH,
   NARROW_STEP, CURVES_ENABLED, CURVE_SEGMENTS, CURVE_LATERAL_PER_SEGMENT, OBSTACLE_MIN_GAP, BALL_DIAMETER,
-  OBSTACLE_SIZE, OBSTACLE_REACH_SAFETY_FACTOR, OBSTACLE_MIN_STRAIGHT_AFTER, LATERAL_MAX_SPEED_BASE,
+  OBSTACLE_SIZE, OBSTACLE_MIN_STRAIGHT_AFTER, LATERAL_MAX_SPEED_BASE,
   LATERAL_SPEED_SCALE_WITH_FORWARD, TUNNEL_SEGMENTS, TUNNEL_MIN_STRAIGHT_AFTER, difficultyConfig,
   OBSTACLE_FIRST_EVENT_MIN_M, OBSTACLE_FIRST_EVENT_MAX_M, OBSTACLE_EVENT_GAP_BASE_M,
   OBSTACLE_EVENT_GAP_JITTER_FRAC, OBSTACLE_EVENT_GAP_SHRINK_PER_TIER, OBSTACLE_EVENT_GAP_MIN_M,
-  DEBUG_ASSERTIONS,
+  OBSTACLE_SPACING_SAFETY_FACTOR, OBSTACLE_COMBINE_SPAN_BW, OBSTACLE_COMBINE_MIN_CORRIDOR_BW,
+  OBSTACLE_ROW_MAX_PUSH_ATTEMPTS, DEBUG_ASSERTIONS,
 } from './config.js';
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
 
 /** Deterministic RNG (mulberry32), kept behind one function so runs could be seeded later. */
 function makeRng(seed) {
@@ -50,7 +55,8 @@ export class Track {
     this.lastTunnelZ = 0;
     this.straightsOwed = 6; // guarantee a safe, obstacle-free start (also reused after tunnels)
     this.lastWasTunnel = false;
-    this.pendingObstacleGapCenter = null; // previous obstacle row's gap center, for reachability chaining
+    this.pendingObstacleGapCenter = null; // previous obstacle row's gap center, for spacing chaining
+    this.pendingObstacleRowZ = null; // previous obstacle row's z0, for spacing chaining (item 3)
 
     // Distance-paced obstacle scheduler (Matt's second-playthrough item 2): the first event is
     // guaranteed inside the 40-60m window on every run, every difficulty, independent of the RNG's
@@ -70,17 +76,6 @@ export class Track {
 
     this._cx = 0; // running centerline X as segments are appended
     this._width = BASE_TRACK_WIDTH * BALL_DIAMETER;
-
-    // Reachability check (brief section 6, item 4): the gap in row N+1 must be
-    // laterally reachable from row N's gap at max lateral speed, given forward
-    // speed. Rows within an event are one SEGMENT_LENGTH apart; bound the
-    // reachable distance using cfg.maxSpeed (the worst case, since actual speed
-    // is never higher), so the guarantee holds for the whole run, not just at
-    // the current instant. A damping ramp-up means the ball never truly holds
-    // max lateral speed for the whole interval, hence the safety factor.
-    const lateralMaxAtCap = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.cfg.maxSpeed / this.cfg.baseSpeed - 1));
-    const timeBetweenRows = SEGMENT_LENGTH / this.cfg.maxSpeed;
-    this.reachBW = Math.max(OBSTACLE_MIN_GAP, (lateralMaxAtCap * timeBetweenRows * OBSTACLE_REACH_SAFETY_FACTOR) / BALL_DIAMETER);
 
     this.ensureAhead(SEGMENTS_AHEAD * SEGMENT_LENGTH);
   }
@@ -214,44 +209,123 @@ export class Track {
     for (let i = 0; i < taperSteps; i++) this.pushSegment({ type: 'narrow', dw: deltaUp });
   }
 
+  /** Estimated forward speed at track distance z, for spacing math that runs ahead of the sim
+   * (row placement happens before the ball ever gets there). Tier-based like rollObstacleGap's
+   * estimatedTier; elapsed time is approximated from z / baseSpeed, which is always an
+   * OVER-estimate of true elapsed time (actual speed is never below baseSpeed) and therefore an
+   * over-estimate of speed too - erring toward a larger required spacing, never a smaller one. */
+  estimateSpeedAt(z) {
+    const cfg = this.cfg;
+    const estimatedTier = Math.floor(z / cfg.tunnelSpacingMeters);
+    const elapsedApprox = z / cfg.baseSpeed;
+    const ramped = cfg.baseSpeed + cfg.speedRampPerSec * elapsedApprox + cfg.tierBonus * estimatedTier;
+    return Math.min(cfg.maxSpeed, ramped);
+  }
+
+  /** Max lateral speed at a given forward speed (mirrors sim.js's lateralMax formula exactly). */
+  lateralMaxAtSpeed(speed) {
+    return LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (speed / this.cfg.baseSpeed - 1));
+  }
+
+  /** Minimum longitudinal spacing (world units) between two corridor centers at distance z
+   * (Matt's third-playthrough item 3a): minSpacing = (lateralDistance / maxLateralSpeed) *
+   * forwardSpeed * OBSTACLE_SPACING_SAFETY_FACTOR, evaluated at the speed the ball will actually
+   * have when it arrives at z, not the run-start speed. */
+  minSpacingFor(gapCenterA, gapCenterB, z) {
+    const lateralDistWorld = Math.abs(gapCenterB - gapCenterA) * BALL_DIAMETER;
+    if (lateralDistWorld <= 0) return 0;
+    const speed = this.estimateSpeedAt(z);
+    const maxLateralSpeed = this.lateralMaxAtSpeed(speed);
+    return (lateralDistWorld / maxLateralSpeed) * speed * OBSTACLE_SPACING_SAFETY_FACTOR;
+  }
+
+  /**
+   * Place one obstacle row, chained against the previous row's gap center/z (either the row
+   * before it in this same event, or the last row of a previous event - both are the same
+   * `pendingObstacleGapCenter`/`pendingObstacleRowZ` chain, since a close-together pair of
+   * separate events is exactly the "46m wall" Matt hit: two independently-valid corridors with
+   * almost no forward distance between them). Returns { gapCenter, z0 } or null if the row had to
+   * be dropped (item 3b.3).
+   */
+  placeObstacleRow(prevGapCenter, prevRowZ) {
+    const widthBW = () => this._width / BALL_DIAMETER;
+    const gapBW = OBSTACLE_MIN_GAP;
+
+    if (prevGapCenter === null) {
+      const maxGapCenterOffset = Math.max(0, (widthBW() - gapBW) / 2);
+      const gapCenter = (this.rng() * 2 - 1) * maxGapCenterOffset;
+      const seg = this.pushSegment({ type: 'obstacle', obstacles: this.buildObstacleRow(widthBW(), gapBW, gapCenter), gapCenterBW: gapCenter });
+      return { gapCenter, z0: seg.z0 };
+    }
+
+    const maxGapCenterOffset0 = Math.max(0, (widthBW() - gapBW) / 2);
+    let gapCenter = (this.rng() * 2 - 1) * maxGapCenterOffset0;
+    for (let attempt = 0; attempt <= OBSTACLE_ROW_MAX_PUSH_ATTEMPTS; attempt++) {
+      const z0 = this.frontZ;
+      const actualSpacing = z0 - prevRowZ;
+      const maxGapCenterOffset = Math.max(0, (widthBW() - gapBW) / 2);
+
+      // 3c: rows closer than OBSTACLE_COMBINE_SPAN_BW ball-diameters must be treated as one
+      // combined pattern sharing a corridor >= OBSTACLE_COMBINE_MIN_CORRIDOR_BW wide. Shift
+      // toward the previous row's corridor first (this also shrinks the item-3a lateral
+      // distance, so it's tried before, and folds into, the 3a repair below).
+      if (actualSpacing < OBSTACLE_COMBINE_SPAN_BW * BALL_DIAMETER) {
+        const maxOffsetFromPrev = Math.max(0, gapBW - OBSTACLE_COMBINE_MIN_CORRIDOR_BW);
+        gapCenter = clamp(gapCenter, prevGapCenter - maxOffsetFromPrev, prevGapCenter + maxOffsetFromPrev);
+        gapCenter = clamp(gapCenter, -maxGapCenterOffset, maxGapCenterOffset);
+      }
+
+      // 3a/3b.1: if the time-derived minimum spacing is still violated, shift the corridor as
+      // far toward the previous row's as the available spacing allows.
+      let required = this.minSpacingFor(gapCenter, prevGapCenter, z0);
+      if (actualSpacing < required) {
+        const speed = this.estimateSpeedAt(z0);
+        const maxLateralSpeed = this.lateralMaxAtSpeed(speed);
+        const maxLateralDistBW = (actualSpacing * maxLateralSpeed) / (speed * OBSTACLE_SPACING_SAFETY_FACTOR * BALL_DIAMETER);
+        gapCenter = clamp(gapCenter, prevGapCenter - maxLateralDistBW, prevGapCenter + maxLateralDistBW);
+        gapCenter = clamp(gapCenter, -maxGapCenterOffset, maxGapCenterOffset);
+        required = this.minSpacingFor(gapCenter, prevGapCenter, z0);
+      }
+
+      if (actualSpacing >= required) {
+        if (DEBUG_ASSERTIONS) {
+          console.assert(actualSpacing + 1e-6 >= required,
+            `Ball Run: obstacle row spacing ${actualSpacing} < required ${required} (gapCenter ${gapCenter}, prev ${prevGapCenter})`);
+          if (actualSpacing < OBSTACLE_COMBINE_SPAN_BW * BALL_DIAMETER) {
+            const overlap = gapBW - Math.abs(gapCenter - prevGapCenter);
+            console.assert(overlap + 1e-6 >= OBSTACLE_COMBINE_MIN_CORRIDOR_BW,
+              `Ball Run: combined-pattern corridor ${overlap} < ${OBSTACLE_COMBINE_MIN_CORRIDOR_BW} (rows ${actualSpacing} apart)`);
+          }
+        }
+        const seg = this.pushSegment({ type: 'obstacle', obstacles: this.buildObstacleRow(widthBW(), gapBW, gapCenter), gapCenterBW: gapCenter });
+        return { gapCenter, z0: seg.z0 };
+      }
+
+      // 3b.2: still violating after the shift - push further downtrack and retry.
+      this.pushSegment({ type: 'straight' });
+    }
+    // 3b.3: genuinely can't satisfy the constraint within a bounded number of pushes - drop the
+    // row rather than ship a violation.
+    return null;
+  }
+
   emitObstacleRows() {
     const cfg = this.cfg;
     const [minRows, maxRows] = cfg.obstacleRowsPerEvent;
     const rows = minRows + Math.floor(this.rng() * (maxRows - minRows + 1));
     let prevGapCenter = this.pendingObstacleGapCenter;
+    let prevRowZ = this.pendingObstacleRowZ;
     for (let r = 0; r < rows; r++) {
-      const widthBW = this._width / BALL_DIAMETER; // track width in ball-widths
-      const gapBW = OBSTACLE_MIN_GAP;
-      const maxGapCenterOffset = Math.max(0, (widthBW - gapBW) / 2);
-      let gapCenter;
-      if (prevGapCenter !== null) {
-        // Reachability: clamp this row's gap center to what's laterally reachable
-        // from the previous row's gap (this.reachBW, computed once in the
-        // constructor from the difficulty's max forward/lateral speeds - see
-        // brief section 6, item 4) so every spawn stays winnable.
-        const reach = this.reachBW;
-        const lo = Math.max(-maxGapCenterOffset, prevGapCenter - reach);
-        const hi = Math.min(maxGapCenterOffset, prevGapCenter + reach);
-        gapCenter = lo + this.rng() * Math.max(0, hi - lo);
-        // Safety net (item 4): the clamp above should make this unreachable by construction, but
-        // assert it in debug builds so a future retune of speed/reach constants gets caught here
-        // instead of shipping an unwinnable row.
-        if (DEBUG_ASSERTIONS) {
-          console.assert(Math.abs(gapCenter - prevGapCenter) <= reach + 1e-6,
-            `Ball Run: obstacle row gap center ${gapCenter} unreachable from previous ${prevGapCenter} (reach ${reach})`);
-        }
-      } else {
-        gapCenter = (this.rng() * 2 - 1) * maxGapCenterOffset;
+      const placed = this.placeObstacleRow(prevGapCenter, prevRowZ);
+      if (placed) {
+        prevGapCenter = placed.gapCenter;
+        prevRowZ = placed.z0;
       }
-      const obstacles = this.buildObstacleRow(widthBW, gapBW, gapCenter);
-      // gapCenterBW rides along as plain data (ball-widths, relative to centerline) purely for
-      // auditing/debug tooling; gameplay and rendering never read it.
-      this.pushSegment({ type: 'obstacle', obstacles, gapCenterBW: gapCenter });
       // A clear segment between rows so the player can react.
       if (r < rows - 1) this.pushSegment({ type: 'straight' });
-      prevGapCenter = gapCenter;
     }
     this.pendingObstacleGapCenter = prevGapCenter;
+    this.pendingObstacleRowZ = prevRowZ;
     this._firstObstaclePending = false;
     // Reschedule the next event from here (item 2), regardless of whether this one fired via the
     // scheduler or (in principle) some other path, so cadence stays correct either way.
@@ -288,6 +362,7 @@ export class Track {
     }
     this.straightsOwed = TUNNEL_MIN_STRAIGHT_AFTER;
     this.pendingObstacleGapCenter = null;
+    this.pendingObstacleRowZ = null;
   }
 
   // --- Queries ------------------------------------------------------------
