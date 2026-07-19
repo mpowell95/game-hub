@@ -368,6 +368,11 @@ class MancalaUI {
     this.movesMade = 0;
     this.renderGame();
     saveGame(this);
+    // Say who opens. Without this the alternation is invisible: the opponent's
+    // opening move just appears, and a game you open looks identical to one
+    // where the turn never alternated.
+    const n = this.names();
+    this.toast(starter === P1 && this.mode === 'bot' ? 'You start' : `${n[starter === P1 ? 'p1' : 'p2'].name} starts`);
     // When the opponent opens, hand them the first move.
     if (this.mode === 'bot' && starter === P2) this.botTurn();
   }
