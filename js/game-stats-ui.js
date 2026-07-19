@@ -21,6 +21,7 @@ const TABS = [
   { id: 'escoba', label: 'Escoba', accent: '#1c7a4f' },
   { id: 'filler', label: 'Filler', accent: '#c2557f' },
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
+  { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -175,12 +176,37 @@ function escobaScreen(rec) {
     </div>`;
 }
 
+// --- Ball Run (solo, difficulty-scaled, distance-is-the-score) --------------
+const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+
+/** Ball Run: no wins/losses (only a crash or a fall ends a run), so the honest numbers are runs
+ *  played and the best distance reached, overall and per difficulty. */
+function ballRunScreen(rec) {
+  const br = (rec && rec.br) || {};
+  const runs = br.runs | 0, best = br.bestDistance | 0;
+  if (!runs) return emptyState('Ball Run');
+  const bd = br.bestByDiff || {};
+  const rows = BR_DIFFS.map(([k, label]) =>
+    `<tr><th scope="row">${label}</th><td>${bd[k] | 0} m</td></tr>`).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
+      <div class="gs-tally"><b>${best} m</b><span>Best distance</span></div>
+    </div>
+    <h4 class="gs-tbl-h">Best distance by difficulty</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
+  if (id === 'ballrun') return ballRunScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

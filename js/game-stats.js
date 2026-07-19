@@ -25,7 +25,14 @@
 //         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
 //       escoba: {
 //         total, byDiff,
-//         es: { escobas } } },                    // escobas the human made
+//         es: { escobas } },                      // escobas the human made
+//       ballrun: {
+//         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
+//         br: { runs, bestDistance, bestByDiff: { easy, medium, hard } } } },  // a solo, difficulty-scaled
+//                                                   // endless runner: no opponent, no loss state, distance is
+//                                                   // the score, so every finished run counts as played+won
+//                                                   // (like nutsbolts) and the honest numbers are runs and
+//                                                   // best distance, overall and per difficulty
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -33,10 +40,12 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
+// Ball Run difficulties (easy|medium|hard, no expert tier).
+export const BR_DIFFS = ['easy', 'medium', 'hard'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -87,6 +96,17 @@ function ensureEs(g) {
   if (!Number.isFinite(g.es.escobas)) g.es.escobas = 0;
 }
 
+/** Ball Run: the solo-difficulty-scaled counters. A run has no opponent and no loss state (only a
+ *  crash or a fall ends it), so `br.runs` is the true play count and `br.bestDistance` /
+ *  `br.bestByDiff` are the honest scoreboard (max, never decreases). */
+function ensureBr(g) {
+  if (!g.br || typeof g.br !== 'object') g.br = { runs: 0, bestDistance: 0, bestByDiff: {} };
+  if (!Number.isFinite(g.br.runs)) g.br.runs = 0;
+  if (!Number.isFinite(g.br.bestDistance)) g.br.bestDistance = 0;
+  if (!g.br.bestByDiff || typeof g.br.bestByDiff !== 'object') g.br.bestByDiff = {};
+  for (const d of BR_DIFFS) if (!Number.isFinite(g.br.bestByDiff[d])) g.br.bestByDiff[d] = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -101,6 +121,7 @@ function normalize(raw) {
   ensureCc(st.games.chinchon);
   ensureNb(st.games.nutsbolts);
   ensureEs(st.games.escoba);
+  ensureBr(st.games.ballrun);
   return st;
 }
 
@@ -251,5 +272,24 @@ export function recordEscoba(difficulty, won, extras) {
   return st;
 }
 
+/** Ball Run: record one finished run. `difficulty` is easy|medium|hard; `distance` is the meters
+ *  reached (floored, never negative). A run has no opponent and no loss state, so it counts as
+ *  played+won (mirrors Nuts & Bolts); `lost` is never touched. Additive; bestDistance/bestByDiff
+ *  only ever go up, matching every other best-tracking field in this file. */
+export function recordBallRun(distance, difficulty) {
+  const st = loadStats();
+  const g = st.games.ballrun;
+  ensureBr(g);
+  const d = BR_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const dist = Number.isFinite(distance) ? Math.max(0, Math.floor(distance)) : 0;
+  if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
+  g.br.runs += 1;
+  g.br.bestDistance = Math.max(g.br.bestDistance | 0, dist);
+  if (d) g.br.bestByDiff[d] = Math.max(g.br.bestByDiff[d] | 0, dist);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
-export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba, GAMES, STATS_KEY, DEVICE_KEY };
+export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba, recordBallRun, GAMES, STATS_KEY, DEVICE_KEY };

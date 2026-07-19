@@ -24,6 +24,7 @@ const TABS = [
   { id: 'filler', label: 'Filler', accent: '#c2557f' },
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
   { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
+  { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
 ];
 const ACCENT = Object.fromEntries(TABS.map((t) => [t.id, t.accent]));
 
@@ -68,6 +69,22 @@ function nutsBoltsRows(list) {
   }));
 }
 
+// Ball Run difficulty tiers (byDiff/bestByDiff keys, lowercased by the recorder).
+const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+
+function ballrunRows(list) {
+  // Score-based, not win/loss: rank by best distance reached (any difficulty), like a high-score
+  // table. Best-per-tier / total runs are shown but not ranked on, same reasoning as Nuts & Bolts.
+  const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
+    .sort(cmp((g) => (g.games.ballrun.br.bestDistance | 0), (g) => g.updatedAt));
+  if (!rows.length) return emptyRows('No Ball Run runs recorded yet.');
+  return table(['#', 'Player', 'Best', ...BR_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
+    const br = g.games.ballrun.br;
+    const bd = br.bestByDiff || {};
+    return rowHTML(g, i, [`${br.bestDistance | 0} m`, ...BR_DIFFS.map(([k]) => `${bd[k] | 0} m`), `${br.runs | 0}`]);
+  }));
+}
+
 function rowHTML(g, i, metrics, nameExtra) {
   const me = g.key === _meKey ? ' is-me' : '';
   const cells = metrics.map((m) => `<td>${m}</td>`).join('');
@@ -102,6 +119,7 @@ function bodyFor(id) {
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, deviceId()); } catch { /* keep */ }
   if (id === 'overall') return overallRows(list);
   if (id === 'nutsbolts') return nutsBoltsRows(list);
+  if (id === 'ballrun') return ballrunRows(list);
   return gameRows(list, id);
 }
 

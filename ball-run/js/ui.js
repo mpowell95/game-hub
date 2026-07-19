@@ -8,6 +8,7 @@ import { Renderer } from './render.js';
 import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DIFFICULTIES, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { recordBallRun } from '../../js/game-stats.js';
 
 const BEST_KEY_PREFIX = 'ballrun.best.';
 const DIFFICULTY_KEY = 'ballrun.difficulty';
@@ -411,7 +412,9 @@ class BallRunUI {
     const prevBest = loadBest(this.difficulty);
     const isNewBest = distance > prevBest;
     if (isNewBest) saveBest(this.difficulty, distance);
-    if (!this._resultRecorded) this._resultRecorded = true;
+    // Shared cross-device stats/leaderboard store, additive alongside the local best above (which
+    // stays the source of truth for the pre-game/game-over "your best" display).
+    if (!this._resultRecorded) { this._resultRecorded = true; try { recordBallRun(distance, this.difficulty); } catch { /* ignore */ } }
 
     this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? 'You fell off!' : 'Crashed!';
     this.el.goDistance.textContent = `Distance: ${distance} m`;

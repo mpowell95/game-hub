@@ -11,7 +11,7 @@
 
 import { GAMES } from './game-stats.js';
 
-export const SOLO = new Set(['nutsbolts']);                 // solo puzzle: win-only, no loss axis
+export const SOLO = new Set(['nutsbolts', 'ballrun']);       // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -127,6 +127,12 @@ export function aggregatePlayers(all) {
         if (!dst.nb) dst.nb = { solved: 0, moves: 0, bestLevel: 0 };
         dst.nb.solved += src.nb.solved | 0; dst.nb.moves += src.nb.moves | 0;
         dst.nb.bestLevel = Math.max(dst.nb.bestLevel, src.nb.bestLevel | 0);
+      } else if (g === 'ballrun' && src.br) {
+        if (!dst.br) dst.br = { runs: 0, bestDistance: 0, bestByDiff: {} };
+        dst.br.runs += src.br.runs | 0;
+        dst.br.bestDistance = Math.max(dst.br.bestDistance | 0, src.br.bestDistance | 0);
+        const sbd = src.br.bestByDiff || {};
+        for (const k of Object.keys(sbd)) dst.br.bestByDiff[k] = Math.max(dst.br.bestByDiff[k] | 0, sbd[k] | 0);
       }
     }
   }
