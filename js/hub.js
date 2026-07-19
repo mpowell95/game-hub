@@ -244,6 +244,11 @@ const GAMES = [
     title: 'Ball Run',
     blurb: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',
     module: '../ball-run/js/ui.js',
+    // Real-time full-bleed 3D canvas: the hub's own header row and the
+    // hub-main side padding would both eat into the play area and show as
+    // dead space / gutters around the game. Ball Run's own screens show
+    // their own title and back affordance, same reasoning as escoba/mancala.
+    immersive: true,
     accent: '#c22e8f',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
             <rect width="120" height="120" fill="#0a0a12"/>

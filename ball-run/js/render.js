@@ -6,8 +6,9 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_CUBE_SIZE,
-  CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK,
+  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_CUBE_SIZE, TILE_SIZE,
+  CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
+  CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK,
   COLOR_VOID, COLOR_BALL, COLOR_TRACK_TILE, COLOR_TRACK_GROUT, COLOR_OBSTACLE, COLOR_OBSTACLE_EDGE,
   COLOR_TUNNEL_WALL, COLOR_TUNNEL_EDGE, COLOR_CHEVRON, COLOR_SHADOW, CRASH_SHAKE_MS, difficultyConfig,
 } from './config.js';
@@ -16,6 +17,12 @@ const FLOOR_POOL_SIZE = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
 const WALL_POOL_SIZE = (SEGMENTS_AHEAD + SEGMENTS_BEHIND) * 2; // left + right per segment
 const OBSTACLE_POOL_SIZE = 24;
 
+// One repeatable TILE_SIZE-unit tile: grout drawn only on the top/left edges
+// so REPEAT-wrapping produces a single continuous grid line per tile boundary
+// instead of a doubled-up line (verify-item B: the old texture baked a full
+// bordered 2x2 pattern into every segment's plane independent of its world
+// size, so segment joins showed as duplicated/misaligned seams - a "venetian
+// blind" look instead of one continuous tiled ribbon).
 function buildTileTexture() {
   const size = 256;
   const c = document.createElement('canvas');
@@ -27,11 +34,7 @@ function buildTileTexture() {
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.moveTo(0, 0); ctx.lineTo(size, 0);
-  ctx.moveTo(0, size); ctx.lineTo(size, size);
   ctx.moveTo(0, 0); ctx.lineTo(0, size);
-  ctx.moveTo(size, 0); ctx.lineTo(size, size);
-  ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
-  ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
   ctx.stroke();
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -150,9 +153,22 @@ export class Renderer {
     this.floorMat = new THREE.MeshStandardMaterial({ map: this.tileTex, roughness: 0.85, metalness: 0.05 });
     this.tunnelFloorMat = new THREE.MeshStandardMaterial({ map: this.tunnelFloorTex, roughness: 0.7, metalness: 0.05 });
     this.tunnelFloorLabelMat = new THREE.MeshStandardMaterial({ map: this.tunnelFloorLabelTex, roughness: 0.7, metalness: 0.05 });
+    // Each plain-floor slot gets its own cloned texture (same canvas image,
+    // independent repeat/offset) so the grid can be scaled to the segment's
+    // real world size and phase-aligned to world Z. Built once here, not
+    // per frame; _layoutFloor only mutates the existing repeat/offset Vector2s.
+    this.floorTexPool = [];
+    this.floorMatPool = [];
     this.floorPool = [];
     for (let i = 0; i < FLOOR_POOL_SIZE; i++) {
-      const mesh = new THREE.Mesh(geo, this.floorMat);
+      const tex = this.tileTex.clone();
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      const mat = this.floorMat.clone();
+      mat.map = tex;
+      this.floorTexPool.push(tex);
+      this.floorMatPool.push(mat);
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.visible = false;
       this.scene.add(mesh);
@@ -252,7 +268,17 @@ export class Renderer {
       mesh.position.set(midCx, 0, midZ);
       mesh.rotation.y = yaw;
       mesh.scale.set(width, dz, 1);
-      mesh.material = seg.isTunnel ? (seg.showSpeedLabel ? this.tunnelFloorLabelMat : this.tunnelFloorMat) : this.floorMat;
+      if (seg.isTunnel) {
+        mesh.material = seg.showSpeedLabel ? this.tunnelFloorLabelMat : this.tunnelFloorMat;
+      } else {
+        mesh.material = this.floorMatPool[i];
+        // Tile the grid at its real world size (TILE_SIZE per repeat) and
+        // phase-align the offset to the segment's world Z so the pattern
+        // reads as one continuous ribbon instead of a seam at every segment.
+        const tex = this.floorTexPool[i];
+        tex.repeat.set(width / TILE_SIZE, dz / TILE_SIZE);
+        tex.offset.set(0, -(seg.z0 / TILE_SIZE) % 1);
+      }
 
       if (seg.isTunnel && left && right) {
         const wallH = 3.2;
@@ -307,7 +333,7 @@ export class Renderer {
       }
     }
     this.camera.position.set(this._camLagX + shakeX, CAMERA_HEIGHT + shakeY, ballWorldZ - CAMERA_BACK);
-    this.camera.lookAt(this._camLagX, CAMERA_HEIGHT * 0.55, ballWorldZ + CAMERA_LOOK_AHEAD);
+    this.camera.lookAt(this._camLagX, CAMERA_HEIGHT * CAMERA_LOOK_HEIGHT_FRAC, ballWorldZ + CAMERA_LOOK_AHEAD);
 
     const speedFrac = Math.max(0, Math.min(1, (sim.speed - sim.cfg.baseSpeed) / (sim.cfg.maxSpeed - sim.cfg.baseSpeed)));
     const fovKick = reducedMotion ? 0 : CAMERA_MAX_FOV_KICK * speedFrac;
@@ -337,6 +363,8 @@ export class Renderer {
     this._shadowGeo.dispose(); this._shadowMat.dispose();
     this._floorGeo.dispose();
     this.floorMat.dispose(); this.tunnelFloorMat.dispose(); this.tunnelFloorLabelMat.dispose();
+    this.floorMatPool.forEach((m) => m.dispose());
+    this.floorTexPool.forEach((t) => t.dispose());
     this._wallGeo.dispose(); this.wallMat.dispose();
     this._obstacleGeo.dispose(); this._obstacleEdgesGeo.dispose();
     this.obstacleMat.dispose(); this.obstacleEdgeMat.dispose();

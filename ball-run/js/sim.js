@@ -66,9 +66,15 @@ export class Sim {
     this.track.trimBehind(this.z - SEGMENTS_BEHIND * SEGMENT_LENGTH);
 
     // --- Lateral steering ---
+    // World +X renders as screen-LEFT here (the track's forward direction is
+    // +Z, and the chase camera looks down +Z, which flips the camera's local
+    // +X/right relative to world +X). Drag right / ArrowRight must move the
+    // ball right on screen, so the input axis is negated once, here, to land
+    // in world space. This is the single sign flip in the whole input chain;
+    // DRAG_SENSITIVITY itself stays a plain positive constant (config.js).
     const inputAxis = dragAxis !== 0 ? dragAxis : keyAxis * dt * 1.6;
     const lateralMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
-    const commandedVelocity = (inputAxis / dt) * DRAG_SENSITIVITY;
+    const commandedVelocity = -(inputAxis / dt) * DRAG_SENSITIVITY;
     const clampedCommand = Math.max(-lateralMax, Math.min(lateralMax, commandedVelocity));
     const damp = Math.min(1, LATERAL_DAMPING * dt);
     this.lateralVelocity += (clampedCommand - this.lateralVelocity) * damp;

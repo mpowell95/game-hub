@@ -12,10 +12,17 @@
   --br-attention: #ffce3a;
   --br-radius: 18px;
 
-  position: relative;
+  /* Fixed to the viewport rather than flowing inside the hub's padded,
+     max-width-720px .hub-main: that's the only way to get true edge-to-edge
+     full-bleed (no white side gutters) both standalone and mounted in the
+     hub (build guide / Matt feedback item 4). dvh (not vh) so iOS Safari's
+     collapsing toolbar chrome never causes a scrollable overflow. z-index
+     sits below the hub's floating immersive back button (z-index 10). */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  height: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   background: var(--br-void);
   color: var(--br-ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

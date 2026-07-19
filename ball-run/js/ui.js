@@ -58,44 +58,51 @@ const FACE_SVGS = {
 
 // Static how-to-play stills (brief section 11). Drawn as small inline SVGs
 // approximating the reference frames rather than live 3D demos, per the brief.
+// Re-drawn (item 5) with the ball sitting lower in frame with a generous
+// forward view, matching the retuned camera framing in render.js, and with
+// the drag cue replaced by a plain touch-point + double-headed-arrow glyph
+// (no hand/finger illustration) in the hub's own inline-SVG stroke style.
 function stillDragSteer() {
   return `<svg viewBox="0 0 200 200" aria-hidden="true">
     <rect width="200" height="200" fill="#000"/>
-    <g opacity="0.9"><path d="M20 190 L100 60 L180 190 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-      <path d="M20 190 L180 190" stroke="#8f9aef" stroke-width="2"/>
-      <path d="M60 130 L140 130" stroke="#8f9aef" stroke-width="1.5"/>
-      <path d="M100 60 L20 190 M100 60 L180 190" stroke="#8f9aef" stroke-width="1.5"/></g>
-    <circle cx="100" cy="85" r="24" fill="#e91ec4"/>
-    <ellipse cx="93" cy="77" rx="7" ry="5" fill="#ff9fe6" opacity="0.7"/>
-    <path d="M60 150 l16 -22 M76 128 l-4 6" stroke="#ffd9a0" stroke-width="10" stroke-linecap="round"/>
-    <path d="M40 150 h55" stroke="#ffb27a" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M14 196 L100 40 L186 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
+    <path d="M50 160 L150 160" stroke="#8f9aef" stroke-width="1.5"/>
+    <path d="M70 122 L130 122" stroke="#8f9aef" stroke-width="1.2"/>
+    <circle cx="100" cy="140" r="19" fill="#e91ec4"/>
+    <ellipse cx="93" cy="133" rx="6" ry="4" fill="#ff9fe6" opacity="0.7"/>
+    <g stroke="#39f4ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <line x1="44" y1="182" x2="156" y2="182"/>
+      <path d="M44 182 l16 -11 M44 182 l16 11"/>
+      <path d="M156 182 l-16 -11 M156 182 l-16 11"/>
+      <circle cx="100" cy="182" r="9" fill="#000"/>
+    </g>
   </svg>`;
 }
 function stillObstacle() {
   return `<svg viewBox="0 0 200 200" aria-hidden="true">
     <rect width="200" height="200" fill="#000"/>
-    <path d="M10 190 L100 70 L190 190 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-    <path d="M55 140 L145 140" stroke="#8f9aef" stroke-width="1.5"/>
-    <circle cx="75" cy="115" r="20" fill="#e91ec4"/>
-    <rect x="108" y="88" width="26" height="26" fill="#9b1fd6" stroke="#ff5fe0" stroke-width="2"/>
+    <path d="M6 196 L100 60 L194 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
+    <path d="M50 152 L150 152" stroke="#8f9aef" stroke-width="1.5"/>
+    <circle cx="72" cy="128" r="17" fill="#e91ec4"/>
+    <rect x="112" y="104" width="24" height="24" fill="#9b1fd6" stroke="#ff5fe0" stroke-width="2"/>
   </svg>`;
 }
 function stillEdge() {
   return `<svg viewBox="0 0 200 200" aria-hidden="true">
     <rect width="200" height="200" fill="#000"/>
-    <path d="M70 190 L130 60 L200 100 L200 190 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-    <path d="M115 140 L185 145" stroke="#8f9aef" stroke-width="1.5"/>
-    <circle cx="88" cy="150" r="20" fill="#e91ec4"/>
+    <path d="M64 196 L128 60 L200 96 L200 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
+    <path d="M108 150 L182 154" stroke="#8f9aef" stroke-width="1.5"/>
+    <circle cx="84" cy="162" r="17" fill="#e91ec4"/>
   </svg>`;
 }
 function stillTunnel() {
   return `<svg viewBox="0 0 200 200" aria-hidden="true">
     <rect width="200" height="200" fill="#2b0a3d"/>
-    <path d="M0 0 L100 40 L200 0 Z" fill="#9b1fd6" opacity="0.5"/>
-    <path d="M0 200 L100 130 L200 200 Z" fill="#3a2f7b"/>
-    <path d="M20 170 L100 100 L180 170" fill="none" stroke="#39f4ff" stroke-width="10" stroke-linecap="round"/>
-    <path d="M45 140 L100 100 L155 140" fill="none" stroke="#39f4ff" stroke-width="10" stroke-linecap="round"/>
-    <circle cx="100" cy="105" r="18" fill="#e91ec4"/>
+    <path d="M0 0 L100 46 L200 0 Z" fill="#9b1fd6" opacity="0.5"/>
+    <path d="M0 200 L100 148 L200 200 Z" fill="#3a2f7b"/>
+    <path d="M18 178 L100 116 L182 178" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
+    <path d="M42 152 L100 116 L158 152" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="100" cy="150" r="16" fill="#e91ec4"/>
   </svg>`;
 }
 
@@ -133,9 +140,16 @@ class BallRunUI {
     this._onVisibilityChange = () => this.handleVisibilityChange();
     this._onResize = () => this.handleResize();
 
+    // Lock page scroll for the whole time this route is mounted (item 3):
+    // .br-root is fixed full-viewport, but an unlocked body can still
+    // rubber-band/scroll on iOS Safari on touch drag. Restored in destroy().
+    this._prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     this.mount();
     document.addEventListener('visibilitychange', this._onVisibilityChange);
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('orientationchange', this._onResize);
   }
 
   // --- DOM construction -------------------------------------------------
@@ -446,6 +460,8 @@ class BallRunUI {
     this.teardownRun();
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('orientationchange', this._onResize);
+    document.body.style.overflow = this._prevBodyOverflow;
     this.container.innerHTML = '';
   }
 

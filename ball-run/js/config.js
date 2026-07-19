@@ -27,43 +27,56 @@ export const CURVE_LATERAL_PER_SEGMENT = { easy: 0.16, medium: 0.24, hard: 0.34 
 // Obstacles.
 export const OBSTACLE_MIN_GAP = 2; // ball-widths of guaranteed clear gap
 export const OBSTACLE_CUBE_SIZE = TILE_SIZE * 0.8;
+// Safety margin applied to the theoretical max lateral reach when chaining
+// gap centers between consecutive obstacle rows (brief section 6, item 4):
+// lateral velocity ramps up rather than snapping to max, so the true reachable
+// distance in one row-to-row interval is less than max-speed * time.
+export const OBSTACLE_REACH_SAFETY_FACTOR = 0.6;
+// Forced clean (obstacle-free) segments after an obstacle event ends, so
+// consecutive obstacle events read as a slalom rather than a solid wall.
+export const OBSTACLE_MIN_STRAIGHT_AFTER = 2;
 
 // Speedpoint tunnels.
 export const TUNNEL_SEGMENTS = 8;
 export const TUNNEL_MIN_STRAIGHT_AFTER = 3; // segments of guaranteed straight after a tunnel exit
 
 // Difficulty presets. Each controls the speed model and generation weights.
+// Speed constants retuned per Matt's first-playthrough feedback (item 2): the
+// old base/ramp/tier/max were far too slow to read as a "runner". Scaled ~2.5x
+// across the board, tunnelSpacingMeters scaled up to match so the first
+// speedpoint still lands at the same felt pace (see commit message for the
+// full old -> new list).
 export const DIFFICULTIES = {
   easy: {
     label: 'Easy',
-    baseSpeed: 6,
-    speedRampPerSec: 0.045,
-    tierBonus: 1.6,
-    maxSpeed: 16,
-    tunnelSpacingMeters: 90,
-    weights: { straight: 0.55, curve: 0.16, narrow: 0.12, obstacle: 0.14, tunnel: 0.03 },
+    baseSpeed: 15,
+    speedRampPerSec: 0.1125,
+    tierBonus: 4.0,
+    maxSpeed: 40,
+    tunnelSpacingMeters: 280,
+    weights: { straight: 0.58, curve: 0.16, narrow: 0.12, obstacle: 0.14 },
     obstacleRowsPerEvent: [1, 1],
     curveArcChance: 0.5, // of a 'curve' pick, chance it's a full multi-segment arc vs a short one
   },
   medium: {
     label: 'Medium',
-    baseSpeed: 8,
-    speedRampPerSec: 0.07,
-    tierBonus: 2.1,
-    maxSpeed: 22,
-    tunnelSpacingMeters: 75,
-    weights: { straight: 0.4, curve: 0.22, narrow: 0.16, obstacle: 0.18, tunnel: 0.04 },
+    baseSpeed: 20,
+    speedRampPerSec: 0.175,
+    tierBonus: 5.25,
+    maxSpeed: 55,
+    tunnelSpacingMeters: 230,
+    weights: { straight: 0.44, curve: 0.22, narrow: 0.16, obstacle: 0.18 },
     obstacleRowsPerEvent: [1, 2],
     curveArcChance: 0.65,
   },
   hard: {
     label: 'Hard',
-    baseSpeed: 10,
-    speedRampPerSec: 0.1,
-    tierBonus: 2.6,
-    maxSpeed: 30,
-    tunnelSpacingMeters: 60,
-    weights: { straight: 0.28, curve: 0.28, narrow: 0.2, obstacle: 0.2, tunnel: 0.04 },
+    baseSpeed: 25,
+    speedRampPerSec: 0.25,
+    tierBonus: 6.5,
+    maxSpeed: 75,
+    tunnelSpacingMeters: 185,
+    weights: { straight: 0.32, curve: 0.28, narrow: 0.2, obstacle: 0.2 },
     obstacleRowsPerEvent: [2, 3],
     curveArcChance: 0.8,
   },
@@ -73,16 +86,21 @@ export const DEFAULT_DIFFICULTY = 'medium';
 // Lateral control (brief section 4). A full comfortable thumb swipe (~40% of
 // screen width) should traverse the full track width. Exposed here so it's
 // easy to retune from one place; input.js reads it, doesn't own it.
+// Verified from scratch after the item-1 sign fix (BASE_TRACK_WIDTH * BALL_DIAMETER
+// world units of travel over a 0.4 normalized swipe): 5 / 0.4 = 12.5, unchanged.
 export const DRAG_SENSITIVITY = 12.5; // world units of lateral offset per 1.0 of normalized (screen-width-relative) drag
-export const LATERAL_MAX_SPEED_BASE = 6; // world units/sec at base forward speed
+export const LATERAL_MAX_SPEED_BASE = 15; // world units/sec at base forward speed
 export const LATERAL_SPEED_SCALE_WITH_FORWARD = 0.5; // fraction of forward-speed growth that adds to lateral max speed
 export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its target (1/sec)
 
-// Camera.
+// Camera. Height/back/look-ahead retuned for item 3 (shorter phone canvas):
+// the ball now sits in the lower third of the frame with a generous forward
+// view, instead of being pinned near the bottom edge.
 export const CAMERA_LAG = 0.12; // lerp factor per frame toward the ball's lateral position
-export const CAMERA_HEIGHT = 3.2;
-export const CAMERA_BACK = 6.5;
-export const CAMERA_LOOK_AHEAD = 8;
+export const CAMERA_HEIGHT = 3.6;
+export const CAMERA_BACK = 7.5;
+export const CAMERA_LOOK_AHEAD = 10;
+export const CAMERA_LOOK_HEIGHT_FRAC = 0.42; // fraction of CAMERA_HEIGHT the look-at target sits at (lower = steeper downward pitch)
 export const CAMERA_BASE_FOV = 62;
 export const CAMERA_MAX_FOV_KICK = 7; // added at max speed
 

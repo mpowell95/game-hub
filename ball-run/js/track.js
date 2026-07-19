@@ -10,7 +10,8 @@
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BASE_TRACK_WIDTH, MIN_TRACK_WIDTH,
   NARROW_STEP, CURVE_SEGMENTS, CURVE_LATERAL_PER_SEGMENT, OBSTACLE_MIN_GAP, BALL_DIAMETER,
-  TUNNEL_SEGMENTS, TUNNEL_MIN_STRAIGHT_AFTER, difficultyConfig,
+  OBSTACLE_REACH_SAFETY_FACTOR, OBSTACLE_MIN_STRAIGHT_AFTER, LATERAL_MAX_SPEED_BASE,
+  LATERAL_SPEED_SCALE_WITH_FORWARD, TUNNEL_SEGMENTS, TUNNEL_MIN_STRAIGHT_AFTER, difficultyConfig,
 } from './config.js';
 
 /** Deterministic RNG (mulberry32), kept behind one function so runs could be seeded later. */
@@ -40,13 +41,27 @@ export class Track {
     this.segments = []; // ordered by index, contiguous z coverage from segments[0].z0
     this.nextIndex = 0;
     this.frontZ = 0; // z up to which segments have been generated
-    this.lastTunnelZ = -this.cfg.tunnelSpacingMeters; // allow an early tunnel
+    // First tunnel is due one full cadence interval into the run (brief section
+    // 6: "spawn cadence: roughly every N meters"); tunnelSpacingMeters IS that
+    // interval, for the first tunnel and every one after.
+    this.lastTunnelZ = 0;
     this.straightsOwed = 6; // guarantee a safe, obstacle-free start (also reused after tunnels)
     this.lastWasTunnel = false;
     this.pendingObstacleGapCenter = null; // previous obstacle row's gap center, for reachability chaining
 
     this._cx = 0; // running centerline X as segments are appended
     this._width = BASE_TRACK_WIDTH * BALL_DIAMETER;
+
+    // Reachability check (brief section 6, item 4): the gap in row N+1 must be
+    // laterally reachable from row N's gap at max lateral speed, given forward
+    // speed. Rows within an event are one SEGMENT_LENGTH apart; bound the
+    // reachable distance using cfg.maxSpeed (the worst case, since actual speed
+    // is never higher), so the guarantee holds for the whole run, not just at
+    // the current instant. A damping ramp-up means the ball never truly holds
+    // max lateral speed for the whole interval, hence the safety factor.
+    const lateralMaxAtCap = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.cfg.maxSpeed / this.cfg.baseSpeed - 1));
+    const timeBetweenRows = SEGMENT_LENGTH / this.cfg.maxSpeed;
+    this.reachBW = Math.max(OBSTACLE_MIN_GAP, (lateralMaxAtCap * timeBetweenRows * OBSTACLE_REACH_SAFETY_FACTOR) / BALL_DIAMETER);
 
     this.ensureAhead(SEGMENTS_AHEAD * SEGMENT_LENGTH);
   }
@@ -69,12 +84,14 @@ export class Track {
     const cfg = this.cfg;
     let type = pickWeighted(this.rng, cfg.weights);
 
-    // Global sanity rules (brief section 6): never two tunnels back-to-back,
-    // always a straight beat right after a tunnel exit, and tunnels only spawn
-    // once their meter cadence has elapsed.
-    if (type === 'tunnel' && (this.lastWasTunnel || this.frontZ - this.lastTunnelZ < cfg.tunnelSpacingMeters)) {
-      type = 'straight';
-    }
+    // Tunnels are on a deterministic meter cadence (brief section 6: "spawn
+    // cadence: roughly every N meters"), not a rare weighted-random pick -
+    // otherwise the actual time-to-first-tunnel is dominated by RNG luck
+    // rather than tunnelSpacingMeters. Force one in as soon as it's due;
+    // global sanity rules still apply (never two back-to-back, no tunnel
+    // during the guaranteed-straight buffer at run start or after a tunnel).
+    const tunnelDue = !this.lastWasTunnel && this.frontZ - this.lastTunnelZ >= cfg.tunnelSpacingMeters;
+    if (tunnelDue) type = 'tunnel';
     if (this.straightsOwed > 0) { type = 'straight'; this.straightsOwed--; }
 
     if (type === 'straight') this.emitStraight();
@@ -151,9 +168,10 @@ export class Track {
       let gapCenter;
       if (prevGapCenter !== null) {
         // Reachability: clamp this row's gap center to what's laterally reachable
-        // from the previous row's gap at max lateral speed, given forward speed.
-        // A generous +/-1.5 ball-widths per row keeps every spawn winnable.
-        const reach = 1.5;
+        // from the previous row's gap (this.reachBW, computed once in the
+        // constructor from the difficulty's max forward/lateral speeds - see
+        // brief section 6, item 4) so every spawn stays winnable.
+        const reach = this.reachBW;
         const lo = Math.max(-maxGapCenterOffset, prevGapCenter - reach);
         const hi = Math.min(maxGapCenterOffset, prevGapCenter + reach);
         gapCenter = lo + this.rng() * Math.max(0, hi - lo);
@@ -167,6 +185,9 @@ export class Track {
       prevGapCenter = gapCenter;
     }
     this.pendingObstacleGapCenter = prevGapCenter;
+    // Force a clean stretch after the event so consecutive obstacle events
+    // don't chain into what reads as a solid wall (Matt's verify-item A).
+    this.straightsOwed = Math.max(this.straightsOwed, OBSTACLE_MIN_STRAIGHT_AFTER);
   }
 
   /** Cubes fill the track minus a `gapBW`-wide safe gap centered at `gapCenter` (ball-widths, relative to centerline). */
@@ -175,9 +196,12 @@ export class Track {
     const gapLo = gapCenter - gapBW / 2;
     const gapHi = gapCenter + gapBW / 2;
     const cubes = [];
-    // Left fill (from left edge to the gap), right fill (from the gap to right edge),
-    // one cube per ball-width, clamped so cubes never straddle the safe gap.
-    for (let x = -half + 0.5; x < gapLo; x += 1) cubes.push({ lateral: x });
+    // Anchor each fill's cube grid AT the gap edge (not at the track edge) so
+    // no cube can ever encroach into the safety gap: a cube grid anchored at
+    // the track edge instead could land its nearest-to-gap cube anywhere up
+    // to just short of gapLo/gapHi, shrinking the true passable width below
+    // the configured OBSTACLE_MIN_GAP (found via a generated-track audit).
+    for (let x = gapLo - 0.5; x > -half; x -= 1) cubes.push({ lateral: x });
     for (let x = gapHi + 0.5; x < half; x += 1) cubes.push({ lateral: x });
     return cubes.map((c) => ({ lateral: c.lateral * BALL_DIAMETER }));
   }
