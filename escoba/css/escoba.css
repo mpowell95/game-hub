@@ -629,3 +629,58 @@
   .eb-broom, .eb-broom.is-sweeping { display: none; animation: none; }
   .eb-confetti { display: none; }
 }
+
+/* Multiplayer (M1 pilot). Entry buttons sit below the ordinary solo Start
+   button; the lobby screens replace the setup panel's content entirely while
+   active (renderSetup() branches on _screen), so they inherit .eb-panel's
+   flow layout -- only the reserved message line and the persistent MP status
+   in .eb-mat-announce need fixed geometry (Invariant 3). */
+.eb-mp-entry {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--eb-surface-2);
+}
+.eb-mp-lobby { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.eb-mp-lobby .eb-label { text-align: center; }
+
+/* The code display: the one selection/attention treatment in this screen --
+   #ffce3a (--eb-attn) PLUS a distinct dashed border, never color alone. */
+.eb-mp-code {
+  align-self: center;
+  font-size: clamp(44px, 14vw, 56px); line-height: 1; font-weight: 900;
+  letter-spacing: 0.18em; padding: 14px 20px 10px; color: var(--eb-ink);
+  border: 3px dashed var(--eb-attn); border-radius: 14px;
+  background: rgba(255, 206, 58, 0.12);
+}
+.eb-mp-code.eb-mp-code-empty { color: var(--eb-muted); border-color: var(--eb-surface-2); background: none; }
+
+.eb-mp-oppslot {
+  align-self: center; display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 16px; border-radius: 12px; background: var(--eb-surface-2);
+  font-weight: 700;
+}
+.eb-mp-oppslot-empty { color: var(--eb-muted); font-size: 1.1rem; }
+.eb-mp-oppname { color: var(--eb-ink); }
+
+.eb-mp-code-input {
+  align-self: center; width: 100%; max-width: 240px;
+  font: inherit; font-size: 1.6rem; font-weight: 900; text-align: center; letter-spacing: 0.3em;
+  text-transform: uppercase; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--eb-surface-2); background: var(--eb-surface); color: var(--eb-ink);
+}
+.eb-mp-code-input:focus { outline: 2px solid var(--eb-accent); outline-offset: -1px; }
+
+/* Reserved 1-line status/error slot (mirrors the hub's .hub-fr-msg pattern):
+   always present so its text appearing/disappearing never shifts the Join
+   button below it. */
+.eb-mp-msg {
+  margin: 0; min-height: 1.1em; text-align: center; font-size: 0.85rem; font-weight: 700; color: var(--eb-bad);
+}
+.eb-mp-msg-action {
+  appearance: none; border: none; background: none; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* Persistent MP status reuses the ordinary announce pill (Invariant 3: no new
+   row) but stays lit until explicitly cleared instead of auto-fading, and
+   reads as a status rather than a move description. */
+.eb-mat-announce.is-mp-status { background: rgba(74, 50, 0, 0.92); border: 1.5px solid var(--eb-attn); }

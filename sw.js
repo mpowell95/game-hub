@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v144';
+const CACHE = 'game-hub-v145';
 
 const ASSETS = [
   './',
@@ -23,6 +23,7 @@ const ASSETS = [
   './js/stats-net.js',
   './js/players-agg.js',
   './js/leaderboard-ui.js',
+  './js/net.js',
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
@@ -76,6 +77,7 @@ const ASSETS = [
   './escoba/js/deck.js',
   './escoba/js/cards.js',
   './escoba/js/game.js',
+  './escoba/js/hash.js',
   './escoba/js/ai.js',
   './escoba/js/ui.js',
   './escoba/img/broom-sprite.webp',

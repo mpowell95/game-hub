@@ -15,8 +15,10 @@ import { Game, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
 import { captureOptions, sumValues, cardLabel } from './deck.js';
 import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
+import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { loadStats, recordEscoba } from '../../js/game-stats.js';
+import { loadStats, recordEscoba, deviceId } from '../../js/game-stats.js';
+import * as net from '../../js/net.js';
 
 const AI_NAMES = ['Lucía', 'Diego', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
@@ -42,6 +44,10 @@ const BROOM_MS = 1500, BROOM_TO_FLYOUT_MS = 480, BROOM_TO_BANNER_MS = 720;
 const STORE_SETTINGS = 'escoba-settings';
 const STORE_SAVE = 'escoba-save';
 const SAVE_SCHEMA_V = 1;
+const MP_CODE_LEN = 4;
+const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
+const MP_STALE_MS = 60 * 1000;
+const MP_RECOVERY_MAX_ATTEMPTS = 3;
 const BROOM_URL = new URL('../img/broom-sprite.webp', import.meta.url).href;
 const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
@@ -80,6 +86,14 @@ class EscobaUI {
     this._matchEnded = false;
     this._matchEscobas = 0;
 
+    // Multiplayer (M1 pilot). null in solo -- every MP code path is gated
+    // behind this single field so solo play is byte-identical to before.
+    this.mp = null;
+    this._screen = 'setup';      // 'setup' | 'host-lobby' | 'join-lobby'
+    this._mpBusy = false;
+    this._mpError = '';
+    this._mpStatusMsg = '';
+
     this._setup = this._loadSetup();
 
     const ui = this;
@@ -89,11 +103,13 @@ class EscobaUI {
     };
 
     this._onClick = (e) => this.onClick(e);
+    this._onInput = (e) => this.onInput(e);
 
     ensureStylesheet();
     preloadDeck();
     { const img = new Image(); img.src = BROOM_URL; }   // warm the sweep sprite so the first escoba doesn't flash
     this.mount();
+    this._tryRestoreMP();
   }
 
   // --- settings persistence -------------------------------------------------
@@ -152,10 +168,13 @@ class EscobaUI {
   _saveSnapshot() {
     if (!this.game) return;
     try {
-      saveJSON(STORE_SAVE, {
+      const payload = {
         v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobas, assist: this._matchAssist,
         snap: this.game.snapshot(),
-      });
+      };
+      // Additive MP field: absent in solo, so the solo save shape is unchanged.
+      if (this.mp) payload.mp = { code: this.mp.code, role: this.mp.role, seq: this.mp.appliedSeq, at: Date.now() };
+      saveJSON(STORE_SAVE, payload);
     } catch { /* private mode / quota */ }
   }
 
@@ -213,6 +232,7 @@ class EscobaUI {
 
     this.el.broom.style.backgroundImage = `url("${BROOM_URL}")`;
     this.root.addEventListener('click', this._onClick);
+    this.root.addEventListener('input', this._onInput);
     this._tableCells = new Map();   // card.id -> .eb-table-cell, kept across renders for the FLIP-ish transition
     if (typeof ResizeObserver !== 'undefined') {
       this._matResizeObserver = new ResizeObserver(() => this._relayoutTable());
@@ -240,12 +260,22 @@ class EscobaUI {
     this._resolveModal();
     this._selHand = null; this._selTable.clear(); this.activePlayerId = null;
     this._chartView = false; this._matchEnded = false; this._closeMenu();
+    // A lobby-only subscription (no match started yet) that wasn't already
+    // torn down by its own cancel/leave path -- disconnect it defensively.
+    // A live match's own room stays connected until an explicit leave.
+    if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
+    this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = '';
+    this.mp = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
   }
 
   renderSetup() {
+    if (this._screen === 'host-lobby' || this._screen === 'join-lobby') {
+      this.el.setup.innerHTML = `<div class="eb-panel">${this._renderMpLobby()}</div>`;
+      return;
+    }
     const s = this._setup;
     const rec = (loadStats().games || {}).escoba;
     const played = rec && rec.total ? rec.total.played | 0 : 0;
@@ -304,7 +334,62 @@ class EscobaUI {
         </div>
         <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
         <button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>
+        <div class="eb-mp-entry">
+          <button class="eb-btn eb-btn-ghost" data-action="mp-host">Play online</button>
+          <button class="eb-btn eb-btn-ghost" data-action="mp-join-open">Join with code</button>
+        </div>
       </div>`;
+  }
+
+  // --- multiplayer lobby (M1 pilot) ------------------------------------------
+
+  _renderMpLobby() {
+    const back = `<button class="eb-btn eb-btn-ghost" data-action="mp-cancel">Back</button>`;
+    if (this._screen === 'host-lobby') {
+      const room = this._mpLobbyRoom;
+      const guest = room && room.guest;
+      const code = this._mpPendingCode;
+      const msg = this._mpError || (this._mpBusy ? 'Creating room…' : '');
+      return `<div class="eb-mp-lobby">
+        <span class="eb-label">Room code</span>
+        ${code ? `<div class="eb-mp-code">${esc(code)}</div>` : `<div class="eb-mp-code eb-mp-code-empty">····</div>`}
+        <span class="eb-label">Opponent</span>
+        <div class="eb-mp-oppslot">${guest
+          ? `<span class="eb-av">${guest.avatar}</span><span class="eb-mp-oppname">${esc(guest.name)}</span>`
+          : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
+        <p class="eb-mp-msg" data-role="mp-msg">${esc(msg)}</p>
+        <button class="eb-btn eb-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>Start</button>
+        ${back}
+      </div>`;
+    }
+    if (this._mpJoinedCode) {
+      // Already joined -- waiting on the host to tap Start. Same shape as the
+      // host lobby's opponent slot, mirrored (the host is who we're waiting on).
+      const room = this._mpLobbyRoom;
+      const host = room && room.host;
+      return `<div class="eb-mp-lobby">
+        <span class="eb-label">Room code</span>
+        <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
+        <span class="eb-label">Host</span>
+        <div class="eb-mp-oppslot">${host
+          ? `<span class="eb-av">${host.avatar}</span><span class="eb-mp-oppname">${esc(host.name)}</span>`
+          : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
+        <p class="eb-mp-msg" data-role="mp-msg">Waiting for host</p>
+        ${back}
+      </div>`;
+    }
+    const err = this._mpError;
+    const msg = err === 'version'
+      ? `<button class="eb-mp-msg eb-mp-msg-action" data-action="mp-update-required">Update required</button>`
+      : `<p class="eb-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+    return `<div class="eb-mp-lobby">
+      <span class="eb-label">Enter code</span>
+      <input class="eb-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+      ${msg}
+      <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">Join</button>
+      ${back}
+    </div>`;
   }
 
   syncSetupInputs() {
@@ -486,6 +571,13 @@ class EscobaUI {
       case 'roundStart':
         this.activePlayerId = null;
         this.render();
+        // Host publishes the round it just built (deck order + dealer) before
+        // dealing, so the guest can preset its own engine to match. Read right
+        // here: lastDeckOrder was just set by playRound(), before any await.
+        if (this.mp && this.mp.role === 'host') {
+          try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealer); }
+          catch { this._setMpStatus('Connection error'); }
+        }
         break;
       case 'deal':
         this.render();
@@ -525,6 +617,7 @@ class EscobaUI {
         await this.animatePlay(p, payload);
         this.render();
         this._saveSnapshot();
+        if (this.mp) await this._mpAfterPlay(p, payload);
         if (payload.escoba) await this.showBanner('¡ESCOBA!', `${p.name} clears the table`);
         break;
       case 'sweepLeftovers':
@@ -535,21 +628,34 @@ class EscobaUI {
         break;
       case 'roundScored':
         this._chartView = false;
-        this._matchEscobas += this.game.byId(0).escobas;
+        this._matchEscobas += this._human().escobas;
         if (!this.game.winner) this._saveSnapshot();   // a won boundary isn't resumable; matchEnd clears it
         await this.showRoundModal();
+        // Guest only: the next round's deck can't be dealt locally until the
+        // host has shuffled it and published it (see the 'roundStart' hook
+        // above). Wait here -- between the modal closing and the engine's
+        // own playMatch() loop calling playRound() again -- so a guest who
+        // taps "Next round" before the host does simply waits in place.
+        if (this.mp && this.mp.role === 'guest' && !this.game.winner) await this._mpAwaitNextRound();
         break;
       case 'matchEnd':
         this._matchEnded = true;
         this._clearSave();
         this._commitStats();
         this._chartView = false;
+        if (this.mp && this.mp.role === 'host') {
+          try { await net.writeResult(this.mp.code, { winnerId: this.game.winner.id, standings: this.game.standings.map((p) => ({ id: p.id, totalScore: p.totalScore })) }); }
+          catch { /* best-effort: the match already concluded locally either way */ }
+        }
         this.showMatchModal();
         break;
     }
   }
 
-  beat(ms) { return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, ms); }); }
+  beat(ms) {
+    const scaled = this.mp && this.mp.replayMode ? ms * 0.25 : ms;
+    return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, scaled); });
+  }
 
   /** Show the played card landing on the table, then -- for a capture --
    *  hold it and what it captures highlighted together before anything
@@ -636,17 +742,18 @@ class EscobaUI {
         <span class="eb-banner-sub">${esc(sub)}</span>
       </div>`;
       this.el.banner.hidden = false;
+      const scaled = this.mp && this.mp.replayMode ? BEAT_ESCOBA * 0.25 : BEAT_ESCOBA;
       this._bannerTimer = setTimeout(() => {
         if (this.el && this.el.banner) this.el.banner.hidden = true;
         resolve();
-      }, BEAT_ESCOBA);
+      }, scaled);
     });
   }
 
   _commitStats() {
     if (this._statsCommitted) return;
     this._statsCommitted = true;
-    const human = this.game.byId(0);
+    const human = this._human();
     const won = !!(this.game.winner && this.game.winner.id === human.id);
     const opp0 = this.game.players.find((x) => !x.isHuman);
     const difficulty = (opp0 && opp0.difficulty) || 'normal';
@@ -655,7 +762,11 @@ class EscobaUI {
 
   // --- rendering ------------------------------------------------------------
 
-  _human() { return this.game.byId(0); }
+  /** The local human's seat: always 0 in solo. In MP, the host is seat 0 and
+   *  the guest is seat 1 -- every "self" lookup must go through this rather
+   *  than assume seat 0, since a guest's local human sits at seat 1. */
+  _localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  _human() { return this.game.byId(this._localSeat()); }
 
   render() {
     if (this._dead || !this.game || this.el.game.hidden) return;
@@ -903,8 +1014,8 @@ class EscobaUI {
 
   renderSelf() {
     const h = this._human();
-    const active = !!this._pending || this.activePlayerId === 0;
-    const dealer = this.game.dealer === 0;
+    const active = !!this._pending || this.activePlayerId === this._localSeat();
+    const dealer = this.game.dealer === this._localSeat();
     return `<div class="eb-self-chip ${active ? 'is-active' : ''}">
       <div class="eb-self-top">
         <span class="eb-self-av">${h.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
@@ -1150,7 +1261,7 @@ class EscobaUI {
 
   showMatchModal() {
     this._renderMatchModal();
-    const humanWon = this.game.winner && this.game.winner.id === 0;
+    const humanWon = this.game.winner && this.game.winner.id === this._localSeat();
     if (humanWon && !this._celebrated) { this._celebrate(); this._celebrated = true; }
   }
 
@@ -1233,12 +1344,31 @@ class EscobaUI {
    *  the fixed game geometry (Task 5). */
   announce(msg) {
     if (this._dead || !this.el || !this.el.announce) return;
+    if (this._mpStatusMsg) return;   // a persistent MP status owns the reserved row right now
     this.el.announce.textContent = msg;
     this.el.announce.classList.add('is-in');
     clearTimeout(this._announceTimer);
     this._announceTimer = setTimeout(() => {
       if (this.el && this.el.announce) this.el.announce.classList.remove('is-in');
     }, BEAT_ANNOUNCE);
+  }
+
+  /** Persistent MP status in the same reserved row `announce()` uses (Invariant
+   *  3: no new row, no layout shift) -- "Resyncing" / "Opponent disconnected" /
+   *  "Opponent left" stay lit until explicitly cleared, unlike a transient toast. */
+  _setMpStatus(msg) {
+    this._mpStatusMsg = msg;
+    if (!this.el || !this.el.announce) return;
+    clearTimeout(this._announceTimer);
+    this.el.announce.textContent = msg;
+    this.el.announce.classList.add('is-in', 'is-mp-status');
+  }
+
+  _clearMpStatus() {
+    if (!this._mpStatusMsg) return;
+    this._mpStatusMsg = '';
+    if (!this.el || !this.el.announce) return;
+    this.el.announce.classList.remove('is-mp-status', 'is-in');
   }
 
   /** Confetti burst: a short, self-contained celebration (no libraries). */
@@ -1285,13 +1415,21 @@ class EscobaUI {
       case 'close-howto': this._closeModal(); break;
       case 'start': this.startGame(); break;
       case 'resume-game': this._resumeGame(); break;
+      // multiplayer lobby
+      case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
+      case 'mp-join-open': this.syncSetupInputs(); this._screen = 'join-lobby'; this._mpError = ''; this.renderSetup(); break;
+      case 'mp-join-submit': this._mpJoinSubmit(); break;
+      case 'mp-start': this._mpHostStart(); break;
+      case 'mp-cancel': this._mpCancelLobby(); break;
+      case 'mp-update-required': this._mpForceUpdate(); break;
+      case 'mp-error-ok': this.showSetup(); break;
       // game
       case 'card': this.onCardTap(a.dataset.id); break;
       case 'capture': this._confirmCapture(); break;
       case 'lay': this._confirmLay(); break;
       case 'toggle-chart': this._chartView = !this._chartView; if (this._modalResolve) this._renderRoundModal(); else this._renderMatchModal(); break;
       case 'next-round': this._resolveModal(); break;
-      case 'new-game': this.startGame(); break;
+      case 'new-game': if (this.mp) this._mpLeaveToSetup(); else this.startGame(); break;
       case 'show-results': this.showMatchModal(); break;
       case 'close-match': this._closeModal(); this.render(); break;
       // in-game menu
@@ -1300,6 +1438,17 @@ class EscobaUI {
       case 'menu-newgame': this._menuAction('newgame'); break;
       case 'menu-quit': this._menuAction('quit'); break;
     }
+  }
+
+  /** Delegated `input` listener (mirrors the click delegation above): the
+   *  join-code field auto-uppercases, filters to the code alphabet, and
+   *  submits itself once a full code is typed. */
+  onInput(e) {
+    const el = e.target;
+    if (!(el && el.dataset && el.dataset.role === 'mp-code-input')) return;
+    const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
+    if (clean !== el.value) el.value = clean;
+    if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
   }
 
   // --- in-game menu ---------------------------------------------------------
@@ -1321,15 +1470,18 @@ class EscobaUI {
       <div class="eb-sheet eb-menu-sheet">
         <h2 class="eb-sheet-title">Menu</h2>
         <button class="eb-btn eb-btn-ghost" data-action="open-howto">📖 How to play</button>
-        ${btn('newgame', 'New game (same settings)')}
-        ${btn('quit', 'Quit to setup')}
+        ${btn('newgame', this.mp ? 'Leave match' : 'New game (same settings)')}
+        ${this.mp ? '' : btn('quit', 'Quit to setup')}
         <button class="eb-btn eb-btn-primary" data-action="menu-resume">Resume game</button>
       </div>`;
   }
 
   /** Destructive menu actions confirm-on-second-tap while a match is live.
    *  Both actually clear the resumable save (an explicit in-game abandon),
-   *  unlike leaving via the hub's own back button, which now preserves it. */
+   *  unlike leaving via the hub's own back button, which now preserves it.
+   *  In MP either action leaves the match (there is no "same settings"
+   *  restart -- rehosting isn't automatic), which also ends the room for
+   *  the opponent, unlike backgrounding (destroy()), which preserves it. */
   _menuAction(which) {
     if (this._inProgress() && this._menuConfirm !== which) {
       this._menuConfirm = which;
@@ -1337,8 +1489,420 @@ class EscobaUI {
       return;
     }
     this._closeMenu();
+    if (this.mp) { this._mpLeaveToSetup(); return; }
     if (which === 'newgame') this.startGame();
     else { this._clearSave(); this.showSetup(); }
+  }
+
+  // --- multiplayer (M1 pilot) -------------------------------------------------
+  // Everything below is reached only through this.mp -- null for the entire
+  // life of a solo match, so none of it runs a single line in solo play.
+
+  _myIdentity() {
+    return { name: this._setup.humanName || 'You', avatar: this._setup.humanAvatar, deviceId: deviceId() };
+  }
+
+  _mpNewState(role, code, opp) {
+    return {
+      role, code, localSeat: role === 'host' ? 0 : 1,
+      appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+      pendingResolve: null, pendingSeq: null, pendingHash: null,
+      replayMode: false, recoveryAttempts: 0,
+      opponentLeft: false, lastRoomSnapshot: null,
+      lastRecoveryHandled: null, lastRecoveryApplied: null,
+      awaitingRoundN: null, awaitingRoundResolve: null,
+    };
+  }
+
+  /** Same agent interface as AIAgent/humanAgent: chooseMove() -> a promise the
+   *  engine awaits. Resolved from the network instead of a tap or a heuristic;
+   *  see _mpTryDeliverNextMove/_mpAfterPlay for the send/receive halves. */
+  _makeRemoteAgent() {
+    const ui = this;
+    return {
+      isHuman: false,
+      chooseMove() {
+        return new Promise((resolve) => {
+          ui.mp.pendingResolve = resolve;
+          ui._mpTryDeliverNextMove();   // the move may already be cached from a prior room update
+        });
+      },
+    };
+  }
+
+  /** If the engine is currently awaiting a remote move AND that move's seq is
+   *  already in the cached log, resolve it. A no-op otherwise (the next room
+   *  update, or the next chooseMove() call, will retry) -- this is the whole
+   *  re-entrancy guard: only one seq is ever "wanted" at a time. */
+  _mpTryDeliverNextMove() {
+    const mp = this.mp;
+    if (!mp || !mp.pendingResolve || !mp.movesById) return;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry) return;
+    const resolve = mp.pendingResolve;
+    mp.pendingResolve = null;
+    mp.pendingSeq = seq;
+    mp.pendingHash = entry.h;
+    resolve(entry.move);
+  }
+
+  /** Called after every applied 'play' event in MP. `p` is whoever's move it
+   *  was, by SEAT (see _localSeat/_human): p.isHuman means it was played by
+   *  this device's own local human via the ordinary humanAgent, so it needs
+   *  sending; otherwise it just arrived from the peer via RemoteAgent and
+   *  needs hash verification. */
+  async _mpAfterPlay(p, payload) {
+    const mp = this.mp;
+    if (!mp) return;
+    if (p.isHuman) {
+      const seq = mp.appliedSeq + 1;
+      const move = { cardId: payload.card.id, captureIds: payload.captured.map((c) => c.id) };
+      const hash = stateHash(this.game);
+      try {
+        await net.appendMove(mp.code, mp.role, seq, move, hash);
+        mp.appliedSeq = seq;
+      } catch { this._setMpStatus('Connection error'); }
+      return;
+    }
+    const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
+    mp.pendingSeq = null; mp.pendingHash = null;
+    if (expectedSeq == null) return;
+    const hash = stateHash(this.game);
+    if (hash === expectedHash) {
+      mp.appliedSeq = expectedSeq;
+      mp.recoveryAttempts = 0;
+      if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+      return;
+    }
+    await this._mpHandleMismatch(expectedSeq);
+  }
+
+  /** Desync: guest can only flag it (host is authoritative in M1); host
+   *  rebuilds a snapshot for the guest either way. Three consecutive failed
+   *  attempts end the match rather than looping forever. */
+  async _mpHandleMismatch(seq) {
+    const mp = this.mp;
+    if (!mp) return;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
+    this._setMpStatus('Resyncing');
+    try {
+      if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
+      else await net.requestRecovery(mp.code, seq);
+    } catch { /* the next room update (heartbeat-driven) retries this naturally */ }
+  }
+
+  /** Guest side of a resync: rebuild via the SAME snapshot/fromSnapshot path
+   *  solo resume already uses (Game.fromSnapshot re-enters mid-round from the
+   *  saved checkpoint), just with MP agents instead of a fresh AI. */
+  _mpApplyRecovery(recovery) {
+    const mp = this.mp;
+    if (!mp || this._dead) return;
+    const snap = recovery.state;
+    const agentsById = {};
+    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    if (this.game) this.game.abort();
+    this._resolvePending(null);
+    this.game = Game.fromSnapshot(snap, agentsById);
+    this._bindGame();
+    mp.appliedSeq = recovery.seq;
+    mp.pendingResolve = null; mp.pendingSeq = null; mp.pendingHash = null;
+    mp.replayMode = false; mp.recoveryAttempts = 0;
+    this._clearMpStatus();
+    net.clearRecovery(mp.code).catch(() => {});
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP recovery error', err); });
+  }
+
+  _mpApplyRoundData(round) {
+    this.game.config.presetDeck = round.deck;
+    this.game.dealer = round.dealer;
+  }
+
+  /** Guest-only: block the engine's own round transition until the host's
+   *  freshly-shuffled deck for the next round has arrived (see the
+   *  'roundStart'/'roundScored' hooks in onEvent). */
+  _mpAwaitNextRound() {
+    const mp = this.mp;
+    const targetRound = this.game.round + 1;
+    const room = mp.lastRoomSnapshot;
+    if (room && room.round && room.round.n === targetRound) {
+      this._mpApplyRoundData(room.round);
+      return Promise.resolve();
+    }
+    this._setMpStatus('Waiting for host');
+    return new Promise((resolve) => { mp.awaitingRoundN = targetRound; mp.awaitingRoundResolve = resolve; });
+  }
+
+  async _mpEndDueToError() {
+    if (this._dead || this._matchEnded) return;
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._chartView = false;
+    this._clearSave();
+    const mp = this.mp;
+    this.mp = null;
+    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.role); } catch { /* best-effort */ } }
+    else net.disconnect();
+    this.render();
+    this._renderMpErrorModal();
+  }
+
+  _mpEndDueToOpponentLeft() {
+    if (this._dead || this._matchEnded) return;
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._chartView = false;
+    this._clearSave();
+    net.stopHeartbeat();
+    this.render();
+    this._renderMpOpponentLeftModal();
+  }
+
+  _renderMpErrorModal() {
+    this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
+      <h2 class="eb-sheet-title">Connection error</h2>
+      <p class="eb-sheet-sub">The match could not stay in sync</p>
+      <div class="eb-sheet-actions">
+        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">Back to setup</button>
+      </div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  _renderMpOpponentLeftModal() {
+    const standings = this.game.players.slice().sort((a, b) => b.totalScore - a.totalScore);
+    const rows = standings.map((p, i) => `<li><span class="eb-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('');
+    this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
+      <h2 class="eb-sheet-title">Opponent left</h2>
+      <p class="eb-sheet-sub">Final standings</p>
+      <ol class="eb-standings">${rows}</ol>
+      <div class="eb-sheet-actions">
+        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">Back to setup</button>
+      </div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  /** The one room subscription for this device's whole MP session (lobby
+   *  through match end): net.js allows exactly one at a time, so everything
+   *  routes through this single dispatcher rather than re-subscribing. */
+  _mpRoomCallback(room) {
+    if (this._dead) return;
+    this._mpLobbyRoom = room;
+    if (this.mp) { this._mpOnRoomUpdate(room); return; }
+    if (this._screen === 'host-lobby' || this._screen === 'join-lobby') this.renderSetup();
+    if (this._screen === 'join-lobby' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
+      this._mpGuestStartMatch(room);
+    }
+  }
+
+  async _mpOnRoomUpdate(room) {
+    if (this._dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+
+    // An abandon (leaveRoom) sets status:'ended' with no result; a natural
+    // conclusion (writeResult) sets both together -- result == null is what
+    // tells the two apart, since matchEnd may not have reached this device
+    // yet even when it concluded normally (see the case just below).
+    if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this._matchEnded) {
+      mp.opponentLeft = true;
+      this._setMpStatus('Opponent left');
+      this._mpEndDueToOpponentLeft();
+      return;
+    }
+
+    const oppKey = mp.role === 'host' ? 'guest' : 'host';
+    const opp = room[oppKey];
+    if (opp && !mp.opponentLeft) {
+      const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
+      if (stale && this._mpStatusMsg !== 'Opponent disconnected') this._setMpStatus('Opponent disconnected');
+      else if (!stale && this._mpStatusMsg === 'Opponent disconnected') this._clearMpStatus();
+    }
+
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot()); } catch { /* the requester retries */ }
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this._mpApplyRecovery(room.recovery);
+      }
+    }
+
+    const entries = Object.values(room.moves || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq), 0);
+    if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+    mp.maxKnownSeq = maxSeq;
+    this._mpTryDeliverNextMove();
+
+    if (mp.awaitingRoundResolve && room.round && room.round.n === mp.awaitingRoundN) {
+      this._mpApplyRoundData(room.round);
+      const resolve = mp.awaitingRoundResolve;
+      mp.awaitingRoundN = null; mp.awaitingRoundResolve = null;
+      this._clearMpStatus();
+      resolve();
+    }
+  }
+
+  async _mpHostCreate() {
+    if (this._mpBusy) return;
+    this._mpBusy = true; this._mpError = '';
+    this.renderSetup();
+    const me = this._myIdentity();
+    const config = { targetScore: this._setup.targetScore, deckMode: this._setup.deckMode };
+    const res = await net.createRoom('escoba', config, me);
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'busy' ? 'Could not create a room' : 'Offline';
+      this.renderSetup();
+      return;
+    }
+    this._mpPendingCode = res.code;
+    net.heartbeat(res.code, 'host');
+    await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
+    this.renderSetup();
+  }
+
+  async _mpHostStart() {
+    const room = this._mpLobbyRoom;
+    if (!room || !room.guest || this._mpBusy || this.mp) return;
+    const code = this._mpPendingCode;
+    this.mp = this._mpNewState('host', code, room.guest);
+    if (this.game) this.game.abort();
+    const s = this._setup;
+    const players = [
+      makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
+    ];
+    this._resolvePending(null);
+    this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
+    this._bindGame();
+    this._matchEscobas = 0;
+    this._matchAssist = !!s.assist;
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP match error', err); });
+  }
+
+  async _mpJoinSubmit() {
+    if (this._mpBusy) return;
+    const input = this.el.setup.querySelector('[data-role="mp-code-input"]');
+    const code = ((input && input.value) || '').trim().toUpperCase();
+    if (code.length !== MP_CODE_LEN) return;
+    this._mpBusy = true; this._mpError = '';
+    this.renderSetup();
+    const me = this._myIdentity();
+    const res = await net.joinRoom(code, me);
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'not-found' ? 'Room not found'
+        : res.error === 'ended' ? 'Room ended'
+        : res.error === 'full' ? 'Room full'
+        : res.error === 'version' ? 'version'
+        : 'Offline';
+      this.renderSetup();
+      return;
+    }
+    this._mpPendingCode = code;
+    this._mpJoinedCode = code;
+    net.heartbeat(code, 'guest');
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    this._mpLobbyRoom = res.room;
+    this.renderSetup();
+    // The room may already be active (a fast host, or a rejoin mid-match):
+    // check immediately rather than only on the next listener fire.
+    if (res.room && res.room.status === 'active' && res.room.round) this._mpGuestStartMatch(res.room);
+  }
+
+  _mpGuestStartMatch(room) {
+    if (this.mp || this._dead) return;
+    const code = this._mpJoinedCode;
+    this.mp = this._mpNewState('guest', code, room.host);
+    if (this.game) this.game.abort();
+    const s = this._setup;
+    const cfg = room.config || {};
+    const players = [
+      makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
+      makePlayer({ id: 1, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+    ];
+    this._resolvePending(null);
+    this.game = new Game({ players, config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck } });
+    this.game.dealer = room.round.dealer;
+    this._bindGame();
+    this._matchEscobas = 0;
+    this._matchAssist = !!s.assist;
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP match error', err); });
+  }
+
+  _mpCancelLobby() {
+    const code = this._mpPendingCode;
+    const role = this._screen === 'host-lobby' ? 'host' : 'guest';
+    this._screen = 'setup';
+    this._mpError = ''; this._mpBusy = false;
+    this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
+    if (code) net.leaveRoom(code, role).catch(() => {});
+    else net.disconnect();
+    this.renderSetup();
+  }
+
+  /** The in-game menu's leave action: unlike destroy() (backgrounding, room
+   *  left untouched), this is an explicit abandon -- ends the room too. */
+  _mpLeaveToSetup() {
+    const mp = this.mp;
+    if (this.game) this.game.abort();
+    this.mp = null;
+    this._clearSave();
+    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    else net.disconnect();
+    this.showSetup();
+  }
+
+  async _mpForceUpdate() {
+    try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch { /* ignore */ }
+    try { location.reload(); } catch { /* ignore */ }
+  }
+
+  /** Backgrounding/restore: an MP autosave (see _saveSnapshot) younger than
+   *  30 minutes reattaches to the same room and fast-replays any moves that
+   *  landed while this device was away, instead of offering the ordinary
+   *  solo-shaped "Resume game" button. Runs once, right after mount(). */
+  async _tryRestoreMP() {
+    const save = this._loadSave();
+    if (!save || !save.mp) return;
+    const age = Date.now() - (save.mp.at || 0);
+    if (age > MP_RESTORE_MAX_AGE_MS) {
+      saveJSON(STORE_SAVE, Object.assign({}, save, { mp: null }));
+      return;
+    }
+    const { code, role } = save.mp;
+    if (!code || !role || !save.snap) return;
+    try {
+      if (role === 'guest') {
+        const res = await net.joinRoom(code, this._myIdentity());
+        if (res.error) return;   // room gone/ended/taken: solo-shaped resume is still offered from the same save
+      } else if (!(await net.init())) return;
+    } catch { return; }
+    if (this._dead || this.mp || this.game) return;   // superseded by a faster user action meanwhile
+
+    const agentsById = {};
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    this.mp = this._mpNewState(role, code, null);
+    this.mp.appliedSeq = save.mp.seq | 0;
+    this.game = Game.fromSnapshot(save.snap, agentsById);
+    this._bindGame();
+    this._matchEscobas = save.matchEscobas | 0;
+    this._matchAssist = save.assist !== false;
+    net.heartbeat(code, role);
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    this._enterGameScreen();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP restore error', err); });
   }
 
   // --- teardown -------------------------------------------------------------
@@ -1348,11 +1912,16 @@ class EscobaUI {
     // Deliberately do NOT clear the resumable save here: destroy() runs when
     // the hub tears the module down for ANY reason, including the player
     // just navigating back to the launcher mid-match, which is exactly the
-    // case resume exists for.
+    // case resume exists for. Same reasoning for MP: this is backgrounding,
+    // not an abandon (see _mpLeaveToSetup/_menuAction for the explicit one),
+    // so the room is left untouched -- only the LOCAL listener/heartbeat
+    // stop, per Invariant 2.
     if (this.game) this.game.abort();
     this._resolvePending(null);
     this._resolveModal();
-    if (this.root) this.root.removeEventListener('click', this._onClick);
+    net.disconnect();
+    this.mp = null;
+    if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
     if (this._matResizeObserver) this._matResizeObserver.disconnect();
     if (this._onWinResize) window.removeEventListener('resize', this._onWinResize);
     clearTimeout(this._beatTimer);
@@ -1386,9 +1955,12 @@ export function destroy() {
  *  unmounted (see _saveSnapshot/_resumeGame), so leaving via the hub's back
  *  button never loses progress: the hub never needs its "you'll lose your
  *  progress" confirm for this game. The in-game menu's own "Quit to setup"
- *  still warns and clears the save, since that IS an explicit abandon. */
+ *  still warns and clears the save, since that IS an explicit abandon.
+ *  Multiplayer is the deliberate exception: leaving mid-match is consequential
+ *  for the live opponent (they will see this device go stale) even though the
+ *  match itself is technically resumable, so the hub's confirm IS wanted here. */
 export function isInProgress() {
-  return false;
+  return !!(instance && instance.mp && !instance._matchEnded);
 }
 
 export default { init, destroy, isInProgress };

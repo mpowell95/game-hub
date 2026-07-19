@@ -58,6 +58,7 @@ export class Game {
     this.dealer = Math.floor(rng() * players.length);
     this.table = [];
     this.stock = [];
+    this.lastDeckOrder = null; // ids of the deck order actually used for the current round (shuffled or preset)
     this.lastCapturer = null; // player id of the most recent capture this round
     this.lastCards = false;   // final deal of the round is in play
     this.winner = null;
@@ -87,6 +88,7 @@ export class Game {
     g.stock = snap.stock;
     g.lastCapturer = snap.lastCapturer;
     g.lastCards = snap.lastCards;
+    g.lastDeckOrder = null;
     g.winner = null;
     g.standings = null;
     g.matchEndReason = null;
@@ -177,7 +179,16 @@ export class Game {
     this._midRound = true;
     for (const p of this.players) { p.hand = []; p.captured = []; p.escobas = 0; }
     this.table = [];
-    this.stock = shuffle(makeDeck(this.config.deckMode), this.rng);
+    // Multiplayer lockstep: a host-supplied exact deck order (card ids), used
+    // in place of a local shuffle so both sides deal an identical round. Absent
+    // (the default) -> byte-identical to the original shuffle-only behavior.
+    if (this.config.presetDeck && this.config.presetDeck.length) {
+      const byId = new Map(makeDeck(this.config.deckMode).map((c) => [c.id, c]));
+      this.stock = this.config.presetDeck.map((id) => byId.get(id)).filter(Boolean);
+    } else {
+      this.stock = shuffle(makeDeck(this.config.deckMode), this.rng);
+    }
+    this.lastDeckOrder = this.stock.map((c) => c.id);
     this.lastCapturer = null;
     this.lastCards = false;
 

@@ -8,7 +8,7 @@
 
 import { Game, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
-import { makeDeck, sumValues, captureOptions } from './deck.js';
+import { makeDeck, shuffle, sumValues, captureOptions } from './deck.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.error('FAIL:', msg); } };
@@ -147,6 +147,41 @@ for (let seed = 500; seed < 520; seed++) {
 }
 for (let seed = 600; seed < 610; seed++) {
   await playMatchWithResume(seed, 3, ['normal', 'normal', 'normal'], 31, 'spanish');
+}
+
+// --- preset deck determinism (multiplayer lockstep) -----------------------
+// Two independent Game instances, given the identical deck order and dealer,
+// must deal identical hands/table and record the identical lastDeckOrder --
+// the guarantee the multiplayer pilot's host->guest deck transmission relies on.
+async function playOneRoundWithPreset(seed, deckMode) {
+  const order = shuffle(makeDeck(deckMode), lcg(seed)).map((c) => c.id);
+  const makePlayers = () => [
+    makePlayer({ id: 0, name: 'A', avatar: 'x', agent: new AIAgent({ difficulty: 'normal' }), difficulty: 'normal' }),
+    makePlayer({ id: 1, name: 'B', avatar: 'x', agent: new AIAgent({ difficulty: 'normal' }), difficulty: 'normal' }),
+  ];
+  const g1 = new Game({ players: makePlayers(), config: { targetScore: 21, deckMode, presetDeck: order } });
+  const g2 = new Game({ players: makePlayers(), config: { targetScore: 21, deckMode, presetDeck: order } });
+  g1.dealer = 0; g2.dealer = 0;
+  g1.onEvent = async (type) => { if (type === 'roundScored') g1.abort(); };
+  g2.onEvent = async (type) => { if (type === 'roundScored') g2.abort(); };
+  await g1.playMatch();
+  await g2.playMatch();
+  return { g1, g2 };
+}
+
+for (const deckMode of ['spanish', 'american']) {
+  const { g1, g2 } = await playOneRoundWithPreset(4242, deckMode);
+  ok(g1.lastDeckOrder.join(',') === g2.lastDeckOrder.join(','), `preset deck: identical lastDeckOrder (${deckMode})`);
+  for (let i = 0; i < g1.players.length; i++) {
+    const h1 = g1.players[i].hand.map((c) => c.id).sort().join(',');
+    const h2 = g2.players[i].hand.map((c) => c.id).sort().join(',');
+    ok(h1 === h2, `preset deck: identical hand for player ${i} (${deckMode})`);
+    const c1 = g1.players[i].captured.map((c) => c.id).sort().join(',');
+    const c2 = g2.players[i].captured.map((c) => c.id).sort().join(',');
+    ok(c1 === c2, `preset deck: identical captured pile for player ${i} (${deckMode})`);
+  }
+  ok(g1.table.map((c) => c.id).sort().join(',') === g2.table.map((c) => c.id).sort().join(','),
+    `preset deck: identical table (${deckMode})`);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
