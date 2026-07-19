@@ -121,18 +121,24 @@ function ensureBr(g) {
 /** Fourth-playthrough item 2: Ball Run's recorded metric changed from bestDistance/bestByDiff
  *  (meters) to bestObstacles/bestObstaclesByDiff (obstacle rows passed) - old meter values are NOT
  *  comparable to counts and are never converted. One-time, guarded migration (same fold-once pattern
- *  as seedChinchonExtras, guard `_brMetricMigrated`): if the RAW pre-normalize `br` was still in the
- *  OLD meter shape, it is moved VERBATIM to `brLegacyMeters` (never deleted, per this file's "never
+ *  as seedChinchonExtras, guard `_brMetricMigrated`): if the pre-normalize `br` was still in the OLD
+ *  meter shape, it is moved VERBATIM to `brLegacyMeters` (never deleted, per this file's "never
  *  overwrite, always additive" discipline) and `br` is reset to a fresh, zeroed obstacle-count shape.
- *  Takes `rawGames` (the untouched `games` object as read from storage, before normalize()/ensureBr
- *  filled in default fields) because ensureBr only ever ADDS missing fields and never strips old
- *  ones - checking the already-normalized `st` here would find a hybrid object carrying both old and
- *  new fields and could never tell old data from a fresh install. */
-function migrateBallRunMetric(st, rawGames) {
+ *  Takes `preNormalizeBr` - a snapshot of `br` taken BEFORE normalize()/ensureBr ran (loadStats()
+ *  clones it off `raw` first). Fifth-playthrough fix: this used to be handed `raw.games` itself, but
+ *  normalize() mutates `raw` IN PLACE (`st` and `raw` are the same object reference, never cloned),
+ *  and normalize() already calls ensureBr() on `st.games.ballrun` before this function ever runs - so
+ *  by the time this looked at "raw", ensureBr had already stamped bestObstacles:0 /
+ *  bestObstaclesByDiff:{...} onto the still-old-shaped object. The old-shape CHECK below still passed
+ *  (bestDistance survives ensureBr, which only ever adds missing fields), so runs kept migrating
+ *  correctly, but brLegacyMeters ended up a hybrid of the real old meter fields plus bogus zeroed
+ *  count fields bolted on - not the verbatim old record this function's own contract promises. A
+ *  cloned pre-normalize snapshot, taken before any mutation, is genuinely untouched. */
+function migrateBallRunMetric(st, preNormalizeBr) {
   const g = st.games.ballrun;
   if (g._brMetricMigrated) return false;
   g._brMetricMigrated = true;
-  const rawBr = rawGames && rawGames.ballrun && rawGames.ballrun.br;
+  const rawBr = preNormalizeBr;
   const oldShape = rawBr && typeof rawBr === 'object'
     && (Number.isFinite(rawBr.bestDistance) || (rawBr.bestByDiff && typeof rawBr.bestByDiff === 'object'));
   if (oldShape) {
@@ -213,10 +219,16 @@ function persist(st) { try { localStorage.setItem(STATS_KEY, JSON.stringify(st))
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
   const raw = readJSON(STATS_KEY);
+  // Snapshot `br` BEFORE normalize() runs: normalize() mutates `raw` in place (`st` below is the
+  // same object, never cloned) and calls ensureBr() on it, which would otherwise stamp fresh
+  // bestObstacles/bestObstaclesByDiff fields onto an old-shape `br` before migrateBallRunMetric
+  // gets a chance to look at it. A deep clone taken here is genuinely untouched either way.
+  const rawBr = raw && raw.games && raw.games.ballrun && raw.games.ballrun.br;
+  const preNormalizeBr = rawBr && typeof rawBr === 'object' ? JSON.parse(JSON.stringify(rawBr)) : null;
   const st = normalize(raw);
   let changed = foldAll(st);
   changed = seedChinchonExtras(st) || changed;
-  changed = migrateBallRunMetric(st, raw && raw.games) || changed;
+  changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   if (changed) persist(st);
   return st;

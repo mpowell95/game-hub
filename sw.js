@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v141';
+const CACHE = 'game-hub-v142';
 
 const ASSETS = [
   './',
@@ -184,8 +184,20 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     // Network-first: always try the network so a new deploy is served when
     // online; refresh the cache as we go for offline use.
+    //
+    // Fifth-playthrough fix: `fetch(req)` alone is NOT enough - the browser's own HTTP disk
+    // cache sits between this handler and the wire, and a GET whose response carried a
+    // cacheable Cache-Control/expiry can be satisfied straight out of that disk cache without
+    // ever reaching the server, even though this code path is labeled "network-first". That is
+    // exactly how a stats/leaderboard regression (a full deploy, CACHE bumped, SW re-activated)
+    // still showed some shared js/ files running old code while other, less-recently-fetched
+    // files picked up the new deploy immediately: whichever files happened to already be sitting
+    // in a given device's HTTP cache with unexpired headers kept being served stale by the
+    // browser itself, invisibly to this SW. `cache: 'reload'` on the Request forces the browser
+    // to bypass its HTTP cache and revalidate with the server on every fetch, while still letting
+    // the response populate that HTTP cache normally for next time.
     try {
-      const res = await fetch(req);
+      const res = await fetch(new Request(req, { cache: 'reload' }));
       if (res && res.ok && new URL(req.url).origin === self.location.origin) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));

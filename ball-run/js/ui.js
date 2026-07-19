@@ -9,6 +9,7 @@ import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DIFFICULTIES, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBallRun } from '../../js/game-stats.js';
+import { syncMyStats } from '../../js/stats-net.js';
 
 // Fourth-playthrough item 2: the local per-difficulty personal best changed from distance (meters)
 // to obstacle count. Renamed (not just re-valued) so old meter-based bests under the old
@@ -437,7 +438,19 @@ class BallRunUI {
     if (isNewBest) saveBest(this.difficulty, score);
     // Shared cross-device stats/leaderboard store, additive alongside the local best above (which
     // stays the source of truth for the pre-game/game-over "your best" display).
-    if (!this._resultRecorded) { this._resultRecorded = true; try { recordBallRun(score, this.difficulty); } catch { /* ignore */ } }
+    if (!this._resultRecorded) {
+      this._resultRecorded = true;
+      try { recordBallRun(score, this.difficulty); } catch { /* ignore */ }
+      // Fifth-playthrough fix: previously the only thing that pushed a finished run up to Firebase
+      // was hub.js's own lifecycle sync (tab-hide / returning to the launcher grid). This screen's
+      // own "Back to hub" button only calls this module's showSetup() - it stays mounted inside Ball
+      // Run, it does not leave the module - so a player who finishes a run, sees "Back to hub", and
+      // plays again (or closes the tab) from there could go an entire session without the hub's sync
+      // ever firing for that run. Syncing right here means every finished run reaches the leaderboard
+      // on its own, regardless of what the player clicks next. Best-effort/fire-and-forget like every
+      // other syncMyStats() call site; never blocks the game-over screen from showing.
+      try { syncMyStats(); } catch { /* ignore */ }
+    }
 
     this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? 'You fell off!' : 'Crashed!';
     this.el.goScore.textContent = `${score} obstacles passed`;
