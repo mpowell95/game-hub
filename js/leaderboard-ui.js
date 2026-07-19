@@ -78,10 +78,10 @@ function ballrunRows(list) {
   const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
     .sort(cmp((g) => (g.games.ballrun.br.bestDistance | 0), (g) => g.updatedAt));
   if (!rows.length) return emptyRows('No Ball Run runs recorded yet.');
-  return table(['#', 'Player', 'Best', ...BR_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
+  return table(['#', 'Player', ...BR_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
     const br = g.games.ballrun.br;
     const bd = br.bestByDiff || {};
-    return rowHTML(g, i, [`${br.bestDistance | 0} m`, ...BR_DIFFS.map(([k]) => `${bd[k] | 0} m`), `${br.runs | 0}`]);
+    return rowHTML(g, i, [...BR_DIFFS.map(([k]) => `${bd[k] | 0}`), `${br.runs | 0}`]);
   }));
 }
 
