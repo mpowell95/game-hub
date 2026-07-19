@@ -70,7 +70,6 @@
    solid black "Begin challenge" bar. Once the challenge is won, a completed note shows. */
 .cc-btn-challenge { background: #12151c; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 .cc-btn-challenge:hover:not(:disabled) { background: #000; }
-.cc-locked .cc-section, .cc-locked .cc-stats { opacity: 0.45; pointer-events: none; }
 .cc-challenge-note { margin: 0 0 4px; font-weight: 800; color: #178a7a; font-size: 0.95rem; text-align: center; }
 .cc-btn-ghost { background: var(--cc-surface-2); color: var(--cc-ink); }
 .cc-btn-ghost:hover:not(:disabled) { background: #e1e8f2; }
@@ -99,21 +98,8 @@
 .cc-av-opt:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
 .cc-av-opt.is-sel { border-color: var(--cc-accent); background: rgba(212, 160, 23, 0.14); box-shadow: 0 0 0 2px var(--cc-accent); }
 
-/* Deck chooser: setup row button + popup grid of decks */
-.cc-deck-btn {
-  appearance: none; width: 100%; display: flex; align-items: center; gap: 12px;
-  padding: 10px 12px; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
-  border-radius: 14px; cursor: pointer; text-align: left; transition: background 0.15s, transform 0.15s;
-}
-.cc-deck-btn:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
-.cc-deck-thumb { width: 40px; height: 62px; object-fit: cover; border-radius: 6px; border: 1px solid var(--cc-surface-2); box-shadow: 0 2px 6px rgba(9, 24, 48, 0.18); }
-.cc-deck-meta { display: flex; flex-direction: column; gap: 2px; }
-.cc-deck-name { font-weight: 700; }
-.cc-deck-sub { font-size: 0.72rem; color: var(--cc-muted); }
-.cc-deck-go { margin-left: auto; color: var(--cc-muted); font-size: 1.2rem; }
-
-.cc-deck-sheet { max-width: 460px; }
-.cc-deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+/* Deck chooser: inline grid within the Card deck accordion row (M3a) */
+.cc-deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
 .cc-deck-opt {
   appearance: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 14px 10px 12px; border: 1px solid var(--cc-surface-2); background: var(--cc-surface);
@@ -452,7 +438,6 @@
 
 /* ---- Pass 2: settings panel, stats, steppers, switches ---- */
 .cc-stats { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--cc-accent); text-align: center; }
-.cc-section { display: flex; flex-direction: column; gap: 10px; }
 .cc-player-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cc-av { font-size: 1.5rem; line-height: 1; }
 /* Human (button) and AI (span) avatars share one footprint so the name
@@ -478,6 +463,33 @@
   align-self: flex-start; min-width: 44px; text-align: center; padding: 10px 14px;
   border-radius: 11px; background: var(--cc-surface-2); color: var(--cc-muted); font-weight: 800;
 }
+
+/* --- setup screen accordion (M3a): mirrors Escoba's M1.2 summary card --- */
+.cc-summary-card {
+  display: flex; flex-direction: column; border: 1px solid var(--cc-surface-2); border-radius: 14px; overflow: hidden;
+}
+.cc-summary-item + .cc-summary-item { border-top: 1px solid var(--cc-surface-2); }
+.cc-summary-row {
+  appearance: none; border: 0; background: var(--cc-surface); width: 100%; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 14px; font: inherit; text-align: left;
+}
+.cc-summary-row:hover { background: var(--cc-surface-2); }
+.cc-summary-item.is-open .cc-summary-row { background: var(--cc-surface-2); }
+.cc-summary-label { font-weight: 700; color: var(--cc-ink); font-size: 0.9rem; }
+.cc-summary-value {
+  color: var(--cc-muted); font-weight: 600; font-size: 0.86rem; text-align: right;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%;
+}
+.cc-summary-expand { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--cc-surface-2); }
+
+.cc-diff-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cc-diff-name { font-weight: 600; font-size: 0.85rem; color: var(--cc-ink); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-diff-row .cc-segmented { flex: 0 0 auto; width: 190px; }
+
+/* Challenge mode: the whole accordion (not just flat .cc-section rows,
+   removed in M3a) is grayed out and non-interactive while locked. */
+.cc-locked .cc-summary-card, .cc-locked .cc-stats { opacity: 0.45; pointer-events: none; }
 
 /* --- multiplayer (M2b) ------------------------------------------------------
    Mirrors Escoba's M1/M1.1/M1.2 MP lobby styling 1:1 (same shape, cc- prefix). */
@@ -524,9 +536,6 @@
   text-decoration: underline; text-underline-offset: 2px; color: var(--cc-bad); font: inherit; font-weight: 700;
 }
 
-.cc-rules-toggle { appearance: none; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: space-between; cursor: pointer; width: 100%; }
-.cc-chevron { color: var(--cc-muted); font-weight: 800; }
-.cc-rules { display: flex; flex-direction: column; gap: 8px; padding-top: 2px; }
 .cc-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; }
 .cc-rule-name { font-size: 0.9rem; font-weight: 600; }
 .cc-rule .cc-segmented { padding: 4px; }
@@ -583,31 +592,8 @@
   }
   .cc-chinchon-banner { animation: none; }
   .cc-card.is-new { animation: none; }
-  .cc-nudge { animation: none; }
   .cc-confetti { display: none; }
 }
-
-/* ---- "Try another deck" bouncing nudge ---- */
-.cc-deck-btn-wrap { position: relative; }
-.cc-nudge {
-  position: absolute; top: -13px; right: 10px; z-index: 5; pointer-events: none;
-  background: var(--cc-accent); color: #fff; font-size: 0.72rem; font-weight: 800;
-  padding: 4px 11px; border-radius: 999px; white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(200, 146, 15, 0.45);
-  animation: cc-bounce 1s ease-in-out infinite;
-}
-.cc-nudge::after {
-  content: ''; position: absolute; bottom: -5px; right: 20px;
-  border-left: 6px solid transparent; border-right: 6px solid transparent;
-  border-top: 6px solid var(--cc-accent);
-}
-@keyframes cc-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-/* "View all cards" variant: bounces above the view button (custom decks only) */
-.cc-deck-view-wrap { position: relative; display: block; }
-.cc-nudge-view { top: -15px; right: 50%; transform: translateX(50%); left: auto; }
-.cc-nudge-view::after { right: 50%; transform: translateX(50%); }
-@keyframes cc-bounce-c { 0%, 100% { transform: translateX(50%) translateY(0); } 50% { transform: translateX(50%) translateY(-6px); } }
-.cc-nudge-view { animation-name: cc-bounce-c; }
 
 /* ---- Confetti celebration (Ana Banana chosen) ---- */
 .cc-confetti { position: fixed; inset: 0; z-index: 200; pointer-events: none; overflow: hidden; }

@@ -117,6 +117,7 @@ class ChinchonUI {
     this._modalResolve = null;
     this._placeResolve = null;
     this._chartView = false;
+    this._setupExpanded = null;   // which settings-card row is open (M3a accordion, mirrors Escoba's M1.2), one at a time
     this._sortMode = 'suit';        // 'suit' | 'rank' (cycled by the sort button)
     this._highlightSets = false;    // colour-code melds in the hand
     this._manualOrder = null;       // [cardId] once the player drag-reorders
@@ -200,9 +201,7 @@ class ChinchonUI {
       aiDifficulty: Array.isArray(saved.aiDifficulty) ? saved.aiDifficulty.slice(0, 3)
         : [profileDiff(0), profileDiff(1), profileDiff(2)],
       deck: DECKS_BY_ID[saved.deck] ? saved.deck : DEFAULT_DECK_ID,
-      rulesOpen: false,
       dark: !!saved.dark,
-      deckNudgeSeen: !!saved.deckNudgeSeen,
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
       // Last-used setup-screen mode (M2b). Additive: absent on an older save
       // simply defaults to 'solo', same as today's only screen.
@@ -212,7 +211,7 @@ class ChinchonUI {
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, deckNudgeSeen: s.deckNudgeSeen, config: s.config, mode: s.mode });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode });
   }
 
   /** Apply the dark-mode class to the root (idempotent; safe before mount). */
@@ -277,6 +276,7 @@ class ChinchonUI {
     // A live match's own room stays connected until an explicit leave.
     if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
     this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
+    this._setupExpanded = null;
     this.mp = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
@@ -288,6 +288,128 @@ class ChinchonUI {
   get challengeLive() {
     if (!this.challengeActive) return false;
     try { return !loadChallenge().wins.chinchon; } catch { return true; }
+  }
+
+  /** Shared `.cc-segmented` builder, used throughout the settings card. */
+  _seg(action, value, opts, cls = '', attrs = '') {
+    return `<div class="cc-segmented${cls}"${attrs}>${opts.map(([v, lbl]) =>
+      `<button class="cc-seg ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
+  }
+
+  /** One accordion row of the settings summary card (M3a, mirrors Escoba's
+   *  M1.2 _summaryRow): a label + collapsed value, tap to expand the actual
+   *  controls in place. Only `content` is rendered when open. */
+  _summaryRow(key, label, value, content) {
+    const open = this._setupExpanded === key;
+    return `<div class="cc-summary-item ${open ? 'is-open' : ''}">
+      <button class="cc-summary-row" data-action="toggle-row" data-row="${key}">
+        <span class="cc-summary-label">${label}</span>
+        <span class="cc-summary-value">${value}</span>
+      </button>
+      ${open ? `<div class="cc-summary-expand">${content}</div>` : ''}
+    </div>`;
+  }
+
+  /** The settings summary card (M3a): one collapsed accordion mirroring
+   *  Escoba's M1.2 layout, replacing the old flat Players/Card deck/Game
+   *  Settings sections. Solo and Host-online share this verbatim (Host is
+   *  simply the screen where the host locks in these values pre-room). */
+  _renderSettingsCard(isHost) {
+    const s = this._setup;
+    const c = s.config;
+    const seg = this._seg.bind(this);
+
+    const toggleRow = (field, label) =>
+      `<div class="cc-rule"><span class="cc-rule-name">${label}</span>
+        <button class="cc-switch ${c[field] ? 'is-on' : ''}" data-action="rule-toggle" data-field="${field}" role="switch" aria-checked="${!!c[field]}"><span class="cc-switch-thumb"></span></button></div>`;
+    const stepRow = (field, label, val, suffix = '') =>
+      `<div class="cc-rule"><span class="cc-rule-name">${label}</span>
+        <span class="cc-stepper"><button class="cc-step" data-action="rule-step" data-field="${field}" data-d="-1">−</button>
+        <span class="cc-step-val">${val}${suffix}</span>
+        <button class="cc-step" data-action="rule-step" data-field="${field}" data-d="1">+</button></span></div>`;
+
+    // --- Players row: count + human identity + (solo/join) AI name inputs.
+    // Host online is 2-player only: a fixed, non-interactive "2" instead of
+    // the count selector, and no AI rows (the second seat is the remote
+    // guest, shown once they join the lobby, not here). ---
+    const opponentNames = isHost ? [] : s.aiNames.slice(0, s.count - 1);
+    const playersValue = isHost ? `2 · ${esc(s.humanName)} · online`
+      : esc([s.humanName, ...opponentNames].join(' vs '));
+    const aiNameRows = opponentNames.map((name, i) => `<div class="cc-player-row">
+      <span class="cc-av">${s.aiAvatars[i]}</span>
+      <input class="cc-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="Opponent ${i + 1} name">
+    </div>`).join('');
+    const playersContent = `
+      ${isHost ? `<div class="cc-locked-count" aria-label="2 players (online)">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
+      <div class="cc-player-row">
+        <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
+        <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
+      </div>
+      ${aiNameRows}`;
+
+    // --- Difficulty row: absent in Host mode (no AI opponents to tune). ---
+    const diffLabel = (d) => (DIFFICULTIES.find(([v]) => v === d) || DIFFICULTIES[1])[1];
+    const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
+    const diffContent = opponentNames.map((name, i) => `<div class="cc-diff-row">
+      <span class="cc-diff-name">${esc(name)}</span>
+      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES, ' cc-seg-sm', ` data-i="${i}"`)}
+    </div>`).join('');
+
+    // --- Card deck row: replaces the old floating deck button + gallery
+    // "See all cards" nudge (M3a A3) -- deck choices are inline here, the
+    // gallery is one link away, and nothing is unreachable. ---
+    const deckValue = esc(DECKS_BY_ID[s.deck].name);
+    const deckContent = `<div class="cc-deck-grid">${this._deckOptionsHtml()}</div>`;
+
+    // --- Game settings, regrouped into sensible rows (was one flat
+    // disclosure): victory + limits, closing rules, deck rules, misc. ---
+    const usesPoints = c.victoryCondition !== 'rounds';
+    const usesRounds = c.victoryCondition !== 'points';
+    const victoryLabel = { points: 'By points', rounds: 'By rounds', roundsOrPoints: 'Rounds or points' }[c.victoryCondition];
+    const limitBits = [];
+    if (usesPoints) limitBits.push(`${c.scoreLimit} pts`);
+    if (usesRounds) limitBits.push(`${c.roundsLimit} rounds`);
+    const victoryValue = esc([victoryLabel, ...limitBits].join(' · '));
+    const victoryContent = `
+      <div class="cc-rule"><span class="cc-rule-name">Victory</span>
+        ${seg('rule-victory', c.victoryCondition, [['points', 'Points'], ['rounds', 'Rounds'], ['roundsOrPoints', 'Both']])}</div>
+      ${usesPoints ? stepRow('scoreLimit', 'Score limit', c.scoreLimit) : ''}
+      ${usesRounds ? stepRow('roundsLimit', 'Rounds', c.roundsLimit) : ''}`;
+
+    const placeLabel = { auto: 'Auto placement', manual: 'Manual placement', off: 'No placement' }[c.placeOnEnding];
+    const closingValue = esc(`Close ≤${c.maxClose} · ${c.figuresFaceValue ? 'Own' : 'Flat'} figures · ${placeLabel}`);
+    const closingContent = `
+      <div class="cc-rule"><span class="cc-rule-name">Max points to close</span>
+        ${seg('rule-maxclose', String(c.maxClose), [['3', '3'], ['4', '4'], ['5', '5']])}</div>
+      <div class="cc-rule"><span class="cc-rule-name">Figures value</span>
+        ${seg('rule-figures', c.figuresFaceValue ? 'own' : 'flat', [['flat', 'Flat 10'], ['own', 'Own']])}</div>
+      <div class="cc-rule"><span class="cc-rule-name">Place cards on ending</span>
+        ${seg('rule-place', c.placeOnEnding, [['auto', 'Auto'], ['manual', 'Manual'], ['off', 'Off']])}</div>`;
+
+    const deckRuleBits = [c.extended ? '48-card' : null, c.joker ? 'Joker' : null, c.aceOrosWild ? 'Wild Ace' : null].filter(Boolean);
+    deckRuleBits.push(`${c.maxResets} reset${c.maxResets === 1 ? '' : 's'}`);
+    const deckRulesValue = esc(deckRuleBits.join(' · '));
+    const deckRulesContent = `
+      ${toggleRow('extended', 'Use 8s & 9s (48 cards)')}
+      ${toggleRow('joker', 'Play with Joker')}
+      ${toggleRow('aceOrosWild', 'Ace of Oros is wild')}
+      ${stepRow('maxResets', 'Deck resets', c.maxResets)}`;
+
+    const miscOn = [c.winWithChinchon ? 'Chinchón wins' : null, c.showRemaining ? 'Remaining shown' : null].filter(Boolean);
+    const miscValue = esc(miscOn.length ? miscOn.join(' · ') : 'Off');
+    const miscContent = `
+      ${toggleRow('winWithChinchon', 'Win with chinchón')}
+      ${toggleRow('showRemaining', 'Show remaining cards')}`;
+
+    return `<div class="cc-summary-card">
+      ${this._summaryRow('players', 'Players', playersValue, playersContent)}
+      ${isHost ? '' : this._summaryRow('difficulty', 'Difficulty', diffValue, diffContent)}
+      ${this._summaryRow('deck', 'Card deck', deckValue, deckContent)}
+      ${this._summaryRow('victory', 'Victory', victoryValue, victoryContent)}
+      ${this._summaryRow('closing', 'Closing rules', closingValue, closingContent)}
+      ${this._summaryRow('deckrules', 'Deck rules', deckRulesValue, deckRulesContent)}
+      ${this._summaryRow('rules', 'Other rules', miscValue, miscContent)}
+    </div>`;
   }
 
   renderSetup() {
@@ -305,57 +427,12 @@ class ChinchonUI {
     const live = this.challengeLive;
     const done = this.challengeActive && !live;
     const s = this._setup;
-    const c = s.config;
     const st = this.stats;
     // In challenge mode the setup is fixed and the app runs "straight"; suppress the joke
-    // flavor (Ana Banana title, lifetime stats, deck nudge). Normal play keeps all of it.
+    // flavor (Ana Banana title, lifetime stats). Normal play keeps all of it.
     const statsLine = (!this.challengeActive && st.games > 0)
       ? `<p class="cc-stats">🏆 ${st.games} played · ${st.wins} won · ${st.closes} closes · ${st.chinchons} chinchón</p>`
       : '';
-
-    const seg = (action, value, opts, attrs = '') =>
-      `<div class="cc-segmented" ${attrs}>${opts.map(([v, lbl]) =>
-        `<button class="cc-seg ${v === value ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
-    const toggleRow = (field, label) =>
-      `<div class="cc-rule"><span class="cc-rule-name">${label}</span>
-        <button class="cc-switch ${c[field] ? 'is-on' : ''}" data-action="rule-toggle" data-field="${field}" role="switch" aria-checked="${!!c[field]}"><span class="cc-switch-thumb"></span></button></div>`;
-    const stepRow = (field, label, val, suffix = '') =>
-      `<div class="cc-rule"><span class="cc-rule-name">${label}</span>
-        <span class="cc-stepper"><button class="cc-step" data-action="rule-step" data-field="${field}" data-d="-1">−</button>
-        <span class="cc-step-val">${val}${suffix}</span>
-        <button class="cc-step" data-action="rule-step" data-field="${field}" data-d="1">+</button></span></div>`;
-
-    const aiDiffSeg = (i) => `<div class="cc-segmented cc-seg-sm">${DIFFICULTIES.map(([v, lbl]) =>
-      `<button class="cc-seg ${(s.aiDifficulty[i] || 'normal') === v ? 'is-selected' : ''}" data-action="set-aidiff" data-i="${i}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
-    const aiRows = [];
-    for (let i = 0; i < s.count - 1; i++) {
-      aiRows.push(`<div class="cc-player-row">
-        <span class="cc-av">${s.aiAvatars[i]}</span>
-        <input class="cc-name-input" data-ai-name="${i}" value="${esc(s.aiNames[i])}" maxlength="14" aria-label="Opponent ${i + 1} name">
-        ${aiDiffSeg(i)}
-      </div>`);
-    }
-
-    const usesPoints = c.victoryCondition !== 'rounds';
-    const usesRounds = c.victoryCondition !== 'points';
-
-    const rulesBody = `
-      <div class="cc-rule"><span class="cc-rule-name">Victory</span>
-        ${seg('rule-victory', c.victoryCondition, [['points', 'Points'], ['rounds', 'Rounds'], ['roundsOrPoints', 'Both']])}</div>
-      ${usesPoints ? stepRow('scoreLimit', 'Score limit', c.scoreLimit) : ''}
-      ${usesRounds ? stepRow('roundsLimit', 'Rounds', c.roundsLimit) : ''}
-      <div class="cc-rule"><span class="cc-rule-name">Max points to close</span>
-        ${seg('rule-maxclose', String(c.maxClose), [['3', '3'], ['4', '4'], ['5', '5']])}</div>
-      ${stepRow('maxResets', 'Deck resets', c.maxResets)}
-      <div class="cc-rule"><span class="cc-rule-name">Figures value</span>
-        ${seg('rule-figures', c.figuresFaceValue ? 'own' : 'flat', [['flat', 'Flat 10'], ['own', 'Own']])}</div>
-      <div class="cc-rule"><span class="cc-rule-name">Place cards on ending</span>
-        ${seg('rule-place', c.placeOnEnding, [['auto', 'Auto'], ['manual', 'Manual'], ['off', 'Off']])}</div>
-      ${toggleRow('winWithChinchon', 'Win with chinchón')}
-      ${toggleRow('extended', 'Use 8s & 9s (48 cards)')}
-      ${toggleRow('joker', 'Play with Joker')}
-      ${toggleRow('aceOrosWild', 'Ace of Oros is wild')}
-      ${toggleRow('showRemaining', 'Show remaining cards')}`;
 
     // Themed title: the Ana Banana deck rebrands the whole screen as a joke edition.
     const anita = s.deck === 'anita';
@@ -368,9 +445,7 @@ class ChinchonUI {
     // challenge mode (that hidden feature is solo-only by construction, and
     // MP would only complicate its locked/qualifying setup for no benefit).
     const mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
-    const modeSeg = this.challengeActive ? '' : `<div class="cc-section">
-      ${seg('set-mode', mpMode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']])}
-    </div>`;
+    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']]);
 
     if (mpMode === 'join') {
       this.el.setup.innerHTML = `<div class="cc-card-panel">${statsLine}${modeSeg}${this._renderMpJoinBody()}</div>`;
@@ -378,19 +453,6 @@ class ChinchonUI {
     }
 
     const isHost = mpMode === 'host';
-    // Online is 2-player only: Host mode shows a fixed, non-interactive "2"
-    // instead of the count selector, and no AI opponent rows (the second
-    // seat is the remote guest, shown once they join in the lobby, not here).
-    const playersSection = `<div class="cc-section">
-        <span class="cc-label">Players</span>
-        ${isHost ? `<div class="cc-locked-count" aria-label="2 players (online)">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
-        <div class="cc-player-row">
-          <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
-          <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
-        </div>
-        ${isHost ? '' : aiRows.join('')}
-      </div>`;
-
     const actionBtn = isHost
       ? `<button class="cc-btn cc-btn-ghost" data-action="mp-host">Host game</button>`
       : `<button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? 'Begin challenge' : 'Start game'}</button>`;
@@ -400,29 +462,7 @@ class ChinchonUI {
         ${done ? '<p class="cc-challenge-note">Chinch&oacute;n challenge completed. Play anyways?</p>' : ''}
         ${statsLine}
         ${modeSeg}
-        ${playersSection}
-
-        <div class="cc-section">
-          <span class="cc-label">Card deck</span>
-          <div class="cc-deck-btn-wrap">
-            <button class="cc-deck-btn" data-action="open-deck" title="Choose a deck">
-              <img class="cc-deck-thumb" src="${deckAssetUrl(s.deck, 'back')}" alt="">
-              <span class="cc-deck-meta">
-                <span class="cc-deck-name">${esc(DECKS_BY_ID[s.deck].name)}</span>
-                <span class="cc-deck-sub">Tap to change</span>
-              </span>
-              <span class="cc-deck-go">▸</span>
-            </button>
-            ${(s.deckNudgeSeen || this.challengeActive) ? '' : `<span class="cc-nudge" aria-hidden="true">Try another deck! 👀</span>`}
-          </div>
-        </div>
-
-        <div class="cc-section">
-          <button class="cc-rules-toggle" data-action="toggle-rules" aria-expanded="${s.rulesOpen}">
-            <span class="cc-label">Game Settings</span><span class="cc-chevron">${s.rulesOpen ? '▾' : '▸'}</span></button>
-          <div class="cc-rules" ${s.rulesOpen ? '' : 'hidden'}>${rulesBody}</div>
-        </div>
-
+        ${this._renderSettingsCard(isHost)}
         ${actionBtn}
       </div>`;
   }
@@ -525,33 +565,21 @@ class ChinchonUI {
     this.el.modal.innerHTML = '';
   }
 
-  _openDeckPicker() {
-    // Opening the picker satisfies the "try another deck" nudge for good.
-    if (!this._setup.deckNudgeSeen) { this._setup.deckNudgeSeen = true; this._saveSetup(); }
-    const opts = listDecks().map((d) => {
+  /** The Card deck accordion row's expanded content (M3a): deck options inline,
+   *  no modal -- picking a deck is a direct tap here. Each option keeps its own
+   *  "View all cards" link into the full-screen gallery (still a modal, since
+   *  it's genuinely full-screen content, not a setup control). */
+  _deckOptionsHtml() {
+    return listDecks().map((d) => {
       const sel = d.id === this._setup.deck ? 'is-sel' : '';
       return `<div class="cc-deck-opt-wrap ${sel}">
         <button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
           <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
           <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
         </button>
-        <span class="cc-deck-view-wrap">
-          <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
-          ${d.base ? `<span class="cc-nudge cc-nudge-view" aria-hidden="true">See all the cards! 👀</span>` : ''}
-        </span>
+        <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
       </div>`;
     }).join('');
-    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-deck-sheet">
-      <h2 class="cc-sheet-title">Choose a deck</h2>
-      <div class="cc-deck-grid">${opts}</div>
-      <button class="cc-btn cc-btn-ghost" data-action="close-deck">Close</button>
-    </div>`;
-    this.el.modal.hidden = false;
-  }
-
-  _closeDeckPicker() {
-    this.el.modal.hidden = true;
-    this.el.modal.innerHTML = '';
   }
 
   /** Gallery of every card in a deck; tap any card to view it full-screen. */
@@ -564,16 +592,20 @@ class ChinchonUI {
         <span class="cc-gal-cap">${esc(label)}</span>
       </button>`;
     }).join('');
-    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-deck"></div><div class="cc-sheet cc-gallery-sheet">
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-gallery"></div><div class="cc-sheet cc-gallery-sheet">
       <div class="cc-gallery-head">
-        <button class="cc-btn cc-btn-ghost cc-gallery-back" data-action="back-to-decks">← Decks</button>
         <h2 class="cc-sheet-title">${esc(d.name)}</h2>
-        <button class="cc-btn cc-btn-ghost" data-action="close-deck">Done</button>
+        <button class="cc-btn cc-btn-ghost" data-action="close-gallery">Done</button>
       </div>
       <p class="cc-gallery-hint">Tap any card to zoom in.</p>
       <div class="cc-gallery-grid">${cells}</div>
     </div>`;
     this.el.modal.hidden = false;
+  }
+
+  _closeGalleryModal() {
+    this.el.modal.hidden = true;
+    this.el.modal.innerHTML = '';
   }
 
   /** Full-screen view of a single card, layered above the gallery. */
@@ -1302,11 +1334,10 @@ class ChinchonUI {
       case 'open-avatar': this.syncSetupInputs(); this._openAvatarPicker(); break;
       case 'pick-avatar': this._setup.humanAvatar = a.dataset.v; this._saveSetup(); this._closeAvatarPicker(); this.renderSetup(); break;
       case 'close-avatar': this._closeAvatarPicker(); break;
-      case 'open-deck': this.syncSetupInputs(); this._openDeckPicker(); break;
       case 'pick-deck': {
         const wasOther = this._setup.deck !== a.dataset.v;
         this._setup.deck = a.dataset.v; setDeck(a.dataset.v); preloadDeck();
-        this._saveSetup(); this._closeDeckPicker(); this.renderSetup();
+        this._saveSetup(); this.renderSetup();
         // Reward picking the Ana Banana deck with a little celebration.
         if (a.dataset.v === 'anita' && wasOther) { this._celebrate(); this.toast('Nice choice! 🎉'); }
         break;
@@ -1318,13 +1349,12 @@ class ChinchonUI {
         if (!this.el.menu.hidden) this._renderMenu();
         if (!this.el.setup.hidden) this.renderSetup();
         break;
-      case 'close-deck': this._closeCardZoom(); this._closeDeckPicker(); break;
+      case 'close-gallery': this._closeCardZoom(); this._closeGalleryModal(); break;
       case 'view-deck': this._openDeckGallery(a.dataset.v); break;
-      case 'back-to-decks': this._openDeckPicker(); break;
       case 'zoom-card': this._openCardZoom(a.dataset.deck, a.dataset.name); break;
       case 'close-zoom': this._closeCardZoom(); break;
       case 'set-aidiff': this.syncSetupInputs(); this._setup.aiDifficulty[+a.dataset.i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
-      case 'toggle-rules': this.syncSetupInputs(); this._setup.rulesOpen = !this._setup.rulesOpen; this.renderSetup(); break;
+      case 'toggle-row': { this.syncSetupInputs(); const row = a.dataset.row; this._setupExpanded = this._setupExpanded === row ? null : row; this.renderSetup(); break; }
       case 'rule-victory': this.syncSetupInputs(); this._setup.config.victoryCondition = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'rule-maxclose': this.syncSetupInputs(); this._setup.config.maxClose = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'rule-figures': this.syncSetupInputs(); this._setup.config.figuresFaceValue = a.dataset.v === 'own'; this._saveSetup(); this.renderSetup(); break;
@@ -1333,7 +1363,7 @@ class ChinchonUI {
       case 'rule-step': this.syncSetupInputs(); this._stepRule(a.dataset.field, +a.dataset.d); this._saveSetup(); this.renderSetup(); break;
       case 'start': this.startGame(); break;
       // multiplayer lobby (M2b)
-      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
+      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
       case 'mp-join-submit': this._mpJoinSubmit(); break;
       case 'mp-start': this._mpHostStart(); break;
