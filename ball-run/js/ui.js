@@ -10,7 +10,12 @@ import { SIM_DT, MAX_STEPS_PER_FRAME, DIFFICULTIES, DEFAULT_DIFFICULTY, difficul
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBallRun } from '../../js/game-stats.js';
 
-const BEST_KEY_PREFIX = 'ballrun.best.';
+// Fourth-playthrough item 2: the local per-difficulty personal best changed from distance (meters)
+// to obstacle count. Renamed (not just re-valued) so old meter-based bests under the old
+// 'ballrun.best.' prefix are simply never read as if they were counts - a fresh key, per this
+// module's existing plain-localStorage convention (no old data is touched or deleted, it's just
+// orphaned under its old key).
+const BEST_KEY_PREFIX = 'ballrun.bestObstacles.';
 const DIFFICULTY_KEY = 'ballrun.difficulty';
 const SEEN_HELP_KEY = 'ballrun.seenHelp';
 const DIFF_ORDER = ['easy', 'medium', 'hard'];
@@ -33,8 +38,8 @@ function loadBest(difficulty) {
   } catch { return 0; }
 }
 
-function saveBest(difficulty, distance) {
-  try { localStorage.setItem(BEST_KEY_PREFIX + difficulty, String(Math.floor(distance))); } catch { /* ignore */ }
+function saveBest(difficulty, obstaclesPassed) {
+  try { localStorage.setItem(BEST_KEY_PREFIX + difficulty, String(Math.floor(obstaclesPassed))); } catch { /* ignore */ }
 }
 
 function loadSavedDifficulty() {
@@ -176,7 +181,11 @@ class BallRunUI {
         <section class="br-game" data-role="game" hidden>
           <canvas class="br-canvas" data-role="canvas"></canvas>
           <div class="br-hud" data-role="hud">
-            <div class="br-hud-distance" data-role="distance">0<span class="br-hud-unit">m</span></div>
+            <div class="br-hud-score" data-role="score" aria-label="Obstacles passed">
+              <svg class="br-hud-cube" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 7 L12 12 L21 7 M12 12 V22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+              <span data-role="score-value">0</span>
+            </div>
+            <div class="br-hud-distance" data-role="distance">0 m</div>
             <div class="br-hud-tiers" data-role="tiers"></div>
           </div>
           <div class="br-gate" data-role="resume-gate" hidden>
@@ -185,6 +194,7 @@ class BallRunUI {
           <div class="br-overlay" data-role="gameover" hidden>
             <div class="br-panel">
               <h2 data-role="go-title">Run over</h2>
+              <p class="br-go-score" data-role="go-score"></p>
               <p class="br-go-distance" data-role="go-distance"></p>
               <p class="br-go-best" data-role="go-best"></p>
               <div class="br-panel-actions">
@@ -227,12 +237,15 @@ class BallRunUI {
       game: q('[data-role="game"]'),
       canvas: q('[data-role="canvas"]'),
       hud: q('[data-role="hud"]'),
+      score: q('[data-role="score"]'),
+      scoreValue: q('[data-role="score-value"]'),
       distance: q('[data-role="distance"]'),
       tiers: q('[data-role="tiers"]'),
       resumeGate: q('[data-role="resume-gate"]'),
       resumeBtn: q('[data-role="resume"]'),
       gameover: q('[data-role="gameover"]'),
       goTitle: q('[data-role="go-title"]'),
+      goScore: q('[data-role="go-score"]'),
       goDistance: q('[data-role="go-distance"]'),
       goBest: q('[data-role="go-best"]'),
       playAgain: q('[data-role="play-again"]'),
@@ -292,7 +305,7 @@ class BallRunUI {
 
   syncBestUi() {
     const best = loadBest(this.difficulty);
-    this.el.setupBest.textContent = best > 0 ? `Best: ${best} m` : 'No runs yet';
+    this.el.setupBest.textContent = best > 0 ? `Best: ${best} passed` : 'No runs yet';
   }
 
   // --- Screens ------------------------------------------------------------
@@ -372,10 +385,17 @@ class BallRunUI {
 
   updateHud(force) {
     if (!this.sim) return;
+    // Obstacle count is the primary HUD number (fourth-playthrough item 2); distance stays as a
+    // secondary flavor line, never compared against a best.
+    const score = this.sim.score;
+    if (force || this._lastShownScore !== score) {
+      this._lastShownScore = score;
+      this.el.scoreValue.textContent = String(score);
+    }
     const meters = Math.floor(this.sim.z);
     if (force || this._lastShownDistance !== meters) {
       this._lastShownDistance = meters;
-      this.el.distance.firstChild.textContent = String(meters);
+      this.el.distance.textContent = `${meters} m`;
     }
     const tierCount = Math.min(6, this.sim.tiersPassed);
     if (this._lastShownTiers !== tierCount) {
@@ -408,19 +428,23 @@ class BallRunUI {
 
   onGameOver() {
     this.stopLoop();
+    // Fourth-playthrough item 2: obstacle count is now the headline score and what's compared
+    // against the personal best. Distance is shown once as secondary flavor info only.
+    const score = this.sim.score;
     const distance = Math.floor(this.sim.z);
     const prevBest = loadBest(this.difficulty);
-    const isNewBest = distance > prevBest;
-    if (isNewBest) saveBest(this.difficulty, distance);
+    const isNewBest = score > prevBest;
+    if (isNewBest) saveBest(this.difficulty, score);
     // Shared cross-device stats/leaderboard store, additive alongside the local best above (which
     // stays the source of truth for the pre-game/game-over "your best" display).
-    if (!this._resultRecorded) { this._resultRecorded = true; try { recordBallRun(distance, this.difficulty); } catch { /* ignore */ } }
+    if (!this._resultRecorded) { this._resultRecorded = true; try { recordBallRun(score, this.difficulty); } catch { /* ignore */ } }
 
     this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? 'You fell off!' : 'Crashed!';
+    this.el.goScore.textContent = `${score} obstacles passed`;
     this.el.goDistance.textContent = `Distance: ${distance} m`;
     this.el.goBest.innerHTML = isNewBest
       ? '<span class="br-star" aria-hidden="true">&#9733;</span> New best!'
-      : `Best: ${Math.max(prevBest, distance)} m`;
+      : `Best: ${Math.max(prevBest, score)}`;
     this.el.gameover.hidden = false;
   }
 

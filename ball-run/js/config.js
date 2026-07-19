@@ -85,11 +85,27 @@ export const TUNNEL_MIN_STRAIGHT_AFTER = 3; // segments of guaranteed straight a
 // across the board, tunnelSpacingMeters scaled up to match so the first
 // speedpoint still lands at the same felt pace (see commit message for the
 // full old -> new list).
+//
+// Fourth-playthrough item 1: Easy started too slow. Matt's direction: Easy's starting speed should
+// be roughly what the OLD build reached at 700m into an Easy run. Computed headlessly by running the
+// actual fixed-timestep speed model (sim.js's formula, SIM_DT=1/60) against the old easy config
+// (baseSpeed 15, speedRampPerSec 0.1125, tierBonus 4.0, tunnelSpacingMeters 280) out to z=700m:
+// elapsed lands at 35.667s, 2 speedpoint tiers passed by then, ramped speed = 15 + 0.1125*35.667 +
+// 4.0*2 = 27.0125 (well under the old 40 cap, so uncapped). baseSpeed: 15 -> 27.0125.
+// With the floor 12 units closer to the unchanged 40 cap (range shrank from 25 to 13, roughly half),
+// the old ramp rate would close that range in about half the time it used to - flattened
+// proportionally to the new/old range ratio (13/25): 0.1125 -> 0.06 (speedRampPerSec).
+// maxSpeed and tunnelSpacingMeters are unchanged per Matt's direction (keep the cap where it is).
+// tierBonus unchanged (4.0): at 2-3 speedpoint tiers in, tierBonus alone is what actually gates the
+// cap (7 tiers * 4.0 = 28, already past the 13-unit headroom by tier 4), so the ramp flatten mostly
+// affects the shape of the climb between speedpoints rather than the ultimate cap-hit point - noted
+// for Matt in case the felt cap-hit timing (now ~840m instead of the old config's ~1400m at this
+// base) wants a bigger retune of tierBonus later; not touched here since only ramp was in scope.
 export const DIFFICULTIES = {
   easy: {
     label: 'Easy',
-    baseSpeed: 15,
-    speedRampPerSec: 0.1125,
+    baseSpeed: 27.0125,
+    speedRampPerSec: 0.06,
     tierBonus: 4.0,
     maxSpeed: 40,
     tunnelSpacingMeters: 280,
@@ -102,7 +118,11 @@ export const DIFFICULTIES = {
   },
   medium: {
     label: 'Medium',
-    baseSpeed: 20,
+    // Fourth-playthrough item 1: Easy's raised base speed (27.0125) landed above Medium's old base
+    // (20), collapsing the tiers' start-of-run separation (and briefly inverting it). Small nudge,
+    // not a full retune: baseSpeed 20 -> 30, restoring a clear Medium > Easy gap at run start (30 vs
+    // 27.0125) that widens further as Medium's higher ramp/tierBonus/cap pull ahead over the run.
+    baseSpeed: 30,
     speedRampPerSec: 0.175,
     tierBonus: 5.25,
     maxSpeed: 55,

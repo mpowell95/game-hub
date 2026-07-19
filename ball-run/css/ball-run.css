@@ -186,14 +186,37 @@
   pointer-events: none;
 }
 
-.br-hud-distance {
+/* Primary HUD number (fourth-playthrough item 2): obstacles passed, not distance. min-width reserves
+   room for a 4-digit count with the cube glyph so the HUD never shifts as the digit count grows
+   during a run (no-layout-shift rule); tabular-nums keeps digit widths uniform as they change. */
+.br-hud-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 4.4ch;
   font-size: 1.6rem;
   font-weight: 900;
   color: var(--br-ink);
   text-shadow: 0 2px 6px rgba(0,0,0,0.6);
   font-variant-numeric: tabular-nums;
 }
-.br-hud-unit { font-size: 0.9rem; margin-left: 2px; opacity: 0.7; }
+.br-hud-cube {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  color: var(--br-orange);
+}
+
+/* Secondary flavor line (distance), deliberately smaller/dimmer than the score above it so it never
+   reads as the primary number. */
+.br-hud-distance {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--br-ink-dim);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  font-variant-numeric: tabular-nums;
+}
 
 .br-hud-tiers {
   display: flex;
@@ -239,7 +262,10 @@
   text-align: center;
 }
 .br-panel h2 { margin: 0 0 10px; font-size: 1.4rem; font-weight: 900; }
-.br-go-distance { margin: 4px 0; font-weight: 700; color: var(--br-ink-dim); }
+/* Headline score (fourth-playthrough item 2: obstacles passed, not distance). */
+.br-go-score { margin: 0 0 6px; font-size: 1.3rem; font-weight: 900; color: var(--br-ink); }
+/* Secondary flavor line, deliberately smaller/dimmer than the score above it. */
+.br-go-distance { margin: 0 0 4px; font-size: 0.85rem; font-weight: 700; color: var(--br-ink-dim); }
 .br-go-best { margin: 4px 0 20px; font-weight: 800; color: var(--br-attention); }
 .br-star { color: var(--br-attention); }
 .br-panel-actions { display: flex; flex-direction: column; gap: 10px; }

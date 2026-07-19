@@ -309,6 +309,11 @@ export class Track {
     return null;
   }
 
+  /** Each row placed here becomes its own 'obstacle' track segment (including every row of a
+   * combined pattern from placeObstacleRow's 3c corridor-sharing rule) - sim.js's scoring (fourth-
+   * playthrough item 2) counts one point per crossed 'obstacle' segment, so a merged 2-row pattern is
+   * worth 2 points, scored as each row's far edge is individually crossed. Rows placeObstacleRow
+   * drops (returns null, 3b.3) never become a segment and so never score. */
   emitObstacleRows() {
     const cfg = this.cfg;
     const [minRows, maxRows] = cfg.obstacleRowsPerEvent;

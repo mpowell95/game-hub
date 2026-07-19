@@ -28,11 +28,20 @@
 //         es: { escobas } },                      // escobas the human made
 //       ballrun: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
-//         br: { runs, bestDistance, bestByDiff: { easy, medium, hard } } } },  // a solo, difficulty-scaled
-//                                                   // endless runner: no opponent, no loss state, distance is
-//                                                   // the score, so every finished run counts as played+won
-//                                                   // (like nutsbolts) and the honest numbers are runs and
-//                                                   // best distance, overall and per difficulty
+//         br: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } },  // a solo,
+//                                                   // difficulty-scaled endless runner: no opponent, no loss
+//                                                   // state, so every finished run counts as played+won (like
+//                                                   // nutsbolts); the score is obstacle rows passed (fourth-
+//                                                   // playthrough item 2 - distance alone was a hollow score
+//                                                   // since Easy could bank 100+m without meeting an obstacle),
+//                                                   // so the honest numbers are runs and best obstacle count,
+//                                                   // overall and per difficulty
+//         brLegacyMeters: { runs, bestDistance, bestByDiff: { easy, medium, hard } } } },  // preserved verbatim
+//                                                   // (never deleted) if an old meter-based `br` was found on
+//                                                   // load, folded ONCE via a _brMetricMigrated guard - meters
+//                                                   // and obstacle counts are not comparable units, so this is
+//                                                   // a start-fresh migration, not a conversion; only present
+//                                                   // on devices that had pre-migration Ball Run data
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -97,14 +106,40 @@ function ensureEs(g) {
 }
 
 /** Ball Run: the solo-difficulty-scaled counters. A run has no opponent and no loss state (only a
- *  crash or a fall ends it), so `br.runs` is the true play count and `br.bestDistance` /
- *  `br.bestByDiff` are the honest scoreboard (max, never decreases). */
+ *  crash or a fall ends it), so `br.runs` is the true play count and `br.bestObstacles` /
+ *  `br.bestObstaclesByDiff` are the honest scoreboard (max, never decreases). Fourth-playthrough
+ *  item 2: the score is obstacle rows passed, not meters (see migrateBallRunMetric for the one-time
+ *  fold of any pre-existing meter-based data into brLegacyMeters). */
 function ensureBr(g) {
-  if (!g.br || typeof g.br !== 'object') g.br = { runs: 0, bestDistance: 0, bestByDiff: {} };
+  if (!g.br || typeof g.br !== 'object') g.br = { runs: 0, bestObstacles: 0, bestObstaclesByDiff: {} };
   if (!Number.isFinite(g.br.runs)) g.br.runs = 0;
-  if (!Number.isFinite(g.br.bestDistance)) g.br.bestDistance = 0;
-  if (!g.br.bestByDiff || typeof g.br.bestByDiff !== 'object') g.br.bestByDiff = {};
-  for (const d of BR_DIFFS) if (!Number.isFinite(g.br.bestByDiff[d])) g.br.bestByDiff[d] = 0;
+  if (!Number.isFinite(g.br.bestObstacles)) g.br.bestObstacles = 0;
+  if (!g.br.bestObstaclesByDiff || typeof g.br.bestObstaclesByDiff !== 'object') g.br.bestObstaclesByDiff = {};
+  for (const d of BR_DIFFS) if (!Number.isFinite(g.br.bestObstaclesByDiff[d])) g.br.bestObstaclesByDiff[d] = 0;
+}
+
+/** Fourth-playthrough item 2: Ball Run's recorded metric changed from bestDistance/bestByDiff
+ *  (meters) to bestObstacles/bestObstaclesByDiff (obstacle rows passed) - old meter values are NOT
+ *  comparable to counts and are never converted. One-time, guarded migration (same fold-once pattern
+ *  as seedChinchonExtras, guard `_brMetricMigrated`): if the RAW pre-normalize `br` was still in the
+ *  OLD meter shape, it is moved VERBATIM to `brLegacyMeters` (never deleted, per this file's "never
+ *  overwrite, always additive" discipline) and `br` is reset to a fresh, zeroed obstacle-count shape.
+ *  Takes `rawGames` (the untouched `games` object as read from storage, before normalize()/ensureBr
+ *  filled in default fields) because ensureBr only ever ADDS missing fields and never strips old
+ *  ones - checking the already-normalized `st` here would find a hybrid object carrying both old and
+ *  new fields and could never tell old data from a fresh install. */
+function migrateBallRunMetric(st, rawGames) {
+  const g = st.games.ballrun;
+  if (g._brMetricMigrated) return false;
+  g._brMetricMigrated = true;
+  const rawBr = rawGames && rawGames.ballrun && rawGames.ballrun.br;
+  const oldShape = rawBr && typeof rawBr === 'object'
+    && (Number.isFinite(rawBr.bestDistance) || (rawBr.bestByDiff && typeof rawBr.bestByDiff === 'object'));
+  if (oldShape) {
+    g.brLegacyMeters = rawBr;
+    g.br = { runs: 0, bestObstacles: 0, bestObstaclesByDiff: {} };
+  }
+  return true;
 }
 
 /** Fill any missing structure so the rest of the code can assume a full shape. */
@@ -177,9 +212,12 @@ function persist(st) { try { localStorage.setItem(STATS_KEY, JSON.stringify(st))
 
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
-  const st = normalize(readJSON(STATS_KEY));
+  const raw = readJSON(STATS_KEY);
+  const st = normalize(raw);
   let changed = foldAll(st);
   changed = seedChinchonExtras(st) || changed;
+  changed = migrateBallRunMetric(st, raw && raw.games) || changed;
+  ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   if (changed) persist(st);
   return st;
 }
@@ -272,20 +310,21 @@ export function recordEscoba(difficulty, won, extras) {
   return st;
 }
 
-/** Ball Run: record one finished run. `difficulty` is easy|medium|hard; `distance` is the meters
- *  reached (floored, never negative). A run has no opponent and no loss state, so it counts as
- *  played+won (mirrors Nuts & Bolts); `lost` is never touched. Additive; bestDistance/bestByDiff
- *  only ever go up, matching every other best-tracking field in this file. */
-export function recordBallRun(distance, difficulty) {
+/** Ball Run: record one finished run. `difficulty` is easy|medium|hard; `obstaclesPassed` is the
+ *  obstacle-row score (floored, never negative - fourth-playthrough item 2: obstacle rows passed,
+ *  not meters, see the header comment block and migrateBallRunMetric). A run has no opponent and no
+ *  loss state, so it counts as played+won (mirrors Nuts & Bolts); `lost` is never touched. Additive;
+ *  bestObstacles/bestObstaclesByDiff only ever go up, matching every other best-tracking field here. */
+export function recordBallRun(obstaclesPassed, difficulty) {
   const st = loadStats();
   const g = st.games.ballrun;
   ensureBr(g);
   const d = BR_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
-  const dist = Number.isFinite(distance) ? Math.max(0, Math.floor(distance)) : 0;
+  const score = Number.isFinite(obstaclesPassed) ? Math.max(0, Math.floor(obstaclesPassed)) : 0;
   if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
   g.br.runs += 1;
-  g.br.bestDistance = Math.max(g.br.bestDistance | 0, dist);
-  if (d) g.br.bestByDiff[d] = Math.max(g.br.bestByDiff[d] | 0, dist);
+  g.br.bestObstacles = Math.max(g.br.bestObstacles | 0, score);
+  if (d) g.br.bestObstaclesByDiff[d] = Math.max(g.br.bestObstaclesByDiff[d] | 0, score);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

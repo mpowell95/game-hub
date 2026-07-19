@@ -26,9 +26,21 @@ export class Sim {
 
     this.state = RunState.PLAYING;
     this.elapsed = 0;       // seconds of active play (paused time excluded)
-    this.z = 0;              // forward distance traveled == score
+    this.z = 0;              // forward distance traveled; kept for track-generation pacing, speedpoint
+                              // timing, and a secondary flavor stat (fourth-playthrough item 2) - NOT the score
     this.speed = this.cfg.baseSpeed;
     this.tiersPassed = 0;
+
+    // Score (fourth-playthrough item 2): +1 the moment the ball's z crosses the far edge (z1) of an
+    // obstacle row segment, without the run ending on that row. Every spawned row is its own track
+    // segment (see track.js's placeObstacleRow), including each row of a merged combined pattern, so
+    // scoring one point per crossed obstacle-type segment automatically scores merged patterns one
+    // point per row. Rows the generator dropped during auto-repair never became a segment, so they
+    // never score. _lastScoredSegmentIndex tracks the highest track segment index already resolved
+    // (scored or not) so each segment is only ever considered once, scanned forward with zero
+    // allocations (plain array index scan, breaks as soon as it reaches an uncrossed segment).
+    this.score = 0;
+    this._lastScoredSegmentIndex = -1;
 
     this.lateralOffset = 0;  // relative to the track centerline
     this.lateralVelocity = 0;
@@ -109,6 +121,23 @@ export class Sim {
     // --- Edge fall: ball's CENTER passes the track edge (brief section 5) ---
     if (Math.abs(this.lateralOffset) > halfWidth) {
       this.beginCrash('edge');
+      return;
+    }
+
+    this.updateScore();
+  }
+
+  /** Score any obstacle-row segments the ball has now fully cleared (z past the segment's far edge).
+   * Never runs on a step that just crashed (both crash paths return before this call), so a row the
+   * run ends on is never scored. */
+  updateScore() {
+    const segs = this.track.segments;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (seg.index <= this._lastScoredSegmentIndex) continue;
+      if (seg.z1 > this.z) break; // ascending order: nothing past this one has been cleared yet either
+      if (seg.type === 'obstacle') this.score += 1;
+      this._lastScoredSegmentIndex = seg.index;
     }
   }
 

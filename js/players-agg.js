@@ -128,11 +128,16 @@ export function aggregatePlayers(all) {
         dst.nb.solved += src.nb.solved | 0; dst.nb.moves += src.nb.moves | 0;
         dst.nb.bestLevel = Math.max(dst.nb.bestLevel, src.nb.bestLevel | 0);
       } else if (g === 'ballrun' && src.br) {
-        if (!dst.br) dst.br = { runs: 0, bestDistance: 0, bestByDiff: {} };
+        // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /
+        // bestObstaclesByDiff), not meters. Old meter-shaped records (pre-migration, no
+        // bestObstacles field) simply contribute 0 here, same as a record with no runs yet - their
+        // meter data is preserved locally under brLegacyMeters (game-stats.js) but never aggregated
+        // as if it were a comparable count.
+        if (!dst.br) dst.br = { runs: 0, bestObstacles: 0, bestObstaclesByDiff: {} };
         dst.br.runs += src.br.runs | 0;
-        dst.br.bestDistance = Math.max(dst.br.bestDistance | 0, src.br.bestDistance | 0);
-        const sbd = src.br.bestByDiff || {};
-        for (const k of Object.keys(sbd)) dst.br.bestByDiff[k] = Math.max(dst.br.bestByDiff[k] | 0, sbd[k] | 0);
+        dst.br.bestObstacles = Math.max(dst.br.bestObstacles | 0, src.br.bestObstacles | 0);
+        const sbd = src.br.bestObstaclesByDiff || {};
+        for (const k of Object.keys(sbd)) dst.br.bestObstaclesByDiff[k] = Math.max(dst.br.bestObstaclesByDiff[k] | 0, sbd[k] | 0);
       }
     }
   }

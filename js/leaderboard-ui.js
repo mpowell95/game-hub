@@ -69,18 +69,21 @@ function nutsBoltsRows(list) {
   }));
 }
 
-// Ball Run difficulty tiers (byDiff/bestByDiff keys, lowercased by the recorder).
+// Ball Run difficulty tiers (byDiff/bestObstaclesByDiff keys, lowercased by the recorder).
 const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
 
 function ballrunRows(list) {
-  // Score-based, not win/loss: rank by best distance reached (any difficulty), like a high-score
-  // table. Best-per-tier / total runs are shown but not ranked on, same reasoning as Nuts & Bolts.
+  // Score-based, not win/loss: rank by best obstacle count reached (any difficulty, fourth-
+  // playthrough item 2), like a high-score table. Best-per-tier / total runs are shown but not
+  // ranked on, same reasoning as Nuts & Bolts. Pre-migration (meter-based) records have no
+  // bestObstacles yet, so they read as 0 here and simply sort to the bottom - the legacy data is
+  // preserved (see game-stats.js's brLegacyMeters) but this board starts clean on the new metric.
   const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
-    .sort(cmp((g) => (g.games.ballrun.br.bestDistance | 0), (g) => g.updatedAt));
+    .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
   if (!rows.length) return emptyRows('No Ball Run runs recorded yet.');
   return table(['#', 'Player', ...BR_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
     const br = g.games.ballrun.br;
-    const bd = br.bestByDiff || {};
+    const bd = br.bestObstaclesByDiff || {};
     return rowHTML(g, i, [...BR_DIFFS.map(([k]) => `${bd[k] | 0}`), `${br.runs | 0}`]);
   }));
 }

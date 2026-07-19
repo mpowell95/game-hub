@@ -176,24 +176,25 @@ function escobaScreen(rec) {
     </div>`;
 }
 
-// --- Ball Run (solo, difficulty-scaled, distance-is-the-score) --------------
+// --- Ball Run (solo, difficulty-scaled, obstacles-passed-is-the-score) ------
 const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
 
 /** Ball Run: no wins/losses (only a crash or a fall ends a run), so the honest numbers are runs
- *  played and the best distance reached, overall and per difficulty. */
+ *  played and the best obstacle count reached, overall and per difficulty (fourth-playthrough item
+ *  2: the score is obstacle rows passed, not meters). */
 function ballRunScreen(rec) {
   const br = (rec && rec.br) || {};
-  const runs = br.runs | 0, best = br.bestDistance | 0;
+  const runs = br.runs | 0, best = br.bestObstacles | 0;
   if (!runs) return emptyState('Ball Run');
-  const bd = br.bestByDiff || {};
+  const bd = br.bestObstaclesByDiff || {};
   const rows = BR_DIFFS.map(([k, label]) =>
-    `<tr><th scope="row">${label}</th><td>${bd[k] | 0} m</td></tr>`).join('');
+    `<tr><th scope="row">${label}</th><td>${bd[k] | 0} obstacles</td></tr>`).join('');
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
-      <div class="gs-tally"><b>${best} m</b><span>Best distance</span></div>
+      <div class="gs-tally"><b>${best}</b><span>Best obstacles passed</span></div>
     </div>
-    <h4 class="gs-tbl-h">Best distance by difficulty</h4>
+    <h4 class="gs-tbl-h">Best obstacles passed by difficulty</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
       <tbody>${rows}</tbody>
