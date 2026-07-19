@@ -4,6 +4,46 @@ A small, ad-free, installable **PWA that hosts self-contained game modules**. Va
 JS (ES modules), **no build step, no dependencies, no framework**. Deploys as static
 files (e.g. GitHub Pages). A shared **user profile** prefills every game (see "The shared profile").
 
+## THE LAW: player data is never deleted, never lost, never put at risk
+
+This is not a guideline. It is the one absolute rule of this repo, set by Matt after a
+migration made his entire Ball Run history invisible (July 2026, commits `d7f284b` through
+`a5571f3` tell the full story). Every rule below exists because it was violated once and a
+player paid for it. No feature, cleanup, refactor, or deadline outranks any of them.
+
+1. **Stored is not enough; data must stay VISIBLE.** To a player, history that no screen
+   shows IS deleted, even if the bytes sit safely in localStorage. Before shipping any
+   change to a data shape, list every UI surface that displays that data and every gate
+   that decides visibility (e.g. `br.runs > 0` filters in game-stats-ui.js and
+   leaderboard-ui.js), and prove each one still shows pre-change history.
+2. **Writes are additive, only.** Counters increment. Bests only ever improve
+   (`Math.max`). Nothing is ever zeroed, decremented, or overwritten with less. This
+   already holds everywhere in `js/game-stats.js`; keep it that way.
+3. **Migrations carry everything forward that CAN be carried.** Only genuinely
+   unit-incompatible values (e.g. meters vs obstacle counts) may be archived instead of
+   converted. Unit-agnostic data (play counts, totals, byDiff buckets, timestamps) always
+   survives into the live shape. Archived data goes under a clearly named legacy key and
+   is still SHOWN to the player, labeled honestly (see the "Best distance, before scoring
+   changed" table in game-stats-ui.js).
+4. **Never fabricate conversions.** If old and new metrics are incomparable, do not
+   invent numbers. Archive, display as legacy, start the new metric fresh.
+5. **Old keys are never deleted, never repurposed.** A shape change gets a new key or new
+   field names. Orphaned data is left in place.
+6. **No silent write failures.** Every storage write that matters either verifies by
+   re-reading what actually landed on disk, or at minimum logs loudly (`console.error`)
+   on failure. A swallowed `catch {}` around a data write is a bug. `persist()` in
+   game-stats.js and the flight recorder in ball-run/js/ui.js are the reference pattern:
+   log locally FIRST, then write the shared store, verify by fresh re-read, retry
+   unsynced entries on every app open.
+7. **Test migrations against real history, not fresh stores.** A migration test that
+   seeds a synthetic new-shape store proves nothing. Extract the actual old writer code
+   (`git show <old-commit>:js/game-stats.js`), have it write the store the way real
+   devices did, then load with current code and assert the data is intact AND visible.
+   Two incidents were declared "verified" on fresh-store tests before this rule existed.
+8. **When a player reports missing data, believe them.** Do not blame caches, incognito
+   mode, or user error until the code history has been fully replayed and ruled out. The
+   one time that order was reversed, the bug was real and the deflection made it worse.
+
 ## Run it
 
 ```
