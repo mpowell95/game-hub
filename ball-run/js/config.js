@@ -1,6 +1,10 @@
 // config.js — every tuning constant for Ball Run in one place (brief section 13).
 // Feel changes go through Matt after his first playthrough; don't retune silently.
 
+// Dev-only runtime checks (e.g. obstacle row reachability). Off by default so a console.assert
+// never runs in production; flip locally or via ?debug=1 (see track.js) when auditing generation.
+export const DEBUG_ASSERTIONS = typeof location !== 'undefined' && /[?&]debug=1\b/.test(location.search);
+
 // Fixed-timestep simulation rate. 60Hz keeps the accumulator math simple and
 // matches the render target, while staying independent of display refresh rate.
 export const SIM_HZ = 60;
@@ -21,12 +25,17 @@ export const MIN_TRACK_WIDTH = 3; // never narrower than this
 export const NARROW_STEP = 1; // width steps down/up by this many ball-widths
 
 // Curves: gentle arcs spread across several segments, not instant kinks.
+export const CURVES_ENABLED = true; // Matt's A/B switch for the item-1 curve-camera fix; false = straight-only track
 export const CURVE_SEGMENTS = 10; // how many segments an arc is spread across
 export const CURVE_LATERAL_PER_SEGMENT = { easy: 0.16, medium: 0.24, hard: 0.34 }; // world units of centerline drift per segment while curving
 
 // Obstacles.
 export const OBSTACLE_MIN_GAP = 2; // ball-widths of guaranteed clear gap
-export const OBSTACLE_CUBE_SIZE = TILE_SIZE * 0.8;
+// Cube edge length, derived from the ball diameter (Matt's second-playthrough item 3: cubes must
+// read as a bigger threat than the ball, not smaller). Kept as a multiplier so it can never drift
+// out of ratio from BALL_DIAMETER again.
+export const OBSTACLE_SIZE_MULTIPLIER = 1.5;
+export const OBSTACLE_SIZE = BALL_DIAMETER * OBSTACLE_SIZE_MULTIPLIER;
 // Safety margin applied to the theoretical max lateral reach when chaining
 // gap centers between consecutive obstacle rows (brief section 6, item 4):
 // lateral velocity ramps up rather than snapping to max, so the true reachable
@@ -35,6 +44,18 @@ export const OBSTACLE_REACH_SAFETY_FACTOR = 0.6;
 // Forced clean (obstacle-free) segments after an obstacle event ends, so
 // consecutive obstacle events read as a slalom rather than a solid wall.
 export const OBSTACLE_MIN_STRAIGHT_AFTER = 2;
+
+// Obstacle distance-pacing (Matt's second-playthrough item 2: first obstacle landed at 281m under
+// pure weighted-random occurrence, since a run could roll many non-obstacle events before ever
+// drawing "obstacle"). Occurrence is now a distance scheduler; weighted-random only picks what an
+// obstacle event *looks like* (row count, via obstacleRowsPerEvent) once the scheduler has decided
+// one happens here.
+export const OBSTACLE_FIRST_EVENT_MIN_M = 40; // first obstacle event must land in this window, every run, every difficulty
+export const OBSTACLE_FIRST_EVENT_MAX_M = 60;
+export const OBSTACLE_EVENT_GAP_BASE_M = { easy: 55, medium: 35, hard: 22 }; // meters between events, before jitter/speed-tier shrink
+export const OBSTACLE_EVENT_GAP_JITTER_FRAC = 0.3; // +/- fraction of the base gap
+export const OBSTACLE_EVENT_GAP_SHRINK_PER_TIER = 0.94; // multiplicative shrink of the gap per estimated speed tier passed
+export const OBSTACLE_EVENT_GAP_MIN_M = 12; // floor so shrink-per-tier can't collapse cadence into a wall
 
 // Speedpoint tunnels.
 export const TUNNEL_SEGMENTS = 8;
@@ -54,7 +75,10 @@ export const DIFFICULTIES = {
     tierBonus: 4.0,
     maxSpeed: 40,
     tunnelSpacingMeters: 280,
-    weights: { straight: 0.58, curve: 0.16, narrow: 0.12, obstacle: 0.14 },
+    // 'obstacle' occurrence is scheduler-driven now (see OBSTACLE_EVENT_GAP_*), not weighted-random;
+    // these weights cover straight/curve/narrow only and are renormalized automatically by
+    // pickWeighted (track.js) when CURVES_ENABLED is false and 'curve' is dropped from the pool.
+    weights: { straight: 0.67, curve: 0.19, narrow: 0.14 },
     obstacleRowsPerEvent: [1, 1],
     curveArcChance: 0.5, // of a 'curve' pick, chance it's a full multi-segment arc vs a short one
   },
@@ -65,7 +89,7 @@ export const DIFFICULTIES = {
     tierBonus: 5.25,
     maxSpeed: 55,
     tunnelSpacingMeters: 230,
-    weights: { straight: 0.44, curve: 0.22, narrow: 0.16, obstacle: 0.18 },
+    weights: { straight: 0.54, curve: 0.27, narrow: 0.19 },
     obstacleRowsPerEvent: [1, 2],
     curveArcChance: 0.65,
   },
@@ -76,7 +100,7 @@ export const DIFFICULTIES = {
     tierBonus: 6.5,
     maxSpeed: 75,
     tunnelSpacingMeters: 185,
-    weights: { straight: 0.32, curve: 0.28, narrow: 0.2, obstacle: 0.2 },
+    weights: { straight: 0.4, curve: 0.35, narrow: 0.25 },
     obstacleRowsPerEvent: [2, 3],
     curveArcChance: 0.8,
   },
@@ -96,6 +120,10 @@ export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its t
 // Camera. Height/back/look-ahead retuned for item 3 (shorter phone canvas):
 // the ball now sits in the lower third of the frame with a generous forward
 // view, instead of being pinned near the bottom edge.
+// CAMERA_LAG now damps the ball's TRACK-LOCAL lateral offset (not raw world X, per the
+// second-playthrough item-1 fix): the camera rides the centerline's moving frame (position along
+// it, yaw aligned to the local tangent) so a curve turns the world around a visually planted ball,
+// with only this small lag/easing producing on-screen lateral motion, never the curve itself.
 export const CAMERA_LAG = 0.12; // lerp factor per frame toward the ball's lateral position
 export const CAMERA_HEIGHT = 3.6;
 export const CAMERA_BACK = 7.5;

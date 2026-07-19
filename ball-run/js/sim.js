@@ -5,7 +5,7 @@
 
 import {
   SIM_DT, BALL_RADIUS, SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
-  OBSTACLE_CUBE_SIZE, DRAG_SENSITIVITY, LATERAL_MAX_SPEED_BASE,
+  OBSTACLE_SIZE, DRAG_SENSITIVITY, LATERAL_MAX_SPEED_BASE,
   LATERAL_SPEED_SCALE_WITH_FORWARD, LATERAL_DAMPING, FALL_GRAVITY,
   CRASH_BEAT_MS, difficultyConfig,
 } from './config.js';
@@ -97,7 +97,7 @@ export class Sim {
 
     // --- Obstacle collision ---
     if (seg && seg.obstacles && seg.obstacles.length) {
-      const halfCube = OBSTACLE_CUBE_SIZE / 2;
+      const halfCube = OBSTACLE_SIZE / 2;
       for (const cube of seg.obstacles) {
         if (Math.abs(this.lateralOffset - cube.lateral) < halfCube + BALL_RADIUS) {
           this.beginCrash('obstacle');
@@ -135,11 +135,6 @@ export class Sim {
     this.fallY -= this.fallVelocityY * dt;
     // Forward motion stops the instant the fall begins; only gravity acts from here.
     if (this.crashTimer >= CRASH_BEAT_MS + 400) this.state = RunState.GAME_OVER;
-  }
-
-  /** Track-frame-relative world X of the ball right now (centerline + lateral offset). */
-  ballWorldX() {
-    return this.track.frameAt(this.z).cx + this.lateralOffset;
   }
 
   isOver() {

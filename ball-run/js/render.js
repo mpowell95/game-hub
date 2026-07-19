@@ -6,7 +6,7 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_CUBE_SIZE, TILE_SIZE,
+  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_SIZE, TILE_SIZE,
   CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK,
   COLOR_VOID, COLOR_BALL, COLOR_TRACK_TILE, COLOR_TRACK_GROUT, COLOR_OBSTACLE, COLOR_OBSTACLE_EDGE,
@@ -112,7 +112,11 @@ export class Renderer {
     dir.position.set(4, 8, -4);
     this.scene.add(dir);
 
-    this._camLagX = 0;
+    // Damped lateral offset the camera tracks (item 1 fix): a lerp toward the ball's TRACK-LOCAL
+    // lateralOffset, not a lerp toward raw world X. The camera's world position is then derived
+    // from this via the track's own local frame (see _layoutCamera), so it rides the centerline
+    // through curves instead of chasing a world-X target that drifts independently of the floor.
+    this._camLagLateral = 0;
     this._shakeUntil = 0;
     this._shakeSeed = Math.random() * 1000;
 
@@ -220,8 +224,13 @@ export class Renderer {
   /** One frame: read sim (plain data) and place pooled meshes accordingly. */
   render(sim, reducedMotion) {
     const track = sim.track;
-    const ballWorldX = sim.ballWorldX();
-    const ballWorldZ = sim.z;
+    // World position of the ball: track-distance sim.z offset laterally by sim.lateralOffset along
+    // the track's own local right vector at that point (item 1 fix), not a raw world-X add. On a
+    // curve this keeps the ball sitting on the floor quad's actual (rotated) surface instead of
+    // sliding off it as the track's local frame rotates underneath a world-axis-only offset.
+    const ballPoint = track.worldPointAt(sim.z, sim.lateralOffset);
+    const ballWorldX = ballPoint.x;
+    const ballWorldZ = ballPoint.z;
     const ballY = sim.state === 'falling' ? Math.max(-14, sim.fallY) + BALL_RADIUS : BALL_RADIUS;
 
     this.ball.position.set(ballWorldX, ballY, ballWorldZ);
@@ -232,10 +241,12 @@ export class Renderer {
     this.ballShadow.visible = sim.state !== 'falling';
     this.ballShadow.position.set(ballWorldX, 0.02, ballWorldZ);
 
-    this._layoutFloor(track, ballWorldZ);
-    this._layoutObstacles(track, ballWorldZ);
+    // Segment windowing uses sim.z (the track-distance parameter), not ballWorldZ (the ball's true
+    // world Z, which includes a small lateral-offset contribution from worldPointAt above).
+    this._layoutFloor(track, sim.z);
+    this._layoutObstacles(track, sim.z);
 
-    this._layoutCamera(sim, ballWorldX, ballWorldZ, reducedMotion);
+    this._layoutCamera(sim, reducedMotion);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -308,7 +319,13 @@ export class Renderer {
       if (seg.z1 < zBack || seg.z0 > zFront || !seg.obstacles) continue;
       const midCx = (seg.cx0 + seg.cx1) / 2;
       const midZ = (seg.z0 + seg.z1) / 2;
-      for (const c of seg.obstacles) cubes.push({ x: midCx + c.lateral, z: midZ });
+      // Same local-right-vector fix as the ball (item 1): a cube's `lateral` is relative to the
+      // centerline, so it must be applied along the segment's own tangent-perpendicular, not raw
+      // world X, or cubes drift off the visually rotated floor quad during a curve exactly like
+      // the ball did.
+      const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
+      const nx = Math.cos(yaw), nz = -Math.sin(yaw);
+      for (const c of seg.obstacles) cubes.push({ x: midCx + c.lateral * nx, z: midZ + c.lateral * nz, yaw });
       if (cubes.length >= OBSTACLE_POOL_SIZE) break;
     }
     for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
@@ -316,13 +333,29 @@ export class Renderer {
       const c = cubes[i];
       if (!c) { mesh.visible = false; continue; }
       mesh.visible = true;
-      mesh.scale.set(OBSTACLE_CUBE_SIZE, OBSTACLE_CUBE_SIZE, OBSTACLE_CUBE_SIZE);
-      mesh.position.set(c.x, OBSTACLE_CUBE_SIZE / 2, c.z);
+      mesh.scale.set(OBSTACLE_SIZE, OBSTACLE_SIZE, OBSTACLE_SIZE);
+      mesh.position.set(c.x, OBSTACLE_SIZE / 2, c.z);
+      mesh.rotation.y = c.yaw;
     }
   }
 
-  _layoutCamera(sim, ballWorldX, ballWorldZ, reducedMotion) {
-    this._camLagX += (ballWorldX - this._camLagX) * CAMERA_LAG;
+  /**
+   * Camera locked to the track's local frame (item 1 fix): both position and look-at target are
+   * computed from track.worldPointAt at track-distances behind/ahead of the ball, using the SAME
+   * damped lateral offset the ball itself would have there. Through a curve this rotates the
+   * camera's yaw with the track's tangent (via lookAt on two points that both sit on the curving
+   * centerline) instead of holding a fixed world-Z heading, so the world turns around a visually
+   * planted ball; only CAMERA_LAG's small easing produces on-screen lateral motion.
+   */
+  _layoutCamera(sim, reducedMotion) {
+    const track = sim.track;
+    this._camLagLateral += (sim.lateralOffset - this._camLagLateral) * CAMERA_LAG;
+
+    const camZ = sim.z - CAMERA_BACK; // matches the pre-fix camera's fixed CAMERA_BACK offset behind the ball
+    const lookZ = sim.z + CAMERA_LOOK_AHEAD;
+    const camPoint = track.worldPointAt(camZ, this._camLagLateral);
+    const lookPoint = track.worldPointAt(lookZ, this._camLagLateral);
+
     let shakeX = 0, shakeY = 0;
     if (!reducedMotion && sim.state === 'crashing') {
       const t = sim.crashTimer / CRASH_SHAKE_MS;
@@ -332,8 +365,8 @@ export class Renderer {
         shakeY = Math.cos(sim.crashTimer * 1.3 + this._shakeSeed) * 0.08 * decay;
       }
     }
-    this.camera.position.set(this._camLagX + shakeX, CAMERA_HEIGHT + shakeY, ballWorldZ - CAMERA_BACK);
-    this.camera.lookAt(this._camLagX, CAMERA_HEIGHT * CAMERA_LOOK_HEIGHT_FRAC, ballWorldZ + CAMERA_LOOK_AHEAD);
+    this.camera.position.set(camPoint.x + shakeX, CAMERA_HEIGHT + shakeY, camPoint.z);
+    this.camera.lookAt(lookPoint.x, CAMERA_HEIGHT * CAMERA_LOOK_HEIGHT_FRAC, lookPoint.z);
 
     const speedFrac = Math.max(0, Math.min(1, (sim.speed - sim.cfg.baseSpeed) / (sim.cfg.maxSpeed - sim.cfg.baseSpeed)));
     const fovKick = reducedMotion ? 0 : CAMERA_MAX_FOV_KICK * speedFrac;
@@ -344,9 +377,9 @@ export class Renderer {
     }
   }
 
-  /** Reset camera lag / shake state for a fresh run (called on restart). */
-  resetCamera(x) {
-    this._camLagX = x;
+  /** Reset camera lag / shake state for a fresh run (called on restart). `lateral` is the track-local lateral offset, not a world X. */
+  resetCamera(lateral) {
+    this._camLagLateral = lateral;
   }
 
   dispose() {
