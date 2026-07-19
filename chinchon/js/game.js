@@ -72,6 +72,94 @@ export class Game {
     this.standings = null;
     this.aborted = false;
     this.onEvent = null;      // async (type, payload) => void, set by the UI
+
+    this.lastDeckOrder = null; // ids of the deck order actually used for the round (shuffled or preset)
+    this._midRound = false;    // true while a round's cards are live (safe to snapshot+resume mid-round)
+    this._nextTurn = null;     // player index due to act next (checkpoint for resume)
+    this._resumeMidRound = false;
+    this._resumeNextTurn = null;
+  }
+
+  /**
+   * Rebuild a Game from a snapshot() payload. `agentsById` maps each saved
+   * player's id to a live agent (the human agent instance, or a fresh
+   * AIAgent) since agents aren't serializable. Mirrors escoba/js/game.js's
+   * Game.fromSnapshot 1:1 (same v:1 shape, same _midRound/_nextTurn resume
+   * convention); see snapshot() below for the field-by-field rationale.
+   */
+  static fromSnapshot(snap, agentsById) {
+    const g = Object.create(Game.prototype);
+    g.config = snap.config;
+    g.rng = Math.random;
+    g.onEvent = null;
+    g.aborted = false;
+    g.stock = snap.stock;
+    g.discard = snap.discard;
+    g.currentPlayerIndex = snap.currentPlayerIndex;
+    g.dealerIndex = snap.dealerIndex;
+    g.round = snap.round;
+    g.phase = snap.phase;
+    g.resetsUsed = snap.resetsUsed;
+    g.whoClosed = snap.whoClosed;
+    g.closeType = snap.closeType;
+    g.lockedMelds = snap.lockedMelds;
+    g.winner = null;
+    g.matchEndReason = null;
+    g.standings = null;
+    g.lastDeckOrder = null;
+    g._midRound = !!snap.midRound;
+    g._nextTurn = snap.nextTurn;
+    g._resumeMidRound = !!snap.midRound;
+    g._resumeNextTurn = snap.nextTurn;
+    g.players = snap.players.map((sp) => ({
+      id: sp.id, name: sp.name, avatar: sp.avatar, isHuman: sp.isHuman, difficulty: sp.difficulty,
+      agent: agentsById[sp.id],
+      hand: sp.hand, hasDrawn: sp.hasDrawn, hasHadTurn: sp.hasHadTurn,
+      roundScore: sp.roundScore, totalScore: sp.totalScore, scoreHistory: sp.scoreHistory,
+      placed: sp.placed, closeInfo: sp.closeInfo,
+    }));
+    return g;
+  }
+
+  /**
+   * Plain-JSON snapshot of the full match. Card objects are already plain
+   * data (id/suit/rank/value/isJoker/isWild), so no id-based rehydration is
+   * needed, same as Escoba.
+   *
+   * Snapshot point: ONLY valid between completed turns (after playTurn()'s
+   * promise has resolved and before the next one starts), never mid-turn
+   * (i.e. never between a player's draw and their discard). Chinchón's
+   * per-turn phase machine (draw -> discard -> close) has no defined resume
+   * behavior partway through -- fromSnapshot()/resumeRound() re-enter at the
+   * START of whichever turn _nextTurn checkpoints, so a snapshot taken
+   * mid-turn would silently replay that half-finished turn from scratch
+   * (wrong hand/stock/discard state) rather than continuing it. This mirrors
+   * Escoba's identical constraint (see escoba/js/game.js's "UI intentionally
+   * never snapshots the very first deal of a round").
+   */
+  snapshot() {
+    return {
+      v: 1,
+      midRound: this._midRound,
+      nextTurn: this._nextTurn,
+      config: this.config,
+      stock: this.stock,
+      discard: this.discard,
+      currentPlayerIndex: this.currentPlayerIndex,
+      dealerIndex: this.dealerIndex,
+      round: this.round,
+      phase: this.phase,
+      resetsUsed: this.resetsUsed,
+      whoClosed: this.whoClosed,
+      closeType: this.closeType,
+      lockedMelds: this.lockedMelds,
+      players: this.players.map((p) => ({
+        id: p.id, name: p.name, avatar: p.avatar, isHuman: p.isHuman, difficulty: p.difficulty,
+        hand: p.hand, hasDrawn: p.hasDrawn, hasHadTurn: p.hasHadTurn,
+        roundScore: p.roundScore, totalScore: p.totalScore, scoreHistory: p.scoreHistory,
+        placed: p.placed, closeInfo: p.closeInfo,
+      })),
+    };
   }
 
   // --- queries --------------------------------------------------------------
@@ -129,7 +217,19 @@ export class Game {
   }
 
   startRound() {
-    const deck = shuffle(makeDeck(this.config), this.rng);
+    this._midRound = true;
+    // Multiplayer lockstep: a host-supplied exact deck order (card ids), used
+    // in place of a local shuffle so both sides deal an identical round.
+    // Absent (the default) -> byte-identical to the original shuffle-only
+    // behavior. Same pattern as Escoba's F1 (escoba/js/game.js).
+    let deck;
+    if (this.config.presetDeck && this.config.presetDeck.length) {
+      const byId = new Map(makeDeck(this.config).map((c) => [c.id, c]));
+      deck = this.config.presetDeck.map((id) => byId.get(id)).filter(Boolean);
+    } else {
+      deck = shuffle(makeDeck(this.config), this.rng);
+    }
+    this.lastDeckOrder = deck.map((c) => c.id);
     for (const p of this.players) p.hand = [];
     let k = 0;
     for (let r = 0; r < 7; r++) for (const p of this.players) p.hand.push(deck[k++]);
@@ -191,38 +291,69 @@ export class Game {
 
   async playMatch() {
     try {
-      this.initMatch();
+      if (this._resumeMidRound) {
+        this._resumeMidRound = false;
+        await this.resumeRound();
+        this._throwIfAborted();
+        if (await this.finishRoundAfterPlay()) return;
+      } else {
+        this.initMatch();
+      }
       while (true) {
         this.startRound();
         await this.emit('roundStart', { round: this.round });
         this._throwIfAborted();
         await this.runRound();
-        await this.resolveRoundScoring();
-        this.applyRoundScores();
-        this.phase = 'roundEnd';
-        await this.emit('roundScored', { round: this.round });
-        this._throwIfAborted();
-        if (this.checkMatchEnd()) {
-          this.phase = 'matchEnd';
-          this.finalizeStandings();
-          await this.emit('matchEnd', {});
-          break;
-        }
-        this.round++;
-        this.dealerIndex = (this.dealerIndex + 1) % this.players.length;
+        if (await this.finishRoundAfterPlay()) break;
       }
     } catch (e) {
       if (!(e instanceof AbortError)) throw e;
     }
   }
 
+  /** Score the just-finished round, resolve match end, advance the round/
+   *  dealer for the next round (only if the match continues). Returns true
+   *  once the match has concluded (emits 'matchEnd' itself), else false.
+   *  Extracted from playMatch()'s loop body so the resume path (a snapshot
+   *  restored mid-round) can share the exact same post-round sequence
+   *  instead of duplicating it. */
+  async finishRoundAfterPlay() {
+    this._midRound = false;
+    await this.resolveRoundScoring();
+    this.applyRoundScores();
+    this.phase = 'roundEnd';
+    await this.emit('roundScored', { round: this.round });
+    this._throwIfAborted();
+    if (this.checkMatchEnd()) {
+      this.phase = 'matchEnd';
+      this.finalizeStandings();
+      await this.emit('matchEnd', {});
+      return true;
+    }
+    this.round++;
+    this.dealerIndex = (this.dealerIndex + 1) % this.players.length;
+    return false;
+  }
+
   async runRound() {
     while (true) {
+      // Checkpoint the FOLLOWING player before this turn plays out: by the
+      // time playTurn()'s promise resolves, this player's turn is fully
+      // committed, so a snapshot taken then should resume with whoever is
+      // next. Same convention as Escoba's runTurnLoop/_nextTurn.
+      this._nextTurn = (this.currentPlayerIndex + 1) % this.players.length;
       const p = this.current();
       const roundEnded = await this.playTurn(p);
       if (roundEnded) break;
       this.advance();
     }
+  }
+
+  /** Resume a mid-round match: jump to the saved checkpoint and replay only
+   *  the remaining turn loop, using the restored hands/stock/discard. */
+  async resumeRound() {
+    if (this._resumeNextTurn != null) this.currentPlayerIndex = this._resumeNextTurn;
+    await this.runRound();
   }
 
   async playTurn(player) {

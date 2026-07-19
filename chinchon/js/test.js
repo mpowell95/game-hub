@@ -2,11 +2,14 @@
 // Run from the hub root:  node chinchon/js/test.js
 // Not precached or deployed; pure-engine correctness only.
 
-import { makeDeck, cardValue } from './deck.js';
+import { makeDeck, cardValue, shuffle } from './deck.js';
 import {
   bestDeadwood, bestPartition, canClose, isChinchon, isDoubleMeld,
   sixAndOne, classifyClosingHand, attachableCards, generateMelds,
 } from './meld.js';
+import { Game, makePlayer } from './game.js';
+import { AIAgent } from './ai.js';
+import { stateHash } from './hash.js';
 
 const DEF = { extended: false, joker: false, aceOrosWild: false, figuresFaceValue: false, maxClose: 3, winWithChinchon: true, chinchonNegative: -25 };
 const EXT = { ...DEF, extended: true };
@@ -112,6 +115,128 @@ eq('attach to both ends of a run (chained)', place2.attached.map((c) => c.id).so
 
 // --- generateMelds sanity ---
 assert('generateMelds finds the set', generateMelds([C('oros', 3), C('copas', 3), C('espadas', 3)], DEF).some((m) => m.kind === 'set'));
+
+// --- M2a: multiplayer groundwork (snapshot, preset deck, state hash) --------
+// 'hard' tier AI (blunder 0, closeEagerness 1.0) is deterministic purely from
+// game state -- neither threshold actually depends on the rng's value, only
+// on it being < those constants (always/never true) -- so two independently
+// constructed 'hard' AIAgent instances make byte-identical decisions given
+// identical state, with no shared seed required.
+function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0x100000000; }; }
+const hardAgents = () => [
+  makePlayer({ id: 0, name: 'A', avatar: 'x', agent: new AIAgent({ difficulty: 'hard' }) }),
+  makePlayer({ id: 1, name: 'B', avatar: 'x', agent: new AIAgent({ difficulty: 'hard' }) }),
+];
+
+// T4.1 — presetDeck: two Games, same preset + same (deterministic) agent
+// decisions -> identical hands, stock, discard at round end. `rng` is also
+// shared (not just the deck order): a long round can exhaust the stock and
+// trigger tryResetStock()'s own shuffle, which reads this.rng -- without a
+// shared seed there, two otherwise-identical games could diverge on a reset
+// the same way two default-Math.random() instances would.
+async function playOneRoundWithPreset(seed) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  const g = new Game({ players: hardAgents(), config: { ...DEF, presetDeck: order }, rng: lcg(seed + 1) });
+  g.onEvent = async (type) => { if (type === 'roundScored') g.abort(); };
+  await g.playMatch();
+  return g;
+}
+
+for (const seed of [11, 202, 3003]) {
+  const g1 = await playOneRoundWithPreset(seed);
+  const g2 = await playOneRoundWithPreset(seed);
+  eq(`presetDeck: identical lastDeckOrder (seed ${seed})`, g1.lastDeckOrder, g2.lastDeckOrder);
+  eq(`presetDeck: identical stock (seed ${seed})`, g1.stock.map((c) => c.id), g2.stock.map((c) => c.id));
+  eq(`presetDeck: identical discard (seed ${seed})`, g1.discard.map((c) => c.id), g2.discard.map((c) => c.id));
+  for (let i = 0; i < g1.players.length; i++) {
+    eq(`presetDeck: identical hand for player ${i} (seed ${seed})`,
+      g1.players[i].hand.map((c) => c.id).sort(), g2.players[i].hand.map((c) => c.id).sort());
+  }
+}
+
+// T4.2 — snapshot roundtrip: play N scripted turns, snapshot, fromSnapshot
+// into two independent instances, then drive each and compare stateHash
+// after every subsequent turn (a mismatch anywhere means the restore lost
+// state the resumed match actually depends on).
+async function playScriptedTurns(seed, n) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  // maxResets: 0 -- fromSnapshot() hardcodes a fresh Math.random() rng (same
+  // as Escoba's), same as production would (a restored engine has no reason
+  // to reproduce the ORIGINAL's rng stream). That's fine for everything
+  // except tryResetStock()'s own reshuffle, which reads it; disabling resets
+  // for this test keeps gA/gB's post-restore continuation deterministic
+  // without weakening what's actually being verified (turn/discard/hand
+  // state, not the reset-shuffle path, which is out of scope for M2a).
+  const g = new Game({ players: hardAgents(), config: { ...DEF, presetDeck: order, maxResets: 0 } });
+  let turns = 0;
+  g.onEvent = async (type) => {
+    // Abort at the START of turn n+1 (turnStart fires before any card moves)
+    // -- a genuine between-turns boundary: turn n is already fully committed
+    // (hasHadTurn included), turn n+1 hasn't touched state yet. Aborting
+    // mid-turn instead (e.g. right after 'discard') would skip the
+    // hasHadTurn=true commit for that turn -- exactly the mid-turn snapshot
+    // this module's snapshot() doc comment says never to take.
+    if (type === 'turnStart') { turns++; if (turns === n + 1) g.abort(); }
+  };
+  await g.playMatch();
+  return g;
+}
+
+async function collectHashesToOneRoundEnd(g) {
+  const hashes = [];
+  g.onEvent = async (type) => {
+    if (type === 'discard') hashes.push(stateHash(g));
+    if (type === 'roundScored') g.abort();
+  };
+  await g.playMatch();
+  return hashes;
+}
+
+for (const [seed, n] of [[7, 3], [77, 6], [777, 9]]) {
+  const scripted = await playScriptedTurns(seed, n);
+  assert(`resume: aborted mid-round after ${n} turns (seed ${seed})`, scripted._midRound);
+  const snap = JSON.parse(JSON.stringify(scripted.snapshot()));   // mirrors localStorage's round trip
+
+  const mkAgents = () => { const m = {}; for (const sp of snap.players) m[sp.id] = new AIAgent({ difficulty: 'hard' }); return m; };
+  const gA = Game.fromSnapshot(JSON.parse(JSON.stringify(snap)), mkAgents());
+  const gB = Game.fromSnapshot(JSON.parse(JSON.stringify(snap)), mkAgents());
+
+  const hashesA = await collectHashesToOneRoundEnd(gA);
+  const hashesB = await collectHashesToOneRoundEnd(gB);
+  assert(`resume: at least one further turn played (seed ${seed})`, hashesA.length > 0);
+  eq(`resume: identical hash sequence after restoring from snapshot (seed ${seed})`, hashesA, hashesB);
+  eq(`resume: identical final stock/discard (seed ${seed})`,
+    { stock: gA.stock.map((c) => c.id), discard: gA.discard.map((c) => c.id) },
+    { stock: gB.stock.map((c) => c.id), discard: gB.discard.map((c) => c.id) });
+  for (let i = 0; i < gA.players.length; i++) {
+    eq(`resume: identical final hand for player ${i} (seed ${seed})`,
+      gA.players[i].hand.map((c) => c.id).sort(), gB.players[i].hand.map((c) => c.id).sort());
+  }
+}
+
+// T4.3 — hash stability: identical state -> identical hash; one card moved -> different hash.
+{
+  const mkGame = (hand0) => {
+    const g = new Game({ players: hardAgents(), config: DEF });
+    g.players[0].hand = hand0;
+    g.players[1].hand = [C('espadas', 5)];
+    g.stock = [C('bastos', 6)];
+    g.discard = [C('oros', 7)];
+    return g;
+  };
+  const g1 = mkGame([C('oros', 3), C('copas', 4)]);
+  const h1a = stateHash(g1);
+  const h1b = stateHash(g1);
+  eq('hash stability: identical state -> identical hash', h1a, h1b);
+
+  const g3 = mkGame([C('oros', 3), C('copas', 4), C('bastos', 1)]);
+  assert('hash stability: a moved/added card changes the hash', h1a !== stateHash(g3));
+
+  // Cosmetic hand-order drift (same cards, different array order) must NOT
+  // change the hash -- hands are sorted by id before hashing.
+  const g2 = mkGame([C('copas', 4), C('oros', 3)]);   // same two cards, reversed
+  eq('hash stability: hand order is cosmetic, not part of the hash', h1a, stateHash(g2));
+}
 
 console.log(`\nChinchón engine tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
