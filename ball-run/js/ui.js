@@ -8,7 +8,7 @@ import { Renderer } from './render.js';
 import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DIFFICULTIES, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordBallRun } from '../../js/game-stats.js';
+import { recordBallRun, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 
 // Fourth-playthrough item 2: the local per-difficulty personal best changed from distance (meters)
@@ -20,6 +20,74 @@ const BEST_KEY_PREFIX = 'ballrun.bestObstacles.';
 const DIFFICULTY_KEY = 'ballrun.difficulty';
 const SEEN_HELP_KEY = 'ballrun.seenHelp';
 const DIFF_ORDER = ['easy', 'medium', 'hard'];
+
+// Fifth-playthrough incident: a player's finished runs never reached the shared stats store, and
+// the only trace of the failure was a swallowed exception nobody could see. `recordBallRun` writing
+// straight into the shared multi-game blob is genuinely the more fragile path (shared shape, shared
+// migrations, shared code touched by every other game); the local best above never lost anything.
+// This is a dead-simple, independent "flight recorder": every finished run is appended here FIRST,
+// synchronously, before the shared store is touched at all. If the shared write then fails (throws,
+// or silently doesn't move the needle), the entry stays `synced:false` and `reconcileRunLog()` (run
+// on every Ball Run open, i.e. before every subsequent play) retries it. A run can now only vanish
+// from the leaderboard/My Skills if this log entry AND every later retry all fail, not just one call.
+const RUN_LOG_KEY = 'ballrun.runLog.v1';
+const RUN_LOG_MAX = 200;
+
+function readRunLog() {
+  try {
+    const v = JSON.parse(localStorage.getItem(RUN_LOG_KEY) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+function writeRunLog(log) {
+  try { localStorage.setItem(RUN_LOG_KEY, JSON.stringify(log)); } catch (err) { console.error('[ball-run] run log write failed', err); }
+}
+function appendRunLog(entry) {
+  const log = readRunLog();
+  log.push(entry);
+  while (log.length > RUN_LOG_MAX) log.shift();
+  writeRunLog(log);
+  return log;
+}
+function markRunLogSynced(ts) {
+  const log = readRunLog();
+  const e = log.find((x) => x.ts === ts);
+  if (e) { e.synced = true; writeRunLog(log); }
+}
+
+/** Attempt the shared-store write for one flight-recorder entry. Verifies the write actually landed
+ *  on disk (a FRESH loadStats() re-read afterward, not the in-memory object recordBallRun returns)
+ *  rather than trusting "didn't throw" alone: game-stats.js's own persist() swallows storage-write
+ *  failures internally, so its returned object can show an incremented count even when nothing was
+ *  actually written to localStorage. Returns true only on a confirmed-on-disk new run. Never throws;
+ *  logs loudly on any failure so a connected debugging session can see it. */
+function trySyncRunEntry(entry) {
+  let before = -1;
+  try { before = loadStats().games.ballrun.br.runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
+  try {
+    recordBallRun(entry.score, entry.difficulty);
+  } catch (err) {
+    console.error('[ball-run] recordBallRun threw', { entry, err });
+    return false;
+  }
+  let after = -1;
+  try { after = loadStats().games.ballrun.br.runs | 0; } catch (err) { console.error('[ball-run] post-write stats read failed', err); return false; }
+  if (after >= 0 && (before < 0 || after > before)) return true;
+  console.error('[ball-run] recordBallRun did not confirm a new run (persist may have failed)', { entry, before, after });
+  return false;
+}
+
+/** Retry any run this device recorded locally but never confirmed reaching the shared store, e.g.
+ *  because the shared write threw or silently no-opped last time. Runs on every Ball Run open, so a
+ *  failed run gets another chance every time the player comes back, not just once. Idempotent: a
+ *  successfully-synced entry is never retried, so this cannot double-count a run that already landed. */
+function reconcileRunLog() {
+  const log = readRunLog();
+  for (const entry of log) {
+    if (entry.synced) continue;
+    if (trySyncRunEntry(entry)) markRunLogSynced(entry.ts);
+  }
+}
 
 function ensureStylesheet() {
   const href = new URL('../css/ball-run.css', import.meta.url).href;
@@ -124,6 +192,10 @@ class BallRunUI {
   constructor(container) {
     ensureStylesheet();
     this.container = container;
+
+    // Retry any run recorded locally last session that never confirmed reaching the shared
+    // stats/leaderboard store (see RUN_LOG_KEY above). Cheap no-op when there's nothing to retry.
+    try { reconcileRunLog(); } catch (err) { console.error('[ball-run] reconcile on open failed', err); }
 
     const profile = loadProfile();
     const opp = profile && profile.opponents && profile.opponents[0];
@@ -440,7 +512,11 @@ class BallRunUI {
     // stays the source of truth for the pre-game/game-over "your best" display).
     if (!this._resultRecorded) {
       this._resultRecorded = true;
-      try { recordBallRun(score, this.difficulty); } catch { /* ignore */ }
+      // Sixth-playthrough fix: write the raw result to the flight-recorder log FIRST, before
+      // touching the shared store at all, so the run is never lost even if the write below fails.
+      const logEntry = { ts: Date.now(), difficulty: this.difficulty, score, distance, synced: false };
+      appendRunLog(logEntry);
+      if (trySyncRunEntry(logEntry)) markRunLogSynced(logEntry.ts);
       // Fifth-playthrough fix: previously the only thing that pushed a finished run up to Firebase
       // was hub.js's own lifecycle sync (tab-hide / returning to the launcher grid). This screen's
       // own "Back to hub" button only calls this module's showSetup() - it stays mounted inside Ball
@@ -449,7 +525,7 @@ class BallRunUI {
       // ever firing for that run. Syncing right here means every finished run reaches the leaderboard
       // on its own, regardless of what the player clicks next. Best-effort/fire-and-forget like every
       // other syncMyStats() call site; never blocks the game-over screen from showing.
-      try { syncMyStats(); } catch { /* ignore */ }
+      try { syncMyStats(); } catch (err) { console.error('[ball-run] syncMyStats failed', err); }
     }
 
     this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? 'You fell off!' : 'Crashed!';

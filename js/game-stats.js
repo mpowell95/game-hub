@@ -214,7 +214,15 @@ function foldAll(st) {
   return changed;
 }
 
-function persist(st) { try { localStorage.setItem(STATS_KEY, JSON.stringify(st)); } catch { /* ignore */ } }
+// Sixth-playthrough incident (Ball Run): a storage-write failure here was completely silent, with
+// no trace anywhere a player or a future debugging session could see it. Every call site already
+// discards this function's return value, so returning a success flag (instead of nothing) and
+// logging on failure is purely additive: zero risk to any existing game, strictly more visibility
+// for every game that shares this store.
+function persist(st) {
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(st)); return true; }
+  catch (err) { console.error('[game-stats] persist failed, this write was not saved', err); return false; }
+}
 
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
