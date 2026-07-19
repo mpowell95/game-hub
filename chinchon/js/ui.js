@@ -14,7 +14,9 @@ import { loadProfile } from '../../js/profile-store.js';
 import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordChinchon } from '../../js/game-stats.js';
+import { recordChinchon, deviceId } from '../../js/game-stats.js';
+import { stateHash } from './hash.js';
+import * as net from '../../js/net.js';
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
@@ -30,6 +32,24 @@ const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
 const BEAT_TURN = 700, BEAT_DRAW = 650, BEAT_DISCARD = 550, BEAT_CLOSE = 800;
 const STORE_SETTINGS = 'chinchon-settings';
 const STORE_STATS = 'chinchon-stats';
+
+// Multiplayer (M2b). Chinchón has no existing solo autosave, so this key is
+// MP-only: written after every applied entry while this.mp is set, cleared on
+// match end/leave. Never touches STORE_SETTINGS/STORE_STATS.
+const STORE_MP_SAVE = 'gamehub.chinchon.mp.v1';
+const MP_CODE_LEN = 4;
+const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
+const MP_STALE_MS = 60 * 1000;
+const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Human labels for the room's locked config, host-lobby summary line only
+// (mirrors Escoba's MP_CONFIG_LABELS pattern). Unknown keys are skipped.
+const MP_CONFIG_LABELS = {
+  victoryCondition: (v) => (v === 'rounds' ? 'By rounds' : v === 'roundsOrPoints' ? 'Rounds or points' : 'By points'),
+  scoreLimit: (v) => `${v} pts`,
+  roundsLimit: (v) => `${v} rounds`,
+  extended: (v) => (v ? '48-card deck' : null),
+  joker: (v) => (v ? 'Joker' : null),
+};
 
 /** Idempotently ensure the module's stylesheet is on the page (hub or standalone). */
 function ensureStylesheet() {
@@ -109,16 +129,35 @@ class ChinchonUI {
     // Hidden challenge: active only for the trigger profile name (inert otherwise).
     this.challengeActive = isChallengeActive((loadProfile() || {}).name);
 
+    // Multiplayer (M2b). null in solo -- every MP code path is gated behind
+    // this single field so solo play is byte-identical to before.
+    this.mp = null;
+    this._screen = 'setup';      // 'setup' | 'host-lobby' | 'join-lobby'
+    this._mpBusy = false;
+    this._mpError = '';
+    this._mpJoinCode = '';
+    this._mpStatusMsg = '';
+
     const ui = this;
     this.humanAgent = {
       isHuman: true,
       chooseDraw: () => ui.promptDraw(),
       chooseDiscard: () => ui.promptDiscard(),
-      decideClose: () => ui.promptClose(),
+      decideClose: async () => {
+        const wants = await ui.promptClose();
+        // A DECLINED close has no engine event to hook (playTurn() just
+        // returns false with no state change) -- but for that exact reason,
+        // sending here (immediately, no mutation pending) already reflects
+        // the correct post-decision state; an ACCEPTED close is instead
+        // sent from the 'close' event once whoClosed is actually set.
+        if (ui.mp && !wants) await ui._mpAfterDecision(ui._human(), { t: 'close', kind: false });
+        return wants;
+      },
       choosePlacements: (view, locked, attachable) => ui.promptPlacements(attachable),
     };
 
     this._onClick = (e) => this.onClick(e);
+    this._onInput = (e) => this.onInput(e);
     this._onHandPointerDown = (e) => this.onHandPointerDown(e);
     this._onPointerMove = (e) => this.onPointerMove(e);
     this._onPointerUp = (e) => this.onPointerUp(e);
@@ -127,6 +166,7 @@ class ChinchonUI {
     setDeck(this._setup.deck);
     preloadDeck();
     this.mount();
+    this._tryRestoreMP();
   }
 
   // --- settings persistence -------------------------------------------------
@@ -164,12 +204,15 @@ class ChinchonUI {
       dark: !!saved.dark,
       deckNudgeSeen: !!saved.deckNudgeSeen,
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
+      // Last-used setup-screen mode (M2b). Additive: absent on an older save
+      // simply defaults to 'solo', same as today's only screen.
+      mode: ['solo', 'host', 'join'].includes(saved.mode) ? saved.mode : 'solo',
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, deckNudgeSeen: s.deckNudgeSeen, config: s.config });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, deckNudgeSeen: s.deckNudgeSeen, config: s.config, mode: s.mode });
   }
 
   /** Apply the dark-mode class to the root (idempotent; safe before mount). */
@@ -215,6 +258,7 @@ class ChinchonUI {
     };
 
     this.root.addEventListener('click', this._onClick);
+    this.root.addEventListener('input', this._onInput);
     this.el.hand.addEventListener('pointerdown', this._onHandPointerDown);
     this._applyTheme();
     this.showSetup();
@@ -228,6 +272,12 @@ class ChinchonUI {
     this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
     this._modalResolve = null; this._placeResolve = null; this._chartView = false;
     this._matchEnded = false; this._closeMenu();
+    // A lobby-only subscription (no match started yet) that wasn't already
+    // torn down by its own cancel/leave path -- disconnect it defensively.
+    // A live match's own room stays connected until an explicit leave.
+    if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
+    this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
+    this.mp = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
@@ -241,6 +291,11 @@ class ChinchonUI {
   }
 
   renderSetup() {
+    if (this._screen === 'host-lobby' || this._screen === 'join-lobby') {
+      this.el.header.innerHTML = `<h1 class="cc-title">Chinchón</h1>`;
+      this.el.setup.innerHTML = `<div class="cc-card-panel">${this._renderMpLobby()}</div>`;
+      return;
+    }
     // While the challenge is unwon, force the qualifying config (exactly 1 opponent at
     // Average or Hard) so the locked setup she plays actually counts.
     if (this.challengeLive) {
@@ -309,19 +364,43 @@ class ChinchonUI {
       ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Ana Banana</span></h1>`
       : `<h1 class="cc-title">Chinchón</h1>`) + themeBtn;
 
+    // Multiplayer (M2b): a Solo/Host online/Join selector, absent entirely in
+    // challenge mode (that hidden feature is solo-only by construction, and
+    // MP would only complicate its locked/qualifying setup for no benefit).
+    const mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
+    const modeSeg = this.challengeActive ? '' : `<div class="cc-section">
+      ${seg('set-mode', mpMode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']])}
+    </div>`;
+
+    if (mpMode === 'join') {
+      this.el.setup.innerHTML = `<div class="cc-card-panel">${statsLine}${modeSeg}${this._renderMpJoinBody()}</div>`;
+      return;
+    }
+
+    const isHost = mpMode === 'host';
+    // Online is 2-player only: Host mode shows a fixed, non-interactive "2"
+    // instead of the count selector, and no AI opponent rows (the second
+    // seat is the remote guest, shown once they join in the lobby, not here).
+    const playersSection = `<div class="cc-section">
+        <span class="cc-label">Players</span>
+        ${isHost ? `<div class="cc-locked-count" aria-label="2 players (online)">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
+        <div class="cc-player-row">
+          <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
+          <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
+        </div>
+        ${isHost ? '' : aiRows.join('')}
+      </div>`;
+
+    const actionBtn = isHost
+      ? `<button class="cc-btn cc-btn-ghost" data-action="mp-host">Host game</button>`
+      : `<button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? 'Begin challenge' : 'Start game'}</button>`;
+
     this.el.setup.innerHTML = `
       <div class="cc-card-panel ${live ? 'cc-locked' : ''}">
         ${done ? '<p class="cc-challenge-note">Chinch&oacute;n challenge completed. Play anyways?</p>' : ''}
         ${statsLine}
-        <div class="cc-section">
-          <span class="cc-label">Players</span>
-          ${seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
-          <div class="cc-player-row">
-            <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
-            <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
-          </div>
-          ${aiRows.join('')}
-        </div>
+        ${modeSeg}
+        ${playersSection}
 
         <div class="cc-section">
           <span class="cc-label">Card deck</span>
@@ -344,8 +423,81 @@ class ChinchonUI {
           <div class="cc-rules" ${s.rulesOpen ? '' : 'hidden'}>${rulesBody}</div>
         </div>
 
-        <button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? 'Begin challenge' : 'Start game'}</button>
+        ${actionBtn}
       </div>`;
+  }
+
+  // --- multiplayer lobby (M2b) ------------------------------------------------
+
+  /** Join mode's body: code input on the main setup screen itself (never its
+   *  own pre-join screen) -- _screen only switches to 'join-lobby' once the
+   *  join actually succeeds (see _mpJoinSubmit). Mirrors Escoba's M1.2 Join
+   *  mode, incl. retained-on-error input (see onInput/_syncMpMsgSlot). */
+  _renderMpJoinBody() {
+    const err = this._mpError;
+    const msg = err === 'version'
+      ? `<button class="cc-mp-msg cc-mp-msg-action" data-action="mp-update-required">Update required</button>`
+      : `<p class="cc-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+    return `<div class="cc-mp-lobby">
+      <span class="cc-label">Enter code</span>
+      <input class="cc-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
+        value="${esc(this._mpJoinCode)}"
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+      ${msg}
+      <button class="cc-btn cc-btn-primary" data-action="mp-join-submit">Join</button>
+    </div>`;
+  }
+
+  /** Mid-dot summary of the room's locked config for the host lobby (e.g.
+   *  "By points · 100 pts"). Unknown/falsy-labeled keys are skipped, and
+   *  scoreLimit/roundsLimit are only shown when victoryCondition actually
+   *  uses them (mirrors the setup screen's own usesPoints/usesRounds gate). */
+  _mpConfigSummary(config) {
+    if (!config) return '';
+    const usesPoints = config.victoryCondition !== 'rounds';
+    const usesRounds = config.victoryCondition !== 'points';
+    return Object.keys(MP_CONFIG_LABELS)
+      .filter((k) => (k === 'scoreLimit' ? usesPoints : k === 'roundsLimit' ? usesRounds : true))
+      .map((k) => (config[k] !== undefined ? MP_CONFIG_LABELS[k](config[k]) : null))
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  _renderMpLobby() {
+    const back = `<button class="cc-btn cc-btn-ghost" data-action="mp-cancel">Back</button>`;
+    if (this._screen === 'host-lobby') {
+      const room = this._mpLobbyRoom;
+      const guest = room && room.guest;
+      const code = this._mpPendingCode;
+      const msg = this._mpError || (this._mpBusy ? 'Creating room…' : '');
+      return `<div class="cc-mp-lobby">
+        <span class="cc-label">Room code</span>
+        ${code ? `<div class="cc-mp-code">${esc(code)}</div>` : `<div class="cc-mp-code cc-mp-code-empty">····</div>`}
+        <span class="cc-label">Opponent</span>
+        <div class="cc-mp-oppslot">${guest
+          ? `<span class="cc-av">${guest.avatar}</span><span class="cc-mp-oppname">${esc(guest.name)}</span>`
+          : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
+        <p class="cc-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
+        <p class="cc-mp-msg" data-role="mp-msg">${esc(msg)}</p>
+        <button class="cc-btn cc-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>Start</button>
+        ${back}
+      </div>`;
+    }
+    // The only other lobby state is 'join-lobby', only ever entered once a
+    // join has actually succeeded (see _mpJoinSubmit) -- waiting on the host
+    // to tap Start. Mirrored shape of the host lobby's opponent slot.
+    const room = this._mpLobbyRoom;
+    const host = room && room.host;
+    return `<div class="cc-mp-lobby">
+      <span class="cc-label">Room code</span>
+      <div class="cc-mp-code">${esc(this._mpJoinedCode)}</div>
+      <span class="cc-label">Host</span>
+      <div class="cc-mp-oppslot">${host
+        ? `<span class="cc-av">${host.avatar}</span><span class="cc-mp-oppname">${esc(host.name)}</span>`
+        : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
+      <p class="cc-mp-msg" data-role="mp-msg">Waiting for host</p>
+      ${back}
+    </div>`;
   }
 
   syncSetupInputs() {
@@ -521,47 +673,81 @@ class ChinchonUI {
     switch (type) {
       case 'roundStart':
         this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null; this.render();
+        // Host publishes the round it just built (deck order + dealer) before
+        // any turn plays, so the guest can preset its own engine to match.
+        // Read right here: lastDeckOrder was just set by startRound(), which
+        // ran synchronously before this event, with no await in between.
+        if (this.mp && this.mp.role === 'host') {
+          try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealerIndex); }
+          catch { this._setMpStatus('Connection error'); }
+        }
         break;
       case 'turnStart':
         this.activePlayerId = payload.playerId; this.render();
+        // Guest only: the engine is about to check tryResetStock() (right
+        // after this emit resolves, before any award); if the stock is
+        // already empty, block here until the host's reported reset order
+        // has arrived, so the guest's own tryResetStock() call finds
+        // config.presetStockResets already populated instead of falling
+        // through to a local (non-deterministic) shuffle.
+        if (this.mp && this.mp.role === 'guest') await this._mpAwaitStockReset();
         if (p && !p.isHuman) await this.beat(BEAT_TURN);
         break;
       case 'draw':
         if (p && p.isHuman) this._newCardId = payload.card.id;
         this.render();
+        if (this.mp) await this._mpAfterDecision(p, { t: 'draw', src: payload.source });
         if (p && !p.isHuman) { this.toast(`${p.name} drew from the ${payload.source === 'discard' ? 'discard pile' : 'deck'}`); await this.beat(BEAT_DRAW); }
         break;
       case 'discard':
         if (p && p.isHuman) this._newCardId = null;
         this.render();
+        if (this.mp) await this._mpAfterDecision(p, { t: 'discard', cardId: payload.card.id });
         if (p && !p.isHuman) await this.beat(BEAT_DISCARD);
         break;
       case 'close':
+        if (this.mp) await this._mpAfterDecision(p, { t: 'close', kind: true });
         this.toast(`${p.name} closed the round!`); this.render(); await this.beat(BEAT_CLOSE);
         break;
       case 'reset':
         this.toast('Deck reshuffled'); this.render();
         break;
       case 'roundScored':
-        if (this.game.whoClosed === 0) {
+        if (this.game.whoClosed === this._human().id) {
           this._matchCloses++;
           if (this.game.closeType === 'chinchon') this._matchChinchons++;
           else if (this.game.closeType === 'doubleMeld') this._matchMinusTens++;   // a -10 close (menos diez)
         }
         this._chartView = false;
+        if (this.mp) this._mpSaveSnapshot();   // turn boundary: safe autosave point (see snapshot() doc comment)
         await this.showRoundModal();
+        // Guest only: the next round's deck can't be dealt locally until the
+        // host has shuffled it and published it (see _mpHostAnnounceRound,
+        // hooked off 'roundStart'). Wait here so a guest who taps "Next
+        // round" before the host does simply waits in place.
+        if (this.mp && this.mp.role === 'guest' && !this.game.winner) await this._mpAwaitNextRound();
         break;
       case 'matchEnd':
         this._matchEnded = true;
         this._commitStats();
         this._chartView = false;
+        if (this.mp) {
+          this._mpClearSave();
+          if (this.mp.role === 'host') {
+            try { await net.writeResult(this.mp.code, { winnerId: this.game.winner.id, standings: this.game.standings.map((pl) => ({ id: pl.id, totalScore: pl.totalScore })) }); }
+            catch { /* best-effort: the match already concluded locally either way */ }
+          }
+        }
         await this.showMatchModal();
         this._onChallengeMatchEnd(); // hidden challenge: reveal the code after the match modal
         break;
     }
   }
 
-  beat(ms) { return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, ms); }); }
+  beat(ms) {
+    const scaled = this.mp && this.mp.replayMode ? ms * 0.25 : ms;
+    return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, scaled); });
+  }
 
   _commitStats() {
     if (this._statsCommitted) return;
@@ -686,6 +872,11 @@ class ChinchonUI {
   }
 
   statusText() {
+    // A persistent MP status (Resyncing / Opponent disconnected / Opponent
+    // left / Waiting for host) owns this reserved slot -- Chinchón has no
+    // separate announce row (see the T4 handoff note), so it reuses the
+    // existing status-text slot rather than adding new DOM.
+    if (this._mpStatusMsg) return this._mpStatusMsg;
     if (this._pending) {
       // No draw prompt text: the glowing name chip + highlighted piles say it.
       if (this._pending.kind === 'discard') return '';
@@ -695,6 +886,9 @@ class ChinchonUI {
     if (ap && !ap.isHuman) return `${ap.name} is playing…`;
     return '';
   }
+
+  _setMpStatus(msg) { this._mpStatusMsg = msg; this.render(); }
+  _clearMpStatus() { if (!this._mpStatusMsg) return; this._mpStatusMsg = ''; this.render(); }
 
   renderSelf() {
     const h = this._human();
@@ -794,6 +988,32 @@ class ChinchonUI {
     if (!c) return '';
     if (c.isJoker) return 'Joker';
     return `${c.rank} ${SUIT_META[c.suit].label}`;
+  }
+
+  /** Delegated `input` listener (mirrors the click delegation): the join-code
+   *  field auto-uppercases, filters to the code alphabet, and submits itself
+   *  once a full code is typed. A prior error's TEXT clears the moment the
+   *  player edits the code (the code itself is never cleared by a failed
+   *  attempt); done via a targeted DOM patch rather than a full renderSetup()
+   *  so the input never loses focus/caret mid-keystroke. */
+  onInput(e) {
+    const el = e.target;
+    if (!(el && el.dataset && el.dataset.role === 'mp-code-input')) return;
+    const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
+    if (clean !== el.value) el.value = clean;
+    this._mpJoinCode = clean;
+    if (this._mpError) { this._mpError = ''; this._syncMpMsgSlot(); }
+    if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
+  }
+
+  /** Patches the reserved message slot in place (see onInput above). Handles
+   *  both renderings that can occupy it: the plain <p> and the version-error
+   *  <button> (mp-update-required) -- always replaced with an empty/busy <p>. */
+  _syncMpMsgSlot() {
+    if (!this.el || !this.el.setup) return;
+    const slot = this.el.setup.querySelector('.cc-mp-msg');
+    if (!slot) return;
+    slot.outerHTML = `<p class="cc-mp-msg" data-role="mp-msg">${esc(this._mpError || (this._mpBusy ? 'Joining…' : ''))}</p>`;
   }
 
   // --- hand drag-to-reorder (pointer events) --------------------------------
@@ -1112,6 +1332,14 @@ class ChinchonUI {
       case 'rule-toggle': this.syncSetupInputs(); this._setup.config[a.dataset.field] = !this._setup.config[a.dataset.field]; this._saveSetup(); this.renderSetup(); break;
       case 'rule-step': this.syncSetupInputs(); this._stepRule(a.dataset.field, +a.dataset.d); this._saveSetup(); this.renderSetup(); break;
       case 'start': this.startGame(); break;
+      // multiplayer lobby (M2b)
+      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
+      case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
+      case 'mp-join-submit': this._mpJoinSubmit(); break;
+      case 'mp-start': this._mpHostStart(); break;
+      case 'mp-cancel': this._mpCancelLobby(); break;
+      case 'mp-update-required': this._mpForceUpdate(); break;
+      case 'mp-error-ok': this.showSetup(); break;
       // game
       case 'draw-stock': if (pend && pend.kind === 'draw') this._resolvePending('stock'); break;
       case 'draw-discard': if (pend && pend.kind === 'draw') this._resolvePending('discard'); break;
@@ -1127,7 +1355,7 @@ class ChinchonUI {
       case 'place-skip': this._resolvePlace([]); break;
       case 'toggle-chart': this._chartView = !this._chartView; if (this._modalResolve) this._renderRoundModal(); else this._renderMatchModal(); break;
       case 'next-round': this._resolveModal(); break;
-      case 'new-game': this.showSetup(); break;
+      case 'new-game': if (this.mp) this._mpLeaveToSetup(); else this.showSetup(); break;
       // in-game menu
       case 'open-menu': this._openMenu(); break;
       case 'close-menu': case 'menu-resume': this._closeMenu(); break;
@@ -1156,13 +1384,16 @@ class ChinchonUI {
       <div class="cc-sheet cc-menu-sheet">
         <h2 class="cc-sheet-title">Menu</h2>
         <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${this._setup.dark ? '☀️ Light mode' : '🌙 Dark mode'}</button>
-        ${btn('newgame', 'New game (same settings)')}
-        ${btn('quit', 'Quit to setup')}
+        ${btn('newgame', this.mp ? 'Leave match' : 'New game (same settings)')}
+        ${this.mp ? '' : btn('quit', 'Quit to setup')}
         <button class="cc-btn cc-btn-primary" data-action="menu-resume">Resume game</button>
       </div>`;
   }
 
-  /** Destructive menu actions confirm-on-second-tap while a match is live. */
+  /** Destructive menu actions confirm-on-second-tap while a match is live.
+   *  In MP either action leaves the match (there is no "same settings"
+   *  restart -- rehosting isn't automatic), which also ends the room for
+   *  the opponent, unlike backgrounding (destroy()), which preserves it. */
   _menuAction(which) {
     if (this._inProgress() && this._menuConfirm !== which) {
       this._menuConfirm = which;
@@ -1170,6 +1401,7 @@ class ChinchonUI {
       return;
     }
     this._closeMenu();
+    if (this.mp) { this._mpLeaveToSetup(); return; }
     if (which === 'newgame') this.startGame();
     else this.showSetup();
   }
@@ -1188,15 +1420,553 @@ class ChinchonUI {
     this.render();
   }
 
+  // --- multiplayer (M2b) -------------------------------------------------------
+  // Everything below is reached only through this.mp -- null for the entire
+  // life of a solo match, so none of it runs a single line in solo play.
+
+  _myIdentity() {
+    return { name: this._setup.humanName || 'You', avatar: this._setup.humanAvatar, deviceId: deviceId() };
+  }
+
+  /** The remote seat, unambiguous in a 2-player MP match: whichever player
+   *  isn't the local human. Used where an agent callback needs "the player
+   *  object" but isn't itself passed one (RemoteAgent's decideClose). */
+  _remotePlayer() { return this.game.players.find((p) => !p.isHuman); }
+
+  _mpNewState(role, code, opp) {
+    return {
+      role, code,
+      appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+      pendingResolve: null, pendingType: null, pendingSeq: null, pendingHash: null,
+      replayMode: false, recoveryAttempts: 0,
+      opponentLeft: false, lastRoomSnapshot: null,
+      lastRecoveryHandled: null, lastRecoveryApplied: null,
+      awaitingRoundN: null, awaitingRoundResolve: null,
+      awaitingStockReset: null,
+    };
+  }
+
+  /** Manual lay-off prompts every non-closer for a choice mid-scoring; M2b's
+   *  move protocol doesn't sync that decision (out of scope -- the T1
+   *  move-type list is draw/discard/close/stock-reset only), so MP coerces
+   *  'manual' to 'auto' (same net effect on the hand, no prompt needed). */
+  _mpBuildConfig(cfg) {
+    const c = Object.assign({}, DEFAULT_CONFIG, cfg);
+    if (c.placeOnEnding === 'manual') c.placeOnEnding = 'auto';
+    return c;
+  }
+
+  /** Same agent interface as AIAgent/humanAgent: each method returns a
+   *  promise the engine awaits, resolved from the network instead of a tap
+   *  or a heuristic. choosePlacements is never actually exercised (manual
+   *  placement is coerced away for MP, see _mpBuildConfig) but is defined
+   *  defensively so a stale/edge-case config can never hit a missing method. */
+  _makeRemoteAgent() {
+    const ui = this;
+    return {
+      isHuman: false,
+      chooseDraw() { return ui._mpAwaitDecisionValue('draw'); },
+      chooseDiscard() { return ui._mpAwaitDecisionValue('discard'); },
+      async decideClose() {
+        const kind = await ui._mpAwaitDecisionValue('close');
+        // A DECLINED close has no engine event to hook (playTurn() just
+        // returns false with no state change) -- verify immediately, since
+        // no mutation is coming for this decision either.
+        if (!kind) await ui._mpAfterDecision(ui._remotePlayer(), null);
+        return kind;
+      },
+      async choosePlacements(view, locked, attachable) { return attachable.map((c) => c.id); },
+    };
+  }
+
+  /** If a RemoteAgent method is currently awaiting AND the next entry in the
+   *  cached log matches, resolve it. A no-op otherwise (the next room update,
+   *  or the next call from the engine, will retry) -- single-slot re-entrancy
+   *  guard, mirroring Escoba's _mpTryDeliverNextMove. Also greedily consumes
+   *  any LEADING 'stock-reset' entries first: those need no agent decision at
+   *  all (see tryResetStock()'s doc comment in game.js), just an append to
+   *  config.presetStockResets before the log can be seen as "caught up". */
+  _mpTryDeliverNextMove() {
+    const mp = this.mp;
+    if (!mp || !mp.movesById) return;
+    while (true) {
+      const seq = mp.appliedSeq + 1;
+      const entry = mp.movesById.get(seq);
+      if (!entry || entry.move.t !== 'stock-reset') break;
+      this.game.config.presetStockResets = (this.game.config.presetStockResets || []).concat([entry.move.order]);
+      mp.appliedSeq = seq;
+      if (mp.awaitingStockReset) { const r = mp.awaitingStockReset; mp.awaitingStockReset = null; this._clearMpStatus(); r(); }
+    }
+    if (!mp.pendingResolve) return;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry) return;
+    const resolve = mp.pendingResolve;
+    mp.pendingResolve = null; mp.pendingType = null;
+    mp.pendingSeq = seq;
+    mp.pendingHash = entry.h;
+    const m = entry.move;
+    resolve(m.t === 'draw' ? m.src : m.t === 'discard' ? m.cardId : !!m.kind);
+  }
+
+  _mpAwaitDecisionValue(expectedType) {
+    return new Promise((resolve) => {
+      this.mp.pendingResolve = resolve;
+      this.mp.pendingType = expectedType;
+      this._mpTryDeliverNextMove();   // the move may already be cached from a prior room update
+    });
+  }
+
+  /** Guest-only: block right before the engine's own tryResetStock() call
+   *  (hooked from 'turnStart', which fires before it) until the host's
+   *  reported reset order has arrived and been queued into
+   *  config.presetStockResets -- otherwise the guest's own tryResetStock()
+   *  would fall through to a local, non-deterministic shuffle. */
+  _mpAwaitStockReset() {
+    const mp = this.mp;
+    if (this.game.stock.length > 0 || this.game.resetsUsed >= this.game.config.maxResets) return Promise.resolve();
+    const have = (this.game.config.presetStockResets || []).length;
+    if (have > this.game.resetsUsed) return Promise.resolve();
+    this._setMpStatus('Waiting for host');
+    return new Promise((resolve) => { mp.awaitingStockReset = resolve; });
+  }
+
+  /** Called after every applied draw/discard/close decision in MP (and,
+   *  directly, after a declined close, which has no engine event). `p` is
+   *  whoever's decision it was, BY SEAT (Chinchón's own _human() already
+   *  resolves by isHuman flag, not index, so this needs no seat-index fix):
+   *  p.isHuman means it was made by this device's own local human via the
+   *  ordinary humanAgent, so it needs sending; otherwise it just arrived
+   *  from the peer via RemoteAgent and needs hash verification. */
+  async _mpAfterDecision(p, moveIfLocal) {
+    const mp = this.mp;
+    if (!mp) return;
+    if (p.isHuman) {
+      // Reserve the seq SYNCHRONOUSLY, not after the network await: the
+      // synchronous onStockReset hook (see _mpSendStockReset) can otherwise
+      // race a subsequent awaited send and collide on the same seq number.
+      const seq = ++mp.appliedSeq;
+      const hash = stateHash(this.game);
+      net.appendMove(mp.code, mp.role, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('Connection error'); });
+      return;
+    }
+    const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
+    mp.pendingSeq = null; mp.pendingHash = null;
+    if (expectedSeq == null) return;
+    const hash = stateHash(this.game);
+    if (hash === expectedHash) {
+      mp.appliedSeq = expectedSeq;
+      mp.recoveryAttempts = 0;
+      if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+      return;
+    }
+    await this._mpHandleMismatch(expectedSeq);
+  }
+
+  /** Host's onStockReset hook (config.onStockReset, wired in _mpHostStart):
+   *  fires SYNCHRONOUSLY inside tryResetStock(), so this reserves its seq
+   *  the same synchronous way _mpAfterDecision's send branch does, then
+   *  fires the network write in the background. */
+  _mpSendStockReset(order) {
+    const mp = this.mp;
+    if (!mp) return;
+    const seq = ++mp.appliedSeq;
+    const hash = stateHash(this.game);
+    net.appendMove(mp.code, mp.role, seq, { t: 'stock-reset', order }, hash).catch(() => { this._setMpStatus('Connection error'); });
+  }
+
+  /** Desync: guest can only flag it (host is authoritative in M2b, matching
+   *  M1's Escoba protocol); host rebuilds a snapshot for the guest either
+   *  way. Three consecutive failed attempts end the match. */
+  async _mpHandleMismatch(seq) {
+    const mp = this.mp;
+    if (!mp) return;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
+    this._setMpStatus('Resyncing');
+    try {
+      if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
+      else await net.requestRecovery(mp.code, seq);
+    } catch { /* the next room update (heartbeat-driven) retries this naturally */ }
+  }
+
+  /** Guest side of a resync: rebuild via Game.fromSnapshot (the same
+   *  turn-boundary resume path T5's autosave/restore uses) with MP agents
+   *  instead of AI. */
+  _mpApplyRecovery(recovery) {
+    const mp = this.mp;
+    if (!mp || this._dead) return;
+    const snap = recovery.state;
+    const agentsById = {};
+    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    if (this.game) this.game.abort();
+    this._resolvePending(null); this._resolvePlace([]); this._resolveModal();
+    this.game = Game.fromSnapshot(snap, agentsById);
+    this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+    this._matchEnded = false; this._closeMenu();
+    mp.appliedSeq = recovery.seq;
+    mp.pendingResolve = null; mp.pendingType = null; mp.pendingSeq = null; mp.pendingHash = null;
+    mp.replayMode = false; mp.recoveryAttempts = 0;
+    this._clearMpStatus();
+    net.clearRecovery(mp.code).catch(() => {});
+    this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    this._buildPiles();
+    this.render();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP recovery error', err); });
+  }
+
+  /** Guest-only: block the engine's own round transition until the host's
+   *  freshly-shuffled deck for the next round has arrived (see the
+   *  'roundStart'/'roundScored' hooks in onEvent). */
+  _mpAwaitNextRound() {
+    const mp = this.mp;
+    const targetRound = this.game.round + 1;
+    const room = mp.lastRoomSnapshot;
+    if (room && room.round && room.round.n === targetRound) {
+      this.game.config.presetDeck = room.round.deck;
+      return Promise.resolve();
+    }
+    this._setMpStatus('Waiting for host');
+    return new Promise((resolve) => { mp.awaitingRoundN = targetRound; mp.awaitingRoundResolve = resolve; });
+  }
+
+  async _mpEndDueToError() {
+    if (this._dead || this._matchEnded) return;
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._chartView = false;
+    this._mpClearSave();
+    const mp = this.mp;
+    this.mp = null;
+    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.role); } catch { /* best-effort */ } }
+    else net.disconnect();
+    this.render();
+    this._renderMpErrorModal();
+  }
+
+  _mpEndDueToOpponentLeft() {
+    if (this._dead || this._matchEnded) return;
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._chartView = false;
+    this._mpClearSave();
+    net.stopHeartbeat();
+    this.render();
+    this._renderMpOpponentLeftModal();
+  }
+
+  _renderMpErrorModal() {
+    this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      <h2 class="cc-sheet-title">Connection error</h2>
+      <p class="cc-sheet-sub">The match could not stay in sync</p>
+      <div class="cc-sheet-actions">
+        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">Back to setup</button>
+      </div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  _renderMpOpponentLeftModal() {
+    const standings = this.game.players.slice().sort((a, b) => b.totalScore - a.totalScore);
+    const rows = standings.map((p, i) => `<li><span class="cc-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('');
+    this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      <h2 class="cc-sheet-title">Opponent left</h2>
+      <p class="cc-sheet-sub">Final standings</p>
+      <ol class="cc-standings">${rows}</ol>
+      <div class="cc-sheet-actions">
+        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">Back to setup</button>
+      </div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  /** The one room subscription for this device's whole MP session (lobby
+   *  through match end): net.js allows exactly one at a time. */
+  _mpRoomCallback(room) {
+    if (this._dead) return;
+    this._mpLobbyRoom = room;
+    if (this.mp) { this._mpOnRoomUpdate(room); return; }
+    if (this._screen === 'host-lobby' || this._screen === 'join-lobby') this.renderSetup();
+    if (this._screen === 'join-lobby' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
+      this._mpGuestStartMatch(room);
+    }
+  }
+
+  async _mpOnRoomUpdate(room) {
+    if (this._dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+
+    // An abandon (leaveRoom) sets status:'ended' with no result; a natural
+    // conclusion (writeResult) sets both together -- result == null is what
+    // tells the two apart, since matchEnd may not have reached this device
+    // yet even when it concluded normally.
+    if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this._matchEnded) {
+      mp.opponentLeft = true;
+      this._setMpStatus('Opponent left');
+      this._mpEndDueToOpponentLeft();
+      return;
+    }
+
+    const oppKey = mp.role === 'host' ? 'guest' : 'host';
+    const opp = room[oppKey];
+    if (opp && !mp.opponentLeft) {
+      const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
+      if (stale && this._mpStatusMsg !== 'Opponent disconnected') this._setMpStatus('Opponent disconnected');
+      else if (!stale && this._mpStatusMsg === 'Opponent disconnected') this._clearMpStatus();
+    }
+
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot()); } catch { /* the requester retries */ }
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this._mpApplyRecovery(room.recovery);
+      }
+    }
+
+    const entries = Object.values(room.moves || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq), 0);
+    if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+    mp.maxKnownSeq = maxSeq;
+    this._mpTryDeliverNextMove();
+
+    if (mp.awaitingRoundResolve && room.round && room.round.n === mp.awaitingRoundN) {
+      this.game.config.presetDeck = room.round.deck;
+      const resolve = mp.awaitingRoundResolve;
+      mp.awaitingRoundN = null; mp.awaitingRoundResolve = null;
+      this._clearMpStatus();
+      resolve();
+    }
+  }
+
+  async _mpHostCreate() {
+    if (this._mpBusy) return;
+    this._mpBusy = true; this._mpError = '';
+    this.renderSetup();
+    const me = this._myIdentity();
+    const config = this._mpBuildConfig(this._setup.config);
+    const res = await net.createRoom('chinchon', config, me);
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'busy' ? 'Could not create a room' : 'Offline';
+      this.renderSetup();
+      return;
+    }
+    this._mpPendingCode = res.code;
+    net.heartbeat(res.code, 'host');
+    await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
+    this.renderSetup();
+  }
+
+  async _mpHostStart() {
+    const room = this._mpLobbyRoom;
+    if (!room || !room.guest || this._mpBusy || this.mp) return;
+    const code = this._mpPendingCode;
+    this.mp = this._mpNewState('host', code, room.guest);
+    if (this.game) this.game.abort();
+    this.syncSetupInputs();
+    const s = this._setup;
+    const config = this._mpBuildConfig(s.config);
+    config.onStockReset = (order) => this._mpSendStockReset(order);
+    const players = [
+      makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
+    ];
+    this.game = new Game({ players, config });
+    this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+    this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
+    this._matchEnded = false; this._closeMenu();
+    this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    this._buildPiles();
+    this.render();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP match error', err); });
+  }
+
+  async _mpJoinSubmit() {
+    if (this._mpBusy) return;
+    const code = this._mpJoinCode;
+    if (code.length !== MP_CODE_LEN) return;
+    this._mpBusy = true; this._mpError = '';
+    this.renderSetup();
+    const me = this._myIdentity();
+    const res = await net.joinRoom(code, me);
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'not-found' ? 'Room not found'
+        : res.error === 'ended' ? 'Room ended'
+        : res.error === 'full' ? 'Room full'
+        : res.error === 'version' ? 'version'
+        : 'Offline';
+      this.renderSetup();
+      return;
+    }
+    // Game-type check: net.js is game-agnostic, so a wrong-game join must be
+    // caught client-side. Treated as a not-found-class error (no room slot
+    // was actually claimed on our behalf server-side to undo -- the guest
+    // field write already happened, but harmlessly, since the room is unusable
+    // to us either way and its own TTL/host will reclaim it).
+    if (res.room && res.room.game && res.room.game !== 'chinchon') {
+      this._mpError = 'Wrong game';
+      this.renderSetup();
+      return;
+    }
+    this._mpPendingCode = code;
+    this._mpJoinedCode = code;
+    this._screen = 'join-lobby';   // only now: a failed attempt stays on the setup screen's Join mode
+    net.heartbeat(code, 'guest');
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    this._mpLobbyRoom = res.room;
+    this.renderSetup();
+    if (res.room && res.room.status === 'active' && res.room.round) this._mpGuestStartMatch(res.room);
+  }
+
+  _mpGuestStartMatch(room) {
+    if (this.mp || this._dead) return;
+    const code = this._mpJoinedCode;
+    this.mp = this._mpNewState('guest', code, room.host);
+    if (this.game) this.game.abort();
+    const s = this._setup;
+    const config = this._mpBuildConfig(room.config || {});
+    config.presetDeck = room.round.deck;
+    // Dealer rotation in Chinchón is fully deterministic (initMatch() always
+    // starts at 0, finishRoundAfterPlay() always advances by 1) -- unlike
+    // Escoba's randomly-picked round-1 dealer, there is nothing to force
+    // here; both engines reach the identical dealerIndex on their own.
+    const players = [
+      makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
+      makePlayer({ id: 1, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+    ];
+    this.game = new Game({ players, config });
+    this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+    this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
+    this._matchEnded = false; this._closeMenu();
+    this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    this._buildPiles();
+    this.render();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP match error', err); });
+  }
+
+  _mpCancelLobby() {
+    const code = this._mpPendingCode;
+    const role = this._screen === 'host-lobby' ? 'host' : 'guest';
+    this._screen = 'setup';
+    this._mpError = ''; this._mpBusy = false; this._mpJoinCode = '';
+    this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
+    if (code) net.leaveRoom(code, role).catch(() => {});
+    else net.disconnect();
+    this.renderSetup();
+  }
+
+  /** The in-game menu's leave action: unlike destroy() (backgrounding, room
+   *  left untouched), this is an explicit abandon -- ends the room too. */
+  _mpLeaveToSetup() {
+    const mp = this.mp;
+    if (this.game) this.game.abort();
+    this.mp = null;
+    this._mpClearSave();
+    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    else net.disconnect();
+    this.showSetup();
+  }
+
+  async _mpForceUpdate() {
+    try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch { /* ignore */ }
+    try { location.reload(); } catch { /* ignore */ }
+  }
+
+  // --- MP autosave (T5): MP-only, no solo equivalent exists ------------------
+
+  /** Snapshot timing constraint (from M2a/game.js's snapshot() doc comment):
+   *  only valid BETWEEN turns, never mid-turn (between a draw and its
+   *  discard). Called only from the 'roundScored' onEvent hook (a round
+   *  boundary, always safe) -- NOT after every entry, unlike Escoba's
+   *  per-move autosave, because Chinchón's per-DECISION granularity means
+   *  "after a draw" is mid-turn. A restored match therefore always resumes
+   *  from the last completed round's start, fast-replaying whatever of the
+   *  new round already happened via the normal move log (replayMode). */
+  _mpSaveSnapshot() {
+    if (!this.game || !this.mp) return;
+    try {
+      saveJSON(STORE_MP_SAVE, {
+        v: 1, code: this.mp.code, role: this.mp.role, seq: this.mp.appliedSeq,
+        at: Date.now(), snap: this.game.snapshot(),
+      });
+    } catch { /* private mode / quota */ }
+  }
+
+  _mpLoadSave() {
+    const raw = loadJSON(STORE_MP_SAVE, null);
+    return (raw && raw.v === 1 && raw.snap) ? raw : null;
+  }
+
+  _mpClearSave() { try { localStorage.removeItem(STORE_MP_SAVE); } catch { /* ignore */ } }
+
+  /** Backgrounding/restore: an MP autosave younger than 30 minutes, with the
+   *  room still active, reattaches to the same room and fast-replays
+   *  (replayMode) whatever moves landed while this device was away, instead
+   *  of just returning to a blank setup screen. Runs once, right after
+   *  mount(). Chinchón has no solo autosave, so this never fires outside MP. */
+  async _tryRestoreMP() {
+    const save = this._mpLoadSave();
+    if (!save) return;
+    const age = Date.now() - (save.at || 0);
+    if (age > MP_RESTORE_MAX_AGE_MS) { this._mpClearSave(); return; }
+    const { code, role } = save;
+    if (!code || !role || !save.snap) return;
+    try {
+      if (role === 'guest') {
+        const res = await net.joinRoom(code, this._myIdentity());
+        if (res.error || (res.room && res.room.status === 'ended')) { this._mpClearSave(); return; }
+      } else if (!(await net.init())) return;
+    } catch { return; }
+    if (this._dead || this.mp || this.game) return;   // superseded by a faster user action meanwhile
+
+    const agentsById = {};
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    this.mp = this._mpNewState(role, code, null);
+    this.mp.appliedSeq = save.seq | 0;
+    this.game = Game.fromSnapshot(save.snap, agentsById);
+    this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+    this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
+    this._matchEnded = false;
+    net.heartbeat(code, role);
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this._buildPiles();
+    this.render();
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP restore error', err); });
+  }
+
   // --- teardown -------------------------------------------------------------
 
   destroy() {
     this._dead = true;
+    // Deliberately do NOT abandon an MP room here: this is backgrounding
+    // (destroy() runs for ANY hub teardown, incl. just navigating back to
+    // the launcher mid-match), not an explicit abandon -- see
+    // _mpLeaveToSetup/_menuAction for that. The room stays alive server-side
+    // (only the local listener/heartbeat stop, per Invariant 2) and the MP
+    // autosave lets a relaunch within 30 min pick the match back up.
     if (this.game) this.game.abort();
     this._resolvePending(null); // unblock any awaiting human decision (engine then aborts)
     this._resolvePlace([]);     // unblock any awaiting placement prompt
     this._resolveModal();       // unblock any awaiting round modal
-    if (this.root) this.root.removeEventListener('click', this._onClick);
+    net.disconnect();
+    this.mp = null;
+    if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
     document.removeEventListener('pointercancel', this._onPointerUp);

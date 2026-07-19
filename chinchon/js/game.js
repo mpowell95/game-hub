@@ -244,12 +244,31 @@ export class Game {
     this.currentPlayerIndex = (this.dealerIndex + 1) % this.players.length;
   }
 
-  /** Reshuffle the discard (minus its top) back into the stock. False if no reset left. */
+  /** Reshuffle the discard (minus its top) back into the stock. False if no reset left.
+   *
+   *  Multiplayer lockstep (M2b T0): a plain `shuffle(this.discard, this.rng)`
+   *  would desync host and guest the moment a reset fires (each device's
+   *  `rng` is its own, per fromSnapshot() -- see chinchon/js/hash.js's doc).
+   *  Two additive hooks, both no-ops when absent (byte-identical to before):
+   *    - `config.presetStockResets`: an array of exact orders (card ids),
+   *      consumed one per reset in order. When the next entry exists, it
+   *      is used instead of shuffling -- the guest's side of the protocol.
+   *    - `config.onStockReset(newOrder)`: called with the resulting stock
+   *      order (ids) whenever a reset actually shuffles locally -- the
+   *      host's side, letting the UI capture and transmit it as a
+   *      synthetic 'stock-reset' move (see T1). */
   tryResetStock() {
     if (this.resetsUsed >= this.config.maxResets) return false;
     if (this.discard.length <= 1) return false;
     const top = this.discard.pop();
-    this.stock = shuffle(this.discard, this.rng);
+    const preset = Array.isArray(this.config.presetStockResets) ? this.config.presetStockResets[this.resetsUsed] : null;
+    if (preset && preset.length) {
+      const byId = new Map(this.discard.map((c) => [c.id, c]));
+      this.stock = preset.map((id) => byId.get(id)).filter(Boolean);
+    } else {
+      this.stock = shuffle(this.discard, this.rng);
+      if (typeof this.config.onStockReset === 'function') this.config.onStockReset(this.stock.map((c) => c.id));
+    }
     this.discard = [top];
     this.resetsUsed++;
     return true;

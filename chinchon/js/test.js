@@ -238,5 +238,74 @@ for (const [seed, n] of [[7, 3], [77, 6], [777, 9]]) {
   eq('hash stability: hand order is cosmetic, not part of the hash', h1a, stateHash(g2));
 }
 
+// --- M2b T0: deterministic stock reset --------------------------------------
+// A direct unit test of tryResetStock()'s two hooks (no full match needed):
+// the host shuffles and reports; the guest, given that exact reported order,
+// reaches byte-identical stock/discard with no shuffle of its own.
+{
+  const startDiscard = () => [C('oros', 1), C('copas', 2), C('espadas', 3), C('bastos', 4)];
+
+  const gHost = new Game({ players: hardAgents(), config: { ...DEF, maxResets: 2 }, rng: lcg(999) });
+  gHost.discard = startDiscard();
+  let reported = null;
+  gHost.config.onStockReset = (order) => { reported = order; };
+  assert('T0: host-style reset succeeds', gHost.tryResetStock());
+  assert('T0: host reset reports an order (discard minus its top)', Array.isArray(reported) && reported.length === 3);
+  eq('T0: host stock matches what it reported', gHost.stock.map((c) => c.id), reported);
+  eq('T0: discard left with only the top card', gHost.discard.map((c) => c.id), ['b4']);
+  eq('T0: resetsUsed incremented', gHost.resetsUsed, 1);
+
+  const gGuest = new Game({ players: hardAgents(), config: { ...DEF, maxResets: 2, presetStockResets: [reported] } });
+  gGuest.discard = startDiscard();
+  assert('T0: guest-style (preset) reset succeeds', gGuest.tryResetStock());
+  eq('T0: guest stock matches host exactly (no independent shuffle)', gGuest.stock.map((c) => c.id), gHost.stock.map((c) => c.id));
+  eq('T0: guest discard matches host', gGuest.discard.map((c) => c.id), gHost.discard.map((c) => c.id));
+
+  // config.onStockReset must NOT fire when a preset order is consumed (the
+  // guest never actually shuffles, so there is nothing new to report).
+  let guestReported = false;
+  gGuest.config.onStockReset = () => { guestReported = true; };
+  gGuest.discard = [C('oros', 5), C('copas', 6)];
+  gGuest.resetsUsed = 0;
+  gGuest.config.presetStockResets = [['o5']];   // 2nd-call shape irrelevant; just needs an entry
+  gGuest.tryResetStock();
+  assert('T0: onStockReset is not called when a preset order was consumed', !guestReported);
+}
+
+// --- M2b T0: full-match scenario -- same presetDeck + scripted (deterministic
+// hard-AI) moves, stock forced near-empty so a reset actually fires mid-match.
+// Host shuffles+reports; guest consumes the report via presetStockResets;
+// both reach identical post-reset stock/discard/hands with no shared rng. ---
+async function playForcingOneReset(seed, opts = {}) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  const cfg = { ...DEF, presetDeck: order, maxResets: 1, ...opts };
+  const g = new Game({ players: hardAgents(), config: cfg, rng: lcg(seed + 1) });
+  g.onEvent = async (type) => {
+    // Force exhaustion soon after the deal (stock is fully dealt by the time
+    // 'roundStart' fires, before any turn plays) so the reset fires within a
+    // handful of turns instead of needing to script ~25 real draws.
+    if (type === 'roundStart') g.stock = g.stock.slice(0, 2);
+    if (type === 'roundScored') g.abort();
+  };
+  await g.playMatch();
+  return g;
+}
+
+for (const seed of [55, 555]) {
+  const reported = [];
+  const gHost = await playForcingOneReset(seed, { onStockReset: (o) => reported.push(o) });
+  assert(`T0: a reset actually fired mid-match (seed ${seed})`, gHost.resetsUsed === 1);
+  eq(`T0: exactly one order was reported (seed ${seed})`, reported.length, 1);
+
+  const gGuest = await playForcingOneReset(seed, { presetStockResets: reported });
+  eq(`T0: identical stock after a shared-order reset (seed ${seed})`, gHost.stock.map((c) => c.id), gGuest.stock.map((c) => c.id));
+  eq(`T0: identical discard (seed ${seed})`, gHost.discard.map((c) => c.id), gGuest.discard.map((c) => c.id));
+  for (let i = 0; i < gHost.players.length; i++) {
+    eq(`T0: identical hand for player ${i} (seed ${seed})`,
+      gHost.players[i].hand.map((c) => c.id).sort(), gGuest.players[i].hand.map((c) => c.id).sort());
+  }
+  eq(`T0: identical stateHash post-reset (seed ${seed})`, stateHash(gHost), stateHash(gGuest));
+}
+
 console.log(`\nChinchón engine tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

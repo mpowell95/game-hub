@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v147';
+const CACHE = 'game-hub-v148';
 
 const ASSETS = [
   './',
@@ -59,6 +59,7 @@ const ASSETS = [
   './chinchon/js/meld.js',
   './chinchon/js/cards.js',
   './chinchon/js/game.js',
+  './chinchon/js/hash.js',
   './chinchon/js/ai.js',
   './chinchon/js/ui.js',
   // Parchís (self-contained single file)

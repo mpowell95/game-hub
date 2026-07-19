@@ -11,6 +11,7 @@
   --cc-accent: #d4a017;
   --cc-good: #2e8b57;
   --cc-bad: #c2402f;
+  --cc-attn: #ffce3a;            /* the one attention color (MP room code); never used alone for meaning */
 
   /* Spanish suit colours. */
   --cc-suit-oros: #c8920f;
@@ -470,6 +471,58 @@
 .cc-name-input:focus { outline: 2px solid var(--cc-accent); outline-offset: 1px; }
 .cc-seg-sm { margin-left: auto; }
 .cc-seg-sm .cc-seg { padding: 6px 9px; font-size: 0.82rem; }
+
+/* Host mode: online is 2-player only, so the count selector is replaced by a
+   fixed, non-interactive indicator instead of a disabled-looking control. */
+.cc-locked-count {
+  align-self: flex-start; min-width: 44px; text-align: center; padding: 10px 14px;
+  border-radius: 11px; background: var(--cc-surface-2); color: var(--cc-muted); font-weight: 800;
+}
+
+/* --- multiplayer (M2b) ------------------------------------------------------
+   Mirrors Escoba's M1/M1.1/M1.2 MP lobby styling 1:1 (same shape, cc- prefix). */
+.cc-mp-lobby { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.cc-mp-lobby .cc-label { text-align: center; }
+
+.cc-mp-code {
+  align-self: center;
+  font-size: clamp(44px, 14vw, 56px); line-height: 1; font-weight: 900;
+  letter-spacing: 0.18em; padding: 14px 20px 10px; color: var(--cc-ink);
+  border: 3px dashed var(--cc-attn); border-radius: 14px;
+  background: rgba(255, 206, 58, 0.12);
+}
+.cc-mp-code.cc-mp-code-empty { color: var(--cc-muted); border-color: var(--cc-surface-2); background: none; }
+
+.cc-mp-oppslot {
+  align-self: center; display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 16px; border-radius: 12px; background: var(--cc-surface-2);
+  font-weight: 700;
+}
+.cc-mp-oppslot-empty { color: var(--cc-muted); font-size: 1.1rem; }
+.cc-mp-oppname { color: var(--cc-ink); }
+
+.cc-mp-summary {
+  margin: 0; min-height: 1.1em; text-align: center; font-size: 0.78rem; font-weight: 600;
+  color: var(--cc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.cc-mp-code-input {
+  align-self: center; width: 100%; max-width: 240px;
+  font: inherit; font-size: 1.6rem; font-weight: 900; text-align: center; letter-spacing: 0.3em;
+  text-transform: uppercase; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--cc-surface-2); background: var(--cc-surface); color: var(--cc-ink);
+}
+.cc-mp-code-input:focus { outline: 2px solid var(--cc-accent); outline-offset: -1px; }
+
+/* Reserved 1-line status/error slot: always present so its text
+   appearing/disappearing never shifts the Join button below it. */
+.cc-mp-msg {
+  margin: 0; min-height: 1.1em; text-align: center; font-size: 0.85rem; font-weight: 700; color: var(--cc-bad);
+}
+.cc-mp-msg-action {
+  appearance: none; border: none; background: none; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; color: var(--cc-bad); font: inherit; font-weight: 700;
+}
 
 .cc-rules-toggle { appearance: none; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: space-between; cursor: pointer; width: 100%; }
 .cc-chevron { color: var(--cc-muted); font-weight: 800; }
