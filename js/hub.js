@@ -7,13 +7,8 @@
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
-import { isChallengeActive, isAdmin, isDevProfile, loadChallenge } from './challenge/hooks.js';
-import { markUnlockSeen } from './challenge/challenge-store.js';
+import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
-
-// Which challenge win-slot each of the four games maps to, for the challenge-mode task
-// markers on the launcher cards (star = still to win, check = won). Other cards map to none.
-const CHALLENGE_SLOT = { 'connect-four': 'connect4', 'chinchon': 'chinchon', 'business-deal': 'business', 'parchis': 'parchis' };
 
 const GAMES = [
   {
@@ -260,37 +255,6 @@ const GAMES = [
   },
 ];
 
-// Hidden entries appended only when the profile name matches (see render()). The
-// challenge card is Ana's mission; the admin card is Matt's Challenge Control. Both
-// mount the same module, which decides which face to show from the profile name.
-const CHALLENGE_CARD = {
-  id: 'challenge',
-  title: 'Hidden Challenge',
-  blurb: '',
-  module: './challenge/challenge-ui.js',
-  accent: '#f2b705',
-  art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-          <rect width="120" height="120" fill="#12151c"/>
-          <circle cx="60" cy="55" r="30" fill="none" stroke="#f2b705" stroke-width="6"/>
-          <text x="60" y="72" font-size="46" font-weight="900" text-anchor="middle" fill="#f2b705" font-family="system-ui, -apple-system, sans-serif">?</text>
-          <g fill="#f2b705"><circle cx="22" cy="26" r="3"/><circle cx="99" cy="30" r="2.5"/><circle cx="28" cy="98" r="2.5"/><circle cx="96" cy="92" r="3"/></g>
-        </svg>`,
-};
-const ADMIN_CARD = {
-  id: 'challenge',
-  title: 'Challenge Control',
-  blurb: 'Matt only.',
-  module: './challenge/challenge-ui.js',
-  accent: '#178a7a',
-  art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-          <rect width="120" height="120" fill="#0e1b19"/>
-          <circle cx="60" cy="60" r="34" fill="none" stroke="#178a7a" stroke-width="4"/>
-          <circle cx="60" cy="60" r="20" fill="none" stroke="#178a7a" stroke-width="3"/>
-          <line x1="60" y1="60" x2="90" y2="42" stroke="#f2b705" stroke-width="4"/>
-          <circle cx="60" cy="60" r="5" fill="#f2b705"/>
-        </svg>`,
-};
-
 class Hub {
   constructor(root) {
     this.root = root;
@@ -310,21 +274,25 @@ class Hub {
   render() {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
     const prof = loadProfile();
+    // M3b: the hidden challenge/gift is complete and retired. Task badges, the hidden
+    // "Hidden Challenge"/"Challenge Control" hub card, and the first-activation unlock
+    // announcement are gone for everyone, including the recipient and Matt. The only
+    // surviving entry point is the keepsake button below, gated on the SAME identity
+    // checks the challenge already used (recipient or tester name, or Matt).
     const active = !!(prof && isChallengeActive(prof.name));
-    this._chWins = active ? (loadChallenge().wins || {}) : null;   // challenge task markers on the cards
-    const admin = !active && !!(prof && isAdmin(prof.name));
-    const extra = active ? CHALLENGE_CARD : admin ? ADMIN_CARD : null;   // hidden card, shown apart from the games
+    const admin = !!(prof && isAdmin(prof.name));
+    this._chWins = null;
+    const showKeepsake = active || admin;
     // In-development games (devOnly) render only for Matt and the tester. Everyone else,
     // including the challenge recipient, never sees the card at all.
     const dev = !!(prof && isDevProfile(prof.name));
     // Games are always listed ALPHABETICALLY by display title (project rule). Sorting at
     // render time keeps it self-maintaining: a new GAMES entry lands in the right place no
     // matter where it is added to the array. localeCompare so accents (Chinchón, Parchís)
-    // sort correctly. The hidden challenge/admin card is deliberately NOT sorted in; it
-    // renders apart in .hub-extra below the grid.
+    // sort correctly.
     const visible = GAMES.filter((g) => !g.devOnly || dev)
       .sort((a, b) => a.title.localeCompare(b.title));
-    this.games = visible.concat(extra ? [extra] : []);                   // includes `extra` for launch() lookup
+    this.games = visible;
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -343,7 +311,7 @@ class Hub {
           <section class="hub-grid" data-role="grid" aria-label="Games">
             ${visible.map((g) => this.cardHTML(g)).join('')}
           </section>
-          ${extra ? `<section class="hub-extra">${this.cardHTML(extra)}</section>` : ''}
+          ${showKeepsake ? `<section class="hub-extra"><button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">🎁 Challenge</button></section>` : ''}
           <section class="hub-game" data-role="game" hidden></section>
         </main>
         <div class="hub-confirm" data-role="confirm" hidden>
@@ -389,6 +357,7 @@ class Hub {
       leaderboard: this.root.querySelector('[data-role="leaderboard"]'),
       version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
+      keepsake: this.root.querySelector('[data-role="keepsake"]'),
     };
 
     // The profile pill reads "My Profile" (consistent with My Stats / Leaderboards); the accent
@@ -403,8 +372,7 @@ class Hub {
       this.el.confirm.hidden = true;
       this.showLauncher();
     });
-    // Delegate from .hub-main so it catches both the grid cards and the separate
-    // hidden-challenge card below the grid.
+    // Delegate from .hub-main so it catches the grid cards.
     this.el.grid.parentElement.addEventListener('click', (e) => {
       const card = e.target.closest('.hub-card');
       if (!card) return;
@@ -412,6 +380,8 @@ class Hub {
       if (card.dataset.comingSoon === 'true') return;
       this.launch(card.dataset.id);                // in-hub module: mount in place
     });
+
+    if (this.el.keepsake) this.el.keepsake.addEventListener('click', () => this.openKeepsake());
 
     this.el.stats.addEventListener('click', () => {
       import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
@@ -425,8 +395,16 @@ class Hub {
 
     this.initFirstRun(prof);
     this._initVersionPill();
+  }
 
-    this.maybePlayUnlock(active);
+  /** M3b: the sole surviving entry point into the retired challenge — a read-only
+   *  keepsake (codes, boarding pass, flight, selfie) for the recipient or Matt. */
+  async openKeepsake() {
+    try {
+      const prof = loadProfile();
+      const m = await import('./challenge/keepsake.js');
+      m.showKeepsake((prof && prof.name) || '');
+    } catch (e) { console.error('Keepsake failed to load', e); }
   }
 
   // --- version pill: shows the running build; tap = update check + reload ----
@@ -538,28 +516,12 @@ class Hub {
     });
   }
 
-  /** On first activation for the challenge profile, play the unlock announcement once. */
-  maybePlayUnlock(active) {
-    if (!active) return;
-    try {
-      if (loadChallenge().unlockSeen) return;
-      markUnlockSeen();
-      import('./challenge/unlock.js').then((m) => m.playUnlock()).catch(() => {});
-    } catch { /* never break the hub */ }
-  }
-
   cardHTML(g) {
     // Square tile: full-bleed art with the title in a caption. The blurb moves to
     // the accessible label (it is no longer shown on the compact tile face).
-    // Challenge mode: mark each of the four games as a task (star = to win, check = won).
-    const slot = this._chWins ? CHALLENGE_SLOT[g.id] : null;
-    const badge = slot
-      ? `<span class="hub-card-badge${this._chWins[slot] ? ' is-won' : ''}" aria-hidden="true">${this._chWins[slot] ? '✓' : '★'}</span>`
-      : '';
     const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
-        ${badge}
         ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>'
           : g.devOnly ? '<span class="hub-soon-tag">Test</span>' : ''}`;
     const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;

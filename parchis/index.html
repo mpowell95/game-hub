@@ -2280,8 +2280,8 @@
   //
   // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
   // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
-  var APP_VERSION = "v11";
-  var BUILD_DATE = "2026-07-12";
+  var APP_VERSION = "v12";
+  var BUILD_DATE = "2026-07-19";
   function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
   function versionLabel() { return APP_VERSION + " · " + buildDate(); }
 
@@ -3338,8 +3338,14 @@
     } catch (e) { return ""; }
   }
   function chEsc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
-  function chActive() { var p = readProfile(); return !!p && CH_TRIGGERS.indexOf(chHash(chNorm(p.name))) !== -1; }
-  function chDone() { try { var raw = localStorage.getItem("gamehub.challenge"); var st = raw ? JSON.parse(chDeobf(raw)) : null; return !!(st && st.wins && st.wins.parchis); } catch (e) { return false; } }
+  // M3b: the hidden challenge is retired (the gift is complete). Forcing chActive/chDone
+  // false collapses chLive() and every branch keyed on it (forced dark theme, the setup
+  // bypass straight past the title menu, the locked/"Begin challenge" setup, the
+  // "completed, play anyways?" note) back to plain, ungated play for every profile,
+  // including the former recipient. Neutralized here rather than deleting the branches
+  // themselves -- see js/challenge/keepsake.js in the hub repo for what replaced it.
+  function chActive() { return false; }
+  function chDone() { return false; }
   function chLive() { return chActive() && !chDone(); }
   function chRecordWin() {
     try {

@@ -11,7 +11,7 @@ import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { isChallengeActive, qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
+import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
 import { recordChinchon, deviceId } from '../../js/game-stats.js';
@@ -127,8 +127,12 @@ class ChinchonUI {
 
     this._setup = this._loadSetup();
     this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0, minusTen: 0 });
-    // Hidden challenge: active only for the trigger profile name (inert otherwise).
-    this.challengeActive = isChallengeActive((loadProfile() || {}).name);
+    // Hidden challenge (M3b): retired. The gift is complete; forcing this false
+    // collapses every challengeActive/challengeLive branch below back to plain,
+    // ungated play for every profile, including the former recipient. The entry
+    // point is neutralized here rather than deleting the branches themselves --
+    // see js/challenge/keepsake.js for what replaced it.
+    this.challengeActive = false;
 
     // Multiplayer (M2b). null in solo -- every MP code path is gated behind
     // this single field so solo play is byte-identical to before.

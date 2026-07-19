@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v148';
+const CACHE = 'game-hub-v149';
 
 const ASSETS = [
   './',
@@ -27,7 +27,9 @@ const ASSETS = [
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
-  // Hidden challenge - inert unless the active profile name matches the hashed trigger
+  // Hidden challenge (M3b: retired, gift complete) - challenge-ui.js/unlock.js are now
+  // unimported dead modules, kept precached only for reversibility; keepsake.js is the
+  // one surviving read-only entry point (js/hub.js's Challenge button).
   './js/challenge/crypt.js',
   './js/challenge/secrets.js',
   './js/challenge/challenge-store.js',
@@ -36,6 +38,7 @@ const ASSETS = [
   './js/challenge/reveal.js',
   './js/challenge/challenge-ui.js',
   './js/challenge/challenge-net.js',
+  './js/challenge/keepsake.js',
   './css/challenge.css',
   // NOTE: the challenge celebration images (js/challenge/assets/*) are deliberately NOT
   // precached. They are ~9 MB of one-person gift content; forcing every PWA installer to

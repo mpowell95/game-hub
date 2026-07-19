@@ -12,7 +12,7 @@ import { Game, WIN, DRAW } from './game.js';
 import { Difficulty } from './ai.js';
 import { COLS, ROWS, PLAYER_ONE, PLAYER_TWO } from './board.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { isChallengeActive, cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
+import { cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
 import { recordConnect4 } from '../../js/game-stats.js';
@@ -71,8 +71,12 @@ class ConnectFourUI {
     this.oppName = (opp && opp.name) || 'Computer';
     this.oppEmoji = (opp && opp.emoji) || '';
 
-    // Hidden challenge: active only for the trigger profile name (inert otherwise).
-    this.challengeActive = isChallengeActive(this.humanName);
+    // Hidden challenge (M3b): retired. Forcing this false collapses every
+    // challengeActive/challengeLive branch below back to plain, ungated play
+    // (normal difficulty, no hazing, no taunts) for every profile. The entry
+    // point is neutralized here rather than deleting the branches themselves --
+    // see js/challenge/keepsake.js for what replaced it.
+    this.challengeActive = false;
 
     // Runtime state.
     this.game = null;

@@ -170,26 +170,22 @@ body {
   margin: 0 auto;
 }
 
-/* The hidden-challenge (or Mission Control) card sits on its own, centered below the
-   games with a divider, so it reads as separate from the four game tiles. */
+/* The Challenge keepsake button (M3b) sits on its own, centered below the games with
+   a divider, so it reads as separate from the game tiles -- same slot the old hidden
+   challenge/Mission Control card used, now a plain button per the retirement's intent. */
 .hub-extra {
-  max-width: 460px;
   margin: 26px auto 0;
   padding-top: 24px;
   border-top: 1px solid var(--hub-surface-2);
   display: flex;
   justify-content: center;
 }
-.hub-extra .hub-card { width: 224px; }
-/* The hidden-challenge card is the payoff: a soft gold ring + glow so it reads as special,
-   not just another tile below a faint divider. */
-.hub-extra .hub-card {
+/* A soft gold tint so it still reads as a little special, not just another pill. */
+.hub-keepsake-btn {
   border-color: rgba(242, 183, 5, 0.55);
-  box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.25), 0 8px 26px rgba(242, 183, 5, 0.22);
+  box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.18);
 }
-.hub-extra .hub-card:hover {
-  box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.4), 0 14px 34px rgba(242, 183, 5, 0.32);
-}
+.hub-keepsake-btn:hover { box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.32); }
 .hub-card {
   position: relative;
   aspect-ratio: 1 / 1;

@@ -86,7 +86,11 @@
     });
   }
 
-  function isActive() { return TRIGGER_HASHES.indexOf(hash(norm(profileName()))) >= 0; }
+  // M3b: the hidden challenge is retired (the gift is complete). Forcing this false
+  // collapses active()/live()/done() below back to plain, ungated play for every
+  // profile, including the former recipient. Neutralized here rather than deleting
+  // the functions themselves -- see js/challenge/keepsake.js for what replaced it.
+  function isActive() { return false; }
   window.__bdChallenge = {
     active: isActive,
     done: function () { return isDone(); },
