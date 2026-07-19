@@ -78,14 +78,22 @@ function loadSettings() {
       const lvl = Math.round(Number(raw.level));
       if (lvl >= 1 && lvl <= 3) out.level = lvl;
       if (raw.speed === 'slow' || raw.speed === 'normal') out.speed = raw.speed;
+      // Who opens the NEXT new game. Persisted so the alternation survives
+      // leaving the game, a reload, or closing the app.
+      if (raw.nextStarter === P1 || raw.nextStarter === P2) out.nextStarter = raw.nextStarter;
       return Object.keys(out).length ? out : null;
     }
   } catch { /* treat as no settings */ }
   return null;
 }
 
-function saveSettings(level, speed) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level, speed })); } catch { /* ignore */ }
+/** Merge a patch into the stored settings, so no writer clobbers another's field. */
+function saveSettings(patch) {
+  try {
+    const cur = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    const base = (cur && typeof cur === 'object') ? cur : {};
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...base, ...patch }));
+  } catch { /* ignore */ }
 }
 
 /** Persist the in-progress game so leaving (hub, Setup, a reload, or closing the
@@ -171,6 +179,9 @@ class MancalaUI {
     // multiplies every animation duration/stagger in the move sequence.
     this.speed = (saved && saved.speed) || 'normal';
     this.speedFactor = this.speed === 'slow' ? 2 : 1;
+    // The opening move alternates game to game (you, then the opponent, then you
+    // ...), on every difficulty and in both modes. Very first game: you open.
+    this.nextStarter = (saved && saved.nextStarter != null) ? saved.nextStarter : P1;
     this.hasProfileName = !!(profile && profile.name);
     this.humanName = (profile && profile.name) || 'You';
     this.humanEmoji = (profile && profile.emoji) || '🙂';
@@ -345,14 +356,25 @@ class MancalaUI {
   startGame(mode) {
     this.gen += 1;
     this.mode = mode;
-    saveSettings(this.level, this.speed);
+    // Alternate the opening move every new game (including Restart and Play
+    // again), then bank the flip immediately so it survives leaving mid-game.
+    const starter = this.nextStarter === P2 ? P2 : P1;
+    this.nextStarter = starter === P1 ? P2 : P1;
+    this.persistSettings();
     clearGame();                 // a new game replaces any saved one
-    this.state = newGame(P1);
+    this.state = newGame(starter);
     this.view = 'game';
     this.busy = false;
     this.movesMade = 0;
     this.renderGame();
     saveGame(this);
+    // When the opponent opens, hand them the first move.
+    if (this.mode === 'bot' && starter === P2) this.botTurn();
+  }
+
+  /** Write level, speed and the alternating starter back to the settings store. */
+  persistSettings() {
+    saveSettings({ level: this.level, speed: this.speed, nextStarter: this.nextStarter });
   }
 
   /** Rebuild the board from a saved game and hand the turn back to whoever had it. */
@@ -884,7 +906,7 @@ class MancalaUI {
         el.classList.toggle('is-active', on);
         el.setAttribute('aria-checked', String(on));
       });
-      saveSettings(this.level, this.speed);
+      this.persistSettings();
     } else if (action === 'speed') {
       this.speed = btn.dataset.speed === 'slow' ? 'slow' : 'normal';
       this.speedFactor = this.speed === 'slow' ? 2 : 1;
@@ -893,7 +915,7 @@ class MancalaUI {
         el.classList.toggle('is-active', on);
         el.setAttribute('aria-checked', String(on));
       });
-      saveSettings(this.level, this.speed);
+      this.persistSettings();
     } else if (action === 'speed-toggle') {
       // In-game toggle: flip the speed and relabel in place. No re-render, so
       // the board and the match are untouched.
@@ -902,7 +924,7 @@ class MancalaUI {
       const label = this.container.querySelector('[data-role="speedbtn"]');
       if (label) label.innerHTML = this.speed === 'slow' ? '½&times;' : '1&times;';
       this.toast(this.speed === 'slow' ? 'Relaxed' : 'Normal');
-      saveSettings(this.level, this.speed);
+      this.persistSettings();
     } else if (action === 'resume') {
       const saved = loadGame();
       if (saved) this.resumeGame(saved); else this.startGame('bot');
