@@ -95,7 +95,7 @@ function table(head, bodyRows) {
   // <table> (commas OR the template's own newlines) is foster-parented out by the HTML parser and
   // renders as a blank row of junk above the table. Keep this markup whitespace-free.
   const body = Array.isArray(bodyRows) ? bodyRows.join('') : bodyRows;
-  const th = head.map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : ''} scope="col">${h}</th>`).join('');
+  const th = head.map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : i === 1 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
   return `<div class="lb-tblwrap"><table class="lb-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function emptyRows(msg) { return `<p class="lb-none">${esc(msg)}</p>`; }
@@ -234,6 +234,7 @@ function ensureCss() {
     '.lb-table thead th{background:var(--hub-surface-2,#eef2f8);color:var(--hub-muted,#5b6b82);font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}',
     '.lb-table .lb-rank{text-align:center;width:34px;color:var(--hub-muted,#5b6b82);font-weight:800}',
     '.lb-table .lb-name{text-align:left;font-weight:800;color:var(--hub-ink,#16243a)}',
+    '.lb-table thead th.lb-name{color:var(--hub-muted,#5b6b82)}',
     '.lb-table tbody td{font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
     '.lb-table tbody tr+tr th,.lb-table tbody tr+tr td{border-top:1px solid var(--hub-surface-2,#eef2f8)}',
     '.lb-dev{display:block;font-style:normal;font-size:.72rem;font-weight:700;color:var(--hub-muted,#5b6b82)}',
