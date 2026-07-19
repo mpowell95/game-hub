@@ -41,7 +41,10 @@
 //                                                   // load, folded ONCE via a _brMetricMigrated guard - meters
 //                                                   // and obstacle counts are not comparable units, so this is
 //                                                   // a start-fresh migration, not a conversion; only present
-//                                                   // on devices that had pre-migration Ball Run data
+//                                                   // on devices that had pre-migration Ball Run data.
+//                                                   // _brRunsRefolded: the archived `runs` play count (unit-
+//                                                   // agnostic, unlike the meter bests) is folded BACK into the
+//                                                   // live br.runs once - see refoldBallRunLegacyRuns
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -148,6 +151,27 @@ function migrateBallRunMetric(st, preNormalizeBr) {
   return true;
 }
 
+/** Sixth-playthrough incident, the real root cause: the migration above archived the ENTIRE old
+ *  `br` object, including `runs`, and reset the live counter to 0 - but `runs` is a play count,
+ *  not a meter value; it was never unit-incompatible and should have carried forward. Both the
+ *  Game Stats tab and the Leaderboard gate their whole Ball Run display on `br.runs > 0`, so
+ *  zeroing it made a player's entire (still stored, never deleted) history invisible on every
+ *  screen at once - which reads exactly like deleted data to the player. This folds the archived
+ *  play count back into the live counter, once (its own guard, so devices that migrated before
+ *  this fix existed are repaired on their next load, and devices migrating fresh get the same
+ *  result). The meter-valued best fields stay archived in brLegacyMeters, never converted. */
+function refoldBallRunLegacyRuns(st) {
+  const g = st.games.ballrun;
+  if (g._brRunsRefolded) return false;
+  g._brRunsRefolded = true;
+  const legacy = g.brLegacyMeters;
+  if (legacy && typeof legacy === 'object' && (legacy.runs | 0) > 0) {
+    ensureBr(g);
+    g.br.runs += legacy.runs | 0;
+  }
+  return true;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -237,6 +261,7 @@ export function loadStats() {
   let changed = foldAll(st);
   changed = seedChinchonExtras(st) || changed;
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
+  changed = refoldBallRunLegacyRuns(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   if (changed) persist(st);
   return st;

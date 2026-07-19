@@ -184,11 +184,27 @@ const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
  *  2: the score is obstacle rows passed, not meters). */
 function ballRunScreen(rec) {
   const br = (rec && rec.br) || {};
+  const legacy = (rec && rec.brLegacyMeters) || null;
   const runs = br.runs | 0, best = br.bestObstacles | 0;
-  if (!runs) return emptyState('Ball Run');
+  // A device with only pre-metric-change history still has runs (refolded from the archive in
+  // game-stats.js), so the empty state genuinely means "never played", not "played before the
+  // scoring change" - sixth-playthrough incident, where zeroed runs hid real history.
+  if (!runs && !legacy) return emptyState('Ball Run');
   const bd = br.bestObstaclesByDiff || {};
   const rows = BR_DIFFS.map(([k, label]) =>
     `<tr><th scope="row">${label}</th><td>${bd[k] | 0} obstacles</td></tr>`).join('');
+  // Scores from before the scoring change are meters, not obstacle counts - the units are not
+  // comparable, so they are shown as their own clearly-labeled record instead of being converted
+  // (which would fabricate numbers) or hidden (which reads as deleted data).
+  const lbd = (legacy && legacy.bestByDiff) || {};
+  const legacyRows = legacy ? BR_DIFFS.map(([k, label]) =>
+    `<tr><th scope="row">${label}</th><td>${lbd[k] | 0} m</td></tr>`).join('') : '';
+  const legacyHtml = legacy ? `
+    <h4 class="gs-tbl-h">Best distance, before scoring changed to obstacles</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <tbody>${legacyRows}</tbody>
+    </table>` : '';
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
@@ -198,7 +214,7 @@ function ballRunScreen(rec) {
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>${legacyHtml}`;
 }
 
 function screenFor(id, st) {
