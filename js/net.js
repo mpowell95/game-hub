@@ -9,39 +9,25 @@
 // guarded: if firebase-config.js is unconfigured, the SDK fails to load, or
 // the device is offline, init() returns false and callers see an explicit
 // error/throw (no silent retries or write queues in M1).
+//
+// The named app + auth are booted through js/firebase-boot.js, shared with stats-net.js, so there
+// is only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-const SDK = '10.12.2';
+import { getStatsApp } from './firebase-boot.js';
+
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 const HEARTBEAT_MS = 10000;
 
-let _db = null, _api = null, _tried = false, _ok = false;
+let _db = null, _api = null;
 let _unsubRoom = null, _heartbeatTimer = null;
 
-async function readConfig() {
-  try { const m = await import('./firebase-config.js'); return m.firebaseConfig || (m.default && m.default.firebaseConfig) || m.default || null; }
-  catch { return null; }
-}
-
-/** Initialize the shared NAMED Firebase app + anonymous auth once. Idempotent. */
+/** Ensure the shared named Firebase app + anonymous auth are ready. Idempotent. */
 export async function init() {
-  if (_tried) return _ok;
-  _tried = true;
-  try {
-    const cfg = await readConfig();
-    if (!(cfg && cfg.apiKey && cfg.databaseURL)) return (_ok = false);
-    const appMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`);
-    const dbMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-database.js`);
-    const authMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`);
-    let app;
-    try { app = appMod.getApp('stats'); }              // fetch-or-create: never a second 'stats' app
-    catch { app = appMod.initializeApp(cfg, 'stats'); }
-    _db = dbMod.getDatabase(app);
-    _api = dbMod;
-    const auth = authMod.getAuth(app);
-    if (!auth.currentUser) await authMod.signInAnonymously(auth);
-    return (_ok = true);
-  } catch { return (_ok = false); }
+  const r = await getStatsApp();
+  if (!r) return false;
+  _db = r.db; _api = r.api;
+  return true;
 }
 
 function randomCode() {

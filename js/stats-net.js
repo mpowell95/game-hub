@@ -8,34 +8,22 @@
 // unconfigured, the SDK fails to load, or the device is offline, init() returns false and every
 // call is a safe no-op. Gameplay is never blocked and offline play is unaffected. It only ever
 // touches players/ - never the challenge/, flight/, or selfies/ nodes.
+//
+// The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
+// only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
 import { deviceId, loadStats } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
+import { getStatsApp } from './firebase-boot.js';
 
-const SDK = '10.12.2';
-let _db = null, _api = null, _tried = false, _ok = false;
+let _db = null, _api = null;
 
-async function readConfig() {
-  try { const m = await import('./firebase-config.js'); return m.firebaseConfig || (m.default && m.default.firebaseConfig) || m.default || null; }
-  catch { return null; }
-}
-
-/** Initialize a NAMED Firebase app + anonymous auth once. Returns true only when usable. */
+/** Ensure the shared named Firebase app + anonymous auth are ready. Returns true only when usable. */
 export async function init() {
-  if (_tried) return _ok;
-  _tried = true;
-  try {
-    const cfg = await readConfig();
-    if (!(cfg && cfg.apiKey && cfg.databaseURL)) return (_ok = false);
-    const appMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`);
-    const dbMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-database.js`);
-    const authMod = await import(`https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`);
-    const app = appMod.initializeApp(cfg, 'stats');   // named app: never collides with the challenge default app
-    _db = dbMod.getDatabase(app);
-    _api = dbMod;
-    await authMod.signInAnonymously(authMod.getAuth(app));
-    return (_ok = true);
-  } catch { return (_ok = false); }
+  const r = await getStatsApp();
+  if (!r) return false;
+  _db = r.db; _api = r.api;
+  return true;
 }
 
 /** Mirror this device's profile + unified stats up to players/<deviceId>. Best-effort, never throws. */
