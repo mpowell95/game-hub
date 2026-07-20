@@ -412,6 +412,11 @@ export class Renderer {
     this.obstacleMat.dispose(); this.obstacleEdgeMat.dispose();
     this.tileTex.dispose(); this.tunnelFloorTex.dispose(); this.tunnelFloorLabelTex.dispose(); this.tunnelWallTex.dispose();
     this.renderer.dispose();
+    // Non-negotiable 7 continued: dispose() alone leaves the WebGL context to be reclaimed by
+    // GC, not immediately - repeated hub<->game remounts can pile up toward the browser's
+    // context cap before that happens (see ARCH-REVIEW.md S4-6). forceContextLoss() releases it
+    // synchronously on teardown.
+    if (typeof this.renderer.forceContextLoss === 'function') this.renderer.forceContextLoss();
     this.scene.clear();
   }
 }
