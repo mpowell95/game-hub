@@ -47,14 +47,19 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('device fallback -> 2 groups', aggregatePlayers(all).length, 2);
 }
 
-// ---- mid-migration split then self-heal ----
+// ---- mid-migration: a partly-linked device (shares the name but not yet the code) merges via the
+// identity GRAPH, same as once the code syncs too - this is the fix from 3a81990 ("Leaderboard: merge
+// split identities"), not a regression: history must not stay stranded on separate rows just because
+// one device hasn't picked up the code yet. ----
 {
   const split = { d1: rec({ playerId: 'CODE9', name: 'Sam' }, { filler: comp(3, 2, 1) }, 100), d2: rec({ name: 'Sam' }, { filler: comp(1, 1, 0) }, 200) };
-  eq('mid-migration: 2 groups (code vs name)', aggregatePlayers(split).length, 2);
+  const sl = aggregatePlayers(split);
+  eq('mid-migration: name merges into coded group -> 1 group', sl.length, 1);
+  eq('mid-migration: filler summed', sl[0].games.filler.total.played, 4);
   const healed = { d1: rec({ playerId: 'CODE9', name: 'Sam' }, { filler: comp(3, 2, 1) }, 100), d2: rec({ playerId: 'code9', name: 'Sam' }, { filler: comp(1, 1, 0) }, 200) };
   const hl = aggregatePlayers(healed);
-  eq('self-heal: 1 group', hl.length, 1);
-  eq('self-heal: filler summed', hl[0].games.filler.total.played, 4);
+  eq('fully-coded: still 1 group', hl.length, 1);
+  eq('fully-coded: filler summed', hl[0].games.filler.total.played, 4);
 }
 
 // ---- 8-game summing + dim merges (grid add, cc add, es add, nb add/max) + solo exclusion ----
