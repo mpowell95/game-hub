@@ -1,3 +1,17 @@
+// game-stats-global.js - IN-SCOPE COPY for Business Deal's own nested service worker
+// (business-deal/sw.js). MUST stay byte-identical to the canonical ../js/game-stats-global.js.
+//
+// Why a copy instead of the original path: BD's page is controlled exclusively by its own nested
+// SW (the more specific of the two scopes), so ALL of its fetches - including this script's, at
+// `../js/game-stats-global.js` - are served through BD's OWN cache/fetch handler, not the root
+// hub's. The original file lived outside BD's own ASSETS list, so a device that only ever
+// installed /business-deal/ and later went offline would 404 this script, leaving
+// window.__ghStats undefined for the rest of that session (ARCH-REVIEW.md S4-1). Copying it into
+// BD's own directory and adding it to business-deal/sw.js's ASSETS makes it precache-able within
+// BD's own scope - the "in-scope copy" fix from S5-1, without restructuring the double-SW setup.
+//
+// ---- everything below is the canonical file, verbatim ----
+//
 // game-stats-global.js - a CLASSIC (non-module) port of game-stats.js's recorder, for the
 // launch-out games that are not ES modules (Business Deal, Parchis). It writes the SAME
 // localStorage['gamehub.stats'] shape with the SAME per-game `_leg` legacy-fold guard, so it

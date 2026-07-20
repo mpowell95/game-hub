@@ -6,7 +6,7 @@
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v27';
+const CACHE = 'business-deal-hub-v28';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.
@@ -19,6 +19,9 @@ const ASSETS = [
   './js/game.js',
   './js/ai.js',
   './js/challenge-hook.js',
+  // In-scope copy of the shared stats recorder (ARCH-REVIEW.md S4-1/S5-1) - must be reachable
+  // from THIS cache, since BD's own nested SW is the exclusive controller of BD's page fetches.
+  './js/game-stats-global.js',
   './js/ui.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

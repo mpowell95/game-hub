@@ -32,6 +32,25 @@
   // and the cached build always match.
   const APP_VERSION = 'v26';
 
+  // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
+  // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
+  // it - see business-deal/sw.js). bd-stats still recorded the play locally, but since the
+  // unified-store fold-in guard (_leg) is one-time, a play that missed __ghStats could never be
+  // folded in later: a permanent, silent under-count on the shared leaderboard. Queueing it here
+  // instead means the play is recovered the next time EITHER drain point runs: this device's own
+  // game-stats-global.js (drains on its own next successful load) or the hub's game-stats.js,
+  // which drains the same key on every hub visit regardless of whether __ghStats ever works on
+  // this device.
+  const PENDING_STATS_KEY = 'gamehub.bd.pendingStats.v1';
+  function _queuePendingStat(game, diff, won) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PENDING_STATS_KEY) || '[]');
+      const list = Array.isArray(raw) ? raw : [];
+      list.push({ game: game, diff: diff, won: won, ts: Date.now() });
+      localStorage.setItem(PENDING_STATS_KEY, JSON.stringify(list));
+    } catch (e) { console.error('[business-deal] failed to queue pending stat, this play may be lost from the shared leaderboard', e); }
+  }
+
   const LIGHT_BANDS = ['lightblue', 'yellow', 'utility']; // need dark text on band
 
   // Railroad & Utility are the two "sets" not identified by a vivid color block,
@@ -1668,7 +1687,14 @@
     _recordResult(humanWon) {
       // Unified Game Stats (per difficulty), recorded BEFORE the bd-stats increment so the
       // one-time bd-stats fold reads the pre-game value. bd-stats is still kept as-is below.
-      try { if (window.__ghStats) window.__ghStats.record('business', this.difficulty, humanWon); } catch (e) {}
+      try {
+        if (window.__ghStats) {
+          window.__ghStats.record('business', this.difficulty, humanWon);
+        } else {
+          console.warn('[business-deal] __ghStats unavailable, queueing this result to sync into the shared leaderboard later', this.difficulty, humanWon);
+          _queuePendingStat('business', this.difficulty, humanWon);
+        }
+      } catch (e) {}
       const s = this._loadStats();
       s.played++; if (humanWon) s.won++; else s.lost++;
       try { localStorage.setItem('bd-stats', JSON.stringify(s)); } catch (e) {}

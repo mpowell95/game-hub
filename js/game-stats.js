@@ -238,6 +238,27 @@ function foldAll(st) {
   return changed;
 }
 
+// F1 (durability, ARCH-REVIEW.md S4-1/S5-1): Business Deal queues a play here
+// (gamehub.bd.pendingStats.v1, in business-deal/js/ui.js's _recordResult) when its own
+// window.__ghStats was unavailable at game-end - e.g. offline on a device whose install of BD's
+// nested service worker predates game-stats-global.js being added to that worker's own cache
+// list. Draining it here, on every hub load (loadStats() runs via hub.js's syncMyStats on every
+// visit - see js/hub.js), guarantees the play still reaches the unified store: the hub's own ESM
+// code is loaded fresh over the network by the ROOT service worker regardless of what BD's
+// nested-SW seam is doing. Additive only, through the same bumpTotals() every other recorder uses.
+const PENDING_BD_KEY = 'gamehub.bd.pendingStats.v1';
+function drainPendingBusinessDeal(st) {
+  const q = readJSON(PENDING_BD_KEY);
+  if (!Array.isArray(q) || !q.length) return false;
+  for (const e of q) {
+    if (!e || GAMES.indexOf(e.game) < 0) continue;
+    bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+  }
+  try { localStorage.removeItem(PENDING_BD_KEY); } catch { /* ignore */ }
+  console.warn(`[game-stats] drained ${q.length} pending Business Deal stat(s) that were queued while __ghStats was unavailable`);
+  return true;
+}
+
 // Sixth-playthrough incident (Ball Run): a storage-write failure here was completely silent, with
 // no trace anywhere a player or a future debugging session could see it. Every call site already
 // discards this function's return value, so returning a success flag (instead of nothing) and
@@ -262,6 +283,7 @@ export function loadStats() {
   changed = seedChinchonExtras(st) || changed;
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   changed = refoldBallRunLegacyRuns(st) || changed;
+  changed = drainPendingBusinessDeal(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   if (changed) persist(st);
   return st;

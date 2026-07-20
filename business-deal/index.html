@@ -65,7 +65,9 @@
   <script src="js/game.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/challenge-hook.js"></script>
-  <script src="../js/game-stats-global.js"></script>
+  <!-- In-scope copy (business-deal/js/game-stats-global.js), NOT ../js/game-stats-global.js:
+       must be reachable from BD's OWN nested SW cache when offline (ARCH-REVIEW.md S4-1). -->
+  <script src="js/game-stats-global.js"></script>
   <script src="js/ui.js"></script>
   <script>
     window.addEventListener('DOMContentLoaded', function () {
