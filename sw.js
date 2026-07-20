@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v149';
+const CACHE = 'game-hub-v150';
 
 const ASSETS = [
   './',
@@ -50,6 +50,7 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   // Connect Four module
+  './connect-four/index.html',
   './connect-four/js/ui.js',
   './connect-four/js/worker.js',
   './connect-four/js/game.js',
