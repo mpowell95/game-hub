@@ -96,6 +96,19 @@ export async function joinRoom(code, me) {
     const now = Date.now();
     if (!room || room.status === 'ended' || (now - (room.updated || 0)) > ROOM_TTL_MS) return { error: 'not-found' };
     if (room.v !== 1) return { error: 'version' };
+    // Mid-deploy desync guard (S4-5/S5-9): the host's swv was already recorded at createRoom via
+    // the same GET_VERSION read. A joiner on a different SW build would lockstep a different
+    // build's state shape against the host's and hash-mismatch into the recovery loop instead of
+    // a clean "update required" message. 'unknown' on either side (no active controller yet, or
+    // the postMessage round-trip timed out) is never treated as a mismatch - this check must
+    // never block a join it can't actually verify.
+    const mySwv = await getSwVersion();
+    if (room.swv && room.swv !== 'unknown' && mySwv !== 'unknown' && room.swv !== mySwv) {
+      return { error: 'version' };
+    }
+    if (room.swv === 'unknown' || mySwv === 'unknown') {
+      console.warn('[net] joinRoom: sw version unknown on host or guest, allowing join without a version check', { roomSwv: room.swv, mySwv });
+    }
     const rejoined = !!(room.guest && room.guest.deviceId === me.deviceId);
     if (room.guest && !rejoined) return { error: 'full' };
     await _api.update(roomRef(CODE), { guest: { ...me, lastSeen: now }, updated: now });
