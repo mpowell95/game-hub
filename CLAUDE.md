@@ -43,6 +43,15 @@ player paid for it. No feature, cleanup, refactor, or deadline outranks any of t
 8. **When a player reports missing data, believe them.** Do not blame caches, incognito
    mode, or user error until the code history has been fully replayed and ruled out. The
    one time that order was reversed, the bug was real and the deflection made it worse.
+9. **A milestone is not done until CLAUDE.md reflects it.** This project's "team" is a
+   sequence of fresh AI sessions with no memory of each other; this file plus handoff notes
+   is their *entire* inherited context. Every convention that goes undocumented here gets
+   silently re-derived (and re-diverged) by the next session — three storage-key
+   generations, two setup-screen patterns, and three CSS root-class styles all trace back to
+   a session that shipped a convention without writing it down. If a milestone creates or
+   changes a convention (a new settings-key style, a new shared module, a new sync point
+   between duplicated code), updating this file for it is part of that milestone, not
+   follow-up work.
 
 ## Run it
 
@@ -56,12 +65,24 @@ node server.mjs           # serves the repo root at http://localhost:8123
 A plain dev server is required (ES modules, module workers, and the service worker
 can't run from `file://`). It sends `Cache-Control: no-store` so dev edits aren't cached.
 
+### Diagnostic: the version pill stuck at `vN → vN+1`
+
+The hub's top-bar version pill compares the ACTIVE service worker's cache version
+(`GET_VERSION` message to `navigator.serviceWorker.controller`) against the version parsed
+from a fresh, no-store fetch of the deployed `sw.js`. If they differ it renders
+`vN → vN+1` and marks itself stale. **If that arrow never resolves after a reload (or two),
+the new service worker's install failed** — almost always because `cache.addAll()` hit one
+`ASSETS` entry that 404s (see `validate-sw-assets.mjs`), which is atomic: the whole install
+aborts silently and the previous worker just keeps serving the old build offline, with no
+other visible symptom. This is the tell to look for before suspecting anything else when a
+deploy "didn't take." `RESTORE.md` and `validate-sw-assets.mjs` are the prevention/detection
+pair for this failure mode.
+
 ## Architecture
 
 ```
 index.html              hub shell host
 js/hub.js               launcher grid + module mount/unmount  (the GAMES registry)
-js/profile-store.js     shared user-profile reader/writer (loadProfile/saveProfile/clearProfile)
 css/hub.css             shell chrome only
 sw.js                   shared service worker (network-first, precaches every game)
 manifest.webmanifest    one manifest for the whole hub
@@ -73,14 +94,54 @@ The hub shows a grid of game cards. Tapping a **module** game dynamically import
 entry and mounts it into a content area (no page reload); tapping a **launch-out** game
 navigates to its own deployed URL.
 
+### Shared modules (`js/`)
+
+Everything below is imported by `hub.js` and/or the module games; a game's own `js/` files
+never appear here. This table is the part the old architecture diagram omitted almost
+entirely — keep it current when a module is added, split, or merged.
+
+| Module | Role |
+|---|---|
+| `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
+| `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; legacy-store folds, the Ball Run metric migration, and the Business Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Business Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
+| `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
+| `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry |
+| `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows |
+| `js/game-stats-ui.js` | "My Stats" overlay; per-game tailored screens |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón and Escoba |
+| `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
+| `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
+
+Firebase layer: one project (`js/firebase-config.js`), anonymous auth, RTDB rules
+`auth != null` (known-intentional, effectively open since anyone can sign in anonymously).
+Two client layers now share one bootstrap (`js/firebase-boot.js`, named app `'stats'`):
+`stats-net.js` and `net.js`. `js/challenge/challenge-net.js` boots Firebase's separate
+DEFAULT (unnamed) app and is untouched by the shared bootstrap — it was never part of the
+init race that motivated it. Node ownership is disciplined by convention: stats-net touches
+`players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
+nodes. Nothing enforces this but comments.
+
+### Dev tooling (repo root, not deployed)
+
+| Script | Role |
+|---|---|
+| `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
+| `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
+| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
+
 ### The module contract
 
-A game module's entry (`<game>/js/ui.js`) exports exactly:
+A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
+object bundling them. All seven in-hub module games (Connect Four, Chinchón, Escoba, Filler,
+Mancala, Nuts & Bolts, Ball Run) export all three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
 export function destroy() { /* remove ALL document/window listeners, stop timers/workers, clear container */ }
-export default { init, destroy };
+export function isInProgress() { /* true if the hub should confirm before navigating away */ }
+export default { init, destroy, isInProgress };
 ```
 
 - The hub mounts with `const m = await import(game.module); m.init(el);` and tears down with
@@ -88,24 +149,67 @@ export default { init, destroy };
   same container for the next game.
 - Keep a module-level `let instance`; `init` replaces any prior instance.
 - The game must also run **standalone** from its own `<game>/index.html`, which links its
-  CSS and calls `init(document.getElementById('<game>'))`. Same `init` either way.
+  CSS and calls `init(document.getElementById('<game>'))`. Same `init` either way. Every
+  module game's `index.html` must also be in `sw.js`'s `ASSETS` list (run
+  `node validate-sw-assets.mjs` to check) — Connect Four's was missing for a long time before
+  a July 2026 fix, which silently broke offline standalone play with no other symptom.
+- `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
+  navigating back to the launcher) and has **two legitimate meanings** depending on whether
+  the game can resume:
+  - **No mid-game resume** (Connect Four, Filler, Nuts & Bolts, Ball Run): returns `true`
+    while a game/run is actually in progress, `false` otherwise. The literal meaning.
+  - **Autosave/resume built in** (Escoba, Mancala): returns `false` for solo play even
+    mid-game, because leaving is lossless — the engine snapshots after every state-changing
+    event and picks up where it left off on return (`escoba-save`, `gamehub.mancala.game.v1`).
+    Escoba's MP path is the exception within the exception: `isInProgress()` returns `true`
+    only while an active multiplayer match is live (leaving mid-MP genuinely abandons the
+    room), so one function answers two different questions depending on solo-vs-MP context.
+  When adding a game, decide up front which meaning applies and say so in a comment next to
+  `isInProgress()` — don't leave the next session to guess from behavior alone.
+- An `immersive: true` entry in `hub.js`'s `GAMES` array (currently Escoba, Mancala, Ball Run)
+  collapses the hub's header to a floating back button for games with their own full-bleed
+  chrome. It's a de facto fourth registry flag, same status as `module`/`href`/`devOnly` —
+  set it when a game wants to own the whole viewport.
 
 ### Adding a game — checklist
 
+**Copy Escoba's patterns, not Connect Four's or Filler's.** Connect Four and Filler are the
+oldest games and look the most "template-like" to a fresh session, but they carry the
+repo's weakest patterns: no persisted settings (Connect Four), prefix-only CSS scoping
+(both), and the old flat/segmented setup screen instead of the accordion. Escoba (and
+Chinchón, which mirrors it) is the reference for the setup-screen pattern, CSS scoping
+discipline, and the settings-key convention below. When restructuring an old game, migrate
+it toward Escoba's patterns rather than leaving it as its own precedent.
+
 1. Create `<game>/` with `index.html`, `css/<game>.css`, `js/ui.js` (+ engine modules).
-2. `ui.js` exports `init`/`destroy` and injects its stylesheet idempotently via
-   `new URL('../css/<game>.css', import.meta.url)` (so it's self-contained in the hub).
-3. **Scope all CSS** under a root class `.xx-root`; prefix every class `.xx-` and every
-   custom property `--xx-`. No global selectors.
-4. Add an entry to `GAMES` in `js/hub.js`:
+2. `ui.js` exports `init`/`destroy`/`isInProgress` (see "The module contract" above) and
+   injects its stylesheet idempotently via `new URL('../css/<game>.css', import.meta.url)`
+   (so it's self-contained in the hub).
+3. **Scope all CSS** under a root class `.xx-root` (2-3 letter game prefix; see the games
+   table for existing prefixes — they are not all derived from the game's name the same
+   way, e.g. Escoba is `.eb-`). Prefix every class `.xx-` and every custom property `--xx-`.
+   **Every rule must be descendant-scoped under `.xx-root`** (`.xx-root .xx-card`, not a
+   bare top-level `.xx-card`) — a prefix alone is not isolation, it just makes a collision
+   less likely. Mancala's CSS is the cleanest example of this in the repo; Connect Four and
+   Filler are prefix-only and rely on no one else having minted a colliding class yet.
+4. **Persist settings under `gamehub.<game>.v1`** (e.g. `gamehub.filler.v1`,
+   `gamehub.nutsbolts.v1`). This is the only settings-key convention going forward — three
+   earlier generations exist in this repo (dashed `chinchon-settings`/`escoba-settings`,
+   dotted un-namespaced `ballrun.*`) and are **frozen in place per THE LAW** (rule 5: old
+   keys are never renamed or repurposed), but every *new* key must use this form.
+5. Add an entry to `GAMES` in `js/hub.js`:
    - in-hub module → `module: '../<game>/js/ui.js'`
    - separately-deployed app → `href: '/<game>/'`
    - plus `id, title, blurb, badge, accent, art` (inline SVG).
    - Array position is irrelevant: the launcher grid is sorted **alphabetically by display `title`**
      at render time (`localeCompare`). Games are always listed alphabetically, no exceptions. (The
      hidden challenge/admin card is the sole exception; it renders apart in `.hub-extra`.)
-5. Add the game's files to the `ASSETS` precache list in `sw.js` and **bump `CACHE`**
-   (`game-hub-vN` → `vN+1`), or the new files won't be cached for offline.
+6. Add the game's files (including its `index.html`) to the `ASSETS` precache list in `sw.js`
+   and **bump `CACHE`** (`game-hub-vN` → `vN+1`), or the new files won't be cached for
+   offline. Run `node validate-sw-assets.mjs` before committing — it fails on any `ASSETS`
+   entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
+   in the list yet, which is exactly the mistake that left Connect Four's standalone page
+   uncached for a long time.
 
 ## The games
 
@@ -117,6 +221,9 @@ export default { init, destroy };
 | Parchís | launch-out `href:` | Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See below. |
 | Escoba | in-hub `module:` | Spanish fishing card game (capture cards summing to 15) vs AI, 2-3 players, Fournier rules. Engine mirrors Chinchón's async agent pattern (`escoba/js/game.js` + `ai.js`, no DOM; `ui.js` owns the DOM). Card faces reuse the shared Anita deck from `chinchon/decks/anita/` (no deck picker, no copied assets). Two numbering modes, same math either way (one card of each value 1-10 per suit): `spanish` (default: 1-7 + figures counting 8/9/10) and `american` (ranks 1-9 + Sota, values as printed, no Caballo/Rey; only sticks when explicitly chosen, via `deckModeChosen`). Settings in `escoba-settings`; results recorded via `recordEscoba` in `js/game-stats.js`. Resumable: the engine snapshots after every state-changing event (`Game.snapshot()`/`Game.fromSnapshot()`, `escoba-save` in localStorage) so navigating away mid-match and coming back later (or a killed tab) picks up where it left off; `isInProgress()` returns false to the hub for this reason (leaving never loses progress), while the in-game menu's own "Quit to setup" is a separate, explicit abandon that clears the save. Its own top bar chrome is `immersive: true` in `GAMES` (hub.js), collapsing the shared hub header to a floating back button. |
 | Mancala | in-hub `module:` | Kalah rules vs AI (3 tiers; Pro = iterative-deepening alpha-beta under a ~380ms budget) or pass-and-play. Pure engine (`mancala/js/game.js`) + `ai.js` + `ui.js`; stones are persistent DOM elements sown pit-to-pit with WAAPI arc flights (timeout-raced so a hidden tab never stalls a move; `?motion=1/0` overrides reduced-motion). Settings in `gamehub.mancala.v1`; results via `recordResult('mancala', ...)`. Reference screenshots in `mancala/reference/` (gitignored). |
+| Filler | in-hub `module:` | Flood-fill duel vs AI (color-pick your corner, grow to capture the majority). Pure engine (`filler/js/game.js`) + `ai.js` + `ui.js`, no worker. Settings in `gamehub.filler.v1` (the gen-3 key convention); results via `recordResult('filler', ...)`. Still on the old flat/segmented setup screen, not the accordion pattern. |
+| Nuts & Bolts | in-hub `module:` | Solo color-sort puzzle: stack matching nuts onto bolts. Procedural level generator (`nuts-bolts/js/generator.js`) with a solvability + quality-gate self-test (regenerates a level rather than shipping an unsolvable or trivial one). Settings/progress in `gamehub.nutsbolts.v1` (schema-versioned, with its own migration). A solo puzzle has no opponent/loss state, so results record via `recordNutsBolts` (solved/moves/bestLevel), not `recordResult`. |
+| Ball Run | in-hub `module:` | Solo endless runner: steer a rolling ball down a neon track, dodge obstacles. Three.js/WebGL renderer (`render.js`, vendored `ball-run/vendor/three.module.min.js`), fixed-timestep sim (`sim.js`/`track.js`) decoupled from rendering, `input.js` for touch/drag steering. `immersive: true`. Settings under the older dotted `ballrun.*` keys (predates the `gamehub.<game>.v1` convention; frozen per THE LAW). Results recorded via `recordBallRun` (obstacle-count score, not distance — see `js/game-stats.js`'s header comment for the metric-migration history) through a local "flight recorder" (`ballrun.runLog.v1`) that retries any run that didn't confirm reaching the shared store, on every subsequent open. Renderer teardown calls `forceContextLoss()` after `dispose()` so repeated hub↔game remounts don't leak WebGL contexts toward the browser's context cap. |
 
 ---
 
@@ -135,7 +242,12 @@ profile", or "👤 Name" once set).
   opponents:[{name, emoji, skill:1|2|3}], updatedAt }
 ```
 
-- **Only the profile page writes it;** games are read-only consumers.
+- **The profile page is the primary writer; games stay read-only consumers.** One
+  documented exception: `js/hub.js`'s first-run gate (name-or-code prompt) also calls
+  `saveProfile()` to adopt a linked owner's name/emoji and mint/attach a `playerId` — this
+  predates the "only the profile page writes it" wording in an earlier version of this file,
+  which was simply stale. If you add another writer, update this line again rather than
+  letting it drift back out of sync with the code.
 - Readers **try/catch** and treat missing or malformed data as "no profile", falling back silently to
   built-in defaults. A profile must never crash a game.
 - **Extend additively; never rename fields.** `skill` tolerates a future 4; the UI emits 1-3.
@@ -146,6 +258,30 @@ ES module: `loadProfile()` returns a validated object or `null`; `saveProfile(p)
 `version`/`updatedAt`; `clearProfile()` deletes the key. In-hub module games `import` it directly;
 single-file or non-ESM games (Business Deal, Parchís) inline the small read-only subset, kept in sync
 with this contract.
+
+### Business Deal's must-stay-synced duplicates
+
+Business Deal is global-JS, not ESM (a deliberate, bounded exception — see its games-table
+row), so it can't `import` the shared modules directly. It carries three small inlined/copied
+pieces that must be kept in sync by hand whenever their canonical source changes:
+
+1. **Profile reader** (`business-deal/js/ui.js`, near the top): a read-only subset of
+   `profile-store.js`'s `normalize()`. Already known to have drifted — its emoji fallback is
+   `'🧑'` vs the canonical `'🙂'`/`'🤖'`, and it slices 4 opponents vs the contract's 3. Not
+   worth fixing retroactively (bounded, cosmetic), but don't let it drift further: if the
+   profile contract's *shape* changes (new required field, renamed key), update this copy too.
+2. **Challenge crypto mirror** (`business-deal/js/challenge-hook.js`): inlines the
+   hash/obfuscate/deobfuscate logic and salts from the retired `js/challenge/{crypt,secrets}.js`,
+   explicitly commented as mirroring that file byte-for-byte. Changing the trigger hash, salt,
+   or code blob in one place without the other breaks Business Deal's challenge hook silently.
+3. **Stats recorder** (`business-deal/js/game-stats-global.js`): a byte-identical in-scope
+   copy of `js/game-stats-global.js`. It has to be a *copy*, not a shared reference, because
+   Business Deal's page is exclusively controlled by its own nested service worker
+   (`business-deal/sw.js`) — a request for anything outside `business-deal/` (like the
+   original `../js/game-stats-global.js`) is still routed through BD's own SW's fetch
+   handler, so it can only be reachable offline if it's also in BD's own cache list. If you
+   change `js/game-stats-global.js`, copy the change into
+   `business-deal/js/game-stats-global.js` too and bump `business-deal/sw.js`'s `CACHE`.
 
 ### Consuming it in a game
 
