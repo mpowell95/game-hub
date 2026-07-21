@@ -768,8 +768,14 @@ class EscobaUI {
       case 'play':
         await this.animatePlay(p, payload);
         this.render();
-        this._saveSnapshot();
+        // Save AFTER the MP bookkeeping: _mpAfterPlay is what advances appliedSeq
+        // for this very play, and the autosave records that seq. Saving first
+        // stored mp.seq one LOW relative to the play already in the snapshot, so
+        // every rejoin (_tryRestoreMP) re-applied a move its own state contained
+        // and desynced immediately (test-mp-lockstep.mjs E4). Solo is unaffected
+        // (this.mp is null, the save is the only step either way).
         if (this.mp) await this._mpAfterPlay(p, payload);
+        this._saveSnapshot();
         if (payload.escoba) await this.showBanner('¡ESCOBA!', `${p.name} clears the table`);
         break;
       case 'sweepLeftovers':
@@ -1786,13 +1792,25 @@ class EscobaUI {
 
   /** Guest side of a resync: rebuild via the SAME snapshot/fromSnapshot path
    *  solo resume already uses (Game.fromSnapshot re-enters mid-round from the
-   *  saved checkpoint), just with MP agents instead of a fresh AI. */
+   *  saved checkpoint), just with MP agents instead of a fresh AI.
+   *
+   *  Seat mapping: the snapshot's isHuman flags are the SENDER's (host's)
+   *  perspective. isHuman is device-RELATIVE - it decides which seat prompts
+   *  locally and which seat sends vs verifies in _mpAfterPlay - so remap by
+   *  SEAT (mp.localSeat, fixed at match start) and normalize before
+   *  rebuilding. Trusting the transmitted flags handed this device's human
+   *  agent to the HOST's seat and a RemoteAgent to its own
+   *  (test-mp-lockstep.mjs E3), so recovery - the safety net every other MP
+   *  defect leans on - could never actually land. */
   _mpApplyRecovery(recovery) {
     const mp = this.mp;
     if (!mp || this._dead) return;
     const snap = recovery.state;
     const agentsById = {};
-    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    for (const sp of snap.players) {
+      sp.isHuman = sp.id === mp.localSeat;
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    }
     if (this.game) this.game.abort();
     this._resolvePending(null);
     this.game = Game.fromSnapshot(snap, agentsById);
@@ -1803,7 +1821,16 @@ class EscobaUI {
     this._clearMpStatus();
     net.clearRecovery(mp.code).catch(() => {});
     this._enterGameScreen();
-    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP recovery error', err); });
+    const start = () => {
+      if (this._dead) return;
+      this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP recovery error', err); });
+    };
+    // A round-BOUNDARY snapshot (midRound:false - e.g. the host answered while its
+    // round modal was open) continues with the NEXT round, whose deck+dealer must
+    // come from the host's round record first - same gate the live 'roundScored'
+    // hook uses. Without it the guest would replay the snapshot's stale presetDeck.
+    if (!snap.midRound && mp.role === 'guest') this._mpAwaitNextRound().then(start);
+    else start();
   }
 
   _mpApplyRoundData(round) {
@@ -2093,6 +2120,14 @@ class EscobaUI {
     net.heartbeat(code, role);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this._enterGameScreen();
+    // A round-BOUNDARY save (midRound:false, written at 'roundScored') resumes with
+    // the NEXT round: its deck+dealer must come from the host's published round
+    // record, not the snapshot's stale presetDeck - same gate the live
+    // 'roundScored' hook uses. Mid-round saves resume in place and need nothing.
+    // Host-side restores shuffle and publish their own next round, so only the
+    // guest waits; the onRoom subscription above resolves it when the record lands.
+    if (role === 'guest' && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
+    if (this._dead) return;
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP restore error', err); });
   }
 

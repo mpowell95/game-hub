@@ -78,6 +78,7 @@ export class Game {
     this._nextTurn = null;     // player index due to act next (checkpoint for resume)
     this._resumeMidRound = false;
     this._resumeNextTurn = null;
+    this._resumeNextRound = false;   // restored from a round-BOUNDARY snapshot: continue with the next round
   }
 
   /**
@@ -111,6 +112,10 @@ export class Game {
     g._nextTurn = snap.nextTurn;
     g._resumeMidRound = !!snap.midRound;
     g._resumeNextTurn = snap.nextTurn;
+    // A midRound:false snapshot is a ROUND-BOUNDARY state (the MP autosave only
+    // writes at 'roundScored'): playMatch() must continue with the next round,
+    // never initMatch() (which would zero every score - see playMatch()).
+    g._resumeNextRound = !snap.midRound;
     g.players = snap.players.map((sp) => ({
       id: sp.id, name: sp.name, avatar: sp.avatar, isHuman: sp.isHuman, difficulty: sp.difficulty,
       agent: agentsById[sp.id],
@@ -250,9 +255,14 @@ export class Game {
    *  would desync host and guest the moment a reset fires (each device's
    *  `rng` is its own, per fromSnapshot() -- see chinchon/js/hash.js's doc).
    *  Two additive hooks, both no-ops when absent (byte-identical to before):
-   *    - `config.presetStockResets`: an array of exact orders (card ids),
-   *      consumed one per reset in order. When the next entry exists, it
-   *      is used instead of shuffling -- the guest's side of the protocol.
+   *    - `config.presetStockResets`: a QUEUE of exact orders (card ids),
+   *      shift()-consumed one per reset, in arrival order. When an entry is
+   *      queued, it is used instead of shuffling -- the guest's side of the
+   *      protocol. A queue, NOT an array indexed by `resetsUsed`: resetsUsed
+   *      is per-ROUND (startRound zeroes it) while the queue is appended
+   *      across the whole match, so indexing replayed round 1's shuffle
+   *      order at round 2's first reset and desynced every multi-round MP
+   *      match with resets in two rounds (test-mp-lockstep.mjs C2b).
    *    - `config.onStockReset(newOrder)`: called with the resulting stock
    *      order (ids) whenever a reset actually shuffles locally -- the
    *      host's side, letting the UI capture and transmit it as a
@@ -261,7 +271,8 @@ export class Game {
     if (this.resetsUsed >= this.config.maxResets) return false;
     if (this.discard.length <= 1) return false;
     const top = this.discard.pop();
-    const preset = Array.isArray(this.config.presetStockResets) ? this.config.presetStockResets[this.resetsUsed] : null;
+    const queue = Array.isArray(this.config.presetStockResets) ? this.config.presetStockResets : null;
+    const preset = queue && queue.length ? queue.shift() : null;
     if (preset && preset.length) {
       const byId = new Map(this.discard.map((c) => [c.id, c]));
       this.stock = preset.map((id) => byId.get(id)).filter(Boolean);
@@ -315,6 +326,19 @@ export class Game {
         await this.resumeRound();
         this._throwIfAborted();
         if (await this.finishRoundAfterPlay()) return;
+      } else if (this._resumeNextRound) {
+        // Restored from a round-BOUNDARY snapshot (the shape the MP autosave
+        // writes at 'roundScored'): scores/round/dealer already hold the
+        // post-round values, so continue with the NEXT round. This branch used
+        // to fall through to initMatch(), which zeroed every totalScore/
+        // scoreHistory and restarted at round 1 - the exact opposite of the
+        // restore comment's promise, and a THE-LAW-class score loss when both
+        // devices restored at once (test-mp-lockstep.mjs C4). The round/dealer
+        // advance here mirrors finishRoundAfterPlay()'s continuation lines,
+        // which the snapshot was taken just before.
+        this._resumeNextRound = false;
+        this.round++;
+        this.dealerIndex = (this.dealerIndex + 1) % this.players.length;
       } else {
         this.initMatch();
       }
@@ -335,15 +359,27 @@ export class Game {
    *  once the match has concluded (emits 'matchEnd' itself), else false.
    *  Extracted from playMatch()'s loop body so the resume path (a snapshot
    *  restored mid-round) can share the exact same post-round sequence
-   *  instead of duplicating it. */
+   *  instead of duplicating it.
+   *
+   *  The match-end DECISION is made before 'roundScored' is emitted and
+   *  announced in the payload (`matchOver`). Escoba's engine decides before
+   *  emitting too (its checkMatchEnd sets `winner`); Chinchón's used to
+   *  decide after, and the MP guest gate in ui.js - copied from Escoba
+   *  across that ordering difference - checked `!this.game.winner` at
+   *  roundScored time, which is null for every points/rounds ending. Result:
+   *  the guest blocked forever "waiting for host" at every normal match end
+   *  and never recorded the match (test-mp-lockstep.mjs C1). checkMatchEnd()
+   *  is pure (it only reads totals/round/winner), so deciding early changes
+   *  nothing else. */
   async finishRoundAfterPlay() {
     this._midRound = false;
     await this.resolveRoundScoring();
     this.applyRoundScores();
     this.phase = 'roundEnd';
-    await this.emit('roundScored', { round: this.round });
+    const matchOver = this.checkMatchEnd();
+    await this.emit('roundScored', { round: this.round, matchOver });
     this._throwIfAborted();
-    if (this.checkMatchEnd()) {
+    if (matchOver) {
       this.phase = 'matchEnd';
       this.finalizeStandings();
       await this.emit('matchEnd', {});

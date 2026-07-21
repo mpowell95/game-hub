@@ -755,13 +755,21 @@ class ChinchonUI {
           else if (this.game.closeType === 'doubleMeld') this._matchMinusTens++;   // a -10 close (menos diez)
         }
         this._chartView = false;
-        if (this.mp) this._mpSaveSnapshot();   // turn boundary: safe autosave point (see snapshot() doc comment)
+        // Turn boundary: safe autosave point (see snapshot() doc comment). Never
+        // save a CONCLUDED match: matchEnd is about to clear the save anyway, and
+        // a crash in between would otherwise leave a restorable save for a match
+        // that is over (whose restore would deal a phantom next round).
+        if (this.mp && !payload.matchOver) this._mpSaveSnapshot();
         await this.showRoundModal();
         // Guest only: the next round's deck can't be dealt locally until the
-        // host has shuffled it and published it (see _mpHostAnnounceRound,
-        // hooked off 'roundStart'). Wait here so a guest who taps "Next
-        // round" before the host does simply waits in place.
-        if (this.mp && this.mp.role === 'guest' && !this.game.winner) await this._mpAwaitNextRound();
+        // host has shuffled it and published it (see the 'roundStart' hook).
+        // Wait here so a guest who taps "Next round" before the host does
+        // simply waits in place. Gate on payload.matchOver, NOT on
+        // this.game.winner: the engine only decides a points/rounds ending
+        // AFTER this emit, so winner is still null here on the final round -
+        // gating on it deadlocked the guest ("Waiting for host", forever, no
+        // stats recorded) at every normal match end (test-mp-lockstep.mjs C1).
+        if (this.mp && this.mp.role === 'guest' && !payload.matchOver) await this._mpAwaitNextRound();
         break;
       case 'matchEnd':
         this._matchEnded = true;
@@ -1559,8 +1567,13 @@ class ChinchonUI {
   _mpAwaitStockReset() {
     const mp = this.mp;
     if (this.game.stock.length > 0 || this.game.resetsUsed >= this.game.config.maxResets) return Promise.resolve();
+    // presetStockResets is a QUEUE the engine shift()-consumes (see
+    // tryResetStock() in game.js): any queued entry IS the next reset, so
+    // proceed when one is waiting. This used to compare against the per-round
+    // resetsUsed counter, which read leftover round-1 entries as "round 2's
+    // reset already arrived" and skipped the wait (test-mp-lockstep.mjs C2b).
     const have = (this.game.config.presetStockResets || []).length;
-    if (have > this.game.resetsUsed) return Promise.resolve();
+    if (have > 0) return Promise.resolve();
     this._setMpStatus('Waiting for host');
     return new Promise((resolve) => { mp.awaitingStockReset = resolve; });
   }
@@ -1626,13 +1639,27 @@ class ChinchonUI {
 
   /** Guest side of a resync: rebuild via Game.fromSnapshot (the same
    *  turn-boundary resume path T5's autosave/restore uses) with MP agents
-   *  instead of AI. */
+   *  instead of AI.
+   *
+   *  Seat mapping: the snapshot's isHuman flags are the SENDER's (host's)
+   *  perspective. isHuman is device-RELATIVE - it decides which seat prompts
+   *  locally and which seat sends vs verifies in _mpAfterDecision - so the
+   *  flags must be remapped by SEAT (host is always id 0, guest id 1, fixed
+   *  at match start) and normalized before rebuilding. Trusting the
+   *  transmitted flags handed this device's human agent to the HOST's seat
+   *  and a RemoteAgent to its own (test-mp-lockstep.mjs C3/E3), leaving the
+   *  recovered player prompted for the opponent's cards while their own
+   *  turns waited on the network forever. */
   _mpApplyRecovery(recovery) {
     const mp = this.mp;
     if (!mp || this._dead) return;
     const snap = recovery.state;
+    const mySeat = mp.role === 'host' ? 0 : 1;
     const agentsById = {};
-    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    for (const sp of snap.players) {
+      sp.isHuman = sp.id === mySeat;
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+    }
     if (this.game) this.game.abort();
     this._resolvePending(null); this._resolvePlace([]); this._resolveModal();
     this.game = Game.fromSnapshot(snap, agentsById);
@@ -1648,7 +1675,16 @@ class ChinchonUI {
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this._buildPiles();
     this.render();
-    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP recovery error', err); });
+    const start = () => {
+      if (this._dead) return;
+      this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP recovery error', err); });
+    };
+    // A round-BOUNDARY snapshot (midRound:false - e.g. the host answered while its
+    // round modal was open) resumes with the NEXT round, whose deck must come from
+    // the host's round record first - same gate the live 'roundScored' hook uses.
+    // Without it the guest would deal a locally-shuffled round and desync again.
+    if (!snap.midRound && mp.role === 'guest') this._mpAwaitNextRound().then(start);
+    else start();
   }
 
   /** Guest-only: block the engine's own round transition until the host's
@@ -1927,9 +1963,11 @@ class ChinchonUI {
    *  discard). Called only from the 'roundScored' onEvent hook (a round
    *  boundary, always safe) -- NOT after every entry, unlike Escoba's
    *  per-move autosave, because Chinchón's per-DECISION granularity means
-   *  "after a draw" is mid-turn. A restored match therefore always resumes
-   *  from the last completed round's start, fast-replaying whatever of the
-   *  new round already happened via the normal move log (replayMode). */
+   *  "after a draw" is mid-turn. A restored match resumes with the NEXT
+   *  round via playMatch()'s boundary branch (game.js: `_resumeNextRound`,
+   *  scores/round/dealer kept), waits for the host's round record
+   *  (_tryRestoreMP's _mpAwaitNextRound gate), then fast-replays whatever
+   *  of the new round already happened via the normal move log (replayMode). */
   _mpSaveSnapshot() {
     if (!this.game || !this.mp) return;
     try {
@@ -1981,6 +2019,14 @@ class ChinchonUI {
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this._buildPiles();
     this.render();
+    // The autosave is always a round-BOUNDARY snapshot (see _mpSaveSnapshot), so the
+    // restored engine continues with the NEXT round - whose deck must come from the
+    // host's published round record, exactly like the live 'roundScored' gate. The
+    // host side needs no wait: it shuffles and publishes its own next round. If the
+    // host hasn't advanced yet (still on its round modal), this waits in place and
+    // the onRoom subscription above resolves it when the record lands.
+    if (role === 'guest' && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
+    if (this._dead) return;
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP restore error', err); });
   }
 

@@ -1,13 +1,11 @@
 // run-all-tests.mjs - runs every node test in the repo, exit-code aggregated.
 // Run: node run-all-tests.mjs        (Node >= 22.7, no dependencies)
 //
-// KNOWN-RED note: test-mp-lockstep.mjs currently carries seven [KNOWN-BUG PROBE]
-// failures - intended-behavior assertions for real multiplayer defects found when the
-// tripwire suite was written (guest match-end deadlock, stale presetStockResets,
-// recovery seat-swap, restore off-by-one / initMatch wipe). Each probe's failure
-// message names the mechanism and file:line. They stay red until the product bugs are
-// fixed; every other suite is expected green. See the probe messages before assuming
-// a regression.
+// ALL suites are expected green. test-mp-lockstep.mjs's [KNOWN-BUG PROBE] assertions
+// were born red against five real MP defects (guest match-end deadlock, stale
+// presetStockResets, recovery seat-swap, restore off-by-one / initMatch wipe); the
+// defects are fixed and the probes now serve as regression tripwires - a red probe
+// means one of those bugs came BACK, and its failure message names the mechanism.
 //
 // smoke-match.mjs / smoke-ui.mjs need jsdom (an external package this repo otherwise
 // does not depend on); they are SKIPPED, not failed, when jsdom isn't installed.
@@ -31,7 +29,7 @@ const SUITES = [
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },
-  { file: 'test-mp-lockstep.mjs', knownRed: 'carries [KNOWN-BUG PROBE] assertions for open MP defects' },
+  { file: 'test-mp-lockstep.mjs' },
   // jsdom-dependent smoke suites (optional)
   { file: 'smoke-match.mjs', optionalDep: 'jsdom' },
   { file: 'smoke-ui.mjs', optionalDep: 'jsdom' },
@@ -58,5 +56,5 @@ for (const suite of SUITES) {
 
 console.log(`\n==================================================`);
 console.log(`${ran} suite(s) ran, ${skipped} skipped, ${failures} failed`);
-if (failures) console.log('(if the only failure is test-mp-lockstep.mjs, check whether every FAIL line is a [KNOWN-BUG PROBE] - those are open product bugs, not test regressions)');
+if (failures) console.log('(a red [KNOWN-BUG PROBE] in test-mp-lockstep.mjs means a previously-fixed MP defect has REGRESSED - its failure message names the mechanism and file)');
 process.exit(failures ? 1 : 0);

@@ -123,6 +123,45 @@ init race that motivated it. Node ownership is disciplined by convention: stats-
 `players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
 nodes. Nothing enforces this but comments.
 
+### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
+
+Chinchón and Escoba share one lockstep protocol over `js/net.js` (`rooms/<CODE>`: a
+seq-keyed move log, per-round `round` records, a `recovery` field). Both engines apply
+the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
+every applied remote move; the host is authoritative for desync recovery. Five
+invariants below each encode a real bug found and fixed by `test-mp-lockstep.mjs`
+(its [KNOWN-BUG PROBE] assertions are the regression tripwires — if one goes red, one
+of these came back):
+
+1. **Decide the match end BEFORE emitting `roundScored`.** Chinchón's engine announces
+   it as `payload.matchOver`; every MP gate keys on that field, never on
+   `this.game.winner` (null at that moment for points/rounds endings — gating on it
+   deadlocked the guest at every normal match end and silently skipped its stats
+   recording). Escoba's engine sets `winner` before emitting, so its `!winner` gate is
+   equivalent. Any new event-hook gate about "does the match continue" must use the
+   engine's pre-emit decision.
+2. **Transmitted snapshots carry device-RELATIVE `isHuman` flags.** A snapshot's flags
+   are the SENDER's perspective. Any receiver rebuilding from one (`_mpApplyRecovery`
+   in both ui.js files) must remap agents by SEAT (host = id 0, guest = id 1, fixed at
+   match start) and normalize the flags to itself. Trusting transmitted flags handed
+   the guest's human agent to the host's seat, which made recovery — the safety net
+   under everything else — unable to land.
+3. **`config.presetStockResets` is a shift()-consumed queue** (Chinchón only), never an
+   array indexed by the per-round `resetsUsed` counter; `_mpAwaitStockReset` proceeds
+   when ANY entry is queued. Index-based consumption replayed round 1's shuffle order
+   at round 2's first reset.
+4. **Autosave AFTER the MP bookkeeping for the same event.** Escoba's `'play'` hook
+   runs `_mpAfterPlay` (which advances `appliedSeq`) before `_saveSnapshot`, so the
+   save's `mp.seq` matches the play already inside its snapshot. Saving first put the
+   seq one low and every rejoin re-applied a move it already had.
+5. **A round-boundary snapshot (`midRound:false`) resumes with the NEXT round, scores
+   kept.** Chinchón's engine takes the `_resumeNextRound` branch in `playMatch()`
+   (never `initMatch()`, which zeroes every score — a THE-LAW-class loss when both
+   devices restored at once), and a restoring/recovering GUEST awaits the host's
+   published round record (`_mpAwaitNextRound`) before playing, in both games — the
+   next round's deck must come from the host, not a stale `presetDeck` or a local
+   shuffle.
+
 ### Dev tooling (repo root, not deployed)
 
 | Script | Role |
@@ -130,6 +169,10 @@ nodes. Nothing enforces this but comments.
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
+| `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
+| `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates |
+| `test-mp-lockstep.mjs` | headless two-engine MP lockstep for Chinchón + Escoba over a fake room; mirrors the ui.js MP glue with per-method citations — update the mirror when the glue changes. Its [KNOWN-BUG PROBE] assertions are regression tripwires for the five fixed MP defects (see "Multiplayer lockstep — invariants") |
+| `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. All green expected. Run before every deploy. |
 
 ### The module contract
 

@@ -182,6 +182,14 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   `snap` is exactly `Game.snapshot()`'s output plus a `midRound` flag. Cleared on
   `matchEnd` and on the in-game menu's "Quit to setup"/"New game"; **never** cleared by
   `destroy()` (that's the whole point: navigating away via the hub must preserve it).
+- **MP invariants (July 2026 hardening — full list + rationale in the root CLAUDE.md,
+  "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`):**
+  the `'play'` hook saves AFTER `_mpAfterPlay` so the autosave's `mp.seq` matches the
+  play already in its snapshot; `_mpApplyRecovery` remaps the transmitted snapshot's
+  device-relative `isHuman` flags by seat (`mp.localSeat`) before rebuilding; and a
+  guest restoring or recovering from a round-BOUNDARY snapshot (`midRound:false`)
+  awaits the host's published round record (`_mpAwaitNextRound`) before playing, so
+  the next round's deck+dealer come from the host, never a stale `presetDeck`.
 - **`recordEscoba(difficulty, won, { escobas })`** in `js/game-stats.js` feeds the shared
   per-device stats (`gamehub.stats`), tab `escoba` in the Stats overlay
   (`js/game-stats-ui.js`).

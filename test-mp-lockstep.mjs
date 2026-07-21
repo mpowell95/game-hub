@@ -10,43 +10,51 @@
 // the mirror WITH it - each mirror method cites its source so the drift is checkable:
 //
 //   Chinchón (chinchon/js/ui.js):        Escoba (escoba/js/ui.js):
-//     _mpNewState            :1470-1481    _mpNewState            :1696-1706
-//     humanAgent (decline)   :147-161      _makeRemoteAgent       :1711-1722
-//     _makeRemoteAgent       :1498-1514    _mpTryDeliverNextMove  :1728-1739
-//     _mpTryDeliverNextMove  :1523-1544    _mpAfterPlay           :1746-1770
-//     _mpAwaitDecisionValue  :1546-1552    _mpHandleMismatch      :1775-1785
-//     _mpAwaitStockReset     :1559-1566    _mpApplyRecovery       :1790-1807
-//     _mpAfterDecision       :1575-1598    _mpApplyRoundData      :1809-1812
-//     _mpSendStockReset      :1604-1610    _mpAwaitNextRound      :1817-1827
-//     _mpHandleMismatch      :1615-1625    _mpOnRoomUpdate        :1892-1941
-//     _mpApplyRecovery       :1630-1652    _mpHostStart           :1963-1981
-//     _mpAwaitNextRound      :1657-1667    _mpGuestStartMatch     :2014-2033
-//     _mpOnRoomUpdate        :1731-1780    onEvent MP hooks       :719-804
-//     _mpHostStart           :1802-1826    _saveSnapshot          :180-191
-//     _mpGuestStartMatch     :1867-1893    _tryRestoreMP          :2067-2097
-//     onEvent MP hooks       :706-779
-//     _mpSaveSnapshot        :1933-1941
-//     _tryRestoreMP          :1955-1985
+//     _mpNewState            :1478          _mpNewState            :1702
+//     humanAgent (decline)   :147-161       _makeRemoteAgent       :1717
+//     _makeRemoteAgent       :1506          _mpTryDeliverNextMove  :1734
+//     _mpTryDeliverNextMove  :1531          _mpAfterPlay           :1752
+//     _mpAwaitDecisionValue  :1554          _mpHandleMismatch      :1781
+//     _mpAwaitStockReset     :1567          _mpApplyRecovery       :1805
+//     _mpAfterDecision       :1588          _mpApplyRoundData      :1836
+//     _mpSendStockReset      :1617          _mpAwaitNextRound      :1844
+//     _mpHandleMismatch      :1628          _mpOnRoomUpdate        :1919
+//     _mpApplyRecovery       :1653          _mpHostStart           :1990
+//     _mpAwaitNextRound      :1693          _mpGuestStartMatch     :2041
+//     _mpOnRoomUpdate        :1767          onEvent MP hooks       :719-810
+//     _mpHostStart           :1838          _saveSnapshot          :180-191
+//     _mpGuestStartMatch     :1903          _tryRestoreMP          :2094
+//     onEvent MP hooks       :706-786
+//     _mpSaveSnapshot        :1971
+//     _tryRestoreMP          :1993
+//   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
+//   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
 //   (net.js:122-128), appendMove keys by padded seq (:132-137), writeRecovery replaces the
 //   recovery field (:145-149), requestRecovery (:153-156), onValue fires once immediately on
 //   subscribe (Firebase semantics; FakeRoom.onRoom does the same).
 //
-// SCENARIOS (per game where applicable):
+// SCENARIOS (per game where applicable) - ALL GREEN EXPECTED. The [KNOWN-BUG PROBE]
+// assertions were born red against five real MP defects this suite surfaced when first
+// written (chinchon guest match-end deadlock; stale cross-round presetStockResets;
+// recovery seat swap in both games; escoba play-save seq off-by-one; chinchon restore
+// initMatch wipe); all five were then fixed, and the probes now stand as regression
+// tripwires - their failure messages still describe the original mechanism so a
+// regression is instantly recognizable.
 //   1. Full match to completion, deterministic scripted agents, hash verified on every applied
-//      remote move (that IS the protocol) + final-state hash equality. Expected green.
+//      remote move (that IS the protocol) + final-state hash equality. C1 additionally probes
+//      that the GUEST also concludes a points-ended match (payload.matchOver gate).
 //   2. Chinchón only: stock exhaustion -> host-shuffled reset transmitted as a 'stock-reset'
-//      entry -> identical post-reset play. 2a: within one round (expected green - the path QA
-//      never reached live). 2b: a SECOND round that also exhausts - probes that
-//      config.presetStockResets from round 1 doesn't poison round 2 (game.js:264 indexes
-//      presets by the per-round resetsUsed counter, but startRound() never clears the array).
+//      entry -> identical post-reset play. 2a: within one round (the path QA never reached
+//      live). 2b: a SECOND round that also exhausts (queue-consumption of presetStockResets).
 //      (Escoba has no mid-round host-shuffle - decks are per-round only - noted as N/A.)
 //   3. Forced desync: deliberately corrupt one guest-side application -> assert the mismatch is
 //      DETECTED at the next hash compare, the recovery snapshot round-trips through
-//      Game.fromSnapshot, and play continues to a convergent match end.
-//   4. Mid-match rejoin: freeze the guest, drop its live state, rebuild from its last autosave
-//      exactly the way _tryRestoreMP does, replay the room-log tail, assert convergence with no
-//      recovery and no move-log overwrites (the INTENDED behavior of the restore feature).
+//      Game.fromSnapshot with seat-remapped isHuman flags, and the guest's own seat stays its
+//      local human.
+//   4. Mid-match rejoin: freeze the guest in-band, drop its live state, rebuild from its last
+//      autosave exactly the way _tryRestoreMP does, replay the room-log tail, assert clean
+//      convergence (no mismatches/recovery) and, for chinchon, that scores/round survive.
 //
 // Node-only, no deps, players-agg.test.mjs idiom. Run: node test-mp-lockstep.mjs
 
@@ -186,11 +194,11 @@ class ChinchonSide {
     const m = entry.move;
     resolve(m.t === 'draw' ? m.src : m.t === 'discard' ? m.cardId : !!m.kind);   // :1543
   }
-  awaitStockReset() {   // _mpAwaitStockReset @ :1559-1566
+  awaitStockReset() {   // _mpAwaitStockReset (queue semantics: any queued entry is the next reset)
     const mp = this.mp;
     if (this.game.stock.length > 0 || this.game.resetsUsed >= this.game.config.maxResets) return Promise.resolve();
     const have = (this.game.config.presetStockResets || []).length;
-    if (have > this.game.resetsUsed) return Promise.resolve();
+    if (have > 0) return Promise.resolve();
     return new Promise((resolve) => { mp.awaitingStockReset = resolve; });
   }
   async afterDecision(p, moveIfLocal) {   // _mpAfterDecision @ :1575-1598
@@ -232,20 +240,25 @@ class ChinchonSide {
       else await this.room.requestRecovery(seq);
     } catch { /* retried on next room update */ }
   }
-  applyRecovery(recovery) {   // _mpApplyRecovery @ :1630-1652
+  applyRecovery(recovery) {   // _mpApplyRecovery (seat-remapped isHuman + boundary-aware start - the C3/E3 fix)
     const mp = this.mp;
     if (!mp || this.dead) return;
-    const snap = recovery.state;
+    const snap = deep(recovery.state);
+    const mySeat = this.role === 'host' ? 0 : 1;
     const agentsById = {};
-    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+    for (const sp of snap.players) {
+      sp.isHuman = sp.id === mySeat;
+      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+    }
     if (this.game) this.game.abort();
     this.recoveriesApplied++;
-    this.bindGame(CGame.fromSnapshot(deep(snap), agentsById));
+    this.bindGame(CGame.fromSnapshot(snap, agentsById));
     mp.appliedSeq = recovery.seq;
     mp.pendingResolve = null; mp.pendingType = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
     this.room.clearRecovery().catch(() => {});
-    this.startLoop();
+    if (!snap.midRound && this.role === 'guest') this.awaitNextRound().then(() => this.startLoop());
+    else this.startLoop();
   }
   awaitNextRound() {   // _mpAwaitNextRound @ :1657-1667
     const mp = this.mp;
@@ -303,8 +316,10 @@ class ChinchonSide {
       case 'discard': await this.afterDecision(p, { t: 'discard', cardId: payload.card.id }); break;    // :741
       case 'close': await this.afterDecision(p, { t: 'close', kind: true }); break;                     // :745
       case 'roundScored':
-        this.saves.push({ v: 1, code: 'T', role: this.role, seq: this.mp.appliedSeq, at: 0, snap: deep(this.game.snapshot()) });   // _mpSaveSnapshot @ :758/1933-1941
-        if (this.role === 'guest' && !this.game.winner) await this.awaitNextRound();   // :764
+        // _mpSaveSnapshot + guest gate, both on payload.matchOver (the engine decides
+        // the match end BEFORE emitting and announces it in the payload - the C1 fix)
+        if (!payload.matchOver) this.saves.push({ v: 1, code: 'T', role: this.role, seq: this.mp.appliedSeq, at: 0, snap: deep(this.game.snapshot()) });
+        if (this.role === 'guest' && !payload.matchOver) await this.awaitNextRound();
         break;
       case 'matchEnd':
         this.matchEnded = true;
@@ -336,13 +351,17 @@ class ChinchonSide {
     this.bindGame(new CGame({ players, config: cfg }));
     this.startLoop();
   }
-  restoreFromSave(save) {   // _tryRestoreMP @ :1955-1985 (join/heartbeat elided; FakeRoom always reachable)
+  async restoreFromSave(save) {   // _tryRestoreMP (join/heartbeat elided; FakeRoom always reachable)
     const agentsById = {};
     for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
     this.mp = mpNewState();
-    this.mp.appliedSeq = save.seq | 0;   // :1973
-    this.bindGame(CGame.fromSnapshot(deep(save.snap), agentsById));   // :1974
-    this.startLoop();   // :1984
+    this.mp.appliedSeq = save.seq | 0;
+    this.bindGame(CGame.fromSnapshot(deep(save.snap), agentsById));
+    // Boundary saves (the only kind chinchon MP writes) wait for the host's next-round
+    // record before playing, mirroring the fixed _tryRestoreMP.
+    if (this.role === 'guest' && !save.snap.midRound) await this.awaitNextRound();
+    if (this.dead) return;
+    this.startLoop();
   }
   kill() { this.dead = true; if (this.game) this.game.abort(); this.room.offRoom(this._roomCb); }
 }
@@ -412,20 +431,25 @@ class EscobaSide {
       else await this.room.requestRecovery(seq);
     } catch { /* retried on next room update */ }
   }
-  applyRecovery(recovery) {   // _mpApplyRecovery @ :1790-1807
+  applyRecovery(recovery) {   // _mpApplyRecovery (seat-remapped isHuman + boundary-aware start - the E3 fix)
     const mp = this.mp;
     if (!mp || this.dead) return;
-    const snap = recovery.state;
+    const snap = deep(recovery.state);
+    const mySeat = this.role === 'host' ? 0 : 1;   // mp.localSeat in the real glue
     const agentsById = {};
-    for (const sp of snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+    for (const sp of snap.players) {
+      sp.isHuman = sp.id === mySeat;
+      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+    }
     if (this.game) this.game.abort();
     this.recoveriesApplied++;
-    this.bindGame(EGame.fromSnapshot(deep(snap), agentsById));
+    this.bindGame(EGame.fromSnapshot(snap, agentsById));
     mp.appliedSeq = recovery.seq;
     mp.pendingResolve = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
     this.room.clearRecovery().catch(() => {});
-    this.startLoop();
+    if (!snap.midRound && this.role === 'guest') this.awaitNextRound().then(() => this.startLoop());
+    else this.startLoop();
   }
   applyRoundData(round) { this.game.config.presetDeck = round.deck; this.game.dealer = round.dealer; }   // _mpApplyRoundData @ :1809-1812
   awaitNextRound() {   // _mpAwaitNextRound @ :1817-1827
@@ -482,8 +506,10 @@ class EscobaSide {
       case 'deal': if (!payload.first) this.save('deal'); break;    // :739
       case 'initialEscoba': this.save('initialEscoba'); break;               // :744
       case 'play':
-        this.save('play');                                          // :771 - fires BEFORE _mpAfterPlay (:772)
+        // afterPlay FIRST, save second: _mpAfterPlay advances appliedSeq for this very
+        // play, and the autosave records that seq (the E4 off-by-one fix).
         await this.afterPlay(p, payload);
+        this.save('play');
         break;
       case 'sweepLeftovers': this.save('sweep'); break;              // :777
       case 'roundScored':
@@ -515,13 +541,18 @@ class EscobaSide {
     this.game.dealer = room.round.dealer;   // :2027
     this.startLoop();
   }
-  restoreFromSave(save) {   // _tryRestoreMP @ :2067-2097 (join elided; FakeRoom always reachable)
+  async restoreFromSave(save) {   // _tryRestoreMP (join elided; FakeRoom always reachable)
     const agentsById = {};
     for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
     this.mp = mpNewState();
-    this.mp.appliedSeq = save.mp.seq | 0;   // :2088
-    this.bindGame(EGame.fromSnapshot(deep(save.snap), agentsById));   // :2089
-    this.startLoop();   // :2096
+    this.mp.appliedSeq = save.mp.seq | 0;
+    this.bindGame(EGame.fromSnapshot(deep(save.snap), agentsById));
+    // Boundary saves resume with the next round: wait for the host's round record
+    // (deck + dealer) first, mirroring the fixed _tryRestoreMP. Mid-round saves
+    // (the common play-save) resume in place.
+    if (this.role === 'guest' && !save.snap.midRound) await this.awaitNextRound();
+    if (this.dead) return;
+    this.startLoop();
   }
   kill() { this.dead = true; if (this.game) this.game.abort(); this.room.offRoom(this._roomCb); }
 }
@@ -605,16 +636,13 @@ console.log('\n--- C1: Chinchón full match (KNOWN-BUG PROBE: guest deadlocks at
     // Give the guest a generous beat to also conclude, then probe.
     await new Promise((r) => setTimeout(r, 500));
     ok('C1 [KNOWN-BUG PROBE]: guest also reaches matchEnd when the match ends on points\n' +
-       '      (fails while chinchon/js/game.js:339-346 emits roundScored BEFORE checkMatchEnd() runs:\n' +
-       '      the guest-side gate `if (... && !this.game.winner) await this._mpAwaitNextRound()` at\n' +
-       '      chinchon/js/ui.js:764 sees winner==null on the FINAL round of every points/rounds-limit\n' +
-       '      match (winner is only pre-set by a chinchon close), so the guest blocks forever waiting\n' +
-       '      for a round the host will never publish. Escoba is immune - escoba/js/game.js:166-173\n' +
-       '      runs checkMatchEnd() BEFORE emitting roundScored; the gate was copied across that\n' +
-       '      ordering difference. Consequence beyond the hang: the guest never runs its matchEnd\n' +
-       '      hook, so recordChinchon/_commitStats (chinchon/js/ui.js:766-768) NEVER fires - every\n' +
-       '      points-ended MP match is silently missing from the guest\'s gamehub.stats, a THE-LAW\n' +
-       '      rule-6-class silent data loss)',
+       '      (REGRESSION GUARD: chinchon/js/game.js finishRoundAfterPlay (:374) must decide the match\n' +
+       '      end BEFORE emitting roundScored and announce it as payload.matchOver, and the guest gate\n' +
+       '      at chinchon/js/ui.js:772 must key on that field, never on this.game.winner - winner is\n' +
+       '      null at that moment for every points/rounds ending. When the decision came after the\n' +
+       '      emit, the guest blocked forever "waiting for host" at every normal match end and never\n' +
+       '      ran its matchEnd hook, so recordChinchon/_commitStats never fired: the match was\n' +
+       '      silently missing from the guest\'s gamehub.stats, a THE-LAW rule-6-class loss)',
       guest.matchEnded,
       `guest.matchEnded=${guest.matchEnded} guest awaitingRoundN=${guest.mp.awaitingRoundN} (stuck waiting for a round ${guest.mp.awaitingRoundN} that will never be published)`);
   } catch (e) { fail++; console.log(`FAIL  C1 did not complete: ${e.message}`); }
@@ -650,16 +678,14 @@ console.log('\n--- C2b: Chinchón resets in two rounds (KNOWN-BUG PROBE: stale p
     // Wait until a mismatch appears (the bug), or round 3 is reached cleanly (intended).
     await until(() => host.mismatches + guest.mismatches > 0 || host.game.round >= 3 || host.failedHard || guest.failedHard, 20000, 'C2b round-2 reset outcome');
     ok('C2b [KNOWN-BUG PROBE]: a reset in a LATER round stays in sync\n' +
-       '      (fails while chinchon/js/game.js:264 indexes config.presetStockResets - which is\n' +
-       '      appended-to forever and NEVER cleared between rounds - with the per-ROUND resetsUsed\n' +
-       '      counter, and chinchon/js/ui.js:1562-1563 skips the wait whenever stale entries make\n' +
-       '      presets.length > resetsUsed: the guest silently replays round 1\'s shuffle order for\n' +
-       '      round 2\'s reset, its stock diverges from the host\'s fresh shuffle, and the next\n' +
-       '      applied move hash-mismatches. Live consequence: any multi-round MP match with stock\n' +
-       '      resets in two different rounds desyncs and leans on the (also broken, see E3/C3)\n' +
-       '      recovery path)',
+       '      (REGRESSION GUARD: config.presetStockResets is a shift()-consumed QUEUE - chinchon/js/\n' +
+       '      game.js tryResetStock (:270) - and _mpAwaitStockReset (chinchon/js/ui.js:1567) proceeds\n' +
+       '      when ANY entry is queued. When it was an array indexed by the per-ROUND resetsUsed\n' +
+       '      counter (which startRound zeroes while the array grew forever), round 2\'s first reset\n' +
+       '      silently replayed round 1\'s shuffle order, the guest\'s stock diverged from the host\'s\n' +
+       '      fresh shuffle, and every multi-round MP match with resets in two rounds desynced)',
       host.mismatches + guest.mismatches === 0 && host.game.round >= 3,
-      `mismatches host=${host.mismatches} guest=${guest.mismatches} at round=${host.game.round} (host mismatching = it verified the guest's post-stale-reset moves; the guest's config was then replaced wholesale by the recovery snapshot)`);
+      `mismatches host=${host.mismatches} guest=${guest.mismatches} at round=${host.game.round}`);
   } catch (e) { fail++; console.log(`FAIL  C2b did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
 }
@@ -675,13 +701,13 @@ console.log('\n--- E3: Escoba forced desync + recovery (KNOWN-BUG PROBE: recover
     ok('E3: recovered state round-tripped through Game.fromSnapshot (game live again)', !!guest.game && guest.game.round >= 1);
     const ownSeat = guest.game && guest.game.players.find((p) => p.id === 1);
     ok('E3 [KNOWN-BUG PROBE]: after recovery, the guest\'s own seat is still its local human\n' +
-       '      (fails while escoba/js/ui.js:1795 (and chinchon/js/ui.js:1635) assigns agents by the\n' +
-       '      snapshot\'s isHuman flags - but the snapshot came from the HOST, whose players[0] is\n' +
-       '      the human and players[1] (the guest\'s own seat) is not. isHuman is device-RELATIVE;\n' +
-       '      transmitting it without remapping hands the guest\'s human agent to the HOST\'s seat\n' +
-       '      and a network RemoteAgent to the guest\'s own seat. Post-recovery the guest is\n' +
-       '      prompted to play the host\'s cards and its own turns wait on the network forever -\n' +
-       '      recovery, the safety net for every other MP defect, cannot actually land)',
+       '      (REGRESSION GUARD: recovery snapshots carry the SENDER\'s isHuman flags, and isHuman is\n' +
+       '      device-RELATIVE - _mpApplyRecovery (escoba/js/ui.js:1805) must remap by seat\n' +
+       '      (mp.localSeat) and normalize the flags before rebuilding. Trusting the transmitted\n' +
+       '      flags handed the guest\'s human agent to the HOST\'s seat and a network RemoteAgent to\n' +
+       '      its own: the recovered player was prompted for the opponent\'s cards while their own\n' +
+       '      turns waited on the network forever, so recovery - the safety net every other MP\n' +
+       '      defect leans on - could never actually land)',
       !!(ownSeat && ownSeat.isHuman),
       `guest post-recovery players: ${guest.game ? guest.game.players.map((p) => `id${p.id}:isHuman=${p.isHuman}`).join(', ') : 'no game'}`);
   } catch (e) { fail++; console.log(`FAIL  E3 did not complete: ${e.message}`); }
@@ -702,8 +728,8 @@ console.log('\n--- C3: Chinchón forced desync + recovery (same seat-swap probe)
     ok('C3: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1, `recoveries=${guest.recoveriesApplied}`);
     const ownSeat = guest.game && guest.game.players.find((p) => p.id === 1);
     ok('C3 [KNOWN-BUG PROBE]: after recovery, the guest\'s own seat is still its local human\n' +
-       '      (same mechanism as E3: chinchon/js/ui.js:1635 maps agents by the HOST-relative isHuman\n' +
-       '      flags in the transmitted snapshot)',
+       '      (same REGRESSION GUARD as E3: chinchon/js/ui.js:1653 _mpApplyRecovery must remap the\n' +
+       '      transmitted host-relative isHuman flags by seat before rebuilding)',
       !!(ownSeat && ownSeat.isHuman),
       `guest post-recovery players: ${guest.game ? guest.game.players.map((p) => `id${p.id}:isHuman=${p.isHuman}`).join(', ') : 'no game'}`);
   } catch (e) { fail++; console.log(`FAIL  C3 did not complete: ${e.message}`); }
@@ -745,20 +771,19 @@ console.log('\n--- E4: Escoba rejoin from autosave (KNOWN-BUG PROBE: play-save s
       snapAlreadyContainsNext = eHash(probeGame) === entry.h;
     }
     ok('E4 [KNOWN-BUG PROBE]: the autosave\'s seq matches its snapshot (restore replays only genuinely-new moves)\n' +
-       '      (fails while escoba/js/ui.js:771 calls _saveSnapshot() BEFORE :772 _mpAfterPlay() bumps\n' +
-       '      appliedSeq: every play-event autosave stores mp.seq one LOW relative to the state in its\n' +
-       '      own snapshot, so _tryRestoreMP (:2088) rebuilds at post-move-N state with appliedSeq N-1\n' +
-       '      and re-applies move N - a guaranteed desync on rejoin, converging only via the recovery\n' +
-       '      path, which E3 shows is itself broken. Live consequence: backgrounding an MP escoba\n' +
-       '      match mid-round and reopening within 30 min - the exact case _tryRestoreMP exists for -\n' +
-       '      cannot resume cleanly)',
+       '      (REGRESSION GUARD: escoba/js/ui.js\'s \'play\' hook (:768-780) must run _mpAfterPlay -\n' +
+       '      which advances appliedSeq for this very play - BEFORE _saveSnapshot records that seq.\n' +
+       '      When the save came first, every play-event autosave stored mp.seq one LOW relative to\n' +
+       '      the play already in its snapshot, so _tryRestoreMP rebuilt at post-move-N state with\n' +
+       '      appliedSeq N-1 and re-applied move N: a guaranteed desync on every rejoin, the exact\n' +
+       '      case the 30-minute restore window exists for)',
       !snapAlreadyContainsNext,
       `save.mp.seq=${lastSave.mp.seq} (kind=play), room entry at seq ${(lastSave.mp.seq | 0) + 1} ${entry ? `hash-matches the snapshot state: ${snapAlreadyContainsNext}` : 'absent'}`);
 
     // End-to-end expression of the same defect through the mirrored restore path: the
     // restored side's first applied delivery re-applies a contained move and mismatches.
     restored = new EscobaSide('guest', room, escobaScript(), {});
-    restored.restoreFromSave(lastSave);
+    await restored.restoreFromSave(lastSave);
     await until(() => restored.mp.appliedSeq > (lastSave.mp.seq | 0) || restored.mismatches > 0 || restored.failedHard || restored.errors.length > 0, 10000, 'E4 restored side applies something');
     ok('E4 [KNOWN-BUG PROBE]: restored guest replays the tail cleanly (zero mismatches, no errors)',
       restored.mismatches === 0 && !restored.failedHard && restored.errors.length === 0,
@@ -780,44 +805,51 @@ console.log('\n--- E4: Escoba rejoin from autosave (KNOWN-BUG PROBE: play-save s
 // --- C4: mid-match rejoin from the round-boundary autosave -------------------------
 console.log('\n--- C4: Chinchón rejoin from autosave (KNOWN-BUG PROBE: restore re-runs initMatch) ---');
 {
-  const { room, host, guest } = await makeChinchon({ victoryCondition: 'points', scoreLimit: 500, maxResets: 2 }, true, {});
+  // In-band freeze (same reasoning as E4): stop the guest's delivery a few decisions
+  // into round 2, so the lockstep cascade halts there instead of racing the whole
+  // match to completion between two timer polls.
+  let guestRef = null;
+  const frozen = () => guestRef !== null && guestRef.saves.length >= 1 && guestRef.mp.appliedSeq >= (guestRef.saves[0].seq | 0) + 4;
+  const { room, host, guest } = await makeChinchon({ victoryCondition: 'points', scoreLimit: 500, maxResets: 2 }, true, { guest: { frozen } });
+  guestRef = guest;
   try {
     await until(() => guest.saves.length >= 1, 20000, 'C4 round-1 boundary autosave exists');
     const boundarySave = deep(guest.saves[0]);
     const scoresAtSave = boundarySave.snap.players.map((p) => p.totalScore);
-    cleanup(room, host, guest);   // the save is captured; the live match is no longer needed
+    // The restore path resumes with the NEXT round and (correctly) waits for the host's
+    // round record - capture the real one the live host published before tearing down.
+    await until(() => room.round && room.round.n === boundarySave.snap.round + 1, 15000, 'C4 host published the next round');
+    const nextRound = deep(room.round);
+    cleanup(room, host, guest);   // save + round record captured; the live match is no longer needed
 
-    // Restore on an isolated room so the probe reads the fromSnapshot outcome itself,
-    // not the state after the desync/recovery churn the buggy restore then triggers
-    // (playMatch()'s body runs synchronously through initMatch() and startRound() up to
-    // its first await, so the wipe - if it happens - is observable immediately).
+    // Restore on an isolated room (carrying the captured round record) so the probe
+    // reads the restore outcome itself, not the state after any subsequent live play.
+    // playMatch()'s body runs synchronously through its resume branch and startRound()
+    // up to the first await, so scores/round are observable right after restore.
     const isoRoom = new FakeRoom();
-    isoRoom.round = { n: boundarySave.snap.round, deck: [], dealer: 0 };
+    isoRoom.round = nextRound;
     isoRoom.status = 'active';
     const restored = new ChinchonSide('guest', isoRoom, chinchonScript(true), {});
-    restored.restoreFromSave(boundarySave);
+    await restored.restoreFromSave(boundarySave);
     const restoredScores = restored.game ? restored.game.players.map((p) => p.totalScore) : null;
     const restoredRound = restored.game ? restored.game.round : null;
     restored.kill(); isoRoom.dead = true;
     ok('C4 [KNOWN-BUG PROBE]: restored engine keeps the saved scores and round (no initMatch wipe)\n' +
-       '      (fails while chinchon/js/game.js:311-320 playMatch() takes the else-branch for a\n' +
-       '      midRound:false snapshot - the ONLY kind chinchon MP ever saves, see the roundScored-\n' +
-       '      boundary constraint at chinchon/js/ui.js:1925-1932 - and calls initMatch(), which\n' +
-       '      ZEROES every totalScore/scoreHistory and restarts at round 1 with the snapshot\'s\n' +
-       '      stale presetDeck. The restore feature\'s own doc comment promises "resumes from the\n' +
-       '      last completed round\'s start, fast-replaying via the move log"; what it actually does\n' +
-       '      is restart the match. Live consequences: the rejoining player sees zeroed scores; its\n' +
-       '      replayed own-turn decisions OVERWRITE the host\'s entries in the shared move log; and\n' +
-       '      if BOTH devices restore from autosaves (both backgrounded mid-match), there is no\n' +
-       '      authoritative host left to recover from - the match\'s scores are simply gone, a\n' +
+       '      (REGRESSION GUARD: chinchon/js/game.js playMatch (:322) must take the _resumeNextRound\n' +
+       '      branch for a midRound:false snapshot - the ONLY kind chinchon MP saves - continuing\n' +
+       '      with the next round, scores/dealer kept, and _tryRestoreMP (chinchon/js/ui.js:1993)\n' +
+       '      must await the host\'s round record before playing. When this fell through to\n' +
+       '      initMatch(), every totalScore/scoreHistory was ZEROED and the match restarted at\n' +
+       '      round 1 with a stale presetDeck; with BOTH devices restoring at once there was no\n' +
+       '      authoritative host to recover from and the match\'s scores were simply gone - a\n' +
        '      THE-LAW-class loss)',
-      restoredScores != null && JSON.stringify(restoredScores) === JSON.stringify(scoresAtSave) && restoredRound >= boundarySave.snap.round,
+      restoredScores != null && JSON.stringify(restoredScores) === JSON.stringify(scoresAtSave) && restoredRound === boundarySave.snap.round + 1,
       `scores at save=${JSON.stringify(scoresAtSave)} (round ${boundarySave.snap.round}), after restore=${JSON.stringify(restoredScores)} (round ${restoredRound})`);
   } catch (e) { fail++; console.log(`FAIL  C4 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
 }
 
 console.log(fail
-  ? `\n${fail} FAILURE(S) - the [KNOWN-BUG PROBE] failures assert intended behavior the product does not yet meet; see the probe messages and the tripwire report for mechanisms`
+  ? `\n${fail} FAILURE(S) - a red [KNOWN-BUG PROBE] means a previously-fixed MP defect has REGRESSED; its message names the mechanism and file:line`
   : '\nALL PASS');
 process.exit(fail ? 1 : 0);
