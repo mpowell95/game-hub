@@ -1,12 +1,12 @@
 /* =============================================================================
- * sw.js — Service worker for "Business Deal" / Monopoly Deal.
+ * sw.js — Service worker for Monopoly Deal.
  *
  * NETWORK-FIRST for code so a freshly deployed build is always served when the
  * device is online (the old cache-first strategy left players stuck on stale
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v28';
+const CACHE = 'business-deal-hub-v29';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.

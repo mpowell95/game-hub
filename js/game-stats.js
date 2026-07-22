@@ -238,7 +238,7 @@ function foldAll(st) {
   return changed;
 }
 
-// F1 (durability, ARCH-REVIEW.md S4-1/S5-1): Business Deal queues a play here
+// F1 (durability, ARCH-REVIEW.md S4-1/S5-1): Monopoly Deal queues a play here
 // (gamehub.bd.pendingStats.v1, in business-deal/js/ui.js's _recordResult) when its own
 // window.__ghStats was unavailable at game-end - e.g. offline on a device whose install of BD's
 // nested service worker predates game-stats-global.js being added to that worker's own cache
@@ -255,7 +255,7 @@ function drainPendingBusinessDeal(st) {
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
   }
   try { localStorage.removeItem(PENDING_BD_KEY); } catch { /* ignore */ }
-  console.warn(`[game-stats] drained ${q.length} pending Business Deal stat(s) that were queued while __ghStats was unavailable`);
+  console.warn(`[game-stats] drained ${q.length} pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable`);
   return true;
 }
 

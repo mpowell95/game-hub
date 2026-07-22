@@ -1,5 +1,5 @@
 /* =============================================================================
- * game.js — Rules engine & turn state machine for "Business Deal"
+ * game.js — Rules engine & turn state machine for Monopoly Deal
  * -----------------------------------------------------------------------------
  * Pure game logic. No DOM. Decisions that a player/AI must make (which move to
  * play, whether to play Just Say No, how to pay a debt, what to discard, how to
@@ -988,7 +988,7 @@
       ],
     });
 
-    console.log('=== Business Deal — headless engine self-test (seed ' + seed + ') ===');
+    console.log('=== Monopoly Deal — headless engine self-test (seed ' + seed + ') ===');
     game.setup();
     assertDeckIntegrity(game, 'after setup');
 

@@ -56,7 +56,7 @@ const GAMES = [
     id: 'business-deal',
     title: 'Monopoly Deal',
     blurb: 'Cards, cash & schemes. Collect property sets to win vs. smart AI. 2–5 players.',
-    // Business Deal lives in this repo now (business-deal/) and launches out like
+    // Monopoly Deal lives in this repo now (business-deal/) and launches out like
     // Parchís, rather than mounting as an in-hub module. It keeps its own global-JS
     // stack and service worker (nested under business-deal/); it is not an ES module.
     href: 'business-deal/',
@@ -74,7 +74,7 @@ const GAMES = [
     id: 'parchis',
     title: 'Parchís',
     blurb: 'Spanish Parchís vs. smart AI. One die, seguros, barreras & bonos. 2–4 players.',
-    // Self-contained single-file game living in this repo; launches out like Business Deal.
+    // Self-contained single-file game living in this repo; launches out like Monopoly Deal.
     href: 'parchis/',
     accent: '#c0632b',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">

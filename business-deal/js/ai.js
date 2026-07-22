@@ -1,5 +1,5 @@
 /* =============================================================================
- * ai.js — Strategic AI agent for "Business Deal"
+ * ai.js — Strategic AI agent for Monopoly Deal
  * -----------------------------------------------------------------------------
  * Implements the agent interface defined in game.js. The engine calls
  * chooseMove() once per play-slot (up to 3 per turn), so a strong move in one
@@ -564,7 +564,7 @@
       return { winnerIndex: g.winner ? g.winner.id : -1, turns };
     }
 
-    console.log('=== Business Deal — AI self-test (' + games + ' games each) ===');
+    console.log('=== Monopoly Deal — AI self-test (' + games + ' games each) ===');
 
     // 1) AI (P0) vs RandomAgent (P1) — AI should dominate.
     let aiWins = 0, rndWins = 0, unfinished = 0, totalTurns = 0;

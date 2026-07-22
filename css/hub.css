@@ -34,7 +34,7 @@ body {
   gap: 10px;
   padding: 14px 16px;
   /* Clear the iOS status bar/notch in EVERY context. `env(safe-area-inset-top)`
-     is ~0 in mobile Safari (and when returning here from the Business Deal PWA),
+     is ~0 in mobile Safari (and when returning here from the Monopoly Deal PWA),
      which let "Game Hub" collide with the clock. Guarantee a 54px minimum (≈ a
      Dynamic Island status bar); the notch/standalone case still wins via env(). */
   padding-top: max(env(safe-area-inset-top, 0px), 54px);
@@ -220,7 +220,7 @@ body {
   letter-spacing: -0.01em;
   text-align: left;
   color: #fff;
-  /* Consistent, tall scrim so labels stay crisp over busy artwork (Parchís, Business Deal),
+  /* Consistent, tall scrim so labels stay crisp over busy artwork (Parchís, Monopoly Deal),
      not just the clean tiles. */
   background: linear-gradient(to top, rgba(6, 12, 24, 0.92) 0%, rgba(6, 12, 24, 0.78) 30%, rgba(6, 12, 24, 0.28) 68%, rgba(6, 12, 24, 0));
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.7);

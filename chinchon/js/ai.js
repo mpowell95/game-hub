@@ -8,7 +8,7 @@
 // "Thinking" delays are added by the UI, never here. Difficulty is a blunder
 // rate: with some probability the agent takes a plausible-but-suboptimal move
 // instead of the best one (never a catastrophic, meld-breaking move). This
-// mirrors the Business Deal AI's tiering.
+// mirrors the Monopoly Deal AI's tiering.
 
 import * as meld from './meld.js';
 

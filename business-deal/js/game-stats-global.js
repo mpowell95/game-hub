@@ -1,4 +1,4 @@
-// game-stats-global.js - IN-SCOPE COPY for Business Deal's own nested service worker
+// game-stats-global.js - IN-SCOPE COPY for Monopoly Deal's own nested service worker
 // (business-deal/sw.js). MUST stay byte-identical to the canonical ../js/game-stats-global.js.
 //
 // Why a copy instead of the original path: BD's page is controlled exclusively by its own nested
@@ -13,7 +13,7 @@
 // ---- everything below is the canonical file, verbatim ----
 //
 // game-stats-global.js - a CLASSIC (non-module) port of game-stats.js's recorder, for the
-// launch-out games that are not ES modules (Business Deal, Parchis). It writes the SAME
+// launch-out games that are not ES modules (Monopoly Deal, Parchis). It writes the SAME
 // localStorage['gamehub.stats'] shape with the SAME per-game `_leg` legacy-fold guard, so it
 // interoperates cleanly with the ES-module game-stats.js used by the hub, Connect Four, and
 // Chinchon (whoever runs first folds a legacy store; the flag makes the other skip). Exposes
@@ -70,7 +70,7 @@
     } catch (e) { /* never break the game */ }
   }
 
-  // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): drain any Business Deal plays that were queued
+  // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): drain any Monopoly Deal plays that were queued
   // (business-deal/js/ui.js's _recordResult) because __ghStats wasn't available at game-end. This
   // runs once, right here, the moment this script itself loads successfully - i.e. exactly the
   // "next BD load where __ghStats works" case. Through the SAME `record()` above, so it's the
@@ -85,7 +85,7 @@
         if (e) record(e.game, e.diff, e.won);
       }
       localStorage.removeItem(PENDING_STATS_KEY);
-      console.warn('[game-stats-global] drained ' + q.length + ' pending Business Deal stat(s) that were queued while __ghStats was unavailable');
+      console.warn('[game-stats-global] drained ' + q.length + ' pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable');
     } catch (e) { /* never break the game */ }
   }
 

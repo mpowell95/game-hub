@@ -19,6 +19,31 @@ A small, ad-free, installable **PWA that hosts self-contained game modules**. Va
 JS (ES modules), **no build step, no dependencies, no framework**. Deploys as static
 files (e.g. GitHub Pages). A shared **user profile** prefills every game (see "The shared profile").
 
+## Monopoly Deal naming (settled — do not change)
+
+The game is called **Monopoly Deal**. Every user-visible string says "Monopoly Deal":
+hub card title, page title, PWA manifest name/short_name, iOS home-screen title,
+watermark, setup dialog, in-game menus, My Stats label, leaderboard label.
+
+The folder is `business-deal/` and several internal identifiers use `business` / `bd`.
+**This is intentional and must never be "fixed."** A directory name is not a display
+name. These identifiers are load-bearing:
+
+- `business-deal/` is the live URL path. Renaming it breaks every installed PWA on
+  every family device (PWA scope and start_url are path-based) and every bookmark.
+- The stats game id `'business'` is the key inside every player's `gamehub.stats` and
+  inside Firebase RTDB at `players/<deviceId>/games/business`. Renaming it orphans
+  every Monopoly Deal record anyone has ever accumulated. THE LAW #1.
+- `bd-stats` is folded in ONCE by foldLegacy. Rename it and the old data can never be
+  recovered.
+- `gamehub.bd.pendingStats.v1` is the offline retry queue. Rename it and queued plays
+  are stranded on players' devices permanently.
+
+If a future audit or review calls the folder-name/display-name split "contradictory,"
+that review is mistaken. It is not a contradiction and requires no action.
+Do not rename the game to "Business Deal." Do not rename the folder. Do not rename
+the stats ids. This is closed.
+
 ## THE LAW: player data is never deleted, never lost, never put at risk
 
 This is not a guideline. It is the one absolute rule of this repo, set by Matt after a
@@ -118,8 +143,8 @@ entirely — keep it current when a module is added, split, or merged.
 | Module | Role |
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
-| `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; legacy-store folds, the Ball Run metric migration, and the Business Deal pending-stats drain (see "The shared profile" section) |
-| `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Business Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
+| `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows |
@@ -275,7 +300,7 @@ it toward Escoba's patterns rather than leaving it as its own precedent.
 |---|---|---|
 | Connect Four | in-hub `module:` | AI in a Web Worker (`new Worker(new URL('./worker.js', import.meta.url), {type:'module'})`) with a main-thread fallback; needs the worker for its multi-second Expert solver. |
 | Chinchón | in-hub `module:` | Spanish rummy vs AI. No worker (light heuristic AI). See below. |
-| Business Deal | launch-out `href:` | Full-screen PWA that lives **in this repo** (`business-deal/`), launched like Parchís; `window.*` globals + its own nested service worker, not ESM. A precedent, not the preferred pattern. |
+| Monopoly Deal | launch-out `href:` | Full-screen PWA that lives **in this repo** (`business-deal/`), launched like Parchís; `window.*` globals + its own nested service worker, not ESM. A precedent, not the preferred pattern. |
 | Parchís | launch-out `href:` | Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See below. |
 | Escoba | in-hub `module:` | Spanish fishing card game (capture cards summing to 15) vs AI, 2-3 players, Fournier rules. Engine mirrors Chinchón's async agent pattern (`escoba/js/game.js` + `ai.js`, no DOM; `ui.js` owns the DOM). Card faces reuse the shared Anita deck from `chinchon/decks/anita/` (no deck picker, no copied assets). Two numbering modes, same math either way (one card of each value 1-10 per suit): `spanish` (default: 1-7 + figures counting 8/9/10) and `american` (ranks 1-9 + Sota, values as printed, no Caballo/Rey; only sticks when explicitly chosen, via `deckModeChosen`). Settings in `escoba-settings`; results recorded via `recordEscoba` in `js/game-stats.js`. Resumable: the engine snapshots after every state-changing event (`Game.snapshot()`/`Game.fromSnapshot()`, `escoba-save` in localStorage) so navigating away mid-match and coming back later (or a killed tab) picks up where it left off; `isInProgress()` returns false to the hub for this reason (leaving never loses progress), while the in-game menu's own "Quit to setup" is a separate, explicit abandon that clears the save. Its own top bar chrome is `immersive: true` in `GAMES` (hub.js), collapsing the shared hub header to a floating back button. |
 | Mancala | in-hub `module:` | Kalah rules vs AI (3 tiers; Pro = iterative-deepening alpha-beta under a ~380ms budget) or pass-and-play. Pure engine (`mancala/js/game.js`) + `ai.js` + `ui.js`; stones are persistent DOM elements sown pit-to-pit with WAAPI arc flights (timeout-raced so a hidden tab never stalls a move; `?motion=1/0` overrides reduced-motion). Settings in `gamehub.mancala.v1`; results via `recordResult('mancala', ...)`. Reference screenshots in `mancala/reference/` (gitignored). |
@@ -314,12 +339,12 @@ profile", or "👤 Name" once set).
 
 ES module: `loadProfile()` returns a validated object or `null`; `saveProfile(p)` normalizes and stamps
 `version`/`updatedAt`; `clearProfile()` deletes the key. In-hub module games `import` it directly;
-single-file or non-ESM games (Business Deal, Parchís) inline the small read-only subset, kept in sync
+single-file or non-ESM games (Monopoly Deal, Parchís) inline the small read-only subset, kept in sync
 with this contract.
 
-### Business Deal's must-stay-synced duplicates
+### Monopoly Deal's must-stay-synced duplicates
 
-Business Deal is global-JS, not ESM (a deliberate, bounded exception — see its games-table
+Monopoly Deal is global-JS, not ESM (a deliberate, bounded exception — see its games-table
 row), so it can't `import` the shared modules directly. It carries three small inlined/copied
 pieces that must be kept in sync by hand whenever their canonical source changes:
 
@@ -331,10 +356,10 @@ pieces that must be kept in sync by hand whenever their canonical source changes
 2. **Challenge crypto mirror** (`business-deal/js/challenge-hook.js`): inlines the
    hash/obfuscate/deobfuscate logic and salts from the retired `js/challenge/{crypt,secrets}.js`,
    explicitly commented as mirroring that file byte-for-byte. Changing the trigger hash, salt,
-   or code blob in one place without the other breaks Business Deal's challenge hook silently.
+   or code blob in one place without the other breaks Monopoly Deal's challenge hook silently.
 3. **Stats recorder** (`business-deal/js/game-stats-global.js`): a byte-identical in-scope
    copy of `js/game-stats-global.js`. It has to be a *copy*, not a shared reference, because
-   Business Deal's page is exclusively controlled by its own nested service worker
+   Monopoly Deal's page is exclusively controlled by its own nested service worker
    (`business-deal/sw.js`) — a request for anything outside `business-deal/` (like the
    original `../js/game-stats-global.js`) is still routed through BD's own SW's fetch
    handler, so it can only be reachable offline if it's also in BD's own cache list. If you
@@ -350,7 +375,7 @@ pieces that must be kept in sync by hand whenever their canonical source changes
 - Use the profile name/emoji only where a game already shows player identity; do not add new avatar
   surfaces to games that lack them.
 - Prefills today: **Connect Four** (difficulty plus "You"/opponent labels), **Chinchón** (human and
-  opponent identity plus per-AI difficulty), **Business Deal** (AI count, one global difficulty, human
+  opponent identity plus per-AI difficulty), **Monopoly Deal** (AI count, one global difficulty, human
   and opponent identity). **Parchís** wires up in its own R2-3 (see below).
 
 ### Accessibility + copy conventions

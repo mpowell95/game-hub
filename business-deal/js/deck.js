@@ -1,5 +1,5 @@
 /* =============================================================================
- * deck.js — Card definitions, deck builder, and shuffle for "Business Deal"
+ * deck.js — Card definitions, deck builder, and shuffle for Monopoly Deal
  * -----------------------------------------------------------------------------
  * A faithful model of the 106 playable Monopoly Deal cards (the 4 Quick Start
  * rule cards are excluded). This module is pure data + helpers: no game state,

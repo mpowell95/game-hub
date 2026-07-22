@@ -1,5 +1,5 @@
 /* =============================================================================
- * ui.js — DOM rendering, human interaction, and game loop for "Business Deal"
+ * ui.js — DOM rendering, human interaction, and game loop for Monopoly Deal
  * -----------------------------------------------------------------------------
  * Recreates the look of the reference "Business" app: bright blue table, AI
  * opponents across the top, authentic Monopoly-Deal card faces, tap-to-enlarge
@@ -65,7 +65,7 @@
   const OPP_TINTS = ['#1f8a4c', '#1f5fc8', '#c0392b', '#7d3cc0', '#0e8f8f'];
 
   // --- Shared hub profile (read-only) ----------------------------------------
-  // Business Deal is a separate app that cannot import the hub's ES module, so the
+  // Monopoly Deal is a separate app that cannot import the hub's ES module, so the
   // read path of js/profile-store.js is inlined here. It reads the profile the hub
   // writes to localStorage["gamehub.profile"] (shared because both deploy under the
   // same origin) and returns { name, emoji, opponents:[{name,emoji,skill:1-3}] }, or
@@ -416,7 +416,7 @@
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
 
       // Opponent identity comes from the hub profile (roster order), falling back
-      // to Business Deal's built-in flavor. The human keeps the id-based "You" that
+      // to Monopoly Deal's built-in flavor. The human keeps the id-based "You" that
       // the UI uses throughout; only the human's avatar is profile-driven.
       const prof = readHubProfile();
       const aiName = (i) => (prof && prof.opponents[i] && prof.opponents[i].name) || AI_NAMES[i % AI_NAMES.length];
