@@ -303,6 +303,7 @@
 /* Result — a banner BELOW the board (never over it), so the winning line and
    final position stay fully visible. */
 .cf-result {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -316,6 +317,13 @@
   animation: cf-pop 0.3s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
 }
 .cf-result[data-outcome="win"] { border-color: rgba(23, 105, 212, 0.35); }
+.cf-result-x {
+  position: absolute; top: 10px; right: 10px; appearance: none; border: 0;
+  width: 32px; height: 32px; border-radius: 50%; background: var(--cf-surface-2);
+  color: var(--cf-muted); font-size: 1rem; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cf-result-x:hover { background: #e1e8f2; color: var(--cf-ink); }
 @keyframes cf-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.96); }
   to   { opacity: 1; transform: none; }

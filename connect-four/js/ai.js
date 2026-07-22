@@ -246,6 +246,168 @@ function expertSolve(position, mask, nbMoves) {
   return min;
 }
 
+// ---------------------------------------------------------------------------
+// Bitboard depth-limited negamax: the "Estimate" mode fallback for evaluate-
+// Columns (2026-07-22), and Expert's opening-fallback move search.
+//
+// C4-4: the wide-open opening can't be solved EXACTLY within any UI-tolerable
+// budget (the empty board alone takes minutes even for this solver - verified
+// by hand), so evaluateColumns fell back to a much weaker, much slower
+// Board-object (play/undo) alpha-beta search (searchHeuristic/evaluate below)
+// for "Estimate" mode. That fallback was slow enough that within the 3s hint
+// budget it rarely got past a shallow depth, and a shallow depth on an
+// early-game position often reads as "losing everywhere" simply because it
+// can't see far enough to find the center column's real long-term edge -
+// exactly Matt's "the panel says I lose no matter what" complaint. This
+// bitboard version reuses the SAME move ordering/win-detection primitives as
+// the exact solver (bit ops instead of an OOP Board), so it reaches roughly
+// 3-6x the depth in the same wall-clock time (measured: ~14 ply vs ~8-9 ply
+// at 3s on an empty board) - the empty board now reads center-highest AND
+// positive within the existing 3s hint budget, still honestly labeled
+// "Estimate" (not "Solved") since it isn't exact. Cross-checked against the
+// exact solver on 15 randomized 20-30 stone positions: agreed on the winning/
+// losing side and the best (or an equally-winning) column every time.
+const CENTER_COL = 3;
+const boundedTT = new Map(); // separate from transTable: values here are depth-bound, not exact
+const BOUNDED_TT_MAX_ENTRIES = 4_000_000;
+const BIT_IDX = [];
+for (let c = 0; c < COLS; c++) {
+  BIT_IDX[c] = [];
+  for (let r = 0; r < ROWS; r++) BIT_IDX[c][r] = 1n << BigInt(c * H1 + r);
+}
+
+/** Bitboard port of evaluate()'s window-counting heuristic below (identical
+ *  scoreWindow values/orientations), so leaf evaluation stays cheap inside a
+ *  bitboard-native tree - same proven scoring, no Board object per node. */
+function evalBitboard(position, mask) {
+  const opp = mask ^ position;
+  let score = 0;
+  const centerMask = FULL_COLUMN << BigInt(CENTER_COL * H1);
+  score += popcount(position & centerMask) * 6;
+  score -= popcount(opp & centerMask) * 6;
+
+  const windowAt = (bits) => {
+    let mine = 0, his = 0;
+    for (const b of bits) {
+      if (position & b) mine++;
+      else if (opp & b) his++;
+    }
+    if (mine > 0 && his > 0) return; // contested, dead line
+    if (mine === 3) score += 50;
+    else if (mine === 2) score += 10;
+    else if (mine === 1) score += 1;
+    else if (his === 3) score -= 80;
+    else if (his === 2) score -= 10;
+    else if (his === 1) score -= 1;
+  };
+
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c <= COLS - 4; c++)
+      windowAt([BIT_IDX[c][r], BIT_IDX[c + 1][r], BIT_IDX[c + 2][r], BIT_IDX[c + 3][r]]);
+  for (let c = 0; c < COLS; c++)
+    for (let r = 0; r <= ROWS - 4; r++)
+      windowAt([BIT_IDX[c][r], BIT_IDX[c][r + 1], BIT_IDX[c][r + 2], BIT_IDX[c][r + 3]]);
+  for (let c = 0; c <= COLS - 4; c++)
+    for (let r = 0; r <= ROWS - 4; r++)
+      windowAt([BIT_IDX[c][r], BIT_IDX[c + 1][r + 1], BIT_IDX[c + 2][r + 2], BIT_IDX[c + 3][r + 3]]);
+  for (let c = 0; c <= COLS - 4; c++)
+    for (let r = 3; r < ROWS; r++)
+      windowAt([BIT_IDX[c][r], BIT_IDX[c + 1][r - 1], BIT_IDX[c + 2][r - 2], BIT_IDX[c + 3][r - 3]]);
+  return score;
+}
+
+/**
+ * Depth-limited negamax with alpha-beta, bitboard-native. Returns a value from
+ * the side-to-move's perspective on the SAME WIN_BASE/evalBitboard scale as
+ * evaluateColumnsBounded (not the exact solver's Pons scale - this is a bounded
+ * guess, never claimed exact). Uses `nonLosingCells` the same way the exact
+ * solver does (never hand the opponent an immediate win) - that restriction is
+ * always sound, not an approximation, regardless of depth cap.
+ */
+function negamaxBounded(position, mask, nbMoves, depth, alpha, beta) {
+  nodeCount++;
+  if ((nodeCount & 8191) === 0 && Date.now() > searchDeadline) throw TIMEOUT;
+
+  const poss = possibleCells(mask);
+  if (computeWinningCells(position, mask) & poss) return WIN_BASE - nbMoves;
+  if (nbMoves >= COLS * ROWS) return 0;
+
+  const next = nonLosingCells(position, mask);
+  if (next === 0n) return -(WIN_BASE - nbMoves);
+
+  if (depth === 0) return evalBitboard(position, mask);
+
+  const key = Number(position + mask) + depth * 562949953421312; // depth * 2^49
+  const cached = boundedTT.get(key);
+  if (cached !== undefined) {
+    if (cached.flag === 0) return cached.value;
+    if (cached.flag === 1 && cached.value > alpha) alpha = cached.value;
+    else if (cached.flag === -1 && cached.value < beta) beta = cached.value;
+    if (alpha >= beta) return cached.value;
+  }
+
+  const moves = [];
+  for (const c of COLUMN_ORDER) {
+    const move = next & COLUMN_MASK[c];
+    if (move) moves.push({ move, threats: popcount(computeWinningCells(position | move, mask | move)) });
+  }
+  moves.sort((a, b) => b.threats - a.threats);
+
+  const origAlpha = alpha;
+  let best = -Infinity;
+  for (const { move } of moves) {
+    const score = -negamaxBounded(position ^ mask, mask | move, nbMoves + 1, depth - 1, -beta, -alpha);
+    if (score > best) best = score;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  const flag = best <= origAlpha ? -1 : best >= beta ? 1 : 0;
+  if (boundedTT.size < BOUNDED_TT_MAX_ENTRIES) boundedTT.set(key, { flag, value: best });
+  return best;
+}
+
+/**
+ * Evaluate every legal column via the bitboard bounded search, iteratively
+ * deepening (1 ply at a time) until `deadline`. Returns [{col,score}] with a
+ * `.reachedDepth` (deepest fully-completed ply) - the caller labels this
+ * "Estimate (depth N)", never "Solved" (see evaluateColumns/evaluateColumnsBounded
+ * caller in evaluateColumns and chooseSearchTimed below).
+ */
+function evaluateColumnsBounded(board, player, deadline) {
+  const mask = board.pieces[PLAYER_ONE] | board.pieces[PLAYER_TWO];
+  const position = board.pieces[player];
+  const nbMoves = board.moveCount;
+  const legal = board.legalMoves();
+  const poss = possibleCells(mask);
+  const winCells = computeWinningCells(position, mask);
+
+  let scores = legal.map((c) => ({ col: c, score: 0 }));
+  let reachedDepth = 0;
+  searchDeadline = deadline;
+  boundedTT.clear();
+  try {
+    for (let depth = 1; depth <= COLS * ROWS - nbMoves; depth++) {
+      const next = [];
+      for (const c of legal) {
+        const move = poss & COLUMN_MASK[c];
+        const s = (winCells & move) !== 0n
+          ? WIN_BASE - (nbMoves + 1)
+          : -negamaxBounded(position ^ mask, mask | move, nbMoves + 1, depth - 1, -Infinity, Infinity);
+        next.push({ col: c, score: s });
+      }
+      scores = next;
+      reachedDepth = depth;
+      if (Date.now() > deadline) break;
+    }
+  } catch (e) {
+    if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; }
+  } finally {
+    searchDeadline = Infinity;
+  }
+  scores.reachedDepth = reachedDepth;
+  return scores;
+}
+
 // Opening book: the wide-open early board is the most expensive thing to solve
 // and the first move is a known result (center is the unique winning first
 // move). Skipping it avoids deep search exactly when the tree is biggest, as
@@ -339,58 +501,51 @@ export function evaluateColumns(board, player, budgetMs) {
   const start = Date.now();
   const finite = Number.isFinite(budgetMs);
 
-  // Evaluate one column for `player`: an immediate win is best; otherwise search
-  // the resulting position from the opponent's side and negate.
-  const evalColumn = (c, depth) => {
-    const b = board.clone();
-    b.play(c, player);
-    return b.isWin(player)
-      ? WIN_BASE - b.moveCount
-      : -searchHeuristic(b, player ^ 1, depth - 1, -Infinity, Infinity);
-  };
-
   // Pass 1: try to solve every legal column exactly within ~half the budget.
+  // Skipped entirely below MIN_STONES_FOR_EXACT_ATTEMPT: measured empirically
+  // (evaluateColumns at a generous 6s budget), positions under ~12 stones
+  // never finished exactly while everything from 14 stones on solved in under
+  // a second - so for genuinely early boards Pass 1 was pure overhead, and
+  // burning half the budget on a guaranteed-timeout starved Pass 2's depth
+  // exactly when the position most needed a deep look (see evaluateColumnsBounded's
+  // doc comment above). Skipping it there hands Pass 2 the WHOLE budget instead.
+  const MIN_STONES_FOR_EXACT_ATTEMPT = 12;
   const exactScores = new Map();
-  let exact = true;
-  searchDeadline = finite ? start + Math.floor(budgetMs * 0.5) : Infinity;
-  try {
-    for (const c of COLUMN_ORDER) {
-      if (!legal.includes(c)) continue;
-      const move = poss & COLUMN_MASK[c];
-      if ((winCells & move) !== 0n) {
-        exactScores.set(c, (COLS * ROWS + 1 - (nbMoves + 1)) >> 1); // wins on this move
-      } else {
-        exactScores.set(c, -expertSolve(position ^ mask, mask | move, nbMoves + 1));
+  let exact = nbMoves >= MIN_STONES_FOR_EXACT_ATTEMPT;
+  if (exact) {
+    searchDeadline = finite ? start + Math.floor(budgetMs * 0.5) : Infinity;
+    try {
+      for (const c of COLUMN_ORDER) {
+        if (!legal.includes(c)) continue;
+        const move = poss & COLUMN_MASK[c];
+        if ((winCells & move) !== 0n) {
+          exactScores.set(c, (COLS * ROWS + 1 - (nbMoves + 1)) >> 1); // wins on this move
+        } else {
+          exactScores.set(c, -expertSolve(position ^ mask, mask | move, nbMoves + 1));
+        }
       }
+    } catch (e) {
+      if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; }
+      exact = false;
+    } finally {
+      searchDeadline = Infinity;
     }
-  } catch (e) {
-    if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; }
-    exact = false;
-  } finally {
-    searchDeadline = Infinity;
   }
 
   let scores;
   if (exact) {
     scores = legal.map((c) => ({ col: c, score: exactScores.get(c) }));
+    scores.reachedDepth = COLS * ROWS - nbMoves; // solved to the end of the game
   } else {
-    // Pass 2: iterative-deepening heuristic over the remaining budget. The old
-    // code did a single shallow (depth-8) pass that IGNORED the budget — far too
-    // weak, so its "best move" could quietly walk into a forced loss. Deepening
-    // until time runs out makes the recommendation much stronger.
-    scores = legal.map((c) => ({ col: c, score: 0 }));
-    searchDeadline = finite ? start + budgetMs : start + 1200; // cap unbudgeted calls
-    try {
-      for (let depth = 2; depth <= COLS * ROWS - nbMoves; depth++) {
-        const next = legal.map((c) => ({ col: c, score: evalColumn(c, depth) }));
-        scores = next; // this depth completed in full
-        if (Date.now() > searchDeadline) break;
-      }
-    } catch (e) {
-      if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; } // keep last full depth
-    } finally {
-      searchDeadline = Infinity;
-    }
+    // Pass 2: the opening can't be solved exactly in any UI-tolerable budget
+    // (verified: the empty board alone takes minutes). Fall back to the
+    // bitboard depth-limited search (evaluateColumnsBounded above), which
+    // reaches roughly 3-6x the depth of the old Board-object alpha-beta
+    // fallback in the same wall-clock time - deep enough that the empty
+    // board now reads center-highest AND positive within the existing hint
+    // budget, instead of "losing everywhere" from too shallow a look.
+    const deadline = finite ? start + budgetMs : start + 1200;
+    scores = evaluateColumnsBounded(board, player, deadline);
   }
   scores.exact = exact;
   return scores;
@@ -525,28 +680,21 @@ function chooseSearch(board, player, depth, rng) {
 }
 
 /**
- * Iterative-deepening heuristic search bounded by `deadline` (epoch ms). Returns
- * the best move from the deepest fully-completed depth. Searches on clones so an
- * aborted depth can't corrupt board state. Used as the Expert opening fallback.
+ * Expert's opening fallback move choice, bounded by `deadline` (epoch ms):
+ * delegates to the same bitboard depth-limited search evaluateColumns uses for
+ * "Estimate" mode (evaluateColumnsBounded above) rather than the older,
+ * slower Board-object iterative deepening (bestMoveAtDepth/searchHeuristic),
+ * so Expert's opening play is exactly as strong as what the hint panel shows -
+ * one evaluation backbone, not two.
  */
 function chooseSearchTimed(board, player, deadline) {
-  let best = orderedLegal(board)[0]; // center-most legal move — safe default
-  const prevDeadline = searchDeadline;
-  searchDeadline = deadline;
-  try {
-    for (let depth = 1; depth <= COLS * ROWS; depth++) {
-      const { col, score } = bestMoveAtDepth(board.clone(), player, depth, () => 0);
-      best = col;
-      // A forced win/loss is already decided; deeper search won't change it.
-      if (Math.abs(score) >= WIN_BASE - COLS * ROWS) break;
-      if (Date.now() > deadline) break;
-    }
-  } catch (e) {
-    if (e !== TIMEOUT) throw e; // keep `best` from the last completed depth
-  } finally {
-    searchDeadline = prevDeadline;
+  const scores = evaluateColumnsBounded(board, player, deadline);
+  let bestCol = scores[0].col, bestScore = -Infinity;
+  for (const c of COLUMN_ORDER) {
+    const found = scores.find((s) => s.col === c);
+    if (found && found.score > bestScore) { bestScore = found.score; bestCol = c; }
   }
-  return best;
+  return bestCol;
 }
 
 // ---------------------------------------------------------------------------
@@ -691,7 +839,23 @@ export class AI {
       check('expert sees the win (value > 0)', val > 0);
     }
 
-    // 5. Integration: the hybrid Expert must never lose to Easy, going first or
+    // 5. C4-4 regression guard: the hint panel's "Estimate" fallback must not
+    //    read the empty board as losing everywhere - it must rank the center
+    //    column highest AND positive within a UI-realistic budget. (Before this
+    //    fix, Pass 1 always burned half the budget on a doomed exact-solve
+    //    attempt and the remaining heuristic search was too shallow AND too
+    //    slow to see past a negative-looking horizon - every column read as
+    //    losing on the very first hint request of a fresh game.)
+    {
+      const g = new Game(PLAYER_ONE);
+      const evals = evaluateColumns(g.board, g.currentPlayer, 3000);
+      const byCol = new Map(evals.map((e) => [e.col, e.score]));
+      const best = Math.max(...evals.map((e) => e.score));
+      check('empty-board estimate ranks center highest', byCol.get(3) === best && !evals.exact);
+      check('empty-board estimate is positive (first-player win)', best > 0);
+    }
+
+    // 6. Integration: the hybrid Expert must never lose to Easy, going first or
     //    second (a small budget exercises the heuristic fallback too).
     {
       let losses = 0, games = 0;

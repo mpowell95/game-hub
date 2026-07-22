@@ -177,7 +177,7 @@ class ConnectFourUI {
     if (this.worker) {
       try {
         const r = await this.postToWorker(params);
-        return { evals: r.evals, exact: r.exact };
+        return { evals: r.evals, exact: r.exact, reachedDepth: r.reachedDepth };
       } catch { this.disableWorker(); }
     }
     const { evaluateColumns } = await import('./ai.js');
@@ -185,7 +185,10 @@ class ConnectFourUI {
     for (const c of params.history) game.play(c);
     await new Promise((r) => setTimeout(r, 16));
     const evals = evaluateColumns(game.board, game.currentPlayer, params.budgetMs);
-    return { evals: evals.map((v) => ({ col: v.col, score: v.score })), exact: evals.exact };
+    return {
+      evals: evals.map((v) => ({ col: v.col, score: v.score })),
+      exact: evals.exact, reachedDepth: evals.reachedDepth,
+    };
   }
 
   async computeInline(params) {
@@ -255,6 +258,7 @@ class ConnectFourUI {
           </div>
 
           <div class="cf-result" data-role="result" hidden>
+            <button type="button" class="cf-result-x" data-role="result-close" aria-label="Close">✕</button>
             <p class="cf-result-msg" data-role="result-msg"></p>
             <div class="cf-result-actions">
               <button type="button" class="cf-btn cf-btn-primary" data-role="rematch">Rematch</button>
@@ -332,6 +336,11 @@ class ConnectFourUI {
     root.querySelector('[data-role="start"]').addEventListener('click', () => this.startGame());
     root.querySelector('[data-role="rematch"]').addEventListener('click', () => this.startGame());
     root.querySelector('[data-role="change"]').addEventListener('click', () => this.showSetup());
+    // Connect Four's board is never hidden behind its result banner (unlike
+    // other games' overlay modals), so there's no "view board" to route to -
+    // the X just hides the banner itself, reclaiming the space it took so the
+    // full board shows without needing a rematch/settings change first.
+    root.querySelector('[data-role="result-close"]').addEventListener('click', () => { this.el.result.hidden = true; });
 
     // In-game controls.
     this.el.undo.addEventListener('click', () => this.requestUndo());
@@ -956,7 +965,7 @@ class ConnectFourUI {
     this.el.evalCaption.textContent = !data ? ''
       : data.exact
         ? 'Solved · + wins, − loses · best ringed'
-        : 'Estimate · best move marked ★';
+        : `Estimate (depth ${data.reachedDepth || '?'}) · best move marked ★`;
   }
 
   // --- Teardown -------------------------------------------------------------

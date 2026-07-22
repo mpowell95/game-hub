@@ -8,9 +8,9 @@
 //   { id, kind: 'move', history, firstPlayer, difficulty, budgetMs }
 //   { id, kind: 'eval', history, firstPlayer, budgetMs }
 // worker replies:
-//   { id, col }                        for a 'move' request
-//   { id, evals: [{col,score}], exact } for an 'eval' request
-//   { id, error: <string> }            on failure (caller falls back to main thread)
+//   { id, col }                                            for a 'move' request
+//   { id, evals: [{col,score}], exact, reachedDepth }       for an 'eval' request
+//   { id, error: <string> }                                 on failure (caller falls back to main thread)
 
 import { Game } from './game.js';
 import { AI, evaluateColumns } from './ai.js';
@@ -22,7 +22,10 @@ self.onmessage = (e) => {
     for (const col of history) game.play(col);
     if (kind === 'eval') {
       const evals = evaluateColumns(game.board, game.currentPlayer, budgetMs);
-      self.postMessage({ id, evals: evals.map((v) => ({ col: v.col, score: v.score })), exact: evals.exact });
+      self.postMessage({
+        id, evals: evals.map((v) => ({ col: v.col, score: v.score })),
+        exact: evals.exact, reachedDepth: evals.reachedDepth,
+      });
     } else {
       const ai = new AI(difficulty, { expertBudgetMs: budgetMs });
       self.postMessage({ id, col: ai.chooseMove(game) });
