@@ -23,7 +23,7 @@ const TABS = [
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
   { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
   { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
-  { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#7048a8' },
+  { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#16243a' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
