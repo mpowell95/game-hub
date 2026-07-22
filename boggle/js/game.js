@@ -116,6 +116,31 @@ export function isValidPath(path) {
   return true;
 }
 
+/** What tapping/dragging onto tile (r, c) means for the current `path`.
+ *  Pure, so the swipe-tracing rules in ui.js are unit-testable without a DOM:
+ *    'start'     - nothing selected yet, begin a path here
+ *    'end'       - already the head of the path (a no-op while dragging;
+ *                  ui.js treats a TAP here as "remove the last letter")
+ *    'backtrack' - dragged back onto the previous tile, so drop the head
+ *                  (this is what lets a swipe undo itself without lifting)
+ *    'blocked'   - a tile already used earlier in this word: Boggle forbids
+ *                  reusing a tile, so it can never be appended
+ *    'append'    - a legal next step (adjacent, unused)
+ *    'far'       - not adjacent to the head; ignored mid-swipe rather than
+ *                  breaking the trace, so a fast diagonal drag that overshoots
+ *                  just does nothing until the finger comes back */
+export function pathAction(path, r, c) {
+  if (!path || !path.length) return 'start';
+  const [lr, lc] = path[path.length - 1];
+  if (lr === r && lc === c) return 'end';
+  if (path.length >= 2) {
+    const [pr, pc] = path[path.length - 2];
+    if (pr === r && pc === c) return 'backtrack';
+  }
+  if (path.some(([pr, pc]) => pr === r && pc === c)) return 'blocked';
+  return isAdjacent(lr, lc, r, c) ? 'append' : 'far';
+}
+
 /** The uppercase word spelled by walking `path` over `grid` (Qu tiles
  *  contribute both letters). Does not validate the path -- callers that need
  *  legality should check `isValidPath` first. */
@@ -137,5 +162,5 @@ export function scoreForWord(word) {
 
 export default {
   BOARD_SIZE, MIN_WORD_LEN, DICE, newBoard, neighbors, isAdjacent,
-  isValidPath, wordForPath, scoreForWord, facesForDie,
+  isValidPath, pathAction, wordForPath, scoreForWord, facesForDie,
 };

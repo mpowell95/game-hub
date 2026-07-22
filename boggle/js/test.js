@@ -11,10 +11,10 @@
 
 import {
   BOARD_SIZE, MIN_WORD_LEN, DICE, newBoard, neighbors, isAdjacent,
-  isValidPath, wordForPath, scoreForWord, facesForDie,
+  isValidPath, pathAction, wordForPath, scoreForWord, facesForDie,
 } from './game.js';
 import { step, isWord, buildTrieFromWords, isValidWord } from './dict.js';
-import { solveBoard } from './solver.js';
+import { solveBoard, shakePlayableBoard } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 
 function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0x100000000; }; }
@@ -72,6 +72,50 @@ function makeGrid(rows) {
   ok('path: revisiting an earlier tile is rejected', !isValidPath([[0, 0], [0, 1], [0, 0]]));
   ok('path: a non-adjacent step is rejected', !isValidPath([[0, 0], [2, 2]]));
   ok('path: an out-of-bounds tile is rejected', !isValidPath([[0, 0], [-1, 0]]));
+}
+
+// === Swipe tracing (pathAction) ==============================================
+//
+// These are the rules a finger dragging across the board obeys. They live in
+// game.js precisely so they can be asserted here with no DOM: ui.js's
+// _pointerMove/_onKeyboardTile are thin wrappers that only translate these
+// verdicts into push/pop, so a bug in the tracing rules shows up HERE rather
+// than only under a real finger on a real phone.
+{
+  ok('trace: an empty path starts anywhere', pathAction([], 2, 2) === 'start');
+  ok('trace: an adjacent unused tile is appended', pathAction([[0, 0]], 0, 1) === 'append');
+  ok('trace: a DIAGONAL neighbour is appended (Boggle allows corners)', pathAction([[1, 1]], 2, 2) === 'append');
+  ok('trace: staying on the head is a no-op mid-drag', pathAction([[0, 0], [0, 1]], 0, 1) === 'end');
+  // Dragging back onto the previous tile is how a swipe undoes itself without
+  // the finger ever lifting -- the single most important non-obvious rule here.
+  ok('trace: moving back onto the previous tile backtracks', pathAction([[0, 0], [0, 1]], 0, 0) === 'backtrack');
+  ok('trace: an earlier (non-previous) tile is blocked, never reused', pathAction([[0, 0], [0, 1], [0, 2]], 0, 0) === 'blocked');
+  ok('trace: a non-adjacent tile is ignored, not an error', pathAction([[0, 0]], 3, 3) === 'far');
+  // A backtrack must be distinguishable from a plain reuse: with only two tiles
+  // the previous one is index 0, with three it is index 1.
+  ok('trace: backtrack targets the PREVIOUS tile, not the first', pathAction([[0, 0], [0, 1], [1, 1]], 0, 1) === 'backtrack');
+  ok('trace: the first tile of a 3-long path is blocked, not backtrack', pathAction([[0, 0], [0, 1], [1, 1]], 0, 0) === 'blocked');
+}
+
+// Replaying a full swipe through pathAction must produce a legal path, and
+// backtracking must genuinely shorten it (the drag-in-drag-out case).
+{
+  const applyDrag = (steps) => {
+    const path = [];
+    for (const [r, c] of steps) {
+      const a = path.length ? pathAction(path, r, c) : 'start';
+      if (a === 'start') path.push([r, c]);
+      else if (a === 'append') path.push([r, c]);
+      else if (a === 'backtrack') path.pop();
+    }
+    return path;
+  };
+  const straight = applyDrag([[0, 0], [0, 1], [1, 2], [2, 3]]);
+  ok('trace: a swiped path is a legal Boggle path', isValidPath(straight) && straight.length === 4);
+  const overshot = applyDrag([[0, 0], [0, 1], [0, 2], [0, 1]]);
+  ok('trace: swiping back out drops the overshot tile', overshot.length === 2 && isValidPath(overshot));
+  const withFar = applyDrag([[0, 0], [3, 3], [0, 1]]);
+  ok('trace: a far tile mid-swipe is skipped without breaking the trace', withFar.length === 2 && isValidPath(withFar));
 }
 
 // === Solver ===================================================================
@@ -145,6 +189,36 @@ function makeGrid(rows) {
   const trie = buildTrieFromWords(['A', 'AB', 'B', 'BA']);
   const solved = solveBoard(grid, trie);
   ok('solver: never returns anything shorter than MIN_WORD_LEN', solved.every((e) => e.word.length >= MIN_WORD_LEN) && solved.length === 0);
+}
+
+// === Board playability gate ===================================================
+//
+// The dice stay authentic (see game.js); this gate only rejects the measured
+// bad tail -- vowel-starved boards with almost nothing findable on them.
+{
+  // A dictionary rich in short words built from common letters, so an ordinary
+  // board clears the bar and the gate's accept path is what gets exercised.
+  const trie = buildTrieFromWords([
+    'AT', 'ATE', 'EAT', 'TEA', 'SEA', 'SET', 'SAT', 'RAT', 'TAR', 'ART', 'EAR', 'ERA',
+    'RATE', 'TEAR', 'SEAT', 'EAST', 'RATS', 'STAR', 'TARE', 'TEAS', 'ATES', 'ETAS',
+  ]);
+  // A bar of 1 word is trivially clearable, so this asserts the CONTRACT
+  // (shape, bounded attempts, solved list matches the board) rather than the
+  // production thresholds, which depend on the full 170k dictionary.
+  const res = shakePlayableBoard(trie, Math.random, { minWords: 1, minShortWords: 1, minVowels: 1, maxAttempts: 8 });
+  ok('gate: returns a board, its solve, and an attempt count', !!res && !!res.board && Array.isArray(res.solved) && res.attempts >= 1);
+  ok('gate: never exceeds maxAttempts', res.attempts <= 8);
+  ok('gate: the returned solve really is this board\'s solve',
+    res.solved.every((e) => wordForPath(res.board.grid, e.path) === e.word));
+  ok('gate: the returned board is a real 16-dice shake', res.board.tiles.length === 16
+    && new Set(res.board.tiles.map((t) => t.dieIndex)).size === 16);
+
+  // An IMPOSSIBLE bar must still terminate and still hand back a usable board
+  // (the best one seen), never null and never an infinite loop -- a player must
+  // always get a board, even on a freak run of bad shakes.
+  const forced = shakePlayableBoard(trie, Math.random, { minWords: 1e9, minShortWords: 1e9, minVowels: 17, maxAttempts: 5 });
+  ok('gate: an unreachable bar still returns the best board seen', !!forced && !!forced.board && forced.board.tiles.length === 16);
+  ok('gate: an unreachable bar stops at maxAttempts (no infinite loop)', forced.attempts <= 5);
 }
 
 // === AI ========================================================================

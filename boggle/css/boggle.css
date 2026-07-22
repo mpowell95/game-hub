@@ -124,6 +124,15 @@
   border-radius: 16px;
   box-shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
   box-sizing: border-box;
+  /* Swipe-to-trace is the primary input, so the board must own the gesture
+     outright: without touch-action:none a drag across the tiles scrolls the
+     page instead of spelling a word, which is the whole feature. The
+     selection/callout suppressors stop a long press from turning into a text
+     selection or the iOS "copy/look up" bubble mid-word. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .bg-root .bg-tile {
@@ -141,7 +150,10 @@
 .bg-root .bg-tile:disabled { opacity: 0.42; }
 .bg-root .bg-tile:not(:disabled) { cursor: pointer; }
 .bg-root .bg-tile:not(:disabled):active { transform: scale(0.94); }
-.bg-root .bg-tile-face { font-size: clamp(18px, 6.5vw, 28px); font-weight: 900; color: var(--bg-ink); line-height: 1; }
+/* The glyph must never be the pointer target: hit-testing is done against the
+   BUTTON rects cached at gesture start, and a child element under the finger
+   would otherwise be what a stray elementFromPoint call resolves to. */
+.bg-root .bg-tile-face { font-size: clamp(18px, 6.5vw, 28px); font-weight: 900; color: var(--bg-ink); line-height: 1; pointer-events: none; }
 /* A tile mid-path (not the removable last one): distinct fill + solid
    border, told apart from disabled-and-unreachable tiles by opacity staying
    full (this one is CLAIMED, not just currently unreachable). */
@@ -157,6 +169,8 @@
 
 .bg-root .bg-wordbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; max-width: 380px; padding: 10px 14px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); border-radius: 14px; }
 .bg-root .bg-wordbar-text { font-size: 16px; font-weight: 900; letter-spacing: 0.03em; color: var(--bg-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The placeholder hint is not a word in progress, so it must not read like one. */
+.bg-root .bg-wordbar-text.is-empty { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--bg-muted); }
 .bg-root .bg-wordbar-actions { display: flex; gap: 6px; flex: none; }
 
 .bg-root .bg-feedback { min-height: 18px; margin: -6px 0 0; font-size: 12.5px; font-weight: 800; text-align: center; }
@@ -203,7 +217,12 @@
 
 .bg-root .bg-help { text-align: center; max-width: 340px; }
 .bg-root .bg-help .bg-card-title { margin-bottom: 10px; }
-.bg-root .bg-help-lead { margin: 0; font-size: 11.5px; font-weight: 800; color: var(--bg-ink); white-space: nowrap; }
+/* Sized against the card's REAL available width (340px card minus 20px side
+   padding = 300px) using a Range measurement of the rendered text, not
+   scrollWidth -- scrollWidth clamps to clientWidth and will happily report
+   "fits" for text that is actually 15px too wide. Measured: 315px at 11.5px,
+   282px at 11px. Locked with nowrap so it can never wrap mid-sentence. */
+.bg-root .bg-help-lead { margin: 0; font-size: 11px; font-weight: 800; color: var(--bg-ink); white-space: nowrap; }
 
 .bg-root .bg-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
 .bg-root .bg-diagram { width: 168px; height: 168px; }

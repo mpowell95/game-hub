@@ -13,12 +13,25 @@
 // fetch + a trie build) before a round can start, so there is a genuine
 // 'loading' view between 'setup' and 'game' that no other game in this repo
 // needs.
+//
+// INPUT: swipe-to-trace is the primary way to play (drag through the letters
+// without lifting, release to submit), because tapping each letter
+// individually and then hitting a submit button is too slow to be worth
+// playing against a clock -- Matt's direct call, 2026-07-22. Tap-to-select is
+// KEPT as a second path, not as a fallback nobody uses: it is what makes the
+// board work for keyboard and screen-reader users, since every tile is still a
+// real <button>. The two modes coexist (see _onPointerDown/_onPointerMove and
+// `_tapMode`), so a tap-built word and a swiped word are the same code path
+// from onSubmitWord() onward.
+//
+// The rules for what a given tile means mid-trace live in game.js's pure
+// pathAction(), not here, so they are unit-testable without a DOM.
 
 import {
-  BOARD_SIZE, newBoard, neighbors, isAdjacent, wordForPath, scoreForWord, MIN_WORD_LEN,
+  BOARD_SIZE, neighbors, pathAction, wordForPath, scoreForWord, MIN_WORD_LEN,
 } from './game.js';
 import { loadDictionary, isValidWord } from './dict.js';
-import { solveBoard } from './solver.js';
+import { shakePlayableBoard } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, loadStats } from '../../js/game-stats.js';
@@ -38,6 +51,13 @@ const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const posKey = (r, c) => `${r},${c}`;
 const displayFace = (face) => (face === 'QU' ? 'Qu' : face);
+// Leads with the swipe because that is the intended way to play; the tap path
+// still exists (and is what keyboard/screen-reader users get) but does not need
+// to be advertised in a one-line hint.
+const WORDBAR_HINT = 'Swipe through the letters';
+// A browser fires `click` within a few ms of pointerup; anything later than
+// this is a genuine keyboard activation, not the tail of a tap.
+const CLICK_AFTER_POINTER_MS = 700;
 
 /** Idempotently ensure the module's stylesheet is on the page (hub or standalone). */
 function ensureStylesheet() {
@@ -77,7 +97,31 @@ class BoggleUI {
     this._solveExpanded = false;
     this._setup = this._loadSetup();
 
+    // Swipe-trace state. `_tracing` = a pointer is currently down on the board;
+    // `_traceMoved` = it has reached a second tile, which is what separates a
+    // DRAG (submit on release) from a TAP (keep the path, wait for more taps);
+    // `_tapMode` = the current path was built by tapping, so the next tap
+    // extends it instead of starting over. `_tileRects` is measured once per
+    // gesture (see _onPointerDown) so hit-testing never depends on the DOM
+    // mid-drag.
+    this._tracing = false;
+    this._traceMoved = false;
+    this._tapMode = false;
+    this._tileRects = null;
+    this._pointerId = null;
+    // When the last pointer gesture ended. Used to ignore the synthetic click
+    // browsers fire after a tap -- deliberately a TIMESTAMP and not a boolean
+    // flag: ending a trace can re-render the board, which leaves the browser
+    // dispatching that click at a now-detached node where a delegated handler
+    // never sees it. A flag would then stay stuck true and silently swallow the
+    // next KEYBOARD activation; a timestamp cannot get stuck.
+    this._lastPointerAt = 0;
+
     this._onClick = (e) => this.onClick(e);
+    this._onPointerDown = (e) => this._pointerDown(e);
+    this._onPointerMove = (e) => this._pointerMove(e);
+    this._onPointerUp = (e) => this._pointerUp(e);
+    this._onPointerCancel = () => this._pointerCancel();
 
     ensureStylesheet();
     this.mount();
@@ -86,6 +130,7 @@ class BoggleUI {
   destroy() {
     this._dead = true;
     this.stopTimer();
+    this._detachBoardPointer();
     if (this.root) this.root.removeEventListener('click', this._onClick);
     this.container.innerHTML = '';
     this._board = null;
@@ -257,8 +302,16 @@ class BoggleUI {
     if (this._dead) return;
     console.log(`[Boggle] dictionary ready: ${dict.wordCount.toLocaleString()} words, trie built in ${dict.buildMs.toFixed(1)}ms`);
     this._trieRoot = dict.root;
-    this._board = newBoard();
-    this._solved = solveBoard(this._board.grid, this._trieRoot);
+    // Shake until the board is actually worth playing (see solver.js's
+    // BOARD_QUALITY): the dice stay authentic, but a vowel-starved board with
+    // nothing findable on it gets re-shaken rather than dealt.
+    const shake = shakePlayableBoard(this._trieRoot);
+    this._board = shake.board;
+    this._solved = shake.solved;
+    console.log(`[Boggle] board ready after ${shake.attempts} shake(s): ${this._solved.length} words findable`);
+    this._tapMode = false;
+    this._tracing = false;
+    this._traceMoved = false;
     this.view = 'game';
     this._remainingSec = this._setup.timerMinutes * 60;
     this._endsAt = Date.now() + this._remainingSec * 1000;
@@ -301,27 +354,167 @@ class BoggleUI {
     el.classList.toggle('is-low', this._remainingSec <= 10);
   }
 
-  // --- game: tap-sequence input -----------------------------------------------
+  // --- game: swipe tracing + tap fallback -------------------------------------
 
-  /** Only tiles adjacent to the current path's last tile are selectable (and
-   *  the last tile itself, to support tap-to-remove); everything else is
-   *  disabled at render time so an illegal path can never be built. */
-  onTileTap(r, c) {
-    if (this.view !== 'game' || this._roundOver || !this._board) return;
-    const key = posKey(r, c);
-    const path = this._path;
-    if (path.length) {
-      const [lr, lc] = path[path.length - 1];
-      if (posKey(lr, lc) === key) {
-        path.pop();
-        this._feedback = null;
-        this.renderGame();
-        return;
-      }
-      if (path.some(([pr, pc]) => posKey(pr, pc) === key)) return; // mid-path tile, no reuse
-      if (!isAdjacent(lr, lc, r, c)) return; // defensive; button should already be disabled
+  _attachBoardPointer() {
+    const board = this.shell && this.shell.querySelector('.bg-board');
+    if (!board) return;
+    this._boardEl = board;
+    board.addEventListener('pointerdown', this._onPointerDown);
+    board.addEventListener('pointermove', this._onPointerMove);
+    board.addEventListener('pointerup', this._onPointerUp);
+    board.addEventListener('pointercancel', this._onPointerCancel);
+  }
+
+  _detachBoardPointer() {
+    const board = this._boardEl;
+    if (!board) return;
+    board.removeEventListener('pointerdown', this._onPointerDown);
+    board.removeEventListener('pointermove', this._onPointerMove);
+    board.removeEventListener('pointerup', this._onPointerUp);
+    board.removeEventListener('pointercancel', this._onPointerCancel);
+    this._boardEl = null;
+  }
+
+  /** Measure all 16 tiles ONCE per gesture. Hit-testing against cached rects
+   *  (rather than elementFromPoint) keeps tracing independent of the DOM: tiles
+   *  that are `disabled` because they are not legal continuations would still
+   *  need to be hit-testable for BACKTRACKING to work, and nothing re-lays-out
+   *  mid-drag because _updateBoardVisuals() only patches classes. */
+  _measureTiles() {
+    const board = this._boardEl;
+    if (!board) { this._tileRects = []; return; }
+    this._tileRects = [...board.querySelectorAll('.bg-tile')].map((el) => ({
+      r: Number(el.dataset.r),
+      c: Number(el.dataset.c),
+      rect: el.getBoundingClientRect(),
+    }));
+  }
+
+  /** The tile under (x, y), or null. Each rect is inset ~14% so the pointer has
+   *  to be meaningfully INSIDE a tile before it joins the word -- clipping a
+   *  corner on the way past should not silently add a letter. */
+  _tileAt(x, y) {
+    if (!this._tileRects) return null;
+    for (const t of this._tileRects) {
+      const { rect } = t;
+      const ix = rect.width * 0.14, iy = rect.height * 0.14;
+      if (x >= rect.left + ix && x <= rect.right - ix && y >= rect.top + iy && y <= rect.bottom - iy) return t;
     }
-    path.push([r, c]);
+    return null;
+  }
+
+  _canPlay() {
+    return this.view === 'game' && !this._roundOver && !!this._board;
+  }
+
+  _pointerDown(e) {
+    if (!this._canPlay()) return;
+    const hit = this._tileAt(e.clientX, e.clientY) || this._measureThenHit(e);
+    if (!hit) return;
+    e.preventDefault();
+    this._tracing = true;
+    this._traceMoved = false;
+    this._pointerId = e.pointerId;
+    this._feedback = null;
+    try { this._boardEl.setPointerCapture(e.pointerId); } catch { /* not fatal */ }
+
+    // Continuing a tap-built word vs starting a new one. A tap on the current
+    // head removes it (the documented tap-to-remove affordance); anything that
+    // is not a legal continuation starts fresh.
+    if (this._tapMode && this._path.length) {
+      const action = pathAction(this._path, hit.r, hit.c);
+      if (action === 'end') this._path.pop();
+      else if (action === 'append') this._path.push([hit.r, hit.c]);
+      else this._path = [[hit.r, hit.c]];
+    } else {
+      this._path = [[hit.r, hit.c]];
+    }
+    this._updateBoardVisuals();
+  }
+
+  /** pointerdown can arrive before any gesture has measured the board (first
+   *  touch of a round), so measure lazily and re-test once. */
+  _measureThenHit(e) {
+    this._measureTiles();
+    return this._tileAt(e.clientX, e.clientY);
+  }
+
+  _pointerMove(e) {
+    if (!this._tracing || !this._canPlay()) return;
+    if (this._pointerId !== null && e.pointerId !== this._pointerId) return;
+    const hit = this._tileAt(e.clientX, e.clientY);
+    if (!hit) return;
+    const action = pathAction(this._path, hit.r, hit.c);
+    if (action === 'append') {
+      this._path.push([hit.r, hit.c]);
+      this._traceMoved = true;
+    } else if (action === 'backtrack') {
+      this._path.pop();
+      this._traceMoved = true;
+    } else {
+      return; // 'end' (still on the head), 'blocked' (reused), 'far' (overshot)
+    }
+    e.preventDefault();
+    this._updateBoardVisuals();
+  }
+
+  _pointerUp(e) {
+    if (!this._tracing) return;
+    this._endTrace(e, true);
+  }
+
+  _pointerCancel() {
+    if (!this._tracing) return;
+    // Interrupted (system gesture, call, etc): end the trace but never submit
+    // a word the player did not choose to finish.
+    this._endTrace(null, false);
+  }
+
+  _endTrace(e, submit) {
+    this._tracing = false;
+    this._lastPointerAt = Date.now();
+    if (e && this._pointerId !== null) {
+      try { this._boardEl.releasePointerCapture(this._pointerId); } catch { /* already gone */ }
+    }
+    this._pointerId = null;
+    const wasDrag = this._traceMoved;
+    this._traceMoved = false;
+
+    if (!submit) { this._tapMode = false; this._path = []; this.renderGame(); return; }
+    if (wasDrag) {
+      // A real swipe: releasing IS the submit. Too short just clears, with no
+      // scolding -- an aborted drag is not a mistake worth a red message.
+      this._tapMode = false;
+      if (this._path.length && wordForPath(this._board.grid, this._path).length >= MIN_WORD_LEN) {
+        this.onSubmitWord();
+      } else {
+        this._path = [];
+        this.renderGame();
+      }
+      return;
+    }
+    // A tap, not a drag: keep the letter selected so taps can build a word.
+    // Patch in place rather than re-render, so the element the browser is about
+    // to fire `click` at is still the live one in the document.
+    this._tapMode = true;
+    this._updateBoardVisuals();
+  }
+
+  /** Keyboard equivalent of a tap: same rules as _pointerDown's tap branch,
+   *  driven by pathAction so the two can never disagree. */
+  _onKeyboardTile(r, c) {
+    if (!this._canPlay()) return;
+    const action = pathAction(this._path, r, c);
+    if (action === 'start' || action === 'far' || action === 'blocked') {
+      if (action === 'far' || action === 'blocked') return; // illegal, ignore
+      this._path = [[r, c]];
+    } else if (action === 'end') {
+      this._path.pop();
+    } else if (action === 'append') {
+      this._path.push([r, c]);
+    }
+    this._tapMode = true;
     this._feedback = null;
     this.renderGame();
   }
@@ -329,6 +522,7 @@ class BoggleUI {
   onClearPath() {
     if (!this._path.length) return;
     this._path = [];
+    this._tapMode = false;
     this._feedback = null;
     this.renderGame();
   }
@@ -337,6 +531,7 @@ class BoggleUI {
     if (!this._board || !this._path.length) return;
     const word = wordForPath(this._board.grid, this._path);
     if (word.length < MIN_WORD_LEN) return;
+    this._tapMode = false;
     if (this._found.has(word)) {
       this._feedback = { type: 'duplicate', word };
     } else if (!isValidWord(this._trieRoot, word)) {
@@ -352,7 +547,10 @@ class BoggleUI {
 
   // --- game screen --------------------------------------------------------
 
-  _boardHtml() {
+  /** Per-tile display state for the current path. Shared by the initial render
+   *  (_boardHtml) and the in-place patch (_updateBoardVisuals) so the two can
+   *  never drift apart. */
+  _tileStates() {
     const grid = this._board.grid;
     const path = this._path;
     const usedKeys = new Set(path.map(([r, c]) => posKey(r, c)));
@@ -362,7 +560,7 @@ class BoggleUI {
       const [lr, lc] = path[path.length - 1];
       liveKeys = new Set(neighbors(lr, lc).map(([r, c]) => posKey(r, c)).filter((k) => !usedKeys.has(k)));
     }
-    const tiles = [];
+    const out = [];
     for (let r = 0; r < BOARD_SIZE; r++) {
       for (let c = 0; c < BOARD_SIZE; c++) {
         const key = posKey(r, c);
@@ -372,23 +570,74 @@ class BoggleUI {
         const live = !this._roundOver && (path.length === 0 || isLast || (liveKeys && liveKeys.has(key)));
         let label;
         if (inPath && !isLast) label = `Letter ${face}, already used in this word`;
-        else if (isLast) label = `Letter ${face}, tap to remove from word`;
-        else if (!live) label = `Letter ${face}, not connected to the current word`;
+        else if (isLast) label = `Letter ${face}, end of the word, tap to remove it`;
+        else if (!live) label = `Letter ${face}, not touching the current letter`;
         else label = `Letter ${face}, row ${r + 1} column ${c + 1}`;
-        tiles.push(`<button type="button" class="bg-tile ${inPath ? 'is-used' : ''} ${isLast ? 'is-last' : ''}"
-          data-action="tile" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'} aria-label="${esc(label)}">
-          <span class="bg-tile-face">${esc(face)}</span></button>`);
+        out.push({ r, c, face, inPath, isLast, live, label });
       }
     }
-    const points = path.length > 1
-      ? path.map(([r, c]) => `${((c + 0.5) / BOARD_SIZE * 100).toFixed(2)},${((r + 0.5) / BOARD_SIZE * 100).toFixed(2)}`).join(' ')
-      : '';
+    return out;
+  }
+
+  /** Polyline points in the 0-100 viewBox space, one per tile centre. */
+  _pathPoints() {
+    if (this._path.length < 2) return '';
+    return this._path
+      .map(([r, c]) => `${((c + 0.5) / BOARD_SIZE * 100).toFixed(2)},${((r + 0.5) / BOARD_SIZE * 100).toFixed(2)}`)
+      .join(' ');
+  }
+
+  _boardHtml() {
+    const tiles = this._tileStates().map((t) => `<button type="button"
+      class="bg-tile ${t.inPath ? 'is-used' : ''} ${t.isLast ? 'is-last' : ''}"
+      data-action="tile" data-r="${t.r}" data-c="${t.c}" ${t.live ? '' : 'disabled'}
+      aria-label="${esc(t.label)}"><span class="bg-tile-face">${esc(t.face)}</span></button>`).join('');
+    const points = this._pathPoints();
     return `<div class="bg-board-wrap">
       <svg class="bg-path-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        ${points ? `<polyline points="${points}" class="bg-path-line" fill="none"/>` : ''}
+        <polyline points="${points}" class="bg-path-line" fill="none"${points ? '' : ' style="display:none"'}/>
       </svg>
-      <div class="bg-board" role="grid" aria-label="Boggle board">${tiles.join('')}</div>
+      <div class="bg-board" role="grid" aria-label="Boggle board">${tiles}</div>
     </div>`;
+  }
+
+  /** Patch the board in place instead of re-rendering it. A swipe fires many
+   *  pointermove events per second, and rebuilding innerHTML on each one would
+   *  destroy the very element the finger is on (breaking pointer capture) and
+   *  re-lay-out the grid, invalidating the cached hit-test rects. Only classes,
+   *  the disabled flag, aria-labels, the polyline and the word bar change. */
+  _updateBoardVisuals() {
+    if (this._dead || !this._boardEl) return;
+    const buttons = this._boardEl.querySelectorAll('.bg-tile');
+    const states = this._tileStates();
+    states.forEach((t, i) => {
+      const el = buttons[i];
+      if (!el) return;
+      el.classList.toggle('is-used', t.inPath);
+      el.classList.toggle('is-last', t.isLast);
+      el.disabled = !t.live;
+      el.setAttribute('aria-label', t.label);
+    });
+    const line = this.shell.querySelector('.bg-path-line');
+    if (line) {
+      const points = this._pathPoints();
+      line.setAttribute('points', points);
+      line.style.display = points ? '' : 'none';
+    }
+    this._updateWordBar();
+  }
+
+  _updateWordBar() {
+    const word = this._path.length ? wordForPath(this._board.grid, this._path) : '';
+    const textEl = this.shell.querySelector('.bg-wordbar-text');
+    if (textEl) {
+      textEl.textContent = word || WORDBAR_HINT;
+      textEl.classList.toggle('is-empty', !word);
+    }
+    const clearBtn = this.shell.querySelector('[data-action="clear-path"]');
+    if (clearBtn) clearBtn.disabled = !this._path.length;
+    const submitBtn = this.shell.querySelector('[data-action="submit-word"]');
+    if (submitBtn) submitBtn.disabled = word.length < MIN_WORD_LEN;
   }
 
   _feedbackHtml() {
@@ -417,7 +666,7 @@ class BoggleUI {
       </div>
       ${this._boardHtml()}
       <div class="bg-wordbar">
-        <div class="bg-wordbar-text">${word ? esc(word) : 'Tap letters to build a word'}</div>
+        <div class="bg-wordbar-text ${word ? '' : 'is-empty'}">${word ? esc(word) : WORDBAR_HINT}</div>
         <div class="bg-wordbar-actions">
           <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="clear-path" ${this._path.length ? '' : 'disabled'}>Clear</button>
           <button type="button" class="bg-btn bg-btn-primary bg-btn-small" data-action="submit-word" ${canSubmit ? '' : 'disabled'}><span aria-hidden="true">&check;</span> Enter</button>
@@ -432,6 +681,11 @@ class BoggleUI {
         <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="help">How to play</button>
         <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="change-settings">Give up</button>
       </div>`;
+    // renderGame() replaces the board element, so the pointer listeners have to
+    // be re-bound to the NEW node (and the old ones dropped) every time.
+    this._detachBoardPointer();
+    this._attachBoardPointer();
+    this._measureTiles();
   }
 
   // --- end of round ---------------------------------------------------------
@@ -552,6 +806,8 @@ class BoggleUI {
           <p class="bg-help-caption">Letters must touch, including corners. You cannot use the same tile twice in one word.</p>
           <p class="bg-help-example">Tiles touching corner to corner = still connected</p>
           <ul class="bg-help-list">
+            <li>Swipe through the letters without lifting your finger, then let go to submit.</li>
+            <li>Slide back a letter to undo it, still without lifting.</li>
             <li>Qu is one tile that counts as two letters.</li>
             <li>Longer words score much more: three letters is 1 point, eight letters is 11.</li>
             <li>Words you both find still count for both of you.</li>
@@ -585,7 +841,13 @@ class BoggleUI {
     } else if (action === 'start') {
       this.startGame();
     } else if (action === 'tile') {
-      this.onTileTap(Number(btn.dataset.r), Number(btn.dataset.c));
+      // Pointer input is fully handled by the pointerdown/up pair; the click a
+      // browser fires straight afterwards must not re-apply it. A KEYBOARD
+      // activation (Enter/Space on a focused tile) arrives with no recent
+      // pointer gesture behind it, and that is what this branch exists for --
+      // it is what keeps the board playable with no pointer at all.
+      if (Date.now() - this._lastPointerAt < CLICK_AFTER_POINTER_MS) return;
+      this._onKeyboardTile(Number(btn.dataset.r), Number(btn.dataset.c));
     } else if (action === 'submit-word') {
       this.onSubmitWord();
     } else if (action === 'clear-path') {
