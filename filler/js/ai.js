@@ -40,9 +40,23 @@ function greedy(s, options, rng) {
 function pro(s, options, rng) {
   const me = s.turn;
   const opp = opponentOf(me);
+  // Restrict to the colors that capture the most RIGHT NOW: a capture is always
+  // strictly good in Filler (it only grows your territory, never a downside), so
+  // it must never lose out to a captureless move. The 0.2 frontier bonus below is
+  // meant to be a tie-breaker among equally-good captures, but its magnitude (the
+  // frontier can be 10-40 tiles) dwarfs a real capture gain of 1-2 tiles, so
+  // comparing it across the full option set let a captureless "grow the frontier"
+  // move outscore an actual, available capture - including the move that would
+  // legitimately end the game. That was FILLER-1: the AI would cycle through every
+  // captureless color instead of the one closing tile it could still reach, until
+  // the dry-move stalemate guard force-ended the game with the board unfilled.
+  const gains = options.map((color) => ({ color, gain: captureGain(s, me, color) }));
+  let maxGain = -Infinity;
+  for (const g of gains) if (g.gain > maxGain) maxGain = g.gain;
+  const candidates = gains.filter((g) => g.gain === maxGain).map((g) => g.color);
   let bestValue = -Infinity;
   let best = [];
-  for (const color of options) {
+  for (const color of candidates) {
     const sim = cloneGame(s);
     applyMove(sim, color);
     let value;

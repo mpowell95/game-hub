@@ -46,6 +46,23 @@ const NEIGHBORS = (() => {
 
 export const opponentOf = (p) => (p === P1 ? P2 : P1);
 
+/** Recolor `tileIdx` to a color unlike all four of its real orthogonal neighbors
+ *  (whichever exist) plus any `extraAvoid` colors, preserving the "no two
+ *  orthogonal neighbors share a color" invariant around it. Falls back to the
+ *  existing color if every color is banned (not reachable with COLOR_COUNT = 6
+ *  and at most 4 neighbors + 1 extra to avoid). */
+function recolorAvoiding(colors, tileIdx, extraAvoid, rng) {
+  const c = tileIdx % COLS, r = Math.floor(tileIdx / COLS);
+  const banned = new Set(extraAvoid);
+  if (c > 0) banned.add(colors[idx(c - 1, r)]);
+  if (c < COLS - 1) banned.add(colors[idx(c + 1, r)]);
+  if (r > 0) banned.add(colors[idx(c, r - 1)]);
+  if (r < ROWS - 1) banned.add(colors[idx(c, r + 1)]);
+  const options = [];
+  for (let k = 0; k < COLOR_COUNT; k++) if (!banned.has(k)) options.push(k);
+  return options.length ? options[Math.floor(rng() * options.length)] : colors[tileIdx];
+}
+
 /** Random board where no two orthogonal neighbors share a color, and the two
  *  starting corners differ (each player must hold a distinct current color). */
 export function generateColors(rng = Math.random) {
@@ -67,6 +84,18 @@ export function generateColors(rng = Math.random) {
     for (let k = 0; k < COLOR_COUNT; k++) if (banned.indexOf(k) < 0) options.push(k);
     colors[P1_START] = options[Math.floor(rng() * options.length)];
   }
+  // FILLER-2: a starting corner's own color is already guaranteed to differ from
+  // both of its neighbors (the loop above), but those two neighbors are NOT
+  // adjacent to each other, so nothing stopped them from coincidentally sharing
+  // a color - which lets a single first move capture both at once (Matt's "the
+  // computer starts with two of the same box next to him," screenshot 15,
+  // measured at ~24% of boards for either corner before this fix). Applied
+  // identically to both corners so the fix is even-handed, not computer-only.
+  const debiasNeighborPair = (nbA, nbB) => {
+    if (colors[nbA] === colors[nbB]) colors[nbB] = recolorAvoiding(colors, nbB, [colors[nbA]], rng);
+  };
+  debiasNeighborPair(idx(1, ROWS - 1), idx(0, ROWS - 2));   // P1's two neighbors (right, top)
+  debiasNeighborPair(idx(COLS - 2, 0), idx(COLS - 1, 1));   // P2's two neighbors (left, bottom)
   return colors;
 }
 
