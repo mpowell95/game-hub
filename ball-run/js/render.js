@@ -391,7 +391,12 @@ export class Renderer {
     this._camLagLateral = lateral;
   }
 
-  dispose() {
+  /** `loseContext` defaults to true (leaving the hub entirely: release the GPU context so
+   *  repeated hub<->game remounts don't pile up toward the browser's context cap). Pass
+   *  false when the same canvas will immediately get a new Renderer (in-game "Play Again"
+   *  restart) - forcing context loss there leaves the canvas permanently lost, since a
+   *  lost context is not synchronously replaced by a fresh one on the next getContext(). */
+  dispose(loseContext = true) {
     // Non-negotiable 7: fully release GPU resources on exit to the hub.
     const disposeMesh = (m) => {
       if (m.geometry) m.geometry.dispose();
@@ -415,8 +420,9 @@ export class Renderer {
     // Non-negotiable 7 continued: dispose() alone leaves the WebGL context to be reclaimed by
     // GC, not immediately - repeated hub<->game remounts can pile up toward the browser's
     // context cap before that happens (see ARCH-REVIEW.md S4-6). forceContextLoss() releases it
-    // synchronously on teardown.
-    if (typeof this.renderer.forceContextLoss === 'function') this.renderer.forceContextLoss();
+    // synchronously on teardown. Only when actually leaving the game (loseContext) - see the
+    // dispose() doc comment for why an in-place restart must skip this.
+    if (loseContext && typeof this.renderer.forceContextLoss === 'function') this.renderer.forceContextLoss();
     this.scene.clear();
   }
 }

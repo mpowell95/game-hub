@@ -410,10 +410,14 @@ class BallRunUI {
     this.startLoop();
   }
 
-  teardownRun() {
+  /** `fullExit` is false for an in-game restart (Play/Play Again reuse the same canvas
+   *  immediately after) and true for actually leaving the game (hub destroy()) - see
+   *  Renderer.dispose()'s doc comment for why forcing context loss on a restart blacks
+   *  out the canvas. */
+  teardownRun(fullExit = false) {
     this.stopLoop();
     if (this.input) { this.input.destroy(); this.input = null; }
-    if (this.renderer) { this.renderer.dispose(); this.renderer = null; }
+    if (this.renderer) { this.renderer.dispose(fullExit); this.renderer = null; }
     this.sim = null;
   }
 
@@ -573,7 +577,7 @@ class BallRunUI {
 
   destroy() {
     this.stopLoop();
-    this.teardownRun();
+    this.teardownRun(true);
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('orientationchange', this._onResize);

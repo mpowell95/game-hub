@@ -1369,7 +1369,7 @@ class ChinchonUI {
       case 'view-deck': this._openDeckGallery(a.dataset.v); break;
       case 'zoom-card': this._openCardZoom(a.dataset.deck, a.dataset.name); break;
       case 'close-zoom': this._closeCardZoom(); break;
-      case 'set-aidiff': this.syncSetupInputs(); this._setup.aiDifficulty[+a.dataset.i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
+      case 'set-aidiff': { this.syncSetupInputs(); const i = +a.closest('.cc-segmented').dataset.i; this._setup.aiDifficulty[i] = a.dataset.v; this._saveSetup(); this.renderSetup(); break; }
       case 'toggle-row': { this.syncSetupInputs(); const row = a.dataset.row; this._setupExpanded = this._setupExpanded === row ? null : row; this.renderSetup(); break; }
       case 'rule-victory': this.syncSetupInputs(); this._setup.config.victoryCondition = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'rule-maxclose': this.syncSetupInputs(); this._setup.config.maxClose = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
