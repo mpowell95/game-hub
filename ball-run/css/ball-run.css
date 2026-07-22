@@ -254,6 +254,7 @@
 }
 
 .br-panel {
+  position: relative;
   background: var(--br-panel);
   border-radius: var(--br-radius);
   padding: 28px 24px;

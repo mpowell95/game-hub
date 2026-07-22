@@ -831,6 +831,7 @@ class MancalaUI {
     overlay.innerHTML = `
       <div class="mc-scrim"></div>
       <div class="mc-card" role="dialog" aria-modal="true" aria-label="Game over">
+        <button type="button" class="mc-x" data-action="close-overlay" aria-label="Close">&times;</button>
         <span class="mc-card-emoji">${won === true ? '🏆' : won === false ? esc(n.p2.emoji) : '🤝'}</span>
         <h3 class="mc-card-title">${title}</h3>
         <p class="mc-card-score">

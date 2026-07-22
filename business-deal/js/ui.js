@@ -1710,6 +1710,7 @@
       const s = this._loadStats();
       root.innerHTML =
         '<div class="scrim"></div><div class="win-card">' +
+        '<button type="button" class="win-x" id="win-close" aria-label="Close">✕</button>' +
         `<h1>${w.id === 0 ? 'You Win! 🎉' : esc(w.name) + ' wins'}</h1>` +
         `<p>Winning sets: ${esc(sets)}</p>` +
         `<p class="win-stats">Record: ${s.won}W – ${s.lost}L</p>` +
@@ -1719,6 +1720,10 @@
       root.querySelector('#again').addEventListener('click', () => this.showSetup());
       root.querySelector('#win-stats').addEventListener('click', () => this.showStats('win'));
       root.querySelector('#win-hub').addEventListener('click', () => this._toHub());
+      // No "view board" equivalent exists here (the board is deliberately hidden
+      // behind .game-over so its dead "New Game" can't be tapped through this
+      // overlay - see below), so the X reuses the same "Game Hub" exit.
+      root.querySelector('#win-close').addEventListener('click', () => this._toHub());
       root.classList.add('show');
       // The board's bottom "New Game" sits under this overlay (dead tap); hide it
       // so "Play Again" is the single, working restart.

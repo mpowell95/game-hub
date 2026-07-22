@@ -266,6 +266,7 @@ class BallRunUI {
           </div>
           <div class="br-overlay" data-role="gameover" hidden>
             <div class="br-panel">
+              <button type="button" class="br-help-close" data-action="close-gameover" aria-label="Close">&times;</button>
               <h2 data-role="go-title">Run over</h2>
               <p class="br-go-score" data-role="go-score"></p>
               <p class="br-go-distance" data-role="go-distance"></p>
@@ -344,6 +345,11 @@ class BallRunUI {
     this.el.resumeBtn.addEventListener('click', () => this.resumeFromGate());
     this.el.playAgain.addEventListener('click', () => this.startRun());
     this.el.goHub.addEventListener('click', () => this.showSetup());
+    // No "view board" equivalent exists for a finished run (there's nothing more
+    // to look at once the run has ended), so the X reuses "Back to hub"'s own
+    // handler - same non-destructive exit, just from the corner instead of a
+    // labeled button.
+    this.el.gameover.querySelector('[data-action="close-gameover"]').addEventListener('click', () => this.showSetup());
 
     root.querySelector('.br-help-overlay').addEventListener('click', (e) => {
       const action = e.target.closest('[data-action]');

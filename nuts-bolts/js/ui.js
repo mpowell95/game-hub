@@ -307,6 +307,7 @@ class NutsBoltsUI {
       </div>
       <div class="nb-overlay" data-role="win-overlay" hidden>
         <div class="nb-panel">
+          <button type="button" class="nb-panel-close" data-action="close-win" aria-label="Close">&times;</button>
           <div class="nb-win-flash" data-role="win-flash"></div>
           <div class="nb-confetti-layer" data-role="confetti"></div>
           <h2 data-role="win-title"></h2>
@@ -516,6 +517,12 @@ class NutsBoltsUI {
         break;
       case 'close-help':
         this.helpOverlay.hidden = true;
+        break;
+      case 'close-win':
+        // Non-destructive dismiss: reveal the finished board, same as every
+        // other game's end-of-game X. Solving progress/level is unaffected;
+        // "Next level" is the only way to actually advance.
+        this.winOverlay.hidden = true;
         break;
       case 'next-level':
         this.winOverlay.hidden = true;
