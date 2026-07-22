@@ -131,18 +131,26 @@
     .pf-add:hover { background: rgba(23, 105, 212, .07); }
     .pf-add[hidden] { display: none; }
 
-    .pf-foot { text-align: center; color: var(--hub-muted); font-size: .84rem; line-height: 1.5; }
+    .pf-foot {
+      text-align: center; color: var(--hub-muted); font-size: .84rem; line-height: 1.5;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    /* Reset is destructive - a solid red button, last on the page (own row, below
+       Device details) so it isn't the first/easiest tap target in this group. */
     .pf-reset-btn {
       font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 16px; border-radius: 11px;
-      border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: #c2402f;
+      border: 1px solid #c2402f; background: #c2402f; color: #fff;
       cursor: pointer; touch-action: manipulation;
     }
-    .pf-reset-btn:hover { background: #fbeae7; border-color: #f0ccc6; }
-    /* Device details is informational, not destructive - same shape as Reset profile
-       but the neutral ink color instead of red, so it doesn't read as dangerous. */
-    .pf-dev-btn { color: var(--hub-ink); margin-top: 0; }
+    .pf-reset-btn:hover { background: #a8341f; border-color: #a8341f; }
+    /* Device details is informational, not destructive - a neutral outline button,
+       same shape family as Reset but its own row above it. */
+    .pf-dev-btn {
+      font: inherit; font-weight: 700; margin-top: 0; padding: 10px 16px; border-radius: 11px;
+      border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
+      cursor: pointer; touch-action: manipulation;
+    }
     .pf-dev-btn:hover { background: var(--hub-surface-2); border-color: var(--hub-surface-2); }
-    .pf-foot-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
     .pf-dev-card { max-width: 560px; max-height: 82vh; overflow-y: auto; }
     .pf-dev-status {
@@ -234,10 +242,8 @@
       </details>
 
       <div class="pf-foot">
-        <div class="pf-foot-row">
-          <button type="button" class="pf-reset-btn pf-dev-btn" id="pf-devdetails-btn">Device details</button>
-          <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
-        </div>
+        <button type="button" class="pf-dev-btn" id="pf-devdetails-btn">Device details</button>
+        <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
       </div>
     </main>
   </div>
