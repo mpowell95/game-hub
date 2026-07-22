@@ -25,6 +25,7 @@ const TABS = [
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
   { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
   { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
+  { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
 ];
 const ACCENT = Object.fromEntries(TABS.map((t) => [t.id, t.accent]));
 

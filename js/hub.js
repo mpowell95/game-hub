@@ -235,6 +235,32 @@ const GAMES = [
           </svg>`,
   },
   {
+    id: 'tic-tac-toe',
+    title: 'Tic Tac Toe',
+    blurb: 'Classic 3x3, or Ultimate: nine boards in one, where your move picks your opponent\'s board.',
+    module: '../tic-tac-toe/js/ui.js',
+    accent: '#0e7c86',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#0e7c86"/>
+            <g stroke="#d7ece9" stroke-width="5" stroke-linecap="round">
+              <line x1="42" y1="14" x2="42" y2="106"/>
+              <line x1="78" y1="14" x2="78" y2="106"/>
+              <line x1="14" y1="42" x2="106" y2="42"/>
+              <line x1="14" y1="78" x2="106" y2="78"/>
+            </g>
+            <g stroke="#e0532f" stroke-width="7" stroke-linecap="round">
+              <line x1="22" y1="22" x2="34" y2="34"/><line x1="34" y1="22" x2="22" y2="34"/>
+              <line x1="86" y1="22" x2="98" y2="34"/><line x1="98" y1="22" x2="86" y2="34"/>
+              <line x1="54" y1="54" x2="66" y2="66"/><line x1="66" y1="54" x2="54" y2="66"/>
+            </g>
+            <g fill="none" stroke="#ffce3a" stroke-width="7">
+              <circle cx="28" cy="92" r="9"/>
+              <circle cx="92" cy="60" r="9"/>
+              <circle cx="92" cy="92" r="9"/>
+            </g>
+          </svg>`,
+  },
+  {
     id: 'ball-run',
     title: 'Ball Run',
     blurb: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',

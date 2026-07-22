@@ -36,7 +36,7 @@
 //                                                   // since Easy could bank 100+m without meeting an obstacle),
 //                                                   // so the honest numbers are runs and best obstacle count,
 //                                                   // overall and per difficulty
-//         brLegacyMeters: { runs, bestDistance, bestByDiff: { easy, medium, hard } } } },  // preserved verbatim
+//         brLegacyMeters: { runs, bestDistance, bestByDiff: { easy, medium, hard } } },  // preserved verbatim
 //                                                   // (never deleted) if an old meter-based `br` was found on
 //                                                   // load, folded ONCE via a _brMetricMigrated guard - meters
 //                                                   // and obstacle counts are not comparable units, so this is
@@ -45,6 +45,16 @@
 //                                                   // _brRunsRefolded: the archived `runs` play count (unit-
 //                                                   // agnostic, unlike the meter bests) is folded BACK into the
 //                                                   // live br.runs once - see refoldBallRunLegacyRuns
+//       tictactoe: {
+//         total, byDiff,                           // classic recordResult-shaped (beginner/intermediate/pro)
+//         tt: { classic: { played, won, lost, tied }, ultimate: { played, won, lost, tied } } } },
+//                                                   // tic-tac-toe is draw-heavy (Pro Classic is an unbeatable
+//                                                   // solved game -- see tic-tac-toe/js/ai.js -- so most Pro
+//                                                   // Classic games are draws), so `tied` is stored EXPLICITLY
+//                                                   // per variant here, unlike `total`/`byDiff` above which
+//                                                   // keep the shared {played,won,lost} shape (a draw stays
+//                                                   // derivable there as played-won-lost, same as every other
+//                                                   // game); see recordTicTacToe
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -52,7 +62,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
@@ -172,6 +182,17 @@ function refoldBallRunLegacyRuns(st) {
   return true;
 }
 
+/** Tic Tac Toe: the per-variant W/L/Tie counters. Draw-heavy by design (Pro
+ *  Classic is unbeatable, see tic-tac-toe/js/ai.js), so `tied` is tracked
+ *  explicitly here rather than left to be derived, unlike `total`/`byDiff`. */
+function ensureTt(g) {
+  if (!g.tt || typeof g.tt !== 'object') g.tt = {};
+  for (const v of ['classic', 'ultimate']) {
+    if (!g.tt[v] || typeof g.tt[v] !== 'object') g.tt[v] = { played: 0, won: 0, lost: 0, tied: 0 };
+    for (const k of ['played', 'won', 'lost', 'tied']) if (!Number.isFinite(g.tt[v][k])) g.tt[v][k] = 0;
+  }
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -187,6 +208,7 @@ function normalize(raw) {
   ensureNb(st.games.nutsbolts);
   ensureEs(st.games.escoba);
   ensureBr(st.games.ballrun);
+  ensureTt(st.games.tictactoe);
   return st;
 }
 
@@ -397,5 +419,31 @@ export function recordBallRun(obstaclesPassed, difficulty) {
   return st;
 }
 
+/** Tic Tac Toe: record a finished game, split by VARIANT. Maintains total/byDiff (as
+ *  recordResult) AND the per-variant breakdown in `tt`. `variant` is 'classic' or
+ *  'ultimate'; `difficulty` is beginner/intermediate/pro. `won` is true, false, or null
+ *  for a draw (draws are very common here, especially Classic vs Pro -- Pro Classic is
+ *  an unbeatable solved game by design, see tic-tac-toe/js/ai.js). A draw increments
+ *  `played` and `tied` only; `won`/`lost` are never touched for it. Additive; never
+ *  overwrites. */
+export function recordTicTacToe(variant, difficulty, won) {
+  const st = loadStats();
+  const g = st.games.tictactoe;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureTt(g);
+  const v = variant === 'ultimate' ? 'ultimate' : 'classic';
+  const rec = g.tt[v];
+  rec.played += 1;
+  if (won === true) rec.won += 1;
+  else if (won === false) rec.lost += 1;
+  else rec.tied += 1;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
-export default { deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba, recordBallRun, GAMES, STATS_KEY, DEVICE_KEY };
+export default {
+  deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
+  recordBallRun, recordTicTacToe, GAMES, STATS_KEY, DEVICE_KEY,
+};

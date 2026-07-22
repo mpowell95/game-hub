@@ -256,13 +256,22 @@ export default { init, destroy, isInProgress };
 
 ### Adding a game — checklist
 
-**Copy Escoba's patterns, not Connect Four's or Filler's.** Connect Four and Filler are the
-oldest games and look the most "template-like" to a fresh session, but they carry the
-repo's weakest patterns: no persisted settings (Connect Four), prefix-only CSS scoping
-(both), and the old flat/segmented setup screen instead of the accordion. Escoba (and
-Chinchón, which mirrors it) is the reference for the setup-screen pattern, CSS scoping
-discipline, and the settings-key convention below. When restructuring an old game, migrate
-it toward Escoba's patterns rather than leaving it as its own precedent.
+**Copy per axis, not per game. No single game is the reference for everything** — an earlier
+version of this paragraph named Escoba for all three axes below, and was wrong on two of them.
+
+| Axis | Reference | Notes |
+|---|---|---|
+| Setup screen | **Escoba** (Chinchón mirrors it) | the accordion, one row open at a time. Filler's flat/segmented screen is acceptable for a small game. Connect Four's is the weakest in the repo; do not copy it. |
+| CSS scoping | **Mancala** | every rule descendant-scoped under its root class (`.mc-root .mc-x`, never bare `.mc-x`). Escoba, Filler and Connect Four all carry large numbers of bare top-level prefixed rules — a prefix alone is not isolation. |
+| Settings **key** | **Filler / Mancala / Nuts & Bolts** | `gamehub.<game>.v1`, per item 4 below. Escoba's `escoba-settings` is a frozen gen-1 key, kept per THE LAW rule 5, and must never be the model for a new game. |
+| Persisting settings at all | anything but Connect Four | Connect Four persists nothing. Every new game persists. |
+
+**The settings *key* and the settings *screen* are separate axes and their best examples are
+different games.** The key is a localStorage name the player never sees; the screen is the
+setup UI they interact with. Do not infer one from the other — citing a game for its CSS
+scoping or its storage key says nothing about whether its screen is worth copying.
+
+When restructuring an old game, migrate it toward the reference for each axis independently.
 
 1. Create `<game>/` with `index.html`, `css/<game>.css`, `js/ui.js` (+ engine modules).
 2. `ui.js` exports `init`/`destroy`/`isInProgress` (see "The module contract" above) and
@@ -307,6 +316,7 @@ it toward Escoba's patterns rather than leaving it as its own precedent.
 | Filler | in-hub `module:` | Flood-fill duel vs AI (color-pick your corner, grow to capture the majority). Pure engine (`filler/js/game.js`) + `ai.js` + `ui.js`, no worker. Settings in `gamehub.filler.v1` (the gen-3 key convention); results via `recordResult('filler', ...)`. Still on the old flat/segmented setup screen, not the accordion pattern. |
 | Nuts & Bolts | in-hub `module:` | Solo color-sort puzzle: stack matching nuts onto bolts. Procedural level generator (`nuts-bolts/js/generator.js`) with a solvability + quality-gate self-test (regenerates a level rather than shipping an unsolvable or trivial one). Settings/progress in `gamehub.nutsbolts.v1` (schema-versioned, with its own migration). A solo puzzle has no opponent/loss state, so results record via `recordNutsBolts` (solved/moves/bestLevel), not `recordResult`. |
 | Ball Run | in-hub `module:` | Solo endless runner: steer a rolling ball down a neon track, dodge obstacles. Three.js/WebGL renderer (`render.js`, vendored `ball-run/vendor/three.module.min.js`), fixed-timestep sim (`sim.js`/`track.js`) decoupled from rendering, `input.js` for touch/drag steering. `immersive: true`. Settings under the older dotted `ballrun.*` keys (predates the `gamehub.<game>.v1` convention; frozen per THE LAW). Results recorded via `recordBallRun` (obstacle-count score, not distance — see `js/game-stats.js`'s header comment for the metric-migration history) through a local "flight recorder" (`ballrun.runLog.v1`) that retries any run that didn't confirm reaching the shared store, on every subsequent open. Renderer teardown calls `forceContextLoss()` after `dispose()` so repeated hub↔game remounts don't leak WebGL contexts toward the browser's context cap. |
+| Tic Tac Toe | in-hub `module:` | Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate** (nine 3x3 boards nested in a 3x3 meta-board; the cell you play picks which board your opponent plays next, a resolved target board grants a free move, and a small board that fills with no winner is DEAD — counts for neither side, never playable again). Pure engine (`tic-tac-toe/js/game.js`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala (no async agent interface — a move has no multi-step resolution to pace). Three shared-vocabulary tiers (beginner/intermediate/pro) per variant: Classic Pro is **exhaustive minimax, unbeatable by design** (a perfect opponent can only draw it — intentional, not a bug); Ultimate Pro is iterative-deepening alpha-beta under a ~380ms budget (Mancala's Pro tier is the precedent for that number), with a 4-term eval (positional small-board ownership, meta-line potential, in-board two-in-a-row, and a heavily-weighted "send penalty" for handing the opponent a good board or a free move — the term that makes it play like Ultimate instead of nine unrelated games). Setup screen is Escoba's accordion pattern. Settings in `gamehub.tictactoe.v1`. Results via `recordTicTacToe(variant, difficulty, won)`: maintains the shared `total`/`byDiff` bucket (draws derived, like every other game) AND an explicit per-variant `tt.classic`/`tt.ultimate` `{played,won,lost,tied}` breakdown — `tied` is stored explicitly there (not derived) because this game is draw-heavy, especially Classic vs Pro; the Stats tab shows all six W/L/T numbers, never folded away. |
 
 ---
 

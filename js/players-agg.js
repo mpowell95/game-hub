@@ -138,6 +138,18 @@ export function aggregatePlayers(all) {
         dst.br.bestObstacles = Math.max(dst.br.bestObstacles | 0, src.br.bestObstacles | 0);
         const sbd = src.br.bestObstaclesByDiff || {};
         for (const k of Object.keys(sbd)) dst.br.bestObstaclesByDiff[k] = Math.max(dst.br.bestObstaclesByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'tictactoe' && src.tt) {
+        // Ties are a first-class, explicitly-stored category here (see game-stats.js), so the
+        // combined cross-device view must carry them forward too - dropping `tt` here would zero
+        // out the per-variant W/L/T breakdown on the Stats screen the moment two devices sync,
+        // even though `total` above is still correct (a THE-LAW-rule-1-shaped bug: data present
+        // but not shown).
+        if (!dst.tt) dst.tt = { classic: { played: 0, won: 0, lost: 0, tied: 0 }, ultimate: { played: 0, won: 0, lost: 0, tied: 0 } };
+        for (const v of ['classic', 'ultimate']) {
+          const sv = src.tt[v] || {};
+          const dv = dst.tt[v];
+          dv.played += sv.played | 0; dv.won += sv.won | 0; dv.lost += sv.lost | 0; dv.tied += sv.tied | 0;
+        }
       }
     }
   }

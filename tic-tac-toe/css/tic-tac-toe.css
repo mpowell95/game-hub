@@ -1,0 +1,396 @@
+/* tic-tac-toe.css - scoped under .ttt-root (hub rule: no global selectors,
+   every rule descendant-scoped -- Mancala is the reference for this
+   discipline, see root CLAUDE.md "Adding a game" checklist).
+
+   X and O are colorblind-safe by construction (distinct glyphs, not distinct
+   hues alone); the accent colors below are decoration on top of that, never
+   the only signal. The forced-board cue in Ultimate uses an outline + label
+   + dimming of everything else, never color alone. */
+
+.ttt-root {
+  --ttt-accent: #0e7c86;
+  --ttt-accent-deep: #095b62;
+  --ttt-ink: #16243a;
+  --ttt-muted: #5b6b82;
+  --ttt-bg: #f4f6fb;
+  --ttt-surface: #ffffff;
+  --ttt-surface-2: #eef2f8;
+  --ttt-x: #e0532f;
+  --ttt-o: #1f5fa8;
+  --ttt-gold: #ffce4a;
+  --ttt-dead: #97a3b6;
+  display: block;
+  min-height: 100%;
+  background: var(--ttt-bg);
+  color: var(--ttt-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ttt-root .ttt-shell {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 18px 14px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --- shared bits --------------------------------------------------------- */
+
+.ttt-root .ttt-title {
+  margin: 0;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.ttt-root .ttt-sub {
+  margin: -8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ttt-muted);
+}
+.ttt-root .ttt-stats {
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ttt-muted);
+}
+
+.ttt-root .ttt-vscard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.ttt-root .ttt-vsside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 84px;
+}
+.ttt-root .ttt-vsemoji { font-size: 24px; line-height: 1; }
+.ttt-root .ttt-vsname {
+  font-size: 12.5px;
+  font-weight: 800;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ttt-root .ttt-vslabel {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: var(--ttt-muted);
+}
+
+.ttt-root .ttt-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 13px 16px;
+  font-size: 15px;
+}
+.ttt-root .ttt-btn-primary { background: var(--ttt-accent); color: #fff; }
+.ttt-root .ttt-btn-primary:active { background: var(--ttt-accent-deep); }
+.ttt-root .ttt-btn-ghost {
+  background: var(--ttt-surface);
+  color: var(--ttt-ink);
+  border: 1px solid var(--ttt-surface-2);
+}
+.ttt-root .ttt-btn-small { padding: 9px 12px; font-size: 13px; }
+.ttt-root .ttt-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ttt-accent-deep);
+  font: inherit;
+  font-weight: 800;
+  font-size: 13.5px;
+  text-align: center;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* Segmented control, shared by every settings row. */
+.ttt-root .ttt-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 5px;
+  background: var(--ttt-surface-2);
+  border-radius: 11px;
+  padding: 4px;
+}
+.ttt-root .ttt-segbtn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ttt-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.ttt-root .ttt-segbtn.is-selected {
+  background: #fff;
+  color: var(--ttt-ink);
+  box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18);
+}
+
+/* --- setup: accordion summary card (Escoba's pattern) -------------------- */
+
+.ttt-root .ttt-summary {
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.ttt-root .ttt-row { border-bottom: 1px solid var(--ttt-surface-2); }
+.ttt-root .ttt-row:last-child { border-bottom: 0; }
+.ttt-root .ttt-row-head {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.ttt-root .ttt-row-label { font-size: 14px; font-weight: 800; color: var(--ttt-ink); }
+.ttt-root .ttt-row-value { font-size: 13.5px; font-weight: 700; color: var(--ttt-muted); }
+.ttt-root .ttt-row.is-open .ttt-row-value { color: var(--ttt-accent-deep); }
+.ttt-root .ttt-row-expand { padding: 0 14px 14px; }
+.ttt-root .ttt-hint { margin: 8px 2px 0; font-size: 12px; line-height: 1.4; color: var(--ttt-muted); }
+
+/* --- game: top bar --------------------------------------------------------*/
+
+.ttt-root .ttt-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ttt-root .ttt-idchip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: var(--ttt-surface);
+  font-size: 13px;
+  font-weight: 800;
+}
+.ttt-root .ttt-idchip.is-turn { border-color: var(--ttt-gold); background: rgba(255, 206, 74, 0.22); }
+.ttt-root .ttt-idchip .ttt-mark { font-weight: 900; }
+.ttt-root .ttt-idchip[data-mark='X'] .ttt-mark { color: var(--ttt-x); }
+.ttt-root .ttt-idchip[data-mark='O'] .ttt-mark { color: var(--ttt-o); }
+.ttt-root .ttt-vsdash { font-size: 12px; font-weight: 900; color: var(--ttt-muted); }
+
+.ttt-root .ttt-status {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.ttt-root .ttt-status:not(:empty) {
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 999px;
+  padding: 4px 14px;
+}
+
+/* --- classic board --------------------------------------------------------*/
+
+.ttt-root .ttt-board {
+  --ttt-cell: 96px;
+  display: grid;
+  grid-template-columns: repeat(3, var(--ttt-cell));
+  grid-template-rows: repeat(3, var(--ttt-cell));
+  gap: 8px;
+  margin: 0 auto;
+  padding: 10px;
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
+}
+@media (max-width: 380px) { .ttt-root .ttt-board { --ttt-cell: min(26vw, 92px); } }
+
+.ttt-root .ttt-cell {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ttt-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--ttt-cell) * 0.5);
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease;
+}
+.ttt-root .ttt-cell:disabled { cursor: default; }
+.ttt-root .ttt-cell.is-live:hover { background: #e3e9f4; }
+.ttt-root .ttt-cell.is-live:active { transform: scale(0.94); }
+.ttt-root .ttt-cell[data-mark='X'] { color: var(--ttt-x); }
+.ttt-root .ttt-cell[data-mark='O'] { color: var(--ttt-o); }
+.ttt-root .ttt-cell.is-win { background: rgba(255, 206, 74, 0.55); }
+.ttt-root .ttt-cell:focus-visible { outline: 3px solid var(--ttt-accent); outline-offset: -3px; }
+
+/* --- ultimate board ---------------------------------------------------- */
+
+.ttt-root .ttt-uboard {
+  --ttt-ugap: 7px;
+  --ttt-sgap: 3px;
+  --ttt-ucell: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: var(--ttt-ugap);
+  width: min(100%, 360px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  padding: 10px;
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 18px;
+  box-shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
+}
+@media (max-width: 380px) { .ttt-root .ttt-uboard { --ttt-ucell: 20px; } }
+
+.ttt-root .ttt-sboard {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: var(--ttt-sgap);
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--ttt-surface-2);
+  border: 2.5px solid transparent;
+  transition: opacity 150ms ease, border-color 150ms ease;
+}
+/* The forced-board cue: outline + label, never color alone (also carried by
+   the status line's text, see ui.js). Every OTHER open board dims so the one
+   playable board reads at a glance. */
+.ttt-root .ttt-sboard.is-forced { border-color: var(--ttt-gold); box-shadow: 0 0 0 3px rgba(255, 206, 74, 0.35); }
+.ttt-root .ttt-sboard.is-dim { opacity: 0.42; }
+.ttt-root .ttt-sboard.is-resolved { opacity: 0.62; }
+/* The three small boards that completed the winning meta-line, at match end. */
+.ttt-root .ttt-sboard.is-win-board { border-color: var(--ttt-gold); box-shadow: 0 0 0 4px rgba(255, 206, 74, 0.55); opacity: 1; }
+
+.ttt-root .ttt-scell {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+.ttt-root .ttt-scell:disabled { cursor: default; background: rgba(255, 255, 255, 0.6); }
+.ttt-root .ttt-scell.is-live:active { transform: scale(0.9); }
+.ttt-root .ttt-scell[data-mark='X'] { color: var(--ttt-x); }
+.ttt-root .ttt-scell[data-mark='O'] { color: var(--ttt-o); }
+.ttt-root .ttt-scell.is-win { background: rgba(255, 206, 74, 0.65); }
+
+/* A resolved small board gets a big overlay glyph so its outcome reads
+   instantly without having to parse nine tiny cells. Dead boards use a
+   distinct dash glyph (a shape, not a color) so "no winner" never relies on
+   hue alone either. */
+.ttt-root .ttt-soverlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 900;
+  border-radius: 10px;
+  pointer-events: none;
+}
+.ttt-root .ttt-sboard[data-owner='X'] .ttt-soverlay { display: flex; color: var(--ttt-x); background: rgba(224, 83, 47, 0.14); }
+.ttt-root .ttt-sboard[data-owner='O'] .ttt-soverlay { display: flex; color: var(--ttt-o); background: rgba(31, 95, 168, 0.14); }
+.ttt-root .ttt-sboard[data-owner='D'] .ttt-soverlay { display: flex; color: var(--ttt-dead); background: rgba(151, 163, 182, 0.18); font-size: 26px; }
+
+/* --- actions / end overlay ------------------------------------------------*/
+
+.ttt-root .ttt-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ttt-root .ttt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.ttt-root .ttt-scrim { position: absolute; inset: 0; background: rgba(16, 26, 44, 0.55); }
+.ttt-root .ttt-card {
+  position: relative;
+  background: var(--ttt-surface);
+  border-radius: 18px;
+  padding: 22px 20px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 18px 44px rgba(16, 26, 44, 0.38);
+}
+.ttt-root .ttt-card-emoji { font-size: 40px; line-height: 1; display: block; }
+.ttt-root .ttt-card-title { margin: 8px 0 4px; font-size: 22px; font-weight: 900; }
+.ttt-root .ttt-card-sub { margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--ttt-muted); }
+.ttt-root .ttt-card-actions { display: flex; flex-direction: column; gap: 9px; }
+.ttt-root .ttt-x {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  appearance: none;
+  border: 0;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ttt-muted);
+}
+
+.ttt-root .ttt-help { text-align: left; max-width: 400px; max-height: min(78vh, 600px); overflow-y: auto; }
+.ttt-root .ttt-help h4 { margin: 14px 0 4px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+.ttt-root .ttt-help p, .ttt-root .ttt-help li { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3a4a63; }
+.ttt-root .ttt-help ul { margin: 4px 0 0; padding-left: 18px; }

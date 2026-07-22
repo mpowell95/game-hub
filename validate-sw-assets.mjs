@@ -84,7 +84,7 @@ if (offenders.length) {
 // ESM. A precedent, not the preferred pattern."). Parchís is a compiled single-file build from the
 // sibling ../Parchís/ repo; only its index.html lives in this repo and is already precached.
 const SCAN_DIRS = [
-  'connect-four', 'chinchon', 'escoba', 'filler', 'mancala', 'nuts-bolts', 'ball-run',
+  'connect-four', 'chinchon', 'escoba', 'filler', 'mancala', 'nuts-bolts', 'ball-run', 'tic-tac-toe',
   'js', 'profile', 'css',
 ];
 const SCAN_EXT = new Set(['.js', '.css', '.html']);

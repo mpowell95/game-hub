@@ -22,6 +22,7 @@ const TABS = [
   { id: 'filler', label: 'Filler', accent: '#c2557f' },
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
   { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
+  { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -217,6 +218,31 @@ function ballRunScreen(rec) {
     </table>${legacyHtml}`;
 }
 
+// --- Tic Tac Toe (played by variant, ties shown explicitly) -----------------
+function ttVariantTallies(label, v) {
+  return `<h4 class="gs-tbl-h">${esc(label)}</h4>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${v.won | 0}</b><span>Won</span></div>
+      <div class="gs-tally"><b>${v.lost | 0}</b><span>Lost</span></div>
+      <div class="gs-tally"><b>${v.tied | 0}</b><span>Tied</span></div>
+      <div class="gs-tally"><b>${v.played | 0}</b><span>Played</span></div>
+    </div>`;
+}
+
+/** Draw-heavy by design (Pro Classic is an unbeatable solved game -- see
+ *  tic-tac-toe/js/ai.js's comment on it), so ties are shown explicitly per
+ *  variant here rather than folded into a derived number. THE LAW rule 1: a
+ *  screen that hides the most common outcome reads as deleted data to the
+ *  player, and a tie is the single most common outcome this game produces. */
+function ticTacToeScreen(rec) {
+  const total = (rec && rec.total) || { played: 0 };
+  if (!(total.played | 0)) return emptyState('Tic Tac Toe');
+  const tt = (rec && rec.tt) || {};
+  const classic = tt.classic || { played: 0, won: 0, lost: 0, tied: 0 };
+  const ultimate = tt.ultimate || { played: 0, won: 0, lost: 0, tied: 0 };
+  return ttVariantTallies('Classic', classic) + ttVariantTallies('Ultimate', ultimate);
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -224,6 +250,7 @@ function screenFor(id, st) {
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
+  if (id === 'tictactoe') return ticTacToeScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 
