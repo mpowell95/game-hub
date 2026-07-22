@@ -7,10 +7,12 @@
    alone -- but real Dots and Boxes IS played in each player's own color
    (you draw in yours, the opponent draws in theirs), so --db-human/--db-ai
    below are a real, bright, load-bearing signal on top of the glyph, not
-   just decoration. Same red/blue pairing as Tic Tac Toe's X/O
-   (tic-tac-toe/css/tic-tac-toe.css's --ttt-x/--ttt-o) for one consistent
-   two-player palette across the hub. Drawn vs undrawn edges are ALSO told
-   apart by thickness + opacity, never hue alone, so an edge's state reads
+   just decoration. Explicitly bright, unambiguous red/blue (iOS system
+   red/blue, #ff3b30/#007aff) per Matt's direct call -- deliberately
+   NOT Tic Tac Toe's more muted --ttt-x/--ttt-o (#e0532f/#1f5fa8, a
+   vermilion that reads as orange, not red); the two games' palettes
+   diverge on purpose here. Drawn vs undrawn edges are ALSO told apart
+   by thickness + opacity, never hue alone, so an edge's state reads
    even before you register whose color it is. A capturable box (one line
    away from being claimed) gets a dashed GOLD border, not a color tied to
    either player, so it's never confused with either player's claim color. */
@@ -25,10 +27,10 @@
   --db-surface-2: #eef2f8;
   --db-line-off: #b9c2d4;
   --db-line-on: #2c3a52;
-  --db-human: #e0532f;
-  --db-ai: #1f5fa8;
-  --db-human-tint: rgba(224, 83, 47, 0.22);
-  --db-ai-tint: rgba(31, 95, 168, 0.20);
+  --db-human: #ff3b30;
+  --db-ai: #007aff;
+  --db-human-tint: rgba(255, 59, 48, 0.22);
+  --db-ai-tint: rgba(0, 122, 255, 0.20);
   --db-gold: #ffce4a;
   display: block;
   min-height: 100%;

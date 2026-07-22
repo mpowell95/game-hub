@@ -285,18 +285,31 @@ const GAMES = [
     blurb: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
     module: '../dots-boxes/js/ui.js',
     accent: '#7048a8',
+    // Two claimed boxes, one in each player's actual in-game color (bright
+    // iOS red/blue, matching dots-boxes/css/dots-boxes.css's --db-human/
+    // --db-ai exactly) -- the tile itself now shows the same red-vs-blue
+    // identity a player sees on the board, not an unrelated gold accent.
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
             <rect width="120" height="120" fill="#7048a8"/>
-            <rect x="30" y="30" width="30" height="30" fill="rgba(255,255,255,0.16)"/>
+            <rect x="30" y="30" width="30" height="30" fill="rgba(255,59,48,0.32)"/>
+            <rect x="60" y="60" width="30" height="30" fill="rgba(0,122,255,0.32)"/>
             <g stroke="rgba(255,255,255,0.32)" stroke-width="2" stroke-linecap="round">
-              <line x1="60" y1="60" x2="90" y2="60"/>
+              <line x1="60" y1="30" x2="90" y2="30"/>
               <line x1="90" y1="30" x2="90" y2="60"/>
+              <line x1="30" y1="60" x2="30" y2="90"/>
+              <line x1="30" y1="90" x2="60" y2="90"/>
             </g>
-            <g stroke="#ffce4a" stroke-width="6" stroke-linecap="round">
+            <g stroke="#ff3b30" stroke-width="6" stroke-linecap="round">
               <line x1="30" y1="30" x2="60" y2="30"/>
               <line x1="30" y1="30" x2="30" y2="60"/>
               <line x1="30" y1="60" x2="60" y2="60"/>
               <line x1="60" y1="30" x2="60" y2="60"/>
+            </g>
+            <g stroke="#007aff" stroke-width="6" stroke-linecap="round">
+              <line x1="60" y1="60" x2="90" y2="60"/>
+              <line x1="90" y1="60" x2="90" y2="90"/>
+              <line x1="60" y1="90" x2="90" y2="90"/>
+              <line x1="60" y1="60" x2="60" y2="90"/>
             </g>
             <g fill="#e7defb">
               <circle cx="30" cy="30" r="5"/><circle cx="60" cy="30" r="5"/><circle cx="90" cy="30" r="5"/>
