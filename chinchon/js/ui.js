@@ -1242,7 +1242,8 @@ class ChinchonUI {
           <p class="cc-betty-cap">${humanWon ? 'Betty approves 😎' : 'Betty is not impressed.'}</p>
         </div>`
       : '';
-    this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-match"></div><div class="cc-sheet">
+      <button class="cc-sheet-x" data-action="close-match" aria-label="Close">✕</button>
       ${banner}
       <h2 class="cc-sheet-title">${winner.avatar} ${esc(winner.name)} wins${reason}!</h2>
       ${betty}
@@ -1402,6 +1403,9 @@ class ChinchonUI {
       case 'toggle-chart': this._chartView = !this._chartView; if (this._modalResolve) this._renderRoundModal(); else this._renderMatchModal(); break;
       case 'next-round': this._resolveModal(); break;
       case 'new-game': if (this.mp) this._mpLeaveToSetup(); else this.showSetup(); break;
+      // Dismiss the match-end sheet without starting a new game (mirrors Escoba's
+      // close-match): reveals the finished board underneath. "New game" is unchanged.
+      case 'close-match': this.el.modal.hidden = true; this.el.modal.innerHTML = ''; this.render(); break;
       // in-game menu
       case 'open-menu': this._openMenu(); break;
       case 'close-menu': case 'menu-resume': this._closeMenu(); break;

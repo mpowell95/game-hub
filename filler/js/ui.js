@@ -341,8 +341,9 @@ class FillerUI {
     overlay.className = 'fl-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
-      <div class="fl-scrim"></div>
+      <div class="fl-scrim" data-action="close-overlay"></div>
       <div class="fl-card" role="dialog" aria-modal="true" aria-label="Game over">
+        <button type="button" class="fl-x" data-action="close-overlay" aria-label="Close">&times;</button>
         <span class="fl-card-emoji">${won === true ? '🏆' : won === false ? esc(this.oppEmoji) : '🤝'}</span>
         <h3 class="fl-card-title">${title}</h3>
         <p class="fl-card-score">
