@@ -325,8 +325,11 @@
   box-shadow: 0 12px 28px rgba(20, 40, 80, 0.4);
   transition: none;   /* transforms track the pointer 1:1 — no easing lag */
 }
-/* Sets toggle: non-set cards fall back in grayscale (set cards keep meld rings) */
-.cc-card.is-dimmed { filter: grayscale(1); opacity: 0.5; }
+/* Sets toggle: non-set cards fall back a gentle notch (batch 10: full grayscale
+   + 0.5 opacity read as harsh; a lighter touch still says "doesn't count"
+   without going stark, transform/opacity/filter only so toggling never shifts
+   layout - melded cards get their own lift+bar treatment just below). */
+.cc-card.is-dimmed { filter: grayscale(0.55); opacity: 0.72; }
 /* Newly drawn card: yellow ring persists until that turn's discard resolves,
    plus a brief lift/settle animation on arrival (ring only under reduced motion). */
 .cc-card.is-new { box-shadow: 0 0 0 3px #ffce3a, 0 2px 10px rgba(0, 0, 0, 0.3); }
@@ -593,17 +596,29 @@
 .cc-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 600; }
 .cc-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 
-/* ---- CH-1: meld highlight, colorblind-safe ----
-   The old version rang each meld in a DIFFERENT color (green/blue/gold/red/
-   purple/orange) - with red and green both in the mix, that's the exact
-   thing THE LAW rule 9 exists to prevent for Matt (red-green colorblind), and
-   the likely reason "highlight sets" read badly to him even though he couldn't
-   say why. One ring color now (the shared #ffce3a attention color, same as
-   the newly-drawn-card ring elsewhere), with a small numbered badge as the
-   non-color channel that tells melds apart - no subjective redesign of the
-   dim/grayscale treatment itself, which Matt didn't specifically call out. */
+/* ---- CH-1: meld highlight, colorblind-safe (batch 10 revision) ----
+   The first pass (one ring color instead of one per meld) fixed the
+   colorblind violation but kept a "painted" look Matt still disliked on
+   sight, just couldn't name. This pass replaces the ring with the specific
+   treatment requested: GROUP, don't paint. No fill/wash on melded cards and
+   never a color per meld - instead each meld reads as a lifted cluster (a
+   slight upward offset, `transform` only so it can never cause layout shift
+   whether highlight-sets is on or off) with a single thin accent bar along
+   its own bottom edge (one shared #ffce3a, the same accent used everywhere
+   else in this hub for emphasis). `.cc-card` itself is `overflow: hidden`
+   (for its rounded corners), so the bar sits just inside the bottom edge
+   rather than truly "beneath" the card - reads the same at this size. The
+   small numbered badge stays: it's the actual non-color channel that tells
+   two simultaneous melds apart (lift + bar alone don't distinguish WHICH
+   meld a card belongs to), so it remains, just no longer paired with a ring. */
 .cc-card[class*="cc-meld-c"] {
-  box-shadow: 0 0 0 2.5px var(--cc-attn), 0 1px 3px rgba(20, 40, 80, 0.3);
+  transform: translateY(-5px);
+}
+.cc-card[class*="cc-meld-c"]::before {
+  content: '';
+  position: absolute; left: 10%; right: 10%; bottom: 3%;
+  height: 3.5%; min-height: 2px; border-radius: 2px;
+  background: var(--cc-attn); z-index: 4;
 }
 .cc-card[class*="cc-meld-c"]::after {
   content: attr(data-meld-num);
