@@ -395,6 +395,45 @@ class DotsBoxesUI {
   }
 
   // --- how to play ------------------------------------------------------------
+  //
+  // Everyone already knows "draw a line, fill the grid" -- the one genuinely
+  // non-obvious mechanic is the extra turn (completing a box lets you go
+  // again), so the sheet shows ONLY that, as a diagram, not a rules dump.
+  // Same shape as Tic Tac Toe's how-to-play sheet: one bold goal line, a
+  // diagram of the one confusing mechanic, a plain-word caption, an "X = Y"
+  // example, then the one remaining edge case as its own sentence.
+
+  /** Completing a box's 4th side (the highlighted gold edge, checked off)
+   *  claims it and hands you another move (the curved arrow to a second,
+   *  still-open box) -- shape/arrow driven, no reliance on color alone. */
+  _extraTurnDiagram() {
+    return `<svg class="db-diagram" viewBox="0 0 224 224" role="img" aria-label="Completing the fourth side of a box claims it and lets you play again">
+      <defs>
+        <marker id="db-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--db-gold)"/>
+        </marker>
+      </defs>
+      <g class="db-dg-claimed">
+        <line x1="16" y1="70" x2="104" y2="70" class="db-dg-side"/>
+        <line x1="16" y1="70" x2="16" y2="158" class="db-dg-side"/>
+        <line x1="16" y1="158" x2="104" y2="158" class="db-dg-side"/>
+        <line x1="104" y1="70" x2="104" y2="158" class="db-dg-move"/>
+        <path d="M35,118 L58,141 L92,90" class="db-dg-check"/>
+      </g>
+      <g class="db-dg-dots">
+        <circle cx="16" cy="70" r="4.5"/><circle cx="104" cy="70" r="4.5"/>
+        <circle cx="16" cy="158" r="4.5"/><circle cx="104" cy="158" r="4.5"/>
+      </g>
+      <g class="db-dg-open">
+        <rect x="148" y="44" width="60" height="60" rx="4"/>
+      </g>
+      <g class="db-dg-dots db-dg-dots-open">
+        <circle cx="148" cy="44" r="4"/><circle cx="208" cy="44" r="4"/>
+        <circle cx="148" cy="104" r="4"/><circle cx="208" cy="104" r="4"/>
+      </g>
+      <path d="M108,85 Q140,40 150,55" class="db-dg-arrow" marker-end="url(#db-dg-arrowhead)"/>
+    </svg>`;
+  }
 
   openHelp() {
     this.closeOverlays();
@@ -406,15 +445,13 @@ class DotsBoxesUI {
       <div class="db-card db-help" role="dialog" aria-modal="true" aria-label="How to play">
         <button type="button" class="db-x" data-action="close-overlay" aria-label="Close">&times;</button>
         <h3 class="db-card-title">How to play</h3>
-        <section>
-          <p>On your turn, draw one line between two dots that are next to each other.</p>
-          <p>Complete the fourth side of a box and you claim it, marked with your emoji, and you get to go again.</p>
-          <ul>
-            <li>A single turn can chain together many boxes in a row.</li>
-            <li>If your line doesn't complete a box, the turn passes.</li>
-            <li>When every line is drawn, whoever claimed the most boxes wins. A tie is possible.</li>
-          </ul>
-        </section>
+        <p class="db-help-lead">Claim the most boxes to win.</p>
+        <div class="db-diagram-wrap">${this._extraTurnDiagram()}</div>
+        <div class="db-help-lines">
+          <p class="db-help-caption">Draw the 4th side of a box to claim it.</p>
+          <p class="db-help-example">Complete a box = You play again</p>
+          <p class="db-help-rule">Otherwise, the turn passes to your opponent.</p>
+        </div>
       </div>`;
     this.root.appendChild(overlay);
   }

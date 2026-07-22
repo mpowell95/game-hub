@@ -380,7 +380,29 @@
   color: var(--db-muted);
 }
 
-.db-root .db-help { text-align: left; max-width: 400px; max-height: min(78vh, 600px); overflow-y: auto; }
-.db-root .db-help p, .db-root .db-help li { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3a4a63; }
-.db-root .db-help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
-.db-root .db-help p + p { margin-top: 8px; }
+.db-root .db-help { text-align: center; max-width: 340px; max-height: min(78vh, 600px); overflow-y: auto; }
+/* Deliberate, explicit gaps (not the title's own collapsed margin) so the
+   title -> lead -> diagram rhythm is set in one place instead of two rules
+   quietly fighting each other. Scoped to .db-help so the win/lose card's
+   title spacing is untouched. */
+.db-root .db-help .db-card-title { margin-bottom: 10px; }
+.db-root .db-help-lead { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--db-ink); white-space: nowrap; }
+
+.db-root .db-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
+.db-root .db-diagram { width: 168px; height: 168px; }
+.db-root .db-dg-side { stroke: var(--db-line-on); stroke-width: 4; stroke-linecap: round; }
+.db-root .db-dg-move { stroke: var(--db-gold); stroke-width: 7; stroke-linecap: round; }
+.db-root .db-dg-check { fill: none; stroke: var(--db-accent-deep); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.db-root .db-dg-dots circle { fill: var(--db-line-on); }
+.db-root .db-dg-dots-open circle { fill: var(--db-line-off); }
+.db-root .db-dg-open rect { fill: none; stroke: var(--db-line-off); stroke-width: 2; stroke-dasharray: 4 4; }
+.db-root .db-dg-arrow { fill: none; stroke: var(--db-gold); stroke-width: 3; stroke-linecap: round; }
+
+.db-root .db-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
+.db-root .db-help-lines p { margin: 0; }
+.db-root .db-help-caption { font-size: 13px; font-weight: 700; color: var(--db-muted); }
+/* Sized and pinned to one line against the card's real available width
+   (max-width: 340px minus its 20px side padding) -- measured, not guessed,
+   then locked with white-space: nowrap so it can never wrap mid-word. */
+.db-root .db-help-example { font-size: 12px; font-weight: 700; color: var(--db-ink); white-space: nowrap; }
+.db-root .db-help-rule { font-size: 12px; font-weight: 600; color: #3a4a63; white-space: nowrap; }
