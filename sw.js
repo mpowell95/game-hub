@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v158';
+const CACHE = 'game-hub-v160';
 
 const ASSETS = [
   './',
@@ -23,6 +23,7 @@ const ASSETS = [
   './js/game-stats-ui.js',
   './js/stats-net.js',
   './js/firebase-boot.js',
+  './js/device-report.js',
   './js/players-agg.js',
   './js/leaderboard-ui.js',
   './js/leaderboard-rank.js',

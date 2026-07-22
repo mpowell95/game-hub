@@ -58,6 +58,11 @@
     }
     .pf-section > h2 { margin: 0 0 4px; font-size: 1.06rem; font-weight: 800; }
     .pf-section > .pf-hint { margin: 0 0 14px; font-size: .82rem; color: var(--hub-muted); line-height: 1.4; }
+    /* Support identifier: legible in a screenshot, but visually inert so it reads as a build detail
+       rather than something a player is meant to act on. */
+    .pf-devid { margin: 10px 0 0; font-size: .68rem; letter-spacing: .06em; color: var(--hub-muted);
+                opacity: .55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pf-devid:empty { display: none; }
 
     .pf-label { display: block; font-size: .82rem; font-weight: 700; color: var(--hub-muted); margin-bottom: 6px; }
     .pf-input {
@@ -133,6 +138,25 @@
       cursor: pointer; touch-action: manipulation;
     }
     .pf-reset-btn:hover { background: #fbeae7; border-color: #f0ccc6; }
+    /* Device details is informational, not destructive - same shape as Reset profile
+       but the neutral ink color instead of red, so it doesn't read as dangerous. */
+    .pf-dev-btn { color: var(--hub-ink); margin-top: 0; }
+    .pf-dev-btn:hover { background: var(--hub-surface-2); border-color: var(--hub-surface-2); }
+    .pf-foot-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+    .pf-dev-card { max-width: 560px; max-height: 82vh; overflow-y: auto; }
+    .pf-dev-status {
+      font-size: .84rem; font-weight: 700; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px;
+    }
+    .pf-dev-status.pending { background: var(--hub-surface-2); color: var(--hub-muted); }
+    .pf-dev-status.ok { background: rgba(23, 138, 122, .12); color: #178A7A; }
+    .pf-dev-status.err { background: rgba(224, 83, 47, .12); color: #c2402f; }
+    .pf-dev-summary { font-size: .86rem; color: var(--hub-ink); margin: 0 0 12px; line-height: 1.5; }
+    .pf-dev-json {
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap; word-break: break-word; background: var(--hub-surface-2);
+      border-radius: 10px; padding: 12px; margin: 0; color: var(--hub-ink);
+    }
 
     /* Emoji picker modal */
     .pf-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
@@ -196,6 +220,11 @@
           <button type="button" class="pf-add pf-code-btn" id="pf-code-link-btn">Link</button>
         </div>
         <p class="pf-hint" id="pf-code-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
+        <!-- Support identifier. Deliberately quiet: it means nothing to a player, but a screenshot of
+             this screen then carries name + player code + which DEVICE recorded a given history, which
+             is the one thing that cannot be worked out remotely (a shared phone whose profile has been
+             switched looks identical to its own device record). Read-only: it never mints an id. -->
+        <p class="pf-devid" id="pf-device-id"></p>
       </section>
 
       <details class="pf-section pf-collapse">
@@ -205,7 +234,10 @@
       </details>
 
       <div class="pf-foot">
-        <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
+        <div class="pf-foot-row">
+          <button type="button" class="pf-reset-btn pf-dev-btn" id="pf-devdetails-btn">Device details</button>
+          <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
+        </div>
       </div>
     </main>
   </div>
@@ -234,9 +266,25 @@
     </div>
   </div>
 
+  <!-- Device details: gathers every identifying/device/profile record on this device,
+       shows it, and sends it to Matt automatically - nothing to copy or screenshot. -->
+  <div class="pf-modal" id="pf-devdetails" hidden>
+    <div class="pf-modal-scrim" data-dev-close></div>
+    <div class="pf-modal-card pf-dev-card" role="dialog" aria-modal="true" aria-label="Device details">
+      <div class="pf-modal-head">
+        <strong>Device details</strong>
+        <button type="button" class="pf-x" data-dev-close aria-label="Close">&times;</button>
+      </div>
+      <p class="pf-dev-status pending" id="pf-dev-status">Gathering...</p>
+      <p class="pf-dev-summary" id="pf-dev-summary"></p>
+      <pre class="pf-dev-json" id="pf-dev-json"></pre>
+    </div>
+  </div>
+
   <script type="module">
     import { loadProfile, saveProfile, clearProfile, newPlayerCode, canonicalizeCode } from '../js/profile-store.js';
     import * as net from '../js/stats-net.js';
+    import { gatherDeviceReport, uploadDeviceReport } from '../js/device-report.js';
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -291,6 +339,7 @@
       codeLinkBtn: $('#pf-code-link-btn'),
       codeMsg: $('#pf-code-msg'),
       nameMsg: $('#pf-name-msg'),
+      deviceId: $('#pf-device-id'),
     };
     const msg = (el, t) => { if (el) el.textContent = t || ''; };
     let prevName = (state.name || '').trim();
@@ -450,6 +499,48 @@
       els.reset.hidden = true;
     });
 
+    // -- Device details ------------------------------------------------------------
+    // Gathers everything identifying stored on this device (profile, stats, every
+    // game's own settings/saves, plus two Firebase reads that catch a mixed-up
+    // profile), shows it, and sends it to Matt automatically - by design there is
+    // nothing here for the person holding the phone to copy, screenshot, or relay.
+    const elsDev = {
+      btn: $('#pf-devdetails-btn'),
+      modal: $('#pf-devdetails'),
+      status: $('#pf-dev-status'),
+      summary: $('#pf-dev-summary'),
+      json: $('#pf-dev-json'),
+    };
+    const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    function setDevStatus(kind, text) {
+      elsDev.status.className = 'pf-dev-status ' + kind;
+      elsDev.status.textContent = text;
+    }
+    elsDev.modal.querySelectorAll('[data-dev-close]').forEach((n) =>
+      n.addEventListener('click', () => { elsDev.modal.hidden = true; }));
+    elsDev.btn.addEventListener('click', async () => {
+      elsDev.modal.hidden = false;
+      elsDev.summary.textContent = '';
+      elsDev.json.textContent = '';
+      setDevStatus('pending', 'Gathering device details...');
+      let report;
+      try {
+        report = await gatherDeviceReport();
+      } catch (e) {
+        setDevStatus('err', 'Could not gather device details: ' + (e && e.message ? e.message : e));
+        return;
+      }
+      const name = (report.profile && report.profile.name) || '(no name set)';
+      const code = (report.profile && report.profile.playerId) || '—';
+      elsDev.summary.innerHTML =
+        `<b>${escHtml(name)}</b> &middot; device ${escHtml(report.deviceId.slice(0, 8))} &middot; code ${escHtml(code)}`;
+      elsDev.json.textContent = JSON.stringify(report, null, 2);
+      setDevStatus('pending', 'Sending to Matt...');
+      const result = await uploadDeviceReport(report);
+      if (result.ok) setDevStatus('ok', 'Sent ✓ — nothing more to do here.');
+      else setDevStatus('err', 'Could not send (' + result.reason + ') — shown below, still saved on this device only.');
+    });
+
     // -- Initial paint -----------------------------------------------------------
     function hydrate() {
       els.youEmoji.textContent = state.emoji;
@@ -458,8 +549,19 @@
       renderColors();
       renderOpps();
     }
+    // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from
+    // game-stats.js, because that function MINTS and persists an id when none exists - a display
+    // element must never cause a write. A device with no id yet has recorded nothing, so the line
+    // simply stays empty (.pf-devid:empty is display:none).
+    function showDeviceId() {
+      let id = '';
+      try { id = localStorage.getItem('gamehub.deviceId') || ''; } catch { /* private mode: leave blank */ }
+      els.deviceId.textContent = id ? 'id ' + id.slice(0, 8) : '';
+    }
+
     ensurePlayerId();
     hydrate();
+    showDeviceId();
   </script>
 </body>
 </html>
