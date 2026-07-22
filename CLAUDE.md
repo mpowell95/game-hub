@@ -154,13 +154,15 @@ entirely — keep it current when a module is added, split, or merged.
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
-| `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle) — `tt`/`db`/`bg` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry |
-| `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows |
+| `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay; per-game tailored screens |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
+| `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
+| `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón and Escoba |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -220,6 +222,7 @@ of these came back):
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
+| `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
 | `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates |
 | `test-mp-lockstep.mjs` | headless two-engine MP lockstep for Chinchón + Escoba over a fake room; mirrors the ui.js MP glue with per-method citations — update the mirror when the glue changes. Its [KNOWN-BUG PROBE] assertions are regression tripwires for the five fixed MP defects (see "Multiplayer lockstep — invariants") |
@@ -320,6 +323,20 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg` —
+   anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
+   third is a THE LAW rule 1 bug that is invisible on a single device:
+   - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
+   - `js/game-stats-ui.js` — a screen that actually RENDERS it (stored is not enough).
+   - **`js/players-agg.js` — an explicit `else if (g === '<id>' && src.xx)` branch in
+     `aggregatePlayers`.** The cross-device combine only carries sub-counters it names, so
+     without this the game's own Stats screen reads zeroes the moment a person's second
+     device syncs, even though `total`/`byDiff` stay correct and every device's local store
+     is intact. Counters add; **bests take `Math.max`, never a sum**; a paired value (Boggle's
+     `longestWord: {word,len}`) must move as a UNIT so the text always matches its own length.
+   This was missed twice in a row (Dots and Boxes, then Boggle), both caught only by opening
+   My Stats in a browser. `players-agg.test.mjs` now has a per-game regression case for each;
+   add one for any new sub-counter.
 
 ## The games
 
@@ -336,6 +353,79 @@ When restructuring an old game, migrate it toward the reference for each axis in
 | Ball Run | in-hub `module:` | Solo endless runner: steer a rolling ball down a neon track, dodge obstacles. Three.js/WebGL renderer (`render.js`, vendored `ball-run/vendor/three.module.min.js`), fixed-timestep sim (`sim.js`/`track.js`) decoupled from rendering, `input.js` for touch/drag steering. `immersive: true`. Settings under the older dotted `ballrun.*` keys (predates the `gamehub.<game>.v1` convention; frozen per THE LAW). Results recorded via `recordBallRun` (obstacle-count score, not distance — see `js/game-stats.js`'s header comment for the metric-migration history) through a local "flight recorder" (`ballrun.runLog.v1`) that retries any run that didn't confirm reaching the shared store, on every subsequent open. Renderer teardown calls `forceContextLoss()` after `dispose()` so repeated hub↔game remounts don't leak WebGL contexts toward the browser's context cap. |
 | Tic Tac Toe | in-hub `module:` | Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate** (nine 3x3 boards nested in a 3x3 meta-board; the cell you play picks which board your opponent plays next, a resolved target board grants a free move, and a small board that fills with no winner is DEAD — counts for neither side, never playable again). Pure engine (`tic-tac-toe/js/game.js`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala (no async agent interface — a move has no multi-step resolution to pace). Three shared-vocabulary tiers (beginner/intermediate/pro) per variant: Classic Pro is **exhaustive minimax, unbeatable by design** (a perfect opponent can only draw it — intentional, not a bug); Ultimate Pro is iterative-deepening alpha-beta under a ~380ms budget (Mancala's Pro tier is the precedent for that number), with a 4-term eval (positional small-board ownership, meta-line potential, in-board two-in-a-row, and a heavily-weighted "send penalty" for handing the opponent a good board or a free move — the term that makes it play like Ultimate instead of nine unrelated games). Setup screen is Escoba's accordion pattern. Settings in `gamehub.tictactoe.v1`. Results via `recordTicTacToe(variant, difficulty, won)`: maintains the shared `total`/`byDiff` bucket (draws derived, like every other game) AND an explicit per-variant `tt.classic`/`tt.ultimate` `{played,won,lost,tied}` breakdown — `tied` is stored explicitly there (not derived) because this game is draw-heavy, especially Classic vs Pro; the Stats tab shows all six W/L/T numbers, never folded away. |
 | Dots and Boxes | in-hub `module:` | Draw an edge on a lattice of dots; complete a box's 4th side to claim it and go again, so one turn can chain-capture many boxes. Three board sizes, a setting independent of difficulty: Small (3x3 boxes), Medium (4x4, the only size where an even box count makes a tie possible), Large (5x5). Pure engine (`dots-boxes/js/game.js`, edges as `{type:'h'\|'v', r, c}`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala/Tic Tac Toe. Three shared-vocabulary tiers: Beginner takes any free box then plays randomly; Intermediate takes every free box and prefers safe moves, opening the shortest chain when forced, but never sacrifices; **Pro adds the double-cross** (`ai.js`'s `pickCaptureOrDoubleCross`) — when eating a chain/loop, it takes all but the last 2 boxes (last 4 of a loop) and plays the "hard-hearted handout" instead, trading a small sacrifice for forcing the opponent to open the next chain, UNLESS taking everything already wins the game outright on box count or it's the last region left on the board. Pro also solves the endgame exactly via alpha-beta once ≤14 edges remain (a deadline-guarded search, falling back to the heuristic on abort). Board is CSS Grid with alternating dot/cell tracks, every edge a real `<button>` expanded past its thin dot-track to a genuine 44px tap target via a sized-then-negative-margined box (verified at 375px width for all three sizes, see `dots-boxes/css/dots-boxes.css`'s board-padding comment). Colorblind-safe: claimed boxes show the owner's emoji glyph, never color alone; a capturable box gets a dashed border pulse. Setup screen is Escoba's accordion pattern. Settings in `gamehub.dotsboxes.v1`. Results via `recordDotsBoxes(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `db` breakdown (`{played,won,lost,tied,boxes,bestChain}`) — `tied` is explicit (Medium can end 8-8), `boxes` is the human's cumulative claimed-box count (additive), `bestChain` is their longest single-turn capture run ever (`Math.max` only). `isInProgress()` is the no-mid-game-resume meaning: even a Large match runs only a few minutes, so autosave wasn't worth the complexity. |
+| Boggle | in-hub `module:` | Timed word search vs AI on a 4x4 grid shaken from the real 16 classic Boggle dice (`boggle/js/game.js`'s `DICE`, shuffled into position then one random face each; random-letter boards are frequently unplayable, so this repo does not generate one). **The solver is the AI, not a separate opponent**: one exhaustive DFS against the dictionary trie (`boggle/js/solver.js`) produces the scoring word list, the end-of-round reveal, AND the opponent all from a single algorithm — `boggle/js/ai.js` has no search of its own, it just samples a difficulty-scaled slice of the solver's own output (beginner ~20% biased toward short words, intermediate ~45% unbiased, pro ~70% biased toward long/high-scoring words), so every AI word is provably a genuine board find, never invented. Dictionary is the public-domain **ENABLE** word list, ~170k words (`boggle/data/words.txt` + `boggle/data/CREDITS.md`) — **the first game in this repo to ship a large non-image data asset**; like any code file it must be in `sw.js`'s `ASSETS` precache list or the game silently breaks offline, and any future word game following this pattern should precache its own word list the same way. Fetched once, lazily, on first game start, and parsed into a trie of nested `Map`s (deliberately not a `Set` of every prefix, which would duplicate ~170k strings many times over) cached in module scope so hub navigation never re-fetches or rebuilds it (`boggle/js/dict.js`). The `Qu` tile is a single tile worth two letters and must advance the trie by both in one board step — the classic Boggle solver bug is getting this wrong, and `boggle/js/test.js` asserts it directly (a board with the Qu tile must find "QUIT" and must never produce a malformed "QIT"). A round is a shared-board timed sprint (2/3/5 minute settings, not turn-based): both sides score independently against the same board with no duplicate cancellation (real Boggle cancels words both sides found; against a solver-backed opponent that would gut the human's score every round), higher total wins, and ties are real. Settings in `gamehub.boggle.v1`. Results via `recordBoggle(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `bg` breakdown (`{played,won,lost,tied,words,bestScore,longestWord}`) — `tied` is explicit (a round can genuinely tie), `words` is the human's cumulative found-word count (additive), `bestScore` is `Math.max` only, and `longestWord` (`{word,len}`) is replaced only when strictly longer, never by a shorter word even on a winning round. `isInProgress()` is the no-mid-game-resume meaning: a live 2-5 minute countdown cannot meaningfully pause across a hub navigation. |
+
+---
+
+## The leaderboard's rating model (2026-07-22)
+
+The Leaderboards overlay ranks people by a single 0-100 **rating** instead of by absolute wins.
+The maths lives in `js/leaderboard-rank.js` (pure, headless-testable) and the cross-game difficulty
+mapping in `js/difficulty-tiers.js`; `js/leaderboard-ui.js` is DOM only.
+
+**Everything here is a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>` are
+read-only to this feature — nothing is stored, migrated or normalized, so the whole model is
+reversible by editing those two modules and nothing else. Every rule applies identically to every
+player; there is no per-player special-casing anywhere in it.
+
+- **A draw counts as a win**, for every player, in every game. Derived at render time as
+  `wins = played - lost`, never stored. Rationale: against Tic Tac Toe's Classic Pro (unbeatable by
+  design) a draw is the best achievable result. It also makes records *reconcile* — before this, a
+  stored 2W/2L/10D record rendered as W-L `2-2` beside `14` plays and a `14%` win rate, three
+  numbers that contradicted each other. Losses clamp to `played`, so W + L === Plays holds even for
+  a malformed legacy record. Draws stay visible in their own right on **My Stats** (`tt`/`db`/`bg`
+  show explicit W/L/T) — that is the surface satisfying THE LAW rule 1 for the raw breakdown.
+- **Difficulty is weighted, never filtered.** `tierOf()` maps all four live vocabularies
+  (`beginner/intermediate/pro`, `easy/medium/hard/expert`, `extrahard`, `facil/normal/dificil`) onto
+  the profile's canonical 1-3 scale plus an optional tier 4 above Pro, weighted `0.8/1.0/1.25/1.5`.
+  Unmapped buckets (`unknown`, `legacy`) count at weight 1.0 and are shown as "Unrated" — dropping
+  them would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
+  **Do not change `normDiff`** — it is on the write path; this is a separate read-path mapping.
+- **`competitiveRating` = `min(1, wilson(p, nRaw) · avgW)`.** Two distinct uses of the weight, and
+  both are load-bearing: `p = Σ(wins·w)/Σ(played·w)` captures the player's own tier MIX and stays in
+  [0,1]; `avgW = Σ(played·w)/Σ(played)` captures the difficulty they play AT. **Weighting numerator
+  and denominator alone — the obvious formulation, and what the original spec said — cancels exactly
+  for anyone who plays a single tier** (10-5 on Pro and 10-5 on Beginner both give p = 0.667), which
+  would have made difficulty a silent no-op for the most common record shape. The `avgW` factor is
+  what makes it count; `test-leaderboard-rank.mjs` pins this.
+- Wilson's `n` is the RAW play count, never the weighted one: difficulty should move your *rate*,
+  not fake your *sample size*. Under 5 rated plays is flagged `provisional` (shown, not hidden).
+- **`soloRating` is achievement relative to the family**, because Ball Run and Nuts & Bolts have no
+  loss axis (they record `played`+`won`, never `lost`) and so cannot feed a win-rate model — a
+  Wilson score on zero losses trends to 1.0 with volume, which would let someone top the board by
+  grinding. Scored against the field maximum, then passed through the SAME Wilson discount as the
+  competitive side. **Known property, deliberately left as-is:** a relative ratio is 1.0 by
+  definition for whoever holds the field max, and in a game only one person plays that is them at
+  any sample size, so a solo leader still tends to outrank a mid competitive record. Wilson removes
+  the worst of it (a 12-level Nuts & Bolts record scored a flat **100** before that, topping a
+  22-match Chinchón record) but cannot discount a rate with no variance. If this reads wrong on the
+  real family board, **the lever is a solo-axis multiplier in `soloRating()`**, not the tests.
+- The two are blended **by play count**, so a mostly-competitive player's rating is mostly their
+  competitive score and a solo-only player still gets a real, comparable number. `—` when unrated.
+- **Everyone with any recorded play is listed.** The old board filtered `comp.played > 0`, which put
+  Ball Run / Nuts & Bolts-only players on NO main screen at all — stored but invisible, rule 1.
+  Their W-L cell shows a headline achievement (`Ball Run 61`) instead of a meaningless record.
+
+UI conventions worth keeping: two fixed segments (Standings / Games), never the old plays-sorted tab
+strip — it re-ordered itself between visits and anything past the fourth tab was undiscoverable.
+Games are alphabetical by title, matching the launcher. `table-layout: fixed` with widths declared on
+`thead th` (with fixed layout the FIRST row sets the columns — putting them on `tbody td` silently
+leaves every column an equal share) plus `white-space: nowrap` is what stops `15-3` wrapping onto two
+lines. Wide boards (Nuts & Bolts, Ball Run) get `is-wide` and scroll inside `.lb-tblwrap`, never the
+page body. The difficulty-mix bar is one hue varying only in LIGHTNESS, with a text `aria-label` —
+colorblind-safe, same rule as the rest of the repo.
+
+### Head-to-head capture
+
+`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a new top-level
+`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. **Capture only — nothing displays
+it yet, and that is deliberate.** The opponent's identity only exists while the multiplayer room is
+live: Chinchón and Escoba both knew exactly who they had just played (`_mpNewState` accepted the
+room participant as a parameter and then *discarded* it) and threw it away at match end, so every MP
+match played before 2026-07-22 is permanently unrecoverable. Both now store it on `this.mp.opp`,
+refresh it from the live room in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and
+record it in `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by
+construction, and `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
 
 ---
 

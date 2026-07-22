@@ -14,7 +14,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordChinchon, deviceId } from '../../js/game-stats.js';
+import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 
@@ -813,6 +813,10 @@ class ChinchonUI {
       minusTen: this._matchMinusTens || 0,
       chinchons: this._matchChinchons || 0,
     });
+    // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
+    // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
+    const opp = this.mp && this.mp.opp;
+    if (opp) { try { recordHeadToHead('chinchon', opp, won); } catch { /* never block the result */ } }
   }
 
   /** Hidden challenge: on a qualifying human match win (exactly 1 opponent at Average or
@@ -1478,6 +1482,11 @@ class ChinchonUI {
   _mpNewState(role, code, opp) {
     return {
       role, code,
+      // Who we are playing, `{ name, avatar, deviceId }` from the room (js/net.js). This was
+      // accepted as a parameter and then discarded, so every multiplayer match forgot its
+      // opponent the moment it ended; _commitStats now records it. Null on the restore path,
+      // where _mpOnRoomUpdate backfills it from the live room.
+      opp: opp || null,
       appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
       pendingResolve: null, pendingType: null, pendingSeq: null, pendingHash: null,
       replayMode: false, recoveryAttempts: 0,
@@ -1768,6 +1777,11 @@ class ChinchonUI {
     if (this._dead || !this.mp || !room) return;
     const mp = this.mp;
     mp.lastRoomSnapshot = room;
+    // Keep the opponent's identity current from the live room (and fill it in at all on the
+    // restore/rejoin path, which starts with none). Only overwritten while the other side is
+    // actually present, so a mid-match departure leaves the last known identity intact.
+    const other = mp.role === 'host' ? room.guest : room.host;
+    if (other && other.deviceId) mp.opp = other;
 
     // An abandon (leaveRoom) sets status:'ended' with no result; a natural
     // conclusion (writeResult) sets both together -- result == null is what

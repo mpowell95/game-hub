@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v156';
+const CACHE = 'game-hub-v157';
 
 const ASSETS = [
   './',
@@ -25,6 +25,8 @@ const ASSETS = [
   './js/firebase-boot.js',
   './js/players-agg.js',
   './js/leaderboard-ui.js',
+  './js/leaderboard-rank.js',
+  './js/difficulty-tiers.js',
   './js/net.js',
   // Profile page (profile project)
   './profile/',
@@ -125,6 +127,18 @@ const ASSETS = [
   './ball-run/js/input.js',
   './ball-run/js/render.js',
   './ball-run/vendor/three.module.min.js',
+  // Boggle module (data/words.txt is the ~1.6MB dictionary the solver and human
+  // input validation both need -- it must be precached or the game is broken
+  // offline, same as any code asset)
+  './boggle/',
+  './boggle/index.html',
+  './boggle/css/boggle.css',
+  './boggle/js/ui.js',
+  './boggle/js/game.js',
+  './boggle/js/dict.js',
+  './boggle/js/solver.js',
+  './boggle/js/ai.js',
+  './boggle/data/words.txt',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,

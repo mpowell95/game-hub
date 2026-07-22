@@ -1,0 +1,230 @@
+/* boggle.css - scoped under .bg-root (hub rule: no global selectors, every
+   rule descendant-scoped -- Mancala is the reference for this discipline,
+   see root CLAUDE.md "Adding a game" checklist).
+
+   Matt is red/green colorblind: valid/invalid word feedback and the
+   selected-path tile state are never color-only. Feedback pairs its color
+   with a check/cross glyph (.bg-feedback); the path overlay pairs its
+   accent color with outline weight, a filled line, and (in the how-to-play
+   diagram) a crossed-out shape for "already used" -- never hue alone. */
+
+.bg-root {
+  --bg-accent: #1f3864;
+  --bg-accent-deep: #14233f;
+  --bg-accent-tint: rgba(31, 56, 100, 0.12);
+  --bg-ink: #16243a;
+  --bg-muted: #5b6b82;
+  --bg-bg: #f4f6fb;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #eef2f8;
+  --bg-line-off: #b9c2d4;
+  --bg-line-on: #2c3a52;
+  --bg-good: #1c7a4f;
+  --bg-good-tint: rgba(28, 122, 79, 0.14);
+  --bg-bad: #d9342b;
+  --bg-bad-tint: rgba(217, 52, 43, 0.12);
+  --bg-gold: #ffce4a;
+  display: block;
+  min-height: 100%;
+  background: var(--bg-bg);
+  color: var(--bg-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bg-root .bg-shell {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 18px 14px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* --- shared bits --------------------------------------------------------- */
+
+.bg-root .bg-title { margin: 0; text-align: center; font-size: 26px; font-weight: 900; letter-spacing: 0.01em; }
+.bg-root .bg-sub { margin: -8px 0 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--bg-muted); }
+.bg-root .bg-stats { margin: 0; text-align: center; font-size: 12.5px; font-weight: 700; color: var(--bg-muted); }
+
+.bg-root .bg-vscard {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 10px 14px; width: 100%; max-width: 380px;
+  background: var(--bg-surface); border: 1px solid var(--bg-surface-2); border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.bg-root .bg-vsside { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 84px; }
+.bg-root .bg-vsemoji { font-size: 24px; line-height: 1; }
+.bg-root .bg-vsname { font-size: 12.5px; font-weight: 800; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-root .bg-vslabel { font-size: 11px; font-weight: 900; text-transform: uppercase; color: var(--bg-muted); }
+
+.bg-root .bg-btn { appearance: none; border: 0; border-radius: 12px; font: inherit; font-weight: 800; cursor: pointer; padding: 13px 16px; font-size: 15px; }
+.bg-root .bg-btn-primary { background: var(--bg-accent); color: #fff; }
+.bg-root .bg-btn-primary:active { background: var(--bg-accent-deep); }
+.bg-root .bg-btn-primary:disabled { background: var(--bg-line-off); cursor: default; }
+.bg-root .bg-btn-ghost { background: var(--bg-surface); color: var(--bg-ink); border: 1px solid var(--bg-surface-2); }
+.bg-root .bg-btn-ghost:disabled { color: var(--bg-line-off); cursor: default; }
+.bg-root .bg-btn-small { padding: 9px 12px; font-size: 13px; }
+.bg-root .bg-link {
+  appearance: none; border: 0; background: none; color: var(--bg-accent-deep);
+  font: inherit; font-weight: 800; font-size: 13.5px; text-align: center; cursor: pointer; padding: 4px;
+}
+
+/* Segmented control, shared by every settings row. */
+.bg-root .bg-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 5px; background: var(--bg-surface-2); border-radius: 11px; padding: 4px; }
+.bg-root .bg-segbtn { appearance: none; border: 0; border-radius: 8px; padding: 9px 4px; font: inherit; font-size: 13px; font-weight: 800; color: var(--bg-muted); background: transparent; cursor: pointer; }
+.bg-root .bg-segbtn.is-selected { background: #fff; color: var(--bg-ink); box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18); }
+
+/* --- setup: accordion summary card (Escoba's pattern) -------------------- */
+
+.bg-root .bg-summary { width: 100%; max-width: 380px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06); }
+.bg-root .bg-row { border-bottom: 1px solid var(--bg-surface-2); }
+.bg-root .bg-row:last-child { border-bottom: 0; }
+.bg-root .bg-row-head { appearance: none; width: 100%; border: 0; background: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 14px; font: inherit; cursor: pointer; text-align: left; }
+.bg-root .bg-row-label { font-size: 14px; font-weight: 800; color: var(--bg-ink); }
+.bg-root .bg-row-value { font-size: 13.5px; font-weight: 700; color: var(--bg-muted); }
+.bg-root .bg-row.is-open .bg-row-value { color: var(--bg-accent-deep); }
+.bg-root .bg-row-expand { padding: 0 14px 14px; }
+.bg-root .bg-hint { margin: 8px 2px 0; font-size: 12px; line-height: 1.4; color: var(--bg-muted); }
+
+/* --- loading -------------------------------------------------------------- */
+
+.bg-root .bg-loading { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 40px 20px; text-align: center; font-size: 14px; font-weight: 700; color: var(--bg-muted); }
+.bg-root .bg-spinner { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--bg-surface-2); border-top-color: var(--bg-accent); animation: bg-spin 800ms linear infinite; }
+@media (prefers-reduced-motion: reduce) { .bg-root .bg-spinner { animation: none; border-top-color: var(--bg-surface-2); border-right-color: var(--bg-accent); } }
+@keyframes bg-spin { to { transform: rotate(360deg); } }
+
+/* --- game: top bar ---------------------------------------------------------*/
+
+.bg-root .bg-topbar { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 420px; }
+.bg-root .bg-timer { min-width: 84px; text-align: center; font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; padding: 6px 14px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); color: var(--bg-ink); }
+.bg-root .bg-timer.is-low { color: #fff; background: var(--bg-bad); border-color: var(--bg-bad); animation: bg-pulse 1000ms ease-in-out infinite; }
+.bg-root .bg-scorebox { display: flex; flex-direction: column; align-items: center; padding: 6px 12px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); min-width: 62px; }
+.bg-root .bg-scorebox b { font-size: 18px; font-weight: 900; line-height: 1.1; }
+.bg-root .bg-scorebox span { font-size: 10.5px; font-weight: 700; color: var(--bg-muted); text-transform: uppercase; }
+
+/* --- game: board ------------------------------------------------------------ */
+
+.bg-root .bg-board-wrap { position: relative; width: min(100%, 340px); aspect-ratio: 1; }
+.bg-root .bg-path-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
+.bg-root .bg-path-line { stroke: var(--bg-accent-deep); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+.bg-root .bg-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--bg-surface-2);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
+  box-sizing: border-box;
+}
+
+.bg-root .bg-tile {
+  appearance: none;
+  border: 2px solid var(--bg-line-off);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.bg-root .bg-tile:disabled { opacity: 0.42; }
+.bg-root .bg-tile:not(:disabled) { cursor: pointer; }
+.bg-root .bg-tile:not(:disabled):active { transform: scale(0.94); }
+.bg-root .bg-tile-face { font-size: clamp(18px, 6.5vw, 28px); font-weight: 900; color: var(--bg-ink); line-height: 1; }
+/* A tile mid-path (not the removable last one): distinct fill + solid
+   border, told apart from disabled-and-unreachable tiles by opacity staying
+   full (this one is CLAIMED, not just currently unreachable). */
+.bg-root .bg-tile.is-used { background: var(--bg-accent-tint); border-color: var(--bg-accent); opacity: 1; }
+.bg-root .bg-tile.is-used .bg-tile-face { color: var(--bg-accent-deep); }
+/* The last tile in the path: same fill as is-used PLUS a heavier, dashed
+   outline -- shape signals "tap again to remove", not color alone. */
+.bg-root .bg-tile.is-last { border-width: 3px; border-style: dashed; border-color: var(--bg-accent-deep); }
+.bg-root .bg-tile:focus-visible { outline: 2px solid var(--bg-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .bg-root .bg-tile { transition: none; } .bg-root .bg-tile:not(:disabled):active { transform: none; } }
+
+/* --- game: word bar + feedback ---------------------------------------------- */
+
+.bg-root .bg-wordbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; max-width: 380px; padding: 10px 14px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); border-radius: 14px; }
+.bg-root .bg-wordbar-text { font-size: 16px; font-weight: 900; letter-spacing: 0.03em; color: var(--bg-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-root .bg-wordbar-actions { display: flex; gap: 6px; flex: none; }
+
+.bg-root .bg-feedback { min-height: 18px; margin: -6px 0 0; font-size: 12.5px; font-weight: 800; text-align: center; }
+.bg-root .bg-feedback.is-good { color: var(--bg-good); }
+.bg-root .bg-feedback.is-bad { color: var(--bg-bad); }
+
+/* --- game: found words list --------------------------------------------- */
+
+.bg-root .bg-found { width: 100%; max-width: 380px; background: var(--bg-surface); border: 1px solid var(--bg-surface-2); border-radius: 14px; padding: 10px 14px 12px; }
+.bg-root .bg-found-h { margin: 0 0 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--bg-muted); }
+.bg-root .bg-found-list { list-style: none; margin: 0; padding: 0; max-height: 130px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.bg-root .bg-found-list li { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; font-weight: 700; padding: 3px 2px; }
+.bg-root .bg-found-list li b { font-variant-numeric: tabular-nums; color: var(--bg-accent-deep); }
+.bg-root .bg-found-empty { color: var(--bg-muted); font-weight: 600; }
+
+/* --- actions / overlays ------------------------------------------------- */
+
+.bg-root .bg-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+
+.bg-root .bg-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px; }
+.bg-root .bg-scrim { position: absolute; inset: 0; background: rgba(16, 26, 44, 0.55); }
+.bg-root .bg-card { position: relative; background: var(--bg-surface); border-radius: 18px; padding: 22px 20px; max-width: 340px; width: 100%; text-align: center; box-shadow: 0 18px 44px rgba(16, 26, 44, 0.38); max-height: min(84vh, 640px); overflow-y: auto; }
+.bg-root .bg-card-emoji { font-size: 40px; line-height: 1; display: block; }
+.bg-root .bg-card-title { margin: 8px 0 4px; font-size: 22px; font-weight: 900; }
+.bg-root .bg-card-sub { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--bg-muted); }
+.bg-root .bg-card-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+.bg-root .bg-x { position: absolute; top: 8px; right: 10px; appearance: none; border: 0; background: none; font-size: 24px; line-height: 1; cursor: pointer; color: var(--bg-muted); }
+
+.bg-root .bg-end-tallies { display: flex; justify-content: center; gap: 8px; margin: 4px 0 12px; }
+.bg-root .bg-tally { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 6px; background: var(--bg-surface-2); border-radius: 10px; }
+.bg-root .bg-tally b { font-size: 17px; font-weight: 900; }
+.bg-root .bg-tally span { font-size: 10px; font-weight: 700; color: var(--bg-muted); text-align: center; }
+
+.bg-root .bg-solve-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--bg-surface-2); }
+.bg-root .bg-solve-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--bg-surface-2); font-size: 13px; font-weight: 700; }
+.bg-root .bg-solve-word { flex: 1; text-align: left; }
+.bg-root .bg-solve-pts { font-variant-numeric: tabular-nums; color: var(--bg-muted); min-width: 18px; text-align: right; }
+.bg-root .bg-solve-owners { min-width: 30px; text-align: right; font-size: 14px; }
+.bg-root .bg-solve-row.is-mine { background: var(--bg-accent-tint); }
+.bg-root .bg-solve-row.is-theirs.is-mine { background: linear-gradient(90deg, var(--bg-accent-tint), var(--bg-good-tint)); }
+.bg-root .bg-solve-row.is-theirs:not(.is-mine) { background: var(--bg-good-tint); }
+
+/* --- how to play ---------------------------------------------------------- */
+
+.bg-root .bg-help { text-align: center; max-width: 340px; }
+.bg-root .bg-help .bg-card-title { margin-bottom: 10px; }
+.bg-root .bg-help-lead { margin: 0; font-size: 11.5px; font-weight: 800; color: var(--bg-ink); white-space: nowrap; }
+
+.bg-root .bg-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
+.bg-root .bg-diagram { width: 168px; height: 168px; }
+.bg-root .bg-dg-grid rect { fill: none; stroke: var(--bg-line-off); stroke-width: 2; }
+.bg-root .bg-dg-step { fill: var(--bg-accent-tint); stroke: var(--bg-accent); stroke-width: 2; }
+.bg-root .bg-dg-used { fill: var(--bg-surface-2); stroke: var(--bg-muted); stroke-width: 2; stroke-dasharray: 4 4; }
+.bg-root .bg-dg-cross { stroke: var(--bg-bad); stroke-width: 3; stroke-linecap: round; }
+.bg-root .bg-dg-path { stroke: var(--bg-accent-deep); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+
+.bg-root .bg-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
+.bg-root .bg-help-lines p { margin: 0; }
+.bg-root .bg-help-caption { font-size: 12.5px; font-weight: 700; color: var(--bg-muted); }
+.bg-root .bg-help-example { font-size: 12px; font-weight: 700; color: var(--bg-ink); white-space: nowrap; }
+.bg-root .bg-help-list { list-style: disc; text-align: left; margin: 4px 0 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 6px; }
+.bg-root .bg-help-list li { font-size: 12px; font-weight: 600; color: #3a4a63; }
+
+@keyframes bg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .bg-root .bg-timer.is-low { animation: none; }
+}
+
+@media (max-width: 400px) {
+  .bg-root .bg-tile-face { font-size: clamp(16px, 8vw, 26px); }
+}

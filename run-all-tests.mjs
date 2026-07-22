@@ -25,8 +25,10 @@ const SUITES = [
   { file: 'nuts-bolts/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },
+  { file: 'boggle/js/test.js' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
+  { file: 'test-leaderboard-rank.mjs' },
   { file: 'favorites.test.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // tripwire suites (integration layer)

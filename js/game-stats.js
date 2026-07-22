@@ -64,6 +64,16 @@
 //                                                   // `bestChain` is the longest single-turn capture run the
 //                                                   // human has ever made (Math.max only, per THE LAW rule 2 --
 //                                                   // never overwritten with a lower value); see recordDotsBoxes
+//       boggle: {
+//         total, byDiff,
+//         bg: { played, won, lost, tied, words, bestScore, longestWord: { word, len } } },  // a timed round
+//                                                   // scored against the AI's own found-word total, so it CAN
+//                                                   // tie -- `tied` is stored EXPLICITLY, same reasoning as
+//                                                   // tictactoe/dotsboxes above; `words` is the human's
+//                                                   // cumulative found-word count (additive); `bestScore` and
+//                                                   // `longestWord` are bests (Math.max / longer-only, per THE
+//                                                   // LAW rule 2 -- never overwritten with a lower value); see
+//                                                   // recordBoggle
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -71,7 +81,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
@@ -210,6 +220,18 @@ function ensureDb(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'boxes', 'bestChain']) if (!Number.isFinite(g.db[k])) g.db[k] = 0;
 }
 
+/** Boggle: the per-round W/L/Tie counters plus the human's cumulative found-word
+ *  count and two bests (highest score, longest word). Scored against the AI's own
+ *  found-word total, so it CAN tie -- `tied` is tracked explicitly, same reasoning
+ *  as ensureTt/ensureDb above. */
+function ensureBg(g) {
+  if (!g.bg || typeof g.bg !== 'object') g.bg = { played: 0, won: 0, lost: 0, tied: 0, words: 0, bestScore: 0, longestWord: { word: '', len: 0 } };
+  for (const k of ['played', 'won', 'lost', 'tied', 'words', 'bestScore']) if (!Number.isFinite(g.bg[k])) g.bg[k] = 0;
+  if (!g.bg.longestWord || typeof g.bg.longestWord !== 'object') g.bg.longestWord = { word: '', len: 0 };
+  if (typeof g.bg.longestWord.word !== 'string') g.bg.longestWord.word = '';
+  if (!Number.isFinite(g.bg.longestWord.len)) g.bg.longestWord.len = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -227,6 +249,7 @@ function normalize(raw) {
   ensureBr(st.games.ballrun);
   ensureTt(st.games.tictactoe);
   ensureDb(st.games.dotsboxes);
+  ensureBg(st.games.boggle);
   return st;
 }
 
@@ -484,8 +507,73 @@ export function recordDotsBoxes(difficulty, won, extras) {
   return st;
 }
 
+/** Boggle: record a finished round. Maintains total/byDiff (as recordResult)
+ *  AND the `bg` breakdown. `won` is true, false, or null for a tie (scored
+ *  against the AI's own found-word total, so it CAN tie) -- a tie increments
+ *  `played` and `tied` only, matching recordTicTacToe/recordDotsBoxes.
+ *  `extras` = { words, score, longestWord: { word, len } } for THIS round:
+ *  `words` (the human's found-word count) is added to the running total;
+ *  `bestScore` only ever raises the stored best (Math.max), and
+ *  `longestWord` is replaced only when this round's word is STRICTLY longer
+ *  than the stored one, per THE LAW rule 2. Additive; never overwrites. */
+export function recordBoggle(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.boggle;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureBg(g);
+  const e = extras || {};
+  g.bg.played += 1;
+  if (won === true) g.bg.won += 1;
+  else if (won === false) g.bg.lost += 1;
+  else g.bg.tied += 1;
+  g.bg.words += Math.max(0, e.words | 0);
+  g.bg.bestScore = Math.max(g.bg.bestScore | 0, e.score | 0);
+  const lw = e.longestWord;
+  if (lw && typeof lw.word === 'string' && (lw.len | 0) > (g.bg.longestWord.len | 0)) {
+    g.bg.longestWord = { word: lw.word, len: lw.len | 0 };
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
+ *
+ *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
+ *
+ *  A NEW top-level key holding nothing but incrementing counters, so it needs no migration and
+ *  cannot disturb any existing shape (THE LAW rules 2 and 5 are satisfied by construction).
+ *  stats-net.js mirrors `gamehub.stats` wholesale, so it syncs with no change there either.
+ *
+ *  It is written BEFORE there is a screen for it because the opponent's identity only exists while
+ *  the multiplayer room is live: Chinchón and Escoba both know exactly who they just played, and
+ *  both used to throw it away at match end. A display can be added whenever; matches played
+ *  without this are permanently unrecoverable.
+ *
+ *  `opponent` is a room participant, `{ name, avatar, deviceId }` (js/net.js). `won` is true/false;
+ *  anything else records the encounter without crediting either side. */
+export function recordHeadToHead(gameId, opponent, won) {
+  if (GAMES.indexOf(gameId) < 0) return null;
+  const oppId = String((opponent && opponent.deviceId) || '').trim();
+  if (!oppId || oppId === deviceId()) return null;         // no self-play rows
+  const st = loadStats();
+  if (!st.h2h || typeof st.h2h !== 'object') st.h2h = {};
+  const perGame = st.h2h[gameId] || (st.h2h[gameId] = {});
+  const row = perGame[oppId] || (perGame[oppId] = { name: '', w: 0, l: 0 });
+  if (!Number.isFinite(row.w)) row.w = 0;
+  if (!Number.isFinite(row.l)) row.l = 0;
+  const name = String((opponent && opponent.name) || '').trim();
+  if (name) row.name = name;                               // keep the freshest name seen
+  if (won === true) row.w += 1;
+  else if (won === false) row.l += 1;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
-  recordBallRun, recordTicTacToe, recordDotsBoxes, GAMES, STATS_KEY, DEVICE_KEY,
+  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordHeadToHead,
+  GAMES, STATS_KEY, DEVICE_KEY,
 };

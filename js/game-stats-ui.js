@@ -24,6 +24,7 @@ const TABS = [
   { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
   { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
   { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#16243a' },
+  { id: 'boggle', label: 'Boggle', accent: '#1f3864' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -263,6 +264,29 @@ function dotsBoxesScreen(rec) {
     </div>`;
 }
 
+/** Boggle: the standard record-vs-AI screen (recordScreen gives Won/Lost/
+ *  Played/Win rate + the by-difficulty table) plus Tied shown explicitly
+ *  (a round is scored against the AI's own found-word total, so it CAN tie,
+ *  same reasoning as dotsBoxesScreen/ticTacToeScreen above) and the human's
+ *  cumulative words found, best score, and longest word ever -- the
+ *  longest word is shown by name, not just its length, since it's the most
+ *  personal stat in the game and folding it away would read as deleted data
+ *  per THE LAW rule 1. */
+function boggleScreen(rec) {
+  const total = (rec && rec.total) || { played: 0 };
+  if (!(total.played | 0)) return emptyState('Boggle');
+  const bg = (rec && rec.bg) || { tied: 0, words: 0, bestScore: 0, longestWord: { word: '', len: 0 } };
+  const lw = bg.longestWord || { word: '', len: 0 };
+  const longestDisplay = lw.word ? `${lw.word} (${lw.len | 0})` : '—';
+  return recordScreen('boggle', rec) + `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${bg.tied | 0}</b><span>Tied</span></div>
+      <div class="gs-tally"><b>${bg.bestScore | 0}</b><span>Best score</span></div>
+      <div class="gs-tally"><b>${bg.words | 0}</b><span>Words found</span></div>
+      <div class="gs-tally"><b>${esc(longestDisplay)}</b><span>Longest word</span></div>
+    </div>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -272,6 +296,7 @@ function screenFor(id, st) {
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);
   if (id === 'dotsboxes') return dotsBoxesScreen(rec);
+  if (id === 'boggle') return boggleScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

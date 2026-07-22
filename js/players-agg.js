@@ -150,6 +150,34 @@ export function aggregatePlayers(all) {
           const dv = dst.tt[v];
           dv.played += sv.played | 0; dv.won += sv.won | 0; dv.lost += sv.lost | 0; dv.tied += sv.tied | 0;
         }
+      } else if (g === 'dotsboxes' && src.db) {
+        // Same hazard again (found while adding Boggle's `bg` below, 2026-07-22): Dots and
+        // Boxes' Stats screen reads `db` for ties, cumulative boxes claimed and the best
+        // single-turn chain, so without this branch all three blanked out as soon as a second
+        // device synced -- stored on every device, invisible on the combined screen.
+        // Counters add; bestChain is a best, so it takes the max (never the sum).
+        if (!dst.db) dst.db = { played: 0, won: 0, lost: 0, tied: 0, boxes: 0, bestChain: 0 };
+        dst.db.played += src.db.played | 0; dst.db.won += src.db.won | 0;
+        dst.db.lost += src.db.lost | 0; dst.db.tied += src.db.tied | 0;
+        dst.db.boxes += src.db.boxes | 0;
+        dst.db.bestChain = Math.max(dst.db.bestChain | 0, src.db.bestChain | 0);
+      } else if (g === 'boggle' && src.bg) {
+        // Same THE-LAW-rule-1 hazard as tictactoe's tt above: `total` aggregates fine on its
+        // own, but Boggle's Stats screen reads `bg` for ties, best score, words found and the
+        // longest word, so dropping it here would blank all four the moment a second device
+        // syncs -- data present in every device's own store, invisible on the combined screen.
+        // Counters add; bests take the max across devices, and the longest word carries its
+        // TEXT from whichever device actually holds the longest one (a max on `len` alone
+        // would keep a length with the wrong word next to it).
+        if (!dst.bg) dst.bg = { played: 0, won: 0, lost: 0, tied: 0, words: 0, bestScore: 0, longestWord: { word: '', len: 0 } };
+        dst.bg.played += src.bg.played | 0; dst.bg.won += src.bg.won | 0;
+        dst.bg.lost += src.bg.lost | 0; dst.bg.tied += src.bg.tied | 0;
+        dst.bg.words += src.bg.words | 0;
+        dst.bg.bestScore = Math.max(dst.bg.bestScore | 0, src.bg.bestScore | 0);
+        const slw = src.bg.longestWord || {};
+        if ((slw.len | 0) > (dst.bg.longestWord.len | 0)) {
+          dst.bg.longestWord = { word: typeof slw.word === 'string' ? slw.word : '', len: slw.len | 0 };
+        }
       }
     }
   }

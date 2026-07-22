@@ -414,6 +414,58 @@ const GAMES = [
             </g>
           </svg>`,
   },
+  {
+    id: 'boggle',
+    title: 'Boggle',
+    blurb: 'Shake the grid, race the clock. Link touching letters into as many words as you can.',
+    module: '../boggle/js/ui.js',
+    accent: '#1f3864',
+    // A 4x4 letter grid is inherently square, so rather than stretch it (which
+    // would misrepresent the board), the grid sits at FULL tile height on the
+    // left and the traced word spills out of it to the right as loose,
+    // slightly-rotated tiles -- the horizontal space carries the word leaving
+    // the board, which is the one thing this game is actually about. Grid is
+    // 16px tiles on a 3px gap (73x73, vertically centred); the gold path is
+    // the same --bg-gold the game itself uses, and it takes a DIAGONAL step
+    // (B->O) before running right, since diagonal adjacency is Boggle's
+    // non-obvious rule. Reads B-O-G-G-L-E across the frame.
+    art: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1f3864"/>
+            <g fill="rgba(255,255,255,0.13)">
+              <rect x="8" y="8" width="16" height="16" rx="3.5"/><rect x="27" y="8" width="16" height="16" rx="3.5"/>
+              <rect x="46" y="8" width="16" height="16" rx="3.5"/><rect x="65" y="8" width="16" height="16" rx="3.5"/>
+              <rect x="8" y="27" width="16" height="16" rx="3.5"/><rect x="27" y="27" width="16" height="16" rx="3.5"/>
+              <rect x="46" y="27" width="16" height="16" rx="3.5"/><rect x="65" y="27" width="16" height="16" rx="3.5"/>
+              <rect x="8" y="46" width="16" height="16" rx="3.5"/><rect x="27" y="46" width="16" height="16" rx="3.5"/>
+              <rect x="46" y="46" width="16" height="16" rx="3.5"/><rect x="65" y="46" width="16" height="16" rx="3.5"/>
+              <rect x="8" y="65" width="16" height="16" rx="3.5"/><rect x="27" y="65" width="16" height="16" rx="3.5"/>
+              <rect x="46" y="65" width="16" height="16" rx="3.5"/><rect x="65" y="65" width="16" height="16" rx="3.5"/>
+            </g>
+            <path d="M16,35 L35,54 L54,35 L97,42 L120,36 L143,30" stroke="#ffce4a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <g fill="#ffffff">
+              <rect x="8" y="27" width="16" height="16" rx="3.5"/>
+              <rect x="27" y="46" width="16" height="16" rx="3.5"/>
+              <rect x="46" y="27" width="16" height="16" rx="3.5"/>
+            </g>
+            <g fill="#1f3864" font-family="system-ui, sans-serif" font-weight="900" font-size="11" text-anchor="middle">
+              <text x="16" y="39">B</text>
+              <text x="35" y="58">O</text>
+              <text x="54" y="39">G</text>
+            </g>
+            <g transform="rotate(-7 97 42)">
+              <rect x="88" y="33" width="18" height="18" rx="4" fill="#ffffff"/>
+              <text x="97" y="46.5" fill="#1f3864" font-family="system-ui, sans-serif" font-weight="900" font-size="12" text-anchor="middle">G</text>
+            </g>
+            <g transform="rotate(6 120 36)">
+              <rect x="111" y="27" width="18" height="18" rx="4" fill="#ffffff"/>
+              <text x="120" y="40.5" fill="#1f3864" font-family="system-ui, sans-serif" font-weight="900" font-size="12" text-anchor="middle">L</text>
+            </g>
+            <g transform="rotate(-5 143 30)">
+              <rect x="134" y="21" width="18" height="18" rx="4" fill="#ffffff"/>
+              <text x="143" y="34.5" fill="#1f3864" font-family="system-ui, sans-serif" font-weight="900" font-size="12" text-anchor="middle">E</text>
+            </g>
+          </svg>`,
+  },
 ];
 
 class Hub {

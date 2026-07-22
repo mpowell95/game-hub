@@ -109,6 +109,60 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('no data loss: Σ played preserved', outPlayed, inPlayed);
 }
 
+// ---- Dots and Boxes' db sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// Regression guard for the same defect as the tt/bg cases: `db` carries ties, cumulative
+// boxes claimed and the best single-turn chain, all of which the Stats screen reads and
+// all of which blanked out on a second synced device before players-agg carried db forward.
+{
+  const all = {
+    d1: rec({ playerId: 'DB111', name: 'Box' }, {
+      dotsboxes: {
+        total: { played: 4, won: 3, lost: 0 },
+        db: { played: 4, won: 3, lost: 0, tied: 1, boxes: 40, bestChain: 7 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'db111', name: 'Box' }, {
+      dotsboxes: {
+        total: { played: 2, won: 0, lost: 2 },
+        db: { played: 2, won: 0, lost: 2, tied: 0, boxes: 11, bestChain: 3 },
+      },
+    }, 200),
+  };
+  const db = aggregatePlayers(all)[0].games.dotsboxes.db;
+  eq('dotsboxes: W/L/T counters summed across devices', [db.played, db.won, db.lost, db.tied], [6, 3, 2, 1]);
+  eq('dotsboxes: boxes claimed summed', db.boxes, 51);
+  eq('dotsboxes: bestChain is the max, not the sum', db.bestChain, 7);
+}
+
+// ---- Boggle's bg sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// `total` aggregating correctly is NOT enough: the Boggle Stats screen reads `bg` for
+// ties, best score, words found and the longest word. Before players-agg carried `bg`
+// forward, all four blanked out the moment a second device synced -- present in every
+// device's own store, invisible on the combined screen. Same hazard the tt branch
+// documents. Counters add, bests take the max, and the longest word keeps its TEXT
+// paired with its own length (never a max on `len` next to a different device's word).
+{
+  const all = {
+    d1: rec({ playerId: 'BG111', name: 'Word' }, {
+      boggle: {
+        total: { played: 3, won: 2, lost: 0 },
+        bg: { played: 3, won: 2, lost: 0, tied: 1, words: 12, bestScore: 30, longestWord: { word: 'STARTER', len: 7 } },
+      },
+    }, 100),
+    d2: rec({ playerId: 'bg111', name: 'Word' }, {
+      boggle: {
+        total: { played: 2, won: 0, lost: 2 },
+        bg: { played: 2, won: 0, lost: 2, tied: 0, words: 5, bestScore: 44, longestWord: { word: 'QUITTERS', len: 8 } },
+      },
+    }, 200),
+  };
+  const bg = aggregatePlayers(all)[0].games.boggle.bg;
+  eq('boggle: W/L/T counters summed across devices', [bg.played, bg.won, bg.lost, bg.tied], [5, 2, 2, 1]);
+  eq('boggle: words found summed', bg.words, 17);
+  eq('boggle: bestScore is the max, not the sum or the last one', bg.bestScore, 44);
+  eq('boggle: longest word keeps its own text and length together', bg.longestWord, { word: 'QUITTERS', len: 8 });
+}
+
 // ---- aggregateForViewer: fresh device with my code shows my other devices' history ----
 {
   const all = { other: rec({ playerId: 'ME777', name: 'Me' }, { business: comp(9, 6, 3) }, 100) };
