@@ -87,6 +87,11 @@ class ConnectFourUI {
     this.humanHasMoved = false;
     this.showBestMoves = false;
     this.hintReqId = 0;
+    // C4-2/C4-3: one shared disqualification flag, reset per game (startGame()).
+    // Set by a confirmed undo or by confirming "Show best moves" - either taints
+    // the same flag, so the game records no W/L when it ends (see the
+    // recordConnect4 call). Never re-prompts again once true for this game.
+    this._statsDisqualified = false;
     this.worker = null;
     this.workerCallbacks = new Map(); // request id -> { resolve, reject }
     this.requestId = 0;
@@ -276,6 +281,17 @@ class ConnectFourUI {
             <button type="button" class="cf-btn cf-btn-primary" data-role="menu-resume">Resume game</button>
           </div>
         </div>
+
+        <div class="cf-menu" data-role="stats-confirm" hidden>
+          <div class="cf-menu-scrim" data-role="stats-confirm-cancel"></div>
+          <div class="cf-menu-card" role="dialog" aria-modal="true" aria-label="Confirm">
+            <p class="cf-menu-note" data-role="stats-confirm-msg"></p>
+            <div class="cf-menu-actions">
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="stats-confirm-cancel-btn">Cancel</button>
+              <button type="button" class="cf-btn cf-btn-primary" data-role="stats-confirm-ok">Confirm</button>
+            </div>
+          </div>
+        </div>
       </div>`;
 
     const root = this.container.querySelector('.cf-root');
@@ -298,6 +314,8 @@ class ConnectFourUI {
       first: q('[data-role="first"]'),
       menuPanel: q('[data-role="menu-panel"]'),
       hintToggle: q('[data-role="hint-toggle"]'),
+      statsConfirm: q('[data-role="stats-confirm"]'),
+      statsConfirmMsg: q('[data-role="stats-confirm-msg"]'),
     };
 
     // Setup-screen wiring.
@@ -316,7 +334,7 @@ class ConnectFourUI {
     root.querySelector('[data-role="change"]').addEventListener('click', () => this.showSetup());
 
     // In-game controls.
-    this.el.undo.addEventListener('click', () => this.undo());
+    this.el.undo.addEventListener('click', () => this.requestUndo());
     root.querySelector('[data-role="menu"]').addEventListener('click', () => this.openMenu());
 
     // Menu panel. Restart/Quit abandon the game, so they confirm-on-second-tap
@@ -325,10 +343,13 @@ class ConnectFourUI {
     const quitBtn = root.querySelector('[data-role="menu-quit"]');
     root.querySelector('[data-role="menu-resume"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-scrim"]').addEventListener('click', () => this.closeMenu());
-    root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.undo(); });
+    root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.requestUndo(); });
     restartBtn.addEventListener('click', () => this.confirmDestructive(restartBtn, () => { this.closeMenu(); this.startGame(); }));
     quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { this.closeMenu(); this.showSetup(); }));
     this.el.hintToggle.addEventListener('change', () => this.onHintToggle());
+    root.querySelector('[data-role="stats-confirm-cancel"]').addEventListener('click', () => this.cancelStatsConfirm());
+    root.querySelector('[data-role="stats-confirm-cancel-btn"]').addEventListener('click', () => this.cancelStatsConfirm());
+    root.querySelector('[data-role="stats-confirm-ok"]').addEventListener('click', () => this.confirmStatsConfirm());
 
     // Board interaction (delegated).
     this.el.board.addEventListener('click', this._onBoardClick);
@@ -424,6 +445,12 @@ class ConnectFourUI {
     this.busy = false;
     this.hoverCol = -1;
     this.humanHasMoved = false;
+    // C4-2/C4-3: fresh game, fresh flag - except "Show best moves" persists
+    // across rematches, and per THE LAW rule 2 (Matt's stated simplest rule),
+    // hints on at ANY point in the game disqualifies it, including already
+    // being on when it starts. No re-prompt here: the confirm already
+    // happened whenever it was first turned on.
+    this._statsDisqualified = this.showBestMoves;
 
     // Reset board visuals.
     this.buildBoardCells();
@@ -484,8 +511,25 @@ class ConnectFourUI {
     }
   }
 
+  /** C4-3: turning "Show best moves" ON taints stats the same way an undo does
+   *  (one shared flag - see _statsDisqualified). Turning it off, or turning it
+   *  on when the game is already disqualified, needs no prompt. Declining
+   *  reverts the checkbox instead of silently leaving it checked but inert. */
   onHintToggle() {
-    this.showBestMoves = this.el.hintToggle.checked;
+    const turningOn = this.el.hintToggle.checked && !this.showBestMoves;
+    if (turningOn && this.game && !this._statsDisqualified) {
+      this.showStatsConfirm(
+        "Using Show Best Moves means this game won't count towards your stats. Turn it on anyway?",
+        () => { this._statsDisqualified = true; this.applyHintToggle(true); },
+      );
+      return; // checkbox stays checked visually until confirmed/reverted
+    }
+    this.applyHintToggle(this.el.hintToggle.checked);
+  }
+
+  applyHintToggle(on) {
+    this.showBestMoves = on;
+    this.el.hintToggle.checked = on;
     if (this.showBestMoves) { this.clearEvalRow(); this.refreshHints(); }
     else { this.hideHints(); this.clearEvalRow(); }
   }
@@ -505,6 +549,10 @@ class ConnectFourUI {
 
   onKeyDown(e) {
     if (this.el.game.hidden) return;
+    if (!this.el.statsConfirm.hidden) {     // confirm open: Esc cancels, ignore game keys
+      if (e.key === 'Escape') this.cancelStatsConfirm();
+      return;
+    }
     if (!this.el.menuPanel.hidden) {       // menu open: Esc closes, ignore game keys
       if (e.key === 'Escape') this.closeMenu();
       return;
@@ -675,7 +723,9 @@ class ConnectFourUI {
     this.el.dot.classList.toggle('p1', dot === 'p1');
     this.el.dot.classList.toggle('p2', dot === 'p2');
     this.el.status.textContent = msg;
-    this.el.resultMsg.textContent = msg;
+    // C4-2/C4-3: say so on the result banner itself when this game won't be
+    // recorded - a silent skip would just look like the stats are broken.
+    this.el.resultMsg.textContent = msg + (this._statsDisqualified ? ' (not counted towards stats)' : '');
     this.el.result.hidden = false;
     this.updateUndoState(); // can still take back the final move
     // Bring the Rematch / Change-settings actions into view on tall layouts.
@@ -685,11 +735,16 @@ class ConnectFourUI {
     // game object so a stray re-entry can't double-count. this.difficulty is the player's pick
     // (never the hazing's forced level). firstMove tracks WHO MOVED FIRST (humanPlayer === PLAYER_ONE).
     // A draw records as played-only (won = null), which the stats grid leaves out (W/L only).
+    // C4-2/C4-3: a confirmed undo or "show best moves" this game taints
+    // _statsDisqualified - skip recordConnect4 entirely so the game leaves no
+    // W/L trace (not even a loss), same as never having recorded it.
     if (this.game && !this.game._statsRecorded) {
       this.game._statsRecorded = true;
-      const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
-      const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-      recordConnect4(this.difficulty, firstMove, won);
+      if (!this._statsDisqualified) {
+        const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
+        const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
+        recordConnect4(this.difficulty, firstMove, won);
+      }
     }
 
     if (this.challengeLive) {
@@ -717,6 +772,38 @@ class ConnectFourUI {
   /** True if there's a human move to take back (and we're not mid-think). */
   canUndo() {
     return !this.challengeLive && !!this.game && !this.busy && this.humanHasMoved;
+  }
+
+  /** C4-2: the FIRST undo in a game asks for confirmation (it taints stats);
+   *  once disqualified, later undos in the same game just undo directly. */
+  requestUndo() {
+    if (!this.canUndo()) return;
+    if (this._statsDisqualified) { this.undo(); return; }
+    this.showStatsConfirm(
+      "Undoing a move means this game won't count towards your stats. Undo anyway?",
+      () => { this._statsDisqualified = true; this.undo(); },
+    );
+  }
+
+  /** Shared confirm dialog for C4-2/C4-3 - reuses the menu's scrim/card look. */
+  showStatsConfirm(message, onConfirm) {
+    this._statsConfirmAction = onConfirm;
+    this.el.statsConfirmMsg.textContent = message;
+    this.el.statsConfirm.hidden = false;
+  }
+
+  cancelStatsConfirm() {
+    this._statsConfirmAction = null;
+    this.el.statsConfirm.hidden = true;
+    // Reverting a declined hint-toggle confirm needs the checkbox put back.
+    this.el.hintToggle.checked = this.showBestMoves;
+  }
+
+  confirmStatsConfirm() {
+    const action = this._statsConfirmAction;
+    this._statsConfirmAction = null;
+    this.el.statsConfirm.hidden = true;
+    if (action) action();
   }
 
   /**
@@ -816,6 +903,16 @@ class ConnectFourUI {
     if (on) {
       this.el.evalCaption.innerHTML =
         'Analyzing<span class="cf-dots"><i>.</i><i>.</i><i>.</i></span>';
+      // C4-1: refreshHints() keeps the PREVIOUS position's star/box visible
+      // (dimmed via is-stale) while a fresh analysis runs, so nothing flickers
+      // between moves - but that star is the answer to the last position, not
+      // the one being analyzed now. Suppress just the star/box look while
+      // "Analyzing..." is showing; renderEvalRow() rebuilds the row fresh once
+      // the real result lands, so nothing needs restoring here.
+      for (const cell of this.el.evalRow.querySelectorAll('.cf-eval.is-best, .cf-eval.is-pick')) {
+        cell.classList.remove('is-best', 'is-pick');
+        if (cell.textContent === '★') { cell.textContent = '·'; cell.classList.add('is-faint'); }
+      }
     }
     // When off, the next renderEvalRow() writes the real caption.
   }
