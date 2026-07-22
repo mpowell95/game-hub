@@ -23,7 +23,7 @@ import {
 
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
-function edgeDrawn(s, e) { return e.type === 'h' ? s.hEdges[e.r][e.c] : s.vEdges[e.r][e.c]; }
+function edgeDrawn(s, e) { return (e.type === 'h' ? s.hEdges[e.r][e.c] : s.vEdges[e.r][e.c]) !== null; }
 
 /** Legal moves that complete (capture) at least one box right now. */
 function captureMoves(state, moves) {

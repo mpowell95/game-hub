@@ -2,11 +2,18 @@
    every rule descendant-scoped -- Mancala is the reference for this
    discipline, see root CLAUDE.md "Adding a game" checklist).
 
-   Matt is red/green colorblind: box ownership is carried by the owner's
-   EMOJI glyph, never by fill color alone (the tint below is decoration on
-   top of that). Drawn vs undrawn edges are told apart by thickness + opacity,
-   never hue. A capturable box (one line away from being claimed) gets a
-   dashed border, not a color cue. */
+   Matt is red/green colorblind: box ownership is carried FIRST by the
+   owner's EMOJI glyph and on lines by who-drew-it, never by fill/line color
+   alone -- but real Dots and Boxes IS played in each player's own color
+   (you draw in yours, the opponent draws in theirs), so --db-human/--db-ai
+   below are a real, bright, load-bearing signal on top of the glyph, not
+   just decoration. Same red/blue pairing as Tic Tac Toe's X/O
+   (tic-tac-toe/css/tic-tac-toe.css's --ttt-x/--ttt-o) for one consistent
+   two-player palette across the hub. Drawn vs undrawn edges are ALSO told
+   apart by thickness + opacity, never hue alone, so an edge's state reads
+   even before you register whose color it is. A capturable box (one line
+   away from being claimed) gets a dashed GOLD border, not a color tied to
+   either player, so it's never confused with either player's claim color. */
 
 .db-root {
   --db-accent: #7048a8;
@@ -18,9 +25,10 @@
   --db-surface-2: #eef2f8;
   --db-line-off: #b9c2d4;
   --db-line-on: #2c3a52;
-  --db-human-tint: rgba(112, 72, 168, 0.16);
-  --db-ai-tint: rgba(31, 95, 168, 0.14);
-  --db-warn: #e0532f;
+  --db-human: #e0532f;
+  --db-ai: #1f5fa8;
+  --db-human-tint: rgba(224, 83, 47, 0.22);
+  --db-ai-tint: rgba(31, 95, 168, 0.20);
   --db-gold: #ffce4a;
   display: block;
   min-height: 100%;
@@ -304,6 +312,10 @@
 .db-root .db-edge.is-drawn .db-line { background: var(--db-line-on); opacity: 1; }
 .db-root .db-edge.is-drawn.db-edge-h .db-line { height: 5px; }
 .db-root .db-edge.is-drawn.db-edge-v .db-line { width: 5px; }
+/* A drawn line's color is who drew it (real Dots and Boxes convention) --
+   these override the neutral is-drawn color above, same weight/thickness. */
+.db-root .db-edge.is-drawn.is-human .db-line { background: var(--db-human); }
+.db-root .db-edge.is-drawn.is-ai .db-line { background: var(--db-ai); }
 .db-root .db-edge.is-live:hover .db-line { opacity: 0.7; }
 .db-root .db-edge.is-live:active .db-line { opacity: 0.9; }
 .db-root .db-edge:focus-visible { outline: 2px solid var(--db-accent); outline-offset: 2px; z-index: 3; }
@@ -319,11 +331,12 @@
   background: var(--db-surface-2);
   transition: background 150ms ease, border-color 150ms ease;
 }
-.db-root .db-box.is-human { background: var(--db-human-tint); }
-.db-root .db-box.is-ai { background: var(--db-ai-tint); }
+.db-root .db-box.is-human { background: var(--db-human-tint); border-color: var(--db-human); }
+.db-root .db-box.is-ai { background: var(--db-ai-tint); border-color: var(--db-ai); }
 /* Capturable cue: a box one line away from being claimed, told apart by a
-   dashed border + pulse, never by color alone. */
-.db-root .db-box.is-capturable { border-style: dashed; border-color: var(--db-warn); animation: db-pulse 1100ms ease-in-out infinite; }
+   dashed GOLD border + pulse -- gold on purpose, so it never reads as
+   either player's claim color while the box is still unclaimed. */
+.db-root .db-box.is-capturable { border-style: dashed; border-color: var(--db-gold); animation: db-pulse 1100ms ease-in-out infinite; }
 .db-root .db-glyph { font-size: calc(var(--db-cell) * 0.52); line-height: 1; }
 .db-root .db-box.is-claim .db-glyph { animation: db-pop 260ms ease; }
 
@@ -391,8 +404,8 @@
 .db-root .db-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
 .db-root .db-diagram { width: 168px; height: 168px; }
 .db-root .db-dg-side { stroke: var(--db-line-on); stroke-width: 4; stroke-linecap: round; }
-.db-root .db-dg-move { stroke: var(--db-gold); stroke-width: 7; stroke-linecap: round; }
-.db-root .db-dg-check { fill: none; stroke: var(--db-accent-deep); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.db-root .db-dg-move { stroke: var(--db-human); stroke-width: 7; stroke-linecap: round; }
+.db-root .db-dg-check { fill: none; stroke: var(--db-human); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
 .db-root .db-dg-dots circle { fill: var(--db-line-on); }
 .db-root .db-dg-dots-open circle { fill: var(--db-line-off); }
 .db-root .db-dg-open rect { fill: none; stroke: var(--db-line-off); stroke-width: 2; stroke-dasharray: 4 4; }
@@ -406,3 +419,12 @@
    then locked with white-space: nowrap so it can never wrap mid-word. */
 .db-root .db-help-example { font-size: 12px; font-weight: 700; color: var(--db-ink); white-space: nowrap; }
 .db-root .db-help-rule { font-size: 12px; font-weight: 600; color: #3a4a63; white-space: nowrap; }
+
+/* Color legend: introduces the red/blue coding (also carried by the diagram
+   above and every line/box in the game itself) before a player ever sees
+   the board, so it never has to be puzzled out mid-game. */
+.db-root .db-help-legend { display: flex; justify-content: center; gap: 14px; margin: 16px 0 0; flex-wrap: wrap; }
+.db-root .db-legend-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--db-ink); white-space: nowrap; }
+.db-root .db-legend-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.db-root .db-legend-chip.is-human .db-legend-swatch { background: var(--db-human); }
+.db-root .db-legend-chip.is-ai .db-legend-swatch { background: var(--db-ai); }

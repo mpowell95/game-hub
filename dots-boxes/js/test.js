@@ -29,14 +29,14 @@ function buildRowChains(lengths, openFirstChain, bankedForP0 = 0) {
   const cols = bankedForP0 + lengths.reduce((a, b) => a + b, 0);
   const s = newGame(1, cols);
   for (let c = 0; c < bankedForP0; c++) {
-    s.hEdges[0][c] = true; s.hEdges[1][c] = true; s.vEdges[0][c] = true; s.vEdges[0][c + 1] = true;
+    s.hEdges[0][c] = 0; s.hEdges[1][c] = 0; s.vEdges[0][c] = 0; s.vEdges[0][c + 1] = 0;
     s.boxes[0][c] = 0;
   }
-  for (let c = bankedForP0; c < cols; c++) { s.hEdges[0][c] = true; s.hEdges[1][c] = true; }
+  for (let c = bankedForP0; c < cols; c++) { s.hEdges[0][c] = 0; s.hEdges[1][c] = 0; }
   let idx = bankedForP0;
   const wallCols = [idx];
   for (const len of lengths) { idx += len; wallCols.push(idx); }
-  for (const w of wallCols) s.vEdges[0][w] = true;
+  for (const w of wallCols) s.vEdges[0][w] = 0;
 
   idx = bankedForP0;
   for (let i = 0; i < lengths.length; i++) {
@@ -44,16 +44,16 @@ function buildRowChains(lengths, openFirstChain, bankedForP0 = 0) {
     const leftBox = idx, rightBox = idx + len - 1;
     const opened = openFirstChain && i === 0;
     if (len === 1) {
-      if (!opened) { s.hEdges[0][leftBox] = false; s.hEdges[1][leftBox] = false; }
+      if (!opened) { s.hEdges[0][leftBox] = null; s.hEdges[1][leftBox] = null; }
     } else {
-      if (!opened) s.hEdges[1][leftBox] = false;
-      s.hEdges[1][rightBox] = false;
+      if (!opened) s.hEdges[1][leftBox] = null;
+      s.hEdges[1][rightBox] = null;
     }
     idx += len;
   }
   s.drawnEdges = 0;
-  for (let c = 0; c < cols; c++) { if (s.hEdges[0][c]) s.drawnEdges++; if (s.hEdges[1][c]) s.drawnEdges++; }
-  for (let c = 0; c <= cols; c++) if (s.vEdges[0][c]) s.drawnEdges++;
+  for (let c = 0; c < cols; c++) { if (s.hEdges[0][c] !== null) s.drawnEdges++; if (s.hEdges[1][c] !== null) s.drawnEdges++; }
+  for (let c = 0; c <= cols; c++) if (s.vEdges[0][c] !== null) s.drawnEdges++;
   s.turn = 0;
   return s;
 }
@@ -90,9 +90,9 @@ function playMatch(rows, cols, tierP0, tierP1, rng) {
 {
   const s = newGame(1, 2);
   // box0: top,bottom,left drawn (missing right = v[0][1], shared with box1's left)
-  s.hEdges[0][0] = true; s.hEdges[1][0] = true; s.vEdges[0][0] = true;
+  s.hEdges[0][0] = 0; s.hEdges[1][0] = 0; s.vEdges[0][0] = 0;
   // box1: top,bottom,right drawn (missing left = v[0][1], the shared edge)
-  s.hEdges[0][1] = true; s.hEdges[1][1] = true; s.vEdges[0][2] = true;
+  s.hEdges[0][1] = 0; s.hEdges[1][1] = 0; s.vEdges[0][2] = 0;
   s.drawnEdges = 5;
   const res = applyMove(s, { type: 'v', r: 0, c: 1 });
   ok('engine: shared edge claims both boxes at once', s.boxes[0][0] === 0 && s.boxes[0][1] === 0);
@@ -136,8 +136,8 @@ function playMatch(rows, cols, tierP0, tierP1, rng) {
   // a hand-built 4x4 finish where each player owns exactly 8 boxes.
   const s = newGame(4, 4);
   for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) s.boxes[r][c] = (r + c) % 2;
-  for (let r = 0; r <= 4; r++) for (let c = 0; c < 4; c++) s.hEdges[r][c] = true;
-  for (let r = 0; r < 4; r++) for (let c = 0; c <= 4; c++) s.vEdges[r][c] = true;
+  for (let r = 0; r <= 4; r++) for (let c = 0; c < 4; c++) s.hEdges[r][c] = 0;
+  for (let r = 0; r < 4; r++) for (let c = 0; c <= 4; c++) s.vEdges[r][c] = 0;
   s.drawnEdges = s.totalEdges;
   const sc = score(s);
   ok('engine: 4x4 can produce an 8-8 tie', isOver(s) && sc.p0 === 8 && sc.p1 === 8);

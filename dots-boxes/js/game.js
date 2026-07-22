@@ -7,6 +7,12 @@
 //   vEdges[r][c]   r in 0..rows-1,  c in 0..cols     vertical segments
 //   boxes[r][c]    null | 0 | 1                      owner (player index)
 //
+// Edges store null | 0 | 1 too (the player who drew them, not just a drawn
+// flag) so the UI can render each player's lines in their own color -- real
+// Dots and Boxes is played that way, and it's how a player reads the board
+// at a glance mid-chain. Never truthy-check an edge cell (owner 0 is
+// falsy); always compare `!== null`.
+//
 // The extra-turn rule is the whole game: completing a box's 4th side grants
 // another turn to the SAME player, so a single turn can chain-capture many
 // boxes. applyMove() only flips `turn` when a move claims nothing -- as long
@@ -21,8 +27,8 @@ export function newGame(rows, cols) {
   return {
     rows,
     cols,
-    hEdges: Array.from({ length: rows + 1 }, () => new Array(cols).fill(false)),
-    vEdges: Array.from({ length: rows }, () => new Array(cols + 1).fill(false)),
+    hEdges: Array.from({ length: rows + 1 }, () => new Array(cols).fill(null)),
+    vEdges: Array.from({ length: rows }, () => new Array(cols + 1).fill(null)),
     boxes: Array.from({ length: rows }, () => new Array(cols).fill(null)),
     turn: 0,
     drawnEdges: 0,
@@ -40,11 +46,11 @@ export function cloneGame(s) {
 }
 
 function edgeDrawn(s, edge) {
-  return edge.type === 'h' ? s.hEdges[edge.r][edge.c] : s.vEdges[edge.r][edge.c];
+  return (edge.type === 'h' ? s.hEdges[edge.r][edge.c] : s.vEdges[edge.r][edge.c]) !== null;
 }
-function setEdge(s, edge) {
-  if (edge.type === 'h') s.hEdges[edge.r][edge.c] = true;
-  else s.vEdges[edge.r][edge.c] = true;
+function setEdge(s, edge, owner) {
+  if (edge.type === 'h') s.hEdges[edge.r][edge.c] = owner;
+  else s.vEdges[edge.r][edge.c] = owner;
 }
 
 /** Stable string key for an edge, for use in Sets/Maps (ai.js chain analysis, ui.js legality checks). */
@@ -52,18 +58,18 @@ export function edgeKey(edge) { return `${edge.type}:${edge.r}:${edge.c}`; }
 
 export function legalMoves(s) {
   const out = [];
-  for (let r = 0; r <= s.rows; r++) for (let c = 0; c < s.cols; c++) if (!s.hEdges[r][c]) out.push({ type: 'h', r, c });
-  for (let r = 0; r < s.rows; r++) for (let c = 0; c <= s.cols; c++) if (!s.vEdges[r][c]) out.push({ type: 'v', r, c });
+  for (let r = 0; r <= s.rows; r++) for (let c = 0; c < s.cols; c++) if (s.hEdges[r][c] === null) out.push({ type: 'h', r, c });
+  for (let r = 0; r < s.rows; r++) for (let c = 0; c <= s.cols; c++) if (s.vEdges[r][c] === null) out.push({ type: 'v', r, c });
   return out;
 }
 
 /** Drawn-side count (0-4) of box (r,c). */
 export function edgeCount(s, r, c) {
   let n = 0;
-  if (s.hEdges[r][c]) n++;          // top
-  if (s.hEdges[r + 1][c]) n++;      // bottom
-  if (s.vEdges[r][c]) n++;          // left
-  if (s.vEdges[r][c + 1]) n++;      // right
+  if (s.hEdges[r][c] !== null) n++;          // top
+  if (s.hEdges[r + 1][c] !== null) n++;      // bottom
+  if (s.vEdges[r][c] !== null) n++;          // left
+  if (s.vEdges[r][c + 1] !== null) n++;      // right
   return n;
 }
 
@@ -102,7 +108,7 @@ export function neighborAcross(s, edge, r, c) {
  *  extra turn if anything was claimed. Mutates `s` in place. */
 export function applyMove(s, edge) {
   if (edgeDrawn(s, edge)) return { claimed: 0, again: false, boxes: [] };
-  setEdge(s, edge);
+  setEdge(s, edge, s.turn);
   s.drawnEdges += 1;
   const claimedBoxes = [];
   for (const [r, c] of adjacentBoxes(s, edge)) {

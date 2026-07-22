@@ -294,6 +294,13 @@ class DotsBoxesUI {
     return tracks.join(' ');
   }
 
+  /** '' | 'is-human' | 'is-ai' for a seat owner (null|0|1) -- shared by edges
+   *  and boxes so a player's lines and their claimed boxes read as the same
+   *  color at a glance, the way the game is played on paper. */
+  _ownerClass(owner) {
+    return owner === null ? '' : (owner === this.humanSeat ? 'is-human' : 'is-ai');
+  }
+
   _boardHtml(s, id) {
     const rows = s.rows, cols = s.cols;
     const canClickNow = !isOver(s) && !this.busy && s.turn === this.humanSeat;
@@ -307,17 +314,19 @@ class DotsBoxesUI {
           parts.push('<div class="db-dot" aria-hidden="true"></div>');
         } else if (rowIsDots) {
           const r = mr / 2, c = (mc - 1) / 2;
-          const drawn = s.hEdges[r][c];
+          const owner = s.hEdges[r][c];
+          const drawn = owner !== null;
           const live = canClickNow && !drawn;
-          parts.push(`<button type="button" class="db-edge db-edge-h ${drawn ? 'is-drawn' : ''} ${live ? 'is-live' : ''}"
+          parts.push(`<button type="button" class="db-edge db-edge-h ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
             data-action="edge" data-etype="h" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
             aria-label="${drawn ? 'Line already drawn' : 'Draw line'}, row ${r + 1}, between columns ${c + 1} and ${c + 2}">
             <span class="db-line" aria-hidden="true"></span></button>`);
         } else if (colIsDots) {
           const r = (mr - 1) / 2, c = mc / 2;
-          const drawn = s.vEdges[r][c];
+          const owner = s.vEdges[r][c];
+          const drawn = owner !== null;
           const live = canClickNow && !drawn;
-          parts.push(`<button type="button" class="db-edge db-edge-v ${drawn ? 'is-drawn' : ''} ${live ? 'is-live' : ''}"
+          parts.push(`<button type="button" class="db-edge db-edge-v ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
             data-action="edge" data-etype="v" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
             aria-label="${drawn ? 'Line already drawn' : 'Draw line'}, column ${c + 1}, between rows ${r + 1} and ${r + 2}">
             <span class="db-line" aria-hidden="true"></span></button>`);
@@ -326,11 +335,10 @@ class DotsBoxesUI {
           const owner = s.boxes[r][c];
           const capturable = owner === null && edgeCount(s, r, c) === 3;
           const isNew = claimed.some(([br, bc]) => br === r && bc === c);
-          const ownerClass = owner === null ? '' : (owner === this.humanSeat ? 'is-human' : 'is-ai');
           const glyph = owner === null ? '' : esc(owner === this.humanSeat ? id.humanEmoji : id.oppEmoji);
           const label = owner === null ? (capturable ? `Box, row ${r + 1} column ${c + 1}, one line away from being claimed` : `Box, row ${r + 1} column ${c + 1}, empty`)
             : `Box, row ${r + 1} column ${c + 1}, claimed by ${owner === this.humanSeat ? id.humanName : id.oppName}`;
-          parts.push(`<div class="db-box ${ownerClass} ${capturable ? 'is-capturable' : ''} ${isNew ? 'is-claim' : ''}" aria-label="${label}">
+          parts.push(`<div class="db-box ${this._ownerClass(owner)} ${capturable ? 'is-capturable' : ''} ${isNew ? 'is-claim' : ''}" aria-label="${label}">
             ${glyph ? `<span class="db-glyph">${glyph}</span>` : ''}</div>`);
         }
       }
@@ -403,9 +411,10 @@ class DotsBoxesUI {
   // diagram of the one confusing mechanic, a plain-word caption, an "X = Y"
   // example, then the one remaining edge case as its own sentence.
 
-  /** Completing a box's 4th side (the highlighted gold edge, checked off)
+  /** Completing a box's 4th side (highlighted in YOUR color, checked off)
    *  claims it and hands you another move (the curved arrow to a second,
-   *  still-open box) -- shape/arrow driven, no reliance on color alone. */
+   *  still-open box) -- shape/arrow driven, color is a reinforcement on top,
+   *  never the only signal. */
   _extraTurnDiagram() {
     return `<svg class="db-diagram" viewBox="0 0 224 224" role="img" aria-label="Completing the fourth side of a box claims it and lets you play again">
       <defs>
@@ -437,6 +446,7 @@ class DotsBoxesUI {
 
   openHelp() {
     this.closeOverlays();
+    const id = this._identity();
     const overlay = document.createElement('div');
     overlay.className = 'db-overlay';
     overlay.dataset.role = 'help';
@@ -451,6 +461,10 @@ class DotsBoxesUI {
           <p class="db-help-caption">Draw the 4th side of a box to claim it.</p>
           <p class="db-help-example">Complete a box = You play again</p>
           <p class="db-help-rule">Otherwise, the turn passes to your opponent.</p>
+        </div>
+        <div class="db-help-legend">
+          <span class="db-legend-chip is-human"><span class="db-legend-swatch" aria-hidden="true"></span>You</span>
+          <span class="db-legend-chip is-ai"><span class="db-legend-swatch" aria-hidden="true"></span>${esc(id.oppName)}</span>
         </div>
       </div>`;
     this.root.appendChild(overlay);
