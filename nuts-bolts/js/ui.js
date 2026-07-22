@@ -46,11 +46,28 @@ function pluralMoves(n) {
 // Boards range 5 to 17 bolts; three CSS size tiers, switched by one class on
 // the board root so every dependent metric (nut size, base plates, rod
 // height) scales together via custom properties, not hardcoded per-element.
+const SIZE_TIERS = ['nb-size-l', 'nb-size-m', 'nb-size-s'];
+
 function sizeClassFor(boltCount) {
   if (boltCount <= 8) return 'nb-size-l';
   if (boltCount <= 12) return 'nb-size-m';
   return 'nb-size-s';
 }
+
+// LAYOUT-1 continuous fallback: 'nb-size-s' (the smallest discrete tier) can
+// still overflow a short viewport on the biggest boards (Extra Hard's 15
+// bolts, confirmed against the reported screenshot). These mirror
+// .nb-board.nb-size-s's own values in nuts-bolts.css - the base this scales
+// down from once the discrete tiers run out. Never below MIN_CONTINUOUS_SCALE
+// so bolts stay legible/tappable rather than shrinking indefinitely.
+const SIZE_S_BASE = { nutH: 25, nutW: 46, rodH: 26, boltW: 58, washerW: 36, washerH: 9, gapRow: 12, gapCol: 14 };
+const MIN_CONTINUOUS_SCALE = 0.6;
+const CONTINUOUS_SCALE_ATTEMPTS = 6;
+// This shrink-to-fit is a phone-viewport concern (nuts-bolts.css's own desktop
+// tweak already lives behind the same breakpoint, :825). A short but WIDE
+// desktop browser window scrolling is normal and expected - not the bug this
+// batch is about - so don't shrink there.
+const PHONE_WIDTH_MAX = 699;
 
 // Builds one nut element: outer wrapper, clipped hex face (top-face band +
 // 3-facet body + bore), and a centered symbol (or "?" for hidden). Shared by
@@ -161,6 +178,18 @@ class NutsBoltsUI {
     this.onDocPointerUp = this.onDocPointerUp.bind(this);
     this.onDocPointerMove = this.onDocPointerMove.bind(this);
 
+    // LAYOUT-1: the board's size tier (nb-size-l/m/s) was chosen purely by bolt
+    // count, with no regard for whether it actually fits the viewport - a phone
+    // a little shorter than the reference device still overflowed and forced a
+    // page scroll. `_sizeOverride` forces a smaller tier than the natural one
+    // when `fitToViewport` (below) measures an overflow; reset per level so a
+    // roomier level (or a resize back to a taller viewport) isn't stuck small.
+    this._sizeOverride = null;
+    this._resizeTimer = null;
+    this.onResize = this.onResize.bind(this);
+    window.addEventListener('resize', this.onResize);
+    window.addEventListener('orientationchange', this.onResize);
+
     // The difficulty menu is always the entry point. A persisted in-progress
     // board (if any) is kept aside and only restored when the player taps
     // the matching tier card (see startTier), not auto-resumed on load.
@@ -236,6 +265,7 @@ class NutsBoltsUI {
   // --- Game screen ---
 
   renderGame() {
+    this._sizeOverride = null;
     this.container.innerHTML = '';
     const root = document.createElement('div');
     root.className = 'nb-root';
@@ -326,6 +356,69 @@ class NutsBoltsUI {
     this.renderBoard();
     this.updateTopbar();
     this.boardEl.classList.add('nb-fade-in');
+    this.fitToViewport();
+  }
+
+  // LAYOUT-1: shrink the board's size tier (never below 'nb-size-s') until the
+  // page no longer needs to scroll, or there's nothing smaller left to try.
+  // document.documentElement.scrollHeight vs window.innerHeight is the same
+  // black-box measurement CLAUDE.md documents for Escoba's viewport budget -
+  // it works regardless of which element (hub chrome vs this game) is at fault.
+  fitToViewport() {
+    if (this.screen !== 'game' || !this.boardEl || !this.game) return;
+    if (window.innerWidth > PHONE_WIDTH_MAX) { this.clearContinuousScale(); return; }
+    this.clearContinuousScale();
+    let tierIndex = SIZE_TIERS.indexOf(this._sizeOverride || sizeClassFor(this.game.stacks.length));
+    while (document.documentElement.scrollHeight > window.innerHeight && tierIndex < SIZE_TIERS.length - 1) {
+      tierIndex += 1;
+      this._sizeOverride = SIZE_TIERS[tierIndex];
+      this.renderBoard();
+    }
+    // The smallest discrete tier can still overflow on the biggest boards (see
+    // SIZE_S_BASE above) - shrink continuously from there rather than stopping.
+    if (SIZE_TIERS[tierIndex] !== 'nb-size-s') return;
+    let scale = 1;
+    for (let i = 0; i < CONTINUOUS_SCALE_ATTEMPTS; i++) {
+      const overflow = document.documentElement.scrollHeight - window.innerHeight;
+      if (overflow <= 0 || scale <= MIN_CONTINUOUS_SCALE) break;
+      const boardHeight = this.boardEl.getBoundingClientRect().height;
+      if (boardHeight <= 0) break;
+      const neededBoardHeight = Math.max(boardHeight - overflow, boardHeight * MIN_CONTINUOUS_SCALE);
+      scale = Math.max(MIN_CONTINUOUS_SCALE, scale * (neededBoardHeight / boardHeight));
+      this.applyContinuousScale(scale);
+    }
+  }
+
+  applyContinuousScale(scale) {
+    const s = this.boardEl.style;
+    s.setProperty('--nb-nut-h', `${SIZE_S_BASE.nutH * scale}px`);
+    s.setProperty('--nb-nut-w', `${SIZE_S_BASE.nutW * scale}px`);
+    s.setProperty('--nb-rod-h', `${SIZE_S_BASE.rodH * scale}px`);
+    s.setProperty('--nb-bolt-w', `${SIZE_S_BASE.boltW * scale}px`);
+    s.setProperty('--nb-washer-w', `${SIZE_S_BASE.washerW * scale}px`);
+    s.setProperty('--nb-washer-h', `${SIZE_S_BASE.washerH * scale}px`);
+    s.setProperty('--nb-gap-row', `${SIZE_S_BASE.gapRow * scale}px`);
+    s.setProperty('--nb-gap-col', `${SIZE_S_BASE.gapCol * scale}px`);
+  }
+
+  clearContinuousScale() {
+    if (!this.boardEl) return;
+    const s = this.boardEl.style;
+    ['--nb-nut-h', '--nb-nut-w', '--nb-rod-h', '--nb-bolt-w', '--nb-washer-w', '--nb-washer-h', '--nb-gap-row', '--nb-gap-col']
+      .forEach((prop) => s.removeProperty(prop));
+  }
+
+  onResize() {
+    clearTimeout(this._resizeTimer);
+    this._resizeTimer = setTimeout(() => {
+      if (this.screen !== 'game' || !this.boardEl || !this.game) return;
+      // A resize can make more room too (rotating back to portrait, a taller
+      // browser chrome collapsing) - re-derive from the natural tier each time
+      // rather than only ever shrinking further.
+      this._sizeOverride = null;
+      this.renderBoard();
+      this.fitToViewport();
+    }, 120);
   }
 
   updateTopbar(pulseMoves) {
@@ -345,7 +438,7 @@ class NutsBoltsUI {
 
   renderBoard() {
     this.boardEl.innerHTML = '';
-    this.boardEl.className = 'nb-board ' + sizeClassFor(this.game.stacks.length);
+    this.boardEl.className = 'nb-board ' + (this._sizeOverride || sizeClassFor(this.game.stacks.length));
     this.game.stacks.forEach((stack, index) => {
       const locked = isBoltComplete(stack);
       const bolt = document.createElement('div');
@@ -715,8 +808,11 @@ class NutsBoltsUI {
   destroy() {
     clearTimeout(this.toastTimer);
     clearTimeout(this.longPressTimer);
+    clearTimeout(this._resizeTimer);
     document.removeEventListener('pointerup', this.onDocPointerUp);
     document.removeEventListener('pointermove', this.onDocPointerMove);
+    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('orientationchange', this.onResize);
     this.container.innerHTML = '';
   }
 

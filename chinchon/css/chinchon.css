@@ -230,6 +230,17 @@
   padding: 14px; background: linear-gradient(180deg, #1f7a52, #18603f);
   border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), 0 8px 22px rgba(13, 71, 50, 0.35);
 }
+
+/* LAYOUT-2: applied by fitToViewport() (ui.js) once a short phone measures an
+   overflow. Tightens the TOP of the screen first (root padding, the topbar-to-
+   mat gap, the mat's own padding) per Matt's own diagnosis - "wasted space at
+   the top" - rather than only shrinking the hand/board (THE LAW rule 7:
+   redistribute the budget, don't just shrink indiscriminately). */
+.cc-root.cc-compact { padding-top: 0; }
+.cc-root.cc-compact .cc-game { gap: 5px; padding: 6px; }
+.cc-root.cc-compact .cc-mat { padding: 8px; gap: 5px; }
+.cc-root.cc-compact .cc-actions { min-height: 40px; }
+.cc-root.cc-compact .cc-hand { padding-bottom: 6px; }
 .cc-piles { --cc-pile-fs: clamp(15px, 5vw, 23px); display: flex; gap: 24px; align-items: flex-end; }
 .cc-piles .cc-card { --fs: var(--cc-pile-fs); }
 /* The deck (stock) back is drawn larger so it's easy to read across the table. */

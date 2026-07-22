@@ -25,6 +25,11 @@ const AI_NAMES = ['Lucía', 'Diego', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
 const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
 const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
+
+// LAYOUT-2: the widest phone width fitToViewport() should act on, matching
+// chinchon.css's own `.cc-root { max-width: 720px }` / `@media (min-width:
+// 700px)` desktop-oriented breakpoint.
+const PHONE_WIDTH_MAX = 699;
 // Profile skill tiers (1-3) -> Chinchón's three AI levels.
 const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
@@ -265,6 +270,35 @@ class ChinchonUI {
     this.el.hand.addEventListener('pointerdown', this._onHandPointerDown);
     this._applyTheme();
     this.showSetup();
+
+    // LAYOUT-2: see fitToViewport() below.
+    this._ccCompact = false;
+    this._onCcResize = () => {
+      clearTimeout(this._ccResizeTimer);
+      this._ccResizeTimer = setTimeout(() => this.fitToViewport(), 120);
+    };
+    window.addEventListener('resize', this._onCcResize);
+    window.addEventListener('orientationchange', this._onCcResize);
+  }
+
+  /** Chinchon is not immersive (hub chrome sits above it), and its own
+   *  padding/gaps could still add up to a small phone-width overflow (Matt:
+   *  "a little too big... plenty of space that's wasted at the top"). Same
+   *  black-box measurement CLAUDE.md documents for Escoba's viewport budget:
+   *  document.documentElement.scrollHeight vs window.innerHeight. Tightens the
+   *  TOP first via .cc-compact (see chinchon.css) rather than only shrinking
+   *  the hand - once applied it stays on for the rest of this match rather
+   *  than flipping back and forth right at the boundary. */
+  fitToViewport() {
+    if (this._dead || this.el.game.hidden || this._ccCompact) return;
+    // Phone-viewport concern only (chinchon.css's own desktop tweak lives
+    // behind the same breakpoint, PHONE_WIDTH_MAX+1). A short but WIDE desktop
+    // browser window scrolling is normal and expected, not the reported bug.
+    if (window.innerWidth > PHONE_WIDTH_MAX) return;
+    if (document.documentElement.scrollHeight > window.innerHeight) {
+      this._ccCompact = true;
+      this.root.classList.add('cc-compact');
+    }
   }
 
   // --- setup screen ---------------------------------------------------------
@@ -654,6 +688,10 @@ class ChinchonUI {
 
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    // A fresh match may fit without compacting even if a previous one didn't
+    // (e.g. rules/round count changed) - re-evaluate rather than staying stuck.
+    this._ccCompact = false;
+    this.root.classList.remove('cc-compact');
     this._buildPiles();
     this.render();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón match error', err); });
@@ -851,6 +889,7 @@ class ChinchonUI {
     this.el.handbar.innerHTML = this.renderHandbar();
     this._syncHand();
     this.el.actions.innerHTML = this.renderActions();
+    this.fitToViewport();
   }
 
   renderOpponents() {
@@ -2068,6 +2107,9 @@ class ChinchonUI {
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
     document.removeEventListener('pointercancel', this._onPointerUp);
+    window.removeEventListener('resize', this._onCcResize);
+    window.removeEventListener('orientationchange', this._onCcResize);
+    clearTimeout(this._ccResizeTimer);
     clearTimeout(this._beatTimer);
     clearTimeout(this._toastTimer);
     this.game = null;

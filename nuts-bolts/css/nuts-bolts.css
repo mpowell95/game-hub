@@ -241,7 +241,7 @@
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 20px 24px;
+  gap: var(--nb-gap-row, 20px) var(--nb-gap-col, 24px);
   padding: 24px 16px 28px;
   flex: 1;
   align-content: center;
@@ -268,17 +268,17 @@
 .nb-board.nb-size-l {
   --nb-nut-h: 30px; --nb-nut-w: 56px; --nb-rod-h: 34px;
   --nb-bolt-w: 72px; --nb-washer-w: 44px; --nb-washer-h: 11px;
-  gap: 22px 26px;
+  --nb-gap-row: 22px; --nb-gap-col: 26px;
 }
 .nb-board.nb-size-m {
   --nb-nut-h: 28px; --nb-nut-w: 52px; --nb-rod-h: 30px;
   --nb-bolt-w: 64px; --nb-washer-w: 40px; --nb-washer-h: 10px;
-  gap: 16px 18px;
+  --nb-gap-row: 16px; --nb-gap-col: 18px;
 }
 .nb-board.nb-size-s {
   --nb-nut-h: 25px; --nb-nut-w: 46px; --nb-rod-h: 26px;
   --nb-bolt-w: 58px; --nb-washer-w: 36px; --nb-washer-h: 9px;
-  gap: 12px 14px;
+  --nb-gap-row: 12px; --nb-gap-col: 14px;
 }
 
 /* ---------- Bolt: washer, ridged rod, dome cap ---------- */
