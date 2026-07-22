@@ -351,6 +351,7 @@ class TicTacToeUI {
     overlay.innerHTML = `
       <div class="ttt-scrim"></div>
       <div class="ttt-card" role="dialog" aria-modal="true" aria-label="Game over">
+        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="Close">&times;</button>
         <span class="ttt-card-emoji">${esc(emoji)}</span>
         <h3 class="ttt-card-title">${esc(title)}</h3>
         <p class="ttt-card-sub">${s.variant === 'ultimate' ? 'Ultimate' : 'Classic'} &middot; ${DIFF_LABEL[this._setup.difficulty]}</p>
@@ -364,6 +365,37 @@ class TicTacToeUI {
 
   // --- how to play ------------------------------------------------------------
 
+  /** The one thing prose explains badly: play the top-right cell of a board,
+   *  your opponent is sent to the top-right board. Nine board outlines, one
+   *  shown with its own 3x3 grid and a marked cell, an arrow to the matching
+   *  board. Colors ride on top of shape (mark, outline, arrow), never alone. */
+  _forcedBoardDiagram() {
+    return `<svg class="ttt-diagram" viewBox="0 0 224 224" role="img" aria-label="Playing the top-right cell of a board sends your opponent to the top-right board">
+      <defs>
+        <marker id="ttt-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--ttt-gold)"/>
+        </marker>
+      </defs>
+      <rect x="10" y="10" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="79" y="10" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="148" y="10" width="66" height="66" rx="6" class="ttt-dg-board ttt-dg-dest"/>
+      <rect x="10" y="79" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="79" y="79" width="66" height="66" rx="6" class="ttt-dg-board ttt-dg-src"/>
+      <rect x="148" y="79" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="10" y="148" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="79" y="148" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <rect x="148" y="148" width="66" height="66" rx="6" class="ttt-dg-board"/>
+      <g class="ttt-dg-grid">
+        <line x1="101" y1="79" x2="101" y2="145"/><line x1="123" y1="79" x2="123" y2="145"/>
+        <line x1="79" y1="101" x2="145" y2="101"/><line x1="79" y1="123" x2="145" y2="123"/>
+      </g>
+      <g class="ttt-dg-mark">
+        <line x1="127" y1="83" x2="141" y2="97"/><line x1="141" y1="83" x2="127" y2="97"/>
+      </g>
+      <path d="M139,85 Q166,58 179,44" class="ttt-dg-arrow" marker-end="url(#ttt-dg-arrowhead)"/>
+    </svg>`;
+  }
+
   openHelp() {
     this.closeOverlays();
     const overlay = document.createElement('div');
@@ -374,20 +406,13 @@ class TicTacToeUI {
       <div class="ttt-card ttt-help" role="dialog" aria-modal="true" aria-label="How to play">
         <button type="button" class="ttt-x" data-action="close-overlay" aria-label="Close">&times;</button>
         <h3 class="ttt-card-title">How to play</h3>
-        <section>
-          <h4>Classic</h4>
-          <p>Take turns placing X and O. Three in a row, across, down, or diagonal, wins. A full board with no line is a draw.</p>
-        </section>
-        <section>
-          <h4>Ultimate</h4>
-          <p>Nine Classic boards arranged in a 3x3 grid. Win a small board to claim its cell on the big board; win three small boards in a row to win the match.</p>
-          <p>The cell you play picks which small board your opponent must play in next.</p>
-          <ul>
-            <li>Sent to a board that's already won or full? Play in any open board.</li>
-            <li>A small board that fills with no winner is dead: it counts for neither side and can never be played in again.</li>
-            <li>Every small board resolved with no line on the big board is a draw.</li>
-          </ul>
-        </section>
+        <p class="ttt-help-lead">Win the big board to win the game.</p>
+        <div class="ttt-diagram-wrap">${this._forcedBoardDiagram()}</div>
+        <div class="ttt-help-lines">
+          <p class="ttt-help-caption">Your move determines the next board.</p>
+          <p class="ttt-help-example">Play top right box = Opponent plays top right board</p>
+          <p class="ttt-help-rule">Sent to a completed mini-board = play on any live board.</p>
+        </div>
       </div>`;
     this.root.appendChild(overlay);
   }

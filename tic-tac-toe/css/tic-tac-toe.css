@@ -390,7 +390,37 @@
   color: var(--ttt-muted);
 }
 
-.ttt-root .ttt-help { text-align: left; max-width: 400px; max-height: min(78vh, 600px); overflow-y: auto; }
-.ttt-root .ttt-help h4 { margin: 14px 0 4px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
-.ttt-root .ttt-help p, .ttt-root .ttt-help li { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3a4a63; }
-.ttt-root .ttt-help ul { margin: 4px 0 0; padding-left: 18px; }
+.ttt-root .ttt-help { text-align: center; max-width: 340px; max-height: min(78vh, 600px); overflow-y: auto; }
+/* Deliberate, explicit gaps (not the title's own collapsed margin) so the
+   title -> lead -> diagram rhythm is set in one place instead of two rules
+   quietly fighting each other. Scoped to .ttt-help so the win/lose card's
+   title spacing is untouched. */
+.ttt-root .ttt-help .ttt-card-title { margin-bottom: 10px; }
+.ttt-root .ttt-help-lead { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--ttt-ink); }
+/* One consistent flex gap for all three lines under the diagram, instead of
+   fiddling with each line's own margin -- a plain centered sentence (the old
+   bullet, now de-bulleted per Matt's request) sits at the same rhythm as the
+   caption/example pair above it. */
+.ttt-root .ttt-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
+.ttt-root .ttt-help-lines p { margin: 0; }
+.ttt-root .ttt-help-caption { font-size: 13px; font-weight: 700; color: var(--ttt-muted); }
+/* Sized (and pinned to one line) so "Play top right box = Opponent plays top
+   right board" never wraps -- measured against the card's actual available
+   width at the 375px mobile viewport, not guessed. */
+.ttt-root .ttt-help-example { font-size: 12px; font-weight: 700; color: var(--ttt-ink); white-space: nowrap; }
+/* Same reasoning as .ttt-help-example: sized and pinned to one line against
+   the card's actual measured available width, not guessed. */
+.ttt-root .ttt-help-rule { font-size: 11.5px; font-weight: 600; color: #3a4a63; white-space: nowrap; }
+
+.ttt-root .ttt-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
+.ttt-root .ttt-diagram { width: 168px; height: 168px; }
+.ttt-root .ttt-dg-board { fill: var(--ttt-surface-2); stroke: var(--ttt-accent); stroke-width: 2; opacity: 0.55; }
+/* The source board (where the example move is played) gets its own 3x3 grid
+   and mark; the destination board is picked out by a thick gold outline, the
+   same forced-board cue used live in-game -- never color alone, since the
+   arrow and the mark's X shape carry the same information redundantly. */
+.ttt-root .ttt-dg-board.ttt-dg-src { opacity: 1; stroke-width: 2.5; }
+.ttt-root .ttt-dg-board.ttt-dg-dest { fill: rgba(255, 206, 74, 0.28); stroke: var(--ttt-gold); stroke-width: 4; opacity: 1; }
+.ttt-root .ttt-dg-grid line { stroke: var(--ttt-accent); stroke-width: 1.5; opacity: 0.6; }
+.ttt-root .ttt-dg-mark line { stroke: var(--ttt-x); stroke-width: 4; stroke-linecap: round; }
+.ttt-root .ttt-dg-arrow { fill: none; stroke: var(--ttt-gold); stroke-width: 3; stroke-linecap: round; }
