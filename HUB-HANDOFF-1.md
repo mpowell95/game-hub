@@ -4,7 +4,7 @@ Status: **complete and verified** in a real browser (dev server on :8123). No ga
 nothing deployed, `parchis/` untouched.
 
 Note on locations: the profile-project planning docs and this project's CLAUDE.md live in the sibling
-`Game-Hub/` workspace; the code below lives in this hub repo (`Connect-Four/` = `mpowell95/game-hub`).
+`Game-Hub-Docs/` planning archive; the code below lives in this hub repo (`Game-Hub/` = `mpowell95/game-hub`).
 
 ## Files added / changed (all in this repo)
 

@@ -1,5 +1,20 @@
 # Game Hub — CLAUDE.md
 
+## Repo location (settled — do not change)
+
+The local folder for this repo is `Game-Hub/`, under
+`C:\Users\powel\OneDrive\Documents\CLAUDE CODE\Personal\`.
+The GitHub remote is `mpowell95/game-hub`. These now match. They did not always:
+this folder was called `Connect-Four/` until 2026-07-21, a leftover from when the
+project was only Connect Four.
+
+`Game-Hub-Docs/` (sibling folder) is the planning/handoff archive. It is NOT a git
+repo and is NOT part of this project. Do not merge it in, and do not confuse it
+with this repo.
+
+The local folder name has no relationship to the remote, the Pages deployment, the
+site URL, or any player data. Do not "fix" or rename it again.
+
 A small, ad-free, installable **PWA that hosts self-contained game modules**. Vanilla
 JS (ES modules), **no build step, no dependencies, no framework**. Deploys as static
 files (e.g. GitHub Pages). A shared **user profile** prefills every game (see "The shared profile").
