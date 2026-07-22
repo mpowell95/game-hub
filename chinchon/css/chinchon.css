@@ -593,14 +593,26 @@
 .cc-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 600; }
 .cc-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 
-/* ---- Meld-highlight colours (one per meld) — glow that hugs the card ---- */
-.cc-card.cc-meld-c0 { --meld: var(--cc-good); }
-.cc-card.cc-meld-c1 { --meld: var(--cc-suit-espadas); }
-.cc-card.cc-meld-c2 { --meld: var(--cc-accent); }
-.cc-card.cc-meld-c3 { --meld: var(--cc-suit-copas); }
-.cc-card.cc-meld-c4 { --meld: #7a5bd0; }
-.cc-card.cc-meld-c5 { --meld: #e07a2a; }
-.cc-card[class*="cc-meld-c"] { box-shadow: 0 0 0 2.5px var(--meld), 0 1px 3px rgba(20, 40, 80, 0.3); }
+/* ---- CH-1: meld highlight, colorblind-safe ----
+   The old version rang each meld in a DIFFERENT color (green/blue/gold/red/
+   purple/orange) - with red and green both in the mix, that's the exact
+   thing THE LAW rule 9 exists to prevent for Matt (red-green colorblind), and
+   the likely reason "highlight sets" read badly to him even though he couldn't
+   say why. One ring color now (the shared #ffce3a attention color, same as
+   the newly-drawn-card ring elsewhere), with a small numbered badge as the
+   non-color channel that tells melds apart - no subjective redesign of the
+   dim/grayscale treatment itself, which Matt didn't specifically call out. */
+.cc-card[class*="cc-meld-c"] {
+  box-shadow: 0 0 0 2.5px var(--cc-attn), 0 1px 3px rgba(20, 40, 80, 0.3);
+}
+.cc-card[class*="cc-meld-c"]::after {
+  content: attr(data-meld-num);
+  position: absolute; top: 3px; left: 3px; z-index: 5;
+  width: 1.3em; height: 1.3em; border-radius: 50%;
+  background: var(--cc-attn); color: #16243a;
+  font-size: 0.62em; font-weight: 900; line-height: 1.3em; text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .cc-card, .cc-btn, .cc-opp-pill, .cc-switch, .cc-switch-thumb { transition: none; }

@@ -126,6 +126,7 @@ class ChinchonUI {
     this._sortMode = 'suit';        // 'suit' | 'rank' (cycled by the sort button)
     this._highlightSets = false;    // colour-code melds in the hand
     this._manualOrder = null;       // [cardId] once the player drag-reorders
+    this._handBreak = null;         // CH-2: top-row card count once the player drags across rows (null = default split)
     this._displayOrder = [];        // ids in current on-screen order (for drag math)
     this._drag = null;
     this._justDragged = false;
@@ -1013,13 +1014,24 @@ class ChinchonUI {
 
   /** Sync the hand in place: card nodes are keyed by id and REUSED across renders,
       so their <img> elements never reload (the old innerHTML rebuild made every
-      action flash). Also inserts the 2-row break so the last 4 cards sit on the
-      bottom row (7 cards -> 3 top / 4 bottom; 8 after a draw -> 4 / 4). */
+      action flash). Also (re)inserts the 2-row break at this._handBreak, the
+      player's own last chosen top-row count - CH-2: this used to be forced to
+      order.length - 4 every render (always exactly 4 on the bottom), which
+      silently undid any row the player dragged a card into. Defaults to that
+      same split the first time a hand appears (or after a resort), but from
+      then on only changes when the player actually drags a card across rows
+      (_applyDrop) - so 7 or 8 cards can sit in either row, including all of
+      them in one row and none in the other, and it holds afterward. */
   _syncHand() {
     const hand = this.el.hand;
     const h = this._human();
     const order = this._computeHandOrder(h.hand);
     this._displayOrder = order.map((c) => c.id);
+    const breakActive = order.length > 4;
+    if (breakActive) {
+      if (this._handBreak == null) this._handBreak = Math.max(0, order.length - 4);
+      this._handBreak = Math.max(0, Math.min(this._handBreak, order.length));
+    }
 
     let colorOf = null;
     if (this._highlightSets) {
@@ -1034,10 +1046,10 @@ class ChinchonUI {
     if (!brk) { brk = document.createElement('div'); brk.className = 'cc-hand-break'; }
 
     const MELD_CLASSES = ['cc-meld-c0', 'cc-meld-c1', 'cc-meld-c2', 'cc-meld-c3', 'cc-meld-c4', 'cc-meld-c5'];
-    const breakAt = Math.max(0, order.length - 4);
+    const breakAt = breakActive ? this._handBreak : order.length;
     const seq = [];
     order.forEach((c, i) => {
-      if (i === breakAt && order.length > 4) seq.push(brk);
+      if (breakActive && i === breakAt) seq.push(brk);
       let el = byId.get(c.id);
       if (!el) el = this._cardNode(c, { draggable: true });
       byId.delete(c.id);
@@ -1045,14 +1057,42 @@ class ChinchonUI {
       el.classList.toggle('is-new', c.id === this._newCardId);
       for (const mc of MELD_CLASSES) el.classList.remove(mc);
       const inSet = !!(colorOf && colorOf.has(c.id));
-      if (inSet) el.classList.add('cc-meld-c' + (colorOf.get(c.id) % 6));
+      if (inSet) {
+        const meldIdx = colorOf.get(c.id);
+        el.classList.add('cc-meld-c' + (meldIdx % 6));
+        el.dataset.meldNum = String(meldIdx + 1); // CH-1: the non-color badge that tells melds apart
+      } else {
+        delete el.dataset.meldNum;
+      }
       el.classList.toggle('is-dimmed', !!colorOf && !inSet);
       seq.push(el);
     });
+    if (breakActive && breakAt === order.length) seq.push(brk); // all in the top row
     for (const el of byId.values()) el.remove();
-    if (order.length <= 4 && brk.parentNode) brk.remove();
+    if (!breakActive && brk.parentNode) brk.remove();
     // Appending an existing child moves it: order is applied without recreating nodes.
     seq.forEach((el) => hand.appendChild(el));
+
+    // CH-2: --cc-hand-overlap is tuned for at most 4 cards per row (the old fixed
+    // split). Now a row can hold up to 8, which the base overlap doesn't leave
+    // room for - a full row would silently wrap onto a second line within its
+    // own row (Escoba's "invisible extra row" bug, recurring here). Tighten the
+    // overlap just enough for the actual largest row THIS hand has, measured
+    // against the real container/card widths rather than a guessed constant;
+    // reset to the roomier default overlap once no row needs more than 4.
+    const topCount = breakActive ? breakAt : order.length;
+    const bottomCount = breakActive ? order.length - breakAt : 0;
+    const maxRow = Math.max(topCount, bottomCount);
+    const sample = hand.querySelector('.cc-card[data-drag]');
+    if (maxRow > 4 && sample) {
+      const cardW = sample.getBoundingClientRect().width;
+      const handW = hand.getBoundingClientRect().width;
+      const baseOverlapPx = parseFloat(getComputedStyle(hand).fontSize) * 2.1;
+      const neededOverlapPx = cardW - (handW - cardW) / (maxRow - 1) + 2; // +2px rounding margin
+      hand.style.setProperty('--cc-hand-overlap', `${Math.max(neededOverlapPx, baseOverlapPx)}px`);
+    } else {
+      hand.style.removeProperty('--cc-hand-overlap');
+    }
   }
 
   renderActions() {
@@ -1134,6 +1174,7 @@ class ChinchonUI {
       if (this._pilesEl) this._pilesEl.discard.classList.toggle('is-droptarget', over);
     }
     d.targetIndex = over ? -1 : this._dropIndex(e.clientX, e.clientY, d.id);
+    d.targetRow = over ? -1 : this._dropRow(e.clientY);
   }
 
   onPointerUp() {
@@ -1150,7 +1191,7 @@ class ChinchonUI {
     if (!d.moved) return;
     this._justDragged = true;        // swallow the click that follows a drag
     if (d.overDiscard && this._canDropDiscard()) { this._resolvePending(d.id); return; }
-    this._applyDrop(d.id, d.targetIndex);
+    this._applyDrop(d.id, d.targetIndex, d.targetRow);
     this.render();
   }
 
@@ -1177,10 +1218,31 @@ class ChinchonUI {
     return idx;
   }
 
-  _applyDrop(id, idx) {
+  /** Which row (0 = top, 1 = bottom) the pointer is over, using the break
+   *  element's own rect as the boundary - CH-2, see _applyDrop. -1 if there's
+   *  no active break (hand of 4 or fewer: a single row, no row to target). */
+  _dropRow(y) {
+    const brk = this.el.hand.querySelector('.cc-hand-break');
+    if (!brk) return -1;
+    return y < brk.getBoundingClientRect().top ? 0 : 1;
+  }
+
+  /** CH-2: `row` (from _dropRow) lets a drag change which row a card ends up
+   *  in, not just its position within the row it started in - dragging a card
+   *  into the other row's space grows that row by shrinking/growing
+   *  _handBreak (the persisted top-row count) just enough to include it,
+   *  instead of the old fixed "always 4 on the bottom" split silently
+   *  overriding wherever the player actually dropped it. */
+  _applyDrop(id, idx, row) {
     const without = this._displayOrder.filter((x) => x !== id);
-    without.splice(Math.max(0, Math.min(idx, without.length)), 0, id);
+    const clamped = Math.max(0, Math.min(idx, without.length));
+    without.splice(clamped, 0, id);
     this._manualOrder = without;
+    if (row != null && row !== -1 && this._handBreak != null && without.length > 4) {
+      const finalIdx = without.indexOf(id);
+      if (row === 0 && finalIdx >= this._handBreak) this._handBreak = finalIdx + 1;
+      else if (row === 1 && finalIdx < this._handBreak) this._handBreak = finalIdx;
+    }
   }
 
   // --- modals ---------------------------------------------------------------
@@ -1432,7 +1494,7 @@ class ChinchonUI {
       case 'card':
         if (this._justDragged) { this._justDragged = false; break; }
         this.onCardTap(a.dataset.id); break;
-      case 'sort-cycle': this._sortMode = this._sortMode === 'suit' ? 'rank' : 'suit'; this._manualOrder = null; this.render(); break;
+      case 'sort-cycle': this._sortMode = this._sortMode === 'suit' ? 'rank' : 'suit'; this._manualOrder = null; this._handBreak = null; this.render(); break;
       case 'toggle-highlight': this._highlightSets = !this._highlightSets; this.render(); break;
       case 'discard-confirm': if (pend && pend.kind === 'discard' && this._selectedCardId) this._resolvePending(this._selectedCardId); break;
       case 'close-yes': if (pend && pend.kind === 'close') this._resolvePending(true); break;
