@@ -24,6 +24,7 @@ const SUITES = [
   { file: 'connect-four/js/test.js' },
   { file: 'nuts-bolts/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
+  { file: 'dots-boxes/js/test.js' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
   { file: 'validate-sw-assets.mjs' },

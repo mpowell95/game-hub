@@ -1,0 +1,386 @@
+/* dots-boxes.css - scoped under .db-root (hub rule: no global selectors,
+   every rule descendant-scoped -- Mancala is the reference for this
+   discipline, see root CLAUDE.md "Adding a game" checklist).
+
+   Matt is red/green colorblind: box ownership is carried by the owner's
+   EMOJI glyph, never by fill color alone (the tint below is decoration on
+   top of that). Drawn vs undrawn edges are told apart by thickness + opacity,
+   never hue. A capturable box (one line away from being claimed) gets a
+   dashed border, not a color cue. */
+
+.db-root {
+  --db-accent: #7048a8;
+  --db-accent-deep: #52357c;
+  --db-ink: #16243a;
+  --db-muted: #5b6b82;
+  --db-bg: #f4f6fb;
+  --db-surface: #ffffff;
+  --db-surface-2: #eef2f8;
+  --db-line-off: #b9c2d4;
+  --db-line-on: #2c3a52;
+  --db-human-tint: rgba(112, 72, 168, 0.16);
+  --db-ai-tint: rgba(31, 95, 168, 0.14);
+  --db-warn: #e0532f;
+  --db-gold: #ffce4a;
+  display: block;
+  min-height: 100%;
+  background: var(--db-bg);
+  color: var(--db-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.db-root .db-shell {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 18px 14px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* --- shared bits --------------------------------------------------------- */
+
+.db-root .db-title {
+  margin: 0;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.db-root .db-sub {
+  margin: -8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--db-muted);
+}
+.db-root .db-stats {
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--db-muted);
+}
+
+.db-root .db-vscard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  width: 100%;
+  max-width: 380px;
+  background: var(--db-surface);
+  border: 1px solid var(--db-surface-2);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.db-root .db-vsside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 84px;
+}
+.db-root .db-vsemoji { font-size: 24px; line-height: 1; }
+.db-root .db-vsname {
+  font-size: 12.5px;
+  font-weight: 800;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-root .db-vslabel {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: var(--db-muted);
+}
+
+.db-root .db-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 13px 16px;
+  font-size: 15px;
+}
+.db-root .db-btn-primary { background: var(--db-accent); color: #fff; }
+.db-root .db-btn-primary:active { background: var(--db-accent-deep); }
+.db-root .db-btn-ghost {
+  background: var(--db-surface);
+  color: var(--db-ink);
+  border: 1px solid var(--db-surface-2);
+}
+.db-root .db-btn-small { padding: 9px 12px; font-size: 13px; }
+.db-root .db-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--db-accent-deep);
+  font: inherit;
+  font-weight: 800;
+  font-size: 13.5px;
+  text-align: center;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* Segmented control, shared by every settings row. */
+.db-root .db-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 5px;
+  background: var(--db-surface-2);
+  border-radius: 11px;
+  padding: 4px;
+}
+.db-root .db-segbtn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--db-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.db-root .db-segbtn.is-selected {
+  background: #fff;
+  color: var(--db-ink);
+  box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18);
+}
+
+/* --- setup: accordion summary card (Escoba's pattern) -------------------- */
+
+.db-root .db-summary {
+  width: 100%;
+  max-width: 380px;
+  background: var(--db-surface);
+  border: 1px solid var(--db-surface-2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.db-root .db-row { border-bottom: 1px solid var(--db-surface-2); }
+.db-root .db-row:last-child { border-bottom: 0; }
+.db-root .db-row-head {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.db-root .db-row-label { font-size: 14px; font-weight: 800; color: var(--db-ink); }
+.db-root .db-row-value { font-size: 13.5px; font-weight: 700; color: var(--db-muted); }
+.db-root .db-row.is-open .db-row-value { color: var(--db-accent-deep); }
+.db-root .db-row-expand { padding: 0 14px 14px; }
+.db-root .db-hint { margin: 8px 2px 0; font-size: 12px; line-height: 1.4; color: var(--db-muted); }
+
+/* --- game: top bar ---------------------------------------------------------*/
+
+.db-root .db-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+.db-root .db-idchip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: var(--db-surface);
+  font-size: 13px;
+  font-weight: 800;
+}
+.db-root .db-idchip.is-turn { border-color: var(--db-gold); background: rgba(255, 206, 74, 0.22); }
+.db-root .db-idchip .db-score { font-weight: 900; font-variant-numeric: tabular-nums; min-width: 1.1em; text-align: center; }
+.db-root .db-vsdash { font-size: 12px; font-weight: 900; color: var(--db-muted); }
+
+.db-root .db-status {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.db-root .db-status:not(:empty) {
+  background: var(--db-surface);
+  border: 1px solid var(--db-surface-2);
+  border-radius: 999px;
+  padding: 4px 14px;
+}
+
+/* --- board: CSS Grid lattice, alternating dot/cell tracks ------------------ */
+/* Every edge is a real <button>, so it's focusable, has an aria-label, and
+   gets native tap handling -- same as every other interactive game cell in
+   this repo. Edges render visually thin but need ~44px of touch area: each
+   edge button fills its whole grid track, then expands past its (much
+   smaller) dot-sized track dimension via a negative margin, so the tappable
+   box is far bigger than the drawn line inside it. Box fills and dots are
+   plain non-interactive divs, so that overflow safely overlaps them. */
+
+.db-root .db-board[data-size="small"] { --db-dot: 12px; --db-cell: 84px; }
+.db-root .db-board[data-size="medium"] { --db-dot: 11px; --db-cell: 68px; }
+.db-root .db-board[data-size="large"] { --db-dot: 10px; --db-cell: 56px; }
+@media (max-width: 420px) {
+  .db-root .db-board[data-size="small"] { --db-cell: min(22vw, 84px); }
+  .db-root .db-board[data-size="medium"] { --db-cell: min(18vw, 68px); }
+  .db-root .db-board[data-size="large"] { --db-cell: min(13.5vw, 56px); }
+}
+
+.db-root .db-board {
+  display: grid;
+  /* Edge buttons overflow this padding on purpose (see .db-edge-h/.db-edge-v
+     below): each expands from the ~10-12px dot track to a real 44px tap
+     target via a negative margin, so the board needs enough of its own
+     padding to absorb that overflow without pushing the page into
+     horizontal scroll. Verified at 375px width with the Large (5x5) board. */
+  margin: 0 auto;
+  padding: 16px;
+  background: var(--db-surface);
+  border: 1px solid var(--db-surface-2);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
+}
+
+.db-root .db-dot {
+  width: var(--db-dot);
+  height: var(--db-dot);
+  border-radius: 50%;
+  background: var(--db-line-on);
+  justify-self: center;
+  align-self: center;
+}
+
+.db-root .db-edge {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+.db-root .db-edge.is-live { cursor: pointer; }
+/* The button's actual box is enlarged to a real 44px tap target, THEN pulled
+   back with a negative margin so it centers on its (much thinner) dot-sized
+   grid track without pushing neighboring tracks -- sizing alone doesn't do
+   this: a track-sized box with a negative margin only shifts a still-tiny
+   hit area, it doesn't grow it. */
+.db-root .db-edge-h { width: 100%; height: 44px; margin-block: calc((var(--db-dot) - 44px) / 2); }
+.db-root .db-edge-v { height: 100%; width: 44px; margin-inline: calc((var(--db-dot) - 44px) / 2); }
+
+.db-root .db-line { background: var(--db-line-off); border-radius: 2px; opacity: 0.4; transition: background 120ms ease, opacity 120ms ease, height 120ms ease, width 120ms ease; }
+.db-root .db-edge-h .db-line { width: 100%; height: 2px; }
+.db-root .db-edge-v .db-line { height: 100%; width: 2px; }
+.db-root .db-edge.is-drawn .db-line { background: var(--db-line-on); opacity: 1; }
+.db-root .db-edge.is-drawn.db-edge-h .db-line { height: 5px; }
+.db-root .db-edge.is-drawn.db-edge-v .db-line { width: 5px; }
+.db-root .db-edge.is-live:hover .db-line { opacity: 0.7; }
+.db-root .db-edge.is-live:active .db-line { opacity: 0.9; }
+.db-root .db-edge:focus-visible { outline: 2px solid var(--db-accent); outline-offset: 2px; z-index: 3; }
+
+.db-root .db-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background: var(--db-surface-2);
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.db-root .db-box.is-human { background: var(--db-human-tint); }
+.db-root .db-box.is-ai { background: var(--db-ai-tint); }
+/* Capturable cue: a box one line away from being claimed, told apart by a
+   dashed border + pulse, never by color alone. */
+.db-root .db-box.is-capturable { border-style: dashed; border-color: var(--db-warn); animation: db-pulse 1100ms ease-in-out infinite; }
+.db-root .db-glyph { font-size: calc(var(--db-cell) * 0.52); line-height: 1; }
+.db-root .db-box.is-claim .db-glyph { animation: db-pop 260ms ease; }
+
+@keyframes db-pop { from { transform: scale(0.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes db-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .db-root .db-box.is-claim .db-glyph { animation: none; }
+  .db-root .db-box.is-capturable { animation: none; }
+}
+
+/* --- actions / end overlay ------------------------------------------------*/
+
+.db-root .db-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.db-root .db-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.db-root .db-scrim { position: absolute; inset: 0; background: rgba(16, 26, 44, 0.55); }
+.db-root .db-card {
+  position: relative;
+  background: var(--db-surface);
+  border-radius: 18px;
+  padding: 22px 20px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 18px 44px rgba(16, 26, 44, 0.38);
+}
+.db-root .db-card-emoji { font-size: 40px; line-height: 1; display: block; }
+.db-root .db-card-title { margin: 8px 0 4px; font-size: 22px; font-weight: 900; }
+.db-root .db-card-sub { margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--db-muted); }
+.db-root .db-card-actions { display: flex; flex-direction: column; gap: 9px; }
+.db-root .db-x {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  appearance: none;
+  border: 0;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--db-muted);
+}
+
+.db-root .db-help { text-align: left; max-width: 400px; max-height: min(78vh, 600px); overflow-y: auto; }
+.db-root .db-help p, .db-root .db-help li { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3a4a63; }
+.db-root .db-help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.db-root .db-help p + p { margin-top: 8px; }

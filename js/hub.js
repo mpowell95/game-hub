@@ -279,6 +279,32 @@ const GAMES = [
             <ellipse cx="54" cy="49" rx="5" ry="3.5" fill="#ff9fe6" opacity="0.7"/>
           </svg>`,
   },
+  {
+    id: 'dots-boxes',
+    title: 'Dots and Boxes',
+    blurb: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
+    module: '../dots-boxes/js/ui.js',
+    accent: '#7048a8',
+    art: `<svg viewBox="0 0 120 120" aria-hidden="true">
+            <rect width="120" height="120" fill="#7048a8"/>
+            <rect x="30" y="30" width="30" height="30" fill="rgba(255,255,255,0.16)"/>
+            <g stroke="rgba(255,255,255,0.32)" stroke-width="2" stroke-linecap="round">
+              <line x1="60" y1="60" x2="90" y2="60"/>
+              <line x1="90" y1="30" x2="90" y2="60"/>
+            </g>
+            <g stroke="#ffce4a" stroke-width="6" stroke-linecap="round">
+              <line x1="30" y1="30" x2="60" y2="30"/>
+              <line x1="30" y1="30" x2="30" y2="60"/>
+              <line x1="30" y1="60" x2="60" y2="60"/>
+              <line x1="60" y1="30" x2="60" y2="60"/>
+            </g>
+            <g fill="#e7defb">
+              <circle cx="30" cy="30" r="5"/><circle cx="60" cy="30" r="5"/><circle cx="90" cy="30" r="5"/>
+              <circle cx="30" cy="60" r="5"/><circle cx="60" cy="60" r="5"/><circle cx="90" cy="60" r="5"/>
+              <circle cx="30" cy="90" r="5"/><circle cx="60" cy="90" r="5"/><circle cx="90" cy="90" r="5"/>
+            </g>
+          </svg>`,
+  },
 ];
 
 class Hub {

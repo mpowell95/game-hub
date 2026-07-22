@@ -47,7 +47,7 @@
 //                                                   // live br.runs once - see refoldBallRunLegacyRuns
 //       tictactoe: {
 //         total, byDiff,                           // classic recordResult-shaped (beginner/intermediate/pro)
-//         tt: { classic: { played, won, lost, tied }, ultimate: { played, won, lost, tied } } } },
+//         tt: { classic: { played, won, lost, tied }, ultimate: { played, won, lost, tied } } },
 //                                                   // tic-tac-toe is draw-heavy (Pro Classic is an unbeatable
 //                                                   // solved game -- see tic-tac-toe/js/ai.js -- so most Pro
 //                                                   // Classic games are draws), so `tied` is stored EXPLICITLY
@@ -55,6 +55,15 @@
 //                                                   // keep the shared {played,won,lost} shape (a draw stays
 //                                                   // derivable there as played-won-lost, same as every other
 //                                                   // game); see recordTicTacToe
+//       dotsboxes: {
+//         total, byDiff,
+//         db: { played, won, lost, tied, boxes, bestChain } },  // Medium (4x4) can end in an 8-8 tie, so
+//                                                   // `tied` is stored EXPLICITLY here too, same reasoning as
+//                                                   // tictactoe's tt above; `boxes` is the human's cumulative
+//                                                   // claimed-box count across every game (additive), and
+//                                                   // `bestChain` is the longest single-turn capture run the
+//                                                   // human has ever made (Math.max only, per THE LAW rule 2 --
+//                                                   // never overwritten with a lower value); see recordDotsBoxes
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -62,7 +71,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes'];
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
@@ -193,6 +202,14 @@ function ensureTt(g) {
   }
 }
 
+/** Dots and Boxes: the per-match W/L/Tie counters plus the human's cumulative box
+ *  count and best single-turn chain. Medium (4x4) can end 8-8, so `tied` is tracked
+ *  explicitly here, same reasoning as ensureTt above. */
+function ensureDb(g) {
+  if (!g.db || typeof g.db !== 'object') g.db = { played: 0, won: 0, lost: 0, tied: 0, boxes: 0, bestChain: 0 };
+  for (const k of ['played', 'won', 'lost', 'tied', 'boxes', 'bestChain']) if (!Number.isFinite(g.db[k])) g.db[k] = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -209,6 +226,7 @@ function normalize(raw) {
   ensureEs(st.games.escoba);
   ensureBr(st.games.ballrun);
   ensureTt(st.games.tictactoe);
+  ensureDb(st.games.dotsboxes);
   return st;
 }
 
@@ -442,8 +460,32 @@ export function recordTicTacToe(variant, difficulty, won) {
   return st;
 }
 
+/** Dots and Boxes: record a finished match. Maintains total/byDiff (as recordResult)
+ *  AND the `db` breakdown. `won` is true, false, or null for a tie (Medium/4x4 can end
+ *  8-8) -- a tie increments `played` and `tied` only, matching recordTicTacToe.
+ *  `extras` = { boxes, bestChain } for THIS game: `boxes` (the human's claimed-box
+ *  count) is added to the running total; `bestChain` (the human's longest single-turn
+ *  capture run) only ever raises the stored best (Math.max), per THE LAW rule 2.
+ *  Additive; never overwrites. */
+export function recordDotsBoxes(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.dotsboxes;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureDb(g);
+  const e = extras || {};
+  g.db.played += 1;
+  if (won === true) g.db.won += 1;
+  else if (won === false) g.db.lost += 1;
+  else g.db.tied += 1;
+  g.db.boxes += Math.max(0, e.boxes | 0);
+  g.db.bestChain = Math.max(g.db.bestChain | 0, e.bestChain | 0);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export { GAMES, STATS_KEY, DEVICE_KEY };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
-  recordBallRun, recordTicTacToe, GAMES, STATS_KEY, DEVICE_KEY,
+  recordBallRun, recordTicTacToe, recordDotsBoxes, GAMES, STATS_KEY, DEVICE_KEY,
 };

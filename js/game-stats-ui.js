@@ -23,6 +23,7 @@ const TABS = [
   { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
   { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
   { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
+  { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#7048a8' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -243,6 +244,25 @@ function ticTacToeScreen(rec) {
   return ttVariantTallies('Classic', classic) + ttVariantTallies('Ultimate', ultimate);
 }
 
+/** Dots and Boxes: Won/Lost/Tied shown explicitly (Medium/4x4 can end 8-8, same
+ *  reasoning as ticTacToeScreen above), plus the human's cumulative boxes claimed
+ *  and longest single-turn chain -- never folded away, per THE LAW rule 1. */
+function dotsBoxesScreen(rec) {
+  const db = (rec && rec.db) || { played: 0, won: 0, lost: 0, tied: 0, boxes: 0, bestChain: 0 };
+  if (!(db.played | 0)) return emptyState('Dots and Boxes');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${db.won | 0}</b><span>Won</span></div>
+      <div class="gs-tally"><b>${db.lost | 0}</b><span>Lost</span></div>
+      <div class="gs-tally"><b>${db.tied | 0}</b><span>Tied</span></div>
+      <div class="gs-tally"><b>${db.played | 0}</b><span>Played</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${db.boxes | 0}</b><span>Boxes claimed</span></div>
+      <div class="gs-tally"><b>${db.bestChain | 0}</b><span>Longest chain</span></div>
+    </div>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -251,6 +271,7 @@ function screenFor(id, st) {
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);
+  if (id === 'dotsboxes') return dotsBoxesScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

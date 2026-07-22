@@ -317,6 +317,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
 | Nuts & Bolts | in-hub `module:` | Solo color-sort puzzle: stack matching nuts onto bolts. Procedural level generator (`nuts-bolts/js/generator.js`) with a solvability + quality-gate self-test (regenerates a level rather than shipping an unsolvable or trivial one). Settings/progress in `gamehub.nutsbolts.v1` (schema-versioned, with its own migration). A solo puzzle has no opponent/loss state, so results record via `recordNutsBolts` (solved/moves/bestLevel), not `recordResult`. |
 | Ball Run | in-hub `module:` | Solo endless runner: steer a rolling ball down a neon track, dodge obstacles. Three.js/WebGL renderer (`render.js`, vendored `ball-run/vendor/three.module.min.js`), fixed-timestep sim (`sim.js`/`track.js`) decoupled from rendering, `input.js` for touch/drag steering. `immersive: true`. Settings under the older dotted `ballrun.*` keys (predates the `gamehub.<game>.v1` convention; frozen per THE LAW). Results recorded via `recordBallRun` (obstacle-count score, not distance — see `js/game-stats.js`'s header comment for the metric-migration history) through a local "flight recorder" (`ballrun.runLog.v1`) that retries any run that didn't confirm reaching the shared store, on every subsequent open. Renderer teardown calls `forceContextLoss()` after `dispose()` so repeated hub↔game remounts don't leak WebGL contexts toward the browser's context cap. |
 | Tic Tac Toe | in-hub `module:` | Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate** (nine 3x3 boards nested in a 3x3 meta-board; the cell you play picks which board your opponent plays next, a resolved target board grants a free move, and a small board that fills with no winner is DEAD — counts for neither side, never playable again). Pure engine (`tic-tac-toe/js/game.js`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala (no async agent interface — a move has no multi-step resolution to pace). Three shared-vocabulary tiers (beginner/intermediate/pro) per variant: Classic Pro is **exhaustive minimax, unbeatable by design** (a perfect opponent can only draw it — intentional, not a bug); Ultimate Pro is iterative-deepening alpha-beta under a ~380ms budget (Mancala's Pro tier is the precedent for that number), with a 4-term eval (positional small-board ownership, meta-line potential, in-board two-in-a-row, and a heavily-weighted "send penalty" for handing the opponent a good board or a free move — the term that makes it play like Ultimate instead of nine unrelated games). Setup screen is Escoba's accordion pattern. Settings in `gamehub.tictactoe.v1`. Results via `recordTicTacToe(variant, difficulty, won)`: maintains the shared `total`/`byDiff` bucket (draws derived, like every other game) AND an explicit per-variant `tt.classic`/`tt.ultimate` `{played,won,lost,tied}` breakdown — `tied` is stored explicitly there (not derived) because this game is draw-heavy, especially Classic vs Pro; the Stats tab shows all six W/L/T numbers, never folded away. |
+| Dots and Boxes | in-hub `module:` | Draw an edge on a lattice of dots; complete a box's 4th side to claim it and go again, so one turn can chain-capture many boxes. Three board sizes, a setting independent of difficulty: Small (3x3 boxes), Medium (4x4, the only size where an even box count makes a tie possible), Large (5x5). Pure engine (`dots-boxes/js/game.js`, edges as `{type:'h'\|'v', r, c}`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala/Tic Tac Toe. Three shared-vocabulary tiers: Beginner takes any free box then plays randomly; Intermediate takes every free box and prefers safe moves, opening the shortest chain when forced, but never sacrifices; **Pro adds the double-cross** (`ai.js`'s `pickCaptureOrDoubleCross`) — when eating a chain/loop, it takes all but the last 2 boxes (last 4 of a loop) and plays the "hard-hearted handout" instead, trading a small sacrifice for forcing the opponent to open the next chain, UNLESS taking everything already wins the game outright on box count or it's the last region left on the board. Pro also solves the endgame exactly via alpha-beta once ≤14 edges remain (a deadline-guarded search, falling back to the heuristic on abort). Board is CSS Grid with alternating dot/cell tracks, every edge a real `<button>` expanded past its thin dot-track to a genuine 44px tap target via a sized-then-negative-margined box (verified at 375px width for all three sizes, see `dots-boxes/css/dots-boxes.css`'s board-padding comment). Colorblind-safe: claimed boxes show the owner's emoji glyph, never color alone; a capturable box gets a dashed border pulse. Setup screen is Escoba's accordion pattern. Settings in `gamehub.dotsboxes.v1`. Results via `recordDotsBoxes(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `db` breakdown (`{played,won,lost,tied,boxes,bestChain}`) — `tied` is explicit (Medium can end 8-8), `boxes` is the human's cumulative claimed-box count (additive), `bestChain` is their longest single-turn capture run ever (`Math.max` only). `isInProgress()` is the no-mid-game-resume meaning: even a Large match runs only a few minutes, so autosave wasn't worth the complexity. |
 
 ---
 
@@ -394,6 +395,41 @@ pieces that must be kept in sync by hand whenever their canonical source changes
   shape marker, never hue alone. Palette: yellow `#F2B705` circle, blue `#1F5FA8` triangle, vermilion
   `#E0532F` square, teal `#178A7A` diamond.
 - **No em dashes** in user-facing game or profile copy (use commas, colons, or parentheses).
+
+### How-to-play screens — the pattern (worked out on Tic Tac Toe, 2026-07-21)
+
+Reference implementation: `tic-tac-toe/js/ui.js` (`openHelp()`).
+
+**Explain only the one genuinely non-obvious mechanic.** Skip anything the player already
+knows — do not re-explain basic rules of a game everyone grew up with. For Tic Tac Toe that
+meant explaining only Ultimate's "your cell picks their board" rule and nothing else.
+
+Structure, top to bottom:
+
+1. **One short bold sentence** stating the goal or win condition.
+2. **A small SVG diagram** illustrating the confusing mechanic directly. If you can show it,
+   do not describe it in prose. (Tic Tac Toe's: nine board outlines, one showing its own
+   mini-grid with a marked cell, and an arrow curving to the board that cell sends the
+   opponent to.)
+3. **A caption** under the diagram stating the rule in plain words.
+4. **A concrete one-line example in "X = Y" format** (e.g. "Play top right box = Opponent
+   plays top right board").
+5. **Any remaining edge cases**, each as its own plain sentence. No bullets unless there are
+   three or more.
+
+Rules for the whole screen:
+
+- **Every line of text must fit on a single row.** Do not guess a font-size. Measure the
+  actual rendered width against the container's real available width, size down until it
+  fits, then lock it with `white-space: nowrap`.
+- **Spacing between elements must be explicit and deliberate** — one flex container with a
+  fixed `gap`, or hard-coded margins. Never leave it to collapse naturally between two
+  unrelated rules.
+- **The diagram must carry its meaning through shape, outline, and arrows, never color
+  alone** (colorblind-safe, same as the palette rule above).
+
+Related: **any "you win / you lose" popup gets a close (X) in its top-right corner**, so it
+can be dismissed without forcing a rematch.
 
 ---
 
