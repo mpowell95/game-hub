@@ -9,6 +9,7 @@
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
+import { loadFavorites, toggleFavorite } from './favorites.js';
 
 const GAMES = [
   {
@@ -284,13 +285,14 @@ const GAMES = [
     title: 'Dots and Boxes',
     blurb: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
     module: '../dots-boxes/js/ui.js',
-    accent: '#7048a8',
-    // Two claimed boxes, one in each player's actual in-game color (bright
-    // iOS red/blue, matching dots-boxes/css/dots-boxes.css's --db-human/
-    // --db-ai exactly) -- the tile itself now shows the same red-vs-blue
-    // identity a player sees on the board, not an unrelated gold accent.
+    // Neutral dark backdrop on purpose, NOT a third saturated hue: with
+    // --db-human/--db-ai already bright red/blue, a colorful accent behind
+    // them (the old #7048a8 purple) fights the two-color art for attention.
+    // #16243a is dots-boxes.css's own --db-ink, so this isn't an invented
+    // color either, just the game's existing neutral pulled onto the tile.
+    accent: '#16243a',
     art: `<svg viewBox="0 0 120 120" aria-hidden="true">
-            <rect width="120" height="120" fill="#7048a8"/>
+            <rect width="120" height="120" fill="#16243a"/>
             <rect x="30" y="30" width="30" height="30" fill="rgba(255,59,48,0.32)"/>
             <rect x="60" y="60" width="30" height="30" fill="rgba(0,122,255,0.32)"/>
             <g stroke="rgba(255,255,255,0.32)" stroke-width="2" stroke-linecap="round">
@@ -351,13 +353,26 @@ class Hub {
     // In-development games (devOnly) render only for Matt and the tester. Everyone else,
     // including the challenge recipient, never sees the card at all.
     const dev = !!(prof && isDevProfile(prof.name));
-    // Games are always listed ALPHABETICALLY by display title (project rule). Sorting at
-    // render time keeps it self-maintaining: a new GAMES entry lands in the right place no
-    // matter where it is added to the array. localeCompare so accents (Chinchón, Parchís)
-    // sort correctly.
-    const visible = GAMES.filter((g) => !g.devOnly || dev)
-      .sort((a, b) => a.title.localeCompare(b.title));
-    this.games = visible;
+    // Games are listed FAVORITES FIRST, then ALPHABETICALLY by display title within each
+    // group (project rule). Sorting at render time keeps it self-maintaining: a new GAMES
+    // entry lands in the right place no matter where it is added to the array. localeCompare
+    // so accents (Chinchón, Parchís) sort correctly. An id in storage that doesn't match a
+    // visible game (retired/not-yet-unlocked) is simply never matched here - it stays in
+    // storage untouched and starts showing again the moment the game reappears.
+    const visible = GAMES.filter((g) => !g.devOnly || dev);
+    const favIds = new Set(loadFavorites());
+    const byTitle = (a, b) => a.title.localeCompare(b.title);
+    const favGames = visible.filter((g) => favIds.has(g.id)).sort(byTitle);
+    const restGames = visible.filter((g) => !favIds.has(g.id)).sort(byTitle);
+    this.games = [...favGames, ...restGames];
+    this._favIds = favIds;
+    // The divider only earns its place between two non-empty groups; with zero favorites
+    // (the common first-run case) or with every visible game favorited, the grid is a plain
+    // single alphabetical list and no divider renders.
+    const showDivider = favGames.length > 0 && restGames.length > 0;
+    const gridHTML = favGames.map((g) => this.cardHTML(g)).join('')
+      + (showDivider ? '<div class="hub-divider">All games</div>' : '')
+      + restGames.map((g) => this.cardHTML(g)).join('');
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -374,7 +389,7 @@ class Hub {
         </header>
         <main class="hub-main">
           <section class="hub-grid" data-role="grid" aria-label="Games">
-            ${visible.map((g) => this.cardHTML(g)).join('')}
+            ${gridHTML}
           </section>
           ${showKeepsake ? `<section class="hub-extra"><button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">🎁 Challenge</button></section>` : ''}
           <section class="hub-game" data-role="game" hidden></section>
@@ -439,6 +454,14 @@ class Hub {
     });
     // Delegate from .hub-main so it catches the grid cards.
     this.el.grid.parentElement.addEventListener('click', (e) => {
+      // .hub-fav is a SIBLING of .hub-card, not nested inside it (a button can't nest inside
+      // a button/link), so this needs no stopPropagation - it just has to run first.
+      const fav = e.target.closest('.hub-fav');
+      if (fav) {
+        toggleFavorite(fav.dataset.favId);
+        this.render();   // full re-render: ordering logic stays in exactly one place
+        return;
+      }
       const card = e.target.closest('.hub-card');
       if (!card) return;
       if (card.tagName === 'A') return;            // launch-out: real link, native nav
@@ -582,8 +605,8 @@ class Hub {
   }
 
   cardHTML(g) {
-    // Square tile: full-bleed art with the title in a caption. The blurb moves to
-    // the accessible label (it is no longer shown on the compact tile face).
+    // Landscape tile: full-bleed art with the title outlined directly over it (no scrim).
+    // The blurb moves to the accessible label (it is no longer shown on the tile face).
     const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
@@ -592,12 +615,18 @@ class Hub {
     const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
-    if (g.href) {
-      return `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}" aria-label="${aria}">${inner}</a>`;
-    }
-    return `<button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
+    const card = g.href
+      ? `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}" aria-label="${aria}">${inner}</a>`
+      : `<button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
               data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
               style="--card-accent:${g.accent}" aria-label="${aria}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>${inner}</button>`;
+    // A <button> can't nest inside a <button> or <a>, so the heart is a SIBLING inside a
+    // positioned .hub-cell wrapper, not a child of .hub-card - see .hub-cell/.hub-fav in hub.css.
+    const favored = this._favIds.has(g.id);
+    const favLabel = favored ? `Remove ${g.title} from favorites` : `Add ${g.title} to favorites`;
+    const fav = `<button type="button" class="hub-fav${favored ? ' is-fav' : ''}" data-fav-id="${g.id}"
+              aria-pressed="${favored}" aria-label="${favLabel}">${favored ? '♥' : '♡'}</button>`;
+    return `<div class="hub-cell">${card}${fav}</div>`;
   }
 
   async launch(id) {

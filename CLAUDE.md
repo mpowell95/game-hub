@@ -59,6 +59,16 @@ player paid for it. No feature, cleanup, refactor, or deadline outranks any of t
 2. **Writes are additive, only.** Counters increment. Bests only ever improve
    (`Math.max`). Nothing is ever zeroed, decremented, or overwritten with less. This
    already holds everywhere in `js/game-stats.js`; keep it that way.
+
+   **Carve-out: THE LAW governs history and achievement data — data a player earned and
+   cannot recreate.** A user-controlled preference the player can restore in one tap
+   (e.g. launcher favorites, `js/favorites.js`) is not that. Removing a favorite is the
+   user's intent, not data loss, so `toggleFavorite` removing an id from
+   `gamehub.favorites.v1` does not violate rule 2. Do not invent a tombstone/soft-delete
+   scheme for this kind of data, and do not refuse to implement removal citing this rule —
+   the rule was never about preferences. If a future feature is ambiguous about which side
+   of this line it's on, ask: can the player recreate this state in one tap with no loss? If
+   yes, it's a preference, not history.
 3. **Migrations carry everything forward that CAN be carried.** Only genuinely
    unit-incompatible values (e.g. meters vs obstacle counts) may be archived instead of
    converted. Unit-agnostic data (play counts, totals, byDiff buckets, timestamps) always
@@ -143,6 +153,7 @@ entirely — keep it current when a module is added, split, or merged.
 | Module | Role |
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
+| `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
 | `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
@@ -292,10 +303,17 @@ When restructuring an old game, migrate it toward the reference for each axis in
 5. Add an entry to `GAMES` in `js/hub.js`:
    - in-hub module → `module: '../<game>/js/ui.js'`
    - separately-deployed app → `href: '/<game>/'`
-   - plus `id, title, blurb, badge, accent, art` (inline SVG).
-   - Array position is irrelevant: the launcher grid is sorted **alphabetically by display `title`**
-     at render time (`localeCompare`). Games are always listed alphabetically, no exceptions. (The
+   - plus `id, title, blurb, badge, accent, art` (inline SVG — see the art requirement below).
+   - Array position is irrelevant: the launcher grid renders **favorites first, then
+     alphabetically by display `title` within each group** (`localeCompare`), computed at
+     render time in `js/hub.js` from `js/favorites.js`. A new entry needs no special handling
+     for this — it's unfavorited by default and lands alphabetically among the rest. (The
      hidden challenge/admin card is the sole exception; it renders apart in `.hub-extra`.)
+   - **Art must be landscape**: `viewBox="0 0 160 90"`, composed to fill that frame, with a
+     full-bleed `<rect width="160" height="90" fill="…"/>` background. Do NOT draw a square
+     composition and crop it with `preserveAspectRatio="slice"` — that was tried during the
+     2026-07 tile redesign and rejected because it cuts shapes off mid-shape at the frame edge
+     (it bisected Connect Four's discs). Compose for the frame you're given.
 6. Add the game's files (including its `index.html`) to the `ASSETS` precache list in `sw.js`
    and **bump `CACHE`** (`game-hub-vN` → `vN+1`), or the new files won't be cached for
    offline. Run `node validate-sw-assets.mjs` before committing — it fails on any `ASSETS`

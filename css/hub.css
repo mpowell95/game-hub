@@ -160,8 +160,8 @@ body {
    sits on top of the mounted game's own content. */
 .hub-main.hub-main-immersive { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
 
-/* Launcher grid — a 2x2 grid of SQUARE game tiles, so all four games are visible
-   at a glance without scrolling. Each tile is full-bleed art with a title caption. */
+/* Launcher grid — 2-up on phones, landscape (16:9) tiles so more rows fit per
+   scroll. Each tile is full-bleed art with a title caption. */
 .hub-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -188,14 +188,24 @@ body {
 .hub-keepsake-btn:hover { box-shadow: 0 0 0 1px rgba(242, 183, 5, 0.32); }
 .hub-card {
   position: relative;
-  aspect-ratio: 1 / 1;
+  width: 100%;
+  /* A <button> child no longer sizes itself from the grid track now that .hub-cell (not
+     .hub-card) is the grid item - unlike a <div>/<a>, a form control's block width isn't
+     reliably "fill the container" from display:block alone in every engine, which let
+     aspect-ratio derive height from a near-zero shrink-to-fit width. Explicit width: 100%
+     removes the ambiguity for every .hub-card element type (<button> and <a> alike). */
+  aspect-ratio: 16 / 9;
   display: block;
   overflow: hidden;
   text-decoration: none;
   appearance: none;
   border: 1px solid var(--hub-surface-2);
-  background: var(--hub-surface);
-  border-radius: 18px;
+  /* Backstop for pre-landscape art: square SVGs (viewBox 120x120) letterbox in this
+     16:9 frame, leaving gaps at the sides where the art's own background rect no
+     longer reaches. Matching the card's own fill to the art's accent makes the
+     letterbox read as intentional instead of a bug. */
+  background: var(--card-accent, var(--hub-surface));
+  border-radius: 14px;
   padding: 0;
   cursor: pointer;
   font: inherit;
@@ -208,28 +218,37 @@ body {
 .hub-card.is-soon { cursor: default; opacity: 0.7; }
 .hub-card.is-soon:hover { transform: none; box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06); }
 
-/* Full-bleed art fills the square; the title sits in a caption over a scrim. */
+/* Full-bleed art fills the tile; the title sits directly on the art with an
+   outline, no scrim (see .hub-card-label). */
 .hub-card-art { position: absolute; inset: 0; display: block; }
 .hub-card-art svg { width: 100%; height: 100%; display: block; }
 .hub-card-label {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
-  padding: 26px 12px 10px;
+  left: 10px; bottom: 7px;
+  right: auto;
+  padding: 0;
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: -0.01em;
   text-align: left;
+  white-space: nowrap;
   color: #fff;
-  /* Consistent, tall scrim so labels stay crisp over busy artwork (Parchís, Monopoly Deal),
-     not just the clean tiles. */
-  background: linear-gradient(to top, rgba(6, 12, 24, 0.92) 0%, rgba(6, 12, 24, 0.78) 30%, rgba(6, 12, 24, 0.28) 68%, rgba(6, 12, 24, 0));
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.7);
+  /* No scrim: the four-way outline below carries contrast on its own, so the
+     gradient that used to cover the bottom third of every tile is gone. */
+  background: none;
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000,
+    -1px  1px 0 #000, 1px  1px 0 #000,
+     0 2px 6px rgba(0, 0, 0, 0.7);
 }
 
 .hub-soon-tag {
   position: absolute;
   top: 12px;
-  right: 12px;
+  /* Left, not right: the top-right corner is the favorite heart's (.hub-fav). Soon/Test only
+     ever appear on comingSoon/devOnly cards, so the two never actually need to coexist, but
+     keeping them on opposite corners avoids relying on that. */
+  left: 12px;
   background: var(--hub-surface-2);
   color: var(--hub-muted);
   font-size: 0.66rem;
@@ -237,6 +256,54 @@ body {
   letter-spacing: 0.04em;
   padding: 3px 8px;
   border-radius: 999px;
+}
+
+/* Each grid item is now a .hub-cell wrapping the launch .hub-card/<a> plus a sibling
+   .hub-fav heart button (a button cannot nest inside a button/link, so they're siblings,
+   positioned via this relative wrapper - no stopPropagation needed either). */
+.hub-cell { position: relative; }
+
+.hub-fav {
+  position: absolute;
+  top: 4px; right: 4px;
+  z-index: 2;
+  width: 40px; height: 40px;               /* hit area */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  appearance: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.2rem;                       /* visual glyph stays ~20px inside the 40px target */
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  transition: color 0.1s, transform 0.1s;
+}
+.hub-fav:active { transform: scale(0.9); }
+/* Filled vs. outline glyph is a SHAPE difference, not a hue difference (colorblind-safe by
+   construction); full opacity on top is a legibility nicety, not the signal itself. */
+.hub-fav.is-fav { color: #fff; }
+
+.hub-divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  color: var(--hub-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hub-divider::before, .hub-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hub-surface-2);
 }
 /* Challenge mode: a task marker on each of the four game cards (star = to win, check = won). */
 .hub-card-badge {

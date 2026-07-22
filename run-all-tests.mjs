@@ -27,6 +27,7 @@ const SUITES = [
   { file: 'dots-boxes/js/test.js' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
+  { file: 'favorites.test.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
