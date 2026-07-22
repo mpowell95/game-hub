@@ -474,15 +474,22 @@ class Hub {
     this.current = null;     // { module, id } of the mounted game
     this._onBack = () => this.requestLeave();
     this.render();
-    // Family-wide stats sync: best-effort, guarded, no-op offline. On load, on tab-hide, and on
-    // returning to the launcher (a game may have just updated the stats).
+    // Family-wide stats sync: best-effort, guarded, no-op offline. On load, on tab-hide, on
+    // returning to the launcher (a game may have just updated the stats), and on RECONNECT.
+    // The reconnect hook matters: a device that played offline used to sit un-mirrored until its
+    // next cold start, and because the sync failed silently nobody could tell. syncMyStats mirrors
+    // the whole store every time, so this retry simply repairs whatever the offline period missed.
     this._onVis = () => { if (document.visibilityState === 'hidden') this._syncStats(); };
     document.addEventListener('visibilitychange', this._onVis);
+    this._onOnline = () => this._syncStats();
+    window.addEventListener('online', this._onOnline);
     this._syncStats();
   }
 
-  /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured). */
-  _syncStats() { try { syncMyStats(); } catch { /* never block the hub */ } }
+  /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
+   *  syncMyStats never throws and reports its own failures loudly (see stats-net.js's syncHealth) -
+   *  this guard is only for a synchronous import-time fault, and must not re-swallow the result. */
+  _syncStats() { try { syncMyStats(); } catch (err) { console.error('[hub] stats sync could not start', err); } }
 
   render() {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
@@ -850,6 +857,7 @@ class Hub {
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
+    if (this._onOnline) window.removeEventListener('online', this._onOnline);
     this.root.innerHTML = '';
   }
 }

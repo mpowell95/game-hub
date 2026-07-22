@@ -157,7 +157,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/game-stats.js` | unified per-device stats in `gamehub.stats`; one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle) — `tt`/`db`/`bg` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a byte-identical in-scope copy** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
-| `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry |
+| `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay; per-game tailored screens |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
@@ -414,6 +414,41 @@ leaves every column an equal share) plus `white-space: nowrap` is what stops `15
 lines. Wide boards (Nuts & Bolts, Ball Run) get `is-wide` and scroll inside `.lb-tblwrap`, never the
 page body. The difficulty-mix bar is one hue varying only in LIGHTNESS, with a text `aria-label` —
 colorblind-safe, same rule as the rest of the repo.
+
+### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
+
+A player asked where their game history had gone: they were not on the leaderboard. The leaderboard
+was correct. Their data was intact on their own device and had **never reached Firebase at all**.
+
+`syncMyStats()` ended in a bare `catch { return false; }`, and `hub.js`'s `_syncStats()` called it
+without `await` inside another bare `catch {}`. So a device that could not mirror - offline, blocked
+anonymous auth, private browsing, a rejected write - failed **silently, every time, forever**. Nothing
+reported it: not the device, not the hub, not the leaderboard. The first signal anyone got was a
+person asking why they were missing. That is THE LAW rule 6 violated in the single place it matters
+most, and rule 1 as a consequence (history that reaches no screen reads as deleted).
+
+Now, per rule 6's own reference pattern:
+
+- **Every attempt is recorded locally** in `gamehub.syncHealth.v1`, readable via `syncHealth()`:
+  `{ ok, lastOkAt, lastErrAt, lastErr, localPlays, remotePlays }`. A silently-failing device can be
+  diagnosed **from that device** instead of by noticing a gap on someone else's board.
+- **Every failure path logs loudly** (`console.error`) and names the cost: how many local plays are
+  not mirrored, and that the history is still safe locally.
+- **The write is verified by a fresh re-read.** A resolved promise is not proof the data landed; the
+  check compares total plays that landed against total plays stored, and fails the sync if short.
+- **Retry on reconnect.** `hub.js` syncs on load, tab-hide, return-to-launcher, and now the `online`
+  event. `syncMyStats` mirrors the whole store every time, so any retry repairs a missed period.
+
+**Diagnosing "my history is missing" (do this before suspecting the leaderboard):** on the player's
+own device, open the hub and run `JSON.parse(localStorage['gamehub.syncHealth.v1'])`. `ok:false`, or
+`localPlays` well above `remotePlays`, means the data is fine locally and the SYNC is the problem.
+`gamehub.stats` is the source of truth and is never touched by any of this.
+
+**Known gap, not yet fixed:** the leaderboard lists only players with a profile name
+(`(g.name || '').trim()` in `leaderboard-ui.js`, predates the 2026-07-22 overhaul). Devices that
+recorded plays without ever setting a profile name are mirrored to Firebase but appear on no screen -
+16 plays across 9 devices as of 2026-07-22. That is stored-but-invisible, rule 1. Fixing it needs a
+display identity for a nameless device, which is a product decision, not just a filter change.
 
 ### Head-to-head capture
 

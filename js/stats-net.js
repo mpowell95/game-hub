@@ -26,9 +26,57 @@ export async function init() {
   return true;
 }
 
-/** Mirror this device's profile + unified stats up to players/<deviceId>. Best-effort, never throws. */
+// Sync health, recorded locally on EVERY attempt so a device that is silently failing to mirror can
+// be diagnosed from the device itself (`syncHealth()` / the hub's stats screens) rather than only by
+// noticing a missing row on someone else's leaderboard.
+//
+// This exists because the opposite happened: a player's history sat correct in their own localStorage
+// and simply never reached players/<deviceId>, and because syncMyStats swallowed every failure in a
+// bare `catch {}` (THE LAW rule 6, violated in the one place it mattered most) NOTHING anywhere
+// reported it - not the device, not the hub, not the leaderboard. The first anyone knew was a person
+// asking why they were not on the board. A sync that cannot fail loudly is a sync you cannot trust.
+const SYNC_KEY = 'gamehub.syncHealth.v1';
+
+function readSyncHealth() {
+  try { return JSON.parse(localStorage.getItem(SYNC_KEY) || 'null') || {}; } catch { return {}; }
+}
+function writeSyncHealth(patch) {
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify(Object.assign(readSyncHealth(), patch))); }
+  catch (err) { console.error('[stats-net] could not record sync health', err); }
+}
+/** Last known mirror state for THIS device: { ok, lastOkAt, lastErrAt, lastErr, localPlays, remotePlays }. */
+export function syncHealth() { return readSyncHealth(); }
+
+/** Total recorded plays in the local store, the number that must survive the trip to Firebase. */
+function localPlayCount() {
+  try {
+    const st = loadStats();
+    let n = 0;
+    for (const g of Object.keys(st.games || {})) n += ((st.games[g] || {}).total || {}).played | 0;
+    return n;
+  } catch { return 0; }
+}
+function remotePlayCount(rec) {
+  const games = (rec && rec.stats && rec.stats.games) || {};
+  let n = 0;
+  for (const g of Object.keys(games)) n += ((games[g] || {}).total || {}).played | 0;
+  return n;
+}
+
+/** Mirror this device's profile + unified stats up to players/<deviceId>. Never throws, but never
+ *  fails QUIETLY either: every failure path logs loudly and is recorded in syncHealth(). The write is
+ *  verified by a fresh re-read, because a resolved promise is not proof the data landed. Idempotent -
+ *  it mirrors the whole store every time, so any retry naturally repairs a previously failed sync. */
 export async function syncMyStats() {
-  if (!(await init())) return false;
+  const id = deviceId();
+  const localPlays = localPlayCount();
+  if (!(await init())) {
+    // Not necessarily a bug (offline play is supported and expected), but it must be VISIBLE: while
+    // this persists, this device's history exists nowhere but this device.
+    console.error(`[stats-net] sync skipped: Firebase unavailable (offline or unconfigured). ${localPlays} local plays are NOT mirrored to players/${id}.`);
+    writeSyncHealth({ ok: false, lastErrAt: Date.now(), lastErr: 'firebase-unavailable', localPlays });
+    return false;
+  }
   try {
     const prof = loadProfile() || {};
     const rec = {
@@ -36,9 +84,23 @@ export async function syncMyStats() {
       stats: loadStats(),
       updatedAt: _api.serverTimestamp(),
     };
-    await _api.update(_api.ref(_db, 'players/' + deviceId()), rec);
+    await _api.update(_api.ref(_db, 'players/' + id), rec);
+    // Verify by fresh re-read (THE LAW rule 6's reference pattern, as used by game-stats.js persist()).
+    const snap = await _api.get(_api.ref(_db, 'players/' + id));
+    const landed = snap && snap.exists() ? snap.val() : null;
+    const remotePlays = remotePlayCount(landed);
+    if (!landed || remotePlays < localPlays) {
+      console.error(`[stats-net] sync VERIFY FAILED for players/${id}: ${localPlays} local plays, ${remotePlays} landed. History is still safe locally; it will retry on the next open or reconnect.`);
+      writeSyncHealth({ ok: false, lastErrAt: Date.now(), lastErr: 'verify-short', localPlays, remotePlays });
+      return false;
+    }
+    writeSyncHealth({ ok: true, lastOkAt: Date.now(), lastErr: '', localPlays, remotePlays });
     return true;
-  } catch { return false; }
+  } catch (err) {
+    console.error(`[stats-net] sync FAILED for players/${id}: ${localPlays} local plays not mirrored. History is still safe locally; it will retry on the next open or reconnect.`, err);
+    writeSyncHealth({ ok: false, lastErrAt: Date.now(), lastErr: String((err && err.message) || err), localPlays });
+    return false;
+  }
 }
 
 /** Live-watch every device's record (Admin Insights + Leaderboard). cb({deviceId: record}). Returns unsubscribe. */
@@ -119,4 +181,4 @@ export async function adminReleaseUsername(name) {
   catch { return false; }
 }
 
-export default { init, syncMyStats, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername };
+export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername };
