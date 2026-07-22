@@ -450,8 +450,15 @@
       this.removeFromHand(player, card.id);
       this.log(`${player.name} plays ${card.name}.`);
 
+      // MD-4: Debt Collector/Birthday charge a fixed, known-in-advance amount
+      // (mirrors _applyActionEffect's own hardcoded 5/2) - passed through so a
+      // defending human agent can show it alongside the Just Say No decision,
+      // same as rent below. Sly Deal/Forced Deal/Deal Breaker steal a property,
+      // not cash, so they have no such amount and keep the plain JSN prompt.
+      const knownAmount = card.action === A.DEBT_COLLECTOR ? 5 : card.action === A.BIRTHDAY ? 2 : undefined;
+      const knownReason = card.action === A.DEBT_COLLECTOR ? 'debt' : card.action === A.BIRTHDAY ? 'birthday' : undefined;
       for (const target of targets) {
-        const proceeds = await this._resolveJustSayNo(player, target, card);
+        const proceeds = await this._resolveJustSayNo(player, target, card, knownAmount, knownReason);
         if (!proceeds) {
           this.log(`  ${card.name} against ${target.name} was cancelled.`);
           continue;
@@ -593,7 +600,7 @@
         ` for ${amount}M.`);
 
       for (const target of targets) {
-        const proceeds = await this._resolveJustSayNo(player, target, card);
+        const proceeds = await this._resolveJustSayNo(player, target, card, amount, 'rent');
         if (!proceeds) { this.log(`  Rent on ${target.name} cancelled.`); continue; }
         await this._charge(target, player, amount, { reason: 'rent', card });
       }
@@ -604,7 +611,12 @@
      * Just Say No chain
      * Returns true if the action proceeds, false if cancelled.
      * ====================================================================*/
-    async _resolveJustSayNo(attacker, defender, actionCard) {
+    /** `amount`/`reason` are the known-in-advance cash cost of the action
+     *  proceeding (undefined for property-steal actions with no such amount -
+     *  see _doTargetedAction). MD-4: passed through so a defending human agent
+     *  can show the pay-rent screen (bank/properties/amount) with Just Say No
+     *  as an option there, instead of a bare yes/no prompt with no context. */
+    async _resolveJustSayNo(attacker, defender, actionCard, amount, reason) {
       let proceeds = true;
       let responder = defender;       // defender responds first (to cancel)
       let guard = 0;
@@ -621,6 +633,9 @@
             responderId: responder.id,
             responderRole: responder.id === defender.id ? 'defender' : 'attacker',
             willProceed: proceeds, // current outcome before this responder acts
+            amount, reason,
+            creditorId: attacker.id,   // mirrors _charge's ctx shape (the payer's future creditor)
+            sourceCard: actionCard,    // mirrors _charge's ctx shape (shown as the "charging card")
           });
         } catch (e) { wants = false; }
         if (!wants) break;

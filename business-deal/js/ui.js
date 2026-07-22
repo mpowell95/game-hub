@@ -204,7 +204,7 @@
       };
       face.innerHTML = PILL +
         `<div class="w-split">${half(c1, 'top')}${half(c2, 'bot')}</div>` +
-        `<div class="w-tag">WILD</div>`;
+        `<div class="w-tag top">WILD</div><div class="w-tag bot">WILD</div>`;
       return face;
     }
 
@@ -256,8 +256,39 @@
   class HumanAgent {
     constructor(ui) { this.ui = ui; this.name = 'You'; }
     chooseMove(view, legal) { return this.ui.promptMove(view, legal); }
-    respondToAction(view, ctx) { return this.ui.promptJSN(view, ctx); }
-    choosePayment(view, ctx) { return this.ui.promptPayment(view, ctx); }
+    // MD-4: when the human is the one who'd pay (defender, and the action has a
+    // known cash amount - rent/debt/birthday), show the normal pay screen with
+    // Just Say No as an option there instead of a standalone yes/no prompt with
+    // no context. Property-steal actions (no amount) and the "counter their
+    // cancellation" attacker-side case keep the plain prompt - see promptJSN.
+    respondToAction(view, ctx) {
+      if (ctx.responderRole === 'defender' && ctx.amount != null) {
+        return this.ui.promptPayment(view, ctx, { jsn: true }).then((res) => {
+          // Only cache a REAL payment (>=1 card chosen). The "nothing to pay"
+          // branch always resolves ids:[] and _charge()'s own required<=0 guard
+          // returns before ever calling choosePayment for it - so nothing would
+          // ever consume an empty cache entry, and it would sit there stale
+          // until it wrongly matched some later, unrelated same-amount charge.
+          if (!res.jsn && res.ids && res.ids.length) {
+            this.ui._cachedPayment = { creditorId: ctx.creditorId, amount: ctx.amount, reason: ctx.reason, ids: res.ids };
+          }
+          return res.jsn;
+        });
+      }
+      return this.ui.promptJSN(view, ctx);
+    }
+    // If respondToAction already collected a payment choice for this exact
+    // charge (declined Just Say No from the merged screen above), reuse it
+    // instead of asking again - _charge() always calls choosePayment right
+    // after a proceeding respondToAction, so the cache is consumed same-tick.
+    choosePayment(view, ctx) {
+      const c = this.ui._cachedPayment;
+      if (c && c.creditorId === ctx.creditorId && c.amount === ctx.amount && c.reason === ctx.reason) {
+        this.ui._cachedPayment = null;
+        return c.ids;
+      }
+      return this.ui.promptPayment(view, ctx);
+    }
     chooseDiscards(view, count) { return this.ui.promptDiscards(view, count); }
     assignWildColor(view, card, valid) { return this.ui.promptWildColor(view, card, valid); }
   }
@@ -366,7 +397,9 @@
       // (precedence: last-used > profile > built-in). Difficulty is one global
       // setting here, so it comes from the first opponent's tier.
       const prof = readHubProfile();
-      let chosen = this._lastNumAI || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 3);
+      // MD-2: default 2 AI opponents (3 players total) when there's no
+      // last-used choice or profile-derived opponent count to prefill from.
+      let chosen = this._lastNumAI || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 2);
       let diff = this._lastDiff || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
       const root = this.$('setup');
       // Hidden challenge: while unwon, force the qualifying config (2+ opponents at
@@ -379,6 +412,9 @@
         if (live) { if (chosen < 2) chosen = 3; if (diff === 'easy') diff = 'normal'; }
         const lock = live ? ' bd-locked' : '';
         root.innerHTML =
+          // MD-1: hub-back button top-left (matches every other game's placement),
+          // replacing the old bottom-of-sheet "Game Hub" button.
+          '<button class="tb-btn" id="setup-back-btn" type="button" aria-label="Back to Game Hub">‹</button>' +
           '<div class="scrim"></div><div class="sheet">' +
           (done ? '<p class="bd-challenge-note">Monopoly Deal challenge completed. Play anyways?</p>' : '') +
           "<h3>Monopoly Deal</h3><p>How many AI opponents?</p>" +
@@ -388,7 +424,6 @@
           ['easy', 'normal', 'hard'].map(d => `<button class="count-btn diff${d === diff ? ' sel' : ''}" data-d="${d}" style="width:auto;padding:0 16px;font-size:15px">${d[0].toUpperCase() + d.slice(1)}</button>`).join('') +
           '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : 'Start Game') + '</button>' +
           '<button class="cta ghost-cta" id="setup-stats">Stats</button>' +
-          '<button class="cta ghost-cta" id="setup-hub">← Game Hub</button>' +
           `<div class="setup-version">${APP_VERSION}</div></div>`;
         if (!live) {
           root.querySelectorAll('.count-btn[data-n]').forEach(b =>
@@ -398,7 +433,7 @@
         }
         this.$('start-btn').addEventListener('click', () => { root.classList.remove('show'); this.newGame(chosen, diff); });
         this.$('setup-stats').addEventListener('click', () => this.showStats('setup'));
-        this.$('setup-hub').addEventListener('click', () => this._toHub());
+        this.$('setup-back-btn').addEventListener('click', () => this._toHub());
         root.querySelector('.scrim').addEventListener('click', () => { if (this.game) root.classList.remove('show'); });
       };
       render();
@@ -1484,7 +1519,14 @@
       });
     }
 
-    promptPayment(view, ctx) {
+    /** `opts.jsn` (MD-4): called when the human is defending against a rent/
+     *  debt/birthday charge AND still holds a Just Say No card. Adds a Just Say
+     *  No option right on this screen (bank/properties/amount already visible,
+     *  answering "how can I decide without knowing what I'd pay") instead of a
+     *  separate bare yes/no prompt. Resolves { jsn, ids } in that mode instead
+     *  of the plain ids[] the normal choosePayment call expects - see
+     *  HumanAgent.respondToAction/choosePayment for how the two calls hand off. */
+    promptPayment(view, ctx, opts = {}) {
       const me = view.me;
       const completeColors = new Set(Object.keys(me.properties).filter(c => me.properties[c].cards.length >= REQ[c]));
       // Gather selectable assets, keeping the real card object so we can render
@@ -1503,6 +1545,7 @@
       const required = Math.min(ctx.amount, total);
       const creditor = this._oppName(view, ctx.creditorId);
       const reasonWord = ctx.reason === 'birthday' ? 'Birthday' : ctx.reason === 'rent' ? 'Rent' : 'Debt';
+      const jsnBtnHTML = opts.jsn ? '<button class="pay-jsn" id="pay-jsn">Just Say No</button>' : '';
 
       return new Promise(resolve => {
         const root = this.$('overlay');
@@ -1510,15 +1553,22 @@
 
         if (!all.length) {
           const sheet = this._sheet(`<h3>You owe ${ctx.amount}M to ${esc(creditor)}</h3>` +
-            '<p>You have nothing on the table — you pay nothing</p><button class="cta" id="ok">OK</button>');
-          sheet.querySelector('#ok').addEventListener('click', () => { this._closeOverlay(); resolve([]); });
+            '<p>You have nothing on the table — you pay nothing</p>' +
+            '<button class="cta" id="ok">OK</button>' + (opts.jsn ? '<button class="cta ghost-cta" id="ok-jsn">Just Say No instead</button>' : ''));
+          sheet.querySelector('#ok').addEventListener('click', () => { this._closeOverlay(); resolve(opts.jsn ? { jsn: false, ids: [] } : []); });
+          const jsnAlt = sheet.querySelector('#ok-jsn');
+          if (jsnAlt) jsnAlt.addEventListener('click', () => { this._closeOverlay(); resolve({ jsn: true }); });
           return;
         }
 
         const selected = new Set();
         const screen = elNew('div', 'pay-screen');
         // Minimal copy: who + amount on top, a short "Tap to select" hint below.
-        const banner = elNew('div', 'pay-banner',
+        // In JSN mode, name the attacking card first so the decision has context
+        // (mirrors the old standalone prompt's copy, just ahead of the numbers).
+        const jsnContext = opts.jsn && ctx.actionCard
+          ? `<div class="pay-jsn-context">${esc(this._oppName(view, ctx.attackerId))} played ${esc(ctx.actionCard.name)}</div>` : '';
+        const banner = elNew('div', 'pay-banner', jsnContext +
           `<div class="main">Pay ${ctx.amount}M to ${esc(creditor)}</div>` +
           `<div class="sub" id="pay-sub">${esc(reasonWord)} · tap cards to select</div>`);
 
@@ -1556,20 +1606,25 @@
         mkZone('Bank', bankAssets, 'No bank cards');
         mkZone('Properties', propAssets, 'No properties — bank only');
 
-        // Fixed footer so the controls never float over the board.
+        // Fixed footer so the controls never float over the board. Just Say No
+        // (jsn mode only) sits alongside Pay/Clear - a third, equally-valid choice,
+        // not a buried afterthought.
         const footer = elNew('div', 'pay-footer');
         const sel = elNew('div', 'pay-selected', 'Selected 0M');
         const payBtn = elNew('button', 'pay-go', 'Pay'); payBtn.disabled = true;
         const clearBtn = elNew('button', 'pay-clear', 'Clear');
         const btns = elNew('div', 'pay-actions'); btns.append(payBtn, clearBtn);
+        if (jsnBtnHTML) btns.insertAdjacentHTML('beforeend', jsnBtnHTML);
         footer.append(sel, btns);
 
-        payBtn.addEventListener('click', () => { this._closeOverlay(); resolve([...selected]); });
+        payBtn.addEventListener('click', () => { this._closeOverlay(); resolve(opts.jsn ? { jsn: false, ids: [...selected] } : [...selected]); });
         clearBtn.addEventListener('click', () => {
           selected.clear();
           screen.querySelectorAll('.pay-card.sel').forEach(e => e.classList.remove('sel'));
           refresh();
         });
+        const jsnBtn = footer.querySelector('#pay-jsn');
+        if (jsnBtn) jsnBtn.addEventListener('click', () => { this._closeOverlay(); resolve({ jsn: true }); });
 
         screen.append(banner, scroll, footer);
         root.append(screen);
