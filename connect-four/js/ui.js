@@ -16,7 +16,10 @@ import { cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/chal
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
 import { recordConnect4 } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
 const DROP_MS = 360; // keep in sync with --cf-drop-time in the CSS
@@ -39,10 +42,10 @@ function ensureStylesheet() {
 }
 
 const DIFFICULTY_LABELS = [
-  [Difficulty.EASY, 'Easy'],
-  [Difficulty.MEDIUM, 'Medium'],
-  [Difficulty.HARD, 'Hard'],
-  [Difficulty.EXPERT, 'Expert'],
+  [Difficulty.EASY, 'diff_easy'],
+  [Difficulty.MEDIUM, 'diff_medium'],
+  [Difficulty.HARD, 'diff_hard'],
+  [Difficulty.EXPERT, 'diff_expert'],
 ];
 
 // Profile skill tiers (1-3) map onto the first three difficulties. Connect Four's
@@ -206,37 +209,37 @@ class ConnectFourUI {
     this.container.innerHTML = `
       <div class="cf-root">
         <header class="cf-header" data-role="header">
-          <h1 class="cf-title">Connect Four</h1>
+          <h1 class="cf-title">${t('title')}</h1>
         </header>
 
-        <section class="cf-setup" aria-label="Game setup">
+        <section class="cf-setup" aria-label="${t('setup_aria')}">
           <p class="cf-challenge-note" data-role="challenge-note" hidden></p>
           <div class="cf-field">
-            <span class="cf-label">Difficulty</span>
+            <span class="cf-label">${t('difficulty')}</span>
             <div class="cf-segmented" data-role="difficulty">
-              ${DIFFICULTY_LABELS.map(([val, label]) =>
-                `<button type="button" class="cf-seg" data-value="${val}">${label}</button>`).join('')}
+              ${DIFFICULTY_LABELS.map(([val, labelKey]) =>
+                `<button type="button" class="cf-seg" data-value="${val}">${t(labelKey)}</button>`).join('')}
             </div>
           </div>
 
           <div class="cf-field">
-            <span class="cf-label">Who goes first</span>
+            <span class="cf-label">${t('who_first')}</span>
             <div class="cf-segmented" data-role="first">
-              <button type="button" class="cf-seg" data-value="you">You</button>
+              <button type="button" class="cf-seg" data-value="you">${t('you')}</button>
               <button type="button" class="cf-seg" data-value="ai">${this.oppLabel()}</button>
             </div>
           </div>
 
-          <button type="button" class="cf-btn cf-btn-primary" data-role="start">Start game</button>
+          <button type="button" class="cf-btn cf-btn-primary" data-role="start">${t('start_game')}</button>
         </section>
 
         <section class="cf-game" hidden>
           <div class="cf-statusbar">
             <span class="cf-turn-dot" data-role="dot"></span>
-            <span class="cf-status" data-role="status" role="status" aria-live="polite">Your move</span>
+            <span class="cf-status" data-role="status" role="status" aria-live="polite">${t('your_move')}</span>
             <span class="cf-bar-actions">
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="undo" title="Take back your last move">↩ Undo</button>
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu">Menu</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="undo" title="${t('undo_title')}">${t('undo_btn')}</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu">${t('menu')}</button>
             </span>
           </div>
 
@@ -245,7 +248,7 @@ class ConnectFourUI {
               <span class="cf-legend-item"><span class="cf-chip p1"></span>${this.humanLabel()}</span>
               <span class="cf-legend-item"><span class="cf-chip p2"></span>${this.oppLabel()}</span>
             </span>
-            <span class="cf-hint" data-role="hint">Tap a column to drop ↓</span>
+            <span class="cf-hint" data-role="hint">${t('tap_column_hint')}</span>
           </div>
 
           <div class="cf-hints" data-role="hints" hidden>
@@ -254,45 +257,45 @@ class ConnectFourUI {
           </div>
 
           <div class="cf-board-wrap">
-            <div class="cf-board" data-role="board" role="grid" aria-label="Connect Four board — press number keys 1 to 7 to drop in a column"></div>
+            <div class="cf-board" data-role="board" role="grid" aria-label="${t('board_aria')}"></div>
           </div>
 
           <div class="cf-result" data-role="result" hidden>
-            <button type="button" class="cf-result-x" data-role="result-close" aria-label="Close">✕</button>
+            <button type="button" class="cf-result-x" data-role="result-close" aria-label="${t('close')}">✕</button>
             <p class="cf-result-msg" data-role="result-msg"></p>
             <div class="cf-result-actions">
-              <button type="button" class="cf-btn cf-btn-primary" data-role="rematch">Rematch</button>
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="change">Change settings</button>
+              <button type="button" class="cf-btn cf-btn-primary" data-role="rematch">${t('rematch')}</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="change">${t('change_settings')}</button>
             </div>
           </div>
         </section>
 
         <div class="cf-menu" data-role="menu-panel" hidden>
           <div class="cf-menu-scrim" data-role="menu-scrim"></div>
-          <div class="cf-menu-card" role="dialog" aria-modal="true" aria-label="Game menu">
-            <h2 class="cf-menu-title">Menu</h2>
+          <div class="cf-menu-card" role="dialog" aria-modal="true" aria-label="${t('menu_dialog_aria')}">
+            <h2 class="cf-menu-title">${t('menu')}</h2>
             <label class="cf-switch">
               <input type="checkbox" data-role="hint-toggle">
               <span class="cf-switch-track"><span class="cf-switch-thumb"></span></span>
-              <span class="cf-switch-text">Show best moves</span>
+              <span class="cf-switch-text">${t('show_best_moves')}</span>
             </label>
-            <p class="cf-menu-note">Marks the engine's best column each turn. Exact + / − scores appear once the board is solvable.</p>
+            <p class="cf-menu-note">${t('menu_note')}</p>
             <div class="cf-menu-actions">
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">↩ Undo your last move</button>
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-restart">Restart game</button>
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-quit">Quit to setup</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">${t('menu_undo')}</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-restart">${t('restart_game')}</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-quit">${t('quit_to_setup')}</button>
             </div>
-            <button type="button" class="cf-btn cf-btn-primary" data-role="menu-resume">Resume game</button>
+            <button type="button" class="cf-btn cf-btn-primary" data-role="menu-resume">${t('resume_game')}</button>
           </div>
         </div>
 
         <div class="cf-menu" data-role="stats-confirm" hidden>
           <div class="cf-menu-scrim" data-role="stats-confirm-cancel"></div>
-          <div class="cf-menu-card" role="dialog" aria-modal="true" aria-label="Confirm">
+          <div class="cf-menu-card" role="dialog" aria-modal="true" aria-label="${t('confirm_dialog_aria')}">
             <p class="cf-menu-note" data-role="stats-confirm-msg"></p>
             <div class="cf-menu-actions">
-              <button type="button" class="cf-btn cf-btn-ghost" data-role="stats-confirm-cancel-btn">Cancel</button>
-              <button type="button" class="cf-btn cf-btn-primary" data-role="stats-confirm-ok">Confirm</button>
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="stats-confirm-cancel-btn">${t('cancel')}</button>
+              <button type="button" class="cf-btn cf-btn-primary" data-role="stats-confirm-ok">${t('confirm')}</button>
             </div>
           </div>
         </div>
@@ -392,12 +395,12 @@ class ConnectFourUI {
     this.el.undo.hidden = live;
     const mu = this.el.menuPanel.querySelector('[data-role="menu-undo"]'); if (mu) mu.hidden = live;
     const startBtn = this.el.setup.querySelector('[data-role="start"]');
-    if (startBtn) { startBtn.textContent = live ? 'Begin challenge' : 'Start game'; startBtn.classList.toggle('cf-btn-challenge', live); }
+    if (startBtn) { startBtn.textContent = live ? t('begin_challenge') : t('start_game'); startBtn.classList.toggle('cf-btn-challenge', live); }
     [this.el.difficulty, this.el.first].forEach((g) => { if (g) g.classList.toggle('is-locked', live); });
     const cnote = this.el.setup.querySelector('[data-role="challenge-note"]');
-    if (cnote) { cnote.hidden = live; cnote.textContent = live ? '' : 'Connect 4 challenge completed. Play anyways?'; }
+    if (cnote) { cnote.hidden = live; cnote.textContent = live ? '' : t('challenge_completed_note'); }
     const rematch = this.el.result.querySelector('[data-role="rematch"]');
-    if (rematch) rematch.textContent = live ? 'Retry Challenge' : 'Rematch';
+    if (rematch) rematch.textContent = live ? t('retry_challenge') : t('rematch');
     const change = this.el.result.querySelector('[data-role="change"]');
     if (change) change.hidden = live;
   }
@@ -419,7 +422,7 @@ class ConnectFourUI {
       for (let c = 0; c < COLS; c++) {
         cells.push(
           `<div class="cf-cell" data-col="${c}" data-row="${r}" role="gridcell"` +
-          ` aria-label="Column ${c + 1}, row ${r + 1}, empty" style="--cf-vr:${vr}">` +
+          ` aria-label="${t('col_row_empty_aria', { col: c + 1, row: r + 1 })}" style="--cf-vr:${vr}">` +
           `<div class="cf-piece"></div></div>`);
       }
     }
@@ -430,8 +433,8 @@ class ConnectFourUI {
   labelCell(col, row, who) {
     const cell = this.el.board.querySelector(`.cf-cell[data-col="${col}"][data-row="${row}"]`);
     if (!cell) return;
-    const occ = who === this.humanPlayer ? 'your disc' : who >= 0 ? 'computer disc' : 'empty';
-    cell.setAttribute('aria-label', `Column ${col + 1}, row ${row + 1}, ${occ}`);
+    const occ = who === this.humanPlayer ? t('your_disc') : who >= 0 ? t('computer_disc') : t('empty');
+    cell.setAttribute('aria-label', t('col_row_occ_aria', { col: col + 1, row: row + 1, occ }));
   }
 
   // --- Screen transitions ---------------------------------------------------
@@ -503,7 +506,7 @@ class ConnectFourUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = 'Tap again to confirm';
+    btn.textContent = t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -528,7 +531,7 @@ class ConnectFourUI {
     const turningOn = this.el.hintToggle.checked && !this.showBestMoves;
     if (turningOn && this.game && !this._statsDisqualified) {
       this.showStatsConfirm(
-        "Using Show Best Moves means this game won't count towards your stats. Turn it on anyway?",
+        t('hint_toggle_confirm'),
         () => { this._statsDisqualified = true; this.applyHintToggle(true); },
       );
       return; // checkbox stays checked visually until confirmed/reverted
@@ -681,9 +684,9 @@ class ConnectFourUI {
     this.el.dot.classList.toggle('p1', turn === PLAYER_ONE);
     this.el.dot.classList.toggle('p2', turn === PLAYER_TWO);
     let text;
-    if (this.busy && turn === this.aiPlayer) text = `${this.oppName} is thinking…`;
-    else if (turn === this.humanPlayer) text = 'Your move';
-    else text = `${this.oppName}'s move`;
+    if (this.busy && turn === this.aiPlayer) text = t('opp_thinking', { opp: this.oppName });
+    else if (turn === this.humanPlayer) text = t('your_move');
+    else text = t('opp_move', { opp: this.oppName });
     this.el.status.textContent = text;
     // Cue that the board isn't tappable unless it's your turn (no dead-tap mystery).
     this.el.board.classList.toggle('is-locked', !(turn === this.humanPlayer && !this.busy));
@@ -718,11 +721,11 @@ class ConnectFourUI {
         });
       }
       const youWon = this.game.winner === this.humanPlayer;
-      msg = youWon ? 'You win! 🎉' : `${this.oppName} wins`;
+      msg = youWon ? t('you_win') : t('opp_wins', { opp: this.oppName });
       dot = this.game.winner === PLAYER_ONE ? 'p1' : 'p2';
       this.el.result.dataset.outcome = youWon ? 'win' : 'loss';
     } else if (this.game.status === DRAW) {
-      msg = "It's a draw";
+      msg = t('draw');
       this.el.result.dataset.outcome = 'draw';
     }
 
@@ -734,7 +737,7 @@ class ConnectFourUI {
     this.el.status.textContent = msg;
     // C4-2/C4-3: say so on the result banner itself when this game won't be
     // recorded - a silent skip would just look like the stats are broken.
-    this.el.resultMsg.textContent = msg + (this._statsDisqualified ? ' (not counted towards stats)' : '');
+    this.el.resultMsg.textContent = msg + (this._statsDisqualified ? t('not_counted') : '');
     this.el.result.hidden = false;
     this.updateUndoState(); // can still take back the final move
     // Bring the Rematch / Change-settings actions into view on tall layouts.
@@ -789,7 +792,7 @@ class ConnectFourUI {
     if (!this.canUndo()) return;
     if (this._statsDisqualified) { this.undo(); return; }
     this.showStatsConfirm(
-      "Undoing a move means this game won't count towards your stats. Undo anyway?",
+      t('undo_confirm'),
       () => { this._statsDisqualified = true; this.undo(); },
     );
   }
@@ -911,7 +914,7 @@ class ConnectFourUI {
     this._thinking = on;
     if (on) {
       this.el.evalCaption.innerHTML =
-        'Analyzing<span class="cf-dots"><i>.</i><i>.</i><i>.</i></span>';
+        `${t('analyzing')}<span class="cf-dots"><i>.</i><i>.</i><i>.</i></span>`;
       // C4-1: refreshHints() keeps the PREVIOUS position's star/box visible
       // (dimmed via is-stale) while a fresh analysis runs, so nothing flickers
       // between moves - but that star is the answer to the last position, not
@@ -964,8 +967,8 @@ class ConnectFourUI {
     if (this._thinking) return; // don't clobber the animated "Analyzing…"
     this.el.evalCaption.textContent = !data ? ''
       : data.exact
-        ? 'Solved · + wins, − loses · best ringed'
-        : `Estimate (depth ${data.reachedDepth || '?'}) · best move marked ★`;
+        ? t('eval_solved')
+        : t('eval_estimate', { n: data.reachedDepth || '?' });
   }
 
   // --- Teardown -------------------------------------------------------------
