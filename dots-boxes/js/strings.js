@@ -56,7 +56,7 @@ export const STRINGS = {
     help_rule: 'Otherwise, the turn passes to your opponent.',
   },
   es: {
-    title: 'Dots and Boxes',
+    title: 'Puntos y Cajas',
     tagline: 'Dibuja líneas, cierra cajas y encadena tus capturas.',
     stats_line: '{played} jugadas · {w}-{l}-{t} · mejor cadena {chain}',
     vs: 'vs',

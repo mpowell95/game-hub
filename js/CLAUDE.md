@@ -145,6 +145,20 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   byDiff bucket names/event names stay canonical. `test-i18n-strings.mjs` is the drift tripwire
   (no orphaned `es` keys, matching `{placeholder}` tokens, no empty values) across every
   dictionary; add a new game's `strings.js` to its `DICTS` list when one is created.
+- **Game titles translate (Matt, 2026-07-23 — Spain Spanish only, reversing the extraction
+  handoff's original titles-stay decision).** Six differ: Conecta 4, Tres en Raya, Puntos y
+  Cajas, Tuercas y Tornillos, Carrera de Bolas, Serpiente; the rest are proper/brand names in
+  both languages. The name lives in THREE places that must stay in step: `js/strings.js`'s
+  `game_title_<statsId>` keys (read by BOTH the leaderboard's `GAME_META` and My Stats' `TABS`,
+  so those two can never disagree), the hub `GAMES` registry's `title: {en, es}` (resolved by
+  `titleText()`, same pattern as blurbs), and each game's own `strings.js` `title`. Launcher and
+  By Game sort alphabetically by the DISPLAYED title, resolved at render time
+  (`gameMetaSorted()` in leaderboard-ui.js — never sort these at module scope, it freezes
+  whichever language loaded first), so the order legitimately differs per language. **PENDING:
+  Snake's own `snake/js/strings.js` es title** — the hub tile/leaderboard/stats all say
+  Serpiente already, but the in-game title edit is deliberately deferred while the D-pad
+  session holds that file dirty; make the one-line edit (es `title: 'Serpiente'`) once it
+  commits, and delete this note.
 - **Entry points**: the hub's first-run gate has an English/Español chooser (self-labeled, so it
   never needs translating; takes effect immediately, no Save); the hub top bar has a flag-knob
   toggle (`[data-role="lang"]`, `_paintLangToggle()` in hub.js — Matt's design, inline SVG)

@@ -57,7 +57,7 @@ export const STRINGS = {
     help_rule: 'Sent to a completed mini-board = play on any live board.',
   },
   es: {
-    title: 'Tic Tac Toe',
+    title: 'Tres en Raya',
     tagline: 'Clásico 3x3, o Definitivo: nueve tableros en uno.',
     stats_line: '{total} jugadas · Clásico {cw}-{cl}-{ct} · Definitivo {uw}-{ul}-{ut}',
     vs: 'vs',

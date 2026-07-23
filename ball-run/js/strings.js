@@ -40,7 +40,7 @@ export const STRINGS = {
     help_4: 'At each speedpoint the ball accelerates again. Survive as long as you can to get the highest score!',
   },
   es: {
-    title: 'BALL RUN',
+    title: 'CARRERA DE BOLAS',
     blurb: 'Guía tu bola arrastrando el dedo a izquierda y derecha. Esquiva obstáculos y no te salgas de la pista. ¡Sobrevive todo lo que puedas!',
     best_passed: 'Mejor: {n} superados',
     no_runs_yet: 'Todavía sin carreras',

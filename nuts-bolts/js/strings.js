@@ -70,7 +70,7 @@ export const STRINGS = {
     assist_count: '{label} x{count}',
   },
   es: {
-    title: 'Nuts & Bolts',
+    title: 'Tuercas y Tornillos',
     tagline: 'Elige una dificultad',
     level_n: 'Nivel {n}',
     tier_easy: 'Fácil',

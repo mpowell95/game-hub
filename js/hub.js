@@ -19,11 +19,16 @@ const t = makeT(STRINGS);
 /** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
  *  (Monopoly Deal, Parchís, Boggle — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
 const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) : b;
+/** Resolve a game title the same way (Matt, 2026-07-23: titles DO translate — Spain Spanish —
+ *  reversing the i18n handoff's original titles-stay decision). Proper/brand names stay plain
+ *  strings. The same six Spanish names live in js/strings.js's game_title_* keys (leaderboard +
+ *  stats tabs) and in each game's own strings.js title — keep all three in step. */
+const titleText = (g) => (g.title && typeof g.title === 'object') ? (g.title[getLang()] || g.title.en) : g.title;
 
 const GAMES = [
   {
     id: 'connect-four',
-    title: 'Connect Four',
+    title: { en: 'Connect Four', es: 'Conecta 4' },
     blurb: { en: 'Drop discs, connect four. Four AI levels incl. a perfect endgame solver.',
       es: 'Encesta fichas y conecta cuatro. Cuatro niveles de IA, incluido un solucionador perfecto de finales.' },
     // Relative to this module (js/hub.js): up to root, then into the game folder.
@@ -115,7 +120,7 @@ const GAMES = [
   },
   {
     id: 'nuts-bolts',
-    title: 'Nuts & Bolts',
+    title: { en: 'Nuts & Bolts', es: 'Tuercas y Tornillos' },
     blurb: { en: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
       es: 'Puzle de clasificar por colores. Apila tuercas iguales en los tornillos.' },
     module: '../nuts-bolts/js/ui.js',
@@ -127,7 +132,7 @@ const GAMES = [
   },
   {
     id: 'tic-tac-toe',
-    title: 'Tic Tac Toe',
+    title: { en: 'Tic Tac Toe', es: 'Tres en Raya' },
     blurb: { en: 'Classic 3x3, or Ultimate: nine boards in one, where your move picks your opponent\'s board.',
       es: 'Clásico 3x3, o Definitivo: nueve tableros en uno, donde tu jugada elige el tablero de tu rival.' },
     module: '../tic-tac-toe/js/ui.js',
@@ -140,7 +145,7 @@ const GAMES = [
   },
   {
     id: 'ball-run',
-    title: 'Ball Run',
+    title: { en: 'Ball Run', es: 'Carrera de Bolas' },
     blurb: { en: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',
       es: 'Guía una bola rodante por una pista de neón sin fin. Esquiva obstáculos y persigue puntos de velocidad.' },
     module: '../ball-run/js/ui.js',
@@ -157,7 +162,7 @@ const GAMES = [
   },
   {
     id: 'dots-boxes',
-    title: 'Dots and Boxes',
+    title: { en: 'Dots and Boxes', es: 'Puntos y Cajas' },
     blurb: { en: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
       es: 'Dibuja líneas, cierra cajas y encadena tus capturas. Reglas simples, final de partida profundo.' },
     module: '../dots-boxes/js/ui.js',
@@ -191,7 +196,7 @@ const GAMES = [
   },
   {
     id: 'snake',
-    title: 'Snake',
+    title: { en: 'Snake', es: 'Serpiente' },
     blurb: { en: 'The old phone classic. Eat, grow, and don’t hit the walls.',
       es: 'El clásico del teléfono de antes. Come, crece y no choques con las paredes.' },
     module: '../snake/js/ui.js',
@@ -249,7 +254,7 @@ class Hub {
     // storage untouched and starts showing again the moment the game reappears.
     const visible = GAMES.filter((g) => !g.devOnly || dev);
     const favIds = new Set(loadFavorites());
-    const byTitle = (a, b) => a.title.localeCompare(b.title);
+    const byTitle = (a, b) => titleText(a).localeCompare(titleText(b));
     const favGames = visible.filter((g) => favIds.has(g.id)).sort(byTitle);
     const restGames = visible.filter((g) => !favIds.has(g.id)).sort(byTitle);
     this.games = [...favGames, ...restGames];
@@ -587,11 +592,11 @@ class Hub {
     // The blurb moves to the accessible label (it is no longer shown on the tile face).
     const inner = `
         <span class="hub-card-art">${g.art}</span>
-        <span class="hub-card-label">${g.title}</span>
+        <span class="hub-card-label">${titleText(g)}</span>
         ${g.comingSoon ? `<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`
           : g.devOnly ? `<span class="hub-soon-tag">${t('hub_test_tag')}</span>` : ''}`;
     const blurb = blurbText(g.blurb);
-    const aria = blurb ? `${g.title}. ${blurb}` : g.title;
+    const aria = blurb ? `${titleText(g)}. ${blurb}` : titleText(g);
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
     const card = g.href
@@ -602,7 +607,7 @@ class Hub {
     // A <button> can't nest inside a <button> or <a>, so the heart is a SIBLING inside a
     // positioned .hub-cell wrapper, not a child of .hub-card - see .hub-cell/.hub-fav in hub.css.
     const favored = this._favIds.has(g.id);
-    const favLabel = t(favored ? 'hub_fav_remove' : 'hub_fav_add', { title: g.title });
+    const favLabel = t(favored ? 'hub_fav_remove' : 'hub_fav_add', { title: titleText(g) });
     const fav = `<button type="button" class="hub-fav${favored ? ' is-fav' : ''}" data-fav-id="${g.id}"
               aria-pressed="${favored}" aria-label="${favLabel}">${favored ? '♥' : '♡'}</button>`;
     return `<div class="hub-cell">${card}${fav}</div>`;
@@ -619,7 +624,7 @@ class Hub {
       const module = await import(game.module);
       module.init(this.el.game);
       this.current = { module, id };
-      this.el.title.textContent = game.title;
+      this.el.title.textContent = titleText(game);
       this.el.back.hidden = false;
       this.el.grid.hidden = true;
       if (this.el.extra) this.el.extra.hidden = true;
@@ -630,7 +635,7 @@ class Hub {
       this._setImmersive(!!game.immersive);
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
-      this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: game.title })}</p>`;
+      this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
       this.el.game.hidden = false;
       this.el.grid.hidden = true;
       if (this.el.extra) this.el.extra.hidden = true;

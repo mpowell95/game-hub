@@ -45,22 +45,27 @@ const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test
 // item 5). Fixed order: a tile never moves between visits, unlike the old plays-sorted tab strip.
 // `id` is the STATS id (game-stats.js's GAMES); js/game-art.js is keyed by the HUB registry id, so
 // STATS_TO_HUB below maps between them for the tile art thumbnails.
+// Labels resolve through js/strings.js's game_title_* keys (shared with the stats tabs, and
+// matching the hub registry's {en,es} titles — Matt, 2026-07-23: game titles translate, Spain
+// Spanish). Sort happens at CALL time via gameMetaSorted(): alphabetical by the DISPLAYED title
+// in the active language, the launcher's own convention — a module-scope sort would freeze
+// whichever language happened to be active at first import.
 const GAME_META = [
-  { id: 'ballrun', label: 'Ball Run' },
-  { id: 'boggle', label: 'Boggle' },
-  { id: 'chinchon', label: 'Chinchón' },
-  { id: 'connect4', label: 'Connect 4' },
-  { id: 'dotsboxes', label: 'Dots and Boxes' },
-  { id: 'escoba', label: 'Escoba' },
-  { id: 'filler', label: 'Filler' },
-  { id: 'mancala', label: 'Mancala' },
-  { id: 'business', label: 'Monopoly Deal' },
-  { id: 'nutsbolts', label: 'Nuts & Bolts' },
-  { id: 'parchis', label: 'Parchís' },
-  { id: 'snake', label: 'Snake' },
-  { id: 'tictactoe', label: 'Tic Tac Toe' },
-].sort((a, b) => a.label.localeCompare(b.label));
-const LABEL = Object.fromEntries(GAME_META.map((g) => [g.id, g.label]));
+  { id: 'ballrun', labelKey: 'game_title_ballrun' },
+  { id: 'boggle', labelKey: 'game_title_boggle' },
+  { id: 'chinchon', labelKey: 'game_title_chinchon' },
+  { id: 'connect4', labelKey: 'game_title_connect4' },
+  { id: 'dotsboxes', labelKey: 'game_title_dotsboxes' },
+  { id: 'escoba', labelKey: 'game_title_escoba' },
+  { id: 'filler', labelKey: 'game_title_filler' },
+  { id: 'mancala', labelKey: 'game_title_mancala' },
+  { id: 'business', labelKey: 'game_title_business' },
+  { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
+  { id: 'parchis', labelKey: 'game_title_parchis' },
+  { id: 'snake', labelKey: 'game_title_snake' },
+  { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
+];
+function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
 // Verified against js/hub.js's GAMES registry (root CLAUDE.md, "Adding a game" item 7 warning).
 const STATS_TO_HUB = {
@@ -72,7 +77,7 @@ const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsb
 const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function labelOf(id) { return LABEL[id] || id; }
+function labelOf(id) { const m = GAME_META.find((g) => g.id === id); return m ? t(m.labelKey) : id; }
 
 // --- identity chrome --------------------------------------------------------
 function rankName(g) { return esc(g.name || ''); }
@@ -227,7 +232,7 @@ function playerListHTML(list) {
 
 // --- By Game ------------------------------------------------------------------
 function gameListHTML(list) {
-  const rows = GAME_META.map((meta) => {
+  const rows = gameMetaSorted().map((meta) => {
     const leaders = list.filter((g) => gameMetricAt(g, meta.id, _diff) > 0)
       .sort((a, b) => gameMetricAt(b, meta.id, _diff) - gameMetricAt(a, meta.id, _diff) || (b.updatedAt || 0) - (a.updatedAt || 0));
     const lead = leaders.length ? leaders[0] : null;
@@ -241,7 +246,7 @@ function gameListHTML(list) {
       : `<span class="lb-gnum">&nbsp;</span>`;
     return `<button type="button" class="lb-grow" data-game="${meta.id}">
       <span class="lb-gart">${art}</span>
-      <span class="lb-gmain"><span class="lb-gname">${esc(meta.label)}</span>${body}</span>
+      <span class="lb-gmain"><span class="lb-gname">${esc(t(meta.labelKey))}</span>${body}</span>
       ${metric}
       <span class="lb-gchev" aria-hidden="true">&rsaquo;</span>
     </button>`;

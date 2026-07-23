@@ -61,7 +61,7 @@ export const STRINGS = {
     analyzing: 'Analyzing',
   },
   es: {
-    title: 'Connect Four',
+    title: 'Conecta 4',
     setup_aria: 'Ajustes de la partida',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',

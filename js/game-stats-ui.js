@@ -16,20 +16,23 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 
+// Tab labels resolve through js/strings.js's game_title_* keys — the SAME keys the leaderboard
+// uses, so the two overlays can never disagree on a game's name (Matt, 2026-07-23: titles
+// translate, Spain Spanish; the hub registry carries matching {en,es} titles).
 const TABS = [
-  { id: 'connect4', label: 'Connect 4', accent: '#1769d4' },
-  { id: 'chinchon', label: 'Chinchón', accent: '#d4a017' },
-  { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
-  { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
-  { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
-  { id: 'escoba', label: 'Escoba', accent: '#1c7a4f' },
-  { id: 'filler', label: 'Filler', accent: '#c2557f' },
-  { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
-  { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
-  { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
-  { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#16243a' },
-  { id: 'boggle', label: 'Boggle', accent: '#1f3864' },
-  { id: 'snake', label: 'Snake', accent: '#3f7d2c' },
+  { id: 'connect4', labelKey: 'game_title_connect4', accent: '#1769d4' },
+  { id: 'chinchon', labelKey: 'game_title_chinchon', accent: '#d4a017' },
+  { id: 'business', labelKey: 'game_title_business', accent: '#6a4cff' },
+  { id: 'parchis', labelKey: 'game_title_parchis', accent: '#c0632b' },
+  { id: 'nutsbolts', labelKey: 'game_title_nutsbolts', accent: '#607d8b' },
+  { id: 'escoba', labelKey: 'game_title_escoba', accent: '#1c7a4f' },
+  { id: 'filler', labelKey: 'game_title_filler', accent: '#c2557f' },
+  { id: 'mancala', labelKey: 'game_title_mancala', accent: '#e08a3c' },
+  { id: 'ballrun', labelKey: 'game_title_ballrun', accent: '#c22e8f' },
+  { id: 'tictactoe', labelKey: 'game_title_tictactoe', accent: '#0e7c86' },
+  { id: 'dotsboxes', labelKey: 'game_title_dotsboxes', accent: '#16243a' },
+  { id: 'boggle', labelKey: 'game_title_boggle', accent: '#1f3864' },
+  { id: 'snake', labelKey: 'game_title_snake', accent: '#3f7d2c' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -39,8 +42,8 @@ function visibleTabs() {
   return TABS.filter((tab) => !tab.devOnly || dev);
 }
 const C4_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
-// Game titles are proper names and stay untranslated everywhere (root CLAUDE.md decision 1).
-const LABEL = Object.fromEntries(TABS.map((tab) => [tab.id, tab.label]));
+/** A game's display title in the active language (call at render time, never module scope). */
+function gameLabel(id) { const tab = TABS.find((x) => x.id === id); return tab ? t(tab.labelKey) : id; }
 
 // Map each game's own difficulty vocabulary onto the hub's shared tier names, so the by-difficulty
 // tables read consistently (Monopoly Deal uses easy/normal/hard, Parchis uses beginner/intermediate/
@@ -148,7 +151,7 @@ function diffTable(byDiff) {
 function recordScreen(id, rec) {
   const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
   const played = total.played | 0, won = total.won | 0, lost = total.lost | 0;
-  if (!played) return emptyState(LABEL[id] || 'These');
+  if (!played) return emptyState(gameLabel(id));
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
@@ -341,7 +344,7 @@ let _combinedDevices = 1;
 
 function tabsHTML() {
   return visibleTabs().map((tab) =>
-    `<button type="button" class="gs-tab${tab.id === _active ? ' is-active' : ''}" data-game="${tab.id}" style="--gs-accent:${tab.accent}"${tab.id === _active ? ' aria-current="true"' : ''}>${esc(tab.label)}</button>`
+    `<button type="button" class="gs-tab${tab.id === _active ? ' is-active' : ''}" data-game="${tab.id}" style="--gs-accent:${tab.accent}"${tab.id === _active ? ' aria-current="true"' : ''}>${esc(t(tab.labelKey))}</button>`
   ).join('');
 }
 
