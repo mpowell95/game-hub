@@ -20,20 +20,24 @@ import { newGame, legalMoves, applyMove, edgeKey, edgeCount, isOver, score } fro
 import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordDotsBoxes, loadStats } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.dotsboxes.v1';
 const AI_THINK_MS = 500;      // pause before the AI's first move of a fresh turn
 const AI_CHAIN_STEP_MS = 220; // faster pacing between successive chain-capture moves
 
 // Board size is a SETTING, not the difficulty tier (AI skill is, see DIFFICULTIES
-// below) -- the two are independent axes, see root CLAUDE.md / the handoff.
-const SIZES = [['small', 'Small', 3, 3], ['medium', 'Medium', 4, 4], ['large', 'Large', 5, 5]];
-const SIZE_META = Object.fromEntries(SIZES.map(([k, label, rows, cols]) => [k, { label, rows, cols }]));
+// below) -- the two are independent axes, see root CLAUDE.md / the handoff. Values
+// (first element) stay canonical; labelKey resolves via t().
+const SIZES = [['small', 'size_small', 3, 3], ['medium', 'size_medium', 4, 4], ['large', 'size_large', 5, 5]];
+const SIZE_META = Object.fromEntries(SIZES.map(([k, labelKey, rows, cols]) => [k, { labelKey, rows, cols }]));
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
 // new tier names here.
-const DIFFICULTIES = [['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['pro', 'Pro']];
-const DIFF_LABEL = Object.fromEntries(DIFFICULTIES);
+const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
+const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);
 // Shared hub profile: opponent skill (1/2/3) maps 1:1 onto beginner/intermediate/pro.
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
@@ -137,7 +141,7 @@ class DotsBoxesUI {
     try { rec = (loadStats().games || {}).dotsboxes; } catch { rec = null; }
     const db = rec && rec.db;
     if (!db || !db.played) return '';
-    return `${db.played} played · ${db.won | 0}-${db.lost | 0}-${db.tied | 0} · best chain ${db.bestChain | 0}`;
+    return t('stats_line', { played: db.played, w: db.won | 0, l: db.lost | 0, t: db.tied | 0, chain: db.bestChain | 0 });
   }
 
   // --- DOM construction -------------------------------------------------------
@@ -170,23 +174,24 @@ class DotsBoxesUI {
   _sizeContent() {
     const s = this._setup;
     const meta = SIZE_META[s.size];
-    return this._seg('set-size', s.size, SIZES.map(([k, label]) => [k, label]))
-      + `<p class="db-hint">${meta.rows}×${meta.cols} boxes${meta.rows * meta.cols % 2 === 0 ? ' (a tie is possible)' : ''}.</p>`;
+    const hint = meta.rows * meta.cols % 2 === 0
+      ? t('hint_size_boxes_tie', { rows: meta.rows, cols: meta.cols })
+      : t('hint_size_boxes', { rows: meta.rows, cols: meta.cols });
+    return this._seg('set-size', s.size, SIZES.map(([k, labelKey]) => [k, t(labelKey)]))
+      + `<p class="db-hint">${hint}</p>`;
   }
 
   _diffContent() {
     const s = this._setup;
-    const hint = s.difficulty === 'pro'
-      ? 'Plans chains and loops ahead, plays the double-cross, and solves the endgame exactly. Very tough to beat.'
-      : s.difficulty === 'intermediate' ? 'Avoids giving away free boxes when it can, but never sacrifices for control.'
-        : 'Takes free boxes when offered, otherwise plays at random.';
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES) + `<p class="db-hint">${hint}</p>`;
+    const hint = s.difficulty === 'pro' ? t('hint_diff_pro')
+      : s.difficulty === 'intermediate' ? t('hint_diff_intermediate') : t('hint_diff_beginner');
+    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, t(k)])) + `<p class="db-hint">${hint}</p>`;
   }
 
   _firstContent() {
     const id = this._identity();
     const sel = this._setup.humanFirst ? 'you' : 'ai';
-    return this._seg('set-first', sel, [['you', 'You'], ['ai', esc(id.oppName)]]);
+    return this._seg('set-first', sel, [['you', t('you')], ['ai', esc(id.oppName)]]);
   }
 
   renderSetup() {
@@ -199,21 +204,21 @@ class DotsBoxesUI {
     const s = this._setup;
     const stats = this._statsLine();
     this.shell.innerHTML = `
-      <h1 class="db-title">Dots and Boxes</h1>
-      <p class="db-sub">Draw lines, close boxes, chain your captures.</p>
+      <h1 class="db-title">${t('title')}</h1>
+      <p class="db-sub">${t('tagline')}</p>
       ${stats ? `<p class="db-stats">${esc(stats)}</p>` : ''}
       <div class="db-vscard">
         <div class="db-vsside"><span class="db-vsemoji">${esc(id.humanEmoji)}</span><span class="db-vsname">${esc(id.humanName)}</span></div>
-        <span class="db-vslabel">vs</span>
+        <span class="db-vslabel">${t('vs')}</span>
         <div class="db-vsside"><span class="db-vsemoji">${esc(id.oppEmoji)}</span><span class="db-vsname">${esc(id.oppName)}</span></div>
       </div>
       <div class="db-summary">
-        ${this._row('size', 'Board size', SIZE_META[s.size].label, this._sizeContent())}
-        ${this._row('difficulty', 'Difficulty', DIFF_LABEL[s.difficulty], this._diffContent())}
-        ${this._row('first', 'First move', s.humanFirst ? 'You' : id.oppName, this._firstContent())}
+        ${this._row('size', t('row_size'), t(SIZE_META[s.size].labelKey), this._sizeContent())}
+        ${this._row('difficulty', t('row_difficulty'), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
+        ${this._row('first', t('row_first'), s.humanFirst ? t('you') : id.oppName, this._firstContent())}
       </div>
-      <button type="button" class="db-btn db-btn-primary" data-action="start">Start game</button>
-      <button type="button" class="db-link" data-action="help">How to play</button>`;
+      <button type="button" class="db-btn db-btn-primary" data-action="start">${t('start')}</button>
+      <button type="button" class="db-link" data-action="help">${t('howto')}</button>`;
   }
 
   // --- game screen --------------------------------------------------------
@@ -281,11 +286,11 @@ class DotsBoxesUI {
     if (isOver(s)) {
       const sc = score(s);
       const humanScore = this.humanSeat === 0 ? sc.p0 : sc.p1, aiScore = this.aiSeat === 0 ? sc.p0 : sc.p1;
-      return humanScore === aiScore ? 'Tie game!' : (humanScore > aiScore ? 'You win!' : `${id.oppName} wins`);
+      return humanScore === aiScore ? t('tie_game') : (humanScore > aiScore ? t('you_win') : t('opp_wins', { opp: id.oppName }));
     }
-    if (this.busy) return this._chaining ? `${id.oppName} claims a box and goes again...` : `${id.oppName} is thinking...`;
-    if (s.turn === this.humanSeat) return this._chaining ? 'You claimed a box! Go again' : 'Your turn';
-    return `${id.oppName}'s turn`;
+    if (this.busy) return this._chaining ? t('opp_claims_again', { opp: id.oppName }) : t('opp_thinking', { opp: id.oppName });
+    if (s.turn === this.humanSeat) return this._chaining ? t('you_claimed_again') : t('your_turn');
+    return t('opp_turn', { opp: id.oppName });
   }
 
   _gridTemplate(n) {
@@ -319,7 +324,7 @@ class DotsBoxesUI {
           const live = canClickNow && !drawn;
           parts.push(`<button type="button" class="db-edge db-edge-h ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
             data-action="edge" data-etype="h" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
-            aria-label="${drawn ? 'Line already drawn' : 'Draw line'}, row ${r + 1}, between columns ${c + 1} and ${c + 2}">
+            aria-label="${t('edge_h_aria', { state: t(drawn ? 'line_drawn' : 'draw_line'), r: r + 1, c1: c + 1, c2: c + 2 })}">
             <span class="db-line" aria-hidden="true"></span></button>`);
         } else if (colIsDots) {
           const r = (mr - 1) / 2, c = mc / 2;
@@ -328,7 +333,7 @@ class DotsBoxesUI {
           const live = canClickNow && !drawn;
           parts.push(`<button type="button" class="db-edge db-edge-v ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
             data-action="edge" data-etype="v" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
-            aria-label="${drawn ? 'Line already drawn' : 'Draw line'}, column ${c + 1}, between rows ${r + 1} and ${r + 2}">
+            aria-label="${t('edge_v_aria', { state: t(drawn ? 'line_drawn' : 'draw_line'), c: c + 1, r1: r + 1, r2: r + 2 })}">
             <span class="db-line" aria-hidden="true"></span></button>`);
         } else {
           const r = (mr - 1) / 2, c = (mc - 1) / 2;
@@ -336,8 +341,9 @@ class DotsBoxesUI {
           const capturable = owner === null && edgeCount(s, r, c) === 3;
           const isNew = claimed.some(([br, bc]) => br === r && bc === c);
           const glyph = owner === null ? '' : esc(owner === this.humanSeat ? id.humanEmoji : id.oppEmoji);
-          const label = owner === null ? (capturable ? `Box, row ${r + 1} column ${c + 1}, one line away from being claimed` : `Box, row ${r + 1} column ${c + 1}, empty`)
-            : `Box, row ${r + 1} column ${c + 1}, claimed by ${owner === this.humanSeat ? id.humanName : id.oppName}`;
+          const label = owner === null
+            ? t(capturable ? 'box_capturable_aria' : 'box_empty_aria', { r: r + 1, c: c + 1 })
+            : t('box_claimed_aria', { r: r + 1, c: c + 1, who: owner === this.humanSeat ? id.humanName : id.oppName });
           parts.push(`<div class="db-box ${this._ownerClass(owner)} ${capturable ? 'is-capturable' : ''} ${isNew ? 'is-claim' : ''}" aria-label="${label}">
             ${glyph ? `<span class="db-glyph">${glyph}</span>` : ''}</div>`);
         }
@@ -345,7 +351,7 @@ class DotsBoxesUI {
     }
     return `<div class="db-board" data-size="${this._setup.size}"
       style="grid-template-columns:${this._gridTemplate(cols)};grid-template-rows:${this._gridTemplate(rows)};"
-      role="grid" aria-label="Dots and Boxes board">${parts.join('')}</div>`;
+      role="grid" aria-label="${t('board_aria')}">${parts.join('')}</div>`;
   }
 
   renderGame() {
@@ -360,7 +366,7 @@ class DotsBoxesUI {
         <div class="db-idchip ${!over && s.turn === this.humanSeat ? 'is-turn' : ''}">
           <span>${esc(id.humanEmoji)}</span><span>${esc(id.humanName)}</span><span class="db-score">${humanScore}</span>
         </div>
-        <span class="db-vsdash">vs</span>
+        <span class="db-vsdash">${t('vs')}</span>
         <div class="db-idchip ${!over && s.turn === this.aiSeat ? 'is-turn' : ''}">
           <span class="db-score">${aiScore}</span><span>${esc(id.oppName)}</span><span>${esc(id.oppEmoji)}</span>
         </div>
@@ -368,8 +374,8 @@ class DotsBoxesUI {
       <p class="db-status" aria-live="polite">${esc(this._statusText(s, id))}</p>
       ${this._boardHtml(s, id)}
       <div class="db-actions">
-        <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="help">How to play</button>
-        <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="change-settings">New game</button>
+        <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="help">${t('howto')}</button>
+        <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="change-settings">${t('new_game')}</button>
       </div>`;
   }
 
@@ -382,21 +388,21 @@ class DotsBoxesUI {
     try { recordDotsBoxes(this._setup.difficulty, won, extras); } catch { /* never block the result */ }
 
     const id = this._identity();
-    const title = won === null ? 'Tie game!' : won ? 'You win!' : `${id.oppName} wins`;
+    const title = won === null ? t('tie_game') : won ? t('you_win') : t('opp_wins', { opp: id.oppName });
     const emoji = won === null ? '🤝' : won ? '🏆' : id.oppEmoji;
     const overlay = document.createElement('div');
     overlay.className = 'db-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
       <div class="db-scrim"></div>
-      <div class="db-card" role="dialog" aria-modal="true" aria-label="Game over">
-        <button type="button" class="db-x" data-action="close-overlay" aria-label="Close">&times;</button>
+      <div class="db-card" role="dialog" aria-modal="true" aria-label="${t('game_over')}">
+        <button type="button" class="db-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <span class="db-card-emoji">${emoji}</span>
         <h3 class="db-card-title">${esc(title)}</h3>
-        <p class="db-card-sub">${humanScore}-${aiScore} · ${SIZE_META[this._setup.size].label} · ${DIFF_LABEL[this._setup.difficulty]}</p>
+        <p class="db-card-sub">${humanScore}-${aiScore} · ${t(SIZE_META[this._setup.size].labelKey)} · ${t(DIFF_LABEL_KEY[this._setup.difficulty])}</p>
         <div class="db-card-actions">
-          <button type="button" class="db-btn db-btn-primary" data-action="rematch">Play again</button>
-          <button type="button" class="db-btn db-btn-ghost" data-action="change-settings">Change settings</button>
+          <button type="button" class="db-btn db-btn-primary" data-action="rematch">${t('play_again')}</button>
+          <button type="button" class="db-btn db-btn-ghost" data-action="change-settings">${t('change_settings')}</button>
         </div>
       </div>`;
     this.root.appendChild(overlay);
@@ -416,7 +422,7 @@ class DotsBoxesUI {
    *  still-open box) -- shape/arrow driven, color is a reinforcement on top,
    *  never the only signal. */
   _extraTurnDiagram() {
-    return `<svg class="db-diagram" viewBox="0 0 224 224" role="img" aria-label="Completing the fourth side of a box claims it and lets you play again">
+    return `<svg class="db-diagram" viewBox="0 0 224 224" role="img" aria-label="${t('help_diagram_aria')}">
       <defs>
         <marker id="db-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--db-gold)"/>
@@ -452,18 +458,18 @@ class DotsBoxesUI {
     overlay.dataset.role = 'help';
     overlay.innerHTML = `
       <div class="db-scrim" data-action="close-overlay"></div>
-      <div class="db-card db-help" role="dialog" aria-modal="true" aria-label="How to play">
-        <button type="button" class="db-x" data-action="close-overlay" aria-label="Close">&times;</button>
-        <h3 class="db-card-title">How to play</h3>
-        <p class="db-help-lead">Claim the most boxes to win.</p>
+      <div class="db-card db-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="db-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
+        <h3 class="db-card-title">${t('howto')}</h3>
+        <p class="db-help-lead">${t('help_lead')}</p>
         <div class="db-diagram-wrap">${this._extraTurnDiagram()}</div>
         <div class="db-help-lines">
-          <p class="db-help-caption">Draw the 4th side of a box to claim it.</p>
-          <p class="db-help-example">Complete a box = You play again</p>
-          <p class="db-help-rule">Otherwise, the turn passes to your opponent.</p>
+          <p class="db-help-caption">${t('help_caption')}</p>
+          <p class="db-help-example">${t('help_example')}</p>
+          <p class="db-help-rule">${t('help_rule')}</p>
         </div>
         <div class="db-help-legend">
-          <span class="db-legend-chip is-human"><span class="db-legend-swatch" aria-hidden="true"></span>You</span>
+          <span class="db-legend-chip is-human"><span class="db-legend-swatch" aria-hidden="true"></span>${t('you')}</span>
           <span class="db-legend-chip is-ai"><span class="db-legend-swatch" aria-hidden="true"></span>${esc(id.oppName)}</span>
         </div>
       </div>`;
