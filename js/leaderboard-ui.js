@@ -39,6 +39,7 @@ const GAME_META = [
   { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
   { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
   { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
+  { id: 'snake', label: 'Snake', accent: '#3f7d2c' },
   { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
 ].sort((a, b) => a.label.localeCompare(b.label));
 const ACCENT = Object.fromEntries(GAME_META.map((g) => [g.id, g.accent]));
@@ -98,6 +99,8 @@ function compRecord(group) {
 function soloHeadline(group) {
   const br = group.games.ballrun.br;
   if (br && (br.runs | 0) > 0) return `Ball Run ${br.bestObstacles | 0}`;
+  const sn = (group.games.snake || {}).sn;
+  if (sn && (sn.runs | 0) > 0) return `Snake ${sn.bestLen | 0}`;
   const solved = group.solo.solved | 0;
   if (solved > 0) return `${solved} solved`;
   return '—';
@@ -139,6 +142,11 @@ function leaderOf(list, id) {
     const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
       .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
     return rows.length ? { g: rows[0], metric: `${rows[0].games.ballrun.br.bestObstacles | 0} obstacles` } : null;
+  }
+  if (id === 'snake') {
+    const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
+      .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
+    return rows.length ? { g: rows[0], metric: `length ${rows[0].games.snake.sn.bestLen | 0}` } : null;
   }
   const rows = list.filter((g) => (g.games[id].total.played | 0) > 0)
     .sort(cmp((g) => {
@@ -191,6 +199,23 @@ function ballrunRows(list) {
     const br = g.games.ballrun.br;
     const bd = br.bestObstaclesByDiff || {};
     return rowHTML(g, i, [...BR_DIFFS.map(([k]) => `${bd[k] | 0}`), `${br.runs | 0}`]);
+  }));
+}
+
+// Snake difficulty tiers (byDiff/bestLenByDiff keys, lowercased by the recorder).
+const SN_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+
+function snakeRows(list) {
+  // Score-based like Ball Run: rank by best snake length reached (any difficulty), a high-score
+  // table. Per-tier bests and total runs shown but not ranked on. The `|| {}` guard matters:
+  // remote records synced before Snake existed have no `snake` key until their device updates.
+  const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
+    .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
+  if (!rows.length) return emptyRows('No Snake runs recorded yet.');
+  return table(['#', 'Player', ...SN_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
+    const sn = g.games.snake.sn;
+    const bd = sn.bestLenByDiff || {};
+    return rowHTML(g, i, [...SN_DIFFS.map(([k]) => `${bd[k] | 0}`), `${sn.runs | 0}`]);
   }));
 }
 
@@ -278,6 +303,10 @@ const TEXTURE = {
       show: (g) => ((g.games.boggle.bg || {}).longestWord || {}).word || '',
     },
   ],
+  snake: [
+    { label: 'Longest snake', get: (g) => (((g.games.snake || {}).sn || {}).bestLen) | 0 },
+    { label: 'Total runs', get: (g) => (((g.games.snake || {}).sn || {}).runs) | 0 },
+  ],
   tictactoe: [
     { label: 'Classic played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
     { label: 'Ultimate played', get: (g) => (((g.games.tictactoe.tt || {}).ultimate) || {}).played | 0 },
@@ -322,10 +351,12 @@ function gameDetail(list, id) {
   let board;
   if (id === 'nutsbolts') board = nutsBoltsRows(list);
   else if (id === 'ballrun') board = ballrunRows(list);
+  else if (id === 'snake') board = snakeRows(list);
   else board = gameRows(list, id);
   // The viewer's own per-tier split, then the field's. When the viewer is the only person who has
   // played this game the two are the same table, so only one is drawn - a duplicate reads as a bug.
-  const players = list.filter((g) => (g.games[id].total.played | 0) > 0);
+  // (`|| {}` on games[id]: remote records synced before a game existed have no key for it.)
+  const players = list.filter((g) => ((g.games[id] || {}).total || {}).played > 0);
   const mine = players.find((g) => g.key === _meKey);
   const solo = mine && players.length === 1;
   const mineTable = mine ? tierTable(solo ? 'By difficulty' : 'Your record by difficulty', tierRows(mine.games[id])) : '';

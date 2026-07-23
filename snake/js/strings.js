@@ -1,0 +1,78 @@
+// snake/js/strings.js — every user-visible string in Snake, both languages. THE REFERENCE
+// IMPLEMENTATION for per-game dictionaries (root CLAUDE.md, "Adding a game" item 9): English is
+// the source of truth (every key exists in `en`); `es` may lag and js/i18n.js's fallback shows
+// English for anything missing, so a partial translation can never break a screen.
+//
+// Spanish drafted by a working session; native-speaker review welcome — corrections are one-line
+// edits here, nothing else moves.
+
+export const STRINGS = {
+  en: {
+    title: 'Snake',
+    tagline: 'The old phone classic.',
+    difficulty: 'Difficulty',
+    diff_easy: 'Easy',
+    diff_medium: 'Medium',
+    diff_hard: 'Hard',
+    play: 'Play',
+    howto: 'How to play',
+    resume_hint: 'Swipe or use arrow keys to steer.',
+    // In-game HUD
+    score: 'Score',
+    best: 'Best',
+    length: 'Length',
+    tap_to_start: 'Swipe or press an arrow key to start',
+    paused: 'Paused',
+    tap_to_resume: 'Tap to resume',
+    // Game over
+    game_over: 'Game over',
+    you_won: 'You filled the whole board!',
+    final_length: 'Your snake reached {len}',
+    new_best: 'New best!',
+    play_again: 'Play again',
+    change_setup: 'Setup',
+    close: 'Close',
+    // Help screen (how-to-play pattern: only the non-obvious bits — everyone knows Snake)
+    help_goal: 'Eat the food, grow as long as you can.',
+    help_controls: 'Steer with a swipe anywhere on the board, or the arrow keys.',
+    help_walls: 'The walls are solid: hitting a wall, or your own body, ends the run.',
+    help_example: 'Swipe down = the snake turns down',
+    // aria
+    aria_board: 'Snake board',
+    aria_close: 'Close',
+    aria_help: 'How to play',
+  },
+  es: {
+    title: 'Snake',
+    tagline: 'El clásico del teléfono de antes.',
+    difficulty: 'Dificultad',
+    diff_easy: 'Fácil',
+    diff_medium: 'Normal',
+    diff_hard: 'Difícil',
+    play: 'Jugar',
+    howto: 'Cómo se juega',
+    resume_hint: 'Desliza o usa las flechas para girar.',
+    score: 'Puntos',
+    best: 'Récord',
+    length: 'Longitud',
+    tap_to_start: 'Desliza o pulsa una flecha para empezar',
+    paused: 'En pausa',
+    tap_to_resume: 'Toca para seguir',
+    game_over: 'Fin de la partida',
+    you_won: '¡Has llenado todo el tablero!',
+    final_length: 'Tu serpiente llegó a {len}',
+    new_best: '¡Nuevo récord!',
+    play_again: 'Jugar otra vez',
+    change_setup: 'Ajustes',
+    close: 'Cerrar',
+    help_goal: 'Come la comida y crece todo lo que puedas.',
+    help_controls: 'Gira deslizando el dedo por el tablero, o con las flechas del teclado.',
+    help_walls: 'Las paredes son sólidas: chocar con una pared, o con tu propio cuerpo, termina la partida.',
+    help_example: 'Desliza hacia abajo = la serpiente gira hacia abajo',
+    aria_board: 'Tablero de Snake',
+    aria_close: 'Cerrar',
+    aria_help: 'Cómo se juega',
+  },
+};
+
+export default STRINGS;

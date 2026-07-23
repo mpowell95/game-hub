@@ -10,6 +10,7 @@ import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './pro
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
 import { statsOwner } from './game-stats.js';
+import { getLang, setLang } from './i18n.js';
 import { loadFavorites, toggleFavorite } from './favorites.js';
 
 const GAMES = [
@@ -467,6 +468,30 @@ const GAMES = [
             </g>
           </svg>`,
   },
+  {
+    id: 'snake',
+    title: 'Snake',
+    blurb: 'The old phone classic. Eat, grow, and don’t hit the walls.',
+    module: '../snake/js/ui.js',
+    accent: '#3f7d2c',
+    // The LCD look the game itself renders: pale green screen, a dark pixel snake winding across
+    // the full landscape frame toward a hollow-circle food (shape, not hue, tells them apart —
+    // same colorblind rule as the live board). Composed for 160x90, nothing cropped.
+    art: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#c9dd9a"/>
+            <rect x="4" y="4" width="152" height="82" rx="6" fill="none" stroke="#28340f" stroke-width="4"/>
+            <g fill="#28340f">
+              <rect x="18" y="60" width="11" height="11" rx="1.5"/><rect x="31" y="60" width="11" height="11" rx="1.5"/>
+              <rect x="44" y="60" width="11" height="11" rx="1.5"/><rect x="44" y="47" width="11" height="11" rx="1.5"/>
+              <rect x="44" y="34" width="11" height="11" rx="1.5"/><rect x="57" y="34" width="11" height="11" rx="1.5"/>
+              <rect x="70" y="34" width="11" height="11" rx="1.5"/><rect x="83" y="34" width="11" height="11" rx="1.5"/>
+              <rect x="83" y="21" width="11" height="11" rx="1.5"/><rect x="96" y="21" width="11" height="11" rx="1.5"/>
+              <rect x="109" y="21" width="11" height="11" rx="1.5"/>
+            </g>
+            <rect x="112" y="24" width="5" height="5" fill="#c9dd9a"/>
+            <circle cx="136" cy="27" r="7" fill="none" stroke="#28340f" stroke-width="3.5"/>
+          </svg>`,
+  },
 ];
 
 class Hub {
@@ -536,6 +561,7 @@ class Hub {
             <button type="button" class="hub-version" data-role="version" hidden></button>
           </div>
           <div class="hub-top-right">
+            <button type="button" class="hub-statsbtn" data-role="lang" aria-label="Language / Idioma"></button>
             <button type="button" class="hub-statsbtn" data-role="stats" aria-label="My game stats">My Stats</button>
             <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboards">Leaderboards</button>
             <a class="hub-profile" data-role="profile" href="profile/">My Profile</a>
@@ -562,6 +588,10 @@ class Hub {
           <div class="hub-fr-scrim"></div>
           <div class="hub-fr-card" role="dialog" aria-modal="true" aria-label="Choose a name">
             <h2 class="hub-fr-h">Choose a name</h2>
+            <div class="hub-fr-row hub-fr-langrow" role="group" aria-label="Language / Idioma">
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="en">English</button>
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="es">Español</button>
+            </div>
             <div class="hub-fr-row">
               <input class="hub-fr-input" data-role="fr-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
               <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="fr-save">Save</button>
@@ -589,6 +619,7 @@ class Hub {
       profile: this.root.querySelector('[data-role="profile"]'),
       stats: this.root.querySelector('[data-role="stats"]'),
       leaderboard: this.root.querySelector('[data-role="leaderboard"]'),
+      lang: this.root.querySelector('[data-role="lang"]'),
       version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
       keepsake: this.root.querySelector('[data-role="keepsake"]'),
@@ -634,6 +665,18 @@ class Hub {
     });
 
     this.el.version.addEventListener('click', () => this._forceUpdate());
+
+    // Language toggle: the pill shows the CURRENT language; tapping switches to the other one.
+    // Persists in gamehub.lang.v1 and dispatches gamehub:lang (js/i18n.js); the launcher itself
+    // re-renders, and games pick the change up at their next render (they read t() at render
+    // time — the documented convention, see js/CLAUDE.md "Language support").
+    if (this.el.lang) {
+      this.el.lang.textContent = getLang().toUpperCase();
+      this.el.lang.addEventListener('click', () => {
+        setLang(getLang() === 'en' ? 'es' : 'en');
+        this.render();
+      });
+    }
 
     this.initFirstRun(prof);
     this._initVersionPill();
@@ -727,6 +770,16 @@ class Hub {
     setTimeout(() => { try { nameIn.focus(); } catch { /* ignore */ } }, 60);
 
     const finish = () => { box.hidden = true; this.render(); this._syncStats(); };
+
+    // Language choice, part of first-run per the i18n plan: takes effect IMMEDIATELY (so the
+    // rest of first run — and everything after — is already in the chosen language), persists in
+    // gamehub.lang.v1, and needs no Save. Each button is self-labeled in its own language, so
+    // this row never needs translating.
+    const langBtns = Array.from(box.querySelectorAll('[data-role="fr-lang"]'));
+    const paintLang = () => langBtns.forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.lang === getLang())));
+    paintLang();
+    langBtns.forEach((b) => b.addEventListener('click', () => { setLang(b.dataset.lang); paintLang(); }));
 
     box.querySelector('[data-role="fr-save"]').addEventListener('click', async () => {
       const name = (nameIn.value || '').trim();

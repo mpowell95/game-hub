@@ -112,6 +112,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers |
 | `js/favorites.js` | hub-only launcher favorites (`gamehub.favorites.v1`) |
+| `js/i18n.js` | the EN/ES language layer: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange`; Parchís's proven t() as a shared module |
 | `js/game-stats.js` | unified stats, keyed per PLAYER (`statsKey()`/`statsId()`); one recorder per game |
 | `js/game-stats-global.js` | non-ESM recorder port for Monopoly Deal/Parchís (`window.__ghStats`) |
 | `js/firebase-boot.js` | the ONE bootstrap for the named `'stats'` Firebase app |
@@ -270,6 +271,14 @@ When restructuring an old game, migrate it toward the reference for each axis in
    engine notes, settings/persistence keys, tests. `escoba/CLAUDE.md` is the reference for depth
    and structure. Game-specific detail goes HERE, not in the root file — the root games table gets
    one row (integration, prefix, settings key, recorder) and nothing else.
+9. **Create `<game>/js/strings.js` and route every user-visible string through `t()`** — the hub
+   is bilingual (English/Spanish, `js/i18n.js`, preference in `gamehub.lang.v1`). Export
+   `{ en: {...}, es: {...} }` (English is the source of truth; a missing Spanish key falls back
+   to English, so partial translation never breaks), build `const t = makeT(STRINGS)` in ui.js,
+   and call `t()` at RENDER time — never at module scope. Include aria-labels. Language changes
+   apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
+   `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
+   full mechanism doc is in `js/CLAUDE.md` ("Language support").
 
 ## The games
 
@@ -289,6 +298,7 @@ working in that folder).
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
+| Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:` | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 
 The root-class/prefix cells were verified against each game's actual CSS on 2026-07-23 (note

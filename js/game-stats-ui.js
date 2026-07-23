@@ -25,6 +25,7 @@ const TABS = [
   { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
   { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#16243a' },
   { id: 'boggle', label: 'Boggle', accent: '#1f3864' },
+  { id: 'snake', label: 'Snake', accent: '#3f7d2c' },
 ];
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -287,6 +288,30 @@ function boggleScreen(rec) {
     </div>`;
 }
 
+// --- Snake (solo, speed-tiered, longest-snake-is-the-score) -----------------
+const SN_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+
+/** Snake: no wins/losses (a run ends in a crash), so the honest numbers are runs played and the
+ *  longest snake reached, overall and per speed tier — Ball Run's screen shape. */
+function snakeScreen(rec) {
+  const sn = (rec && rec.sn) || {};
+  const runs = sn.runs | 0, best = sn.bestLen | 0;
+  if (!runs) return emptyState('Snake');
+  const bd = sn.bestLenByDiff || {};
+  const rows = SN_DIFFS.map(([k, label]) =>
+    `<tr><th scope="row">${label}</th><td>${bd[k] | 0}</td></tr>`).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
+      <div class="gs-tally"><b>${best}</b><span>Longest snake</span></div>
+    </div>
+    <h4 class="gs-tbl-h">Longest snake by difficulty</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -297,6 +322,7 @@ function screenFor(id, st) {
   if (id === 'tictactoe') return ticTacToeScreen(rec);
   if (id === 'dotsboxes') return dotsBoxesScreen(rec);
   if (id === 'boggle') return boggleScreen(rec);
+  if (id === 'snake') return snakeScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

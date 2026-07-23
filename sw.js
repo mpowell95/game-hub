@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v161';
+const CACHE = 'game-hub-v162';
 
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/hub.js',
   './js/a2hs.js',
   './js/favorites.js',
+  './js/i18n.js',
   './js/profile-store.js',
   './js/firebase-config.js',
   './js/game-stats.js',
@@ -140,6 +141,12 @@ const ASSETS = [
   './boggle/js/solver.js',
   './boggle/js/ai.js',
   './boggle/data/words.txt',
+  './snake/',
+  './snake/index.html',
+  './snake/css/snake.css',
+  './snake/js/ui.js',
+  './snake/js/game.js',
+  './snake/js/strings.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,

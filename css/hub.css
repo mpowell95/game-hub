@@ -153,6 +153,10 @@ body {
 .hub-fr-or { text-align: center; color: var(--hub-muted); font-size: .8rem; font-weight: 700; margin: 12px 0; }
 .hub-fr-msg { margin: 10px 0 0; min-height: 1.1em; font-size: .85rem; font-weight: 600; color: var(--hub-muted); }
 .hub-fr .hub-cbtn { flex: 0 0 auto; }
+/* First-run language row: two self-labeled chips, the active one filled. Selection is carried by
+   aria-pressed (a real state, not a color), so the style just follows the attribute. */
+.hub-fr-langrow .hub-cbtn { flex: 1 1 0; }
+.hub-fr-langrow .hub-cbtn[aria-pressed="true"] { background: var(--hub-accent, #1769d4); color: #fff; }
 
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 /* The floating immersive back button (above) overlays .hub-main since

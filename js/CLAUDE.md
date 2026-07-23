@@ -80,6 +80,7 @@ entirely — keep it current when a module is added, split, or merged.
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
+| `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
 | `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle) — `tt`/`db`/`bg` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
@@ -103,6 +104,46 @@ init race that motivated it. Node ownership is disciplined by convention: stats-
 `players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
 nodes, device-report.js touches `deviceReports/` only (read of the first two, write of
 the third). Nothing enforces this but comments.
+
+---
+
+### Language support (2026-07-23)
+
+The hub is bilingual, English/Spanish, English the default and fallback. The design is
+**Parchís's proven round-2 i18n promoted to a shared convention** — `window.ParchisI18n` in
+`parchis/index.html` shipped the same t() semantics months earlier and is untouched by this.
+
+- **`js/i18n.js`**: `getLang()`/`setLang()` over **`gamehub.lang.v1`** (`'en'|'es'`);
+  `makeT(dict)` builds a `t(key, params)` with the chain *chosen language → English → the key
+  itself* plus `{name}` placeholder substitution (a per-language FUNCTION value is the escape
+  hatch for grammar that placeholders can't express); `setLang` stamps
+  `document.documentElement.lang` and dispatches a `gamehub:lang` CustomEvent;
+  `onLangChange(cb)` returns an unsubscribe.
+- **The preference is deliberately NOT a `gamehub.profile` field**: the profile shape has
+  hand-synced inlined readers in Monopoly Deal and Parchís (see "Monopoly Deal's must-stay-synced
+  duplicates"), so extending it drags in those copies — and a profile reset shouldn't change the
+  device's language. A preference, not history: THE LAW's rule-2 carve-out applies, same as
+  favorites.
+- **Dictionaries are per-game ES modules** (`<game>/js/strings.js`, `{ en, es }`), co-located
+  with the game and added to `sw.js` ASSETS — they ride the module graph, so offline support is
+  the ordinary precache, no fetches, no JSON, no SW logic. Shared-UI strings (hub chrome, My
+  Stats, Leaderboards) are NOT yet translated — that extraction is the deferred bulk of the
+  i18n effort; the fallback chain is the migration strategy (untranslated surfaces simply show
+  English).
+- **Entry points**: the hub's first-run gate has an English/Español chooser (self-labeled, so it
+  never needs translating; takes effect immediately, no Save); the hub top bar has a `[data-role
+  ="lang"]` pill showing the current language, tap to switch (re-renders the launcher).
+- **Live-switch policy**: language changes apply to newly rendered UI. Games read `t()` at
+  render time and MAY subscribe via `onLangChange` for live re-labeling (Snake does); they are
+  not required to.
+- **Known content caveat**: Boggle's UI can translate, but its gameplay dictionary and dice are
+  English — a real Spanish Boggle needs a Spanish word list and letter distribution (separate,
+  larger task). Parchís keeps its own in-game language setting (`parchis_r2_prefs.lang`), which
+  wins over the hub preference on that page; wiring it to read `gamehub.lang.v1` as its default
+  goes through the sibling `../Parchís/` source rebuild, deferred with the big extraction.
+
+Reference implementation: `snake/` (born bilingual). New-game obligations: root CLAUDE.md,
+"Adding a game" item 9.
 
 ---
 

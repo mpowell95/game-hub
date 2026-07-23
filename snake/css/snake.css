@@ -1,0 +1,99 @@
+/* snake.css — every rule descendant-scoped under .sn-root (the repo's CSS rule: a prefix alone is
+   not isolation; Mancala's descendant-scoping discipline with the .xx-root naming convention).
+   Custom properties are --sn-. The board is an LCD-green throwback; ownership of meaning never
+   rides on hue alone (snake = squares, food = hollow circle — shapes, drawn in ui.js). */
+
+.sn-root {
+  --sn-ink: #1c2410;
+  --sn-lcd: #c9dd9a;
+  --sn-pixel: #28340f;
+  --sn-card: #ffffff;
+  --sn-accent: #3f7d2c;
+  --sn-muted: #6a7461;
+  display: block;
+  color: var(--sn-ink);
+}
+
+/* --- setup ------------------------------------------------------------------------------- */
+.sn-root .sn-setup {
+  max-width: 420px; margin: 0 auto; padding: 26px 18px 40px;
+  display: flex; flex-direction: column; gap: 14px; text-align: center;
+}
+.sn-root .sn-title { margin: 0; font-size: 1.7rem; }
+.sn-root .sn-tag { margin: 0 0 6px; color: var(--sn-muted); }
+.sn-root .sn-field { display: flex; flex-direction: column; gap: 8px; }
+.sn-root .sn-label { font-weight: 700; font-size: 0.95rem; text-align: left; }
+.sn-root .sn-segrow { display: flex; gap: 8px; }
+.sn-root .sn-seg {
+  flex: 1 1 0; font: inherit; font-weight: 700; padding: 11px 8px; border-radius: 11px;
+  border: 2px solid var(--sn-accent); background: var(--sn-card); color: var(--sn-ink);
+  cursor: pointer; touch-action: manipulation;
+}
+.sn-root .sn-seg.is-on { background: var(--sn-accent); color: #fff; }
+.sn-root .sn-play {
+  font: inherit; font-weight: 800; font-size: 1.1rem; padding: 13px 16px; border-radius: 12px;
+  border: 0; background: var(--sn-accent); color: #fff; cursor: pointer; touch-action: manipulation;
+}
+.sn-root .sn-play:hover { filter: brightness(1.08); }
+.sn-root .sn-howto {
+  font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 11px;
+  border: 1px solid #cbd5c0; background: transparent; color: var(--sn-ink);
+  cursor: pointer; touch-action: manipulation;
+}
+
+/* --- game -------------------------------------------------------------------------------- */
+.sn-root .sn-game {
+  max-width: 480px; margin: 0 auto; padding: 10px 12px 24px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sn-root .sn-hud {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 0.95rem; color: var(--sn-ink);
+}
+.sn-root .sn-hud-cell b { font-variant-numeric: tabular-nums; }
+.sn-root .sn-boardwrap {
+  position: relative; display: flex; justify-content: center;
+  touch-action: none; /* the board is a swipe surface — never a scroll surface */
+}
+.sn-root .sn-canvas {
+  display: block; border-radius: 8px; border: 3px solid var(--sn-pixel);
+  background: var(--sn-lcd); max-width: 100%;
+}
+.sn-root .sn-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;
+  align-items: center; justify-content: center; text-align: center;
+  background: rgba(201, 221, 154, 0.82); border-radius: 8px;
+  font-weight: 800; color: var(--sn-pixel); padding: 12px; pointer-events: none;
+}
+.sn-root .sn-overlay .sn-sub { font-weight: 600; font-size: 0.9rem; }
+
+/* --- game-over modal (X-close per the repo convention) ------------------------------------ */
+.sn-root .sn-modal {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(20, 26, 10, 0.45); border-radius: 8px; padding: 14px;
+}
+.sn-root .sn-modal-card {
+  position: relative; background: var(--sn-card); border-radius: 14px; padding: 20px 18px 16px;
+  width: min(320px, 100%); text-align: center; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+.sn-root .sn-modal-h { margin: 0 0 6px; font-size: 1.25rem; }
+.sn-root .sn-modal-line { margin: 0 0 14px; }
+.sn-root .sn-modal-actions { display: flex; flex-direction: column; gap: 8px; }
+.sn-root .sn-x {
+  position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%;
+  border: 0; background: #eef1e8; color: var(--sn-ink); font: inherit; font-weight: 700;
+  cursor: pointer; touch-action: manipulation; line-height: 1;
+}
+
+/* --- help sheet ---------------------------------------------------------------------------- */
+.sn-root.sn-help-overlay { position: fixed; inset: 0; z-index: 220; display: flex; align-items: center; justify-content: center; }
+.sn-root .sn-scrim { position: absolute; inset: 0; background: rgba(15, 20, 8, 0.5); }
+.sn-root .sn-help {
+  position: relative; background: var(--sn-card); border-radius: 14px; padding: 22px 18px 18px;
+  width: min(340px, calc(100vw - 32px)); color: var(--sn-ink);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+.sn-root .sn-help-goal { margin: 0 0 10px; white-space: nowrap; font-size: 0.98rem; }
+.sn-root .sn-help-art { display: block; width: 100%; margin: 0 0 10px; color: var(--sn-pixel); }
+.sn-root .sn-help-line { margin: 0 0 8px; font-size: 0.92rem; }
+.sn-root .sn-help-ex { margin: 0; font-weight: 700; font-size: 0.92rem; white-space: nowrap; }

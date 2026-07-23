@@ -163,6 +163,38 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('boggle: longest word keeps its own text and length together', bg.longestWord, { word: 'QUITTERS', len: 8 });
 }
 
+// ---- Snake's sn sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires: without the sn branch the
+// Snake Stats screen and leaderboard read zero runs/bests as soon as a second device syncs.
+// Counters add; length bests take the max (never a sum), overall and per difficulty. A device
+// with NO snake key at all (synced before Snake existed) must combine cleanly too.
+{
+  const all = {
+    d1: rec({ playerId: 'SN111', name: 'Slither' }, {
+      snake: {
+        total: { played: 4, won: 4, lost: 0 },
+        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
+        sn: { runs: 4, bestLen: 21, bestLenByDiff: { easy: 0, medium: 21, hard: 0 } },
+      },
+    }, 100),
+    d2: rec({ playerId: 'sn111', name: 'Slither' }, {
+      snake: {
+        total: { played: 2, won: 2, lost: 0 },
+        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+        sn: { runs: 2, bestLen: 14, bestLenByDiff: { easy: 0, medium: 0, hard: 14 } },
+      },
+    }, 200),
+    d3: rec({ playerId: 'SN111', name: 'Slither' }, {}, 300),   // pre-Snake device: no snake key
+  };
+  const grp = aggregatePlayers(all)[0];
+  const sn = grp.games.snake.sn;
+  eq('snake: one person, three devices, one row', aggregatePlayers(all).length, 1);
+  eq('snake: runs summed across devices', sn.runs, 6);
+  eq('snake: bestLen is the max, not the sum or the last one', sn.bestLen, 21);
+  eq('snake: per-difficulty bests take the max per tier', [sn.bestLenByDiff.medium, sn.bestLenByDiff.hard], [21, 14]);
+  eq('snake: totals still aggregate alongside', grp.games.snake.total.played, 6);
+}
+
 // ---- aggregateForViewer: fresh device with my code shows my other devices' history ----
 {
   const all = { other: rec({ playerId: 'ME777', name: 'Me' }, { business: comp(9, 6, 3) }, 100) };

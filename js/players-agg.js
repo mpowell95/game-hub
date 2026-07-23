@@ -11,7 +11,7 @@
 
 import { GAMES } from './game-stats.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun']);       // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -161,6 +161,15 @@ export function aggregatePlayers(all) {
         dst.db.lost += src.db.lost | 0; dst.db.tied += src.db.tied | 0;
         dst.db.boxes += src.db.boxes | 0;
         dst.db.bestChain = Math.max(dst.db.bestChain | 0, src.db.bestChain | 0);
+      } else if (g === 'snake' && src.sn) {
+        // Same THE-LAW-rule-1 hazard as every sub-counter above (missed twice before this list
+        // existed): without this branch Snake's runs and length bests blank out the moment a
+        // second device syncs. Counters add; the length bests take the max, never a sum.
+        if (!dst.sn) dst.sn = { runs: 0, bestLen: 0, bestLenByDiff: {} };
+        dst.sn.runs += src.sn.runs | 0;
+        dst.sn.bestLen = Math.max(dst.sn.bestLen | 0, src.sn.bestLen | 0);
+        const sbd = src.sn.bestLenByDiff || {};
+        for (const k of Object.keys(sbd)) dst.sn.bestLenByDiff[k] = Math.max(dst.sn.bestLenByDiff[k] | 0, sbd[k] | 0);
       } else if (g === 'boggle' && src.bg) {
         // Same THE-LAW-rule-1 hazard as tictactoe's tt above: `total` aggregates fine on its
         // own, but Boggle's Stats screen reads `bg` for ties, best score, words found and the

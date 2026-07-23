@@ -81,7 +81,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -122,6 +122,9 @@ const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
 // Ball Run difficulties (easy|medium|hard, no expert tier).
 export const BR_DIFFS = ['easy', 'medium', 'hard'];
+// Snake difficulties (easy|medium|hard — speed tiers; same axis shape as Ball Run, own constant
+// so the two games can diverge without a rename).
+export const SN_DIFFS = ['easy', 'medium', 'hard'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -310,6 +313,18 @@ function refoldBallRunLegacyRuns(st) {
   return true;
 }
 
+/** Snake: the solo-run counters, Ball Run's proven shape (a run has no opponent and no loss
+ *  state — it ends in a crash — so `sn.runs` is the true play count and the length bests are
+ *  the scoreboard, Math.max only, per THE LAW rule 2). `bestLen` is the snake's LENGTH (start 3
+ *  + food eaten) — the iconic "how long did it get" number. */
+function ensureSn(g) {
+  if (!g.sn || typeof g.sn !== 'object') g.sn = { runs: 0, bestLen: 0, bestLenByDiff: {} };
+  if (!Number.isFinite(g.sn.runs)) g.sn.runs = 0;
+  if (!Number.isFinite(g.sn.bestLen)) g.sn.bestLen = 0;
+  if (!g.sn.bestLenByDiff || typeof g.sn.bestLenByDiff !== 'object') g.sn.bestLenByDiff = {};
+  for (const d of SN_DIFFS) if (!Number.isFinite(g.sn.bestLenByDiff[d])) g.sn.bestLenByDiff[d] = 0;
+}
+
 /** Tic Tac Toe: the per-variant W/L/Tie counters. Draw-heavy by design (Pro
  *  Classic is unbeatable, see tic-tac-toe/js/ai.js), so `tied` is tracked
  *  explicitly here rather than left to be derived, unlike `total`/`byDiff`. */
@@ -359,6 +374,7 @@ function normalize(raw) {
   ensureTt(st.games.tictactoe);
   ensureDb(st.games.dotsboxes);
   ensureBg(st.games.boggle);
+  ensureSn(st.games.snake);
   return st;
 }
 
@@ -669,6 +685,25 @@ export function recordBoggle(difficulty, won, extras) {
   return st;
 }
 
+/** Snake: record one finished run. `length` is the snake's final length (start 3 + food eaten);
+ *  `difficulty` is easy|medium|hard (speed tiers). A run has no opponent and no loss state, so it
+ *  counts as played+won and `lost` is never touched (mirrors Ball Run / Nuts & Bolts). Additive;
+ *  the length bests only ever go up. */
+export function recordSnake(length, difficulty) {
+  const st = loadStats();
+  const g = st.games.snake;
+  ensureSn(g);
+  const d = SN_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const len = Number.isFinite(length) ? Math.max(0, Math.floor(length)) : 0;
+  if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
+  g.sn.runs += 1;
+  g.sn.bestLen = Math.max(g.sn.bestLen | 0, len);
+  if (d) g.sn.bestLenByDiff[d] = Math.max(g.sn.bestLenByDiff[d] | 0, len);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
  *
  *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
@@ -706,7 +741,7 @@ export function recordHeadToHead(gameId, opponent, won) {
 export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
-  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordHeadToHead,
+  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };
