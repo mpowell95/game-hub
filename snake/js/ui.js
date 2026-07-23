@@ -219,6 +219,7 @@ class SnakeUI {
     this.overlay = this.root.querySelector('[data-role="overlay"]');
     this.pad = this.root.querySelector('[data-role="pad"]');
     this._sizeCanvas();
+    this._centerGame();
     this._draw();
     const wrap = this.root.querySelector('[data-role="boardwrap"]');
     let touch = null;
@@ -247,10 +248,10 @@ class SnakeUI {
   _sizeCanvas() {
     const wrap = this.canvas.parentElement;
     const cw = wrap.clientWidth || 320;
-    // Height budget: the pad + HUD + margins below the board need ~230px at most (the four
-    // true-cross D-pad styles are a row taller than 'classic'); never let the board push the
-    // pad off a short viewport. Width stays the cap on ordinary phones.
-    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 230);
+    // Height budget: the pad + HUD + margins below the board need ~280px at most now that the
+    // pad's size caps are bigger; never let the board push the pad off a short viewport. Width
+    // stays the cap on ordinary phones.
+    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 280);
     this.cell = Math.max(10, Math.min(Math.floor(cw / COLS), Math.floor(availH / ROWS)));
     const w = this.cell * COLS, h = this.cell * ROWS;
     const dpr = window.devicePixelRatio || 1;
@@ -269,13 +270,26 @@ class SnakeUI {
   _sizePad(boardWidth) {
     if (!this.pad) return;
     if (this.settings.dpadStyle === 'classic') {
-      this.pad.style.width = Math.max(200, Math.min(280, boardWidth)) + 'px';
+      this.pad.style.width = Math.max(260, Math.min(340, boardWidth)) + 'px';
       this.pad.style.height = '';
     } else {
-      const size = Math.max(140, Math.min(200, Math.round(boardWidth * 0.62)));
+      const size = Math.max(180, Math.min(260, Math.round(boardWidth * 0.78)));
       this.pad.style.width = size + 'px';
       this.pad.style.height = size + 'px';
     }
+  }
+
+  /** The board is width-bound on almost every phone (COLS=15 already fills the width before
+   *  ROWS=17 needs the height), so extra vertical room on a tall device was never going to the
+   *  board — it just piled up as dead space below the pad, which read as "the pad is stuck near
+   *  the top." Split any real leftover space so the whole board+pad group sits centered instead. */
+  _centerGame() {
+    const game = this.root.querySelector('.sn-game');
+    if (!game) return;
+    game.style.marginTop = '';
+    const rect = game.getBoundingClientRect();
+    const leftover = (window.innerHeight || 640) - rect.top - rect.height;
+    if (leftover > 32) game.style.marginTop = Math.floor(leftover / 2) + 'px';
   }
 
   _steer(dir) {
