@@ -1,7 +1,7 @@
 # Nuts & Bolts (`nuts-bolts/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
-> never put at risk — the nine full rules repeat throughout the root `CLAUDE.md`, which is always
+> never put at risk — the nine full rules are stated near the top of the root `CLAUDE.md`, which is always
 > loaded alongside this file. Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
