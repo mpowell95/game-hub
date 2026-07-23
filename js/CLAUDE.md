@@ -154,11 +154,9 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   `titleText()`, same pattern as blurbs), and each game's own `strings.js` `title`. Launcher and
   By Game sort alphabetically by the DISPLAYED title, resolved at render time
   (`gameMetaSorted()` in leaderboard-ui.js — never sort these at module scope, it freezes
-  whichever language loaded first), so the order legitimately differs per language. **PENDING:
-  Snake's own `snake/js/strings.js` es title** — the hub tile/leaderboard/stats all say
-  Serpiente already, but the in-game title edit is deliberately deferred while the D-pad
-  session holds that file dirty; make the one-line edit (es `title: 'Serpiente'`) once it
-  commits, and delete this note.
+  whichever language loaded first), so the order legitimately differs per language. Snake's own
+  `snake/js/strings.js` es title says Serpiente too (landed 2026-07-23, once the D-pad session
+  released the file).
 - **Entry points**: the hub's first-run gate has an English/Español chooser (self-labeled, so it
   never needs translating; takes effect immediately, no Save); the hub top bar has a flag-knob
   toggle (`[data-role="lang"]`, `_paintLangToggle()` in hub.js — Matt's design, inline SVG)

@@ -57,7 +57,7 @@ export const STRINGS = {
     aria_dpad_style_group: 'D-pad style',
   },
   es: {
-    title: 'Snake',
+    title: 'Serpiente',
     tagline: 'El clásico del teléfono de antes.',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',
