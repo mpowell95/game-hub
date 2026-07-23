@@ -18,19 +18,23 @@ import { loadProfile } from '../../js/profile-store.js';
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.snake.v1';
 
-// The five on-screen D-pad looks (Matt-supplied reference images, 2026-07-23), recolored to the
-// LCD theme's own palette rather than their reference colors. 'classic' is the original 2-row
-// cross (up alone on top, left/down/right below); the other four are a true 4-way plus shape,
-// which is why they need their own grid-template-areas below (see snake.css).
+// The six on-screen D-pad looks (Matt-supplied reference images, 2026-07-23), recolored to the
+// LCD theme's own palette rather than their reference colors. 'classic' is a 2-row cross (up
+// alone on top, left/down/right below). 'compass' is Matt's own design: individual bordered
+// squares like classic's, but a true 3-row layout (up alone / left+right / down alone) — the
+// design he actually built, and the default. The remaining four are a true 4-way plus rendered
+// as ONE unified shape instead of separate buttons, which is why they need their own
+// grid-template-areas below (see snake.css) same as 'compass'.
 const DPAD_STYLES = [
   { id: 'classic', labelKey: 'dpad_classic' },
+  { id: 'compass', labelKey: 'dpad_compass' },
   { id: 'circle', labelKey: 'dpad_circle' },
   { id: 'gamepad', labelKey: 'dpad_gamepad' },
   { id: 'solid', labelKey: 'dpad_solid' },
   { id: 'solidArrows', labelKey: 'dpad_solid_arrows' },
 ];
 const DPAD_STYLE_IDS = DPAD_STYLES.map((s) => s.id);
-const DEFAULT_DPAD_STYLE = 'classic';
+const DEFAULT_DPAD_STYLE = 'compass';
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function saveSettings(s) {
