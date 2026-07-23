@@ -17,7 +17,7 @@
 import { aggregatePlayers, buildIdentity, COMPETITIVE } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
-import { deviceId } from './game-stats.js';
+import { statsId } from './game-stats.js';
 import { record, tierMix, tierRows, rankPlayers, cmp } from './leaderboard-rank.js';
 import { TIERS, TIER_LABEL } from './difficulty-tiers.js';
 
@@ -382,7 +382,7 @@ function currentBody() {
   // Only players who have set a profile name are listed. Devices with no name keep every game they
   // recorded; that history joins a player automatically the moment the device sets a name.
   const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
-  try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, deviceId()); } catch { /* keep */ }
+  try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_game) return gameDetail(list, _game);
   if (_seg === 'games') return gamesBody(list);
   return standingsBody(list);

@@ -8,7 +8,7 @@
 // from the hub header. Colorblind-safe: the active tab is marked by weight + ink + an accent
 // underline together, never hue alone.
 
-import { loadStats, deviceId } from './game-stats.js';
+import { loadStats, statsId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 
@@ -327,7 +327,10 @@ async function refreshCombined() {
     const [net, agg] = await Promise.all([import('./stats-net.js'), import('./players-agg.js')]);
     const all = await net.readPlayersOnce();
     if (!_host) return;
-    const me = agg.aggregateForViewer(all, loadProfile() || {}, deviceId(), loadStats());
+    // statsId(), not deviceId(): the fresh local store must overlay THIS player's own remote node.
+    // Keyed by device, a second player on a shared phone would overlay (and hide) the first player's
+    // record instead of their own.
+    const me = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats());
     if (me && me.games) { _st = { games: me.games }; _combinedDevices = me.devices || 1; rerender(); }
   } catch { /* stay local */ }
 }

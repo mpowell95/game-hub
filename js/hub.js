@@ -9,6 +9,7 @@
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
+import { statsOwner } from './game-stats.js';
 import { loadFavorites, toggleFavorite } from './favorites.js';
 
 const GAMES = [
@@ -731,13 +732,28 @@ class Hub {
       const name = (nameIn.value || '').trim();
       if (!name) { say('Enter a name.'); return; }
       const cur = loadProfile() || {};
-      const code = cur.playerId || newPlayerCode();
+      // Which code this device should record under (see game-stats.js's "WHOSE stats these are"):
+      //   - the profile's own code, if it still has one;
+      //   - else the code that already OWNS this device's stats, but ONLY when the name typed
+      //     matches that owner's name. That is the same person setting themselves up again after
+      //     losing their profile, and minting a fresh code would fork them away from their own
+      //     history for no reason;
+      //   - else a brand-new code. A different name is a different person, and giving them their
+      //     own code is exactly what stops two people on one phone blending into one record.
+      const owner = statsOwner();
+      const sameAsOwner = !!(owner && (owner.name || '').trim().toLowerCase() === name.toLowerCase());
+      const code = cur.playerId || (sameAsOwner ? owner.code : null) || newPlayerCode();
       say('Checking...');
       let status = 'offline';
       try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
       if (status === 'taken') { say('Taken. Use that code instead.'); return; }
       saveProfile(Object.assign({}, cur, { name, playerId: code }));
-      try { claimUsername(name, code, ''); } catch { /* best-effort */ }
+      // The real previous name, not '' - the hardcoded empty string here is what left "natalia"
+      // reserved against Ana's code when the shared device was renamed through this gate, so the
+      // registry said the name was taken by someone who no longer used it and Natalia could never
+      // claim her own name (CLAUDE.md, "The Ana/Natalia correction"). claimUsername only releases a
+      // previous name it can prove this code owned, so passing it is safe even when it is stale.
+      try { claimUsername(name, code, cur.name || ''); } catch { /* best-effort */ }
       finish();
     });
 

@@ -34,6 +34,7 @@ const SUITES = [
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },
+  { file: 'test-stats-identity.mjs' },
   { file: 'test-mp-lockstep.mjs' },
   // jsdom-dependent smoke suites (optional)
   { file: 'smoke-match.mjs', optionalDep: 'jsdom' },

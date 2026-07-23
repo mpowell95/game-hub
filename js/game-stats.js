@@ -82,6 +82,41 @@
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
 const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle'];
+
+// --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
+//
+// The store used to be keyed by DEVICE alone, so two people sharing one phone wrote into the same
+// counters and there was no way to tell their plays apart afterwards. That is exactly what happened
+// to Ana and Natalia (see CLAUDE.md, "The Ana/Natalia correction"): one device, one store, a week of
+// blended history and no per-play log to unpick it with. This is the structural fix.
+//
+// The store is now chosen by the ACTIVE PROFILE'S PLAYER CODE, with one rule that makes the change
+// free for every device that already exists:
+//
+//   * The FIRST code ever seen on a device becomes its OWNER and keeps `gamehub.stats` and the
+//     `players/<deviceId>` sync node, exactly as before. **Nothing is migrated, copied, moved or
+//     rewritten** - the owner's store is the same key holding the same bytes it held yesterday, so
+//     there is no migration to get wrong and no window where history is anywhere but where it was
+//     (THE LAW rules 1, 3 and 5 hold trivially rather than by careful handling).
+//   * Any DIFFERENT code that later becomes active on that device gets its OWN store
+//     (`gamehub.stats.p.<CODE>`) and its OWN sync node (`players/<deviceId>-<CODE>`). Two people on
+//     one phone can no longer land in one record no matter what either of them does.
+//   * A device with no profile code at all behaves exactly as it always did (device-wide store).
+//
+// The owner is recorded in `gamehub.stats.owner.v1`; every fork is appended to
+// `gamehub.stats.forks.v1`, which is diagnostic only (nothing reads it but a human and
+// js/device-report.js) and, per rule 5, is never pruned.
+//
+// KNOWN, DOCUMENTED GAP: if the SAME person loses their profile and is issued a brand-new code, this
+// forks them away from their own history. Their old store is untouched on disk and their old node is
+// untouched in Firebase, and players-agg.js unions devices by NAME as well as by code, so both My
+// Stats and the leaderboard still show the full history whenever the device is online. Offline, the
+// local view would show only the new store. js/hub.js's first-run gate narrows this by reusing the
+// owner's code when the name typed matches the owner's own name; it cannot be closed completely
+// without asking the player who they are, which is a product decision, not a storage one.
+const OWNER_KEY = 'gamehub.stats.owner.v1';       // { code, name, at } - who owns STATS_KEY here
+const FORK_KEY = 'gamehub.stats.forks.v1';        // append-only: every time a second identity appeared
+const storeKeyFor = (code) => 'gamehub.stats.p.' + code;
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
@@ -104,6 +139,80 @@ export function deviceId() {
   }
   return id;
 }
+
+/** The active profile's player code, or null. Read straight from localStorage rather than through
+ *  profile-store.js: this module is imported by players-agg.js, which runs headless in Node, and the
+ *  read must stay a bare, throw-proof key lookup with no module graph behind it. The regex is the
+ *  same canonical form profile-store.js's `code()` enforces - keep the two in step. */
+const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
+export function activeCode() {
+  try {
+    const p = JSON.parse(localStorage.getItem('gamehub.profile') || 'null');
+    const c = (p && typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase();
+    return CODE_RE.test(c) ? c : null;
+  } catch { return null; }
+}
+function activeName() {
+  try {
+    const p = JSON.parse(localStorage.getItem('gamehub.profile') || 'null');
+    return (p && typeof p.name === 'string' ? p.name : '').trim();
+  } catch { return ''; }
+}
+
+/** Who owns this device's original store: { code, name, at }, or null if no code has appeared yet. */
+export function statsOwner() { const o = readJSON(OWNER_KEY); return (o && typeof o === 'object' && o.code) ? o : null; }
+
+function writeOwner(o) {
+  try { localStorage.setItem(OWNER_KEY, JSON.stringify(o)); }
+  catch (err) { console.error('[game-stats] could not record the store owner', err); }
+}
+
+/** Note a fork the first time a given code needs its own store here. Diagnostic + append-only; a
+ *  failure to record it must never stop the fork itself, which is the part that protects the data. */
+function noteFork(code, prevKey) {
+  try {
+    const log = readJSON(FORK_KEY);
+    const list = Array.isArray(log) ? log : [];
+    if (list.some((e) => e && e.code === code)) return;
+    let prevPlays = 0;
+    try {
+      const prev = JSON.parse(localStorage.getItem(prevKey) || 'null');
+      for (const g of Object.keys((prev && prev.games) || {})) prevPlays += (((prev.games[g] || {}).total || {}).played | 0);
+    } catch { /* diagnostic only */ }
+    list.push({ code, at: new Date().toISOString(), prevKey, prevPlays });
+    localStorage.setItem(FORK_KEY, JSON.stringify(list));
+    console.warn(`[game-stats] a second player (${code}) is now recording on this device. Their stats go to ${storeKeyFor(code)} and players/<deviceId>-${code}; the previous player's ${prevPlays} plays stay untouched in ${prevKey}.`);
+  } catch (err) { console.error('[game-stats] could not record the store fork', err); }
+}
+
+/** Resolve WHOSE store is active: { code, key, syncId, forked }. Claims ownership of the legacy
+ *  device-wide store for the first code ever seen here, and keeps the owner's display name fresh. */
+function resolveStore() {
+  const code = activeCode();
+  const id = deviceId();
+  if (!code) return { code: null, key: STATS_KEY, syncId: id, forked: false };
+  const owner = statsOwner();
+  if (!owner) {
+    writeOwner({ code, name: activeName(), at: new Date().toISOString() });
+    return { code, key: STATS_KEY, syncId: id, forked: false };
+  }
+  if (owner.code === code) {
+    const name = activeName();
+    if (name && name !== owner.name) writeOwner(Object.assign({}, owner, { name }));
+    return { code, key: STATS_KEY, syncId: id, forked: false };
+  }
+  noteFork(code, STATS_KEY);
+  return { code, key: storeKeyFor(code), syncId: id + '-' + code, forked: true };
+}
+
+/** The localStorage key holding the ACTIVE player's stats on this device. */
+export function statsKey() { return resolveStore().key; }
+
+/** The id this device's ACTIVE player syncs under: `players/<statsId()>`. Equals deviceId() for the
+ *  device's owner (so every record that already exists keeps its exact node) and
+ *  `<deviceId>-<CODE>` for anyone else playing here. Not a network identity - multiplayer still uses
+ *  deviceId(), which is per-device by design. */
+export function statsId() { return resolveStore().syncId; }
 
 /** Connect 4: the WHO-MOVED-FIRST grid (player|computer x easy/medium/hard/expert x {w,l}). */
 function ensureGrid(g) {
@@ -295,6 +404,23 @@ function seedChinchonExtras(st) {
   return true;
 }
 
+/** Forked-store counterparts of foldAll/seedChinchonExtras: set the same fold-once guards so the
+ *  device-wide legacy stores are never folded into a second player's store, and never will be on a
+ *  later load either. The legacy keys themselves are left completely untouched (THE LAW rule 5) -
+ *  they still belong to, and still show for, the owner. */
+function latchLegacyGuards(st) {
+  let changed = false;
+  for (const id of ['chinchon', 'business']) { if (!st.games[id]._leg) { st.games[id]._leg = true; changed = true; } }
+  return changed;
+}
+function latchChinchonSeed(st) {
+  const g = st.games.chinchon;
+  if (g._ccSeeded) return false;
+  g._ccSeeded = true;
+  ensureCc(g);
+  return true;
+}
+
 function foldAll(st) {
   let changed = foldLegacy(st, 'chinchon', 'chinchon-stats', (c) => ({ played: c.games | 0, won: c.wins | 0, lost: c.losses | 0 }));
   changed = foldLegacy(st, 'business', 'bd-stats', (b) => ({ played: b.played | 0, won: b.won | 0, lost: b.lost | 0 })) || changed;
@@ -328,13 +454,15 @@ function drainPendingBusinessDeal(st) {
 // logging on failure is purely additive: zero risk to any existing game, strictly more visibility
 // for every game that shares this store.
 function persist(st) {
-  try { localStorage.setItem(STATS_KEY, JSON.stringify(st)); return true; }
-  catch (err) { console.error('[game-stats] persist failed, this write was not saved', err); return false; }
+  const key = statsKey();
+  try { localStorage.setItem(key, JSON.stringify(st)); return true; }
+  catch (err) { console.error(`[game-stats] persist failed, this write was not saved (${key})`, err); return false; }
 }
 
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
-  const raw = readJSON(STATS_KEY);
+  const store = resolveStore();
+  const raw = readJSON(store.key);
   // Snapshot `br` BEFORE normalize() runs: normalize() mutates `raw` in place (`st` below is the
   // same object, never cloned) and calls ensureBr() on it, which would otherwise stamp fresh
   // bestObstacles/bestObstaclesByDiff fields onto an old-shape `br` before migrateBallRunMetric
@@ -342,8 +470,12 @@ export function loadStats() {
   const rawBr = raw && raw.games && raw.games.ballrun && raw.games.ballrun.br;
   const preNormalizeBr = rawBr && typeof rawBr === 'object' ? JSON.parse(JSON.stringify(rawBr)) : null;
   const st = normalize(raw);
-  let changed = foldAll(st);
-  changed = seedChinchonExtras(st) || changed;
+  // The per-game legacy stores (chinchon-stats, bd-stats) are DEVICE-wide: they predate player codes
+  // entirely, so they belong to whoever owned this device's original store. Folding them into a
+  // second person's forked store would hand them the first person's history - the exact blending
+  // this whole split exists to prevent. Latch the fold-once guards without folding instead.
+  let changed = store.forked ? latchLegacyGuards(st) : foldAll(st);
+  changed = (store.forked ? latchChinchonSeed(st) : seedChinchonExtras(st)) || changed;
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   changed = refoldBallRunLegacyRuns(st) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
@@ -571,9 +703,10 @@ export function recordHeadToHead(gameId, opponent, won) {
   return st;
 }
 
-export { GAMES, STATS_KEY, DEVICE_KEY };
+export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordHeadToHead,
-  GAMES, STATS_KEY, DEVICE_KEY,
+  statsKey, statsId, statsOwner, activeCode,
+  GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

@@ -12,7 +12,7 @@
 // belong to whom).
 
 import { loadProfile } from './profile-store.js';
-import { loadStats, deviceId } from './game-stats.js';
+import { loadStats, deviceId, statsId, statsKey, statsOwner, FORK_KEY } from './game-stats.js';
 import { syncHealth } from './stats-net.js';
 import { getStatsApp } from './firebase-boot.js';
 
@@ -87,9 +87,29 @@ async function gatherLocal() {
 
   const rawKeyDump = allLocalStorageKeys().map((key) => ({ key, bytes: byteSize(readRaw(key) || '') }));
 
+  // WHOSE stats this device is recording (game-stats.js's "WHOSE stats these are" block). If two
+  // people have ever played here, `otherStores` is the tell: it lists every other player's store on
+  // this device by key and play count, so a blended-history question is answerable from one report
+  // instead of by inference. `stats` above is the ACTIVE player's store only.
+  const identity = {
+    statsId: statsId(),                    // the players/<id> node this device's active player syncs to
+    statsKey: statsKey(),                  // which localStorage key `stats` above came from
+    owner: statsOwner(),                   // { code, name, at } of whoever owns the original store here
+    forks: readJSON(FORK_KEY),             // append-only log of every additional player seen here
+    otherStores: allLocalStorageKeys()
+      .filter((k) => k.startsWith('gamehub.stats.p.') && k !== statsKey())
+      .map((key) => {
+        const st = readJSON(key);
+        let plays = 0;
+        for (const g of Object.keys((st && st.games) || {})) plays += (((st.games[g] || {}).total || {}).played | 0);
+        return { key, plays, updatedAt: (st && st.updatedAt) || null };
+      }),
+  };
+
   return {
     capturedAt: new Date().toISOString(),
     deviceId: id,
+    identity,
     profile,
     stats,
     favorites,
@@ -116,7 +136,10 @@ async function gatherConflictChecks(local) {
       const snap = await api.get(api.ref(db, 'usernames/' + encodeKey(key)));
       out.registeredOwner = snap.exists() ? snap.val() : null; // { code, at } or null if unclaimed
     }
-    const psnap = await api.get(api.ref(db, 'players/' + local.deviceId));
+    // The ACTIVE player's node, which is deviceId for this device's owner and <deviceId>-<CODE> for
+    // anyone else playing here - comparing against players/<deviceId> would compare a second player's
+    // local stats to the first player's remote record and report a phantom disagreement.
+    const psnap = await api.get(api.ref(db, 'players/' + local.identity.statsId));
     out.remotePlayer = psnap.exists() ? psnap.val() : null;
   } catch (e) {
     out.error = String(e && e.message ? e.message : e);

@@ -22,10 +22,39 @@
 (function () {
   'use strict';
   var STATS_KEY = 'gamehub.stats';
+  var OWNER_KEY = 'gamehub.stats.owner.v1';
+  var CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
   var GAMES = ['connect4', 'chinchon', 'business', 'parchis'];
 
   function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function bucket() { return { played: 0, won: 0, lost: 0 }; }
+
+  // WHOSE stats these are. Mirrors game-stats.js's resolveStore(), minus the ownership CLAIM: this
+  // is a secondary writer, so it only ever READS who the owner is and never records one. When no
+  // owner has been recorded yet it uses the device-wide store, which is precisely what the ES-module
+  // recorder does at the moment it claims - so the two agree either way. Keep in step with
+  // game-stats.js; test-recorder-contract.mjs pins the shared surface.
+  function activeCode() {
+    try {
+      var p = JSON.parse(localStorage.getItem('gamehub.profile') || 'null');
+      var c = (p && typeof p.playerId === 'string' ? p.playerId : '').replace(/^\s+|\s+$/g, '').toUpperCase();
+      return CODE_RE.test(c) ? c : null;
+    } catch (e) { return null; }
+  }
+  function activeStatsKey() {
+    var code = activeCode();
+    if (!code) return STATS_KEY;
+    var o = readJSON(OWNER_KEY);
+    if (!o || !o.code || o.code === code) return STATS_KEY;
+    return 'gamehub.stats.p.' + code;
+  }
+
+  // The device-wide legacy stores belong to whoever owned the original store here; folding them into
+  // a second player's forked store would hand them the first player's history. Latch the fold-once
+  // guards instead, exactly as game-stats.js's latchLegacyGuards does.
+  function latchLegacyGuards(st) {
+    for (var i = 0; i < 2; i++) st.games[['chinchon', 'business'][i]]._leg = true;
+  }
 
   function normalize(raw) {
     var st = (raw && typeof raw === 'object') ? raw : {};
@@ -56,9 +85,13 @@
   function record(gameId, difficulty, won) {
     try {
       if (GAMES.indexOf(gameId) < 0) return;
-      var st = normalize(readJSON(STATS_KEY));
-      foldLegacy(st, 'chinchon', 'chinchon-stats', function (c) { return { played: c.games | 0, won: c.wins | 0, lost: c.losses | 0 }; });
-      foldLegacy(st, 'business', 'bd-stats', function (b) { return { played: b.played | 0, won: b.won | 0, lost: b.lost | 0 }; });
+      var key = activeStatsKey();
+      var st = normalize(readJSON(key));
+      if (key !== STATS_KEY) latchLegacyGuards(st);
+      else {
+        foldLegacy(st, 'chinchon', 'chinchon-stats', function (c) { return { played: c.games | 0, won: c.wins | 0, lost: c.losses | 0 }; });
+        foldLegacy(st, 'business', 'bd-stats', function (b) { return { played: b.played | 0, won: b.won | 0, lost: b.lost | 0 }; });
+      }
       var g = st.games[gameId];
       var d = String(difficulty == null ? '' : difficulty).toLowerCase().replace(/^\s+|\s+$/g, '') || 'unknown';
       var b = g.byDiff[d] || (g.byDiff[d] = bucket());
@@ -66,7 +99,7 @@
       if (won === true) { g.total.won += 1; b.won += 1; }
       else if (won === false) { g.total.lost += 1; b.lost += 1; }
       st.updatedAt = new Date().toISOString();
-      localStorage.setItem(STATS_KEY, JSON.stringify(st));
+      localStorage.setItem(key, JSON.stringify(st));
     } catch (e) { /* never break the game */ }
   }
 

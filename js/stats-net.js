@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { deviceId, loadStats } from './game-stats.js';
+import { statsId, loadStats } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 
@@ -68,7 +68,11 @@ function remotePlayCount(rec) {
  *  verified by a fresh re-read, because a resolved promise is not proof the data landed. Idempotent -
  *  it mirrors the whole store every time, so any retry naturally repairs a previously failed sync. */
 export async function syncMyStats() {
-  const id = deviceId();
+  // statsId(), not deviceId(): the node is per (device, player). For the device's owner the two are
+  // the same string, so every record that already exists keeps its exact key; a SECOND person playing
+  // on the same phone syncs to `players/<deviceId>-<CODE>` instead of overwriting the first person's
+  // node (see game-stats.js's "WHOSE stats these are" block).
+  const id = statsId();
   const localPlays = localPlayCount();
   if (!(await init())) {
     // Not necessarily a bug (offline play is supported and expected), but it must be VISIBLE: while
