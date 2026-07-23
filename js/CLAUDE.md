@@ -126,10 +126,25 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   favorites.
 - **Dictionaries are per-game ES modules** (`<game>/js/strings.js`, `{ en, es }`), co-located
   with the game and added to `sw.js` ASSETS — they ride the module graph, so offline support is
-  the ordinary precache, no fetches, no JSON, no SW logic. Shared-UI strings (hub chrome, My
-  Stats, Leaderboards) are NOT yet translated — that extraction is the deferred bulk of the
-  i18n effort; the fallback chain is the migration strategy (untranslated surfaces simply show
-  English).
+  the ordinary precache, no fetches, no JSON, no SW logic.
+- **The big extraction (HANDOFF-I18N-EXTRACTION.md) is complete (2026-07-24).** Translated:
+  hub chrome (`js/strings.js`, `hub_` keys — top bar, first-run gate, confirm dialogs, card
+  blurbs as `{en,es}` on each `GAMES` entry), the profile page (`pf_` keys, the one
+  `data-i18n`/`data-i18n-placeholder`/`data-i18n-aria` attribute-driven surface — decision 4),
+  My Stats (`gs_` keys) and Leaderboards (`lb_` keys), and all ten pre-Snake in-hub games
+  (Filler, Mancala, Tic Tac Toe, Dots and Boxes, Nuts & Bolts, Ball Run, Connect Four, Escoba,
+  Chinchón) each with its own `<game>/js/strings.js`. Standing exclusions, unchanged from the
+  handoff: **Boggle** (all of it — English word game to its core), **Monopoly Deal** and
+  **Parchís** (each its own separate task — Parchís needs the sibling `../Parchís/` source
+  rebuild to read `gamehub.lang.v1`), **`js/challenge/`** (retired, Matt's own words), and
+  everywhere card-suit vocabulary (Oros/Copas/Espadas/Bastos) plus card-rank/figure names
+  (Sota/Caballo/Rey) and proper/deck names (e.g. Chinchón's "Ana Banana", the AI roster names)
+  appear — those are real vocabulary or proper nouns in both languages, never routed through
+  `t()`. `js/difficulty-tiers.js`, `js/game-stats.js` (`normDiff`), and every `recordX()`
+  recorder were zero-edit throughout: only DISPLAY labels translate, difficulty ids/stats keys/
+  byDiff bucket names/event names stay canonical. `test-i18n-strings.mjs` is the drift tripwire
+  (no orphaned `es` keys, matching `{placeholder}` tokens, no empty values) across every
+  dictionary; add a new game's `strings.js` to its `DICTS` list when one is created.
 - **Entry points**: the hub's first-run gate has an English/Español chooser (self-labeled, so it
   never needs translating; takes effect immediately, no Save); the hub top bar has a flag-knob
   toggle (`[data-role="lang"]`, `_paintLangToggle()` in hub.js — Matt's design, inline SVG)
@@ -192,61 +207,75 @@ of these came back):
 
 ## The leaderboard's rating model (2026-07-22)
 
-The Leaderboards overlay ranks people by a single 0-100 **rating** instead of by absolute wins.
-The maths lives in `js/leaderboard-rank.js` (pure, headless-testable) and the cross-game difficulty
-mapping in `js/difficulty-tiers.js`; `js/leaderboard-ui.js` is DOM only.
+**2026-07-23 redesign (wins-only display, rating retired from the UI):** Matt's call, third
+mockup round approved same day (`HANDOFF-LEADERBOARD-REDESIGN.md`, now superseded by this section).
+The Leaderboard overlay no longer shows W-L, win rate, or the 0-100 rating anywhere — every screen
+leads with ONE big **wins** number (or a solo game's own metric: obstacles/longest/solved), because
+Matt (the app's own builder) couldn't read the old four-table-per-game layout. **Losses and full
+records stay visible on My Stats** (`game-stats-ui.js`) — that screen is what satisfies THE LAW
+rule 1 for the raw breakdown now; the leaderboard is the bragging wall, not the ledger.
 
-**Everything here is a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>` are
-read-only to this feature — nothing is stored, migrated or normalized, so the whole model is
-reversible by editing those two modules and nothing else. Every rule applies identically to every
-player; there is no per-player special-casing anywhere in it.
+**The rating model is retired from display, not from the repo.** `js/leaderboard-rank.js` (Wilson
+scoring, difficulty weighting, `rankPlayers`/`ratePlayer`/`soloRating`) and `test-leaderboard-rank.mjs`
+are untouched and still green — kept in place for a possible future dedicated rating page. Only its
+UI caller is gone. `js/leaderboard-ui.js` now imports just `bucketsOf`/`tierMix` from it, to sum wins
+and detect which tiers a player has played; **do not delete leaderboard-rank.js's rating exports as
+"unused"** — they are intentionally dormant, not dead.
 
-- **A draw counts as a win**, for every player, in every game. Derived at render time as
-  `wins = played - lost`, never stored. Rationale: against Tic Tac Toe's Classic Pro (unbeatable by
-  design) a draw is the best achievable result. It also makes records *reconcile* — before this, a
-  stored 2W/2L/10D record rendered as W-L `2-2` beside `14` plays and a `14%` win rate, three
-  numbers that contradicted each other. Losses clamp to `played`, so W + L === Plays holds even for
-  a malformed legacy record. Draws stay visible in their own right on **My Stats** (`tt`/`db`/`bg`
-  show explicit W/L/T) — that is the surface satisfying THE LAW rule 1 for the raw breakdown.
-- **Difficulty is weighted, never filtered.** `tierOf()` maps all four live vocabularies
-  (`beginner/intermediate/pro`, `easy/medium/hard/expert`, `extrahard`, `facil/normal/dificil`) onto
-  the profile's canonical 1-3 scale plus an optional tier 4 above Pro, weighted `0.8/1.0/1.25/1.5`.
-  Unmapped buckets (`unknown`, `legacy`) count at weight 1.0 and are shown as "Unrated" — dropping
-  them would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
-  **Do not change `normDiff`** — it is on the write path; this is a separate read-path mapping.
-- **`competitiveRating` = `min(1, wilson(p, nRaw) · avgW)`.** Two distinct uses of the weight, and
-  both are load-bearing: `p = Σ(wins·w)/Σ(played·w)` captures the player's own tier MIX and stays in
-  [0,1]; `avgW = Σ(played·w)/Σ(played)` captures the difficulty they play AT. **Weighting numerator
-  and denominator alone — the obvious formulation, and what the original spec said — cancels exactly
-  for anyone who plays a single tier** (10-5 on Pro and 10-5 on Beginner both give p = 0.667), which
-  would have made difficulty a silent no-op for the most common record shape. The `avgW` factor is
-  what makes it count; `test-leaderboard-rank.mjs` pins this.
-- Wilson's `n` is the RAW play count, never the weighted one: difficulty should move your *rate*,
-  not fake your *sample size*. Under 5 rated plays is flagged `provisional` (shown, not hidden).
-- **`soloRating` is achievement relative to the family**, because Ball Run and Nuts & Bolts have no
-  loss axis (they record `played`+`won`, never `lost`) and so cannot feed a win-rate model — a
-  Wilson score on zero losses trends to 1.0 with volume, which would let someone top the board by
-  grinding. Scored against the field maximum, then passed through the SAME Wilson discount as the
-  competitive side. **Known property, deliberately left as-is:** a relative ratio is 1.0 by
-  definition for whoever holds the field max, and in a game only one person plays that is them at
-  any sample size, so a solo leader still tends to outrank a mid competitive record. Wilson removes
-  the worst of it (a 12-level Nuts & Bolts record scored a flat **100** before that, topping a
-  22-match Chinchón record) but cannot discount a rate with no variance. If this reads wrong on the
-  real family board, **the lever is a solo-axis multiplier in `soloRating()`**, not the tests.
-- The two are blended **by play count**, so a mostly-competitive player's rating is mostly their
-  competitive score and a solo-only player still gets a real, comparable number. `—` when unrated.
-- **Everyone with any recorded play is listed.** The old board filtered `comp.played > 0`, which put
-  Ball Run / Nuts & Bolts-only players on NO main screen at all — stored but invisible, rule 1.
-  Their W-L cell shows a headline achievement (`Ball Run 61`) instead of a meaningless record.
+**Everything here is still a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>`
+are read-only to this feature — nothing is stored, migrated or normalized.
 
-UI conventions worth keeping: two fixed segments (Standings / Games), never the old plays-sorted tab
-strip — it re-ordered itself between visits and anything past the fourth tab was undiscoverable.
-Games are alphabetical by title, matching the launcher. `table-layout: fixed` with widths declared on
-`thead th` (with fixed layout the FIRST row sets the columns — putting them on `tbody td` silently
-leaves every column an equal share) plus `white-space: nowrap` is what stops `15-3` wrapping onto two
-lines. Wide boards (Nuts & Bolts, Ball Run) get `is-wide` and scroll inside `.lb-tblwrap`, never the
-page body. The difficulty-mix bar is one hue varying only in LIGHTNESS, with a text `aria-label` —
-colorblind-safe, same rule as the rest of the repo.
+- **A draw (or a solo run/solve) counts as a win**, for every player, in every game, derived at
+  render time via `bucketsOf()`'s `wins = played - losses` (never stored). Solo games (Ball
+  Run/Nuts & Bolts/Snake) populate `total`/`byDiff` with the same `{played,won,lost}` shape as
+  every competitive game (`lost` just never gets touched), so `winsAtTier()` in `leaderboard-ui.js`
+  works generically across ALL 13 games with no special-casing for "solo" — a solve/run at a tier
+  IS a win at that tier, per Matt's explicit instruction. **Known, accepted property:** solo volume
+  inflates win counts with no rating left to discount it; Matt is trading precision for legibility.
+- **Difficulty is a single-select FILTER now, not a weighting.** Five pills — All (default),
+  Beginner, Intermediate, Pro, Expert — shared between By Player and By Game and carried into a
+  game's own page; resets to All every time the overlay opens (not persisted). Ski-slope shapes
+  (circle/square/diamond/double-diamond, `diffShapeSVG()` in leaderboard-ui.js) carry the tier,
+  color is secondary (colorblind rule). **Legacy/unknown buckets (`tierOf()` returns null) count in
+  All ONLY** and appear under no tier pill — dropping them from All would be a rule 1 regression on
+  exactly the data `foldLegacy` exists to preserve. `difficulty-tiers.js` itself is untouched.
+- **Ball Run and Snake are the one place "wins at a tier" and "the game's own metric" diverge** —
+  their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`), not a play count, so
+  `leaderboard-ui.js` special-cases `brBestAt()`/`snBestAt()` for them; every other game (including
+  Nuts & Bolts — a solve always increments both `played` and `won` by exactly 1) uses the generic
+  `winsAtTier()`/`gameMetricAt()` path.
+- **Everyone with any recorded play at the selected filter is listed** (`plays > 0` at that tier;
+  under All, any play at all) — the same visibility bar as the old rating-based board, now applied
+  per-filter instead of once. A Beginner-only player must still be visible under the default (All).
+- Sort: wins (or metric) desc → fewer games wins ties (better economy) → `updatedAt` desc — same
+  shape as the old rating tie-break, just without the rating.
+
+**`js/game-art.js`** is the single source for every hub-launcher tile's inline SVG art, keyed by the
+HUB registry id (`GAMES[].id]` — moved out of `js/hub.js`'s GAMES array so the Leaderboard's By Game
+screen can show the SAME real tile art as a thumbnail without importing hub.js itself (a
+side-effectful module: it boots stats sync and first-run gates on import). `hub.js` now reads
+`GAME_ART[id]`; `leaderboard-ui.js` reads `GAME_ART[hubIdOf(statsId)]` via its own
+`STATS_TO_HUB` map (verify that map against the real `GAMES` registry if either changes ids).
+
+**The unified chrome band spec** (hub top bar, Leaderboard overlay, My Stats overlay — Matt called
+out that the three banners were clearly built independently): three CSS custom properties in
+`css/hub.css`'s `:root`, consumed by all three (with a literal fallback, since Escoba-style
+standalone pages never open the overlays but defensive costs nothing):
+`--gh-band-title: 44px` (17px/600-weight title, `.hub-top-info` / `.lb-top-row` / `.gs-top-row` —
+note the overlay's OUTER `.lb-top`/`.gs-top` only adds safe-area clearance and horizontal padding;
+the measured 44px band is the INNER `-row` wrapper, mirroring how `.hub-top-info` is the measured
+band inside the outer `.hub-top`), `--gh-band-controls: 36px` (the segmented pills — `.hub-top-right`,
+`.lb-segs`), `--gh-band-filter: 34px` (the difficulty pill row, `.lb-pills`). If a future band
+measures wrong, check whether the container still carries its OWN vertical padding on top of the
+shared `min-height` — that was the bug the first draft of this redesign shipped with.
+
+UI conventions worth keeping: two fixed segments (By Player / By Game, renamed from Standings/Games),
+never the old plays-sorted tab strip — it re-ordered itself between visits and anything past the
+fourth tab was undiscoverable. Games are alphabetical by title, matching the launcher. By Game's
+number/unit stack is FIXED-WIDTH and right-aligned (`min-width:56px` on `.lb-gnum`) — the old
+free-form gray metric text made the column ragged. "Who leads what" chips (`textureHTML`, unchanged
+maths) are now tinted (amber/teal/blue rotation, `.lb-chip-a/b/c`) rather than plain cards, and are
+filter-INDEPENDENT (several — Chinchón closes, Boggle words — have no per-tier storage at all).
 
 ### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
 

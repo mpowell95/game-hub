@@ -396,8 +396,10 @@ export function openStatsOverlay() {
     <div class="gs-scrim" data-role="gs-close"></div>
     <div class="gs-panel">
       <header class="gs-top">
-        <h2>${t('gs_title')}</h2>
-        <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
+        <div class="gs-top-row">
+          <h2>${t('gs_title')}</h2>
+          <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
+        </div>
       </header>
       <nav class="gs-tabs" data-role="gs-tabs" aria-label="${t('gs_tabs_aria')}">${tabsHTML()}</nav>
       <div class="gs-body" data-role="gs-body">${screenFor(_active, _st)}</div>
@@ -419,10 +421,11 @@ function ensureCss() {
     '.gs-overlay.is-in{opacity:1}',
     '.gs-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.gs-panel{position:relative;width:100%;max-width:560px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
-    '.gs-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:max(env(safe-area-inset-top,0px),16px) 18px 12px;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
-    '.gs-top h2{margin:0;font-size:1.15rem;font-weight:800;color:var(--hub-ink,#16243a)}',
+    '.gs-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
+    '.gs-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--gh-band-title,44px)}',
+    '.gs-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
     '.gs-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
-    '.gs-tabs{display:flex;gap:4px;padding:10px 12px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--hub-bg,#f4f6fb)}',
+    '.gs-tabs{display:flex;align-items:center;gap:4px;min-height:var(--gh-band-controls,36px);padding:0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--hub-bg,#f4f6fb)}',
     '.gs-tab{flex:0 0 auto;appearance:none;border:0;background:none;cursor:pointer;padding:8px 12px 10px;font-size:.9rem;font-weight:700;color:var(--hub-muted,#5b6b82);border-bottom:3px solid transparent;white-space:nowrap}',
     '.gs-tab.is-active{color:var(--hub-ink,#16243a);font-weight:900;border-bottom-color:var(--gs-accent,#1769d4)}',
     '.gs-body{padding:14px 16px 8px;display:grid;gap:14px}',

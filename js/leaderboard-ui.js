@@ -1,33 +1,41 @@
-// leaderboard-ui.js - the public "Leaderboard" overlay: every player sees everyone's record, rating
-// and plays. Reads the synced players/ node live (watchPlayers) and aggregates it into ONE row per
+// leaderboard-ui.js - the public "Leaderboard" overlay: every player sees everyone's record and
+// plays. Reads the synced players/ node live (watchPlayers) and aggregates it into ONE row per
 // person by player code (js/players-agg.js), so a person's phone + laptop count once. Self-contained
 // (injects its own lb- CSS once); mirrors game-stats-ui.js. Opened from the hub header.
 //
-// READ-ONLY consumer. This file never writes, migrates or normalizes stored data - the ranking rules
-// live in js/leaderboard-rank.js and are pure read-time display transforms over the stored shape.
+// READ-ONLY consumer. This file never writes, migrates or normalizes stored data - the win/tier
+// maths lives in js/leaderboard-rank.js and is a pure read-time display transform over the stored
+// shape.
 //
-// Two segments, not a tab strip. The old design put 13 tabs in a horizontal scroller and re-sorted
-// them by total plays on every render, so tab POSITIONS moved between visits and anything past the
-// fourth was undiscoverable. Now: Standings (one ranked list of people) and Games (a grid of every
-// game, alphabetical and fixed, tap through to that game's board).
+// 2026-07-23 redesign (HANDOFF-LEADERBOARD-REDESIGN.md): WINS ONLY everywhere here. No W-L, no
+// losses, no win rate, no rating. Losses and full records stay visible on My Stats (game-stats-ui.js)
+// - that is the surface satisfying THE LAW rule 1 for the raw breakdown; this overlay is the
+// bragging wall. The 0-100 rating (leaderboard-rank.js's rankPlayers/ratePlayer/soloRating) is
+// retired from DISPLAY only - the module and its tests are untouched and still green, kept for a
+// possible future dedicated rating page (Matt's call). This file now only imports record/bucketsOf/
+// tierMix/tierRows/cmp from it.
 //
-// Colorblind-safe: rank, the viewer's own highlighted row, and the difficulty-mix bar all use
-// weight, border and LIGHTNESS within one hue - never hue alone.
+// Two segments (By Player / By Game, renamed from Standings/Games) plus a shared difficulty pill
+// row (All/Beginner/Intermediate/Pro/Expert) that filters both. Colorblind-safe: pills carry a
+// SHAPE per tier (circle/square/diamond/double-diamond), never hue alone; the viewer's own row uses
+// a border highlight, never color alone.
 
-import { aggregatePlayers, buildIdentity, COMPETITIVE } from './players-agg.js';
+import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
-import { record, tierMix, tierRows, rankPlayers, cmp } from './leaderboard-rank.js';
+import { bucketsOf, tierMix } from './leaderboard-rank.js';
 import { TIERS } from './difficulty-tiers.js';
+import { GAME_ART } from './game-art.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 // difficulty-tiers.js is READ-path-only and out of scope for i18n edits (its TIER_LABEL is
-// English-only, used elsewhere); this maps the same 1-4 tiers onto our own translated keys
-// instead of importing that label.
+// English-only, used elsewhere); this maps the same 1-4 tiers onto our own translated keys instead.
 const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'gs_diff_pro', 4: 'gs_diff_expert' };
+// Ski-slope shape language (colorblind-safe: shape carries the meaning, color is secondary).
+const TIER_COLOR = { 1: '#2e9e44', 2: '#1F5FA8', 3: '#1c2430', 4: '#1c2430' };
 
 // Old test/debug device records. They stay in Firebase untouched (no data is ever deleted); they are
 // simply never rendered. Matched by deviceId prefix.
@@ -35,33 +43,42 @@ const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test
 
 // Every game, ALPHABETICAL BY TITLE - the hub launcher's convention (CLAUDE.md, "Adding a game",
 // item 5). Fixed order: a tile never moves between visits, unlike the old plays-sorted tab strip.
+// `id` is the STATS id (game-stats.js's GAMES); js/game-art.js is keyed by the HUB registry id, so
+// STATS_TO_HUB below maps between them for the tile art thumbnails.
 const GAME_META = [
-  { id: 'ballrun', label: 'Ball Run', accent: '#c22e8f' },
-  { id: 'boggle', label: 'Boggle', accent: '#1f3864' },
-  { id: 'chinchon', label: 'Chinchón', accent: '#d4a017' },
-  { id: 'connect4', label: 'Connect 4', accent: '#1769d4' },
-  { id: 'dotsboxes', label: 'Dots and Boxes', accent: '#16243a' },
-  { id: 'escoba', label: 'Escoba', accent: '#1c7a4f' },
-  { id: 'filler', label: 'Filler', accent: '#c2557f' },
-  { id: 'mancala', label: 'Mancala', accent: '#e08a3c' },
-  { id: 'business', label: 'Monopoly Deal', accent: '#6a4cff' },
-  { id: 'nutsbolts', label: 'Nuts & Bolts', accent: '#607d8b' },
-  { id: 'parchis', label: 'Parchís', accent: '#c0632b' },
-  { id: 'snake', label: 'Snake', accent: '#3f7d2c' },
-  { id: 'tictactoe', label: 'Tic Tac Toe', accent: '#0e7c86' },
+  { id: 'ballrun', label: 'Ball Run' },
+  { id: 'boggle', label: 'Boggle' },
+  { id: 'chinchon', label: 'Chinchón' },
+  { id: 'connect4', label: 'Connect 4' },
+  { id: 'dotsboxes', label: 'Dots and Boxes' },
+  { id: 'escoba', label: 'Escoba' },
+  { id: 'filler', label: 'Filler' },
+  { id: 'mancala', label: 'Mancala' },
+  { id: 'business', label: 'Monopoly Deal' },
+  { id: 'nutsbolts', label: 'Nuts & Bolts' },
+  { id: 'parchis', label: 'Parchís' },
+  { id: 'snake', label: 'Snake' },
+  { id: 'tictactoe', label: 'Tic Tac Toe' },
 ].sort((a, b) => a.label.localeCompare(b.label));
-const ACCENT = Object.fromEntries(GAME_META.map((g) => [g.id, g.accent]));
 const LABEL = Object.fromEntries(GAME_META.map((g) => [g.id, g.label]));
+const ALL_IDS = GAME_META.map((g) => g.id);
+// Verified against js/hub.js's GAMES registry (root CLAUDE.md, "Adding a game" item 7 warning).
+const STATS_TO_HUB = {
+  connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
+  dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
+};
+const hubIdOf = (id) => STATS_TO_HUB[id] || id;
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved' };
+const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }
 function labelOf(id) { return LABEL[id] || id; }
 
 // --- identity chrome --------------------------------------------------------
-function rankName(g) { return esc(g.name || t('lb_unnamed')); }
+function rankName(g) { return esc(g.name || ''); }
 
-/** The player's synced profile emoji (aggregated in players-agg.js and, until now, never rendered),
- *  falling back to their first initial in a neutral circle. Free identity, already in the data. */
+/** The player's synced profile emoji (aggregated in players-agg.js), falling back to their first
+ *  initial in a neutral circle. */
 function avatarHTML(g) {
   const emoji = (g.emoji || '').trim();
   if (emoji) return `<span class="lb-av" aria-hidden="true">${esc(emoji)}</span>`;
@@ -69,214 +86,174 @@ function avatarHTML(g) {
   return `<span class="lb-av is-initial" aria-hidden="true">${esc(initial)}</span>`;
 }
 
-/** A thin bar segmented by share of plays per difficulty tier: darkest segment = highest tier.
- *  One hue, varying only in lightness, so it stays readable without color vision (and it carries a
- *  text title/aria-label as the non-visual equivalent). Answers "does this person play Pro or
- *  Beginner?" at a glance without spending a column on it. */
-function tierBarHTML(mix) {
-  const total = TIERS.reduce((a, t) => a + mix[t], 0) + mix.unranked;
-  if (!total) return '';
-  const parts = [];
-  const words = [];
-  for (const tier of TIERS) {
-    if (mix[tier] <= 0) continue;
-    parts.push(`<span class="lb-tseg is-t${tier}" style="width:${((mix[tier] / total) * 100).toFixed(2)}%"></span>`);
-    words.push(`${t(TIER_LABEL_KEY[tier])} ${pct(mix[tier], total)}%`);
-  }
-  if (mix.unranked > 0) {
-    parts.push(`<span class="lb-tseg is-t0" style="width:${((mix.unranked / total) * 100).toFixed(2)}%"></span>`);
-    words.push(`${t('lb_unrated')} ${pct(mix.unranked, total)}%`);
-  }
-  const text = esc(words.join(', '));
-  return `<span class="lb-tbar" role="img" aria-label="${t('lb_diffmix_aria', { text })}" title="${text}">${parts.join('')}</span>`;
+// --- difficulty tier maths ---------------------------------------------------
+// Solo games (Ball Run/Nuts & Bolts/Snake) ALSO populate total/byDiff with the standard
+// {played,won,lost} bucket shape (game-stats.js's bumpTotals path) - every recordX() call bumps it
+// alongside its own br/nb/sn sub-object. So winsAtTier/playsAtTier below work generically across
+// EVERY game: a solo run/solve counts as a win at its tier (played === won for a solo game, lost
+// never touched), matching the handoff's "a solve/run at a tier is a win at that tier".
+
+/** Sum of wins across `gameIds`, at `tier` (1-4), or every tier + unranked/legacy when tier is null.
+ *  null-tier (unranked/legacy) buckets only ever count under the `tier === null` (All) case - by
+ *  definition they belong to no tier, so they must not vanish from the default view (THE LAW rule 1). */
+function winsAtTier(group, gameIds, tier) {
+  let w = 0;
+  for (const id of gameIds) for (const b of bucketsOf(group.games[id])) if (tier == null || b.tier === tier) w += b.wins;
+  return w;
+}
+function playsAtTier(group, gameIds, tier) {
+  let n = 0;
+  for (const id of gameIds) for (const b of bucketsOf(group.games[id])) if (tier == null || b.tier === tier) n += b.played;
+  return n;
+}
+/** Sorted tiers (1-4) this player/field has ANY play in, across `gameIds`. */
+function tiersPresent(group, gameIds) {
+  const mix = tierMix(group, gameIds);
+  return TIERS.filter((k) => mix[k] > 0);
+}
+function fieldTiersPresent(list, gameIds) {
+  const seen = new Set();
+  for (const g of list) for (const k of tiersPresent(g, gameIds)) seen.add(k);
+  return TIERS.filter((k) => seen.has(k));
 }
 
-// --- standings --------------------------------------------------------------
-/** Combined competitive W-L with draws folded into wins (see leaderboard-rank.js). */
-function compRecord(group) {
-  let wins = 0, losses = 0, played = 0;
-  for (const id of COMPETITIVE) {
-    const r = record(group.games[id].total);
-    wins += r.wins; losses += r.losses; played += r.played;
-  }
-  return { wins, losses, played };
+// Ball Run / Snake: the shared metric is a BEST value (obstacles/length), not a play count, so it
+// needs its own per-tier lookup into bestObstaclesByDiff/bestLenByDiff - these are the only two
+// games where "wins at a tier" and "the number this game is ranked by" are genuinely different
+// things (see js/leaderboard-rank.js's soloRating comment for the same distinction).
+const BR_TIER_KEYS = ['easy', 'medium', 'hard'];
+const SN_TIER_KEYS = ['easy', 'medium', 'hard'];
+function brBestAt(g, tier) {
+  const br = g.games.ballrun.br;
+  if (!br) return 0;
+  if (tier == null) return br.bestObstacles | 0;
+  const key = BR_TIER_KEYS[tier - 1];
+  return key ? (br.bestObstaclesByDiff || {})[key] | 0 : 0;
+}
+function snBestAt(g, tier) {
+  const sn = (g.games.snake || {}).sn;
+  if (!sn) return 0;
+  if (tier == null) return sn.bestLen | 0;
+  const key = SN_TIER_KEYS[tier - 1];
+  return key ? (sn.bestLenByDiff || {})[key] | 0 : 0;
+}
+/** The number a game's leaderboard is ranked by, at `tier`. Nuts & Bolts needs no special case:
+ *  every solve increments both `played` and `won` by exactly 1 (recordNutsBolts), so winsAtTier
+ *  already equals "levels solved at this tier". */
+function gameMetricAt(g, id, tier) {
+  if (id === 'ballrun') return brBestAt(g, tier);
+  if (id === 'snake') return snBestAt(g, tier);
+  return winsAtTier(g, [id], tier);
 }
 
-/** W-L is meaningless for someone who only plays solo games, so their record cell shows the
- *  headline achievement instead. They still carry a real rating and a real rank. */
-function soloHeadline(group) {
-  const br = group.games.ballrun.br;
-  if (br && (br.runs | 0) > 0) return t('lb_solo_ballrun', { n: br.bestObstacles | 0 });
-  const sn = (group.games.snake || {}).sn;
-  if (sn && (sn.runs | 0) > 0) return t('lb_solo_snake', { n: sn.bestLen | 0 });
-  const solved = group.solo.solved | 0;
-  if (solved > 0) return t('lb_solo_solved', { n: solved });
-  return '—';
+// --- difficulty pills --------------------------------------------------------
+function diffShapeSVG(tier) {
+  if (tier === 1) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>';
+  if (tier === 2) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>';
+  if (tier === 3) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>';
+  if (tier === 4) return '<svg viewBox="0 0 34 20" class="lb-dshape lb-dshape-x2" aria-hidden="true"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>';
+  return '';
+}
+const DIFF_PILLS = [
+  { tier: null, labelKey: 'lb_diff_all' },
+  { tier: 1, labelKey: 'gs_diff_beginner' },
+  { tier: 2, labelKey: 'gs_diff_intermediate' },
+  { tier: 3, labelKey: 'gs_diff_pro' },
+  { tier: 4, labelKey: 'gs_diff_expert' },
+];
+
+/** The filter row, single-select, shared between By Player and By Game (and carried into a game
+ *  page). `showExpert` hides the Expert pill where tier-4 data cannot exist (a specific game with
+ *  no tier-4 bucket in the field); By Player/By Game always show it (cross-game context). */
+function pillsHTML(showExpert) {
+  const items = showExpert ? DIFF_PILLS : DIFF_PILLS.filter((p) => p.tier !== 4);
+  return `<div class="lb-pills" role="group" aria-label="${t('lb_diff_filter_aria')}">${items.map((p) => {
+    const active = _diff === p.tier;
+    const color = p.tier ? TIER_COLOR[p.tier] : '#1c2430';
+    return `<button type="button" class="lb-pill${active ? ' is-active' : ''}" data-tier="${p.tier == null ? '' : p.tier}" style="--lb-pill-color:${color}" aria-pressed="${active}">${p.tier ? diffShapeSVG(p.tier) : ''}<span>${esc(t(p.labelKey))}</span></button>`;
+  }).join('')}</div>`;
 }
 
-function ratingCell(r) {
-  if (r.rating == null) return '—';
-  return `${r.rating}${r.provisional ? '<span class="lb-prov" aria-label="provisional">*</span>' : ''}`;
+/** Mini tile row: one tile per tier in `tiers`, showing `valueFn(tier)`'s win/metric count.
+ *  `valueFn` returning null renders a muted dash (game page: alignment across cards - a tier the
+ *  field plays but this player hasn't gets a "-" tile rather than being omitted, so every card in
+ *  the list has the same tile COUNT). On By Player, `tiers` is only the tiers this player has
+ *  played, so `valueFn` never returns null there and no dash ever shows on that tab. */
+function miniTilesHTML(tiers, valueFn) {
+  if (!tiers.length) return '';
+  return `<div class="lb-tiles">${tiers.map((tier) => {
+    const v = valueFn(tier);
+    const sel = _diff === tier ? ' is-sel' : '';
+    const empty = v == null ? ' is-empty' : '';
+    return `<span class="lb-tile2${sel}${empty}" style="--lb-pill-color:${TIER_COLOR[tier]}" title="${esc(t(TIER_LABEL_KEY[tier]))}">${diffShapeSVG(tier)}<b>${v == null ? '&mdash;' : v}</b></span>`;
+  }).join('')}</div>`;
 }
 
-/** Every named player with ANY recorded play, ranked by the blended rating.
- *  The old board filtered on `comp.played > 0`, which put anyone who only plays Ball Run or
- *  Nuts & Bolts nowhere on the default screen at all - stored but invisible, THE LAW rule 1. */
-function standingsBody(list) {
-  const ranked = rankPlayers(list).filter((r) => r.plays > 0);
-  if (!ranked.length) return emptyRows(t('lb_empty_all'));
-  const allIds = GAME_META.map((g) => g.id);
-  const rows = ranked.map((r, i) => {
-    const g = r.group;
-    const cr = compRecord(g);
-    const recCell = cr.played > 0 ? `${cr.wins}-${cr.losses}` : esc(soloHeadline(g));
-    const mix = tierMix(g, allIds);
-    return rowHTML(g, i, [recCell, ratingCell(r), `${r.plays}`], tierBarHTML(mix));
+// --- By Player ---------------------------------------------------------------
+function medalClass(i) { return i === 0 ? ' is-gold' : i === 1 ? ' is-silver' : i === 2 ? ' is-bronze' : ''; }
+
+function playerCardHTML(g, i, wins, games, tilesHtml) {
+  const me = g.key === _meKey ? ' is-me' : '';
+  return `<div class="lb-pcard${me}"${me ? ' aria-current="true"' : ''}>
+    <div class="lb-pcard-row">
+      <span class="lb-medal${medalClass(i)}">${i + 1}</span>
+      ${avatarHTML(g)}
+      <span class="lb-pname">${rankName(g)}</span>
+      <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
+    </div>
+    <div class="lb-pmeta">${t('lb_games_count', { n: games })}</div>
+    ${tilesHtml}
+  </div>`;
+}
+
+function playerListHTML(list) {
+  const rows = list.filter((g) => playsAtTier(g, ALL_IDS, _diff) > 0);
+  if (!rows.length) return emptyState(t('lb_empty_all'));
+  rows.sort((a, b) => {
+    const w = winsAtTier(b, ALL_IDS, _diff) - winsAtTier(a, ALL_IDS, _diff);
+    if (w) return w;
+    const gg = playsAtTier(a, ALL_IDS, _diff) - playsAtTier(b, ALL_IDS, _diff);   // fewer games wins ties
+    if (gg) return gg;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
   });
-  const anyProv = ranked.some((r) => r.provisional);
-  return table([t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('lb_col_rating'), t('lb_col_plays')], rows)
-    + (anyProv ? `<p class="lb-note">${t('lb_note_provisional')}</p>` : '')
-    + `<p class="lb-note">${t('lb_note_rating')}</p>`;
+  return `<div class="lb-plist">${rows.map((g, i) => {
+    const wins = winsAtTier(g, ALL_IDS, _diff);
+    const games = playsAtTier(g, ALL_IDS, _diff);
+    const tiers = tiersPresent(g, ALL_IDS);
+    const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, ALL_IDS, tier));
+    return playerCardHTML(g, i, wins, games, tiles);
+  }).join('')}</div>`;
 }
 
-// --- games grid -------------------------------------------------------------
-/** The leader line on a game tile: whoever tops that game's own board, with their headline number. */
-function leaderOf(list, id) {
-  if (id === 'nutsbolts') {
-    const rows = list.filter((g) => (g.solo.solved | 0) > 0).sort(cmp((g) => g.solo.solved, (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: t('lb_solo_solved', { n: rows[0].solo.solved | 0 }) } : null;
-  }
-  if (id === 'ballrun') {
-    const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
-      .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: t('gs_br_obstacles_cell', { n: rows[0].games.ballrun.br.bestObstacles | 0 }) } : null;
-  }
-  if (id === 'snake') {
-    const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
-      .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: `${t('gs_sn_longest')} ${rows[0].games.snake.sn.bestLen | 0}` } : null;
-  }
-  const rows = list.filter((g) => (g.games[id].total.played | 0) > 0)
-    .sort(cmp((g) => {
-      const r = record(g.games[id].total);
-      return pct(r.wins, r.played);
-    }, (g) => g.games[id].total.played | 0, (g) => g.updatedAt));
-  if (!rows.length) return null;
-  const r = record(rows[0].games[id].total);
-  return { g: rows[0], metric: `${r.wins}-${r.losses}` };
+// --- By Game ------------------------------------------------------------------
+function gameListHTML(list) {
+  const rows = GAME_META.map((meta) => {
+    const leaders = list.filter((g) => gameMetricAt(g, meta.id, _diff) > 0)
+      .sort((a, b) => gameMetricAt(b, meta.id, _diff) - gameMetricAt(a, meta.id, _diff) || (b.updatedAt || 0) - (a.updatedAt || 0));
+    const lead = leaders.length ? leaders[0] : null;
+    if (!lead && _diff != null) return '';   // drops off the list entirely under a specific tier
+    const art = GAME_ART[hubIdOf(meta.id)] || '';
+    const body = lead
+      ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span></span>`
+      : `<span class="lb-glead lb-glead-empty">${t('lb_no_games_yet')}</span>`;
+    const metric = lead
+      ? `<span class="lb-gnum"><b>${gameMetricAt(lead, meta.id, _diff)}</b><span>${esc(t(unitKeyOf(meta.id)))}</span></span>`
+      : `<span class="lb-gnum">&nbsp;</span>`;
+    return `<button type="button" class="lb-grow" data-game="${meta.id}">
+      <span class="lb-gart">${art}</span>
+      <span class="lb-gmain"><span class="lb-gname">${esc(meta.label)}</span>${body}</span>
+      ${metric}
+      <span class="lb-gchev" aria-hidden="true">&rsaquo;</span>
+    </button>`;
+  }).filter(Boolean);
+  if (!rows.length) return emptyState(t('lb_empty_all'));
+  return `<div class="lb-glist">${rows.join('')}</div>`;
 }
 
-function gamesBody(list) {
-  const tiles = GAME_META.map((meta) => {
-    const lead = leaderOf(list, meta.id);
-    const inner = lead
-      ? `<span class="lb-tile-lead">${avatarHTML(lead.g)}<span class="lb-tile-who">${rankName(lead.g)}</span></span><span class="lb-tile-metric">${esc(lead.metric)}</span>`
-      : `<span class="lb-tile-lead lb-tile-empty">${t('lb_no_games_yet')}</span><span class="lb-tile-metric">&nbsp;</span>`;
-    return `<button type="button" class="lb-tile" data-game="${meta.id}" style="--lb-accent:${meta.accent}"><span class="lb-tile-name">${esc(meta.label)}</span>${inner}</button>`;
-  }).join('');
-  return `<div class="lb-grid">${tiles}</div>`;
-}
-
-// --- game detail ------------------------------------------------------------
-// Nuts & Bolts difficulty tiers (byDiff keys are lowercased by the recorder).
-const NB_TIERS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['extrahard', 'lb_diff_extra']];
-// Ball Run difficulty tiers (byDiff/bestObstaclesByDiff keys, lowercased by the recorder).
-const BR_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
-
-function nutsBoltsRows(list) {
-  // Levels beaten, overall and per difficulty. Best level / average moves are properties of the
-  // puzzle rather than the player, so they are not ranked.
-  const rows = list.filter((g) => g.solo.solved > 0).sort(cmp((g) => g.solo.solved, (g) => g.updatedAt));
-  if (!rows.length) return emptyRows(t('lb_empty_nb'));
-  return table([t('lb_col_hash'), t('lb_col_player'), t('lb_col_solved'), ...NB_TIERS.map(([, l]) => t(l))], rows.map((g, i) => {
-    const bd = g.games.nutsbolts.byDiff || {};
-    return rowHTML(g, i, [`${g.solo.solved}`, ...NB_TIERS.map(([k]) => `${(bd[k] && bd[k].played) | 0}`)]);
-  }));
-}
-
-function ballrunRows(list) {
-  // Score-based, not win/loss: rank by best obstacle count reached (any difficulty), like a
-  // high-score table. Best-per-tier / total runs are shown but not ranked on, same reasoning as
-  // Nuts & Bolts. Pre-migration (meter-based) records have no bestObstacles yet, so they read as 0
-  // and sort to the bottom - the legacy data is preserved (see game-stats.js's brLegacyMeters) but
-  // this board starts clean on the new metric.
-  const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
-    .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
-  if (!rows.length) return emptyRows(t('lb_empty_ballrun'));
-  return table([t('lb_col_hash'), t('lb_col_player'), ...BR_DIFFS.map(([, l]) => t(l)), t('gs_runs')], rows.map((g, i) => {
-    const br = g.games.ballrun.br;
-    const bd = br.bestObstaclesByDiff || {};
-    return rowHTML(g, i, [...BR_DIFFS.map(([k]) => `${bd[k] | 0}`), `${br.runs | 0}`]);
-  }));
-}
-
-// Snake difficulty tiers (byDiff/bestLenByDiff keys, lowercased by the recorder).
-const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
-
-function snakeRows(list) {
-  // Score-based like Ball Run: rank by best snake length reached (any difficulty), a high-score
-  // table. Per-tier bests and total runs shown but not ranked on. The `|| {}` guard matters:
-  // remote records synced before Snake existed have no `snake` key until their device updates.
-  const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
-    .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
-  if (!rows.length) return emptyRows(t('lb_empty_snake'));
-  return table([t('lb_col_hash'), t('lb_col_player'), ...SN_DIFFS.map(([, l]) => t(l)), t('gs_runs')], rows.map((g, i) => {
-    const sn = g.games.snake.sn;
-    const bd = sn.bestLenByDiff || {};
-    return rowHTML(g, i, [...SN_DIFFS.map(([k]) => `${bd[k] | 0}`), `${sn.runs | 0}`]);
-  }));
-}
-
-/** Standard per-game ranked table, with §2 draws-as-wins applied so W-L, win rate and plays all
- *  reconcile (they did not before: a 2W/2L/10D record rendered as "2-2 / 14% / 14"). */
-function gameRows(list, id) {
-  const rows = list.filter((g) => (g.games[id].total.played | 0) > 0)
-    .sort(cmp(
-      (g) => { const r = record(g.games[id].total); return pct(r.wins, r.played); },
-      (g) => g.games[id].total.played | 0,
-      (g) => g.updatedAt,
-    ));
-  if (!rows.length) return emptyRows(t('lb_empty_game', { label: labelOf(id) }));
-  return table([t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('gs_win_rate'), t('lb_col_plays')], rows.map((g, i) => {
-    const r = record(g.games[id].total);
-    return rowHTML(g, i, [`${r.wins}-${r.losses}`, `${pct(r.wins, r.played)}%`, `${r.played}`],
-      tierBarHTML(tierMix(g, [id])));
-  }));
-}
-
-/** One row per difficulty tier: W-L and win rate each. This is where "10 wins on Easy" and "10 wins
- *  on Hard" stop looking like the same achievement. Unrated buckets ('legacy', 'unknown') get their
- *  own row rather than being dropped - THE LAW rule 1 applies to the data foldLegacy preserved. */
-function tierTable(heading, rows) {
-  const order = [...TIERS, 'unranked'];
-  const present = order.filter((k) => rows[k] && rows[k].played > 0);
-  if (!present.length) return '';
-  const body = present.map((k) => {
-    const r = rows[k];
-    const label = k === 'unranked' ? t('lb_unrated') : t(TIER_LABEL_KEY[k]);
-    return `<tr><th scope="row" class="lb-name">${esc(label)}</th><td>${r.wins}-${r.losses}</td><td>${pct(r.wins, r.played)}%</td><td>${r.played}</td></tr>`;
-  }).join('');
-  const th = [t('lb_col_difficulty'), t('gs_col_wl'), t('gs_win_rate'), t('lb_col_plays')]
-    .map((h, i) => `<th${i === 0 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
-  return `<h3 class="lb-h3">${esc(heading)}</h3><div class="lb-tblwrap"><table class="lb-table is-tiers"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-/** Sum every listed player's per-tier buckets for one game, for the field-wide breakdown. */
-function fieldTierRows(list, id) {
-  const out = {};
-  for (const g of list) {
-    const rows = tierRows(g.games[id]);
-    for (const k of Object.keys(rows)) {
-      if (!rows[k]) continue;
-      const d = out[k] || (out[k] = { played: 0, wins: 0, losses: 0 });
-      d.played += rows[k].played; d.wins += rows[k].wins; d.losses += rows[k].losses;
-    }
-  }
-  return out;
-}
-
-// Each game's own stored texture, aggregated by players-agg.js and - until now - never rendered
-// anywhere but My Stats. Shown as "who leads this, and by how much" chips under the ranked table.
+// --- game detail (drill-in from By Game) -------------------------------------
+// Each game's own stored texture, aggregated by players-agg.js. Filter-INDEPENDENT (lifetime
+// numbers; several - Chinchón closes, Boggle words - have no per-tier storage at all), shown as
+// "who leads what" chips below the player cards.
 const TEXTURE = {
   connect4: [
     { labelKey: 'lb_tex_wins_first', get: (g) => sumGrid(g.games.connect4.grid, 'player') },
@@ -327,6 +304,7 @@ const TEXTURE = {
     },
   ],
 };
+const CHIP_TINTS = ['a', 'b', 'c'];
 
 function sumGrid(grid, side) {
   if (!grid || !grid[side]) return 0;
@@ -339,71 +317,66 @@ function textureHTML(list, id) {
   const specs = TEXTURE[id];
   if (!specs) return '';
   const chips = [];
-  for (const spec of specs) {
+  specs.forEach((spec, i) => {
     let best = null;
     for (const g of list) {
       const v = spec.get(g) | 0;
       if (v > 0 && (!best || v > best.v)) best = { v, g };
     }
-    if (!best) continue;
+    if (!best) return;
     // `show` lets a chip rank on a number but DISPLAY something else (Boggle's longest word).
     const shown = spec.show ? esc(spec.show(best.g) || String(best.v)) : String(best.v);
-    chips.push(`<div class="lb-chip"><b>${shown}</b><span>${esc(t(spec.labelKey))}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
-  }
+    const tint = CHIP_TINTS[i % CHIP_TINTS.length];
+    chips.push(`<div class="lb-chip lb-chip-${tint}"><b>${shown}</b><span>${esc(t(spec.labelKey))}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
+  });
   if (!chips.length) return '';
   return `<h3 class="lb-h3">${t('lb_who_leads_h')}</h3><div class="lb-chips">${chips.join('')}</div>`;
 }
 
 function gameDetail(list, id) {
-  const head = `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-back">${t('lb_back_games')}</button><h3 class="lb-detail-h" style="--lb-accent:${ACCENT[id] || '#5b6b82'}">${esc(labelOf(id))}</h3></div>`;
-  let board;
-  if (id === 'nutsbolts') board = nutsBoltsRows(list);
-  else if (id === 'ballrun') board = ballrunRows(list);
-  else if (id === 'snake') board = snakeRows(list);
-  else board = gameRows(list, id);
-  // The viewer's own per-tier split, then the field's. When the viewer is the only person who has
-  // played this game the two are the same table, so only one is drawn - a duplicate reads as a bug.
-  // (`|| {}` on games[id]: remote records synced before a game existed have no key for it.)
-  const players = list.filter((g) => ((g.games[id] || {}).total || {}).played > 0);
-  const mine = players.find((g) => g.key === _meKey);
-  const solo = mine && players.length === 1;
-  const mineTable = mine ? tierTable(t(solo ? 'lb_by_diff' : 'lb_your_record_by_diff'), tierRows(mine.games[id])) : '';
-  const fieldTable = solo ? '' : tierTable(t(mine ? 'lb_everyone_by_diff' : 'lb_by_diff'), fieldTierRows(list, id));
-  return head + board + mineTable + fieldTable + textureHTML(list, id);
+  const art = GAME_ART[hubIdOf(id)] || '';
+  const head = `<div class="lb-detail-top">
+    <button type="button" class="lb-back" data-role="lb-back">${t('lb_back_games')}</button>
+    <span class="lb-detail-art">${art}</span>
+    <h3 class="lb-detail-h">${esc(labelOf(id))}</h3>
+  </div>`;
+  const fieldTiers = fieldTiersPresent(list, [id]);
+  const showExpert = fieldTiers.includes(4);
+  const pills = pillsHTML(showExpert);
+  const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0)
+    .sort((a, b) => {
+      const m = gameMetricAt(b, id, _diff) - gameMetricAt(a, id, _diff);
+      if (m) return m;
+      const p = playsAtTier(a, [id], _diff) - playsAtTier(b, [id], _diff);
+      if (p) return p;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  const cardsHtml = rows.length
+    ? `<div class="lb-plist">${rows.map((g, i) => {
+        const metric = gameMetricAt(g, id, _diff);
+        const games = playsAtTier(g, [id], _diff);
+        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
+        return playerCardHTML(g, i, metric, games, tiles);
+      }).join('')}</div>`
+    : emptyState(t('lb_empty_game', { label: labelOf(id) }));
+  return head + pills + cardsHtml + textureHTML(list, id);
 }
 
-// --- shared table markup ----------------------------------------------------
-function rowHTML(g, i, metrics, nameExtra) {
-  const me = g.key === _meKey ? ' is-me' : '';
-  const cells = metrics.map((m) => `<td>${m}</td>`).join('');
-  const name = `<span class="lb-who">${avatarHTML(g)}<span class="lb-nm">${rankName(g)}</span></span>${nameExtra || ''}`;
-  return `<tr class="lb-r${me}"${me ? ' aria-current="true"' : ''}><td class="lb-rank">${i + 1}</td><th scope="row" class="lb-name">${name}</th>${cells}</tr>`;
-}
+// --- shared shell -------------------------------------------------------------
+function emptyState(msg) { return `<p class="lb-none">${esc(msg)}</p>`; }
 
-function table(head, bodyRows) {
-  // join('') matters: interpolating an ARRAY stringifies it with commas, and any stray text inside
-  // <table> (commas OR the template's own newlines) is foster-parented out by the HTML parser and
-  // renders as a blank row of junk above the table. Keep this markup whitespace-free.
-  const body = Array.isArray(bodyRows) ? bodyRows.join('') : bodyRows;
-  const th = head.map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : i === 1 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
-  // A per-difficulty column each (Nuts & Bolts, Ball Run) needs the tighter numeric geometry.
-  const wide = head.length > 5 ? ' is-wide' : '';
-  return `<div class="lb-tblwrap"><table class="lb-table${wide}"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-function emptyRows(msg) { return `<p class="lb-none">${esc(msg)}</p>`; }
-
-/** Fixed-height placeholder rows in the real table's geometry, so the panel does not jump when the
- *  live data lands. The repo's fixed-geometry convention (CLAUDE.md, Escoba's .eb-table note);
- *  the old "Connecting..." paragraph was replaced by content of a completely different height. */
+/** Fixed-height placeholder cards in the real card list's geometry, so the panel does not jump
+ *  when live data lands (the repo's fixed-geometry convention, CLAUDE.md/Escoba's .eb-table note). */
 function skeletonHTML(rows = 6) {
-  // The name cell mirrors rowHTML's exactly - avatar circle, name bar, tier bar - so a skeleton row
-  // is the same HEIGHT as the row that replaces it. Without the avatar and bar placeholders the
-  // rows came out ~17px short each and the table visibly grew as the data landed.
-  const body = Array.from({ length: rows }, () =>
-    `<tr class="lb-r is-skel"><td class="lb-rank"><span class="lb-sk lb-sk-n"></span></td><th scope="row" class="lb-name"><span class="lb-who"><span class="lb-av is-initial"></span><span class="lb-sk lb-sk-w"></span></span><span class="lb-tbar"></span></th><td><span class="lb-sk"></span></td><td><span class="lb-sk"></span></td><td><span class="lb-sk"></span></td></tr>`).join('');
-  const th = [t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('lb_col_rating'), t('lb_col_plays')]
-    .map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : i === 1 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
-  return `<div class="lb-tblwrap" aria-busy="true" aria-label="${t('lb_loading_aria')}"><table class="lb-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const card = () => `<div class="lb-pcard is-skel">
+    <div class="lb-pcard-row">
+      <span class="lb-medal"><span class="lb-sk lb-sk-n"></span></span>
+      <span class="lb-av is-initial"></span>
+      <span class="lb-sk lb-sk-w" style="flex:1 1 auto"></span>
+      <span class="lb-sk" style="width:34px"></span>
+    </div>
+  </div>`;
+  return `<div class="lb-plist" aria-busy="true" aria-label="${t('lb_loading_aria')}">${Array.from({ length: rows }, card).join('')}</div>`;
 }
 
 /** Records to render: everything except the old test/debug devices (which stay stored, just hidden). */
@@ -423,20 +396,19 @@ function currentBody() {
   const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_game) return gameDetail(list, _game);
-  if (_seg === 'games') return gamesBody(list);
-  return standingsBody(list);
+  return pillsHTML(true) + (_seg === 'games' ? gameListHTML(list) : playerListHTML(list));
 }
 
-// --- overlay shell ----------------------------------------------------------
 let _host = null;
-let _seg = 'standings';     // 'standings' | 'games'
+let _seg = 'players';       // 'players' | 'games'
 let _game = null;           // non-null => showing that game's detail board
+let _diff = null;           // null (All) | 1-4, shared between By Player/By Game and a game page
 let _all = {};
 let _meKey = '';
 let _unsub = null;
 let _connected = false;
 
-const SEGMENTS = [{ id: 'standings', labelKey: 'lb_seg_standings' }, { id: 'games', labelKey: 'lb_seg_games' }];
+const SEGMENTS = [{ id: 'players', labelKey: 'lb_by_player' }, { id: 'games', labelKey: 'lb_by_game' }];
 
 function segsHTML() {
   return SEGMENTS.map((s) =>
@@ -466,6 +438,13 @@ function onKey(e) {
 function onClick(e) {
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
   if (e.target.closest('[data-role="lb-back"]')) { _game = null; rerender(); return; }
+  const pill = e.target.closest('.lb-pill');
+  if (pill) {
+    const raw = pill.dataset.tier;
+    _diff = raw === '' ? null : Number(raw);
+    rerender();
+    return;
+  }
   const seg = e.target.closest('.lb-seg');
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
@@ -473,8 +452,8 @@ function onClick(e) {
     _seg = next; _game = null; rerender();
     return;
   }
-  const tile = e.target.closest('.lb-tile');
-  if (tile && tile.dataset.game) { _game = tile.dataset.game; rerender(); }
+  const row = e.target.closest('.lb-grow');
+  if (row && row.dataset.game) { _game = row.dataset.game; rerender(); }
 }
 
 export function closeLeaderboard() {
@@ -486,8 +465,9 @@ export function closeLeaderboard() {
 export async function openLeaderboard() {
   ensureCss();
   closeLeaderboard();
-  _seg = 'standings';
+  _seg = 'players';
   _game = null;
+  _diff = null;   // resets to All every time the overlay opens (not persisted)
   _all = {};
   _connected = false;
   _meKey = '';   // resolved in currentBody() once records load (identity needs the whole graph)
@@ -500,8 +480,10 @@ export async function openLeaderboard() {
     <div class="lb-scrim" data-role="lb-close"></div>
     <div class="lb-panel">
       <header class="lb-top">
-        <h2>${t('lb_title')}</h2>
-        <button type="button" class="lb-x" data-role="lb-close" aria-label="${t('gs_close_aria')}">&times;</button>
+        <div class="lb-top-row">
+          <h2>${t('lb_title')}</h2>
+          <button type="button" class="lb-x" data-role="lb-close" aria-label="${t('gs_close_aria')}">&times;</button>
+        </div>
       </header>
       <nav class="lb-segs" data-role="lb-segs" aria-label="${t('lb_segs_aria')}">${segsHTML()}</nav>
       <div class="lb-body" data-role="lb-body">${skeletonHTML()}</div>
@@ -530,80 +512,83 @@ function ensureCss() {
     '.lb-overlay.is-in{opacity:1}',
     '.lb-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.lb-panel{position:relative;width:100%;max-width:620px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
-    '.lb-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:max(env(safe-area-inset-top,0px),16px) 18px 12px;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
-    '.lb-top h2{margin:0;font-size:1.15rem;font-weight:800;color:var(--hub-ink,#16243a)}',
+    // Title band: shared 44px height, 17px/600 title (unified chrome spec).
+    '.lb-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
+    // The measured title band: exactly --gh-band-title tall, matching the hub top bar's
+    // .hub-top-info and My Stats' .gs-top-row (the outer .lb-top only adds safe-area clearance).
+    '.lb-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--gh-band-title,44px)}',
+    '.lb-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
     '.lb-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
-    // Two segments, fixed width, no scroller. Nothing here can move between visits.
-    '.lb-segs{display:flex;gap:6px;padding:12px 16px 0;background:var(--hub-bg,#f4f6fb)}',
-    '.lb-seg{flex:1 1 0;appearance:none;cursor:pointer;padding:9px 12px;font-size:.9rem;font-weight:700;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:10px}',
-    '.lb-seg.is-active{color:var(--hub-ink,#16243a);font-weight:900;border-color:var(--hub-ink,#16243a);box-shadow:inset 0 0 0 1px var(--hub-ink,#16243a)}',
-    '.lb-body{padding:14px 16px 8px}',
+    // Control band: shared 36px height, 999px-radius pills, 12px text.
+    '.lb-segs{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-controls,36px);padding:0 16px;background:var(--hub-bg,#f4f6fb)}',
+    '.lb-seg{flex:1 1 0;appearance:none;cursor:pointer;padding:8px 12px;font-size:12px;font-weight:700;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:999px}',
+    '.lb-seg.is-active{color:#fff;font-weight:800;background:var(--hub-ink,#16243a);border-color:var(--hub-ink,#16243a)}',
+    // Filter band: shared 34px height, the difficulty pills.
+    '.lb-pills{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-filter,34px);padding:0 2px;overflow-x:auto;-webkit-overflow-scrolling:touch}',
+    '.lb-pill{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;appearance:none;cursor:pointer;border:1.5px solid var(--lb-pill-color,#1c2430);color:var(--lb-pill-color,#1c2430);background:#fff;border-radius:999px;padding:5px 11px;font-size:.76rem;font-weight:800}',
+    '.lb-pill.is-active{background:var(--lb-pill-color,#1c2430);color:#fff}',
+    '.lb-dshape{width:11px;height:11px;fill:currentColor;display:block}',
+    '.lb-dshape-x2{width:19px;height:11px}',
+    '.lb-body{padding:10px 16px 8px}',
     '.lb-h3{margin:18px 0 8px;font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
-    '.lb-note{margin:8px 2px 0;color:var(--hub-muted,#5b6b82);font-size:.74rem;font-weight:600;line-height:1.4}',
-    // overflow-x:auto, NOT hidden: the 7-column Nuts & Bolts and 6-column Ball Run boards are wider
-    // than a 375px phone, and they must scroll INSIDE this wrapper rather than be clipped (or push
-    // the page body sideways).
-    '.lb-tblwrap{border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;background:var(--hub-surface,#fff);box-shadow:0 4px 16px rgba(20,40,80,.06);overflow-x:auto;-webkit-overflow-scrolling:touch}',
-    // table-layout:fixed + white-space:nowrap is the wrap fix: "15-3" can never break across two
-    // lines the way it did on the old board. With fixed layout the column widths come from the
-    // FIRST row, so they must be declared on thead th - setting them on tbody td does nothing but
-    // leave every column an equal share, which clipped even short names behind an ellipsis.
-    '.lb-table{width:100%;border-collapse:collapse;table-layout:fixed}',
-    '.lb-table th,.lb-table td{box-sizing:border-box;padding:9px 8px;text-align:right;font-size:.88rem;white-space:nowrap}',
-    '.lb-table thead th{width:58px;background:var(--hub-surface-2,#eef2f8);color:var(--hub-muted,#5b6b82);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em}',
-    '.lb-table .lb-rank{text-align:center;color:var(--hub-muted,#5b6b82);font-weight:800}',
-    '.lb-table thead th.lb-rank{width:30px}',
-    // The name column takes whatever the fixed numeric columns leave.
-    '.lb-table .lb-name{text-align:left;font-weight:800;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis}',
-    '.lb-table thead th.lb-name{width:auto;min-width:120px;color:var(--hub-muted,#5b6b82)}',
-    '.lb-table tbody td{font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
-    '.lb-table tbody tr+tr th,.lb-table tbody tr+tr td{border-top:1px solid var(--hub-surface-2,#eef2f8)}',
-    '.lb-table.is-tiers thead th{width:62px}',
-    // Boards with a per-difficulty column each (Nuts & Bolts, Ball Run): tighter numeric columns so
-    // less of the table sits off-screen, and it scrolls inside .lb-tblwrap for the rest.
-    '.lb-table.is-wide thead th{width:46px;padding:9px 6px}',
-    '.lb-table.is-wide td{padding:9px 6px}',
-    '.lb-who{display:flex;align-items:center;gap:7px;min-width:0}',
-    '.lb-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    // Avatar: the synced profile emoji, else the first initial in a neutral circle.
-    '.lb-av{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--hub-surface-2,#eef2f8);font-size:.95rem;line-height:1}',
-    '.lb-av.is-initial{font-size:.72rem;font-weight:900;color:var(--hub-muted,#5b6b82)}',
-    '.lb-prov{font-weight:900;color:var(--hub-muted,#5b6b82)}',
-    // Difficulty mix: ONE hue, lightness only (colorblind-safe), darkest = hardest.
-    '.lb-tbar{display:flex;width:100%;height:4px;margin-top:5px;border-radius:2px;overflow:hidden;background:var(--hub-surface-2,#eef2f8)}',
-    '.lb-tseg{display:block;height:100%}',
-    '.lb-tseg.is-t1{background:#c3d0e2}', '.lb-tseg.is-t2{background:#8fa4c0}',
-    '.lb-tseg.is-t3{background:#4d6b8a}', '.lb-tseg.is-t4{background:#1d2c44}',
-    '.lb-tseg.is-t0{background:repeating-linear-gradient(135deg,#dfe5ee 0 3px,#eef2f8 3px 6px)}',
-    // Games grid: every game visible at once, two columns, fixed alphabetical order.
-    '.lb-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
-    '.lb-tile{appearance:none;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-height:92px;padding:10px 11px;text-align:left;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-left:4px solid var(--lb-accent,#5b6b82);border-radius:12px;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
-    '.lb-tile-name{font-size:.88rem;font-weight:900;color:var(--hub-ink,#16243a);line-height:1.2}',
-    '.lb-tile-lead{display:flex;align-items:center;gap:6px;min-width:0;max-width:100%;margin-top:auto;font-size:.78rem;font-weight:700;color:var(--hub-muted,#5b6b82)}',
-    '.lb-tile-who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-tile-empty{font-style:normal;opacity:.75}',
-    '.lb-tile-metric{font-size:.76rem;font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
-    // Game detail
-    '.lb-detail-top{display:flex;align-items:center;gap:10px;margin:0 0 12px}',
-    '.lb-back{appearance:none;cursor:pointer;padding:7px 11px;font-size:.8rem;font-weight:800;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:9px;white-space:nowrap}',
-    '.lb-detail-h{margin:0;font-size:1rem;font-weight:900;color:var(--hub-ink,#16243a);padding-left:9px;border-left:4px solid var(--lb-accent,#5b6b82);line-height:1.3}',
-    '.lb-chips{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
-    '.lb-chip{display:flex;flex-direction:column;gap:2px;padding:10px 11px;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px}',
-    // overflow-wrap:anywhere because one chip is text, not a number (Boggle's longest word) and a
-    // 15-letter ENABLE word would otherwise run straight out of the chip.
-    '.lb-chip b{font-size:1.15rem;font-weight:900;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums;line-height:1.1;overflow-wrap:anywhere}',
-    '.lb-chip span{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
-    '.lb-chip em{display:flex;align-items:center;gap:5px;min-width:0;font-style:normal;font-size:.76rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-chip .lb-av{width:19px;height:19px;font-size:.78rem}',
-    '.lb-r.is-me td,.lb-r.is-me th{background:rgba(23,105,212,.10)}',
-    '.lb-r.is-me .lb-rank{box-shadow:inset 3px 0 0 var(--hub-accent,#1769d4)}',
-    // Skeleton rows share the real row geometry, so nothing shifts when data lands.
+    // Player/game-detail card list.
+    '.lb-plist{display:flex;flex-direction:column;gap:9px;margin-top:8px}',
+    '.lb-pcard{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:14px;padding:11px 12px;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
+    '.lb-pcard.is-me{box-shadow:inset 0 0 0 1.5px var(--hub-accent,#1769d4),0 4px 16px rgba(20,40,80,.06)}',
+    '.lb-pcard.is-skel{opacity:.65}',
+    '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
+    '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',
+    '.lb-medal.is-gold{background:#f5c518;color:#5c4a00}',
+    '.lb-medal.is-silver{background:#d9dee6;color:#3a4453}',
+    '.lb-medal.is-bronze{background:#e0b490;color:#5c3a1e}',
+    '.lb-av{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--hub-surface-2,#eef2f8);font-size:.9rem;line-height:1}',
+    '.lb-av.is-initial{font-size:.7rem;font-weight:900;color:var(--hub-muted,#5b6b82)}',
+    '.lb-pname{flex:1 1 auto;min-width:0;font-size:.92rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-pnum{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}',
+    '.lb-pnum b{font-size:1.3rem;font-weight:700;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.lb-pnum span{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
+    '.lb-pmeta{margin:4px 0 0 34px;font-size:.72rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
+    '.lb-tiles{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0 34px}',
+    '.lb-tile2{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:8px;background:var(--hub-surface-2,#eef2f8);border:1.5px solid transparent;font-size:.72rem;font-weight:800;color:var(--hub-muted,#5b6b82)}',
+    '.lb-tile2 .lb-dshape{fill:var(--lb-pill-color,#5b6b82)}',
+    '.lb-tile2.is-sel{border-color:var(--lb-pill-color,#1c2430);color:var(--hub-ink,#16243a);background:#fff}',
+    '.lb-tile2.is-empty{opacity:.5}',
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--hub-surface-2,#eef2f8);vertical-align:middle}',
-    '.lb-sk-n{width:14px}', '.lb-sk-w{width:66%}',
-    '.lb-r.is-skel td,.lb-r.is-skel th{opacity:.65}',
-    '.lb-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.92rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
-    '.lb-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.76rem;padding:12px 16px 40px;margin:0}',
-    '@media (max-width:359px){.lb-grid,.lb-chips{grid-template-columns:1fr}}',
+    '.lb-sk-n{width:14px}', '.lb-sk-w{width:60%}',
+    // Games list.
+    '.lb-glist{display:flex;flex-direction:column;gap:8px;margin-top:8px}',
+    '.lb-grow{appearance:none;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 11px;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;box-shadow:0 4px 16px rgba(20,40,80,.06);font:inherit;color:inherit}',
+    '.lb-gart{flex:0 0 auto;width:46px;height:26px;border-radius:6px;overflow:hidden;line-height:0}',
+    '.lb-gart svg{width:100%;height:100%;display:block}',
+    '.lb-gmain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}',
+    '.lb-gname{font-size:.9rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-glead{display:flex;align-items:center;gap:5px;min-width:0;font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
+    '.lb-glead-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-glead-empty{font-style:normal;opacity:.75}',
+    // Fixed-width stack (spec: the old free-form gray text made the column ragged).
+    '.lb-gnum{flex:0 0 auto;min-width:56px;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}',
+    '.lb-gnum b{font-size:1rem;font-weight:700;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.lb-gnum span{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
+    '.lb-gchev{flex:0 0 auto;color:var(--hub-muted,#5b6b82);font-size:1.1rem;line-height:1}',
+    // Game detail header.
+    '.lb-detail-top{display:flex;align-items:center;gap:10px;margin:8px 0 4px;min-height:var(--gh-band-title,44px)}',
+    '.lb-back{appearance:none;cursor:pointer;padding:7px 11px;font-size:.8rem;font-weight:800;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:9px;white-space:nowrap}',
+    '.lb-detail-art{flex:0 0 auto;width:40px;height:23px;border-radius:6px;overflow:hidden;line-height:0}',
+    '.lb-detail-art svg{width:100%;height:100%;display:block}',
+    '.lb-detail-h{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    // "Who leads what" chips: tinted backgrounds, rotating a small fixed palette; text is always
+    // the dark pair of its own tint, never gray/black (Matt's restyle note).
+    '.lb-chips{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
+    '.lb-chip{display:flex;flex-direction:column;gap:2px;padding:10px 11px;border-radius:12px}',
+    '.lb-chip-a{background:#fdf3e2;color:#8a5b00}',
+    '.lb-chip-b{background:#e5f3f0;color:#0d5c4d}',
+    '.lb-chip-c{background:#e8eff8;color:#173f6e}',
+    '.lb-chip b{font-size:1.15rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.1;overflow-wrap:anywhere;color:inherit}',
+    '.lb-chip span{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:inherit;opacity:.82}',
+    '.lb-chip em{display:flex;align-items:center;gap:5px;min-width:0;font-style:normal;font-size:.76rem;font-weight:700;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-chip .lb-av{width:19px;height:19px;font-size:.78rem;background:rgba(255,255,255,.55)}',
+    '.lb-none{margin:8px 0 0;color:var(--hub-muted,#5b6b82);font-size:.92rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
+    '@media (max-width:359px){.lb-chips{grid-template-columns:1fr}}',
   ].join('');
   document.head.appendChild(el);
 }

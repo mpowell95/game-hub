@@ -8,6 +8,17 @@
   --hub-ink: #16243a;
   --hub-muted: #5b6b82;
   --hub-accent: #1769d4;
+
+  /* Unified chrome spec (2026-07-23 leaderboard redesign): the hub top bar, the Leaderboard
+     overlay and the My Stats overlay all share these three band heights, so "Matt's Game Hub" /
+     "Leaderboard" / "Game stats" all read at the same size and the controls beneath them line up
+     the same way on every screen. Consumed here AND by both overlays' injected CSS (they render
+     inside the hub page, so these vars are in scope there too); each consumer keeps a literal
+     fallback (var(--gh-band-title, 44px)) since Escoba-style standalone pages never open these
+     overlays but defensive costs nothing. */
+  --gh-band-title: 44px;
+  --gh-band-controls: 36px;
+  --gh-band-filter: 34px;
 }
 
 * { box-sizing: border-box; }
@@ -68,7 +79,9 @@ body {
   backdrop-filter: saturate(1.2) blur(6px);
   box-shadow: 0 2px 10px rgba(20, 40, 80, 0.18);
 }
-.hub-top-title { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.01em; }
+/* Unified chrome spec: 17px/600 everywhere a title band shows a title (hub / Leaderboard /
+   Game stats), so all three read as the same size instead of three independently-tuned banners. */
+.hub-top-title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .hub-back {
   appearance: none;
   border: 1px solid var(--hub-surface-2);
@@ -104,7 +117,7 @@ body {
 
 /* Header is two rows: an info row (back + title + version) and, below it, the interactive
    controls row (My Stats / Leaderboards / My Profile). */
-.hub-top-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hub-top-info { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: var(--gh-band-title, 44px); }
 .hub-top-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-top-info .hub-version { margin-left: auto; }
 /* The version pill is informational chrome; keep it out of the way while a game is mounted. */
@@ -118,7 +131,7 @@ body {
 .hub-top.hub-top-immersive .hub-langtoggle { display: none; }
 
 /* Three controls pinned left / center / right. */
-.hub-top-right { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.hub-top-right { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: var(--gh-band-controls, 36px); }
 .hub-top-right > :nth-child(1) { justify-self: start; }
 .hub-top-right > :nth-child(2) { justify-self: center; }
 .hub-top-right > :nth-child(3) { justify-self: end; }

@@ -119,8 +119,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/stats-net.js` | Firebase mirror to `players/<id>`; username registry; `syncHealth()` |
 | `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows |
 | `js/game-stats-ui.js` | "My Stats" overlay |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only) |
-| `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23) |
+| `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
+| `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón and Escoba |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |

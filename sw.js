@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v182';
+const CACHE = 'game-hub-v184';
 
 const ASSETS = [
   './',
@@ -27,6 +27,7 @@ const ASSETS = [
   './js/firebase-boot.js',
   './js/device-report.js',
   './js/players-agg.js',
+  './js/game-art.js',
   './js/leaderboard-ui.js',
   './js/leaderboard-rank.js',
   './js/difficulty-tiers.js',
@@ -74,6 +75,7 @@ const ASSETS = [
   './chinchon/js/hash.js',
   './chinchon/js/ai.js',
   './chinchon/js/ui.js',
+  './chinchon/js/strings.js',
   // Parchís (self-contained single file)
   './parchis/',
   './parchis/index.html',
@@ -94,6 +96,7 @@ const ASSETS = [
   './escoba/js/hash.js',
   './escoba/js/ai.js',
   './escoba/js/ui.js',
+  './escoba/js/strings.js',
   './escoba/img/broom-sprite.webp',
   // Mancala module
   './mancala/index.html',
