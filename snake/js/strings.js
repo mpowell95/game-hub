@@ -45,6 +45,15 @@ export const STRINGS = {
     aria_down: 'Down',
     aria_left: 'Left',
     aria_right: 'Right',
+    // D-pad style picker (setup screen)
+    dpad_style: 'D-pad style',
+    dpad_style_hint: 'Pick how the on-screen arrows look.',
+    dpad_classic: 'Classic',
+    dpad_circle: 'Circle',
+    dpad_gamepad: 'Gamepad',
+    dpad_solid: 'Solid',
+    dpad_solid_arrows: 'Solid + arrows',
+    aria_dpad_style_group: 'D-pad style',
   },
   es: {
     title: 'Snake',
@@ -80,6 +89,14 @@ export const STRINGS = {
     aria_down: 'Abajo',
     aria_left: 'Izquierda',
     aria_right: 'Derecha',
+    dpad_style: 'Estilo de cruceta',
+    dpad_style_hint: 'Elige cómo se ven las flechas en pantalla.',
+    dpad_classic: 'Clásico',
+    dpad_circle: 'Círculo',
+    dpad_gamepad: 'Mando',
+    dpad_solid: 'Sólido',
+    dpad_solid_arrows: 'Sólido + flechas',
+    aria_dpad_style_group: 'Estilo de cruceta',
   },
 };
 

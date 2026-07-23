@@ -6,6 +6,7 @@
 .sn-root {
   --sn-ink: #1c2410;
   --sn-lcd: #c9dd9a;
+  --sn-lcd-rgb: 201, 221, 154;
   --sn-pixel: #28340f;
   --sn-card: #ffffff;
   --sn-accent: #3f7d2c;
@@ -40,6 +41,21 @@
   border: 1px solid #cbd5c0; background: transparent; color: var(--sn-ink);
   cursor: pointer; touch-action: manipulation;
 }
+
+/* --- D-pad style picker (setup screen) ----------------------------------------------------- */
+.sn-root .sn-dpad-hint { margin: -2px 0 2px; font-size: 0.82rem; color: var(--sn-muted); text-align: left; }
+.sn-root .sn-dpad-options { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.sn-root .sn-dpad-option {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1 1 0; min-width: 68px;
+  font: inherit; font-size: 0.68rem; font-weight: 700; color: var(--sn-ink);
+  background: transparent; border: 2px solid transparent; border-radius: 12px;
+  padding: 6px 2px; cursor: pointer; touch-action: manipulation;
+}
+.sn-root .sn-dpad-option.is-on { border-color: var(--sn-accent); background: rgba(63, 125, 44, 0.1); }
+.sn-root .sn-dpad-swatch {
+  width: 74px; height: 58px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.sn-root .sn-pad--mini { transform: scale(0.3); pointer-events: none; }
 
 /* --- game -------------------------------------------------------------------------------- */
 .sn-root .sn-game {
@@ -98,19 +114,85 @@
 .sn-root .sn-help-line { margin: 0 0 8px; font-size: 0.92rem; }
 .sn-root .sn-help-ex { margin: 0; font-weight: 700; font-size: 0.92rem; white-space: nowrap; }
 
-/* --- on-screen D-pad (2026-07-23: the buttons the ready overlay always promised) ----------- */
+/* --- on-screen D-pad (2026-07-23: the buttons the ready overlay always promised) -----------
+   Five selectable looks (setup screen picker above), all built from the same grid + button
+   markup (snake/js/ui.js padCellsHTML): 'classic' keeps the original 2-row cross (up alone on
+   top, left/down/right below); the other four are a true 4-way plus, laid out with an extra
+   'mid' row/cell for a center marker some of the reference looks use. Colors follow the LCD
+   theme's own palette, not the uploaded references' literal colors. */
 .sn-root .sn-pad {
+  position: relative;
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
   width: min(240px, 70vw); margin: 2px auto 0;
+}
+.sn-root .sn-pad--classic {
   grid-template-areas: ". up ." "left down right";
+  grid-template-rows: repeat(2, 46px);
+}
+.sn-root .sn-pad--circle,
+.sn-root .sn-pad--gamepad,
+.sn-root .sn-pad--solid,
+.sn-root .sn-pad--solidArrows {
+  grid-template-areas: ". up ." "left mid right" ". down .";
+  grid-template-rows: repeat(3, 46px);
 }
 .sn-root .sn-pad-up { grid-area: up; }
 .sn-root .sn-pad-left { grid-area: left; }
 .sn-root .sn-pad-down { grid-area: down; }
 .sn-root .sn-pad-right { grid-area: right; }
+.sn-root .sn-pad-mid { grid-area: mid; display: none; z-index: 1; align-self: center; justify-self: center; }
 .sn-root .sn-padbtn {
-  font: inherit; font-size: 1.15rem; line-height: 1; padding: 13px 0; border-radius: 12px;
-  border: 2px solid var(--sn-pixel); background: var(--sn-card); color: var(--sn-pixel);
+  display: flex; align-items: center; justify-content: center; z-index: 1;
+  font: inherit; font-size: 1.15rem; line-height: 1; padding: 0; margin: 0; border-radius: 12px;
+  border: 0; background: transparent; color: var(--sn-pixel);
   cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
-.sn-root .sn-padbtn:active { background: var(--sn-lcd); transform: translateY(1px); }
+
+/* Classic: individual bordered squares (the original, unchanged look). */
+.sn-root .sn-pad--classic .sn-padbtn {
+  border: 2px solid var(--sn-pixel); background: var(--sn-card);
+}
+.sn-root .sn-pad--classic .sn-padbtn:active { background: var(--sn-lcd); transform: translateY(1px); }
+
+/* Circle: a translucent disc backdrop, borderless floating chevrons, a dim center dot. */
+.sn-root .sn-pad--circle { border-radius: 50%; background: rgba(var(--sn-lcd-rgb), 0.55); }
+.sn-root .sn-pad--circle .sn-padbtn { font-size: 1.3rem; }
+.sn-root .sn-pad--circle .sn-padbtn:active .sn-pad-glyph { transform: scale(0.85); display: inline-block; }
+.sn-root .sn-pad--circle .sn-pad-mid {
+  display: block; width: 46%; height: 46%; border-radius: 50%; background: var(--sn-pixel); opacity: 0.55;
+}
+
+/* Gamepad: a bezeled plastic cross (light body, dark outline, embossed highlight), a raised nub. */
+.sn-root .sn-pad--gamepad::before,
+.sn-root .sn-pad--gamepad::after {
+  content: ''; position: absolute; background: var(--sn-card); border: 2px solid var(--sn-pixel);
+  border-radius: 14px; box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.6), inset 0 -2px 3px rgba(0, 0, 0, 0.15);
+}
+.sn-root .sn-pad--gamepad::before { left: 33.3333%; right: 33.3333%; top: 0; bottom: 0; }
+.sn-root .sn-pad--gamepad::after { top: 33.3333%; bottom: 33.3333%; left: 0; right: 0; }
+.sn-root .sn-pad--gamepad .sn-pad-mid {
+  display: block; width: 42%; height: 42%; border-radius: 50%;
+  background: var(--sn-lcd); border: 2px solid var(--sn-pixel);
+}
+
+/* Solid: one flat-filled cross, no visible arrows (position alone tells them apart; the aria
+   label still names each direction for screen readers). */
+.sn-root .sn-pad--solid::before,
+.sn-root .sn-pad--solid::after,
+.sn-root .sn-pad--solidArrows::before,
+.sn-root .sn-pad--solidArrows::after {
+  content: ''; position: absolute; background: var(--sn-pixel); border-radius: 14px;
+}
+.sn-root .sn-pad--solid::before,
+.sn-root .sn-pad--solidArrows::before { left: 33.3333%; right: 33.3333%; top: 0; bottom: 0; }
+.sn-root .sn-pad--solid::after,
+.sn-root .sn-pad--solidArrows::after { top: 33.3333%; bottom: 33.3333%; left: 0; right: 0; }
+.sn-root .sn-pad--solid .sn-pad-glyph { display: none; }
+
+/* Solid + arrows: the same flat cross, with light arrows visible against the fill. */
+.sn-root .sn-pad--solidArrows .sn-padbtn { color: var(--sn-card); }
+
+.sn-root .sn-pad--circle .sn-padbtn:active,
+.sn-root .sn-pad--gamepad .sn-padbtn:active,
+.sn-root .sn-pad--solid .sn-padbtn:active,
+.sn-root .sn-pad--solidArrows .sn-padbtn:active { opacity: 0.6; }

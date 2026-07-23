@@ -18,6 +18,20 @@ import { loadProfile } from '../../js/profile-store.js';
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.snake.v1';
 
+// The five on-screen D-pad looks (Matt-supplied reference images, 2026-07-23), recolored to the
+// LCD theme's own palette rather than their reference colors. 'classic' is the original 2-row
+// cross (up alone on top, left/down/right below); the other four are a true 4-way plus shape,
+// which is why they need their own grid-template-areas below (see snake.css).
+const DPAD_STYLES = [
+  { id: 'classic', labelKey: 'dpad_classic' },
+  { id: 'circle', labelKey: 'dpad_circle' },
+  { id: 'gamepad', labelKey: 'dpad_gamepad' },
+  { id: 'solid', labelKey: 'dpad_solid' },
+  { id: 'solidArrows', labelKey: 'dpad_solid_arrows' },
+];
+const DPAD_STYLE_IDS = DPAD_STYLES.map((s) => s.id);
+const DEFAULT_DPAD_STYLE = 'classic';
+
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
@@ -27,14 +41,28 @@ function saveSettings(s) {
 /** Last-used settings beat profile (skill 1/2/3 -> easy/medium/hard) beat the default. */
 function loadSettings() {
   const saved = readJSON(SETTINGS_KEY);
-  if (saved && DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty };
+  const dpadStyle = saved && DPAD_STYLE_IDS.includes(saved.dpadStyle) ? saved.dpadStyle : DEFAULT_DPAD_STYLE;
+  if (saved && DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty, dpadStyle };
   let skillDiff = null;
   try {
     const p = loadProfile();
     const skill = p && p.opponents && p.opponents[0] ? p.opponents[0].skill : null;
     skillDiff = skill === 1 ? 'easy' : skill === 3 ? 'hard' : skill === 2 ? 'medium' : null;
   } catch { /* no profile is fine */ }
-  return { difficulty: skillDiff || 'medium' };
+  return { difficulty: skillDiff || 'medium', dpadStyle };
+}
+
+/** The pad's inner cells: `tag` is 'button' for the real, interactive pad, or 'span' for the
+ *  decorative preview swatches on the setup screen (a <button> can't nest another <button>). */
+function padCellsHTML(tag, withAria) {
+  const attr = (dir) => withAria
+    ? `data-dir="${dir}" aria-label="${t(`aria_${dir}`)}"` : 'aria-hidden="true"';
+  return `
+    <${tag} class="sn-padbtn sn-pad-up" ${attr('up')}><span class="sn-pad-glyph">▲</span></${tag}>
+    <${tag} class="sn-padbtn sn-pad-left" ${attr('left')}><span class="sn-pad-glyph">◀</span></${tag}>
+    <${tag} class="sn-padbtn sn-pad-down" ${attr('down')}><span class="sn-pad-glyph">▼</span></${tag}>
+    <${tag} class="sn-padbtn sn-pad-right" ${attr('right')}><span class="sn-pad-glyph">▶</span></${tag}>
+    <span class="sn-pad-mid" aria-hidden="true"></span>`;
 }
 
 function bestFor(diff) {
@@ -80,9 +108,18 @@ class SnakeUI {
     this.game = null;
     this.screen = 'setup';
     const d = this.settings.difficulty;
+    const dp = this.settings.dpadStyle;
     const diffBtn = (id, label) => `
       <button type="button" class="sn-seg${d === id ? ' is-on' : ''}" data-diff="${id}"
         aria-pressed="${d === id}">${label}</button>`;
+    const dpadOption = (style) => `
+      <button type="button" class="sn-dpad-option${dp === style.id ? ' is-on' : ''}" data-dpad="${style.id}"
+        aria-pressed="${dp === style.id}" aria-label="${t(style.labelKey)}">
+        <span class="sn-dpad-swatch">
+          <span class="sn-pad sn-pad--${style.id} sn-pad--mini" aria-hidden="true">${padCellsHTML('span', false)}</span>
+        </span>
+        <span class="sn-dpad-label">${t(style.labelKey)}</span>
+      </button>`;
     this.root.innerHTML = `
       <div class="sn-root">
         <div class="sn-setup">
@@ -92,6 +129,13 @@ class SnakeUI {
             <span class="sn-label">${t('difficulty')}</span>
             <div class="sn-segrow" role="group" aria-label="${t('difficulty')}">
               ${diffBtn('easy', t('diff_easy'))}${diffBtn('medium', t('diff_medium'))}${diffBtn('hard', t('diff_hard'))}
+            </div>
+          </div>
+          <div class="sn-field">
+            <span class="sn-label">${t('dpad_style')}</span>
+            <p class="sn-dpad-hint">${t('dpad_style_hint')}</p>
+            <div class="sn-dpad-options" role="group" aria-label="${t('aria_dpad_style_group')}">
+              ${DPAD_STYLES.map(dpadOption).join('')}
             </div>
           </div>
           <button type="button" class="sn-play" data-role="play">${t('play')}</button>
@@ -104,6 +148,14 @@ class SnakeUI {
       this.settings.difficulty = b.dataset.diff;
       saveSettings(this.settings);
       this.root.querySelectorAll('.sn-seg').forEach((x) =>
+        { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    });
+    this.root.querySelector('.sn-dpad-options').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dpad]');
+      if (!b) return;
+      this.settings.dpadStyle = b.dataset.dpad;
+      saveSettings(this.settings);
+      this.root.querySelectorAll('.sn-dpad-option').forEach((x) =>
         { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     });
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => this.startRun());
@@ -158,11 +210,8 @@ class SnakeUI {
             <canvas class="sn-canvas" data-role="canvas" aria-label="${t('aria_board')}"></canvas>
             <div class="sn-overlay" data-role="overlay"><span>${t('tap_to_start')}</span></div>
           </div>
-          <div class="sn-pad" data-role="pad" aria-label="${t('aria_board')}">
-            <button type="button" class="sn-padbtn sn-pad-up" data-dir="up" aria-label="${t('aria_up')}">▲</button>
-            <button type="button" class="sn-padbtn sn-pad-left" data-dir="left" aria-label="${t('aria_left')}">◀</button>
-            <button type="button" class="sn-padbtn sn-pad-down" data-dir="down" aria-label="${t('aria_down')}">▼</button>
-            <button type="button" class="sn-padbtn sn-pad-right" data-dir="right" aria-label="${t('aria_right')}">▶</button>
+          <div class="sn-pad sn-pad--${this.settings.dpadStyle}" data-role="pad" aria-label="${t('aria_board')}">
+            ${padCellsHTML('button', true)}
           </div>
         </div>
       </div>`;
@@ -197,9 +246,10 @@ class SnakeUI {
   _sizeCanvas() {
     const wrap = this.canvas.parentElement;
     const cw = wrap.clientWidth || 320;
-    // Height budget: the pad + HUD + margins below the board need ~190px; never let the board
-    // push the pad off a short viewport. Width stays the cap on ordinary phones.
-    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 190);
+    // Height budget: the pad + HUD + margins below the board need ~230px at most (the four
+    // true-cross D-pad styles are a row taller than 'classic'); never let the board push the
+    // pad off a short viewport. Width stays the cap on ordinary phones.
+    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 230);
     this.cell = Math.max(10, Math.min(Math.floor(cw / COLS), Math.floor(availH / ROWS)));
     const w = this.cell * COLS, h = this.cell * ROWS;
     const dpr = window.devicePixelRatio || 1;
@@ -330,6 +380,14 @@ class SnakeUI {
       }
       if (this.overlay && !this.overlay.hidden && !this.started) {
         this.overlay.innerHTML = `<span>${t('tap_to_start')}</span>`;
+      }
+      const pad = this.root.querySelector('[data-role="pad"]');
+      if (pad) {
+        pad.setAttribute('aria-label', t('aria_board'));
+        ['up', 'down', 'left', 'right'].forEach((dir) => {
+          const b = pad.querySelector(`[data-dir="${dir}"]`);
+          if (b) b.setAttribute('aria-label', t(`aria_${dir}`));
+        });
       }
     }
   }

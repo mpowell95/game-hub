@@ -60,8 +60,11 @@ players-agg's `SOLO` set and joins `soloRating()`'s best-relative-to-field axis 
 
 ## Settings & persistence
 
-`gamehub.snake.v1`: `{ difficulty }`. Precedence: saved settings > profile skill (1/2/3 →
-easy/medium/hard) > medium. Language is NOT stored here — it's the hub-wide `gamehub.lang.v1`.
+`gamehub.snake.v1`: `{ difficulty, dpadStyle }`. Precedence: saved settings > profile skill (1/2/3
+→ easy/medium/hard) > medium (difficulty); `dpadStyle` defaults to `'classic'` and falls back to
+it if the stored value isn't one of the five known ids (`DPAD_STYLE_IDS` in ui.js), so a future
+removed/renamed style can never crash the setup screen. Language is NOT stored here — it's the
+hub-wide `gamehub.lang.v1`.
 
 ## UI notes
 
@@ -75,6 +78,20 @@ easy/medium/hard) > medium. Language is NOT stored here — it's the hub-wide `g
 - On-screen D-pad (▲ / ◀ ▼ ▶) below the board, `pointerdown`-driven, wired through the same
   `_steer()` path as swipes and keys; `_sizeCanvas()` height-caps the cell size so board + pad
   always fit the viewport.
+- **Five selectable D-pad looks** (2026-07-23, from Matt-supplied reference images, recolored to
+  the LCD theme rather than their reference colors): `classic` (the original 2-row cross, up alone
+  on top), `circle` (translucent disc, floating chevrons, dim center dot), `gamepad` (bezeled
+  plastic cross with a raised nub), `solid` (flat cross, no visible arrows — position alone tells
+  them apart, aria-label still names each direction), `solidArrows` (the same flat cross with
+  light arrows shown). All five share one markup (`padCellsHTML()` in ui.js) and one grid; only
+  `classic` uses the 2-row layout, the other four are a true 4-way plus (extra `mid` grid cell/row
+  for the center marker some looks use) — see the `.sn-pad--*` rules in snake.css. Picked via a
+  labeled, visually-previewed picker on the setup screen (`sn-dpad-options`, previews render the
+  same real markup at `transform: scale()` inside non-interactive `<span>`s to avoid nesting a
+  `<button>` inside a `<button>`) — the picker's own "D-pad style" label plus its hint line
+  (`dpad_style_hint`) are what makes the existence of multiple styles discoverable, not a
+  separate callout. Choosing a style only takes effect on the next `startRun()` (same as
+  difficulty). `_rerenderForLang()` relabels the live pad's aria-labels on a language switch.
 - Game-over modal has the repo-standard X close (dismiss without a forced rematch).
 - `openHelp()` (the how-to-play pattern, see tic-tac-toe/CLAUDE.md) builds a `.sn-help-overlay`
   appended to `document.body` (so it survives screen re-renders); `destroy()` removes any open one.
