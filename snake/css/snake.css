@@ -97,3 +97,20 @@
 .sn-root .sn-help-art { display: block; width: 100%; margin: 0 0 10px; color: var(--sn-pixel); }
 .sn-root .sn-help-line { margin: 0 0 8px; font-size: 0.92rem; }
 .sn-root .sn-help-ex { margin: 0; font-weight: 700; font-size: 0.92rem; white-space: nowrap; }
+
+/* --- on-screen D-pad (2026-07-23: the buttons the ready overlay always promised) ----------- */
+.sn-root .sn-pad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  width: min(240px, 70vw); margin: 2px auto 0;
+  grid-template-areas: ". up ." "left down right";
+}
+.sn-root .sn-pad-up { grid-area: up; }
+.sn-root .sn-pad-left { grid-area: left; }
+.sn-root .sn-pad-down { grid-area: down; }
+.sn-root .sn-pad-right { grid-area: right; }
+.sn-root .sn-padbtn {
+  font: inherit; font-size: 1.15rem; line-height: 1; padding: 13px 0; border-radius: 12px;
+  border: 2px solid var(--sn-pixel); background: var(--sn-card); color: var(--sn-pixel);
+  cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.sn-root .sn-padbtn:active { background: var(--sn-lcd); transform: translateY(1px); }

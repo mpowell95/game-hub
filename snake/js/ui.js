@@ -158,6 +158,12 @@ class SnakeUI {
             <canvas class="sn-canvas" data-role="canvas" aria-label="${t('aria_board')}"></canvas>
             <div class="sn-overlay" data-role="overlay"><span>${t('tap_to_start')}</span></div>
           </div>
+          <div class="sn-pad" data-role="pad" aria-label="${t('aria_board')}">
+            <button type="button" class="sn-padbtn sn-pad-up" data-dir="up" aria-label="${t('aria_up')}">▲</button>
+            <button type="button" class="sn-padbtn sn-pad-left" data-dir="left" aria-label="${t('aria_left')}">◀</button>
+            <button type="button" class="sn-padbtn sn-pad-down" data-dir="down" aria-label="${t('aria_down')}">▼</button>
+            <button type="button" class="sn-padbtn sn-pad-right" data-dir="right" aria-label="${t('aria_right')}">▶</button>
+          </div>
         </div>
       </div>`;
     this.canvas = this.root.querySelector('[data-role="canvas"]');
@@ -180,12 +186,21 @@ class SnakeUI {
       this._steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
     }, { passive: true });
     wrap.addEventListener('click', () => { if (this.paused) this._resume(); });
+    this.root.querySelector('[data-role="pad"]').addEventListener('pointerdown', (e) => {
+      const b = e.target.closest('[data-dir]');
+      if (!b) return;
+      e.preventDefault();                    // keep focus/scroll side effects off the board
+      this._steer(b.dataset.dir);
+    });
   }
 
   _sizeCanvas() {
     const wrap = this.canvas.parentElement;
     const cw = wrap.clientWidth || 320;
-    this.cell = Math.max(10, Math.floor(cw / COLS));
+    // Height budget: the pad + HUD + margins below the board need ~190px; never let the board
+    // push the pad off a short viewport. Width stays the cap on ordinary phones.
+    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 190);
+    this.cell = Math.max(10, Math.min(Math.floor(cw / COLS), Math.floor(availH / ROWS)));
     const w = this.cell * COLS, h = this.cell * ROWS;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = w * dpr; this.canvas.height = h * dpr;

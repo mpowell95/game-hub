@@ -72,6 +72,9 @@ easy/medium/hard) > medium. Language is NOT stored here — it's the hub-wide `g
   crawls — the auto-pause covers the hidden-tab case, and a throttled-but-visible preview pane
   is a dev-environment artifact, not a bug.
 - The board wrap is `touch-action: none` (a swipe surface must never scroll the page).
+- On-screen D-pad (▲ / ◀ ▼ ▶) below the board, `pointerdown`-driven, wired through the same
+  `_steer()` path as swipes and keys; `_sizeCanvas()` height-caps the cell size so board + pad
+  always fit the viewport.
 - Game-over modal has the repo-standard X close (dismiss without a forced rematch).
 - `openHelp()` (the how-to-play pattern, see tic-tac-toe/CLAUDE.md) builds a `.sn-help-overlay`
   appended to `document.body` (so it survives screen re-renders); `destroy()` removes any open one.
