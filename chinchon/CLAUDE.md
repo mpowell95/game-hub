@@ -136,6 +136,14 @@ node chinchon/js/sim.js     # 30 all-AI matches; checks termination, scoring, no
 ```
 Run requires Node ≥22.7 (ESM syntax detection; there is no package.json).
 
+i18n: `chinchon/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
+(`easy`/`normal`/`hard`), all rule/config values (`victoryCondition`, `figuresFaceValue`,
+`placeOnEnding`, deck ids, etc.) and MP protocol fields stay canonical; only their display labels
+translate. Card-suit terms (Oros/Copas/Espadas/Bastos) and the deck-gallery's Spanish card-rank
+names (As/Sota/Caballo/Rey, via `galleryLabel()`) are the game's real vocabulary in both
+languages and are never routed through `t()`; "Chinchón" (the game name and the winning hand)
+likewise stays the Spanish term in both languages.
+
 ---
 
 ## Hub notes

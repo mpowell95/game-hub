@@ -19,11 +19,18 @@ import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
 
 const AI_NAMES = ['Lucía', 'Diego', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
 const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
-const DIFFICULTIES = [['easy', 'Beginner'], ['normal', 'Intermediate'], ['hard', 'Pro']];
+// Storage vocabulary stays canonical (easy/normal/hard, written to escoba-settings); display
+// labels resolve through t() at render time -- see _diffLabel().
+const DIFFICULTIES = ['easy', 'normal', 'hard'];
+const DIFF_LABEL_KEY = { easy: 'diff_beginner', normal: 'diff_intermediate', hard: 'diff_pro' };
 // Profile skill tiers (1-3) -> Escoba's three AI levels.
 const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#e8b53a', '#d22f27', '#1f5fd4', '#2e8b57'];
@@ -51,8 +58,8 @@ const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // Human labels for the room's locked config, host-lobby summary line only.
 // Unknown keys (a future config field) are skipped, not shown raw.
 const MP_CONFIG_LABELS = {
-  targetScore: (v) => `${v} pts`,
-  deckMode: (v) => (v === 'american' ? 'American deck' : 'Spanish deck'),
+  targetScore: (v) => t('pts_value', { n: v }),
+  deckMode: (v) => (v === 'american' ? t('deck_american_label') : t('deck_spanish_label')),
 };
 const BROOM_URL = new URL('../img/broom-sprite.webp', import.meta.url).href;
 const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
@@ -202,13 +209,13 @@ class EscobaUI {
   mount() {
     this.container.innerHTML = `
       <div class="eb-root">
-        <header class="eb-header" data-role="header"><h1 class="eb-title">Escoba</h1></header>
+        <header class="eb-header" data-role="header"><h1 class="eb-title">${esc(t('title'))}</h1></header>
         <section class="eb-setup" data-role="setup"></section>
         <section class="eb-game" data-role="game" hidden>
           <div class="eb-topbar">
             <div class="eb-opponents" data-role="opponents"></div>
             <div class="eb-matchinfo" data-role="matchinfo"></div>
-            <button class="eb-menu-btn" data-action="open-menu" aria-label="Game menu">☰</button>
+            <button class="eb-menu-btn" data-action="open-menu" aria-label="${esc(t('aria_menu'))}">☰</button>
           </div>
           <div class="eb-announce-row">
             <div class="eb-mat-announce" data-role="announce" aria-live="polite"></div>
@@ -218,8 +225,8 @@ class EscobaUI {
               <div class="eb-stock" data-role="stock"></div>
               <span class="eb-stock-count" data-role="stockcount"></span>
             </div>
-            <div class="eb-table" data-role="table" aria-label="Table cards"></div>
-            <div class="eb-lasthand-chip" data-role="lasthand" aria-hidden="true">🧹 Last hand</div>
+            <div class="eb-table" data-role="table" aria-label="${esc(t('aria_table'))}"></div>
+            <div class="eb-lasthand-chip" data-role="lasthand" aria-hidden="true">🧹 ${esc(t('lasthand_chip'))}</div>
             <div class="eb-sum-chip" data-role="sumchip" aria-hidden="true"></div>
             <div class="eb-broom" data-role="broom" aria-hidden="true"></div>
           </div>
@@ -316,48 +323,49 @@ class EscobaUI {
     const seg = this._seg.bind(this);
 
     const opponentNames = s.aiNames.slice(0, s.count - 1);
-    const playersValue = esc([s.humanName, ...opponentNames].join(' vs '));
+    const playersValue = esc([s.humanName, ...opponentNames].join(` ${t('vs')} `));
     const aiNameRows = opponentNames.map((name, i) => `<div class="eb-player-row eb-player-row-ai">
       <span class="eb-av">${s.aiAvatars[i]}</span>
-      <input class="eb-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="Opponent ${i + 1} name">
+      <input class="eb-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="${esc(t('aria_opp_name', { n: i + 1 }))}">
     </div>`).join('');
     const playersContent = `
       ${seg('set-count', s.count, [[2, '2'], [3, '3']])}
       <div class="eb-player-row">
-        <button class="eb-av eb-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
-        <input class="eb-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
+        <button class="eb-av eb-av-btn" data-action="open-avatar" title="${esc(t('title_choose_avatar'))}">${s.humanAvatar}</button>
+        <input class="eb-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="${esc(t('aria_your_name'))}">
       </div>
       ${aiNameRows}`;
 
-    const diffLabel = (d) => (DIFFICULTIES.find(([v]) => v === d) || DIFFICULTIES[1])[1];
+    const diffLabel = (d) => t(DIFF_LABEL_KEY[d] || DIFF_LABEL_KEY.normal);
     const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
+    const diffOptions = DIFFICULTIES.map((d) => [d, diffLabel(d)]);
     const diffContent = opponentNames.map((name, i) => `<div class="eb-diff-row">
       <span class="eb-diff-name">${esc(name)}</span>
-      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES, ' eb-seg-sm', ` data-i="${i}"`)}
+      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', diffOptions, ' eb-seg-sm', ` data-i="${i}"`)}
     </div>`).join('');
 
-    const targetContent = seg('set-target', s.targetScore, [[21, '21 points'], [31, '31 points']]);
+    const targetContent = seg('set-target', s.targetScore, [[21, t('target_pts', { n: 21 })], [31, t('target_pts', { n: 31 })]]);
 
-    const deckModeValue = s.deckMode === 'american' ? 'American' : 'Spanish';
+    const deckModeValue = s.deckMode === 'american' ? t('deckmode_american') : t('deckmode_spanish');
     const deckModeContent = `
-      ${seg('set-deckmode', s.deckMode, [['spanish', 'Spanish'], ['american', 'American']])}
+      ${seg('set-deckmode', s.deckMode, [['spanish', t('deckmode_spanish')], ['american', t('deckmode_american')]])}
       <p class="eb-hint">${s.deckMode === 'american'
-        ? 'Cards 1 to 10, every card counts the number printed on it. No Caballo or Rey.'
-        : 'Traditional deck: Sota (printed 10) counts 8, Caballo (11) counts 9, Rey (12) counts 10.'}</p>`;
+        ? esc(t('hint_deckmode_american'))
+        : esc(t('hint_deckmode_spanish'))}</p>`;
 
-    const assistValue = s.assist ? 'On' : 'Off';
+    const assistValue = s.assist ? t('assist_on') : t('assist_off');
     const assistContent = `
-      ${seg('set-assist', s.assist ? 'on' : 'off', [['on', 'On'], ['off', 'Off']])}
+      ${seg('set-assist', s.assist ? 'on' : 'off', [['on', t('assist_on')], ['off', t('assist_off')]])}
       <p class="eb-hint">${s.assist
-        ? 'Combinable table cards are highlighted and a running sum shows as you build a capture.'
-        : 'Unassisted: nothing is highlighted, no running sum. You work out the 15 yourself.'}</p>`;
+        ? esc(t('hint_assist_on'))
+        : esc(t('hint_assist_off'))}</p>`;
 
     return `<div class="eb-summary-card">
-      ${this._summaryRow('players', 'Players', `${s.count} · ${playersValue}`, playersContent)}
-      ${this._summaryRow('difficulty', 'Difficulty', diffValue, diffContent)}
-      ${this._summaryRow('target', 'Play to', `${s.targetScore} pts`, targetContent)}
-      ${this._summaryRow('deckmode', 'Card numbering', deckModeValue, deckModeContent)}
-      ${this._summaryRow('assist', 'Capture hints', assistValue, assistContent)}
+      ${this._summaryRow('players', esc(t('lbl_players')), `${s.count} · ${playersValue}`, playersContent)}
+      ${this._summaryRow('difficulty', esc(t('lbl_difficulty')), diffValue, diffContent)}
+      ${this._summaryRow('target', esc(t('lbl_playto')), t('pts_value', { n: s.targetScore }), targetContent)}
+      ${this._summaryRow('deckmode', esc(t('lbl_cardnumbering')), esc(deckModeValue), deckModeContent)}
+      ${this._summaryRow('assist', esc(t('lbl_capturehints')), esc(assistValue), assistContent)}
     </div>`;
   }
 
@@ -368,15 +376,15 @@ class EscobaUI {
   _renderJoinModeBody() {
     const err = this._mpError;
     const msg = err === 'version'
-      ? `<button class="eb-mp-msg eb-mp-msg-action" data-action="mp-update-required">Update required</button>`
-      : `<p class="eb-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+      ? `<button class="eb-mp-msg eb-mp-msg-action" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`
+      : `<p class="eb-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? t('mp_joining') : ''))}</p>`;
     return `<div class="eb-join-body">
-      <span class="eb-label">Enter code</span>
+      <span class="eb-label">${esc(t('lbl_enter_code'))}</span>
       <input class="eb-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
         value="${esc(this._mpJoinCode)}"
-        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${esc(t('aria_room_code'))}">
       ${msg}
-      <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">Join</button>
+      <button class="eb-btn eb-btn-primary" data-action="mp-join-submit">${esc(t('btn_join'))}</button>
     </div>`;
   }
 
@@ -391,24 +399,24 @@ class EscobaUI {
     const won = rec && rec.total ? rec.total.won | 0 : 0;
     const escobas = rec && rec.es ? rec.es.escobas | 0 : 0;
     const statsLine = played > 0
-      ? `<p class="eb-stats">🧹 ${played} played · ${won} won · ${escobas} escobas</p>` : '';
+      ? `<p class="eb-stats">🧹 ${esc(t('stats_line', { played, won, escobas }))}</p>` : '';
 
     const save = this._loadSave();
     const resumeBtn = save
-      ? `<button class="eb-btn eb-btn-primary" data-action="resume-game">Resume game</button>` : '';
+      ? `<button class="eb-btn eb-btn-primary" data-action="resume-game">${esc(t('btn_resume'))}</button>` : '';
 
-    const modeSeg = this._seg('set-mode', s.mode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']]);
+    const modeSeg = this._seg('set-mode', s.mode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]]);
 
     let body;
     if (s.mode === 'join') {
       body = `${this._renderJoinModeBody()}
-        <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>`;
+        <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>`;
     } else {
       const actionBtn = s.mode === 'host'
-        ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">Host game</button>`
-        : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? 'New game' : 'Start game'}</button>`;
+        ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">${esc(t('btn_host_game'))}</button>`
+        : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? esc(t('btn_new_game')) : esc(t('btn_start_game'))}</button>`;
       body = `${this._renderSettingsCard()}
-        <button class="eb-howto-link" data-action="open-howto">📖 How to play</button>
+        <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
         ${actionBtn}`;
     }
 
@@ -438,22 +446,22 @@ class EscobaUI {
   }
 
   _renderMpLobby() {
-    const back = `<button class="eb-btn eb-btn-ghost" data-action="mp-cancel">Back</button>`;
+    const back = `<button class="eb-btn eb-btn-ghost" data-action="mp-cancel">${esc(t('btn_back'))}</button>`;
     if (this._screen === 'host-lobby') {
       const room = this._mpLobbyRoom;
       const guest = room && room.guest;
       const code = this._mpPendingCode;
-      const msg = this._mpError || (this._mpBusy ? 'Creating room…' : '');
+      const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
       return `<div class="eb-mp-lobby">
-        <span class="eb-label">Room code</span>
+        <span class="eb-label">${esc(t('lbl_room_code'))}</span>
         ${code ? `<div class="eb-mp-code">${esc(code)}</div>` : `<div class="eb-mp-code eb-mp-code-empty">····</div>`}
-        <span class="eb-label">Opponent</span>
+        <span class="eb-label">${esc(t('lbl_opponent'))}</span>
         <div class="eb-mp-oppslot">${guest
           ? `<span class="eb-av">${guest.avatar}</span><span class="eb-mp-oppname">${esc(guest.name)}</span>`
           : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
         <p class="eb-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
         <p class="eb-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-        <button class="eb-btn eb-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>Start</button>
+        <button class="eb-btn eb-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${esc(t('btn_start'))}</button>
         ${back}
       </div>`;
     }
@@ -465,13 +473,13 @@ class EscobaUI {
     const room = this._mpLobbyRoom;
     const host = room && room.host;
     return `<div class="eb-mp-lobby">
-      <span class="eb-label">Room code</span>
+      <span class="eb-label">${esc(t('lbl_room_code'))}</span>
       <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
-      <span class="eb-label">Host</span>
+      <span class="eb-label">${esc(t('lbl_host'))}</span>
       <div class="eb-mp-oppslot">${host
         ? `<span class="eb-av">${host.avatar}</span><span class="eb-mp-oppname">${esc(host.name)}</span>`
         : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
-      <p class="eb-mp-msg" data-role="mp-msg">Waiting for host</p>
+      <p class="eb-mp-msg" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
       ${back}
     </div>`;
   }
@@ -487,11 +495,11 @@ class EscobaUI {
 
   _openAvatarPicker() {
     const grid = HUMAN_AVATARS.map((av) =>
-      `<button class="eb-av-opt ${av === this._setup.humanAvatar ? 'is-sel' : ''}" data-action="pick-avatar" data-v="${av}" aria-label="Avatar ${av}">${av}</button>`).join('');
+      `<button class="eb-av-opt ${av === this._setup.humanAvatar ? 'is-sel' : ''}" data-action="pick-avatar" data-v="${av}" aria-label="${esc(t('aria_avatar', { av }))}">${av}</button>`).join('');
     this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-modal"></div><div class="eb-sheet eb-avatar-sheet">
-      <h2 class="eb-sheet-title">Choose your avatar</h2>
+      <h2 class="eb-sheet-title">${esc(t('avatar_title'))}</h2>
       <div class="eb-av-grid">${grid}</div>
-      <button class="eb-btn eb-btn-ghost" data-action="close-modal">Close</button>
+      <button class="eb-btn eb-btn-ghost" data-action="close-modal">${esc(t('btn_close'))}</button>
     </div>`;
     this.el.modal.hidden = false;
   }
@@ -527,14 +535,14 @@ class EscobaUI {
         <div class="eb-howto-demo">
           ${wrap(c.seven)}<span class="eb-howto-plus">+</span>${wrap(c.eight, 'is-attn')}
         </div>
-        <p class="eb-howto-caption">Make 15 with one hand card + table cards</p>
-        <p class="eb-howto-fine">Capturing is required when your card can make 15</p>
+        <p class="eb-howto-caption">${esc(t('howto_caption_1'))}</p>
+        <p class="eb-howto-fine">${esc(t('howto_fine_1'))}</p>
       </div>`,
       `<div class="eb-howto-panel">
         <div class="eb-howto-demo">
           ${wrap(c.lay)}<span class="eb-howto-arrow">→</span>${wrap(c.lay)}
         </div>
-        <p class="eb-howto-caption">No 15 possible? Your card joins the table</p>
+        <p class="eb-howto-caption">${esc(t('howto_caption_2'))}</p>
       </div>`,
       `<div class="eb-howto-panel">
         <div class="eb-howto-demo">
@@ -542,7 +550,7 @@ class EscobaUI {
           <span class="eb-howto-arrow">→</span>
           <span class="eb-howto-broom" aria-hidden="true">🧹</span>
         </div>
-        <p class="eb-howto-caption">Cleared the table? Escoba, 1 point</p>
+        <p class="eb-howto-caption">${esc(t('howto_caption_3'))}</p>
       </div>`,
     ].join('');
   }
@@ -560,41 +568,41 @@ class EscobaUI {
   _openHowTo() {
     const s = this._setup;
     const valuesBody = s.deckMode === 'american'
-      ? `<p>Cards 1 to 10 as printed, no Caballo or Rey. Corner badge matches the printed number. (Traditional Spanish figures: switch numbering in setup.)</p>`
-      : `<p>Traditional 40-card deck. 1 to 7 as printed. Sota, Caballo, Rey count 8, 9, 10, not the printed 10/11/12. Corner badge always shows the true capture value. (Prefer cards as printed? Switch to American numbering in setup.)</p>`;
+      ? `<p>${esc(t('detail_values_american'))}</p>`
+      : `<p>${esc(t('detail_values_spanish'))}</p>`;
     this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-howto"></div>
       <div class="eb-sheet eb-howto">
         <div class="eb-howto-head">
-          <h2 class="eb-sheet-title">How to play Escoba</h2>
-          <button class="eb-btn eb-btn-ghost" data-action="close-howto">Done</button>
+          <h2 class="eb-sheet-title">${esc(t('howto_title'))}</h2>
+          <button class="eb-btn eb-btn-ghost" data-action="close-howto">${esc(t('btn_done'))}</button>
         </div>
         <div class="eb-howto-body">
           <div class="eb-howto-panels">
             <div class="eb-howto-track" data-role="howto-track">${this._howtoPanels()}</div>
           </div>
           <div class="eb-howto-dots" data-role="howto-dots">
-            <button class="eb-howto-dot is-active" data-action="howto-dot" data-i="0" aria-label="Panel 1"></button>
-            <button class="eb-howto-dot" data-action="howto-dot" data-i="1" aria-label="Panel 2"></button>
-            <button class="eb-howto-dot" data-action="howto-dot" data-i="2" aria-label="Panel 3"></button>
+            <button class="eb-howto-dot is-active" data-action="howto-dot" data-i="0" aria-label="${esc(t('aria_panel', { n: 1 }))}"></button>
+            <button class="eb-howto-dot" data-action="howto-dot" data-i="1" aria-label="${esc(t('aria_panel', { n: 2 }))}"></button>
+            <button class="eb-howto-dot" data-action="howto-dot" data-i="2" aria-label="${esc(t('aria_panel', { n: 3 }))}"></button>
           </div>
           <table class="eb-howto-table">
             <tbody>
-              <tr><td>Each escoba</td><td>1 pt</td></tr>
-              <tr><td>Most cards</td><td>1 pt</td></tr>
-              <tr><td>Opponent under 10 cards (2 players)</td><td>+2 pts</td></tr>
-              <tr><td>Most coins (Oros)</td><td>1 pt</td></tr>
-              <tr><td>All 10 coins</td><td>+2 pts</td></tr>
-              <tr><td>The guindis (7 of Oros)</td><td>1 pt</td></tr>
-              <tr><td>All four 7s (includes the guindis point)</td><td>3 pts</td></tr>
-              <tr><td>Most 7s</td><td>1 pt</td></tr>
+              <tr><td>${esc(t('row_each_escoba'))}</td><td>${esc(t('pt_1'))}</td></tr>
+              <tr><td>${esc(t('row_most_cards'))}</td><td>${esc(t('pt_1'))}</td></tr>
+              <tr><td>${esc(t('row_opp_under10'))}</td><td>${esc(t('pts_plus2'))}</td></tr>
+              <tr><td>${esc(t('row_most_coins'))}</td><td>${esc(t('pt_1'))}</td></tr>
+              <tr><td>${esc(t('row_all10coins'))}</td><td>${esc(t('pts_plus2'))}</td></tr>
+              <tr><td>${esc(t('row_guindis'))}</td><td>${esc(t('pt_1'))}</td></tr>
+              <tr><td>${esc(t('row_all_sevens'))}</td><td>${esc(t('pts_3'))}</td></tr>
+              <tr><td>${esc(t('row_most_sevens'))}</td><td>${esc(t('pt_1'))}</td></tr>
             </tbody>
           </table>
           <div class="eb-howto-details">
-            ${this._howtoDetailRow('dealing', 'Dealing and last cards',
-              `<p>3 cards each, 4 face up. Table sums to 15 (or 30)? Dealer takes it as an escoba (or two). Hands empty: 3 more dealt each until the deck runs out (last cards). Leftover table cards at the end go to whoever captured last.</p>`)}
-            ${this._howtoDetailRow('values', 'Card values and numbering', valuesBody)}
-            ${this._howtoDetailRow('edge', 'Ties, sole lead, and edge cases',
-              `<p>Ties in a "most" category score nobody. Capture zero cards all round (2 players)? Instant loss. First to the target score with the sole lead wins the match.</p>`)}
+            ${this._howtoDetailRow('dealing', esc(t('detail_dealing_head')),
+              `<p>${esc(t('detail_dealing_body'))}</p>`)}
+            ${this._howtoDetailRow('values', esc(t('detail_values_head')), valuesBody)}
+            ${this._howtoDetailRow('edge', esc(t('detail_edge_head')),
+              `<p>${esc(t('detail_edge_body'))}</p>`)}
           </div>
         </div>
       </div>`;
@@ -728,7 +736,7 @@ class EscobaUI {
         // here: lastDeckOrder was just set by playRound(), before any await.
         if (this.mp && this.mp.role === 'host') {
           try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealer); }
-          catch { this._setMpStatus('Connection error'); }
+          catch { this._setMpStatus(t('mp_conn_error_title')); }
         }
         break;
       case 'deal':
@@ -737,7 +745,7 @@ class EscobaUI {
         // escoba check runs synchronously right after with no further await,
         // so there is no useful mid-step to resume into there.
         if (!payload.first) this._saveSnapshot();
-        if (payload.lastCards) { this.announce('Last cards'); await this.beat(BEAT_TURN); }
+        if (payload.lastCards) { this.announce(t('announce_last_cards')); await this.beat(BEAT_TURN); }
         break;
       case 'initialEscoba': {
         this.render();   // the engine already moved these into the dealer's pile
@@ -757,7 +765,7 @@ class EscobaUI {
           await this.beat(BROOM_TO_BANNER_MS - BROOM_TO_FLYOUT_MS);
           this._layoutTable(this.game.table);   // drops the now-stale temp cells
         }
-        await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', `${p.name} takes the opening table`);
+        await this.showBanner(payload.count === 2 ? '¡ESCOBA! ×2' : '¡ESCOBA!', t('banner_takes_opening', { name: p.name }));
         break;
       }
       case 'turnStart':
@@ -776,12 +784,12 @@ class EscobaUI {
         // (this.mp is null, the save is the only step either way).
         if (this.mp) await this._mpAfterPlay(p, payload);
         this._saveSnapshot();
-        if (payload.escoba) await this.showBanner('¡ESCOBA!', `${p.name} clears the table`);
+        if (payload.escoba) await this.showBanner('¡ESCOBA!', t('banner_clears_table', { name: p.name }));
         break;
       case 'sweepLeftovers':
         this.render();
         this._saveSnapshot();
-        this.announce(`${p.name} takes the leftover cards`);
+        this.announce(t('announce_takes_leftover', { name: p.name }));
         await this.beat(BEAT_PLAY);
         break;
       case 'roundScored':
@@ -837,8 +845,8 @@ class EscobaUI {
 
     if (isAI) {
       this.announce(captured.length
-        ? `${p.name} plays ${cardLabel(card)} · captures ${captured.length}`
-        : `${p.name} plays ${cardLabel(card)}`);
+        ? t('announce_plays_captures', { name: p.name, card: cardLabel(card), n: captured.length })
+        : t('announce_plays', { name: p.name, card: cardLabel(card) }));
     }
     if (!captured.length) { await this.beat(isAI ? BEAT_PLAY : 380); return; }
 
@@ -946,8 +954,8 @@ class EscobaUI {
   }
 
   _pileChips(p) {
-    return `<span class="eb-pile-chip" title="Cards captured">🂠 ${p.captured.length}</span>` +
-      (p.escobas ? `<span class="eb-pile-chip eb-pile-escoba" title="Escobas this round">🧹 ${p.escobas}</span>` : '');
+    return `<span class="eb-pile-chip" title="${esc(t('title_captured'))}">🂠 ${p.captured.length}</span>` +
+      (p.escobas ? `<span class="eb-pile-chip eb-pile-escoba" title="${esc(t('title_escobas_round'))}">🧹 ${p.escobas}</span>` : '');
   }
 
   /** Mini card-back fan (capped at 3) + an exact-count numeral, so an
@@ -956,7 +964,7 @@ class EscobaUI {
   _miniCards(count) {
     const shown = Math.min(count, 3);
     const backs = Array.from({ length: shown }, () => '<i></i>').join('');
-    return `<span class="eb-mini-cards" title="Cards in hand">${backs}<em>${count}</em></span>`;
+    return `<span class="eb-mini-cards" title="${esc(t('title_hand_count'))}">${backs}<em>${count}</em></span>`;
   }
 
   renderOpponents() {
@@ -966,10 +974,10 @@ class EscobaUI {
       const dealer = g.dealer === p.id;
       return `<div class="eb-opp-pill ${active ? 'is-active' : ''}">
         <div class="eb-opp-top">
-          <span class="eb-opp-av">${p.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
+          <span class="eb-opp-av">${p.avatar}${dealer ? `<i class="eb-dealer-dot" title="${esc(t('dealer_title'))}">${esc(t('dealer_letter'))}</i>` : ''}</span>
           <span class="eb-opp-name">${esc(p.name)}</span>
         </div>
-        <div class="eb-opp-score"><b>${p.totalScore}</b><span>pts</span></div>
+        <div class="eb-opp-score"><b>${p.totalScore}</b><span>${esc(t('pts_label'))}</span></div>
         <div class="eb-opp-foot">${this._miniCards(p.hand.length)}${this._pileChips(p)}</div>
       </div>`;
     }).join('');
@@ -980,8 +988,8 @@ class EscobaUI {
    *  _syncLastHand). Always renders both lines so the slot never shifts. */
   renderMatchInfo() {
     const g = this.game;
-    return `<span class="eb-mi-line">Round ${g.round}</span>
-      <span class="eb-mi-line">First to ${g.config.targetScore}</span>`;
+    return `<span class="eb-mi-line">${esc(t('round_n', { n: g.round }))}</span>
+      <span class="eb-mi-line">${esc(t('first_to_n', { n: g.config.targetScore }))}</span>`;
   }
 
   /** The last-hand flag is a persistent state chip on the mat (Task C), not
@@ -1180,10 +1188,10 @@ class EscobaUI {
     const dealer = this.game.dealer === this._localSeat();
     return `<div class="eb-self-chip ${active ? 'is-active' : ''}">
       <div class="eb-self-top">
-        <span class="eb-self-av">${h.avatar}${dealer ? '<i class="eb-dealer-dot" title="Dealer">D</i>' : ''}</span>
+        <span class="eb-self-av">${h.avatar}${dealer ? `<i class="eb-dealer-dot" title="${esc(t('dealer_title'))}">${esc(t('dealer_letter'))}</i>` : ''}</span>
         <span class="eb-self-name">${esc(h.name)}</span>
       </div>
-      <div class="eb-self-score"><b>${h.totalScore}</b><span>pts</span></div>
+      <div class="eb-self-score"><b>${h.totalScore}</b><span>${esc(t('pts_label'))}</span></div>
       <span class="eb-self-piles">${this._pileChips(h)}</span>
     </div>`;
   }
@@ -1201,8 +1209,8 @@ class EscobaUI {
    *  its label changes ("Capture 9/15" building up to "Capture"). */
   renderActions() {
     if (this._matchEnded) {
-      return `<button class="eb-btn eb-btn-ghost" data-action="show-results">Results</button>
-        <button class="eb-btn eb-btn-primary" data-action="new-game">New game</button>`;
+      return `<button class="eb-btn eb-btn-ghost" data-action="show-results">${esc(t('btn_results'))}</button>
+        <button class="eb-btn eb-btn-primary" data-action="new-game">${esc(t('btn_new_game'))}</button>`;
     }
     if (!this._pending) return '';
     const selCard = this._selCard();
@@ -1214,20 +1222,20 @@ class EscobaUI {
       // pre-disabled either -- an invalid sum is rejected at tap time (see
       // _confirmCapture), same wordless shake as an over-mandatory place.
       if (this._selTable.size > 0) {
-        return `<button class="eb-btn eb-btn-primary" data-action="capture">Capture</button>`;
+        return `<button class="eb-btn eb-btn-primary" data-action="capture">${esc(t('btn_capture'))}</button>`;
       }
-      return `<button class="eb-btn eb-btn-primary" data-action="lay">Place ${esc(cardLabel(selCard))}</button>`;
+      return `<button class="eb-btn eb-btn-primary" data-action="lay">${esc(t('btn_place', { card: cardLabel(selCard) }))}</button>`;
     }
     const opts = this._optsFor(selCard);
     if (!opts.length) {
-      return `<button class="eb-btn eb-btn-primary" data-action="lay">Place ${esc(cardLabel(selCard))}</button>`;
+      return `<button class="eb-btn eb-btn-primary" data-action="lay">${esc(t('btn_place', { card: cardLabel(selCard) }))}</button>`;
     }
     const picked = this.game.table.filter((c) => this._selTable.has(c.id));
     const sum = selCard.value + sumValues(picked);
     const valid = picked.length > 0 && sum === 15;
     // The running sum lives in the mat-anchored chip now (_syncSumChip), not
     // the button label: feedback stays where the player is already looking.
-    return `<button class="eb-btn eb-btn-primary" data-action="capture" ${valid ? '' : 'disabled'}>Capture</button>`;
+    return `<button class="eb-btn eb-btn-primary" data-action="capture" ${valid ? '' : 'disabled'}>${esc(t('btn_capture'))}</button>`;
   }
 
   _selCard() {
@@ -1384,15 +1392,15 @@ class EscobaUI {
 
     const head = `<div class="eb-score-head"><span></span>${players.map((p) => `<span>${p.avatar} ${esc(p.name)}</span>`).join('')}</div>`;
     const rows = [
-      row('Escobas', stats.map((s) => cell(s.escobas))),
-      row('Cards', stats.map((s, i) => cell(s.cards, i === cardsIdx))),
-      row('Coin cards', stats.map((s, i) => cell(s.coins, i === coinsIdx))),
+      row(esc(t('row_escobas')), stats.map((s) => cell(s.escobas))),
+      row(esc(t('row_cards')), stats.map((s, i) => cell(s.cards, i === cardsIdx))),
+      row(esc(t('row_coincards')), stats.map((s, i) => cell(s.coins, i === coinsIdx))),
       row('7 de Oros', stats.map((s, i) => cell(s.guindis ? '✓' : '✕', i === guindisIdx))),
-      row('Sevens', stats.map((s, i) => cell(s.sevens, i === sevensIdx))),
+      row(esc(t('row_sevens')), stats.map((s, i) => cell(s.sevens, i === sevensIdx))),
     ].join('');
-    const pointsRow = `<div class="eb-score-points-row"><span class="eb-score-cat">Round ${g.round} points</span>
+    const pointsRow = `<div class="eb-score-points-row"><span class="eb-score-cat">${esc(t('round_points', { n: g.round }))}</span>
       ${players.map((p) => `<span class="eb-score-cell">${this._sign(p.roundScore)}</span>`).join('')}</div>`;
-    const totalRow = `<div class="eb-score-total-row"><span class="eb-score-cat">Total scores</span>
+    const totalRow = `<div class="eb-score-total-row"><span class="eb-score-cat">${esc(t('row_total_scores'))}</span>
       ${players.map((p) => `<span class="eb-score-cell">${p.totalScore}</span>`).join('')}</div>`;
 
     const footnotes = players.map((p) => {
@@ -1411,11 +1419,11 @@ class EscobaUI {
     const g = this.game;
     const body = this._chartView ? this.renderChartBlock() : this._renderScoreTable(g);
     this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
-      <h2 class="eb-sheet-title">Round ${g.round}</h2>
+      <h2 class="eb-sheet-title">${esc(t('round_n', { n: g.round }))}</h2>
       ${body}
       <div class="eb-sheet-actions">
-        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Table' : '📈 Scoreboard'}</button>
-        <button class="eb-btn eb-btn-primary" data-action="next-round">Next round</button>
+        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? esc(t('btn_table')) : esc(t('btn_scoreboard'))}</button>
+        <button class="eb-btn eb-btn-primary" data-action="next-round">${esc(t('btn_next_round'))}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1434,15 +1442,15 @@ class EscobaUI {
     const body = this._chartView ? this.renderChartBlock() : `<ol class="eb-standings">${standings.map((p, i) => `<li class="${p === winner ? 'is-winner' : ''}">
         <span class="eb-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('')}</ol>`;
     const reason = g.matchEndReason === 'whitewash'
-      ? `<p class="eb-sheet-sub">Opponent captured no cards: instant win</p>` : '';
+      ? `<p class="eb-sheet-sub">${esc(t('reason_whitewash'))}</p>` : '';
     this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-match"></div><div class="eb-sheet">
-      <button class="eb-sheet-x" data-action="close-match" aria-label="Close">✕</button>
-      <h2 class="eb-sheet-title">${winner.avatar} ${esc(winner.name)} wins!</h2>
+      <button class="eb-sheet-x" data-action="close-match" aria-label="${esc(t('aria_close'))}">✕</button>
+      <h2 class="eb-sheet-title">${winner.avatar} ${esc(t('wins_headline', { name: winner.name }))}</h2>
       ${reason}
       ${body}
       <div class="eb-sheet-actions">
-        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Standings' : '📈 Scoreboard'}</button>
-        <button class="eb-btn eb-btn-primary" data-action="new-game">New game</button>
+        <button class="eb-btn eb-btn-ghost" data-action="toggle-chart">${this._chartView ? esc(t('btn_standings')) : esc(t('btn_scoreboard'))}</button>
+        <button class="eb-btn eb-btn-primary" data-action="new-game">${esc(t('btn_new_game'))}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1465,7 +1473,7 @@ class EscobaUI {
       return `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}" class="eb-grid"/>`;
     }).join('');
     const capLine = `<line x1="${padL}" y1="${y(cap).toFixed(1)}" x2="${W - padR}" y2="${y(cap).toFixed(1)}" class="eb-caprule"/>
-      <text x="${W - padR}" y="${(y(cap) - 3).toFixed(1)}" class="eb-axis" text-anchor="end">target ${cap}</text>`;
+      <text x="${W - padR}" y="${(y(cap) - 3).toFixed(1)}" class="eb-axis" text-anchor="end">${esc(t('chart_target', { n: cap }))}</text>`;
     const yLabels = `<text x="${padL - 4}" y="${(y(0) + 3).toFixed(1)}" class="eb-axis" text-anchor="end">0</text>
       <text x="${padL - 4}" y="${(y(domainMax) + 8).toFixed(1)}" class="eb-axis" text-anchor="end">${domainMax}</text>`;
     const xLabels = `<text x="${padL}" y="${H - 6}" class="eb-axis" text-anchor="start">R0</text>
@@ -1482,7 +1490,7 @@ class EscobaUI {
       `<span class="eb-legend-item"><span class="eb-legend-dot" style="background:${PLAYER_COLORS[idx % PLAYER_COLORS.length]}"></span>${p.avatar} ${esc(p.name)} · ${p.totalScore}</span>`).join('');
 
     return `<div class="eb-chart">
-      <svg viewBox="0 0 ${W} ${H}" class="eb-chart-svg" role="img" aria-label="Cumulative score by round">
+      <svg viewBox="0 0 ${W} ${H}" class="eb-chart-svg" role="img" aria-label="${esc(t('aria_chart'))}">
         ${grid}${capLine}${yLabels}${xLabels}${lines}
       </svg>
       <div class="eb-legend">${legend}</div>
@@ -1665,15 +1673,15 @@ class EscobaUI {
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="eb-btn eb-btn-ghost ${confirming ? 'eb-confirm' : ''}" data-action="menu-${which}">${
-        confirming ? 'Tap again: this game will be lost' : label}</button>`;
+        confirming ? esc(t('menu_confirm_lost')) : label}</button>`;
     };
     this.el.menu.innerHTML = `<div class="eb-scrim" data-action="close-menu"></div>
       <div class="eb-sheet eb-menu-sheet">
-        <h2 class="eb-sheet-title">Menu</h2>
-        <button class="eb-btn eb-btn-ghost" data-action="open-howto">📖 How to play</button>
-        ${btn('newgame', this.mp ? 'Leave match' : 'New game (same settings)')}
-        ${this.mp ? '' : btn('quit', 'Quit to setup')}
-        <button class="eb-btn eb-btn-primary" data-action="menu-resume">Resume game</button>
+        <h2 class="eb-sheet-title">${esc(t('menu_title'))}</h2>
+        <button class="eb-btn eb-btn-ghost" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
+        ${btn('newgame', this.mp ? esc(t('menu_leave_match')) : esc(t('menu_newgame_samesettings')))}
+        ${this.mp ? '' : btn('quit', esc(t('menu_quit_setup')))}
+        <button class="eb-btn eb-btn-primary" data-action="menu-resume">${esc(t('btn_resume'))}</button>
       </div>`;
   }
 
@@ -1768,7 +1776,7 @@ class EscobaUI {
       try {
         await net.appendMove(mp.code, mp.role, seq, move, hash);
         mp.appliedSeq = seq;
-      } catch { this._setMpStatus('Connection error'); }
+      } catch { this._setMpStatus(t('mp_conn_error_title')); }
       return;
     }
     const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
@@ -1792,7 +1800,7 @@ class EscobaUI {
     if (!mp) return;
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
-    this._setMpStatus('Resyncing');
+    this._setMpStatus(t('mp_status_resyncing'));
     try {
       if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
       else await net.requestRecovery(mp.code, seq);
@@ -1858,7 +1866,7 @@ class EscobaUI {
       this._mpApplyRoundData(room.round);
       return Promise.resolve();
     }
-    this._setMpStatus('Waiting for host');
+    this._setMpStatus(t('mp_waiting_host'));
     return new Promise((resolve) => { mp.awaitingRoundN = targetRound; mp.awaitingRoundResolve = resolve; });
   }
 
@@ -1889,10 +1897,10 @@ class EscobaUI {
 
   _renderMpErrorModal() {
     this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
-      <h2 class="eb-sheet-title">Connection error</h2>
-      <p class="eb-sheet-sub">The match could not stay in sync</p>
+      <h2 class="eb-sheet-title">${esc(t('mp_conn_error_title'))}</h2>
+      <p class="eb-sheet-sub">${esc(t('mp_conn_error_sub'))}</p>
       <div class="eb-sheet-actions">
-        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">Back to setup</button>
+        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">${esc(t('btn_back_to_setup'))}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1902,11 +1910,11 @@ class EscobaUI {
     const standings = this.game.players.slice().sort((a, b) => b.totalScore - a.totalScore);
     const rows = standings.map((p, i) => `<li><span class="eb-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('');
     this.el.modal.innerHTML = `<div class="eb-scrim"></div><div class="eb-sheet">
-      <h2 class="eb-sheet-title">Opponent left</h2>
-      <p class="eb-sheet-sub">Final standings</p>
+      <h2 class="eb-sheet-title">${esc(t('mp_opponent_left_title'))}</h2>
+      <p class="eb-sheet-sub">${esc(t('mp_final_standings'))}</p>
       <ol class="eb-standings">${rows}</ol>
       <div class="eb-sheet-actions">
-        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">Back to setup</button>
+        <button class="eb-btn eb-btn-primary" data-action="mp-error-ok">${esc(t('btn_back_to_setup'))}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1941,7 +1949,7 @@ class EscobaUI {
     // yet even when it concluded normally (see the case just below).
     if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this._matchEnded) {
       mp.opponentLeft = true;
-      this._setMpStatus('Opponent left');
+      this._setMpStatus(t('mp_status_opp_left'));
       this._mpEndDueToOpponentLeft();
       return;
     }
@@ -1950,8 +1958,8 @@ class EscobaUI {
     const opp = room[oppKey];
     if (opp && !mp.opponentLeft) {
       const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
-      if (stale && this._mpStatusMsg !== 'Opponent disconnected') this._setMpStatus('Opponent disconnected');
-      else if (!stale && this._mpStatusMsg === 'Opponent disconnected') this._clearMpStatus();
+      if (stale && this._mpStatusMsg !== t('mp_status_opp_disconnected')) this._setMpStatus(t('mp_status_opp_disconnected'));
+      else if (!stale && this._mpStatusMsg === t('mp_status_opp_disconnected')) this._clearMpStatus();
     }
 
     if (room.recovery) {
@@ -1991,7 +1999,7 @@ class EscobaUI {
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
-      this._mpError = res.error === 'busy' ? 'Could not create a room' : 'Offline';
+      this._mpError = res.error === 'busy' ? t('mp_could_not_create_room') : t('mp_offline');
       this.renderSetup();
       return;
     }
@@ -2032,11 +2040,11 @@ class EscobaUI {
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
-      this._mpError = res.error === 'not-found' ? 'Room not found'
-        : res.error === 'ended' ? 'Room ended'
-        : res.error === 'full' ? 'Room full'
+      this._mpError = res.error === 'not-found' ? t('mp_room_not_found')
+        : res.error === 'ended' ? t('mp_room_ended')
+        : res.error === 'full' ? t('mp_room_full')
         : res.error === 'version' ? 'version'
-        : 'Offline';
+        : t('mp_offline');
       this.renderSetup();
       return;
     }

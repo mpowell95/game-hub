@@ -17,6 +17,10 @@ import { showCodeReveal } from '../../js/challenge/reveal.js';
 import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
 
 const DECKS_BY_ID = Object.fromEntries(listDecks().map((d) => [d.id, d]));
 const DEFAULT_DECK_ID = 'anita';
@@ -24,7 +28,10 @@ const DEFAULT_DECK_ID = 'anita';
 const AI_NAMES = ['Lucía', 'Diego', 'Sofía'];
 const AI_AVATARS = ['💃', '🤠', '🎸'];
 const HUMAN_AVATARS = ['🤠', '💃', '🕺', '🎸', '🐂', '🌹', '🏰', '🍷', '👑', '🦁', '🐉', '⚔️', '🛡️', '🎭', '🌟', '🔥', '🦊', '🐼', '🦉', '🐺', '😎', '🧔', '🎩', '🃏'];
-const DIFFICULTIES = [['easy', 'Easy'], ['normal', 'Average'], ['hard', 'Hard']];
+// Values (first element) stay canonical — they're written to STORE_SETTINGS/recordChinchon;
+// the second element is a strings.js label key, resolved via t() at render time.
+const DIFFICULTIES = [['easy', 'diff_easy'], ['normal', 'diff_average'], ['hard', 'diff_hard']];
+const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);
 
 // LAYOUT-2: the widest phone width fitToViewport() should act on, matching
 // chinchon.css's own `.cc-root { max-width: 720px }` / `@media (min-width:
@@ -49,11 +56,11 @@ const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // Human labels for the room's locked config, host-lobby summary line only
 // (mirrors Escoba's MP_CONFIG_LABELS pattern). Unknown keys are skipped.
 const MP_CONFIG_LABELS = {
-  victoryCondition: (v) => (v === 'rounds' ? 'By rounds' : v === 'roundsOrPoints' ? 'Rounds or points' : 'By points'),
-  scoreLimit: (v) => `${v} pts`,
-  roundsLimit: (v) => `${v} rounds`,
-  extended: (v) => (v ? '48-card deck' : null),
-  joker: (v) => (v ? 'Joker' : null),
+  victoryCondition: (v) => (v === 'rounds' ? t('victory_by_rounds') : v === 'roundsOrPoints' ? t('victory_by_both') : t('victory_by_points')),
+  scoreLimit: (v) => t('pts_suffix', { v }),
+  roundsLimit: (v) => t('rounds_suffix', { v }),
+  extended: (v) => (v ? t('mp_48card_deck') : null),
+  joker: (v) => (v ? t('deck_rule_joker') : null),
 };
 
 /** Idempotently ensure the module's stylesheet is on the page (hub or standalone). */
@@ -234,12 +241,12 @@ class ChinchonUI {
   mount() {
     this.container.innerHTML = `
       <div class="cc-root">
-        <header class="cc-header" data-role="header"><h1 class="cc-title">Chinchón</h1></header>
+        <header class="cc-header" data-role="header"><h1 class="cc-title">${t('title')}</h1></header>
         <section class="cc-setup" data-role="setup"></section>
         <section class="cc-game" data-role="game" hidden>
           <div class="cc-topbar">
             <div class="cc-opponents" data-role="opponents"></div>
-            <button class="cc-menu-btn" data-action="open-menu" aria-label="Game menu">☰</button>
+            <button class="cc-menu-btn" data-action="open-menu" aria-label="${t('menu_btn_aria')}">☰</button>
           </div>
           <div class="cc-mat">
             <div class="cc-piles" data-role="piles"></div>
@@ -372,26 +379,26 @@ class ChinchonUI {
     // the count selector, and no AI rows (the second seat is the remote
     // guest, shown once they join the lobby, not here). ---
     const opponentNames = isHost ? [] : s.aiNames.slice(0, s.count - 1);
-    const playersValue = isHost ? `2 · ${esc(s.humanName)} · online`
+    const playersValue = isHost ? `2 · ${esc(s.humanName)} · ${t('online_word')}`
       : esc([s.humanName, ...opponentNames].join(' vs '));
     const aiNameRows = opponentNames.map((name, i) => `<div class="cc-player-row">
       <span class="cc-av">${s.aiAvatars[i]}</span>
-      <input class="cc-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="Opponent ${i + 1} name">
+      <input class="cc-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="${t('aria_opponent_name', { n: i + 1 })}">
     </div>`).join('');
     const playersContent = `
-      ${isHost ? `<div class="cc-locked-count" aria-label="2 players (online)">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
+      ${isHost ? `<div class="cc-locked-count" aria-label="2 · ${t('online_word')}">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
       <div class="cc-player-row">
-        <button class="cc-av cc-av-btn" data-action="open-avatar" title="Choose avatar">${s.humanAvatar}</button>
-        <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="Your name">
+        <button class="cc-av cc-av-btn" data-action="open-avatar" title="${t('avatar_choose_title')}">${s.humanAvatar}</button>
+        <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="${t('aria_your_name')}">
       </div>
       ${aiNameRows}`;
 
     // --- Difficulty row: absent in Host mode (no AI opponents to tune). ---
-    const diffLabel = (d) => (DIFFICULTIES.find(([v]) => v === d) || DIFFICULTIES[1])[1];
+    const diffLabel = (d) => t(DIFF_LABEL_KEY[d] || DIFF_LABEL_KEY.normal);
     const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
     const diffContent = opponentNames.map((name, i) => `<div class="cc-diff-row">
       <span class="cc-diff-name">${esc(name)}</span>
-      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES, ' cc-seg-sm', ` data-i="${i}"`)}
+      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES.map(([v, k]) => [v, t(k)]), ' cc-seg-sm', ` data-i="${i}"`)}
     </div>`).join('');
 
     // --- Card deck row: replaces the old floating deck button + gallery
@@ -404,50 +411,50 @@ class ChinchonUI {
     // disclosure): victory + limits, closing rules, deck rules, misc. ---
     const usesPoints = c.victoryCondition !== 'rounds';
     const usesRounds = c.victoryCondition !== 'points';
-    const victoryLabel = { points: 'By points', rounds: 'By rounds', roundsOrPoints: 'Rounds or points' }[c.victoryCondition];
+    const victoryLabel = { points: t('victory_by_points'), rounds: t('victory_by_rounds'), roundsOrPoints: t('victory_by_both') }[c.victoryCondition];
     const limitBits = [];
-    if (usesPoints) limitBits.push(`${c.scoreLimit} pts`);
-    if (usesRounds) limitBits.push(`${c.roundsLimit} rounds`);
+    if (usesPoints) limitBits.push(t('pts_suffix', { v: c.scoreLimit }));
+    if (usesRounds) limitBits.push(t('rounds_suffix', { v: c.roundsLimit }));
     const victoryValue = esc([victoryLabel, ...limitBits].join(' · '));
     const victoryContent = `
-      <div class="cc-rule"><span class="cc-rule-name">Victory</span>
-        ${seg('rule-victory', c.victoryCondition, [['points', 'Points'], ['rounds', 'Rounds'], ['roundsOrPoints', 'Both']])}</div>
-      ${usesPoints ? stepRow('scoreLimit', 'Score limit', c.scoreLimit) : ''}
-      ${usesRounds ? stepRow('roundsLimit', 'Rounds', c.roundsLimit) : ''}`;
+      <div class="cc-rule"><span class="cc-rule-name">${t('row_victory')}</span>
+        ${seg('rule-victory', c.victoryCondition, [['points', t('seg_points')], ['rounds', t('seg_rounds')], ['roundsOrPoints', t('seg_both')]])}</div>
+      ${usesPoints ? stepRow('scoreLimit', t('label_score_limit'), c.scoreLimit) : ''}
+      ${usesRounds ? stepRow('roundsLimit', t('label_rounds'), c.roundsLimit) : ''}`;
 
-    const placeLabel = { auto: 'Auto placement', manual: 'Manual placement', off: 'No placement' }[c.placeOnEnding];
-    const closingValue = esc(`Close ≤${c.maxClose} · ${c.figuresFaceValue ? 'Own' : 'Flat'} figures · ${placeLabel}`);
+    const placeLabel = { auto: t('place_auto_full'), manual: t('place_manual_full'), off: t('place_off_full') }[c.placeOnEnding];
+    const closingValue = esc(t('closing_summary', { max: c.maxClose, fig: c.figuresFaceValue ? t('seg_own') : t('label_flat'), place: placeLabel }));
     const closingContent = `
-      <div class="cc-rule"><span class="cc-rule-name">Max points to close</span>
+      <div class="cc-rule"><span class="cc-rule-name">${t('label_max_close')}</span>
         ${seg('rule-maxclose', String(c.maxClose), [['3', '3'], ['4', '4'], ['5', '5']])}</div>
-      <div class="cc-rule"><span class="cc-rule-name">Figures value</span>
-        ${seg('rule-figures', c.figuresFaceValue ? 'own' : 'flat', [['flat', 'Flat 10'], ['own', 'Own']])}</div>
-      <div class="cc-rule"><span class="cc-rule-name">Place cards on ending</span>
-        ${seg('rule-place', c.placeOnEnding, [['auto', 'Auto'], ['manual', 'Manual'], ['off', 'Off']])}</div>`;
+      <div class="cc-rule"><span class="cc-rule-name">${t('label_figures_value')}</span>
+        ${seg('rule-figures', c.figuresFaceValue ? 'own' : 'flat', [['flat', t('seg_flat10')], ['own', t('seg_own')]])}</div>
+      <div class="cc-rule"><span class="cc-rule-name">${t('label_place_on_ending')}</span>
+        ${seg('rule-place', c.placeOnEnding, [['auto', t('seg_auto')], ['manual', t('seg_manual')], ['off', t('seg_off')]])}</div>`;
 
-    const deckRuleBits = [c.extended ? '48-card' : null, c.joker ? 'Joker' : null, c.aceOrosWild ? 'Wild Ace' : null].filter(Boolean);
-    deckRuleBits.push(`${c.maxResets} reset${c.maxResets === 1 ? '' : 's'}`);
+    const deckRuleBits = [c.extended ? t('deck_rule_48card') : null, c.joker ? t('deck_rule_joker') : null, c.aceOrosWild ? t('deck_rule_wild_ace') : null].filter(Boolean);
+    deckRuleBits.push(t('resets_count', { n: c.maxResets }));
     const deckRulesValue = esc(deckRuleBits.join(' · '));
     const deckRulesContent = `
-      ${toggleRow('extended', 'Use 8s & 9s (48 cards)')}
-      ${toggleRow('joker', 'Play with Joker')}
-      ${toggleRow('aceOrosWild', 'Ace of Oros is wild')}
-      ${stepRow('maxResets', 'Deck resets', c.maxResets)}`;
+      ${toggleRow('extended', t('label_use_48'))}
+      ${toggleRow('joker', t('label_play_joker'))}
+      ${toggleRow('aceOrosWild', t('label_ace_wild'))}
+      ${stepRow('maxResets', t('label_deck_resets'), c.maxResets)}`;
 
-    const miscOn = [c.winWithChinchon ? 'Chinchón wins' : null, c.showRemaining ? 'Remaining shown' : null].filter(Boolean);
-    const miscValue = esc(miscOn.length ? miscOn.join(' · ') : 'Off');
+    const miscOn = [c.winWithChinchon ? t('misc_chinchon_wins') : null, c.showRemaining ? t('misc_remaining_shown') : null].filter(Boolean);
+    const miscValue = esc(miscOn.length ? miscOn.join(' · ') : t('misc_off'));
     const miscContent = `
-      ${toggleRow('winWithChinchon', 'Win with chinchón')}
-      ${toggleRow('showRemaining', 'Show remaining cards')}`;
+      ${toggleRow('winWithChinchon', t('label_win_chinchon'))}
+      ${toggleRow('showRemaining', t('label_show_remaining'))}`;
 
     return `<div class="cc-summary-card">
-      ${this._summaryRow('players', 'Players', playersValue, playersContent)}
-      ${isHost ? '' : this._summaryRow('difficulty', 'Difficulty', diffValue, diffContent)}
-      ${this._summaryRow('deck', 'Card deck', deckValue, deckContent)}
-      ${this._summaryRow('victory', 'Victory', victoryValue, victoryContent)}
-      ${this._summaryRow('closing', 'Closing rules', closingValue, closingContent)}
-      ${this._summaryRow('deckrules', 'Deck rules', deckRulesValue, deckRulesContent)}
-      ${this._summaryRow('rules', 'Other rules', miscValue, miscContent)}
+      ${this._summaryRow('players', t('row_players'), playersValue, playersContent)}
+      ${isHost ? '' : this._summaryRow('difficulty', t('row_difficulty'), diffValue, diffContent)}
+      ${this._summaryRow('deck', t('row_deck'), deckValue, deckContent)}
+      ${this._summaryRow('victory', t('row_victory'), victoryValue, victoryContent)}
+      ${this._summaryRow('closing', t('row_closing'), closingValue, closingContent)}
+      ${this._summaryRow('deckrules', t('row_deckrules'), deckRulesValue, deckRulesContent)}
+      ${this._summaryRow('rules', t('row_other'), miscValue, miscContent)}
     </div>`;
   }
 
@@ -470,21 +477,22 @@ class ChinchonUI {
     // In challenge mode the setup is fixed and the app runs "straight"; suppress the joke
     // flavor (Ana Banana title, lifetime stats). Normal play keeps all of it.
     const statsLine = (!this.challengeActive && st.games > 0)
-      ? `<p class="cc-stats">🏆 ${st.games} played · ${st.wins} won · ${st.closes} closes · ${st.chinchons} chinchón</p>`
+      ? `<p class="cc-stats">🏆 ${t('stats_line', { games: st.games, wins: st.wins, closes: st.closes, chinchons: st.chinchons })}</p>`
       : '';
 
     // Themed title: the Ana Banana deck rebrands the whole screen as a joke edition.
+    // "Ana Banana" is a nickname, not translated (same as the deck's own name).
     const anita = s.deck === 'anita';
-    const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="Toggle dark mode" title="${s.dark ? 'Light mode' : 'Dark mode'}">${s.dark ? '☀️' : '🌙'}</button>`;
+    const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="${t('theme_toggle_aria')}" title="${s.dark ? t('mode_light') : t('mode_dark')}">${s.dark ? '☀️' : '🌙'}</button>`;
     this.el.header.innerHTML = ((anita && !this.challengeActive)
-      ? `<h1 class="cc-title cc-title-anita">Chinchón <span class="cc-title-bonita">Ana Banana</span></h1>`
-      : `<h1 class="cc-title">Chinchón</h1>`) + themeBtn;
+      ? `<h1 class="cc-title cc-title-anita">${t('title')} <span class="cc-title-bonita">Ana Banana</span></h1>`
+      : `<h1 class="cc-title">${t('title')}</h1>`) + themeBtn;
 
     // Multiplayer (M2b): a Solo/Host online/Join selector, absent entirely in
     // challenge mode (that hidden feature is solo-only by construction, and
     // MP would only complicate its locked/qualifying setup for no benefit).
     const mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
-    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', 'Solo'], ['host', 'Host online'], ['join', 'Join']]);
+    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]]);
 
     if (mpMode === 'join') {
       this.el.setup.innerHTML = `<div class="cc-card-panel">${statsLine}${modeSeg}${this._renderMpJoinBody()}</div>`;
@@ -493,12 +501,12 @@ class ChinchonUI {
 
     const isHost = mpMode === 'host';
     const actionBtn = isHost
-      ? `<button class="cc-btn cc-btn-ghost" data-action="mp-host">Host game</button>`
-      : `<button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? 'Begin challenge' : 'Start game'}</button>`;
+      ? `<button class="cc-btn cc-btn-ghost" data-action="mp-host">${t('action_host_game')}</button>`
+      : `<button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? t('action_begin_challenge') : t('action_start_game')}</button>`;
 
     this.el.setup.innerHTML = `
       <div class="cc-card-panel ${live ? 'cc-locked' : ''}">
-        ${done ? '<p class="cc-challenge-note">Chinch&oacute;n challenge completed. Play anyways?</p>' : ''}
+        ${done ? `<p class="cc-challenge-note">${t('challenge_completed_note')}</p>` : ''}
         ${statsLine}
         ${modeSeg}
         ${this._renderSettingsCard(isHost)}
@@ -515,15 +523,15 @@ class ChinchonUI {
   _renderMpJoinBody() {
     const err = this._mpError;
     const msg = err === 'version'
-      ? `<button class="cc-mp-msg cc-mp-msg-action" data-action="mp-update-required">Update required</button>`
-      : `<p class="cc-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+      ? `<button class="cc-mp-msg cc-mp-msg-action" data-action="mp-update-required">${t('mp_update_required')}</button>`
+      : `<p class="cc-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? t('mp_joining') : ''))}</p>`;
     return `<div class="cc-mp-lobby">
-      <span class="cc-label">Enter code</span>
+      <span class="cc-label">${t('mp_enter_code')}</span>
       <input class="cc-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
         value="${esc(this._mpJoinCode)}"
-        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('aria_room_code')}">
       ${msg}
-      <button class="cc-btn cc-btn-primary" data-action="mp-join-submit">Join</button>
+      <button class="cc-btn cc-btn-primary" data-action="mp-join-submit">${t('mp_join_btn')}</button>
     </div>`;
   }
 
@@ -543,22 +551,22 @@ class ChinchonUI {
   }
 
   _renderMpLobby() {
-    const back = `<button class="cc-btn cc-btn-ghost" data-action="mp-cancel">Back</button>`;
+    const back = `<button class="cc-btn cc-btn-ghost" data-action="mp-cancel">${t('mp_back_btn')}</button>`;
     if (this._screen === 'host-lobby') {
       const room = this._mpLobbyRoom;
       const guest = room && room.guest;
       const code = this._mpPendingCode;
-      const msg = this._mpError || (this._mpBusy ? 'Creating room…' : '');
+      const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
       return `<div class="cc-mp-lobby">
-        <span class="cc-label">Room code</span>
+        <span class="cc-label">${t('aria_room_code')}</span>
         ${code ? `<div class="cc-mp-code">${esc(code)}</div>` : `<div class="cc-mp-code cc-mp-code-empty">····</div>`}
-        <span class="cc-label">Opponent</span>
+        <span class="cc-label">${t('mp_opponent_label')}</span>
         <div class="cc-mp-oppslot">${guest
           ? `<span class="cc-av">${guest.avatar}</span><span class="cc-mp-oppname">${esc(guest.name)}</span>`
           : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
         <p class="cc-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
         <p class="cc-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-        <button class="cc-btn cc-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>Start</button>
+        <button class="cc-btn cc-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${t('mp_start_btn')}</button>
         ${back}
       </div>`;
     }
@@ -568,13 +576,13 @@ class ChinchonUI {
     const room = this._mpLobbyRoom;
     const host = room && room.host;
     return `<div class="cc-mp-lobby">
-      <span class="cc-label">Room code</span>
+      <span class="cc-label">${t('aria_room_code')}</span>
       <div class="cc-mp-code">${esc(this._mpJoinedCode)}</div>
-      <span class="cc-label">Host</span>
+      <span class="cc-label">${t('mp_host_label')}</span>
       <div class="cc-mp-oppslot">${host
         ? `<span class="cc-av">${host.avatar}</span><span class="cc-mp-oppname">${esc(host.name)}</span>`
         : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
-      <p class="cc-mp-msg" data-role="mp-msg">Waiting for host</p>
+      <p class="cc-mp-msg" data-role="mp-msg">${t('mp_waiting_host')}</p>
       ${back}
     </div>`;
   }
@@ -590,11 +598,11 @@ class ChinchonUI {
 
   _openAvatarPicker() {
     const grid = HUMAN_AVATARS.map((av) =>
-      `<button class="cc-av-opt ${av === this._setup.humanAvatar ? 'is-sel' : ''}" data-action="pick-avatar" data-v="${av}" aria-label="Avatar ${av}">${av}</button>`).join('');
+      `<button class="cc-av-opt ${av === this._setup.humanAvatar ? 'is-sel' : ''}" data-action="pick-avatar" data-v="${av}" aria-label="${t('aria_avatar_option', { av })}">${av}</button>`).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-avatar"></div><div class="cc-sheet cc-avatar-sheet">
-      <h2 class="cc-sheet-title">Choose your avatar</h2>
+      <h2 class="cc-sheet-title">${t('avatar_picker_title')}</h2>
       <div class="cc-av-grid">${grid}</div>
-      <button class="cc-btn cc-btn-ghost" data-action="close-avatar">Close</button>
+      <button class="cc-btn cc-btn-ghost" data-action="close-avatar">${t('close_word')}</button>
     </div>`;
     this.el.modal.hidden = false;
   }
@@ -613,10 +621,10 @@ class ChinchonUI {
       const sel = d.id === this._setup.deck ? 'is-sel' : '';
       return `<div class="cc-deck-opt-wrap ${sel}">
         <button class="cc-deck-opt ${sel}" data-action="pick-deck" data-v="${d.id}" aria-pressed="${sel ? 'true' : 'false'}">
-          <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(d.name)} back" draggable="false">
+          <img class="cc-deck-back" src="${deckAssetUrl(d.id, 'back')}" alt="${esc(t('deck_back_alt', { name: d.name }))}" draggable="false">
           <span class="cc-deck-opt-name">${esc(d.name)}${sel ? ' <span class="cc-deck-tick">✓</span>' : ''}</span>
         </button>
-        <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 View all cards</button>
+        <button class="cc-deck-view-btn" data-action="view-deck" data-v="${d.id}">🔍 ${t('view_all_cards')}</button>
       </div>`;
     }).join('');
   }
@@ -634,9 +642,9 @@ class ChinchonUI {
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-gallery"></div><div class="cc-sheet cc-gallery-sheet">
       <div class="cc-gallery-head">
         <h2 class="cc-sheet-title">${esc(d.name)}</h2>
-        <button class="cc-btn cc-btn-ghost" data-action="close-gallery">Done</button>
+        <button class="cc-btn cc-btn-ghost" data-action="close-gallery">${t('gallery_done')}</button>
       </div>
-      <p class="cc-gallery-hint">Tap any card to zoom in.</p>
+      <p class="cc-gallery-hint">${t('gallery_hint')}</p>
       <div class="cc-gallery-grid">${cells}</div>
     </div>`;
     this.el.modal.hidden = false;
@@ -659,7 +667,7 @@ class ChinchonUI {
         <img class="cc-zoom-img" src="${deckAssetUrl(deckId, name)}" alt="${esc(label)}" draggable="false">
         <span class="cc-zoom-cap">${esc(label)}</span>
       </div>
-      <button class="cc-zoom-close" data-action="close-zoom" aria-label="Close">✕</button>`;
+      <button class="cc-zoom-close" data-action="close-zoom" aria-label="${t('close_word')}">✕</button>`;
     this.root.appendChild(z);
   }
 
@@ -713,12 +721,12 @@ class ChinchonUI {
       const total = attachable.reduce((sum, c) => sum + c.value, 0);
       const cards = attachable.map((c) => cardFaceHTML(c, { static: true, mini: true, melded: true })).join('');
       this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
-        <h2 class="cc-sheet-title">Lay off cards?</h2>
-        <p class="cc-sheet-sub">Onto ${esc(closer.name)}'s melds · −${total} pts</p>
+        <h2 class="cc-sheet-title">${t('place_modal_title')}</h2>
+        <p class="cc-sheet-sub">${esc(t('place_modal_sub', { name: closer.name, total }))}</p>
         <div class="cc-place-cards">${cards}</div>
         <div class="cc-place-actions">
-          <button class="cc-btn cc-btn-primary" data-action="place-all">Place all (−${total})</button>
-          <button class="cc-btn cc-btn-ghost" data-action="place-skip">Keep them</button>
+          <button class="cc-btn cc-btn-primary" data-action="place-all">${esc(t('place_all_btn', { total }))}</button>
+          <button class="cc-btn cc-btn-ghost" data-action="place-skip">${t('keep_them_btn')}</button>
         </div></div>`;
       this.el.modal.hidden = false;
     });
@@ -754,7 +762,7 @@ class ChinchonUI {
         // ran synchronously before this event, with no await in between.
         if (this.mp && this.mp.role === 'host') {
           try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealerIndex); }
-          catch { this._setMpStatus('Connection error'); }
+          catch { this._setMpStatus('mp_status_connection_error'); }
         }
         break;
       case 'turnStart':
@@ -772,7 +780,7 @@ class ChinchonUI {
         if (p && p.isHuman) this._newCardId = payload.card.id;
         this.render();
         if (this.mp) await this._mpAfterDecision(p, { t: 'draw', src: payload.source });
-        if (p && !p.isHuman) { this.toast(`${p.name} drew from the ${payload.source === 'discard' ? 'discard pile' : 'deck'}`); await this.beat(BEAT_DRAW); }
+        if (p && !p.isHuman) { this.toast(payload.source === 'discard' ? t('toast_drew_discard', { name: p.name }) : t('toast_drew_deck', { name: p.name })); await this.beat(BEAT_DRAW); }
         break;
       case 'discard':
         if (p && p.isHuman) this._newCardId = null;
@@ -782,10 +790,10 @@ class ChinchonUI {
         break;
       case 'close':
         if (this.mp) await this._mpAfterDecision(p, { t: 'close', kind: true });
-        this.toast(`${p.name} closed the round!`); this.render(); await this.beat(BEAT_CLOSE);
+        this.toast(t('toast_closed_round', { name: p.name })); this.render(); await this.beat(BEAT_CLOSE);
         break;
       case 'reset':
-        this.toast('Deck reshuffled'); this.render();
+        this.toast(t('toast_deck_reshuffled')); this.render();
         break;
       case 'roundScored':
         if (this.game.whoClosed === this._human().id) {
@@ -908,14 +916,14 @@ class ChinchonUI {
       never rebuilt, so it can't flash. Only the discard's top card is swapped. */
   _buildPiles() {
     this.el.piles.innerHTML = `
-      <button class="cc-pile cc-stock" data-action="draw-stock" disabled aria-label="Draw from deck">
+      <button class="cc-pile cc-stock" data-action="draw-stock" disabled aria-label="${t('pile_draw_aria')}">
         ${cardFaceHTML({}, { faceDown: true, static: true })}
         <span class="cc-pile-count" hidden></span>
-        <span class="cc-pile-label">Deck</span>
+        <span class="cc-pile-label">${t('pile_deck_label')}</span>
       </button>
-      <button class="cc-pile cc-discard" data-action="draw-discard" disabled aria-label="Take the discard">
+      <button class="cc-pile cc-discard" data-action="draw-discard" disabled aria-label="${t('pile_take_discard_aria')}">
         <div class="cc-card cc-empty"></div>
-        <span class="cc-pile-label">Discard</span>
+        <span class="cc-pile-label">${t('pile_discard_label')}</span>
       </button>`;
     this._pilesEl = {
       stock: this.el.piles.querySelector('.cc-stock'),
@@ -952,10 +960,10 @@ class ChinchonUI {
   renderStatus() {
     const g = this.game;
     const pills = [
-      `<span class="cc-pill">Round ${g.round}</span>`,
-      `<span class="cc-pill">Resets ${g.resetsUsed}/${g.config.maxResets}</span>`,
+      `<span class="cc-pill">${t('status_round', { n: g.round })}</span>`,
+      `<span class="cc-pill">${t('status_resets', { used: g.resetsUsed, max: g.config.maxResets })}</span>`,
     ];
-    if (g.config.showRemaining) pills.push(`<span class="cc-pill">Deck ${g.stock.length}</span>`);
+    if (g.config.showRemaining) pills.push(`<span class="cc-pill">${t('status_deck_count', { n: g.stock.length })}</span>`);
     return `<span class="cc-status-text">${esc(this.statusText())}</span><span class="cc-pills">${pills.join('')}</span>`;
   }
 
@@ -963,15 +971,17 @@ class ChinchonUI {
     // A persistent MP status (Resyncing / Opponent disconnected / Opponent
     // left / Waiting for host) owns this reserved slot -- Chinchón has no
     // separate announce row (see the T4 handoff note), so it reuses the
-    // existing status-text slot rather than adding new DOM.
-    if (this._mpStatusMsg) return this._mpStatusMsg;
+    // existing status-text slot rather than adding new DOM. _mpStatusMsg
+    // holds a strings.js KEY (not display text), resolved here at render
+    // time so it can also be compared by key elsewhere without translating.
+    if (this._mpStatusMsg) return t(this._mpStatusMsg);
     if (this._pending) {
       // No draw prompt text: the glowing name chip + highlighted piles say it.
       if (this._pending.kind === 'discard') return '';
-      if (this._pending.kind === 'close') return 'You can close! Close the round, or keep playing.';
+      if (this._pending.kind === 'close') return t('status_can_close');
     }
     const ap = this.activePlayerId != null ? this.game.byId(this.activePlayerId) : null;
-    if (ap && !ap.isHuman) return `${ap.name} is playing…`;
+    if (ap && !ap.isHuman) return t('status_opp_playing', { name: ap.name });
     return '';
   }
 
@@ -988,9 +998,9 @@ class ChinchonUI {
   }
 
   renderHandbar() {
-    const sortLabel = this._sortMode === 'suit' ? 'by suit' : 'by rank';
-    return `<button class="cc-tool cc-tool-icon" data-action="sort-cycle" title="Sorted ${sortLabel} — tap to cycle" aria-label="Sorted ${sortLabel}, tap to cycle">↕</button>
-      <button class="cc-tool cc-tool-sm ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="Highlight sets">Sets</button>`;
+    const sortLabel = this._sortMode === 'suit' ? t('sort_label_suit') : t('sort_label_rank');
+    return `<button class="cc-tool cc-tool-icon" data-action="sort-cycle" title="${t('sort_title', { mode: sortLabel })}" aria-label="${t('sort_aria', { mode: sortLabel })}">↕</button>
+      <button class="cc-tool cc-tool-sm ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="${t('highlight_sets_title')}">${t('sets_btn')}</button>`;
   }
 
   _computeHandOrder(hand) {
@@ -1099,11 +1109,11 @@ class ChinchonUI {
     if (!this._pending) return '';
     if (this._pending.kind === 'discard') {
       const sel = this._selectedCardId;
-      return `<button class="cc-btn cc-btn-primary" data-action="discard-confirm" ${sel ? '' : 'disabled'}>Discard${sel ? ' ' + esc(this._cardLabel(sel)) : ''}</button>`;
+      return `<button class="cc-btn cc-btn-primary" data-action="discard-confirm" ${sel ? '' : 'disabled'}>${t('discard_word')}${sel ? ' ' + esc(this._cardLabel(sel)) : ''}</button>`;
     }
     if (this._pending.kind === 'close') {
-      return `<button class="cc-btn cc-btn-primary" data-action="close-yes">Close round ✓</button>
-              <button class="cc-btn cc-btn-ghost" data-action="close-no">Keep playing</button>`;
+      return `<button class="cc-btn cc-btn-primary" data-action="close-yes">${t('close_round_btn')}</button>
+              <button class="cc-btn cc-btn-ghost" data-action="close-no">${t('keep_playing_btn')}</button>`;
     }
     // Draw phase intentionally shows no text — the glowing name chip and the
     // highlighted piles already signal "your turn; tap a pile".
@@ -1113,7 +1123,7 @@ class ChinchonUI {
   _cardLabel(id) {
     const c = this._human().hand.find((x) => x.id === id);
     if (!c) return '';
-    if (c.isJoker) return 'Joker';
+    if (c.isJoker) return t('card_label_joker');
     return `${c.rank} ${SUIT_META[c.suit].label}`;
   }
 
@@ -1140,7 +1150,7 @@ class ChinchonUI {
     if (!this.el || !this.el.setup) return;
     const slot = this.el.setup.querySelector('.cc-mp-msg');
     if (!slot) return;
-    slot.outerHTML = `<p class="cc-mp-msg" data-role="mp-msg">${esc(this._mpError || (this._mpBusy ? 'Joining…' : ''))}</p>`;
+    slot.outerHTML = `<p class="cc-mp-msg" data-role="mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_joining') : ''))}</p>`;
   }
 
   // --- hand drag-to-reorder (pointer events) --------------------------------
@@ -1254,17 +1264,17 @@ class ChinchonUI {
   _renderRoundModal() {
     const g = this.game;
     const closer = g.whoClosed != null ? g.byId(g.whoClosed) : null;
-    const title = closer ? `${esc(closer.name)} closed the round` : 'Deck exhausted';
+    const title = closer ? t('modal_closed_round_title', { name: esc(closer.name) }) : t('modal_deck_exhausted_title');
     const cat = closer && closer.closeInfo ? closer.closeInfo.category : null;
     const isChinchon = cat === 'chinchon';
-    const sub = cat === 'doubleMeld' ? 'Double meld' : cat === 'sixAndOne' ? 'Six and one' : '';
+    const sub = cat === 'doubleMeld' ? t('modal_sub_double_meld') : cat === 'sixAndOne' ? t('modal_sub_six_and_one') : '';
     const banner = isChinchon ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
       body = this.renderChartBlock();
     } else {
       const rows = g.players.map((p) => {
-        const placed = p.placed && p.placed.length ? ` <span class="cc-placed">laid off ${p.placed.length}</span>` : '';
+        const placed = p.placed && p.placed.length ? ` <span class="cc-placed">${t('laid_off', { n: p.placed.length })}</span>` : '';
         return `<tr class="${closer && p.id === closer.id ? 'is-closer' : ''}">
           <td>${p.avatar} ${esc(p.name)}${placed}</td>
           <td class="num">${this._sign(p.roundScore)}</td>
@@ -1272,7 +1282,7 @@ class ChinchonUI {
       }).join('');
       const bonusLine = closer ? this._bonusLine(closer) : '';
       const breakdown = closer ? this._closerBreakdown(closer) : '';
-      body = `<table class="cc-score"><thead><tr><th>Player</th><th class="num">Round</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>${bonusLine}${breakdown}`;
+      body = `<table class="cc-score"><thead><tr><th>${t('table_header_player')}</th><th class="num">${t('table_header_round')}</th><th class="num">${t('table_header_total')}</th></tr></thead><tbody>${rows}</tbody></table>${bonusLine}${breakdown}`;
     }
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
       ${banner}
@@ -1280,8 +1290,8 @@ class ChinchonUI {
       ${sub ? `<p class="cc-sheet-sub">${sub}</p>` : ''}
       ${body}
       <div class="cc-sheet-actions">
-        <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Scores' : '📈 Scoreboard'}</button>
-        <button class="cc-btn cc-btn-primary" data-action="next-round">Next round</button>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? t('scores_btn') : '📈 ' + t('scoreboard_word')}</button>
+        <button class="cc-btn cc-btn-primary" data-action="next-round">${t('next_round_btn')}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1290,8 +1300,8 @@ class ChinchonUI {
   /** Large, unmissable banner leading a round/match summary won via chinchón. */
   _chinchonBanner() {
     return `<div class="cc-chinchon-banner">
-      <div class="cc-chinchon-headline">¡CHINCHÓN!</div>
-      <p class="cc-chinchon-sub">Seven cards in a single run. Round won instantly.</p>
+      <div class="cc-chinchon-headline">${t('chinchon_banner_headline')}</div>
+      <p class="cc-chinchon-sub">${t('chinchon_banner_sub')}</p>
     </div>`;
   }
 
@@ -1300,8 +1310,8 @@ class ChinchonUI {
   _bonusLine(closer) {
     const info = closer.closeInfo;
     if (!info) return '';
-    if (info.category === 'chinchon') return `<p class="cc-bonus-line">Chinchón bonus: ${this._sign(info.score)}</p>`;
-    if (info.category === 'doubleMeld') return `<p class="cc-bonus-line">All cards melded: ${this._sign(info.score)}</p>`;
+    if (info.category === 'chinchon') return `<p class="cc-bonus-line">${t('bonus_chinchon', { sign: this._sign(info.score) })}</p>`;
+    if (info.category === 'doubleMeld') return `<p class="cc-bonus-line">${t('bonus_double_meld', { sign: this._sign(info.score) })}</p>`;
     return '';
   }
 
@@ -1314,7 +1324,7 @@ class ChinchonUI {
     const groups = bp.melds.map((m) =>
       `<span class="cc-meld-group">${m.idx.map((i) => cardFaceHTML(closer.hand[i], { static: true, mini: true, melded: true })).join('')}</span>`).join('');
     const leftover = closer.hand.map((c, i) => meldedIdx.has(i) ? '' : cardFaceHTML(c, { static: true, mini: true, dead: true })).join('');
-    return `<div class="cc-breakdown"><span class="cc-breakdown-label">${esc(closer.name)}'s hand</span>
+    return `<div class="cc-breakdown"><span class="cc-breakdown-label">${t('breakdown_hand_label', { name: esc(closer.name) })}</span>
       <div class="cc-breakdown-cards">${groups}${leftover ? `<span class="cc-meld-group cc-leftover">${leftover}</span>` : ''}</div></div>`;
   }
 
@@ -1327,7 +1337,6 @@ class ChinchonUI {
     const standings = g.standings || g.players;
     const winner = g.winner;
     const isChinchonWin = g.matchEndReason === 'chinchon';
-    const reason = isChinchonWin ? ' with a Chinchón' : '';
     const banner = isChinchonWin ? this._chinchonBanner() : '';
     let body;
     if (this._chartView) {
@@ -1340,18 +1349,21 @@ class ChinchonUI {
     const betty = (!this._chartView && this._setup.deck === 'anita')
       ? `<div class="cc-betty is-${humanWon ? 'win' : 'loss'}">
           <img class="cc-betty-img" src="${anitaImgUrl(humanWon ? 'betty-win.webp' : 'betty-loss.webp')}" alt="" draggable="false">
-          <p class="cc-betty-cap">${humanWon ? 'Betty approves 😎' : 'Betty is not impressed.'}</p>
+          <p class="cc-betty-cap">${humanWon ? t('betty_win_caption') : t('betty_loss_caption')}</p>
         </div>`
       : '';
+    const titleText = isChinchonWin
+      ? t('match_title_chinchon', { winner: esc(winner.name) })
+      : t('match_title_plain', { winner: esc(winner.name) });
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-match"></div><div class="cc-sheet">
-      <button class="cc-sheet-x" data-action="close-match" aria-label="Close">✕</button>
+      <button class="cc-sheet-x" data-action="close-match" aria-label="${t('close_word')}">✕</button>
       ${banner}
-      <h2 class="cc-sheet-title">${winner.avatar} ${esc(winner.name)} wins${reason}!</h2>
+      <h2 class="cc-sheet-title">${winner.avatar} ${titleText}</h2>
       ${betty}
       ${body}
       <div class="cc-sheet-actions">
-        <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? 'Standings' : '📈 Scoreboard'}</button>
-        <button class="cc-btn cc-btn-primary" data-action="new-game">${this.challengeLive ? 'Retry Challenge' : 'New game'}</button>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? t('standings_word') : '📈 ' + t('scoreboard_word')}</button>
+        <button class="cc-btn cc-btn-primary" data-action="new-game">${this.challengeLive ? t('retry_challenge_btn') : t('new_game_btn')}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1374,7 +1386,7 @@ class ChinchonUI {
       return `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}" class="cc-grid"/>`;
     }).join('');
     const capLine = (cap <= domainMax)
-      ? `<line x1="${padL}" y1="${y(cap).toFixed(1)}" x2="${W - padR}" y2="${y(cap).toFixed(1)}" class="cc-caprule"/><text x="${W - padR}" y="${(y(cap) - 3).toFixed(1)}" class="cc-axis" text-anchor="end">limit ${cap}</text>`
+      ? `<line x1="${padL}" y1="${y(cap).toFixed(1)}" x2="${W - padR}" y2="${y(cap).toFixed(1)}" class="cc-caprule"/><text x="${W - padR}" y="${(y(cap) - 3).toFixed(1)}" class="cc-axis" text-anchor="end">${t('chart_limit_label', { cap })}</text>`
       : '';
     const yLabels = `<text x="${padL - 4}" y="${(y(0) + 3).toFixed(1)}" class="cc-axis" text-anchor="end">0</text>
       <text x="${padL - 4}" y="${(y(domainMax) + 8).toFixed(1)}" class="cc-axis" text-anchor="end">${domainMax}</text>`;
@@ -1392,7 +1404,7 @@ class ChinchonUI {
       `<span class="cc-legend-item"><span class="cc-legend-dot" style="background:${PLAYER_COLORS[idx % PLAYER_COLORS.length]}"></span>${p.avatar} ${esc(p.name)} · ${p.totalScore}</span>`).join('');
 
     return `<div class="cc-chart">
-      <svg viewBox="0 0 ${W} ${H}" class="cc-chart-svg" role="img" aria-label="Cumulative score by round">
+      <svg viewBox="0 0 ${W} ${H}" class="cc-chart-svg" role="img" aria-label="${t('chart_aria')}">
         ${grid}${capLine}${yLabels}${xLabels}${lines}
       </svg>
       <div class="cc-legend">${legend}</div>
@@ -1457,7 +1469,7 @@ class ChinchonUI {
         this._setup.deck = a.dataset.v; setDeck(a.dataset.v); preloadDeck();
         this._saveSetup(); this.renderSetup();
         // Reward picking the Ana Banana deck with a little celebration.
-        if (a.dataset.v === 'anita' && wasOther) { this._celebrate(); this.toast('Nice choice! 🎉'); }
+        if (a.dataset.v === 'anita' && wasOther) { this._celebrate(); this.toast(t('toast_nice_choice')); }
         break;
       }
       case 'toggle-theme':
@@ -1529,15 +1541,15 @@ class ChinchonUI {
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-${which}">${
-        confirming ? 'Tap again — you’ll lose this game' : label}</button>`;
+        confirming ? t('menu_confirm_tap_again') : label}</button>`;
     };
     this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
       <div class="cc-sheet cc-menu-sheet">
-        <h2 class="cc-sheet-title">Menu</h2>
-        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${this._setup.dark ? '☀️ Light mode' : '🌙 Dark mode'}</button>
-        ${btn('newgame', this.mp ? 'Leave match' : 'New game (same settings)')}
-        ${this.mp ? '' : btn('quit', 'Quit to setup')}
-        <button class="cc-btn cc-btn-primary" data-action="menu-resume">Resume game</button>
+        <h2 class="cc-sheet-title">${t('menu_title')}</h2>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${this._setup.dark ? '☀️ ' + t('mode_light') : '🌙 ' + t('mode_dark')}</button>
+        ${btn('newgame', this.mp ? t('menu_leave_match') : t('menu_new_game_settings'))}
+        ${this.mp ? '' : btn('quit', t('menu_quit_setup'))}
+        <button class="cc-btn cc-btn-primary" data-action="menu-resume">${t('menu_resume')}</button>
       </div>`;
   }
 
@@ -1688,7 +1700,7 @@ class ChinchonUI {
     // reset already arrived" and skipped the wait (test-mp-lockstep.mjs C2b).
     const have = (this.game.config.presetStockResets || []).length;
     if (have > 0) return Promise.resolve();
-    this._setMpStatus('Waiting for host');
+    this._setMpStatus('mp_waiting_host');
     return new Promise((resolve) => { mp.awaitingStockReset = resolve; });
   }
 
@@ -1708,7 +1720,7 @@ class ChinchonUI {
       // race a subsequent awaited send and collide on the same seq number.
       const seq = ++mp.appliedSeq;
       const hash = stateHash(this.game);
-      net.appendMove(mp.code, mp.role, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('Connection error'); });
+      net.appendMove(mp.code, mp.role, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
       return;
     }
     const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
@@ -1733,7 +1745,7 @@ class ChinchonUI {
     if (!mp) return;
     const seq = ++mp.appliedSeq;
     const hash = stateHash(this.game);
-    net.appendMove(mp.code, mp.role, seq, { t: 'stock-reset', order }, hash).catch(() => { this._setMpStatus('Connection error'); });
+    net.appendMove(mp.code, mp.role, seq, { t: 'stock-reset', order }, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
   }
 
   /** Desync: guest can only flag it (host is authoritative in M2b, matching
@@ -1744,7 +1756,7 @@ class ChinchonUI {
     if (!mp) return;
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
-    this._setMpStatus('Resyncing');
+    this._setMpStatus('mp_status_resyncing');
     try {
       if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
       else await net.requestRecovery(mp.code, seq);
@@ -1812,7 +1824,7 @@ class ChinchonUI {
       this.game.config.presetDeck = room.round.deck;
       return Promise.resolve();
     }
-    this._setMpStatus('Waiting for host');
+    this._setMpStatus('mp_waiting_host');
     return new Promise((resolve) => { mp.awaitingRoundN = targetRound; mp.awaitingRoundResolve = resolve; });
   }
 
@@ -1843,10 +1855,10 @@ class ChinchonUI {
 
   _renderMpErrorModal() {
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
-      <h2 class="cc-sheet-title">Connection error</h2>
-      <p class="cc-sheet-sub">The match could not stay in sync</p>
+      <h2 class="cc-sheet-title">${t('mp_error_title')}</h2>
+      <p class="cc-sheet-sub">${t('mp_error_sub')}</p>
       <div class="cc-sheet-actions">
-        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">Back to setup</button>
+        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">${t('back_to_setup_btn')}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1856,11 +1868,11 @@ class ChinchonUI {
     const standings = this.game.players.slice().sort((a, b) => b.totalScore - a.totalScore);
     const rows = standings.map((p, i) => `<li><span class="cc-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
-      <h2 class="cc-sheet-title">Opponent left</h2>
-      <p class="cc-sheet-sub">Final standings</p>
+      <h2 class="cc-sheet-title">${t('mp_opponent_left_title')}</h2>
+      <p class="cc-sheet-sub">${t('mp_final_standings_sub')}</p>
       <ol class="cc-standings">${rows}</ol>
       <div class="cc-sheet-actions">
-        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">Back to setup</button>
+        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">${t('back_to_setup_btn')}</button>
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1894,7 +1906,7 @@ class ChinchonUI {
     // yet even when it concluded normally.
     if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this._matchEnded) {
       mp.opponentLeft = true;
-      this._setMpStatus('Opponent left');
+      this._setMpStatus('mp_status_opponent_left');
       this._mpEndDueToOpponentLeft();
       return;
     }
@@ -1903,8 +1915,8 @@ class ChinchonUI {
     const opp = room[oppKey];
     if (opp && !mp.opponentLeft) {
       const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
-      if (stale && this._mpStatusMsg !== 'Opponent disconnected') this._setMpStatus('Opponent disconnected');
-      else if (!stale && this._mpStatusMsg === 'Opponent disconnected') this._clearMpStatus();
+      if (stale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
+      else if (!stale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
 
     if (room.recovery) {
@@ -1944,7 +1956,7 @@ class ChinchonUI {
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
-      this._mpError = res.error === 'busy' ? 'Could not create a room' : 'Offline';
+      this._mpError = res.error === 'busy' ? t('mp_err_could_not_create_room') : t('mp_err_offline');
       this.renderSetup();
       return;
     }
@@ -1991,11 +2003,11 @@ class ChinchonUI {
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
-      this._mpError = res.error === 'not-found' ? 'Room not found'
-        : res.error === 'ended' ? 'Room ended'
-        : res.error === 'full' ? 'Room full'
+      this._mpError = res.error === 'not-found' ? t('mp_err_room_not_found')
+        : res.error === 'ended' ? t('mp_err_room_ended')
+        : res.error === 'full' ? t('mp_err_room_full')
         : res.error === 'version' ? 'version'
-        : 'Offline';
+        : t('mp_err_offline');
       this.renderSetup();
       return;
     }
@@ -2005,7 +2017,7 @@ class ChinchonUI {
     // field write already happened, but harmlessly, since the room is unusable
     // to us either way and its own TTL/host will reclaim it).
     if (res.room && res.room.game && res.room.game !== 'chinchon') {
-      this._mpError = 'Wrong game';
+      this._mpError = t('mp_err_wrong_game');
       this.renderSetup();
       return;
     }
