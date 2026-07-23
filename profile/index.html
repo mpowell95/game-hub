@@ -193,39 +193,39 @@
     <header class="hub-top">
       <div class="hub-top-info">
         <a class="hub-back" href="../">&#8249; Hub</a>
-        <h1 class="hub-top-title">Profile</h1>
-        <span class="pf-saved" id="pf-saved" role="status" aria-live="polite">Saved</span>
+        <h1 class="hub-top-title" data-i18n="pf_title">Profile</h1>
+        <span class="pf-saved" id="pf-saved" role="status" aria-live="polite" data-i18n="pf_saved">Saved</span>
       </div>
     </header>
 
     <main class="hub-main pf-main">
       <section class="pf-section">
-        <h2>You</h2>
+        <h2 data-i18n="pf_you_h">You</h2>
         <div class="pf-you-row">
-          <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji">🙂</button>
+          <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji" data-i18n-aria="pf_you_emoji_aria">🙂</button>
           <div class="pf-name-wrap">
-            <label class="pf-label" for="pf-you-name">Your name</label>
-            <input class="pf-input" id="pf-you-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+            <label class="pf-label" for="pf-you-name" data-i18n="pf_name_label">Your name</label>
+            <input class="pf-input" id="pf-you-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off" data-i18n-placeholder="pf_name_placeholder">
           </div>
         </div>
         <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
 
         <details class="pf-collapse pf-subcollapse">
-          <summary>Preferred color</summary>
+          <summary data-i18n="pf_color_summary">Preferred color</summary>
           <div class="pf-swatches" id="pf-colors"></div>
         </details>
       </section>
 
       <section class="pf-section">
-        <h2>Sync devices</h2>
+        <h2 data-i18n="pf_sync_h">Sync devices</h2>
         <div class="pf-code-row">
-          <code id="pf-code" class="pf-code" aria-label="Your code">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
-          <button type="button" class="pf-add pf-code-btn" id="pf-code-copy">Copy</button>
+          <code id="pf-code" class="pf-code" aria-label="Your code" data-i18n-aria="pf_code_aria">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
+          <button type="button" class="pf-add pf-code-btn" id="pf-code-copy" data-i18n="pf_copy_btn">Copy</button>
         </div>
         <div class="pf-code-row">
           <input class="pf-input" id="pf-code-link-input" type="text" maxlength="5" placeholder="Enter a code"
-                 autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.18em">
-          <button type="button" class="pf-add pf-code-btn" id="pf-code-link-btn">Link</button>
+                 autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.18em" data-i18n-placeholder="pf_code_placeholder">
+          <button type="button" class="pf-add pf-code-btn" id="pf-code-link-btn" data-i18n="pf_link_btn">Link</button>
         </div>
         <p class="pf-hint" id="pf-code-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
         <!-- Support identifier. Deliberately quiet: it means nothing to a player, but a screenshot of
@@ -236,14 +236,14 @@
       </section>
 
       <details class="pf-section pf-collapse">
-        <summary>Customize Computer Players</summary>
+        <summary data-i18n="pf_customize_summary">Customize Computer Players</summary>
         <div id="pf-opps"></div>
-        <button type="button" class="pf-add" id="pf-add-opp">+ Add opponent</button>
+        <button type="button" class="pf-add" id="pf-add-opp" data-i18n="pf_add_opp_btn">+ Add opponent</button>
       </details>
 
       <div class="pf-foot">
-        <button type="button" class="pf-dev-btn" id="pf-devdetails-btn">Device details</button>
-        <button type="button" class="pf-reset-btn" id="pf-reset-btn">Reset profile</button>
+        <button type="button" class="pf-dev-btn" id="pf-devdetails-btn" data-i18n="pf_devdetails_btn">Device details</button>
+        <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
     </main>
   </div>
@@ -251,10 +251,10 @@
   <!-- Emoji picker (shared by You and each opponent) -->
   <div class="pf-modal" id="pf-picker" hidden>
     <div class="pf-modal-scrim" data-picker-close></div>
-    <div class="pf-modal-card" role="dialog" aria-modal="true" aria-label="Choose an emoji">
+    <div class="pf-modal-card" role="dialog" aria-modal="true" aria-label="Choose an emoji" data-i18n-aria="pf_emoji_modal_h">
       <div class="pf-modal-head">
-        <strong>Choose an emoji</strong>
-        <button type="button" class="pf-x" data-picker-close aria-label="Close">&times;</button>
+        <strong data-i18n="pf_emoji_modal_h">Choose an emoji</strong>
+        <button type="button" class="pf-x" data-picker-close aria-label="Close" data-i18n-aria="pf_close_aria">&times;</button>
       </div>
       <div class="pf-emoji-grid" id="pf-emoji-grid"></div>
     </div>
@@ -263,11 +263,11 @@
   <!-- Reset confirm (reuses hub.css confirm styling) -->
   <div class="hub-confirm" id="pf-reset" hidden>
     <div class="hub-confirm-scrim" data-reset-cancel></div>
-    <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="Reset profile">
-      <p class="hub-confirm-msg">Reset your profile? This deletes your name, emoji, color, and opponents on this device.</p>
+    <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="Reset profile" data-i18n-aria="pf_reset_dialog_aria">
+      <p class="hub-confirm-msg" data-i18n="pf_reset_confirm_msg">Reset your profile? This deletes your name, emoji, color, and opponents on this device.</p>
       <div class="hub-confirm-actions">
-        <button type="button" class="hub-cbtn hub-cbtn-ghost" data-reset-cancel>Keep it</button>
-        <button type="button" class="hub-cbtn hub-cbtn-danger" id="pf-reset-confirm">Reset profile</button>
+        <button type="button" class="hub-cbtn hub-cbtn-ghost" data-reset-cancel data-i18n="pf_reset_keep">Keep it</button>
+        <button type="button" class="hub-cbtn hub-cbtn-danger" id="pf-reset-confirm" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
     </div>
   </div>
@@ -276,12 +276,12 @@
        shows it, and sends it to Matt automatically - nothing to copy or screenshot. -->
   <div class="pf-modal" id="pf-devdetails" hidden>
     <div class="pf-modal-scrim" data-dev-close></div>
-    <div class="pf-modal-card pf-dev-card" role="dialog" aria-modal="true" aria-label="Device details">
+    <div class="pf-modal-card pf-dev-card" role="dialog" aria-modal="true" aria-label="Device details" data-i18n-aria="pf_devdetails_dialog_aria">
       <div class="pf-modal-head">
-        <strong>Device details</strong>
-        <button type="button" class="pf-x" data-dev-close aria-label="Close">&times;</button>
+        <strong data-i18n="pf_devdetails_btn">Device details</strong>
+        <button type="button" class="pf-x" data-dev-close aria-label="Close" data-i18n-aria="pf_close_aria">&times;</button>
       </div>
-      <p class="pf-dev-status pending" id="pf-dev-status">Gathering...</p>
+      <p class="pf-dev-status pending" id="pf-dev-status" data-i18n="pf_dev_gathering">Gathering...</p>
       <p class="pf-dev-summary" id="pf-dev-summary"></p>
       <pre class="pf-dev-json" id="pf-dev-json"></pre>
     </div>
@@ -291,6 +291,19 @@
     import { loadProfile, saveProfile, clearProfile, newPlayerCode, canonicalizeCode } from '../js/profile-store.js';
     import * as net from '../js/stats-net.js';
     import { gatherDeviceReport, uploadDeviceReport } from '../js/device-report.js';
+    import { makeT, onLangChange } from '../js/i18n.js';
+    import STRINGS from '../js/strings.js';
+
+    const t = makeT(STRINGS);
+    // The one static-HTML surface in the hub (decision 4, HANDOFF-I18N-EXTRACTION.md): apply
+    // data-i18n / data-i18n-placeholder / data-i18n-aria on load and on every language switch.
+    function applyI18n() {
+      document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+      document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+    }
+    applyI18n();
+    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); });
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -305,16 +318,17 @@
       '🐢','🦄','🐙','🐝','🐧','🐨','🐵','🦖',
       '⛳','🏌️','🏓','🎾','🏸','⚽','🎮','🏆',
     ];
+    // Values (id / v) stay canonical; labels resolve through t() at render time.
     const COLORS = [
-      { id: 'yellow', label: 'Yellow', hex: '#F2B705', shape: 'circle' },
-      { id: 'blue',   label: 'Blue',   hex: '#1F5FA8', shape: 'triangle' },
-      { id: 'red',    label: 'Red',    hex: '#E0532F', shape: 'square' },
-      { id: 'green',  label: 'Green',  hex: '#178A7A', shape: 'diamond' },
+      { id: 'yellow', labelKey: 'pf_color_yellow', hex: '#F2B705', shape: 'circle' },
+      { id: 'blue',   labelKey: 'pf_color_blue',   hex: '#1F5FA8', shape: 'triangle' },
+      { id: 'red',    labelKey: 'pf_color_red',    hex: '#E0532F', shape: 'square' },
+      { id: 'green',  labelKey: 'pf_color_green',  hex: '#178A7A', shape: 'diamond' },
     ];
     const SKILLS = [
-      { v: 1, label: 'Beginner' },
-      { v: 2, label: 'Intermediate' },
-      { v: 3, label: 'Pro' },
+      { v: 1, labelKey: 'pf_skill_beginner' },
+      { v: 2, labelKey: 'pf_skill_intermediate' },
+      { v: 3, labelKey: 'pf_skill_pro' },
     ];
     const SHAPES = {
       circle: '<circle cx="12" cy="12" r="8"/>',
@@ -391,10 +405,10 @@
     // -- Colors ------------------------------------------------------------------
     function renderColors() {
       const none = `<button type="button" class="pf-swatch pf-swatch-none ${state.preferredColor === null ? 'is-selected' : ''}"
-          data-color="none"><span class="pf-none-mark" aria-hidden="true"></span>No preference</button>`;
+          data-color="none"><span class="pf-none-mark" aria-hidden="true"></span>${t('pf_color_none')}</button>`;
       els.colors.innerHTML = COLORS.map((c) =>
         `<button type="button" class="pf-swatch ${state.preferredColor === c.id ? 'is-selected' : ''}" data-color="${c.id}">
-           ${shapeSVG(c.shape, c.hex)}${c.label}
+           ${shapeSVG(c.shape, c.hex)}${t(c.labelKey)}
          </button>`).join('') + none;
     }
     els.colors.addEventListener('click', (ev) => {
@@ -409,16 +423,16 @@
     function renderOpps() {
       els.opps.innerHTML = state.opponents.map((o, i) => `
         <div class="pf-opp" data-i="${i}">
-          <button type="button" class="pf-emoji-btn sm" data-opp-emoji="${i}" aria-label="Choose opponent emoji">${o.emoji}</button>
+          <button type="button" class="pf-emoji-btn sm" data-opp-emoji="${i}" aria-label="${t('pf_opp_emoji_aria')}">${o.emoji}</button>
           <div class="pf-opp-main">
             <input class="pf-input pf-opp-name" data-opp-name="${i}" type="text" maxlength="20"
-                   value="${o.name.replace(/"/g, '&quot;')}" placeholder="Computer ${i + 1}" autocomplete="off">
-            <div class="pf-seg" role="group" aria-label="Skill for ${o.name.replace(/"/g, '&quot;')}">
+                   value="${o.name.replace(/"/g, '&quot;')}" placeholder="${t('pf_opp_placeholder', { n: i + 1 })}" autocomplete="off">
+            <div class="pf-seg" role="group" aria-label="${t('pf_skill_aria', { name: o.name.replace(/"/g, '&quot;') })}">
               ${SKILLS.map((s) => `<button type="button" data-opp-skill="${i}" data-v="${s.v}"
-                   class="${o.skill === s.v ? 'is-on' : ''}">${s.label}</button>`).join('')}
+                   class="${o.skill === s.v ? 'is-on' : ''}">${t(s.labelKey)}</button>`).join('')}
             </div>
           </div>
-          <button type="button" class="pf-remove" data-opp-remove="${i}" aria-label="Remove opponent">&times;</button>
+          <button type="button" class="pf-remove" data-opp-remove="${i}" aria-label="${t('pf_remove_opp_aria')}">&times;</button>
         </div>`).join('');
       els.addOpp.hidden = state.opponents.length >= 3;
     }
@@ -436,7 +450,7 @@
     });
     els.addOpp.addEventListener('click', () => {
       if (state.opponents.length >= 3) return;
-      state.opponents.push({ name: `Computer ${state.opponents.length + 1}`, emoji: '🤖', skill: 2 });
+      state.opponents.push({ name: t('pf_opp_placeholder', { n: state.opponents.length + 1 }), emoji: '🤖', skill: 2 });
       renderOpps();
       commitNow();
     });
@@ -449,12 +463,12 @@
     els.youName.addEventListener('change', async () => {
       const name = els.youName.value.trim();
       if (!name || name.toLowerCase() === prevName.toLowerCase()) { prevName = name; return; }
-      msg(els.nameMsg, 'Checking...');
+      msg(els.nameMsg, t('pf_msg_checking'));
       let status = 'offline';
       try { status = await net.usernameStatus(name, state.playerId); } catch { status = 'offline'; }
       if (status === 'taken') {
         els.youName.value = prevName; state.name = prevName; commitNow();
-        msg(els.nameMsg, 'Taken. Enter that player\'s code to use it.');
+        msg(els.nameMsg, t('pf_msg_taken'));
       } else {
         const old = prevName; prevName = name;
         msg(els.nameMsg, '');
@@ -466,14 +480,14 @@
     els.codeCopy.addEventListener('click', async () => {
       const c = state.playerId || '';
       if (!c) return;
-      try { await navigator.clipboard.writeText(c); msg(els.codeMsg, 'Copied ' + c); }
-      catch { msg(els.codeMsg, 'Long-press the code to copy.'); }
+      try { await navigator.clipboard.writeText(c); msg(els.codeMsg, t('pf_msg_copied', { code: c })); }
+      catch { msg(els.codeMsg, t('pf_msg_longpress')); }
     });
     els.codeLinkBtn.addEventListener('click', async () => {
       const c = canonicalizeCode(els.codeLink.value);
-      if (!c) { msg(els.codeMsg, 'Invalid code.'); return; }
-      if (c === state.playerId) { msg(els.codeMsg, 'Already linked to that code.'); return; }
-      msg(els.codeMsg, 'Linking...');
+      if (!c) { msg(els.codeMsg, t('pf_msg_invalid_code')); return; }
+      if (c === state.playerId) { msg(els.codeMsg, t('pf_msg_already_linked')); return; }
+      msg(els.codeMsg, t('pf_msg_linking'));
       // Adopt that player's name/emoji so this device joins as THEM (a blank name would normalize
       // to 'You' and, being newest, rename the whole player on the leaderboard).
       let owner = null;
@@ -483,7 +497,7 @@
       commitNow();
       hydrate();
       els.code.textContent = c; els.codeLink.value = '';
-      msg(els.codeMsg, 'Linked to ' + c + '. Stats will combine.');
+      msg(els.codeMsg, t('pf_msg_linked', { code: c }));
       try { net.claimUsername(state.name, c, ''); } catch { /* best-effort */ }
       try { net.syncMyStats(); } catch { /* best-effort */ }
     });
@@ -528,23 +542,23 @@
       elsDev.modal.hidden = false;
       elsDev.summary.textContent = '';
       elsDev.json.textContent = '';
-      setDevStatus('pending', 'Gathering device details...');
+      setDevStatus('pending', t('pf_dev_gathering_full'));
       let report;
       try {
         report = await gatherDeviceReport();
       } catch (e) {
-        setDevStatus('err', 'Could not gather device details: ' + (e && e.message ? e.message : e));
+        setDevStatus('err', t('pf_dev_gather_err', { msg: (e && e.message ? e.message : e) }));
         return;
       }
-      const name = (report.profile && report.profile.name) || '(no name set)';
+      const name = (report.profile && report.profile.name) || t('pf_dev_noname');
       const code = (report.profile && report.profile.playerId) || '—';
       elsDev.summary.innerHTML =
         `<b>${escHtml(name)}</b> &middot; device ${escHtml(report.deviceId.slice(0, 8))} &middot; code ${escHtml(code)}`;
       elsDev.json.textContent = JSON.stringify(report, null, 2);
-      setDevStatus('pending', 'Sending to Matt...');
+      setDevStatus('pending', t('pf_dev_sending'));
       const result = await uploadDeviceReport(report);
-      if (result.ok) setDevStatus('ok', 'Sent ✓ — nothing more to do here.');
-      else setDevStatus('err', 'Could not send (' + result.reason + ') — shown below, still saved on this device only.');
+      if (result.ok) setDevStatus('ok', t('pf_dev_sent_ok'));
+      else setDevStatus('err', t('pf_dev_send_err', { reason: result.reason }));
     });
 
     // -- Initial paint -----------------------------------------------------------
