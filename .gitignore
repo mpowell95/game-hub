@@ -15,3 +15,7 @@ HANDOFF.md
 
 # Reference screenshots of other apps (design reference only, not for the public repo)
 mancala/reference/
+
+# RTDB snapshots (backups/rtdb-backup.mjs). Real family data - every player's name, player code
+# and full stats - so the snapshots stay LOCAL. The script itself is tracked; its output never is.
+backups/*.json
