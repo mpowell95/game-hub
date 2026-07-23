@@ -16,14 +16,17 @@ import { newGame, legalMoves, applyMove, X, O } from './game.js';
 import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordTicTacToe, loadStats } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.tictactoe.v1';
 const AI_THINK_MS = 450;
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
-// new tier names here.
-const DIFFICULTIES = [['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['pro', 'Pro']];
-const DIFF_LABEL = Object.fromEntries(DIFFICULTIES);
+// new tier names here. Values (first element) stay canonical; labelKey resolves via t().
+const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
+const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);
 // Shared hub profile: opponent skill (1/2/3) maps 1:1 onto beginner/intermediate/pro.
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
@@ -124,7 +127,10 @@ class TicTacToeUI {
     if (!total) return '';
     const tt = (rec && rec.tt) || {};
     const c = tt.classic || {}, u = tt.ultimate || {};
-    return `${total} played · Classic ${c.won | 0}-${c.lost | 0}-${c.tied | 0} · Ultimate ${u.won | 0}-${u.lost | 0}-${u.tied | 0}`;
+    return t('stats_line', {
+      total, cw: c.won | 0, cl: c.lost | 0, ct: c.tied | 0,
+      uw: u.won | 0, ul: u.lost | 0, ut: u.tied | 0,
+    });
   }
 
   // --- DOM construction -------------------------------------------------------
@@ -156,24 +162,22 @@ class TicTacToeUI {
 
   _variantContent() {
     const s = this._setup;
-    return this._seg('set-variant', s.variant, [['classic', 'Classic'], ['ultimate', 'Ultimate']]) +
-      `<p class="ttt-hint">${s.variant === 'ultimate'
-        ? 'Nine 3x3 boards in one. The cell you play picks which board your opponent plays next.'
-        : 'The original: one 3x3 board, three in a row wins.'}</p>`;
+    return this._seg('set-variant', s.variant, [['classic', t('variant_classic')], ['ultimate', t('variant_ultimate')]]) +
+      `<p class="ttt-hint">${s.variant === 'ultimate' ? t('hint_variant_ultimate') : t('hint_variant_classic')}</p>`;
   }
 
   _diffContent() {
     const s = this._setup;
     const hint = s.difficulty === 'pro'
-      ? (s.variant === 'ultimate' ? 'Deep search under a time budget. Very tough to beat.' : 'Perfect play: the best you can do is draw.')
-      : s.difficulty === 'intermediate' ? 'Blocks your wins and thinks a little ahead.' : 'Mostly plays at random.';
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES) + `<p class="ttt-hint">${hint}</p>`;
+      ? (s.variant === 'ultimate' ? t('hint_diff_pro_ultimate') : t('hint_diff_pro_classic'))
+      : s.difficulty === 'intermediate' ? t('hint_diff_intermediate') : t('hint_diff_beginner');
+    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, t(k)])) + `<p class="ttt-hint">${hint}</p>`;
   }
 
   _firstContent() {
     const id = this._identity();
     const sel = this._setup.humanFirst ? 'you' : 'ai';
-    return this._seg('set-first', sel, [['you', 'You'], ['ai', esc(id.oppName)]]);
+    return this._seg('set-first', sel, [['you', t('you')], ['ai', esc(id.oppName)]]);
   }
 
   renderSetup() {
@@ -186,21 +190,21 @@ class TicTacToeUI {
     const s = this._setup;
     const stats = this._statsLine();
     this.shell.innerHTML = `
-      <h1 class="ttt-title">Tic Tac Toe</h1>
-      <p class="ttt-sub">Classic 3x3, or Ultimate: nine boards in one.</p>
+      <h1 class="ttt-title">${t('title')}</h1>
+      <p class="ttt-sub">${t('tagline')}</p>
       ${stats ? `<p class="ttt-stats">${esc(stats)}</p>` : ''}
       <div class="ttt-vscard">
         <div class="ttt-vsside"><span class="ttt-vsemoji">${esc(id.humanEmoji)}</span><span class="ttt-vsname">${esc(id.humanName)}</span></div>
-        <span class="ttt-vslabel">vs</span>
+        <span class="ttt-vslabel">${t('vs')}</span>
         <div class="ttt-vsside"><span class="ttt-vsemoji">${esc(id.oppEmoji)}</span><span class="ttt-vsname">${esc(id.oppName)}</span></div>
       </div>
       <div class="ttt-summary">
-        ${this._row('variant', 'Variant', s.variant === 'ultimate' ? 'Ultimate' : 'Classic', this._variantContent())}
-        ${this._row('difficulty', 'Difficulty', DIFF_LABEL[s.difficulty], this._diffContent())}
-        ${this._row('first', 'First move', s.humanFirst ? 'You' : id.oppName, this._firstContent())}
+        ${this._row('variant', t('row_variant'), s.variant === 'ultimate' ? t('variant_ultimate') : t('variant_classic'), this._variantContent())}
+        ${this._row('difficulty', t('row_difficulty'), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
+        ${this._row('first', t('row_first'), s.humanFirst ? t('you') : id.oppName, this._firstContent())}
       </div>
-      <button type="button" class="ttt-btn ttt-btn-primary" data-action="start">Start game</button>
-      <button type="button" class="ttt-link" data-action="help">How to play</button>`;
+      <button type="button" class="ttt-btn ttt-btn-primary" data-action="start">${t('start')}</button>
+      <button type="button" class="ttt-link" data-action="help">${t('howto')}</button>`;
   }
 
   // --- game screen --------------------------------------------------------
@@ -252,15 +256,15 @@ class TicTacToeUI {
   }
 
   _statusText(s, id) {
-    if (s.over) return s.isDraw ? 'Draw' : (s.winner === this.humanMark ? 'You win!' : `${id.oppName} wins`);
-    if (this.busy) return `${id.oppName} is thinking...`;
+    if (s.over) return s.isDraw ? t('draw') : (s.winner === this.humanMark ? t('you_win') : t('opp_wins', { opp: id.oppName }));
+    if (this.busy) return t('opp_thinking', { opp: id.oppName });
     if (s.turn === this.humanMark) {
       if (s.variant === 'ultimate') {
-        return s.forcedBoard === null ? 'Your turn: play in any highlighted board' : `Your turn: play in board ${s.forcedBoard + 1}`;
+        return s.forcedBoard === null ? t('your_turn_any_board') : t('your_turn_board', { n: s.forcedBoard + 1 });
       }
-      return 'Your turn';
+      return t('your_turn');
     }
-    return `${id.oppName}'s turn`;
+    return t('opp_turn', { opp: id.oppName });
   }
 
   _classicBoardHtml(s) {
@@ -271,12 +275,12 @@ class TicTacToeUI {
     const cellsHtml = s.board.map((mark, i) => {
       const r = Math.floor(i / 3) + 1, c = (i % 3) + 1;
       const live = canClickNow && legalSet.has(i);
-      const name = mark ? `Row ${r}, column ${c}, occupied by ${mark}` : `Row ${r}, column ${c}, empty`;
+      const name = mark ? t('cell_occupied_aria', { r, c, mark }) : t('cell_empty_aria', { r, c });
       return `<button type="button" class="ttt-cell ${live ? 'is-live' : ''} ${winSet.has(i) ? 'is-win' : ''}"
         data-action="cell" data-cell="${i}" data-mark="${mark || ''}" ${live ? '' : 'disabled'}
         aria-label="${name}">${mark || ''}</button>`;
     }).join('');
-    return `<div class="ttt-board" role="grid" aria-label="Tic Tac Toe board">${cellsHtml}</div>`;
+    return `<div class="ttt-board" role="grid" aria-label="${t('board_aria')}">${cellsHtml}</div>`;
   }
 
   _ultimateBoardHtml(s) {
@@ -295,13 +299,15 @@ class TicTacToeUI {
       else cls = playableBoards.has(b) ? 'is-forced' : 'is-dim';
 
       const overlayGlyph = owner === 'D' ? '–' : (owner || '');   // en dash: a drawn board's glyph, not em-dash punctuation
-      const label = `Board ${b + 1}${resolved ? (owner === 'D' ? ', drawn' : `, won by ${owner}`) : ''}`;
+      const label = resolved
+        ? (owner === 'D' ? t('sboard_drawn_aria', { n: b + 1 }) : t('sboard_won_aria', { n: b + 1, mark: owner }))
+        : t('sboard_aria', { n: b + 1 });
       const cellsHtml = cells.map((mark, c) => {
         const r = Math.floor(c / 3) + 1, col = (c % 3) + 1;
         const live = canClickNow && legalSet.has(`${b}:${c}`);
         const name = mark
-          ? `Board ${b + 1}, row ${r}, column ${col}, occupied by ${mark}`
-          : `Board ${b + 1}, row ${r}, column ${col}, empty`;
+          ? t('scell_occupied_aria', { n: b + 1, r, c: col, mark })
+          : t('scell_empty_aria', { n: b + 1, r, c: col });
         return `<button type="button" class="ttt-scell ${live ? 'is-live' : ''}"
           data-action="scell" data-board="${b}" data-cell="${c}" data-mark="${mark || ''}" ${live ? '' : 'disabled'}
           aria-label="${name}">${mark || ''}</button>`;
@@ -311,7 +317,7 @@ class TicTacToeUI {
       </div>`;
     }).join('');
 
-    return `<div class="ttt-uboard" role="grid" aria-label="Ultimate Tic Tac Toe board">${boardsHtml}</div>`;
+    return `<div class="ttt-uboard" role="grid" aria-label="${t('uboard_aria')}">${boardsHtml}</div>`;
   }
 
   renderGame() {
@@ -324,7 +330,7 @@ class TicTacToeUI {
         <div class="ttt-idchip ${!s.over && s.turn === this.humanMark ? 'is-turn' : ''}" data-mark="${this.humanMark}">
           <span>${esc(id.humanEmoji)}</span><span>${esc(id.humanName)}</span><span class="ttt-mark">${this.humanMark}</span>
         </div>
-        <span class="ttt-vsdash">vs</span>
+        <span class="ttt-vsdash">${t('vs')}</span>
         <div class="ttt-idchip ${!s.over && s.turn === this.aiMark ? 'is-turn' : ''}" data-mark="${this.aiMark}">
           <span class="ttt-mark">${this.aiMark}</span><span>${esc(id.oppName)}</span><span>${esc(id.oppEmoji)}</span>
         </div>
@@ -332,8 +338,8 @@ class TicTacToeUI {
       <p class="ttt-status" aria-live="polite">${esc(this._statusText(s, id))}</p>
       ${boardHtml}
       <div class="ttt-actions">
-        <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="help">How to play</button>
-        <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="change-settings">New game</button>
+        <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="help">${t('howto')}</button>
+        <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="change-settings">${t('new_game')}</button>
       </div>`;
   }
 
@@ -343,21 +349,21 @@ class TicTacToeUI {
     try { recordTicTacToe(s.variant, this._setup.difficulty, won); } catch { /* never block the result */ }
 
     const id = this._identity();
-    const title = s.isDraw ? 'Draw' : won ? 'You win!' : `${id.oppName} wins`;
+    const title = s.isDraw ? t('draw') : won ? t('you_win') : t('opp_wins', { opp: id.oppName });
     const emoji = s.isDraw ? '🤝' : won ? '🏆' : id.oppEmoji;
     const overlay = document.createElement('div');
     overlay.className = 'ttt-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
       <div class="ttt-scrim"></div>
-      <div class="ttt-card" role="dialog" aria-modal="true" aria-label="Game over">
-        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="Close">&times;</button>
+      <div class="ttt-card" role="dialog" aria-modal="true" aria-label="${t('game_over')}">
+        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <span class="ttt-card-emoji">${esc(emoji)}</span>
         <h3 class="ttt-card-title">${esc(title)}</h3>
-        <p class="ttt-card-sub">${s.variant === 'ultimate' ? 'Ultimate' : 'Classic'} &middot; ${DIFF_LABEL[this._setup.difficulty]}</p>
+        <p class="ttt-card-sub">${s.variant === 'ultimate' ? t('variant_ultimate') : t('variant_classic')} &middot; ${t(DIFF_LABEL_KEY[this._setup.difficulty])}</p>
         <div class="ttt-card-actions">
-          <button type="button" class="ttt-btn ttt-btn-primary" data-action="rematch">Play again</button>
-          <button type="button" class="ttt-btn ttt-btn-ghost" data-action="change-settings">Change settings</button>
+          <button type="button" class="ttt-btn ttt-btn-primary" data-action="rematch">${t('play_again')}</button>
+          <button type="button" class="ttt-btn ttt-btn-ghost" data-action="change-settings">${t('change_settings')}</button>
         </div>
       </div>`;
     this.root.appendChild(overlay);
@@ -370,7 +376,7 @@ class TicTacToeUI {
    *  shown with its own 3x3 grid and a marked cell, an arrow to the matching
    *  board. Colors ride on top of shape (mark, outline, arrow), never alone. */
   _forcedBoardDiagram() {
-    return `<svg class="ttt-diagram" viewBox="0 0 224 224" role="img" aria-label="Playing the top-right cell of a board sends your opponent to the top-right board">
+    return `<svg class="ttt-diagram" viewBox="0 0 224 224" role="img" aria-label="${t('help_diagram_aria')}">
       <defs>
         <marker id="ttt-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--ttt-gold)"/>
@@ -403,15 +409,15 @@ class TicTacToeUI {
     overlay.dataset.role = 'help';
     overlay.innerHTML = `
       <div class="ttt-scrim" data-action="close-overlay"></div>
-      <div class="ttt-card ttt-help" role="dialog" aria-modal="true" aria-label="How to play">
-        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="Close">&times;</button>
-        <h3 class="ttt-card-title">How to play</h3>
-        <p class="ttt-help-lead">Win the big board to win the game.</p>
+      <div class="ttt-card ttt-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
+        <h3 class="ttt-card-title">${t('howto')}</h3>
+        <p class="ttt-help-lead">${t('help_lead')}</p>
         <div class="ttt-diagram-wrap">${this._forcedBoardDiagram()}</div>
         <div class="ttt-help-lines">
-          <p class="ttt-help-caption">Your move determines the next board.</p>
-          <p class="ttt-help-example">Play top right box = Opponent plays top right board</p>
-          <p class="ttt-help-rule">Sent to a completed mini-board = play on any live board.</p>
+          <p class="ttt-help-caption">${t('help_caption')}</p>
+          <p class="ttt-help-example">${t('help_example')}</p>
+          <p class="ttt-help-rule">${t('help_rule')}</p>
         </div>
       </div>`;
     this.root.appendChild(overlay);

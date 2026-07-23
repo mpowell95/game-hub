@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v173';
+const CACHE = 'game-hub-v176';
 
 const ASSETS = [
   './',
@@ -115,6 +115,7 @@ const ASSETS = [
   './tic-tac-toe/js/ui.js',
   './tic-tac-toe/js/game.js',
   './tic-tac-toe/js/ai.js',
+  './tic-tac-toe/js/strings.js',
   // Dots and Boxes module
   './dots-boxes/',
   './dots-boxes/index.html',

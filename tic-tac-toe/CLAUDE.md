@@ -14,6 +14,10 @@ Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate**
 The How-to-play screen pattern in the root CLAUDE.md was worked out on this game;
 `openHelp()` in `js/ui.js` is its reference implementation.
 
+i18n: `tic-tac-toe/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Variant keys
+(`classic`/`ultimate`), difficulty keys (`beginner`/`intermediate`/`pro`), and marks (`X`/`O`) stay
+canonical; only their display labels translate.
+
 ---
 
 ## How-to-play screens — the repo-wide pattern (worked out here, 2026-07-21)
