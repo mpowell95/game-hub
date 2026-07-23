@@ -19,26 +19,29 @@ import {
 import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.mancala.v1';
 const GAME_KEY = 'gamehub.mancala.game.v1';   // the one in-progress game (see saveGame)
 
 const LEVELS = [
-  { level: 1, key: 'beginner', label: 'Beginner' },
-  { level: 2, key: 'intermediate', label: 'Intermediate' },
-  { level: 3, key: 'pro', label: 'Pro' },
+  { level: 1, key: 'beginner', labelKey: 'diff_beginner' },
+  { level: 2, key: 'intermediate', labelKey: 'diff_intermediate' },
+  { level: 3, key: 'pro', labelKey: 'diff_pro' },
 ];
 const LEVEL_KEY = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 // Short difficulty word for the compact in-game chip (the setup screen keeps the
 // full Beginner/Intermediate/Pro tier names). These are the same tiers, just the
 // space-saving synonym, so the score bar never has to truncate a player's name.
-const CHIP_LABEL = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
+const CHIP_LABEL_KEY = { 1: 'chip_easy', 2: 'chip_medium', 3: 'chip_hard' };
 
 // Animation speed. 'slow' doubles every duration/stagger (half speed) for a
 // calmer pace over a full game; 'normal' is the default.
 const SPEEDS = [
-  { key: 'normal', label: 'Normal' },
-  { key: 'slow', label: 'Relaxed' },
+  { key: 'normal', labelKey: 'speed_normal' },
+  { key: 'slow', labelKey: 'speed_slow' },
 ];
 
 // The bot's default identity. The hub's other games give the AI a real name +
@@ -293,15 +296,15 @@ class MancalaUI {
             </span>
             <span class="mc-logo-store mc-logo-store--p1"></span>
           </div>
-          <h2 class="mc-title">Mancala</h2>
-          <p class="mc-sub">Sow stones counterclockwise. Bank the most in your mancala.</p>
+          <h2 class="mc-title">${t('title')}</h2>
+          <p class="mc-sub">${t('tagline')}</p>
 
           <div class="mc-vscard">
             <div class="mc-vsside">
               <span class="mc-vsemoji">${esc(this.humanEmoji)}</span>
               <span class="mc-vsname">${esc(this.humanName)}</span>
             </div>
-            <span class="mc-vslabel">vs</span>
+            <span class="mc-vslabel">${t('vs')}</span>
             <div class="mc-vsside" data-role="vs-opp">
               <span class="mc-vsemoji">${esc(this.botEmoji)}</span>
               <span class="mc-vsname">${esc(this.botName)}</span>
@@ -309,31 +312,31 @@ class MancalaUI {
           </div>
 
           <div class="mc-field">
-            <span class="mc-fieldlabel" id="mc-difflabel">Difficulty</span>
+            <span class="mc-fieldlabel" id="mc-difflabel">${t('difficulty')}</span>
             <div class="mc-seg" role="radiogroup" aria-labelledby="mc-difflabel">
               ${LEVELS.map((l) => `
                 <button type="button" class="mc-segbtn${l.level === this.level ? ' is-active' : ''}"
                   data-action="level" data-level="${l.level}" role="radio"
-                  aria-checked="${l.level === this.level}">${l.label}</button>`).join('')}
+                  aria-checked="${l.level === this.level}">${t(l.labelKey)}</button>`).join('')}
             </div>
           </div>
 
           <div class="mc-field">
-            <span class="mc-fieldlabel" id="mc-speedlabel">Animation speed</span>
+            <span class="mc-fieldlabel" id="mc-speedlabel">${t('anim_speed')}</span>
             <div class="mc-seg" role="radiogroup" aria-labelledby="mc-speedlabel">
               ${SPEEDS.map((s) => `
                 <button type="button" class="mc-segbtn${s.key === this.speed ? ' is-active' : ''}"
                   data-action="speed" data-speed="${s.key}" role="radio"
-                  aria-checked="${s.key === this.speed}">${s.label}</button>`).join('')}
+                  aria-checked="${s.key === this.speed}">${t(s.labelKey)}</button>`).join('')}
             </div>
           </div>
 
           ${paused ? `
-          <button type="button" class="mc-primary" data-action="resume">Resume game</button>
-          <p class="mc-resumenote">Starting a new game below ends it.</p>` : ''}
-          <button type="button" class="${paused ? 'mc-secondary' : 'mc-primary'}" data-action="start-bot">Play vs ${esc(this.botName)}</button>
-          <button type="button" class="mc-secondary" data-action="start-friend">Two players</button>
-          <button type="button" class="mc-ghost" data-action="help">How to play</button>
+          <button type="button" class="mc-primary" data-action="resume">${t('resume_game')}</button>
+          <p class="mc-resumenote">${t('resume_note')}</p>` : ''}
+          <button type="button" class="${paused ? 'mc-secondary' : 'mc-primary'}" data-action="start-bot">${t('play_vs', { name: esc(this.botName) })}</button>
+          <button type="button" class="mc-secondary" data-action="start-friend">${t('two_players')}</button>
+          <button type="button" class="mc-ghost" data-action="help">${t('howto')}</button>
         </div>
       </div>`;
   }
@@ -348,8 +351,8 @@ class MancalaUI {
       };
     }
     return {
-      p1: { name: this.hasProfileName ? this.humanName : 'Player 1', emoji: this.humanEmoji },
-      p2: { name: 'Player 2', emoji: '👥' },
+      p1: { name: this.hasProfileName ? this.humanName : t('player_1'), emoji: this.humanEmoji },
+      p2: { name: t('player_2'), emoji: '👥' },
     };
   }
 
@@ -372,7 +375,7 @@ class MancalaUI {
     // opening move just appears, and a game you open looks identical to one
     // where the turn never alternated.
     const n = this.names();
-    this.toast(starter === P1 && this.mode === 'bot' ? 'You start' : `${n[starter === P1 ? 'p1' : 'p2'].name} starts`);
+    this.toast(starter === P1 && this.mode === 'bot' ? t('you_start') : t('name_starts', { name: n[starter === P1 ? 'p1' : 'p2'].name }));
     // When the opponent opens, hand them the first move.
     if (this.mode === 'bot' && starter === P2) this.botTurn();
   }
@@ -398,13 +401,13 @@ class MancalaUI {
 
   renderGame() {
     const n = this.names();
-    const chip = this.mode === 'bot' ? CHIP_LABEL[this.level] : '2 Players';
+    const chip = this.mode === 'bot' ? t(CHIP_LABEL_KEY[this.level]) : t('chip_two_players');
 
     // Portrait sow order runs up the right column and down the left, so the
     // right column lists P2's pits bottom-up and the left column P1's top-down.
     const pitBtn = (i) => `
       <button type="button" class="mc-pit mc-pit--${ownerOf(i) === P1 ? 'p1' : 'p2'}"
-        data-pit="${i}" style="grid-area:p${i}" aria-label="Pit">
+        data-pit="${i}" style="grid-area:p${i}" aria-label="${t('pit_aria')}">
         <span class="mc-hole"></span>
         <span class="mc-count"><b class="mc-countnum" data-role="count-${i}">0</b></span>
       </button>`;
@@ -429,7 +432,7 @@ class MancalaUI {
               </div>
               <div class="mc-stones" data-role="stones" aria-hidden="true"></div>
               <div class="mc-think" data-role="think" hidden>
-                <span>${esc(n.p2.name)} thinking</span><span class="mc-dots"><i></i><i></i><i></i></span>
+                <span>${t('thinking', { name: esc(n.p2.name) })}</span><span class="mc-dots"><i></i><i></i><i></i></span>
               </div>
               <div class="mc-toast" data-role="toast" hidden></div>
             </div>
@@ -443,13 +446,13 @@ class MancalaUI {
           <p class="mc-status" data-role="status" aria-live="polite"></p>
 
           <footer class="mc-bar">
-            <button type="button" class="mc-ghost mc-small" data-action="help">Help</button>
+            <button type="button" class="mc-ghost mc-small" data-action="help">${t('help_short')}</button>
             <!-- Speed is togglable IN the game: changing it used to mean going out
                  to Setup, which threw the match away. Applies to the next move. -->
             <button type="button" class="mc-ghost mc-small" data-action="speed-toggle"
-              data-role="speedbtn" aria-label="Animation speed">${this.speed === 'slow' ? '½&times;' : '1&times;'}</button>
-            <button type="button" class="mc-ghost mc-small" data-action="restart">Restart</button>
-            <button type="button" class="mc-ghost mc-small" data-action="newgame">Setup</button>
+              data-role="speedbtn" aria-label="${t('anim_speed')}">${this.speed === 'slow' ? '½&times;' : '1&times;'}</button>
+            <button type="button" class="mc-ghost mc-small" data-action="restart">${t('restart')}</button>
+            <button type="button" class="mc-ghost mc-small" data-action="newgame">${t('setup')}</button>
           </footer>
         </div>
       </div>`;
@@ -623,7 +626,7 @@ class MancalaUI {
       el.disabled = !humanTurn || !live.has(i);
     }
     this.setStatus(s.over ? '' : humanTurn
-      ? (this.mode === 'friend' ? `${esc(this.names()[s.turn === P1 ? 'p1' : 'p2'].name)}'s turn` : 'Your turn')
+      ? (this.mode === 'friend' ? t('players_turn', { name: esc(this.names()[s.turn === P1 ? 'p1' : 'p2'].name) }) : t('your_turn'))
       : '');
   }
 
@@ -786,7 +789,7 @@ class MancalaUI {
       return;
     }
     if (events.extraTurn) {
-      this.toast('Extra turn');
+      this.toast(t('extra_turn'));
       this.pulseStore(storeOf(this.state.turn));
     }
     if (this.mode === 'bot' && this.state.turn === P2) this.botTurn();
@@ -823,15 +826,15 @@ class MancalaUI {
       try { recordResult('mancala', LEVEL_KEY[this.level], won); } catch { /* never block the result */ }
     }
     const title = this.mode === 'friend'
-      ? (won === null ? 'Draw' : `${esc(n[won ? 'p1' : 'p2'].name)} wins!`)
-      : (won === true ? 'You win!' : won === false ? `${esc(n.p2.name)} wins` : 'Draw');
+      ? (won === null ? t('draw') : t('name_wins', { name: esc(n[won ? 'p1' : 'p2'].name) }))
+      : (won === true ? t('you_win') : won === false ? t('opp_wins', { name: esc(n.p2.name) }) : t('draw'));
     const overlay = document.createElement('div');
     overlay.className = 'mc-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
       <div class="mc-scrim"></div>
-      <div class="mc-card" role="dialog" aria-modal="true" aria-label="Game over">
-        <button type="button" class="mc-x" data-action="close-overlay" aria-label="Close">&times;</button>
+      <div class="mc-card" role="dialog" aria-modal="true" aria-label="${t('game_over')}">
+        <button type="button" class="mc-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <span class="mc-card-emoji">${won === true ? '🏆' : won === false ? esc(n.p2.emoji) : '🤝'}</span>
         <h3 class="mc-card-title">${title}</h3>
         <p class="mc-card-score">
@@ -840,9 +843,9 @@ class MancalaUI {
           <span><b>${s.pits[P2_STORE]}</b> ${esc(n.p2.name)}</span>
         </p>
         <div class="mc-card-actions">
-          <button type="button" class="mc-primary" data-action="rematch">Play again</button>
-          <button type="button" class="mc-ghost" data-action="newgame">Change setup</button>
-          <button type="button" class="mc-ghost mc-small" data-action="close-overlay">View board</button>
+          <button type="button" class="mc-primary" data-action="rematch">${t('play_again')}</button>
+          <button type="button" class="mc-ghost" data-action="newgame">${t('change_setup')}</button>
+          <button type="button" class="mc-ghost mc-small" data-action="close-overlay">${t('view_board')}</button>
         </div>
       </div>`;
     this.container.querySelector('.mancala').appendChild(overlay);
@@ -852,34 +855,34 @@ class MancalaUI {
 
   openHelp() {
     this.closeOverlays();
-    const oppName = this.mode === 'friend' ? 'your opponent' : esc(this.botName);
+    const oppName = this.mode === 'friend' ? t('your_opponent') : esc(this.botName);
     const overlay = document.createElement('div');
     overlay.className = 'mc-overlay';
     overlay.dataset.role = 'help';
     overlay.innerHTML = `
       <div class="mc-scrim" data-action="close-overlay"></div>
-      <div class="mc-card mc-help" role="dialog" aria-modal="true" aria-label="How to play">
-        <button type="button" class="mc-x" data-action="close-overlay" aria-label="Close">&times;</button>
-        <h3 class="mc-card-title">How to play</h3>
+      <div class="mc-card mc-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="mc-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
+        <h3 class="mc-card-title">${t('howto')}</h3>
         <section>
-          <h4>The board</h4>
-          <p>Each player has six pits and a mancala (the long tray) that stores every stone they collect. You own the blue side; ${oppName} owns the red side.</p>
+          <h4>${t('help_board_h')}</h4>
+          <p>${t('help_board', { opp: oppName })}</p>
         </section>
         <section>
-          <h4>Your turn</h4>
-          <p>Tap one of your pits. All of its stones are picked up and sown counterclockwise, one per pit, including your own mancala. The opponent's mancala is skipped.</p>
+          <h4>${t('help_turn_h')}</h4>
+          <p>${t('help_turn')}</p>
         </section>
         <section>
-          <h4>Extra turn</h4>
-          <p>If the last stone lands in your mancala, you move again.</p>
+          <h4>${t('help_extra_h')}</h4>
+          <p>${t('help_extra')}</p>
         </section>
         <section>
-          <h4>Capture</h4>
-          <p>If the last stone lands in an empty pit on your side, you win that stone and every stone in the opposite pit.</p>
+          <h4>${t('help_capture_h')}</h4>
+          <p>${t('help_capture')}</p>
         </section>
         <section>
-          <h4>End of the game</h4>
-          <p>The game ends when all six pits on one side are empty. The other player keeps the stones left on their side. Most stones in the mancala wins.</p>
+          <h4>${t('help_end_h')}</h4>
+          <p>${t('help_end')}</p>
         </section>
       </div>`;
     this.container.querySelector('.mancala').appendChild(overlay);
@@ -929,7 +932,7 @@ class MancalaUI {
       this.speedFactor = this.speed === 'slow' ? 2 : 1;
       const label = this.container.querySelector('[data-role="speedbtn"]');
       if (label) label.innerHTML = this.speed === 'slow' ? '½&times;' : '1&times;';
-      this.toast(this.speed === 'slow' ? 'Relaxed' : 'Normal');
+      this.toast(this.speed === 'slow' ? t('speed_slow') : t('speed_normal'));
       this.persistSettings();
     } else if (action === 'resume') {
       const saved = loadGame();

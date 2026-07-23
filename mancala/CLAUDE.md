@@ -14,3 +14,8 @@ Kalah rules vs AI (3 tiers; Pro = iterative-deepening alpha-beta under a ~380ms 
 CSS: every rule is descendant-scoped under the root class `.mancala` (`.mancala .mc-x`) — the
 scoping-discipline reference for the repo, though the root class itself predates the `.xx-root`
 naming convention and stays as-is.
+
+i18n: `mancala/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty keys
+(`beginner`/`intermediate`/`pro`) and speed keys (`normal`/`slow`) stay canonical; only their
+display labels translate. `AI_ROSTER` names (Lucía, Diego, …) are proper names and are not routed
+through `t()`.
