@@ -96,10 +96,10 @@ console.log('=== Nuts & Bolts engine: headless tests ===\n');
   const before = JSON.stringify(game.stacks.map(colorsOf));
 
   const r1 = game.tryMove(0, 1); // destination full (locked single-color)
-  ok(r1.legal === false && r1.reason === 'That bolt is full', 'illegal: full destination reported full, got ' + r1.reason);
+  ok(r1.legal === false && r1.reason === 'full', 'illegal: full destination reported full, got ' + r1.reason);
 
   const r2 = game.tryMove(0, 2); // color mismatch
-  ok(r2.legal === false && r2.reason === "Colors don't match", 'illegal: mismatched color rejected, got ' + r2.reason);
+  ok(r2.legal === false && r2.reason === 'color-mismatch', 'illegal: mismatched color rejected, got ' + r2.reason);
 
   ok(JSON.stringify(game.stacks.map(colorsOf)) === before, 'illegal: board unchanged after rejected moves');
 }
@@ -201,7 +201,7 @@ console.log('=== Nuts & Bolts engine: headless tests ===\n');
   // excavate the hidden nut rather than being softlocked.
   const selectResult = game.select(0);
   ok(
-    selectResult.reason !== 'That bolt is locked',
+    selectResult.reason !== 'locked',
     'WP1 repro: a full-but-incomplete bolt must remain selectable (excavation), got reason=' + selectResult.reason
   );
   game.deselect();

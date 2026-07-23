@@ -15,6 +15,7 @@ const DICTS = [
   { name: 'mancala/js/strings.js', path: './mancala/js/strings.js' },
   { name: 'tic-tac-toe/js/strings.js', path: './tic-tac-toe/js/strings.js' },
   { name: 'dots-boxes/js/strings.js', path: './dots-boxes/js/strings.js' },
+  { name: 'nuts-bolts/js/strings.js', path: './nuts-bolts/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

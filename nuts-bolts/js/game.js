@@ -80,8 +80,8 @@ export class NutsBoltsGame {
     }
     if (this.selected === null) {
       const stack = this.stacks[index];
-      if (!stack.length) return { changed: false, reason: 'That bolt is empty' };
-      if (isBoltComplete(stack)) return { changed: false, reason: 'That bolt is locked' };
+      if (!stack.length) return { changed: false, reason: 'empty' };
+      if (isBoltComplete(stack)) return { changed: false, reason: 'locked' };
       this.selected = index;
       return { changed: true };
     }
@@ -103,19 +103,19 @@ export class NutsBoltsGame {
       return { legal: false, changed: true, reason: '' };
     }
     if (isBoltComplete(source)) {
-      return { legal: false, changed: false, reason: 'That bolt is locked' };
+      return { legal: false, changed: false, reason: 'locked' };
     }
     const run = topRun(source);
     if (run.length === 0) {
       this.selected = null;
-      return { legal: false, changed: true, reason: 'That bolt is empty' };
+      return { legal: false, changed: true, reason: 'empty' };
     }
     if (dest.length === CAP) {
-      return { legal: false, changed: false, reason: 'That bolt is full' };
+      return { legal: false, changed: false, reason: 'full' };
     }
     const destTop = dest.length ? dest[dest.length - 1].color : null;
     if (dest.length && destTop !== run.color) {
-      return { legal: false, changed: false, reason: "Colors don't match" };
+      return { legal: false, changed: false, reason: 'color-mismatch' };
     }
     const freeSpace = CAP - dest.length;
     const count = Math.min(run.length, freeSpace);

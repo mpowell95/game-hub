@@ -1,10 +1,21 @@
 import { NutsBoltsGame, getTopRun } from './game.js';
-import { CAP, PALETTE, isBoltComplete, TIER_ORDER, TIER_LABELS, TIER_DESCRIPTIONS } from './generator.js';
+import { CAP, PALETTE, isBoltComplete, TIER_ORDER } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordNutsBolts } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const STORAGE_KEY = 'gamehub.nutsbolts.v1';
-const COLOR_NAME = Object.fromEntries(PALETTE.map((p) => [p.key, p.name]));
+// generator.js's own TIER_LABELS/TIER_DESCRIPTIONS/PALETTE.name stay English (that file is a
+// pure, DOM-free engine module, same discipline as game.js/ai.js) — these local maps translate
+// the same keys for display instead.
+const TIER_LABEL_KEY = { easy: 'tier_easy', medium: 'tier_medium', hard: 'tier_hard', extraHard: 'tier_extra_hard' };
+const TIER_DESC_KEY = { easy: 'tier_desc_easy', medium: 'tier_desc_medium', hard: 'tier_desc_hard', extraHard: 'tier_desc_extra_hard' };
+const COLOR_NAME_KEY = Object.fromEntries(PALETTE.map((p) => [p.key, 'color_' + p.key]));
+// game.js returns storage-vocabulary reason codes (empty/locked/full/color-mismatch); this maps
+// them onto display text.
+const REASON_KEY = { empty: 'reason_empty', locked: 'reason_locked', full: 'reason_full', 'color-mismatch': 'reason_color_mismatch' };
 
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP = 10;
@@ -40,7 +51,7 @@ function esc(s) {
 }
 
 function pluralMoves(n) {
-  return `${n} move${n === 1 ? '' : 's'}`;
+  return t(n === 1 ? 'move_one' : 'move_other', { n });
 }
 
 // Boards range 5 to 17 bolts; three CSS size tiers, switched by one class on
@@ -217,15 +228,15 @@ class NutsBoltsUI {
     root.className = 'nb-root nb-menu';
     const cards = TIER_ORDER.map((tier) => `
       <button type="button" class="nb-tier-card" data-tier="${tier}">
-        <div class="nb-tier-name">${esc(TIER_LABELS[tier])}</div>
-        <div class="nb-tier-level">Level ${this.levels[tier]}</div>
-        <div class="nb-tier-desc">${esc(TIER_DESCRIPTIONS[tier])}</div>
+        <div class="nb-tier-name">${esc(t(TIER_LABEL_KEY[tier]))}</div>
+        <div class="nb-tier-level">${t('level_n', { n: this.levels[tier] })}</div>
+        <div class="nb-tier-desc">${esc(t(TIER_DESC_KEY[tier]))}</div>
       </button>
     `).join('');
     root.innerHTML = `
       <div class="nb-menu-header">
-        <h1>Nuts &amp; Bolts</h1>
-        <p>Choose a difficulty</p>
+        <h1>${t('title')}</h1>
+        <p>${t('tagline')}</p>
       </div>
       <div class="nb-tier-list">${cards}</div>
     `;
@@ -271,24 +282,24 @@ class NutsBoltsUI {
     root.className = 'nb-root';
     root.innerHTML = `
       <div class="nb-topbar">
-        <button type="button" class="nb-headerbtn" data-action="back-to-menu" aria-label="Back to difficulty menu">${ICON_BACK}</button>
+        <button type="button" class="nb-headerbtn" data-action="back-to-menu" aria-label="${t('back_to_menu_aria')}">${ICON_BACK}</button>
         <div class="nb-title">
           <span class="nb-eyebrow" data-role="tier-label"></span>
           <span class="nb-level-num" data-role="level"></span>
         </div>
-        <button type="button" class="nb-headerbtn" data-action="restart" aria-label="Restart">${ICON_RESTART}</button>
+        <button type="button" class="nb-headerbtn" data-action="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
       </div>
       <div class="nb-moves" data-role="moves"></div>
       <div class="nb-board" data-role="board"></div>
       <div class="nb-fx-layer" data-role="fx-layer"></div>
       <div class="nb-bottombar">
         <div class="nb-bottombtn-wrap">
-          <button type="button" class="nb-bottombtn" data-action="undo" aria-label="Undo">${ICON_UNDO}</button>
-          <span class="nb-bottombtn-label">Undo</span>
+          <button type="button" class="nb-bottombtn" data-action="undo" aria-label="${t('undo_aria')}">${ICON_UNDO}</button>
+          <span class="nb-bottombtn-label">${t('undo_label')}</span>
         </div>
         <div class="nb-bottombtn-wrap">
-          <button type="button" class="nb-bottombtn" data-action="help" aria-label="Help">${ICON_HELP}</button>
-          <span class="nb-bottombtn-label">Help</span>
+          <button type="button" class="nb-bottombtn" data-action="help" aria-label="${t('help_aria')}">${ICON_HELP}</button>
+          <span class="nb-bottombtn-label">${t('help_label')}</span>
         </div>
       </div>
       <div class="nb-toast" role="status" aria-live="polite" data-role="toast">
@@ -298,42 +309,42 @@ class NutsBoltsUI {
       <div class="nb-assist" role="status" aria-live="polite" data-role="assist" hidden></div>
       <div class="nb-overlay" data-role="restart-overlay" hidden>
         <div class="nb-confirm" data-role="restart-confirm">
-          <p>Restart this level? Your moves will be lost.</p>
+          <p>${t('restart_confirm_msg')}</p>
           <div class="nb-panel-actions">
-            <button type="button" class="nb-btn" data-action="restart-cancel">Cancel</button>
-            <button type="button" class="nb-btn nb-btn-primary" data-action="restart-confirm">Restart</button>
+            <button type="button" class="nb-btn" data-action="restart-cancel">${t('cancel')}</button>
+            <button type="button" class="nb-btn nb-btn-primary" data-action="restart-confirm">${t('restart')}</button>
           </div>
         </div>
       </div>
       <div class="nb-overlay" data-role="win-overlay" hidden>
         <div class="nb-panel">
-          <button type="button" class="nb-panel-close" data-action="close-win" aria-label="Close">&times;</button>
+          <button type="button" class="nb-panel-close" data-action="close-win" aria-label="${t('close_aria')}">&times;</button>
           <div class="nb-win-flash" data-role="win-flash"></div>
           <div class="nb-confetti-layer" data-role="confetti"></div>
           <h2 data-role="win-title"></h2>
           <p data-role="win-detail"></p>
           <div class="nb-panel-actions">
-            <button type="button" class="nb-btn nb-btn-primary" data-action="next-level">Next level</button>
+            <button type="button" class="nb-btn nb-btn-primary" data-action="next-level">${t('next_level')}</button>
           </div>
         </div>
       </div>
       <div class="nb-overlay" data-role="help-overlay" hidden>
         <div class="nb-panel">
-          <button type="button" class="nb-panel-close" data-action="close-help" aria-label="Close">&times;</button>
-          <h2>How to play</h2>
+          <button type="button" class="nb-panel-close" data-action="close-help" aria-label="${t('close_aria')}">&times;</button>
+          <h2>${t('howto')}</h2>
           <div class="nb-help-body">
             <ul>
-              <li>Tap a bolt to select its top group of same-colored nuts.</li>
-              <li>Tap another bolt to move them there. They only move onto an empty bolt or onto a matching color, and only if there's room.</li>
-              <li>Fill each bolt with a single color to complete it. A completed bolt locks.</li>
-              <li>Some levels have hidden nuts (shown with a "?"). Their color is revealed once they reach the top.</li>
-              <li>Undo is free and unlimited.</li>
-              <li>Press and hold a bolt to hear its colors by name.</li>
-              <li>Harder levels repeat colors: three orange bolts means twelve orange nuts.</li>
+              <li>${t('help_li_1')}</li>
+              <li>${t('help_li_2')}</li>
+              <li>${t('help_li_3')}</li>
+              <li>${t('help_li_4')}</li>
+              <li>${t('help_li_5')}</li>
+              <li>${t('help_li_6')}</li>
+              <li>${t('help_li_7')}</li>
             </ul>
           </div>
           <div class="nb-panel-actions">
-            <button type="button" class="nb-btn nb-btn-primary" data-action="close-help">OK</button>
+            <button type="button" class="nb-btn nb-btn-primary" data-action="close-help">${t('ok')}</button>
           </div>
         </div>
       </div>
@@ -423,8 +434,8 @@ class NutsBoltsUI {
   }
 
   updateTopbar(pulseMoves) {
-    this.root.querySelector('[data-role="tier-label"]').textContent = TIER_LABELS[this.currentDifficulty] || '';
-    this.root.querySelector('[data-role="level"]').textContent = `Level ${this.game.level}`;
+    this.root.querySelector('[data-role="tier-label"]').textContent = t(TIER_LABEL_KEY[this.currentDifficulty]) || '';
+    this.root.querySelector('[data-role="level"]').textContent = t('level_n', { n: this.game.level });
     const movesEl = this.root.querySelector('[data-role="moves"]');
     movesEl.textContent = pluralMoves(this.game.moves);
     if (pulseMoves) {
@@ -447,7 +458,7 @@ class NutsBoltsUI {
       bolt.dataset.index = String(index);
       bolt.setAttribute('role', 'button');
       bolt.setAttribute('tabindex', '0');
-      bolt.setAttribute('aria-label', `Bolt ${index + 1}`);
+      bolt.setAttribute('aria-label', t('bolt_aria', { n: index + 1 }));
       bolt.innerHTML = '<div class="nb-bolt-rod"></div><div class="nb-bolt-dome"></div><div class="nb-bolt-stack"></div><div class="nb-bolt-badge">&#10003;</div>';
       const stackEl = bolt.querySelector('.nb-bolt-stack');
 
@@ -551,8 +562,8 @@ class NutsBoltsUI {
 
     const result = this.game.select(index);
     if (result.reason) {
-      const chipColor = result.reason === "Colors don't match" ? attemptColor : null;
-      this.showToast(result.reason, chipColor);
+      const chipColor = result.reason === 'color-mismatch' ? attemptColor : null;
+      this.showToast(t(REASON_KEY[result.reason]) || result.reason, chipColor);
       // Shake the bolt just tapped: for a select-time rejection that's the
       // attempted source, for an illegal move attempt it's the destination,
       // so feedback always points at whichever bolt the player just touched.
@@ -700,8 +711,8 @@ class NutsBoltsUI {
       try { recordNutsBolts(this.game.level, this.game.moves, this.currentDifficulty); } catch { /* ignore */ }
     }
     const name = this.profile && this.profile.name;
-    const title = `Level ${this.game.level} complete`;
-    const detail = name ? `Nice one, ${esc(name)}! ${pluralMoves(this.game.moves)}.` : `${pluralMoves(this.game.moves)}.`;
+    const title = t('win_title', { n: this.game.level });
+    const detail = name ? t('win_detail_named', { name: esc(name), moves: pluralMoves(this.game.moves) }) : t('win_detail', { moves: pluralMoves(this.game.moves) });
     this.root.querySelector('[data-role="win-title"]').textContent = title;
     this.root.querySelector('[data-role="win-detail"]').innerHTML = detail;
     this.winOverlay.hidden = false;
@@ -774,7 +785,7 @@ class NutsBoltsUI {
     const groups = [];
     for (let i = stack.length - 1; i >= 0; i--) {
       const nut = stack[i];
-      const label = nut.hidden ? 'Hidden' : COLOR_NAME[nut.color];
+      const label = nut.hidden ? t('assist_hidden') : t(COLOR_NAME_KEY[nut.color]);
       const last = groups[groups.length - 1];
       if (last && last.label === label) last.count += 1;
       else groups.push({ label, count: 1, color: nut.hidden ? null : nut.color, hidden: nut.hidden });
@@ -783,20 +794,20 @@ class NutsBoltsUI {
     if (!groups.length) {
       const empty = document.createElement('div');
       empty.className = 'nb-assist-label';
-      empty.textContent = 'Empty bolt';
+      empty.textContent = t('empty_bolt');
       this.assistEl.appendChild(empty);
     } else {
       groups.forEach((g, i) => {
         const row = document.createElement('div');
         row.className = 'nb-assist-row';
         const prefix = document.createElement('span');
-        prefix.textContent = i === 0 ? 'Top:' : (i === groups.length - 1 && groups.length > 1 ? 'Base:' : '');
+        prefix.textContent = i === 0 ? t('assist_top') : (i === groups.length - 1 && groups.length > 1 ? t('assist_base') : '');
         const detail = document.createElement('span');
         detail.className = 'nb-assist-detail';
         const swatch = buildNutEl({ color: g.color, hidden: g.hidden });
         swatch.classList.add('nb-assist-swatch');
         const text = document.createElement('span');
-        text.textContent = `${g.label} x${g.count}`;
+        text.textContent = t('assist_count', { label: g.label, count: g.count });
         detail.append(swatch, text);
         row.append(prefix, detail);
         this.assistEl.appendChild(row);
