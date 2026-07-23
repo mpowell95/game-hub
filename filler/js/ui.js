@@ -14,25 +14,28 @@ import {
 import { chooseColor } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.filler.v1';
 
-// Index order matches the engine's color ids 0..5. `label` doubles as the
+// Index order matches the engine's color ids 0..5. `labelKey` doubles as the
 // accessible name; it names the shape too, so screen reader output is also
 // hue-independent.
 const COLOR_META = [
-  { key: 'yellow', label: 'Yellow circle' },
-  { key: 'blue', label: 'Blue triangle' },
-  { key: 'vermilion', label: 'Vermilion square' },
-  { key: 'teal', label: 'Teal diamond' },
-  { key: 'purple', label: 'Purple star' },
-  { key: 'pink', label: 'Pink cross' },
+  { key: 'yellow', labelKey: 'color_yellow' },
+  { key: 'blue', labelKey: 'color_blue' },
+  { key: 'vermilion', labelKey: 'color_vermilion' },
+  { key: 'teal', labelKey: 'color_teal' },
+  { key: 'purple', labelKey: 'color_purple' },
+  { key: 'pink', labelKey: 'color_pink' },
 ];
 
 const LEVELS = [
-  { level: 1, key: 'beginner', label: 'Beginner' },
-  { level: 2, key: 'intermediate', label: 'Intermediate' },
-  { level: 3, key: 'pro', label: 'Pro' },
+  { level: 1, key: 'beginner', labelKey: 'diff_beginner' },
+  { level: 2, key: 'intermediate', labelKey: 'diff_intermediate' },
+  { level: 3, key: 'pro', labelKey: 'diff_pro' },
 ];
 const LEVEL_KEY = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
@@ -124,12 +127,12 @@ class FillerUI {
   // --- shared bits -----------------------------------------------------------
 
   swatchHTML(color, cls = '') {
-    return `<span class="fl-swatch ${cls}" data-color="${color}" role="img" aria-label="${COLOR_META[color].label}"></span>`;
+    return `<span class="fl-swatch ${cls}" data-color="${color}" role="img" aria-label="${t(COLOR_META[color].labelKey)}"></span>`;
   }
 
   legendHTML() {
     return `<ul class="fl-legend">${COLOR_META.map((m, i) =>
-      `<li>${this.swatchHTML(i)}<span>${m.label}</span></li>`).join('')}</ul>`;
+      `<li>${this.swatchHTML(i)}<span>${t(m.labelKey)}</span></li>`).join('')}</ul>`;
   }
 
   // --- setup view ------------------------------------------------------------
@@ -143,15 +146,15 @@ class FillerUI {
           <div class="fl-logo" aria-hidden="true">
             ${[0, 2, 4, 1, 3].map((c) => `<span class="fl-swatch fl-logo-tile" data-color="${c}"></span>`).join('')}
           </div>
-          <h2 class="fl-title">Filler</h2>
-          <p class="fl-sub">Flood the board. Capture the majority.</p>
+          <h2 class="fl-title">${t('title')}</h2>
+          <p class="fl-sub">${t('tagline')}</p>
 
           <div class="fl-vscard">
             <div class="fl-vsside">
               <span class="fl-vsemoji">${esc(this.humanEmoji)}</span>
               <span class="fl-vsname">${esc(this.humanName)}</span>
             </div>
-            <span class="fl-vslabel">vs</span>
+            <span class="fl-vslabel">${t('vs')}</span>
             <div class="fl-vsside">
               <span class="fl-vsemoji">${esc(this.oppEmoji)}</span>
               <span class="fl-vsname">${esc(this.oppName)}</span>
@@ -159,17 +162,17 @@ class FillerUI {
           </div>
 
           <div class="fl-field">
-            <span class="fl-fieldlabel" id="fl-difflabel">Difficulty</span>
+            <span class="fl-fieldlabel" id="fl-difflabel">${t('difficulty')}</span>
             <div class="fl-seg" role="radiogroup" aria-labelledby="fl-difflabel">
               ${LEVELS.map((l) => `
                 <button type="button" class="fl-segbtn${l.level === this.level ? ' is-active' : ''}"
                   data-action="level" data-level="${l.level}" role="radio"
-                  aria-checked="${l.level === this.level}">${l.label}</button>`).join('')}
+                  aria-checked="${l.level === this.level}">${t(l.labelKey)}</button>`).join('')}
             </div>
           </div>
 
-          <button type="button" class="fl-primary" data-action="start">Start game</button>
-          <button type="button" class="fl-ghost" data-action="help">How to play</button>
+          <button type="button" class="fl-primary" data-action="start">${t('start')}</button>
+          <button type="button" class="fl-ghost" data-action="help">${t('howto')}</button>
         </div>
       </div>`;
   }
@@ -194,7 +197,7 @@ class FillerUI {
               <span class="fl-pemoji">${esc(this.humanEmoji)}</span>
               <span class="fl-pmeta">
                 <span class="fl-pname">${esc(this.humanName)}</span>
-                <span class="fl-pcount"><b data-role="count-1">1</b> tiles</span>
+                <span class="fl-pcount"><b data-role="count-1">1</b> ${t('tiles_suffix')}</span>
               </span>
               <span data-role="swatch-1">${this.swatchHTML(s.current[P1], 'fl-hudswatch')}</span>
             </div>
@@ -202,7 +205,7 @@ class FillerUI {
               <span data-role="swatch-2">${this.swatchHTML(s.current[P2], 'fl-hudswatch')}</span>
               <span class="fl-pmeta">
                 <span class="fl-pname">${esc(this.oppName)}</span>
-                <span class="fl-pcount"><b data-role="count-2">1</b> tiles</span>
+                <span class="fl-pcount"><b data-role="count-2">1</b> ${t('tiles_suffix')}</span>
               </span>
               <span class="fl-pemoji">${esc(this.oppEmoji)}</span>
             </div>
@@ -216,7 +219,7 @@ class FillerUI {
 
           <p class="fl-status" data-role="status" aria-live="polite"></p>
 
-          <div class="fl-board" role="img" aria-label="Filler board" data-role="board">
+          <div class="fl-board" role="img" aria-label="${t('board_aria')}" data-role="board">
             ${Array.from({ length: TILES }, (_, i) => `
               <span class="fl-tile" data-i="${i}" data-color="${s.colors[i]}">${
                 i === P1_START ? `<span class="fl-flag fl-flag-1">${esc(this.humanEmoji)}</span>`
@@ -224,15 +227,15 @@ class FillerUI {
               }</span>`).join('')}
           </div>
 
-          <div class="fl-colors" data-role="colors" aria-label="Pick a color">
+          <div class="fl-colors" data-role="colors" aria-label="${t('pick_color_aria')}">
             ${COLOR_META.map((m, i) => `
               <button type="button" class="fl-cbtn" data-action="pick" data-color="${i}"
-                aria-label="${m.label}"><span class="fl-hold" data-role="hold-${i}" hidden></span></button>`).join('')}
+                aria-label="${t(m.labelKey)}"><span class="fl-hold" data-role="hold-${i}" hidden></span></button>`).join('')}
           </div>
 
           <footer class="fl-bar">
-            <button type="button" class="fl-ghost fl-small" data-action="help">How to play</button>
-            <button type="button" class="fl-ghost fl-small" data-action="newgame">New game</button>
+            <button type="button" class="fl-ghost fl-small" data-action="help">${t('howto')}</button>
+            <button type="button" class="fl-ghost fl-small" data-action="newgame">${t('new_game')}</button>
           </footer>
         </div>
       </div>`;
@@ -259,8 +262,8 @@ class FillerUI {
 
     const status = q('[data-role="status"]');
     status.textContent = s.over
-      ? 'Game over'
-      : s.turn === P1 ? 'Your turn: pick a color' : `${this.oppName} is thinking...`;
+      ? t('game_over')
+      : s.turn === P1 ? t('your_turn') : t('opp_thinking', { opp: this.oppName });
 
     for (let i = 0; i < COLOR_META.length; i++) {
       const btn = q(`[data-action="pick"][data-color="${i}"]`);
@@ -336,14 +339,14 @@ class FillerUI {
     const won = s.winner === P1 ? true : s.winner === P2 ? false : null;
     try { recordResult('filler', LEVEL_KEY[this.level], won); } catch { /* never block the result */ }
 
-    const title = won === true ? 'You win!' : won === false ? `${esc(this.oppName)} wins` : 'Draw';
+    const title = won === true ? t('you_win') : won === false ? t('opp_wins', { opp: esc(this.oppName) }) : t('draw');
     const overlay = document.createElement('div');
     overlay.className = 'fl-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
       <div class="fl-scrim" data-action="close-overlay"></div>
-      <div class="fl-card" role="dialog" aria-modal="true" aria-label="Game over">
-        <button type="button" class="fl-x" data-action="close-overlay" aria-label="Close">&times;</button>
+      <div class="fl-card" role="dialog" aria-modal="true" aria-label="${t('game_over')}">
+        <button type="button" class="fl-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <span class="fl-card-emoji">${won === true ? '🏆' : won === false ? esc(this.oppEmoji) : '🤝'}</span>
         <h3 class="fl-card-title">${title}</h3>
         <p class="fl-card-score">
@@ -352,9 +355,9 @@ class FillerUI {
           <span><b>${s.counts[P2]}</b> ${esc(this.oppName)}</span>
         </p>
         <div class="fl-card-actions">
-          <button type="button" class="fl-primary" data-action="rematch">Play again</button>
-          <button type="button" class="fl-ghost" data-action="newgame">Change difficulty</button>
-          <button type="button" class="fl-ghost fl-small" data-action="close-overlay">View board</button>
+          <button type="button" class="fl-primary" data-action="rematch">${t('play_again')}</button>
+          <button type="button" class="fl-ghost" data-action="newgame">${t('change_difficulty')}</button>
+          <button type="button" class="fl-ghost fl-small" data-action="close-overlay">${t('view_board')}</button>
         </div>
       </div>`;
     this.container.querySelector('.filler').appendChild(overlay);
@@ -369,40 +372,40 @@ class FillerUI {
     overlay.dataset.role = 'help';
     overlay.innerHTML = `
       <div class="fl-scrim" data-action="close-overlay"></div>
-      <div class="fl-card fl-help" role="dialog" aria-modal="true" aria-label="How to play">
-        <button type="button" class="fl-x" data-action="close-overlay" aria-label="Close">&times;</button>
-        <h3 class="fl-card-title">How to play</h3>
+      <div class="fl-card fl-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="fl-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
+        <h3 class="fl-card-title">${t('howto')}</h3>
         <section>
-          <h4>Goal</h4>
-          <p>Capture more than half of the board: ${MAJORITY} of the ${TILES} tiles.</p>
+          <h4>${t('help_goal_h')}</h4>
+          <p>${t('help_goal', { majority: MAJORITY, tiles: TILES })}</p>
         </section>
         <section>
-          <h4>Setup</h4>
-          <p>You start from the bottom-left tile. ${esc(this.oppName)} starts from the top-right tile. You move first.</p>
+          <h4>${t('help_setup_h')}</h4>
+          <p>${t('help_setup', { opp: esc(this.oppName) })}</p>
         </section>
         <section>
-          <h4>Your turn</h4>
-          <p>Pick one of the six colors. Your whole territory changes to that color, and every tile of that color touching your territory joins it.</p>
+          <h4>${t('help_turn_h')}</h4>
+          <p>${t('help_turn')}</p>
         </section>
         <section>
-          <h4>Blocked colors</h4>
-          <p>You cannot pick your own current color or your opponent's current color, so you always choose from four options. Blocked buttons show who holds that color.</p>
+          <h4>${t('help_blocked_h')}</h4>
+          <p>${t('help_blocked')}</p>
         </section>
         <section>
-          <h4>End of the game</h4>
-          <p>The game ends when every tile is captured. Whoever holds more tiles wins.</p>
+          <h4>${t('help_end_h')}</h4>
+          <p>${t('help_end')}</p>
         </section>
         <section>
-          <h4>Tips</h4>
+          <h4>${t('help_tips_h')}</h4>
           <ul>
-            <li>Early on, pick the color that grabs the most tiles.</li>
-            <li>Watch where ${esc(this.oppName)} is spreading and pick colors that cut off their path.</li>
-            <li>Think a turn or two ahead: a capture now also changes which colors both of you can pick next.</li>
+            <li>${t('help_tip1')}</li>
+            <li>${t('help_tip2', { opp: esc(this.oppName) })}</li>
+            <li>${t('help_tip3')}</li>
           </ul>
         </section>
         <section>
-          <h4>Colors</h4>
-          <p>Every color has its own shape, so tiles are never told apart by hue alone.</p>
+          <h4>${t('help_colors_h')}</h4>
+          <p>${t('help_colors')}</p>
           ${this.legendHTML()}
         </section>
       </div>`;

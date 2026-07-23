@@ -11,6 +11,7 @@
 const DICTS = [
   { name: 'js/strings.js', path: './js/strings.js' },
   { name: 'snake/js/strings.js', path: './snake/js/strings.js' },
+  { name: 'filler/js/strings.js', path: './filler/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;
