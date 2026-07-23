@@ -1,12 +1,12 @@
 # Chinchón (`chinchon/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
-> never put at risk — the nine full rules are stated near the top of the root `CLAUDE.md`, which is always
-> loaded alongside this file. Settings keys, saves, and stats written by this game are governed by
+> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`, which is always
+> loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
 Hub integration: in-hub `module:`. No mid-game resume meaning for `isInProgress()` — see the
-games table below and the root CLAUDE.md's module-contract section for the two-meanings list.
+root CLAUDE.md's games table and module-contract section for the two-meanings list.
 
 ## Chinchón (`chinchon/`)
 
@@ -142,7 +142,7 @@ Run requires Node ≥22.7 (ESM syntax detection; there is no package.json).
 
 Chinchón: in-hub `module:` — Spanish rummy vs AI. No worker (light heuristic AI). See the rest of this file.
 
-## MP invariants (July 2026 hardening — full list + rationale in the root CLAUDE.md,
+## MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
 "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`)
 
 The Chinchón-side obligations: the engine decides the match end BEFORE emitting `roundScored` and

@@ -1,0 +1,424 @@
+# Shared modules (`js/`) — deep documentation
+
+> **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
+> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`,
+> which is always loaded alongside this file. The full rules with their rationale and incident
+> history are right below.
+
+Everything here was moved verbatim out of the root `CLAUDE.md` on 2026-07-24 so it loads only
+when a session actually works on these files. The root keeps the one-line module table and THE
+LAW itself; this file holds the depth.
+
+## THE LAW — the full working rules
+
+The law itself is Matt's, two sentences, stated in the root `CLAUDE.md`. The nine rules below
+were distilled from real incidents by working sessions (first codified 2026-07-19, commit
+`3898a53`, the night after the Ball Run migration made Matt's history invisible; grown since,
+one incident at a time). They are the enforcement detail behind the root's one-line versions.
+
+1. **Stored is not enough; data must stay VISIBLE.** To a player, history that no screen
+   shows IS deleted, even if the bytes sit safely in localStorage. Before shipping any
+   change to a data shape, list every UI surface that displays that data and every gate
+   that decides visibility (e.g. `br.runs > 0` filters in game-stats-ui.js and
+   leaderboard-ui.js), and prove each one still shows pre-change history.
+2. **Writes are additive, only.** Counters increment. Bests only ever improve
+   (`Math.max`). Nothing is ever zeroed, decremented, or overwritten with less. This
+   already holds everywhere in `js/game-stats.js`; keep it that way.
+
+   **Carve-out: THE LAW governs history and achievement data — data a player earned and
+   cannot recreate.** A user-controlled preference the player can restore in one tap
+   (e.g. launcher favorites, `js/favorites.js`) is not that. Removing a favorite is the
+   user's intent, not data loss, so `toggleFavorite` removing an id from
+   `gamehub.favorites.v1` does not violate rule 2. Do not invent a tombstone/soft-delete
+   scheme for this kind of data, and do not refuse to implement removal citing this rule —
+   the rule was never about preferences. If a future feature is ambiguous about which side
+   of this line it's on, ask: can the player recreate this state in one tap with no loss? If
+   yes, it's a preference, not history.
+3. **Migrations carry everything forward that CAN be carried.** Only genuinely
+   unit-incompatible values (e.g. meters vs obstacle counts) may be archived instead of
+   converted. Unit-agnostic data (play counts, totals, byDiff buckets, timestamps) always
+   survives into the live shape. Archived data goes under a clearly named legacy key and
+   is still SHOWN to the player, labeled honestly (see the "Best distance, before scoring
+   changed" table in game-stats-ui.js).
+4. **Never fabricate conversions.** If old and new metrics are incomparable, do not
+   invent numbers. Archive, display as legacy, start the new metric fresh.
+5. **Old keys are never deleted, never repurposed.** A shape change gets a new key or new
+   field names. Orphaned data is left in place.
+6. **No silent write failures.** Every storage write that matters either verifies by
+   re-reading what actually landed on disk, or at minimum logs loudly (`console.error`)
+   on failure. A swallowed `catch {}` around a data write is a bug. `persist()` in
+   game-stats.js and the flight recorder in ball-run/js/ui.js are the reference pattern:
+   log locally FIRST, then write the shared store, verify by fresh re-read, retry
+   unsynced entries on every app open.
+7. **Test migrations against real history, not fresh stores.** A migration test that
+   seeds a synthetic new-shape store proves nothing. Extract the actual old writer code
+   (`git show <old-commit>:js/game-stats.js`), have it write the store the way real
+   devices did, then load with current code and assert the data is intact AND visible.
+   Two incidents were declared "verified" on fresh-store tests before this rule existed.
+8. **When a player reports missing data, believe them.** Do not blame caches, incognito
+   mode, or user error until the code history has been fully replayed and ruled out. The
+   one time that order was reversed, the bug was real and the deflection made it worse.
+9. **A milestone is not done until CLAUDE.md reflects it.** This project's "team" is a
+   sequence of fresh AI sessions with no memory of each other; this file plus handoff notes
+   is their *entire* inherited context. Every convention that goes undocumented here gets
+   silently re-derived (and re-diverged) by the next session — three storage-key
+   generations, two setup-screen patterns, and three CSS root-class styles all trace back to
+   a session that shipped a convention without writing it down. If a milestone creates or
+   changes a convention (a new settings-key style, a new shared module, a new sync point
+   between duplicated code), updating this file for it is part of that milestone, not
+   follow-up work.
+
+---
+
+### Shared modules (`js/`)
+
+Everything below is imported by `hub.js` and/or the module games; a game's own `js/` files
+never appear here. This table is the part the old architecture diagram omitted almost
+entirely — keep it current when a module is added, split, or merged.
+
+| Module | Role |
+|---|---|
+| `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
+| `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
+| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle) — `tt`/`db`/`bg` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
+| `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
+| `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
+| `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
+| `js/game-stats-ui.js` | "My Stats" overlay; per-game tailored screens |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
+| `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
+| `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón and Escoba |
+| `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
+| `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
+| `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
+
+Firebase layer: one project (`js/firebase-config.js`), anonymous auth, RTDB rules
+`auth != null` (known-intentional, effectively open since anyone can sign in anonymously).
+Two client layers now share one bootstrap (`js/firebase-boot.js`, named app `'stats'`):
+`stats-net.js` and `net.js`. `js/challenge/challenge-net.js` boots Firebase's separate
+DEFAULT (unnamed) app and is untouched by the shared bootstrap — it was never part of the
+init race that motivated it. Node ownership is disciplined by convention: stats-net touches
+`players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
+nodes, device-report.js touches `deviceReports/` only (read of the first two, write of
+the third). Nothing enforces this but comments.
+
+---
+
+### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
+
+Chinchón and Escoba share one lockstep protocol over `js/net.js` (`rooms/<CODE>`: a
+seq-keyed move log, per-round `round` records, a `recovery` field). Both engines apply
+the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
+every applied remote move; the host is authoritative for desync recovery. Five
+invariants below each encode a real bug found and fixed by `test-mp-lockstep.mjs`
+(its [KNOWN-BUG PROBE] assertions are the regression tripwires — if one goes red, one
+of these came back):
+
+1. **Decide the match end BEFORE emitting `roundScored`.** Chinchón's engine announces
+   it as `payload.matchOver`; every MP gate keys on that field, never on
+   `this.game.winner` (null at that moment for points/rounds endings — gating on it
+   deadlocked the guest at every normal match end and silently skipped its stats
+   recording). Escoba's engine sets `winner` before emitting, so its `!winner` gate is
+   equivalent. Any new event-hook gate about "does the match continue" must use the
+   engine's pre-emit decision.
+2. **Transmitted snapshots carry device-RELATIVE `isHuman` flags.** A snapshot's flags
+   are the SENDER's perspective. Any receiver rebuilding from one (`_mpApplyRecovery`
+   in both ui.js files) must remap agents by SEAT (host = id 0, guest = id 1, fixed at
+   match start) and normalize the flags to itself. Trusting transmitted flags handed
+   the guest's human agent to the host's seat, which made recovery — the safety net
+   under everything else — unable to land.
+3. **`config.presetStockResets` is a shift()-consumed queue** (Chinchón only), never an
+   array indexed by the per-round `resetsUsed` counter; `_mpAwaitStockReset` proceeds
+   when ANY entry is queued. Index-based consumption replayed round 1's shuffle order
+   at round 2's first reset.
+4. **Autosave AFTER the MP bookkeeping for the same event.** Escoba's `'play'` hook
+   runs `_mpAfterPlay` (which advances `appliedSeq`) before `_saveSnapshot`, so the
+   save's `mp.seq` matches the play already inside its snapshot. Saving first put the
+   seq one low and every rejoin re-applied a move it already had.
+5. **A round-boundary snapshot (`midRound:false`) resumes with the NEXT round, scores
+   kept.** Chinchón's engine takes the `_resumeNextRound` branch in `playMatch()`
+   (never `initMatch()`, which zeroes every score — a THE-LAW-class loss when both
+   devices restored at once), and a restoring/recovering GUEST awaits the host's
+   published round record (`_mpAwaitNextRound`) before playing, in both games — the
+   next round's deck must come from the host, not a stale `presetDeck` or a local
+   shuffle.
+
+---
+
+## The leaderboard's rating model (2026-07-22)
+
+The Leaderboards overlay ranks people by a single 0-100 **rating** instead of by absolute wins.
+The maths lives in `js/leaderboard-rank.js` (pure, headless-testable) and the cross-game difficulty
+mapping in `js/difficulty-tiers.js`; `js/leaderboard-ui.js` is DOM only.
+
+**Everything here is a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>` are
+read-only to this feature — nothing is stored, migrated or normalized, so the whole model is
+reversible by editing those two modules and nothing else. Every rule applies identically to every
+player; there is no per-player special-casing anywhere in it.
+
+- **A draw counts as a win**, for every player, in every game. Derived at render time as
+  `wins = played - lost`, never stored. Rationale: against Tic Tac Toe's Classic Pro (unbeatable by
+  design) a draw is the best achievable result. It also makes records *reconcile* — before this, a
+  stored 2W/2L/10D record rendered as W-L `2-2` beside `14` plays and a `14%` win rate, three
+  numbers that contradicted each other. Losses clamp to `played`, so W + L === Plays holds even for
+  a malformed legacy record. Draws stay visible in their own right on **My Stats** (`tt`/`db`/`bg`
+  show explicit W/L/T) — that is the surface satisfying THE LAW rule 1 for the raw breakdown.
+- **Difficulty is weighted, never filtered.** `tierOf()` maps all four live vocabularies
+  (`beginner/intermediate/pro`, `easy/medium/hard/expert`, `extrahard`, `facil/normal/dificil`) onto
+  the profile's canonical 1-3 scale plus an optional tier 4 above Pro, weighted `0.8/1.0/1.25/1.5`.
+  Unmapped buckets (`unknown`, `legacy`) count at weight 1.0 and are shown as "Unrated" — dropping
+  them would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
+  **Do not change `normDiff`** — it is on the write path; this is a separate read-path mapping.
+- **`competitiveRating` = `min(1, wilson(p, nRaw) · avgW)`.** Two distinct uses of the weight, and
+  both are load-bearing: `p = Σ(wins·w)/Σ(played·w)` captures the player's own tier MIX and stays in
+  [0,1]; `avgW = Σ(played·w)/Σ(played)` captures the difficulty they play AT. **Weighting numerator
+  and denominator alone — the obvious formulation, and what the original spec said — cancels exactly
+  for anyone who plays a single tier** (10-5 on Pro and 10-5 on Beginner both give p = 0.667), which
+  would have made difficulty a silent no-op for the most common record shape. The `avgW` factor is
+  what makes it count; `test-leaderboard-rank.mjs` pins this.
+- Wilson's `n` is the RAW play count, never the weighted one: difficulty should move your *rate*,
+  not fake your *sample size*. Under 5 rated plays is flagged `provisional` (shown, not hidden).
+- **`soloRating` is achievement relative to the family**, because Ball Run and Nuts & Bolts have no
+  loss axis (they record `played`+`won`, never `lost`) and so cannot feed a win-rate model — a
+  Wilson score on zero losses trends to 1.0 with volume, which would let someone top the board by
+  grinding. Scored against the field maximum, then passed through the SAME Wilson discount as the
+  competitive side. **Known property, deliberately left as-is:** a relative ratio is 1.0 by
+  definition for whoever holds the field max, and in a game only one person plays that is them at
+  any sample size, so a solo leader still tends to outrank a mid competitive record. Wilson removes
+  the worst of it (a 12-level Nuts & Bolts record scored a flat **100** before that, topping a
+  22-match Chinchón record) but cannot discount a rate with no variance. If this reads wrong on the
+  real family board, **the lever is a solo-axis multiplier in `soloRating()`**, not the tests.
+- The two are blended **by play count**, so a mostly-competitive player's rating is mostly their
+  competitive score and a solo-only player still gets a real, comparable number. `—` when unrated.
+- **Everyone with any recorded play is listed.** The old board filtered `comp.played > 0`, which put
+  Ball Run / Nuts & Bolts-only players on NO main screen at all — stored but invisible, rule 1.
+  Their W-L cell shows a headline achievement (`Ball Run 61`) instead of a meaningless record.
+
+UI conventions worth keeping: two fixed segments (Standings / Games), never the old plays-sorted tab
+strip — it re-ordered itself between visits and anything past the fourth tab was undiscoverable.
+Games are alphabetical by title, matching the launcher. `table-layout: fixed` with widths declared on
+`thead th` (with fixed layout the FIRST row sets the columns — putting them on `tbody td` silently
+leaves every column an equal share) plus `white-space: nowrap` is what stops `15-3` wrapping onto two
+lines. Wide boards (Nuts & Bolts, Ball Run) get `is-wide` and scroll inside `.lb-tblwrap`, never the
+page body. The difficulty-mix bar is one hue varying only in LIGHTNESS, with a text `aria-label` —
+colorblind-safe, same rule as the rest of the repo.
+
+### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
+
+A player asked where their game history had gone: they were not on the leaderboard. The leaderboard
+was correct. Their data was intact on their own device and had **never reached Firebase at all**.
+
+`syncMyStats()` ended in a bare `catch { return false; }`, and `hub.js`'s `_syncStats()` called it
+without `await` inside another bare `catch {}`. So a device that could not mirror - offline, blocked
+anonymous auth, private browsing, a rejected write - failed **silently, every time, forever**. Nothing
+reported it: not the device, not the hub, not the leaderboard. The first signal anyone got was a
+person asking why they were missing. That is THE LAW rule 6 violated in the single place it matters
+most, and rule 1 as a consequence (history that reaches no screen reads as deleted).
+
+Now, per rule 6's own reference pattern:
+
+- **Every attempt is recorded locally** in `gamehub.syncHealth.v1`, readable via `syncHealth()`:
+  `{ ok, lastOkAt, lastErrAt, lastErr, localPlays, remotePlays }`. A silently-failing device can be
+  diagnosed **from that device** instead of by noticing a gap on someone else's board.
+- **Every failure path logs loudly** (`console.error`) and names the cost: how many local plays are
+  not mirrored, and that the history is still safe locally.
+- **The write is verified by a fresh re-read.** A resolved promise is not proof the data landed; the
+  check compares total plays that landed against total plays stored, and fails the sync if short.
+- **Retry on reconnect.** `hub.js` syncs on load, tab-hide, return-to-launcher, and now the `online`
+  event. `syncMyStats` mirrors the whole store every time, so any retry repairs a missed period.
+
+**Diagnosing "my history is missing" (do this before suspecting the leaderboard):** on the player's
+own device, open the hub and run `JSON.parse(localStorage['gamehub.syncHealth.v1'])`. `ok:false`, or
+`localPlays` well above `remotePlays`, means the data is fine locally and the SYNC is the problem.
+`gamehub.stats` is the source of truth and is never touched by any of this.
+
+**Known gap, not yet fixed:** the leaderboard lists only players with a profile name
+(`(g.name || '').trim()` in `leaderboard-ui.js`, predates the 2026-07-22 overhaul). Devices that
+recorded plays without ever setting a profile name are mirrored to Firebase but appear on no screen -
+16 plays across 9 devices as of 2026-07-22. That is stored-but-invisible, rule 1. Fixing it needs a
+display identity for a nameless device, which is a product decision, not just a filter change.
+
+### The Ana/Natalia correction (2026-07-23) — what was done, and how certain it actually is
+
+Ana and Natalia shared one physical device (`players/1f75ff86-...`, code `89N3N`, "Anita Bonita")
+for about a week before Natalia got her own phone. `js/game-stats.js` stores only running per-device
+totals, so every play either of them made landed in the same counters and **there is no per-play log
+to split them by.** Separately `usernames/natalia` held `{ code: "89N3N" }` — Ana's code — which is
+why Natalia's brand-new phone answered "Taken. Use that code instead." the first time she tried to
+claim her own name.
+
+**Root cause of the stale registry entry** (verified in code, still unfixed): `js/hub.js`'s
+first-run "fr-save" handler calls `claimUsername(name, code, '')` — a hardcoded empty *previous
+name*, so the gate can register a new name but can never release the one it replaces.
+`profile/index.html`'s rename flow passes the real previous name and releases correctly. The bug
+only fires when a device's local profile is reset and then re-claimed through the hub's gate rather
+than the profile page. `js/stats-net.js` already exports `adminReleaseUsername(name)` for exactly
+this repair; nothing in the UI calls it.
+
+**What was actually written** (`fix-natalia-record.mjs`, applied and verified):
+`players/660e7098-85cf-4293-96ad-888dabc50773` = Natalia, player code **`C5PXN`**, holding 8 plays;
+`usernames/natalia` repointed to `C5PXN`; the dev/test device `f8ad1b82-...` had `profile.name`
+cleared so its 4 plays stop showing as a "test" row on the board (the old name is archived to
+`profile.nameArchived`, **not** destroyed — a new, inert field, additive per rule 5).
+
+**Ana was deliberately not touched.** An earlier version of this plan subtracted Natalia's share from
+Ana's counters; Matt reversed it. So this was a pure ADDITION — no counter anywhere was decremented,
+which is why rules 2 and 4 hold by construction and there was never a moment where a play existed
+nowhere. **The accepted consequence: those 8 plays are now counted twice family-wide**, once inside
+Ana's blended row and once in Natalia's. That is a known, deliberate tradeoff, not an error to
+"fix" — and it is the strongest argument for the profile-code-keyed stats rework below.
+
+**How certain the split is — do not overstate this.** Only two of the eight have real evidence:
+
+| Attribution | Basis |
+|---|---|
+| Escoba 1 → Natalia | `escobaSettings.humanName: "Natalia"` and the in-progress `escobaSave` both name her (verified in that device's own Device Details report) |
+| Chinchón 2 → Ana (left in place) | `chinchonSettings.humanName: "Ana"` in the same report |
+| Boggle 1, Dots and Boxes 1, Filler 2, Mancala 1, Nuts & Bolts 1, Parchís 1 → Natalia | **No name tag exists.** Those games' settings keys carry no `humanName` field at all. Assigned by Matt's standing date rule (any play on that device between Natalia's 2026-07-18 username claim and the morning of 2026-07-22 is hers). **This is a policy decision, not a recovered fact.** |
+
+Even the two "firm" tags are the *last configured* value for that game, not per-play provenance.
+Two further gaps are known and unresolved, and any future work here must not paper over them:
+**Ball Run 8** was left with Ana on timing alone, with no firmer evidence; and **Connect Four shows
+zero plays ever** on every device tied to Ana despite the challenge system requiring real Connect
+Four losses by design — most likely `connect-four/js/ui.js`'s `_statsDisqualified` flag excluded
+them, which means **Ana's true lifetime total is higher than any counter can show.** Do not present
+any total built on this ledger as complete.
+
+**Prevention: done, same day.** See the next section — the store is now keyed by the active
+profile's player code, and the `claimUsername(name, code, '')` release bug above is fixed.
+
+### Whose stats are these — the per-player store split (2026-07-23)
+
+The structural fix for the incident above. The full rationale lives in `js/game-stats.js`'s
+"WHOSE stats these are" block; this is the summary and the rules a future session must not break.
+
+**One rule makes the whole change free for every device that already exists:** the FIRST player code
+ever seen on a device becomes its **owner** and keeps `gamehub.stats` and the `players/<deviceId>`
+node, exactly as before. **Nothing is migrated, copied, moved or re-keyed.** There is no migration to
+get wrong and no window where history is anywhere but where it already was, so THE LAW rules 1, 3 and
+5 hold *by construction* rather than by careful handling — which, given rule 7's history in this repo,
+was the whole point of choosing this shape over "copy the store into a new key".
+
+| Concept | Where |
+|---|---|
+| `gamehub.stats` | unchanged: the OWNER's store on that device (and the only store on a device with no player code) |
+| `gamehub.stats.p.<CODE>` | a second (third, …) player's own store on the same device |
+| `gamehub.stats.owner.v1` | `{ code, name, at }` — who owns the device's original store. Claimed once, by the first code seen |
+| `gamehub.stats.forks.v1` | append-only log of every additional player who has recorded here (`{code, at, prevKey, prevPlays}`). Diagnostic only; never pruned |
+| `statsKey()` / `statsId()` | the resolved local key and the `players/<id>` sync node. `statsId()` is `deviceId()` for the owner, `<deviceId>-<CODE>` for anyone else |
+
+- **No game's `recordX()` call site changed.** Every game already went through `loadStats()`/`persist()`,
+  so the resolution happens entirely inside `game-stats.js`. Keep it that way: a game that reaches for
+  a storage key directly re-opens exactly the hole this closed.
+- **`deviceId()` is still the multiplayer identity** (`net.js` rooms, `recordHeadToHead` opponents) —
+  that is genuinely per-device. Only the STATS node moved to `statsId()`. Callers updated:
+  `stats-net.js`, `game-stats-ui.js`, `leaderboard-ui.js`, `device-report.js`.
+- **The device-wide legacy stores (`chinchon-stats`, `bd-stats`) belong to the owner and are never
+  folded into a forked store** — that would hand a second player the first player's history, the exact
+  blending this prevents. `latchLegacyGuards`/`latchChinchonSeed` set the fold-once guards without
+  folding. The legacy keys themselves are untouched (rule 5).
+- **`js/game-stats-global.js` (and its verbatim-after-header BD copy (enforced by `test-recorder-contract.mjs`)) resolves the same key**, read-only: it
+  never claims ownership, because it is a secondary writer. When no owner is recorded it uses the
+  device-wide store, which is what the ES-module recorder does at the moment it claims — so the two
+  always agree. This is a fourth must-stay-synced point between the two recorders.
+- **`js/hub.js`'s first-run gate** reuses the owner's code when the name typed matches the owner's own
+  name (the same person setting up again after losing their profile — minting a new code would fork
+  them from their own history) and mints a fresh one otherwise (a different name is a different
+  person). It also now passes the real previous name to `claimUsername`.
+
+**Known gap, stated honestly:** if the SAME person loses their profile and is issued a brand-new code
+under a DIFFERENT name, they fork away from their own history. The old store is untouched on disk and
+the old node untouched in Firebase, and `players-agg.js` unions devices by name as well as by code, so
+My Stats and the leaderboard still show everything whenever the device is online; offline, the local
+view would show only the new store. Closing it completely means asking the player who they are, which
+is a product decision, not a storage one.
+
+`test-stats-identity.mjs` is the regression suite, and its rule 7 fixture is the real, unedited store
+read out of `players/1f75ff86-...` — the actual device the incident happened on.
+
+### Head-to-head capture
+
+`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a new top-level
+`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. **Capture only — nothing displays
+it yet, and that is deliberate.** The opponent's identity only exists while the multiplayer room is
+live: Chinchón and Escoba both knew exactly who they had just played (`_mpNewState` accepted the
+room participant as a parameter and then *discarded* it) and threw it away at match end, so every MP
+match played before 2026-07-22 is permanently unrecoverable. Both now store it on `this.mp.opp`,
+refresh it from the live room in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and
+record it in `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by
+construction, and `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+
+---
+
+---
+
+## The shared profile — contract and consumers
+
+The summary and the defaults-only rule live in the root `CLAUDE.md` ("The shared profile");
+this is the full detail.
+
+### Contract (`localStorage["gamehub.profile"]`)
+
+```js
+{ version:1, name, emoji, preferredColor:"yellow"|"blue"|"red"|"green"|null,
+  opponents:[{name, emoji, skill:1|2|3}], updatedAt }
+```
+
+- **The profile page is the primary writer; games stay read-only consumers.** One
+  documented exception: `js/hub.js`'s first-run gate (name-or-code prompt) also calls
+  `saveProfile()` to adopt a linked owner's name/emoji and mint/attach a `playerId` — this
+  predates the "only the profile page writes it" wording in an earlier version of this file,
+  which was simply stale. If you add another writer, update this line again rather than
+  letting it drift back out of sync with the code.
+- Readers **try/catch** and treat missing or malformed data as "no profile", falling back silently to
+  built-in defaults. A profile must never crash a game.
+- **Extend additively; never rename fields.** `skill` tolerates a future 4; the UI emits 1-3.
+
+### `js/profile-store.js`
+
+ES module: `loadProfile()` returns a validated object or `null`; `saveProfile(p)` normalizes and stamps
+`version`/`updatedAt`; `clearProfile()` deletes the key. In-hub module games `import` it directly;
+single-file or non-ESM games (Monopoly Deal, Parchís) inline the small read-only subset, kept in sync
+with this contract.
+
+### Monopoly Deal's must-stay-synced duplicates
+
+Monopoly Deal is global-JS, not ESM (a deliberate, bounded exception — see its games-table
+row), so it can't `import` the shared modules directly. It carries three small inlined/copied
+pieces that must be kept in sync by hand whenever their canonical source changes:
+
+1. **Profile reader** (`business-deal/js/ui.js`, near the top): a read-only subset of
+   `profile-store.js`'s `normalize()`. Already known to have drifted — its emoji fallback is
+   `'🧑'` vs the canonical `'🙂'`/`'🤖'`, and it slices 4 opponents vs the contract's 3. Not
+   worth fixing retroactively (bounded, cosmetic), but don't let it drift further: if the
+   profile contract's *shape* changes (new required field, renamed key), update this copy too.
+2. **Challenge crypto mirror** (`business-deal/js/challenge-hook.js`): inlines the
+   hash/obfuscate/deobfuscate logic and salts from the retired `js/challenge/{crypt,secrets}.js`,
+   explicitly commented as mirroring that file byte-for-byte. Changing the trigger hash, salt,
+   or code blob in one place without the other breaks Monopoly Deal's challenge hook silently.
+3. **Stats recorder** (`business-deal/js/game-stats-global.js`): a verbatim-after-header in-scope
+   copy of `js/game-stats-global.js` — a 15-line header ending in a marker line, then the canonical
+   file byte-for-byte; enforced by `test-recorder-contract.mjs`. Since 2026-07-23 that file also resolves WHICH player's
+   store to write (see "Whose stats are these"), so a drift here now risks landing one player's
+   Monopoly Deal plays in another player's store, not just a stale counter. It has to be a *copy*, not a shared reference, because
+   Monopoly Deal's page is exclusively controlled by its own nested service worker
+   (`business-deal/sw.js`) — a request for anything outside `business-deal/` (like the
+   original `../js/game-stats-global.js`) is still routed through BD's own SW's fetch
+   handler, so it can only be reachable offline if it's also in BD's own cache list. If you
+   change `js/game-stats-global.js`, copy the change into
+   `business-deal/js/game-stats-global.js` too and bump `business-deal/sw.js`'s `CACHE`.
+
+### Consuming it in a game
+
+- Read once at setup-screen load. **Precedence:** a game's own saved last-used settings (e.g.
+  `chinchon-settings`) beat the profile, which beats built-in defaults. Games never write it back.
+- **Skill maps 1:1** (1 Beginner, 2 Intermediate, 3 Pro) onto each game's difficulty. Connect Four's 4th
+  "Expert" solver is not a profile tier (it is still chosen in Connect Four's own setup).
+- Use the profile name/emoji only where a game already shows player identity; do not add new avatar
+  surfaces to games that lack them.
+- Prefills today: **every game**. All eleven in-repo game modules read the
+  profile at setup (name/emoji/opponents/skill as each game's setup uses them), and Parchís's
+  single-file build carries its own inlined reader (see `parchis/CLAUDE.md`). The per-game
+  precedence rule above (own saved settings beat profile beats defaults) applies in each.

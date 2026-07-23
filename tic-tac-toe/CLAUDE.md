@@ -1,8 +1,8 @@
 # Tic Tac Toe (`tic-tac-toe/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
-> never put at risk — the nine full rules are stated near the top of the root `CLAUDE.md`, which is always
-> loaded alongside this file. Settings keys, saves, and stats written by this game are governed by
+> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`, which is always
+> loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
 Hub integration: in-hub `module:`.
@@ -13,3 +13,40 @@ Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate**
 
 The How-to-play screen pattern in the root CLAUDE.md was worked out on this game;
 `openHelp()` in `js/ui.js` is its reference implementation.
+
+---
+
+## How-to-play screens — the repo-wide pattern (worked out here, 2026-07-21)
+
+Reference implementation: `tic-tac-toe/js/ui.js` (`openHelp()`).
+
+**Explain only the one genuinely non-obvious mechanic.** Skip anything the player already
+knows — do not re-explain basic rules of a game everyone grew up with. For Tic Tac Toe that
+meant explaining only Ultimate's "your cell picks their board" rule and nothing else.
+
+Structure, top to bottom:
+
+1. **One short bold sentence** stating the goal or win condition.
+2. **A small SVG diagram** illustrating the confusing mechanic directly. If you can show it,
+   do not describe it in prose. (Tic Tac Toe's: nine board outlines, one showing its own
+   mini-grid with a marked cell, and an arrow curving to the board that cell sends the
+   opponent to.)
+3. **A caption** under the diagram stating the rule in plain words.
+4. **A concrete one-line example in "X = Y" format** (e.g. "Play top right box = Opponent
+   plays top right board").
+5. **Any remaining edge cases**, each as its own plain sentence. No bullets unless there are
+   three or more.
+
+Rules for the whole screen:
+
+- **Every line of text must fit on a single row.** Do not guess a font-size. Measure the
+  actual rendered width against the container's real available width, size down until it
+  fits, then lock it with `white-space: nowrap`.
+- **Spacing between elements must be explicit and deliberate** — one flex container with a
+  fixed `gap`, or hard-coded margins. Never leave it to collapse naturally between two
+  unrelated rules.
+- **The diagram must carry its meaning through shape, outline, and arrows, never color
+  alone** (colorblind-safe, same as the palette rule above).
+
+This pattern applies to EVERY game help screen, not just this one - it lives here because
+`openHelp()` in this game's `js/ui.js` is the reference implementation the root file names.

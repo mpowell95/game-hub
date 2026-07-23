@@ -1,8 +1,8 @@
 # Escoba (`escoba/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
-> never put at risk — the nine full rules are stated near the top of the root `CLAUDE.md`, which is always
-> loaded alongside this file. Settings keys, saves, and stats written by this game are governed by
+> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`, which is always
+> loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
 Spanish fishing/capture game (the Escoba/Scopa family): capture table cards that sum to
@@ -187,7 +187,7 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   `snap` is exactly `Game.snapshot()`'s output plus a `midRound` flag. Cleared on
   `matchEnd` and on the in-game menu's "Quit to setup"/"New game"; **never** cleared by
   `destroy()` (that's the whole point: navigating away via the hub must preserve it).
-- **MP invariants (July 2026 hardening — full list + rationale in the root CLAUDE.md,
+- **MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
   "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`):**
   the `'play'` hook saves AFTER `_mpAfterPlay` so the autosave's `mp.seq` matches the
   play already in its snapshot; `_mpApplyRecovery` remaps the transmitted snapshot's
