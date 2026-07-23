@@ -1,5 +1,10 @@
 # Escoba (`escoba/`)
 
+> **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
+> never put at risk — the nine full rules repeat throughout the root `CLAUDE.md`, which is always
+> loaded alongside this file. Settings keys, saves, and stats written by this game are governed by
+> it: writes additive, keys never repurposed, no silent write failures.
+
 Spanish fishing/capture game (the Escoba/Scopa family): capture table cards that sum to
 **15** with one card from your hand; clearing the whole table is an **escoba** ("broom").
 Built to the Fournier rules in the PDF Matt supplied (no in-repo copy; see "Rules
@@ -35,12 +40,12 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   `hub-top-immersive` in `css/hub.css`) instead of a sticky full bar, and `.hub-main`
   gets extra top padding while it's active so that floating button never overlaps the
   game's own content. This is opt-in per game; every other game's hub chrome is untouched.
-- **`isInProgress()` always returns `false`.** Escoba persists the live match on every
-  state-changing engine event (see "Resume via engine snapshot" below), so leaving via
-  the hub's own `‹ Hub` button never loses progress, making the hub's "you'll lose your
-  progress" confirm actively wrong here: the module tells it there's nothing to confirm.
-  The in-game menu's own "Quit to setup" is a separate, deliberate abandon: it warns and
-  clears the save.
+- **`isInProgress()` returns `false` for all solo play** — Escoba persists the live match on every state-changing engine event (see "Resume
+  via engine snapshot" below), so leaving via the hub's own `‹ Hub` button never loses solo
+  progress, and the hub's "you'll lose your progress" confirm would be actively wrong. The one
+  exception is multiplayer: it returns `true` while an MP match is live and unfinished
+  (`instance.mp && !_matchEnded`), because leaving mid-MP genuinely abandons the room. The in-game
+  menu's own "Quit to setup" is a separate, deliberate abandon: it warns and clears the save.
 
 ## Key design decisions
 
