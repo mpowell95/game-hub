@@ -1,0 +1,76 @@
+// ball-run/js/strings.js — every user-visible string in Ball Run, both languages. Follows the
+// per-game dictionary convention (root CLAUDE.md, "Adding a game" item 9; reference: snake/).
+// English is the source of truth; es may lag (js/i18n.js's fallback shows English for anything
+// missing). Difficulty keys (easy/medium/hard) are storage vocabulary (ballrun.difficulty) and
+// stay canonical — only display labels translate. config.js's own DIFFICULTIES[].label stays
+// English (a tuning/config module, same discipline as sim.js/track.js); ui.js maps the same keys
+// onto t() here instead of importing it for display.
+
+export const STRINGS = {
+  en: {
+    title: 'BALL RUN',
+    blurb: 'Steer your ball by dragging your finger left and right. Avoid obstacles and stay on the track. Survive as long as you can!',
+    best_passed: 'Best: {n} passed',
+    no_runs_yet: 'No runs yet',
+    diff_easy: 'EASY',
+    diff_medium: 'MEDIUM',
+    diff_hard: 'HARD',
+    diff_aria: 'Difficulty',
+    play: 'PLAY',
+    howto_aria: 'How to play',
+    score_aria: 'Obstacles passed',
+    resume: 'Tap to resume',
+    close: 'Close',
+    run_over: 'Run over',
+    fell_off: 'You fell off!',
+    crashed: 'Crashed!',
+    obstacles_passed: '{n} obstacles passed',
+    distance_m: 'Distance: {n} m',
+    new_best: 'New best!',
+    best_n: 'Best: {n}',
+    play_again: 'Play Again',
+    back_to_hub: 'Back to hub',
+    howto_title: 'HOW TO PLAY',
+    ok: 'OK',
+    first_page_aria: 'First page',
+    next_page_aria: 'Next page',
+    help_1: 'Hold and drag your finger left and right to steer your ball as it speeds up',
+    help_2: 'Guide your ball to avoid hitting obstacles, or your run ends!',
+    help_3: "Steer carefully and don't let your ball fall off, or your run ends!",
+    help_4: 'At each speedpoint the ball accelerates again. Survive as long as you can to get the highest score!',
+  },
+  es: {
+    title: 'BALL RUN',
+    blurb: 'Guía tu bola arrastrando el dedo a izquierda y derecha. Esquiva obstáculos y no te salgas de la pista. ¡Sobrevive todo lo que puedas!',
+    best_passed: 'Mejor: {n} superados',
+    no_runs_yet: 'Todavía sin carreras',
+    diff_easy: 'FÁCIL',
+    diff_medium: 'NORMAL',
+    diff_hard: 'DIFÍCIL',
+    diff_aria: 'Dificultad',
+    play: 'JUGAR',
+    howto_aria: 'Cómo se juega',
+    score_aria: 'Obstáculos superados',
+    resume: 'Toca para continuar',
+    close: 'Cerrar',
+    run_over: 'Carrera terminada',
+    fell_off: '¡Te caíste!',
+    crashed: '¡Chocaste!',
+    obstacles_passed: '{n} obstáculos superados',
+    distance_m: 'Distancia: {n} m',
+    new_best: '¡Nuevo récord!',
+    best_n: 'Mejor: {n}',
+    play_again: 'Jugar otra vez',
+    back_to_hub: 'Volver al hub',
+    howto_title: 'CÓMO SE JUEGA',
+    ok: 'Aceptar',
+    first_page_aria: 'Primera página',
+    next_page_aria: 'Página siguiente',
+    help_1: 'Mantén el dedo y arrástralo a izquierda y derecha para guiar tu bola mientras acelera',
+    help_2: '¡Guía tu bola para evitar chocar con obstáculos, o tu carrera termina!',
+    help_3: '¡Guía con cuidado y no dejes que tu bola se caiga, o tu carrera termina!',
+    help_4: 'En cada punto de velocidad la bola acelera de nuevo. ¡Sobrevive todo lo que puedas para conseguir la puntuación más alta!',
+  },
+};
+
+export default STRINGS;

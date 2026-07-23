@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v180';
+const CACHE = 'game-hub-v181';
 
 const ASSETS = [
   './',
@@ -134,6 +134,7 @@ const ASSETS = [
   './ball-run/js/sim.js',
   './ball-run/js/input.js',
   './ball-run/js/render.js',
+  './ball-run/js/strings.js',
   './ball-run/vendor/three.module.min.js',
   // Boggle module (data/words.txt is the ~1.6MB dictionary the solver and human
   // input validation both need -- it must be precached or the game is broken

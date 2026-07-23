@@ -6,10 +6,17 @@
 import { Sim, RunState } from './sim.js';
 import { Renderer } from './render.js';
 import { InputController } from './input.js';
-import { SIM_DT, MAX_STEPS_PER_FRAME, DIFFICULTIES, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
+import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBallRun, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
+// config.js's own DIFFICULTIES[].label stays English (a tuning/config module, same discipline as
+// sim.js/track.js) — this maps the same keys onto translated display text instead.
+const DIFF_LABEL_KEY = { easy: 'diff_easy', medium: 'diff_medium', hard: 'diff_hard' };
 
 // Fourth-playthrough item 2: the local per-difficulty personal best changed from distance (meters)
 // to obstacle count. Renamed (not just re-valued) so old meter-based bests under the old
@@ -182,10 +189,10 @@ function stillTunnel() {
 }
 
 const HELP_PAGES = [
-  { still: stillDragSteer, text: 'Hold and drag your finger left and right to steer your ball as it speeds up' },
-  { still: stillObstacle, text: 'Guide your ball to avoid hitting obstacles, or your run ends!' },
-  { still: stillEdge, text: "Steer carefully and don't let your ball fall off, or your run ends!" },
-  { still: stillTunnel, text: 'At each speedpoint the ball accelerates again. Survive as long as you can to get the highest score!' },
+  { still: stillDragSteer, textKey: 'help_1' },
+  { still: stillObstacle, textKey: 'help_2' },
+  { still: stillEdge, textKey: 'help_3' },
+  { still: stillTunnel, textKey: 'help_4' },
 ];
 
 class BallRunUI {
@@ -237,24 +244,24 @@ class BallRunUI {
     this.container.innerHTML = `
       <div class="br-root">
         <section class="br-setup" data-role="setup">
-          <h1 class="br-title">BALL RUN</h1>
-          <p class="br-blurb">Steer your ball by dragging your finger left and right. Avoid obstacles and stay on the track. Survive as long as you can!</p>
+          <h1 class="br-title">${t('title')}</h1>
+          <p class="br-blurb">${t('blurb')}</p>
           <div class="br-best" data-role="setup-best"></div>
           <div class="br-diff-panel">
             <div class="br-diff-face" data-role="diff-face"></div>
             <div class="br-diff-label" data-role="diff-label"></div>
-            <input type="range" class="br-diff-slider" data-role="diff-slider" min="0" max="2" step="1" aria-label="Difficulty">
+            <input type="range" class="br-diff-slider" data-role="diff-slider" min="0" max="2" step="1" aria-label="${t('diff_aria')}">
           </div>
           <div class="br-setup-actions">
-            <button type="button" class="br-btn br-btn-primary" data-role="play">PLAY</button>
-            <button type="button" class="br-btn br-btn-help" data-role="help-open" aria-label="How to play">?</button>
+            <button type="button" class="br-btn br-btn-primary" data-role="play">${t('play')}</button>
+            <button type="button" class="br-btn br-btn-help" data-role="help-open" aria-label="${t('howto_aria')}">?</button>
           </div>
         </section>
 
         <section class="br-game" data-role="game" hidden>
           <canvas class="br-canvas" data-role="canvas"></canvas>
           <div class="br-hud" data-role="hud">
-            <div class="br-hud-score" data-role="score" aria-label="Obstacles passed">
+            <div class="br-hud-score" data-role="score" aria-label="${t('score_aria')}">
               <svg class="br-hud-cube" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L21 7 V17 L12 22 L3 17 V7 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 7 L12 12 L21 7 M12 12 V22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
               <span data-role="score-value">0</span>
             </div>
@@ -262,18 +269,18 @@ class BallRunUI {
             <div class="br-hud-tiers" data-role="tiers"></div>
           </div>
           <div class="br-gate" data-role="resume-gate" hidden>
-            <button type="button" class="br-btn br-btn-primary" data-role="resume">Tap to resume</button>
+            <button type="button" class="br-btn br-btn-primary" data-role="resume">${t('resume')}</button>
           </div>
           <div class="br-overlay" data-role="gameover" hidden>
             <div class="br-panel">
-              <button type="button" class="br-help-close" data-action="close-gameover" aria-label="Close">&times;</button>
-              <h2 data-role="go-title">Run over</h2>
+              <button type="button" class="br-help-close" data-action="close-gameover" aria-label="${t('close')}">&times;</button>
+              <h2 data-role="go-title">${t('run_over')}</h2>
               <p class="br-go-score" data-role="go-score"></p>
               <p class="br-go-distance" data-role="go-distance"></p>
               <p class="br-go-best" data-role="go-best"></p>
               <div class="br-panel-actions">
-                <button type="button" class="br-btn br-btn-primary" data-role="play-again">Play Again</button>
-                <button type="button" class="br-btn br-btn-ghost" data-role="go-hub">Back to hub</button>
+                <button type="button" class="br-btn br-btn-primary" data-role="play-again">${t('play_again')}</button>
+                <button type="button" class="br-btn br-btn-ghost" data-role="go-hub">${t('back_to_hub')}</button>
               </div>
             </div>
           </div>
@@ -281,17 +288,17 @@ class BallRunUI {
 
         <div class="br-help-overlay" data-role="help" hidden>
           <div class="br-help-panel">
-            <button type="button" class="br-help-close" data-action="close-help" aria-label="Close">&times;</button>
-            <h2 class="br-help-title">HOW TO PLAY</h2>
+            <button type="button" class="br-help-close" data-action="close-help" aria-label="${t('close')}">&times;</button>
+            <h2 class="br-help-title">${t('howto_title')}</h2>
             <div class="br-help-card">
               <div class="br-help-still" data-role="help-still"></div>
               <p class="br-help-text" data-role="help-text"></p>
             </div>
             <div class="br-help-dots" data-role="help-dots"></div>
             <div class="br-help-nav">
-              <button type="button" class="br-btn br-btn-nav" data-action="help-first" aria-label="First page">|&larr;</button>
-              <button type="button" class="br-btn br-btn-primary" data-action="help-ok">OK</button>
-              <button type="button" class="br-btn br-btn-nav" data-action="help-next" aria-label="Next page">&rarr;|</button>
+              <button type="button" class="br-btn br-btn-nav" data-action="help-first" aria-label="${t('first_page_aria')}">|&larr;</button>
+              <button type="button" class="br-btn br-btn-primary" data-action="help-ok">${t('ok')}</button>
+              <button type="button" class="br-btn br-btn-nav" data-action="help-next" aria-label="${t('next_page_aria')}">&rarr;|</button>
             </div>
           </div>
         </div>
@@ -377,14 +384,14 @@ class BallRunUI {
 
   syncDifficultyUi() {
     this.el.diffFace.innerHTML = FACE_SVGS[this.difficulty];
-    this.el.diffLabel.textContent = DIFFICULTIES[this.difficulty].label.toUpperCase();
+    this.el.diffLabel.textContent = t(DIFF_LABEL_KEY[this.difficulty]);
     this.el.diffLabel.dataset.diff = this.difficulty;
     this.el.diffFace.dataset.diff = this.difficulty;
   }
 
   syncBestUi() {
     const best = loadBest(this.difficulty);
-    this.el.setupBest.textContent = best > 0 ? `Best: ${best} passed` : 'No runs yet';
+    this.el.setupBest.textContent = best > 0 ? t('best_passed', { n: best }) : t('no_runs_yet');
   }
 
   // --- Screens ------------------------------------------------------------
@@ -538,12 +545,12 @@ class BallRunUI {
       try { syncMyStats(); } catch (err) { console.error('[ball-run] syncMyStats failed', err); }
     }
 
-    this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? 'You fell off!' : 'Crashed!';
-    this.el.goScore.textContent = `${score} obstacles passed`;
-    this.el.goDistance.textContent = `Distance: ${distance} m`;
+    this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? t('fell_off') : t('crashed');
+    this.el.goScore.textContent = t('obstacles_passed', { n: score });
+    this.el.goDistance.textContent = t('distance_m', { n: distance });
     this.el.goBest.innerHTML = isNewBest
-      ? '<span class="br-star" aria-hidden="true">&#9733;</span> New best!'
-      : `Best: ${Math.max(prevBest, score)}`;
+      ? `<span class="br-star" aria-hidden="true">&#9733;</span> ${t('new_best')}`
+      : t('best_n', { n: Math.max(prevBest, score) });
     this.el.gameover.hidden = false;
   }
 
@@ -574,7 +581,7 @@ class BallRunUI {
   renderHelpPage() {
     const page = HELP_PAGES[this.helpPage];
     this.el.helpStill.innerHTML = page.still();
-    this.el.helpText.textContent = page.text;
+    this.el.helpText.textContent = t(page.textKey);
     this.el.helpDots.innerHTML = HELP_PAGES.map((_, i) =>
       `<span class="br-dot${i === this.helpPage ? ' is-active' : ''}"></span>`).join('');
   }
