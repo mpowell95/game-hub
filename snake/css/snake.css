@@ -44,18 +44,40 @@
 
 /* --- D-pad style picker (setup screen) ----------------------------------------------------- */
 .sn-root .sn-dpad-hint { margin: -2px 0 2px; font-size: 0.82rem; color: var(--sn-muted); text-align: left; }
-.sn-root .sn-dpad-options { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.sn-root .sn-dpad-options { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .sn-root .sn-dpad-option {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1 1 0; min-width: 68px;
-  font: inherit; font-size: 0.68rem; font-weight: 700; color: var(--sn-ink);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; width: 60px;
+  font: inherit; font-size: 0.64rem; font-weight: 700; color: var(--sn-ink);
   background: transparent; border: 2px solid transparent; border-radius: 12px;
   padding: 6px 2px; cursor: pointer; touch-action: manipulation;
 }
 .sn-root .sn-dpad-option.is-on { border-color: var(--sn-accent); background: rgba(63, 125, 44, 0.1); }
-.sn-root .sn-dpad-swatch {
-  width: 74px; height: 58px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+.sn-root .sn-dpad-swatch { width: 100%; height: 52px; display: flex; align-items: center; justify-content: center; }
+/* Mini previews are REAL small pads (not a scaled-down full-size one cropped by an overflow
+   box) — the same grid/shape rules apply at genuinely small px values, so nothing gets clipped
+   or thrown off-center the way a transform: scale() + overflow: hidden crop window would.
+   NOTE the extra ".sn-pad" in every selector below: ".sn-pad--mini" alone ties in specificity
+   with the base ".sn-pad" rule above (both are .sn-root + one class), so which one wins would
+   depend on source order rather than intent — adding ".sn-pad" makes these unambiguously more
+   specific so the mini overrides always win regardless of how the rules get reordered later. */
+.sn-root .sn-pad.sn-pad--mini { pointer-events: none; gap: 3px; margin: 0; }
+.sn-root .sn-pad.sn-pad--mini.sn-pad--classic { width: 58px; grid-template-rows: repeat(2, 19px); }
+.sn-root .sn-pad.sn-pad--mini.sn-pad--circle,
+.sn-root .sn-pad.sn-pad--mini.sn-pad--gamepad,
+.sn-root .sn-pad.sn-pad--mini.sn-pad--solid,
+.sn-root .sn-pad.sn-pad--mini.sn-pad--solidArrows {
+  width: 52px; height: 52px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
 }
-.sn-root .sn-pad--mini { transform: scale(0.3); pointer-events: none; }
+.sn-root .sn-pad--mini .sn-padbtn { font-size: 0.5rem; border-radius: 5px; }
+.sn-root .sn-pad--mini.sn-pad--classic .sn-padbtn { border-width: 1.5px; }
+.sn-root .sn-pad--mini.sn-pad--gamepad::before, .sn-root .sn-pad--mini.sn-pad--gamepad::after,
+.sn-root .sn-pad--mini.sn-pad--solid::before, .sn-root .sn-pad--mini.sn-pad--solid::after,
+.sn-root .sn-pad--mini.sn-pad--solidArrows::before, .sn-root .sn-pad--mini.sn-pad--solidArrows::after {
+  border-radius: 5px; border-width: 1px;
+}
+.sn-root .sn-pad--mini.sn-pad--circle .sn-pad-mid,
+.sn-root .sn-pad--mini.sn-pad--gamepad .sn-pad-mid { border-width: 1px; }
 
 /* --- game -------------------------------------------------------------------------------- */
 .sn-root .sn-game {
@@ -122,7 +144,10 @@
    theme's own palette, not the uploaded references' literal colors. */
 .sn-root .sn-pad {
   position: relative;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  /* minmax(0, 1fr), not bare 1fr: a bare fr track's implicit minimum is its content's
+     min-content size, so a track can refuse to shrink below that and overflow the grid's own
+     box — exactly what broke the mini previews (see .sn-pad--mini below) until this was caught. */
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
   width: min(240px, 70vw); margin: 2px auto 0;
 }
 .sn-root .sn-pad--classic {
@@ -134,7 +159,14 @@
 .sn-root .sn-pad--solid,
 .sn-root .sn-pad--solidArrows {
   grid-template-areas: ". up ." "left mid right" ". down .";
-  grid-template-rows: repeat(3, 46px);
+  /* A true 4-way plus reads as a compass, so it must be SQUARE. Both tracks are proportional
+     (not a fixed px), because ui.js's _sizePad() sets width AND height inline to match the
+     rendered board size — a fixed px pad looked fine on phones but stranded tiny and floating
+     with an oversized board on wider/taller windows, since it never scaled with the board. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  width: 158px; /* JS-set fallback default before _sizePad() runs (see ui.js) */
+  height: 158px;
 }
 .sn-root .sn-pad-up { grid-area: up; }
 .sn-root .sn-pad-left { grid-area: left; }

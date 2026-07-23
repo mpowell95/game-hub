@@ -217,6 +217,7 @@ class SnakeUI {
       </div>`;
     this.canvas = this.root.querySelector('[data-role="canvas"]');
     this.overlay = this.root.querySelector('[data-role="overlay"]');
+    this.pad = this.root.querySelector('[data-role="pad"]');
     this._sizeCanvas();
     this._draw();
     const wrap = this.root.querySelector('[data-role="boardwrap"]');
@@ -257,6 +258,24 @@ class SnakeUI {
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
     this.ctx = this.canvas.getContext('2d');
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._sizePad(w);
+  }
+
+  /** Ties the pad's footprint to the board it actually rendered at, instead of a fixed px
+   *  value: a static size looked right on an ordinary phone but left the pad tiny and
+   *  stranded under an oversized board on a wide/tall window, since it never scaled with it.
+   *  'classic' stays a rectangle (width tracks the board, capped); the four true-cross styles
+   *  must stay perfectly square, so both width and height are set together. */
+  _sizePad(boardWidth) {
+    if (!this.pad) return;
+    if (this.settings.dpadStyle === 'classic') {
+      this.pad.style.width = Math.max(200, Math.min(280, boardWidth)) + 'px';
+      this.pad.style.height = '';
+    } else {
+      const size = Math.max(140, Math.min(200, Math.round(boardWidth * 0.62)));
+      this.pad.style.width = size + 'px';
+      this.pad.style.height = size + 'px';
+    }
   }
 
   _steer(dir) {
