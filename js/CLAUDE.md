@@ -131,8 +131,10 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   i18n effort; the fallback chain is the migration strategy (untranslated surfaces simply show
   English).
 - **Entry points**: the hub's first-run gate has an English/Español chooser (self-labeled, so it
-  never needs translating; takes effect immediately, no Save); the hub top bar has a `[data-role
-  ="lang"]` pill showing the current language, tap to switch (re-renders the launcher).
+  never needs translating; takes effect immediately, no Save); the hub top bar has a flag-knob
+  toggle (`[data-role="lang"]`, `_paintLangToggle()` in hub.js — Matt's design, inline SVG)
+  BETWEEN the title and the version pill, showing only the CURRENT language; tap to switch
+  (re-renders the launcher). It hides in-game and in immersive mode, same as the version pill.
 - **Live-switch policy**: language changes apply to newly rendered UI. Games read `t()` at
   render time and MAY subscribe via `onLangChange` for live re-labeling (Snake does); they are
   not required to.

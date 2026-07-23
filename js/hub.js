@@ -558,10 +558,10 @@ class Hub {
           <div class="hub-top-info">
             <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
             <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
+            <button type="button" class="hub-langtoggle" data-role="lang"></button>
             <button type="button" class="hub-version" data-role="version" hidden></button>
           </div>
           <div class="hub-top-right">
-            <button type="button" class="hub-statsbtn" data-role="lang" aria-label="Language / Idioma"></button>
             <button type="button" class="hub-statsbtn" data-role="stats" aria-label="My game stats">My Stats</button>
             <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboards">Leaderboards</button>
             <a class="hub-profile" data-role="profile" href="profile/">My Profile</a>
@@ -666,12 +666,13 @@ class Hub {
 
     this.el.version.addEventListener('click', () => this._forceUpdate());
 
-    // Language toggle: the pill shows the CURRENT language; tapping switches to the other one.
-    // Persists in gamehub.lang.v1 and dispatches gamehub:lang (js/i18n.js); the launcher itself
-    // re-renders, and games pick the change up at their next render (they read t() at render
-    // time — the documented convention, see js/CLAUDE.md "Language support").
+    // Language toggle, between the title and the version pill: shows ONLY the CURRENT language
+    // (Matt's design — a flag-knob pill, En/blue/US or Es/yellow/Spain); tapping switches to the
+    // other one. Persists in gamehub.lang.v1 and dispatches gamehub:lang (js/i18n.js); the
+    // launcher re-renders, and games pick the change up at their next render (the documented
+    // convention, see js/CLAUDE.md "Language support").
     if (this.el.lang) {
-      this.el.lang.textContent = getLang().toUpperCase();
+      this._paintLangToggle();
       this.el.lang.addEventListener('click', () => {
         setLang(getLang() === 'en' ? 'es' : 'en');
         this.render();
@@ -824,6 +825,52 @@ class Hub {
       saveProfile(next);
       finish();
     });
+  }
+
+  /** The language toggle's face: ONE state at a time (the active language), Matt's flag-knob
+   *  design (2026-07-23) rendered as inline SVG — no image asset, crisp at any DPI, precached
+   *  for free inside hub.js. En = navy pill, US-flag knob left, "En" right; Es = golden pill,
+   *  "Es" left, Spain-flag knob right. The aria-label names the ACTION in the language the
+   *  switch leads to — the person who needs Spanish must be able to read the control. */
+  _paintLangToggle() {
+    if (!this.el.lang) return;
+    const en = getLang() === 'en';
+    this.el.lang.setAttribute('aria-label', en ? 'Cambiar a español' : 'Switch to English');
+    this.el.lang.innerHTML = en
+      ? `<svg viewBox="0 0 64 30" aria-hidden="true">
+          <rect width="64" height="30" rx="15" fill="#23408e"/>
+          <clipPath id="hub-lt-us"><circle cx="15" cy="15" r="12"/></clipPath>
+          <g clip-path="url(#hub-lt-us)">
+            <rect x="3" y="3" width="24" height="24" fill="#ffffff"/>
+            <g fill="#bf1f30">
+              <rect x="3" y="3" width="24" height="1.85"/><rect x="3" y="6.69" width="24" height="1.85"/>
+              <rect x="3" y="10.38" width="24" height="1.85"/><rect x="3" y="14.08" width="24" height="1.85"/>
+              <rect x="3" y="17.77" width="24" height="1.85"/><rect x="3" y="21.46" width="24" height="1.85"/>
+              <rect x="3" y="25.15" width="24" height="1.85"/>
+            </g>
+            <rect x="3" y="3" width="10.6" height="9.95" fill="#26418f"/>
+            <g fill="#ffffff">
+              <circle cx="5.6" cy="5.4" r="0.7"/><circle cx="8.4" cy="5.4" r="0.7"/><circle cx="11.2" cy="5.4" r="0.7"/>
+              <circle cx="7" cy="7.9" r="0.7"/><circle cx="9.8" cy="7.9" r="0.7"/>
+              <circle cx="5.6" cy="10.4" r="0.7"/><circle cx="8.4" cy="10.4" r="0.7"/><circle cx="11.2" cy="10.4" r="0.7"/>
+            </g>
+          </g>
+          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>
+          <text x="43" y="20.5" fill="#e9edf7" font-family="system-ui, sans-serif" font-weight="800" font-size="15" text-anchor="middle">En</text>
+        </svg>`
+      : `<svg viewBox="0 0 64 30" aria-hidden="true">
+          <rect width="64" height="30" rx="15" fill="#f2c500"/>
+          <text x="21" y="20.5" fill="#6f5d10" font-family="system-ui, sans-serif" font-weight="800" font-size="15" text-anchor="middle">Es</text>
+          <clipPath id="hub-lt-es"><circle cx="49" cy="15" r="12"/></clipPath>
+          <g clip-path="url(#hub-lt-es)">
+            <rect x="37" y="3" width="24" height="6" fill="#c60b1e"/>
+            <rect x="37" y="9" width="24" height="12" fill="#ffc400"/>
+            <rect x="37" y="21" width="24" height="6" fill="#c60b1e"/>
+            <rect x="42.5" y="11.4" width="3.6" height="7.2" rx="1" fill="#c60b1e"/>
+            <rect x="43.6" y="13" width="1.4" height="2.4" fill="#ffc400"/>
+          </g>
+          <circle cx="49" cy="15" r="12" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>
+        </svg>`;
   }
 
   cardHTML(g) {
