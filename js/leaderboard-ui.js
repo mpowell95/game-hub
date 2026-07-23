@@ -19,7 +19,15 @@ import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
 import { record, tierMix, tierRows, rankPlayers, cmp } from './leaderboard-rank.js';
-import { TIERS, TIER_LABEL } from './difficulty-tiers.js';
+import { TIERS } from './difficulty-tiers.js';
+import { makeT } from './i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
+// difficulty-tiers.js is READ-path-only and out of scope for i18n edits (its TIER_LABEL is
+// English-only, used elsewhere); this maps the same 1-4 tiers onto our own translated keys
+// instead of importing that label.
+const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'gs_diff_pro', 4: 'gs_diff_expert' };
 
 // Old test/debug device records. They stay in Firebase untouched (no data is ever deleted); they are
 // simply never rendered. Matched by deviceId prefix.
@@ -50,7 +58,7 @@ function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }
 function labelOf(id) { return LABEL[id] || id; }
 
 // --- identity chrome --------------------------------------------------------
-function rankName(g) { return esc(g.name || 'Unnamed'); }
+function rankName(g) { return esc(g.name || t('lb_unnamed')); }
 
 /** The player's synced profile emoji (aggregated in players-agg.js and, until now, never rendered),
  *  falling back to their first initial in a neutral circle. Free identity, already in the data. */
@@ -70,17 +78,17 @@ function tierBarHTML(mix) {
   if (!total) return '';
   const parts = [];
   const words = [];
-  for (const t of TIERS) {
-    if (mix[t] <= 0) continue;
-    parts.push(`<span class="lb-tseg is-t${t}" style="width:${((mix[t] / total) * 100).toFixed(2)}%"></span>`);
-    words.push(`${TIER_LABEL[t]} ${pct(mix[t], total)}%`);
+  for (const tier of TIERS) {
+    if (mix[tier] <= 0) continue;
+    parts.push(`<span class="lb-tseg is-t${tier}" style="width:${((mix[tier] / total) * 100).toFixed(2)}%"></span>`);
+    words.push(`${t(TIER_LABEL_KEY[tier])} ${pct(mix[tier], total)}%`);
   }
   if (mix.unranked > 0) {
     parts.push(`<span class="lb-tseg is-t0" style="width:${((mix.unranked / total) * 100).toFixed(2)}%"></span>`);
-    words.push(`Unrated ${pct(mix.unranked, total)}%`);
+    words.push(`${t('lb_unrated')} ${pct(mix.unranked, total)}%`);
   }
   const text = esc(words.join(', '));
-  return `<span class="lb-tbar" role="img" aria-label="Difficulty mix: ${text}" title="${text}">${parts.join('')}</span>`;
+  return `<span class="lb-tbar" role="img" aria-label="${t('lb_diffmix_aria', { text })}" title="${text}">${parts.join('')}</span>`;
 }
 
 // --- standings --------------------------------------------------------------
@@ -98,11 +106,11 @@ function compRecord(group) {
  *  headline achievement instead. They still carry a real rating and a real rank. */
 function soloHeadline(group) {
   const br = group.games.ballrun.br;
-  if (br && (br.runs | 0) > 0) return `Ball Run ${br.bestObstacles | 0}`;
+  if (br && (br.runs | 0) > 0) return t('lb_solo_ballrun', { n: br.bestObstacles | 0 });
   const sn = (group.games.snake || {}).sn;
-  if (sn && (sn.runs | 0) > 0) return `Snake ${sn.bestLen | 0}`;
+  if (sn && (sn.runs | 0) > 0) return t('lb_solo_snake', { n: sn.bestLen | 0 });
   const solved = group.solo.solved | 0;
-  if (solved > 0) return `${solved} solved`;
+  if (solved > 0) return t('lb_solo_solved', { n: solved });
   return '—';
 }
 
@@ -116,7 +124,7 @@ function ratingCell(r) {
  *  Nuts & Bolts nowhere on the default screen at all - stored but invisible, THE LAW rule 1. */
 function standingsBody(list) {
   const ranked = rankPlayers(list).filter((r) => r.plays > 0);
-  if (!ranked.length) return emptyRows('No games recorded yet.');
+  if (!ranked.length) return emptyRows(t('lb_empty_all'));
   const allIds = GAME_META.map((g) => g.id);
   const rows = ranked.map((r, i) => {
     const g = r.group;
@@ -126,9 +134,9 @@ function standingsBody(list) {
     return rowHTML(g, i, [recCell, ratingCell(r), `${r.plays}`], tierBarHTML(mix));
   });
   const anyProv = ranked.some((r) => r.provisional);
-  return table(['#', 'Player', 'W-L', 'Rating', 'Plays'], rows)
-    + (anyProv ? `<p class="lb-note">* fewer than 5 plays, so the rating is still settling.</p>` : '')
-    + `<p class="lb-note">Rating weighs win rate by difficulty and by how much you have played. A draw counts as a win.</p>`;
+  return table([t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('lb_col_rating'), t('lb_col_plays')], rows)
+    + (anyProv ? `<p class="lb-note">${t('lb_note_provisional')}</p>` : '')
+    + `<p class="lb-note">${t('lb_note_rating')}</p>`;
 }
 
 // --- games grid -------------------------------------------------------------
@@ -136,17 +144,17 @@ function standingsBody(list) {
 function leaderOf(list, id) {
   if (id === 'nutsbolts') {
     const rows = list.filter((g) => (g.solo.solved | 0) > 0).sort(cmp((g) => g.solo.solved, (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: `${rows[0].solo.solved | 0} solved` } : null;
+    return rows.length ? { g: rows[0], metric: t('lb_solo_solved', { n: rows[0].solo.solved | 0 }) } : null;
   }
   if (id === 'ballrun') {
     const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
       .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: `${rows[0].games.ballrun.br.bestObstacles | 0} obstacles` } : null;
+    return rows.length ? { g: rows[0], metric: t('gs_br_obstacles_cell', { n: rows[0].games.ballrun.br.bestObstacles | 0 }) } : null;
   }
   if (id === 'snake') {
     const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
       .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
-    return rows.length ? { g: rows[0], metric: `length ${rows[0].games.snake.sn.bestLen | 0}` } : null;
+    return rows.length ? { g: rows[0], metric: `${t('gs_sn_longest')} ${rows[0].games.snake.sn.bestLen | 0}` } : null;
   }
   const rows = list.filter((g) => (g.games[id].total.played | 0) > 0)
     .sort(cmp((g) => {
@@ -163,7 +171,7 @@ function gamesBody(list) {
     const lead = leaderOf(list, meta.id);
     const inner = lead
       ? `<span class="lb-tile-lead">${avatarHTML(lead.g)}<span class="lb-tile-who">${rankName(lead.g)}</span></span><span class="lb-tile-metric">${esc(lead.metric)}</span>`
-      : `<span class="lb-tile-lead lb-tile-empty">No games yet</span><span class="lb-tile-metric">&nbsp;</span>`;
+      : `<span class="lb-tile-lead lb-tile-empty">${t('lb_no_games_yet')}</span><span class="lb-tile-metric">&nbsp;</span>`;
     return `<button type="button" class="lb-tile" data-game="${meta.id}" style="--lb-accent:${meta.accent}"><span class="lb-tile-name">${esc(meta.label)}</span>${inner}</button>`;
   }).join('');
   return `<div class="lb-grid">${tiles}</div>`;
@@ -171,16 +179,16 @@ function gamesBody(list) {
 
 // --- game detail ------------------------------------------------------------
 // Nuts & Bolts difficulty tiers (byDiff keys are lowercased by the recorder).
-const NB_TIERS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['extrahard', 'Extra']];
+const NB_TIERS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['extrahard', 'lb_diff_extra']];
 // Ball Run difficulty tiers (byDiff/bestObstaclesByDiff keys, lowercased by the recorder).
-const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+const BR_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
 function nutsBoltsRows(list) {
   // Levels beaten, overall and per difficulty. Best level / average moves are properties of the
   // puzzle rather than the player, so they are not ranked.
   const rows = list.filter((g) => g.solo.solved > 0).sort(cmp((g) => g.solo.solved, (g) => g.updatedAt));
-  if (!rows.length) return emptyRows('No Nuts & Bolts levels solved yet.');
-  return table(['#', 'Player', 'Solved', ...NB_TIERS.map(([, l]) => l)], rows.map((g, i) => {
+  if (!rows.length) return emptyRows(t('lb_empty_nb'));
+  return table([t('lb_col_hash'), t('lb_col_player'), t('lb_col_solved'), ...NB_TIERS.map(([, l]) => t(l))], rows.map((g, i) => {
     const bd = g.games.nutsbolts.byDiff || {};
     return rowHTML(g, i, [`${g.solo.solved}`, ...NB_TIERS.map(([k]) => `${(bd[k] && bd[k].played) | 0}`)]);
   }));
@@ -194,8 +202,8 @@ function ballrunRows(list) {
   // this board starts clean on the new metric.
   const rows = list.filter((g) => g.games.ballrun.br && (g.games.ballrun.br.runs | 0) > 0)
     .sort(cmp((g) => (g.games.ballrun.br.bestObstacles | 0), (g) => g.updatedAt));
-  if (!rows.length) return emptyRows('No Ball Run runs recorded yet.');
-  return table(['#', 'Player', ...BR_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
+  if (!rows.length) return emptyRows(t('lb_empty_ballrun'));
+  return table([t('lb_col_hash'), t('lb_col_player'), ...BR_DIFFS.map(([, l]) => t(l)), t('gs_runs')], rows.map((g, i) => {
     const br = g.games.ballrun.br;
     const bd = br.bestObstaclesByDiff || {};
     return rowHTML(g, i, [...BR_DIFFS.map(([k]) => `${bd[k] | 0}`), `${br.runs | 0}`]);
@@ -203,7 +211,7 @@ function ballrunRows(list) {
 }
 
 // Snake difficulty tiers (byDiff/bestLenByDiff keys, lowercased by the recorder).
-const SN_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
 function snakeRows(list) {
   // Score-based like Ball Run: rank by best snake length reached (any difficulty), a high-score
@@ -211,8 +219,8 @@ function snakeRows(list) {
   // remote records synced before Snake existed have no `snake` key until their device updates.
   const rows = list.filter((g) => (g.games.snake || {}).sn && (g.games.snake.sn.runs | 0) > 0)
     .sort(cmp((g) => (g.games.snake.sn.bestLen | 0), (g) => g.updatedAt));
-  if (!rows.length) return emptyRows('No Snake runs recorded yet.');
-  return table(['#', 'Player', ...SN_DIFFS.map(([, l]) => l), 'Runs'], rows.map((g, i) => {
+  if (!rows.length) return emptyRows(t('lb_empty_snake'));
+  return table([t('lb_col_hash'), t('lb_col_player'), ...SN_DIFFS.map(([, l]) => t(l)), t('gs_runs')], rows.map((g, i) => {
     const sn = g.games.snake.sn;
     const bd = sn.bestLenByDiff || {};
     return rowHTML(g, i, [...SN_DIFFS.map(([k]) => `${bd[k] | 0}`), `${sn.runs | 0}`]);
@@ -228,8 +236,8 @@ function gameRows(list, id) {
       (g) => g.games[id].total.played | 0,
       (g) => g.updatedAt,
     ));
-  if (!rows.length) return emptyRows(`No ${labelOf(id)} games recorded yet.`);
-  return table(['#', 'Player', 'W-L', 'Win rate', 'Plays'], rows.map((g, i) => {
+  if (!rows.length) return emptyRows(t('lb_empty_game', { label: labelOf(id) }));
+  return table([t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('gs_win_rate'), t('lb_col_plays')], rows.map((g, i) => {
     const r = record(g.games[id].total);
     return rowHTML(g, i, [`${r.wins}-${r.losses}`, `${pct(r.wins, r.played)}%`, `${r.played}`],
       tierBarHTML(tierMix(g, [id])));
@@ -245,10 +253,10 @@ function tierTable(heading, rows) {
   if (!present.length) return '';
   const body = present.map((k) => {
     const r = rows[k];
-    const label = k === 'unranked' ? 'Unrated' : TIER_LABEL[k];
+    const label = k === 'unranked' ? t('lb_unrated') : t(TIER_LABEL_KEY[k]);
     return `<tr><th scope="row" class="lb-name">${esc(label)}</th><td>${r.wins}-${r.losses}</td><td>${pct(r.wins, r.played)}%</td><td>${r.played}</td></tr>`;
   }).join('');
-  const th = ['Difficulty', 'W-L', 'Win rate', 'Plays']
+  const th = [t('lb_col_difficulty'), t('gs_col_wl'), t('gs_win_rate'), t('lb_col_plays')]
     .map((h, i) => `<th${i === 0 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
   return `<h3 class="lb-h3">${esc(heading)}</h3><div class="lb-tblwrap"><table class="lb-table is-tiers"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -271,47 +279,47 @@ function fieldTierRows(list, id) {
 // anywhere but My Stats. Shown as "who leads this, and by how much" chips under the ranked table.
 const TEXTURE = {
   connect4: [
-    { label: 'Wins going first', get: (g) => sumGrid(g.games.connect4.grid, 'player') },
-    { label: 'Wins going second', get: (g) => sumGrid(g.games.connect4.grid, 'computer') },
+    { labelKey: 'lb_tex_wins_first', get: (g) => sumGrid(g.games.connect4.grid, 'player') },
+    { labelKey: 'lb_tex_wins_second', get: (g) => sumGrid(g.games.connect4.grid, 'computer') },
   ],
   chinchon: [
-    { label: 'Chinchóns', get: (g) => ((g.games.chinchon.cc || {}).chinchons) | 0 },
-    { label: 'Closes', get: (g) => ((g.games.chinchon.cc || {}).closed) | 0 },
-    { label: 'Minus tens', get: (g) => ((g.games.chinchon.cc || {}).minusTen) | 0 },
+    { labelKey: 'lb_tex_chinchons', get: (g) => ((g.games.chinchon.cc || {}).chinchons) | 0 },
+    { labelKey: 'lb_tex_closes', get: (g) => ((g.games.chinchon.cc || {}).closed) | 0 },
+    { labelKey: 'lb_tex_minus_tens', get: (g) => ((g.games.chinchon.cc || {}).minusTen) | 0 },
   ],
-  escoba: [{ label: 'Escobas', get: (g) => ((g.games.escoba.es || {}).escobas) | 0 }],
+  escoba: [{ labelKey: 'lb_tex_escobas', get: (g) => ((g.games.escoba.es || {}).escobas) | 0 }],
   nutsbolts: [
-    { label: 'Best level', get: (g) => g.solo.bestLevel | 0 },
-    { label: 'Levels solved', get: (g) => g.solo.solved | 0 },
+    { labelKey: 'lb_tex_best_level', get: (g) => g.solo.bestLevel | 0 },
+    { labelKey: 'lb_tex_levels_solved', get: (g) => g.solo.solved | 0 },
   ],
   ballrun: [
-    { label: 'Best obstacles', get: (g) => ((g.games.ballrun.br || {}).bestObstacles) | 0 },
-    { label: 'Total runs', get: (g) => ((g.games.ballrun.br || {}).runs) | 0 },
+    { labelKey: 'lb_tex_best_obstacles', get: (g) => ((g.games.ballrun.br || {}).bestObstacles) | 0 },
+    { labelKey: 'lb_tex_total_runs', get: (g) => ((g.games.ballrun.br || {}).runs) | 0 },
   ],
   dotsboxes: [
-    { label: 'Boxes claimed', get: (g) => ((g.games.dotsboxes.db || {}).boxes) | 0 },
-    { label: 'Longest chain', get: (g) => ((g.games.dotsboxes.db || {}).bestChain) | 0 },
+    { labelKey: 'lb_tex_boxes_claimed', get: (g) => ((g.games.dotsboxes.db || {}).boxes) | 0 },
+    { labelKey: 'lb_tex_longest_chain', get: (g) => ((g.games.dotsboxes.db || {}).bestChain) | 0 },
   ],
   boggle: [
-    { label: 'Best score', get: (g) => ((g.games.boggle.bg || {}).bestScore) | 0 },
-    { label: 'Words found', get: (g) => ((g.games.boggle.bg || {}).words) | 0 },
+    { labelKey: 'lb_tex_best_score', get: (g) => ((g.games.boggle.bg || {}).bestScore) | 0 },
+    { labelKey: 'lb_tex_words_found', get: (g) => ((g.games.boggle.bg || {}).words) | 0 },
     // The only text-valued chip: the longest word is shown by name, not just its length, matching
     // My Stats. players-agg.js carries {word,len} as a unit so the text always fits the length.
     {
-      label: 'Longest word',
+      labelKey: 'lb_tex_longest_word',
       get: (g) => ((g.games.boggle.bg || {}).longestWord || {}).len | 0,
       show: (g) => ((g.games.boggle.bg || {}).longestWord || {}).word || '',
     },
   ],
   snake: [
-    { label: 'Longest snake', get: (g) => (((g.games.snake || {}).sn || {}).bestLen) | 0 },
-    { label: 'Total runs', get: (g) => (((g.games.snake || {}).sn || {}).runs) | 0 },
+    { labelKey: 'lb_tex_longest_snake', get: (g) => (((g.games.snake || {}).sn || {}).bestLen) | 0 },
+    { labelKey: 'lb_tex_total_runs', get: (g) => (((g.games.snake || {}).sn || {}).runs) | 0 },
   ],
   tictactoe: [
-    { label: 'Classic played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
-    { label: 'Ultimate played', get: (g) => (((g.games.tictactoe.tt || {}).ultimate) || {}).played | 0 },
+    { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
+    { labelKey: 'lb_tex_ultimate_played', get: (g) => (((g.games.tictactoe.tt || {}).ultimate) || {}).played | 0 },
     {
-      label: 'Draws',
+      labelKey: 'lb_tex_draws',
       get: (g) => {
         const tt = g.games.tictactoe.tt || {};
         return ((tt.classic || {}).tied | 0) + ((tt.ultimate || {}).tied | 0);
@@ -340,14 +348,14 @@ function textureHTML(list, id) {
     if (!best) continue;
     // `show` lets a chip rank on a number but DISPLAY something else (Boggle's longest word).
     const shown = spec.show ? esc(spec.show(best.g) || String(best.v)) : String(best.v);
-    chips.push(`<div class="lb-chip"><b>${shown}</b><span>${esc(spec.label)}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
+    chips.push(`<div class="lb-chip"><b>${shown}</b><span>${esc(t(spec.labelKey))}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
   }
   if (!chips.length) return '';
-  return `<h3 class="lb-h3">Who leads what</h3><div class="lb-chips">${chips.join('')}</div>`;
+  return `<h3 class="lb-h3">${t('lb_who_leads_h')}</h3><div class="lb-chips">${chips.join('')}</div>`;
 }
 
 function gameDetail(list, id) {
-  const head = `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-back">&larr; Games</button><h3 class="lb-detail-h" style="--lb-accent:${ACCENT[id] || '#5b6b82'}">${esc(labelOf(id))}</h3></div>`;
+  const head = `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-back">${t('lb_back_games')}</button><h3 class="lb-detail-h" style="--lb-accent:${ACCENT[id] || '#5b6b82'}">${esc(labelOf(id))}</h3></div>`;
   let board;
   if (id === 'nutsbolts') board = nutsBoltsRows(list);
   else if (id === 'ballrun') board = ballrunRows(list);
@@ -359,8 +367,8 @@ function gameDetail(list, id) {
   const players = list.filter((g) => ((g.games[id] || {}).total || {}).played > 0);
   const mine = players.find((g) => g.key === _meKey);
   const solo = mine && players.length === 1;
-  const mineTable = mine ? tierTable(solo ? 'By difficulty' : 'Your record by difficulty', tierRows(mine.games[id])) : '';
-  const fieldTable = solo ? '' : tierTable(mine ? 'Everyone, by difficulty' : 'By difficulty', fieldTierRows(list, id));
+  const mineTable = mine ? tierTable(t(solo ? 'lb_by_diff' : 'lb_your_record_by_diff'), tierRows(mine.games[id])) : '';
+  const fieldTable = solo ? '' : tierTable(t(mine ? 'lb_everyone_by_diff' : 'lb_by_diff'), fieldTierRows(list, id));
   return head + board + mineTable + fieldTable + textureHTML(list, id);
 }
 
@@ -393,9 +401,9 @@ function skeletonHTML(rows = 6) {
   // rows came out ~17px short each and the table visibly grew as the data landed.
   const body = Array.from({ length: rows }, () =>
     `<tr class="lb-r is-skel"><td class="lb-rank"><span class="lb-sk lb-sk-n"></span></td><th scope="row" class="lb-name"><span class="lb-who"><span class="lb-av is-initial"></span><span class="lb-sk lb-sk-w"></span></span><span class="lb-tbar"></span></th><td><span class="lb-sk"></span></td><td><span class="lb-sk"></span></td><td><span class="lb-sk"></span></td></tr>`).join('');
-  const th = ['#', 'Player', 'W-L', 'Rating', 'Plays']
+  const th = [t('lb_col_hash'), t('lb_col_player'), t('gs_col_wl'), t('lb_col_rating'), t('lb_col_plays')]
     .map((h, i) => `<th${i === 0 ? ' class="lb-rank"' : i === 1 ? ' class="lb-name"' : ''} scope="col">${h}</th>`).join('');
-  return `<div class="lb-tblwrap" aria-busy="true" aria-label="Loading standings"><table class="lb-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="lb-tblwrap" aria-busy="true" aria-label="${t('lb_loading_aria')}"><table class="lb-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /** Records to render: everything except the old test/debug devices (which stay stored, just hidden). */
@@ -428,11 +436,11 @@ let _meKey = '';
 let _unsub = null;
 let _connected = false;
 
-const SEGMENTS = [{ id: 'standings', label: 'Standings' }, { id: 'games', label: 'Games' }];
+const SEGMENTS = [{ id: 'standings', labelKey: 'lb_seg_standings' }, { id: 'games', labelKey: 'lb_seg_games' }];
 
 function segsHTML() {
   return SEGMENTS.map((s) =>
-    `<button type="button" class="lb-seg${s.id === _seg ? ' is-active' : ''}" data-seg="${s.id}"${s.id === _seg ? ' aria-current="true"' : ''}>${esc(s.label)}</button>`
+    `<button type="button" class="lb-seg${s.id === _seg ? ' is-active' : ''}" data-seg="${s.id}"${s.id === _seg ? ' aria-current="true"' : ''}>${esc(t(s.labelKey))}</button>`
   ).join('');
 }
 
@@ -446,7 +454,7 @@ function rerender() {
 
 function renderOffline() {
   const bodyEl = _host && _host.querySelector('[data-role="lb-body"]');
-  if (bodyEl) bodyEl.innerHTML = `<p class="lb-none">The leaderboard needs a connection. It lights up when you are online.</p>`;
+  if (bodyEl) bodyEl.innerHTML = `<p class="lb-none">${t('lb_offline')}</p>`;
 }
 
 function onKey(e) {
@@ -487,15 +495,15 @@ export async function openLeaderboard() {
   host.className = 'lb-overlay';
   host.setAttribute('role', 'dialog');
   host.setAttribute('aria-modal', 'true');
-  host.setAttribute('aria-label', 'Leaderboard');
+  host.setAttribute('aria-label', t('lb_dialog_aria'));
   host.innerHTML = `
     <div class="lb-scrim" data-role="lb-close"></div>
     <div class="lb-panel">
       <header class="lb-top">
-        <h2>Leaderboard</h2>
-        <button type="button" class="lb-x" data-role="lb-close" aria-label="Close">&times;</button>
+        <h2>${t('lb_title')}</h2>
+        <button type="button" class="lb-x" data-role="lb-close" aria-label="${t('gs_close_aria')}">&times;</button>
       </header>
-      <nav class="lb-segs" data-role="lb-segs" aria-label="Standings or games">${segsHTML()}</nav>
+      <nav class="lb-segs" data-role="lb-segs" aria-label="${t('lb_segs_aria')}">${segsHTML()}</nav>
       <div class="lb-body" data-role="lb-body">${skeletonHTML()}</div>
     </div>`;
   host.addEventListener('click', onClick);

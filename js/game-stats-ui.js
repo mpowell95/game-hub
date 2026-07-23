@@ -11,6 +11,10 @@
 import { loadStats, statsId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
+import { makeT } from './i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
 
 const TABS = [
   { id: 'connect4', label: 'Connect 4', accent: '#1769d4' },
@@ -32,20 +36,22 @@ const TABS = [
 function visibleTabs() {
   let dev = false;
   try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
-  return TABS.filter((t) => !t.devOnly || dev);
+  return TABS.filter((tab) => !tab.devOnly || dev);
 }
-const C4_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['expert', 'Expert']];
-const LABEL = Object.fromEntries(TABS.map((t) => [t.id, t.label]));
+const C4_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
+// Game titles are proper names and stay untranslated everywhere (root CLAUDE.md decision 1).
+const LABEL = Object.fromEntries(TABS.map((tab) => [tab.id, tab.label]));
 
 // Map each game's own difficulty vocabulary onto the hub's shared tier names, so the by-difficulty
 // tables read consistently (Monopoly Deal uses easy/normal/hard, Parchis uses beginner/intermediate/
-// pro/expert). 'legacy' is the folded-in pre-unified history (shown as "Earlier games").
+// pro/expert). 'legacy' is the folded-in pre-unified history (shown as "Earlier games"). Values
+// (the object keys here) are storage vocabulary and stay canonical; only labelKey resolves via t().
 const DIFF_META = {
-  easy: { label: 'Beginner', order: 1 }, beginner: { label: 'Beginner', order: 1 }, facil: { label: 'Beginner', order: 1 },
-  normal: { label: 'Intermediate', order: 2 }, medium: { label: 'Intermediate', order: 2 }, intermediate: { label: 'Intermediate', order: 2 }, average: { label: 'Intermediate', order: 2 },
-  hard: { label: 'Pro', order: 3 }, pro: { label: 'Pro', order: 3 }, dificil: { label: 'Pro', order: 3 },
-  expert: { label: 'Expert', order: 4 },
-  legacy: { label: 'Earlier games', order: 9 },
+  easy: { labelKey: 'gs_diff_beginner', order: 1 }, beginner: { labelKey: 'gs_diff_beginner', order: 1 }, facil: { labelKey: 'gs_diff_beginner', order: 1 },
+  normal: { labelKey: 'gs_diff_intermediate', order: 2 }, medium: { labelKey: 'gs_diff_intermediate', order: 2 }, intermediate: { labelKey: 'gs_diff_intermediate', order: 2 }, average: { labelKey: 'gs_diff_intermediate', order: 2 },
+  hard: { labelKey: 'gs_diff_pro', order: 3 }, pro: { labelKey: 'gs_diff_pro', order: 3 }, dificil: { labelKey: 'gs_diff_pro', order: 3 },
+  expert: { labelKey: 'gs_diff_expert', order: 4 },
+  legacy: { labelKey: 'gs_diff_legacy', order: 9 },
 };
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -64,30 +70,30 @@ function c4Totals(grid) {
   return { w, l, plays: w + l };
 }
 
-function c4Table(title, side) {
-  const rows = C4_DIFFS.map(([k, label]) => {
+function c4Table(titleKey, side) {
+  const rows = C4_DIFFS.map(([k, labelKey]) => {
     const c = (side && side[k]) || {};
-    return `<tr><th scope="row">${label}</th><td>${c.w | 0}</td><td>${c.l | 0}</td></tr>`;
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${c.w | 0}</td><td>${c.l | 0}</td></tr>`;
   }).join('');
-  return `<h4 class="gs-tbl-h">${title}</h4>
+  return `<h4 class="gs-tbl-h">${t(titleKey)}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">Wins</th><th scope="col">Losses</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wins')}</th><th scope="col">${t('gs_losses')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
 
 function connect4Screen(rec) {
   const grid = rec && rec.grid;
-  const t = c4Totals(grid);
-  if (!t.plays) return emptyState('Connect 4');
+  const totals = c4Totals(grid);
+  if (!totals.plays) return emptyState('Connect 4');
   return `
     <div class="gs-tallies">
-      <div class="gs-tally"><b>${t.w}</b><span>Wins</span></div>
-      <div class="gs-tally"><b>${t.l}</b><span>Losses</span></div>
-      <div class="gs-tally"><b>${t.plays}</b><span>Plays</span></div>
+      <div class="gs-tally"><b>${totals.w}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${totals.l}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${totals.plays}</b><span>${t('gs_plays')}</span></div>
     </div>
-    ${c4Table('Player first move', grid && grid.player)}
-    ${c4Table('Computer first move', grid && grid.computer)}`;
+    ${c4Table('gs_c4_player_first', grid && grid.player)}
+    ${c4Table('gs_c4_computer_first', grid && grid.computer)}`;
 }
 
 // --- Chinchon ---------------------------------------------------------------
@@ -104,17 +110,17 @@ function chinchonScreen(rec) {
   const cc = (rec && rec.cc) || { closed: 0, minusTen: 0, chinchons: 0 };
   return `<div class="gs-cc">
     <section class="gs-cc-sec">
-      <h4 class="gs-cc-h">Games played</h4>
-      ${ccRow('Finished games', finished, false, finished)}
-      ${ccRow('Victories', victories, true, finished)}
-      ${ccRow('Draws', draws, true, finished)}
-      ${ccRow('Defeats', defeats, true, finished)}
+      <h4 class="gs-cc-h">${t('gs_cc_games_played')}</h4>
+      ${ccRow(t('gs_cc_finished'), finished, false, finished)}
+      ${ccRow(t('gs_cc_victories'), victories, true, finished)}
+      ${ccRow(t('gs_cc_draws'), draws, true, finished)}
+      ${ccRow(t('gs_cc_defeats'), defeats, true, finished)}
     </section>
     <section class="gs-cc-sec">
-      <h4 class="gs-cc-h">Stats</h4>
-      ${ccRow('Total closed by you', cc.closed | 0, false, finished)}
-      ${ccRow('Total minus ten', cc.minusTen | 0, false, finished)}
-      ${ccRow('Total chinchóns', cc.chinchons | 0, false, finished)}
+      <h4 class="gs-cc-h">${t('gs_cc_stats_h')}</h4>
+      ${ccRow(t('gs_cc_closed'), cc.closed | 0, false, finished)}
+      ${ccRow(t('gs_cc_minus_ten'), cc.minusTen | 0, false, finished)}
+      ${ccRow(t('gs_cc_chinchons'), cc.chinchons | 0, false, finished)}
     </section>
   </div>`;
 }
@@ -123,17 +129,18 @@ function chinchonScreen(rec) {
 // Both are "win the table vs AI" games: the meaningful stat is the win rate overall and per
 // opponent difficulty. Built from total + byDiff (what the classic recorder already tracks).
 function diffTable(byDiff) {
-  const meta = (k) => DIFF_META[k] || { label: titleCase(k), order: 8 };
+  const meta = (k) => DIFF_META[k] || { labelKey: null, order: 8 };
   const keys = Object.keys(byDiff || {}).filter((k) => ((byDiff[k] || {}).played | 0) > 0);
   if (!keys.length) return '';
   keys.sort((a, b) => meta(a).order - meta(b).order);
   const rows = keys.map((k) => {
     const d = byDiff[k]; const w = d.won | 0, l = d.lost | 0, p = d.played | 0;
-    return `<tr><th scope="row">${esc(meta(k).label)}</th><td>${w}-${l}</td><td>${pct(w, p)}%</td></tr>`;
+    const label = meta(k).labelKey ? t(meta(k).labelKey) : titleCase(k);
+    return `<tr><th scope="row">${esc(label)}</th><td>${w}-${l}</td><td>${pct(w, p)}%</td></tr>`;
   }).join('');
-  return `<h4 class="gs-tbl-h">Record by difficulty</h4>
+  return `<h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">W-L</th><th scope="col">Win rate</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_col_wl')}</th><th scope="col">${t('gs_win_rate')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -144,15 +151,15 @@ function recordScreen(id, rec) {
   if (!played) return emptyState(LABEL[id] || 'These');
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${won}</b><span>Wins</span></div>
-      <div class="gs-tally"><b>${lost}</b><span>Losses</span></div>
-      <div class="gs-tally"><b>${played}</b><span>Plays</span></div>
-      <div class="gs-tally"><b>${pct(won, played)}%</b><span>Win rate</span></div>
+      <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${lost}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
 }
 
-function emptyState(label) { return `<p class="gs-none">No ${esc(label)} games recorded yet.</p>`; }
+function emptyState(label) { return `<p class="gs-none">${t('gs_empty', { label: esc(label) })}</p>`; }
 
 /** Nuts & Bolts: a solo puzzle, so no wins/losses/win-rate (you cannot lose, only keep going).
  *  Levels solved, how far you got, and the moves it took are the honest numbers. */
@@ -162,10 +169,10 @@ function nutsBoltsScreen(rec) {
   if (!solved) return emptyState('Nuts & Bolts');
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${solved}</b><span>Levels solved</span></div>
-      <div class="gs-tally"><b>${best}</b><span>Best level</span></div>
-      <div class="gs-tally"><b>${moves}</b><span>Total moves</span></div>
-      <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>Avg moves</span></div>
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_nb_solved')}</span></div>
+      <div class="gs-tally"><b>${best}</b><span>${t('gs_nb_best')}</span></div>
+      <div class="gs-tally"><b>${moves}</b><span>${t('gs_nb_moves')}</span></div>
+      <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>${t('gs_nb_avg_moves')}</span></div>
     </div>`;
 }
 
@@ -176,12 +183,12 @@ function escobaScreen(rec) {
   const es = (rec && rec.es) || {};
   return recordScreen('escoba', rec) + `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${es.escobas | 0}</b><span>Escobas made</span></div>
+      <div class="gs-tally"><b>${es.escobas | 0}</b><span>${t('gs_es_escobas')}</span></div>
     </div>`;
 }
 
 // --- Ball Run (solo, difficulty-scaled, obstacles-passed-is-the-score) ------
-const BR_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+const BR_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
 /** Ball Run: no wins/losses (only a crash or a fall ends a run), so the honest numbers are runs
  *  played and the best obstacle count reached, overall and per difficulty (fourth-playthrough item
@@ -195,40 +202,40 @@ function ballRunScreen(rec) {
   // scoring change" - sixth-playthrough incident, where zeroed runs hid real history.
   if (!runs && !legacy) return emptyState('Ball Run');
   const bd = br.bestObstaclesByDiff || {};
-  const rows = BR_DIFFS.map(([k, label]) =>
-    `<tr><th scope="row">${label}</th><td>${bd[k] | 0} obstacles</td></tr>`).join('');
+  const rows = BR_DIFFS.map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${t('gs_br_obstacles_cell', { n: bd[k] | 0 })}</td></tr>`).join('');
   // Scores from before the scoring change are meters, not obstacle counts - the units are not
   // comparable, so they are shown as their own clearly-labeled record instead of being converted
   // (which would fabricate numbers) or hidden (which reads as deleted data).
   const lbd = (legacy && legacy.bestByDiff) || {};
-  const legacyRows = legacy ? BR_DIFFS.map(([k, label]) =>
-    `<tr><th scope="row">${label}</th><td>${lbd[k] | 0} m</td></tr>`).join('') : '';
+  const legacyRows = legacy ? BR_DIFFS.map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${lbd[k] | 0} m</td></tr>`).join('') : '';
   const legacyHtml = legacy ? `
-    <h4 class="gs-tbl-h">Best distance, before scoring changed to obstacles</h4>
+    <h4 class="gs-tbl-h">${t('gs_br_legacy_h')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
       <tbody>${legacyRows}</tbody>
     </table>` : '';
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
-      <div class="gs-tally"><b>${best}</b><span>Best obstacles passed</span></div>
+      <div class="gs-tally"><b>${runs}</b><span>${t('gs_runs')}</span></div>
+      <div class="gs-tally"><b>${best}</b><span>${t('gs_br_best')}</span></div>
     </div>
-    <h4 class="gs-tbl-h">Best obstacles passed by difficulty</h4>
+    <h4 class="gs-tbl-h">${t('gs_br_best_by_diff')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>${legacyHtml}`;
 }
 
 // --- Tic Tac Toe (played by variant, ties shown explicitly) -----------------
-function ttVariantTallies(label, v) {
-  return `<h4 class="gs-tbl-h">${esc(label)}</h4>
+function ttVariantTallies(labelKey, v) {
+  return `<h4 class="gs-tbl-h">${t(labelKey)}</h4>
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${v.won | 0}</b><span>Won</span></div>
-      <div class="gs-tally"><b>${v.lost | 0}</b><span>Lost</span></div>
-      <div class="gs-tally"><b>${v.tied | 0}</b><span>Tied</span></div>
-      <div class="gs-tally"><b>${v.played | 0}</b><span>Played</span></div>
+      <div class="gs-tally"><b>${v.won | 0}</b><span>${t('gs_won')}</span></div>
+      <div class="gs-tally"><b>${v.lost | 0}</b><span>${t('gs_lost')}</span></div>
+      <div class="gs-tally"><b>${v.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${v.played | 0}</b><span>${t('gs_played')}</span></div>
     </div>`;
 }
 
@@ -243,7 +250,7 @@ function ticTacToeScreen(rec) {
   const tt = (rec && rec.tt) || {};
   const classic = tt.classic || { played: 0, won: 0, lost: 0, tied: 0 };
   const ultimate = tt.ultimate || { played: 0, won: 0, lost: 0, tied: 0 };
-  return ttVariantTallies('Classic', classic) + ttVariantTallies('Ultimate', ultimate);
+  return ttVariantTallies('gs_tt_classic', classic) + ttVariantTallies('gs_tt_ultimate', ultimate);
 }
 
 /** Dots and Boxes: Won/Lost/Tied shown explicitly (Medium/4x4 can end 8-8, same
@@ -254,14 +261,14 @@ function dotsBoxesScreen(rec) {
   if (!(db.played | 0)) return emptyState('Dots and Boxes');
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${db.won | 0}</b><span>Won</span></div>
-      <div class="gs-tally"><b>${db.lost | 0}</b><span>Lost</span></div>
-      <div class="gs-tally"><b>${db.tied | 0}</b><span>Tied</span></div>
-      <div class="gs-tally"><b>${db.played | 0}</b><span>Played</span></div>
+      <div class="gs-tally"><b>${db.won | 0}</b><span>${t('gs_won')}</span></div>
+      <div class="gs-tally"><b>${db.lost | 0}</b><span>${t('gs_lost')}</span></div>
+      <div class="gs-tally"><b>${db.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${db.played | 0}</b><span>${t('gs_played')}</span></div>
     </div>
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${db.boxes | 0}</b><span>Boxes claimed</span></div>
-      <div class="gs-tally"><b>${db.bestChain | 0}</b><span>Longest chain</span></div>
+      <div class="gs-tally"><b>${db.boxes | 0}</b><span>${t('gs_db_boxes')}</span></div>
+      <div class="gs-tally"><b>${db.bestChain | 0}</b><span>${t('gs_db_chain')}</span></div>
     </div>`;
 }
 
@@ -281,15 +288,15 @@ function boggleScreen(rec) {
   const longestDisplay = lw.word ? `${lw.word} (${lw.len | 0})` : '—';
   return recordScreen('boggle', rec) + `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${bg.tied | 0}</b><span>Tied</span></div>
-      <div class="gs-tally"><b>${bg.bestScore | 0}</b><span>Best score</span></div>
-      <div class="gs-tally"><b>${bg.words | 0}</b><span>Words found</span></div>
-      <div class="gs-tally"><b>${esc(longestDisplay)}</b><span>Longest word</span></div>
+      <div class="gs-tally"><b>${bg.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${bg.bestScore | 0}</b><span>${t('gs_bg_best_score')}</span></div>
+      <div class="gs-tally"><b>${bg.words | 0}</b><span>${t('gs_bg_words')}</span></div>
+      <div class="gs-tally"><b>${esc(longestDisplay)}</b><span>${t('gs_bg_longest')}</span></div>
     </div>`;
 }
 
 // --- Snake (solo, speed-tiered, longest-snake-is-the-score) -----------------
-const SN_DIFFS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']];
+const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
 /** Snake: no wins/losses (a run ends in a crash), so the honest numbers are runs played and the
  *  longest snake reached, overall and per speed tier — Ball Run's screen shape. */
@@ -298,16 +305,16 @@ function snakeScreen(rec) {
   const runs = sn.runs | 0, best = sn.bestLen | 0;
   if (!runs) return emptyState('Snake');
   const bd = sn.bestLenByDiff || {};
-  const rows = SN_DIFFS.map(([k, label]) =>
-    `<tr><th scope="row">${label}</th><td>${bd[k] | 0}</td></tr>`).join('');
+  const rows = SN_DIFFS.map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${bd[k] | 0}</td></tr>`).join('');
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${runs}</b><span>Runs</span></div>
-      <div class="gs-tally"><b>${best}</b><span>Longest snake</span></div>
+      <div class="gs-tally"><b>${runs}</b><span>${t('gs_runs')}</span></div>
+      <div class="gs-tally"><b>${best}</b><span>${t('gs_sn_longest')}</span></div>
     </div>
-    <h4 class="gs-tbl-h">Longest snake by difficulty</h4>
+    <h4 class="gs-tbl-h">${t('gs_sn_longest_by_diff')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">Best</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -333,8 +340,8 @@ let _st = null;               // the stats to render: local first, then combined
 let _combinedDevices = 1;
 
 function tabsHTML() {
-  return visibleTabs().map((t) =>
-    `<button type="button" class="gs-tab${t.id === _active ? ' is-active' : ''}" data-game="${t.id}" style="--gs-accent:${t.accent}"${t.id === _active ? ' aria-current="true"' : ''}>${esc(t.label)}</button>`
+  return visibleTabs().map((tab) =>
+    `<button type="button" class="gs-tab${tab.id === _active ? ' is-active' : ''}" data-game="${tab.id}" style="--gs-accent:${tab.accent}"${tab.id === _active ? ' aria-current="true"' : ''}>${esc(tab.label)}</button>`
   ).join('');
 }
 
@@ -384,15 +391,15 @@ export function openStatsOverlay() {
   host.className = 'gs-overlay';
   host.setAttribute('role', 'dialog');
   host.setAttribute('aria-modal', 'true');
-  host.setAttribute('aria-label', 'Game stats');
+  host.setAttribute('aria-label', t('gs_dialog_aria'));
   host.innerHTML = `
     <div class="gs-scrim" data-role="gs-close"></div>
     <div class="gs-panel">
       <header class="gs-top">
-        <h2>Game Stats</h2>
-        <button type="button" class="gs-x" data-role="gs-close" aria-label="Close">&times;</button>
+        <h2>${t('gs_title')}</h2>
+        <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
       </header>
-      <nav class="gs-tabs" data-role="gs-tabs" aria-label="Choose a game">${tabsHTML()}</nav>
+      <nav class="gs-tabs" data-role="gs-tabs" aria-label="${t('gs_tabs_aria')}">${tabsHTML()}</nav>
       <div class="gs-body" data-role="gs-body">${screenFor(_active, _st)}</div>
     </div>`;
   host.addEventListener('click', onClick);
