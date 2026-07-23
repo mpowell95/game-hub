@@ -10,14 +10,21 @@ import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './pro
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
 import { statsOwner } from './game-stats.js';
-import { getLang, setLang } from './i18n.js';
+import { getLang, setLang, makeT } from './i18n.js';
 import { loadFavorites, toggleFavorite } from './favorites.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
+/** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
+ *  (Monopoly Deal, Parchís, Boggle — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
+const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) : b;
 
 const GAMES = [
   {
     id: 'connect-four',
     title: 'Connect Four',
-    blurb: 'Drop discs, connect four. Four AI levels incl. a perfect endgame solver.',
+    blurb: { en: 'Drop discs, connect four. Four AI levels incl. a perfect endgame solver.',
+      es: 'Encesta fichas y conecta cuatro. Cuatro niveles de IA, incluido un solucionador perfecto de finales.' },
     // Relative to this module (js/hub.js): up to root, then into the game folder.
     module: '../connect-four/js/ui.js',
     accent: '#1769d4',
@@ -55,7 +62,8 @@ const GAMES = [
   {
     id: 'chinchon',
     title: 'Chinchón',
-    blurb: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
+    blurb: { en: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
+      es: 'Rummy español contra una IA inteligente. Ligadas, cortes y chinchón. 2-4 jugadores.' },
     module: '../chinchon/js/ui.js',
     accent: '#d4a017',
     // A held FAN of five cards is naturally wide, so it suits 16:9 far better than the
@@ -164,7 +172,8 @@ const GAMES = [
   {
     id: 'escoba',
     title: 'Escoba',
-    blurb: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',
+    blurb: { en: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',
+      es: 'Juego de cartas español de pesca. Captura cartas que sumen 15. 2-3 jugadores.' },
     module: '../escoba/js/ui.js',
     // Escoba's own screens (setup + game mat) already show its title and back
     // affordance; the hub's own header row is pure wasted vertical space for
@@ -207,7 +216,8 @@ const GAMES = [
   {
     id: 'filler',
     title: 'Filler',
-    blurb: 'Flood-fill duel vs. smart AI. Pick colors, grow your corner, capture the majority.',
+    blurb: { en: 'Flood-fill duel vs. smart AI. Pick colors, grow your corner, capture the majority.',
+      es: 'Duelo de relleno por inundación contra una IA inteligente. Elige colores, expande tu esquina y captura la mayoría.' },
     module: '../filler/js/ui.js',
     accent: '#c2557f',
     // 8x5 instead of 5x5: the flood-fill board is arbitrary-sized, so widening it is the
@@ -229,7 +239,8 @@ const GAMES = [
   {
     id: 'mancala',
     title: 'Mancala',
-    blurb: 'Sow stones, chain extra turns, capture the most. Vs. AI or a friend.',
+    blurb: { en: 'Sow stones, chain extra turns, capture the most. Vs. AI or a friend.',
+      es: 'Siembra piedras, encadena turnos extra y captura las más posibles. Contra la IA o un amigo.' },
     module: '../mancala/js/ui.js',
     // The board wants every vertical pixel it can get on a phone, and the game
     // shows its own title/avatars, so the hub's header row is wasted space here.
@@ -274,7 +285,8 @@ const GAMES = [
   {
     id: 'nuts-bolts',
     title: 'Nuts & Bolts',
-    blurb: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
+    blurb: { en: 'Colour-sort puzzle. Stack matching nuts onto bolts.',
+      es: 'Puzle de clasificar por colores. Apila tuercas iguales en los tornillos.' },
     module: '../nuts-bolts/js/ui.js',
     accent: '#607d8b',
     // Five bolts in a WIDE row rather than three stacked tall: the puzzle's real shape is
@@ -310,7 +322,8 @@ const GAMES = [
   {
     id: 'tic-tac-toe',
     title: 'Tic Tac Toe',
-    blurb: 'Classic 3x3, or Ultimate: nine boards in one, where your move picks your opponent\'s board.',
+    blurb: { en: 'Classic 3x3, or Ultimate: nine boards in one, where your move picks your opponent\'s board.',
+      es: 'Clásico 3x3, o Definitivo: nueve tableros en uno, donde tu jugada elige el tablero de tu rival.' },
     module: '../tic-tac-toe/js/ui.js',
     accent: '#0e7c86',
     // SQUARE BOARD, deliberately not stretched: the 3x3 is shown at full height, and the
@@ -340,7 +353,8 @@ const GAMES = [
   {
     id: 'ball-run',
     title: 'Ball Run',
-    blurb: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',
+    blurb: { en: 'Steer a rolling ball down an endless neon runway. Dodge obstacles, chase speedpoints.',
+      es: 'Guía una bola rodante por una pista de neón sin fin. Esquiva obstáculos y persigue puntos de velocidad.' },
     module: '../ball-run/js/ui.js',
     // Real-time full-bleed 3D canvas: the hub's own header row and the
     // hub-main side padding would both eat into the play area and show as
@@ -371,7 +385,8 @@ const GAMES = [
   {
     id: 'dots-boxes',
     title: 'Dots and Boxes',
-    blurb: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
+    blurb: { en: 'Draw lines, close boxes, chain your captures. Simple rules, deep endgame.',
+      es: 'Dibuja líneas, cierra cajas y encadena tus capturas. Reglas simples, final de partida profundo.' },
     module: '../dots-boxes/js/ui.js',
     // Neutral dark backdrop on purpose, NOT a third saturated hue: with
     // --db-human/--db-ai already bright red/blue, a colorful accent behind
@@ -471,7 +486,8 @@ const GAMES = [
   {
     id: 'snake',
     title: 'Snake',
-    blurb: 'The old phone classic. Eat, grow, and don’t hit the walls.',
+    blurb: { en: 'The old phone classic. Eat, grow, and don’t hit the walls.',
+      es: 'El clásico del teléfono de antes. Come, crece y no choques con las paredes.' },
     module: '../snake/js/ui.js',
     accent: '#3f7d2c',
     // The LCD look the game itself renders: pale green screen, a dark pixel snake winding across
@@ -556,51 +572,51 @@ class Hub {
       <div class="hub">
         <header class="hub-top">
           <div class="hub-top-info">
-            <button type="button" class="hub-back" data-role="back" hidden aria-label="Back to hub">‹ Hub</button>
+            <button type="button" class="hub-back" data-role="back" hidden aria-label="${t('hub_back_aria')}">‹ Hub</button>
             <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
             <button type="button" class="hub-langtoggle" data-role="lang"></button>
             <button type="button" class="hub-version" data-role="version" hidden></button>
           </div>
           <div class="hub-top-right">
-            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="My game stats">My Stats</button>
-            <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="Leaderboards">Leaderboards</button>
-            <a class="hub-profile" data-role="profile" href="profile/">My Profile</a>
+            <button type="button" class="hub-statsbtn" data-role="stats" aria-label="${t('hub_stats_aria')}">${t('hub_stats_btn')}</button>
+            <button type="button" class="hub-statsbtn" data-role="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${t('hub_leaderboard_btn')}</button>
+            <a class="hub-profile" data-role="profile" href="profile/">${t('hub_profile_btn')}</a>
           </div>
         </header>
         <main class="hub-main">
-          <section class="hub-grid" data-role="grid" aria-label="Games">
+          <section class="hub-grid" data-role="grid" aria-label="${t('hub_games_aria')}">
             ${gridHTML}
           </section>
-          ${showKeepsake ? `<section class="hub-extra"><button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">🎁 Challenge</button></section>` : ''}
+          ${showKeepsake ? `<section class="hub-extra"><button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">${t('hub_challenge_btn')}</button></section>` : ''}
           <section class="hub-game" data-role="game" hidden></section>
         </main>
         <div class="hub-confirm" data-role="confirm" hidden>
           <div class="hub-confirm-scrim" data-role="confirm-cancel"></div>
-          <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="Leave game">
-            <p class="hub-confirm-msg">Leave this game? Your current progress will be lost.</p>
+          <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="${t('hub_confirm_dialog_aria')}">
+            <p class="hub-confirm-msg">${t('hub_confirm_msg')}</p>
             <div class="hub-confirm-actions">
-              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="confirm-cancel">Keep playing</button>
-              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="confirm-leave">Leave game</button>
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="confirm-cancel">${t('hub_confirm_keep')}</button>
+              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="confirm-leave">${t('hub_confirm_leave')}</button>
             </div>
           </div>
         </div>
         <div class="hub-fr" data-role="firstrun" hidden>
           <div class="hub-fr-scrim"></div>
-          <div class="hub-fr-card" role="dialog" aria-modal="true" aria-label="Choose a name">
-            <h2 class="hub-fr-h">Choose a name</h2>
-            <div class="hub-fr-row hub-fr-langrow" role="group" aria-label="Language / Idioma">
+          <div class="hub-fr-card" role="dialog" aria-modal="true" aria-label="${t('hub_fr_dialog_aria')}">
+            <h2 class="hub-fr-h">${t('hub_fr_title')}</h2>
+            <div class="hub-fr-row hub-fr-langrow" role="group" aria-label="${t('hub_fr_langrow_aria')}">
               <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="en">English</button>
               <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="es">Español</button>
             </div>
             <div class="hub-fr-row">
-              <input class="hub-fr-input" data-role="fr-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
-              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="fr-save">Save</button>
+              <input class="hub-fr-input" data-role="fr-name" type="text" maxlength="20" placeholder="${t('hub_fr_name_placeholder')}" autocomplete="off">
+              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="fr-save">${t('hub_fr_save')}</button>
             </div>
-            <div class="hub-fr-or">or</div>
+            <div class="hub-fr-or">${t('hub_fr_or')}</div>
             <div class="hub-fr-row">
-              <input class="hub-fr-input" data-role="fr-code" type="text" maxlength="5" placeholder="Enter a code"
+              <input class="hub-fr-input" data-role="fr-code" type="text" maxlength="5" placeholder="${t('hub_fr_code_placeholder')}"
                      autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.16em">
-              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-link">Link</button>
+              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-link">${t('hub_fr_link')}</button>
             </div>
             <p class="hub-fr-msg" data-role="fr-msg" role="status" aria-live="polite"></p>
           </div>
@@ -627,7 +643,7 @@ class Hub {
 
     // The profile pill reads "My Profile" (consistent with My Stats / Leaderboards); the accent
     // highlight still nudges setup when no profile exists yet.
-    this.el.profile.textContent = 'My Profile';
+    this.el.profile.textContent = t('hub_profile_btn');
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
@@ -736,10 +752,10 @@ class Hub {
       if (running && latest && latest !== running) {
         el.textContent = `${running} → ${latest}`;
         el.classList.add('is-stale');
-        el.setAttribute('aria-label', `Update available: ${latest}. Tap to update.`);
+        el.setAttribute('aria-label', t('hub_version_update_aria', { latest }));
       } else {
         el.textContent = cur;
-        el.setAttribute('aria-label', `Version ${cur}. Tap to check for updates.`);
+        el.setAttribute('aria-label', t('hub_version_current_aria', { cur }));
       }
     } catch { /* never break the hub */ }
   }
@@ -784,7 +800,7 @@ class Hub {
 
     box.querySelector('[data-role="fr-save"]').addEventListener('click', async () => {
       const name = (nameIn.value || '').trim();
-      if (!name) { say('Enter a name.'); return; }
+      if (!name) { say(t('hub_fr_msg_enter_name')); return; }
       const cur = loadProfile() || {};
       // Which code this device should record under (see game-stats.js's "WHOSE stats these are"):
       //   - the profile's own code, if it still has one;
@@ -797,10 +813,10 @@ class Hub {
       const owner = statsOwner();
       const sameAsOwner = !!(owner && (owner.name || '').trim().toLowerCase() === name.toLowerCase());
       const code = cur.playerId || (sameAsOwner ? owner.code : null) || newPlayerCode();
-      say('Checking...');
+      say(t('hub_fr_msg_checking'));
       let status = 'offline';
       try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
-      if (status === 'taken') { say('Taken. Use that code instead.'); return; }
+      if (status === 'taken') { say(t('hub_fr_msg_taken')); return; }
       saveProfile(Object.assign({}, cur, { name, playerId: code }));
       // The real previous name, not '' - the hardcoded empty string here is what left "natalia"
       // reserved against Ana's code when the shared device was renamed through this gate, so the
@@ -813,8 +829,8 @@ class Hub {
 
     box.querySelector('[data-role="fr-link"]').addEventListener('click', async () => {
       const code = canonicalizeCode(codeIn.value);
-      if (!code) { say('Invalid code.'); return; }
-      say('Linking...');
+      if (!code) { say(t('hub_fr_msg_invalid_code')); return; }
+      say(t('hub_fr_msg_linking'));
       const cur = loadProfile() || {};
       // Adopt the player's existing name/emoji so this device joins as THEM. Without this the blank
       // name normalizes to 'You' and, being the newest device, would rename the whole player.
@@ -879,9 +895,10 @@ class Hub {
     const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${g.title}</span>
-        ${g.comingSoon ? '<span class="hub-soon-tag">Soon</span>'
-          : g.devOnly ? '<span class="hub-soon-tag">Test</span>' : ''}`;
-    const aria = g.blurb ? `${g.title}. ${g.blurb}` : g.title;
+        ${g.comingSoon ? `<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`
+          : g.devOnly ? `<span class="hub-soon-tag">${t('hub_test_tag')}</span>` : ''}`;
+    const blurb = blurbText(g.blurb);
+    const aria = blurb ? `${g.title}. ${blurb}` : g.title;
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area.
     const card = g.href
@@ -892,7 +909,7 @@ class Hub {
     // A <button> can't nest inside a <button> or <a>, so the heart is a SIBLING inside a
     // positioned .hub-cell wrapper, not a child of .hub-card - see .hub-cell/.hub-fav in hub.css.
     const favored = this._favIds.has(g.id);
-    const favLabel = favored ? `Remove ${g.title} from favorites` : `Add ${g.title} to favorites`;
+    const favLabel = t(favored ? 'hub_fav_remove' : 'hub_fav_add', { title: g.title });
     const fav = `<button type="button" class="hub-fav${favored ? ' is-fav' : ''}" data-fav-id="${g.id}"
               aria-pressed="${favored}" aria-label="${favLabel}">${favored ? '♥' : '♡'}</button>`;
     return `<div class="hub-cell">${card}${fav}</div>`;
@@ -920,7 +937,7 @@ class Hub {
       this._setImmersive(!!game.immersive);
     } catch (e) {
       console.error(`Failed to load game "${id}"`, e);
-      this.el.game.innerHTML = `<p class="hub-error">Couldn't load ${game.title}. Please try again.</p>`;
+      this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: game.title })}</p>`;
       this.el.game.hidden = false;
       this.el.grid.hidden = true;
       if (this.el.extra) this.el.extra.hidden = true;
