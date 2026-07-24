@@ -63,40 +63,14 @@ const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Android Chrome has navigator.vibrate and gets real timed pulses. iOS
-// Safari/PWAs expose NO vibration API at all, so iPhones get the "switch
-// hack" fallback (iOS 17.4+): programmatically flipping a native
-// <input type="checkbox" switch> fires the Taptic tick, and doing it during
-// an active touch gesture (a Boggle trace always is one) counts as user
-// activation. This is UNDOCUMENTED Safari behavior, not an API -- if an iOS
-// update kills it, Boggle silently returns to the no-haptics state and
-// nothing else breaks. The input must be rendered (display:none suppresses
-// the native switch and its tick), so it parks offscreen instead.
-let hapticSwitch = null;
-function ensureHapticSwitch() {
-  if (hapticSwitch && document.body.contains(hapticSwitch)) return hapticSwitch;
-  const el = document.createElement('input');
-  el.type = 'checkbox';
-  el.setAttribute('switch', '');
-  el.tabIndex = -1;
-  el.setAttribute('aria-hidden', 'true');
-  el.style.cssText = 'position:fixed;left:-40px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
-  document.body.appendChild(el);
-  hapticSwitch = el;
-  return el;
-}
-function removeHapticSwitch() {
-  if (hapticSwitch) { hapticSwitch.remove(); hapticSwitch = null; }
-}
+// Safari/PWAs expose NO vibration API at all -- a "switch hack" fallback
+// (flipping a native <input type="checkbox" switch> to fire the Taptic tick)
+// was tried and tested on a real iPhone 2026-07-24; it did not fire, so it
+// was removed. Verdict is final: web apps cannot produce haptics on iOS.
+// The gold visual cue (see _cueState/_updateWordCue below) is the iOS
+// answer -- do not re-try a haptics workaround here.
 function haptic(ms) {
-  try {
-    if (navigator.vibrate) { navigator.vibrate(ms); return; }
-    if (!('ontouchstart' in window)) return; // desktop: nothing to tick
-    const sw = ensureHapticSwitch();
-    sw.click();
-    // The switch tick has no duration control, so the stronger submit pulse
-    // (ms >= 20) is expressed as a quick double tick instead.
-    if (ms >= 20) setTimeout(() => { try { sw.click(); } catch { /* removed */ } }, 70);
-  } catch { /* not supported */ }
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch { /* not supported */ }
 }
 const posKey = (r, c) => `${r},${c}`;
 const displayFace = (face) => (face === 'QU' ? 'Qu' : face);
@@ -222,11 +196,11 @@ class BoggleUI {
     this._tapMode = false;
     this._tileRects = null;
     this._pointerId = null;
-    // Edge-trigger for the trace haptic (below): the last word this path
-    // already vibrated for, so extending to a new valid word fires again but
-    // backtracking to an already-signaled word does not (Matt's explicit rule
-    // -- see haptic() call sites).
-    this._lastHapticWord = null;
+    // Edge-trigger for the gold word-is-valid cue (and, on Android, the
+    // paired haptic tick): the last word this path already fired for, so
+    // extending to a new valid word fires again but backtracking to an
+    // already-signaled word does not. See _cueState()/_updateWordCue().
+    this._lastCueWord = null;
     // When the last pointer gesture ended. Used to ignore the synthetic click
     // browsers fire after a tap -- deliberately a TIMESTAMP and not a boolean
     // flag: ending a trace can re-render the board, which leaves the browser
@@ -255,7 +229,6 @@ class BoggleUI {
     if (!this._restoring) saveGame(this);
     this.stopTimer();
     this._detachBoardPointer();
-    removeHapticSwitch();
     if (this.root) this.root.removeEventListener('click', this._onClick);
     this.container.innerHTML = '';
     this._board = null;
@@ -806,18 +779,60 @@ class BoggleUI {
     this._updateWordBar();
   }
 
+  /** Pure predicate: is `word` a submittable NEW word right now (length ok,
+   *  in the dictionary, not already found)? Same rule that used to gate the
+   *  iOS haptic trigger -- now also what turns the gold visual cue on. */
+  _isCueWord(word) {
+    return !!word && word.length >= MIN_WORD_LEN && !this._found.has(word)
+      && !!this._trieRoot && isValidWord(this._trieRoot, word);
+  }
+
+  /** Advances the edge-trigger (_lastCueWord) for `word` and reports whether
+   *  the cue state is active and whether this call is the moment it was
+   *  ENTERED (word just became cue-worthy, vs. staying cue-worthy across
+   *  repeated calls for the same word). Shared by both input paths -- the
+   *  swipe path (_updateWordBar, every pointermove) and the tap path
+   *  (renderGame, after every keyboard tile tap) -- so backtracking to an
+   *  already-signaled word never re-fires either one. */
+  _cueState(word) {
+    const active = this._isCueWord(word);
+    const entered = active && word !== this._lastCueWord;
+    this._lastCueWord = active ? word : null;
+    return { active, entered };
+  }
+
+  /** Restart a CSS animation on already-live nodes (the swipe path patches
+   *  the word bar/path/tile in place rather than re-rendering) by removing
+   *  the trigger class, forcing a reflow, then re-adding it. Fresh nodes
+   *  (the tap path re-renders the whole shell) just play it on insertion,
+   *  which this is equally harmless to call for. */
+  _pulseCue(...els) {
+    els.filter(Boolean).forEach((el) => {
+      el.classList.remove('bg-cue-pulse');
+      void el.offsetWidth; // eslint-disable-line no-void -- reflow, not a no-op
+      el.classList.add('bg-cue-pulse');
+    });
+  }
+
+  /** Apply the gold "this trace is a real, new word" cue to the word bar
+   *  text, the traced path line, and the current last tile. `allowHaptic`
+   *  is only true from the swipe path (_updateWordBar) -- the keyboard tap
+   *  path (renderGame) shares the same visual cue but never vibrates, same
+   *  as the old haptic trigger 1 never did (see boggle/CLAUDE.md). */
+  _updateWordCue(word, { allowHaptic = false } = {}) {
+    const cue = this._cueState(word);
+    if (cue.entered && allowHaptic) haptic(12); // Android only; feature-detected in haptic()
+    const textEl = this.shell.querySelector('.bg-wordbar-text');
+    const lineEl = this.shell.querySelector('.bg-path-line');
+    const lastTileEl = this.shell.querySelector('.bg-tile.is-last');
+    [textEl, lineEl, lastTileEl].forEach((el) => el && el.classList.toggle('is-word', cue.active));
+    if (cue.entered) this._pulseCue(textEl);
+    return cue;
+  }
+
   _updateWordBar() {
     const word = this._path.length ? wordForPath(this._board.grid, this._path) : '';
-    // Trigger 1: the moment the current trace first becomes a submittable NEW
-    // word (length ok, in the dictionary, not already found). Edge-triggered
-    // per word string -- see _lastHapticWord's comment.
-    if (word.length >= MIN_WORD_LEN && !this._found.has(word) && this._trieRoot
-      && isValidWord(this._trieRoot, word) && word !== this._lastHapticWord) {
-      haptic(12);
-      this._lastHapticWord = word;
-    } else if (!word) {
-      this._lastHapticWord = null;
-    }
+    this._updateWordCue(word, { allowHaptic: true }); // trigger 1 (see boggle/CLAUDE.md)
     const textEl = this.shell.querySelector('.bg-wordbar-text');
     if (textEl) {
       textEl.textContent = word || t('wordbar_hint');
@@ -875,6 +890,11 @@ class BoggleUI {
     this._detachBoardPointer();
     this._attachBoardPointer();
     this._measureTiles();
+    // Keyboard/tap path: this rebuilds the whole shell (unlike the swipe
+    // path's _updateBoardVisuals patch), so the cue has to be (re)applied to
+    // the fresh nodes here. No haptic -- a keyboard user has no vibration
+    // motor to feel it (see boggle/CLAUDE.md).
+    this._updateWordCue(word);
   }
 
   // --- end of round ---------------------------------------------------------

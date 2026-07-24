@@ -174,6 +174,25 @@
 .bg-root .bg-wordbar-text.is-empty { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--bg-muted); }
 .bg-root .bg-wordbar-actions { display: flex; gap: 6px; flex: none; }
 
+/* The gold "this trace is a real, new word" cue (2026-07-24, replaces the
+   iOS haptic switch hack tested and removed the same day -- see
+   boggle/CLAUDE.md). Gold vs. the normal ink is a brightness/weight change,
+   not a hue-only pair, so it stays within the colorblind-safe rule above.
+   Already-found words never get it (the JS predicate excludes them). */
+.bg-root .bg-wordbar-text.is-word { color: var(--bg-gold); }
+.bg-root .bg-path-line.is-word { stroke: var(--bg-gold); }
+.bg-root .bg-tile.is-last.is-word { border-color: var(--bg-gold); }
+.bg-root .bg-wordbar-text.bg-cue-pulse { animation: bg-cue-pop 200ms ease-out; }
+@keyframes bg-cue-pop {
+  0% { transform: scale(1); text-shadow: 0 0 0 rgba(255, 206, 74, 0); }
+  40% { transform: scale(1.14); text-shadow: 0 0 8px rgba(255, 206, 74, 0.85); }
+  100% { transform: scale(1); text-shadow: 0 0 0 rgba(255, 206, 74, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Color change stays; only the scale/glow pulse is motion. */
+  .bg-root .bg-wordbar-text.bg-cue-pulse { animation: none; }
+}
+
 .bg-root .bg-feedback { min-height: 18px; margin: -6px 0 0; font-size: 12.5px; font-weight: 800; text-align: center; }
 .bg-root .bg-feedback.is-good { color: var(--bg-good); }
 .bg-root .bg-feedback.is-bad { color: var(--bg-bad); }

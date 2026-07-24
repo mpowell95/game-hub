@@ -48,26 +48,27 @@ are gone; difficulty ids (`beginner`/`intermediate`/`pro`) are untouched.
 Matt asked for a small vibration while tracing and shorter round timers
 (`HANDOFF-FB-BOGGLE.md`). Two feature-detected `navigator.vibrate()` calls,
 wrapped in a tiny `haptic(ms)` helper in `ui.js` — real timed pulses on
-Android Chrome. **iOS Safari/PWAs expose no vibration API at all**, so on
-iPhones `haptic()` falls back to the "switch hack" (added 2026-07-24 at
-Matt's request, after the vibrate-only version shipped dark on his iPhone): a
-hidden rendered `<input type="checkbox" switch>` (module-scope singleton,
-parked offscreen — `display:none` would suppress the native switch and its
-tick; removed in `destroy()`) is `.click()`ed to fire the iOS 17.4+ Taptic
-tick, with the stronger submit pulse expressed as a quick double tick since
-the tick has no duration control. This is UNDOCUMENTED Safari behavior: if an
-iOS update kills it, Boggle silently returns to no-haptics and nothing else
-breaks — do not build anything else on it. No settings row for it.
+Android Chrome. **iOS Safari/PWAs expose no vibration API at all.** An
+undocumented "switch hack" fallback (programmatically clicking a hidden
+native `<input type="checkbox" switch>` to fire the iOS 17.4+ Taptic tick)
+was added the same day, then **tested on Matt's real iPhone 2026-07-24 and
+did not fire.** Verdict is final: web apps cannot produce haptics on iOS.
+The switch hack (`ensureHapticSwitch`/`removeHapticSwitch`/`hapticSwitch`)
+was removed from `ui.js`; `haptic(ms)` is back to a plain feature-detected
+`navigator.vibrate()` call that does nothing when the API is absent. **Do
+not re-try an iOS haptics workaround** — the gold visual cue below is the
+answer for platforms with no vibration API. No settings row for haptics.
 
 - **Trigger 1** (`_updateWordBar()`, the same place the current word is
   already derived per pointer move — no second dictionary walk):
   `navigator.vibrate(12)` the moment the current trace first becomes a
   submittable NEW word (length ≥ `MIN_WORD_LEN`, in the trie, not already in
-  `_found`). Edge-triggered per word string via `_lastHapticWord`: extending
-  to a longer valid new word fires again, shrinking back to a word already
-  signaled this trace does not, and already-found words never fire. Only
-  wired into the pointer/swipe path (`_updateWordBar`), not the keyboard tap
-  path (`_onKeyboardTile` → full `renderGame()`) — a keyboard user has no
+  `_found`). Edge-triggered per word string via `_lastCueWord` (shared with
+  the visual cue below, see `_cueState()`): extending to a longer valid new
+  word fires again, shrinking back to a word already signaled this trace
+  does not, and already-found words never fire. Only wired into the
+  pointer/swipe path (`_updateWordBar`), not the keyboard tap path
+  (`_onKeyboardTile` → full `renderGame()`) — a keyboard user has no
   vibration motor to feel it anyway.
 - **Trigger 2**: `navigator.vibrate(25)` on a successful submit only
   (`onSubmitWord`'s valid branch). Duplicate and invalid submits: nothing.
@@ -81,6 +82,37 @@ breaks — do not build anything else on it. No settings row for it.
   `loadGame()`'s in-progress-save validator caps `remainingSec` at
   `Math.max(...TIMERS) * 60` rather than a hardcoded 5 minutes, so it tracks
   the timer set instead of drifting out of sync with it.
+
+## The gold word-is-valid cue (2026-07-24, batch C of the 2026-07-24 feedback arc)
+
+Replaces the removed iOS haptic switch hack above as the way an iPhone player (or anyone,
+Android included) sees that the current trace is a real, new word. Trigger predicate is
+identical to haptic trigger 1: `_isCueWord(word)` — length ≥ `MIN_WORD_LEN`, in the trie, not
+already in `_found`. Shared edge-tracking (`_cueState()`, `_lastCueWord`) drives both the cue
+and, on the swipe path only, the Android vibration — the same variable that used to be called
+`_lastHapticWord` now names both jobs.
+
+- While the predicate holds: the word bar text and the traced path polyline get an `is-word`
+  class (gold, `--bg-gold`), and the current last tile's border goes gold too
+  (`.bg-tile.is-last.is-word`). A single quick scale/glow pulse (`bg-cue-pulse` class, ~200ms
+  `bg-cue-pop` keyframe) fires on the word bar text only, only at the moment the state is
+  ENTERED for a given word string — not on every pointermove while it stays true, and not
+  again on backtrack-then-reforward to an already-signaled word.
+- `_updateWordCue(word, {allowHaptic})` is the one shared apply-point for both input paths:
+  the swipe path (`_updateWordBar`, called from `_updateBoardVisuals`'s in-place DOM patch)
+  passes `allowHaptic: true`; the keyboard tap path (`renderGame()`, which rebuilds the whole
+  shell on every tap) passes no options, so it gets the same visual cue with no vibration —
+  same reasoning as trigger 1 always having been swipe-only.
+- The swipe path's elements persist across many patches per second, so a CSS class toggle
+  alone won't replay the pulse animation on a repeat entry; `_pulseCue()` does the standard
+  remove-class → force reflow (`el.offsetWidth`) → re-add-class restart. Harmless to call on
+  the tap path's fresh nodes too (a freshly inserted node plays the animation regardless).
+- Already-found words: never gold, never pulse (the predicate excludes them structurally).
+  Invalid or too-short traces: normal styling. `prefers-reduced-motion`: the color/weight
+  change stays, only the `bg-cue-pop` animation is suppressed.
+- Colorblind rule: gold vs. the normal ink is a brightness change (paired with the cue only
+  ever showing up alongside the already-bold word-bar weight), not a hue-only pair — never
+  red/green regardless.
 
 ## i18n (2026-07-23) — UI translates, gameplay stays English
 
