@@ -27,6 +27,7 @@ const SUITES = [
   { file: 'dots-boxes/js/test.js' },
   { file: 'boggle/js/test.js' },
   { file: 'snake/js/test.js' },
+  { file: 'uno/js/test.js' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },
