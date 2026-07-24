@@ -777,3 +777,30 @@
    row) but stays lit until explicitly cleared instead of auto-fading, and
    reads as a status rather than a move description. */
 .eb-mat-announce.is-mp-status { background: rgba(74, 50, 0, 0.92); border: 1.5px solid var(--eb-attn); }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
+   properties. --eb-felt/--eb-felt-edge (the table) and --eb-gold/--eb-attn (the colorblind-
+   relevant selection/attention colors) stay UNTOUCHED on purpose -- the felt is already dark in
+   both themes, and gold/attn are already legible against a dark surface. --eb-accent (used both
+   as a button background AND as plain text/border, e.g. .eb-howto-link) gets lightened so it stays
+   readable as text on the new dark surface. A few hover states hardcoded to a light gray literal
+   (not on a variable) get their own overrides, plus the chart grid lines and the dealer-dot badge
+   (which intentionally stays a fixed dark chip regardless of theme), plus the tier 3/4 ski-slope
+   shape fix. */
+:root.gh-dark .eb-root {
+  --eb-surface: #1b2333;
+  --eb-surface-2: #262f42;
+  --eb-ink: #e9eef6;
+  --eb-muted: #9db0c9;
+  --eb-accent: #3fae7d;
+  --eb-bad: #ff6b56;
+  --eb-lead-tint: rgba(63, 150, 240, 0.2);
+}
+:root.gh-dark .eb-root .eb-btn-ghost:hover:not(:disabled) { background: #2f3a50; }
+:root.gh-dark .eb-root .eb-av-btn:hover { background: #2f3a50; }
+:root.gh-dark .eb-root .eb-sheet-x:hover { background: #2f3a50; }
+:root.gh-dark .eb-root .eb-grid { stroke: rgba(233, 238, 246, 0.14); }
+:root.gh-dark .eb-root .eb-dealer-dot { background: #0a1420; border-color: rgba(255, 255, 255, 0.35); }
+:root.gh-dark .eb-root .lb-dshape-t3,
+:root.gh-dark .eb-root .lb-dshape-t4 { fill: #e6e9f0; }
