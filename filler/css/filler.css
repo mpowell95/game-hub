@@ -353,3 +353,25 @@
 @media (min-width: 700px) {
   .fl-shell { max-width: 460px; }
 }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
+   properties. --fl-c0..c5 (the colorblind palette) and --fl-well (the board backdrop, already
+   dark in both themes -- the tiles are the game's own art, like Connect Four's board staying
+   blue) stay UNTOUCHED on purpose. A handful of hardcoded literals not already on a variable
+   (the ghost-button hover, the progress-bar track and its midline divider, the help-bullet
+   text) get their own overrides. */
+:root.gh-dark .filler {
+  --fl-ink: #e9eef6;
+  --fl-muted: #9db0c9;
+  --fl-surface: #1b2333;
+  --fl-edge: #445168;
+  --fl-accent: #4f97e8;
+}
+:root.gh-dark .filler .fl-ghost:hover { background: var(--fl-surface); }
+:root.gh-dark .filler .fl-ghost.is-confirm { background: rgba(255, 99, 82, 0.2); color: #ff8478; border-color: rgba(255, 99, 82, 0.45); }
+:root.gh-dark .filler .fl-progress { background: #2b3547; }
+:root.gh-dark .filler .fl-prog-mid { background: rgba(233, 238, 246, 0.35); }
+:root.gh-dark .filler .fl-help-bullets li { color: var(--fl-muted); }
+:root.gh-dark .filler .lb-dshape-t3,
+:root.gh-dark .filler .lb-dshape-t4 { fill: #e6e9f0; }
