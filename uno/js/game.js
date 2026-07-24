@@ -58,11 +58,18 @@ export function makeDeck() {
 }
 
 export class UnoGame {
-  constructor({ playerCount, rng, presetDeck, onEvent } = {}) {
+  constructor({ playerCount, rng, presetDeck, onEvent, startPlayer } = {}) {
     if (!(playerCount >= 2 && playerCount <= 4)) throw new Error('playerCount must be 2-4');
     this.rng = rng || Math.random;
     this.onEvent = onEvent || (() => {});
     this.n = playerCount;
+    // Who opens the hand - the seat every first-card rule below is computed RELATIVE to,
+    // not hardcoded seat 0. Callers (ui.js) rotate this every game so the opener isn't
+    // always the same seat; the first-card flip's action-card effects target this seat,
+    // never "player 0" literally. Defaults to 0 (and any out-of-range value normalizes to
+    // 0) so every pre-existing construction call, and the direct-state test fixtures that
+    // never set it, keep their old seat-0-opens behavior unchanged.
+    this._startPlayer = Number.isInteger(startPlayer) && startPlayer >= 0 && startPlayer < playerCount ? startPlayer : 0;
     this._initState(presetDeck);
   }
 
@@ -94,21 +101,24 @@ export class UnoGame {
     }
     this.discard.push(card);
     this.activeColor = card.color === 'wild' ? null : card.color;
+    const sp = this._startPlayer || 0;
+    // Every branch below is stated relative to `sp` (the starting seat), exactly as if a
+    // virtual player before `sp` had flipped this card - never relative to seat 0 literally.
     if (card.kind === 'number') {
-      this.currentPlayer = 0;
+      this.currentPlayer = sp;
     } else if (card.kind === 'skip') {
-      this.currentPlayer = this.n > 1 ? 1 : 0;
+      this.currentPlayer = this.n > 1 ? (sp + 1) % this.n : sp;
     } else if (card.kind === 'reverse') {
-      if (this.n === 2) { this.currentPlayer = 1; }
-      else { this.direction = -1; this.currentPlayer = this.n - 1; }
+      if (this.n === 2) { this.currentPlayer = (sp + 1) % this.n; }
+      else { this.direction = -1; this.currentPlayer = (sp - 1 + this.n) % this.n; }
     } else if (card.kind === 'draw2') {
-      this._drawCards(0, 2);
-      this._emit('penaltyDraw', { playerIndex: 0, amount: 2 });
-      this.currentPlayer = this.n > 1 ? 1 : 0;
+      this._drawCards(sp, 2);
+      this._emit('penaltyDraw', { playerIndex: sp, amount: 2 });
+      this.currentPlayer = this.n > 1 ? (sp + 1) % this.n : sp;
     } else if (card.kind === 'wild') {
-      this.currentPlayer = 0;
+      this.currentPlayer = sp;
       this.phase = 'chooseColor';
-      this.pendingWild = { playerIndex: 0, cardId: card.id, isFirstCard: true };
+      this.pendingWild = { playerIndex: sp, cardId: card.id, isFirstCard: true };
     }
     this._emit('gameStart', { topCard: card, currentPlayer: this.currentPlayer });
   }

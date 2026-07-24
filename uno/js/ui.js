@@ -185,14 +185,11 @@ class UnoUI {
 
   _isAI(pi) { return !!(this.seats && this.seats[pi] && this.seats[pi].isAI); }
 
-  _buildSeats(playerCount, nextStarter) {
+  _buildSeats(playerCount) {
     const pool = (this.profile && Array.isArray(this.profile.opponents)) ? this.profile.opponents.slice(0, 3) : [];
-    while (pool.length < 3) pool.push(null);
-    const off = ((nextStarter % 3) + 3) % 3;
-    const rotated = pool.slice(off).concat(pool.slice(0, off));
     const seats = [{ name: this.humanName, emoji: this.humanEmoji, isAI: false }];
     for (let i = 0; i < playerCount - 1; i++) {
-      const o = rotated[i];
+      const o = pool[i];
       seats.push({ name: (o && o.name) || `Computer ${i + 1}`, emoji: (o && o.emoji) || '🤖', isAI: true });
     }
     return seats;
@@ -238,12 +235,18 @@ class UnoUI {
   // --- game lifecycle ------------------------------------------------------------
 
   startGame() {
-    const starter = this.nextStarter;
-    this.nextStarter = (starter + 1) % 3;
+    // Alternate who OPENS the hand across all seats, human included - the engine's
+    // first-card flip only randomizes which card starts the discard, never who acts on
+    // it, so without this the same seat (the human, seat 0) would open ~70% of hands
+    // (every first flip except an action card that redirects it). Banked immediately,
+    // before the game is built, so the rotation survives leaving mid-game (mirrors
+    // mancala/js/ui.js's startGame() alternation).
+    const startPlayer = this.nextStarter % this.players;
+    this.nextStarter = (startPlayer + 1) % this.players;
     saveSettings(this.players, this.difficulty, this.nextStarter);
     clearGame();
-    this.seats = this._buildSeats(this.players, starter);
-    this.game = new UnoGame({ playerCount: this.players });
+    this.seats = this._buildSeats(this.players);
+    this.game = new UnoGame({ playerCount: this.players, startPlayer });
     this.view = 'game';
     this._afterStateChange();
   }

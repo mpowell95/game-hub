@@ -76,6 +76,15 @@ uno/index.html      standalone host (same init() as in-hub)
   implementation in the whole game.
 - **`totalCardCount()`** (deck + discard + every hand) must always read 108; `test.js`
   checks it after reshuffles and after each of 60 full random games.
+- **`_flipFirstCard()`'s every branch is stated RELATIVE to `this._startPlayer`** (the
+  constructor's `startPlayer` option, default 0), never relative to seat 0 literally: a
+  number card opens on `startPlayer`; skip/reverse(2p)/+2 target `startPlayer` and open on
+  `(startPlayer+1)%n`; reverse at 3+ players flips direction and opens on
+  `(startPlayer-1+n)%n` (the seat immediately before `startPlayer` in the original order,
+  since the flip acts as if a virtual player before `startPlayer` had played it); a first-
+  flip wild is chosen by `startPlayer` itself, who then still opens (no self-skip). This is
+  what lets `ui.js` rotate who opens each hand — see "UI notes" for why that matters and the
+  bug this fixed.
 
 ## AI notes (`ai.js`)
 
@@ -92,19 +101,33 @@ move (`game.peekNext(1)`) when that opponent is also the lowest-card player.
 
 ## UI notes (`ui.js`)
 
-- **Seats are fixed: human is always engine index 0**, AI opponents fill 1..n-1 from the
-  shared profile's `opponents` (name/emoji; skill isn't consulted per-seat since difficulty
-  is one global setup choice, not per-opponent - see "Setup screen" below). This keeps the
-  engine's player-0-centric first-card rules simple and matches every other module game's
-  P1-is-human convention.
-- **`nextStarter`/dealer alternation is a seat-rotation of AI opponent ASSIGNMENT, not a
-  turn-order rotation** - a deliberate adaptation of the root checklist's "alternate the
-  dealer/opener... Mancala's model." Mancala/Filler/Tic Tac Toe alternate who moves first
-  because seat position deterministically decides that. Uno's engine already randomizes who
-  opens via the shuffled first-card flip, so seat position carries no real first-move
-  advantage to alternate away; `nextStarter` instead rotates which profile opponent lands in
-  which AI seat each game, so a 3-opponent profile doesn't always see the same opponent in
-  the same seat. Persisted in `gamehub.uno.v1` alongside `players`/`difficulty`.
+- **Seat ASSIGNMENT is fixed: human is always engine index 0**, AI opponents fill 1..n-1
+  from the shared profile's `opponents` (name/emoji; skill isn't consulted per-seat since
+  difficulty is one global setup choice, not per-opponent - see "Setup screen" below). This
+  keeps the engine's `startPlayer`-relative first-card rules simple to reason about and
+  matches every other module game's P1-is-human convention. **Who OPENS the hand is a
+  separate, genuinely rotating concept** - see `nextStarter` immediately below; do not
+  conflate "seat 0 is always the human" with "seat 0 always opens," the two used to be
+  wrongly coupled here (see "Corrected 2026-07-24" below).
+- **`nextStarter` rotates who OPENS the hand, through every seat including the human's.**
+  `UnoGame`'s constructor takes a `startPlayer` option (default 0); `_flipFirstCard()`
+  computes every first-card effect RELATIVE to it (skip/reverse/+2/wild all target
+  `startPlayer`, never seat 0 literally - see "Engine notes" above). `ui.js.startGame()`
+  passes `startPlayer: this.nextStarter % this.players` and immediately advances
+  `nextStarter` to the next seat, banked before the game is built so the rotation survives
+  leaving mid-game (mirrors `mancala/js/ui.js`'s `startGame()` alternation). Persisted in
+  `gamehub.uno.v1` alongside `players`/`difficulty`. **The first-card flip only randomizes
+  which CARD starts the discard pile, never who acts on it** - `startPlayer` is the only
+  thing that actually varies who opens.
+- **Corrected 2026-07-24 (verification finding).** The first build hardcoded every
+  first-card rule to seat 0 and had `nextStarter` rotate which PROFILE OPPONENT filled the
+  AI seats instead - a misreading of "the engine already randomizes who opens" that
+  conflated "which card flips" with "who acts on it." In reality the human (seat 0) opened
+  essentially every hand except when the flipped card happened to be an action card that
+  redirected control - roughly 70% of hands, not the ~1/n a rotating opener should give. Fixed
+  by adding `startPlayer` to the engine (see "Engine notes") and repointing `nextStarter` at
+  the actual opening seat; the AI-opponent-seat-shuffle idea was dropped rather than kept
+  alongside it, to avoid two different things rotating under one persisted field.
 - **The `_afterStateChange()` funnel decides busy/scheduling BEFORE rendering, not after.**
   An earlier draft called `renderGame()` first and updated `this.busy` afterward for the
   *next* call — which meant every render showed the PREVIOUS turn's busy state, so a
@@ -177,23 +200,38 @@ own `title` key. Art: `GAME_ART['uno']` in `js/game-art.js` (fanned cards, lands
 ```
 node uno/js/test.js
 ```
-86 assertions: deck composition (exact counts per color/kind), +2 stacking accumulation and
+97 assertions: deck composition (exact counts per color/kind), +2 stacking accumulation and
 resolution, penalty draws being a single lump (not draw-until-playable), draw-until-playable
 stopping at the first legal card and forcing its play, reshuffle-on-exhaustion preserving
 the 108-card total, Reverse-as-Skip at 2 players vs. a real direction flip at 3+, every
-first-card rule including the Wild+4 reflip, win detection, and 60 full AI-vs-AI random
-games (20 each at 2/3/4 players, seeded rng) all terminating with the card count intact.
-Wired into `run-all-tests.mjs`.
+first-card rule including the Wild+4 reflip **re-proven relative to a non-zero `startPlayer`
+for every card kind** (number/skip/reverse at 2p and 4p/+2/wild, plus an end-to-end
+`UnoGame` construction opening on the requested seat for all 3 seats of a 3-player game),
+win detection, and 60 full AI-vs-AI random games (20 each at 2/3/4 players, seeded rng) all
+terminating with the card count intact. Wired into `run-all-tests.mjs`.
 
 ## Verification (2026-07-24)
 
 Browser-tested at 375x812: setup screen (both rows, Start), a live 2-player game (legal-card
 highlighting, AI turns, draw-until-playable including a multi-draw AI turn), autosave/resume
 across a hard reload, the how-to-play sheet, and dark mode (`:root.gh-dark .un-root`
-resolving its overridden custom properties). Found and fixed one real bug in this pass (the
-busy-flag-before-render ordering, see "UI notes" above) that unit tests alone could not have
-caught, since it only manifests as a stale render, not a wrong engine state. The wild-color
-chooser and win overlay were verified by code review and are exercised indirectly by
-`test.js`'s AI-vs-AI games (which choose wild colors and reach `phase === 'over'` routinely)
-but not click-tested end-to-end in the browser this pass - worth a manual pass if a report
-ever suggests that flow is broken.
+resolving its overridden custom properties). Found and fixed two real bugs this way that
+unit tests alone did not catch:
+
+1. The busy-flag-before-render ordering (see "UI notes" above) — a stale render, not a
+   wrong engine state, so headless assertions on engine state couldn't see it.
+2. **The opener-alternation deviation** — first shipped with every first-card rule
+   hardcoded to seat 0, so the human opened ~70% of hands regardless of `nextStarter`
+   (see "UI notes"'s "Corrected 2026-07-24" note). Caught by a verification pass that
+   actually started several games in a row and read the persisted `nextStarter`/opening
+   seat back out of `localStorage`, not by code review or the original engine tests —
+   the original 86 assertions all passed with the bug present, because they only ever
+   constructed games with the (then-only) default seat-0 opener and had nothing to
+   compare it against. The new relative-`startPlayer` tests above are the regression
+   guard; do not add a first-card code path that reads `0` for "the opener" directly —
+   read `this._startPlayer` (or take it as a parameter) instead.
+
+The wild-color chooser and win overlay were verified by code review and are exercised
+indirectly by `test.js`'s AI-vs-AI games (which choose wild colors and reach
+`phase === 'over'` routinely) but not click-tested end-to-end in the browser this pass -
+worth a manual pass if a report ever suggests that flow is broken.

@@ -9,9 +9,9 @@ import { chooseAction } from './ai.js';
 let pass = 0, fail = 0;
 const ok = (name, cond) => { cond ? pass++ : (fail++, console.error('  FAIL:', name)); };
 
-function freshHiddenGame(playerCount, rng) {
+function freshHiddenGame(playerCount, rng, startPlayer = 0) {
   const g = Object.create(UnoGame.prototype);
-  g.rng = rng; g.onEvent = () => {}; g.n = playerCount;
+  g.rng = rng; g.onEvent = () => {}; g.n = playerCount; g._startPlayer = startPlayer;
   g.players = Array.from({ length: playerCount }, () => ({ hand: [] }));
   g.discard = []; g.direction = 1; g.pendingDraw = 0; g.phase = 'playing';
   g.winner = null; g.currentPlayer = 0; g.activeColor = null;
@@ -205,6 +205,86 @@ function freshHiddenGame(playerCount, rng) {
   ok('first-card: a Wild lets player 0 choose the color', g.phase === 'chooseColor' && g.pendingWild.playerIndex === 0);
   g.chooseColor(0, 'blue');
   ok('first-card: after choosing, player 0 still opens (no skip)', g.activeColor === 'blue' && g.currentPlayer === 0);
+}
+
+// === First-card rules are RELATIVE to startPlayer, never hardcoded seat 0 ======
+//
+// The constructor's `startPlayer` option is what ui.js rotates every game so the same
+// seat doesn't always open. Every branch above must be re-provable with a non-zero
+// starting seat: the effect always lands ON startPlayer, never on seat 0.
+
+{
+  const rng = seededRng(20);
+  const g = freshHiddenGame(4, rng, 2);   // seat 2 opens
+  g.deck = [{ id: 600, color: 'blue', kind: 'number', value: 4 }];
+  g._flipFirstCard();
+  ok('startPlayer relative: a plain number opens on the given start seat, not seat 0', g.currentPlayer === 2);
+}
+
+{
+  const rng = seededRng(21);
+  const g = freshHiddenGame(4, rng, 2);   // seat 2 opens
+  g.deck = [{ id: 601, color: 'blue', kind: 'skip', value: null }];
+  g._flipFirstCard();
+  ok('startPlayer relative: a Skip is applied to the START seat (2), seat 3 opens', g.currentPlayer === 3);
+}
+
+{
+  const rng = seededRng(22);
+  const g = freshHiddenGame(2, rng, 1);   // seat 1 (not the human/seat 0) opens
+  g.deck = [{ id: 602, color: 'blue', kind: 'reverse', value: null }];
+  g._flipFirstCard();
+  ok('startPlayer relative (2p): reverse still acts as skip - the OTHER seat opens (0), not the start seat', g.currentPlayer === 0);
+  ok('startPlayer relative (2p): direction never flips', g.direction === 1);
+}
+
+{
+  const rng = seededRng(23);
+  const g = freshHiddenGame(4, rng, 2);   // seat 2 opens, 3+ players
+  g.deck = [{ id: 603, color: 'blue', kind: 'reverse', value: null }];
+  g._flipFirstCard();
+  ok('startPlayer relative (4p): reverse flips direction', g.direction === -1);
+  ok('startPlayer relative (4p): the seat BEFORE start (1) opens, per the flipped order', g.currentPlayer === 1);
+}
+
+{
+  const rng = seededRng(24);
+  const g = freshHiddenGame(4, rng, 2);   // seat 2 opens
+  g.deck = [
+    { id: 650, color: 'yellow', kind: 'number', value: 3 },
+    { id: 651, color: 'yellow', kind: 'number', value: 4 },
+    { id: 604, color: 'blue', kind: 'draw2', value: null },
+  ];
+  g._flipFirstCard();
+  ok('startPlayer relative: a first-flip +2 hits the START seat (2), not seat 0', g.players[2].hand.length === 2 && g.players[0].hand.length === 0);
+  ok('startPlayer relative: seat 3 opens after the +2', g.currentPlayer === 3);
+}
+
+{
+  const rng = seededRng(25);
+  const g = freshHiddenGame(3, rng, 2);   // seat 2 opens
+  g.deck = [{ id: 605, color: 'wild', kind: 'wild', value: null }];
+  g._flipFirstCard();
+  ok('startPlayer relative: a first-flip Wild is chosen by the START seat, not seat 0', g.phase === 'chooseColor' && g.pendingWild.playerIndex === 2);
+  g.chooseColor(2, 'green');
+  ok('startPlayer relative: after choosing, the start seat still opens (no skip)', g.activeColor === 'green' && g.currentPlayer === 2);
+}
+
+// A full UnoGame construction (not just the isolated _flipFirstCard helper) also honors
+// startPlayer end to end, for every seat in a 3-player game, holding presetDeck fixed so
+// only startPlayer varies between runs.
+{
+  // deck.pop() consumes from the END: the 21 fillers deal out first (7 per player x 3),
+  // leaving the front element - the flip card - for the very last pop.
+  const deckTail = [
+    { id: 799, color: 'green', kind: 'number', value: 9 }, // the card that gets flipped
+    ...Array.from({ length: 21 }, (_, i) => ({ id: 700 + i, color: 'yellow', kind: 'number', value: 1 })),
+  ];
+  const openers = [0, 1, 2].map((sp) => {
+    const g = new UnoGame({ playerCount: 3, rng: seededRng(30), presetDeck: deckTail.slice(), startPlayer: sp });
+    return g.currentPlayer;
+  });
+  ok('startPlayer end-to-end: a real construction opens on the requested seat for every seat', openers.every((o, i) => o === i));
 }
 
 // === Win detection ==============================================================
