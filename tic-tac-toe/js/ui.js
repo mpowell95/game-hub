@@ -22,6 +22,12 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.tictactoe.v1';
+// The in-progress-game autosave (2026-07-23, batch 9, HANDOFF-FB-RESUME.md).
+// Separate from SETTINGS_KEY -- this holds a live match, not preferences.
+// One save slot, either variant; cleared the moment a match ends or is
+// explicitly abandoned (Restart/New game). Pattern copied from
+// mancala/js/ui.js's saveGame/loadGame/clearGame -- do not invent a new one.
+const SAVE_KEY = 'gamehub.tictactoe.save.v1';
 const AI_THINK_MS = 450;
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
@@ -50,6 +56,50 @@ function loadJSON(key, fallback) {
   catch { return fallback; }
 }
 function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
+
+/** Persist the in-progress match (either variant) so leaving -- hub back, a
+ *  reload, or closing the PWA -- never loses it. Called from the single
+ *  post-move funnel (_afterStateChange) after every human and AI move, so it
+ *  always holds the latest settled position. Clears itself the moment the
+ *  match ends (mirrors mancala/js/ui.js's saveGame). */
+function saveGame(ui) {
+  try {
+    if (!ui.state || ui.state.over || ui.view !== 'game') { clearGame(); return; }
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      variant: ui.state.variant,
+      difficulty: ui._setup.difficulty,
+      humanMark: ui.humanMark,
+      aiMark: ui.aiMark,
+      state: ui.state,
+    }));
+  } catch { /* a full quota must never break the game */ }
+}
+
+/** Read back a saved match, or null. Validates hard: a corrupt or
+ *  non-standard shape is treated as "no saved game" rather than crashing the
+ *  module on mount. */
+function loadGame() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (!raw || raw.v !== 1) return null;
+    if (raw.variant !== 'classic' && raw.variant !== 'ultimate') return null;
+    if (raw.humanMark !== X && raw.humanMark !== O) return null;
+    if (raw.aiMark !== X && raw.aiMark !== O) return null;
+    if (!DIFFICULTIES.some(([k]) => k === raw.difficulty)) return null;
+    const s = raw.state;
+    if (!s || typeof s !== 'object' || s.variant !== raw.variant || s.over) return null;
+    if (raw.variant === 'classic') {
+      if (!Array.isArray(s.board) || s.board.length !== 9) return null;
+    } else {
+      if (!Array.isArray(s.boards) || s.boards.length !== 9 || s.boards.some((b) => !Array.isArray(b) || b.length !== 9)) return null;
+      if (!Array.isArray(s.meta) || s.meta.length !== 9) return null;
+    }
+    return { variant: raw.variant, difficulty: raw.difficulty, humanMark: raw.humanMark, aiMark: raw.aiMark, state: s };
+  } catch { return null; }
+}
+
+function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
 class TicTacToeUI {
   constructor(container) {
@@ -80,12 +130,14 @@ class TicTacToeUI {
     this.state = null;
   }
 
-  // A Tic Tac Toe match is seconds long, so autosave/resume would be
-  // over-engineering (see root CLAUDE.md's "two legitimate meanings" note on
-  // isInProgress()). This uses the literal, no-mid-game-resume meaning:
-  // true only while a match is actually in progress right now.
+  // Autosave/resume built in (2026-07-23, batch 9, HANDOFF-FB-RESUME.md):
+  // every move checkpoints the match to SAVE_KEY and the next mount restores
+  // it silently, straight onto the board. Per root CLAUDE.md's "two
+  // legitimate meanings" note on isInProgress(), this game now uses the
+  // resumable meaning -- leaving costs nothing, so the hub's "leave game?"
+  // confirm would be a lie and this always returns false, even mid-match.
   isInProgress() {
-    return this.view === 'game' && !!this.state && !this.state.over;
+    return false;
   }
 
   // --- settings persistence -------------------------------------------------
@@ -163,7 +215,11 @@ class TicTacToeUI {
     this.root = this.container.querySelector('.ttt-root');
     this.shell = this.root.querySelector('[data-role="shell"]');
     this.root.addEventListener('click', this._onClick);
-    this.renderSetup();
+    // Come back to exactly where you left off: an unfinished match (from the
+    // hub back button, a reload, or closing the PWA) resumes straight onto
+    // the board, no "resume?" dialog. Otherwise start at setup.
+    const saved = loadGame();
+    if (saved) this.resumeGame(saved); else this.renderSetup();
   }
 
   // --- setup screen -----------------------------------------------------------
@@ -208,6 +264,10 @@ class TicTacToeUI {
   renderSetup() {
     if (this._dead) return;
     this.closeOverlays();
+    // Leaving an unfinished match via "New game" is an explicit abandon
+    // (same bucket as Restart), so the autosave clears here too -- otherwise
+    // stale progress would ambush the player on the next mount.
+    if (this.view === 'game' && this.state && !this.state.over) clearGame();
     this.view = 'setup';
     this.state = null;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
@@ -251,6 +311,7 @@ class TicTacToeUI {
     this._saveSetup();
     this.humanMark = starter === 'you' ? X : O;
     this.aiMark = this.humanMark === X ? O : X;
+    clearGame();                 // a new match replaces any saved one
     this.state = newGame(s.variant, X);
     this.view = 'game';
     this._afterStateChange();
@@ -259,10 +320,26 @@ class TicTacToeUI {
     // rendered by _afterStateChange -- no separate toast/UI surface needed.
   }
 
+  /** Rebuild an in-progress match exactly as left and hand the turn back to
+   *  whoever had it -- mirrors mancala/js/ui.js's resumeGame(). Reuses the
+   *  normal post-move funnel, so a saved AI turn picks up right where it
+   *  left off (same "worst case: the in-flight move rolls back" note as
+   *  Mancala -- the save is only ever a fully-settled position). */
+  resumeGame(saved) {
+    this._setup.difficulty = saved.difficulty;
+    this.humanMark = saved.humanMark;
+    this.aiMark = saved.aiMark;
+    this.state = saved.state;
+    this.view = 'game';
+    this._afterStateChange();
+  }
+
   /** Single funnel after every state change (initial deal, human move, AI
-   *  move): render, resolve a finished match, or schedule the AI's turn. */
+   *  move): checkpoint the save, render, resolve a finished match, or
+   *  schedule the AI's turn. */
   _afterStateChange() {
     if (this._dead) return;
+    saveGame(this);   // checkpoint after every settled move (clears itself once over)
     if (this.state.over) {
       this.busy = false;
       this.renderGame();

@@ -46,6 +46,26 @@ only shape + name. The Ultimate/Classic variant row keeps its own explanatory hi
 (`hint_variant_ultimate`/`hint_variant_classic`) — that one was never in scope, only the
 difficulty explanation was.
 
+### Autosave/resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)
+
+Silent autosave/resume, same pattern as `mancala/js/ui.js`'s `saveGame`/`loadGame`/`clearGame`.
+Key `gamehub.tictactoe.save.v1` (separate from the frozen settings key above — never touched by
+this feature). Checkpointed from the single post-move funnel (`_afterStateChange`), so it covers
+both variants with one code path: `{v, variant, difficulty, humanMark, aiMark, state}`, where
+`state` is the engine's own state object for whichever variant is live (Classic's `board` or
+Ultimate's `boards`/`meta`), stored as-is since it's already plain JSON-safe data. `loadGame()`
+validates the shape hard (variant, marks, difficulty, and the board/boards arrays are all
+present and the right size, `state.over` false) — anything malformed or stale is treated as no
+save, never a crash on mount. Restore is silent: straight onto the board via `resumeGame()`,
+no "resume?" dialog; if the saved turn belongs to the AI, it moves on its own via the normal
+`_afterStateChange` funnel. Cleared on game end (handled inside `saveGame()` itself once
+`state.over`), on Restart/rematch (`startGame()` clears before building the new match), and on
+"New game" mid-match (`renderSetup()` clears when navigating away from an unfinished game).
+Never cleared on `destroy()` or hub navigation — that is the whole point. `isInProgress()` was
+flipped to the "autosave/resume built in" meaning (root `CLAUDE.md`): it always returns `false`
+now, so the hub's "leave game?" confirm no longer appears for this game. Stats recording is
+untouched — a resumed match records exactly as an uninterrupted one, including ties.
+
 ---
 
 ## How-to-play screens — the repo-wide pattern (worked out here, 2026-07-21)

@@ -8,7 +8,7 @@
 // information is ever carried by hue alone.
 
 import {
-  COLS, ROWS, TILES, P1, P2, P1_START, P2_START,
+  COLS, ROWS, TILES, COLOR_COUNT, P1, P2, P1_START, P2_START,
   newGame, legalColors, applyMove, territoryDistances,
 } from './game.js';
 import { chooseColor } from './ai.js';
@@ -20,6 +20,7 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.filler.v1';
+const GAME_KEY = 'gamehub.filler.save.v1';   // the one in-progress game (see saveGame)
 
 // Index order matches the engine's color ids 0..5. `labelKey` doubles as the
 // accessible name; it names the shape too, so screen reader output is also
@@ -77,6 +78,63 @@ function saveSettings(level, nextStarter) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level, nextStarter })); } catch { /* ignore */ }
 }
 
+/** Persist the in-progress game so leaving (hub back, a reload, or closing the
+ *  PWA) never loses it. Only ever holds ONE unfinished game; cleared the
+ *  moment it finishes or a new one starts (mirrors mancala/js/ui.js's
+ *  saveGame/loadGame/clearGame). Typed arrays are flattened to plain arrays
+ *  for JSON. */
+function saveGame(ui) {
+  try {
+    if (!ui.state || ui.state.over || ui.view !== 'game') { clearGame(); return; }
+    localStorage.setItem(GAME_KEY, JSON.stringify({
+      v: 1,
+      colors: Array.from(ui.state.colors),
+      owner: Array.from(ui.state.owner),
+      turn: ui.state.turn,
+      counts: ui.state.counts,
+      current: ui.state.current,
+      moves: ui.state.moves,
+      dryMoves: ui.state.dryMoves,
+      level: ui.level,
+    }));
+  } catch { /* a full quota must never break the game */ }
+}
+
+/** Read back a saved game, or null. Validates hard: a corrupt or non-standard
+ *  board is treated as "no saved game" rather than crashing the module. */
+function loadGame() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GAME_KEY) || 'null');
+    if (!raw || raw.v !== 1) return null;
+    if (!Array.isArray(raw.colors) || raw.colors.length !== TILES) return null;
+    if (!Array.isArray(raw.owner) || raw.owner.length !== TILES) return null;
+    const colors = Uint8Array.from(raw.colors.map((n) => Math.round(Number(n))));
+    if (!colors.every((n) => n >= 0 && n < COLOR_COUNT)) return null;
+    const owner = Uint8Array.from(raw.owner.map((n) => Math.round(Number(n))));
+    if (!owner.every((n) => n === 0 || n === P1 || n === P2)) return null;
+    // The two starting corners must still belong to their own player - a
+    // structural invariant of every legal Filler position.
+    if (owner[P1_START] !== P1 || owner[P2_START] !== P2) return null;
+    if (!Array.isArray(raw.counts) || raw.counts.length !== 3) return null;
+    if (!Array.isArray(raw.current) || raw.current.length !== 3) return null;
+    const lvl = Math.round(Number(raw.level));
+    return {
+      colors,
+      owner,
+      turn: raw.turn === P2 ? P2 : P1,
+      counts: raw.counts.map((n) => Math.max(0, Math.round(Number(n)) || 0)),
+      current: raw.current.map((n) => Math.round(Number(n)) || 0),
+      moves: Math.max(0, Math.round(Number(raw.moves)) || 0),
+      dryMoves: Math.max(0, Math.round(Number(raw.dryMoves)) || 0),
+      over: false,
+      winner: 0,
+      level: lvl >= 1 && lvl <= 3 ? lvl : 2,
+    };
+  } catch { return null; }
+}
+
+function clearGame() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
+
 class FillerUI {
   constructor(container) {
     this.container = container;
@@ -109,12 +167,21 @@ class FillerUI {
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
-    this.renderSetup();
+
+    // Come back to exactly where you left off: an unfinished game (from the
+    // hub back button, a reload, or closing the PWA) resumes straight onto
+    // the board, no setup screen. Otherwise start at setup.
+    const inProgress = loadGame();
+    if (inProgress) this.resumeGame(inProgress); else this.renderSetup();
   }
 
   // --- lifecycle -------------------------------------------------------------
 
   destroy() {
+    // Leaving mid-game keeps the board (checkpointed after every settled
+    // move); this is a belt-and-braces save in case a move was still
+    // in-flight, mirroring mancala/js/ui.js's destroy().
+    saveGame(this);
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     clearTimeout(this._confirmTimer);
@@ -122,10 +189,6 @@ class FillerUI {
     document.removeEventListener('keydown', this._onKey);
     this.container.innerHTML = '';
     this.state = null;
-  }
-
-  inProgress() {
-    return this.view === 'game' && !!this.state && !this.state.over && this.state.moves > 0;
   }
 
   later(fn, ms) {
@@ -195,14 +258,39 @@ class FillerUI {
     const starter = this.nextStarter === P2 ? P2 : P1;
     this.nextStarter = starter === P1 ? P2 : P1;
     saveSettings(this.level, this.nextStarter);
+    clearGame();                 // a new game replaces any saved one
     this.state = newGame();
     if (starter === P2) this.state.turn = P2;
     this.view = 'game';
     this.busy = false;
     this.renderGame();
+    saveGame(this);
     // When the AI opens, the existing per-turn status line ("{opp} is
     // thinking...") already announces it - no separate banner needed.
     if (starter === P2) this.later(() => this.aiMove(), AI_THINK_MS);
+  }
+
+  /** Rebuild the board from a saved game and hand the turn back to whoever
+   *  had it. Mirrors mancala/js/ui.js's resumeGame(). */
+  resumeGame(saved) {
+    this.level = saved.level;
+    this.state = {
+      colors: saved.colors,
+      owner: saved.owner,
+      turn: saved.turn,
+      counts: saved.counts,
+      current: saved.current,
+      over: false,
+      winner: 0,
+      moves: saved.moves,
+      dryMoves: saved.dryMoves,
+    };
+    this.view = 'game';
+    this.busy = false;
+    this.renderGame();
+    // If we left while the AI was on move (its turn had already been
+    // handed over but it hadn't played yet), it picks up where it left off.
+    if (this.state.turn === P2) this.later(() => this.aiMove(), AI_THINK_MS);
   }
 
   renderGame() {
@@ -306,6 +394,7 @@ class FillerUI {
     const captured = applyMove(s, color);
     const rippleMs = this.animateMove(P1, color, captured);
     this.refresh();
+    saveGame(this);   // checkpoint after every settled move (clears itself once over)
     if (s.over) { this.later(() => this.finish(), rippleMs + 350); return; }
     this.later(() => this.aiMove(), rippleMs + AI_THINK_MS);
   }
@@ -318,6 +407,7 @@ class FillerUI {
     const rippleMs = this.animateMove(P2, color, captured);
     this.busy = false;
     this.refresh();
+    saveGame(this);   // checkpoint after every settled move (clears itself once over)
     if (s.over) this.later(() => this.finish(), rippleMs + 350);
   }
 
@@ -520,9 +610,13 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-/** The hub asks before navigating away mid-game. */
+/** Autosave/resume built in (2026-07-23): Filler snapshots the board after
+ *  every settled move and silently restores it on the next mount, so leaving
+ *  mid-game is lossless. Per root CLAUDE.md's "two legitimate meanings" for
+ *  isInProgress(), this always returns `false` for solo play even mid-game -
+ *  the hub's "leave game?" confirm would be a lie, since nothing is lost. */
 export function isInProgress() {
-  return !!(instance && instance.inProgress());
+  return false;
 }
 
 export default { init, destroy, isInProgress };

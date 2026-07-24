@@ -5,8 +5,12 @@
 > loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`. No mid-game resume meaning for `isInProgress()` — see the
-root CLAUDE.md's games table and module-contract section for the two-meanings list.
+Hub integration: in-hub `module:`. `isInProgress()` is mode-split (batch 9, 2026-07-23,
+HANDOFF-FB-RESUME): **solo** now has autosave/resume built in (see "Solo autosave" below), so it
+returns `false` for a live solo match — leaving is lossless; **MP** keeps the literal "no resume"
+meaning (`instance.mp && instance._inProgress()`) since leaving mid-match is consequential for
+the live opponent. See the root CLAUDE.md's games table and module-contract section for the
+two-meanings list.
 
 ## Chinchón (`chinchon/`)
 
@@ -198,6 +202,39 @@ likewise stays the Spanish term in both languages.
 ## Hub notes
 
 Chinchón: in-hub `module:` — Spanish rummy vs AI. No worker (light heuristic AI). See the rest of this file.
+
+## Solo autosave (batch 9, 2026-07-23, HANDOFF-FB-RESUME)
+
+Solo play mirrors the existing MP autosave mechanism (`_mpSaveSnapshot`/`_tryRestoreMP`, below)
+rather than inventing a new model. Key: `gamehub.chinchon.solo.v1` — separate from the frozen
+`chinchon-settings` key and from the MP save key `gamehub.chinchon.mp.v1`; none of the three is
+ever read or written by either of the other two paths.
+
+- **Shape**: `{ v: 1, at: Date.now(), snap: this.game.snapshot() }` — identical to the MP save's
+  `snap` field, minus the MP-only `code`/`role`/`seq`. `game.snapshot()` already carries both
+  players' match scores (`totalScore`/`scoreHistory`) and the live round state (hands, stock,
+  discard, phase, dealer, etc.).
+- **Written** only at the same safe point MP uses: the `'roundScored'` onEvent hook (a round
+  boundary), never mid-turn — `game.js`'s `snapshot()` doc comment explains why (a snapshot
+  taken between a draw and its discard has no defined resume behavior). Never written for a
+  concluded match.
+- **Freshness**: same 30-minute window as MP (`MP_RESTORE_MAX_AGE_MS`, reused as-is). A save
+  older than that is treated as absent and wiped on the next mount, never restored.
+- **Restored** silently on mount (`_trySoloRestore()`, called before `_tryRestoreMP()` in the
+  constructor — it's synchronous/local, no room to rejoin, so it gets first claim on the mount;
+  if it restores, the MP restore is skipped for that load) straight into the live game screen,
+  no dialog. A malformed/corrupt save (bad JSON, wrong shape, too few players) is treated as "no
+  save" and wiped, never crashes the mount.
+- **Cleared** on: match end (`matchEnd`'s solo branch), quitting to setup mid-match
+  (`showSetup()`, when a game was live and `this.mp` is falsy), and the in-game menu's "new
+  game" restart (`startGame()`, which bypasses `showSetup()`). Never cleared on hub navigation
+  or `destroy()` — that's the point of the feature.
+- **MP is untouched**: every solo method (`_soloSaveSnapshot`/`_soloLoadSave`/`_soloClearSave`/
+  `_trySoloRestore`) either no-ops or returns "no save" whenever `this.mp` is set, and none of
+  the MP methods read `STORE_SOLO_SAVE`. Verified green against `test-mp-lockstep.mjs` after
+  the change.
+- Stats recording is untouched — a resumed solo game records exactly as an uninterrupted one
+  (same `_commitStats()` call, same recorder).
 
 ## MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
 "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`)

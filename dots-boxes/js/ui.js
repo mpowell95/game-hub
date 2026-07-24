@@ -26,6 +26,7 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.dotsboxes.v1';
+const GAME_KEY = 'gamehub.dotsboxes.save.v1';   // the one in-progress game (see saveGame/loadGame)
 const AI_THINK_MS = 500;      // pause before the AI's first move of a fresh turn
 const AI_CHAIN_STEP_MS = 220; // faster pacing between successive chain-capture moves
 
@@ -62,6 +63,83 @@ function loadJSON(key, fallback) {
 }
 function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
 
+/** Persist the in-progress match so leaving (hub, Menu, a reload, or closing
+ *  the PWA) never loses it. Only ever holds ONE unfinished game; cleared the
+ *  moment it finishes or a new one starts. Mirrors mancala/js/ui.js's
+ *  saveGame/loadGame/clearGame pattern -- do not invent a new shape. */
+function saveGame(ui) {
+  try {
+    if (!ui.state || isOver(ui.state) || ui.view !== 'game') { clearGame(); return; }
+    const s = ui.state;
+    localStorage.setItem(GAME_KEY, JSON.stringify({
+      v: 1,
+      size: ui._setup.size,
+      difficulty: ui._setup.difficulty,
+      rows: s.rows,
+      cols: s.cols,
+      hEdges: s.hEdges,
+      vEdges: s.vEdges,
+      boxes: s.boxes,
+      turn: s.turn,
+      drawnEdges: s.drawnEdges,
+      totalEdges: s.totalEdges,
+      humanSeat: ui.humanSeat,
+      aiSeat: ui.aiSeat,
+      lastCaptured: ui._lastCaptured,
+      humanChainRun: ui._humanChainRun,
+      humanBestChainThisGame: ui._humanBestChainThisGame,
+    }));
+  } catch { /* a full quota must never break the game */ }
+}
+
+/** Read back a saved game, or null. Validates hard (board size must match a
+ *  real SIZE_META entry and every array must be shaped exactly right for
+ *  that size) so a corrupt or stale-shape save is treated as "no saved
+ *  game" rather than crashing the module on mount. */
+function loadGame() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GAME_KEY) || 'null');
+    if (!raw || raw.v !== 1) return null;
+    const meta = SIZE_META[raw.size];
+    if (!meta) return null;
+    const rows = Math.round(Number(raw.rows));
+    const cols = Math.round(Number(raw.cols));
+    if (rows !== meta.rows || cols !== meta.cols) return null;
+    if (!DIFFICULTIES.some(([k]) => k === raw.difficulty)) return null;
+
+    const validCell = (v) => v === null || v === 0 || v === 1;
+    const validGrid = (grid, nRows, nCols) => Array.isArray(grid) && grid.length === nRows
+      && grid.every((row) => Array.isArray(row) && row.length === nCols && row.every(validCell));
+    if (!validGrid(raw.hEdges, rows + 1, cols)) return null;
+    if (!validGrid(raw.vEdges, rows, cols + 1)) return null;
+    if (!validGrid(raw.boxes, rows, cols)) return null;
+
+    const totalEdges = (rows + 1) * cols + rows * (cols + 1);
+    const drawnEdges = Math.max(0, Math.round(Number(raw.drawnEdges)) || 0);
+    if (drawnEdges >= totalEdges) return null; // an already-finished board is not "in progress"
+    const humanSeat = raw.humanSeat === 1 ? 1 : 0;
+
+    return {
+      size: raw.size,
+      difficulty: raw.difficulty,
+      rows, cols,
+      hEdges: raw.hEdges,
+      vEdges: raw.vEdges,
+      boxes: raw.boxes,
+      turn: raw.turn === 1 ? 1 : 0,
+      drawnEdges,
+      totalEdges,
+      humanSeat,
+      aiSeat: 1 - humanSeat,
+      lastCaptured: Array.isArray(raw.lastCaptured) ? raw.lastCaptured.filter((p) => Array.isArray(p) && p.length === 2) : [],
+      humanChainRun: Math.max(0, Math.round(Number(raw.humanChainRun)) || 0),
+      humanBestChainThisGame: Math.max(0, Math.round(Number(raw.humanBestChainThisGame)) || 0),
+    };
+  } catch { return null; }
+}
+
+function clearGame() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
+
 class DotsBoxesUI {
   constructor(container) {
     this.container = container;
@@ -84,6 +162,13 @@ class DotsBoxesUI {
 
     ensureStylesheet();
     this.mount();
+    // Come back to exactly where you left off: an unfinished match (from the
+    // hub back button, the in-game Menu button, a reload, or closing the PWA)
+    // resumes straight onto the board, no setup screen and no "resume?"
+    // dialog. Otherwise start at setup. Mirrors mancala/js/ui.js's mount-time
+    // `loadGame()` check.
+    const saved = loadGame();
+    if (saved) this._resumeGame(saved); else this.renderSetup();
   }
 
   destroy() {
@@ -95,13 +180,14 @@ class DotsBoxesUI {
     this.state = null;
   }
 
-  // A Dots and Boxes match runs a few minutes even at Large -- short enough
-  // that autosave/resume would be over-engineering (see root CLAUDE.md's "two
-  // legitimate meanings" note on isInProgress()). This uses the literal,
-  // no-mid-game-resume meaning: true only while a match is actually in
-  // progress right now.
+  // Dots and Boxes autosaves after every drawn edge (see saveGame/loadGame,
+  // key GAME_KEY = 'gamehub.dotsboxes.save.v1') and resumes straight back
+  // onto the board on the next mount -- leaving mid-match costs nothing. Per
+  // root CLAUDE.md's "two legitimate meanings" note on isInProgress(), this
+  // game now uses the autosave/resume meaning: false for solo play even
+  // mid-game, because a resumed match is exactly where you left it.
   isInProgress() {
-    return this.view === 'game' && !!this.state && !isOver(this.state);
+    return false;
   }
 
   // --- settings persistence -------------------------------------------------
@@ -182,7 +268,7 @@ class DotsBoxesUI {
     this.root = this.container.querySelector('.db-root');
     this.shell = this.root.querySelector('[data-role="shell"]');
     this.root.addEventListener('click', this._onClick);
-    this.renderSetup();
+    // Caller (constructor) decides setup vs. resume straight into the game.
   }
 
   // --- setup screen -----------------------------------------------------------
@@ -278,6 +364,7 @@ class DotsBoxesUI {
       starter = this._setup.firstMode === 'opponent' ? 'opponent' : 'you';
     }
     this._saveSetup();
+    clearGame();   // a new game (fresh start, rematch, or Restart) replaces any saved one
     // newGame() always starts turn 0, so whichever seat we call human here IS
     // the opener -- the existing status line (_statusText, "Your turn" /
     // "{opp}'s turn") already announces this correctly with no new UI needed.
@@ -288,6 +375,32 @@ class DotsBoxesUI {
     this._lastCaptured = [];
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
+    this.view = 'game';
+    this._afterStateChange(false);
+  }
+
+  /** Rebuild the board from a saved game and hand the turn back to whoever
+   *  had it -- if we left while the AI was mid-chain, it picks up right
+   *  where it left off (`_afterStateChange` already schedules its move when
+   *  `state.turn === aiSeat`). Mirrors mancala/js/ui.js's resumeGame(). */
+  _resumeGame(saved) {
+    this._setup.size = saved.size;
+    this._setup.difficulty = saved.difficulty;
+    this.humanSeat = saved.humanSeat;
+    this.aiSeat = saved.aiSeat;
+    this.state = {
+      rows: saved.rows,
+      cols: saved.cols,
+      hEdges: saved.hEdges,
+      vEdges: saved.vEdges,
+      boxes: saved.boxes,
+      turn: saved.turn,
+      drawnEdges: saved.drawnEdges,
+      totalEdges: saved.totalEdges,
+    };
+    this._lastCaptured = saved.lastCaptured;
+    this._humanChainRun = saved.humanChainRun;
+    this._humanBestChainThisGame = saved.humanBestChainThisGame;
     this.view = 'game';
     this._afterStateChange(false);
   }
@@ -303,12 +416,14 @@ class DotsBoxesUI {
     if (isOver(this.state)) {
       this.busy = false;
       this.renderGame();
+      clearGame();   // a finished match has nothing left to resume
       this.finish();
       return;
     }
     if (this.state.turn === this.aiSeat) {
       this.busy = true;
       this.renderGame();
+      saveGame(this);   // checkpoint after every settled move (clears itself once over)
       const delay = chaining ? AI_CHAIN_STEP_MS : AI_THINK_MS;
       this.aiTimer = setTimeout(() => {
         this.aiTimer = null;
@@ -322,6 +437,7 @@ class DotsBoxesUI {
       if (!chaining) this._humanChainRun = 0;
       this.busy = false;
       this.renderGame();
+      saveGame(this);   // checkpoint after every settled move (clears itself once over)
     }
   }
 
@@ -437,6 +553,7 @@ class DotsBoxesUI {
   }
 
   finish() {
+    clearGame();   // belt and braces: _afterStateChange already cleared the save on game-over
     const s = this.state;
     const sc = score(s);
     const humanScore = this.humanSeat === 0 ? sc.p0 : sc.p1, aiScore = this.aiSeat === 0 ? sc.p0 : sc.p1;

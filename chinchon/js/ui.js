@@ -46,14 +46,25 @@ const BEAT_TURN = 700, BEAT_DRAW = 650, BEAT_DISCARD = 550, BEAT_CLOSE = 800;
 const STORE_SETTINGS = 'chinchon-settings';
 const STORE_STATS = 'chinchon-stats';
 
-// Multiplayer (M2b). Chinchón has no existing solo autosave, so this key is
-// MP-only: written after every applied entry while this.mp is set, cleared on
-// match end/leave. Never touches STORE_SETTINGS/STORE_STATS.
+// Multiplayer (M2b). This key is MP-only: written after every applied entry
+// while this.mp is set, cleared on match end/leave. Never touches
+// STORE_SETTINGS/STORE_STATS. Solo has its own separate autosave key
+// (STORE_SOLO_SAVE, below) added in batch 9 (HANDOFF-FB-RESUME) -- the two
+// never mix; each mount path checks its own key only.
 const STORE_MP_SAVE = 'gamehub.chinchon.mp.v1';
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Solo autosave (batch 9, HANDOFF-FB-RESUME): mirrors STORE_MP_SAVE's shape
+// (v/at/snap) minus the MP-only code/role/seq fields -- a solo match has no
+// room to rejoin. Same 30-minute freshness window as MP (SOLO_RESTORE_MAX_AGE_MS
+// reuses MP_RESTORE_MAX_AGE_MS). Written only at the same safe snapshot point
+// MP uses (the 'roundScored' turn boundary -- see snapshot()'s doc comment in
+// game.js), cleared on match end, explicit restart/new game, and quitting to
+// setup; never on hub navigation or destroy(). See _soloSaveSnapshot/
+// _trySoloRestore below and chinchon/CLAUDE.md.
+const STORE_SOLO_SAVE = 'gamehub.chinchon.solo.v1';
 // Human labels for the room's locked config, host-lobby summary line only
 // (mirrors Escoba's MP_CONFIG_LABELS pattern). Unknown keys are skipped.
 const MP_CONFIG_LABELS = {
@@ -185,7 +196,10 @@ class ChinchonUI {
     setDeck(this._setup.deck);
     preloadDeck();
     this.mount();
-    this._tryRestoreMP();
+    // Solo restore is synchronous/local (no room to rejoin), so it runs first;
+    // if it claims the mount (a fresh, valid solo save existed) the MP restore
+    // is skipped -- the two keys are separate and never both apply to one mount.
+    if (!this._trySoloRestore()) this._tryRestoreMP();
   }
 
   // --- settings persistence -------------------------------------------------
@@ -319,6 +333,11 @@ class ChinchonUI {
 
   showSetup() {
     if (this._dead) return;
+    // An explicit quit-to-setup mid-solo-match abandons that match (unlike
+    // destroy()/hub navigation, which leaves the autosave in place for a
+    // silent resume) -- clear it so re-entering the game doesn't restore a
+    // match the player just walked away from on purpose.
+    if (this.game && !this.mp) this._soloClearSave();
     if (this.game) { this.game.abort(); this.game = null; }
     this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
     this._modalResolve = null; this._placeResolve = null; this._chartView = false;
@@ -678,6 +697,11 @@ class ChinchonUI {
   }
 
   startGame() {
+    // The in-game menu's "new game" restarts with the same settings without
+    // going through showSetup() (see _menuAction) -- clear any prior solo
+    // save directly here too, so a fresh match never gets shadowed by a save
+    // from the match it's replacing.
+    if (!this.mp) this._soloClearSave();
     this.syncSetupInputs();
     const s = this._setup;
     // Alternate which seat deals the OPENING round of a fresh solo match (not
@@ -829,6 +853,7 @@ class ChinchonUI {
         // a crash in between would otherwise leave a restorable save for a match
         // that is over (whose restore would deal a phantom next round).
         if (this.mp && !payload.matchOver) this._mpSaveSnapshot();
+        else if (!this.mp && !payload.matchOver) this._soloSaveSnapshot();
         await this.showRoundModal();
         // Guest only: the next round's deck can't be dealt locally until the
         // host has shuffled it and published it (see the 'roundStart' hook).
@@ -850,6 +875,8 @@ class ChinchonUI {
             try { await net.writeResult(this.mp.code, { winnerId: this.game.winner.id, standings: this.game.standings.map((pl) => ({ id: pl.id, totalScore: pl.totalScore })) }); }
             catch { /* best-effort: the match already concluded locally either way */ }
           }
+        } else {
+          this._soloClearSave();
         }
         await this.showMatchModal();
         this._onChallengeMatchEnd(); // hidden challenge: reveal the code after the match modal
@@ -1551,7 +1578,11 @@ class ChinchonUI {
 
   // --- in-game menu ---------------------------------------------------------
 
-  /** A live match worth confirming before abandoning. */
+  /** A live match worth confirming before abandoning -- used internally by the
+   *  in-game menu's confirm-on-second-tap (still literal for both modes: a
+   *  courtesy tap-again, unrelated to the hub's leave-confirm). The exported
+   *  module-level isInProgress() below narrows this further for MP only --
+   *  see its comment for the two-meanings split. */
   _inProgress() {
     return !!this.game && !this.el.game.hidden && !this._matchEnded;
   }
@@ -2183,6 +2214,72 @@ class ChinchonUI {
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP restore error', err); });
   }
 
+  // --- solo autosave (batch 9, HANDOFF-FB-RESUME): mirrors the MP autosave
+  // above 1:1 (same snapshot shape and round-boundary safety constraint --
+  // see game.js's snapshot() doc comment), minus the MP-only code/role/seq
+  // fields. Solo-only: every method here is a no-op (or returns "no save")
+  // whenever this.mp is set, so it can never cross into an MP context, and
+  // the MP methods above never read STORE_SOLO_SAVE. ---------------------
+
+  /** Same safe point as _mpSaveSnapshot: only called from the 'roundScored'
+   *  onEvent hook (a round boundary), never mid-turn, and never for a
+   *  concluded match (matchEnd clears the save instead). */
+  _soloSaveSnapshot() {
+    if (!this.game || this.mp) return;
+    try {
+      saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot() });
+    } catch { /* private mode / quota */ }
+  }
+
+  _soloLoadSave() {
+    const raw = loadJSON(STORE_SOLO_SAVE, null);
+    return (raw && raw.v === 1 && raw.snap) ? raw : null;
+  }
+
+  _soloClearSave() { try { localStorage.removeItem(STORE_SOLO_SAVE); } catch { /* ignore */ } }
+
+  /** Mount-time silent resume for solo play: no dialog, straight into the live
+   *  game screen (root CLAUDE.md's "Autosave/resume built in" isInProgress()
+   *  meaning). Unlike _tryRestoreMP this is fully local/synchronous -- no room
+   *  to rejoin -- so it runs first in the constructor and, if it claims the
+   *  mount, _tryRestoreMP is skipped entirely for that load. A malformed save
+   *  (bad JSON, wrong shape, too few players) is treated as absent and wiped,
+   *  never allowed to crash the mount. Returns true if it restored. */
+  _trySoloRestore() {
+    try {
+      const save = this._soloLoadSave();
+      if (!save) return false;
+      const age = Date.now() - (save.at || 0);
+      if (age > MP_RESTORE_MAX_AGE_MS) { this._soloClearSave(); return false; }
+      const snap = save.snap;
+      if (!snap || !Array.isArray(snap.players) || snap.players.length < 2) { this._soloClearSave(); return false; }
+      if (this._dead || this.mp || this.game) return false;   // superseded by a faster user action meanwhile
+
+      const agentsById = {};
+      for (const sp of snap.players) {
+        agentsById[sp.id] = sp.isHuman ? this.humanAgent
+          : new AIAgent({ difficulty: sp.difficulty || 'normal', name: sp.name });
+      }
+      this.game = Game.fromSnapshot(snap, agentsById);
+      this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+      this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+      this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
+      this._matchEnded = false; this._closeMenu();
+      this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+      this._ccCompact = false;
+      this.root.classList.remove('cc-compact');
+      this._buildPiles();
+      this.render();
+      this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón solo restore error', err); });
+      return true;
+    } catch (err) {
+      console.error('Chinchón solo restore parse error', err);
+      this._soloClearSave();
+      this.game = null;
+      return false;
+    }
+  }
+
   // --- teardown -------------------------------------------------------------
 
   destroy() {
@@ -2229,9 +2326,17 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-/** True if a match is in progress (so the hub can confirm before unmounting). */
+/** True if a match is in progress (so the hub can confirm before unmounting).
+ *  Two legitimate meanings depending on mode (root CLAUDE.md's module-contract
+ *  section spells this split out): solo now has autosave/resume built in
+ *  (gamehub.chinchon.solo.v1, batch 9/HANDOFF-FB-RESUME) -- leaving a solo
+ *  match mid-game is lossless, so it returns false even while one is live.
+ *  MP is the exception within the exception, same as Escoba: leaving mid-match
+ *  is consequential for the live opponent (the room goes stale for them) even
+ *  though the match is technically resumable, so this returns true only while
+ *  an active MP match is unfinished (mirrors escoba/js/ui.js's isInProgress()). */
 export function isInProgress() {
-  return !!instance && instance._inProgress();
+  return !!(instance && instance.mp && instance._inProgress());
 }
 
 export default { init, destroy, isInProgress };

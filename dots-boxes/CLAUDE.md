@@ -47,3 +47,23 @@ exactly like Connect Four's `confirmDestructive`/`resetConfirms` (`connect-four/
 first tap arms it ("Tap again to confirm", `.is-confirm` style, 3.5s auto-reset), a second tap
 resets the board with the SAME settings (no trip through setup) and participates in the
 alternation logic above like any other new game.
+
+### Silent autosave/resume (2026-07-23, batch 9 of the feedback arc)
+
+`gamehub.dotsboxes.save.v1` (new key, separate from the frozen `gamehub.dotsboxes.v1` settings
+key) holds the ONE in-progress match: board size, difficulty, both edge grids (`hEdges`/`vEdges`),
+`boxes`, `turn`, `drawnEdges`/`totalEdges`, `humanSeat`/`aiSeat`, and the in-flight chain counters
+(`lastCaptured`, `humanChainRun`, `humanBestChainThisGame`). `ui.js`'s `saveGame`/`loadGame`/
+`clearGame` mirror `mancala/js/ui.js`'s pattern exactly (do not invent a new shape). Checkpointed
+after every settled move (`_afterStateChange`, both the human and AI branches) so leaving the hub,
+reloading, or closing the PWA never loses a live match; restored straight onto the board on the
+next mount (`_resumeGame`, called from the constructor before `renderSetup()` ever runs) with no
+"resume?" dialog — if the AI was mid-turn (including mid-chain), it just keeps playing. `loadGame`
+validates hard: the saved size must resolve to a real `SIZE_META` entry and every edge/box grid
+must be exactly the shape that size implies, or the save is treated as absent (never crashes the
+mount). Cleared on game end (`_afterStateChange`'s over branch, plus a belt-and-braces clear in
+`finish()`) and on any new game (`startGame()`, covering fresh start, rematch, and Restart) —
+never on hub navigation or `destroy()`, which is the entire point. `isInProgress()` flipped from
+the literal "match live right now" meaning to the autosave/resume meaning (root CLAUDE.md's "two
+legitimate meanings" paragraph): it now always returns `false` for solo play, so the hub's
+leave-confirm no longer appears — leaving costs nothing.

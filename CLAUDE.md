@@ -180,14 +180,22 @@ export default { init, destroy, isInProgress };
 - `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
   navigating back to the launcher) and has **two legitimate meanings** depending on whether
   the game can resume:
-  - **No mid-game resume** (Connect Four, Filler, Nuts & Bolts, Ball Run): returns `true`
-    while a game/run is actually in progress, `false` otherwise. The literal meaning.
-  - **Autosave/resume built in** (Escoba, Mancala): returns `false` for solo play even
-    mid-game, because leaving is lossless — the engine snapshots after every state-changing
-    event and picks up where it left off on return (`escoba-save`, `gamehub.mancala.game.v1`).
-    Escoba's MP path is the exception within the exception: `isInProgress()` returns `true`
-    only while an active multiplayer match is live (leaving mid-MP genuinely abandons the
-    room), so one function answers two different questions depending on solo-vs-MP context.
+  - **No mid-game resume** (Ball Run, Snake): returns `true` while a game/run is actually
+    in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
+    is meaningless.
+  - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
+    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts): returns
+    `false` for solo play even mid-game, because leaving is lossless — each game snapshots
+    after every state-changing event and picks up where it left off on return. Save keys:
+    `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
+    `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
+    `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1` (Nuts & Bolts needed no new key —
+    its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
+    just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's
+    and Chinchón's MP paths are each the exception within the exception: `isInProgress()`
+    returns `true` only while an active multiplayer match is live (leaving mid-MP genuinely
+    abandons the room), so one function answers two different questions depending on
+    solo-vs-MP context.
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
 - An `immersive: true` entry in `hub.js`'s `GAMES` array (currently Escoba, Mancala, Ball Run)

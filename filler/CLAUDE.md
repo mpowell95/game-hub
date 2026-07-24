@@ -35,3 +35,21 @@ A confirm-guarded **Restart** button (`data-role="restart"`) sits in the mid-gam
 `tap_again_confirm` string), guards on `this.state.over` rather than Connect Four's `game.isOver()`,
 and on confirm calls `startGame()` directly (same board size, same settings, counts as a new game
 for the alternation above) rather than returning to setup.
+
+### Autosave/resume (2026-07-23, batch 9, `HANDOFF-FB-RESUME.md`)
+
+`gamehub.filler.save.v1` (new key, separate from the settings key above) holds at most one
+in-progress game: board colors, owners, whose turn, both players' current colors/counts, move
+counters, and the difficulty level, snapshotted after every settled move (`saveGame()`, both in
+`humanMove()` and `aiMove()`) and as a belt-and-braces write in `destroy()`, mirroring
+`mancala/js/ui.js`'s `saveGame`/`loadGame`/`clearGame` pattern exactly. On mount, `init()` restores
+straight into the live game screen with no setup step and no "resume?" dialog; a malformed or
+non-standard save (wrong shape, wrong tile count, a starting corner that doesn't belong to its own
+player) is treated as no save (`loadGame()` returns `null`) rather than crashing the module.
+Cleared only in `startGame()` (a genuinely new game: Start, Rematch, and the Restart button all go
+through it) and implicitly by `saveGame()` itself once `state.over` is true - never on hub
+navigation or plain `destroy()`, which is the entire point. `isInProgress()` is flipped to the
+"autosave built in" meaning from root CLAUDE.md and always returns `false`: leaving mid-game costs
+nothing, so the hub's leave-confirm no longer fires for this game. Stats recording is untouched - a
+resumed game records exactly as an uninterrupted one, since `finish()` reads directly off
+`this.state`/`this.level` regardless of whether the game was ever interrupted.

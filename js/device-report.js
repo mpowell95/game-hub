@@ -58,6 +58,7 @@ async function gatherLocal() {
     chinchonSettings: readJSON('chinchon-settings'),
     chinchonStatsLegacy: readJSON('chinchon-stats'),
     chinchonMpResume: readJSON('gamehub.chinchon.mp.v1'),
+    chinchonSoloSave: readJSON('gamehub.chinchon.solo.v1'),
     escobaSettings: readJSON('escoba-settings'),
     escobaSave: readJSON('escoba-save'), // MP state (if any) nests inside this, no separate key
     monopolyDealStatsLegacy: readJSON('bd-stats'),
@@ -65,10 +66,15 @@ async function gatherLocal() {
     mancalaSettings: readJSON('gamehub.mancala.v1'),
     mancalaSave: readJSON('gamehub.mancala.game.v1'),
     fillerSettings: readJSON('gamehub.filler.v1'),
+    fillerSave: readJSON('gamehub.filler.save.v1'),
     nutsBoltsSettings: readJSON('gamehub.nutsbolts.v1'),
     ticTacToeSettings: readJSON('gamehub.tictactoe.v1'),
+    ticTacToeSave: readJSON('gamehub.tictactoe.save.v1'),
     dotsAndBoxesSettings: readJSON('gamehub.dotsboxes.v1'),
+    dotsAndBoxesSave: readJSON('gamehub.dotsboxes.save.v1'),
     boggleSettings: readJSON('gamehub.boggle.v1'),
+    boggleSave: readJSON('gamehub.boggle.save.v1'),
+    connectFourSave: readJSON('gamehub.connect4.save.v1'),
     ballRun: {
       difficulty: readRaw('ballrun.difficulty'),
       seenHelp: readRaw('ballrun.seenHelp'),

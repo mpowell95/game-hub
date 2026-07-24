@@ -38,6 +38,58 @@ function loadC4Settings() {
 function saveC4Settings(v) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)); } catch { /* best-effort */ }
 }
+
+const GAME_KEY = 'gamehub.connect4.save.v1';
+
+/** Batch 9 (2026-07-23): silent autosave/resume, following the Escoba/Mancala pattern
+ *  (see mancala/js/ui.js's saveGame/loadGame/clearGame). Snapshots the in-progress game
+ *  (board history, whose turn via firstPlayer, difficulty, the hint toggle, and the
+ *  _statsDisqualified flag so a hint-assisted game STAYS disqualified after a resume) to
+ *  localStorage after every move. Only ever holds ONE unfinished game; a finished game or
+ *  the setup screen clears it. Never touches SETTINGS_KEY (who-goes-first stays separate). */
+function saveC4Game(ui) {
+  try {
+    if (!ui.game || ui.game.isOver() || !ui.el || ui.el.game.hidden) { clearC4Game(); return; }
+    localStorage.setItem(GAME_KEY, JSON.stringify({
+      v: 1,
+      history: ui.game.history.slice(),
+      firstPlayer: ui.game.firstPlayer,
+      difficulty: ui.difficulty,
+      showBestMoves: ui.showBestMoves,
+      statsDisqualified: ui._statsDisqualified,
+      humanHasMoved: ui.humanHasMoved,
+    }));
+  } catch { /* a full quota must never break the game */ }
+}
+
+/** Read back a saved game, or null. Validates hard (shape, column range, a legal
+ *  replay that isn't already over) — a corrupt or foreign save is treated as "no
+ *  saved game" rather than crashing the module on mount. */
+function loadC4Game() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GAME_KEY) || 'null');
+    if (!raw || raw.v !== 1) return null;
+    if (!Array.isArray(raw.history) || !raw.history.every((c) => Number.isInteger(c) && c >= 0 && c < COLS)) return null;
+    if (raw.firstPlayer !== PLAYER_ONE && raw.firstPlayer !== PLAYER_TWO) return null;
+    if (!DIFFICULTY_LABELS.some(([v]) => v === raw.difficulty)) return null;
+    const game = new Game(raw.firstPlayer);
+    for (const c of raw.history) {
+      if (game.isOver() || !game.board.canPlay(c)) return null; // not a legal replay
+      game.play(c);
+    }
+    if (game.isOver()) return null; // a finished game should never have been saved
+    return {
+      game,
+      difficulty: raw.difficulty,
+      showBestMoves: !!raw.showBestMoves,
+      statsDisqualified: !!raw.statsDisqualified,
+      humanHasMoved: !!raw.humanHasMoved,
+    };
+  } catch { return null; }
+}
+
+function clearC4Game() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
+
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // Pass 2 (estimate) budget for the "show best moves" analysis
 const INLINE_EXACT_ATTEMPT_MS = 300; // Pass 1 cap when the worker is unavailable (blocks the UI thread)
@@ -392,7 +444,9 @@ class ConnectFourUI {
     root.querySelector('[data-role="menu-scrim"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.requestUndo(); });
     restartBtn.addEventListener('click', () => this.confirmDestructive(restartBtn, () => { this.closeMenu(); this.startGame(); }));
-    quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { this.closeMenu(); this.showSetup(); }));
+    // Quitting to setup abandons the current game (unlike hub navigation): clear the
+    // save so a later mount doesn't silently resume a game the player explicitly left.
+    quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { clearC4Game(); this.game = null; this.closeMenu(); this.showSetup(); }));
     this.el.hintToggle.addEventListener('change', () => this.onHintToggle());
     root.querySelector('[data-role="stats-confirm-cancel"]').addEventListener('click', () => this.cancelStatsConfirm());
     root.querySelector('[data-role="stats-confirm-cancel-btn"]').addEventListener('click', () => this.cancelStatsConfirm());
@@ -407,7 +461,37 @@ class ConnectFourUI {
     this.syncSegmented(this.el.difficulty, this.difficulty);
     this.syncSegmented(this.el.first, this.firstMode);
     this.buildBoardCells();
-    this.showSetup();   // showSetup() calls syncChallengeUi() for the current state
+    // Come back to exactly where you left off: an in-progress game (from the hub
+    // back button, a reload, or closing the PWA) resumes silently, straight onto
+    // the board — no "resume?" dialog. Otherwise start at setup as before.
+    const saved = loadC4Game();
+    if (saved) this.resumeGame(saved); else this.showSetup();   // showSetup() calls syncChallengeUi()
+  }
+
+  /** Restore a saved in-progress game straight into the live game screen. If the
+   *  save was interrupted mid AI-think (the human's move was applied and saved,
+   *  but the AI's reply never landed), hand the turn back to the AI immediately. */
+  resumeGame(saved) {
+    this.difficulty = saved.difficulty;
+    this.showBestMoves = saved.showBestMoves;
+    this._statsDisqualified = saved.statsDisqualified;
+    this.humanHasMoved = saved.humanHasMoved;
+    this.game = saved.game;
+    this.busy = false;
+    this.hoverCol = -1;
+    this.clearHover();
+    this.syncSegmented(this.el.difficulty, this.difficulty);
+    this.syncChallengeUi();
+    this.redrawBoard();
+    this.el.result.hidden = true;
+    this.closeMenu();
+    this.el.setup.hidden = true;
+    this.el.header.hidden = true;
+    this.el.game.hidden = false;
+    if (this.showBestMoves) { this.el.hints.hidden = false; this.clearEvalRow(); } else this.hideHints();
+    this.updateStatus();
+    if (this.game.currentPlayer === this.aiPlayer) this.aiTurn();
+    else this.refreshHints();
   }
 
   /** Still working on the Connect Four challenge? (active AND not yet won). Once won, the
@@ -526,6 +610,7 @@ class ConnectFourUI {
     this.el.game.hidden = false;
 
     this.updateStatus();
+    saveC4Game(this); // checkpoint the fresh game immediately (0 moves is still resumable)
     if (this.game.currentPlayer === this.aiPlayer) this.aiTurn();
     else this.refreshHints();
   }
@@ -593,6 +678,7 @@ class ConnectFourUI {
     this.el.hintToggle.checked = on;
     if (this.showBestMoves) { this.clearEvalRow(); this.refreshHints(); }
     else { this.hideHints(); this.clearEvalRow(); }
+    saveC4Game(this); // the toggle (and any disqualification it just caused) must persist
   }
 
   // --- Turn flow ------------------------------------------------------------
@@ -672,6 +758,7 @@ class ConnectFourUI {
     // "Computer is thinking…" while the AI's disc is already visibly falling).
     if (!this.game.isOver()) this.updateStatus();
     await this.dropPiece(col, row, player);
+    saveC4Game(this); // checkpoint after every settled move (clears itself once over)
     if (this.game.isOver()) this.endGame();
   }
 
@@ -755,6 +842,7 @@ class ConnectFourUI {
   }
 
   endGame() {
+    clearC4Game(); // game end (result recorded) is one of the cross-cutting clear points
     this.busy = false;
     this.clearHover();
     this.dimHints(); // keep the hint row reserved (dimmed) — no end-of-game shift
@@ -889,6 +977,7 @@ class ConnectFourUI {
     this.el.result.hidden = true;
     this.updateStatus();
     this.refreshHints();
+    saveC4Game(this); // the undo (and its disqualification, if just confirmed) must persist
   }
 
   /** Repaint every cell from the current game state (no drop animation). */
@@ -1055,6 +1144,11 @@ class ConnectFourUI {
   // --- Teardown -------------------------------------------------------------
 
   destroy() {
+    // Checkpoint one last time: a move's game.play() commits synchronously, before its
+    // drop animation (and the saveC4Game() call after it) resolves, so a destroy() that
+    // lands mid-animation could otherwise leave the save one move stale. Never clears
+    // here — leaving mid-game via the hub is the whole point of autosave/resume.
+    saveC4Game(this);
     document.removeEventListener('keydown', this._onKeyDown);
     if (this.el && this.el.board) {
       this.el.board.removeEventListener('click', this._onBoardClick);
@@ -1084,10 +1178,15 @@ export function destroy() {
   if (instance) { instance.destroy(); instance = null; }
 }
 
-/** True if a game is mid-play (so the hub can confirm before unmounting). */
+/** Two legitimate meanings exist for this hook, depending on whether the game can
+ *  resume (root CLAUDE.md, "The module contract"): literal "true while a game is
+ *  actually in progress" for games with no mid-game resume, or "always false for
+ *  solo play" for games with autosave/resume built in, because leaving is lossless.
+ *  Connect Four moved to the second meaning (batch 9, 2026-07-23): every move is
+ *  snapshotted to `gamehub.connect4.save.v1` and silently restored on mount, so the
+ *  hub's "leave game?" confirm is no longer needed — there's nothing to lose. */
 export function isInProgress() {
-  return !!instance && !!instance.game && !instance.game.isOver()
-    && instance.humanHasMoved;
+  return false;
 }
 
 export default { init, destroy, isInProgress };

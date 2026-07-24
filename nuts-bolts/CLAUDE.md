@@ -28,6 +28,19 @@ anymore (the `tier_desc_*` string keys were removed as part of this). Stored dif
 Beginner/Intermediate/Pro/Expert vocabulary (`tier_easy`/`tier_medium`/`tier_hard`/
 `tier_extra_hard` keys in `strings.js`, same ids, new text).
 
+**Auto-resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)**: mount now checks
+`this.savedBoard` in the `NutsBoltsUI` constructor and, if an in-progress board exists, calls
+`startTier(this.savedBoard.difficulty)` directly instead of rendering the menu - skipping straight
+to the game screen for that board's tier, silently, no "resume?" dialog. This reuses the SAME
+`startTier()` resume path (`resumingInMemory`/`resumingFromDisk`) that a matching-tier tap always
+used; no second resume mechanism was added, and no new save key (the existing
+`gamehub.nutsbolts.v1` kept-aside board was already surviving navigation, this just stops making
+the player re-select the same tier to see it). When there is no saved board the menu still renders
+normally, `selectedTier` still defaulting to the last-played tier. `isInProgress()` flipped to
+always return `false` to match (root `CLAUDE.md`'s "autosave built in" `isInProgress()` meaning):
+leaving mid-game is lossless (the board persists after every move and now auto-resumes), so the
+hub's leave-confirm no longer appears.
+
 i18n: `nuts-bolts/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Tier keys
 (`easy`/`medium`/`hard`/`extraHard`), color keys, and `game.js`'s move-reason codes
 (`empty`/`locked`/`full`/`color-mismatch`, changed from their old English-sentence values) stay

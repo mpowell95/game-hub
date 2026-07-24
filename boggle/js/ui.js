@@ -31,7 +31,7 @@ import {
   BOARD_SIZE, neighbors, pathAction, wordForPath, scoreForWord, MIN_WORD_LEN,
 } from './game.js';
 import { loadDictionary, isValidWord } from './dict.js';
-import { shakePlayableBoard } from './solver.js';
+import { shakePlayableBoard, solveBoard } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, loadStats } from '../../js/game-stats.js';
@@ -41,6 +41,13 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.boggle.v1';
+// The one in-progress round (autosave/resume, batch 9 of the 2026-07-23
+// feedback arc -- see HANDOFF-FB-RESUME.md). Deliberately NOT the solver's
+// full word list: that is cheap to recompute deterministically from the
+// saved board once the dictionary is loaded again (see resumeGame()), so
+// only the board letters + found words + time remaining + the round's own
+// settings are persisted. Never touch SETTINGS_KEY's shape or values.
+const SAVE_KEY = 'gamehub.boggle.save.v1';
 
 // Ids stay module-scope (storage vocabulary); display labels resolve through t()
 // inside the render functions, same pattern as every other bilingual game.
@@ -79,6 +86,69 @@ function loadJSON(key, fallback) {
 }
 function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
 
+/** Rebuild a solver-shaped `{ grid, tiles }` board from saved face letters.
+ *  `dieIndex` is not gameplay state (only test.js's dice-authenticity check
+ *  uses it), so a resumed board carries -1 there -- harmless everywhere else. */
+function boardFromFaces(faces) {
+  const grid = Array.from({ length: BOARD_SIZE }, () => new Array(BOARD_SIZE).fill(null));
+  const tiles = [];
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const tile = { r, c, face: faces[r][c], dieIndex: -1 };
+      grid[r][c] = tile;
+      tiles.push(tile);
+    }
+  }
+  return { grid, tiles };
+}
+
+/** Persist the live round so leaving (hub back, reload, closing the PWA)
+ *  never loses it. Called after every scored word and from destroy() (belt
+ *  and braces -- covers backgrounding mid-word-entry too). Never called for
+ *  hub navigation specifically; destroy() runs regardless of the reason. */
+function saveGame(ui) {
+  try {
+    if (ui.view !== 'game' || !ui._board || ui._roundOver) { clearGame(); return; }
+    const faces = ui._board.grid.map((row) => row.map((tile) => tile.face));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      faces,
+      found: [...ui._found.keys()], // insertion order = discovery order; scores are recomputed on load, never trusted from storage
+      remainingSec: ui._remainingSec,
+      timerMinutes: ui._setup.timerMinutes,
+      difficulty: ui._setup.difficulty,
+    }));
+  } catch { /* a full quota must never break the round */ }
+}
+
+/** Read back a saved round, or null. Validates hard: any corrupt or
+ *  non-4x4-of-letters save is treated as "no saved round" rather than
+ *  crashing the module on mount (same discipline as every other game's
+ *  save/load pair -- see mancala/js/ui.js's loadGame()). */
+function loadGame() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (!raw || raw.v !== 1) return null;
+    if (!Array.isArray(raw.faces) || raw.faces.length !== BOARD_SIZE) return null;
+    for (const row of raw.faces) {
+      if (!Array.isArray(row) || row.length !== BOARD_SIZE) return null;
+      if (!row.every((f) => typeof f === 'string' && /^[A-Z]{1,2}$/.test(f))) return null;
+    }
+    if (!Array.isArray(raw.found)) return null;
+    const found = raw.found
+      .filter((w) => typeof w === 'string' && w.length >= MIN_WORD_LEN)
+      .map((w) => [w, scoreForWord(w)]);
+    const remainingSec = Math.round(Number(raw.remainingSec));
+    if (!Number.isFinite(remainingSec) || remainingSec <= 0 || remainingSec > 5 * 60) return null;
+    if (!TIMERS.includes(raw.timerMinutes) || !DIFFICULTIES.includes(raw.difficulty)) return null;
+    return {
+      faces: raw.faces, found, remainingSec, timerMinutes: raw.timerMinutes, difficulty: raw.difficulty,
+    };
+  } catch { return null; }
+}
+
+function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+
 class BoggleUI {
   constructor(container) {
     this.container = container;
@@ -98,6 +168,11 @@ class BoggleUI {
     this._result = null;
     this._solveExpanded = false;
     this._setup = this._loadSetup();
+    // True only while resumeGame() is mid-flight (awaiting the dictionary):
+    // destroy() must NOT touch the save during this window, or a fast
+    // navigate-away-again before the resume finishes would wipe the very
+    // save it was trying to restore.
+    this._restoring = false;
 
     // Swipe-trace state. `_tracing` = a pointer is currently down on the board;
     // `_traceMoved` = it has reached a second tile, which is what separates a
@@ -131,6 +206,12 @@ class BoggleUI {
 
   destroy() {
     this._dead = true;
+    // Belt and braces with the per-word checkpoint in onSubmitWord(): covers
+    // backgrounding mid-word-entry too. Skipped while a resume is still
+    // loading the dictionary -- nothing has changed yet, and touching the
+    // save here (saveGame() clears it when view isn't 'game') would wipe the
+    // very save resumeGame() was in the middle of restoring.
+    if (!this._restoring) saveGame(this);
     this.stopTimer();
     this._detachBoardPointer();
     if (this.root) this.root.removeEventListener('click', this._onClick);
@@ -138,12 +219,14 @@ class BoggleUI {
     this._board = null;
   }
 
-  // No mid-game resume: a round is a live countdown (2-5 minutes) that cannot
-  // meaningfully pause across a hub navigation -- same reasoning as Dots and
-  // Boxes / Tic Tac Toe (see root CLAUDE.md's "two legitimate meanings" note
-  // on isInProgress()). True only while a round is actually ticking right now.
+  // Autosave/resume built in (saveGame/loadGame/clearGame above): the round
+  // snapshots after every scored word and on destroy(), and resumes silently
+  // into the same board, found-words list and countdown on the next mount.
+  // Per root CLAUDE.md's "two legitimate meanings" note on isInProgress(),
+  // that makes this the SECOND meaning (Escoba/Mancala's) -- leaving costs
+  // nothing, so this returns false even mid-round.
   isInProgress() {
-    return this.view === 'game' && !this._roundOver;
+    return false;
   }
 
   // --- settings persistence -------------------------------------------------
@@ -197,7 +280,10 @@ class BoggleUI {
     this.root = this.container.querySelector('.bg-root');
     this.shell = this.root.querySelector('[data-role="shell"]');
     this.root.addEventListener('click', this._onClick);
-    this.renderSetup();
+    // A saved round wins over setup, straight onto the live board -- no
+    // "resume?" dialog, same silent pattern as Escoba/Mancala.
+    const save = loadGame();
+    if (save) this.resumeGame(save); else this.renderSetup();
   }
 
   // --- setup screen -----------------------------------------------------------
@@ -284,6 +370,7 @@ class BoggleUI {
    *  re-fetches the ~1.6MB word list or rebuilds the trie. */
   async startGame() {
     this._saveSetup();
+    clearGame(); // a new round replaces any saved one
     this._path = [];
     this._found = new Map();
     this._feedback = null;
@@ -316,6 +403,52 @@ class BoggleUI {
     this._traceMoved = false;
     this.view = 'game';
     this._remainingSec = this._setup.timerMinutes * 60;
+    this._endsAt = Date.now() + this._remainingSec * 1000;
+    this.renderGame();
+    this.startTimer();
+  }
+
+  /** Restore a saved round straight onto the live board -- no setup screen,
+   *  no "resume?" dialog. The solver's full word list is NOT saved; it is
+   *  cheap to recompute deterministically from the saved board letters once
+   *  the dictionary trie is loaded again (same lazy/cached load startGame()
+   *  uses). The clock is the deliberate special case: `remainingSec` (a
+   *  duration, not a timestamp) is saved, and `_endsAt` is recomputed fresh
+   *  from `Date.now()` here -- so time spent away from the game never counts
+   *  down. That is intentional, favoring the player. */
+  async resumeGame(save) {
+    this._restoring = true;
+    this.view = 'loading';
+    this.renderLoading();
+    let dict;
+    try {
+      dict = await loadDictionary();
+    } catch (err) {
+      if (this._dead) return;
+      console.error('[Boggle] dictionary load failed (resume)', err);
+      this._restoring = false;
+      clearGame(); // can't resume without the dictionary; don't strand a stale save
+      this.renderLoadError();
+      return;
+    }
+    if (this._dead) { this._restoring = false; return; }
+    this._restoring = false;
+    this._trieRoot = dict.root;
+    this._board = boardFromFaces(save.faces);
+    this._solved = solveBoard(this._board.grid, this._trieRoot);
+    this._found = new Map(save.found);
+    this._path = [];
+    this._feedback = null;
+    this._roundOver = false;
+    this._solveExpanded = false;
+    this._result = null;
+    this._setup.timerMinutes = save.timerMinutes;
+    this._setup.difficulty = save.difficulty;
+    this._tapMode = false;
+    this._tracing = false;
+    this._traceMoved = false;
+    this.view = 'game';
+    this._remainingSec = save.remainingSec;
     this._endsAt = Date.now() + this._remainingSec * 1000;
     this.renderGame();
     this.startTimer();
@@ -542,6 +675,7 @@ class BoggleUI {
       const score = scoreForWord(word);
       this._found.set(word, score);
       this._feedback = { type: 'valid', word, score };
+      saveGame(this); // checkpoint after every scored word
     }
     this._path = [];
     this.renderGame();
@@ -695,6 +829,7 @@ class BoggleUI {
   finish() {
     this.stopTimer();
     this._roundOver = true;
+    clearGame(); // round is over and recorded; nothing left to resume into
     const humanWords = [...this._found.entries()].map(([word, score]) => ({ word, score }));
     const humanScore = humanWords.reduce((s, w) => s + w.score, 0);
     const aiWords = selectAiWords(this._solved, this._setup.difficulty);
@@ -858,6 +993,7 @@ class BoggleUI {
       this.startGame();
     } else if (action === 'change-settings') {
       this.closeOverlays();
+      clearGame(); // "give up" (or leaving a load-error screen): explicit abandon, not a hub nav
       this.renderSetup();
     } else if (action === 'help') {
       this.openHelp();

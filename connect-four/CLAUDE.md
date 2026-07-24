@@ -16,6 +16,22 @@ values (`easy`/`medium`/`hard`/`expert`, `ai.js`'s `Difficulty` enum) stay canon
 labels translate. The hidden-challenge strings in `syncChallengeUi()` are translated too even
 though unreachable (`challengeActive` is hardcoded `false`), for consistency if it's ever revived.
 
+### Autosave/resume: `gamehub.connect4.save.v1` (2026-07-23, batch 9)
+
+Silent autosave/resume, following the Escoba/Mancala pattern (`saveC4Game`/`loadC4Game`/
+`clearC4Game` in `ui.js`, near `loadC4Settings`). Snapshots `{ history, firstPlayer, difficulty,
+showBestMoves, statsDisqualified, humanHasMoved }` after every settled move, every undo, and every
+hint-toggle flip; restores straight into the live game screen on mount (no setup screen, no
+"resume?" dialog) via `resumeGame()`. If the save was interrupted mid AI-think, resume hands the
+turn back to the AI immediately. A hint-assisted or undone game carries `_statsDisqualified`
+through the resume unchanged, so it still records no W/L when it ends. Cleared on game end
+(`endGame()`) and on menu "Quit to setup" (an explicit abandon); never cleared on hub navigation
+or `destroy()` (`destroy()` instead does one last checkpoint save, since a move's `game.play()`
+commits before its drop animation resolves). A corrupt or foreign save (bad shape, illegal replay,
+already-over) is treated as "no save," never crashes the mount. `isInProgress()` now always
+returns `false` for this reason (see its own comment) — the hub's "leave game?" confirm no longer
+applies. Does not touch `SETTINGS_KEY` (who-goes-first stays a separate, persistent choice).
+
 ### Settings: `gamehub.connect4.v1` (2026-07-23, batch 8)
 
 Connect Four persisted nothing before this. New standard `gamehub.<game>.v1` key holding only

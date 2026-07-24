@@ -201,9 +201,11 @@ class NutsBoltsUI {
     window.addEventListener('resize', this.onResize);
     window.addEventListener('orientationchange', this.onResize);
 
-    // The difficulty menu is always the entry point. A persisted in-progress
-    // board (if any) is kept aside and only restored when the player starts
-    // the matching tier (see startTier), not auto-resumed on load.
+    // The difficulty menu is the entry point when there is nothing to resume.
+    // A persisted in-progress board (if any) is kept aside and, per batch-9's
+    // "every game defaults to resumable" (HANDOFF-FB-RESUME.md), auto-resumed
+    // straight into the game screen below - the menu/tier-tap detour is now
+    // only for starting fresh or switching tiers.
     this.game = null;
     this.savedBoard = saved.data.board || null;
     this.screen = 'menu';
@@ -214,7 +216,16 @@ class NutsBoltsUI {
     // is actually pressed, in startTier().
     this.selectedTier = this.currentDifficulty;
 
-    this.render();
+    // Auto-resume (batch 9): a saved board exists, so skip the menu and go
+    // straight back into it via the SAME startTier()/resumingFromDisk path
+    // used when the player taps the matching tier manually - no second
+    // resume mechanism, no "resume?" dialog. No saved board -> normal menu,
+    // last-played tier preselected (unchanged).
+    if (this.savedBoard) {
+      this.startTier(this.savedBoard.difficulty);
+    } else {
+      this.render();
+    }
   }
 
   persist() {
@@ -854,8 +865,13 @@ class NutsBoltsUI {
     this.container.innerHTML = '';
   }
 
+  // Autosave/resume built in (root CLAUDE.md's second isInProgress() meaning):
+  // returns false even mid-game, because leaving is lossless - the board
+  // persists after every move (persist()) and batch 9 now auto-resumes it on
+  // mount (see the constructor), so there is nothing to abandon by navigating
+  // back to the hub.
   isInProgress() {
-    return this.screen === 'game' && !!this.game && this.game.hasProgress();
+    return false;
   }
 }
 
