@@ -226,8 +226,12 @@ below; every other in-hub game keeps its current light-only look until its own P
   **Every OTHER in-hub game keeps its current light-only look on a dark shell until its own
   Phase 2 pass** — each one gets its own `:root.gh-dark .xx-root` variable-override block in
   the game's own CSS, one small commit per game. Done so far: Snake, Mancala, Boggle, Dots
-  and Boxes. Remaining, per the suggested order: Tic Tac Toe, Nuts & Bolts, Filler, Escoba,
-  Ball Run, Connect Four.
+  and Boxes, Tic Tac Toe, Nuts & Bolts, Filler. Remaining, per the suggested order: Escoba,
+  Ball Run, Connect Four. **Nuts & Bolts is a special case**: its whole UI (`.nb-root`) has
+  always had its own permanently-dark workshop palette (`--nb-bg`/`--nb-surface`/etc.),
+  unrelated to the hub toggle — no `:root.gh-dark .nb-root` block was needed, only the tier
+  3/4 ski-slope shape fix, and that fix is applied UNCONDITIONALLY (not gated behind
+  `:root.gh-dark`) since the shape is invisible on that dark backdrop in every hub theme.
 - **Toggle**: hub top bar, `[data-role="theme"]`, next to the language knob
   (`js/hub.js`'s `_paintThemeToggle()`); cycles light → dark → auto → light. Icon shows the
   RESOLVED theme (☀️/🌙); a small "A" badge marks the stored mode specifically being

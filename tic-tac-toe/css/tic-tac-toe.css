@@ -439,3 +439,28 @@
 .ttt-root .ttt-dg-grid line { stroke: var(--ttt-accent); stroke-width: 1.5; opacity: 0.6; }
 .ttt-root .ttt-dg-mark line { stroke: var(--ttt-x); stroke-width: 4; stroke-linecap: round; }
 .ttt-root .ttt-dg-arrow { fill: none; stroke: var(--ttt-gold); stroke-width: 3; stroke-linecap: round; }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
+   properties. --ttt-x/--ttt-o/--ttt-gold/--ttt-dead stay UNTOUCHED on purpose, same as Dots and
+   Boxes's ownership colors: they're the game's own marks, already legible on a dark surface
+   (large glyph text), not chrome. A few hardcoded literals not already on a variable (the
+   ultimate mini-cell background, the classic-cell hover lift, the segmented-control selected
+   state, the help-rule caption) get their own overrides. */
+:root.gh-dark .ttt-root {
+  --ttt-accent: #35b3bd;
+  --ttt-accent-deep: #7ddce2;
+  --ttt-ink: #e9eef6;
+  --ttt-muted: #9db0c9;
+  --ttt-bg: #11182a;
+  --ttt-surface: #1b2333;
+  --ttt-surface-2: #2b3547;
+}
+:root.gh-dark .ttt-root .ttt-segbtn.is-selected { background: var(--ttt-surface-2); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
+:root.gh-dark .ttt-root .ttt-cell.is-live:hover { background: #384463; }
+:root.gh-dark .ttt-root .ttt-scell { background: #2b3547; }
+:root.gh-dark .ttt-root .ttt-scell:disabled { background: rgba(43, 53, 71, 0.6); }
+:root.gh-dark .ttt-root .ttt-btn-ghost.is-confirm { background: rgba(255, 99, 82, 0.2); color: #ff8478; border-color: rgba(255, 99, 82, 0.45); }
+:root.gh-dark .ttt-root .ttt-help-rule { color: var(--ttt-muted); }
+:root.gh-dark .ttt-root .lb-dshape-t3,
+:root.gh-dark .ttt-root .lb-dshape-t4 { fill: #e6e9f0; }
