@@ -473,3 +473,28 @@
 .db-root .db-legend-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .db-root .db-legend-chip.is-human .db-legend-swatch { background: var(--db-human); }
 .db-root .db-legend-chip.is-ai .db-legend-swatch { background: var(--db-ai); }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; Dots and Boxes already routes every surface through
+   its own --db-* custom properties, so overriding them here is the whole job. --db-human/
+   --db-ai stay untouched on purpose: iOS system red/blue are the game's own load-bearing
+   ownership colors (real Dots and Boxes convention), not chrome, and both already read fine on
+   a dark surface. Three hardcoded literals not already on a variable get their own overrides. */
+:root.gh-dark .db-root {
+  --db-accent: #9273d1;
+  --db-accent-deep: #b79cea;
+  --db-ink: #e9eef6;
+  --db-muted: #9db0c9;
+  --db-bg: #11182a;
+  --db-surface: #1b2333;
+  --db-surface-2: #2b3547;
+  --db-line-off: #445168;
+  --db-line-on: #cbd5e6;
+  --db-human-tint: rgba(255, 59, 48, 0.28);
+  --db-ai-tint: rgba(0, 122, 255, 0.28);
+}
+:root.gh-dark .db-root .db-segbtn.is-selected { background: var(--db-surface-2); }
+:root.gh-dark .db-root .db-btn-ghost.is-confirm { background: rgba(255, 99, 82, 0.2); color: #ff8478; border-color: rgba(255, 99, 82, 0.45); }
+:root.gh-dark .db-root .db-help-rule { color: var(--db-muted); }
+:root.gh-dark .db-root .lb-dshape-t3,
+:root.gh-dark .db-root .lb-dshape-t4 { fill: #e6e9f0; }
