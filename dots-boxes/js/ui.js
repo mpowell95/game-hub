@@ -31,7 +31,7 @@ const AI_CHAIN_STEP_MS = 220; // faster pacing between successive chain-capture 
 // Board size is a SETTING, not the difficulty tier (AI skill is, see DIFFICULTIES
 // below) -- the two are independent axes, see root CLAUDE.md / the handoff. Values
 // (first element) stay canonical; labelKey resolves via t().
-const SIZES = [['small', 'size_small', 3, 3], ['medium', 'size_medium', 4, 4], ['large', 'size_large', 5, 5]];
+const SIZES = [['small', 'size_small', 3, 3], ['medium', 'size_medium', 4, 4], ['large', 'size_large', 10, 10]];
 const SIZE_META = Object.fromEntries(SIZES.map(([k, labelKey, rows, cols]) => [k, { labelKey, rows, cols }]));
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
@@ -174,9 +174,7 @@ class DotsBoxesUI {
   _sizeContent() {
     const s = this._setup;
     const meta = SIZE_META[s.size];
-    const hint = meta.rows * meta.cols % 2 === 0
-      ? t('hint_size_boxes_tie', { rows: meta.rows, cols: meta.cols })
-      : t('hint_size_boxes', { rows: meta.rows, cols: meta.cols });
+    const hint = t('hint_size_boxes', { rows: meta.rows, cols: meta.cols });
     return this._seg('set-size', s.size, SIZES.map(([k, labelKey]) => [k, t(labelKey)]))
       + `<p class="db-hint">${hint}</p>`;
   }
@@ -338,7 +336,7 @@ class DotsBoxesUI {
         } else {
           const r = (mr - 1) / 2, c = (mc - 1) / 2;
           const owner = s.boxes[r][c];
-          const capturable = owner === null && edgeCount(s, r, c) === 3;
+          const capturable = owner === null && edgeCount(s, r, c) === 3 && this._setup.difficulty === 'beginner';
           const isNew = claimed.some(([br, bc]) => br === r && bc === c);
           const glyph = owner === null ? '' : esc(owner === this.humanSeat ? id.humanEmoji : id.oppEmoji);
           const label = owner === null

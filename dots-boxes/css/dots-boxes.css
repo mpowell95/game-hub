@@ -268,11 +268,14 @@
    narrower than a small tablet. */
 .db-root .db-board[data-size="small"] { --db-dot: 12px; --db-cell: 96px; }
 .db-root .db-board[data-size="medium"] { --db-dot: 11px; --db-cell: 80px; }
-.db-root .db-board[data-size="large"] { --db-dot: 10px; --db-cell: 84px; }
+/* Large is 10x10 boxes (11x11 dots, 220 edges) -- far too many tracks to use
+   the other sizes' generous per-cell sizing without overflowing the 540px
+   shell, so it gets its own much smaller dot/cell scale tuned to fit. */
+.db-root .db-board[data-size="large"] { --db-dot: 8px; --db-cell: 38px; }
 @media (max-width: 600px) {
   .db-root .db-board[data-size="small"] { --db-cell: min(22vw, 96px); }
   .db-root .db-board[data-size="medium"] { --db-cell: min(17.5vw, 80px); }
-  .db-root .db-board[data-size="large"] { --db-cell: min(13.8vw, 84px); }
+  .db-root .db-board[data-size="large"] { --db-dot: 6px; --db-cell: min(6.5vw, 38px); }
 }
 
 .db-root .db-board {
@@ -319,8 +322,14 @@
    grid track without pushing neighboring tracks -- sizing alone doesn't do
    this: a track-sized box with a negative margin only shifts a still-tiny
    hit area, it doesn't grow it. */
-.db-root .db-edge-h { width: 100%; height: 44px; margin-block: calc((var(--db-dot) - 44px) / 2); }
-.db-root .db-edge-v { height: 100%; width: 44px; margin-inline: calc((var(--db-dot) - 44px) / 2); }
+/* The tap target grows to 44px whenever there's room, but on the dense Large
+   (10x10) board a full 44px would overlap the neighboring row/column's own
+   tap zone and cause mis-taps on the wrong edge -- so it's capped to the
+   track's own pitch (dot+cell) instead, which keeps every edge's hit area
+   exactly non-overlapping even when that's below the 44px ideal. */
+.db-root .db-edge { --db-tap: min(44px, calc(var(--db-dot) + var(--db-cell))); }
+.db-root .db-edge-h { width: 100%; height: var(--db-tap); margin-block: calc((var(--db-dot) - var(--db-tap)) / 2); }
+.db-root .db-edge-v { height: 100%; width: var(--db-tap); margin-inline: calc((var(--db-dot) - var(--db-tap)) / 2); }
 
 .db-root .db-line { background: var(--db-line-off); border-radius: 2px; opacity: 0.4; transition: background 120ms ease, opacity 120ms ease, height 120ms ease, width 120ms ease; }
 .db-root .db-edge-h .db-line { width: 100%; height: 2px; }
