@@ -86,6 +86,12 @@
 
 .br-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .br-root .lb-dshape-x2 { width: 1.7em; }
+/* Tier 3/4 ski-slope shape fix (2026-07-24, HANDOFF-FB-THEME.md Phase 2). Special case like
+   Nuts & Bolts: .br-root's whole chrome (--br-void/--br-panel/etc.) is always a dark neon
+   palette regardless of the hub's light/dark toggle, so the near-black tier 3/4 fill is
+   invisible on this game's own backdrop in every hub theme -- NOT gated behind :root.gh-dark. */
+.br-root .lb-dshape-t3,
+.br-root .lb-dshape-t4 { fill: #e6e9f0; }
 
 /* Standard 3-option segmented difficulty control (2026-07-24 redesign, root CLAUDE.md's "Ball
    Run setup redesign" — replaces the old face icons + range slider, matches every other game's
