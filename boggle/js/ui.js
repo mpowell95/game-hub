@@ -811,8 +811,6 @@ class BoggleUI {
             <li>${esc(t('help_2'))}</li>
             <li>${esc(t('help_3'))}</li>
             <li>${esc(t('help_4'))}</li>
-            <li>${esc(t('help_5'))}</li>
-            <li>${esc(t('help_6'))}</li>
           </ul>
         </div>
       </div>`;

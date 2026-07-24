@@ -429,7 +429,7 @@
 .db-root .db-diagram { width: 168px; height: 168px; }
 .db-root .db-dg-side { stroke: var(--db-line-on); stroke-width: 4; stroke-linecap: round; }
 .db-root .db-dg-move { stroke: var(--db-human); stroke-width: 7; stroke-linecap: round; }
-.db-root .db-dg-check { fill: none; stroke: var(--db-human); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.db-root .db-dg-fill { fill: var(--db-human-tint); }
 .db-root .db-dg-dots circle { fill: var(--db-line-on); }
 .db-root .db-dg-dots-open circle { fill: var(--db-line-off); }
 .db-root .db-dg-open rect { fill: none; stroke: var(--db-line-off); stroke-width: 2; stroke-dasharray: 4 4; }

@@ -138,20 +138,25 @@ const FACE_SVGS = {
   hard: '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="currentColor"/><path d="M8 14l9 4M32 14l-9 4" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round"/><path d="M9 22h8.5M22.5 22H31" stroke="#1a1a1a" stroke-width="4.6" stroke-linecap="round"/><path d="M13 30c3-3.5 11-3.5 14 0" stroke="#1a1a1a" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>',
 };
 
-// Static how-to-play stills (brief section 11). Drawn as small inline SVGs
-// approximating the reference frames rather than live 3D demos, per the brief.
-// Re-drawn (item 5) with the ball sitting lower in frame with a generous
-// forward view, matching the retuned camera framing in render.js, and with
-// the drag cue replaced by a plain touch-point + double-headed-arrow glyph
-// (no hand/finger illustration) in the hub's own inline-SVG stroke style.
-function stillDragSteer() {
-  return `<svg viewBox="0 0 200 200" aria-hidden="true">
+// Single static how-to-play diagram (2026-07-23 rewrite: the old 4-slide pager showed
+// abstract shapes that didn't depict their captions, and its "first page" button was
+// actually skip-to-first, so tapping it looked like "previous" but always restarted the
+// deck). One inline SVG instead, drawn with the same track colors render.js actually uses
+// (COLOR_TRACK_TILE fill, COLOR_TRACK_GROUT edges, COLOR_CHEVRON gap markers, COLOR_BALL)
+// so the sheet matches what the player sees in-game: the ball steering on a dark track,
+// with a visible gap in the right edge showing where falling off ends the run, and a
+// touch-point + double-headed-arrow glyph for the drag-to-steer gesture.
+function helpDiagram() {
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_diagram_aria')}">
     <rect width="200" height="200" fill="#000"/>
-    <path d="M14 196 L100 40 L186 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-    <path d="M50 160 L150 160" stroke="#8f9aef" stroke-width="1.5"/>
-    <path d="M70 122 L130 122" stroke="#8f9aef" stroke-width="1.2"/>
-    <circle cx="100" cy="140" r="19" fill="#e91ec4"/>
-    <ellipse cx="93" cy="133" rx="6" ry="4" fill="#ff9fe6" opacity="0.7"/>
+    <path d="M14 196 L100 40 L186 196 Z" fill="#2b2f6b"/>
+    <path d="M14 196 L100 40" stroke="#8f9aef" stroke-width="3" fill="none"/>
+    <path d="M100 40 L152 118" stroke="#8f9aef" stroke-width="3" fill="none"/>
+    <path d="M162 134 L186 196" stroke="#39f4ff" stroke-width="3" stroke-dasharray="3 5" fill="none"/>
+    <path d="M50 160 L150 160" stroke="#8f9aef" stroke-width="1.2" opacity="0.6"/>
+    <path d="M70 122 L130 122" stroke="#8f9aef" stroke-width="1" opacity="0.6"/>
+    <circle cx="88" cy="140" r="19" fill="#e91ec4"/>
+    <ellipse cx="81" cy="133" rx="6" ry="4" fill="#ff9fe6" opacity="0.7"/>
     <g stroke="#39f4ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
       <line x1="44" y1="182" x2="156" y2="182"/>
       <path d="M44 182 l16 -11 M44 182 l16 11"/>
@@ -160,40 +165,6 @@ function stillDragSteer() {
     </g>
   </svg>`;
 }
-function stillObstacle() {
-  return `<svg viewBox="0 0 200 200" aria-hidden="true">
-    <rect width="200" height="200" fill="#000"/>
-    <path d="M6 196 L100 60 L194 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-    <path d="M50 152 L150 152" stroke="#8f9aef" stroke-width="1.5"/>
-    <circle cx="72" cy="128" r="17" fill="#e91ec4"/>
-    <rect x="112" y="104" width="24" height="24" fill="#9b1fd6" stroke="#ff5fe0" stroke-width="2"/>
-  </svg>`;
-}
-function stillEdge() {
-  return `<svg viewBox="0 0 200 200" aria-hidden="true">
-    <rect width="200" height="200" fill="#000"/>
-    <path d="M64 196 L128 60 L200 96 L200 196 Z" fill="none" stroke="#8f9aef" stroke-width="2"/>
-    <path d="M108 150 L182 154" stroke="#8f9aef" stroke-width="1.5"/>
-    <circle cx="84" cy="162" r="17" fill="#e91ec4"/>
-  </svg>`;
-}
-function stillTunnel() {
-  return `<svg viewBox="0 0 200 200" aria-hidden="true">
-    <rect width="200" height="200" fill="#2b0a3d"/>
-    <path d="M0 0 L100 46 L200 0 Z" fill="#9b1fd6" opacity="0.5"/>
-    <path d="M0 200 L100 148 L200 200 Z" fill="#3a2f7b"/>
-    <path d="M18 178 L100 116 L182 178" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
-    <path d="M42 152 L100 116 L158 152" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="100" cy="150" r="16" fill="#e91ec4"/>
-  </svg>`;
-}
-
-const HELP_PAGES = [
-  { still: stillDragSteer, textKey: 'help_1' },
-  { still: stillObstacle, textKey: 'help_2' },
-  { still: stillEdge, textKey: 'help_3' },
-  { still: stillTunnel, textKey: 'help_4' },
-];
 
 class BallRunUI {
   constructor(container) {
@@ -216,7 +187,6 @@ class BallRunUI {
     this.input = null;
     this.rafId = 0;
     this.running = false;
-    this.helpPage = 0;
     this.helpReturnScreen = 'setup';
     this._lastTime = 0;
     this._acc = 0;
@@ -290,16 +260,14 @@ class BallRunUI {
           <div class="br-help-panel">
             <button type="button" class="br-help-close" data-action="close-help" aria-label="${t('close')}">&times;</button>
             <h2 class="br-help-title">${t('howto_title')}</h2>
+            <p class="br-help-lead">${t('help_goal')}</p>
             <div class="br-help-card">
               <div class="br-help-still" data-role="help-still"></div>
-              <p class="br-help-text" data-role="help-text"></p>
             </div>
-            <div class="br-help-dots" data-role="help-dots"></div>
-            <div class="br-help-nav">
-              <button type="button" class="br-btn br-btn-nav" data-action="help-first" aria-label="${t('first_page_aria')}">|&larr;</button>
-              <button type="button" class="br-btn br-btn-primary" data-action="help-ok">${t('ok')}</button>
-              <button type="button" class="br-btn br-btn-nav" data-action="help-next" aria-label="${t('next_page_aria')}">&rarr;|</button>
-            </div>
+            <p class="br-help-caption">${t('help_caption')}</p>
+            <ul class="br-help-bullets">
+              <li>${t('help_bullet1')}</li>
+            </ul>
           </div>
         </div>
       </div>`;
@@ -333,8 +301,6 @@ class BallRunUI {
       goHub: q('[data-role="go-hub"]'),
       help: q('[data-role="help"]'),
       helpStill: q('[data-role="help-still"]'),
-      helpText: q('[data-role="help-text"]'),
-      helpDots: q('[data-role="help-dots"]'),
     };
 
     this.el.diffSlider.value = String(DIFF_ORDER.indexOf(this.difficulty));
@@ -362,9 +328,6 @@ class BallRunUI {
       const action = e.target.closest('[data-action]');
       if (!action) return;
       if (action.dataset.action === 'close-help') this.closeHelp();
-      else if (action.dataset.action === 'help-ok') { if (this.helpPage >= HELP_PAGES.length - 1) this.closeHelp(); else this.helpNext(); }
-      else if (action.dataset.action === 'help-next') this.helpNext();
-      else if (action.dataset.action === 'help-first') this.helpGo(0);
     });
 
     this.showSetup();
@@ -554,36 +517,18 @@ class BallRunUI {
     this.el.gameover.hidden = false;
   }
 
-  // --- Help carousel (brief section 11) --------------------------------
+  // --- Help sheet (one static diagram, no pagination) --------------------
 
   openHelp(fromScreen) {
     this.helpReturnScreen = fromScreen;
-    this.helpPage = 0;
     if (this.running) { this.stopLoop(); this._pausedForHelp = true; }
-    this.renderHelpPage();
+    this.el.helpStill.innerHTML = helpDiagram();
     this.el.help.hidden = false;
   }
 
   closeHelp() {
     this.el.help.hidden = true;
     if (this._pausedForHelp) { this._pausedForHelp = false; if (this.sim && !this.sim.isOver()) this.startLoop(); }
-  }
-
-  helpNext() {
-    this.helpGo(Math.min(HELP_PAGES.length - 1, this.helpPage + 1));
-  }
-
-  helpGo(i) {
-    this.helpPage = i;
-    this.renderHelpPage();
-  }
-
-  renderHelpPage() {
-    const page = HELP_PAGES[this.helpPage];
-    this.el.helpStill.innerHTML = page.still();
-    this.el.helpText.textContent = t(page.textKey);
-    this.el.helpDots.innerHTML = HELP_PAGES.map((_, i) =>
-      `<span class="br-dot${i === this.helpPage ? ' is-active' : ''}"></span>`).join('');
   }
 
   // --- Teardown -----------------------------------------------------------

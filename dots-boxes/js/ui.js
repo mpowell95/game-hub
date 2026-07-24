@@ -429,11 +429,11 @@ class DotsBoxesUI {
         </marker>
       </defs>
       <g class="db-dg-claimed">
+        <rect x="16" y="70" width="88" height="88" rx="4" class="db-dg-fill"/>
         <line x1="16" y1="70" x2="104" y2="70" class="db-dg-side"/>
         <line x1="16" y1="70" x2="16" y2="158" class="db-dg-side"/>
         <line x1="16" y1="158" x2="104" y2="158" class="db-dg-side"/>
         <line x1="104" y1="70" x2="104" y2="158" class="db-dg-move"/>
-        <path d="M35,118 L58,141 L92,90" class="db-dg-check"/>
       </g>
       <g class="db-dg-dots">
         <circle cx="16" cy="70" r="4.5"/><circle cx="104" cy="70" r="4.5"/>

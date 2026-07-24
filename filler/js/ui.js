@@ -8,7 +8,7 @@
 // information is ever carried by hue alone.
 
 import {
-  COLS, ROWS, TILES, MAJORITY, P1, P2, P1_START, P2_START,
+  COLS, ROWS, TILES, P1, P2, P1_START, P2_START,
   newGame, legalColors, applyMove, territoryDistances,
 } from './game.js';
 import { chooseColor } from './ai.js';
@@ -128,11 +128,6 @@ class FillerUI {
 
   swatchHTML(color, cls = '') {
     return `<span class="fl-swatch ${cls}" data-color="${color}" role="img" aria-label="${t(COLOR_META[color].labelKey)}"></span>`;
-  }
-
-  legendHTML() {
-    return `<ul class="fl-legend">${COLOR_META.map((m, i) =>
-      `<li>${this.swatchHTML(i)}<span>${t(m.labelKey)}</span></li>`).join('')}</ul>`;
   }
 
   // --- setup view ------------------------------------------------------------
@@ -363,7 +358,45 @@ class FillerUI {
     this.container.querySelector('.filler').appendChild(overlay);
   }
 
-  // --- how to play -----------------------------------------------------------
+  // --- how to play ------------------------------------------------------------
+  //
+  // Same shape as Tic Tac Toe's how-to-play sheet: one bold goal line, ONE
+  // diagram of the single non-obvious mechanic, a plain-word caption, an
+  // "X = Y" example, then at most a couple one-sentence bullets.
+
+  /** Two isolated teal tiles touch a blue 2x2 territory (top and right edges);
+   *  arrows show them joining the territory on a blue pick. Shape-driven
+   *  (triangle/diamond glyphs), color is reinforcement only. */
+  _floodDiagram() {
+    return `<svg class="fl-diagram" viewBox="0 0 224 224" role="img" aria-label="${t('help_diagram_aria')}">
+      <defs>
+        <marker id="fl-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--fl-accent)"/>
+        </marker>
+      </defs>
+      <g class="fl-dg-tile">
+        <rect x="11" y="11" width="46" height="46" rx="6"/><rect x="63" y="11" width="46" height="46" rx="6"/>
+        <rect x="115" y="11" width="46" height="46" rx="6"/><rect x="167" y="11" width="46" height="46" rx="6"/>
+        <rect x="115" y="63" width="46" height="46" rx="6"/><rect x="167" y="63" width="46" height="46" rx="6"/>
+        <rect x="167" y="115" width="46" height="46" rx="6"/>
+        <rect x="115" y="167" width="46" height="46" rx="6"/><rect x="167" y="167" width="46" height="46" rx="6"/>
+      </g>
+      <rect x="63" y="63" width="46" height="46" rx="6" class="fl-dg-teal"/>
+      <rect x="11" y="115" width="46" height="46" rx="6" class="fl-dg-blue"/>
+      <rect x="63" y="115" width="46" height="46" rx="6" class="fl-dg-blue"/>
+      <rect x="11" y="167" width="46" height="46" rx="6" class="fl-dg-blue"/>
+      <rect x="63" y="167" width="46" height="46" rx="6" class="fl-dg-blue"/>
+      <g class="fl-dg-glyph">
+        <path d="M86,74.5 106,101 66,101z"/>
+        <path d="M34,138 46,150 22,150z"/>
+        <path d="M86,138 98,150 74,150z"/>
+        <path d="M34,190 46,202 22,202z"/>
+        <path d="M86,190 98,202 74,202z"/>
+      </g>
+      <path d="M86,105 Q100,118 88,133" class="fl-dg-arrow" marker-end="url(#fl-dg-arrowhead)"/>
+      <path d="M65,138 Q40,150 42,163" class="fl-dg-arrow" marker-end="url(#fl-dg-arrowhead)"/>
+    </svg>`;
+  }
 
   openHelp() {
     this.closeOverlays();
@@ -375,39 +408,16 @@ class FillerUI {
       <div class="fl-card fl-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="fl-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <h3 class="fl-card-title">${t('howto')}</h3>
-        <section>
-          <h4>${t('help_goal_h')}</h4>
-          <p>${t('help_goal', { majority: MAJORITY, tiles: TILES })}</p>
-        </section>
-        <section>
-          <h4>${t('help_setup_h')}</h4>
-          <p>${t('help_setup', { opp: esc(this.oppName) })}</p>
-        </section>
-        <section>
-          <h4>${t('help_turn_h')}</h4>
-          <p>${t('help_turn')}</p>
-        </section>
-        <section>
-          <h4>${t('help_blocked_h')}</h4>
-          <p>${t('help_blocked')}</p>
-        </section>
-        <section>
-          <h4>${t('help_end_h')}</h4>
-          <p>${t('help_end')}</p>
-        </section>
-        <section>
-          <h4>${t('help_tips_h')}</h4>
-          <ul>
-            <li>${t('help_tip1')}</li>
-            <li>${t('help_tip2', { opp: esc(this.oppName) })}</li>
-            <li>${t('help_tip3')}</li>
-          </ul>
-        </section>
-        <section>
-          <h4>${t('help_colors_h')}</h4>
-          <p>${t('help_colors')}</p>
-          ${this.legendHTML()}
-        </section>
+        <p class="fl-help-lead">${t('help_lead')}</p>
+        <div class="fl-diagram-wrap">${this._floodDiagram()}</div>
+        <div class="fl-help-lines">
+          <p class="fl-help-caption">${t('help_caption')}</p>
+          <p class="fl-help-example">${t('help_example')}</p>
+        </div>
+        <ul class="fl-help-bullets">
+          <li>${t('help_bullet1')}</li>
+          <li>${t('help_bullet2')}</li>
+        </ul>
       </div>`;
     this.container.querySelector('.filler').appendChild(overlay);
   }
