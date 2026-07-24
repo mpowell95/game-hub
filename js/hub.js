@@ -210,6 +210,15 @@ const GAMES = [
     // same colorblind rule as the live board). Composed for 160x90, nothing cropped.
     art: GAME_ART["snake"],
   },
+  {
+    id: 'uno',
+    title: 'Uno',
+    blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',
+      es: 'Combina color o número, sé el primero en quedarte sin cartas. 2-4 jugadores contra la IA.' },
+    module: '../uno/js/ui.js',
+    accent: '#E0532F',
+    art: GAME_ART["uno"],
+  },
 ];
 
 class Hub {

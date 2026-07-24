@@ -330,6 +330,27 @@ export const GAME_ART = {
             <rect x="112" y="24" width="5" height="5" fill="#c9dd9a"/>
             <circle cx="136" cy="27" r="7" fill="none" stroke="#28340f" stroke-width="3.5"/>
           </svg>`,
+  uno: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2b2b33"/>
+            <g transform="translate(80 52)">
+              <g transform="rotate(-22)">
+                <rect x="-19" y="-30" width="38" height="54" rx="6" fill="#E0532F" stroke="#1c1c22" stroke-width="1.5"/>
+                <rect x="-15.5" y="-25.5" width="9" height="9" rx="1.5" fill="#fff"/>
+              </g>
+              <g transform="rotate(-7)">
+                <rect x="-19" y="-30" width="38" height="54" rx="6" fill="#F2B705" stroke="#1c1c22" stroke-width="1.5"/>
+                <circle cx="-11" cy="-21" r="4.6" fill="#fff"/>
+              </g>
+              <g transform="rotate(8)">
+                <rect x="-19" y="-30" width="38" height="54" rx="6" fill="#178A7A" stroke="#1c1c22" stroke-width="1.5"/>
+                <rect x="-15" y="-25" width="8" height="8" fill="#fff" transform="rotate(45 -11 -21)"/>
+              </g>
+              <g transform="rotate(23)">
+                <rect x="-19" y="-30" width="38" height="54" rx="6" fill="#1F5FA8" stroke="#1c1c22" stroke-width="1.5"/>
+                <path d="M-11,-27 L-6,-18 L-16,-18 Z" fill="#fff"/>
+              </g>
+            </g>
+          </svg>`,
 };
 
 export default GAME_ART;

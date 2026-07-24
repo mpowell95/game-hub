@@ -75,6 +75,8 @@ async function gatherLocal() {
     boggleSettings: readJSON('gamehub.boggle.v1'),
     boggleSave: readJSON('gamehub.boggle.save.v1'),
     connectFourSave: readJSON('gamehub.connect4.save.v1'),
+    unoSettings: readJSON('gamehub.uno.v1'),
+    unoSave: readJSON('gamehub.uno.save.v1'),
     ballRun: {
       difficulty: readRaw('ballrun.difficulty'),
       seenHelp: readRaw('ballrun.seenHelp'),

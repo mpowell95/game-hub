@@ -21,6 +21,7 @@ const DICTS = [
   { name: 'escoba/js/strings.js', path: './escoba/js/strings.js' },
   { name: 'chinchon/js/strings.js', path: './chinchon/js/strings.js' },
   { name: 'boggle/js/strings.js', path: './boggle/js/strings.js' },
+  { name: 'uno/js/strings.js', path: './uno/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

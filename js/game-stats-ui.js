@@ -39,6 +39,7 @@ const TABS = [
   { id: 'dotsboxes', labelKey: 'game_title_dotsboxes' },
   { id: 'boggle', labelKey: 'game_title_boggle' },
   { id: 'snake', labelKey: 'game_title_snake' },
+  { id: 'uno', labelKey: 'game_title_uno' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source

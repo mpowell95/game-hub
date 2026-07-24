@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v215';
+const CACHE = 'game-hub-v216';
 
 const ASSETS = [
   './',
@@ -160,6 +160,13 @@ const ASSETS = [
   './snake/js/ui.js',
   './snake/js/game.js',
   './snake/js/strings.js',
+  './uno/',
+  './uno/index.html',
+  './uno/css/uno.css',
+  './uno/js/ui.js',
+  './uno/js/game.js',
+  './uno/js/ai.js',
+  './uno/js/strings.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,
