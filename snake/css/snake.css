@@ -244,3 +244,27 @@
 .sn-root .sn-pad--gamepad .sn-padbtn:active,
 .sn-root .sn-pad--solid .sn-padbtn:active,
 .sn-root .sn-pad--solidArrows .sn-padbtn:active { opacity: 0.6; }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN
+   custom properties. --sn-lcd/--sn-lcd-rgb/--sn-pixel stay UNTOUCHED here on purpose — they
+   are the LCD screen's own art (the canvas's drawn pixels are literal hex in ui.js and never
+   read these vars anyway), same as Connect Four's board staying blue: only the chrome around
+   the game themes, not the game's own look. */
+:root.gh-dark .sn-root {
+  --sn-ink: #e7ecdd;
+  --sn-card: #1e2818;
+  --sn-muted: #a6b79a;
+}
+:root.gh-dark .sn-root .sn-howto { border-color: #3d4a34; }
+:root.gh-dark .sn-root .sn-x { background: #2a3524; }
+/* classic/compass pad buttons sit on --sn-card (now dark); their border+glyph used --sn-pixel
+   (dark-on-dark, invisible) so those two get their own override rather than --sn-pixel itself,
+   which stays dark everywhere else it's read (the overlay text, the circle/gamepad pad's
+   center dot) because THOSE sit on the still-light --sn-lcd background regardless of theme. */
+:root.gh-dark .sn-root .sn-pad--classic .sn-padbtn,
+:root.gh-dark .sn-root .sn-pad--compass .sn-padbtn { border-color: var(--sn-accent); color: var(--sn-lcd); }
+:root.gh-dark .sn-root .sn-help-art { color: var(--sn-lcd); }
+/* solidArrows' glyph is `color: var(--sn-card)` (white-on-dark-cross in light mode); --sn-card
+   is now dark too, so pin it to the light LCD tone instead of letting it follow --sn-card. */
+:root.gh-dark .sn-root .sn-pad--solidArrows .sn-padbtn { color: var(--sn-lcd); }
