@@ -73,8 +73,10 @@
 
 /* Segmented control, shared by every settings row. */
 .bg-root .bg-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 5px; background: var(--bg-surface-2); border-radius: 11px; padding: 4px; }
-.bg-root .bg-segbtn { appearance: none; border: 0; border-radius: 8px; padding: 9px 4px; font: inherit; font-size: 13px; font-weight: 800; color: var(--bg-muted); background: transparent; cursor: pointer; }
+.bg-root .bg-segbtn { appearance: none; border: 0; border-radius: 8px; padding: 9px 4px; font: inherit; font-size: 13px; font-weight: 800; color: var(--bg-muted); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .bg-root .bg-segbtn.is-selected { background: #fff; color: var(--bg-ink); box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18); }
+.bg-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.bg-root .lb-dshape-x2 { width: 1.7em; }
 
 /* --- setup: accordion summary card (Escoba's pattern) -------------------- */
 
@@ -86,7 +88,6 @@
 .bg-root .bg-row-value { font-size: 13.5px; font-weight: 700; color: var(--bg-muted); }
 .bg-root .bg-row.is-open .bg-row-value { color: var(--bg-accent-deep); }
 .bg-root .bg-row-expand { padding: 0 14px 14px; }
-.bg-root .bg-hint { margin: 8px 2px 0; font-size: 12px; line-height: 1.4; color: var(--bg-muted); }
 
 /* --- loading -------------------------------------------------------------- */
 

@@ -31,6 +31,8 @@
   cursor: pointer; touch-action: manipulation;
 }
 .sn-root .sn-seg.is-on { background: var(--sn-accent); color: #fff; }
+.sn-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.sn-root .lb-dshape-x2 { width: 1.7em; }
 .sn-root .sn-play {
   font: inherit; font-weight: 800; font-size: 1.1rem; padding: 13px 16px; border-radius: 12px;
   border: 0; background: var(--sn-accent); color: #fff; cursor: pointer; touch-action: manipulation;

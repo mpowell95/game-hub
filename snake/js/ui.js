@@ -14,6 +14,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { recordSnake, loadStats } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.snake.v1';
@@ -128,7 +129,7 @@ class SnakeUI {
     const w = this.settings.walls;
     const diffBtn = (id, label) => `
       <button type="button" class="sn-seg${d === id ? ' is-on' : ''}" data-diff="${id}"
-        aria-pressed="${d === id}">${label}</button>`;
+        aria-pressed="${d === id}">${diffShapeSVG(tierOf(id))}${label}</button>`;
     const wallsBtn = (id, label) => `
       <button type="button" class="sn-seg${w === id ? ' is-on' : ''}" data-walls="${id}"
         aria-pressed="${w === id}">${label}</button>`;

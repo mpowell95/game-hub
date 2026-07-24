@@ -21,6 +21,7 @@ import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordDotsBoxes, loadStats } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -76,6 +77,7 @@ class DotsBoxesUI {
     this._lastCaptured = [];
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
+    this._confirmTimer = null;
     this._setup = this._loadSetup();
 
     this._onClick = (e) => this.onClick(e);
@@ -87,6 +89,7 @@ class DotsBoxesUI {
   destroy() {
     this._dead = true;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    clearTimeout(this._confirmTimer);
     if (this.root) this.root.removeEventListener('click', this._onClick);
     this.container.innerHTML = '';
     this.state = null;
@@ -109,16 +112,44 @@ class DotsBoxesUI {
     try { profile = loadProfile(); } catch { profile = null; }
     const opp = profile && profile.opponents && profile.opponents[0];
     const profileDiff = (opp && SKILL_TO_DIFF[opp.skill]) || null;
+    // First-move mode (2026-07-24, batch 8): 'you' | 'opponent' | 'alternate'.
+    // `humanFirst` is the FROZEN gen-1 field (existing shape, never renamed) --
+    // if a device has an explicit legacy `humanFirst` boolean saved (from before
+    // Alternate existed), that choice always wins and maps to 'you'/'opponent'.
+    // A device with NO saved choice at all (fresh `{}`, no `firstMode`, no
+    // `humanFirst`) defaults to 'alternate', per Matt's "every turn-based game
+    // should alternate who goes first by default" (same call as Connect Four's
+    // identical 2026-07-23 change, gamehub.connect4.v1).
+    let firstMode;
+    if (['you', 'opponent', 'alternate'].includes(saved.firstMode)) {
+      firstMode = saved.firstMode;
+    } else if (typeof saved.humanFirst === 'boolean') {
+      firstMode = saved.humanFirst ? 'you' : 'opponent';
+    } else {
+      firstMode = 'alternate';
+    }
+    const nextStarter = saved.nextStarter === 'opponent' ? 'opponent' : 'you';
     return {
       size: SIZE_META[saved.size] ? saved.size : 'medium',
       difficulty: DIFFICULTIES.some(([k]) => k === saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
-      humanFirst: saved.humanFirst !== false,
+      firstMode,
+      nextStarter,
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(SETTINGS_KEY, { size: s.size, difficulty: s.difficulty, humanFirst: s.humanFirst });
+    // humanFirst is kept in step with the resolved mode (frozen field, still
+    // written) so any older/unexpected reader of this key sees a sane boolean;
+    // firstMode/nextStarter are the new, additive fields that actually govern
+    // Alternate. Only size/difficulty/humanFirst existed before this change.
+    saveJSON(SETTINGS_KEY, {
+      size: s.size,
+      difficulty: s.difficulty,
+      humanFirst: s.firstMode === 'opponent' ? false : true,
+      firstMode: s.firstMode,
+      nextStarter: s.nextStarter,
+    });
   }
 
   /** Identity is read fresh from the profile every render (never persisted),
@@ -179,17 +210,29 @@ class DotsBoxesUI {
       + `<p class="db-hint">${hint}</p>`;
   }
 
+  /** Difficulty picker with a ski-slope shape (diffShapeSVG/tierOf, the same
+   *  shared shapes the leaderboard uses) before each label -- no explanation
+   *  prose anymore (Matt asked for the per-tier hint paragraph removed). */
   _diffContent() {
     const s = this._setup;
-    const hint = s.difficulty === 'pro' ? t('hint_diff_pro')
-      : s.difficulty === 'intermediate' ? t('hint_diff_intermediate') : t('hint_diff_beginner');
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, t(k)])) + `<p class="db-hint">${hint}</p>`;
+    const btns = DIFFICULTIES.map(([v, k]) => {
+      const shape = diffShapeSVG(tierOf(v));
+      return `<button type="button" class="db-segbtn ${v === s.difficulty ? 'is-selected' : ''}" data-action="set-diff" data-v="${v}">${shape}<span>${esc(t(k))}</span></button>`;
+    }).join('');
+    return `<div class="db-seg">${btns}</div>`;
   }
 
   _firstContent() {
     const id = this._identity();
-    const sel = this._setup.humanFirst ? 'you' : 'ai';
-    return this._seg('set-first', sel, [['you', t('you')], ['ai', esc(id.oppName)]]);
+    return this._seg('set-first', this._setup.firstMode,
+      [['you', t('you')], ['opponent', esc(id.oppName)], ['alternate', t('alternate')]]);
+  }
+
+  /** Display label for the collapsed "First move" row. */
+  _firstLabel() {
+    const id = this._identity();
+    const m = this._setup.firstMode;
+    return m === 'you' ? t('you') : m === 'opponent' ? id.oppName : t('alternate');
   }
 
   renderSetup() {
@@ -213,7 +256,7 @@ class DotsBoxesUI {
       <div class="db-summary">
         ${this._row('size', t('row_size'), t(SIZE_META[s.size].labelKey), this._sizeContent())}
         ${this._row('difficulty', t('row_difficulty'), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
-        ${this._row('first', t('row_first'), s.humanFirst ? t('you') : id.oppName, this._firstContent())}
+        ${this._row('first', t('row_first'), this._firstLabel(), this._firstContent())}
       </div>
       <button type="button" class="db-btn db-btn-primary" data-action="start">${t('start')}</button>
       <button type="button" class="db-link" data-action="help">${t('howto')}</button>`;
@@ -222,8 +265,23 @@ class DotsBoxesUI {
   // --- game screen --------------------------------------------------------
 
   startGame() {
+    // Resolve who opens. Under Alternate, consume this._setup.nextStarter and
+    // flip it for NEXT time, then bank the flip immediately (persisted by
+    // _saveSetup below) so it survives navigating away mid-game -- every call
+    // to startGame() (fresh game, rematch, Restart) is a "new game" for this
+    // purpose. Mirrors mancala/js/ui.js's startGame() alternation pattern.
+    let starter;
+    if (this._setup.firstMode === 'alternate') {
+      starter = this._setup.nextStarter === 'opponent' ? 'opponent' : 'you';
+      this._setup.nextStarter = starter === 'you' ? 'opponent' : 'you';
+    } else {
+      starter = this._setup.firstMode === 'opponent' ? 'opponent' : 'you';
+    }
     this._saveSetup();
-    this.humanSeat = this._setup.humanFirst ? 0 : 1;
+    // newGame() always starts turn 0, so whichever seat we call human here IS
+    // the opener -- the existing status line (_statusText, "Your turn" /
+    // "{opp}'s turn") already announces this correctly with no new UI needed.
+    this.humanSeat = starter === 'you' ? 0 : 1;
     this.aiSeat = 1 - this.humanSeat;
     const meta = SIZE_META[this._setup.size];
     this.state = newGame(meta.rows, meta.cols);
@@ -373,6 +431,7 @@ class DotsBoxesUI {
       ${this._boardHtml(s, id)}
       <div class="db-actions">
         <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="help">${t('howto')}</button>
+        <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="restart">${t('restart_game')}</button>
         <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="change-settings">${t('new_game')}</button>
       </div>`;
   }
@@ -479,6 +538,32 @@ class DotsBoxesUI {
     this.root.querySelectorAll('.db-overlay').forEach((el) => el.remove());
   }
 
+  /** Run `action` immediately if there's no live match to lose; otherwise
+   *  require a second confirming tap on `btn` (guards Restart against
+   *  accidentally discarding an in-progress game). Same shape as Connect
+   *  Four's confirmDestructive/resetConfirms (connect-four/js/ui.js). */
+  confirmDestructive(btn, action) {
+    if (!this.state || isOver(this.state)) { action(); return; }
+    if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
+    this.resetConfirms();
+    btn.dataset.armed = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = t('tap_again_confirm');
+    btn.classList.add('is-confirm');
+    this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
+  }
+
+  resetConfirms() {
+    clearTimeout(this._confirmTimer);
+    if (!this.shell) return;
+    const b = this.shell.querySelector('[data-action="restart"]');
+    if (b && b.dataset.armed === '1') {
+      b.textContent = b.dataset.label;
+      b.dataset.armed = '';
+      b.classList.remove('is-confirm');
+    }
+  }
+
   // --- events -------------------------------------------------------------
 
   onClick(e) {
@@ -496,7 +581,7 @@ class DotsBoxesUI {
       this._setup.difficulty = btn.dataset.v;
       this.renderSetup();
     } else if (action === 'set-first') {
-      this._setup.humanFirst = btn.dataset.v === 'you';
+      this._setup.firstMode = btn.dataset.v;
       this.renderSetup();
     } else if (action === 'start') {
       this.startGame();
@@ -505,6 +590,8 @@ class DotsBoxesUI {
     } else if (action === 'rematch') {
       this.closeOverlays();
       this.startGame();
+    } else if (action === 'restart') {
+      this.confirmDestructive(btn, () => this.startGame());
     } else if (action === 'change-settings') {
       this.closeOverlays();
       this.renderSetup();

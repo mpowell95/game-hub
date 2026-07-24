@@ -16,6 +16,24 @@ values (`easy`/`medium`/`hard`/`expert`, `ai.js`'s `Difficulty` enum) stay canon
 labels translate. The hidden-challenge strings in `syncChallengeUi()` are translated too even
 though unreachable (`challengeActive` is hardcoded `false`), for consistency if it's ever revived.
 
+### Settings: `gamehub.connect4.v1` (2026-07-23, batch 8)
+
+Connect Four persisted nothing before this. New standard `gamehub.<game>.v1` key holding only
+`{ firstMode: 'you'|'ai'|'alternate', nextStarter: 'you'|'ai' }` — who goes first. Devices with
+no saved key default to `alternate` (Matt: "every turn based game... should alternate who goes
+first by default"); any explicit saved `you`/`ai` choice from before this change (or chosen since)
+always wins over that default. Under Alternate, `nextStarter` flips on every `startGame()` call
+(new game, rematch, and menu Restart all call it) and is persisted immediately, mirroring
+`mancala/js/ui.js`'s `startGame()` alternation pattern. No separate announcement UI was added —
+the existing status line (`updateStatus()`, "Your move" / "{opp}'s move" / "{opp} is thinking…")
+already communicates who opened, right after `startGame()` runs.
+
+Difficulty labels standardized to Beginner/Intermediate/Pro/Expert (was Easy/Medium/Hard/Expert);
+stored `Difficulty` enum values (`easy`/`medium`/`hard`/`expert`) are unchanged. The difficulty and
+who-first segmented buttons render a ski-slope shape (`diffShapeSVG`/`tierOf`, imported from
+`js/difficulty-tiers.js`) before the difficulty label, ~1em, via `.cf-root .lb-dshape` sizing rules
+in `connect-four.css`.
+
 ### Hint panel: per-column exact/estimate mix (2026-07-23, batch 2 of the 2026-07-23 feedback arc)
 
 `evaluateColumns` (`ai.js`) no longer gates the exact solver on a stone-count threshold. It runs

@@ -41,6 +41,26 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
 - **Config-driven from day one.** `DEFAULT_CONFIG` (in `game.js`) holds all ~11 rules.
   Pass 1 hardcodes defaults; Pass 2 just adds the settings UI that produces that object.
 
+### UI notes (2026-07-24)
+
+- **Starting-dealer alternation (solo only).** `startGame()` now alternates which seat deals the
+  OPENING round of a fresh solo match (0/1), banking the flip in a new additive
+  `chinchon-settings` field, `nextStartDealer`, immediately (survives leaving mid-match), mirroring
+  `mancala/js/ui.js`'s `nextStarter` pattern. Plumbed through `Game`'s new `startDealerIndex`
+  constructor option, consumed only by `initMatch()` (`this.dealerIndex = this._startDealerIndex`);
+  the existing per-ROUND rotation (`playMatch()`'s loop, `finishRoundAfterPlay`, the MP resume
+  branches) is untouched. Announced with a new toast string (`toast_dealer`, "{name} deals" /
+  "Reparte {name}"). **This is local solo-vs-AI only** — `_mpHostStart()`/`_mpGuestStartMatch()`
+  never read `nextStartDealer` and always construct `Game` with the default `startDealerIndex`
+  (0, the host's seat), matching the pre-existing "dealer rotation is fully deterministic" comment
+  near `_mpGuestStartMatch`; verified green against `test-mp-lockstep.mjs` (C1-C4) after the change.
+- **Difficulty display labels standardized to the shared scale** (Matt, 2026-07-24): Easy/Average/
+  Hard now display as Beginner/Intermediate/Pro (`diff_easy`/`diff_average`/`diff_hard` strings) —
+  **the stored ids (`easy`/`normal`/`hard`) are unchanged**, this is a label-only change. The setup
+  screen's per-opponent difficulty picker also now renders `js/difficulty-tiers.js`'s
+  `diffShapeSVG(tierOf(id))` (circle/square/diamond) before each label, same shape vocabulary as
+  the leaderboard's tier pills. New CSS (`chinchon.css`): `.cc-root .lb-dshape` / `.lb-dshape-x2`.
+
 ### UI notes (2026-07-23)
 
 - **Auto-close on a fully melded hand.** `promptClose()` computes

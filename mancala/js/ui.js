@@ -20,6 +20,7 @@ import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -317,7 +318,7 @@ class MancalaUI {
               ${LEVELS.map((l) => `
                 <button type="button" class="mc-segbtn${l.level === this.level ? ' is-active' : ''}"
                   data-action="level" data-level="${l.level}" role="radio"
-                  aria-checked="${l.level === this.level}">${t(l.labelKey)}</button>`).join('')}
+                  aria-checked="${l.level === this.level}">${diffShapeSVG(tierOf(l.key))}${t(l.labelKey)}</button>`).join('')}
             </div>
           </div>
 

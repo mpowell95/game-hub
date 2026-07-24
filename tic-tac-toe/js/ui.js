@@ -17,6 +17,7 @@ import { chooseMove } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordTicTacToe, loadStats } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -61,6 +62,7 @@ class TicTacToeUI {
     this.humanMark = X;
     this.aiMark = O;
     this.aiTimer = null;
+    this._confirmTimer = null;
     this._setup = this._loadSetup();
 
     this._onClick = (e) => this.onClick(e);
@@ -72,6 +74,7 @@ class TicTacToeUI {
   destroy() {
     this._dead = true;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    if (this._confirmTimer) { clearTimeout(this._confirmTimer); this._confirmTimer = null; }
     if (this.root) this.root.removeEventListener('click', this._onClick);
     this.container.innerHTML = '';
     this.state = null;
@@ -93,16 +96,36 @@ class TicTacToeUI {
     try { profile = loadProfile(); } catch { profile = null; }
     const opp = profile && profile.opponents && profile.opponents[0];
     const profileDiff = (opp && SKILL_TO_DIFF[opp.skill]) || null;
+    // firstMode: 'you' | 'opponent' | 'alternate'. New field, additive to the
+    // frozen gamehub.tictactoe.v1 shape. Precedence: an explicit new-shape
+    // choice wins; else a pre-existing device's old `humanFirst` boolean
+    // (present in the store from before this change) is honored as-is (it
+    // is the closest available proxy for "an explicit You/Opponent choice
+    // from before this change" -- the old writer never distinguished a
+    // user's deliberate pick from the untouched default, so any prior save
+    // is treated as that device's standing choice); a device with NO saved
+    // settings at all gets the new default, Alternate.
+    let firstMode = 'you';
+    if (saved.firstMode === 'you' || saved.firstMode === 'opponent' || saved.firstMode === 'alternate') {
+      firstMode = saved.firstMode;
+    } else if (Object.prototype.hasOwnProperty.call(saved, 'humanFirst')) {
+      firstMode = saved.humanFirst !== false ? 'you' : 'opponent';
+    } else {
+      firstMode = 'alternate';
+    }
     return {
       variant: saved.variant === 'classic' ? 'classic' : 'ultimate',
       difficulty: DIFFICULTIES.some(([k]) => k === saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
-      humanFirst: saved.humanFirst !== false,
+      firstMode,
+      // Who opens the NEXT alternate-mode game; flipped and banked in
+      // startGame() every time a new game begins (including Restart/rematch).
+      nextStarter: saved.nextStarter === 'you' || saved.nextStarter === 'opponent' ? saved.nextStarter : 'you',
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(SETTINGS_KEY, { variant: s.variant, difficulty: s.difficulty, humanFirst: s.humanFirst });
+    saveJSON(SETTINGS_KEY, { variant: s.variant, difficulty: s.difficulty, firstMode: s.firstMode, nextStarter: s.nextStarter });
   }
 
   /** Identity is read fresh from the profile every render (never persisted),
@@ -145,9 +168,14 @@ class TicTacToeUI {
 
   // --- setup screen -----------------------------------------------------------
 
+  // `lbl` is trusted HTML, not plain text: callers pass either a translated
+  // (trusted) string or already-`esc()`-ed user content (e.g. the opponent
+  // name in _firstContent, or a diffShapeSVG() shape prefix) -- _seg must
+  // not re-escape it, or a caller's own esc() call turns into visible
+  // "&lt;svg&gt;" markup instead of rendering.
   _seg(action, value, opts) {
     return `<div class="ttt-seg">${opts.map(([v, lbl]) =>
-      `<button type="button" class="ttt-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${esc(lbl)}</button>`).join('')}</div>`;
+      `<button type="button" class="ttt-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
   }
 
   _row(key, label, value, content) {
@@ -168,16 +196,13 @@ class TicTacToeUI {
 
   _diffContent() {
     const s = this._setup;
-    const hint = s.difficulty === 'pro'
-      ? (s.variant === 'ultimate' ? t('hint_diff_pro_ultimate') : t('hint_diff_pro_classic'))
-      : s.difficulty === 'intermediate' ? t('hint_diff_intermediate') : t('hint_diff_beginner');
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, t(k)])) + `<p class="ttt-hint">${hint}</p>`;
+    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + esc(t(k))]));
   }
 
   _firstContent() {
     const id = this._identity();
-    const sel = this._setup.humanFirst ? 'you' : 'ai';
-    return this._seg('set-first', sel, [['you', t('you')], ['ai', esc(id.oppName)]]);
+    const sel = this._setup.firstMode;
+    return this._seg('set-first', sel, [['you', t('you')], ['opponent', esc(id.oppName)], ['alternate', t('first_alternate')]]);
   }
 
   renderSetup() {
@@ -201,7 +226,9 @@ class TicTacToeUI {
       <div class="ttt-summary">
         ${this._row('variant', t('row_variant'), s.variant === 'ultimate' ? t('variant_ultimate') : t('variant_classic'), this._variantContent())}
         ${this._row('difficulty', t('row_difficulty'), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
-        ${this._row('first', t('row_first'), s.humanFirst ? t('you') : id.oppName, this._firstContent())}
+        ${this._row('first', t('row_first'),
+          s.firstMode === 'you' ? t('you') : s.firstMode === 'opponent' ? id.oppName : t('first_alternate'),
+          this._firstContent())}
       </div>
       <button type="button" class="ttt-btn ttt-btn-primary" data-action="start">${t('start')}</button>
       <button type="button" class="ttt-link" data-action="help">${t('howto')}</button>`;
@@ -210,12 +237,26 @@ class TicTacToeUI {
   // --- game screen --------------------------------------------------------
 
   startGame() {
+    const s = this._setup;
+    // Resolve who opens THIS game. In Alternate mode, flip nextStarter and
+    // bank it immediately (before any move is played) so the choice survives
+    // navigating away mid-game -- mirrors mancala/js/ui.js's startGame().
+    let starter;
+    if (s.firstMode === 'you') starter = 'you';
+    else if (s.firstMode === 'opponent') starter = 'opponent';
+    else {
+      starter = s.nextStarter === 'opponent' ? 'opponent' : 'you';
+      s.nextStarter = starter === 'you' ? 'opponent' : 'you';
+    }
     this._saveSetup();
-    this.humanMark = this._setup.humanFirst ? X : O;
+    this.humanMark = starter === 'you' ? X : O;
     this.aiMark = this.humanMark === X ? O : X;
-    this.state = newGame(this._setup.variant, X);
+    this.state = newGame(s.variant, X);
     this.view = 'game';
     this._afterStateChange();
+    // Who opens is already announced by the existing status line
+    // (_statusText: "Your turn" / "{opp}'s turn" / "{opp} is thinking...")
+    // rendered by _afterStateChange -- no separate toast/UI surface needed.
   }
 
   /** Single funnel after every state change (initial deal, human move, AI
@@ -339,8 +380,34 @@ class TicTacToeUI {
       ${boardHtml}
       <div class="ttt-actions">
         <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="help">${t('howto')}</button>
+        <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-role="restart" data-action="restart">${t('restart_game')}</button>
         <button type="button" class="ttt-btn ttt-btn-ghost ttt-btn-small" data-action="change-settings">${t('new_game')}</button>
       </div>`;
+  }
+
+  /** Run `action` immediately if there's no game in progress to lose; otherwise
+   *  require a second confirming tap on `btn` (guards against accidentally
+   *  abandoning a game). Reference pattern: connect-four/js/ui.js. */
+  confirmDestructive(btn, action) {
+    if (!this.state || this.state.over) { action(); return; }
+    if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
+    this.resetConfirms();
+    btn.dataset.armed = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = t('tap_again_confirm');
+    btn.classList.add('is-confirm');
+    this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
+  }
+
+  resetConfirms() {
+    clearTimeout(this._confirmTimer);
+    if (!this.shell) return;
+    const b = this.shell.querySelector('[data-role="restart"]');
+    if (b && b.dataset.armed === '1') {
+      b.textContent = b.dataset.label;
+      b.dataset.armed = '';
+      b.classList.remove('is-confirm');
+    }
   }
 
   finish() {
@@ -445,7 +512,7 @@ class TicTacToeUI {
       this._setup.difficulty = btn.dataset.v;
       this.renderSetup();
     } else if (action === 'set-first') {
-      this._setup.humanFirst = btn.dataset.v === 'you';
+      this._setup.firstMode = btn.dataset.v;
       this.renderSetup();
     } else if (action === 'start') {
       this.startGame();
@@ -453,6 +520,10 @@ class TicTacToeUI {
       this.humanMove(Number(btn.dataset.cell));
     } else if (action === 'scell') {
       this.humanMove({ board: Number(btn.dataset.board), cell: Number(btn.dataset.cell) });
+    } else if (action === 'restart') {
+      // Same-settings restart, mid-game (Task 4). Counts as a new completed
+      // game for Alternate-mode purposes, same as Connect Four's menu-restart.
+      this.confirmDestructive(btn, () => this.startGame());
     } else if (action === 'rematch') {
       this.closeOverlays();
       this.startGame();

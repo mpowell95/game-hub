@@ -120,8 +120,11 @@
     .pf-seg button {
       font: inherit; font-weight: 700; font-size: .82rem; border: 0; background: transparent;
       color: var(--hub-muted); padding: 6px 10px; border-radius: 8px; cursor: pointer; touch-action: manipulation;
+      display: inline-flex; align-items: center;
     }
     .pf-seg button.is-on { background: var(--hub-surface); color: var(--hub-ink); box-shadow: 0 1px 3px rgba(20,40,80,.14); }
+    .pf-seg .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+    .pf-seg .lb-dshape-x2 { width: 1.7em; }
 
     .pf-add {
       font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 14px; width: 100%;
@@ -292,6 +295,7 @@
     import * as net from '../js/stats-net.js';
     import { gatherDeviceReport, uploadDeviceReport } from '../js/device-report.js';
     import { makeT, onLangChange } from '../js/i18n.js';
+    import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import STRINGS from '../js/strings.js';
 
     const t = makeT(STRINGS);
@@ -429,7 +433,7 @@
                    value="${o.name.replace(/"/g, '&quot;')}" placeholder="${t('pf_opp_placeholder', { n: i + 1 })}" autocomplete="off">
             <div class="pf-seg" role="group" aria-label="${t('pf_skill_aria', { name: o.name.replace(/"/g, '&quot;') })}">
               ${SKILLS.map((s) => `<button type="button" data-opp-skill="${i}" data-v="${s.v}"
-                   class="${o.skill === s.v ? 'is-on' : ''}">${t(s.labelKey)}</button>`).join('')}
+                   class="${o.skill === s.v ? 'is-on' : ''}">${diffShapeSVG(s.v)}${t(s.labelKey)}</button>`).join('')}
             </div>
           </div>
           <button type="button" class="pf-remove" data-opp-remove="${i}" aria-label="${t('pf_remove_opp_aria')}">&times;</button>

@@ -25,7 +25,7 @@ import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
 import { bucketsOf, tierMix } from './leaderboard-rank.js';
-import { TIERS } from './difficulty-tiers.js';
+import { TIERS, diffShapeSVG } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { screenFor, ensureStatsCss } from './game-stats-ui.js';
 import { makeT } from './i18n.js';
@@ -153,13 +153,8 @@ function gameMetricAt(g, id, tier) {
 }
 
 // --- difficulty pills --------------------------------------------------------
-function diffShapeSVG(tier) {
-  if (tier === 1) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>';
-  if (tier === 2) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>';
-  if (tier === 3) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>';
-  if (tier === 4) return '<svg viewBox="0 0 34 20" class="lb-dshape lb-dshape-x2" aria-hidden="true"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>';
-  return '';
-}
+// diffShapeSVG now lives in js/difficulty-tiers.js (imported above) so every game's setup
+// screen can share the exact same shape markup; behavior here is unchanged.
 const DIFF_PILLS = [
   { tier: null, labelKey: 'lb_diff_all' },
   { tier: 1, labelKey: 'gs_diff_beginner' },

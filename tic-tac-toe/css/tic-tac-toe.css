@@ -112,6 +112,14 @@
   border: 1px solid var(--ttt-surface-2);
 }
 .ttt-root .ttt-btn-small { padding: 9px 12px; font-size: 13px; }
+/* Armed "tap again to confirm" state for the mid-game Restart button
+   (confirmDestructive() in ui.js -- same pattern as Connect Four). */
+.ttt-root .ttt-btn-ghost.is-confirm {
+  background: rgba(194, 64, 47, 0.12);
+  color: #b3261e;
+  border-color: rgba(194, 64, 47, 0.4);
+  font-weight: 800;
+}
 .ttt-root .ttt-link {
   appearance: none;
   border: 0;
@@ -152,6 +160,13 @@
   color: var(--ttt-ink);
   box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18);
 }
+
+/* Ski-slope difficulty shapes (js/difficulty-tiers.js's diffShapeSVG()),
+   prefixed before each difficulty pill's label. Markup already carries
+   .lb-dshape/.lb-dshape-x2 -- only per-game sizing lives here, since
+   leaderboard-ui.js's own CSS injection only runs while that overlay is open. */
+.ttt-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.ttt-root .lb-dshape-x2 { width: 1.7em; }
 
 /* --- setup: accordion summary card (Escoba's pattern) -------------------- */
 

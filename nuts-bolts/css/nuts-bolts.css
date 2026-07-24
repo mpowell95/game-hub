@@ -58,32 +58,70 @@
 .nb-menu-header h1 { margin: 0 0 4px; font-size: 1.4rem; font-weight: 800; }
 .nb-menu-header p { margin: 0; color: var(--nb-muted); font-size: 0.9rem; }
 
-.nb-tier-list {
+.nb-field {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  align-items: stretch;
   flex: 1;
   justify-content: center;
 }
-.nb-tier-card {
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+.nb-fieldlabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--nb-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+}
+.nb-seg {
+  display: flex;
+  border-radius: 14px;
   background: var(--nb-surface);
-  color: var(--nb-ink);
-  text-align: left;
-  padding: 16px 18px;
+  padding: 4px;
+  gap: 4px;
+}
+.nb-segbtn {
+  appearance: none;
+  border: none;
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nb-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 12px 4px;
   cursor: pointer;
   touch-action: manipulation;
-  transition: background 0.12s ease, transform 0.09s ease;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.09s ease;
 }
-.nb-tier-card:active { transform: scale(0.98); }
+.nb-segbtn:active { transform: scale(0.96); }
 @media (hover: hover) {
-  .nb-tier-card:hover { background: var(--nb-surface-raised); }
+  .nb-segbtn:not(.is-selected):hover { background: var(--nb-header-btn); color: var(--nb-ink); }
 }
-.nb-tier-name { font-size: 1.1rem; font-weight: 800; color: var(--nb-accent); }
-.nb-tier-level { font-size: 0.85rem; color: var(--nb-ink); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.nb-tier-desc { font-size: 0.82rem; color: var(--nb-muted); margin-top: 4px; }
+.nb-segbtn.is-selected {
+  background: var(--nb-surface-raised);
+  color: var(--nb-accent);
+}
+.nb-segbtn-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.nb-segbtn-level {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--nb-muted);
+}
+.nb-segbtn.is-selected .nb-segbtn-level { color: var(--nb-ink); }
+/* Ski-slope difficulty shape (js/difficulty-tiers.js's diffShapeSVG) rendered before the label,
+   sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */
+.nb-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.nb-root .lb-dshape-x2 { width: 1.7em; }
+.nb-start-btn { width: 100%; }
 
 /* ---------- Header ---------- */
 

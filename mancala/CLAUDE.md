@@ -19,3 +19,8 @@ i18n: `mancala/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render tim
 (`beginner`/`intermediate`/`pro`) and speed keys (`normal`/`slow`) stay canonical; only their
 display labels translate. `AI_ROSTER` names (Lucía, Diego, …) are proper names and are not routed
 through `t()`.
+
+**Difficulty display (2026-07-24):** the setup screen's difficulty segmented control shows the
+shared ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) before each label, same
+shapes the leaderboard uses, sized ~1em via `.mancala .lb-dshape`. No prose hint existed here to
+delete (unlike Boggle) — this is shapes-only.

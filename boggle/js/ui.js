@@ -36,6 +36,7 @@ import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, loadStats } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -201,9 +202,11 @@ class BoggleUI {
 
   // --- setup screen -----------------------------------------------------------
 
-  _seg(action, value, ids, labelKeys) {
-    return `<div class="bg-seg">${ids.map((v) =>
-      `<button type="button" class="bg-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${esc(t(labelKeys[v]))}</button>`).join('')}</div>`;
+  _seg(action, value, ids, labelKeys, shapes) {
+    return `<div class="bg-seg">${ids.map((v) => {
+      const shape = shapes ? diffShapeSVG(tierOf(v)) : '';
+      return `<button type="button" class="bg-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${shape}${esc(t(labelKeys[v]))}</button>`;
+    }).join('')}</div>`;
   }
 
   _row(key, label, value, content) {
@@ -222,9 +225,7 @@ class BoggleUI {
 
   _diffContent() {
     const s = this._setup;
-    const hintKey = s.difficulty === 'pro' ? 'hint_diff_pro'
-      : s.difficulty === 'intermediate' ? 'hint_diff_intermediate' : 'hint_diff_beginner';
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES, DIFF_LABEL_KEY) + `<p class="bg-hint">${esc(t(hintKey))}</p>`;
+    return this._seg('set-diff', s.difficulty, DIFFICULTIES, DIFF_LABEL_KEY, true);
   }
 
   renderSetup() {

@@ -91,6 +91,10 @@
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .cf-seg:hover { color: var(--cf-ink); }
+/* Ski-slope difficulty shape (js/difficulty-tiers.js's diffShapeSVG) rendered before the label,
+   sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */
+.cf-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.cf-root .lb-dshape-x2 { width: 1.7em; }
 .cf-seg.is-selected {
   background: var(--cf-surface);
   color: var(--cf-accent);

@@ -52,10 +52,16 @@ export function makePlayer({ id, name, avatar, isHuman, difficulty, agent }) {
 class AbortError extends Error {}
 
 export class Game {
-  constructor({ players, config, rng } = {}) {
+  constructor({ players, config, rng, startDealerIndex } = {}) {
     this.players = players;
     this.config = Object.assign({}, DEFAULT_CONFIG, config);
     this.rng = rng || Math.random;
+    // Seat that deals the FIRST round of a fresh match (initMatch() below).
+    // Per-round rotation after that (playMatch()'s loop / finishRoundAfterPlay())
+    // is untouched by this - it's a separate, always-on concern. Defaults to 0,
+    // byte-identical to the pre-alternation behavior; the solo setup screen in
+    // ui.js is the only caller that ever passes 1.
+    this._startDealerIndex = startDealerIndex === 1 ? 1 : 0;
 
     this.stock = [];
     this.discard = [];
@@ -215,7 +221,7 @@ export class Game {
       p.roundScore = 0;
     }
     this.round = 1;
-    this.dealerIndex = 0;
+    this.dealerIndex = this._startDealerIndex;
     this.winner = null;
     this.matchEndReason = null;
     this.standings = null;

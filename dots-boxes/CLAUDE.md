@@ -16,3 +16,34 @@ The capturable-box highlight (dashed gold pulse, `is-capturable`) only renders a
 i18n: `dots-boxes/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Size keys
 (`small`/`medium`/`large`) and difficulty keys (`beginner`/`intermediate`/`pro`) stay canonical;
 only their display labels translate.
+
+### First-move alternation, ski-slope shapes, dropped diff prose, Restart (2026-07-24, batch 8)
+
+`gamehub.dotsboxes.v1` gained three fields, additive on top of the frozen `size`/`difficulty`/
+`humanFirst` shape (`humanFirst` itself is still written every save, kept in step with the
+resolved mode, so any old reader still sees a sane boolean): `firstMode` (`'you'|'opponent'|
+'alternate'`) and `nextStarter` (`'you'|'opponent'`, meaningful only under Alternate). A device
+with an explicit legacy `humanFirst` boolean already saved (from before this change) has that
+choice honored as `'you'`/`'opponent'` and never silently switched to Alternate; a device with no
+saved choice at all defaults to `'alternate'` — same rule, same day, as Connect Four's identical
+`gamehub.connect4.v1` change. Under Alternate, `startGame()` consumes `nextStarter`, flips it, and
+persists immediately (mirrors `mancala/js/ui.js`), so the flip survives leaving mid-game; every
+call to `startGame()` (fresh game, rematch, and the new Restart button) counts as a new game for
+alternation. `newGame()` always starts at seat 0, and `startGame()` maps whichever side is opening
+to seat 0, so the existing status line already announces "Your turn" / "{opp}'s turn" correctly —
+no new announcement UI was added.
+
+The difficulty picker's segmented buttons now show a ski-slope shape (`diffShapeSVG`/`tierOf`,
+imported from `js/difficulty-tiers.js`, sized via `.db-root .lb-dshape`/`.lb-dshape-x2`) before
+each Beginner/Intermediate/Pro label — the same shapes the leaderboard uses. The per-tier
+explanation paragraph that used to sit under the difficulty row (`db-hint`, describing what each
+AI level does) is gone entirely, along with its `hint_diff_beginner`/`hint_diff_intermediate`/
+`hint_diff_pro` string keys (Matt's ask: shape + name only, no prose). The board-size row's own
+hint (`hint_size_boxes`, "{rows}×{cols} boxes.") is untouched — only the difficulty explanation
+was removed.
+
+A **Restart** button sits in the mid-game action row next to How to play / Menu, confirm-guarded
+exactly like Connect Four's `confirmDestructive`/`resetConfirms` (`connect-four/js/ui.js`): a
+first tap arms it ("Tap again to confirm", `.is-confirm` style, 3.5s auto-reset), a second tap
+resets the board with the SAME settings (no trip through setup) and participates in the
+alternation logic above like any other new game.

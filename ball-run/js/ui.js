@@ -11,6 +11,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { recordBallRun, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -347,7 +348,7 @@ class BallRunUI {
 
   syncDifficultyUi() {
     this.el.diffFace.innerHTML = FACE_SVGS[this.difficulty];
-    this.el.diffLabel.textContent = t(DIFF_LABEL_KEY[this.difficulty]);
+    this.el.diffLabel.innerHTML = diffShapeSVG(tierOf(this.difficulty)) + t(DIFF_LABEL_KEY[this.difficulty]);
     this.el.diffLabel.dataset.diff = this.difficulty;
     this.el.diffFace.dataset.diff = this.difficulty;
   }

@@ -17,9 +17,27 @@ import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/ch
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
 import { recordConnect4 } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+const SETTINGS_KEY = 'gamehub.connect4.v1';
+
+/** Connect Four persisted nothing before batch 8; this is a new, standard `gamehub.<game>.v1`
+ *  key holding only the who-goes-first choice + its alternation state. Additive-only: any future
+ *  field just gets added here, never a rename. Malformed/missing storage reads as "no saved
+ *  choice yet" (defaults to Alternate per the handoff), never throws. */
+function loadC4Settings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    return v && typeof v === 'object' ? v : null;
+  } catch { return null; }
+}
+function saveC4Settings(v) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)); } catch { /* best-effort */ }
+}
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
 const HINT_BUDGET_MS = 3000;   // Pass 2 (estimate) budget for the "show best moves" analysis
 const INLINE_EXACT_ATTEMPT_MS = 300; // Pass 1 cap when the worker is unavailable (blocks the UI thread)
@@ -64,7 +82,15 @@ class ConnectFourUI {
     const profile = loadProfile();
     const opp = profile && profile.opponents && profile.opponents[0];
     this.difficulty = (opp && SKILL_TO_DIFFICULTY[opp.skill]) || Difficulty.MEDIUM;
-    this.humanFirst = true;
+    // Who-goes-first: 'you' | 'ai' | 'alternate'. No saved settings at all -> default
+    // Alternate (the handoff's default-for-new-devices rule). Any saved explicit choice
+    // (including a previously saved 'alternate') always wins over that default.
+    const c4settings = loadC4Settings();
+    this.firstMode = (c4settings && ['you', 'ai', 'alternate'].includes(c4settings.firstMode))
+      ? c4settings.firstMode : 'alternate';
+    this.nextStarter = (c4settings && (c4settings.nextStarter === 'you' || c4settings.nextStarter === 'ai'))
+      ? c4settings.nextStarter : 'you';
+    this.humanFirst = this.firstMode === 'ai' ? false : true; // resolved per-game in startGame() for 'alternate'
     this.humanPlayer = PLAYER_ONE;
     this.aiPlayer = PLAYER_TWO;
 
@@ -222,7 +248,7 @@ class ConnectFourUI {
             <span class="cf-label">${t('difficulty')}</span>
             <div class="cf-segmented" data-role="difficulty">
               ${DIFFICULTY_LABELS.map(([val, labelKey]) =>
-                `<button type="button" class="cf-seg" data-value="${val}">${t(labelKey)}</button>`).join('')}
+                `<button type="button" class="cf-seg" data-value="${val}">${diffShapeSVG(tierOf(val))}<span>${t(labelKey)}</span></button>`).join('')}
             </div>
           </div>
 
@@ -231,6 +257,7 @@ class ConnectFourUI {
             <div class="cf-segmented" data-role="first">
               <button type="button" class="cf-seg" data-value="you">${t('you')}</button>
               <button type="button" class="cf-seg" data-value="ai">${this.oppLabel()}</button>
+              <button type="button" class="cf-seg" data-value="alternate">${t('alternate')}</button>
             </div>
           </div>
 
@@ -339,8 +366,10 @@ class ConnectFourUI {
     });
     this.el.first.addEventListener('click', (e) => {
       const btn = e.target.closest('.cf-seg'); if (!btn) return;
-      this.humanFirst = btn.dataset.value === 'you';
-      this.syncSegmented(this.el.first, this.humanFirst ? 'you' : 'ai');
+      this.firstMode = btn.dataset.value;
+      if (this.firstMode !== 'alternate') this.humanFirst = this.firstMode === 'you';
+      saveC4Settings({ firstMode: this.firstMode, nextStarter: this.nextStarter });
+      this.syncSegmented(this.el.first, this.firstMode);
     });
     root.querySelector('[data-role="start"]').addEventListener('click', () => this.startGame());
     root.querySelector('[data-role="rematch"]').addEventListener('click', () => this.startGame());
@@ -376,7 +405,7 @@ class ConnectFourUI {
     document.addEventListener('keydown', this._onKeyDown);
 
     this.syncSegmented(this.el.difficulty, this.difficulty);
-    this.syncSegmented(this.el.first, this.humanFirst ? 'you' : 'ai');
+    this.syncSegmented(this.el.first, this.firstMode);
     this.buildBoardCells();
     this.showSetup();   // showSetup() calls syncChallengeUi() for the current state
   }
@@ -464,6 +493,14 @@ class ConnectFourUI {
     // in one sitting). Fire-and-forget: nothing waits on this.
     if (this.worker) this.worker.postMessage({ id: ++this.requestId, kind: 'newgame' });
     else import('./ai.js').then((m) => m.clearTranspositionTable());
+    // Who opens this game. 'alternate' flips on EVERY completed game (including rematches):
+    // consume this.nextStarter, then bank the flip immediately so it survives leaving mid-game
+    // (mirrors mancala/js/ui.js:359-366, the reference pattern).
+    if (this.firstMode === 'alternate') {
+      this.humanFirst = this.nextStarter === 'you';
+      this.nextStarter = this.nextStarter === 'you' ? 'ai' : 'you';
+      saveC4Settings({ firstMode: this.firstMode, nextStarter: this.nextStarter });
+    }
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
     this.busy = false;

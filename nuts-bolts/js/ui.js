@@ -3,6 +3,7 @@ import { CAP, PALETTE, isBoltComplete, TIER_ORDER } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordNutsBolts } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -11,7 +12,6 @@ const STORAGE_KEY = 'gamehub.nutsbolts.v1';
 // pure, DOM-free engine module, same discipline as game.js/ai.js) — these local maps translate
 // the same keys for display instead.
 const TIER_LABEL_KEY = { easy: 'tier_easy', medium: 'tier_medium', hard: 'tier_hard', extraHard: 'tier_extra_hard' };
-const TIER_DESC_KEY = { easy: 'tier_desc_easy', medium: 'tier_desc_medium', hard: 'tier_desc_hard', extraHard: 'tier_desc_extra_hard' };
 const COLOR_NAME_KEY = Object.fromEntries(PALETTE.map((p) => [p.key, 'color_' + p.key]));
 // game.js returns storage-vocabulary reason codes (empty/locked/full/color-mismatch); this maps
 // them onto display text.
@@ -202,11 +202,17 @@ class NutsBoltsUI {
     window.addEventListener('orientationchange', this.onResize);
 
     // The difficulty menu is always the entry point. A persisted in-progress
-    // board (if any) is kept aside and only restored when the player taps
-    // the matching tier card (see startTier), not auto-resumed on load.
+    // board (if any) is kept aside and only restored when the player starts
+    // the matching tier (see startTier), not auto-resumed on load.
     this.game = null;
     this.savedBoard = saved.data.board || null;
     this.screen = 'menu';
+    // Two-step select-then-start menu (2026-07-24, batch 8): a segmented row picks the
+    // tier, a separate "Start" button commits. Defaults to the last-played tier so
+    // returning to the menu doesn't lose the player's place; selecting a different tier
+    // never touches this.currentDifficulty (or the resume-board logic below) until Start
+    // is actually pressed, in startTier().
+    this.selectedTier = this.currentDifficulty;
 
     this.render();
   }
@@ -226,11 +232,11 @@ class NutsBoltsUI {
     this.container.innerHTML = '';
     const root = document.createElement('div');
     root.className = 'nb-root nb-menu';
-    const cards = TIER_ORDER.map((tier) => `
-      <button type="button" class="nb-tier-card" data-tier="${tier}">
-        <div class="nb-tier-name">${esc(t(TIER_LABEL_KEY[tier]))}</div>
-        <div class="nb-tier-level">${t('level_n', { n: this.levels[tier] })}</div>
-        <div class="nb-tier-desc">${esc(t(TIER_DESC_KEY[tier]))}</div>
+    const segs = TIER_ORDER.map((tier) => `
+      <button type="button" class="nb-segbtn${tier === this.selectedTier ? ' is-selected' : ''}"
+        data-tier="${tier}" role="radio" aria-checked="${tier === this.selectedTier}">
+        <span class="nb-segbtn-label">${diffShapeSVG(tierOf(tier))}${esc(t(TIER_LABEL_KEY[tier]))}</span>
+        <span class="nb-segbtn-level">${t('level_n', { n: this.levels[tier] })}</span>
       </button>
     `).join('');
     root.innerHTML = `
@@ -238,13 +244,27 @@ class NutsBoltsUI {
         <h1>${t('title')}</h1>
         <p>${t('tagline')}</p>
       </div>
-      <div class="nb-tier-list">${cards}</div>
+      <div class="nb-field">
+        <span class="nb-fieldlabel" id="nb-difflabel">${t('tagline')}</span>
+        <div class="nb-seg" role="radiogroup" aria-labelledby="nb-difflabel">${segs}</div>
+      </div>
+      <button type="button" class="nb-btn nb-btn-primary nb-start-btn" data-action="start">${t('start')}</button>
     `;
     this.container.appendChild(root);
     this.root = root;
     root.addEventListener('click', (e) => {
-      const card = e.target.closest('[data-tier]');
-      if (card) this.startTier(card.dataset.tier);
+      const seg = e.target.closest('[data-tier]');
+      if (seg) {
+        this.selectedTier = seg.dataset.tier;
+        root.querySelectorAll('.nb-segbtn').forEach((b) => {
+          const on = b.dataset.tier === this.selectedTier;
+          b.classList.toggle('is-selected', on);
+          b.setAttribute('aria-checked', String(on));
+        });
+        return;
+      }
+      const actionEl = e.target.closest('[data-action="start"]');
+      if (actionEl) this.startTier(this.selectedTier);
     });
   }
 

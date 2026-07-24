@@ -18,6 +18,34 @@ i18n: `tic-tac-toe/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render
 (`classic`/`ultimate`), difficulty keys (`beginner`/`intermediate`/`pro`), and marks (`X`/`O`) stay
 canonical; only their display labels translate.
 
+### Who goes first, and mid-game Restart (2026-07-23, batch 8)
+
+`gamehub.tictactoe.v1` gained two additive fields, `firstMode: 'you'|'opponent'|'alternate'` and
+`nextStarter: 'you'|'opponent'`, alongside the frozen `variant`/`difficulty`. The old boolean
+`humanFirst` field is no longer written but is still read once, on load, as a fallback: any device
+with a pre-existing save (the `humanFirst` key present at all) has it mapped to `firstMode`
+`'you'`/`'opponent'` and treated as that device's standing choice; a device with **no** saved
+settings yet defaults to `'alternate'` (Matt: every turn-based game should default to alternating
+who goes first). Under Alternate, `startGame()` flips `nextStarter` and persists it immediately —
+before the state is built — so the flip survives leaving mid-game; a rematch or the new mid-game
+**Restart** button both call `startGame()`, so both count as a completed game for alternation,
+same as Connect Four's menu-restart. No new announcement UI was added: the existing status line
+(`_statusText()`, "Your turn" / "{opp}'s turn" / "{opp} is thinking...") already reflects who
+opens, immediately after `startGame()` runs.
+
+Restart (`data-role="restart"`, mid-game action row) is confirm-guarded exactly like Connect
+Four's menu Restart/Quit (`confirmDestructive`/`resetConfirms` in `js/ui.js`, `.is-confirm` in the
+CSS): a no-op single tap while a game is in progress arms a 3.5s "tap again to confirm" state,
+immediate on a finished game.
+
+The difficulty pills render a ski-slope shape (`diffShapeSVG`/`tierOf`, imported from
+`js/difficulty-tiers.js`) before the label — `.ttt-root .lb-dshape` sizing rules in
+`tic-tac-toe.css`, same pattern as Connect Four. The per-tier difficulty description paragraph
+(`ttt-hint` under the difficulty row) was removed the same batch; the difficulty row now shows
+only shape + name. The Ultimate/Classic variant row keeps its own explanatory hint
+(`hint_variant_ultimate`/`hint_variant_classic`) — that one was never in scope, only the
+difficulty explanation was.
+
 ---
 
 ## How-to-play screens — the repo-wide pattern (worked out here, 2026-07-21)

@@ -15,6 +15,7 @@ import { chooseColor } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -60,14 +61,20 @@ function loadSettings() {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
     if (raw && typeof raw === 'object') {
       const lvl = Math.round(Number(raw.level));
-      if (lvl >= 1 && lvl <= 3) return { level: lvl };
+      const out = {};
+      if (lvl >= 1 && lvl <= 3) out.level = lvl;
+      // nextStarter: additive field (2026-07-24) - who opens the next game,
+      // silently alternated each game. Absent on a fresh install/pre-existing
+      // store, which defaults to P1 (the human), matching prior behavior.
+      if (raw.nextStarter === P2 || raw.nextStarter === P1) out.nextStarter = raw.nextStarter;
+      return Object.keys(out).length ? out : null;
     }
   } catch { /* treat as no settings */ }
   return null;
 }
 
-function saveSettings(level) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level })); } catch { /* ignore */ }
+function saveSettings(level, nextStarter) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level, nextStarter })); } catch { /* ignore */ }
 }
 
 class FillerUI {
@@ -80,6 +87,10 @@ class FillerUI {
     const opp = profile && profile.opponents && profile.opponents[0];
     const saved = loadSettings();
     this.level = (saved && saved.level) || (opp && opp.skill) || 2;
+    // Silently alternate who opens each game (no setup UI for this - see
+    // filler/CLAUDE.md). Defaults to P1 (the human) when absent, matching
+    // pre-existing behavior for anyone with a pre-alternation settings store.
+    this.nextStarter = (saved && saved.nextStarter) || P1;
     this.humanName = (profile && profile.name) || 'You';
     this.humanEmoji = (profile && profile.emoji) || '🙂';
     this.oppName = (opp && opp.name) || 'Computer';
@@ -106,6 +117,7 @@ class FillerUI {
   destroy() {
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
+    clearTimeout(this._confirmTimer);
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     this.container.innerHTML = '';
@@ -162,7 +174,7 @@ class FillerUI {
               ${LEVELS.map((l) => `
                 <button type="button" class="fl-segbtn${l.level === this.level ? ' is-active' : ''}"
                   data-action="level" data-level="${l.level}" role="radio"
-                  aria-checked="${l.level === this.level}">${t(l.labelKey)}</button>`).join('')}
+                  aria-checked="${l.level === this.level}">${diffShapeSVG(tierOf(l.key))}${t(l.labelKey)}</button>`).join('')}
             </div>
           </div>
 
@@ -175,11 +187,22 @@ class FillerUI {
   // --- game view -------------------------------------------------------------
 
   startGame() {
-    saveSettings(this.level);
+    // Alternate the opening move every new game (including Restart), then
+    // bank the flip immediately so it survives leaving mid-game (mirrors
+    // mancala/js/ui.js's startGame()). The engine itself always constructs
+    // state with P1 to move; when the AI is due to open, we hand it the
+    // turn right after construction and kick off its move automatically.
+    const starter = this.nextStarter === P2 ? P2 : P1;
+    this.nextStarter = starter === P1 ? P2 : P1;
+    saveSettings(this.level, this.nextStarter);
     this.state = newGame();
+    if (starter === P2) this.state.turn = P2;
     this.view = 'game';
     this.busy = false;
     this.renderGame();
+    // When the AI opens, the existing per-turn status line ("{opp} is
+    // thinking...") already announces it - no separate banner needed.
+    if (starter === P2) this.later(() => this.aiMove(), AI_THINK_MS);
   }
 
   renderGame() {
@@ -230,6 +253,7 @@ class FillerUI {
 
           <footer class="fl-bar">
             <button type="button" class="fl-ghost fl-small" data-action="help">${t('howto')}</button>
+            <button type="button" class="fl-ghost fl-small" data-action="restart" data-role="restart">${t('restart_game')}</button>
             <button type="button" class="fl-ghost fl-small" data-action="newgame">${t('new_game')}</button>
           </footer>
         </div>
@@ -426,6 +450,34 @@ class FillerUI {
     this.container.querySelectorAll('.fl-overlay').forEach((el) => el.remove());
   }
 
+  // --- restart confirm guard --------------------------------------------------
+  //
+  // Same tap-again-to-confirm pattern as connect-four/js/ui.js's
+  // confirmDestructive/resetConfirms: a mid-game Restart is destructive (it
+  // discards the board in progress), so it needs a second confirming tap.
+  // A finished game (or no game at all) restarts immediately, no confirm.
+
+  confirmDestructive(btn, action) {
+    if (!this.state || this.state.over) { action(); return; }
+    if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
+    this.resetConfirms();
+    btn.dataset.armed = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = t('tap_again_confirm');
+    btn.classList.add('is-confirm');
+    this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
+  }
+
+  resetConfirms() {
+    clearTimeout(this._confirmTimer);
+    const b = this.container.querySelector('[data-role="restart"]');
+    if (b && b.dataset.armed === '1') {
+      b.textContent = b.dataset.label;
+      b.dataset.armed = '';
+      b.classList.remove('is-confirm');
+    }
+  }
+
   // --- events ----------------------------------------------------------------
 
   onClick(e) {
@@ -441,6 +493,8 @@ class FillerUI {
       });
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();
+    } else if (action === 'restart') {
+      this.confirmDestructive(btn, () => this.startGame());
     } else if (action === 'newgame') {
       this.renderSetup();
     } else if (action === 'pick') {

@@ -19,6 +19,7 @@ import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 import { makeT } from '../../js/i18n.js';
 import STRINGS from './strings.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
 
@@ -223,12 +224,17 @@ class ChinchonUI {
       // Last-used setup-screen mode (M2b). Additive: absent on an older save
       // simply defaults to 'solo', same as today's only screen.
       mode: ['solo', 'host', 'join'].includes(saved.mode) ? saved.mode : 'solo',
+      // Which seat deals the FIRST round of the next fresh SOLO match (solo-vs-AI
+      // only - see startGame()). Alternates 0/1 each match, banked immediately so
+      // it survives leaving mid-match. Additive; absent on an older save defaults
+      // to 0, byte-identical to the pre-alternation behavior (seat 0 always dealt).
+      nextStartDealer: saved.nextStartDealer === 1 ? 1 : 0,
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode, nextStartDealer: s.nextStartDealer });
   }
 
   /** Apply the dark-mode class to the root (idempotent; safe before mount). */
@@ -398,7 +404,7 @@ class ChinchonUI {
     const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
     const diffContent = opponentNames.map((name, i) => `<div class="cc-diff-row">
       <span class="cc-diff-name">${esc(name)}</span>
-      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES.map(([v, k]) => [v, t(k)]), ' cc-seg-sm', ` data-i="${i}"`)}
+      ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + t(k)]), ' cc-seg-sm', ` data-i="${i}"`)}
     </div>`).join('');
 
     // --- Card deck row: replaces the old floating deck button + gallery
@@ -673,8 +679,18 @@ class ChinchonUI {
 
   startGame() {
     this.syncSetupInputs();
-    this._saveSetup();
     const s = this._setup;
+    // Alternate which seat deals the OPENING round of a fresh solo match (not
+    // per-round rotation, which is engine-side and untouched). Bank the flip
+    // right now so it persists even if the player leaves mid-match. Mirrors
+    // mancala's nextStarter alternation (mancala/js/ui.js startGame()). This is
+    // a local solo-vs-AI concept only - the MP host/guest paths (_mpHostStart/
+    // _mpGuestStartMatch) never read nextStartDealer and always create their
+    // Game with the default startDealerIndex (0 = host's seat), per the existing
+    // "dealer rotation is fully deterministic" comment near _mpGuestStartMatch.
+    const startDealer = s.nextStartDealer === 1 ? 1 : 0;
+    s.nextStartDealer = startDealer === 0 ? 1 : 0;
+    this._saveSetup();
     const players = [makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
     for (let i = 0; i < s.count - 1; i++) {
       const diff = s.aiDifficulty[i] || 'normal';
@@ -684,7 +700,7 @@ class ChinchonUI {
       }));
     }
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);
-    this.game = new Game({ players, config });
+    this.game = new Game({ players, config, startDealerIndex: startDealer });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
@@ -698,6 +714,9 @@ class ChinchonUI {
     this.root.classList.remove('cc-compact');
     this._buildPiles();
     this.render();
+    // Announce who deals - without this the alternation is invisible (the
+    // opening deal just happens the same as always).
+    this.toast(t('toast_dealer', { name: players[startDealer].name }));
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón match error', err); });
   }
 

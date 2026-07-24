@@ -176,6 +176,10 @@
   color: var(--db-ink);
   box-shadow: 0 2px 6px rgba(20, 40, 80, 0.18);
 }
+/* Ski-slope difficulty shapes (diffShapeSVG/tierOf, js/difficulty-tiers.js) --
+   the same shared shapes the leaderboard uses, sized to sit before the label. */
+.db-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.db-root .lb-dshape-x2 { width: 1.7em; }
 
 /* --- setup: accordion summary card (Escoba's pattern) -------------------- */
 
@@ -387,6 +391,14 @@
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+/* Armed "tap again to confirm" state for the destructive Restart action --
+   same treatment as Connect Four's .cf-btn-ghost.is-confirm. */
+.db-root .db-btn-ghost.is-confirm {
+  background: rgba(194, 64, 47, 0.12);
+  color: #b3261e;
+  border-color: rgba(194, 64, 47, 0.4);
+  font-weight: 800;
 }
 
 .db-root .db-overlay {

@@ -15,3 +15,9 @@ i18n: `ball-run/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render ti
 (`easy`/`medium`/`hard`, `ballrun.difficulty`) stay canonical; `config.js`'s own
 `DIFFICULTIES[].label` stays English (a tuning/config module, same discipline as `sim.js`/
 `track.js`) — `ui.js` maps the same keys onto local translation tables instead.
+
+Display labels (2026-07-23, batch 8): standardized to the shared Beginner/Intermediate/Pro
+vocabulary (`diff_easy`/`diff_medium`/`diff_hard` in strings.js), normal case (not all-caps), each
+preceded by the shared ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js` — the
+same shapes the leaderboard uses) rendered into `.br-diff-label` alongside the existing face icon.
+Stored `ballrun.difficulty` values are untouched.

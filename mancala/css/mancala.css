@@ -178,12 +178,17 @@
   color: rgba(36, 22, 9, 0.7);
   background: transparent;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .mancala .mc-segbtn.is-active {
   background: #fff;
   color: var(--mc-ink);
   box-shadow: 0 2px 6px rgba(36, 22, 9, 0.25);
 }
+.mancala .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.mancala .lb-dshape-x2 { width: 1.7em; }
 
 .mancala .mc-primary,
 .mancala .mc-secondary,

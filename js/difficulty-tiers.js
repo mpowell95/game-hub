@@ -45,4 +45,16 @@ export const TIER_WEIGHT = { 1: 0.8, 2: 1.0, 3: 1.25, 4: 1.5 };
 /** Weight for a raw byDiff key, including the 1.0 fallback for null tiers. */
 export function weightOf(diffKey) { return TIER_WEIGHT[tierOf(diffKey)] || 1.0; }
 
-export default { TIERS, TIER_LABEL, TIER_SHORT, tierOf, TIER_WEIGHT, weightOf };
+/** Ski-slope difficulty shape markup (pure, no DOM): tier 1 circle, 2 square, 3 diamond,
+ *  4 double-diamond. Moved here verbatim from leaderboard-ui.js (2026-07-23, batch 8) so every
+ *  game's setup screen can render the SAME shape leaderboard-ui.js uses, not a re-derived copy.
+ *  Behavior/markup identical to the original; leaderboard-ui.js now imports this. */
+export function diffShapeSVG(tier) {
+  if (tier === 1) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>';
+  if (tier === 2) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>';
+  if (tier === 3) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>';
+  if (tier === 4) return '<svg viewBox="0 0 34 20" class="lb-dshape lb-dshape-x2" aria-hidden="true"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>';
+  return '';
+}
+
+export default { TIERS, TIER_LABEL, TIER_SHORT, tierOf, TIER_WEIGHT, weightOf, diffShapeSVG };
