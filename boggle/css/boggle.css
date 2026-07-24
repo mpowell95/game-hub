@@ -266,3 +266,29 @@
 @media (max-width: 400px) {
   .bg-root .bg-tile-face { font-size: clamp(16px, 8vw, 26px); }
 }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; Boggle already routes every surface through its own
+   --bg-* custom properties, so overriding them here is the whole job. Two hardcoded literals
+   (the selected-segment background, the how-to-play bullet text) are lifted to variables here
+   too since they weren't already using one. */
+:root.gh-dark .bg-root {
+  --bg-accent: #4d84cf;
+  --bg-accent-deep: #8bb8f2;
+  --bg-accent-tint: rgba(77, 132, 207, 0.22);
+  --bg-ink: #e9eef6;
+  --bg-muted: #9db0c9;
+  --bg-bg: #11182a;
+  --bg-surface: #1b2333;
+  --bg-surface-2: #2b3547;
+  --bg-line-off: #445168;
+  --bg-line-on: #cbd5e6;
+  --bg-good: #3ec27f;
+  --bg-good-tint: rgba(62, 194, 127, 0.2);
+  --bg-bad: #ef5f56;
+  --bg-bad-tint: rgba(239, 95, 86, 0.22);
+}
+:root.gh-dark .bg-root .bg-segbtn.is-selected { background: var(--bg-surface-2); }
+:root.gh-dark .bg-root .bg-help-list li { color: var(--bg-muted); }
+:root.gh-dark .bg-root .lb-dshape-t3,
+:root.gh-dark .bg-root .lb-dshape-t4 { fill: #e6e9f0; }
