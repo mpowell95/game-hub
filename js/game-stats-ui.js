@@ -459,4 +459,11 @@ function ensureCss() {
   document.head.appendChild(el);
 }
 
+// Exported for the Leaderboard's player detail screen (HANDOFF-FB-LEADERBOARD.md item 1): it
+// hands screenFor() an aggregated player's `games` map instead of the local loadStats(), reusing
+// these exact per-game renderers so the two overlays never diverge on how a game's stats look.
+// `ensureStatsCss` re-injects (id-guarded, so a second call is a no-op) the SAME `#gs-css` sheet
+// My Stats uses, so the reused markup (gs-tallies/gs-grid/etc) renders identically there too.
+export { screenFor, ensureCss as ensureStatsCss };
+
 export default { openStatsOverlay, closeStats };

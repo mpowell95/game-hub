@@ -27,6 +27,7 @@ import { statsId } from './game-stats.js';
 import { bucketsOf, tierMix } from './leaderboard-rank.js';
 import { TIERS } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
+import { screenFor, ensureStatsCss } from './game-stats-ui.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -197,18 +198,22 @@ function miniTilesHTML(tiers, valueFn) {
 // --- By Player ---------------------------------------------------------------
 function medalClass(i) { return i === 0 ? ' is-gold' : i === 1 ? ' is-silver' : i === 2 ? ' is-bronze' : ''; }
 
-function playerCardHTML(g, i, wins, games, tilesHtml) {
+/** `unitKey` lets a game page label the number by its own metric (obstacles/longest/solved) -
+ *  By Player always passes the default (cross-game wins). Every card is now a button opening
+ *  the player detail screen (HANDOFF-FB-LEADERBOARD.md item 1). */
+function playerCardHTML(g, i, wins, games, tilesHtml, unitKey) {
   const me = g.key === _meKey ? ' is-me' : '';
-  return `<div class="lb-pcard${me}"${me ? ' aria-current="true"' : ''}>
+  return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       <span class="lb-medal${medalClass(i)}">${i + 1}</span>
       ${avatarHTML(g)}
       <span class="lb-pname">${rankName(g)}</span>
-      <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
+      <span class="lb-pnum"><b>${wins}</b><span>${esc(t(unitKey || 'lb_wins_unit'))}</span></span>
+      <span class="lb-pchev" aria-hidden="true">&rsaquo;</span>
     </div>
     <div class="lb-pmeta">${t('lb_games_count', { n: games })}</div>
     ${tilesHtml}
-  </div>`;
+  </button>`;
 }
 
 function playerListHTML(list) {
@@ -338,6 +343,39 @@ function textureHTML(list, id) {
   return `<h3 class="lb-h3">${t('lb_who_leads_h')}</h3><div class="lb-chips">${chips.join('')}</div>`;
 }
 
+// Tic Tac Toe's game page shows the Ultimate/Classic split instead of one wins number (Matt:
+// "tic tac toe leaderboard just show ultimate vs classic") — same draws-as-wins rule per variant
+// (wins = played - lost), computed straight from the `tt` sub-counter, which has no per-tier
+// storage (like Chinchón closes/Boggle words in textureHTML below), so it is filter-INDEPENDENT:
+// the difficulty pills still gate which players are listed (via the generic total/byDiff bucket),
+// but never change these two numbers.
+function ttVariantWins(v) { return Math.max(0, (v && v.played | 0) - (v && v.lost | 0)); }
+
+function ttCardHTML(g, i) {
+  const me = g.key === _meKey ? ' is-me' : '';
+  const tt = (g.games.tictactoe && g.games.tictactoe.tt) || null;
+  const hasTt = !!(tt && (tt.classic || tt.ultimate));
+  const ultimate = hasTt ? ttVariantWins(tt.ultimate) : 0;
+  const classic = hasTt ? ttVariantWins(tt.classic) : 0;
+  // Legacy/pre-split history (or a device that only ever synced totals) carries no `tt` object -
+  // nobody may fall off the board (rule 1), so show the generic wins number as a third, honestly
+  // labeled fallback value instead of a silent zero.
+  const fallback = hasTt ? '' : `<span class="lb-tt-val is-fallback"><b>${winsAtTier(g, ['tictactoe'], null)}</b><span>${esc(t('lb_wins_unit'))}</span></span>`;
+  return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
+    <div class="lb-pcard-row">
+      <span class="lb-medal${medalClass(i)}">${i + 1}</span>
+      ${avatarHTML(g)}
+      <span class="lb-pname">${rankName(g)}</span>
+      <span class="lb-pchev" aria-hidden="true">&rsaquo;</span>
+    </div>
+    <div class="lb-tt-split">
+      <span class="lb-tt-val"><b>${ultimate}</b><span>${esc(t('lb_tt_ultimate'))}</span></span>
+      <span class="lb-tt-val"><b>${classic}</b><span>${esc(t('lb_tt_classic'))}</span></span>
+      ${fallback}
+    </div>
+  </button>`;
+}
+
 function gameDetail(list, id) {
   const art = GAME_ART[hubIdOf(id)] || '';
   const head = `<div class="lb-detail-top">
@@ -348,23 +386,71 @@ function gameDetail(list, id) {
   const fieldTiers = fieldTiersPresent(list, [id]);
   const showExpert = fieldTiers.includes(4);
   const pills = pillsHTML(showExpert);
-  const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0)
-    .sort((a, b) => {
+  const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0);
+  if (id === 'tictactoe') {
+    rows.sort((a, b) => {
+      const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
+      const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
+      const u = ttVariantWins(tb.ultimate) - ttVariantWins(ta.ultimate);
+      if (u) return u;
+      const c = ttVariantWins(tb.classic) - ttVariantWins(ta.classic);
+      if (c) return c;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  } else {
+    rows.sort((a, b) => {
       const m = gameMetricAt(b, id, _diff) - gameMetricAt(a, id, _diff);
       if (m) return m;
       const p = playsAtTier(a, [id], _diff) - playsAtTier(b, [id], _diff);
       if (p) return p;
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
+  }
   const cardsHtml = rows.length
     ? `<div class="lb-plist">${rows.map((g, i) => {
+        if (id === 'tictactoe') return ttCardHTML(g, i);
         const metric = gameMetricAt(g, id, _diff);
         const games = playsAtTier(g, [id], _diff);
         const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
-        return playerCardHTML(g, i, metric, games, tiles);
+        return playerCardHTML(g, i, metric, games, tiles, unitKeyOf(id));
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
   return head + pills + cardsHtml + textureHTML(list, id);
+}
+
+// --- player detail (drill-in from either card list) --------------------------
+// HANDOFF-FB-LEADERBOARD.md item 1: header (emoji, name, total wins, games played, the same tier
+// chips the card already shows), then one section per game they have played, alphabetical by
+// displayed title, reusing My Stats' own per-game renderers via game-stats-ui.js's screenFor() -
+// pixel-identical to what the local player sees there. No difficulty filter here (a stats sheet,
+// not a ranking); games never played are omitted (no zero-row padding, THE LAW rule 1's mirror:
+// nothing is hidden that has data, nothing is padded that doesn't).
+function playerDetail(list, key) {
+  const g = list.find((x) => x.key === key);
+  if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${t('lb_back_players')}</button></div>` + emptyState(t('lb_empty_all'));
+  const wins = winsAtTier(g, ALL_IDS, null);
+  const games = playsAtTier(g, ALL_IDS, null);
+  const tiers = tiersPresent(g, ALL_IDS);
+  const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, ALL_IDS, tier));
+  const head = `<div class="lb-detail-top">
+    <button type="button" class="lb-back" data-role="lb-player-back">${t('lb_back_players')}</button>
+  </div>
+  <div class="lb-pdetail-head">
+    ${avatarHTML(g)}
+    <span class="lb-pdetail-id">
+      <span class="lb-pdetail-name">${rankName(g)}</span>
+      <span class="lb-pdetail-meta">${t('lb_games_count', { n: games })}</span>
+    </span>
+    <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
+  </div>
+  ${tiles}`;
+  const sections = gameMetaSorted()
+    .filter((meta) => playsAtTier(g, [meta.id], null) > 0)
+    .map((meta) => `<section class="lb-pgame">
+      <h3 class="lb-h3">${esc(t(meta.labelKey))}</h3>
+      ${screenFor(meta.id, { games: g.games })}
+    </section>`).join('');
+  return head + (sections || emptyState(t('lb_empty_all')));
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -400,6 +486,7 @@ function currentBody() {
   // recorded; that history joins a player automatically the moment the device sets a name.
   const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
+  if (_player) return playerDetail(list, _player);
   if (_game) return gameDetail(list, _game);
   return pillsHTML(true) + (_seg === 'games' ? gameListHTML(list) : playerListHTML(list));
 }
@@ -407,6 +494,7 @@ function currentBody() {
 let _host = null;
 let _seg = 'players';       // 'players' | 'games'
 let _game = null;           // non-null => showing that game's detail board
+let _player = null;         // non-null (a group key) => showing that player's detail screen
 let _diff = null;           // null (All) | 1-4, shared between By Player/By Game and a game page
 let _all = {};
 let _meKey = '';
@@ -436,12 +524,14 @@ function renderOffline() {
 
 function onKey(e) {
   if (e.key !== 'Escape') return;
+  if (_player) { _player = null; rerender(); return; }   // Esc backs out of a player before a game
   if (_game) { _game = null; rerender(); return; }   // Esc backs out of a game before closing
   closeLeaderboard();
 }
 
 function onClick(e) {
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
+  if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; rerender(); return; }
   if (e.target.closest('[data-role="lb-back"]')) { _game = null; rerender(); return; }
   const pill = e.target.closest('.lb-pill');
   if (pill) {
@@ -453,10 +543,12 @@ function onClick(e) {
   const seg = e.target.closest('.lb-seg');
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
-    if (next === _seg && !_game) return;
-    _seg = next; _game = null; rerender();
+    if (next === _seg && !_game && !_player) return;
+    _seg = next; _game = null; _player = null; rerender();
     return;
   }
+  const card = e.target.closest('.lb-pcard[data-pkey]');
+  if (card) { _player = card.dataset.pkey; rerender(); return; }
   const row = e.target.closest('.lb-grow');
   if (row && row.dataset.game) { _game = row.dataset.game; rerender(); }
 }
@@ -469,9 +561,11 @@ export function closeLeaderboard() {
 
 export async function openLeaderboard() {
   ensureCss();
+  ensureStatsCss();   // the player detail screen reuses My Stats' gs-* renderers/markup verbatim
   closeLeaderboard();
   _seg = 'players';
   _game = null;
+  _player = null;
   _diff = null;   // resets to All every time the overlay opens (not persisted)
   _all = {};
   _connected = false;
@@ -538,9 +632,26 @@ function ensureCss() {
     '.lb-h3{margin:18px 0 8px;font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
     // Player/game-detail card list.
     '.lb-plist{display:flex;flex-direction:column;gap:9px;margin-top:8px}',
-    '.lb-pcard{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:14px;padding:11px 12px;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
+    // .lb-pcard is a <button> (every card opens the player detail screen) - reset the native
+    // button chrome so it still reads as the same card, not a form control.
+    '.lb-pcard{display:block;width:100%;text-align:left;font:inherit;color:inherit;appearance:none;cursor:pointer;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:14px;padding:11px 12px;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
     '.lb-pcard.is-me{box-shadow:inset 0 0 0 1.5px var(--hub-accent,#1769d4),0 4px 16px rgba(20,40,80,.06)}',
-    '.lb-pcard.is-skel{opacity:.65}',
+    '.lb-pcard.is-skel{opacity:.65;cursor:default}',
+    '.lb-pchev{flex:0 0 auto;color:var(--hub-muted,#5b6b82);font-size:1.1rem;line-height:1;margin-left:1px}',
+    // Tic Tac Toe's game-page card: Ultimate/Classic (+ an honest fallback for un-split legacy
+    // history) instead of the single wins number every other game's card shows.
+    '.lb-tt-split{display:flex;gap:14px;margin:8px 0 0 34px}',
+    '.lb-tt-val{display:flex;flex-direction:column;line-height:1.15}',
+    '.lb-tt-val b{font-size:1.1rem;font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.lb-tt-val span{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
+    '.lb-tt-val.is-fallback{opacity:.7}',
+    // Player detail screen (drill-in from any card).
+    '.lb-pdetail-head{display:flex;align-items:center;gap:10px;margin:4px 0 6px}',
+    '.lb-pdetail-head .lb-av{width:34px;height:34px;font-size:1.2rem}',
+    '.lb-pdetail-id{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}',
+    '.lb-pdetail-name{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-pdetail-meta{font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
+    '.lb-pgame{margin-top:10px}',
     '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
     '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',
     '.lb-medal.is-gold{background:#f5c518;color:#5c4a00}',

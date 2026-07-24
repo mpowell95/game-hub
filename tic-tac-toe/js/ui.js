@@ -94,7 +94,7 @@ class TicTacToeUI {
     const opp = profile && profile.opponents && profile.opponents[0];
     const profileDiff = (opp && SKILL_TO_DIFF[opp.skill]) || null;
     return {
-      variant: saved.variant === 'ultimate' ? 'ultimate' : 'classic',
+      variant: saved.variant === 'classic' ? 'classic' : 'ultimate',
       difficulty: DIFFICULTIES.some(([k]) => k === saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
       humanFirst: saved.humanFirst !== false,
     };
