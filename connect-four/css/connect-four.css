@@ -437,3 +437,25 @@
   .cf-result { animation: none; }
   .cf-menu-card { animation: none; }
 }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
+   properties. --cf-board/--cf-board-edge/--cf-hole/--cf-red/--cf-yellow (the board and its
+   discs) stay UNTOUCHED on purpose -- the board is game art, a blue board in both themes per
+   the handoff, same discipline as Filler's tile backdrop and Connect Four's own tile art.
+   --cf-accent doubles as text/border color (e.g. .cf-hint, .cf-eval.is-pick) as well as a button
+   background, so it's lightened for legibility on the new dark surface. A couple of hover states
+   hardcoded to a light-gray literal (not on a variable) get their own overrides, plus the tier
+   3/4 ski-slope shape fix. */
+:root.gh-dark .cf-root {
+  --cf-ink: #e9eef6;
+  --cf-muted: #9db0c9;
+  --cf-surface: #1b2333;
+  --cf-surface-2: #262f42;
+  --cf-accent: #4f97e8;
+}
+:root.gh-dark .cf-root .cf-btn-primary:hover { background: #6ba8ec; }
+:root.gh-dark .cf-root .cf-bar-actions .cf-btn-ghost:hover { background: #2f3a50; }
+:root.gh-dark .cf-root .cf-result-x:hover { background: #2f3a50; }
+:root.gh-dark .cf-root .lb-dshape-t3,
+:root.gh-dark .cf-root .lb-dshape-t4 { fill: #e6e9f0; }
