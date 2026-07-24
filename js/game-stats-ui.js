@@ -1,18 +1,24 @@
-// game-stats-ui.js - the player-facing "Game Stats" overlay. A tab per game, each with its OWN
-// tailored screen (not a generic played/won/lost card):
+// game-stats-ui.js - the player-facing "Game Stats" overlay. A leaderboard-style game-list
+// drill-down (HANDOFF-FB2-STATS-NAV.md, replacing the old 13-tab strip): an overview (profile
+// identity + total games/wins) tops a list of every game WITH recorded plays, art thumbnail +
+// headline stat + chevron; tapping a row drills into that game's own tailored screen (not a
+// generic played/won/lost card):
 //   Connect 4 - Wins/Losses/Plays totals + a WHO-MOVED-FIRST grid (player vs computer, per level).
 //   Chinchon  - Games played (finished/victories/draws/defeats + %) and close-quality stats
 //               (total closed by you, total minus ten, total chinchons), on a dark panel.
 //   Monopoly Deal / Parchis - Wins/Losses/Plays + win rate, and a record-by-difficulty table.
 // Reads the local unified stats (game-stats.js); self-contained (injects its own CSS once). Opened
-// from the hub header. Colorblind-safe: the active tab is marked by weight + ink + an accent
-// underline together, never hue alone.
+// from the hub header. `gameListHTML` (the shared drill-down list builder) and `screenFor` (the
+// per-game screens) are both exported so the Leaderboard's player detail screen can reuse them
+// verbatim - see the export block at the bottom of this file.
 
 import { loadStats, statsId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
+import { GAME_ART } from './game-art.js';
+import { record } from './leaderboard-rank.js';
 
 const t = makeT(STRINGS);
 
@@ -20,20 +26,33 @@ const t = makeT(STRINGS);
 // uses, so the two overlays can never disagree on a game's name (Matt, 2026-07-23: titles
 // translate, Spain Spanish; the hub registry carries matching {en,es} titles).
 const TABS = [
-  { id: 'connect4', labelKey: 'game_title_connect4', accent: '#1769d4' },
-  { id: 'chinchon', labelKey: 'game_title_chinchon', accent: '#d4a017' },
-  { id: 'business', labelKey: 'game_title_business', accent: '#6a4cff' },
-  { id: 'parchis', labelKey: 'game_title_parchis', accent: '#c0632b' },
-  { id: 'nutsbolts', labelKey: 'game_title_nutsbolts', accent: '#607d8b' },
-  { id: 'escoba', labelKey: 'game_title_escoba', accent: '#1c7a4f' },
-  { id: 'filler', labelKey: 'game_title_filler', accent: '#c2557f' },
-  { id: 'mancala', labelKey: 'game_title_mancala', accent: '#e08a3c' },
-  { id: 'ballrun', labelKey: 'game_title_ballrun', accent: '#c22e8f' },
-  { id: 'tictactoe', labelKey: 'game_title_tictactoe', accent: '#0e7c86' },
-  { id: 'dotsboxes', labelKey: 'game_title_dotsboxes', accent: '#16243a' },
-  { id: 'boggle', labelKey: 'game_title_boggle', accent: '#1f3864' },
-  { id: 'snake', labelKey: 'game_title_snake', accent: '#3f7d2c' },
+  { id: 'connect4', labelKey: 'game_title_connect4' },
+  { id: 'chinchon', labelKey: 'game_title_chinchon' },
+  { id: 'business', labelKey: 'game_title_business' },
+  { id: 'parchis', labelKey: 'game_title_parchis' },
+  { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
+  { id: 'escoba', labelKey: 'game_title_escoba' },
+  { id: 'filler', labelKey: 'game_title_filler' },
+  { id: 'mancala', labelKey: 'game_title_mancala' },
+  { id: 'ballrun', labelKey: 'game_title_ballrun' },
+  { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
+  { id: 'dotsboxes', labelKey: 'game_title_dotsboxes' },
+  { id: 'boggle', labelKey: 'game_title_boggle' },
+  { id: 'snake', labelKey: 'game_title_snake' },
 ];
+
+// Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
+// for both this overlay's game list and the Leaderboard's player detail (leaderboard-ui.js
+// imports these instead of keeping its own copy), so the two screens can never disagree on a
+// game's thumbnail or unit label. Verified against js/hub.js's GAMES registry (root CLAUDE.md,
+// "Adding a game" item 7 warning).
+const HUB_ID = {
+  connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
+  dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
+};
+export const hubIdOf = (id) => HUB_ID[id] || id;
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved' };
+export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
 function visibleTabs() {
@@ -322,6 +341,88 @@ function snakeScreen(rec) {
     </table>`;
 }
 
+/** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
+ *  the same visibility bar the game list must honor (THE LAW rule 1: nothing shown today may
+ *  become unreachable). */
+function hasPlays(id, rec) {
+  if (id === 'connect4') return c4Totals(rec.grid).plays > 0;
+  if (id === 'ballrun') return !!((rec.br && rec.br.runs) || rec.brLegacyMeters);
+  if (id === 'snake') return !!(rec.sn && rec.sn.runs);
+  if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
+  return ((rec.total || {}).played | 0) > 0;
+}
+
+/** The headline number + unit for a game's row in the shared game-list drill-down: wins
+ *  (draws-as-wins, the same maths the leaderboard uses) for competitive games, the game's own
+ *  solo metric for Ball Run/Snake/Nuts & Bolts. */
+function headlineOf(id, rec) {
+  if (id === 'ballrun') return { n: (rec.br && rec.br.bestObstacles) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
+  return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
+}
+
+function emptyAll() { return `<p class="gs-none">${t('lb_empty_all')}</p>`; }
+
+/** The shared game-list drill-down (Matt: "make it like the Leaderboard tab, but more detailed
+ *  and specific to the user"). One row per game WITH plays — art thumbnail, title, headline stat,
+ *  chevron — alphabetical by displayed title, resolved at render time (never sort at module
+ *  scope: js/CLAUDE.md "Language support"). Games with zero plays are omitted. Fed either the
+ *  local viewer's `st.games` (My Stats) or an aggregated player's `games`
+ *  (Leaderboard's player detail, players-agg.js) — both are the same canonical shape, so this one
+ *  function renders identically either way. */
+export function gameListHTML(games) {
+  const g = games || {};
+  const rows = visibleTabs()
+    .filter((tab) => hasPlays(tab.id, g[tab.id] || {}))
+    .sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey)))
+    .map((tab) => {
+      const rec = g[tab.id] || {};
+      const head = headlineOf(tab.id, rec);
+      const art = GAME_ART[hubIdOf(tab.id)] || '';
+      return `<button type="button" class="gs-grow" data-game="${tab.id}">
+        <span class="gs-gart">${art}</span>
+        <span class="gs-gname">${esc(t(tab.labelKey))}</span>
+        <span class="gs-gnum"><b>${head.n}</b><span>${esc(t(head.unitKey))}</span></span>
+        <span class="gs-gchev" aria-hidden="true">&rsaquo;</span>
+      </button>`;
+    });
+  if (!rows.length) return emptyAll();
+  return `<div class="gs-glist">${rows.join('')}</div>`;
+}
+
+/** Sum across every visible game: total plays and total wins (draws-as-wins, same maths the
+ *  leaderboard uses) — the two headline numbers on My Stats' overview screen. */
+function overviewTotals(games) {
+  const g = games || {};
+  let plays = 0, wins = 0;
+  for (const tab of visibleTabs()) {
+    const tot = (g[tab.id] || {}).total || {};
+    plays += tot.played | 0;
+    wins += record(tot).wins;
+  }
+  return { plays, wins };
+}
+
+function overviewHTML(st) {
+  let profile = null;
+  try { profile = loadProfile(); } catch { /* no profile */ }
+  const name = (profile && profile.name) || '';
+  const emoji = (profile && profile.emoji) || '';
+  const totals = overviewTotals(st.games);
+  return `
+    <div class="gs-overview">
+      <div class="gs-ov-id">
+        ${emoji ? `<span class="gs-ov-av" aria-hidden="true">${esc(emoji)}</span>` : ''}
+        ${name ? `<span class="gs-ov-name">${esc(name)}</span>` : ''}
+      </div>
+      <div class="gs-tallies is-4">
+        <div class="gs-tally"><b>${totals.plays}</b><span>${t('gs_total_games')}</span></div>
+        <div class="gs-tally"><b>${totals.wins}</b><span>${t('gs_wins')}</span></div>
+      </div>
+    </div>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -338,22 +439,26 @@ function screenFor(id, st) {
 
 // --- overlay shell ----------------------------------------------------------
 let _host = null;
-let _active = 'connect4';
+let _game = null;             // non-null => drilled into that game's own screenFor
 let _st = null;               // the stats to render: local first, then combined-across-devices when online
 let _combinedDevices = 1;
 
-function tabsHTML() {
-  return visibleTabs().map((tab) =>
-    `<button type="button" class="gs-tab${tab.id === _active ? ' is-active' : ''}" data-game="${tab.id}" style="--gs-accent:${tab.accent}"${tab.id === _active ? ' aria-current="true"' : ''}>${esc(t(tab.labelKey))}</button>`
-  ).join('');
+function backRow() {
+  return `<div class="gs-detail-top">
+    <button type="button" class="gs-back" data-role="gs-back">${t('lb_back_games')}</button>
+  </div>`;
+}
+
+function bodyHTML() {
+  const st = _st || { games: {} };
+  if (_game) return backRow() + screenFor(_game, st);
+  return overviewHTML(st) + gameListHTML(st.games || {});
 }
 
 function rerender() {
   if (!_host) return;
-  const tabsEl = _host.querySelector('[data-role="gs-tabs"]');
   const bodyEl = _host.querySelector('[data-role="gs-body"]');
-  if (tabsEl) tabsEl.innerHTML = tabsHTML();
-  if (bodyEl) bodyEl.innerHTML = screenFor(_active, _st || { games: {} });
+  if (bodyEl) bodyEl.innerHTML = bodyHTML();
 }
 
 /** Fetch every device record and re-render from THIS player's combined (code-aggregated) stats.
@@ -371,15 +476,17 @@ async function refreshCombined() {
   } catch { /* stay local */ }
 }
 
-function onKey(e) { if (e.key === 'Escape') closeStats(); }
+function onKey(e) {
+  if (e.key !== 'Escape') return;
+  if (_game) { _game = null; rerender(); return; }
+  closeStats();
+}
 
 function onClick(e) {
   if (e.target.closest('[data-role="gs-close"]')) { closeStats(); return; }
-  const tab = e.target.closest('.gs-tab');
-  if (tab && tab.dataset.game && tab.dataset.game !== _active) {
-    _active = tab.dataset.game;
-    rerender();
-  }
+  if (e.target.closest('[data-role="gs-back"]')) { _game = null; rerender(); return; }
+  const row = e.target.closest('.gs-grow[data-game]');
+  if (row) { _game = row.dataset.game; rerender(); }
 }
 
 export function closeStats() { if (_host) { _host.remove(); _host = null; } document.removeEventListener('keydown', onKey); }
@@ -387,7 +494,7 @@ export function closeStats() { if (_host) { _host.remove(); _host = null; } docu
 export function openStatsOverlay() {
   ensureCss();
   closeStats();
-  _active = 'connect4';
+  _game = null;
   _st = loadStats();
   _combinedDevices = 1;
   const host = document.createElement('div');
@@ -404,8 +511,7 @@ export function openStatsOverlay() {
           <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
         </div>
       </header>
-      <nav class="gs-tabs" data-role="gs-tabs" aria-label="${t('gs_tabs_aria')}">${tabsHTML()}</nav>
-      <div class="gs-body" data-role="gs-body">${screenFor(_active, _st)}</div>
+      <div class="gs-body" data-role="gs-body">${bodyHTML()}</div>
     </div>`;
   host.addEventListener('click', onClick);
   document.body.appendChild(host);
@@ -428,10 +534,22 @@ function ensureCss() {
     '.gs-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--gh-band-title,44px)}',
     '.gs-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
     '.gs-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
-    '.gs-tabs{display:flex;align-items:center;gap:4px;min-height:var(--gh-band-controls,36px);padding:0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--hub-bg,#f4f6fb)}',
-    '.gs-tab{flex:0 0 auto;appearance:none;border:0;background:none;cursor:pointer;padding:8px 12px 10px;font-size:.9rem;font-weight:700;color:var(--hub-muted,#5b6b82);border-bottom:3px solid transparent;white-space:nowrap}',
-    '.gs-tab.is-active{color:var(--hub-ink,#16243a);font-weight:900;border-bottom-color:var(--gs-accent,#1769d4)}',
     '.gs-body{padding:14px 16px 8px;display:grid;gap:14px}',
+    '.gs-overview{display:grid;gap:10px}',
+    '.gs-ov-id{display:flex;align-items:center;gap:8px;min-height:28px}',
+    '.gs-ov-av{font-size:1.4rem;line-height:1}',
+    '.gs-ov-name{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a)}',
+    '.gs-glist{display:flex;flex-direction:column;gap:8px}',
+    '.gs-grow{appearance:none;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 11px;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;box-shadow:0 4px 16px rgba(20,40,80,.06);font:inherit;color:inherit}',
+    '.gs-gart{flex:0 0 auto;width:46px;height:26px;border-radius:6px;overflow:hidden;line-height:0}',
+    '.gs-gart svg{width:100%;height:100%;display:block}',
+    '.gs-gname{flex:1 1 auto;min-width:0;font-size:.9rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.gs-gnum{flex:0 0 auto;min-width:56px;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}',
+    '.gs-gnum b{font-size:1rem;font-weight:700;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.gs-gnum span{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
+    '.gs-gchev{flex:0 0 auto;color:var(--hub-muted,#5b6b82);font-size:1.1rem;line-height:1}',
+    '.gs-detail-top{display:flex;align-items:center;gap:10px;margin:2px 0 4px;min-height:var(--gh-band-title,44px)}',
+    '.gs-back{appearance:none;cursor:pointer;padding:7px 11px;font-size:.8rem;font-weight:800;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:9px;white-space:nowrap}',
     '.gs-tallies{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}',
     '.gs-tallies.is-4{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}',
     '.gs-tally{background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:12px 4px;text-align:center;box-shadow:0 4px 16px rgba(20,40,80,.06)}',
@@ -459,11 +577,12 @@ function ensureCss() {
   document.head.appendChild(el);
 }
 
-// Exported for the Leaderboard's player detail screen (HANDOFF-FB-LEADERBOARD.md item 1): it
-// hands screenFor() an aggregated player's `games` map instead of the local loadStats(), reusing
-// these exact per-game renderers so the two overlays never diverge on how a game's stats look.
+// Exported for the Leaderboard's player detail screen (HANDOFF-FB2-STATS-NAV.md): it hands
+// screenFor() an aggregated player's `games` map instead of the local loadStats(), reusing these
+// exact per-game renderers so the two overlays never diverge on how a game's stats look, and
+// reuses gameListHTML() (defined above) to render the SAME game-list drill-down My Stats uses.
 // `ensureStatsCss` re-injects (id-guarded, so a second call is a no-op) the SAME `#gs-css` sheet
-// My Stats uses, so the reused markup (gs-tallies/gs-grid/etc) renders identically there too.
+// My Stats uses, so the reused markup (gs-tallies/gs-grid/gs-glist/etc) renders identically there.
 export { screenFor, ensureCss as ensureStatsCss };
 
 export default { openStatsOverlay, closeStats };

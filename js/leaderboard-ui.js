@@ -27,7 +27,7 @@ import { statsId } from './game-stats.js';
 import { bucketsOf, tierMix } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
-import { screenFor, ensureStatsCss } from './game-stats-ui.js';
+import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf } from './game-stats-ui.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -69,14 +69,8 @@ const GAME_META = [
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
-// Verified against js/hub.js's GAMES registry (root CLAUDE.md, "Adding a game" item 7 warning).
-const STATS_TO_HUB = {
-  connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
-  dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
-};
-const hubIdOf = (id) => STATS_TO_HUB[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved' };
-const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
+// hubIdOf/unitKeyOf now live in game-stats-ui.js (single source, HANDOFF-FB2-STATS-NAV.md) so
+// this file and My Stats' game-list drill-down can never disagree on a game's thumbnail or unit.
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function labelOf(id) { const m = GAME_META.find((g) => g.id === id); return m ? t(m.labelKey) : id; }
@@ -415,15 +409,22 @@ function gameDetail(list, id) {
 }
 
 // --- player detail (drill-in from either card list) --------------------------
-// HANDOFF-FB-LEADERBOARD.md item 1: header (emoji, name, total wins, games played, the same tier
-// chips the card already shows), then one section per game they have played, alphabetical by
-// displayed title, reusing My Stats' own per-game renderers via game-stats-ui.js's screenFor() -
-// pixel-identical to what the local player sees there. No difficulty filter here (a stats sheet,
-// not a ranking); games never played are omitted (no zero-row padding, THE LAW rule 1's mirror:
-// nothing is hidden that has data, nothing is padded that doesn't).
+// HANDOFF-FB2-STATS-NAV.md: header (emoji, name, total wins, games played, the same tier chips
+// the card already shows) + a leaderboard-style game list (gameListHTML, shared with My Stats,
+// game-stats-ui.js), replacing the old giant stacked-screen column. Tapping a row drills into
+// that game's own screenFor() screen - pixel-identical to what the local player sees on My
+// Stats - with its own `← Games` back row (`_playerGame`, independent of the top-level By Game
+// drill's `_game`). No difficulty filter here (a stats sheet, not a ranking); games never played
+// are omitted (no zero-row padding, THE LAW rule 1's mirror: nothing is hidden that has data,
+// nothing is padded that doesn't).
 function playerDetail(list, key) {
   const g = list.find((x) => x.key === key);
   if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${t('lb_back_players')}</button></div>` + emptyState(t('lb_empty_all'));
+  if (_playerGame) {
+    return `<div class="lb-detail-top">
+      <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
+    </div>` + screenFor(_playerGame, { games: g.games });
+  }
   const wins = winsAtTier(g, ALL_IDS, null);
   const games = playsAtTier(g, ALL_IDS, null);
   const tiers = tiersPresent(g, ALL_IDS);
@@ -440,13 +441,7 @@ function playerDetail(list, key) {
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${tiles}`;
-  const sections = gameMetaSorted()
-    .filter((meta) => playsAtTier(g, [meta.id], null) > 0)
-    .map((meta) => `<section class="lb-pgame">
-      <h3 class="lb-h3">${esc(t(meta.labelKey))}</h3>
-      ${screenFor(meta.id, { games: g.games })}
-    </section>`).join('');
-  return head + (sections || emptyState(t('lb_empty_all')));
+  return head + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -491,6 +486,7 @@ let _host = null;
 let _seg = 'players';       // 'players' | 'games'
 let _game = null;           // non-null => showing that game's detail board
 let _player = null;         // non-null (a group key) => showing that player's detail screen
+let _playerGame = null;     // non-null => drilled into that game from WITHIN player detail
 let _diff = null;           // null (All) | 1-4, shared between By Player/By Game and a game page
 let _all = {};
 let _meKey = '';
@@ -520,14 +516,16 @@ function renderOffline() {
 
 function onKey(e) {
   if (e.key !== 'Escape') return;
-  if (_player) { _player = null; rerender(); return; }   // Esc backs out of a player before a game
+  if (_playerGame) { _playerGame = null; rerender(); return; }   // Esc backs out of a player's game first
+  if (_player) { _player = null; rerender(); return; }   // then out of a player before a game
   if (_game) { _game = null; rerender(); return; }   // Esc backs out of a game before closing
   closeLeaderboard();
 }
 
 function onClick(e) {
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
-  if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; rerender(); return; }
+  if (e.target.closest('[data-role="lb-pgame-back"]')) { _playerGame = null; rerender(); return; }
+  if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
   if (e.target.closest('[data-role="lb-back"]')) { _game = null; rerender(); return; }
   const pill = e.target.closest('.lb-pill');
   if (pill) {
@@ -540,11 +538,15 @@ function onClick(e) {
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
     if (next === _seg && !_game && !_player) return;
-    _seg = next; _game = null; _player = null; rerender();
+    _seg = next; _game = null; _player = null; _playerGame = null; rerender();
     return;
   }
   const card = e.target.closest('.lb-pcard[data-pkey]');
-  if (card) { _player = card.dataset.pkey; rerender(); return; }
+  if (card) { _player = card.dataset.pkey; _playerGame = null; rerender(); return; }
+  // Player detail's own game list (shared gs-grow rows) vs. the top-level By Game list (lb-grow) -
+  // only one of the two is ever on screen at once, but check player context first to be explicit.
+  const gsRow = e.target.closest('.gs-grow[data-game]');
+  if (gsRow && _player) { _playerGame = gsRow.dataset.game; rerender(); return; }
   const row = e.target.closest('.lb-grow');
   if (row && row.dataset.game) { _game = row.dataset.game; rerender(); }
 }
@@ -562,6 +564,7 @@ export async function openLeaderboard() {
   _seg = 'players';
   _game = null;
   _player = null;
+  _playerGame = null;
   _diff = null;   // resets to All every time the overlay opens (not persisted)
   _all = {};
   _connected = false;

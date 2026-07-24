@@ -87,7 +87,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
-| `js/game-stats-ui.js` | "My Stats" overlay; per-game tailored screens |
+| `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
@@ -352,8 +352,10 @@ are read-only to this feature — nothing is stored, migrated or normalized.
 HUB registry id (`GAMES[].id]` — moved out of `js/hub.js`'s GAMES array so the Leaderboard's By Game
 screen can show the SAME real tile art as a thumbnail without importing hub.js itself (a
 side-effectful module: it boots stats sync and first-run gates on import). `hub.js` now reads
-`GAME_ART[id]`; `leaderboard-ui.js` reads `GAME_ART[hubIdOf(statsId)]` via its own
-`STATS_TO_HUB` map (verify that map against the real `GAMES` registry if either changes ids).
+`GAME_ART[id]`; `leaderboard-ui.js` and `game-stats-ui.js` both read `GAME_ART[hubIdOf(statsId)]`
+via `hubIdOf`/`unitKeyOf`, which live in `game-stats-ui.js` (single source since the 2026-07-24
+game-list redesign below) and are imported by `leaderboard-ui.js` — verify the underlying `HUB_ID`
+map against the real `GAMES` registry if either changes ids.
 
 **The unified chrome band spec** (hub top bar, Leaderboard overlay, My Stats overlay — Matt called
 out that the three banners were clearly built independently): three CSS custom properties in
@@ -374,6 +376,53 @@ number/unit stack is FIXED-WIDTH and right-aligned (`min-width:56px` on `.lb-gnu
 free-form gray metric text made the column ragged. "Who leads what" chips (`textureHTML`, unchanged
 maths) are now tinted (amber/teal/blue rotation, `.lb-chip-a/b/c`) rather than plain cards, and are
 filter-INDEPENDENT (several — Chinchón closes, Boggle words — have no per-tier storage at all).
+
+### My Stats and the leaderboard's player page — the shared game-list drill-down (2026-07-24)
+
+HANDOFF-FB2-STATS-NAV.md. Matt: the old My Stats 13-tab strip was "useless… difficult
+understanding what info is even being shown," and the leaderboard's player detail was "a single,
+scrollable screen, with every game and stat listed. This is very very bad." Both are now the SAME
+structure the leaderboard's By Game screen already used: an identity header + a list (one row per
+game WITH recorded plays — art thumbnail, title, a headline stat, chevron), alphabetical by
+displayed title; tapping a row drills into that game's own tailored `screenFor` screen with a
+`← Games` back row. Games with zero plays are omitted from the list (never shown as a padded
+zero-row); nothing about the per-game `screenFor` screens themselves changed.
+
+- **`gameListHTML(games)`, exported from `js/game-stats-ui.js`, is the ONE list builder both
+  overlays use** — fed either the local viewer's `st.games` (My Stats) or an aggregated player's
+  `games` (`players-agg.js`, the leaderboard's player detail), since both are the same canonical
+  shape. `leaderboard-ui.js` imports it aliased as `gsGameListHTML` — **do not import it as a bare
+  `gameListHTML`**, that name collides with leaderboard-ui.js's own pre-existing top-level By Game
+  list builder (a real bug hit once during this milestone: the naming collision threw a
+  module-load `SyntaxError` that silently broke every button opening the overlay, with no console
+  error surfaced by the hub's own click handlers — always smoke-test a dynamic import in the
+  browser console directly after touching either file's imports).
+- **`hubIdOf`/`unitKeyOf` now live in `game-stats-ui.js`** (moved out of `leaderboard-ui.js`,
+  which used to keep its own identical copy) — single source for the stats-id→hub-id art lookup
+  and the per-game headline unit (`lb_unit_obstacles`/`lb_unit_longest`/`lb_unit_solved`, default
+  `lb_unit_wins`), so My Stats and the leaderboard can never disagree on a game's thumbnail or
+  unit label again.
+- **My Stats' overview** (`overviewHTML`/`overviewTotals` in `game-stats-ui.js`): profile emoji +
+  name, then two headline tallies — total games played and total wins — summed across every
+  visible game via `record()` (imported from `js/leaderboard-rank.js`, the same draws-as-wins
+  maths the leaderboard uses: `wins = played - losses`). Solo games (Ball Run/Snake/Nuts & Bolts)
+  count toward both totals the same as competitive games, since `total`/`byDiff` are populated
+  identically for solo play (see "The leaderboard's rating model" above).
+- **A game's presence in the list uses its OWN empty-state gate**, not a generic `total.played`
+  check (`hasPlays()` in `game-stats-ui.js` mirrors each `screenFor` variant's own condition:
+  Connect 4 sums `c4Totals(grid)`, Ball Run also checks the legacy-meters archive, Snake/Nuts &
+  Bolts read their own sub-counter) — THE LAW rule 1: the visibility bar for "does this game show
+  up" must match the bar each screen already uses to decide its own empty state, or a game could
+  vanish from the list while its screen would still render real numbers if opened directly.
+- **Leaderboard's player detail** (`playerDetail` in `leaderboard-ui.js`) gained its own drill
+  state, `_playerGame` — independent of the top-level By Game drill's `_game`, since a viewer can
+  be inside a player's detail AND that player's own game screen at once. `Esc` backs out
+  game-first, then player, then closes, mirroring the top-level game/close order.
+- Both overlays already inject the same `#gs-css` stylesheet (`ensureStatsCss` re-injection,
+  id-guarded), so the new `.gs-glist`/`.gs-grow` list markup and `.gs-overview` header render
+  identically in both, no new CSS mechanism needed. Light/dark: no new `:root.gh-dark` overrides
+  were needed either — every new rule follows the existing `var(--hub-surface, #fff)`-style
+  fallback pattern the rest of `#gs-css` already uses.
 
 ### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
 
@@ -403,6 +452,23 @@ Now, per rule 6's own reference pattern:
 own device, open the hub and run `JSON.parse(localStorage['gamehub.syncHealth.v1'])`. `ok:false`, or
 `localPlays` well above `remotePlays`, means the data is fine locally and the SYNC is the problem.
 `gamehub.stats` is the source of truth and is never touched by any of this.
+
+**Warning, from an incident (2026-07-24, HANDOFF-FB2-STATS-NAV.md verification):** `hub.js` calls
+`_syncStats()` unconditionally on every page load, with no gate for "this is a test/preview
+browser" - there isn't one. Seeding fake `gamehub.stats`/`gamehub.profile` into `localStorage` to
+eyeball a UI change (My Stats, the leaderboard, anything that reads stats) and then loading the
+page **mirrors that fake data straight to the real production `players/<deviceId>` node** the
+instant the page runs, exactly like a real device's play. This happened once: a fake profile named
+"Matt" with invented stats synced and briefly rode the `matt`→`mattyice` name-alias union before
+being overwritten by a follow-up sync under a harmless name; it was caught, backed up
+(`node backups/rtdb-backup.mjs`), and removed by hand (zero the local store, reload, confirm the
+remote node re-mirrors as empty, then delete the now-empty node with a name+play-count guard,
+verifying with `players-agg.js` that no other player's row moved). **Never seed fake player stats
+into a browser that can reach the real Firebase config** (`js/firebase-config.js`'s
+`databaseURL`, which is this hub's only backend - there is no separate dev/staging project).
+Seed only with sync unreachable (offline, or Firebase blocked in devtools) or inside a headless
+test (`node run-all-tests.mjs`'s suites construct `gamehub.stats`-shaped fixtures directly in
+Node, never through a browser that can reach the network).
 
 **Known gap, not yet fixed:** the leaderboard lists only players with a profile name
 (`(g.name || '').trim()` in `leaderboard-ui.js`, predates the 2026-07-22 overhaul). Devices that
