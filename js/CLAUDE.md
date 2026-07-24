@@ -223,9 +223,11 @@ below; every other in-hub game keeps its current light-only look until its own P
   mode). The profile page (`profile/index.html`) is themed the same way, being just
   another `css/hub.css` consumer with its own small inline `<style>` block (two literal
   `#fff` focus-state spots were switched to `var(--hub-surface)` for the same reason).
-  **Every OTHER in-hub game keeps its current light-only look on a dark shell** — Phase 2
-  (not yet started) gives each one its own `:root.gh-dark .xx-root` variable-override
-  block in the game's own CSS, one small commit per game.
+  **Every OTHER in-hub game keeps its current light-only look on a dark shell until its own
+  Phase 2 pass** — each one gets its own `:root.gh-dark .xx-root` variable-override block in
+  the game's own CSS, one small commit per game. Done so far: Snake, Mancala, Boggle, Dots
+  and Boxes. Remaining, per the suggested order: Tic Tac Toe, Nuts & Bolts, Filler, Escoba,
+  Ball Run, Connect Four.
 - **Toggle**: hub top bar, `[data-role="theme"]`, next to the language knob
   (`js/hub.js`'s `_paintThemeToggle()`); cycles light → dark → auto → light. Icon shows the
   RESOLVED theme (☀️/🌙); a small "A" badge marks the stored mode specifically being

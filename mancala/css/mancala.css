@@ -661,3 +661,39 @@
   .mancala .mc-stone { transition: none; }
   .mancala .mc-card { animation: none; }
 }
+
+/* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
+   js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
+   properties. The wood board itself (--mc-wood/--mc-p1/--mc-p2/stones/stores/buttons) stays
+   UNTOUCHED on purpose, same as Connect Four's board staying blue: that's the game's own art,
+   not chrome. This block themes everything AROUND the board — the shell backdrop, setup screen,
+   status pill, id chips, and the end-card/help overlays, which all hardcode --mc-ink-based inks
+   at various alphas instead of a shared variable, so those are overridden individually here. */
+:root.gh-dark .mancala { --mc-bg-a: #1b2333; --mc-bg-b: #131a28; --mc-card: #1b2333; }
+:root.gh-dark .mancala[data-turn='p1'] { --mc-bg-a: #17263a; --mc-bg-b: #101a28; }
+:root.gh-dark .mancala[data-turn='p2'] { --mc-bg-a: #2a1f2b; --mc-bg-b: #1c1620; }
+:root.gh-dark .mancala .mc-sub,
+:root.gh-dark .mancala .mc-fieldlabel,
+:root.gh-dark .mancala .mc-vslabel,
+:root.gh-dark .mancala .mc-resumenote,
+:root.gh-dark .mancala .mc-id-chip,
+:root.gh-dark .mancala .mc-segbtn { color: #9db0c9; }
+:root.gh-dark .mancala .mc-vscard { background: rgba(255, 255, 255, 0.06); border-color: rgba(233, 238, 246, 0.2); }
+:root.gh-dark .mancala .mc-seg { background: rgba(233, 238, 246, 0.1); }
+:root.gh-dark .mancala .mc-segbtn.is-active { background: #2b3547; color: #e9eef6; }
+:root.gh-dark .mancala .mc-id-chip { background: rgba(233, 238, 246, 0.12); }
+:root.gh-dark .mancala .mc-id-name { color: #e9eef6; }
+:root.gh-dark .mancala .mc-status { color: #e9eef6; }
+:root.gh-dark .mancala .mc-status:not(:empty) { background: rgba(27, 35, 51, 0.85); border-color: #4a5a75; }
+:root.gh-dark .mancala .mc-card { color: #e9eef6; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55); }
+:root.gh-dark .mancala .mc-card-score { color: #9db0c9; }
+:root.gh-dark .mancala .mc-card-score b { color: #e9eef6; }
+:root.gh-dark .mancala .mc-card-dash { color: #6b7d97; }
+:root.gh-dark .mancala .mc-help-lead { color: #e9eef6; }
+:root.gh-dark .mancala .mc-help-diagram-wrap { background: #232c40; }
+:root.gh-dark .mancala .mc-help-caption,
+:root.gh-dark .mancala .mc-help-example,
+:root.gh-dark .mancala .mc-help-bullets { color: #b7c3d6; }
+:root.gh-dark .mancala .mc-x { color: #9db0c9; }
+:root.gh-dark .mancala .lb-dshape-t3,
+:root.gh-dark .mancala .lb-dshape-t4 { fill: #e6e9f0; }
