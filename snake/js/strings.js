@@ -35,8 +35,7 @@ export const STRINGS = {
     // Help screen (how-to-play pattern: only the non-obvious bits — everyone knows Snake)
     help_goal: 'Eat the food, grow as long as you can.',
     help_controls: 'Steer with a swipe anywhere on the board, the on-screen arrows, or the arrow keys.',
-    help_walls: 'The walls are solid: hitting a wall, or your own body, ends the run.',
-    help_example: 'Swipe down = the snake turns down',
+    help_walls: "Hitting your own body ends the run. Walls do too, unless you turned them off.",
     // aria
     aria_board: 'Snake board',
     aria_close: 'Close',
@@ -85,8 +84,7 @@ export const STRINGS = {
     close: 'Cerrar',
     help_goal: 'Come la comida y crece todo lo que puedas.',
     help_controls: 'Gira deslizando el dedo por el tablero, con las flechas en pantalla, o con las flechas del teclado.',
-    help_walls: 'Las paredes son sólidas: chocar con una pared, o con tu propio cuerpo, termina la partida.',
-    help_example: 'Desliza hacia abajo = la serpiente gira hacia abajo',
+    help_walls: 'Chocar con tu propio cuerpo termina la partida. Las paredes también, a menos que las hayas desactivado.',
     aria_board: 'Tablero de Snake',
     aria_close: 'Cerrar',
     aria_help: 'Cómo se juega',

@@ -125,6 +125,10 @@ save without it just keeps classic behavior). Language is NOT stored here — it
 - Game-over modal has the repo-standard X close (dismiss without a forced rematch).
 - `openHelp()` (the how-to-play pattern, see tic-tac-toe/CLAUDE.md) builds a `.sn-help-overlay`
   appended to `document.body` (so it survives screen re-renders); `destroy()` removes any open one.
+  Trimmed 2026-07-24 (HANDOFF-FB2-HOWTO2 item 5): the redundant "swipe down = turns down" example
+  line is gone (the diagram's own turn arrow already shows it), and the walls line now reads
+  `help_walls` — one sentence true in both wall modes ("Hitting your own body ends the run. Walls
+  do too, unless you turned them off.") instead of stating walls are always solid.
 
 ## Tests
 

@@ -133,16 +133,13 @@ function saveDifficulty(v) {
 // Skill tiers (build guide section 5) map 1:1 onto Ball Run's three difficulties.
 const SKILL_TO_DIFFICULTY = { 1: 'easy', 2: 'medium', 3: 'hard' };
 
-// Single static how-to-play diagram (2026-07-23 rewrite: the old 4-slide pager showed
-// abstract shapes that didn't depict their captions, and its "first page" button was
-// actually skip-to-first, so tapping it looked like "previous" but always restarted the
-// deck). One inline SVG instead, drawn with the same track colors render.js actually uses
-// (COLOR_TRACK_TILE fill, COLOR_TRACK_GROUT edges, COLOR_CHEVRON gap markers, COLOR_BALL)
-// so the sheet matches what the player sees in-game: the ball steering on a dark track,
-// with a visible gap in the right edge showing where falling off ends the run, and a
-// touch-point + double-headed-arrow glyph for the drag-to-steer gesture.
-function helpDiagram() {
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_diagram_aria')}">
+// Four-slide how-to-play pager (2026-07-24 restore, HANDOFF-FB2-HOWTO2 item 2: Matt liked the
+// pager, he just wanted the broken "|<-" first-page button fixed into a real previous, and an
+// obstacles slide added since obstacles are the main thing being dodged). Every still is drawn
+// with the same track colors render.js actually uses (COLOR_TRACK_TILE fill, COLOR_OBSTACLE /
+// COLOR_OBSTACLE_EDGE, COLOR_CHEVRON) so each sheet matches what the player sees in-game.
+function stillSteer() {
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_1')}">
     <rect width="200" height="200" fill="#000"/>
     <path d="M14 196 L100 40 L186 196 Z" fill="#2b2f6b"/>
     <path d="M14 196 L100 40" stroke="#8f9aef" stroke-width="3" fill="none"/>
@@ -160,6 +157,61 @@ function helpDiagram() {
     </g>
   </svg>`;
 }
+function stillObstacles() {
+  // Two obstacle cubes (COLOR_OBSTACLE fill, COLOR_OBSTACLE_EDGE stroke) with the ball
+  // lined up in the gap between them, the way render.js's cube meshes read from the front.
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_2')}">
+    <rect width="200" height="200" fill="#000"/>
+    <path d="M10 196 L100 40 L190 196 Z" fill="#2b2f6b"/>
+    <path d="M50 158 L150 158" stroke="#8f9aef" stroke-width="1.2" opacity="0.6"/>
+    <path d="M67 120 L133 120" stroke="#8f9aef" stroke-width="1" opacity="0.6"/>
+    <rect x="52" y="100" width="26" height="26" rx="2" fill="#9b1fd6" stroke="#ff5fe0" stroke-width="2"/>
+    <rect x="122" y="100" width="26" height="26" rx="2" fill="#9b1fd6" stroke="#ff5fe0" stroke-width="2"/>
+    <circle cx="100" cy="152" r="19" fill="#e91ec4"/>
+    <ellipse cx="93" cy="145" rx="6" ry="4" fill="#ff9fe6" opacity="0.7"/>
+  </svg>`;
+}
+function stillEdge() {
+  // Track skewed hard right with the left edge simply absent past the ball, plus a dashed
+  // drop-off line, so "falling off ends the run" reads from the picture alone.
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_3')}">
+    <rect width="200" height="200" fill="#000"/>
+    <path d="M120 196 L150 40 L190 40 L190 196 Z" fill="#2b2f6b"/>
+    <path d="M150 40 L190 40" stroke="#8f9aef" stroke-width="3" fill="none"/>
+    <path d="M190 40 L190 196" stroke="#8f9aef" stroke-width="3" fill="none"/>
+    <path d="M120 196 L150 40" stroke="#39f4ff" stroke-width="3" stroke-dasharray="4 6" fill="none"/>
+    <path d="M160 150 L184 150" stroke="#8f9aef" stroke-width="1" opacity="0.6"/>
+    <circle cx="108" cy="168" r="19" fill="#e91ec4"/>
+    <ellipse cx="101" cy="161" rx="6" ry="4" fill="#ff9fe6" opacity="0.7"/>
+    <path d="M76 196 L100 178" stroke="#39f4ff" stroke-width="2" stroke-dasharray="2 4" opacity="0.6"/>
+    <path d="M50 210 L76 196" stroke="#39f4ff" stroke-width="2" stroke-dasharray="2 4" opacity="0.35"/>
+  </svg>`;
+}
+function stillSpeedpoint() {
+  // The in-game speedpoint tunnel (render.js's isTunnel segment): cyan side rails, a
+  // brighter floor, plus motion streaks trailing the ball for the acceleration cue.
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_4')}">
+    <rect width="200" height="200" fill="#2b0a3d"/>
+    <path d="M0 0 L100 46 L200 0 Z" fill="#9b1fd6" opacity="0.5"/>
+    <path d="M0 200 L100 148 L200 200 Z" fill="#3a2f7b"/>
+    <path d="M18 178 L100 116 L182 178" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
+    <path d="M42 152 L100 116 L158 152" fill="none" stroke="#39f4ff" stroke-width="9" stroke-linecap="round"/>
+    <g stroke="#39f4ff" stroke-width="3" stroke-linecap="round" opacity="0.7">
+      <line x1="60" y1="196" x2="80" y2="176"/>
+      <line x1="100" y1="200" x2="100" y2="178"/>
+      <line x1="140" y1="196" x2="120" y2="176"/>
+    </g>
+    <circle cx="100" cy="150" r="16" fill="#e91ec4"/>
+    <ellipse cx="93" cy="143" rx="5" ry="3.5" fill="#ff9fe6" opacity="0.7"/>
+  </svg>`;
+}
+
+const HELP_PAGES = [
+  { still: stillSteer, textKey: 'help_1' },
+  { still: stillObstacles, textKey: 'help_2' },
+  { still: stillEdge, textKey: 'help_3' },
+  { still: stillSpeedpoint, textKey: 'help_4' },
+];
 
 class BallRunUI {
   constructor(container) {
@@ -182,6 +234,7 @@ class BallRunUI {
     this.input = null;
     this.rafId = 0;
     this.running = false;
+    this.helpPage = 0;
     this.helpReturnScreen = 'setup';
     this._lastTime = 0;
     this._acc = 0;
@@ -262,14 +315,16 @@ class BallRunUI {
           <div class="br-help-panel">
             <button type="button" class="br-help-close" data-action="close-help" aria-label="${t('close')}">&times;</button>
             <h2 class="br-help-title">${t('howto_title')}</h2>
-            <p class="br-help-lead">${t('help_goal')}</p>
             <div class="br-help-card">
               <div class="br-help-still" data-role="help-still"></div>
+              <p class="br-help-text" data-role="help-text"></p>
             </div>
-            <p class="br-help-caption">${t('help_caption')}</p>
-            <ul class="br-help-bullets">
-              <li>${t('help_bullet1')}</li>
-            </ul>
+            <div class="br-help-dots" data-role="help-dots"></div>
+            <div class="br-help-nav">
+              <button type="button" class="br-btn br-btn-nav" data-action="help-prev" aria-label="${t('prev_page_aria')}">&larr;</button>
+              <button type="button" class="br-btn br-btn-primary" data-action="help-ok">${t('ok')}</button>
+              <button type="button" class="br-btn br-btn-nav" data-action="help-next" aria-label="${t('next_page_aria')}">&rarr;</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -301,6 +356,10 @@ class BallRunUI {
       goHub: q('[data-role="go-hub"]'),
       help: q('[data-role="help"]'),
       helpStill: q('[data-role="help-still"]'),
+      helpText: q('[data-role="help-text"]'),
+      helpDots: q('[data-role="help-dots"]'),
+      helpPrev: q('[data-action="help-prev"]'),
+      helpNextBtn: q('[data-action="help-next"]'),
     };
 
     this.syncBestUi();
@@ -332,6 +391,9 @@ class BallRunUI {
       const action = e.target.closest('[data-action]');
       if (!action) return;
       if (action.dataset.action === 'close-help') this.closeHelp();
+      else if (action.dataset.action === 'help-ok') this.closeHelp();
+      else if (action.dataset.action === 'help-prev') this.helpGo(this.helpPage - 1);
+      else if (action.dataset.action === 'help-next') this.helpGo(this.helpPage + 1);
     });
 
     this.showSetup();
@@ -514,18 +576,34 @@ class BallRunUI {
     this.el.gameover.hidden = false;
   }
 
-  // --- Help sheet (one static diagram, no pagination) --------------------
+  // --- Help carousel (4 slides, restored 2026-07-24 with a real previous button) ---------
 
   openHelp(fromScreen) {
     this.helpReturnScreen = fromScreen;
+    this.helpPage = 0;
     if (this.running) { this.stopLoop(); this._pausedForHelp = true; }
-    this.el.helpStill.innerHTML = helpDiagram();
+    this.renderHelpPage();
     this.el.help.hidden = false;
   }
 
   closeHelp() {
     this.el.help.hidden = true;
     if (this._pausedForHelp) { this._pausedForHelp = false; if (this.sim && !this.sim.isOver()) this.startLoop(); }
+  }
+
+  helpGo(i) {
+    this.helpPage = Math.max(0, Math.min(HELP_PAGES.length - 1, i));
+    this.renderHelpPage();
+  }
+
+  renderHelpPage() {
+    const page = HELP_PAGES[this.helpPage];
+    this.el.helpStill.innerHTML = page.still();
+    this.el.helpText.textContent = t(page.textKey);
+    this.el.helpDots.innerHTML = HELP_PAGES.map((_, i) =>
+      `<span class="br-dot${i === this.helpPage ? ' is-active' : ''}"></span>`).join('');
+    this.el.helpPrev.disabled = this.helpPage === 0;
+    this.el.helpNextBtn.disabled = this.helpPage === HELP_PAGES.length - 1;
   }
 
   // --- Teardown -----------------------------------------------------------

@@ -994,12 +994,9 @@ class BoggleUI {
         <div class="bg-diagram-wrap">${this._pathDiagram()}</div>
         <div class="bg-help-lines">
           <p class="bg-help-caption">${esc(t('help_caption'))}</p>
-          <p class="bg-help-example">${esc(t('help_example'))}</p>
           <ul class="bg-help-list">
             <li>${esc(t('help_1'))}</li>
             <li>${esc(t('help_2'))}</li>
-            <li>${esc(t('help_3'))}</li>
-            <li>${esc(t('help_4'))}</li>
           </ul>
         </div>
       </div>`;

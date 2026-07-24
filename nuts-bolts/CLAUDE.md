@@ -39,6 +39,12 @@ just had no entry point before a level was chosen. The help-overlay markup is no
 game), so both buttons open the identical content; `this.helpOverlay` is re-queried on each
 render rather than assumed to exist.
 
+**7 bullets → 4 (2026-07-24, HANDOFF-FB2-HOWTO2 item 6):** the old pick-up and drop-off bullets
+merged into one (`help_li_1`), the standalone "undo is free" bullet was deleted (undo is a
+visible button, undiscoverable-ness was never the problem), and the harder-levels-repeat-colors
+trivia bullet was deleted. `help_li_1`-`help_li_4` in `strings.js` now cover: move mechanic
+(merged), bolt completion/lock, hidden "?" nuts, and press-and-hold color names.
+
 **Auto-resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)**: mount now checks
 `this.savedBoard` in the `NutsBoltsUI` constructor and, if an in-progress board exists, calls
 `startTier(this.savedBoard.difficulty)` directly instead of rendering the menu - skipping straight

@@ -214,7 +214,6 @@ class SnakeUI {
         </svg>
         <p class="sn-help-line">${t('help_controls')}</p>
         <p class="sn-help-line">${t('help_walls')}</p>
-        <p class="sn-help-ex">${t('help_example')}</p>
       </div>`;
     host.addEventListener('click', (e) => { if (e.target.closest('[data-role="close"]')) host.remove(); });
     document.body.appendChild(host);

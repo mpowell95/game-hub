@@ -284,13 +284,6 @@
   font-weight: 900;
 }
 
-.br-help-lead {
-  margin: -6px 0 0;
-  font-weight: 800;
-  text-align: center;
-  line-height: 1.35;
-}
-
 .br-help-card {
   background: #fff;
   border-radius: 16px;
@@ -298,6 +291,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
 .br-help-still {
@@ -308,22 +302,25 @@
 }
 .br-help-still svg { width: 100%; height: 100%; display: block; }
 
-.br-help-caption {
-  margin: 0;
-  font-weight: 700;
+.br-help-text {
+  margin: 0 4px 4px;
+  font-weight: 800;
   text-align: center;
   line-height: 1.35;
-  color: rgba(255, 255, 255, 0.85);
+  color: #1a1a2e;
 }
 
-.br-help-bullets {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  text-align: center;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+.br-help-dots { display: flex; gap: 8px; }
+.br-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.35); }
+.br-dot.is-active { background: var(--br-orange); }
+
+.br-help-nav {
+  display: flex;
+  gap: 10px;
+  width: 100%;
 }
+.br-help-nav .br-btn-primary { flex: 1; }
+.br-help-nav .br-btn-nav:disabled { opacity: 0.35; }
 
 @media (prefers-reduced-motion: reduce) {
   .br-root * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }

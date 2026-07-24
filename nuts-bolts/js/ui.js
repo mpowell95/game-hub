@@ -301,9 +301,6 @@ class NutsBoltsUI {
               <li>${t('help_li_2')}</li>
               <li>${t('help_li_3')}</li>
               <li>${t('help_li_4')}</li>
-              <li>${t('help_li_5')}</li>
-              <li>${t('help_li_6')}</li>
-              <li>${t('help_li_7')}</li>
             </ul>
           </div>
           <div class="nb-panel-actions">

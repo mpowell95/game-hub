@@ -236,7 +236,6 @@
 .bg-root .bg-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
 .bg-root .bg-help-lines p { margin: 0; }
 .bg-root .bg-help-caption { font-size: 12.5px; font-weight: 700; color: var(--bg-muted); }
-.bg-root .bg-help-example { font-size: 12px; font-weight: 700; color: var(--bg-ink); white-space: nowrap; }
 .bg-root .bg-help-list { list-style: disc; text-align: left; margin: 4px 0 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 6px; }
 .bg-root .bg-help-list li { font-size: 12px; font-weight: 600; color: #3a4a63; }
 

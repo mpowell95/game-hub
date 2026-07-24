@@ -104,7 +104,9 @@ trace to one root cause, fixed together:
   feedback names the dictionary language (`"{word}" no está en el diccionario (las palabras
   válidas son en inglés)` — this is the fix for a likely silent third symptom, a Spanish-minded
   player tracing Spanish words the ENABLE dictionary was always going to reject with no
-  explanation), and the how-to-play sheet's sixth bullet says the same thing.
+  explanation. (The how-to-play sheet's own English-dictionary bullet was deleted 2026-07-24,
+  HANDOFF-FB2-HOWTO2 item 4, per Matt: "get rid of that nonsense" — the invalid-word feedback
+  above is now the only place that surfaces it, and still does.)
 - **`.bg-root` carries `translate="no"`** (set in `mount()`) so no machine translator can ever
   rewrite the board again, hub-mounted or standalone. **Do not remove this** — it is the direct
   fix for what Ana hit, verified by re-reading the tile-rendering code (a tile can only ever show

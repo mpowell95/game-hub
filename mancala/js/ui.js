@@ -854,9 +854,29 @@ class MancalaUI {
 
   // --- how to play -----------------------------------------------------------
 
+  /** Mini board diagram (2026-07-24 overhaul, HANDOFF-FB2-HOWTO2 item 1: Matt's "must be
+   *  completely overhauled... same excess-prose issue"). One board, one counterclockwise
+   *  path: your pits (bottom, blue) into your mancala (right), across the opponent's pits
+   *  (top, vermilion) right to left, then a dashed hop that visibly skips the opponent's
+   *  mancala (left) and lands back on your first pit. */
+  _sowDiagram() {
+    return `<svg class="mc-help-diagram" viewBox="0 0 240 160" role="img" aria-label="${t('help_diagram_aria')}">
+      <rect x="8" y="30" width="26" height="100" rx="8" fill="var(--mc-p2)"/>
+      <rect x="206" y="30" width="26" height="100" rx="8" fill="var(--mc-p1)"/>
+      ${[52, 76, 100, 124, 148, 172].map((x) => `<circle cx="${x}" cy="45" r="10" fill="var(--mc-p2)"/>`).join('')}
+      ${[52, 76, 100, 124, 148, 172].map((x) => `<circle cx="${x}" cy="115" r="10" fill="var(--mc-p1)"/>`).join('')}
+      <path d="M100,115 L172,115 Q206,115 214,80 Q206,45 172,45 L52,45"
+        fill="none" stroke="#f2b705" stroke-width="3" stroke-linecap="round"/>
+      <path d="M52,45 Q20,80 52,115" fill="none" stroke="#f2b705" stroke-width="3"
+        stroke-dasharray="5 6" stroke-linecap="round"/>
+      ${[100, 124, 148, 172, 214, 172, 148, 124, 100, 76, 52].map((x, i) =>
+        `<circle cx="${x}" cy="${i === 4 ? 80 : i > 4 ? 45 : 115}" r="3.5" fill="#f2b705"/>`).join('')}
+      <circle cx="52" cy="115" r="3.5" fill="#f2b705" opacity="0.5"/>
+    </svg>`;
+  }
+
   openHelp() {
     this.closeOverlays();
-    const oppName = this.mode === 'friend' ? t('your_opponent') : esc(this.botName);
     const overlay = document.createElement('div');
     overlay.className = 'mc-overlay';
     overlay.dataset.role = 'help';
@@ -865,26 +885,14 @@ class MancalaUI {
       <div class="mc-card mc-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="mc-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <h3 class="mc-card-title">${t('howto')}</h3>
-        <section>
-          <h4>${t('help_board_h')}</h4>
-          <p>${t('help_board', { opp: oppName })}</p>
-        </section>
-        <section>
-          <h4>${t('help_turn_h')}</h4>
-          <p>${t('help_turn')}</p>
-        </section>
-        <section>
-          <h4>${t('help_extra_h')}</h4>
-          <p>${t('help_extra')}</p>
-        </section>
-        <section>
-          <h4>${t('help_capture_h')}</h4>
-          <p>${t('help_capture')}</p>
-        </section>
-        <section>
-          <h4>${t('help_end_h')}</h4>
-          <p>${t('help_end')}</p>
-        </section>
+        <p class="mc-help-lead">${t('help_lead')}</p>
+        <div class="mc-help-diagram-wrap">${this._sowDiagram()}</div>
+        <p class="mc-help-caption">${t('help_caption')}</p>
+        <p class="mc-help-example">${t('help_example')}</p>
+        <ul class="mc-help-bullets">
+          <li>${t('help_rule_capture')}</li>
+          <li>${t('help_rule_end')}</li>
+        </ul>
       </div>`;
     this.container.querySelector('.mancala').appendChild(overlay);
   }

@@ -478,37 +478,32 @@ class FillerUI {
   // diagram of the single non-obvious mechanic, a plain-word caption, an
   // "X = Y" example, then at most a couple one-sentence bullets.
 
-  /** Two isolated teal tiles touch a blue 2x2 territory (top and right edges);
-   *  arrows show them joining the territory on a blue pick. Shape-driven
-   *  (triangle/diamond glyphs), color is reinforcement only. */
+  /** BEFORE -> AFTER pair (2026-07-24 redo, HANDOFF-FB2-HOWTO2 item 3: Matt's "I don't get
+   *  the line running through the squares" - the old diagram's connector arrows read as a
+   *  mystery line). Left board: your territory (top-left, filled + glyph) with two teal
+   *  cells adjacent to it outlined but not yet owned; a fourth cell (bottom-right, not
+   *  adjacent) stays a different color and is unaffected either way. A fat arrow with a teal
+   *  dot (the picked color) points to the right board, where the two teal cells have joined
+   *  your territory (filled + glyph) and the unrelated cell is still untouched. */
   _floodDiagram() {
-    return `<svg class="fl-diagram" viewBox="0 0 224 224" role="img" aria-label="${t('help_diagram_aria')}">
+    const board = (ox, joined) => `
+      <rect x="${ox}" y="10" width="60" height="60" rx="7" class="fl-dg-blue"/>
+      <path d="M${ox + 30},26 ${ox + 44},50 ${ox + 16},50z" class="fl-dg-glyph"/>
+      <rect x="${ox + 66}" y="10" width="60" height="60" rx="7" class="${joined ? 'fl-dg-blue' : 'fl-dg-target'}"/>
+      ${joined ? `<path d="M${ox + 96},26 ${ox + 110},50 ${ox + 82},50z" class="fl-dg-glyph"/>` : ''}
+      <rect x="${ox}" y="76" width="60" height="60" rx="7" class="${joined ? 'fl-dg-blue' : 'fl-dg-target'}"/>
+      ${joined ? `<path d="M${ox + 30},92 ${ox + 44},116 ${ox + 16},116z" class="fl-dg-glyph"/>` : ''}
+      <rect x="${ox + 66}" y="76" width="60" height="60" rx="7" class="fl-dg-tile"/>`;
+    return `<svg class="fl-diagram" viewBox="0 0 332 146" role="img" aria-label="${t('help_diagram_aria')}">
       <defs>
-        <marker id="fl-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker id="fl-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--fl-accent)"/>
         </marker>
       </defs>
-      <g class="fl-dg-tile">
-        <rect x="11" y="11" width="46" height="46" rx="6"/><rect x="63" y="11" width="46" height="46" rx="6"/>
-        <rect x="115" y="11" width="46" height="46" rx="6"/><rect x="167" y="11" width="46" height="46" rx="6"/>
-        <rect x="115" y="63" width="46" height="46" rx="6"/><rect x="167" y="63" width="46" height="46" rx="6"/>
-        <rect x="167" y="115" width="46" height="46" rx="6"/>
-        <rect x="115" y="167" width="46" height="46" rx="6"/><rect x="167" y="167" width="46" height="46" rx="6"/>
-      </g>
-      <rect x="63" y="63" width="46" height="46" rx="6" class="fl-dg-teal"/>
-      <rect x="11" y="115" width="46" height="46" rx="6" class="fl-dg-blue"/>
-      <rect x="63" y="115" width="46" height="46" rx="6" class="fl-dg-blue"/>
-      <rect x="11" y="167" width="46" height="46" rx="6" class="fl-dg-blue"/>
-      <rect x="63" y="167" width="46" height="46" rx="6" class="fl-dg-blue"/>
-      <g class="fl-dg-glyph">
-        <path d="M86,74.5 106,101 66,101z"/>
-        <path d="M34,138 46,150 22,150z"/>
-        <path d="M86,138 98,150 74,150z"/>
-        <path d="M34,190 46,202 22,202z"/>
-        <path d="M86,190 98,202 74,202z"/>
-      </g>
-      <path d="M86,105 Q100,118 88,133" class="fl-dg-arrow" marker-end="url(#fl-dg-arrowhead)"/>
-      <path d="M65,138 Q40,150 42,163" class="fl-dg-arrow" marker-end="url(#fl-dg-arrowhead)"/>
+      ${board(10, false)}
+      ${board(196, true)}
+      <path d="M142,73 L184,73" class="fl-dg-arrow" marker-end="url(#fl-dg-arrowhead)"/>
+      <circle cx="163" cy="73" r="6" class="fl-dg-dot"/>
     </svg>`;
   }
 

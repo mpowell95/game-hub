@@ -585,8 +585,13 @@
   max-height: min(78vh, 620px);
   overflow-y: auto;
 }
-.mancala .mc-help h4 { margin: 14px 0 4px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
-.mancala .mc-help p { margin: 0; font-size: 14px; line-height: 1.5; color: #4a3d2c; }
+.mancala .mc-help-lead { margin: 4px 0 0; font-size: 15px; font-weight: 800; text-align: center; color: var(--mc-ink); }
+.mancala .mc-help-diagram-wrap { margin: 12px auto; max-width: 260px; background: #fff; border-radius: 14px; padding: 10px; }
+.mancala .mc-help-diagram { display: block; width: 100%; height: auto; }
+.mancala .mc-help-caption { margin: 0; font-size: 14px; line-height: 1.5; color: #4a3d2c; text-align: center; }
+.mancala .mc-help-example { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #4a3d2c; text-align: center; }
+.mancala .mc-help-bullets { margin: 14px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: #4a3d2c; }
+.mancala .mc-help-bullets li { margin: 0 0 6px; }
 .mancala .mc-x {
   position: absolute;
   top: 8px;

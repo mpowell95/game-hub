@@ -320,12 +320,14 @@
 }
 .fl-help-lead { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--fl-ink); white-space: nowrap; }
 .fl-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
-.fl-diagram { width: 168px; height: 168px; }
+.fl-diagram { width: 100%; max-width: 260px; height: auto; display: block; }
 .fl-dg-tile { fill: none; stroke: var(--fl-edge); stroke-width: 2; }
 .fl-dg-blue { fill: var(--fl-c1); }
 .fl-dg-teal { fill: var(--fl-c3); }
+.fl-dg-target { fill: none; stroke: var(--fl-c3); stroke-width: 3; stroke-dasharray: 5 4; }
 .fl-dg-glyph { fill: rgba(255, 255, 255, 0.55); }
 .fl-dg-arrow { fill: none; stroke: var(--fl-accent); stroke-width: 3; stroke-linecap: round; }
+.fl-dg-dot { fill: var(--fl-c3); }
 .fl-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
 .fl-help-lines p { margin: 0; }
 .fl-help-caption { font-size: 13px; font-weight: 700; color: var(--fl-muted); }

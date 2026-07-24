@@ -13,6 +13,15 @@ Flood-fill duel vs AI (color-pick your corner, grow to capture the majority). Pu
 
 i18n: `filler/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Color ids (0-5) and difficulty keys (`beginner`/`intermediate`/`pro`) stay canonical; only their display labels translate.
 
+**How-to-play redo (2026-07-24, HANDOFF-FB2-HOWTO2 item 3):** the old diagram (arrows threading
+through a 3x3 tile grid) read as a mystery line (Matt: "I don't get the line running through the
+squares"). `_floodDiagram()` in `ui.js` is now a BEFORE → AFTER pair of small 2x2 boards with a
+fat arrow between them — left board shows your territory plus two outlined-not-yet-owned cells,
+right board shows them joined, a dot on the arrow marks the picked color. The win-condition bullet
+was also corrected against `game.js`: the engine ends on board-full-or-dry-move-limit and awards
+whoever has strictly more territory (`s.counts[P1] > s.counts[P2]`), never on crossing half early
+— the old bullet's "first to own more than half wins" was wrong.
+
 ### Settings: `gamehub.filler.v1` additive field, ski-slope shapes, Restart (2026-07-23, batch 8)
 
 `gamehub.filler.v1` gained a second field, `nextStarter` (`P1`/`P2`, additive - `level` is unchanged

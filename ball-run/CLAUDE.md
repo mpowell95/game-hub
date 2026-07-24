@@ -33,3 +33,13 @@ game uses (`.br-segmented`/`.br-seg` in `ball-run.css`, same shape as Connect Fo
 colored ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) + label, built by
 `diffSegsHTML()` in `ui.js`. `FACE_SVGS` and the slider markup/CSS are deleted entirely. Setup
 keeps: title, the per-difficulty best line (`.br-best`), Play, and the `?` help button.
+
+**How-to-play pager restored (2026-07-24, HANDOFF-FB2-HOWTO2 item 2):** the 2026-07-23 single-
+static-diagram sheet is gone; Matt wanted the pager back ("I liked the slide show better. I
+didn't want it removed. I just wanted it to be fixed"), plus a missing obstacles slide since
+obstacles are the main thing being dodged. `HELP_PAGES` in `ui.js` is 4 slides (steer / obstacles
+/ edge / speedpoint), each with its own inline SVG drawn in the same colors `render.js` actually
+uses. The left button is now a real **previous** (`help-prev`, disabled on slide 1) — the pre-
+af8c212 pager's `|←` was skip-to-first with no prev at all, which read as "brings you back to the
+first page every time" (Matt's bug report). Right button is **next** (disabled on the last
+slide); **OK** always closes. `SEEN_HELP_KEY` first-open-auto-opens-help behavior is unchanged.
