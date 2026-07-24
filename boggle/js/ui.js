@@ -54,7 +54,7 @@ const SAVE_KEY = 'gamehub.boggle.save.v1';
 const TIMERS = [1, 1.5, 2];
 const TIMER_LABEL_KEY = { 1: 'timer_1', 1.5: 'timer_1_5', 2: 'timer_2' };
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
-// DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
+// DIFF_META normalizes these to Easy/Medium/Hard) -- do not invent
 // new tier names here.
 const DIFFICULTIES = ['beginner', 'intermediate', 'pro'];
 const DIFF_LABEL_KEY = { beginner: 'diff_beginner', intermediate: 'diff_intermediate', pro: 'diff_pro' };

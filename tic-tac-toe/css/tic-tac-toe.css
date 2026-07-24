@@ -165,7 +165,7 @@
    prefixed before each difficulty pill's label. Markup already carries
    .lb-dshape/.lb-dshape-x2 -- only per-game sizing lives here, since
    leaderboard-ui.js's own CSS injection only runs while that overlay is open. */
-.ttt-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.ttt-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .ttt-root .lb-dshape-x2 { width: 1.7em; }
 
 /* --- setup: accordion summary card (Escoba's pattern) -------------------- */

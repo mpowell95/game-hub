@@ -504,3 +504,10 @@ body {
 :root.gh-dark .lb-seg.is-active { background: var(--hub-accent); border-color: var(--hub-accent); }
 :root.gh-dark .lb-pill,
 :root.gh-dark .lb-tile2.is-sel { background: var(--hub-surface); }
+/* Tiers 3/4's near-black ski-slope shapes (#1c2430) vanish on a dark surface. diffShapeSVG's
+   svg carries its own inline fill attribute (the TIER_COLOR); a CSS rule targeting that same
+   svg element still wins over its own presentation attribute, which is what this override
+   relies on (2026-07-24, batch A). Every game's own Phase 2 dark-mode pass (HANDOFF-FB-THEME.md)
+   must include the same override scoped to its own root class, for setup screens rendered
+   outside the hub shell. */
+:root.gh-dark .lb-dshape-t3, :root.gh-dark .lb-dshape-t4 { fill: #e6e9f0; }

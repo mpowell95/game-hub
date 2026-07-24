@@ -260,9 +260,12 @@ class NutsBoltsUI {
         <div class="nb-seg" role="radiogroup" aria-labelledby="nb-difflabel">${segs}</div>
       </div>
       <button type="button" class="nb-btn nb-btn-primary nb-start-btn" data-action="start">${t('start')}</button>
+      <button type="button" class="nb-btn nb-btn-ghost nb-howto-btn" data-action="menu-help">${t('howto')}</button>
+      ${this.helpOverlayHTML()}
     `;
     this.container.appendChild(root);
     this.root = root;
+    this.helpOverlay = root.querySelector('[data-role="help-overlay"]');
     root.addEventListener('click', (e) => {
       const seg = e.target.closest('[data-tier]');
       if (seg) {
@@ -274,9 +277,41 @@ class NutsBoltsUI {
         });
         return;
       }
-      const actionEl = e.target.closest('[data-action="start"]');
-      if (actionEl) this.startTier(this.selectedTier);
+      const startEl = e.target.closest('[data-action="start"]');
+      if (startEl) { this.startTier(this.selectedTier); return; }
+      const helpEl = e.target.closest('[data-action="menu-help"]');
+      if (helpEl) { this.openHelp(); return; }
+      const closeHelpEl = e.target.closest('[data-action="close-help"]');
+      if (closeHelpEl) this.helpOverlay.hidden = true;
     });
+  }
+
+  /** Shared markup for the how-to-play overlay: rendered once inside whichever screen's root is
+   *  currently mounted (the game screen's bottom bar button, and the difficulty menu's new
+   *  ghost button, root CLAUDE.md item 4) so both open the SAME content. */
+  helpOverlayHTML() {
+    return `
+      <div class="nb-overlay" data-role="help-overlay" hidden>
+        <div class="nb-panel">
+          <button type="button" class="nb-panel-close" data-action="close-help" aria-label="${t('close_aria')}">&times;</button>
+          <h2>${t('howto')}</h2>
+          <div class="nb-help-body">
+            <ul>
+              <li>${t('help_li_1')}</li>
+              <li>${t('help_li_2')}</li>
+              <li>${t('help_li_3')}</li>
+              <li>${t('help_li_4')}</li>
+              <li>${t('help_li_5')}</li>
+              <li>${t('help_li_6')}</li>
+              <li>${t('help_li_7')}</li>
+            </ul>
+          </div>
+          <div class="nb-panel-actions">
+            <button type="button" class="nb-btn nb-btn-primary" data-action="close-help">${t('ok')}</button>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   startTier(tier) {
@@ -359,26 +394,7 @@ class NutsBoltsUI {
           </div>
         </div>
       </div>
-      <div class="nb-overlay" data-role="help-overlay" hidden>
-        <div class="nb-panel">
-          <button type="button" class="nb-panel-close" data-action="close-help" aria-label="${t('close_aria')}">&times;</button>
-          <h2>${t('howto')}</h2>
-          <div class="nb-help-body">
-            <ul>
-              <li>${t('help_li_1')}</li>
-              <li>${t('help_li_2')}</li>
-              <li>${t('help_li_3')}</li>
-              <li>${t('help_li_4')}</li>
-              <li>${t('help_li_5')}</li>
-              <li>${t('help_li_6')}</li>
-              <li>${t('help_li_7')}</li>
-            </ul>
-          </div>
-          <div class="nb-panel-actions">
-            <button type="button" class="nb-btn nb-btn-primary" data-action="close-help">${t('ok')}</button>
-          </div>
-        </div>
-      </div>
+      ${this.helpOverlayHTML()}
     `;
     this.container.appendChild(root);
     this.root = root;

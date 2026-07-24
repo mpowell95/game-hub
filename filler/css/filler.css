@@ -118,7 +118,7 @@
 .fl-segbtn.is-active { background: var(--fl-accent); color: #fff; font-weight: 800; box-shadow: 0 3px 10px rgba(23, 105, 212, 0.35); }
 
 /* Ski-slope difficulty shapes (js/difficulty-tiers.js's diffShapeSVG) before each label. */
-.filler .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.filler .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .filler .lb-dshape-x2 { width: 1.7em; }
 
 .fl-primary {

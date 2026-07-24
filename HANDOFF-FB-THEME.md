@@ -54,6 +54,17 @@ games: theme the chrome, leave the canvas art alone) → Connect Four (board sta
 in both themes; theme the page around it). Monopoly Deal and Parchís (launch-out, own pages)
 are OUT OF SCOPE — separate tasks like their i18n.
 
+**Ski-slope shapes (2026-07-24, batch A):** every setup screen's difficulty shapes
+(`diffShapeSVG`, `js/difficulty-tiers.js`) now carry an inline `fill` on the svg element itself
+(the TIER_COLOR per tier) — tiers 3/4's near-black fill vanishes on a dark surface. Each game's
+Phase 2 pass must add the same override, scoped to its own root class (css/hub.css's version is
+the reference): `:root.gh-dark .xx-root .lb-dshape-t3, :root.gh-dark .xx-root .lb-dshape-t4 {
+fill: #e6e9f0; }` (a CSS rule targeting the svg element wins over its own presentation attribute,
+so no need to reach into its circle/rect children). Also remove any pre-existing
+`.xx-root .lb-dshape { fill: currentColor; }` base rule in that game's CSS if one exists — it
+would otherwise win over the shape's own inline color and show plain text-color shapes instead
+of the tier color (found and fixed in every pre-Phase-2 game's CSS during batch A).
+
 ## Rules
 
 - Contrast: keep WCAG-ish legibility (muted text ≥ ~4.5:1 on its surface) — check the worst

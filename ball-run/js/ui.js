@@ -133,12 +133,6 @@ function saveDifficulty(v) {
 // Skill tiers (build guide section 5) map 1:1 onto Ball Run's three difficulties.
 const SKILL_TO_DIFFICULTY = { 1: 'easy', 2: 'medium', 3: 'hard' };
 
-const FACE_SVGS = {
-  easy: '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="currentColor"/><circle cx="13" cy="17" r="2.6" fill="#1a1a1a"/><circle cx="27" cy="17" r="2.6" fill="#1a1a1a"/><path d="M12 25c2.5 3 13.5 3 16 0" stroke="#1a1a1a" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>',
-  medium: '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="currentColor"/><path d="M9.5 16.5l7 1.4M30.5 16.5l-7 1.4" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/><path d="M8 22h9M23 22h9" stroke="#1a1a1a" stroke-width="4.4" stroke-linecap="round"/><path d="M13 29c3-2 11-2 14 0" stroke="#1a1a1a" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>',
-  hard: '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="currentColor"/><path d="M8 14l9 4M32 14l-9 4" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round"/><path d="M9 22h8.5M22.5 22H31" stroke="#1a1a1a" stroke-width="4.6" stroke-linecap="round"/><path d="M13 30c3-3.5 11-3.5 14 0" stroke="#1a1a1a" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>',
-};
-
 // Single static how-to-play diagram (2026-07-23 rewrite: the old 4-slide pager showed
 // abstract shapes that didn't depict their captions, and its "first page" button was
 // actually skip-to-first, so tapping it looked like "previous" but always restarted the
@@ -209,6 +203,18 @@ class BallRunUI {
     window.addEventListener('orientationchange', this._onResize);
   }
 
+  /** Standard 3-option segmented control (colored shape + label), same shape as every other
+   *  game's difficulty picker (2026-07-24 redesign — see root CLAUDE.md, "Ball Run setup
+   *  redesign": no faces, no slider, no blurb). */
+  diffSegsHTML() {
+    return DIFF_ORDER.map((d) => `
+      <button type="button" class="br-seg${d === this.difficulty ? ' is-selected' : ''}"
+        data-diff="${d}" role="radio" aria-checked="${d === this.difficulty}">
+        ${diffShapeSVG(tierOf(d))}<span>${t(DIFF_LABEL_KEY[d])}</span>
+      </button>
+    `).join('');
+  }
+
   // --- DOM construction -------------------------------------------------
 
   mount() {
@@ -216,13 +222,8 @@ class BallRunUI {
       <div class="br-root">
         <section class="br-setup" data-role="setup">
           <h1 class="br-title">${t('title')}</h1>
-          <p class="br-blurb">${t('blurb')}</p>
           <div class="br-best" data-role="setup-best"></div>
-          <div class="br-diff-panel">
-            <div class="br-diff-face" data-role="diff-face"></div>
-            <div class="br-diff-label" data-role="diff-label"></div>
-            <input type="range" class="br-diff-slider" data-role="diff-slider" min="0" max="2" step="1" aria-label="${t('diff_aria')}">
-          </div>
+          <div class="br-segmented" data-role="diff-segmented" role="radiogroup" aria-label="${t('diff_aria')}">${this.diffSegsHTML()}</div>
           <div class="br-setup-actions">
             <button type="button" class="br-btn br-btn-primary" data-role="play">${t('play')}</button>
             <button type="button" class="br-btn br-btn-help" data-role="help-open" aria-label="${t('howto_aria')}">?</button>
@@ -279,9 +280,7 @@ class BallRunUI {
       root,
       setup: q('[data-role="setup"]'),
       setupBest: q('[data-role="setup-best"]'),
-      diffFace: q('[data-role="diff-face"]'),
-      diffLabel: q('[data-role="diff-label"]'),
-      diffSlider: q('[data-role="diff-slider"]'),
+      diffSegmented: q('[data-role="diff-segmented"]'),
       play: q('[data-role="play"]'),
       helpOpen: q('[data-role="help-open"]'),
       game: q('[data-role="game"]'),
@@ -304,14 +303,18 @@ class BallRunUI {
       helpStill: q('[data-role="help-still"]'),
     };
 
-    this.el.diffSlider.value = String(DIFF_ORDER.indexOf(this.difficulty));
-    this.syncDifficultyUi();
     this.syncBestUi();
 
-    this.el.diffSlider.addEventListener('input', () => {
-      this.difficulty = DIFF_ORDER[+this.el.diffSlider.value];
+    this.el.diffSegmented.addEventListener('click', (e) => {
+      const seg = e.target.closest('[data-diff]');
+      if (!seg) return;
+      this.difficulty = seg.dataset.diff;
       saveDifficulty(this.difficulty);
-      this.syncDifficultyUi();
+      this.el.diffSegmented.querySelectorAll('.br-seg').forEach((b) => {
+        const on = b.dataset.diff === this.difficulty;
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-checked', String(on));
+      });
       this.syncBestUi();
     });
     this.el.play.addEventListener('click', () => this.startRun());
@@ -344,13 +347,6 @@ class BallRunUI {
   }
   markSeenHelp() {
     try { localStorage.setItem(SEEN_HELP_KEY, '1'); } catch { /* ignore */ }
-  }
-
-  syncDifficultyUi() {
-    this.el.diffFace.innerHTML = FACE_SVGS[this.difficulty];
-    this.el.diffLabel.innerHTML = diffShapeSVG(tierOf(this.difficulty)) + t(DIFF_LABEL_KEY[this.difficulty]);
-    this.el.diffLabel.dataset.diff = this.difficulty;
-    this.el.diffFace.dataset.diff = this.difficulty;
   }
 
   syncBestUi() {

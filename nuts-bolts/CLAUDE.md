@@ -24,9 +24,20 @@ segment only updates `this.selectedTier` (defaults to the last-played tier) and 
 used before — that function, and the kept-aside-board resume logic inside it
 (`resumingInMemory`/`resumingFromDisk`), is untouched by this redesign. No description text
 anymore (the `tier_desc_*` string keys were removed as part of this). Stored difficulty ids
-(`easy`/`medium`/`hard`/`extraHard`) are unchanged; only their DISPLAY labels moved to the shared
-Beginner/Intermediate/Pro/Expert vocabulary (`tier_easy`/`tier_medium`/`tier_hard`/
-`tier_extra_hard` keys in `strings.js`, same ids, new text).
+(`easy`/`medium`/`hard`/`extraHard`) are unchanged; only their DISPLAY labels moved onto the
+shared vocabulary (`tier_easy`/`tier_medium`/`tier_hard`/`tier_extra_hard` keys in `strings.js`,
+same ids, new text) — **Easy/Medium/Hard/Expert as of 2026-07-24** (Matt's reversal of batch 8's
+Beginner/Intermediate/Pro/Expert).
+
+**Overflow fix + How-to button (2026-07-24, batch A):** `.nb-segbtn-label` bled "Intermediate"
+into neighbors at narrow widths inside the 4-column flex row; under `max-width:400px` it now
+stacks the shape ABOVE the label (`flex-direction:column`) at a smaller font instead of forcing
+one line. A ghost **"How to play"** button (`.nb-howto-btn`, `data-action="menu-help"`) now sits
+under Start on the difficulty screen — the sheet already existed (game screen's bottom bar), it
+just had no entry point before a level was chosen. The help-overlay markup is now built once by
+`helpOverlayHTML()` and rendered into whichever screen's root is currently mounted (menu or
+game), so both buttons open the identical content; `this.helpOverlay` is re-queried on each
+render rather than assumed to exist.
 
 **Auto-resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)**: mount now checks
 `this.savedBoard` in the `NutsBoltsUI` constructor and, if an in-progress board exists, calls

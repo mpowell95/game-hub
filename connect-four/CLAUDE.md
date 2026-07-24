@@ -44,11 +44,15 @@ always wins over that default. Under Alternate, `nextStarter` flips on every `st
 the existing status line (`updateStatus()`, "Your move" / "{opp}'s move" / "{opp} is thinking…")
 already communicates who opened, right after `startGame()` runs.
 
-Difficulty labels standardized to Beginner/Intermediate/Pro/Expert (was Easy/Medium/Hard/Expert);
-stored `Difficulty` enum values (`easy`/`medium`/`hard`/`expert`) are unchanged. The difficulty and
-who-first segmented buttons render a ski-slope shape (`diffShapeSVG`/`tierOf`, imported from
-`js/difficulty-tiers.js`) before the difficulty label, ~1em, via `.cf-root .lb-dshape` sizing rules
-in `connect-four.css`.
+Difficulty labels: Easy/Medium/Hard/Expert (2026-07-24, batch A of the second feedback arc —
+Matt's reversal of batch 8's Beginner/Intermediate/Pro/Expert rename); stored `Difficulty` enum
+values (`easy`/`medium`/`hard`/`expert`) are unchanged, label-only. The difficulty and who-first
+segmented buttons render a COLORED ski-slope shape (`diffShapeSVG`/`tierOf`, imported from
+`js/difficulty-tiers.js` — the shape now carries an inline `fill` per tier, green/blue/black) before
+the difficulty label, ~1em, via `.cf-root .lb-dshape` sizing rules in `connect-four.css`.
+**Overflow fix (2026-07-24):** `.cf-seg` now has `min-width:0`/`white-space:nowrap`/an ellipsis
+fallback, plus a `max-width:400px` font step-down to 0.8rem, so Expert/Experto (the longest label,
+either language) fits its 4-track grid at 375px without clipping or overlap.
 
 ### Hint panel: per-column exact/estimate mix (2026-07-23, batch 2 of the 2026-07-23 feedback arc)
 

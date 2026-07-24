@@ -59,11 +59,13 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
   (0, the host's seat), matching the pre-existing "dealer rotation is fully deterministic" comment
   near `_mpGuestStartMatch`; verified green against `test-mp-lockstep.mjs` (C1-C4) after the change.
 - **Difficulty display labels standardized to the shared scale** (Matt, 2026-07-24): Easy/Average/
-  Hard now display as Beginner/Intermediate/Pro (`diff_easy`/`diff_average`/`diff_hard` strings) —
-  **the stored ids (`easy`/`normal`/`hard`) are unchanged**, this is a label-only change. The setup
-  screen's per-opponent difficulty picker also now renders `js/difficulty-tiers.js`'s
-  `diffShapeSVG(tierOf(id))` (circle/square/diamond) before each label, same shape vocabulary as
-  the leaderboard's tier pills. New CSS (`chinchon.css`): `.cc-root .lb-dshape` / `.lb-dshape-x2`.
+  Hard now display as Easy/Medium/Hard (`diff_easy`/`diff_average`/`diff_hard` strings) —
+  **the stored ids (`easy`/`normal`/`hard`) are unchanged**, this is a label-only change. (Same-day
+  batch A reversed the initial Beginner/Intermediate/Pro rename before it shipped anywhere else;
+  the values above are the final ones.) The setup screen's per-opponent difficulty picker also now
+  renders `js/difficulty-tiers.js`'s `diffShapeSVG(tierOf(id))` (circle/square/diamond, each with
+  its own inline color fill) before each label, same shape vocabulary as the leaderboard's tier
+  pills. New CSS (`chinchon.css`): `.cc-root .lb-dshape` / `.lb-dshape-x2`.
 
 ### UI notes (2026-07-23)
 

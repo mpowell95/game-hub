@@ -11,9 +11,16 @@
 // tier, so it (and Nuts & Bolts' Extra Hard) sit in an optional tier 4 above Pro.
 
 export const TIERS = [1, 2, 3, 4];
-export const TIER_LABEL = { 1: 'Beginner', 2: 'Intermediate', 3: 'Pro', 4: 'Expert' };
+// Display vocabulary (2026-07-24, Matt's explicit reversal of batch 8's Beginner/Intermediate/
+// Pro): Easy/Medium/Hard/Expert. Stored ids/byDiff buckets are untouched everywhere (THE LAW
+// rule 5) — this is a label-only rename.
+export const TIER_LABEL = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Expert' };
 /** Short forms for narrow cells (the tier-mix bar's tooltip, the detail table on a phone). */
-export const TIER_SHORT = { 1: 'Beg', 2: 'Int', 3: 'Pro', 4: 'Exp' };
+export const TIER_SHORT = { 1: 'Easy', 2: 'Med', 3: 'Hard', 4: 'Exp' };
+
+/** Ski-slope shape color per tier (2026-07-24): moved here from leaderboard-ui.js so every
+ *  setup screen can color its own shapes, not just the leaderboard. Values unchanged. */
+export const TIER_COLOR = { 1: '#2e9e44', 2: '#1F5FA8', 3: '#1c2430', 4: '#1c2430' };
 
 // Three live vocabularies plus Parchís's Spanish one. Verified against each game's record call:
 //   beginner/intermediate/pro  filler, mancala, tictactoe, dotsboxes, boggle (LEVEL_KEY/DIFFICULTIES)
@@ -48,13 +55,21 @@ export function weightOf(diffKey) { return TIER_WEIGHT[tierOf(diffKey)] || 1.0; 
 /** Ski-slope difficulty shape markup (pure, no DOM): tier 1 circle, 2 square, 3 diamond,
  *  4 double-diamond. Moved here verbatim from leaderboard-ui.js (2026-07-23, batch 8) so every
  *  game's setup screen can render the SAME shape leaderboard-ui.js uses, not a re-derived copy.
- *  Behavior/markup identical to the original; leaderboard-ui.js now imports this. */
+ *  **2026-07-24**: each shape now also carries a per-tier `lb-dshape-tN` class AND an inline
+ *  `fill="<TIER_COLOR>"` attribute (Matt: the shapes shipped without their color code, so
+ *  "it doesn't make any sense to use those symbols"). The inline fill makes color work on every
+ *  surface with zero per-game CSS (standalone game pages never load hub.css, and `diffShapeSVG`
+ *  emits `currentColor` shapes otherwise); the class exists so CSS can still override it (the
+ *  leaderboard's `--lb-pill-color` does, on an active pill; dark mode overrides tiers 3/4 to a
+ *  light color in css/hub.css's `:root.gh-dark` block). Colorblind rule holds by construction:
+ *  color is paired with shape, never alone. */
 export function diffShapeSVG(tier) {
-  if (tier === 1) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>';
-  if (tier === 2) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>';
-  if (tier === 3) return '<svg viewBox="0 0 20 20" class="lb-dshape" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>';
-  if (tier === 4) return '<svg viewBox="0 0 34 20" class="lb-dshape lb-dshape-x2" aria-hidden="true"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>';
+  const fill = TIER_COLOR[tier] || 'currentColor';
+  if (tier === 1) return `<svg viewBox="0 0 20 20" class="lb-dshape lb-dshape-t1" fill="${fill}" aria-hidden="true"><circle cx="10" cy="10" r="8"/></svg>`;
+  if (tier === 2) return `<svg viewBox="0 0 20 20" class="lb-dshape lb-dshape-t2" fill="${fill}" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/></svg>`;
+  if (tier === 3) return `<svg viewBox="0 0 20 20" class="lb-dshape lb-dshape-t3" fill="${fill}" aria-hidden="true"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg>`;
+  if (tier === 4) return `<svg viewBox="0 0 34 20" class="lb-dshape lb-dshape-x2 lb-dshape-t4" fill="${fill}" aria-hidden="true"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg>`;
   return '';
 }
 
-export default { TIERS, TIER_LABEL, TIER_SHORT, tierOf, TIER_WEIGHT, weightOf, diffShapeSVG };
+export default { TIERS, TIER_LABEL, TIER_SHORT, TIER_COLOR, tierOf, TIER_WEIGHT, weightOf, diffShapeSVG };

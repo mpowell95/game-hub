@@ -34,7 +34,7 @@ const LEVELS = [
 ];
 const LEVEL_KEY = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 // Short difficulty word for the compact in-game chip (the setup screen keeps the
-// full Beginner/Intermediate/Pro tier names). These are the same tiers, just the
+// full Easy/Medium/Hard tier names). These are the same tiers, just the
 // space-saving synonym, so the score bar never has to truncate a player's name.
 const CHIP_LABEL_KEY = { 1: 'chip_easy', 2: 'chip_medium', 3: 'chip_hard' };
 

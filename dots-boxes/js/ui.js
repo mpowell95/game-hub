@@ -36,7 +36,7 @@ const AI_CHAIN_STEP_MS = 220; // faster pacing between successive chain-capture 
 const SIZES = [['small', 'size_small', 3, 3], ['medium', 'size_medium', 4, 4], ['large', 'size_large', 10, 10]];
 const SIZE_META = Object.fromEntries(SIZES.map(([k, labelKey, rows, cols]) => [k, { labelKey, rows, cols }]));
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
-// DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
+// DIFF_META normalizes these to Easy/Medium/Hard) -- do not invent
 // new tier names here.
 const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
 const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);

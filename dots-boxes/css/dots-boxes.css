@@ -178,7 +178,7 @@
 }
 /* Ski-slope difficulty shapes (diffShapeSVG/tierOf, js/difficulty-tiers.js) --
    the same shared shapes the leaderboard uses, sized to sit before the label. */
-.db-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.db-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .db-root .lb-dshape-x2 { width: 1.7em; }
 
 /* --- setup: accordion summary card (Escoba's pattern) -------------------- */

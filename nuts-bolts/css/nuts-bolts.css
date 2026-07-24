@@ -110,6 +110,17 @@
   font-size: 0.8rem;
   font-weight: 800;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+/* Easy/Medium/Hard/Expert (root CLAUDE.md, "Fix the two broken setup layouts") still bleeds
+   into neighbors on very narrow phones inside 4 flex columns — step the font down and let the
+   shape stack ABOVE the label instead of forcing one line, so all 4 segments fit at 375px. */
+@media (max-width: 400px) {
+  .nb-segbtn-label { flex-direction: column; gap: 2px; font-size: 0.68rem; white-space: normal; }
+  .nb-root .nb-segbtn-label .lb-dshape { margin-right: 0; }
 }
 .nb-segbtn-level {
   font-size: 0.7rem;
@@ -119,9 +130,10 @@
 .nb-segbtn.is-selected .nb-segbtn-level { color: var(--nb-ink); }
 /* Ski-slope difficulty shape (js/difficulty-tiers.js's diffShapeSVG) rendered before the label,
    sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */
-.nb-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.nb-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .nb-root .lb-dshape-x2 { width: 1.7em; }
 .nb-start-btn { width: 100%; }
+.nb-howto-btn { width: 100%; margin-top: 8px; }
 
 /* ---------- Header ---------- */
 
@@ -215,9 +227,15 @@
   background: var(--nb-accent);
   color: #26210a;
 }
+.nb-btn.nb-btn-ghost {
+  background: transparent;
+  color: var(--nb-muted);
+  box-shadow: inset 0 0 0 1.5px var(--nb-surface-raised);
+}
 @media (hover: hover) {
   .nb-btn:not(:disabled):hover { background: var(--nb-header-btn); }
   .nb-btn.nb-btn-primary:not(:disabled):hover { background: #ffd75c; }
+  .nb-btn.nb-btn-ghost:not(:disabled):hover { background: var(--nb-header-btn); }
 }
 .nb-btn:not(:disabled):active {
   transform: scale(0.94);

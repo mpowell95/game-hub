@@ -25,7 +25,7 @@ import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
 import { bucketsOf, tierMix } from './leaderboard-rank.js';
-import { TIERS, diffShapeSVG } from './difficulty-tiers.js';
+import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { screenFor, ensureStatsCss } from './game-stats-ui.js';
 import { makeT } from './i18n.js';
@@ -36,7 +36,8 @@ const t = makeT(STRINGS);
 // English-only, used elsewhere); this maps the same 1-4 tiers onto our own translated keys instead.
 const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'gs_diff_pro', 4: 'gs_diff_expert' };
 // Ski-slope shape language (colorblind-safe: shape carries the meaning, color is secondary).
-const TIER_COLOR = { 1: '#2e9e44', 2: '#1F5FA8', 3: '#1c2430', 4: '#1c2430' };
+// TIER_COLOR itself now lives in difficulty-tiers.js (2026-07-24) so every game's setup screen
+// can use it too; imported above, values unchanged.
 
 // Old test/debug device records. They stay in Firebase untouched (no data is ever deleted); they are
 // simply never rendered. Matched by deviceId prefix.
@@ -621,8 +622,13 @@ function ensureCss() {
     '.lb-pills{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-filter,34px);padding:0 2px;overflow-x:auto;-webkit-overflow-scrolling:touch}',
     '.lb-pill{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;appearance:none;cursor:pointer;border:1.5px solid var(--lb-pill-color,#1c2430);color:var(--lb-pill-color,#1c2430);background:#fff;border-radius:999px;padding:5px 11px;font-size:.76rem;font-weight:800}',
     '.lb-pill.is-active{background:var(--lb-pill-color,#1c2430);color:#fff}',
-    '.lb-dshape{width:11px;height:11px;fill:currentColor;display:block}',
+    // No base `fill` declared here (2026-07-24): diffShapeSVG's svg now carries its own inline
+    // fill (the TIER_COLOR per tier); circle/rect inherit it since neither has a fill of its
+    // own. A CSS rule that targets the svg itself (not just an inherited value) still wins over
+    // that presentation attribute, which is exactly what the active-pill invert below needs.
+    '.lb-dshape{width:11px;height:11px;display:block}',
     '.lb-dshape-x2{width:19px;height:11px}',
+    '.lb-pill.is-active .lb-dshape{fill:#fff}',
     '.lb-body{padding:10px 16px 8px}',
     '.lb-h3{margin:18px 0 8px;font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
     // Player/game-detail card list.

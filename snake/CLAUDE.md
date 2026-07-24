@@ -43,9 +43,10 @@ snake/index.html     standalone host (same init() as in-hub)
   classic "chase your tail" move) — the engine checks against `body.slice(0, -1)` for a
   non-eating step. test.js pins both this and the eating case.
 - Difficulty is SPEED only (`TICK_MS`: easy 170 / medium 120 / hard 85); rules never change.
-  Display labels (2026-07-23, batch 8) are the shared Beginner/Intermediate/Pro vocabulary, each
-  preceded by the shared ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) in
-  the setup screen's difficulty buttons; stored `easy`/`medium`/`hard` ids are untouched.
+  Display labels are Easy/Medium/Hard (2026-07-24, batch A of the second feedback arc — Matt's
+  reversal of batch 8's Beginner/Intermediate/Pro), each preceded by the shared COLORED
+  ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) in the setup screen's
+  difficulty buttons; stored `easy`/`medium`/`hard` ids are untouched.
 - The input queue holds up to 2 pending turns, applied one per tick — tight corners at Hard's
   tick rate need both taps to land.
 

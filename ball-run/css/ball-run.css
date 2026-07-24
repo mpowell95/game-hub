@@ -78,76 +78,47 @@
   color: var(--br-ink);
 }
 
-.br-blurb {
-  margin: 0;
-  color: var(--br-ink-dim);
-  font-weight: 600;
-  line-height: 1.4;
-  max-width: 340px;
-}
-
 .br-best {
   font-weight: 700;
   color: var(--br-attention);
   min-height: 1.2em; /* reserved so switching difficulty never shifts layout */
 }
 
-.br-diff-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  width: 100%;
-  max-width: 280px;
-}
-
-.br-diff-face {
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--br-orange);
-}
-.br-diff-face svg { width: 56px; height: 56px; }
-
-.br-diff-label {
-  font-size: 1.6rem;
-  font-weight: 900;
-  letter-spacing: 0.03em;
-  color: var(--br-orange);
-}
-
-.br-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.br-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .br-root .lb-dshape-x2 { width: 1.7em; }
 
-.br-diff-slider {
-  -webkit-appearance: none;
-  appearance: none;
+/* Standard 3-option segmented difficulty control (2026-07-24 redesign, root CLAUDE.md's "Ball
+   Run setup redesign" — replaces the old face icons + range slider, matches every other game's
+   difficulty picker shape). */
+.br-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+  margin-top: 12px;
   width: 100%;
-  height: 14px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--br-orange) 0 50%, rgba(255,255,255,0.12) 50% 100%);
-  outline: none;
+  max-width: 320px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
 }
-.br-diff-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #fff;
-  border: 6px solid var(--br-orange);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+.br-seg {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 10px 8px;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--br-ink-dim);
+  cursor: pointer;
+  min-width: 0;
+  white-space: nowrap;
 }
-.br-diff-slider::-moz-range-thumb {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #fff;
-  border: 6px solid var(--br-orange);
+.br-seg.is-selected {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--br-orange);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .br-setup-actions {

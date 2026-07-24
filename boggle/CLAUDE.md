@@ -33,9 +33,11 @@ meaning (always `false`) since leaving is now lossless.
 
 ## Difficulty display (2026-07-24)
 
-The setup screen's difficulty row (Beginner/Intermediate/Pro) shows the shared ski-slope shape
-(`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) before each label, same shapes the leaderboard
-uses, sized ~1em via `.bg-root .lb-dshape`. **The per-tier prose hint** ("Finds close to half the
+The setup screen's difficulty row (Easy/Medium/Hard as of 2026-07-24, was Beginner/Intermediate/
+Pro — Matt's reversal of batch 8's rename, label-only) shows the shared COLORED ski-slope shape
+(`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js` — the shape carries an inline `fill` per tier)
+before each label, same shapes the leaderboard uses, sized ~1em via `.bg-root .lb-dshape`. **The
+per-tier prose hint** ("Finds close to half the
 words on the board...") that used to sit under the segmented control was deleted per Matt's
 standing rule against difficulty-explanation prose — the row now shows only shape + name. The
 `bg-hint` DOM element, its CSS rule, and the `hint_diff_*` keys (both `en`/`es` in `strings.js`)

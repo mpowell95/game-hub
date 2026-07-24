@@ -36,7 +36,7 @@
 
 /* Difficulty-tier shape markers (js/difficulty-tiers.js's diffShapeSVG), rendered before each
    difficulty label in the setup screen's difficulty picker — colorblind-safe shape, not hue. */
-.cc-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.cc-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .cc-root .lb-dshape-x2 { width: 1.7em; }
 
 /* Header */

@@ -33,9 +33,10 @@ alternation. `newGame()` always starts at seat 0, and `startGame()` maps whichev
 to seat 0, so the existing status line already announces "Your turn" / "{opp}'s turn" correctly —
 no new announcement UI was added.
 
-The difficulty picker's segmented buttons now show a ski-slope shape (`diffShapeSVG`/`tierOf`,
-imported from `js/difficulty-tiers.js`, sized via `.db-root .lb-dshape`/`.lb-dshape-x2`) before
-each Beginner/Intermediate/Pro label — the same shapes the leaderboard uses. The per-tier
+The difficulty picker's segmented buttons now show a COLORED ski-slope shape (`diffShapeSVG`/
+`tierOf`, imported from `js/difficulty-tiers.js`, sized via `.db-root .lb-dshape`/`.lb-dshape-x2`)
+before each Easy/Medium/Hard label (2026-07-24, was Beginner/Intermediate/Pro — Matt's reversal
+of batch 8's rename, label-only) — the same shapes the leaderboard uses. The per-tier
 explanation paragraph that used to sit under the difficulty row (`db-hint`, describing what each
 AI level does) is gone entirely, along with its `hint_diff_beginner`/`hint_diff_intermediate`/
 `hint_diff_pro` string keys (Matt's ask: shape + name only, no prose). The board-size row's own

@@ -20,8 +20,16 @@ i18n: `ball-run/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render ti
 `DIFFICULTIES[].label` stays English (a tuning/config module, same discipline as `sim.js`/
 `track.js`) — `ui.js` maps the same keys onto local translation tables instead.
 
-Display labels (2026-07-23, batch 8): standardized to the shared Beginner/Intermediate/Pro
-vocabulary (`diff_easy`/`diff_medium`/`diff_hard` in strings.js), normal case (not all-caps), each
-preceded by the shared ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js` — the
-same shapes the leaderboard uses) rendered into `.br-diff-label` alongside the existing face icon.
-Stored `ballrun.difficulty` values are untouched.
+Display labels (2026-07-24, batch A of the second feedback arc — Matt's reversal of batch 8's
+Beginner/Intermediate/Pro): the shared Easy/Medium/Hard vocabulary (`diff_easy`/`diff_medium`/
+`diff_hard` in strings.js), normal case (not all-caps). Stored `ballrun.difficulty` values are
+untouched — label-only rename, same as every other game in this pass.
+
+**Setup screen redesign (2026-07-24, batch A, Matt: "dumb... too many words. the emoji faces
+don't make any sense. the yellow part of the difficulty bar doesn't move"):** the old setup
+(prose blurb, a big face icon per difficulty, a range slider whose fill never actually tracked
+the selected value) is gone. Replaced with the standard 3-option segmented control every other
+game uses (`.br-segmented`/`.br-seg` in `ball-run.css`, same shape as Connect Four/Nuts & Bolts):
+colored ski-slope shape (`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js`) + label, built by
+`diffSegsHTML()` in `ui.js`. `FACE_SVGS` and the slider markup/CSS are deleted entirely. Setup
+keeps: title, the per-difficulty best line (`.br-best`), Play, and the `?` help button.

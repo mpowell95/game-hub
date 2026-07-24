@@ -89,11 +89,20 @@
   color: var(--cf-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cf-seg:hover { color: var(--cf-ink); }
+/* Expert/Experto is the widest label in a 4-track grid (root CLAUDE.md, "Fix the two broken
+   setup layouts") — step the font down on narrow phones so no label clips or overlaps. */
+@media (max-width: 400px) {
+  .cf-seg { font-size: 0.7rem; padding: 10px 2px; letter-spacing: -0.01em; }
+}
 /* Ski-slope difficulty shape (js/difficulty-tiers.js's diffShapeSVG) rendered before the label,
    sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */
-.cf-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.cf-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .cf-root .lb-dshape-x2 { width: 1.7em; }
 .cf-seg.is-selected {
   background: var(--cf-surface);

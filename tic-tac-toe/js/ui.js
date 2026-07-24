@@ -30,7 +30,7 @@ const SETTINGS_KEY = 'gamehub.tictactoe.v1';
 const SAVE_KEY = 'gamehub.tictactoe.save.v1';
 const AI_THINK_MS = 450;
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
-// DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
+// DIFF_META normalizes these to Easy/Medium/Hard) -- do not invent
 // new tier names here. Values (first element) stay canonical; labelKey resolves via t().
 const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
 const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);
