@@ -46,16 +46,6 @@
 .cc-theme-btn:hover { background: var(--cc-surface-2); transform: translateY(-1px); }
 .cc-theme-btn:active { transform: translateY(1px); }
 
-/* "Ana Banana" joke-edition rebrand of the setup screen */
-.cc-title-anita { display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.05; }
-.cc-title-bonita {
-  font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", "Segoe Print", cursive;
-  font-size: 1.75em; font-weight: 800; letter-spacing: 0.01em;
-  background: linear-gradient(92deg, #e0a010, #ffd84d, #f7b500, #ffe680, #e0a010);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
-}
-
 /* Buttons (mirrors the hub's button system) */
 .cc-btn {
   appearance: none; border: 0; font: inherit; font-weight: 700;

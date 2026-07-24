@@ -474,19 +474,14 @@ class ChinchonUI {
     const done = this.challengeActive && !live;
     const s = this._setup;
     const st = this.stats;
-    // In challenge mode the setup is fixed and the app runs "straight"; suppress the joke
-    // flavor (Ana Banana title, lifetime stats). Normal play keeps all of it.
+    // In challenge mode the setup is fixed and the app runs "straight"; suppress the
+    // lifetime stats line. Normal play keeps it.
     const statsLine = (!this.challengeActive && st.games > 0)
       ? `<p class="cc-stats">🏆 ${t('stats_line', { games: st.games, wins: st.wins, closes: st.closes, chinchons: st.chinchons })}</p>`
       : '';
 
-    // Themed title: the Ana Banana deck rebrands the whole screen as a joke edition.
-    // "Ana Banana" is a nickname, not translated (same as the deck's own name).
-    const anita = s.deck === 'anita';
     const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="${t('theme_toggle_aria')}" title="${s.dark ? t('mode_light') : t('mode_dark')}">${s.dark ? '☀️' : '🌙'}</button>`;
-    this.el.header.innerHTML = ((anita && !this.challengeActive)
-      ? `<h1 class="cc-title cc-title-anita">${t('title')} <span class="cc-title-bonita">Ana Banana</span></h1>`
-      : `<h1 class="cc-title">${t('title')}</h1>`) + themeBtn;
+    this.el.header.innerHTML = `<h1 class="cc-title">${t('title')}</h1>` + themeBtn;
 
     // Multiplayer (M2b): a Solo/Host online/Join selector, absent entirely in
     // challenge mode (that hidden feature is solo-only by construction, and
@@ -710,7 +705,15 @@ class ChinchonUI {
 
   promptDraw() { return new Promise((resolve) => { this._pending = { kind: 'draw', resolve }; this.render(); }); }
   promptDiscard() { return new Promise((resolve) => { this._pending = { kind: 'discard', resolve }; this._selectedCardId = null; this.render(); }); }
-  promptClose() { return new Promise((resolve) => { this._pending = { kind: 'close', resolve }; this.render(); }); }
+  promptClose() {
+    // A fully melded hand (chinchón or a double meld, zero leftover cards) has
+    // no rational reason to keep playing -- resolve yes immediately instead of
+    // prompting. The engine's decideClose flow, event order and MP move
+    // emission are untouched: this is indistinguishable from a fast tap.
+    const cls = meld.classifyClosingHand(this._human().hand, this.game.config);
+    if (cls.leftover.length === 0) return Promise.resolve(true);
+    return new Promise((resolve) => { this._pending = { kind: 'close', resolve }; this.render(); });
+  }
 
   promptPlacements(attachable) {
     return new Promise((resolve) => {

@@ -41,6 +41,35 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
 - **Config-driven from day one.** `DEFAULT_CONFIG` (in `game.js`) holds all ~11 rules.
   Pass 1 hardcodes defaults; Pass 2 just adds the settings UI that produces that object.
 
+### UI notes (2026-07-23)
+
+- **Auto-close on a fully melded hand.** `promptClose()` computes
+  `meld.classifyClosingHand(humanHand, config)` before creating the Close/Keep-playing
+  prompt; if `leftover.length === 0` (category `chinchon` or `doubleMeld` — there is no
+  rational reason to keep playing either: chinchón ends or dominates the match, and a
+  doubleMeld's −10 can't be improved by drawing), it resolves `true` immediately with no
+  prompt shown. This is implemented entirely at the prompt layer — `game.js`'s
+  `decideClose`-driven flow, event order, and MP move emission are byte-identical to a fast
+  human tap, so the lockstep invariants and `test-mp-lockstep.mjs`'s mirror are untouched.
+  Partial closes (1-3 leftover, under `maxClose`) still prompt as before. AI `decideClose`
+  policy is unchanged.
+- **The "Ana Banana" title rebrand is gone** (was `ui.js`'s themed `<h1>` + `.cc-title-anita`/
+  `.cc-title-bonita` CSS, Matt: "remove Ana banana"). The `anita` deck keeps its own display
+  name ("Ana Banana") in the Card deck row and `cards.js` — only the setup screen's giant
+  gold header text was removed.
+- **The players accordion row re-opening was NOT reproducible** (2026-07-23 investigation,
+  browser-driven repro across every path the feedback could plausibly mean): changing player
+  count, switching Solo/Host/Join, quitting mid-match to setup, and completing a full match
+  and tapping "New game" all left the row collapsed (`_setupExpanded` resets to `null` in
+  `showSetup()`, which every one of those paths already calls). No code path was found that
+  sets `_setupExpanded` to `'players'` outside an explicit user tap on that row. Left as-is;
+  if it recurs, get a repro video/screen-recording rather than a static screenshot — a static
+  screenshot of an open row is indistinguishable from Matt having just tapped it to check
+  names.
+- Setup screen at 375×812 (both languages, with and without the lifetime-stats line): zero
+  page scroll with every row collapsed, confirmed after the title removal above (which also
+  shaved a few px off the header). No further compaction was needed.
+
 ### UI notes (2026-07-22)
 
 - **Per-opponent difficulty selector**: `_seg()`'s per-instance index (`data-i`) lives on the WRAPPING `.cc-segmented` div, not the button - the click handler must climb to it (`a.closest('.cc-segmented').dataset.i`, matching Escoba's own handler) rather than read `a.dataset.i` directly off the clicked button. Reading it directly (the bug, now fixed) always resolved to `NaN`, so the selection never actually changed and the highlight never moved.
