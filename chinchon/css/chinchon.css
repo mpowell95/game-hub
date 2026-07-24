@@ -646,7 +646,12 @@
   100% { opacity: 0; transform: translate(var(--drift, 0), 105vh) rotate(560deg); }
 }
 
-/* ---- Dark mode ---- */
+/* ---- Dark mode ----
+   `.cc-dark` is applied by ui.js's _applyTheme() off the SHARED global theme
+   (js/theme.js's resolvedTheme(), gamehub.theme.v1) since 2026-07-24's theme
+   unification (HANDOFF-FB-THEME.md) - not off a Chinchón-only setting anymore.
+   Chinchón's own ☀️/🌙 button now flips that global preference. This block itself
+   (the actual --cc-* color values) is untouched by that change. */
 .cc-root.cc-dark {
   --cc-surface: #1b2333;
   --cc-surface-2: #2b3547;

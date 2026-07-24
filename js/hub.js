@@ -11,6 +11,7 @@ import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
 import { statsOwner } from './game-stats.js';
 import { getLang, setLang, makeT } from './i18n.js';
+import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
 import STRINGS from './strings.js';
@@ -226,6 +227,10 @@ class Hub {
     document.addEventListener('visibilitychange', this._onVis);
     this._onOnline = () => this._syncStats();
     window.addEventListener('online', this._onOnline);
+    // Theme toggle's icon reflects the RESOLVED theme, so it must repaint on a live OS
+    // preference change while the stored mode is 'auto' (not only on an explicit tap) -
+    // subscribed once here (not per render(), which rebinds the button itself).
+    this._themeUnsub = onThemeChange(() => this._paintThemeToggle());
     this._syncStats();
   }
 
@@ -288,6 +293,7 @@ class Hub {
             <button type="button" class="hub-back" data-role="back" hidden aria-label="${t('hub_back_aria')}">‹ Hub</button>
             <h1 class="hub-top-title" data-role="title">Matt's Game Hub</h1>
             <button type="button" class="hub-langtoggle" data-role="lang"></button>
+            <button type="button" class="hub-themetoggle" data-role="theme"></button>
             <button type="button" class="hub-version" data-role="version" hidden></button>
           </div>
           <div class="hub-top-right">
@@ -349,6 +355,7 @@ class Hub {
       stats: this.root.querySelector('[data-role="stats"]'),
       leaderboard: this.root.querySelector('[data-role="leaderboard"]'),
       lang: this.root.querySelector('[data-role="lang"]'),
+      theme: this.root.querySelector('[data-role="theme"]'),
       version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
       keepsake: this.root.querySelector('[data-role="keepsake"]'),
@@ -427,8 +434,33 @@ class Hub {
       });
     }
 
+    // Theme toggle, next to the language knob: cycles light -> dark -> auto -> light.
+    // Icon shows the RESOLVED theme (sun/moon); a small "A" badge marks auto specifically,
+    // since auto's icon alone can't distinguish "auto, currently resolving light" from
+    // a plain manual "light". Hidden in-game/immersive like the lang toggle and version pill.
+    if (this.el.theme) {
+      this._paintThemeToggle();
+      this.el.theme.addEventListener('click', () => {
+        const cur = getTheme();
+        setTheme(cur === 'light' ? 'dark' : cur === 'dark' ? 'auto' : 'light');
+        this._paintThemeToggle();
+      });
+    }
+
     this.initFirstRun(prof);
     this._initVersionPill();
+  }
+
+  /** The theme toggle's face: sun/moon for the RESOLVED theme, plus an "A" badge when the
+   *  stored mode is 'auto' (the icon alone can't tell auto-resolved-light from manual light). */
+  _paintThemeToggle() {
+    if (!this.el.theme) return;
+    const mode = getTheme();
+    const dark = resolvedTheme(mode) === 'dark';
+    const modeLabel = mode === 'auto' ? t('hub_theme_auto') : dark ? t('hub_theme_dark') : t('hub_theme_light');
+    this.el.theme.innerHTML = `<span class="hub-theme-icon" aria-hidden="true">${dark ? '🌙' : '☀️'}</span>`
+      + (mode === 'auto' ? `<span class="hub-theme-badge" aria-hidden="true">A</span>` : '');
+    this.el.theme.setAttribute('aria-label', t('hub_theme_toggle_aria', { mode: modeLabel }));
   }
 
   /** M3b: the sole surviving entry point into the retired challenge — a read-only
@@ -737,6 +769,7 @@ class Hub {
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    if (this._themeUnsub) this._themeUnsub();
     this.root.innerHTML = '';
   }
 }

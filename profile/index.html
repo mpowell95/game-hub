@@ -69,7 +69,7 @@
       font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
       border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2); color: var(--hub-ink);
     }
-    .pf-input:focus { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: #fff; }
+    .pf-input:focus { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: var(--hub-surface); }
 
     .pf-you-row { display: flex; align-items: flex-end; gap: 12px; }
     .pf-you-row .pf-name-wrap { flex: 1; }
@@ -188,7 +188,7 @@
       background: var(--hub-surface-2); cursor: pointer; touch-action: manipulation; display: grid; place-items: center;
     }
     .pf-emoji-grid button:hover { background: #e1e8f2; }
-    .pf-emoji-grid button.is-on { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: #fff; }
+    .pf-emoji-grid button.is-on { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: var(--hub-surface); }
   </style>
 </head>
 <body>
@@ -216,6 +216,11 @@
         <details class="pf-collapse pf-subcollapse">
           <summary data-i18n="pf_color_summary">Preferred color</summary>
           <div class="pf-swatches" id="pf-colors"></div>
+        </details>
+
+        <details class="pf-collapse pf-subcollapse">
+          <summary data-i18n="pf_theme_h">Theme</summary>
+          <div class="pf-seg" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div>
         </details>
       </section>
 
@@ -295,6 +300,7 @@
     import * as net from '../js/stats-net.js';
     import { gatherDeviceReport, uploadDeviceReport } from '../js/device-report.js';
     import { makeT, onLangChange } from '../js/i18n.js';
+    import { getTheme, setTheme } from '../js/theme.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import STRINGS from '../js/strings.js';
 
@@ -307,7 +313,7 @@
       document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
     }
     applyI18n();
-    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); });
+    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); });
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -351,6 +357,7 @@
       youEmoji: $('#pf-you-emoji'),
       youName: $('#pf-you-name'),
       colors: $('#pf-colors'),
+      themeSeg: $('#pf-theme-seg'),
       opps: $('#pf-opps'),
       addOpp: $('#pf-add-opp'),
       saved: $('#pf-saved'),
@@ -422,6 +429,30 @@
       renderColors();
       commitNow();
     });
+
+    // -- Theme ---------------------------------------------------------------------
+    // A device preference (gamehub.theme.v1 via js/theme.js), not a gamehub.profile
+    // field or player history - same reasoning as the hub top bar's own toggle, just
+    // surfaced here too since the profile page is the natural settings screen.
+    const THEME_OPTS = [
+      { v: 'light', labelKey: 'hub_theme_light' },
+      { v: 'dark', labelKey: 'hub_theme_dark' },
+      { v: 'auto', labelKey: 'hub_theme_auto' },
+    ];
+    function renderTheme() {
+      if (!els.themeSeg) return;
+      const cur = getTheme();
+      els.themeSeg.innerHTML = THEME_OPTS.map((o) =>
+        `<button type="button" data-theme="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${t(o.labelKey)}</button>`).join('');
+    }
+    if (els.themeSeg) {
+      els.themeSeg.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-theme]');
+        if (!btn) return;
+        setTheme(btn.dataset.theme);
+        renderTheme();
+      });
+    }
 
     // -- Opponents ---------------------------------------------------------------
     function renderOpps() {
@@ -572,6 +603,7 @@
       els.code.textContent = state.playerId || '—————';
       renderColors();
       renderOpps();
+      renderTheme();
     }
     // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from
     // game-stats.js, because that function MINTS and persists an id when none exists - a display

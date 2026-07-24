@@ -18,6 +18,7 @@ import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 import { makeT } from '../../js/i18n.js';
+import { setTheme, resolvedTheme } from '../../js/theme.js';
 import STRINGS from './strings.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -151,6 +152,14 @@ class ChinchonUI {
     this._justDragged = false;
 
     this._setup = this._loadSetup();
+    // One-time seed (theme unification, HANDOFF-FB-THEME.md): promote Chinchón's own
+    // legacy `dark` flag into the shared global theme the first time this device has
+    // no global preference yet. Read-only migration - the legacy chinchon-settings.dark
+    // field itself is left in place, untouched (THE LAW rule 5). After this runs once,
+    // gamehub.theme.v1 is set and the condition is false on every later mount.
+    try {
+      if (this._setup.dark && localStorage.getItem('gamehub.theme.v1') == null) setTheme('dark');
+    } catch { /* private mode */ }
     this.stats = loadJSON(STORE_STATS, { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0, minusTen: 0 });
     // Hidden challenge (M3b): retired. The gift is complete; forcing this false
     // collapses every challengeActive/challengeLive branch below back to plain,
@@ -251,9 +260,11 @@ class ChinchonUI {
     saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode, nextStartDealer: s.nextStartDealer });
   }
 
-  /** Apply the dark-mode class to the root (idempotent; safe before mount). */
+  /** Apply the dark-mode class to the root (idempotent; safe before mount). Follows the
+   *  shared global theme (js/theme.js), not the legacy per-game `_setup.dark` field -
+   *  see the constructor's one-time seed migration and "toggle-theme" below. */
   _applyTheme() {
-    if (this.root) this.root.classList.toggle('cc-dark', !!(this._setup && this._setup.dark));
+    if (this.root) this.root.classList.toggle('cc-dark', resolvedTheme() === 'dark');
   }
 
   // --- DOM construction -----------------------------------------------------
@@ -505,7 +516,8 @@ class ChinchonUI {
       ? `<p class="cc-stats">🏆 ${t('stats_line', { games: st.games, wins: st.wins, closes: st.closes, chinchons: st.chinchons })}</p>`
       : '';
 
-    const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="${t('theme_toggle_aria')}" title="${s.dark ? t('mode_light') : t('mode_dark')}">${s.dark ? '☀️' : '🌙'}</button>`;
+    const isDark = resolvedTheme() === 'dark';
+    const themeBtn = `<button class="cc-theme-btn" data-action="toggle-theme" aria-label="${t('theme_toggle_aria')}" title="${isDark ? t('mode_light') : t('mode_dark')}">${isDark ? '☀️' : '🌙'}</button>`;
     this.el.header.innerHTML = `<h1 class="cc-title">${t('title')}</h1>` + themeBtn;
 
     // Multiplayer (M2b): a Solo/Host online/Join selector, absent entirely in
@@ -1523,7 +1535,12 @@ class ChinchonUI {
       }
       case 'toggle-theme':
         if (!this.el.setup.hidden) this.syncSetupInputs();
-        this._setup.dark = !this._setup.dark;
+        // Global (js/theme.js), not local: Chinchón's own toggle is now just an
+        // explicit light/dark flip of the shared preference (never 'auto' - a binary
+        // sun/moon button has no third state to land on). `_setup.dark` stays a
+        // harmless, unread legacy field (THE LAW rule 5) rather than being deleted.
+        setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark');
+        this._setup.dark = resolvedTheme() === 'dark';
         this._applyTheme(); this._saveSetup();
         if (!this.el.menu.hidden) this._renderMenu();
         if (!this.el.setup.hidden) this.renderSetup();
@@ -1599,7 +1616,7 @@ class ChinchonUI {
     this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
       <div class="cc-sheet cc-menu-sheet">
         <h2 class="cc-sheet-title">${t('menu_title')}</h2>
-        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${this._setup.dark ? '☀️ ' + t('mode_light') : '🌙 ' + t('mode_dark')}</button>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${resolvedTheme() === 'dark' ? '☀️ ' + t('mode_light') : '🌙 ' + t('mode_dark')}</button>
         ${btn('newgame', this.mp ? t('menu_leave_match') : t('menu_new_game_settings'))}
         ${this.mp ? '' : btn('quit', t('menu_quit_setup'))}
         <button class="cc-btn cc-btn-primary" data-action="menu-resume">${t('menu_resume')}</button>

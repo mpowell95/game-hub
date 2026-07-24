@@ -81,6 +81,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
 | `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
+| `js/theme.js` | (2026-07-24) the light/dark/auto theme layer — see "Theme support" below |
 | `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle) — `tt`/`db`/`bg` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
@@ -182,6 +183,82 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
 
 Reference implementation: `snake/` (born bilingual). New-game obligations: root CLAUDE.md,
 "Adding a game" item 9.
+
+---
+
+### Theme support (Phase 1, 2026-07-24 — HANDOFF-FB-THEME.md, batch 10)
+
+Light/dark/auto, hub-wide. Matt: "chinchon has light/dark mode. Make that available
+everywhere." **Chinchón was the only dark mode in the repo before this** (a local
+`.cc-dark` class, `chinchon-settings.dark`) — it is now unified onto the shared module
+below; every other in-hub game keeps its current light-only look until its own Phase 2 pass.
+
+- **`js/theme.js`**: same shape as `js/i18n.js` — `getTheme()`/`setTheme()` over
+  **`gamehub.theme.v1`** (`'light'|'dark'|'auto'`, default `'auto'`); `resolvedTheme(theme?)`
+  resolves `'auto'` against `matchMedia('(prefers-color-scheme: dark)')`; `onThemeChange(cb)`
+  returns an unsubscribe. `setTheme()` AND a module-load side effect both stamp **`.gh-dark`
+  on `document.documentElement`** when the resolved theme is dark — that class is the ONE
+  thing every surface's CSS keys off. While the stored mode is `'auto'`, a live
+  `matchMedia` `'change'` listener re-stamps the class AND re-dispatches the
+  `gamehub:theme` event on an OS-level theme switch, not only on an explicit tap — so a
+  toggle icon showing the resolved theme (see below) stays correct without a page reload.
+- **A preference, not history**: THE LAW's rule-2 carve-out applies, same as
+  `js/i18n.js`'s language pref and `js/favorites.js` — deliberately not a `gamehub.profile`
+  field, for the same reasons the language preference isn't (see "Language support" above).
+- **CSS mechanism — the only source of truth is the `.gh-dark` class.** Every surface themes
+  by overriding ITS OWN custom properties under `:root.gh-dark` (`css/hub.css`'s dark-mode
+  block is the reference: it redefines `--hub-bg`/`--hub-surface`/`--hub-surface-2`/
+  `--hub-ink`/`--hub-muted` and leaves `--hub-accent` alone). **No `prefers-color-scheme`
+  media query anywhere in game CSS** — `'auto'` is resolved once, in JS, so the toggle
+  always wins over the OS setting the instant it's tapped.
+- **Phase 1 scope (this milestone): the shared module + hub chrome + the three overlays.**
+  `css/hub.css`'s dark block covers the launcher shell, cards, and dialogs via the
+  `--hub-*` variables; the Leaderboard (`js/leaderboard-ui.js`) and My Stats
+  (`js/game-stats-ui.js`) overlays inherit those same variables for free (their injected
+  stylesheets already read `var(--hub-surface, #fff)`-style fallbacks) — `hub.css` only
+  needed a few extra `:root.gh-dark` overrides for the handful of spots those two files
+  hardcode instead of using a variable (`.lb-top`/`.gs-top`'s light-only band tint, and
+  `.lb-seg.is-active`/`.lb-pill`/`.lb-tile2.is-sel`, which are built on `--hub-ink` and
+  would otherwise render near-illegible once `--hub-ink` flips to a pale color in dark
+  mode). The profile page (`profile/index.html`) is themed the same way, being just
+  another `css/hub.css` consumer with its own small inline `<style>` block (two literal
+  `#fff` focus-state spots were switched to `var(--hub-surface)` for the same reason).
+  **Every OTHER in-hub game keeps its current light-only look on a dark shell** — Phase 2
+  (not yet started) gives each one its own `:root.gh-dark .xx-root` variable-override
+  block in the game's own CSS, one small commit per game.
+- **Toggle**: hub top bar, `[data-role="theme"]`, next to the language knob
+  (`js/hub.js`'s `_paintThemeToggle()`); cycles light → dark → auto → light. Icon shows the
+  RESOLVED theme (☀️/🌙); a small "A" badge marks the stored mode specifically being
+  `'auto'` (the icon alone can't distinguish "auto, currently resolving light" from a
+  plain manual "light"). Subscribed once in the `Hub` constructor via `onThemeChange` (not
+  per `render()`, which only rebinds the click handler) so the icon stays correct if the OS
+  preference flips while `'auto'` is active. Hidden in-game/immersive, same visibility
+  rules as the version pill and lang toggle. The profile page also has a plain
+  Light/Dark/Auto segmented control (mirrors its Skill segmented control) — same
+  `getTheme()`/`setTheme()` calls, no separate state.
+- **Chinchón unification**: `js/theme.js` is now the source of truth for Chinchón's own
+  dark mode. `_applyTheme()` toggles `.cc-dark` off `resolvedTheme() === 'dark'`, not the
+  local `_setup.dark` field. Chinchón's own ☀️/🌙 button (header + menu) now calls the
+  GLOBAL `setTheme('light'|'dark')` — an explicit flip, never `'auto'` (a two-icon button
+  has no third state to land on) — so toggling it from inside Chinchón changes the whole
+  hub's theme, matching Matt's ask. **One-time seed migration** (`ChinchonUI`'s
+  constructor): if `chinchon-settings.dark` was `true` and `gamehub.theme.v1` is still
+  unset on this device, seed the global key from it (`setTheme('dark')`) so a player who
+  already had Chinchón's dark mode on doesn't see the rest of the hub flip to light under
+  them. Read-only migration — **the legacy `chinchon-settings.dark` field itself is left
+  in place, untouched** (THE LAW rule 5); `_setup.dark` keeps being written on every save
+  (now just mirroring the resolved theme) as a harmless, no-longer-read legacy field rather
+  than being deleted.
+- **Colorblind palette**: the yellow/blue/vermilion/teal hues + shape markers (profile
+  preferred-color swatches, difficulty tier pills, etc.) are unaffected by this milestone —
+  none of Phase 1's overrides touch hue, only the neutral `--hub-*` surface/ink scale.
+- **Verification**: `node run-all-tests.mjs` green (no headless test imports `document`, so
+  `theme.js`'s DOM-touching code paths are guarded by the same try/catch pattern as
+  `i18n.js`'s); `node test-i18n-strings.mjs` green (the new `hub_theme_*`/`pf_theme_h` keys
+  have matching EN/ES pairs). Browser: cycling light/dark/auto updates the hub, both
+  overlays, and the profile page instantly; reload persists; a device with
+  `chinchon-settings.dark: true` and no `gamehub.theme.v1` yet resolves dark hub-wide on
+  first load after this ships.
 
 ---
 
