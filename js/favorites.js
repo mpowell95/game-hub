@@ -55,4 +55,19 @@ export function toggleFavorite(id) {
   return next;
 }
 
-export default { loadFavorites, isFavorite, toggleFavorite };
+/** Move `id` by `delta` slots (-1 up, +1 down) in the stored order. The `ids` array IS the
+ *  favorites display order (batch 4, 2026-07-23) - this is a pure splice, no new storage key,
+ *  no shape change. No-op (returns the unchanged order) if `id` isn't favorited or the move
+ *  would go out of bounds. */
+export function moveFavorite(id, delta) {
+  const ids = loadFavorites();
+  const i = ids.indexOf(id);
+  if (i === -1) return ids;
+  const j = i + delta;
+  if (j < 0 || j >= ids.length) return ids;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  persist(ids);
+  return ids;
+}
+
+export default { loadFavorites, isFavorite, toggleFavorite, moveFavorite };

@@ -311,6 +311,54 @@ body {
    construction); full opacity on top is a legibility nicety, not the signal itself. */
 .hub-fav.is-fav { color: #fff; }
 
+/* Batch 4 (2026-07-23): custom favorites order. The reorder ghost button sits above the
+   favorites group, full-width like .hub-divider so it doesn't compete with any one tile. */
+.hub-fav-header {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+.hub-fav-reorder {
+  appearance: none;
+  border: 1px solid var(--hub-surface-2);
+  background: none;
+  color: var(--hub-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.hub-fav-reorder:hover { color: inherit; border-color: var(--hub-muted); }
+
+/* Move arrows replace the heart while a favorite tile is in edit mode: same 40px hit area
+   and corner position as .hub-fav, one on each side so both stay reachable without drag. */
+.hub-fav-move {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  width: 40px; height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  appearance: none;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+.hub-fav-move:active { transform: scale(0.9); }
+.hub-fav-move:disabled { opacity: 0.35; cursor: default; }
+.hub-fav-up { right: 48px; }
+.hub-fav-down { right: 4px; }
+
 .hub-divider {
   grid-column: 1 / -1;
   display: flex;

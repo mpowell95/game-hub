@@ -11,7 +11,7 @@ import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
 import { statsOwner } from './game-stats.js';
 import { getLang, setLang, makeT } from './i18n.js';
-import { loadFavorites, toggleFavorite } from './favorites.js';
+import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
 import STRINGS from './strings.js';
 
@@ -249,26 +249,38 @@ class Hub {
     // In-development games (devOnly) render only for Matt and the tester. Everyone else,
     // including the challenge recipient, never sees the card at all.
     const dev = !!(prof && isDevProfile(prof.name));
-    // Games are listed FAVORITES FIRST, then ALPHABETICALLY by display title within each
-    // group (project rule). Sorting at render time keeps it self-maintaining: a new GAMES
-    // entry lands in the right place no matter where it is added to the array. localeCompare
-    // so accents (Chinchón, Parchís) sort correctly. An id in storage that doesn't match a
-    // visible game (retired/not-yet-unlocked) is simply never matched here - it stays in
-    // storage untouched and starts showing again the moment the game reappears.
+    // Games are listed FAVORITES FIRST, in the player's own CUSTOM ORDER (batch 4,
+    // 2026-07-23 - the stored `ids` array IS the display order now), then the "All games"
+    // group ALPHABETICALLY by display title (project rule, now scoped to non-favorites only).
+    // Sorting the rest at render time keeps it self-maintaining: a new GAMES entry lands in
+    // the right place no matter where it is added to the array. localeCompare so accents
+    // (Chinchón, Parchís) sort correctly. An id in storage that doesn't match a visible game
+    // (retired/not-yet-unlocked) is simply never matched here - it stays in storage untouched
+    // and starts showing again the moment the game reappears.
     const visible = GAMES.filter((g) => !g.devOnly || dev);
-    const favIds = new Set(loadFavorites());
+    const storedFavIds = loadFavorites();
+    const favIdSet = new Set(storedFavIds);
     const byTitle = (a, b) => titleText(a).localeCompare(titleText(b));
-    const favGames = visible.filter((g) => favIds.has(g.id)).sort(byTitle);
-    const restGames = visible.filter((g) => !favIds.has(g.id)).sort(byTitle);
+    const favGames = storedFavIds.map((id) => visible.find((g) => g.id === id)).filter(Boolean);
+    const restGames = visible.filter((g) => !favIdSet.has(g.id)).sort(byTitle);
     this.games = [...favGames, ...restGames];
-    this._favIds = favIds;
+    this._favIds = favIdSet;
+    this._favOrder = favGames.map((g) => g.id);
+    // The reorder ghost button needs 2+ favorites to mean anything; if a reorder/removal
+    // drops it below 2, fall out of edit mode gracefully rather than leaving a dangling toggle.
+    if (favGames.length < 2) this._favEdit = false;
     // The divider only earns its place between two non-empty groups; with zero favorites
     // (the common first-run case) or with every visible game favorited, the grid is a plain
-    // single alphabetical list and no divider renders.
+    // single list (custom-ordered) and no divider renders.
     const showDivider = favGames.length > 0 && restGames.length > 0;
-    const gridHTML = favGames.map((g) => this.cardHTML(g)).join('')
+    const showReorder = favGames.length >= 2;
+    const favHeaderHTML = showReorder
+      ? `<div class="hub-fav-header"><button type="button" class="hub-fav-reorder" data-role="fav-reorder">${t(this._favEdit ? 'hub_fav_done' : 'hub_fav_reorder')}</button></div>`
+      : '';
+    const gridHTML = favHeaderHTML
+      + favGames.map((g) => this.cardHTML(g, true)).join('')
       + (showDivider ? '<div class="hub-divider">All games</div>' : '')
-      + restGames.map((g) => this.cardHTML(g)).join('');
+      + restGames.map((g) => this.cardHTML(g, false)).join('');
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -356,6 +368,18 @@ class Hub {
     });
     // Delegate from .hub-main so it catches the grid cards.
     this.el.grid.parentElement.addEventListener('click', (e) => {
+      const reorderBtn = e.target.closest('[data-role="fav-reorder"]');
+      if (reorderBtn) {
+        this._favEdit = !this._favEdit;
+        this.render();
+        return;
+      }
+      const move = e.target.closest('.hub-fav-move');
+      if (move) {
+        moveFavorite(move.dataset.favId, move.dataset.dir === 'up' ? -1 : 1);
+        this.render();
+        return;
+      }
       // .hub-fav is a SIBLING of .hub-card, not nested inside it (a button can't nest inside
       // a button/link), so this needs no stopPropagation - it just has to run first.
       const fav = e.target.closest('.hub-fav');
@@ -366,6 +390,13 @@ class Hub {
       }
       const card = e.target.closest('.hub-card');
       if (!card) return;
+      // Edit mode replaces the favorite heart with move arrows and must not let a mis-tap
+      // launch (or navigate away to) the game underneath - card.dataset.favGroup marks every
+      // tile in the favorites group, button or <a> alike.
+      if (this._favEdit && card.dataset.favGroup === 'true') {
+        if (card.tagName === 'A') e.preventDefault();
+        return;
+      }
       if (card.tagName === 'A') return;            // launch-out: real link, native nav
       if (card.dataset.comingSoon === 'true') return;
       this.launch(card.dataset.id);                // in-hub module: mount in place
@@ -590,7 +621,7 @@ class Hub {
         </svg>`;
   }
 
-  cardHTML(g) {
+  cardHTML(g, favGroup) {
     // Landscape tile: full-bleed art with the title outlined directly over it (no scrim).
     // The blurb moves to the accessible label (it is no longer shown on the tile face).
     const inner = `
@@ -601,19 +632,33 @@ class Hub {
     const blurb = blurbText(g.blurb);
     const aria = blurb ? `${titleText(g)}. ${blurb}` : titleText(g);
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
-    // modules are buttons that mount into the content area.
+    // modules are buttons that mount into the content area. data-fav-group marks every tile
+    // in the favorites group so the click delegate can suppress navigation during edit mode.
     const card = g.href
-      ? `<a class="hub-card" href="${g.href}" style="--card-accent:${g.accent}" aria-label="${aria}">${inner}</a>`
+      ? `<a class="hub-card" href="${g.href}" data-fav-group="${!!favGroup}" style="--card-accent:${g.accent}" aria-label="${aria}">${inner}</a>`
       : `<button type="button" class="hub-card${g.comingSoon ? ' is-soon' : ''}"
-              data-id="${g.id}" data-coming-soon="${!!g.comingSoon}"
+              data-id="${g.id}" data-coming-soon="${!!g.comingSoon}" data-fav-group="${!!favGroup}"
               style="--card-accent:${g.accent}" aria-label="${aria}" ${g.comingSoon ? 'aria-disabled="true"' : ''}>${inner}</button>`;
-    // A <button> can't nest inside a <button> or <a>, so the heart is a SIBLING inside a
-    // positioned .hub-cell wrapper, not a child of .hub-card - see .hub-cell/.hub-fav in hub.css.
+    // A <button> can't nest inside a <button> or <a>, so the heart (or, in favorites edit
+    // mode, the move arrows) is a SIBLING inside a positioned .hub-cell wrapper, not a child
+    // of .hub-card - see .hub-cell/.hub-fav in hub.css.
     const favored = this._favIds.has(g.id);
-    const favLabel = t(favored ? 'hub_fav_remove' : 'hub_fav_add', { title: titleText(g) });
-    const fav = `<button type="button" class="hub-fav${favored ? ' is-fav' : ''}" data-fav-id="${g.id}"
+    let overlay;
+    if (favGroup && this._favEdit) {
+      const idx = this._favOrder.indexOf(g.id);
+      const upLabel = t('hub_fav_move_up', { title: titleText(g) });
+      const downLabel = t('hub_fav_move_down', { title: titleText(g) });
+      overlay = `
+        <button type="button" class="hub-fav-move hub-fav-up" data-fav-id="${g.id}" data-dir="up"
+                  ${idx <= 0 ? 'disabled' : ''} aria-label="${upLabel}">↑</button>
+        <button type="button" class="hub-fav-move hub-fav-down" data-fav-id="${g.id}" data-dir="down"
+                  ${idx >= this._favOrder.length - 1 ? 'disabled' : ''} aria-label="${downLabel}">↓</button>`;
+    } else {
+      const favLabel = t(favored ? 'hub_fav_remove' : 'hub_fav_add', { title: titleText(g) });
+      overlay = `<button type="button" class="hub-fav${favored ? ' is-fav' : ''}" data-fav-id="${g.id}"
               aria-pressed="${favored}" aria-label="${favLabel}">${favored ? '♥' : '♡'}</button>`;
-    return `<div class="hub-cell">${card}${fav}</div>`;
+    }
+    return `<div class="hub-cell">${card}${overlay}</div>`;
   }
 
   async launch(id) {
