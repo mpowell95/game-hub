@@ -158,9 +158,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 ### The module contract
 
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
-object bundling them. All ten in-hub module games (Connect Four, Chinchón, Escoba, Filler,
-Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle) export all three;
-grep-verify before assuming otherwise:
+object bundling them. All twelve in-hub module games (Connect Four, Chinchón, Escoba, Filler,
+Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno) export all
+three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
@@ -185,12 +185,13 @@ export default { init, destroy, isInProgress };
     in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
-    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts): returns
+    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts, Uno): returns
     `false` for solo play even mid-game, because leaving is lossless — each game snapshots
     after every state-changing event and picks up where it left off on return. Save keys:
     `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
     `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
-    `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1` (Nuts & Bolts needed no new key —
+    `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`, `gamehub.uno.save.v1`
+    (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's
     and Chinchón's MP paths are each the exception within the exception: `isInProgress()`
@@ -310,6 +311,7 @@ working in that folder).
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:` | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
+| Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
 
 The root-class/prefix cells were verified against each game's actual CSS on 2026-07-23 (note
 Tic Tac Toe is `.ttt-`, three letters, and Filler/Mancala use pre-convention full-word root
