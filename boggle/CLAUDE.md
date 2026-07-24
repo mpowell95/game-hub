@@ -41,6 +41,38 @@ standing rule against difficulty-explanation prose — the row now shows only sh
 `bg-hint` DOM element, its CSS rule, and the `hint_diff_*` keys (both `en`/`es` in `strings.js`)
 are gone; difficulty ids (`beginner`/`intermediate`/`pro`) are untouched.
 
+## Haptics + shorter timers (2026-07-24, batch 11 of the feedback arc)
+
+Matt asked for a small vibration while tracing and shorter round timers
+(`HANDOFF-FB-BOGGLE.md`). Two feature-detected `navigator.vibrate()` calls,
+wrapped in a tiny `haptic(ms)` helper in `ui.js` that no-ops silently where
+`navigator.vibrate` doesn't exist — **iOS Safari/PWAs expose no vibration API
+at all**, so this ships dark on the family's iPhones; it is real on Android
+Chrome. No settings row for it.
+
+- **Trigger 1** (`_updateWordBar()`, the same place the current word is
+  already derived per pointer move — no second dictionary walk):
+  `navigator.vibrate(12)` the moment the current trace first becomes a
+  submittable NEW word (length ≥ `MIN_WORD_LEN`, in the trie, not already in
+  `_found`). Edge-triggered per word string via `_lastHapticWord`: extending
+  to a longer valid new word fires again, shrinking back to a word already
+  signaled this trace does not, and already-found words never fire. Only
+  wired into the pointer/swipe path (`_updateWordBar`), not the keyboard tap
+  path (`_onKeyboardTile` → full `renderGame()`) — a keyboard user has no
+  vibration motor to feel it anyway.
+- **Trigger 2**: `navigator.vibrate(25)` on a successful submit only
+  (`onSubmitWord`'s valid branch). Duplicate and invalid submits: nothing.
+- Timers changed from **2/3/5 minutes** to **1 / 1.5 / 2 minutes, default
+  1.5** (closer to GamePigeon's 1:20 than the old 5-minute default — Matt:
+  "5 min seems crazy long"). `TIMERS`/`TIMER_LABEL_KEY` in `ui.js` and the
+  `timer_1`/`timer_1_5`/`timer_2` keys in `strings.js` carry the new values;
+  stored values are still plain numeric minutes in `gamehub.boggle.v1`, so an
+  old saved `3` or `5` simply fails `TIMERS.includes()` and falls back to the
+  new default — a preference, allowed to reset (THE LAW rule 2's carve-out).
+  `loadGame()`'s in-progress-save validator caps `remainingSec` at
+  `Math.max(...TIMERS) * 60` rather than a hardcoded 5 minutes, so it tracks
+  the timer set instead of drifting out of sync with it.
+
 ## i18n (2026-07-23) — UI translates, gameplay stays English
 
 Ana reported two things the same afternoon: garbled board tiles ("sometimes instead of one

@@ -51,8 +51,8 @@ const SAVE_KEY = 'gamehub.boggle.save.v1';
 
 // Ids stay module-scope (storage vocabulary); display labels resolve through t()
 // inside the render functions, same pattern as every other bilingual game.
-const TIMERS = [2, 3, 5];
-const TIMER_LABEL_KEY = { 2: 'timer_2', 3: 'timer_3', 5: 'timer_5' };
+const TIMERS = [1, 1.5, 2];
+const TIMER_LABEL_KEY = { 1: 'timer_1', 1.5: 'timer_1_5', 2: 'timer_2' };
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
 // new tier names here.
@@ -62,6 +62,11 @@ const DIFF_LABEL_KEY = { beginner: 'diff_beginner', intermediate: 'diff_intermed
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Android Chrome only -- iOS Safari/PWAs expose no vibration API, so this is
+// a feature-detected no-op there (Matt asked; honest answer, no audio fake).
+function haptic(ms) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch { /* not supported */ }
+}
 const posKey = (r, c) => `${r},${c}`;
 const displayFace = (face) => (face === 'QU' ? 'Qu' : face);
 // A browser fires `click` within a few ms of pointerup; anything later than
@@ -139,7 +144,7 @@ function loadGame() {
       .filter((w) => typeof w === 'string' && w.length >= MIN_WORD_LEN)
       .map((w) => [w, scoreForWord(w)]);
     const remainingSec = Math.round(Number(raw.remainingSec));
-    if (!Number.isFinite(remainingSec) || remainingSec <= 0 || remainingSec > 5 * 60) return null;
+    if (!Number.isFinite(remainingSec) || remainingSec <= 0 || remainingSec > Math.max(...TIMERS) * 60) return null;
     if (!TIMERS.includes(raw.timerMinutes) || !DIFFICULTIES.includes(raw.difficulty)) return null;
     return {
       faces: raw.faces, found, remainingSec, timerMinutes: raw.timerMinutes, difficulty: raw.difficulty,
@@ -186,6 +191,11 @@ class BoggleUI {
     this._tapMode = false;
     this._tileRects = null;
     this._pointerId = null;
+    // Edge-trigger for the trace haptic (below): the last word this path
+    // already vibrated for, so extending to a new valid word fires again but
+    // backtracking to an already-signaled word does not (Matt's explicit rule
+    // -- see haptic() call sites).
+    this._lastHapticWord = null;
     // When the last pointer gesture ended. Used to ignore the synthetic click
     // browsers fire after a tap -- deliberately a TIMESTAMP and not a boolean
     // flag: ending a trace can re-render the board, which leaves the browser
@@ -238,7 +248,7 @@ class BoggleUI {
     const opp = profile && profile.opponents && profile.opponents[0];
     const profileDiff = (opp && SKILL_TO_DIFF[opp.skill]) || null;
     return {
-      timerMinutes: TIMERS.includes(saved.timerMinutes) ? saved.timerMinutes : 3,
+      timerMinutes: TIMERS.includes(saved.timerMinutes) ? saved.timerMinutes : 1.5,
       difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
     };
   }
@@ -675,6 +685,7 @@ class BoggleUI {
       const score = scoreForWord(word);
       this._found.set(word, score);
       this._feedback = { type: 'valid', word, score };
+      haptic(25); // trigger 2: successful submit only, never duplicate/invalid
       saveGame(this); // checkpoint after every scored word
     }
     this._path = [];
@@ -765,6 +776,16 @@ class BoggleUI {
 
   _updateWordBar() {
     const word = this._path.length ? wordForPath(this._board.grid, this._path) : '';
+    // Trigger 1: the moment the current trace first becomes a submittable NEW
+    // word (length ok, in the dictionary, not already found). Edge-triggered
+    // per word string -- see _lastHapticWord's comment.
+    if (word.length >= MIN_WORD_LEN && !this._found.has(word) && this._trieRoot
+      && isValidWord(this._trieRoot, word) && word !== this._lastHapticWord) {
+      haptic(12);
+      this._lastHapticWord = word;
+    } else if (!word) {
+      this._lastHapticWord = null;
+    }
     const textEl = this.shell.querySelector('.bg-wordbar-text');
     if (textEl) {
       textEl.textContent = word || t('wordbar_hint');
