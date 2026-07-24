@@ -5,7 +5,11 @@
 > loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`, immersive.
+Hub integration: in-hub `module:`, immersive. `isInProgress()` uses the LITERAL meaning:
+`true` while a run is live. Ball Run is deliberately EXCLUDED from the repo-wide
+autosave/resume convention (batch 9, HANDOFF-FB-RESUME.md, 2026-07-23; the only other
+exclusion is Snake) — a live-action run cannot meaningfully pause across a hub navigation;
+do not "finish" this by adding a save key.
 
 ## Notes
 

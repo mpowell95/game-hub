@@ -20,6 +20,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
 import { makeT } from '../../js/i18n.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -338,7 +339,7 @@ class EscobaUI {
 
     const diffLabel = (d) => t(DIFF_LABEL_KEY[d] || DIFF_LABEL_KEY.normal);
     const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
-    const diffOptions = DIFFICULTIES.map((d) => [d, diffLabel(d)]);
+    const diffOptions = DIFFICULTIES.map((d) => [d, diffShapeSVG(tierOf(d)) + esc(diffLabel(d))]);
     const diffContent = opponentNames.map((name, i) => `<div class="eb-diff-row">
       <span class="eb-diff-name">${esc(name)}</span>
       ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', diffOptions, ' eb-seg-sm', ` data-i="${i}"`)}

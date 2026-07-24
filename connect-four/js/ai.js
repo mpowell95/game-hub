@@ -137,7 +137,11 @@ function columnOf(moveBit) {
 // speedup — a single wide-window search prunes far less.
 // ---------------------------------------------------------------------------
 const transTable = new Map();      // key: Number(position+mask) -> upper bound
-const TT_MAX_ENTRIES = 8_000_000;  // guard against unbounded memory growth
+// Cap sized for PHONES, not desktops: the table persists across turns (that is
+// the point), a long hint-assisted game genuinely reaches the cap, and ~2M Map
+// entries is already on the order of 100MB in the worker. 8M (the original
+// value) risked mobile Safari killing the tab.
+const TT_MAX_ENTRIES = 2_000_000;  // guard against unbounded memory growth
 let nodeCount = 0;                 // exposed for profiling
 
 // Cooperative time budget for the Expert solver. A full from-scratch solve of
@@ -269,7 +273,7 @@ function expertSolve(position, mask, nbMoves) {
 // losing side and the best (or an equally-winning) column every time.
 const CENTER_COL = 3;
 const boundedTT = new Map(); // separate from transTable: values here are depth-bound, not exact
-const BOUNDED_TT_MAX_ENTRIES = 4_000_000;
+const BOUNDED_TT_MAX_ENTRIES = 1_000_000; // phone-sized, same reasoning as TT_MAX_ENTRIES
 const BIT_IDX = [];
 for (let c = 0; c < COLS; c++) {
   BIT_IDX[c] = [];

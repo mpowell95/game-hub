@@ -100,6 +100,10 @@
 }
 .eb-seg.is-selected { background: var(--eb-surface); color: var(--eb-ink); box-shadow: 0 1px 5px rgba(20, 40, 80, 0.16); }
 .eb-seg-sm .eb-seg { font-size: 0.72rem; padding: 7px 4px; }
+/* Ski-slope tier shapes inside the difficulty segments (shared markup from
+   js/difficulty-tiers.js's diffShapeSVG; only per-game sizing lives here). */
+.eb-root .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
+.eb-root .lb-dshape-x2 { width: 1.7em; }
 
 .eb-player-row { display: flex; align-items: center; gap: 8px; }
 .eb-player-row-ai { flex-wrap: wrap; }

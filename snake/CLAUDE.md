@@ -9,8 +9,11 @@ it the first game born on the shared i18n layer (`js/i18n.js`) and the reference
 for it.
 
 Hub integration: in-hub `module:` (`snake/js/ui.js`), not immersive. `isInProgress()` uses the
-LITERAL meaning (no mid-run resume, same class as Connect Four and Ball Run): `true` while a run
-is live and not over, so the hub confirms before navigating away mid-run.
+LITERAL meaning (no mid-run resume, same class as Ball Run only — every other module game
+autosaves/resumes since batch 9, HANDOFF-FB-RESUME.md, 2026-07-23): `true` while a run is live
+and not over, so the hub confirms before navigating away mid-run. Snake is deliberately
+EXCLUDED from the autosave/resume convention — a live-action run cannot meaningfully pause
+across a hub navigation; do not "finish" this by adding a save key.
 
 ## Layout & responsibilities
 
