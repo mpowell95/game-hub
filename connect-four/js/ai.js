@@ -373,11 +373,11 @@ function negamaxBounded(position, mask, nbMoves, depth, alpha, beta) {
  * "Estimate (depth N)", never "Solved" (see evaluateColumns/evaluateColumnsBounded
  * caller in evaluateColumns and chooseSearchTimed below).
  */
-function evaluateColumnsBounded(board, player, deadline) {
+function evaluateColumnsBounded(board, player, deadline, onlyCols) {
   const mask = board.pieces[PLAYER_ONE] | board.pieces[PLAYER_TWO];
   const position = board.pieces[player];
   const nbMoves = board.moveCount;
-  const legal = board.legalMoves();
+  const legal = onlyCols || board.legalMoves();
   const poss = possibleCells(mask);
   const winCells = computeWinningCells(position, mask);
 
@@ -483,71 +483,94 @@ function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS) {
   return chooseSearchTimed(board, player, start + budgetMs);
 }
 
+// Pass 1's own time slice (2026-07-23 rework), independent of the caller's
+// budgetMs so Pass 2 (the estimate fallback) always keeps its full budget -
+// this is what stops Pass 1 from starving Pass 2, which was the original
+// C4-4 bug when Pass 1 unconditionally spent half of a shared budget. Sized
+// for the worker path where nothing blocks the UI; the inline main-thread
+// fallback (ui.js, workers unavailable) passes a much smaller cap instead.
+export const DEFAULT_EXACT_ATTEMPT_BUDGET_MS = 2500;
+
 /**
  * Evaluate every legal column for the side to move (for the "show best moves"
- * helper). Returns an array of { col, score } from the mover's perspective, with
- * an `exact` flag: true when all columns were solved exactly within budgetMs
- * (mid/endgame; Pons scale where + = the mover wins and a larger magnitude means
- * sooner), false when the opening forced a uniform heuristic fallback so the
- * displayed scores still share one scale (used only to rank, not as ground truth).
+ * helper). Returns an array of { col, score, exact } from the mover's
+ * perspective (Pons scale for exact columns, evalBitboard/WIN_BASE scale for
+ * estimated ones - both rank the same direction, only exact columns' magnitude
+ * means "moves until the proven result"). `.exact` (array-level) is true only
+ * when every column got a proven value this call; `.reachedDepth` is the
+ * estimate pass's deepest completed ply (0 when every column was proven).
+ *
+ * Pass 1 attempts an exact solve for as many columns as fit in exactBudgetMs,
+ * in center-out order, and simply stops when time runs out - whatever finished
+ * first is exact and kept; the rest fall to Pass 2's bounded estimate. This
+ * runs on EVERY call regardless of stone count (2026-07-23; batch 2 of the
+ * 2026-07-23 feedback arc, see HANDOFF-FB-CONNECT4-HINTS.md) because the
+ * transposition table (`transTable`, ai.js module scope) is persistent across
+ * calls within one game - a turn that can't prove anything still leaves cached
+ * bounds behind that make next turn's attempt (on the actual line played)
+ * cheaper, so the "first turn numbers appear" boundary shrinks as the game
+ * goes on instead of staying fixed at a hardcoded stone count. Measured cold
+ * (TT cleared before each solve, so these are the WORST case - a real session
+ * only gets faster than this): a single column at 8 stones took 5.5-12.6s, at
+ * 10 stones 0.27-2.8s, at 6 stones over 25s - so a several-second budget still
+ * proves nothing most early turns, same as the old 12-stone gate in practice,
+ * but the persistent TT means those "wasted" attempts are not actually wasted.
  */
-export function evaluateColumns(board, player, budgetMs) {
+export function evaluateColumns(board, player, budgetMs, exactBudgetMs = DEFAULT_EXACT_ATTEMPT_BUDGET_MS) {
   const legal = board.legalMoves();
   const mask = board.pieces[PLAYER_ONE] | board.pieces[PLAYER_TWO];
   const position = board.pieces[player];
   const nbMoves = board.moveCount;
   const poss = possibleCells(mask);
   const winCells = computeWinningCells(position, mask);
-  const start = Date.now();
   const finite = Number.isFinite(budgetMs);
 
-  // Pass 1: try to solve every legal column exactly within ~half the budget.
-  // Skipped entirely below MIN_STONES_FOR_EXACT_ATTEMPT: measured empirically
-  // (evaluateColumns at a generous 6s budget), positions under ~12 stones
-  // never finished exactly while everything from 14 stones on solved in under
-  // a second - so for genuinely early boards Pass 1 was pure overhead, and
-  // burning half the budget on a guaranteed-timeout starved Pass 2's depth
-  // exactly when the position most needed a deep look (see evaluateColumnsBounded's
-  // doc comment above). Skipping it there hands Pass 2 the WHOLE budget instead.
-  const MIN_STONES_FOR_EXACT_ATTEMPT = 12;
+  // Pass 1: prove as many columns exactly as fit in exactBudgetMs. Stops (does
+  // not throw) the moment time runs out - columns proven before the deadline
+  // keep their exact value regardless of whether later columns finished.
+  const exactStart = Date.now();
   const exactScores = new Map();
-  let exact = nbMoves >= MIN_STONES_FOR_EXACT_ATTEMPT;
-  if (exact) {
-    searchDeadline = finite ? start + Math.floor(budgetMs * 0.5) : Infinity;
-    try {
-      for (const c of COLUMN_ORDER) {
-        if (!legal.includes(c)) continue;
-        const move = poss & COLUMN_MASK[c];
-        if ((winCells & move) !== 0n) {
-          exactScores.set(c, (COLS * ROWS + 1 - (nbMoves + 1)) >> 1); // wins on this move
-        } else {
-          exactScores.set(c, -expertSolve(position ^ mask, mask | move, nbMoves + 1));
-        }
+  searchDeadline = exactStart + exactBudgetMs;
+  try {
+    for (const c of COLUMN_ORDER) {
+      if (!legal.includes(c)) continue;
+      const move = poss & COLUMN_MASK[c];
+      if ((winCells & move) !== 0n) {
+        exactScores.set(c, (COLS * ROWS + 1 - (nbMoves + 1)) >> 1); // wins on this move
+        continue;
       }
-    } catch (e) {
-      if (e !== TIMEOUT) { searchDeadline = Infinity; throw e; }
-      exact = false;
-    } finally {
-      searchDeadline = Infinity;
+      try {
+        exactScores.set(c, -expertSolve(position ^ mask, mask | move, nbMoves + 1));
+      } catch (e) {
+        if (e !== TIMEOUT) throw e;
+        break; // out of time - remaining columns are Pass 2's job
+      }
     }
+  } finally {
+    searchDeadline = Infinity;
   }
 
+  const allExact = exactScores.size === legal.length && legal.length > 0;
   let scores;
-  if (exact) {
-    scores = legal.map((c) => ({ col: c, score: exactScores.get(c) }));
-    scores.reachedDepth = COLS * ROWS - nbMoves; // solved to the end of the game
+  if (allExact) {
+    scores = legal.map((c) => ({ col: c, score: exactScores.get(c), exact: true }));
+    scores.reachedDepth = 0;
   } else {
-    // Pass 2: the opening can't be solved exactly in any UI-tolerable budget
-    // (verified: the empty board alone takes minutes). Fall back to the
-    // bitboard depth-limited search (evaluateColumnsBounded above), which
-    // reaches roughly 3-6x the depth of the old Board-object alpha-beta
-    // fallback in the same wall-clock time - deep enough that the empty
-    // board now reads center-highest AND positive within the existing hint
-    // budget, instead of "losing everywhere" from too shallow a look.
-    const deadline = finite ? start + budgetMs : start + 1200;
-    scores = evaluateColumnsBounded(board, player, deadline);
+    // Pass 2: the bitboard depth-limited estimate (evaluateColumnsBounded
+    // above), restricted to whichever columns Pass 1 didn't prove, run on its
+    // own full budgetMs (untouched by however long Pass 1 took) so it never
+    // gets starved of depth.
+    const unproven = legal.filter((c) => !exactScores.has(c));
+    const start2 = Date.now();
+    const deadline = finite ? start2 + budgetMs : start2 + 1200;
+    const bounded = evaluateColumnsBounded(board, player, deadline, unproven);
+    const boundedByCol = new Map(bounded.map((s) => [s.col, s.score]));
+    scores = legal.map((c) => exactScores.has(c)
+      ? { col: c, score: exactScores.get(c), exact: true }
+      : { col: c, score: boundedByCol.get(c), exact: false });
+    scores.reachedDepth = bounded.reachedDepth;
   }
-  scores.exact = exact;
+  scores.exact = allExact;
   return scores;
 }
 

@@ -21,7 +21,8 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const EXPERT_BUDGET_MS = 1500; // per-move ceiling for Expert (incl. opening fallback)
-const HINT_BUDGET_MS = 3000;   // budget for the "show best moves" per-column analysis
+const HINT_BUDGET_MS = 3000;   // Pass 2 (estimate) budget for the "show best moves" analysis
+const INLINE_EXACT_ATTEMPT_MS = 300; // Pass 1 cap when the worker is unavailable (blocks the UI thread)
 const DROP_MS = 360; // keep in sync with --cf-drop-time in the CSS
 
 /**
@@ -187,9 +188,12 @@ class ConnectFourUI {
     const game = new Game(params.firstPlayer);
     for (const c of params.history) game.play(c);
     await new Promise((r) => setTimeout(r, 16));
-    const evals = evaluateColumns(game.board, game.currentPlayer, params.budgetMs);
+    // Workers unavailable: this runs ON the UI thread, so Pass 1's exact
+    // attempt gets a much smaller slice than the worker path's default (2500ms)
+    // — "nothing blocks" only applies in a worker.
+    const evals = evaluateColumns(game.board, game.currentPlayer, params.budgetMs, INLINE_EXACT_ATTEMPT_MS);
     return {
-      evals: evals.map((v) => ({ col: v.col, score: v.score })),
+      evals: evals.map((v) => ({ col: v.col, score: v.score, exact: v.exact })),
       exact: evals.exact, reachedDepth: evals.reachedDepth,
     };
   }
@@ -254,6 +258,7 @@ class ConnectFourUI {
           <div class="cf-hints" data-role="hints" hidden>
             <div class="cf-eval-row" data-role="eval-row"></div>
             <p class="cf-eval-caption" data-role="eval-caption"></p>
+            <p class="cf-eval-fallible" data-role="eval-fallible" hidden></p>
           </div>
 
           <div class="cf-board-wrap">
@@ -315,6 +320,7 @@ class ConnectFourUI {
       hints: q('[data-role="hints"]'),
       evalRow: q('[data-role="eval-row"]'),
       evalCaption: q('[data-role="eval-caption"]'),
+      evalFallible: q('[data-role="eval-fallible"]'),
       result: q('[data-role="result"]'),
       resultMsg: q('[data-role="result-msg"]'),
       difficulty: q('[data-role="difficulty"]'),
@@ -452,6 +458,12 @@ class ConnectFourUI {
 
   startGame() {
     this.syncChallengeUi();   // reflect current challenge state (assist/undo, etc.)
+    // Fresh game -> drop the exact solver's cached bounds from the last one
+    // (module-scope transTable in ai.js persists across the worker's whole
+    // lifetime otherwise; harmless to keep but unbounded across many rematches
+    // in one sitting). Fire-and-forget: nothing waits on this.
+    if (this.worker) this.worker.postMessage({ id: ++this.requestId, kind: 'newgame' });
+    else import('./ai.js').then((m) => m.clearTranspositionTable());
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
     this.busy = false;
@@ -883,6 +895,7 @@ class ConnectFourUI {
     if (!this.el) return;
     this.el.evalRow.innerHTML = '';
     this.el.evalCaption.textContent = '';
+    this.el.evalFallible.hidden = true;
   }
 
   /** Request and display per-column evaluations (only on the human's turn). */
@@ -929,17 +942,37 @@ class ConnectFourUI {
     // When off, the next renderEvalRow() writes the real caption.
   }
 
+  /**
+   * `data.evals` is now a per-column mix (2026-07-23): each entry carries its
+   * own `.exact` flag, since Pass 1 of evaluateColumns proves whatever it can
+   * within its time slice every turn and the rest fall back to the Pass 2
+   * estimate — a turn can be entirely solved, entirely estimated, or (most
+   * turns, once the game is deep enough for SOME lines to resolve quickly)
+   * a mix of both. Exact and estimate scores are on different scales (Pons
+   * vs. the bitboard heuristic), so they're shown on their own terms per
+   * column rather than compared — the single "best" pick prefers a PROVEN
+   * win over anything estimated, falls back to the estimate ranking when no
+   * column is fully solved, and only compares exact scores directly against
+   * each other when every column got proven this turn.
+   */
   renderEvalRow(data) {
     const row = this.el.evalRow;
     row.innerHTML = '';
     const byCol = new Map();
-    let best = -Infinity;
-    if (data) for (const e of data.evals) { byCol.set(e.col, e.score); best = Math.max(best, e.score); }
-    // Mark exactly ONE recommended move (center-most among ties) — "best" is
-    // singular, so multiple ★/rings is confusing.
+    if (data) for (const e of data.evals) byCol.set(e.col, e);
+
     let bestCol = -1;
-    if (data) for (const c of [3, 2, 4, 1, 5, 0, 6]) {
-      if (byCol.get(c) === best) { bestCol = c; break; }
+    if (data && data.evals.length) {
+      const exactWins = data.evals.filter((e) => e.exact && e.score > 0);
+      const pool = exactWins.length ? exactWins
+        : data.exact ? data.evals
+        : data.evals.filter((e) => !e.exact);
+      if (pool.length) {
+        const best = Math.max(...pool.map((e) => e.score));
+        for (const c of [3, 2, 4, 1, 5, 0, 6]) {
+          if (pool.some((e) => e.col === c && e.score === best)) { bestCol = c; break; }
+        }
+      }
     }
 
     for (let c = 0; c < COLS; c++) {
@@ -947,11 +980,11 @@ class ConnectFourUI {
       cell.className = 'cf-eval';
       if (!data) { cell.classList.add('is-loading'); cell.textContent = '·'; }
       else if (byCol.has(c)) {
-        const s = byCol.get(c);
+        const e = byCol.get(c);
         if (c === bestCol) cell.classList.add('is-best'); // the single recommended move
-        if (data.exact) {
-          cell.textContent = s > 0 ? `+${s}` : `${s}`;
-          cell.classList.add(s > 0 ? 'is-win' : s < 0 ? 'is-loss' : 'is-draw');
+        if (e.exact) {
+          cell.textContent = e.score > 0 ? `+${e.score}` : `${e.score}`;
+          cell.classList.add(e.score > 0 ? 'is-win' : e.score < 0 ? 'is-loss' : 'is-draw');
         } else {
           // Estimate mode: a ★ on the single pick, a faint dot elsewhere (blank
           // pills read as "failed to load").
@@ -965,10 +998,21 @@ class ConnectFourUI {
     }
 
     if (this._thinking) return; // don't clobber the animated "Analyzing…"
-    this.el.evalCaption.textContent = !data ? ''
-      : data.exact
-        ? t('eval_solved')
-        : t('eval_estimate', { n: data.reachedDepth || '?' });
+    if (!data) {
+      this.el.evalCaption.textContent = '';
+      this.el.evalFallible.hidden = true;
+      return;
+    }
+    // A partially-solved turn (some columns proven, some not) is still "not
+    // solved" as a whole — never call a mixed row "Solved".
+    this.el.evalCaption.textContent = data.exact ? t('eval_solved') : t('eval_estimate');
+
+    // Every column reads as losing on a sub-Expert difficulty: the AI itself
+    // isn't perfect at this level, so a "you're doomed" panel would mislead.
+    const belowExpert = this.difficulty !== Difficulty.EXPERT;
+    const allNegative = data.evals.every((e) => e.score < 0);
+    this.el.evalFallible.hidden = !(belowExpert && allNegative);
+    if (!this.el.evalFallible.hidden) this.el.evalFallible.textContent = t('eval_fallible');
   }
 
   // --- Teardown -------------------------------------------------------------

@@ -228,6 +228,13 @@
   text-overflow: ellipsis;
   max-width: 100%;
 }
+.cf-eval-fallible {
+  margin: 2px 0 0;
+  font-size: clamp(0.62rem, 2.6vw, 0.7rem);
+  color: var(--cf-muted);
+  text-align: center;
+  max-width: 100%;
+}
 /* Animated ellipsis shown while the analysis runs. */
 .cf-dots { display: inline-block; }
 .cf-dots i { font-style: normal; opacity: 0; animation: cf-dot 1.4s infinite; }
