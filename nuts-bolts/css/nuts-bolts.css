@@ -132,6 +132,13 @@
    sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */
 .nb-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.3em; }
 .nb-root .lb-dshape-x2 { width: 1.7em; }
+/* Tier 3/4's ski-slope shape ships with a near-black inline fill (js/difficulty-tiers.js's
+   TIER_COLOR). Unlike every other Phase 2 game (HANDOFF-FB-THEME.md) this override is NOT gated
+   behind :root.gh-dark: .nb-root's own backdrop (`--nb-bg`/`--nb-surface`/`--nb-surface-raised`
+   above) is dark in every hub theme, always has been, so the shape is invisible on this screen
+   regardless of the hub's light/dark toggle. */
+.nb-root .lb-dshape-t3,
+.nb-root .lb-dshape-t4 { fill: #e6e9f0; }
 .nb-start-btn { width: 100%; }
 .nb-howto-btn { width: 100%; margin-top: 8px; }
 
