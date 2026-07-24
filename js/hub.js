@@ -17,7 +17,7 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 /** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
- *  (Monopoly Deal, Parchís, Boggle — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
+ *  (Monopoly Deal, Parchís — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
 const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) : b;
 /** Resolve a game title the same way (Matt, 2026-07-23: titles DO translate — Spain Spanish —
  *  reversing the i18n handoff's original titles-stay decision). Proper/brand names stay plain
@@ -180,7 +180,10 @@ const GAMES = [
   {
     id: 'boggle',
     title: 'Boggle',
-    blurb: 'Shake the grid, race the clock. Link touching letters into as many words as you can.',
+    blurb: {
+      en: 'Shake the grid, race the clock. Link touching letters into as many words as you can.',
+      es: 'Agita la cuadrícula, corre contra el reloj. Une letras contiguas en tantas palabras como puedas.',
+    },
     module: '../boggle/js/ui.js',
     accent: '#1f3864',
     // A 4x4 letter grid is inherently square, so rather than stretch it (which

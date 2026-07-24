@@ -65,4 +65,11 @@ export function makeT(dict) {
   };
 }
 
+// Stamp the declared page language at load, not just on a toggle tap -- a hardcoded
+// `lang="en"` in the HTML while a stored preference is 'es' misdeclares the page and
+// invites browser auto-translate (which rewrites text nodes, including Boggle's
+// single-letter tiles into whole words). try/catch: node tests import this module
+// headlessly with no `document`, same guard as setLang's.
+try { document.documentElement.lang = getLang(); } catch { /* not in a DOM */ }
+
 export default { getLang, setLang, onLangChange, makeT, LANGS };

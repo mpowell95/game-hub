@@ -118,7 +118,12 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   itself* plus `{name}` placeholder substitution (a per-language FUNCTION value is the escape
   hatch for grammar that placeholders can't express); `setLang` stamps
   `document.documentElement.lang` and dispatches a `gamehub:lang` CustomEvent;
-  `onLangChange(cb)` returns an unsubscribe.
+  `onLangChange(cb)` returns an unsubscribe. **(2026-07-23) The module ALSO stamps
+  `document.documentElement.lang` from `getLang()` as a module-scope side effect at load**, not
+  only inside `setLang()` — the HTML's hardcoded `lang="en"` otherwise misdeclared a Spanish
+  session until the toggle was tapped that visit, which invited browser auto-translate (a
+  contributing factor in Ana's 2026-07-23 Boggle report below: machine translation rewrites text
+  nodes, including single-letter tiles into whole words).
 - **The preference is deliberately NOT a `gamehub.profile` field**: the profile shape has
   hand-synced inlined readers in Monopoly Deal and Parchís (see "Monopoly Deal's must-stay-synced
   duplicates"), so extending it drags in those copies — and a profile reset shouldn't change the
@@ -133,10 +138,12 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   `data-i18n`/`data-i18n-placeholder`/`data-i18n-aria` attribute-driven surface — decision 4),
   My Stats (`gs_` keys) and Leaderboards (`lb_` keys), and all ten pre-Snake in-hub games
   (Filler, Mancala, Tic Tac Toe, Dots and Boxes, Nuts & Bolts, Ball Run, Connect Four, Escoba,
-  Chinchón) each with its own `<game>/js/strings.js`. Standing exclusions, unchanged from the
-  handoff: **Boggle** (all of it — English word game to its core), **Monopoly Deal** and
-  **Parchís** (each its own separate task — Parchís needs the sibling `../Parchís/` source
-  rebuild to read `gamehub.lang.v1`), **`js/challenge/`** (retired, Matt's own words), and
+  Chinchón) each with its own `<game>/js/strings.js`. **Boggle's UI chrome joined them
+  2026-07-23** (`boggle/js/strings.js`, see boggle/CLAUDE.md and "Known content caveat" below —
+  its gameplay content stays English on purpose). Standing exclusions, unchanged from the
+  handoff: **Monopoly Deal** and **Parchís** (each its own separate task — Parchís needs the
+  sibling `../Parchís/` source rebuild to read `gamehub.lang.v1`), **`js/challenge/`** (retired,
+  Matt's own words), and
   everywhere card-suit vocabulary (Oros/Copas/Espadas/Bastos) plus card-rank/figure names
   (Sota/Caballo/Rey) and proper/deck names (e.g. Chinchón's "Ana Banana", the AI roster names)
   appear — those are real vocabulary or proper nouns in both languages, never routed through
@@ -165,9 +172,11 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
 - **Live-switch policy**: language changes apply to newly rendered UI. Games read `t()` at
   render time and MAY subscribe via `onLangChange` for live re-labeling (Snake does); they are
   not required to.
-- **Known content caveat**: Boggle's UI can translate, but its gameplay dictionary and dice are
-  English — a real Spanish Boggle needs a Spanish word list and letter distribution (separate,
-  larger task). Parchís keeps its own in-game language setting (`parchis_r2_prefs.lang`), which
+- **Known content caveat**: Boggle's UI translates (as of 2026-07-23), but its gameplay
+  dictionary and dice stay English — a real Spanish Boggle needs a Spanish word list and letter
+  distribution (separate, larger task, deferred). The Spanish invalid-word feedback and the
+  how-to-play sheet both say the dictionary is English, so this stays discoverable in-game.
+  Parchís keeps its own in-game language setting (`parchis_r2_prefs.lang`), which
   wins over the hub preference on that page; wiring it to read `gamehub.lang.v1` as its default
   goes through the sibling `../Parchís/` source rebuild, deferred with the big extraction.
 

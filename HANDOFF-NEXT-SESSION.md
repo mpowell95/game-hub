@@ -58,10 +58,15 @@ reference material, not instructions. Do not re-execute any of them.
    `gamehub.lang.v1`. The fix is a small precedence edit in its `getLang` bootstrap, but it must
    go through the sibling `../Parchís/` source + `recombine.mjs` rebuild (see
    `parchis/CLAUDE.md`), so it needs a session with that folder available. Small, contained.
-2. **Boggle Spanish** — excluded from i18n entirely by Matt (not even UI chrome). The open
-   design question recorded in `HANDOFF-I18N-EXTRACTION.md` decision 8: is a Spanish UI over an
-   English-word game helpful or confusing? A REAL Spanish Boggle needs a Spanish word list +
-   dice distribution — a sizable standalone project if Matt ever wants it.
+2. **Boggle Spanish — UI half EXECUTED 2026-07-23** (`HANDOFF-BOGGLE-SPANISH.md`), answering the
+   open design question from `HANDOFF-I18N-EXTRACTION.md` decision 8 with Ana's own 2026-07-23
+   report: an all-English screen inside an otherwise-Spanish app read as broken to her, and
+   likely caused her phone's browser to auto-translate the page (rewriting single-letter tiles
+   into words), so UI translation was the fix, not just a nice-to-have. `boggle/js/strings.js`
+   now covers all UI chrome; `.bg-root` carries `translate="no"` so no translator can touch the
+   board again; the Spanish invalid-word feedback and help sheet both name the dictionary as
+   English. **Remaining open item, unchanged in scope:** a REAL Spanish Boggle needs a Spanish
+   word list + dice distribution — a sizable standalone project if Matt ever wants it.
 3. **Dedicated rating page** — Matt's stated maybe. The maths (`leaderboard-rank.js`) and its
    tests are intact and current; only the display was retired. If built, the known solo-axis
    property (field-max holder rates high on any sample) is documented in `js/CLAUDE.md`.

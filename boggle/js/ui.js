@@ -35,26 +35,27 @@ import { shakePlayableBoard } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, loadStats } from '../../js/game-stats.js';
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
 
+const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.boggle.v1';
 
-const TIMERS = [[2, '2 min'], [3, '3 min'], [5, '5 min']];
-const TIMER_LABEL = Object.fromEntries(TIMERS);
+// Ids stay module-scope (storage vocabulary); display labels resolve through t()
+// inside the render functions, same pattern as every other bilingual game.
+const TIMERS = [2, 3, 5];
+const TIMER_LABEL_KEY = { 2: 'timer_2', 3: 'timer_3', 5: 'timer_5' };
 // Difficulty tiers, in the hub's shared vocabulary (js/game-stats-ui.js's
 // DIFF_META normalizes these to Beginner/Intermediate/Pro) -- do not invent
 // new tier names here.
-const DIFFICULTIES = [['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['pro', 'Pro']];
-const DIFF_LABEL = Object.fromEntries(DIFFICULTIES);
+const DIFFICULTIES = ['beginner', 'intermediate', 'pro'];
+const DIFF_LABEL_KEY = { beginner: 'diff_beginner', intermediate: 'diff_intermediate', pro: 'diff_pro' };
 // Shared hub profile: opponent skill (1/2/3) maps 1:1 onto beginner/intermediate/pro.
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const posKey = (r, c) => `${r},${c}`;
 const displayFace = (face) => (face === 'QU' ? 'Qu' : face);
-// Leads with the swipe because that is the intended way to play; the tap path
-// still exists (and is what keyboard/screen-reader users get) but does not need
-// to be advertised in a one-line hint.
-const WORDBAR_HINT = 'Swipe through the letters';
 // A browser fires `click` within a few ms of pointerup; anything later than
 // this is a genuine keyboard activation, not the tail of a tap.
 const CLICK_AFTER_POINTER_MS = 700;
@@ -153,8 +154,8 @@ class BoggleUI {
     const opp = profile && profile.opponents && profile.opponents[0];
     const profileDiff = (opp && SKILL_TO_DIFF[opp.skill]) || null;
     return {
-      timerMinutes: TIMER_LABEL[saved.timerMinutes] ? saved.timerMinutes : 3,
-      difficulty: DIFFICULTIES.some(([k]) => k === saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
+      timerMinutes: TIMERS.includes(saved.timerMinutes) ? saved.timerMinutes : 3,
+      difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : (profileDiff || 'intermediate'),
     };
   }
 
@@ -183,13 +184,15 @@ class BoggleUI {
     try { rec = (loadStats().games || {}).boggle; } catch { rec = null; }
     const bg = rec && rec.bg;
     if (!bg || !bg.played) return '';
-    return `${bg.played} played · ${bg.won | 0}-${bg.lost | 0}-${bg.tied | 0} · best score ${bg.bestScore | 0}`;
+    return t('stats_line', { played: bg.played, w: bg.won | 0, l: bg.lost | 0, t: bg.tied | 0, score: bg.bestScore | 0 });
   }
 
   // --- DOM construction -------------------------------------------------------
 
   mount() {
-    this.container.innerHTML = `<div class="bg-root"><div class="bg-shell" data-role="shell"></div></div>`;
+    // translate="no": machine translation rewrites single-letter tiles into
+    // words (Ana hit this 2026-07-23) -- see boggle/CLAUDE.md.
+    this.container.innerHTML = `<div class="bg-root" translate="no"><div class="bg-shell" data-role="shell"></div></div>`;
     this.root = this.container.querySelector('.bg-root');
     this.shell = this.root.querySelector('[data-role="shell"]');
     this.root.addEventListener('click', this._onClick);
@@ -198,9 +201,9 @@ class BoggleUI {
 
   // --- setup screen -----------------------------------------------------------
 
-  _seg(action, value, opts) {
-    return `<div class="bg-seg">${opts.map(([v, lbl]) =>
-      `<button type="button" class="bg-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${esc(lbl)}</button>`).join('')}</div>`;
+  _seg(action, value, ids, labelKeys) {
+    return `<div class="bg-seg">${ids.map((v) =>
+      `<button type="button" class="bg-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${esc(t(labelKeys[v]))}</button>`).join('')}</div>`;
   }
 
   _row(key, label, value, content) {
@@ -214,16 +217,14 @@ class BoggleUI {
   }
 
   _timerContent() {
-    return this._seg('set-timer', this._setup.timerMinutes, TIMERS);
+    return this._seg('set-timer', this._setup.timerMinutes, TIMERS, TIMER_LABEL_KEY);
   }
 
   _diffContent() {
     const s = this._setup;
-    const hint = s.difficulty === 'pro'
-      ? 'Finds most of the words on the board, especially the long, high-value ones. Tough to beat.'
-      : s.difficulty === 'intermediate' ? 'Finds close to half the words on the board, an even mix of lengths.'
-        : 'Finds about a fifth of the words on the board, mostly short ones.';
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES) + `<p class="bg-hint">${hint}</p>`;
+    const hintKey = s.difficulty === 'pro' ? 'hint_diff_pro'
+      : s.difficulty === 'intermediate' ? 'hint_diff_intermediate' : 'hint_diff_beginner';
+    return this._seg('set-diff', s.difficulty, DIFFICULTIES, DIFF_LABEL_KEY) + `<p class="bg-hint">${esc(t(hintKey))}</p>`;
   }
 
   renderSetup() {
@@ -236,20 +237,20 @@ class BoggleUI {
     const s = this._setup;
     const stats = this._statsLine();
     this.shell.innerHTML = `
-      <h1 class="bg-title">Boggle</h1>
-      <p class="bg-sub">Shake the grid, race the clock, link touching letters into words.</p>
+      <h1 class="bg-title">${esc(t('title'))}</h1>
+      <p class="bg-sub">${esc(t('tagline'))}</p>
       ${stats ? `<p class="bg-stats">${esc(stats)}</p>` : ''}
       <div class="bg-vscard">
         <div class="bg-vsside"><span class="bg-vsemoji">${esc(id.humanEmoji)}</span><span class="bg-vsname">${esc(id.humanName)}</span></div>
-        <span class="bg-vslabel">vs</span>
+        <span class="bg-vslabel">${esc(t('vs'))}</span>
         <div class="bg-vsside"><span class="bg-vsemoji">${esc(id.oppEmoji)}</span><span class="bg-vsname">${esc(id.oppName)}</span></div>
       </div>
       <div class="bg-summary">
-        ${this._row('timer', 'Timer', TIMER_LABEL[s.timerMinutes], this._timerContent())}
-        ${this._row('difficulty', 'Difficulty', DIFF_LABEL[s.difficulty], this._diffContent())}
+        ${this._row('timer', esc(t('row_timer')), t(TIMER_LABEL_KEY[s.timerMinutes]), this._timerContent())}
+        ${this._row('difficulty', esc(t('row_difficulty')), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
       </div>
-      <button type="button" class="bg-btn bg-btn-primary" data-action="start">Start game</button>
-      <button type="button" class="bg-link" data-action="help">How to play</button>`;
+      <button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('start'))}</button>
+      <button type="button" class="bg-link" data-action="help">${esc(t('howto'))}</button>`;
   }
 
   // --- loading ------------------------------------------------------------
@@ -259,7 +260,7 @@ class BoggleUI {
     this.shell.innerHTML = `
       <div class="bg-loading">
         <div class="bg-spinner" aria-hidden="true"></div>
-        <p>Loading the dictionary&hellip;</p>
+        <p>${esc(t('loading'))}</p>
       </div>`;
   }
 
@@ -267,9 +268,9 @@ class BoggleUI {
     if (this._dead) return;
     this.shell.innerHTML = `
       <div class="bg-loading">
-        <p>Could not load the dictionary. Check your connection and try again.</p>
-        <button type="button" class="bg-btn bg-btn-primary" data-action="start">Try again</button>
-        <button type="button" class="bg-link" data-action="change-settings">Back to setup</button>
+        <p>${esc(t('load_error'))}</p>
+        <button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('try_again'))}</button>
+        <button type="button" class="bg-link" data-action="change-settings">${esc(t('back_to_setup'))}</button>
       </div>`;
   }
 
@@ -569,10 +570,10 @@ class BoggleUI {
         const isLast = key === lastKey;
         const live = !this._roundOver && (path.length === 0 || isLast || (liveKeys && liveKeys.has(key)));
         let label;
-        if (inPath && !isLast) label = `Letter ${face}, already used in this word`;
-        else if (isLast) label = `Letter ${face}, end of the word, tap to remove it`;
-        else if (!live) label = `Letter ${face}, not touching the current letter`;
-        else label = `Letter ${face}, row ${r + 1} column ${c + 1}`;
+        if (inPath && !isLast) label = t('tile_used', { face });
+        else if (isLast) label = t('tile_last', { face });
+        else if (!live) label = t('tile_dead', { face });
+        else label = t('tile_live', { face, row: r + 1, col: c + 1 });
         out.push({ r, c, face, inPath, isLast, live, label });
       }
     }
@@ -597,7 +598,7 @@ class BoggleUI {
       <svg class="bg-path-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <polyline points="${points}" class="bg-path-line" fill="none"${points ? '' : ' style="display:none"'}/>
       </svg>
-      <div class="bg-board" role="grid" aria-label="Boggle board">${tiles}</div>
+      <div class="bg-board" role="grid" aria-label="${esc(t('aria_board'))}">${tiles}</div>
     </div>`;
   }
 
@@ -631,7 +632,7 @@ class BoggleUI {
     const word = this._path.length ? wordForPath(this._board.grid, this._path) : '';
     const textEl = this.shell.querySelector('.bg-wordbar-text');
     if (textEl) {
-      textEl.textContent = word || WORDBAR_HINT;
+      textEl.textContent = word || t('wordbar_hint');
       textEl.classList.toggle('is-empty', !word);
     }
     const clearBtn = this.shell.querySelector('[data-action="clear-path"]');
@@ -643,9 +644,9 @@ class BoggleUI {
   _feedbackHtml() {
     const f = this._feedback;
     if (!f) return '<p class="bg-feedback" aria-live="polite"></p>';
-    if (f.type === 'valid') return `<p class="bg-feedback is-good" aria-live="polite"><span aria-hidden="true">&check;</span> ${esc(f.word)}: ${f.score} point${f.score === 1 ? '' : 's'}</p>`;
-    if (f.type === 'duplicate') return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> Already found ${esc(f.word)}</p>`;
-    return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> "${esc(f.word)}" is not in the dictionary</p>`;
+    if (f.type === 'valid') return `<p class="bg-feedback is-good" aria-live="polite"><span aria-hidden="true">&check;</span> ${esc(t('feedback_valid', { word: f.word, n: f.score }))}</p>`;
+    if (f.type === 'duplicate') return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> ${esc(t('feedback_duplicate', { word: f.word }))}</p>`;
+    return `<p class="bg-feedback is-bad" aria-live="polite"><span aria-hidden="true">&cross;</span> ${esc(t('feedback_invalid', { word: f.word }))}</p>`;
   }
 
   renderGame() {
@@ -661,25 +662,25 @@ class BoggleUI {
     this.shell.innerHTML = `
       <div class="bg-topbar">
         <div class="bg-timer ${this._remainingSec <= 10 ? 'is-low' : ''}" data-role="timer" aria-live="polite">${mm}:${ss}</div>
-        <div class="bg-scorebox"><b>${score}</b><span>points</span></div>
-        <div class="bg-scorebox"><b>${this._found.size}</b><span>words</span></div>
+        <div class="bg-scorebox"><b>${score}</b><span>${esc(t('points'))}</span></div>
+        <div class="bg-scorebox"><b>${this._found.size}</b><span>${esc(t('words'))}</span></div>
       </div>
       ${this._boardHtml()}
       <div class="bg-wordbar">
-        <div class="bg-wordbar-text ${word ? '' : 'is-empty'}">${word ? esc(word) : WORDBAR_HINT}</div>
+        <div class="bg-wordbar-text ${word ? '' : 'is-empty'}">${word ? esc(word) : esc(t('wordbar_hint'))}</div>
         <div class="bg-wordbar-actions">
-          <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="clear-path" ${this._path.length ? '' : 'disabled'}>Clear</button>
-          <button type="button" class="bg-btn bg-btn-primary bg-btn-small" data-action="submit-word" ${canSubmit ? '' : 'disabled'}><span aria-hidden="true">&check;</span> Enter</button>
+          <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="clear-path" ${this._path.length ? '' : 'disabled'}>${esc(t('clear'))}</button>
+          <button type="button" class="bg-btn bg-btn-primary bg-btn-small" data-action="submit-word" ${canSubmit ? '' : 'disabled'}><span aria-hidden="true">&check;</span> ${esc(t('enter'))}</button>
         </div>
       </div>
       ${this._feedbackHtml()}
       <div class="bg-found">
-        <h4 class="bg-found-h">Words found</h4>
-        <ul class="bg-found-list">${foundRows || '<li class="bg-found-empty">None yet</li>'}</ul>
+        <h4 class="bg-found-h">${esc(t('words_found'))}</h4>
+        <ul class="bg-found-list">${foundRows || `<li class="bg-found-empty">${esc(t('none_yet'))}</li>`}</ul>
       </div>
       <div class="bg-actions">
-        <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="help">How to play</button>
-        <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="change-settings">Give up</button>
+        <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="help">${esc(t('howto'))}</button>
+        <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="change-settings">${esc(t('give_up'))}</button>
       </div>`;
     // renderGame() replaces the board element, so the pointer listeners have to
     // be re-bound to the NEW node (and the old ones dropped) every time.
@@ -731,28 +732,28 @@ class BoggleUI {
     this.closeOverlays();
     const id = this._identity();
     const r = this._result;
-    const title = r.won === null ? 'Tie game!' : r.won ? 'You win!' : `${id.oppName} wins`;
+    const title = r.won === null ? t('tie_game') : r.won ? t('you_win') : t('opp_wins', { opp: id.oppName });
     const emoji = r.won === null ? '🤝' : r.won ? '🏆' : id.oppEmoji;
     const overlay = document.createElement('div');
     overlay.className = 'bg-overlay';
     overlay.dataset.role = 'end';
     overlay.innerHTML = `
       <div class="bg-scrim"></div>
-      <div class="bg-card bg-end" role="dialog" aria-modal="true" aria-label="Round over">
-        <button type="button" class="bg-x" data-action="close-overlay" aria-label="Close">&times;</button>
+      <div class="bg-card bg-end" role="dialog" aria-modal="true" aria-label="${esc(t('aria_round_over'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
         <span class="bg-card-emoji">${emoji}</span>
         <h3 class="bg-card-title">${esc(title)}</h3>
-        <p class="bg-card-sub">${r.humanScore}-${r.aiScore} &middot; ${TIMER_LABEL[this._setup.timerMinutes]} &middot; ${DIFF_LABEL[this._setup.difficulty]}</p>
+        <p class="bg-card-sub">${esc(t('end_sub', { score1: r.humanScore, score2: r.aiScore, timer: t(TIMER_LABEL_KEY[this._setup.timerMinutes]), diff: t(DIFF_LABEL_KEY[this._setup.difficulty]) }))}</p>
         <div class="bg-end-tallies">
-          <div class="bg-tally"><b>${r.humanWords.length}</b><span>${esc(id.humanName)}'s words</span></div>
-          <div class="bg-tally"><b>${r.aiWords.length}</b><span>${esc(id.oppName)}'s words</span></div>
-          <div class="bg-tally"><b>${this._solved.length}</b><span>Possible on this board</span></div>
+          <div class="bg-tally"><b>${r.humanWords.length}</b><span>${esc(t('your_words', { name: id.humanName }))}</span></div>
+          <div class="bg-tally"><b>${r.aiWords.length}</b><span>${esc(t('your_words', { name: id.oppName }))}</span></div>
+          <div class="bg-tally"><b>${this._solved.length}</b><span>${esc(t('possible_on_board'))}</span></div>
         </div>
-        <button type="button" class="bg-link" data-action="toggle-solve">${this._solveExpanded ? 'Hide' : 'Browse'} every word on the board &rsaquo;</button>
+        <button type="button" class="bg-link" data-action="toggle-solve">${esc(t(this._solveExpanded ? 'hide_words' : 'browse_words'))}</button>
         ${this._solveExpanded ? this._fullSolveHtml() : ''}
         <div class="bg-card-actions">
-          <button type="button" class="bg-btn bg-btn-primary" data-action="rematch">Play again</button>
-          <button type="button" class="bg-btn bg-btn-ghost" data-action="change-settings">Change settings</button>
+          <button type="button" class="bg-btn bg-btn-primary" data-action="rematch">${esc(t('play_again'))}</button>
+          <button type="button" class="bg-btn bg-btn-ghost" data-action="change-settings">${esc(t('change_settings'))}</button>
         </div>
       </div>`;
     this.root.appendChild(overlay);
@@ -775,7 +776,7 @@ class BoggleUI {
   _pathDiagram() {
     const gridRects = [];
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) gridRects.push(`<rect x="${14 + c * 46}" y="${14 + r * 46}" width="36" height="36" rx="8"/>`);
-    return `<svg class="bg-diagram" viewBox="0 0 200 200" role="img" aria-label="A word traced through three touching tiles including one diagonal step; the first tile, already used, is crossed out and cannot be tapped again">
+    return `<svg class="bg-diagram" viewBox="0 0 200 200" role="img" aria-label="${esc(t('aria_diagram'))}">
       <defs>
         <marker id="bg-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--bg-accent-deep)"/>
@@ -797,20 +798,21 @@ class BoggleUI {
     overlay.dataset.role = 'help';
     overlay.innerHTML = `
       <div class="bg-scrim" data-action="close-overlay"></div>
-      <div class="bg-card bg-help" role="dialog" aria-modal="true" aria-label="How to play">
-        <button type="button" class="bg-x" data-action="close-overlay" aria-label="Close">&times;</button>
-        <h3 class="bg-card-title">How to play</h3>
-        <p class="bg-help-lead">Find as many words as you can before time runs out.</p>
+      <div class="bg-card bg-help" role="dialog" aria-modal="true" aria-label="${esc(t('howto'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
+        <h3 class="bg-card-title">${esc(t('howto'))}</h3>
+        <p class="bg-help-lead">${esc(t('help_lead'))}</p>
         <div class="bg-diagram-wrap">${this._pathDiagram()}</div>
         <div class="bg-help-lines">
-          <p class="bg-help-caption">Letters must touch, including corners. You cannot use the same tile twice in one word.</p>
-          <p class="bg-help-example">Tiles touching corner to corner = still connected</p>
+          <p class="bg-help-caption">${esc(t('help_caption'))}</p>
+          <p class="bg-help-example">${esc(t('help_example'))}</p>
           <ul class="bg-help-list">
-            <li>Swipe through the letters without lifting your finger, then let go to submit.</li>
-            <li>Slide back a letter to undo it, still without lifting.</li>
-            <li>Qu is one tile that counts as two letters.</li>
-            <li>Longer words score much more: three letters is 1 point, eight letters is 11.</li>
-            <li>Words you both find still count for both of you.</li>
+            <li>${esc(t('help_1'))}</li>
+            <li>${esc(t('help_2'))}</li>
+            <li>${esc(t('help_3'))}</li>
+            <li>${esc(t('help_4'))}</li>
+            <li>${esc(t('help_5'))}</li>
+            <li>${esc(t('help_6'))}</li>
           </ul>
         </div>
       </div>`;
