@@ -25,7 +25,14 @@ snake/index.html     standalone host (same init() as in-hub)
 
 ## Rules (classic phone Snake, deliberately)
 
-- Walled 15x17 grid — **walls kill**, no wrap-around. Self-collision kills.
+- Walled 15x17 grid — **walls kill** by default. An opt-in **Walls off** setup toggle (Ana's
+  request, 2026-07-23, "like pac man") makes the head wrap to the opposite edge instead
+  (`game.js`'s `wrap` constructor flag; `head.x/y` modulo `COLS`/`ROWS` on an out-of-bounds
+  step). Self-collision kills either way — wrap only changes the wall check. Persisted as
+  `walls: 'on'|'off'` in `gamehub.snake.v1` (additive; a save without the field reads as
+  `'on'`). This is a rule variant, not a difficulty tier: wrap games record under the SAME
+  `easy/medium/hard` stats ids as walled games (THE LAW rule 5 — do not fork a new id for a
+  rule toggle; Escoba's rule toggles don't fork its stats either).
 - Food grows the snake by one and scores one; it never spawns on the snake.
 - A 180° reversal is impossible (checked against the last EFFECTIVE heading, including queued
   turns, so two fast taps can't sneak a reversal through).
@@ -60,32 +67,48 @@ players-agg's `SOLO` set and joins `soloRating()`'s best-relative-to-field axis 
 
 ## Settings & persistence
 
-`gamehub.snake.v1`: `{ difficulty, dpadStyle }`. Precedence: saved settings > profile skill (1/2/3
-→ easy/medium/hard) > medium (difficulty); `dpadStyle` defaults to `'classic'` and falls back to
-it if the stored value isn't one of the five known ids (`DPAD_STYLE_IDS` in ui.js), so a future
-removed/renamed style can never crash the setup screen. Language is NOT stored here — it's the
-hub-wide `gamehub.lang.v1`.
+`gamehub.snake.v1`: `{ difficulty, dpadStyle, walls }`. Precedence: saved settings > profile skill
+(1/2/3 → easy/medium/hard) > medium (difficulty); `dpadStyle` defaults to `'compass'` and falls
+back to it if the stored value isn't one of the six known ids (`DPAD_STYLE_IDS` in ui.js), so a
+future removed/renamed style can never crash the setup screen. `walls` defaults to `'on'` and a
+saved value that isn't `'off'` also reads as `'on'` (additive field, THE LAW rule 3: an existing
+save without it just keeps classic behavior). Language is NOT stored here — it's the hub-wide
+`gamehub.lang.v1`.
 
 ## UI notes
 
 - Canvas renders the LCD look (pale green `#c9dd9a`, dark pixels `#28340f`); snake is SQUARE
-  cells, food is a HOLLOW CIRCLE — shapes, not hue, tell them apart (colorblind rule).
+  cells, food is a FILLED CIRCLE (Ana: it read too small as a hollow ring; filled + `cell/2 - 1.5`
+  radius reads at a glance) — shapes, not hue, tell them apart (colorblind rule).
 - First steering input starts the clock ("ready" overlay until then). `visibilitychange`
   auto-pauses; tap resumes. NOTE: background tabs throttle `setInterval`, so a backgrounded run
   crawls — the auto-pause covers the hidden-tab case, and a throttled-but-visible preview pane
   is a dev-environment artifact, not a bug.
-- The board wrap is `touch-action: none` (a swipe surface must never scroll the page).
+- **Scroll-leak guard** (Matt: "I accidentally scrolled a bit while playing Snake", 2026-07-23):
+  the board wrap is `touch-action: none` (a swipe surface must never scroll the page), and so is
+  the whole `.sn-pad` container — a prior version only set `touch-action: manipulation` on the
+  individual buttons, so a drag starting on the pad's backdrop or the gaps between buttons could
+  still pan the page. `ui.js` also installs a non-passive `document` `touchmove` listener
+  (`_onTouchMove`) that `preventDefault()`s while a run is genuinely live (`screen==='game' &&
+  game && !game.over && started && !paused`); it's added in the constructor alongside `_onKey`/
+  `_onVis` and removed in `destroy()`.
 - On-screen D-pad (▲ / ◀ ▼ ▶) below the board, `pointerdown`-driven, wired through the same
-  `_steer()` path as swipes and keys; `_sizeCanvas()` height-caps the cell size so board + pad
-  always fit the viewport.
-- **Five selectable D-pad looks** (2026-07-23, from Matt-supplied reference images, recolored to
+  `_steer()` path as swipes and keys. `_sizeCanvas()` sizes the board in two passes: a
+  width-bound guess first (COLS already fills the width before ROWS needs the height on ordinary
+  phones), then it measures the pad's ACTUAL rendered `getBoundingClientRect().bottom` and only
+  shrinks the board if that real footprint would run past the viewport — no more fixed-px budget
+  guess. `_centerGame()`'s leftover-space top margin is skipped if it would push the pad's
+  measured bottom edge off-screen.
+- **Six selectable D-pad looks** (2026-07-23, from Matt-supplied reference images, recolored to
   the LCD theme rather than their reference colors): `classic` (the original 2-row cross, up alone
-  on top), `circle` (translucent disc, floating chevrons, dim center dot), `gamepad` (bezeled
-  plastic cross with a raised nub), `solid` (flat cross, no visible arrows — position alone tells
-  them apart, aria-label still names each direction), `solidArrows` (the same flat cross with
-  light arrows shown). All five share one markup (`padCellsHTML()` in ui.js) and one grid; only
-  `classic` uses the 2-row layout, the other four are a true 4-way plus (extra `mid` grid cell/row
-  for the center marker some looks use) — see the `.sn-pad--*` rules in snake.css. Picked via a
+  on top), `compass` (Matt's own design and the DEFAULT — the same individual bordered squares as
+  classic, but a true 3-row layout: up alone / left+right / down alone), `circle` (translucent
+  disc, floating chevrons, dim center dot), `gamepad` (bezeled plastic cross with a raised nub),
+  `solid` (flat cross, no visible arrows — position alone tells them apart, aria-label still names
+  each direction), `solidArrows` (the same flat cross with light arrows shown). All six share one
+  markup (`padCellsHTML()` in ui.js) and one grid; only `classic` uses the 2-row layout, the other
+  five are a true 4-way plus (extra `mid` grid cell/row for the center marker some looks use) —
+  see the `.sn-pad--*` rules in snake.css. Picked via a
   labeled, visually-previewed picker on the setup screen (`sn-dpad-options`, previews render the
   same real markup at `transform: scale()` inside non-interactive `<span>`s to avoid nesting a
   `<button>` inside a `<button>`) — the picker's own "D-pad style" label plus its hint line
@@ -101,6 +124,7 @@ hub-wide `gamehub.lang.v1`.
 ```
 node snake/js/test.js
 ```
-38 assertions: construction, movement, the reversal guard and queue cap, both wall axes, eating
+49 assertions: construction, movement, the reversal guard and queue cap, both wall axes, eating
 and growth, self-collision via a closed 2x2 loop at length 7, the legal tail-chase at length 4,
-and food-spawn integrity over 50 seeded random runs. Wired into run-all-tests.mjs.
+wrap mode at all four walls plus wrap self-collision still being fatal, and food-spawn integrity
+over 50 seeded random runs. Wired into run-all-tests.mjs.

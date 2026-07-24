@@ -30,10 +30,13 @@ const DIRS = {
 const OPPOSITE = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
 export class Game {
-  /** `rng` is injectable (tests pass a seeded one); defaults to Math.random. */
-  constructor(difficulty = 'medium', rng = Math.random) {
+  /** `rng` is injectable (tests pass a seeded one); defaults to Math.random.
+   *  `wrap`: when true, walls don't kill — the head re-enters on the opposite side instead
+   *  (self-collision still kills either way). */
+  constructor(difficulty = 'medium', rng = Math.random, wrap = false) {
     this.difficulty = DIFFS.includes(difficulty) ? difficulty : 'medium';
     this.rng = rng;
+    this.wrap = !!wrap;
     // Snake starts horizontal, centered, heading right; head is body[0].
     const cy = Math.floor(ROWS / 2);
     const cx = Math.floor(COLS / 2);
@@ -66,12 +69,17 @@ export class Game {
     if (this.over) return { moved: false, ate: false, over: true, won: this.won };
     if (this.queue.length) this.dir = this.queue.shift();
     const d = DIRS[this.dir];
-    const head = { x: this.body[0].x + d.x, y: this.body[0].y + d.y };
+    let head = { x: this.body[0].x + d.x, y: this.body[0].y + d.y };
 
-    // Walls kill (classic phone rules — no wrap).
     if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
-      this.over = true;
-      return { moved: false, ate: false, over: true, won: false };
+      if (this.wrap) {
+        // Re-enter on the opposite side; self-collision below still applies normally.
+        head = { x: (head.x + COLS) % COLS, y: (head.y + ROWS) % ROWS };
+      } else {
+        // Walls kill (classic phone rules).
+        this.over = true;
+        return { moved: false, ate: false, over: true, won: false };
+      }
     }
 
     const ate = !!(this.food && head.x === this.food.x && head.y === this.food.y);

@@ -151,6 +151,9 @@
      box — exactly what broke the mini previews (see .sn-pad--mini below) until this was caught. */
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
   width: min(240px, 70vw); margin: 2px auto 0;
+  /* The container, not just its buttons: a drag starting on the backdrop or between buttons
+     must never pan the page (scroll-leak fix, 2026-07-23). */
+  touch-action: none;
 }
 .sn-root .sn-pad--classic {
   grid-template-areas: ". up ." "left down right";

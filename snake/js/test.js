@@ -111,6 +111,58 @@ function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 10
   ok('tail-chase at length 4 survives', r.over === false && !g.over);
 }
 
+// --- wrap-around mode ----------------------------------------------------------------------------
+{
+  // Right wall: heading right off the edge re-enters at x=0, same row. Food is kept out of the
+  // way (off in a corner) so the snake doesn't grow and shift its own occupied cells mid-walk.
+  const g = new Game('medium', seeded(10), true);
+  const y0 = g.body[0].y;
+  const x0 = g.body[0].x;
+  g.food = { x: 0, y: ROWS - 1 };
+  for (let i = 0; i < (COLS - 1 - x0) + 1; i++) g.step();   // reach the right edge, then wrap once
+  ok('wrap: right wall does not end the run', g.over === false);
+  ok('wrap: head re-enters at x=0', g.body[0].x === 0);
+  ok('wrap: row unchanged crossing the right wall', g.body[0].y === y0);
+
+  // Left wall.
+  const g2 = new Game('medium', seeded(11), true);
+  g2.food = { x: 0, y: ROWS - 1 };
+  g2.setDirection('up'); g2.step();
+  g2.setDirection('left');
+  const gx0 = g2.body[0].x;
+  for (let i = 0; i < gx0 + 1; i++) g2.step();               // reach x=0, then wrap once more
+  ok('wrap: left wall does not end the run', g2.over === false);
+  ok('wrap: head re-enters at x=COLS-1', g2.body[0].x === COLS - 1);
+
+  // Bottom wall.
+  const g3 = new Game('medium', seeded(12), true);
+  g3.food = { x: 0, y: 0 };
+  g3.setDirection('down');
+  const gx3 = g3.body[0].x, gy3 = g3.body[0].y;
+  for (let i = 0; i < (ROWS - 1 - gy3) + 1; i++) g3.step();  // reach the bottom edge, then wrap once
+  ok('wrap: bottom wall does not end the run', g3.over === false);
+  ok('wrap: head re-enters at y=0', g3.body[0].y === 0);
+  ok('wrap: column unchanged crossing the bottom wall', g3.body[0].x === gx3);
+
+  // Top wall.
+  const g4 = new Game('medium', seeded(13), true);
+  g4.food = { x: 0, y: 0 };
+  g4.setDirection('up');
+  const gy4 = g4.body[0].y;
+  for (let i = 0; i < gy4 + 1; i++) g4.step();               // reach y=0, then wrap once more
+  ok('wrap: top wall does not end the run', g4.over === false);
+  ok('wrap: head re-enters at y=ROWS-1', g4.body[0].y === ROWS - 1);
+
+  // Self-collision must still be fatal with wrap on (same closed 2x2 loop as the non-wrap test).
+  const g5 = new Game('medium', seeded(14), true);
+  for (let i = 0; i < 4; i++) { g5.food = { x: g5.body[0].x + 1, y: g5.body[0].y }; g5.step(); }
+  g5.food = { x: 0, y: 0 };
+  g5.setDirection('down'); g5.step();
+  g5.setDirection('left'); g5.step();
+  g5.setDirection('up'); const r5 = g5.step();
+  ok('wrap: self-collision is still fatal', r5.over === true && g5.over === true);
+}
+
 // --- food distribution / spawn integrity over many runs ----------------------------------------
 {
   const rng = seeded(9);

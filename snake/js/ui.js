@@ -42,18 +42,20 @@ function saveSettings(s) {
   catch (err) { console.error('[snake] settings save failed', err); }
 }
 
-/** Last-used settings beat profile (skill 1/2/3 -> easy/medium/hard) beat the default. */
+/** Last-used settings beat profile (skill 1/2/3 -> easy/medium/hard) beat the default.
+ *  `walls` is additive (2026-07-23): an existing save without it reads as 'on', same as before. */
 function loadSettings() {
   const saved = readJSON(SETTINGS_KEY);
   const dpadStyle = saved && DPAD_STYLE_IDS.includes(saved.dpadStyle) ? saved.dpadStyle : DEFAULT_DPAD_STYLE;
-  if (saved && DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty, dpadStyle };
+  const walls = saved && saved.walls === 'off' ? 'off' : 'on';
+  if (saved && DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty, dpadStyle, walls };
   let skillDiff = null;
   try {
     const p = loadProfile();
     const skill = p && p.opponents && p.opponents[0] ? p.opponents[0].skill : null;
     skillDiff = skill === 1 ? 'easy' : skill === 3 ? 'hard' : skill === 2 ? 'medium' : null;
   } catch { /* no profile is fine */ }
-  return { difficulty: skillDiff || 'medium', dpadStyle };
+  return { difficulty: skillDiff || 'medium', dpadStyle, walls };
 }
 
 /** The pad's inner cells: `tag` is 'button' for the real, interactive pad, or 'span' for the
@@ -90,8 +92,18 @@ class SnakeUI {
     this._ensureCss();
     this._onKey = (e) => this._handleKey(e);
     this._onVis = () => { if (document.hidden) this._pause(); };
+    // Scroll-leak guard (Matt: "I accidentally scrolled a bit while playing Snake"): a vertical
+    // drag starting on the D-pad backdrop, the gaps between its buttons, or drifting off a held
+    // button could pan the page mid-run even with the board's own touch-action:none. Non-passive
+    // so preventDefault actually blocks the scroll; only acts while a run is genuinely live.
+    this._onTouchMove = (e) => {
+      if (this.screen === 'game' && this.game && !this.game.over && this.started && !this.paused) {
+        e.preventDefault();
+      }
+    };
     document.addEventListener('keydown', this._onKey);
     document.addEventListener('visibilitychange', this._onVis);
+    document.addEventListener('touchmove', this._onTouchMove, { passive: false });
     this._offLang = onLangChange(() => this._rerenderForLang());
     this.renderSetup();
   }
@@ -113,9 +125,13 @@ class SnakeUI {
     this.screen = 'setup';
     const d = this.settings.difficulty;
     const dp = this.settings.dpadStyle;
+    const w = this.settings.walls;
     const diffBtn = (id, label) => `
       <button type="button" class="sn-seg${d === id ? ' is-on' : ''}" data-diff="${id}"
         aria-pressed="${d === id}">${label}</button>`;
+    const wallsBtn = (id, label) => `
+      <button type="button" class="sn-seg${w === id ? ' is-on' : ''}" data-walls="${id}"
+        aria-pressed="${w === id}">${label}</button>`;
     const dpadOption = (style) => `
       <button type="button" class="sn-dpad-option${dp === style.id ? ' is-on' : ''}" data-dpad="${style.id}"
         aria-pressed="${dp === style.id}" aria-label="${t(style.labelKey)}">
@@ -136,6 +152,12 @@ class SnakeUI {
             </div>
           </div>
           <div class="sn-field">
+            <span class="sn-label">${t('walls')}</span>
+            <div class="sn-segrow" role="group" aria-label="${t('walls')}">
+              ${wallsBtn('on', t('walls_on'))}${wallsBtn('off', t('walls_off'))}
+            </div>
+          </div>
+          <div class="sn-field">
             <span class="sn-label">${t('dpad_style')}</span>
             <p class="sn-dpad-hint">${t('dpad_style_hint')}</p>
             <div class="sn-dpad-options" role="group" aria-label="${t('aria_dpad_style_group')}">
@@ -146,13 +168,16 @@ class SnakeUI {
           <button type="button" class="sn-howto" data-role="howto">${t('howto')}</button>
         </div>
       </div>`;
-    this.root.querySelector('.sn-segrow').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-diff]');
-      if (!b) return;
-      this.settings.difficulty = b.dataset.diff;
-      saveSettings(this.settings);
-      this.root.querySelectorAll('.sn-seg').forEach((x) =>
-        { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    this.root.querySelectorAll('.sn-segrow').forEach((row) => {
+      row.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-diff], [data-walls]');
+        if (!b || !row.contains(b)) return;
+        if (b.dataset.diff) { this.settings.difficulty = b.dataset.diff; }
+        else { this.settings.walls = b.dataset.walls; }
+        saveSettings(this.settings);
+        row.querySelectorAll('.sn-seg').forEach((x) =>
+          { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+      });
     });
     this.root.querySelector('.sn-dpad-options').addEventListener('click', (e) => {
       const b = e.target.closest('[data-dpad]');
@@ -197,7 +222,7 @@ class SnakeUI {
   // --- run -------------------------------------------------------------------------------------
   startRun() {
     this.screen = 'game';
-    this.game = new Game(this.settings.difficulty);
+    this.game = new Game(this.settings.difficulty, Math.random, this.settings.walls === 'off');
     this.started = false;
     this.paused = false;
     this.recorded = false;
@@ -252,11 +277,25 @@ class SnakeUI {
   _sizeCanvas() {
     const wrap = this.canvas.parentElement;
     const cw = wrap.clientWidth || 320;
-    // Height budget: the pad + HUD + margins below the board need ~280px at most now that the
-    // pad's size caps are bigger; never let the board push the pad off a short viewport. Width
-    // stays the cap on ordinary phones.
-    const availH = Math.max(200, (window.innerHeight || 640) - wrap.getBoundingClientRect().top - 280);
-    this.cell = Math.max(10, Math.min(Math.floor(cw / COLS), Math.floor(availH / ROWS)));
+    // Pass 1: a width-bound guess (COLS already fills the width before ROWS needs the height on
+    // ordinary phones) — enough to lay out a real pad+HUD so pass 2 can measure their ACTUAL
+    // footprint instead of assuming a fixed budget (which went stale the moment the pad's own
+    // size caps changed, and left dead space whenever the true footprint was smaller).
+    this._applyBoardSize(Math.max(10, Math.floor(cw / COLS)));
+    if (this.pad) {
+      const bottomMargin = 16;
+      const overflow = this.pad.getBoundingClientRect().bottom - ((window.innerHeight || 640) - bottomMargin);
+      if (overflow > 0) {
+        // The pad's real bottom edge runs past the viewport — shrink the board (and re-derive
+        // the pad from it) until it fits, never letting the D-pad go off-screen.
+        const availH = Math.max(200, (this.cell * ROWS) - overflow);
+        this._applyBoardSize(Math.max(10, Math.min(this.cell, Math.floor(availH / ROWS))));
+      }
+    }
+  }
+
+  _applyBoardSize(cell) {
+    this.cell = cell;
     const w = this.cell * COLS, h = this.cell * ROWS;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = w * dpr; this.canvas.height = h * dpr;
@@ -293,7 +332,16 @@ class SnakeUI {
     game.style.marginTop = '';
     const rect = game.getBoundingClientRect();
     const leftover = (window.innerHeight || 640) - rect.top - rect.height;
-    if (leftover > 32) game.style.marginTop = Math.floor(leftover / 2) + 'px';
+    if (leftover > 32) {
+      const margin = Math.floor(leftover / 2);
+      game.style.marginTop = margin + 'px';
+      // _sizeCanvas() already sized the board to fill the vertical budget down to the pad's real
+      // bottom edge, so any leftover here is genuinely spare (width-bound) space — but never let
+      // centering push the pad's bottom edge off-screen.
+      if (this.pad && this.pad.getBoundingClientRect().bottom > (window.innerHeight || 640) - 8) {
+        game.style.marginTop = '';
+      }
+    }
   }
 
   _steer(dir) {
@@ -397,11 +445,10 @@ class SnakeUI {
     c.fillRect(head.x * cell + Math.floor(cell / 2) - 1, head.y * cell + Math.floor(cell / 2) - 1, 2, 2);
     if (this.game.food) {
       const f = this.game.food;
-      c.strokeStyle = '#28340f';
-      c.lineWidth = Math.max(2, Math.floor(cell / 5));
+      c.fillStyle = '#28340f';
       c.beginPath();
-      c.arc(f.x * cell + cell / 2, f.y * cell + cell / 2, cell / 2 - 2.5, 0, Math.PI * 2);
-      c.stroke();
+      c.arc(f.x * cell + cell / 2, f.y * cell + cell / 2, cell / 2 - 1.5, 0, Math.PI * 2);
+      c.fill();
     }
   }
 
@@ -433,6 +480,7 @@ class SnakeUI {
     this._stopLoop();
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
+    document.removeEventListener('touchmove', this._onTouchMove, { passive: false });
     if (this._offLang) this._offLang();
     document.querySelectorAll('.sn-help-overlay').forEach((n) => n.remove());
     this.root.innerHTML = '';

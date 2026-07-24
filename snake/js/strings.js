@@ -55,6 +55,10 @@ export const STRINGS = {
     dpad_solid: 'Solid',
     dpad_solid_arrows: 'Solid + arrows',
     aria_dpad_style_group: 'D-pad style',
+    // Walls mode (setup screen)
+    walls: 'Walls',
+    walls_on: 'Walls on',
+    walls_off: 'Walls off',
   },
   es: {
     title: 'Serpiente',
@@ -99,6 +103,9 @@ export const STRINGS = {
     dpad_solid: 'Sólido',
     dpad_solid_arrows: 'Sólido + flechas',
     aria_dpad_style_group: 'Estilo de cruceta',
+    walls: 'Paredes',
+    walls_on: 'Con paredes',
+    walls_off: 'Sin paredes',
   },
 };
 
