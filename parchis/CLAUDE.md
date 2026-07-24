@@ -20,7 +20,25 @@ and rebuild.
 - **Profile:** Parchís prefills from `gamehub.profile` via its own inlined reader (`readProfile()`/`prefill()`
   in the built `index.html`; source in `../Parchís/src/`): human name from `profile.name`, opponent names
   and skills from `profile.opponents`. Its own last-used prefs (`parchis_r2_prefs`) take precedence, same as
-  every other game. Do not add a reader on the hub side.
+  every other game (rule 9 below is the ONE deliberate exception, for language only). Do not add a reader
+  on the hub side.
+- **Language (2026-07-24, batch E, HANDOFF-FB2-PARCHIS.md), rule 9: the hub's `gamehub.lang.v1` wins.**
+  `game.js`'s `getLang()` reads the hub key first (raw string, `'en'`/`'es'` only, malformed/missing =
+  absent), then falls back to `parchis_r2_prefs.lang`, then `'en'` - a DELIBERATE reversal of "own prefs
+  beat hub" for language only (Matt: the hub toggle should control every game, including this one).
+  Parchís's own in-game language toggle (Settings) now writes BOTH `parchis_r2_prefs.lang` (as before)
+  and `gamehub.lang.v1`, so switching from either place can never leave the two disagreeing.
+  `parchis_r2_prefs` itself is unchanged otherwise (frozen key, THE LAW rule 5).
+- **How-to-play (rules) screen, rebuilt 2026-07-24** (Matt: the old per-mode wall of 7 section headings
+  x paragraphs "was the worst one yet"). Now ONE short sheet, both languages, no per-mode tabs: a goal
+  line, one inline-SVG diagram (nest to a marked start square, to a diamond-marked safe square sharing an
+  opponent peacefully, to the home column and center), a caption, and 4 bullets (how to leave the nest,
+  capturing plus the bonus of 20, safe squares, and the bonus of 10 for reaching center) - the repo-wide
+  How-to-play pattern from `tic-tac-toe/CLAUDE.md`. The one genuine mode difference (leaving the nest needs
+  a lone 5 in Spanish rules vs any two dice summing to 5 in American rules) is folded into a single bullet
+  rather than kept as separate tabs, since every other bullet is identical across modes. `i18n.js`'s old
+  per-mode `RULES` table and `rules(mode)` function are gone; `hud.js`'s `HUD.openRules(back)` no longer
+  takes a `mode` argument.
 
 ## Hub notes
 

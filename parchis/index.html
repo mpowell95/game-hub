@@ -137,6 +137,15 @@
   .pc-seat.on { color:var(--text); border-color:var(--gold); }
   .pc-rule-h { margin:8px 0 0; font-size:15px; color:var(--gold); }
   .pc-rule-p { margin:0; color:var(--text); font-size:14px; }
+  /* How-to-play (rules) screen, rebuilt 2026-07-24: one goal line, one diagram, a caption,
+     a few short bullets - never the old per-mode wall of section headings. */
+  .pc-help-goal { margin:2px 0 10px; font-weight:700; font-size:15px; color:var(--text); }
+  .pc-help-diagram-wrap { display:flex; justify-content:center; padding:4px 0; }
+  .pc-help-diagram { width:100%; max-width:300px; height:auto; display:block; }
+  .pc-help-caption { margin:10px 0 6px; color:var(--muted); font-size:13px; }
+  .pc-help-bullets { display:flex; flex-direction:column; gap:7px; }
+  .pc-help-bullet { margin:0; color:var(--text); font-size:14px; padding-left:14px; position:relative; }
+  .pc-help-bullet::before { content:"\2022"; position:absolute; left:0; color:var(--gold); }
   .pc-result { display:flex; align-items:center; gap:10px; font-size:15px; }
   .pc-place { font-family:"Rockwell","Roboto Slab",Georgia,serif; font-size:17px; width:34px; color:var(--gold); }
 
@@ -2088,8 +2097,10 @@
 <script>
 /*
  * Parchis i18n: English (default) and Spanish UI copy. Plain script; attaches
- * window.ParchisI18n with t(key, params), setLang, getLang, and rules(mode).
+ * window.ParchisI18n with t(key, params), setLang, getLang.
  * Round 2: English is the default; a saved preference still wins. No em dashes anywhere.
+ * The how-to-play (rules) screen is now ONE short sheet (help* keys below), not a
+ * per-mode wall of text - see hud.js's openRules and root CLAUDE.md's How-to-play pattern.
  */
 (function () {
   "use strict";
@@ -2145,7 +2156,15 @@
       pressEnterToMove: "{desc}. Press Enter to move.", moveByDie: "Move {n}",
       // colors + language names
       amarillo: "Yellow", azul: "Blue", rojo: "Red", verde: "Green",
-      langNameEs: "Espanol", langNameEn: "English"
+      langNameEs: "Espanol", langNameEn: "English",
+      // how-to-play (rules) screen, rebuilt 2026-07-24 (batch E, HANDOFF-FB2-PARCHIS.md)
+      helpDiagramAria: "A start square, a safe square, and the home column leading to the center",
+      helpGoal: "Race all four of your pieces around the board to the center to win.",
+      helpCaption: "Leave the nest onto your marked start square. Diamond-marked squares are safe from capture. The home column leads straight to the center.",
+      helpEntry: "Leave the nest with a 5: one die in Spanish rules, or two dice adding to 5 in American rules.",
+      helpCapture: "Land exactly on a lone opponent to send it home and earn a bonus of 20.",
+      helpSafe: "A marked safe square protects any piece resting there from capture.",
+      helpMeta: "Reaching the center needs an exact count and earns a bonus of 10."
     },
     es: {
       appName: "Parchís",
@@ -2187,51 +2206,14 @@
       pawnInHomeRow: "Ficha {color} en el pasillo, paso {n}", pawnAtCenter: "Ficha {color} en el centro",
       pressEnterToMove: "{desc}. Pulsa Intro para mover.", moveByDie: "Mover {n}",
       amarillo: "Amarillo", azul: "Azul", rojo: "Rojo", verde: "Verde",
-      langNameEs: "Espanol", langNameEn: "English"
-    }
-  };
-
-  // Rules screens, per mode, per language. Content condensed from 11-RULES-DUAL-MODE.md.
-  var RULES = {
-    american: {
-      en: [
-        ["Two dice", "Roll two dice. Play each die as a separate move: two different pieces, or one piece moved twice (each landing resolved fully). You must use both dice whenever a legal order exists."],
-        ["Leaving the nest", "Come out onto your start square with a 5 on a die, with two dice that add up to 5, or enter two pieces on a double 5. Leaving is mandatory whenever possible."],
-        ["Doubles", "Doubles let you roll again. Three doubles in a row: your piece closest to home on the shared track goes back to the nest (the home row and center are always safe). No tops-and-bottoms rule."],
-        ["Blockades", "Two pieces of one color block the square for everyone. On doubles you must break a blockade if you legally can, and the two dice may not rebuild the same blockade on a new square."],
-        ["Capturing", "Land exactly on a lone opponent on a normal square to send it home. A capture earns a 20-square bonus."],
-        ["Safe squares", "An opponent on a safe square cannot be landed on. The start squares are safe. Reaching center needs an exact count and earns a 10-square bonus."],
-        ["Winning", "Bring all four pieces to the center. Play continues for the remaining places."]
-      ],
-      es: [
-        ["Dos dados", "Tiras dos dados. Juegas cada dado como un movimiento aparte: dos fichas distintas, o una ficha movida dos veces (cada llegada se resuelve por completo). Debes usar ambos dados si existe un orden legal."],
-        ["Salir de casa", "Sales a tu salida con un 5 en un dado, con dos dados que sumen 5, o metes dos fichas con un doble 5. Salir es obligatorio si se puede."],
-        ["Dobles", "Los dobles repiten tirada. Tres dobles seguidos: tu ficha mas cercana a la meta en el recorrido comun vuelve a casa (el pasillo y el centro siempre estan a salvo). Sin regla de tapas."],
-        ["Barreras", "Dos fichas de un color bloquean la casilla para todos. Con dobles debes romper una barrera si es legal, y los dos dados no pueden rehacer la misma barrera en otra casilla."],
-        ["Comer", "Cae justo sobre una ficha rival sola en casilla normal para mandarla a casa. Comer da un bono de 20."],
-        ["Seguros", "No puedes caer sobre una ficha rival en un seguro. Las salidas son seguros. Llegar al centro exige cuenta exacta y da un bono de 10."],
-        ["Ganar", "Lleva tus cuatro fichas al centro. La partida sigue para el resto de puestos."]
-      ]
-    },
-    spanish: {
-      en: [
-        ["One die", "Roll a single die and move one piece that many squares."],
-        ["Leaving the nest", "Roll a 5 to bring a piece to your start square. Leaving is mandatory when you can."],
-        ["Sixes", "A 6 lets you roll again. Once all your pieces are out, a 6 moves 7. Three sixes in a row send your last-moved piece home (safe in the home row or center)."],
-        ["Blockades", "Two pieces of one color block the square. On a 6 you must break a blockade if a blocked piece can legally move."],
-        ["Capturing", "Land exactly on a lone opponent on a normal square to send it home. A capture earns a 20-square bonus."],
-        ["Safe squares", "On safe squares nobody is captured and two colors can share. The start squares are safe. Reaching center needs an exact count and earns a 10-square bonus."],
-        ["Winning", "Bring all four pieces to the center. Play continues for the remaining places."]
-      ],
-      es: [
-        ["Un dado", "Tiras un solo dado y mueves una ficha ese numero de casillas."],
-        ["Salir de casa", "Saca un 5 para llevar una ficha a tu salida. Salir es obligatorio cuando puedes."],
-        ["Seises", "Un 6 repite tirada. Con las cuatro fichas fuera, un 6 mueve 7. Tres seises seguidos mandan a casa la ultima ficha que moviste (a salvo en el pasillo o el centro)."],
-        ["Barreras", "Dos fichas de un color bloquean la casilla. Con un 6 debes romper una barrera si una ficha bloqueada puede mover."],
-        ["Comer", "Cae justo sobre una ficha rival sola en casilla normal para mandarla a casa. Comer da un bono de 20."],
-        ["Seguros", "En los seguros no se come y pueden convivir dos colores. Las salidas son seguros. Llegar al centro exige cuenta exacta y da un bono de 10."],
-        ["Ganar", "Lleva tus cuatro fichas al centro. La partida sigue para el resto de puestos."]
-      ]
+      langNameEs: "Espanol", langNameEn: "English",
+      helpDiagramAria: "Una salida, un seguro y el pasillo que lleva al centro",
+      helpGoal: "Lleva tus cuatro fichas alrededor del tablero hasta el centro para ganar.",
+      helpCaption: "Sal de casa a tu salida marcada. Las casillas con diamante son seguros, a salvo de que te coman. El pasillo lleva directo al centro.",
+      helpEntry: "Sal de casa con un 5: un dado en reglas espanolas, o dos dados que sumen 5 en reglas americanas.",
+      helpCapture: "Cae justo sobre una ficha rival sola para mandarla a casa y ganar un bono de 20.",
+      helpSafe: "Un seguro marcado protege de que coman cualquier ficha que este ahi.",
+      helpMeta: "Llegar al centro exige cuenta exacta y da un bono de 10."
     }
   };
 
@@ -2245,12 +2227,8 @@
   }
   function setLang(l) { if (STR[l]) lang = l; }
   function getLang() { return lang; }
-  function rules(mode) {
-    var set = RULES[mode] || RULES.american;
-    return set[lang] || set.en;
-  }
 
-  var I18n = { t: t, setLang: setLang, getLang: getLang, rules: rules, langs: ["en", "es"], STR: STR };
+  var I18n = { t: t, setLang: setLang, getLang: getLang, langs: ["en", "es"], STR: STR };
   if (typeof window !== "undefined") window.ParchisI18n = I18n;
   if (typeof globalThis !== "undefined") globalThis.ParchisI18n = I18n;
 })();
@@ -2280,8 +2258,8 @@
   //
   // The build date is substituted by recombine.mjs. Loading the modular src/ directly leaves the
   // placeholder in place, which is how the label knows to say "dev" instead of lying about a date.
-  var APP_VERSION = "v12";
-  var BUILD_DATE = "2026-07-19";
+  var APP_VERSION = "v13";
+  var BUILD_DATE = "2026-07-24";
   function buildDate() { return BUILD_DATE.charAt(0) === "@" ? "dev" : BUILD_DATE; }
   function versionLabel() { return APP_VERSION + " · " + buildDate(); }
 
@@ -2718,24 +2696,46 @@
     }, { back: leave });
   };
 
-  HUD.openRules = function (mode, back) {
-    var cur = mode || "american";
+  // How-to-play diagram: a corner of the board, nest -> marked start square -> a safe
+  // (diamond-marked) square shared peacefully -> the home column leading to the center.
+  // Purely graphical (no text inside the SVG) - the caption below carries the words, same
+  // split as tic-tac-toe's reference _forcedBoardDiagram(). Shape + outline carry the
+  // meaning, never color alone (colorblind rule).
+  function rulesDiagram() {
+    return '<svg class="pc-help-diagram" viewBox="0 0 320 100" role="img" aria-label="' + t("helpDiagramAria") + '">' +
+      '<defs><marker id="pc-dg-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>' +
+      // nest
+      '<rect x="8" y="28" width="52" height="42" rx="8" fill="var(--panel2)" stroke="var(--line)" stroke-width="2"/>' +
+      '<circle cx="34" cy="49" r="10" fill="var(--amarillo)" stroke="#2a2115" stroke-width="1.5"/>' +
+      '<path d="M63,49 L88,49" stroke="var(--muted)" stroke-width="2.5" marker-end="url(#pc-dg-arrow)"/>' +
+      // start square (salida)
+      '<rect x="92" y="29" width="30" height="40" rx="5" fill="var(--panel2)" stroke="var(--gold)" stroke-width="3"/>' +
+      '<circle cx="107" cy="49" r="10" fill="var(--amarillo)" stroke="#2a2115" stroke-width="1.5"/>' +
+      '<path d="M125,49 L150,49" stroke="var(--muted)" stroke-width="2.5" marker-end="url(#pc-dg-arrow)"/>' +
+      // safe square (seguro): diamond outline marker, sharing an opponent color peacefully
+      '<rect x="154" y="34" width="30" height="30" rx="5" fill="var(--panel2)" stroke="var(--line)" stroke-width="2"/>' +
+      '<polygon points="169,29 189,49 169,69 149,49" fill="none" stroke="var(--verde)" stroke-width="2.5"/>' +
+      '<circle cx="169" cy="49" r="8" fill="var(--azul)" stroke="#2a2115" stroke-width="1.5"/>' +
+      '<path d="M187,49 L212,49" stroke="var(--muted)" stroke-width="2.5" marker-end="url(#pc-dg-arrow)"/>' +
+      // home column (pasillo) lane into the center (meta)
+      '<rect x="216" y="41" width="24" height="16" rx="3" fill="var(--panel2)" stroke="var(--line)" stroke-width="2"/>' +
+      '<rect x="244" y="41" width="24" height="16" rx="3" fill="var(--panel2)" stroke="var(--line)" stroke-width="2"/>' +
+      '<path d="M271,49 L284,49" stroke="var(--muted)" stroke-width="2.5" marker-end="url(#pc-dg-arrow)"/>' +
+      '<polygon points="300,33 305,45 318,45 308,53 312,66 300,58 288,66 292,53 282,45 295,45" fill="var(--gold)" stroke="#2a2115" stroke-width="1.5"/>' +
+      '</svg>';
+  }
+
+  HUD.openRules = function (back) {
     overlay(t("rules"), function (body) {
-      var tabRow = elh("div", "pc-seatrow", body), tabs = {};
-      [["american", t("americanMode")], ["spanish", t("spanishMode")]].forEach(function (pair) {
-        var b = elh("button", "pc-seat" + (cur === pair[0] ? " on" : ""), tabRow, pair[1]);
-        tabs[pair[0]] = b;
-        b.onclick = function () { cur = pair[0]; Object.keys(tabs).forEach(function (k) { tabs[k].classList.toggle("on", k === cur); }); paint(); };
+      elh("p", "pc-help-goal", body, t("helpGoal"));
+      var wrap = elh("div", "pc-help-diagram-wrap", body);
+      wrap.innerHTML = rulesDiagram();
+      elh("p", "pc-help-caption", body, t("helpCaption"));
+      var list = elh("div", "pc-help-bullets", body);
+      [t("helpEntry"), t("helpCapture"), t("helpSafe"), t("helpMeta")].forEach(function (line) {
+        elh("p", "pc-help-bullet", list, line);
       });
-      var content = elh("div", "pc-rules-body", body);
-      function paint() {
-        content.innerHTML = "";
-        window.ParchisI18n.rules(cur).forEach(function (sec) {
-          elh("h3", "pc-rule-h", content, sec[0]);
-          elh("p", "pc-rule-p", content, sec[1]);
-        });
-      }
-      paint();
     }, back ? { back: back } : { dismiss: HUD.closeOverlay });
   };
 
@@ -2790,6 +2790,7 @@
   var STORE_KEY = "parchis_r2_save";
   var PREFS_KEY = "parchis_r2_prefs";
   var PROFILE_KEY = "gamehub.profile";
+  var HUB_LANG_KEY = "gamehub.lang.v1"; // hub-wide language toggle; wins over parchis_r2_prefs.lang (see getLang)
 
   // How long the rolled dice stay on screen after a roll that cannot be played, so the
   // player can read what they rolled and why the turn moved on. Shorter for the AI so a
@@ -3232,9 +3233,19 @@
     if (svg) svg.setAttribute("aria-label", t("boardLabel"));
     if (HUD && HUD.refreshStaticText) HUD.refreshStaticText();
   }
+  function getHubLang() {
+    // Raw read, not through readProfile/loadPrefs: gamehub.lang.v1 is a plain string, not JSON.
+    try { var v = localStorage.getItem(HUB_LANG_KEY); return (v === "en" || v === "es") ? v : null; }
+    catch (e) { return null; }
+  }
   function getLang() {
+    // Deliberate reversal of the "own prefs beat hub" precedence, for language ONLY (Matt,
+    // 2026-07-24): the hub's toggle wins over parchis_r2_prefs.lang so the hub and Parchis can
+    // never show different languages. Falls back to the saved pref, then English.
+    var hub = getHubLang();
+    if (hub) return hub;
     var prefs = loadPrefs();
-    return prefs.lang || (readProfile() && null) || "en"; // English default; saved pref wins
+    return prefs.lang || "en";
   }
 
   function startNewGame(cfg) {
@@ -3289,7 +3300,7 @@
       onLocal: function () { HUD.showSetup("local", prefill(), onPlay, showTitle); },
       onContinue: canContinue ? function () { continueGame(saved); } : null,
       onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved, showTitle); },
-      onRules: function () { HUD.openRules((loadPrefs().mode) || "american", showTitle); },
+      onRules: function () { HUD.openRules(showTitle); },
       onExit: function () { window.location.href = "../"; } // back to the game hub
     });
   }
@@ -3303,6 +3314,8 @@
     applyTheme(theme);
     var speed = Speed.set(s.speed); // normalises an unknown value back to the default
     try { var p = loadPrefs(); p.lang = s.lang; p.theme = theme; p.speed = speed; localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { }
+    // Write both keys so the in-game toggle and the hub toggle can never fight (Matt, 2026-07-24).
+    try { localStorage.setItem(HUB_LANG_KEY, (s.lang === "es") ? "es" : "en"); } catch (e) { }
     if (G.state && G.cfg) { syncHud(); render(); if (G.ui === "showingMoves") highlightMoves(G.moves); }
   }
   function getTheme() { return loadPrefs().theme === "dark" ? "dark" : "light"; } // light default (matches the mockup)
@@ -3456,7 +3469,7 @@
     HUD.openMenu({
       onNewGame: showTitle,
       onSettings: function () { HUD.openSettings(settingsSnapshot(), onSettingsSaved, openInGameMenu); },
-      onRules: function () { HUD.openRules(G.cfg ? G.cfg.mode : "american", openInGameMenu); }
+      onRules: function () { HUD.openRules(openInGameMenu); }
     });
   }
 
