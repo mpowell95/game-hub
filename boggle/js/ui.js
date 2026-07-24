@@ -62,10 +62,41 @@ const DIFF_LABEL_KEY = { beginner: 'diff_beginner', intermediate: 'diff_intermed
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-// Android Chrome only -- iOS Safari/PWAs expose no vibration API, so this is
-// a feature-detected no-op there (Matt asked; honest answer, no audio fake).
+// Android Chrome has navigator.vibrate and gets real timed pulses. iOS
+// Safari/PWAs expose NO vibration API at all, so iPhones get the "switch
+// hack" fallback (iOS 17.4+): programmatically flipping a native
+// <input type="checkbox" switch> fires the Taptic tick, and doing it during
+// an active touch gesture (a Boggle trace always is one) counts as user
+// activation. This is UNDOCUMENTED Safari behavior, not an API -- if an iOS
+// update kills it, Boggle silently returns to the no-haptics state and
+// nothing else breaks. The input must be rendered (display:none suppresses
+// the native switch and its tick), so it parks offscreen instead.
+let hapticSwitch = null;
+function ensureHapticSwitch() {
+  if (hapticSwitch && document.body.contains(hapticSwitch)) return hapticSwitch;
+  const el = document.createElement('input');
+  el.type = 'checkbox';
+  el.setAttribute('switch', '');
+  el.tabIndex = -1;
+  el.setAttribute('aria-hidden', 'true');
+  el.style.cssText = 'position:fixed;left:-40px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(el);
+  hapticSwitch = el;
+  return el;
+}
+function removeHapticSwitch() {
+  if (hapticSwitch) { hapticSwitch.remove(); hapticSwitch = null; }
+}
 function haptic(ms) {
-  try { if (navigator.vibrate) navigator.vibrate(ms); } catch { /* not supported */ }
+  try {
+    if (navigator.vibrate) { navigator.vibrate(ms); return; }
+    if (!('ontouchstart' in window)) return; // desktop: nothing to tick
+    const sw = ensureHapticSwitch();
+    sw.click();
+    // The switch tick has no duration control, so the stronger submit pulse
+    // (ms >= 20) is expressed as a quick double tick instead.
+    if (ms >= 20) setTimeout(() => { try { sw.click(); } catch { /* removed */ } }, 70);
+  } catch { /* not supported */ }
 }
 const posKey = (r, c) => `${r},${c}`;
 const displayFace = (face) => (face === 'QU' ? 'Qu' : face);
@@ -224,6 +255,7 @@ class BoggleUI {
     if (!this._restoring) saveGame(this);
     this.stopTimer();
     this._detachBoardPointer();
+    removeHapticSwitch();
     if (this.root) this.root.removeEventListener('click', this._onClick);
     this.container.innerHTML = '';
     this._board = null;

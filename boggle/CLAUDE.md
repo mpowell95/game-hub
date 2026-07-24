@@ -45,10 +45,17 @@ are gone; difficulty ids (`beginner`/`intermediate`/`pro`) are untouched.
 
 Matt asked for a small vibration while tracing and shorter round timers
 (`HANDOFF-FB-BOGGLE.md`). Two feature-detected `navigator.vibrate()` calls,
-wrapped in a tiny `haptic(ms)` helper in `ui.js` that no-ops silently where
-`navigator.vibrate` doesn't exist — **iOS Safari/PWAs expose no vibration API
-at all**, so this ships dark on the family's iPhones; it is real on Android
-Chrome. No settings row for it.
+wrapped in a tiny `haptic(ms)` helper in `ui.js` — real timed pulses on
+Android Chrome. **iOS Safari/PWAs expose no vibration API at all**, so on
+iPhones `haptic()` falls back to the "switch hack" (added 2026-07-24 at
+Matt's request, after the vibrate-only version shipped dark on his iPhone): a
+hidden rendered `<input type="checkbox" switch>` (module-scope singleton,
+parked offscreen — `display:none` would suppress the native switch and its
+tick; removed in `destroy()`) is `.click()`ed to fire the iOS 17.4+ Taptic
+tick, with the stronger submit pulse expressed as a quick double tick since
+the tick has no duration control. This is UNDOCUMENTED Safari behavior: if an
+iOS update kills it, Boggle silently returns to no-haptics and nothing else
+breaks — do not build anything else on it. No settings row for it.
 
 - **Trigger 1** (`_updateWordBar()`, the same place the current word is
   already derived per pointer move — no second dictionary walk):
