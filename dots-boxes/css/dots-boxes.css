@@ -444,7 +444,7 @@
    quietly fighting each other. Scoped to .db-help so the win/lose card's
    title spacing is untouched. */
 .db-root .db-help .db-card-title { margin-bottom: 10px; }
-.db-root .db-help-lead { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--db-ink); white-space: nowrap; }
+.db-root .db-help-lead { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--db-ink); overflow-wrap: break-word; }
 
 .db-root .db-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
 .db-root .db-diagram { width: 168px; height: 168px; }
@@ -459,11 +459,12 @@
 .db-root .db-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
 .db-root .db-help-lines p { margin: 0; }
 .db-root .db-help-caption { font-size: 13px; font-weight: 700; color: var(--db-muted); }
-/* Sized and pinned to one line against the card's real available width
-   (max-width: 340px minus its 20px side padding) -- measured, not guessed,
-   then locked with white-space: nowrap so it can never wrap mid-word. */
-.db-root .db-help-example { font-size: 12px; font-weight: 700; color: var(--db-ink); white-space: nowrap; }
-.db-root .db-help-rule { font-size: 12px; font-weight: 600; color: #3a4a63; white-space: nowrap; }
+/* Was sized and pinned to one line against the card's real available width
+   (max-width: 340px minus its 20px side padding), locked with white-space:
+   nowrap. Spanish runs longer than English and overflowed that width even at
+   this font size (2026-07-24 QA), so both now wrap instead of forcing nowrap. */
+.db-root .db-help-example { font-size: 12px; font-weight: 700; color: var(--db-ink); overflow-wrap: break-word; }
+.db-root .db-help-rule { font-size: 12px; font-weight: 600; color: #3a4a63; overflow-wrap: break-word; }
 
 /* Color legend: introduces the red/blue coding (also carried by the diagram
    above and every line/box in the game itself) before a player ever sees

@@ -187,7 +187,7 @@ class MancalaUI {
     // ...), on every difficulty and in both modes. Very first game: you open.
     this.nextStarter = (saved && saved.nextStarter != null) ? saved.nextStarter : P1;
     this.hasProfileName = !!(profile && profile.name);
-    this.humanName = (profile && profile.name) || 'You';
+    this.humanName = (profile && profile.name) || t('you');
     this.humanEmoji = (profile && profile.emoji) || '🙂';
     // A profile opponent wins; otherwise the bot is a named character from the
     // shared roster (a random one per session, so the opponent varies game to game).

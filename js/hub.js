@@ -293,7 +293,7 @@ class Hub {
       : '';
     const gridHTML = favHeaderHTML
       + favGames.map((g) => this.cardHTML(g, true)).join('')
-      + (showDivider ? '<div class="hub-divider">All games</div>' : '')
+      + (showDivider ? `<div class="hub-divider">${t('hub_all_games')}</div>` : '')
       + restGames.map((g) => this.cardHTML(g, false)).join('');
     this.root.innerHTML = `
       <div class="hub">

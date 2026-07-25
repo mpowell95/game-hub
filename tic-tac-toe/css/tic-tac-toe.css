@@ -419,13 +419,13 @@
 .ttt-root .ttt-help-lines { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 14px 0 0; }
 .ttt-root .ttt-help-lines p { margin: 0; }
 .ttt-root .ttt-help-caption { font-size: 13px; font-weight: 700; color: var(--ttt-muted); }
-/* Sized (and pinned to one line) so "Play top right box = Opponent plays top
-   right board" never wraps -- measured against the card's actual available
-   width at the 375px mobile viewport, not guessed. */
-.ttt-root .ttt-help-example { font-size: 12px; font-weight: 700; color: var(--ttt-ink); white-space: nowrap; }
-/* Same reasoning as .ttt-help-example: sized and pinned to one line against
-   the card's actual measured available width, not guessed. */
-.ttt-root .ttt-help-rule { font-size: 11.5px; font-weight: 600; color: #3a4a63; white-space: nowrap; }
+/* Was pinned to one line via white-space: nowrap, measured against the
+   English text. The Spanish example ("Juega la casilla superior derecha =
+   El rival juega en el tablero superior derecho") overflows that width at
+   any readable font size (2026-07-24 QA: 406px scrollWidth vs 340px
+   clientWidth), so both lines wrap instead of forcing nowrap. */
+.ttt-root .ttt-help-example { font-size: 12px; font-weight: 700; color: var(--ttt-ink); overflow-wrap: break-word; }
+.ttt-root .ttt-help-rule { font-size: 11.5px; font-weight: 600; color: #3a4a63; overflow-wrap: break-word; }
 
 .ttt-root .ttt-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
 .ttt-root .ttt-diagram { width: 168px; height: 168px; }

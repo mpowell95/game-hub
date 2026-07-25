@@ -150,7 +150,7 @@ class EscobaUI {
     return {
       count: clamp(saved.count || (opps.length ? Math.min(opps.length + 1, 3) : 2), 2, 3),
       humanName: typeof saved.humanName === 'string' ? saved.humanName
-        : (profile && profile.name) || 'You',
+        : (profile && profile.name) || t('you'),
       humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar
         : (profile && profile.emoji) || HUMAN_AVATARS[0],
       aiNames, aiAvatars,
@@ -487,7 +487,7 @@ class EscobaUI {
 
   syncSetupInputs() {
     const input = this.el.setup.querySelector('[data-field="humanName"]');
-    if (input) this._setup.humanName = input.value.trim() || 'You';
+    if (input) this._setup.humanName = input.value.trim() || t('you');
     this.el.setup.querySelectorAll('[data-ai-name]').forEach((inp) => {
       const i = +inp.dataset.aiName;
       this._setup.aiNames[i] = inp.value.trim() || AI_NAMES[i] || `Player ${i + 2}`;
@@ -652,7 +652,7 @@ class EscobaUI {
     this._saveSetup();
     this._clearSave();   // an explicit (re)start replaces any resumable match
     const s = this._setup;
-    const players = [makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
+    const players = [makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
     for (let i = 0; i < s.count - 1; i++) {
       const diff = s.aiDifficulty[i] || 'normal';
       players.push(makePlayer({
@@ -1709,7 +1709,7 @@ class EscobaUI {
   // life of a solo match, so none of it runs a single line in solo play.
 
   _myIdentity() {
-    return { name: this._setup.humanName || 'You', avatar: this._setup.humanAvatar, deviceId: deviceId() };
+    return { name: this._setup.humanName || t('you'), avatar: this._setup.humanAvatar, deviceId: deviceId() };
   }
 
   _mpNewState(role, code, opp) {
@@ -2018,7 +2018,7 @@ class EscobaUI {
     if (this.game) this.game.abort();
     const s = this._setup;
     const players = [
-      makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
       makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
     ];
     this._resolvePending(null);
@@ -2070,7 +2070,7 @@ class EscobaUI {
     const cfg = room.config || {};
     const players = [
       makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
-      makePlayer({ id: 1, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 1, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
     ];
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck } });

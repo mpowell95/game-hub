@@ -26,6 +26,7 @@ export const STRINGS = {
     aria_table: 'Table cards',
     lasthand_chip: 'Last hand',
     vs: 'vs',
+    you: 'You',
 
     // Settings summary card
     lbl_players: 'Players',
@@ -177,6 +178,7 @@ export const STRINGS = {
     aria_table: 'Cartas de la mesa',
     lasthand_chip: 'Última mano',
     vs: 'vs',
+    you: 'Tú',
 
     lbl_players: 'Jugadores',
     lbl_difficulty: 'Dificultad',

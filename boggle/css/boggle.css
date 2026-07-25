@@ -241,8 +241,10 @@
    padding = 300px) using a Range measurement of the rendered text, not
    scrollWidth -- scrollWidth clamps to clientWidth and will happily report
    "fits" for text that is actually 15px too wide. Measured: 315px at 11.5px,
-   282px at 11px. Locked with nowrap so it can never wrap mid-sentence. */
-.bg-root .bg-help-lead { margin: 0; font-size: 11px; font-weight: 800; color: var(--bg-ink); white-space: nowrap; }
+   282px at 11px. Spanish runs longer than English (2026-07-24 QA: 415px
+   scrollWidth vs 340px clientWidth) and can't be shrunk enough to still fit
+   on one line, so this wraps instead of forcing nowrap. */
+.bg-root .bg-help-lead { margin: 0; font-size: 11px; font-weight: 800; color: var(--bg-ink); overflow-wrap: break-word; }
 
 .bg-root .bg-diagram-wrap { display: flex; justify-content: center; margin: 16px 0 2px; }
 .bg-root .bg-diagram { width: 168px; height: 168px; }

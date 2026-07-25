@@ -235,7 +235,7 @@ class ChinchonUI {
     return {
       count: clamp(saved.count || (opps.length ? opps.length + 1 : 3), 2, 4),
       humanName: typeof saved.humanName === 'string' ? saved.humanName
-        : (profile && profile.name) || 'You',
+        : (profile && profile.name) || t('you'),
       humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar
         : (profile && profile.emoji) || HUMAN_AVATARS[0],
       aiNames, aiAvatars,
@@ -621,7 +621,7 @@ class ChinchonUI {
 
   syncSetupInputs() {
     const input = this.el.setup.querySelector('[data-field="humanName"]');
-    if (input) this._setup.humanName = input.value.trim() || 'You';
+    if (input) this._setup.humanName = input.value.trim() || t('you');
     this.el.setup.querySelectorAll('[data-ai-name]').forEach((inp) => {
       const i = +inp.dataset.aiName;
       this._setup.aiNames[i] = inp.value.trim() || AI_NAMES[i] || `Player ${i + 2}`;
@@ -727,7 +727,7 @@ class ChinchonUI {
     const startDealer = s.nextStartDealer === 1 ? 1 : 0;
     s.nextStartDealer = startDealer === 0 ? 1 : 0;
     this._saveSetup();
-    const players = [makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
+    const players = [makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
     for (let i = 0; i < s.count - 1; i++) {
       const diff = s.aiDifficulty[i] || 'normal';
       players.push(makePlayer({
@@ -1658,7 +1658,7 @@ class ChinchonUI {
   // life of a solo match, so none of it runs a single line in solo play.
 
   _myIdentity() {
-    return { name: this._setup.humanName || 'You', avatar: this._setup.humanAvatar, deviceId: deviceId() };
+    return { name: this._setup.humanName || t('you'), avatar: this._setup.humanAvatar, deviceId: deviceId() };
   }
 
   /** The remote seat, unambiguous in a 2-player MP match: whichever player
@@ -2047,7 +2047,7 @@ class ChinchonUI {
     const config = this._mpBuildConfig(s.config);
     config.onStockReset = (order) => this._mpSendStockReset(order);
     const players = [
-      makePlayer({ id: 0, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
       makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
     ];
     this.game = new Game({ players, config });
@@ -2115,7 +2115,7 @@ class ChinchonUI {
     // here; both engines reach the identical dealerIndex on their own.
     const players = [
       makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
-      makePlayer({ id: 1, name: s.humanName || 'You', avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
+      makePlayer({ id: 1, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
     ];
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);

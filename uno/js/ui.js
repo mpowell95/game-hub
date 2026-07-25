@@ -139,7 +139,7 @@ class UnoUI {
     this.container = container;
     const profile = loadProfile();
     this.profile = profile;
-    this.humanName = (profile && profile.name) || 'You';
+    this.humanName = (profile && profile.name) || t('you');
     this.humanEmoji = (profile && profile.emoji) || '🙂';
 
     const saved = loadSettings();
@@ -190,7 +190,7 @@ class UnoUI {
     const seats = [{ name: this.humanName, emoji: this.humanEmoji, isAI: false }];
     for (let i = 0; i < playerCount - 1; i++) {
       const o = pool[i];
-      seats.push({ name: (o && o.name) || `Computer ${i + 1}`, emoji: (o && o.emoji) || '🤖', isAI: true });
+      seats.push({ name: (o && o.name) || t('computer_n', { n: i + 1 }), emoji: (o && o.emoji) || '🤖', isAI: true });
     }
     return seats;
   }

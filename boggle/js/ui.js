@@ -271,9 +271,9 @@ class BoggleUI {
     try { profile = loadProfile(); } catch { profile = null; }
     const opp = profile && profile.opponents && profile.opponents[0];
     return {
-      humanName: (profile && profile.name) || 'You',
+      humanName: (profile && profile.name) || t('you'),
       humanEmoji: (profile && profile.emoji) || '🙂',
-      oppName: (opp && opp.name) || 'Computer',
+      oppName: (opp && opp.name) || t('computer'),
       oppEmoji: (opp && opp.emoji) || '🤖',
     };
   }

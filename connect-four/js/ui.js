@@ -147,10 +147,10 @@ class ConnectFourUI {
     this.aiPlayer = PLAYER_TWO;
 
     // Player identity for on-screen labels (profile-driven; falls back to the
-    // original "You" / "Computer" when there is no profile).
-    this.humanName = (profile && profile.name) || 'You';
+    // translated "You" / "Computer" when there is no profile).
+    this.humanName = (profile && profile.name) || t('you');
     this.humanEmoji = (profile && profile.emoji) || '';
-    this.oppName = (opp && opp.name) || 'Computer';
+    this.oppName = (opp && opp.name) || t('computer');
     this.oppEmoji = (opp && opp.emoji) || '';
 
     // Hidden challenge (M3b): retired. Forcing this false collapses every

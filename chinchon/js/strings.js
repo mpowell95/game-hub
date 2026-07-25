@@ -11,6 +11,7 @@
 export const STRINGS = {
   en: {
     title: 'Chinchón',
+    you: 'You',
     menu_btn_aria: 'Game menu',
     mode_light: 'Light mode',
     mode_dark: 'Dark mode',
@@ -170,6 +171,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Chinchón',
+    you: 'Tú',
     menu_btn_aria: 'Menú del juego',
     mode_light: 'Modo claro',
     mode_dark: 'Modo oscuro',

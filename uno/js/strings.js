@@ -6,6 +6,8 @@ export const STRINGS = {
   en: {
     title: 'Uno',
     tagline: 'Match color or number. Empty your hand first.',
+    you: 'You',
+    computer_n: 'Computer {n}',
     players: 'Players',
     difficulty: 'Difficulty',
     diff_easy: 'Easy',
@@ -60,6 +62,8 @@ export const STRINGS = {
   es: {
     title: 'Uno',
     tagline: 'Combina color o número. Sé el primero en quedarte sin cartas.',
+    you: 'Tú',
+    computer_n: 'Ordenador {n}',
     players: 'Jugadores',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',

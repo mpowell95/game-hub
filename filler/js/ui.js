@@ -149,9 +149,9 @@ class FillerUI {
     // filler/CLAUDE.md). Defaults to P1 (the human) when absent, matching
     // pre-existing behavior for anyone with a pre-alternation settings store.
     this.nextStarter = (saved && saved.nextStarter) || P1;
-    this.humanName = (profile && profile.name) || 'You';
+    this.humanName = (profile && profile.name) || t('you');
     this.humanEmoji = (profile && profile.emoji) || '🙂';
-    this.oppName = (opp && opp.name) || 'Computer';
+    this.oppName = (opp && opp.name) || t('computer');
     this.oppEmoji = (opp && opp.emoji) || '🤖';
 
     this.state = null;
