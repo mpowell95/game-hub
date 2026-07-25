@@ -86,18 +86,43 @@ function cardAriaLabel(card) {
   return t('aria_card', { color: colorName, value });
 }
 
-/** Card face markup. `live` toggles the playable highlight; `back` renders a face-down card. */
+/** Debossed shape medallion (spec §7). Reuses shapeSVG()/COLOR_META - never a second
+ *  shape function. Wild cards get all four shapes quartered into one disc (each is the
+ *  same shapeSVG() output, scaled to a quadrant and clipped to a circle) instead of a
+ *  single shape, since a wild is the one card where four shapes coexist. */
+function medallionHTML(card) {
+  const fill = 'var(--un-medallion)';
+  if (card.color === 'wild') {
+    const clip = `un-wildclip-${card.id}`;
+    return `<svg class="un-medallion" viewBox="0 0 12 12" aria-hidden="true">
+      <defs><clipPath id="${clip}"><circle cx="6" cy="6" r="5.7"/></clipPath></defs>
+      <g clip-path="url(#${clip})">
+        <g transform="translate(0,0) scale(.5)">${shapeSVG('square', fill)}</g>
+        <g transform="translate(6,0) scale(.5)">${shapeSVG('circle', fill)}</g>
+        <g transform="translate(0,6) scale(.5)">${shapeSVG('diamond', fill)}</g>
+        <g transform="translate(6,6) scale(.5)">${shapeSVG('triangle', fill)}</g>
+      </g>
+    </svg>`;
+  }
+  return `<svg class="un-medallion" viewBox="0 0 12 12" aria-hidden="true">${shapeSVG(COLOR_META[card.color].shape, fill)}</svg>`;
+}
+
+/** Card face markup. `live` toggles the playable highlight; `back` renders a face-down card.
+ *  Layer order, outermost in (spec §7 / UN-2 handoff): card bg + rim (CSS on .un-card),
+ *  gloss (::before, CSS only), medallion, numeral, corner mark. `.un-corner-br` is gone
+ *  (spec §5: never visible in a fan, only steals face area) - top-left is the only corner. */
 function cardHTML(card, { live = false, back = false, small = false } = {}) {
   if (back) return `<div class="un-card un-back ${small ? 'un-card-sm' : ''}" aria-hidden="true"></div>`;
   const isWild = card.color === 'wild';
   const glyph = cardFaceGlyph(card);
-  const corner = isWild ? '' : `<span class="un-corner un-corner-tl">${colorGlyphHTML(card.color)}${glyph}</span>
-    <span class="un-corner un-corner-br">${colorGlyphHTML(card.color)}${glyph}</span>`;
+  const isAction = card.kind !== 'number'; // action glyphs render smaller than digits (spec §3)
+  const corner = isWild ? '' : `<span class="un-corner un-corner-tl">${colorGlyphHTML(card.color)}${glyph}</span>`;
   return `<button type="button" class="un-card ${small ? 'un-card-sm' : ''} ${live ? 'is-live' : ''}"
       data-color="${card.color}" data-kind="${card.kind}" data-action="${live ? 'play-card' : ''}" data-id="${card.id}"
       ${live ? '' : 'disabled tabindex="-1"'} aria-label="${esc(cardAriaLabel(card))}">
+    ${medallionHTML(card)}
+    <span class="un-face"><span class="un-glyph-big ${isAction ? 'un-glyph-action' : ''}">${glyph}</span></span>
     ${corner}
-    <span class="un-face">${isWild ? `<span class="un-wildquad" aria-hidden="true">${COLORS.map((c) => `<span data-color="${c}"></span>`).join('')}</span>` : ''}<span class="un-glyph-big">${glyph}</span></span>
   </button>`;
 }
 

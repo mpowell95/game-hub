@@ -265,6 +265,62 @@ its left edge and the tapped sliver always plays the card under it. The reversal
 presentation-only - every `data-id` and `play()` call uses the card's real id. (UN-6's
 `sortedHand()` absorbs this reversal as its `draw` mode.)
 
+### The card face (UN-2) - pressed plastic, spec §7
+
+`cardHTML()`'s button markup is, outermost in: card background + rim (both on `.un-card`
+itself), gloss (`::before`, decorative only), the medallion, the numeral (`.un-face >
+.un-glyph-big`), then the corner mark last (so it always paints on top - see below). No
+new identifiers were renamed; `cardHTML`, `COLOR_META`, `shapeSVG`, `colorGlyphHTML`,
+`cardFaceGlyph`, and `cardAriaLabel` keep their exact prior names and signatures, and
+`cardAriaLabel()`'s output is byte-identical to before.
+
+- **The rim is `box-shadow: inset`, stacked onto the same declaration as `--un-sh-rest`**
+  (`.un-card`'s `box-shadow` is a 4-layer comma list: the ambient shadow, a 3px white inset
+  rim, a 1px-wider black inset hairline). Deliberately not a real `border` - a border adds
+  to the box model even under `border-box` sizing in a way that would have required
+  re-deriving every fan/card dimension in spec §4. **Because `.un-card` is a `<button>`,
+  removing the old literal `border` declaration let the browser's UA stylesheet's default
+  button border show through** (a real regression caught by computed-style verification,
+  not visible from reading the diff) - fixed with an explicit `border: none` alongside the
+  box-shadow rim. Any future card-like `<button>` in this file needs the same explicit
+  reset if its border is being replaced by a shadow.
+- **The medallion is `medallionHTML(card)`, a new function that only calls `shapeSVG()`** -
+  there is still exactly one shape-drawing function in the file. A colored card wraps a
+  single `shapeSVG(COLOR_META[card.color].shape, 'var(--un-medallion)')` in a 12x12-viewBox
+  `<svg class="un-medallion">`; CSS sizes it to 46px (36px on `.un-card-sm`) and applies the
+  two-layer `drop-shadow()` filter from spec §7. Fill is the literal string
+  `'var(--un-medallion)'` passed as the SVG `fill` attribute value (not a CSS rule) -
+  presentation attributes accept `var()` in evergreen browsers, and this keeps
+  `shapeSVG()`'s signature and every other caller (the corner glyph, the color chooser)
+  completely unchanged.
+- **Wild cards get a quartered medallion, not `.un-wildquad`** (that rule and its markup
+  are deleted). `medallionHTML()` calls `shapeSVG()` four times - once per shape - each
+  wrapped in `<g transform="translate(dx,dy) scale(.5)">` so the same 12x12-space shape
+  lands centered in its quadrant (the algebra: `shapeSVG()`'s shapes are already centered
+  on `(6,6)`; `scale(.5)` maps that to `(3,3)`, and `translate(6,0|0,6|6,6)` slides it to
+  the other three quadrant centers), then the whole `<g>` is clipped to a circle via a
+  per-card `<clipPath id="un-wildclip-{card.id}">` so it reads as one disc, not a square
+  grid. The id is keyed off the real card id specifically so two simultaneously-rendered
+  wild cards (a hand can hold two Wild+4s) never collide on the same DOM id.
+- **`.un-corner-br` is gone** - both the CSS rule and the markup that used to render it
+  twice per card. Top-left is the only corner mark now (spec §5: a buried fan card only
+  ever exposes its left edge, so the bottom-right copy was dead weight). `.un-corner` keeps
+  `z-index: 2`, one level above the numeral's `z-index: 1`, specifically so a future
+  markup reorder can't accidentally let the medallion occlude the corner - the corner is
+  the entire legibility story for a buried card and must never lose that fight.
+- **Numeral treatment** (`.un-glyph-big`): `text-shadow` + `-webkit-text-stroke` +
+  `paint-order: stroke fill`, per spec §3, using a new token `--un-numeral-stroke`
+  (numerically identical to `--un-medallion-lo` but kept distinct since they mean different
+  things - a shadow depth vs. a text outline ink - and shouldn't move together by
+  accident). Action glyphs (`+2`, `+4`, `⊘`, `⇄`, `★`) get `.un-glyph-action` at a literal
+  `26px` (a size, not a color/shadow, so it's outside the UN-1 token-discipline gate) so
+  they optically match the 34px digits per spec §3.
+- **Small cards** (`.un-card-sm`, used only by the how-to diagram's `foreignObject`):
+  `.un-face` (the numeral) is `display: none` and `.un-corner` stays hidden (pre-existing
+  rule) - the medallion is the ENTIRE small-card read, sized down to 36px. Verified live:
+  the diagram's three cards all resolve to `faceDisplay: none`, `cornerDisplay: none`,
+  `medallionSize: 36x36`.
+
 ### The `_syncFan` render exemption (UN-3c - load-bearing, do not "fix" back)
 
 `renderGame()` no longer rewrites the container as one HTML string. `_ensureGameShell()`
@@ -298,6 +354,31 @@ still rewrites the whole container and must null `_fanEl`/`_regions`; `startGame
 a stale `_pendingWildId`, and hand cards render disabled while a color chooser is open (both
 were latent stale-chooser bugs the persistent shell would have made easier to hit;
 `_onChooseColor` additionally re-validates turn + hand membership before calling `play`).
+
+### Fixed geometry (UN-5) - the reserved regions of spec §4
+
+`.un-opponents` (44px), `.un-status` (22px, promoted from `min-height`), `.un-mat` (148px),
+`.un-handwrap` (152px), `.un-bar` (40px) are all explicit `height` now, not auto-sized -
+verified live at every value (`getComputedStyle(el).height` read back exactly 44/22/148/
+152/40px). `.un-mat` and any region with padding also needs `box-sizing: border-box`, or
+the literal spec height becomes the CONTENT height and the padding adds on top of it.
+
+**The UNO chip slot was the one that actually moved things.** `.un-unoslot` used to render
+`''` or the chip markup with no CSS of its own, so its height was 0 until the moment a
+player reached one card, at which point it grew to the chip's height and pushed the fan
+down by that many px - a real, player-visible layout shift on the single most dramatic
+moment of a close game. Fixed by giving `.un-unoslot` an unconditional `height: 20px`; the
+JS (`r.uno.innerHTML = hand.length === 1 ? chipHTML : ''`) did not need to change at all -
+reserving the box in CSS is sufficient regardless of what HTML string lands inside it.
+Verified live: forcing chip markup into an empty slot mid-game left `.un-handwrap`'s
+computed height at 152px before and after, and forcing `.un-pendingbadge` markup into
+`.un-mat` left it at 148px before and after (both are absolutely positioned, so they were
+never going to affect flow height, but the fixed heights make that true by construction
+rather than by "the content happens to already add up right").
+
+`.un-opponents` also gained `flex-wrap: nowrap` (was `wrap`) - a wrapped second row of
+chips would need MORE than 44px, which is exactly the shift the fixed height exists to
+prevent. `.un-oppname`'s existing `max-width` + ellipsis absorbs long names instead.
 
 ### Autosave/resume
 

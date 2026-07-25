@@ -36,6 +36,7 @@
   --un-gloss-hi: rgba(255, 255, 255, .16);
   --un-gloss-lo: rgba(0, 0, 0, .12);
   --un-numeral-shade: rgba(0, 0, 0, .28);
+  --un-numeral-stroke: rgba(0, 0, 0, .22); /* -webkit-text-stroke ink, spec §3 numeral treatment */
   --un-card-ink: #FFF;       /* numeral + corner ink (spec §3) */
   --un-back-stripe: #45455A; /* card-back diagonal stripe */
   --un-on-accent: #FFF;      /* text on --un-accent / saturated chips */
@@ -164,7 +165,9 @@
 
 /* --- game screen ----------------------------------------------------------- */
 
-.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+/* height: 44px fixed regardless of 1-3 opponents (spec §4) - nowrap so a long name
+   never grows the row to a second line, which would violate the fixed height. */
+.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; align-items: center; height: 44px; overflow: hidden; margin-bottom: 10px; }
 .un-root .un-oppchip {
   display: flex;
   align-items: center;
@@ -202,8 +205,13 @@
 }
 .un-root .un-unochip-self { display: inline-block; margin-bottom: 4px; }
 
-.un-root .un-status { text-align: center; margin: 0 0 10px; font-weight: 600; min-height: 1.2em; }
+/* height: 22px fixed (spec §4) - was min-height, promoted to fixed per THE LAW's
+   zero-vertical-shift rule; blanked to '' while the color chooser is open. */
+.un-root .un-status { text-align: center; margin: 0 0 10px; font-weight: 600; height: 22px; line-height: 22px; overflow: hidden; }
 
+/* height: 148px fixed (spec §4) - holds a 92px card + pile count + pending-badge
+   headroom; box-sizing: border-box so the padding below counts toward the 148px,
+   not on top of it. */
 .un-root .un-mat {
   position: relative;
   display: flex;
@@ -211,6 +219,8 @@
   justify-content: center;
   gap: 20px;
   padding: 10px 0 18px;
+  height: 148px;
+  box-sizing: border-box;
 }
 
 .un-root .un-pile { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; padding: 0; position: relative; }
@@ -262,22 +272,36 @@
 .un-root .un-colorchip[data-color="green"] { background: var(--un-green); }
 .un-root .un-colorchip[data-color="blue"] { background: var(--un-blue); }
 
-/* --- cards ------------------------------------------------------------------ */
+/* --- cards ------------------------------------------------------------------
+   Layer order, outermost in (spec §7 / UN-2 handoff): card bg + rim, gloss
+   (::before), medallion (debossed shape), numeral, corner mark. */
 
 .un-root .un-card {
   width: var(--un-card-w);
   height: var(--un-card-h);
   box-sizing: border-box;
   border-radius: var(--un-r-card);
-  border: 2px solid var(--un-card-edge);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  border: none; /* cards are <button>s - kill the UA button border, rim is the box-shadow below */
   cursor: default;
   flex: 0 0 auto;
-  box-shadow: var(--un-sh-rest);
+  transform-style: preserve-3d;
+  /* rim: an inset box-shadow, not a real border - a border would fight the box model */
+  box-shadow: var(--un-sh-rest),
+    inset 0 0 0 var(--un-card-rim-w) var(--un-card-rim),
+    inset 0 0 0 calc(var(--un-card-rim-w) + 1px) var(--un-card-edge);
+}
+.un-root .un-card::before {
+  content: '';
+  position: absolute;
+  inset: var(--un-card-rim-w);
+  border-radius: 6px;
+  background: linear-gradient(145deg, var(--un-gloss-hi) 0%, transparent 42%, var(--un-gloss-lo) 100%);
+  pointer-events: none;
 }
 .un-root .un-card-sm { width: var(--un-card-w-sm); height: var(--un-card-h-sm); }
 .un-root .un-card[data-color="red"] { background: var(--un-red); }
@@ -290,6 +314,8 @@
 
 .un-root .un-back { background: repeating-linear-gradient(135deg, var(--un-wild), var(--un-wild) 6px, var(--un-back-stripe) 6px, var(--un-back-stripe) 12px); }
 
+/* z-index:2 keeps the corner topmost regardless of markup order - it is "the entire
+   read" for a buried fan card (spec §5) and must never be occluded by the medallion. */
 .un-root .un-corner {
   position: absolute;
   display: flex;
@@ -299,19 +325,33 @@
   color: var(--un-card-ink);
   font-size: var(--un-t-corner);
   font-weight: 800;
+  z-index: 2;
 }
 .un-root .un-corner-tl { top: 4px; left: 4px; }
-.un-root .un-corner-br { bottom: 4px; right: 4px; transform: rotate(180deg); }
 .un-root .un-card-sm .un-corner { display: none; }
 
+/* debossed shape medallion (spec §7) - reuses shapeSVG()/COLOR_META via medallionHTML() */
+.un-root .un-medallion {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 46px;
+  height: 46px;
+  filter: drop-shadow(0 1.5px 0 var(--un-medallion-lo)) drop-shadow(0 -1px 0 var(--un-medallion-hi));
+  pointer-events: none;
+}
+.un-root .un-card-sm .un-medallion { width: 36px; height: 36px; }
+
 .un-root .un-face { color: var(--un-card-ink); font-size: var(--un-t-numeral); font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.un-root .un-glyph-big { position: relative; z-index: 1; }
-.un-root .un-card-sm .un-face { font-size: var(--un-t-numeral-sm); }
-.un-root .un-wildquad { position: absolute; inset: var(--un-sp-1); border-radius: calc(var(--un-r-card) - var(--un-sp-1)); overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.un-root .un-wildquad span[data-color="red"] { background: var(--un-red); }
-.un-root .un-wildquad span[data-color="yellow"] { background: var(--un-yellow); }
-.un-root .un-wildquad span[data-color="green"] { background: var(--un-green); }
-.un-root .un-wildquad span[data-color="blue"] { background: var(--un-blue); }
+.un-root .un-glyph-big {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 0 var(--un-numeral-shade);
+  -webkit-text-stroke: 1.5px var(--un-numeral-stroke);
+  paint-order: stroke fill;
+}
+.un-root .un-glyph-action { font-size: 26px; } /* +2/+4/⊘/⇄/★ optically match the digits (spec §3) */
+.un-root .un-card-sm .un-face { display: none; } /* small cards: medallion alone identifies the card */
 
 /* --- color chooser ----------------------------------------------------------- */
 
@@ -352,7 +392,12 @@
    this file only consumes them. There is deliberately NO scroll container and
    NO transition here - UN-4 owns motion. */
 
-.un-root .un-handwrap { display: flex; flex-direction: column; align-items: center; }
+/* height: 152px fixed = 20px UNO-chip slot + 132px fan (spec §4). The chip slot is
+   reserved UNCONDITIONALLY: it used to be conditional markup, so the fan dropped
+   down the moment a player reached one card - now the empty slot already occupies
+   its row from first paint. */
+.un-root .un-handwrap { display: flex; flex-direction: column; align-items: center; height: 152px; }
+.un-root .un-unoslot { height: 20px; display: flex; align-items: center; justify-content: center; }
 .un-root .un-hand {
   position: relative;
   height: 132px; /* fan region, spec §4 - identical at every hand size */
@@ -376,7 +421,7 @@
   z-index: var(--z, 0);
 }
 
-.un-root .un-bar { display: flex; gap: 8px; }
+.un-root .un-bar { display: flex; gap: 8px; height: 40px; align-items: center; } /* spec §4 */
 
 /* Penalty-draw toast: short-lived, auto-dismissed, non-interactive. */
 .un-root .un-toast {
