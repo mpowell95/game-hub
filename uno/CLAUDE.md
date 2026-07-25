@@ -220,8 +220,9 @@ these numbers here.
 
 ## Visual rebuild (2026-07-25, per `UNO-DESIGN-SPEC.md` + `HANDOFF-UNO-VISUAL.md`)
 
-Landed in four sessions: UN-1 tokens + UN-3 fan (this section), then UN-2/UN-5 card face and
-fixed geometry, UN-4 motion, UN-6 hand sort. The spec (repo root) is the contract for all of it.
+Landing in four sessions: UN-1 tokens + UN-3 fan (this section), UN-2/UN-5 card face and
+fixed geometry, UN-4 motion (below), UN-6 hand sort (not yet landed - no `handSort` control
+exists in `ui.js` as of this writing). The spec (repo root) is the contract for all of it.
 
 ### The token system (UN-1)
 
@@ -379,6 +380,110 @@ rather than by "the content happens to already add up right").
 `.un-opponents` also gained `flex-wrap: nowrap` (was `wrap`) - a wrapped second row of
 chips would need MORE than 44px, which is exactly the shift the fixed height exists to
 prevent. `.un-oppname`'s existing `max-width` + ellipsis absorbs long names instead.
+
+### Motion system (UN-4) - spec §6, all 13 rows plus 6a
+
+Every duration/easing is a named token in `.un-root` (`--un-dur-*`/`--un-ease-*`), each
+comment-tagged with the spec row it belongs to - grep `--un-dur-` in `uno.css` for the full
+list. No rule anywhere in the file carries an inline duration or `cubic-bezier(...)`
+literal. Row 9 (penalty draws arriving 90ms apart) was **not implemented** - it was
+explicitly outside this session's assigned row order and is deferred, not forgotten; a
+multi-card penalty draw currently pops in via row 6's single-card path with no stagger
+between cards.
+
+**The one real conflict with the render architecture: only one `transition` can be active
+on `transform` at a time.** Rows 2 (relayout, 260ms), 7 (legal-card lift, 180ms, staggered),
+and 11 (press, 120ms) all animate the SAME `transform` property on `.un-fan .un-card` (fan
+layout, the "is legal" lift, and the press dip/scale are three extra terms folded into one
+`transform` value via `--un-lift`/`--un-press-scale`, not three separate transforms - CSS
+only has one `transform` per element). Since a transition's duration is resolved from
+whichever selector matches the element AFTER a style change, not from what actually caused
+the change, the three rows can't each keep their own duration independently; they're
+layered by cascade precedence instead - `:active` (row 11) beats `.is-live` (row 7) beats
+the bare `.un-fan .un-card` base rule (row 2), equal specificity broken by source order.
+Practical effect: a card that's both legal AND being relaid-out (e.g. the hand reflows
+mid-turn) animates at row 7's 180ms rhythm, not row 2's 260ms - a minor, deliberate
+approximation, not a bug. Press always wins since it's the most time-sensitive feedback.
+
+**Non-persistent regions (mat, opponents, UNO slot) need "did this just happen" flags,
+not transitions.** Only the fan's cards get UN-3c's DOM-persistence exemption; the discard
+pile, pending badge, opponent chips, and UNO chip are all rebuilt via `innerHTML` every
+render like before. A CSS `transition` needs a persistent "before" style to animate from,
+so rows 4/5/8/10/12(chip) are `@keyframes` animations instead (which play once from their
+own 0% state on insertion, needing no prior DOM), gated by explicit "did the underlying
+value actually change since the last render" checks in `renderGame()` so an unrelated
+re-render (a toast firing, a different opponent's turn) never replays them:
+- `_lastDiscardId` + `_discardRot` (rows 4/5) - a stable random rest tilt computed once per
+  physical top card and reused across re-renders of the same top card; `_revealPending`
+  (set only by `startGame()`) plus "is this card a wild" decide flip (row 5) vs. settle
+  (row 4).
+- `_lastPendingDraw` (row 8) - only pulses on an actual increase.
+- `_lastHandLen` (row 10, per seat index) - only pops on the exact render a hand first
+  drops to one card.
+- `_aiPulsePi` (row 12's chip half) - an explicit flag set right when the AI plays and
+  cleared by a timer, mirroring the existing `_penaltyToast`/`_penaltyTimer` pattern.
+
+**Flight animations (rows 1, 3, 6, 12) are fixed-position clones in `.un-flightlayer`**, a
+sibling of the fan/mat regions built once in `_ensureGameShell()` so a render never touches
+it. `_spawnFlight()` is the one function that builds/positions/animates/removes a clone:
+`getBoundingClientRect()` on the real source and destination nodes, `left/top/width/height`
+set ONCE as static inline styles (never transitioned - only `transform` moves), then a
+shared `un-fly` keyframe (`un-fly-play`/`un-fly-draw`/`un-fly-deal` just pick different
+duration/easing/delay tokens) takes it from there to `translate(--fly-dx,--fly-dy)
+rotate(--fly-rot) scale(--fly-scale)`. Removed on `animationend`, with a `later()` timeout
+safety net (`FLIGHT_SAFETY_MS`) so a clone can never outlive a re-render if the event is
+ever lost (a backgrounded tab, or - see below - reduced motion). Row 1's 55ms stagger and
+row 6a's rim-glow both ride this same mechanism:
+- Rows 1 (deal) and 6 (draw): a newly-inserted fan node is real from the start (it already
+  carries its correct final `--x/--y/--rot`) but hidden (`un-card-entering`, opacity 0)
+  until ITS OWN clone's flight finishes, so the "arrival" is masked by the clone rather
+  than the real card popping into place mid-animation. Row 1 spawns all n clones at once,
+  each with its own `--i`-keyed CSS `animation-delay` (pure CSS stagger, not a JS
+  `setTimeout` loop) so reduced-motion's blanket delay override zeroes it out for free.
+  Row 6a's glow only fires for a drawn card (`isDeal` false), never during the initial
+  deal, which already tells the "this is new" story via the stagger.
+- Row 3 (human plays): the fan's live card node is cloned BEFORE `g.play()` runs (capturing
+  `sourceEl` first) - `_syncFan` removes the real node the instant the hand no longer
+  contains it, so the clone must exist before that happens, not after.
+- Row 12 (AI plays): opponent hands have no per-card DOM to clone from (only a count chip
+  is rendered), so the clone is built fresh from `cardHTML()` instead of `cloneNode()`. The
+  chip's rect is captured before `g.play()` runs too, since the opponents region rebuilds
+  every render and the OLD chip element is gone (zero-rect) by the time the flight would
+  otherwise read it.
+
+**The wild medallion's clip-path was rebuilt for exactly this reason (do not revert).**
+UN-2 originally clipped the quartered wild disc with an SVG `<clipPath id="un-wildclip-
+{card.id}">` + `url(#...)`. SVG id references are document-global and (per real browser
+behavior) can be resolved-and-cached by reference to a specific node; UN-4's flight clones
+`cloneNode(true)` the whole card including that `<clipPath>`, and the ORIGINAL node is
+removed from the fan the instant the hand changes - so a cloned wild card's clip-path could
+lose its target mid-flight and render unclipped for a frame. Fixed by dropping the SVG
+clipPath entirely and clipping via CSS `clip-path: circle(47.5%)` on `.un-medallion-wild`
+instead (see `medallionHTML()`'s comment) - no id, no document-global scope, so cloning is
+trivially safe. Verified: a Wild Draw Four's medallion stays circular through its entire
+flight. If a future session reintroduces an SVG clipPath anywhere in this file for
+per-card-cloned markup, re-read this note first.
+
+**`prefers-reduced-motion: reduce`** (spec §6): a blanket `.un-root * { animation-duration:
+0.01ms !important; transition-duration: 0.01ms !important; ...}` collapses every row to
+imperceptible, with two named exceptions that keep a 120ms **opacity-only** fade (rows 8
+and 10 - `animation-name` is overridden to a plain `un-fade-reduced` keyframe, dropping the
+scale/bounce). `.un-flightlayer` is simply `display: none` - flights are decorative overlays
+on top of state that's already fully correct the instant they'd spawn, so hiding them loses
+no information. **This has one real consequence for rows 1/6/6a's entering-card mechanism:**
+an element that never generates a box never fires `animationend`, so without a guard, a
+newly drawn/dealt card would stay hidden until `_spawnFlight`'s safety-net timeout
+(`FLIGHT_SAFETY_MS`, 900ms) instead of appearing instantly. `_spawnFlight()` checks
+`matchMedia('(prefers-reduced-motion: reduce)')` FIRST and, if reduced motion is on, skips
+spawning the clone entirely and resolves `onDone` synchronously - the real card is revealed
+the same render frame it's created, with no dependence on any animation event.
+
+**Row 13 (sort toggle) needed no new code at all - by construction, not by luck.**
+`_syncFan` reconciles cards by `data-id`, not by array position, so ANY reordering of the
+hand array fed to it (a future `sortedHand()`, per the deferred UN-6) will move the existing
+persistent nodes to their new `--x/--y/--rot` and animate via row 2's transition exactly
+like a hand-size change does today. There is no `handSort` control yet (session 4 adds
+it) - this is a structural guarantee to build on, not a placeholder.
 
 ### Autosave/resume
 
