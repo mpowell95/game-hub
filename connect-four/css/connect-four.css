@@ -413,6 +413,36 @@
   font-weight: 800;
 }
 
+/* How-to-play sheet (batch D/FB3-HOWTO3): same .cf-menu/.cf-menu-card bottom-sheet
+   shell as the game menu/stats-confirm, plus its own close (X) and diagram. */
+.cf-help { text-align: center; max-width: 360px; }
+.cf-x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  appearance: none;
+  border: 0;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--cf-muted);
+}
+.cf-help-lead { margin: 4px 0 0; font-size: 14.5px; font-weight: 800; color: var(--cf-ink); }
+.cf-help-caption { margin: 0; font-size: 13px; font-weight: 700; color: var(--cf-muted); }
+.cf-help-rule { margin: 0; font-size: 12px; font-weight: 600; color: var(--cf-muted); }
+.cf-diagram-wrap { display: flex; justify-content: center; margin: 4px 0 2px; }
+.cf-diagram { width: 150px; height: auto; }
+.cf-dg-board { fill: var(--cf-surface-2); stroke: var(--cf-accent); stroke-width: 2; opacity: 0.55; }
+.cf-dg-cell { fill: var(--cf-surface); stroke: var(--cf-muted); stroke-width: 1.5; opacity: 0.55; }
+.cf-dg-disc { fill: var(--cf-red); stroke: var(--cf-red-hi); stroke-width: 2; opacity: 1; }
+/* The empty landing cell the falling disc completes -- an outline, not a fill,
+   so "not yet placed" reads as a shape difference, never color alone. */
+.cf-dg-target { fill: rgba(255, 206, 58, 0.28); stroke: var(--cf-yellow); stroke-width: 3; stroke-dasharray: 3 3; opacity: 1; }
+.cf-dg-falling { fill: var(--cf-red); stroke: var(--cf-red-hi); stroke-width: 2; opacity: 0.85; }
+.cf-dg-arrow { fill: none; stroke: var(--cf-accent); stroke-width: 3; stroke-linecap: round; }
+.cf-dg-winline { stroke: var(--cf-yellow); stroke-width: 3; stroke-linecap: round; opacity: 0.9; }
+
 /* Toggle switch */
 .cf-switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
 .cf-switch input { position: absolute; opacity: 0; pointer-events: none; }

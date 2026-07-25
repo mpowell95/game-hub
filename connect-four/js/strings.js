@@ -64,6 +64,11 @@ export const STRINGS = {
     eval_estimate: 'Not solved yet · ★ = engine’s guess',
     eval_fallible: 'The computer at this level can still make mistakes.',
     analyzing: 'Analyzing',
+    howto: 'How to play',
+    help_lead: 'Connect four of your discs in a row.',
+    help_diagram_aria: 'A disc dropping down the last column to complete a diagonal four in a row',
+    help_caption: 'Discs fall to the lowest empty cell; rows, columns and diagonals all count.',
+    help_rule: 'Blocking the opponent’s four matters as much as building yours.',
   },
   es: {
     title: 'Conecta 4',
@@ -120,6 +125,11 @@ export const STRINGS = {
     eval_estimate: 'Aún sin resolver · ★ = intuición del motor',
     eval_fallible: 'El ordenador en este nivel todavía puede fallar.',
     analyzing: 'Analizando',
+    howto: 'Cómo se juega',
+    help_lead: 'Conecta cuatro de tus fichas en línea.',
+    help_diagram_aria: 'Una ficha cayendo por la última columna para completar una diagonal de cuatro en línea',
+    help_caption: 'Las fichas caen a la celda vacía más baja; filas, columnas y diagonales cuentan.',
+    help_rule: 'Bloquear el cuatro en línea del rival importa tanto como construir el tuyo.',
   },
 };
 

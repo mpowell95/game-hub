@@ -428,6 +428,25 @@
 }
 @keyframes cc-sheet-up { from { transform: translateY(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
 .cc-menu-sheet .cc-btn-ghost { text-align: left; }
+
+/* How-to-play sheet (batch D/FB3-HOWTO3): reuses .cc-modal/.cc-scrim/.cc-sheet
+   (the match-result dialog's own shell), reachable from setup and the in-game
+   menu alike. */
+.cc-help-sheet { text-align: center; max-width: 360px; }
+.cc-help-lead { margin: 4px 0 0; font-size: 0.95rem; font-weight: 800; color: var(--cc-ink); }
+.cc-diagram-wrap { display: flex; justify-content: center; margin: 4px 0 2px; }
+.cc-diagram { width: 100%; max-width: 300px; height: auto; }
+.cc-dg-card { fill: var(--cc-surface-2); stroke: var(--cc-muted); stroke-width: 1.5; }
+/* The run and the set are told apart by outline style, never color alone:
+   the run gets a solid accent outline (connected sequence), the set a
+   dashed outline (same rank, different cards) -- plus each card's own
+   number, so the grouping reads without relying on hue. */
+.cc-dg-run { stroke: var(--cc-accent); stroke-width: 2.5; }
+.cc-dg-set { stroke: var(--cc-good); stroke-width: 2.5; stroke-dasharray: 4 3; }
+.cc-dg-pip { font-size: 22px; font-weight: 800; fill: var(--cc-ink); text-anchor: middle; }
+.cc-help-caption { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--cc-muted); }
+.cc-help-rules { margin: 0; padding-left: 18px; text-align: left; font-size: 0.78rem; font-weight: 600; color: var(--cc-muted); display: flex; flex-direction: column; gap: 4px; }
+.cc-help-rules li { line-height: 1.35; }
 .cc-btn.cc-confirm { background: rgba(194, 64, 47, 0.12); color: var(--cc-bad); box-shadow: inset 0 0 0 1px var(--cc-bad); }
 
 .cc-score { width: 100%; border-collapse: collapse; }

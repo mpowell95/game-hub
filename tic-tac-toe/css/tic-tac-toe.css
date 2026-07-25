@@ -439,6 +439,11 @@
 .ttt-root .ttt-dg-grid line { stroke: var(--ttt-accent); stroke-width: 1.5; opacity: 0.6; }
 .ttt-root .ttt-dg-mark line { stroke: var(--ttt-x); stroke-width: 4; stroke-linecap: round; }
 .ttt-root .ttt-dg-arrow { fill: none; stroke: var(--ttt-gold); stroke-width: 3; stroke-linecap: round; }
+/* Classic's minimal diagram (bug fix, batch D/FB3-HOWTO3): smaller than the
+   Ultimate diagram since it's just a 3x3 grid, and the winning line is its
+   own connecting stroke (shape, not color alone) through the three marks. */
+.ttt-root .ttt-diagram-classic { width: 120px; height: 120px; }
+.ttt-root .ttt-dg-winline { stroke: var(--ttt-gold); stroke-width: 4; stroke-linecap: round; opacity: 0.9; }
 
 /* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
    js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom

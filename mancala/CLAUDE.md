@@ -31,3 +31,12 @@ delete (unlike Boggle) — this is shapes-only.
 the counterclockwise sow with a visible dashed hop over the opponent's mancala, a caption, an
 "X = Y" example, and two rule bullets. Matt's own words: "must be completely overhauled... same
 excess-prose issue."
+
+**Trimmed further (2026-07-24, batch D/FB3-HOWTO3):** QA rated this sheet "borderline" —
+a paragraph under the diagram (caption + a separate "X = Y" example line) plus a bold
+line and two bullets. The caption and example are now ONE merged sentence (`help_caption`
+in `strings.js`; the `help_example` key and its `<p class="mc-help-example">` render are
+deleted, along with the now-unused `.mc-help-example` CSS rule in both the light and dark
+blocks) — meaning preserved, not dropped: "Tap a pit to sow its stones counterclockwise,
+one per pit (your mancala counts, your opponent's is skipped); land the last stone in
+your own mancala to go again." The diagram itself and the two rule bullets are untouched.

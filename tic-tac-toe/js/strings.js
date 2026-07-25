@@ -57,6 +57,9 @@ export const STRINGS = {
     help_caption: 'Your move determines the next board.',
     help_example: 'Play top right box = Opponent plays top right board',
     help_rule: 'Sent to a completed mini-board = play on any live board.',
+    help_classic_lead: 'Get three in a row.',
+    help_classic_diagram_aria: 'Three X marks in a diagonal line, highlighted',
+    help_classic_caption: 'Three in a row across, down, or diagonally wins.',
   },
   es: {
     title: 'Tres en Raya',
@@ -109,6 +112,9 @@ export const STRINGS = {
     help_caption: 'Tu jugada determina el siguiente tablero.',
     help_example: 'Juega la casilla superior derecha = El rival juega en el tablero superior derecho',
     help_rule: 'Enviado a un mini-tablero completo = juega en cualquier tablero activo.',
+    help_classic_lead: 'Consigue tres en línea.',
+    help_classic_diagram_aria: 'Tres marcas X en línea diagonal, resaltadas',
+    help_classic_caption: 'Tres en línea en fila, columna o diagonal gana.',
   },
 };
 

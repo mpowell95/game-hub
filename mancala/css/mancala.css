@@ -589,7 +589,6 @@
 .mancala .mc-help-diagram-wrap { margin: 12px auto; max-width: 260px; background: #fff; border-radius: 14px; padding: 10px; }
 .mancala .mc-help-diagram { display: block; width: 100%; height: auto; }
 .mancala .mc-help-caption { margin: 0; font-size: 14px; line-height: 1.5; color: #4a3d2c; text-align: center; }
-.mancala .mc-help-example { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #4a3d2c; text-align: center; }
 .mancala .mc-help-bullets { margin: 14px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: #4a3d2c; }
 .mancala .mc-help-bullets li { margin: 0 0 6px; }
 .mancala .mc-x {
@@ -692,7 +691,6 @@
 :root.gh-dark .mancala .mc-help-lead { color: #e9eef6; }
 :root.gh-dark .mancala .mc-help-diagram-wrap { background: #232c40; }
 :root.gh-dark .mancala .mc-help-caption,
-:root.gh-dark .mancala .mc-help-example,
 :root.gh-dark .mancala .mc-help-bullets { color: #b7c3d6; }
 :root.gh-dark .mancala .mc-x { color: #9db0c9; }
 /* QA (2026-07-24) also caught mc-vsname: it inherits --mc-ink like the title did, sitting on

@@ -100,7 +100,6 @@ class EscobaUI {
     this._matchEnded = false;
     this._matchEscobas = 0;
     this._setupExpanded = null;   // which settings-card row is open (M1.2 accordion), one at a time
-    this._howtoOpen = new Set();  // which how-to-play detail rows are open (multiple allowed)
 
     // Multiplayer (M1 pilot). null in solo -- every MP code path is gated
     // behind this single field so solo play is byte-identical to before.
@@ -511,66 +510,36 @@ class EscobaUI {
   }
 
   // --- how to play ------------------------------------------------------------
+  // Trimmed to the standard repo-wide pattern (batch D/FB3-HOWTO3): the old
+  // 3-slide pager + 8-row scoring table + 3 accordion paragraphs are gone,
+  // replaced by ONE sheet -- goal line, one diagram, one caption, a compact
+  // 4-line scoring list (verified against game.js's scoreRound(), see the
+  // handoff/CLAUDE.md note), and an optional one-line figure-value note.
 
-  /** Two demo cards for the quick-start panels: a 7 and a card whose CAPTURE
-   *  value is 8 (so 7+8=15 reads as a real, mode-correct example), built
-   *  directly rather than off a live game/table (the how-to modal has none). */
-  _howtoDemoCards() {
+  /** The one diagram: a hand card + two table cards, annotated summing to 15
+   *  (mode-agnostic capture values -- 7+5+3 needs no figure card either way).
+   *  Mini card size (same as the old sweep panel) keeps the whole row well
+   *  under the 360px budget. */
+  _howtoDiagram() {
     const mode = this._setup.deckMode;
-    const eightRank = mode === 'american' ? 8 : 10;   // Sota captures as 8 in Spanish
-    return {
-      seven: { id: 'e7', suit: 'espadas', rank: 7, value: captureValue(7, mode) },
-      eight: { id: 'o' + eightRank, suit: 'oros', rank: eightRank, value: captureValue(eightRank, mode) },
-      filler: { id: 'c3', suit: 'copas', rank: 3, value: captureValue(3, mode) },
-      lay: { id: 'b5', suit: 'bastos', rank: 5, value: captureValue(5, mode) },
-      sweepA: { id: 'e2', suit: 'espadas', rank: 2, value: captureValue(2, mode) },
-      sweepB: { id: 'b1', suit: 'bastos', rank: 1, value: captureValue(1, mode) },
-    };
-  }
-
-  _howtoPanels() {
-    const c = this._howtoDemoCards();
-    const wrap = (card, cls = '') => `<div class="eb-howto-cardwrap ${cls}">${cardFaceHTML(card, { value: true, static: true })}</div>`;
-    return [
-      `<div class="eb-howto-panel">
-        <div class="eb-howto-demo">
-          ${wrap(c.seven)}<span class="eb-howto-plus">+</span>${wrap(c.eight, 'is-attn')}
-        </div>
-        <p class="eb-howto-caption">${esc(t('howto_caption_1'))}</p>
-        <p class="eb-howto-fine">${esc(t('howto_fine_1'))}</p>
-      </div>`,
-      `<div class="eb-howto-panel">
-        <div class="eb-howto-demo">
-          ${wrap(c.lay)}<span class="eb-howto-arrow">→</span>${wrap(c.lay)}
-        </div>
-        <p class="eb-howto-caption">${esc(t('howto_caption_2'))}</p>
-      </div>`,
-      `<div class="eb-howto-panel">
-        <div class="eb-howto-demo">
-          <div class="eb-howto-minicards">${cardFaceHTML(c.sweepA, { value: true, mini: true, static: true })}${cardFaceHTML(c.sweepB, { value: true, mini: true, static: true })}${cardFaceHTML(c.filler, { value: true, mini: true, static: true })}</div>
-          <span class="eb-howto-arrow">→</span>
-          <span class="eb-howto-broom" aria-hidden="true">🧹</span>
-        </div>
-        <p class="eb-howto-caption">${esc(t('howto_caption_3'))}</p>
-      </div>`,
-    ].join('');
-  }
-
-  _howtoDetailRow(key, label, bodyHtml) {
-    const open = this._howtoOpen.has(key);
-    return `<div class="eb-howto-detail ${open ? 'is-open' : ''}" data-key="${key}">
-      <button class="eb-howto-detail-head" data-action="howto-toggle">
-        <span>${label}</span><span class="eb-howto-chevron" aria-hidden="true">▾</span>
-      </button>
-      <div class="eb-howto-detail-body">${bodyHtml}</div>
+    const played = { id: 'e7', suit: 'espadas', rank: 7, value: captureValue(7, mode) };
+    const tableA = { id: 'o5', suit: 'oros', rank: 5, value: captureValue(5, mode) };
+    const tableB = { id: 'c3', suit: 'copas', rank: 3, value: captureValue(3, mode) };
+    const mini = (card, cls = '') => `<div class="eb-howto-cardwrap eb-howto-mini ${cls}">${cardFaceHTML(card, { value: true, mini: true, static: true })}</div>`;
+    return `<div class="eb-howto-demo">
+      ${mini(played, 'is-attn')}<span class="eb-howto-plus">+</span>${mini(tableA)}<span class="eb-howto-plus">+</span>${mini(tableB)}
+      <span class="eb-howto-arrow">=</span><span class="eb-howto-sum">15</span>
     </div>`;
   }
 
   _openHowTo() {
     const s = this._setup;
-    const valuesBody = s.deckMode === 'american'
-      ? `<p>${esc(t('detail_values_american'))}</p>`
-      : `<p>${esc(t('detail_values_spanish'))}</p>`;
+    // Default mode is Spanish (traditional), where the figures capture as
+    // 8/9/10, not their printed 10/11/12 -- see deck.js's captureValue() and
+    // the card-values-as-printed repo convention (default stays traditional).
+    // American mode has no figures at all, so the note only applies to Spanish.
+    const figureNote = s.deckMode !== 'american'
+      ? `<p class="eb-howto-fine">${esc(t('howto_figures_note'))}</p>` : '';
     this.el.modal.innerHTML = `<div class="eb-scrim" data-action="close-howto"></div>
       <div class="eb-sheet eb-howto">
         <div class="eb-howto-head">
@@ -578,66 +547,21 @@ class EscobaUI {
           <button class="eb-btn eb-btn-ghost" data-action="close-howto">${esc(t('btn_done'))}</button>
         </div>
         <div class="eb-howto-body">
-          <div class="eb-howto-panels">
-            <div class="eb-howto-track" data-role="howto-track">${this._howtoPanels()}</div>
+          <p class="eb-howto-goal">${esc(t('howto_goal'))}</p>
+          <div class="eb-howto-panel">
+            ${this._howtoDiagram()}
+            <p class="eb-howto-caption">${esc(t('howto_caption'))}</p>
           </div>
-          <div class="eb-howto-dots" data-role="howto-dots">
-            <button class="eb-howto-dot is-active" data-action="howto-dot" data-i="0" aria-label="${esc(t('aria_panel', { n: 1 }))}"></button>
-            <button class="eb-howto-dot" data-action="howto-dot" data-i="1" aria-label="${esc(t('aria_panel', { n: 2 }))}"></button>
-            <button class="eb-howto-dot" data-action="howto-dot" data-i="2" aria-label="${esc(t('aria_panel', { n: 3 }))}"></button>
-          </div>
-          <table class="eb-howto-table">
-            <tbody>
-              <tr><td>${esc(t('row_each_escoba'))}</td><td>${esc(t('pt_1'))}</td></tr>
-              <tr><td>${esc(t('row_most_cards'))}</td><td>${esc(t('pt_1'))}</td></tr>
-              <tr><td>${esc(t('row_opp_under10'))}</td><td>${esc(t('pts_plus2'))}</td></tr>
-              <tr><td>${esc(t('row_most_coins'))}</td><td>${esc(t('pt_1'))}</td></tr>
-              <tr><td>${esc(t('row_all10coins'))}</td><td>${esc(t('pts_plus2'))}</td></tr>
-              <tr><td>${esc(t('row_guindis'))}</td><td>${esc(t('pt_1'))}</td></tr>
-              <tr><td>${esc(t('row_all_sevens'))}</td><td>${esc(t('pts_3'))}</td></tr>
-              <tr><td>${esc(t('row_most_sevens'))}</td><td>${esc(t('pt_1'))}</td></tr>
-            </tbody>
-          </table>
-          <div class="eb-howto-details">
-            ${this._howtoDetailRow('dealing', esc(t('detail_dealing_head')),
-              `<p>${esc(t('detail_dealing_body'))}</p>`)}
-            ${this._howtoDetailRow('values', esc(t('detail_values_head')), valuesBody)}
-            ${this._howtoDetailRow('edge', esc(t('detail_edge_head')),
-              `<p>${esc(t('detail_edge_body'))}</p>`)}
-          </div>
+          <ul class="eb-howto-score">
+            <li>${esc(t('score_escobas'))}</li>
+            <li>${esc(t('score_cards'))}</li>
+            <li>${esc(t('score_coins'))}</li>
+            <li>${esc(t('score_sevens'))}</li>
+          </ul>
+          ${figureNote}
         </div>
       </div>`;
     this.el.modal.hidden = false;
-    this._wireHowtoPanels();
-  }
-
-  /** Native scroll-snap drives the swipe itself (no gesture library); this
-   *  only keeps the dots in sync and adds edge-tap advance, both via the
-   *  track's own scrollLeft, never a custom drag handler. */
-  _wireHowtoPanels() {
-    const track = this.el.modal.querySelector('[data-role="howto-track"]');
-    if (!track) return;
-    const dots = [...this.el.modal.querySelectorAll('.eb-howto-dot')];
-    const panelCount = track.children.length;
-    const syncDots = () => {
-      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-      dots.forEach((d, idx) => d.classList.toggle('is-active', idx === i));
-    };
-    track.addEventListener('scroll', () => {
-      clearTimeout(this._howtoScrollTimer);
-      this._howtoScrollTimer = setTimeout(syncDots, 80);
-    });
-    track.addEventListener('click', (e) => {
-      const rect = track.getBoundingClientRect();
-      const frac = (e.clientX - rect.left) / rect.width;
-      const cur = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-      let target = cur;
-      if (frac < 0.15) target = Math.max(0, cur - 1);
-      else if (frac > 0.85) target = Math.min(panelCount - 1, cur + 1);
-      else return;
-      track.scrollTo({ left: target * track.clientWidth, behavior: 'smooth' });
-      dots.forEach((d, idx) => d.classList.toggle('is-active', idx === target));   // see the howto-dot case for why this isn't left to the scroll listener alone
-    });
   }
 
   // --- game start -------------------------------------------------------------
@@ -1586,27 +1510,6 @@ class EscobaUI {
       case 'close-modal': this._closeModal(); break;
       case 'open-howto': if (!this.el.setup.hidden) this.syncSetupInputs(); this._closeMenu(); this._openHowTo(); break;
       case 'close-howto': this._closeModal(); break;
-      case 'howto-dot': {
-        const track = this.el.modal.querySelector('[data-role="howto-track"]');
-        if (!track) break;
-        const i = +a.dataset.i;
-        track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
-        // Update optimistically rather than solely via the track's own scroll
-        // listener: a programmatic smooth-scroll doesn't reliably fire
-        // 'scroll' events in every environment (this repo's preview browser
-        // forces prefers-reduced-motion, which some engines use to collapse
-        // a smooth scroll to a single non-eventing jump).
-        this.el.modal.querySelectorAll('.eb-howto-dot').forEach((d, idx) => d.classList.toggle('is-active', idx === i));
-        break;
-      }
-      case 'howto-toggle': {
-        const row = a.closest('.eb-howto-detail');
-        if (!row) break;
-        const key = row.dataset.key;
-        if (this._howtoOpen.has(key)) this._howtoOpen.delete(key); else this._howtoOpen.add(key);
-        row.classList.toggle('is-open');
-        break;
-      }
       case 'start': this.startGame(); break;
       case 'resume-game': this._resumeGame(); break;
       // multiplayer lobby

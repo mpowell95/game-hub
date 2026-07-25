@@ -888,7 +888,6 @@ class MancalaUI {
         <p class="mc-help-lead">${t('help_lead')}</p>
         <div class="mc-help-diagram-wrap">${this._sowDiagram()}</div>
         <p class="mc-help-caption">${t('help_caption')}</p>
-        <p class="mc-help-example">${t('help_example')}</p>
         <ul class="mc-help-bullets">
           <li>${t('help_rule_capture')}</li>
           <li>${t('help_rule_end')}</li>

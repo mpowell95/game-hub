@@ -314,6 +314,7 @@ class ConnectFourUI {
           </div>
 
           <button type="button" class="cf-btn cf-btn-primary" data-role="start">${t('start_game')}</button>
+          <button type="button" class="cf-btn cf-btn-ghost" data-role="help-open">${t('howto')}</button>
         </section>
 
         <section class="cf-game" hidden>
@@ -365,6 +366,7 @@ class ConnectFourUI {
             </label>
             <p class="cf-menu-note">${t('menu_note')}</p>
             <div class="cf-menu-actions">
+              <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-help">${t('howto')}</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-undo">${t('menu_undo')}</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-restart">${t('restart_game')}</button>
               <button type="button" class="cf-btn cf-btn-ghost" data-role="menu-quit">${t('quit_to_setup')}</button>
@@ -381,6 +383,22 @@ class ConnectFourUI {
               <button type="button" class="cf-btn cf-btn-ghost" data-role="stats-confirm-cancel-btn">${t('cancel')}</button>
               <button type="button" class="cf-btn cf-btn-primary" data-role="stats-confirm-ok">${t('confirm')}</button>
             </div>
+          </div>
+        </div>
+
+        <!-- How-to-play sheet (batch D/FB3-HOWTO3): mirrors the .cf-menu/.cf-menu-card
+             scrim+dialog pattern above, but a distinct data-role ("help-panel") so it
+             never collides with the in-game menu's own role. Reachable from both the
+             setup screen and the in-game menu. -->
+        <div class="cf-menu" data-role="help-panel" hidden>
+          <div class="cf-menu-scrim" data-role="help-scrim"></div>
+          <div class="cf-menu-card cf-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+            <button type="button" class="cf-x" data-role="help-close" aria-label="${t('close')}">&times;</button>
+            <h2 class="cf-menu-title">${t('howto')}</h2>
+            <p class="cf-help-lead">${t('help_lead')}</p>
+            <div class="cf-diagram-wrap">${this.helpDiagram()}</div>
+            <p class="cf-help-caption">${t('help_caption')}</p>
+            <p class="cf-help-rule">${t('help_rule')}</p>
           </div>
         </div>
       </div>`;
@@ -408,6 +426,7 @@ class ConnectFourUI {
       hintToggle: q('[data-role="hint-toggle"]'),
       statsConfirm: q('[data-role="stats-confirm"]'),
       statsConfirmMsg: q('[data-role="stats-confirm-msg"]'),
+      helpPanel: q('[data-role="help-panel"]'),
     };
 
     // Setup-screen wiring.
@@ -423,6 +442,9 @@ class ConnectFourUI {
       saveC4Settings({ firstMode: this.firstMode, nextStarter: this.nextStarter });
       this.syncSegmented(this.el.first, this.firstMode);
     });
+    root.querySelector('[data-role="help-open"]').addEventListener('click', () => this.openHelp());
+    root.querySelector('[data-role="help-scrim"]').addEventListener('click', () => this.closeHelp());
+    root.querySelector('[data-role="help-close"]').addEventListener('click', () => this.closeHelp());
     root.querySelector('[data-role="start"]').addEventListener('click', () => this.startGame());
     root.querySelector('[data-role="rematch"]').addEventListener('click', () => this.startGame());
     root.querySelector('[data-role="change"]').addEventListener('click', () => this.showSetup());
@@ -440,6 +462,7 @@ class ConnectFourUI {
     // while a game is in progress (no friction once it's already over).
     const restartBtn = root.querySelector('[data-role="menu-restart"]');
     const quitBtn = root.querySelector('[data-role="menu-quit"]');
+    root.querySelector('[data-role="menu-help"]').addEventListener('click', () => { this.closeMenu(); this.openHelp(); });
     root.querySelector('[data-role="menu-resume"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-scrim"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.requestUndo(); });
@@ -632,6 +655,53 @@ class ConnectFourUI {
     this._menuReturnFocus = null;
   }
 
+  // --- How to play ------------------------------------------------------
+
+  openHelp() {
+    this._helpReturnFocus = document.activeElement;
+    this.el.helpPanel.hidden = false;
+  }
+
+  closeHelp() {
+    this.el.helpPanel.hidden = true;
+    if (this._helpReturnFocus && this._helpReturnFocus.focus) this._helpReturnFocus.focus();
+    this._helpReturnFocus = null;
+  }
+
+  /** The one non-obvious mechanic: gravity + the diagonal direction (rows/columns
+   *  are self-evident; diagonal is the one worth showing). A small 4-wide board:
+   *  three discs already stacked along a diagonal, a fourth disc dropping down the
+   *  last column (arrow) to land on the highlighted target cell that completes it.
+   *  Shape/outline/arrow carry the meaning, never color alone (colorblind-safe). */
+  helpDiagram() {
+    const cell = 34, gap = 5, bx = 14, by = 46;
+    const step = cell + gap;
+    const cx = (c) => bx + c * step + cell / 2;
+    const cy = (r) => by + r * step + cell / 2;
+    const boardW = 4 * step - gap;
+    const cells = [];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const isTarget = c === 3 && r === 0;
+        const isPlaced = r === 3 - c && !isTarget;
+        cells.push(`<circle cx="${cx(c)}" cy="${cy(r)}" r="${cell / 2}"
+          class="cf-dg-cell ${isPlaced ? 'cf-dg-disc' : ''} ${isTarget ? 'cf-dg-target' : ''}"></circle>`);
+      }
+    }
+    return `<svg class="cf-diagram" viewBox="0 0 ${boardW + 24} ${by + boardW + 12}" role="img" aria-label="${t('help_diagram_aria')}">
+      <defs>
+        <marker id="cf-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--cf-accent)"/>
+        </marker>
+      </defs>
+      <rect x="${bx - 6}" y="${by - 6}" width="${boardW + 12}" height="${boardW + 12}" rx="10" class="cf-dg-board"/>
+      ${cells.join('')}
+      <line x1="${cx(0)}" y1="${cy(3)}" x2="${cx(3)}" y2="${cy(0)}" class="cf-dg-winline"/>
+      <circle cx="${cx(3)}" cy="14" r="${cell / 2 - 3}" class="cf-dg-falling"></circle>
+      <line x1="${cx(3)}" y1="26" x2="${cx(3)}" y2="${cy(0) - cell / 2 - 4}" class="cf-dg-arrow" marker-end="url(#cf-dg-arrowhead)"/>
+    </svg>`;
+  }
+
   /** Run `action` immediately if the game is over; otherwise require a second
    *  confirming tap on `btn` (a guard against accidentally abandoning a game). */
   confirmDestructive(btn, action) {
@@ -695,6 +765,10 @@ class ConnectFourUI {
   }
 
   onKeyDown(e) {
+    if (this.el.helpPanel && !this.el.helpPanel.hidden) {  // help open (setup or in-game): Esc closes
+      if (e.key === 'Escape') this.closeHelp();
+      return;
+    }
     if (this.el.game.hidden) return;
     if (!this.el.statsConfirm.hidden) {     // confirm open: Esc cancels, ignore game keys
       if (e.key === 'Escape') this.cancelStatsConfirm();

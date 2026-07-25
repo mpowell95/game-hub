@@ -58,6 +58,18 @@ always return `false` to match (root `CLAUDE.md`'s "autosave built in" `isInProg
 leaving mid-game is lossless (the board persists after every move and now auto-resumes), so the
 hub's leave-confirm no longer appears.
 
+**Diagram added (2026-07-24, batch D/FB3-HOWTO3):** the sheet was text-only (4 bullets,
+no visual). `helpDiagramSVG()` in `js/ui.js` adds ONE small SVG above the bullet list
+(purely additive — none of the 4 bullets from the FB2 trim changed): two bolts on the
+left, the top color of the first "pouring" (arced arrow) onto a matching color already at
+the bottom of the second (dashed-outline empty target above it), plus a third bolt shown
+fully filled with one color (a small padlock glyph) to depict "complete/locked". Each
+color also carries its own shape marker (circle/triangle/diamond, matching the
+colorblind-safe palette in root CLAUDE.md — this game's own `PALETTE` hexes for
+yellow/blue/teal are the exact same values) so the grouping never relies on hue alone.
+`.nb-help-diagram-wrap`/`.nb-help-diagram` in `nuts-bolts.css`; new string
+`help_diagram_aria`.
+
 i18n: `nuts-bolts/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Tier keys
 (`easy`/`medium`/`hard`/`extraHard`), color keys, and `game.js`'s move-reason codes
 (`empty`/`locked`/`full`/`color-mismatch`, changed from their old English-sentence values) stay

@@ -296,6 +296,7 @@ class NutsBoltsUI {
           <button type="button" class="nb-panel-close" data-action="close-help" aria-label="${t('close_aria')}">&times;</button>
           <h2>${t('howto')}</h2>
           <div class="nb-help-body">
+            <div class="nb-help-diagram-wrap">${this.helpDiagramSVG()}</div>
             <ul>
               <li>${t('help_li_1')}</li>
               <li>${t('help_li_2')}</li>
@@ -309,6 +310,50 @@ class NutsBoltsUI {
         </div>
       </div>
     `;
+  }
+
+  /** The one diagram (batch D/FB3-HOWTO3): two bolts -- the left one's top
+   *  color pours onto the matching color on the right one (arrow), and a
+   *  third bolt shows a completed/locked single-color bolt. Each color also
+   *  carries its own shape marker (circle/triangle/diamond, matching the
+   *  repo's colorblind-safe palette in root CLAUDE.md) so the grouping never
+   *  relies on hue alone. */
+  helpDiagramSVG() {
+    const marker = (shape, cx, cy) => shape === 'circle'
+      ? `<circle cx="${cx}" cy="${cy}" r="5" fill="#fff" opacity="0.92"/>`
+      : shape === 'triangle'
+        ? `<polygon points="${cx},${cy - 6} ${cx - 6},${cy + 5} ${cx + 6},${cy + 5}" fill="#fff" opacity="0.92"/>`
+        : `<polygon points="${cx},${cy - 6} ${cx + 6},${cy} ${cx},${cy + 6} ${cx - 6},${cy}" fill="#fff" opacity="0.92"/>`;
+    return `<svg class="nb-help-diagram" viewBox="0 -20 190 100" role="img" aria-label="${t('help_diagram_aria')}">
+      <defs>
+        <marker id="nb-dg-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--nb-ink)"/>
+        </marker>
+      </defs>
+      <!-- Bolt A: yellow on top of blue -->
+      <rect x="10" y="20" width="34" height="70" rx="8" fill="none" stroke="var(--nb-muted)" stroke-width="1.5"/>
+      <rect x="10" y="20" width="34" height="35" rx="8" fill="var(--nb-yellow)"/>
+      <rect x="10" y="55" width="34" height="35" fill="var(--nb-blue)"/>
+      ${marker('circle', 27, 37)}
+      ${marker('triangle', 27, 72)}
+      <!-- Bolt B: matching yellow already at the bottom, empty target on top -->
+      <rect x="76" y="20" width="34" height="70" rx="8" fill="none" stroke="var(--nb-muted)" stroke-width="1.5"/>
+      <rect x="76" y="20" width="34" height="35" rx="8" fill="none" stroke="var(--nb-accent)" stroke-width="2" stroke-dasharray="4 3"/>
+      <rect x="76" y="55" width="34" height="35" fill="var(--nb-yellow)"/>
+      ${marker('circle', 93, 72)}
+      <!-- The pour: bolt A's top color arcs over into bolt B's empty target -->
+      <path d="M27,20 C 40,-8 80,-8 93,20" fill="none" stroke="var(--nb-ink)" stroke-width="2.5" marker-end="url(#nb-dg-arrowhead)"/>
+      <!-- Bolt C: fully filled with one color -- complete, locked -->
+      <rect x="142" y="20" width="34" height="70" rx="8" fill="none" stroke="var(--nb-muted)" stroke-width="1.5"/>
+      <rect x="142" y="20" width="34" height="35" rx="8" fill="var(--nb-teal)"/>
+      <rect x="142" y="55" width="34" height="35" fill="var(--nb-teal)"/>
+      ${marker('diamond', 159, 37)}
+      ${marker('diamond', 159, 72)}
+      <g transform="translate(159,10)" aria-hidden="true">
+        <rect x="-6" y="-1" width="12" height="9" rx="2" fill="var(--nb-ink)"/>
+        <path d="M-3,-1 v-3 a3,3 0 0 1 6,0 v3" fill="none" stroke="var(--nb-ink)" stroke-width="2"/>
+      </g>
+    </svg>`;
   }
 
   startTier(tier) {

@@ -546,12 +546,48 @@ class TicTacToeUI {
     </svg>`;
   }
 
+  /** Minimal Classic diagram: a 3x3 grid, three-in-a-row on the diagonal
+   *  highlighted (diagonal chosen because, even in a 3x3, it's the least
+   *  obvious of the eight winning lines -- rows/columns are self-evident).
+   *  Same shape-not-color discipline as the Ultimate diagram: the winning
+   *  line is carried by an actual connecting stroke, not by hue alone. */
+  _classicDiagram() {
+    return `<svg class="ttt-diagram ttt-diagram-classic" viewBox="0 0 108 108" role="img" aria-label="${t('help_classic_diagram_aria')}">
+      <g class="ttt-dg-grid">
+        <line x1="36" y1="4" x2="36" y2="104"/><line x1="72" y1="4" x2="72" y2="104"/>
+        <line x1="4" y1="36" x2="104" y2="36"/><line x1="4" y1="72" x2="104" y2="72"/>
+      </g>
+      <g class="ttt-dg-mark">
+        <line x1="10" y1="10" x2="26" y2="26"/><line x1="26" y1="10" x2="10" y2="26"/>
+      </g>
+      <g class="ttt-dg-mark">
+        <line x1="46" y1="46" x2="62" y2="62"/><line x1="62" y1="46" x2="46" y2="62"/>
+      </g>
+      <g class="ttt-dg-mark">
+        <line x1="82" y1="82" x2="98" y2="98"/><line x1="98" y1="82" x2="82" y2="98"/>
+      </g>
+      <line x1="12" y1="12" x2="96" y2="96" class="ttt-dg-winline"/>
+    </svg>`;
+  }
+
+  /** Variant-aware content (bug fix, batch D/FB3-HOWTO3): the sheet must
+   *  match whichever variant is actually being played, not always Ultimate.
+   *  Mid-game it reads the LIVE game's variant (this.state.variant); at
+   *  setup it reads the pending selection (this._setup.variant) -- so it's
+   *  always accurate whether opened from the setup screen or the in-game
+   *  help button. */
   openHelp() {
     this.closeOverlays();
+    const variant = (this.view === 'game' && this.state) ? this.state.variant : this._setup.variant;
     const overlay = document.createElement('div');
     overlay.className = 'ttt-overlay';
     overlay.dataset.role = 'help';
-    overlay.innerHTML = `
+    overlay.innerHTML = variant === 'ultimate' ? this._helpUltimateMarkup() : this._helpClassicMarkup();
+    this.root.appendChild(overlay);
+  }
+
+  _helpUltimateMarkup() {
+    return `
       <div class="ttt-scrim" data-action="close-overlay"></div>
       <div class="ttt-card ttt-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="ttt-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
@@ -564,7 +600,23 @@ class TicTacToeUI {
           <p class="ttt-help-rule">${t('help_rule')}</p>
         </div>
       </div>`;
-    this.root.appendChild(overlay);
+  }
+
+  /** Classic is barely more than the diagram (root CLAUDE.md item 3: "Classic
+   *  barely needs more than the diagram") -- goal line, diagram, one caption,
+   *  no example, no bullets. */
+  _helpClassicMarkup() {
+    return `
+      <div class="ttt-scrim" data-action="close-overlay"></div>
+      <div class="ttt-card ttt-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="ttt-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
+        <h3 class="ttt-card-title">${t('howto')}</h3>
+        <p class="ttt-help-lead">${t('help_classic_lead')}</p>
+        <div class="ttt-diagram-wrap">${this._classicDiagram()}</div>
+        <div class="ttt-help-lines">
+          <p class="ttt-help-caption">${t('help_classic_caption')}</p>
+        </div>
+      </div>`;
   }
 
   closeOverlays() {

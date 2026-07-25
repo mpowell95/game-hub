@@ -104,6 +104,33 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
 - **Highlight-sets groups, it does not paint (batch 10 revision).** The `cc-meld-c0..c5` classes used to each carry a different hue (including both green and red, a THE LAW rule 9 violation), then a first fix rang every meld in one shared color - which fixed the colorblind issue but kept the "painted" look Matt disliked without being able to name why. The current treatment (`chinchon/css/chinchon.css`'s CH-1 block) drops the ring: each melded card lifts slightly (`transform: translateY`, so toggling highlight-sets on/off never shifts layout) and gets a thin `#ffce3a` accent bar along its own bottom edge (inside the card, since `.cc-card` is `overflow: hidden` for its rounded corners - reads the same at this size); the small numbered badge (`data-meld-num`, a card's own `::after`) stays as the actual non-color differentiator between simultaneous melds, since lift+bar alone don't distinguish which meld a card belongs to. Non-melded cards dim by a lighter notch than before (`grayscale(0.55)`/`opacity: 0.72`, was full grayscale at 0.5 opacity - read as harsh).
 - Both fixes are phone-viewport / narrow-hand concerns; a `PHONE_WIDTH_MAX` (699) guard keeps a short-but-wide desktop window from triggering the row-fit logic, matching this file's own `@media (min-width: 700px)` desktop breakpoint.
 
+### How-to-play sheet (2026-07-24, batch D/FB3-HOWTO3)
+
+Chinchón had no how-to-play entry point at all before this. Added the standard
+repo-wide sheet, reachable from BOTH the setup screen (`data-action="help"`, a
+`.cc-btn-ghost` under the start button) and the in-game hamburger menu
+(`data-action="menu-help"`, alongside the Dark mode toggle) — mid-game is where QA
+flagged confusion striking. `_openHelp()`/`_closeHelp()`/`_helpDiagram()` in `ui.js`
+reuse the existing `.cc-modal`/`.cc-scrim`/`.cc-sheet` shell (the match-result dialog's
+own pattern) under a distinct `data-role="help"`, so it never collides with the
+hamburger `.cc-menu`. Diagram: a generic 7-card hand split into a highlighted run of 4
+(solid accent outline) and a set of 3 (dashed good-color outline) — no suit vocabulary
+in the diagram itself (generic pip numbers only). Content verified against the engine
+before writing (see the root handoff's verification requirement):
+- **Close threshold**: `DEFAULT_CONFIG.maxClose = 3` (`chinchon/js/game.js:31`, "inclusive
+  leftover threshold to close"), consumed by `meld.js`'s `canClose()` (`threshold = cfg.maxClose
+  != null ? cfg.maxClose : 3`, line ~200) — the sheet says "3 points or fewer" to match the
+  actual default.
+- **Menos diez / automatic close**: `meld.js`'s `isDoubleMeld()` (line ~222, "exactly 7 cards
+  split into two complete melds (3+4), no leftover") and `classifyClosingHand()`'s
+  `doubleMeld` branch (line ~251, `score: -10`) — the sheet's "two complete groups is an
+  automatic close" bullet matches this directly.
+- **Chinchón**: `meld.js`'s `isChinchon()` (line ~205, "7 natural cards of one suit in an
+  unbroken ladder sequence (no wild)") and `classifyClosingHand()`'s chinchón branch (line
+  ~239) — the sheet's "7-card same-suit run is chinchón and wins outright" bullet.
+Strings: `howto`/`help_lead`/`help_diagram_aria`/`help_caption`/`help_rule_close`/
+`help_rule_menos_diez`/`help_rule_chinchon` in `strings.js`.
+
 ### Rules engine notes (correctness-critical)
 
 - **Partition search**: `generateMelds` enumerates all candidate sets/runs as bitmasks;

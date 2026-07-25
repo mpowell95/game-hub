@@ -853,6 +853,10 @@
   margin: 8px 0;
 }
 .nb-help-body li { margin: 6px 0; }
+/* Diagram (batch D/FB3-HOWTO3): additive to the 4 bullets above, never
+   replacing any of them. */
+.nb-help-diagram-wrap { display: flex; justify-content: center; margin: 4px 0 10px; }
+.nb-help-diagram { width: 170px; height: auto; }
 
 .nb-confirm {
   position: relative;

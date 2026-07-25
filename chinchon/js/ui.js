@@ -294,6 +294,7 @@ class ChinchonUI {
         </section>
         <div class="cc-modal" data-role="modal" hidden></div>
         <div class="cc-menu" data-role="menu" hidden></div>
+        <div class="cc-modal" data-role="help" hidden></div>
         <div class="cc-toast" data-role="toast" hidden></div>
       </div>`;
 
@@ -303,7 +304,7 @@ class ChinchonUI {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), piles: q('piles'), status: q('status'),
       self: q('self'), handbar: q('handbar'), hand: q('hand'), actions: q('actions'),
-      modal: q('modal'), menu: q('menu'), toast: q('toast'),
+      modal: q('modal'), menu: q('menu'), help: q('help'), toast: q('toast'),
     };
 
     this.root.addEventListener('click', this._onClick);
@@ -545,6 +546,7 @@ class ChinchonUI {
         ${modeSeg}
         ${this._renderSettingsCard(isHost)}
         ${actionBtn}
+        <button class="cc-btn cc-btn-ghost" data-action="help">${t('howto')}</button>
       </div>`;
   }
 
@@ -1575,6 +1577,9 @@ class ChinchonUI {
       case 'rule-toggle': this.syncSetupInputs(); this._setup.config[a.dataset.field] = !this._setup.config[a.dataset.field]; this._saveSetup(); this.renderSetup(); break;
       case 'rule-step': this.syncSetupInputs(); this._stepRule(a.dataset.field, +a.dataset.d); this._saveSetup(); this.renderSetup(); break;
       case 'start': this.startGame(); break;
+      case 'help': this._openHelp(); break;
+      case 'menu-help': this._closeMenu(); this._openHelp(); break;
+      case 'close-help': this._closeHelp(); break;
       // multiplayer lobby (M2b)
       case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
@@ -1610,6 +1615,63 @@ class ChinchonUI {
     }
   }
 
+  // --- how to play (batch D/FB3-HOWTO3) --------------------------------------
+  // Reachable from both the setup screen (data-action="help") and the in-game
+  // menu (data-action="menu-help"), since QA flagged mid-game as where
+  // confusion strikes most. Reuses the .cc-modal/.cc-scrim/.cc-sheet shell
+  // (the match-result dialog's own pattern), a distinct data-role="help" so it
+  // never collides with the in-game hamburger .cc-menu.
+
+  _openHelp() {
+    this.el.help.innerHTML = `<div class="cc-scrim" data-action="close-help"></div>
+      <div class="cc-sheet cc-help-sheet">
+        <button class="cc-sheet-x" data-action="close-help" aria-label="${t('close_word')}">&times;</button>
+        <h2 class="cc-sheet-title">${t('howto')}</h2>
+        <p class="cc-help-lead">${t('help_lead')}</p>
+        <div class="cc-diagram-wrap">${this._helpDiagram()}</div>
+        <p class="cc-help-caption">${t('help_caption')}</p>
+        <ul class="cc-help-rules">
+          <li>${t('help_rule_close')}</li>
+          <li>${t('help_rule_menos_diez')}</li>
+          <li>${t('help_rule_chinchon')}</li>
+        </ul>
+      </div>`;
+    this.el.help.hidden = false;
+  }
+
+  _closeHelp() { this.el.help.hidden = true; this.el.help.innerHTML = ''; }
+
+  /** The one non-obvious mechanic: melding a HAND into runs/sets, not just
+   *  matching pairs. A 7-card hand split into a highlighted run of 4
+   *  (consecutive ranks, one suit) and a set of 3 (one rank, three suits) --
+   *  shape/outline carry the grouping, never color alone. Generic pip glyphs
+   *  (no real suit art needed here), so no suit vocabulary appears in the
+   *  diagram itself. */
+  _helpDiagram() {
+    const w = 40, h = 56, gap = 6;
+    const n = 7;
+    const totalW = n * w + (n - 1) * gap;
+    const x = (i) => i * (w + gap);
+    const runRanks = ['4', '5', '6', '7'];
+    const setRank = '9';
+    let cells = '';
+    for (let i = 0; i < 4; i++) {
+      cells += `<g transform="translate(${x(i)},0)">
+        <rect width="${w}" height="${h}" rx="6" class="cc-dg-card cc-dg-run"/>
+        <text x="${w / 2}" y="${h / 2 + 6}" class="cc-dg-pip">${runRanks[i]}</text>
+      </g>`;
+    }
+    for (let i = 0; i < 3; i++) {
+      cells += `<g transform="translate(${x(4 + i)},0)">
+        <rect width="${w}" height="${h}" rx="6" class="cc-dg-card cc-dg-set"/>
+        <text x="${w / 2}" y="${h / 2 + 6}" class="cc-dg-pip">${setRank}</text>
+      </g>`;
+    }
+    return `<svg class="cc-diagram" viewBox="0 0 ${totalW} ${h + 4}" role="img" aria-label="${t('help_diagram_aria')}">
+      ${cells}
+    </svg>`;
+  }
+
   // --- in-game menu ---------------------------------------------------------
 
   /** A live match worth confirming before abandoning -- used internally by the
@@ -1634,6 +1696,7 @@ class ChinchonUI {
       <div class="cc-sheet cc-menu-sheet">
         <h2 class="cc-sheet-title">${t('menu_title')}</h2>
         <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${resolvedTheme() === 'dark' ? '☀️ ' + t('mode_light') : '🌙 ' + t('mode_dark')}</button>
+        <button class="cc-btn cc-btn-ghost" data-action="menu-help">${t('howto')}</button>
         ${btn('newgame', this.mp ? t('menu_leave_match') : t('menu_new_game_settings'))}
         ${this.mp ? '' : btn('quit', t('menu_quit_setup'))}
         <button class="cc-btn cc-btn-primary" data-action="menu-resume">${t('menu_resume')}</button>

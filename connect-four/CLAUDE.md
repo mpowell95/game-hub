@@ -32,6 +32,24 @@ already-over) is treated as "no save," never crashes the mount. `isInProgress()`
 returns `false` for this reason (see its own comment) — the hub's "leave game?" confirm no longer
 applies. Does not touch `SETTINGS_KEY` (who-goes-first stays a separate, persistent choice).
 
+### How-to-play sheet (2026-07-24, batch D/FB3-HOWTO3)
+
+Connect Four had no how-to-play entry point at all before this. Added the standard
+repo-wide sheet (root CLAUDE.md pattern): goal line, one diagram, a caption, one bullet.
+Reachable from the setup screen (`data-role="help-open"`, a `.cf-btn-ghost` under Start)
+**and** the in-game menu (`data-role="menu-help"`, alongside Undo/Restart/Quit), for
+parity with Tic Tac Toe. The overlay (`data-role="help-panel"`) mirrors the existing
+`.cf-menu`/`.cf-menu-card` scrim+dialog shell used by the game menu and stats-confirm
+panels, but with its own `data-role` so it never collides with either — `openHelp()`/
+`closeHelp()`/`helpDiagram()` in `ui.js`, `.cf-help`/`.cf-x`/`.cf-diagram`/`.cf-dg-*` in
+`connect-four.css`. Diagram: a 4-wide mini board showing a DIAGONAL four-in-a-row (the
+non-obvious direction — rows/columns are self-evident) with the completing disc falling
+down the last column (arrow) onto a dashed-outline target cell, plus a solid connecting
+line through all four positions. Shape/outline/arrow carry the meaning, never color
+alone. Says nothing about the Best Moves panel (its own captions already explain it).
+Strings: `howto`/`help_lead`/`help_diagram_aria`/`help_caption`/`help_rule` in
+`strings.js`.
+
 ### Settings: `gamehub.connect4.v1` (2026-07-23, batch 8)
 
 Connect Four persisted nothing before this. New standard `gamehub.<game>.v1` key holding only

@@ -14,6 +14,20 @@ Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate**
 The How-to-play screen pattern in the root CLAUDE.md was worked out on this game;
 `openHelp()` in `js/ui.js` is its reference implementation.
 
+**Bug fix (2026-07-24, batch D/FB3-HOWTO3): the sheet always showed Ultimate's content,
+even with Classic selected.** `openHelp()` now reads the variant at render time —
+`this.state.variant` when a match is live (`this.view === 'game'`), else the pending
+`this._setup.variant` — and branches to `_helpUltimateMarkup()` (unchanged) or the new
+`_helpClassicMarkup()`. Classic gets a genuinely minimal sheet (root CLAUDE.md item 3:
+"barely needs more than the diagram"): goal `Get three in a row.`, a small 3x3 diagram
+(`_classicDiagram()`) with a diagonal three-in-a-row highlighted via an actual connecting
+stroke (`.ttt-dg-winline`, never color alone — diagonal chosen because even in a 3x3 it's
+the least obvious of the eight lines), one caption, no example, no bullets. Both the
+setup-screen and in-game help buttons call the same `openHelp()`, so a match already in
+progress always shows the variant actually being played, not whatever was last selected
+in setup. New strings: `help_classic_lead`/`help_classic_diagram_aria`/
+`help_classic_caption`.
+
 i18n: `tic-tac-toe/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Variant keys
 (`classic`/`ultimate`), difficulty keys (`beginner`/`intermediate`/`pro`), and marks (`X`/`O`) stay
 canonical; only their display labels translate.
