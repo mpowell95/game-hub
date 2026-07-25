@@ -1,25 +1,93 @@
 /* uno.css - all styles, .un- prefixed, every rule descendant-scoped under .un-root
-   (Mancala discipline, root CLAUDE.md's "Adding a game" checklist). */
+   (Mancala discipline, root CLAUDE.md's "Adding a game" checklist).
+
+   TOKEN DISCIPLINE (UN-1, UNO-DESIGN-SPEC.md §2-§4): every color, shadow, radius,
+   and font-size in this file lives in the two token blocks (.un-root below, and
+   the :root.gh-dark chrome override at the bottom). Every rule outside those
+   blocks consumes tokens only. Gate:
+     grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css
+   must hit token blocks only. */
 
 .un-root {
-  --un-red: #E0532F;
-  --un-yellow: #F2B705;
-  --un-green: #178A7A;
-  --un-blue: #1F5FA8;
-  --un-wild: #2b2b33;
-  --un-bg: #eef1f6;
-  --un-surface: #ffffff;
-  --un-ink: #1c2430;
-  --un-muted: #6b7686;
+  /* card hues - LOCKED, colorblind pairing is contractual (spec §2) */
+  --un-red: #E0532F;    /* square   */
+  --un-yellow: #F2B705; /* circle   */
+  --un-green: #178A7A;  /* diamond  */
+  --un-blue: #1F5FA8;   /* triangle */
+  --un-wild: #23232C;   /* four-way */
   --un-accent: #1F5FA8;
-  --un-border: rgba(0, 0, 0, 0.1);
+
+  /* table + chrome. These are the LIGHT values; the dark block at the bottom
+     overrides chrome only. --un-table and every card token below are
+     THEME-INVARIANT (spec §2, decided): the mat stays dark in both themes. */
+  --un-table: #171C26;
+  --un-bg: #EEF1F6;
+  --un-surface: #FFF;
+  --un-ink: #1C2430;
+  --un-muted: #6B7686;
+  --un-border: rgba(0, 0, 0, .10);
+
+  /* card surface treatment (spec §2) - theme-invariant */
+  --un-card-rim: rgba(255, 255, 255, .94);
+  --un-card-edge: rgba(0, 0, 0, .32);
+  --un-medallion: rgba(255, 255, 255, .22);
+  --un-medallion-lo: rgba(0, 0, 0, .22);
+  --un-medallion-hi: rgba(255, 255, 255, .16);
+  --un-gloss-hi: rgba(255, 255, 255, .16);
+  --un-gloss-lo: rgba(0, 0, 0, .12);
+  --un-numeral-shade: rgba(0, 0, 0, .28);
+  --un-card-ink: #FFF;       /* numeral + corner ink (spec §3) */
+  --un-back-stripe: #45455A; /* card-back diagonal stripe */
+  --un-on-accent: #FFF;      /* text on --un-accent / saturated chips */
+  --un-unochip-ink: #2A2200; /* dark ink on the yellow UNO chip */
+  --un-scrim: rgba(0, 0, 0, .45);
+
+  /* shadow stack - three states only, no component improvises (spec §2) */
+  --un-sh-rest: 0 1px 1px rgba(8, 12, 20, .24), 0 2px 5px rgba(8, 12, 20, .20);
+  --un-sh-raised: 0 2px 3px rgba(8, 12, 20, .24), 0 9px 18px rgba(8, 12, 20, .26);
+  --un-sh-lift: 0 4px 6px rgba(8, 12, 20, .26), 0 20px 38px rgba(8, 12, 20, .34);
+
+  /* type scale (spec §3) */
+  --un-t-numeral: 34px;
+  --un-t-numeral-sm: 22px;
+  --un-t-corner: 13px;
+  --un-t-ui: 15px;
+  --un-t-label: 12px;
+  /* chrome type - setup screen + overlays; extends spec §3 so no rule below
+     carries a literal font-size */
+  --un-t-title: 22px;
+  --un-t-heading: 20px;
+  --un-t-body: 14px;
+  --un-t-small: 13px;
+  --un-t-tiny: 11px;
+  --un-t-emoji: 40px;
+  --un-t-x: 18px;
+
+  /* space + geometry (spec §4) */
+  --un-sp-1: 4px;
+  --un-sp-2: 8px;
+  --un-sp-3: 12px;
+  --un-sp-4: 16px;
+  --un-sp-5: 24px;
+  --un-sp-6: 32px;
+  --un-r-card: 9px;
+  --un-r-chip: 999px;
+  --un-r-sheet: 16px;
+  --un-r-ctl: 12px;  /* setup rows/buttons - chrome, not part of the spec §4 scale */
+  --un-r-badge: 6px; /* UNO chip - chrome, not part of the spec §4 scale */
+  --un-card-w: 62px;
+  --un-card-h: 92px;
+  --un-card-w-sm: 48px;
+  --un-card-h-sm: 71px;
+  --un-card-rim-w: 3px;
+
   display: block;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--un-ink);
   -webkit-tap-highlight-color: transparent;
 }
 
-.un-shell {
+.un-root .un-shell {
   max-width: 480px;
   margin: 0 auto;
   padding: 14px 14px 20px;
@@ -29,18 +97,18 @@
 
 /* --- setup screen --------------------------------------------------------- */
 
-.un-title { margin: 4px 0 2px; font-size: 22px; font-weight: 700; text-align: center; }
-.un-sub { margin: 0 0 16px; text-align: center; color: var(--un-muted); font-size: 14px; }
+.un-root .un-title { margin: 4px 0 2px; font-size: var(--un-t-title); font-weight: 700; text-align: center; }
+.un-root .un-sub { margin: 0 0 16px; text-align: center; color: var(--un-muted); font-size: var(--un-t-body); }
 
-.un-summary { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.un-root .un-summary { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 
-.un-row {
+.un-root .un-row {
   background: var(--un-surface);
   border: 1px solid var(--un-border);
-  border-radius: 12px;
+  border-radius: var(--un-r-ctl);
   overflow: hidden;
 }
-.un-row-head {
+.un-root .un-row-head {
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -53,19 +121,19 @@
   cursor: pointer;
   text-align: left;
 }
-.un-row-label { font-weight: 600; }
-.un-row-value { color: var(--un-muted); font-size: 14px; display: flex; align-items: center; gap: 4px; }
-.un-row-expand { padding: 0 14px 14px; }
+.un-root .un-row-label { font-weight: 600; }
+.un-root .un-row-value { color: var(--un-muted); font-size: var(--un-t-body); display: flex; align-items: center; gap: 4px; }
+.un-root .un-row-expand { padding: 0 14px 14px; }
 
-.un-seg { display: flex; gap: 6px; flex-wrap: wrap; }
-.un-segbtn {
+.un-root .un-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.un-root .un-segbtn {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 10px 8px;
-  border-radius: 10px;
+  border-radius: var(--un-r-ctl);
   border: 1px solid var(--un-border);
   background: var(--un-bg);
   color: var(--un-ink);
@@ -73,70 +141,70 @@
   font-weight: 600;
   cursor: pointer;
 }
-.un-segbtn.is-selected { background: var(--un-accent); border-color: var(--un-accent); color: #fff; }
+.un-root .un-segbtn.is-selected { background: var(--un-accent); border-color: var(--un-accent); color: var(--un-on-accent); }
 .un-root .lb-dshape { width: 1em; height: 1em; }
 .un-root .lb-dshape-x2 { width: 1.7em; height: 1em; }
 
-.un-primary, .un-ghost {
+.un-root .un-primary, .un-root .un-ghost {
   display: block;
   width: 100%;
   margin: 0 0 10px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--un-r-ctl);
   border: none;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
   text-align: center;
 }
-.un-primary { background: var(--un-accent); color: #fff; }
-.un-ghost { background: none; color: var(--un-accent); font-weight: 600; }
-.un-ghost.un-small { width: auto; flex: 1 1 0; padding: 8px 10px; font-size: 13px; margin: 0; }
-.un-ghost.is-confirm { color: var(--un-red); }
+.un-root .un-primary { background: var(--un-accent); color: var(--un-on-accent); }
+.un-root .un-ghost { background: none; color: var(--un-accent); font-weight: 600; }
+.un-root .un-ghost.un-small { width: auto; flex: 1 1 0; padding: 8px 10px; font-size: var(--un-t-small); margin: 0; }
+.un-root .un-ghost.is-confirm { color: var(--un-red); }
 
 /* --- game screen ----------------------------------------------------------- */
 
-.un-opponents { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
-.un-oppchip {
+.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+.un-root .un-oppchip {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--un-r-chip);
   background: var(--un-surface);
   border: 2px solid transparent;
-  font-size: 13px;
+  font-size: var(--un-t-small);
   position: relative;
 }
-.un-oppchip.is-turn { border-color: var(--un-accent); }
-.un-oppname { font-weight: 600; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.un-oppcount {
+.un-root .un-oppchip.is-turn { border-color: var(--un-accent); }
+.un-root .un-oppname { font-weight: 600; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.un-root .un-oppcount {
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--un-r-chip);
   background: var(--un-bg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--un-t-label);
 }
 
-.un-unochip {
+.un-root .un-unochip {
   background: var(--un-yellow);
-  color: #2a2200;
+  color: var(--un-unochip-ink);
   font-weight: 800;
-  font-size: 11px;
+  font-size: var(--un-t-tiny);
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--un-r-badge);
   letter-spacing: 0.02em;
 }
-.un-unochip-self { display: inline-block; margin-bottom: 4px; }
+.un-root .un-unochip-self { display: inline-block; margin-bottom: 4px; }
 
-.un-status { text-align: center; margin: 0 0 10px; font-weight: 600; min-height: 1.2em; }
+.un-root .un-status { text-align: center; margin: 0 0 10px; font-weight: 600; min-height: 1.2em; }
 
-.un-mat {
+.un-root .un-mat {
   position: relative;
   display: flex;
   align-items: center;
@@ -145,30 +213,30 @@
   padding: 10px 0 18px;
 }
 
-.un-pile { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; padding: 0; position: relative; }
-.un-drawpile { cursor: default; }
-.un-drawpile.is-live { cursor: pointer; }
-.un-drawpile:disabled .un-card { cursor: default; }
-.un-pilecount { font-size: 12px; color: var(--un-muted); font-weight: 600; }
+.un-root .un-pile { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; padding: 0; position: relative; }
+.un-root .un-drawpile { cursor: default; }
+.un-root .un-drawpile.is-live { cursor: pointer; }
+.un-root .un-drawpile:disabled .un-card { cursor: default; }
+.un-root .un-pilecount { font-size: var(--un-t-label); color: var(--un-muted); font-weight: 600; }
 /* Live +2/+4 stack counter: prominent and central (top of the mat, between the piles),
    not tucked in a corner, so the player can't miss how big the pile has grown. */
-.un-pendingbadge {
+.un-root .un-pendingbadge {
   position: absolute;
   top: -2px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--un-red);
-  color: #fff;
+  color: var(--un-on-accent);
   font-weight: 800;
-  font-size: 15px;
+  font-size: var(--un-t-ui);
   padding: 5px 14px;
-  border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(224, 83, 47, 0.45);
+  border-radius: var(--un-r-chip);
+  box-shadow: var(--un-sh-raised);
   z-index: 4;
   white-space: nowrap;
 }
 /* Play-direction arrow (3-4 players only), a quiet signal near the discard pile. */
-.un-dir {
+.un-root .un-dir {
   position: absolute;
   top: 2px;
   right: 4px;
@@ -176,31 +244,32 @@
   display: inline-flex;
   line-height: 0;
 }
-.un-discardpile { position: relative; }
-.un-colorchip {
+.un-root .un-discardpile { position: relative; }
+.un-root .un-colorchip {
   position: absolute;
   bottom: -6px;
   right: -6px;
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--un-r-chip);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--un-surface);
 }
-.un-colorchip[data-color="red"] { background: var(--un-red); }
-.un-colorchip[data-color="yellow"] { background: var(--un-yellow); }
-.un-colorchip[data-color="green"] { background: var(--un-green); }
-.un-colorchip[data-color="blue"] { background: var(--un-blue); }
+.un-root .un-colorchip[data-color="red"] { background: var(--un-red); }
+.un-root .un-colorchip[data-color="yellow"] { background: var(--un-yellow); }
+.un-root .un-colorchip[data-color="green"] { background: var(--un-green); }
+.un-root .un-colorchip[data-color="blue"] { background: var(--un-blue); }
 
 /* --- cards ------------------------------------------------------------------ */
 
-.un-card {
-  width: 58px;
-  height: 84px;
-  border-radius: 8px;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+.un-root .un-card {
+  width: var(--un-card-w);
+  height: var(--un-card-h);
+  box-sizing: border-box;
+  border-radius: var(--un-r-card);
+  border: 2px solid var(--un-card-edge);
   position: relative;
   display: flex;
   align-items: center;
@@ -208,52 +277,50 @@
   padding: 0;
   cursor: default;
   flex: 0 0 auto;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  transition: transform 120ms ease;
+  box-shadow: var(--un-sh-rest);
 }
-.un-card-sm { width: 46px; height: 66px; }
-.un-card[data-color="red"] { background: var(--un-red); }
-.un-card[data-color="yellow"] { background: var(--un-yellow); }
-.un-card[data-color="green"] { background: var(--un-green); }
-.un-card[data-color="blue"] { background: var(--un-blue); }
-.un-card[data-color="wild"] { background: var(--un-wild); }
-.un-card.is-live { cursor: pointer; }
-.un-card.is-live:active { transform: translateY(-4px); }
-.un-card:disabled { opacity: 1; }
+.un-root .un-card-sm { width: var(--un-card-w-sm); height: var(--un-card-h-sm); }
+.un-root .un-card[data-color="red"] { background: var(--un-red); }
+.un-root .un-card[data-color="yellow"] { background: var(--un-yellow); }
+.un-root .un-card[data-color="green"] { background: var(--un-green); }
+.un-root .un-card[data-color="blue"] { background: var(--un-blue); }
+.un-root .un-card[data-color="wild"] { background: var(--un-wild); }
+.un-root .un-card.is-live { cursor: pointer; }
+.un-root .un-card:disabled { opacity: 1; }
 
-.un-back { background: repeating-linear-gradient(135deg, var(--un-wild), var(--un-wild) 6px, #45455a 6px, #45455a 12px); }
+.un-root .un-back { background: repeating-linear-gradient(135deg, var(--un-wild), var(--un-wild) 6px, var(--un-back-stripe) 6px, var(--un-back-stripe) 12px); }
 
-.un-corner {
+.un-root .un-corner {
   position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  color: #fff;
-  font-size: 10px;
+  color: var(--un-card-ink);
+  font-size: var(--un-t-corner);
   font-weight: 800;
 }
-.un-corner-tl { top: 4px; left: 4px; }
-.un-corner-br { bottom: 4px; right: 4px; transform: rotate(180deg); }
-.un-card-sm .un-corner { display: none; }
+.un-root .un-corner-tl { top: 4px; left: 4px; }
+.un-root .un-corner-br { bottom: 4px; right: 4px; transform: rotate(180deg); }
+.un-root .un-card-sm .un-corner { display: none; }
 
-.un-face { color: #fff; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.un-glyph-big { position: relative; z-index: 1; }
-.un-card-sm .un-face { font-size: 20px; }
-.un-wildquad { position: absolute; inset: 4px; border-radius: 5px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.un-wildquad span[data-color="red"] { background: var(--un-red); }
-.un-wildquad span[data-color="yellow"] { background: var(--un-yellow); }
-.un-wildquad span[data-color="green"] { background: var(--un-green); }
-.un-wildquad span[data-color="blue"] { background: var(--un-blue); }
+.un-root .un-face { color: var(--un-card-ink); font-size: var(--un-t-numeral); font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.un-root .un-glyph-big { position: relative; z-index: 1; }
+.un-root .un-card-sm .un-face { font-size: var(--un-t-numeral-sm); }
+.un-root .un-wildquad { position: absolute; inset: var(--un-sp-1); border-radius: calc(var(--un-r-card) - var(--un-sp-1)); overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.un-root .un-wildquad span[data-color="red"] { background: var(--un-red); }
+.un-root .un-wildquad span[data-color="yellow"] { background: var(--un-yellow); }
+.un-root .un-wildquad span[data-color="green"] { background: var(--un-green); }
+.un-root .un-wildquad span[data-color="blue"] { background: var(--un-blue); }
 
 /* --- color chooser ----------------------------------------------------------- */
 
-.un-colorchoose {
+.un-root .un-colorchoose {
   position: absolute;
   inset: -10px;
   background: var(--un-surface);
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  border-radius: var(--un-r-sheet);
+  box-shadow: var(--un-sh-lift);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -262,12 +329,12 @@
   padding: 14px;
   z-index: 5;
 }
-.un-cc-title { margin: 0; font-weight: 700; }
-.un-cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.un-cc-btn {
+.un-root .un-cc-title { margin: 0; font-weight: 700; }
+.un-root .un-cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.un-root .un-cc-btn {
   width: 64px;
   height: 64px;
-  border-radius: 12px;
+  border-radius: var(--un-r-ctl);
   border: none;
   background: var(--un-cc);
   display: flex;
@@ -276,23 +343,43 @@
   cursor: pointer;
 }
 
-/* --- hand ---------------------------------------------------------------- */
+/* --- hand: the fan (spec §5) ------------------------------------------------
+   Fixed-height region: cards are absolutely positioned in DESIGN SPACE inside
+   .un-fan (constant 26px step), and the whole fan scales down via --fit, so
+   every card is always visible, the hand NEVER scrolls, and the region height
+   never varies with card count. The per-card custom properties (--x/--y/--rot/
+   --z) and --fit are computed by fanLayout() in ui.js and applied by _syncFan();
+   this file only consumes them. There is deliberately NO scroll container and
+   NO transition here - UN-4 owns motion. */
 
-.un-handwrap { display: flex; flex-direction: column; align-items: center; }
-.un-hand {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 6px 8px 14px;
+.un-root .un-handwrap { display: flex; flex-direction: column; align-items: center; }
+.un-root .un-hand {
+  position: relative;
+  height: 132px; /* fan region, spec §4 - identical at every hand size */
   width: 100%;
   box-sizing: border-box;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
+  perspective: 1200px;
+}
+.un-root .un-fan {
+  position: absolute;
+  inset: 0;
+  transform: scale(var(--fit, 1));
+  transform-origin: 50% 100%;
+}
+.un-root .un-fan .un-card {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(calc(-50% + var(--x, 0px))) translateY(var(--y, 0px)) rotate(var(--rot, 0deg));
+  transform-origin: 50% 150%; /* rotation swings from a point below the hand, like a held fan */
+  z-index: var(--z, 0);
 }
 
-.un-bar { display: flex; gap: 8px; }
+.un-root .un-bar { display: flex; gap: 8px; }
 
 /* Penalty-draw toast: short-lived, auto-dismissed, non-interactive. */
-.un-toast {
+.un-root .un-toast {
   position: absolute;
   left: 50%;
   bottom: 66px;
@@ -300,65 +387,67 @@
   background: var(--un-ink);
   color: var(--un-surface);
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--un-r-chip);
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--un-t-body);
   white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--un-sh-raised);
   z-index: 8;
   pointer-events: none;
 }
 
 /* --- overlays -------------------------------------------------------------- */
 
-.un-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10; }
-.un-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
-.un-card2 {
+.un-root .un-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.un-root .un-scrim { position: absolute; inset: 0; background: var(--un-scrim); }
+.un-root .un-card2 {
   position: relative;
   background: var(--un-surface);
-  border-radius: 16px;
+  border-radius: var(--un-r-sheet);
   padding: 22px;
   max-width: 320px;
   width: calc(100% - 40px);
   text-align: center;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--un-sh-lift);
 }
-.un-x {
+.un-root .un-x {
   position: absolute;
   top: 8px;
   right: 8px;
   width: 30px;
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--un-r-chip);
   border: none;
   background: var(--un-bg);
-  font-size: 18px;
+  font-size: var(--un-t-x);
   line-height: 1;
   cursor: pointer;
 }
-.un-card2-emoji { font-size: 40px; display: block; margin-bottom: 8px; }
-.un-card2-title { margin: 0 0 16px; font-size: 20px; }
-.un-card2-actions { display: flex; flex-direction: column; gap: 8px; }
+.un-root .un-card2-emoji { font-size: var(--un-t-emoji); display: block; margin-bottom: 8px; }
+.un-root .un-card2-title { margin: 0 0 16px; font-size: var(--un-t-heading); }
+.un-root .un-card2-actions { display: flex; flex-direction: column; gap: 8px; }
 
-.un-help { text-align: left; max-width: 360px; }
-.un-help-lead { font-weight: 700; margin: 0 0 10px; }
-.un-diagram-wrap { display: flex; justify-content: center; margin-bottom: 10px; }
-.un-diagram { width: 100%; max-width: 260px; height: auto; }
-.un-dg-eq { font-size: 22px; font-weight: 700; fill: var(--un-ink); }
-.un-help-caption { margin: 0 0 6px; font-size: 14px; color: var(--un-muted); }
-.un-help-example { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
-.un-help-bullets { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.un-root .un-help { text-align: left; max-width: 360px; }
+.un-root .un-help-lead { font-weight: 700; margin: 0 0 10px; }
+.un-root .un-diagram-wrap { display: flex; justify-content: center; margin-bottom: 10px; }
+.un-root .un-diagram { width: 100%; max-width: 260px; height: auto; }
+.un-root .un-dg-eq { font-size: var(--un-t-title); font-weight: 700; fill: var(--un-ink); }
+.un-root .un-help-caption { margin: 0 0 6px; font-size: var(--un-t-body); color: var(--un-muted); }
+.un-root .un-help-example { margin: 0 0 10px; font-size: var(--un-t-body); font-weight: 600; }
+.un-root .un-help-bullets { margin: 0; padding-left: 18px; font-size: var(--un-t-body); display: flex; flex-direction: column; gap: 6px; }
 
-/* --- dark mode --------------------------------------------------------------- */
+/* --- dark mode: CHROME ONLY (spec §2, decided) -------------------------------
+   The mat (--un-table), the four hues, and every card token above are
+   theme-invariant and deliberately absent here. */
 
 :root.gh-dark .un-root {
-  --un-bg: #161b24;
-  --un-surface: #1e2531;
-  --un-ink: #e8ecf3;
-  --un-muted: #93a0b4;
-  --un-border: rgba(255, 255, 255, 0.12);
+  --un-bg: #10141C;
+  --un-surface: #1E2531;
+  --un-ink: #E8ECF3;
+  --un-muted: #8B98AC;
+  --un-border: rgba(255, 255, 255, .10);
 }
 :root.gh-dark .un-root .un-segbtn { background: var(--un-bg); }
 :root.gh-dark .un-root .un-oppcount { background: var(--un-bg); }
 :root.gh-dark .un-root .lb-dshape-t3,
-:root.gh-dark .un-root .lb-dshape-t4 { fill: #e6e9f0; }
+:root.gh-dark .un-root .lb-dshape-t4 { fill: var(--un-ink); }

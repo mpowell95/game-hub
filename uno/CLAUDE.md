@@ -218,6 +218,87 @@ these numbers here.
   against re-renders than a timer-based banner, and satisfies the handoff's "a banner when
   any player reaches one card, no catch/penalty mechanic" without extra state to track.
 
+## Visual rebuild (2026-07-25, per `UNO-DESIGN-SPEC.md` + `HANDOFF-UNO-VISUAL.md`)
+
+Landed in four sessions: UN-1 tokens + UN-3 fan (this section), then UN-2/UN-5 card face and
+fixed geometry, UN-4 motion, UN-6 hand sort. The spec (repo root) is the contract for all of it.
+
+### The token system (UN-1)
+
+`uno/css/uno.css` has exactly two token blocks: `.un-root` (all tokens, light chrome values)
+and `:root.gh-dark .un-root` (chrome overrides ONLY). **Every rule outside those blocks
+consumes tokens - zero literal colors, shadows, radii, or font-sizes.** Gate, run it after any
+CSS edit: `grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css` must hit token blocks only.
+
+- The four card hues + `--un-accent` are the locked hub palette (colorblind pairing,
+  contractual). `--un-wild` moved `#2b2b33` → `#23232C` per spec §2 (not one of the four).
+- **Theme-invariant by design (spec §2, decided): `--un-table` and every card token** (rim,
+  edge, medallion, gloss, numeral shade, card ink, back stripe, the three shadows). Dark mode
+  overrides chrome only (`--un-bg/surface/ink/muted/border`). Do not add card tokens to the
+  dark block.
+- Shadows are a three-state stack (`--un-sh-rest/raised/lift`); no component improvises its
+  own shadow.
+- Chrome-only extension tokens (`--un-t-title/heading/body/small/tiny/emoji/x`,
+  `--un-r-ctl/badge`, `--un-on-accent`, `--un-unochip-ink`, `--un-scrim`, `--un-card-ink`,
+  `--un-back-stripe`) exist so setup/overlay rules carry no literals; they are not part of the
+  spec §3/§4 scales and are commented as such in the file.
+- Cards are `--un-card-w/h` = 62x92 (`box-sizing: border-box`), small cards 48x71.
+
+### The fan (UN-3) - geometry
+
+`fanLayout(n, {W=62, STEP=26, A=428})` in `ui.js` is pure and holds every constant; nothing
+else in the codebase knows the formulas (spec §5): center index `c=(n-1)/2`, `x=(i-c)*STEP`,
+`y=min(14,(i-c)^2*0.55)`, `rot=(i-c)*min(2.4, 26/(n-1))`, `z=i`, `fit=min(1, A/need)` with
+`need=STEP*(n-1)+W`. `_syncFan` passes a measured `A = min(428, .un-hand clientWidth - 24)`
+so the fan fits real phone widths, not just the 480px design shell; a `window` resize listener
+re-renders (removed in `destroy()`). Note: the hub's preview browser does not dispatch
+`resize` on viewport emulation - verify rotation refit on a real device, or dispatch the event
+manually.
+
+`.un-hand` is a fixed 132px box (identical at every n - verified n=1/7/14/20/30), no scroll
+container anywhere in the subtree, `overflow-x` banned from the file. Cards are absolutely
+positioned in design space inside `.un-fan`; only `--fit` and per-card `--x/--y/--rot/--z`
+ever change, so card count cannot affect layout. **Display order is the REVERSED engine hand**
+(engine `draw()` pushes to the end; spec §5 wants the newest card at the LEFT end). Paint
+order stays positional (`z = index`, rightward cards on top), so each card's exposed sliver is
+its left edge and the tapped sliver always plays the card under it. The reversal is
+presentation-only - every `data-id` and `play()` call uses the card's real id. (UN-6's
+`sortedHand()` absorbs this reversal as its `draw` mode.)
+
+### The `_syncFan` render exemption (UN-3c - load-bearing, do not "fix" back)
+
+`renderGame()` no longer rewrites the container as one HTML string. `_ensureGameShell()`
+builds a persistent skeleton once per entry into the game view (region wrappers: opponents /
+status / mat / toastslot / unoslot / hand+fan / bar); every render rebuilds the REGION
+CONTENTS with the same template strings as before, and `_syncFan()` reconciles the fan's card
+nodes in place, keyed by `data-id`.
+
+**Why:** CSS transitions cannot animate across a rebuild - a re-inserted node has no
+before-change style, so UN-4's whole motion system would silently do nothing. And that applies
+to ANCESTORS too: re-attaching the fan into a freshly rebuilt parent detaches it, which kills
+every running and future transition on its cards. So the exemption is necessarily the whole
+game-screen skeleton, not just the fan node - "only the fan is exempt" is not literally
+achievable with a single innerHTML render.
+
+`_syncFan` invariants (drift-proof by construction):
+- Every call is a FULL stateless reconciliation against the hand it is given - membership,
+  position, and live/disabled state are recomputed each time, so rapid consecutive plays
+  cannot desync it (verified: two same-tick taps, fan ids === engine ids).
+- Card nodes are never moved or reparented once inserted (new nodes are appended; position and
+  paint order ride entirely on custom properties), because insertBefore also kills transitions.
+  DOM order therefore diverges from display order - accepted, tab order is the cost.
+- Removal is IMMEDIATE. UN-4's flight animations must use detached clones in a fixed layer,
+  never the live nodes.
+- `_syncFan` (+ `_buildCardEl`, which builds nodes from the same `cardHTML()` string) is the
+  ONLY code that mutates card DOM outside a render template string. Keep it that way.
+
+Consequences handled: the end-of-match and help overlays now SURVIVE re-renders (they hang off
+the persistent `.un-root`), so `startGame()` calls `closeOverlays()` explicitly; `renderSetup()`
+still rewrites the whole container and must null `_fanEl`/`_regions`; `startGame()` also clears
+a stale `_pendingWildId`, and hand cards render disabled while a color chooser is open (both
+were latent stale-chooser bugs the persistent shell would have made easier to hit;
+`_onChooseColor` additionally re-validates turn + hand membership before calling `play`).
+
 ### Autosave/resume
 
 `gamehub.uno.save.v1`, batch-9 convention (silent restore on mount, no "resume?" dialog):

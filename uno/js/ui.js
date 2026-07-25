@@ -101,6 +101,31 @@ function cardHTML(card, { live = false, back = false, small = false } = {}) {
   </button>`;
 }
 
+/** Fan geometry, spec §5. Pure: n -> per-card transforms + container fit scale.
+ *  Design-space constants live here and nowhere else: W = card width, STEP = the
+ *  constant exposed sliver per card, A = usable width (452px shell interior minus
+ *  24px breathing room). The caller passes a measured A when the shell is
+ *  narrower than the 480px design width, so the fan never overflows on phones.
+ *  fit = min(1, A/need) is mathematically <= 1 for all n: the fan CANNOT exceed
+ *  its box, which is what retires the old overflow-x scroll container. */
+function fanLayout(n, { W = 62, STEP = 26, A = 428 } = {}) {
+  const c = (n - 1) / 2;
+  const rotStep = n > 1 ? Math.min(2.4, 26 / (n - 1)) : 0; // total arc capped at ~26deg
+  const cards = [];
+  for (let i = 0; i < n; i++) {
+    const d = i - c;
+    cards.push({
+      x: d * STEP,
+      y: Math.min(14, d * d * 0.55), // parabolic arc, capped
+      rot: d * rotStep,
+      z: i, // paint order stays positional: later (rightward) cards on top
+    });
+  }
+  const need = STEP * (n - 1) + W;
+  const fit = Math.min(1, A / need);
+  return { fit, cards };
+}
+
 function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -165,12 +190,19 @@ class UnoUI {
     this._setupExpanded = null;
     this._penaltyToast = null;
     this._penaltyTimer = null;
+    this._regions = null; // persistent game-screen region elements (see _ensureGameShell)
+    this._fanEl = null;   // the persistent .un-fan node (see _syncFan)
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    // The fan's fit scale depends on the measured hand width, so a rotation or
+    // window resize needs a re-render (renderGame is idempotent presentation of
+    // current state, so calling it here is always safe).
+    this._onResize = () => { if (this.view === 'game' && this.game) this.renderGame(); };
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
+    window.addEventListener('resize', this._onResize);
 
     const inProgress = loadGame();
     if (inProgress) this.resumeGame(inProgress); else this.renderSetup();
@@ -184,7 +216,10 @@ class UnoUI {
     clearTimeout(this._penaltyTimer);
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
+    window.removeEventListener('resize', this._onResize);
     this.container.innerHTML = '';
+    this._regions = null;
+    this._fanEl = null;
     this.game = null;
   }
 
@@ -226,6 +261,10 @@ class UnoUI {
   renderSetup() {
     this.view = 'setup';
     this.game = null;
+    // Setup rebuilds the whole container, so the persistent game shell (and the
+    // fan inside it) is gone after this; drop the refs so the next game rebuilds.
+    this._regions = null;
+    this._fanEl = null;
     const playersContent = this._seg('set-players', this.players, [2, 3, 4].map((n) => [n, String(n)]));
     const diffContent = this._seg('set-diff', this.difficulty, DIFF_KEYS.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + esc(t(k))]));
     this.container.innerHTML = `
@@ -256,6 +295,10 @@ class UnoUI {
     this.nextStarter = (startPlayer + 1) % this.players;
     saveSettings(this.players, this.difficulty, this.nextStarter);
     clearGame();
+    // The game shell persists across renders now, so the end-of-match overlay is
+    // no longer swept away by a full innerHTML rewrite - remove it explicitly.
+    this.closeOverlays();
+    this._pendingWildId = null;
     this.seats = this._buildSeats(this.players);
     this.game = new UnoGame({ playerCount: this.players, startPlayer, onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
@@ -347,61 +390,32 @@ class UnoUI {
     </div>`;
   }
 
-  renderGame() {
-    const g = this.game;
-    const opponents = this.seats.map((s, i) => i).filter((i) => i !== HUMAN);
-    const activeColor = g.activeColor;
-    const top = g.discard[g.discard.length - 1];
-    const pi = g.phase === 'chooseColor' ? -1 : g.currentPlayer;
-    const legal = g.phase === 'playing' ? g.getLegalMoves(HUMAN) : { canPlay: [], mustDraw: false };
-    const humanTurn = pi === HUMAN && !this.busy;
-    const legalIds = new Set(legal.canPlay.map((c) => c.id));
-    const drawTappable = humanTurn && g.pendingDraw > 0 && !legal.mustDraw;
-
-    const showFirstCardChooser = g.phase === 'chooseColor' && g.pendingWild.isFirstCard;
-    const showCardWildChooser = this._pendingWildId != null;
-    const chooserOpen = showFirstCardChooser || showCardWildChooser;
-    const showDir = this.seats.length > 2 && g.phase !== 'over';
-
+  /** Build the persistent game-screen skeleton once per entry into the game view.
+   *
+   *  RENDER EXEMPTION (UN-3c, load-bearing - do not "fix" this back to one big
+   *  innerHTML): the fan's card nodes must survive re-render so CSS transitions
+   *  (UN-4) can animate them. Reinserted DOM nodes get no before-change style,
+   *  so a transition never runs across a rebuild - and that applies to ANCESTORS
+   *  too: re-attaching the fan into a freshly rebuilt parent detaches it, which
+   *  kills every running and future transition on its cards. The skeleton below
+   *  therefore persists for the whole game view, and each render rebuilds only
+   *  the REGION CONTENTS (same template strings as before), while _syncFan()
+   *  reconciles the fan's children in place. */
+  _ensureGameShell() {
+    if (this._fanEl && this.container.querySelector('.un-game')) return;
     this.container.innerHTML = `
       <div class="un-root">
         <div class="un-shell un-game">
-          <div class="un-opponents">
-            ${opponents.map((i) => `
-              <div class="un-oppchip ${g.phase !== 'over' && g.currentPlayer === i ? 'is-turn' : ''}">
-                <span class="un-oppemoji">${esc(this.seats[i].emoji)}</span>
-                <span class="un-oppname">${esc(this.seats[i].name)}</span>
-                <span class="un-oppcount">${g.players[i].hand.length}</span>
-                ${g.players[i].hand.length === 1 ? `<span class="un-unochip">${t('uno_banner')}</span>` : ''}
-              </div>`).join('')}
-          </div>
-
-          <p class="un-status" aria-live="polite">${chooserOpen ? '' : esc(this._seatStatusText())}</p>
-
-          <div class="un-mat">
-            <button type="button" class="un-pile un-drawpile ${drawTappable ? 'is-live' : ''}" data-action="draw-pile"
-              ${drawTappable ? '' : 'disabled'} aria-label="${esc(t('aria_draw_pile', { n: g.deck.length }))}">
-              ${cardHTML({ id: -1, color: 'wild', kind: 'wild', value: null }, { back: true })}
-              <span class="un-pilecount">${g.deck.length}</span>
-            </button>
-            <div class="un-pile un-discardpile" aria-label="${esc(t('aria_discard_pile', { card: cardAriaLabel(top) }))}">
-              ${cardHTML(top, {})}
-              <span class="un-colorchip" data-color="${activeColor || top.color}" aria-hidden="true">${activeColor ? colorGlyphHTML(activeColor, 14) : ''}</span>
-            </div>
-            ${showDir ? `<span class="un-dir" role="img" aria-label="${esc(t(g.direction === 1 ? 'direction_cw' : 'direction_ccw'))}">${dirArrowSVG(g.direction === 1)}</span>` : ''}
-            ${g.pendingDraw > 0 ? `<span class="un-pendingbadge">${esc(t('pending_draw', { n: g.pendingDraw }))}</span>` : ''}
-            ${chooserOpen ? this._colorChooserHTML() : ''}
-          </div>
-
-          ${this._penaltyToast ? `<div class="un-toast" role="status">${esc(this._penaltyToast)}</div>` : ''}
-
+          <div class="un-opponents"></div>
+          <p class="un-status" aria-live="polite"></p>
+          <div class="un-mat"></div>
+          <div class="un-toastslot"></div>
           <div class="un-handwrap">
-            ${g.players[HUMAN].hand.length === 1 ? `<span class="un-unochip un-unochip-self">${t('uno_banner')}</span>` : ''}
+            <div class="un-unoslot"></div>
             <div class="un-hand" role="list" aria-label="${esc(this.humanName)}">
-              ${g.players[HUMAN].hand.map((c) => cardHTML(c, { live: humanTurn && legalIds.has(c.id) })).join('')}
+              <div class="un-fan"></div>
             </div>
           </div>
-
           <footer class="un-bar">
             <button type="button" class="un-ghost un-small" data-action="help">${t('howto')}</button>
             <button type="button" class="un-ghost un-small" data-role="restart" data-action="restart">${t('restart_game')}</button>
@@ -409,6 +423,128 @@ class UnoUI {
           </footer>
         </div>
       </div>`;
+    const q = (s) => this.container.querySelector(s);
+    this._regions = {
+      opponents: q('.un-opponents'),
+      status: q('.un-status'),
+      mat: q('.un-mat'),
+      toast: q('.un-toastslot'),
+      uno: q('.un-unoslot'),
+    };
+    this._fanEl = q('.un-fan');
+  }
+
+  renderGame() {
+    const g = this.game;
+    const opponents = this.seats.map((s, i) => i).filter((i) => i !== HUMAN);
+    const activeColor = g.activeColor;
+    const top = g.discard[g.discard.length - 1];
+    const pi = g.phase === 'chooseColor' ? -1 : g.currentPlayer;
+    const legal = g.phase === 'playing' ? g.getLegalMoves(HUMAN) : { canPlay: [], mustDraw: false };
+
+    const showFirstCardChooser = g.phase === 'chooseColor' && g.pendingWild.isFirstCard;
+    const showCardWildChooser = this._pendingWildId != null;
+    const chooserOpen = showFirstCardChooser || showCardWildChooser;
+    // While the color chooser is up it is the only live control: leaving other
+    // cards tappable used to allow a second play with a stale _pendingWildId.
+    const humanTurn = pi === HUMAN && !this.busy && !chooserOpen;
+    const legalIds = new Set(legal.canPlay.map((c) => c.id));
+    const drawTappable = humanTurn && g.pendingDraw > 0 && !legal.mustDraw;
+    const showDir = this.seats.length > 2 && g.phase !== 'over';
+
+    this._ensureGameShell();
+    const r = this._regions;
+
+    r.opponents.innerHTML = opponents.map((i) => `
+      <div class="un-oppchip ${g.phase !== 'over' && g.currentPlayer === i ? 'is-turn' : ''}">
+        <span class="un-oppemoji">${esc(this.seats[i].emoji)}</span>
+        <span class="un-oppname">${esc(this.seats[i].name)}</span>
+        <span class="un-oppcount">${g.players[i].hand.length}</span>
+        ${g.players[i].hand.length === 1 ? `<span class="un-unochip">${t('uno_banner')}</span>` : ''}
+      </div>`).join('');
+
+    r.status.textContent = chooserOpen ? '' : this._seatStatusText();
+
+    r.mat.innerHTML = `
+      <button type="button" class="un-pile un-drawpile ${drawTappable ? 'is-live' : ''}" data-action="draw-pile"
+        ${drawTappable ? '' : 'disabled'} aria-label="${esc(t('aria_draw_pile', { n: g.deck.length }))}">
+        ${cardHTML({ id: -1, color: 'wild', kind: 'wild', value: null }, { back: true })}
+        <span class="un-pilecount">${g.deck.length}</span>
+      </button>
+      <div class="un-pile un-discardpile" aria-label="${esc(t('aria_discard_pile', { card: cardAriaLabel(top) }))}">
+        ${cardHTML(top, {})}
+        <span class="un-colorchip" data-color="${activeColor || top.color}" aria-hidden="true">${activeColor ? colorGlyphHTML(activeColor, 14) : ''}</span>
+      </div>
+      ${showDir ? `<span class="un-dir" role="img" aria-label="${esc(t(g.direction === 1 ? 'direction_cw' : 'direction_ccw'))}">${dirArrowSVG(g.direction === 1)}</span>` : ''}
+      ${g.pendingDraw > 0 ? `<span class="un-pendingbadge">${esc(t('pending_draw', { n: g.pendingDraw }))}</span>` : ''}
+      ${chooserOpen ? this._colorChooserHTML() : ''}`;
+
+    r.toast.innerHTML = this._penaltyToast ? `<div class="un-toast" role="status">${esc(this._penaltyToast)}</div>` : '';
+
+    r.uno.innerHTML = g.players[HUMAN].hand.length === 1 ? `<span class="un-unochip un-unochip-self">${t('uno_banner')}</span>` : '';
+
+    // Display order: newest card at the LEFT end (spec §5, decided). The engine
+    // appends drawn cards to the END of the hand array, so the display order is
+    // the reversed engine order. Presentation only - every data-id and play()
+    // call still uses the card's real id. (UN-6's sortedHand() will absorb this
+    // reversal as its 'draw' mode.)
+    const displayHand = g.players[HUMAN].hand.slice().reverse();
+    this._syncFan(displayHand, legalIds, humanTurn);
+  }
+
+  /** The fan reconciler (UN-3c) - the ONLY code that mutates card DOM outside a
+   *  render template string. Every call is a FULL, stateless reconciliation
+   *  against the hand it is given: membership, position, and live state are all
+   *  recomputed, so the fan cannot drift from engine state no matter how fast
+   *  plays stack up - the last call wins and reflects current truth, and a card
+   *  played-then-redrawn before anything "resolves" simply reconciles again.
+   *  Card nodes are keyed by data-id, reused across calls, and NEVER moved or
+   *  reparented once inserted (position and paint order are carried entirely by
+   *  --x/--y/--rot/--z, so DOM order does not need to change) - that is what
+   *  lets UN-4's transitions animate re-layout. Removal is immediate: UN-4's
+   *  flight animations use detached clones, never the live nodes. */
+  _syncFan(hand, legalIds, humanTurn) {
+    const fan = this._fanEl;
+    if (!fan) return;
+    const hostW = fan.parentElement ? fan.parentElement.clientWidth : 0;
+    const layout = hostW > 0
+      ? fanLayout(hand.length, { A: Math.min(428, Math.max(24, hostW - 24)) })
+      : fanLayout(hand.length);
+    fan.style.setProperty('--fit', String(layout.fit));
+
+    const byId = new Map();
+    for (const el of [...fan.children]) byId.set(el.dataset.id, el);
+    const want = new Set(hand.map((c) => String(c.id)));
+    for (const [id, el] of byId) {
+      if (!want.has(id)) { el.remove(); byId.delete(id); }
+    }
+
+    hand.forEach((card, i) => {
+      let el = byId.get(String(card.id));
+      if (!el) {
+        el = this._buildCardEl(card);
+        fan.appendChild(el);
+      }
+      const p = layout.cards[i];
+      el.style.setProperty('--x', `${p.x}px`);
+      el.style.setProperty('--y', `${p.y}px`);
+      el.style.setProperty('--rot', `${p.rot}deg`);
+      el.style.setProperty('--z', String(p.z));
+      const live = humanTurn && legalIds.has(card.id);
+      el.classList.toggle('is-live', live);
+      el.dataset.action = live ? 'play-card' : '';
+      el.disabled = !live;
+      el.tabIndex = live ? 0 : -1;
+    });
+  }
+
+  /** One fan card node, built from the same cardHTML() template string the rest
+   *  of the screen uses - one source of card markup, no drift. State (live/
+   *  disabled/position vars) is applied by _syncFan immediately after. */
+  _buildCardEl(card) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = cardHTML(card, {});
+    return tpl.content.firstElementChild;
   }
 
   // --- end of game -----------------------------------------------------------
@@ -566,6 +702,10 @@ class UnoUI {
     if (this._pendingWildId != null) {
       const id = this._pendingWildId;
       this._pendingWildId = null;
+      // Guard against a stale id (turn or hand changed since the chooser opened):
+      // dropping the choice and re-rendering is always safe; throwing is not.
+      if (g.phase !== 'playing' || g.currentPlayer !== HUMAN
+        || !g.players[HUMAN].hand.some((c) => c.id === id)) { this.renderGame(); return; }
       g.play(HUMAN, id, color);
       this._afterStateChange();
     } else if (g.phase === 'chooseColor' && g.pendingWild && g.pendingWild.playerIndex === HUMAN) {
