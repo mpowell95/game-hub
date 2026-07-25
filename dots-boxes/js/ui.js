@@ -693,12 +693,15 @@ class DotsBoxesUI {
       this.renderSetup();
     } else if (action === 'set-size') {
       this._setup.size = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'set-diff') {
       this._setup.difficulty = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'set-first') {
       this._setup.firstMode = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'start') {
       this.startGame();

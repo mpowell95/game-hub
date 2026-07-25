@@ -214,7 +214,68 @@ for (const [seed, n] of [[7, 3], [77, 6], [777, 9]]) {
   }
 }
 
-// T4.3 — hash stability: identical state -> identical hash; one card moved -> different hash.
+// M2c (batch C, HANDOFF-FB3-SETTINGS-RESUME) — a mid-round snapshot must resume
+// with the SAME player sequence an uninterrupted game would have played, never
+// skipping or repeating a turn. T4.2 above only proves two clones of one snapshot
+// agree with each other; it does not prove the snapshot itself was taken at a
+// point that reconstructs the original game correctly. This caught a real bug
+// live in the browser: snapshotting at 'turnStart' resumes at `_nextTurn`, which
+// is set to (currentPlayerIndex+1)%n at the TOP of a turn and holds that value
+// for the turn's whole duration -- so a 'turnStart'-anchored snapshot always
+// resumes one player too late, silently dropping the about-to-act player's turn.
+// game.js's 'turnEnd' (only emitted once a turn is genuinely complete, no close)
+// is the fix; this test would have failed against the 'turnStart' anchor.
+async function playCanonicalTurnOrder(seed) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  const g = new Game({ players: hardAgents(), config: { ...DEF, presetDeck: order, maxResets: 0 } });
+  const seq = [];
+  g.onEvent = async (type, payload) => {
+    if (type === 'turnStart') seq.push(payload.playerId);
+    if (type === 'roundScored') g.abort();
+  };
+  await g.playMatch();
+  return seq;
+}
+
+/** Same round, but snapshotted at the n-th 'turnEnd' (a turn genuinely complete,
+ *  round continuing) and resumed into a fresh Game -- returns the FULL turnStart
+ *  sequence (pre-abort + post-resume) for comparison against the canonical run. */
+async function playResumedTurnOrder(seed, n) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  const g = new Game({ players: hardAgents(), config: { ...DEF, presetDeck: order, maxResets: 0 } });
+  const seqBefore = [];
+  let ends = 0;
+  let snap = null;
+  g.onEvent = async (type, payload) => {
+    if (type === 'turnStart') seqBefore.push(payload.playerId);
+    if (type === 'turnEnd') {
+      ends++;
+      if (ends === n) { snap = JSON.parse(JSON.stringify(g.snapshot())); g.abort(); }
+    }
+  };
+  await g.playMatch();
+  assert(`M2c: aborted after exactly ${n} turnEnd events (seed ${seed})`, ends === n && !!snap);
+  assert(`M2c: snapshot is mid-round (seed ${seed})`, snap.midRound === true);
+
+  const mkAgents = () => { const m = {}; for (const sp of snap.players) m[sp.id] = new AIAgent({ difficulty: 'hard' }); return m; };
+  const g2 = Game.fromSnapshot(JSON.parse(JSON.stringify(snap)), mkAgents());
+  const seqAfter = [];
+  g2.onEvent = async (type, payload) => {
+    if (type === 'turnStart') seqAfter.push(payload.playerId);
+    if (type === 'roundScored') g2.abort();
+  };
+  await g2.playMatch();
+  return seqBefore.concat(seqAfter);
+}
+
+for (const [seed, n] of [[7, 3], [77, 6], [777, 9]]) {
+  const canonical = await playCanonicalTurnOrder(seed);
+  const resumed = await playResumedTurnOrder(seed, n);
+  eq(`M2c: 'turnEnd'-anchored resume replays the exact same turn order as an uninterrupted round (seed ${seed})`,
+    resumed, canonical);
+}
+
+// --- T4.3 — hash stability: identical state -> identical hash; one card moved -> different hash.
 {
   const mkGame = (hand0) => {
     const g = new Game({ players: hardAgents(), config: DEF });

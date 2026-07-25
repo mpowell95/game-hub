@@ -57,14 +57,16 @@ const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
-// Solo autosave (batch 9, HANDOFF-FB-RESUME): mirrors STORE_MP_SAVE's shape
-// (v/at/snap) minus the MP-only code/role/seq fields -- a solo match has no
-// room to rejoin. Same 30-minute freshness window as MP (SOLO_RESTORE_MAX_AGE_MS
-// reuses MP_RESTORE_MAX_AGE_MS). Written only at the same safe snapshot point
-// MP uses (the 'roundScored' turn boundary -- see snapshot()'s doc comment in
-// game.js), cleared on match end, explicit restart/new game, and quitting to
-// setup; never on hub navigation or destroy(). See _soloSaveSnapshot/
-// _trySoloRestore below and chinchon/CLAUDE.md.
+// Solo autosave (batch 9, HANDOFF-FB-RESUME; extended to mid-round in batch C,
+// HANDOFF-FB3-SETTINGS-RESUME): mirrors STORE_MP_SAVE's shape (v/at/snap) minus
+// the MP-only code/role/seq fields -- a solo match has no room to rejoin. Same
+// 30-minute freshness window as MP (SOLO_RESTORE_MAX_AGE_MS reuses
+// MP_RESTORE_MAX_AGE_MS). Written at every safe snapshot point per snapshot()'s
+// doc comment in game.js -- both the 'turnEnd' AND 'roundScored' onEvent hooks
+// (every turn boundary, not just round boundaries -- solo has no MP lockstep
+// constraint forcing round-granularity), cleared on match end, explicit
+// restart/new game, and quitting to setup; never on hub navigation or destroy().
+// See _soloSaveSnapshot/_trySoloRestore below and chinchon/CLAUDE.md.
 const STORE_SOLO_SAVE = 'gamehub.chinchon.solo.v1';
 // Human labels for the room's locked config, host-lobby summary line only
 // (mirrors Escoba's MP_CONFIG_LABELS pattern). Unknown keys are skipped.
@@ -833,6 +835,21 @@ class ChinchonUI {
         // through to a local (non-deterministic) shuffle.
         if (this.mp && this.mp.role === 'guest') await this._mpAwaitStockReset();
         if (p && !p.isHuman) await this.beat(BEAT_TURN);
+        break;
+      case 'turnEnd':
+        // Solo mid-round autosave (batch C, HANDOFF-FB3-SETTINGS-RESUME): game.js's
+        // 'turnEnd' fires only once a turn is genuinely complete (no close), the one
+        // point where `_nextTurn` names a player whose turn hasn't started yet -- see
+        // its doc comment in game.js. Saving from 'turnStart' instead was tried first
+        // and found unsound: `_nextTurn` is set to (currentPlayerIndex+1)%n at the TOP
+        // of a turn and holds that same value throughout it, so a snapshot taken at
+        // 'turnStart' resumes at the player AFTER the one who was actually about to
+        // act, silently skipping their entire turn (caught live in-browser: resuming a
+        // save taken at the human's own 'turnStart' jumped straight to the next AI).
+        // This is in addition to the existing 'roundScored' save below, so a match
+        // abandoned before round 1's first round boundary (or mid-round in any later
+        // round) still restores instead of dropping back to a fresh deal.
+        if (!this.mp) this._soloSaveSnapshot();
         break;
       case 'draw':
         if (p && p.isHuman) this._newCardId = payload.card.id;
@@ -2238,9 +2255,14 @@ class ChinchonUI {
   // whenever this.mp is set, so it can never cross into an MP context, and
   // the MP methods above never read STORE_SOLO_SAVE. ---------------------
 
-  /** Same safe point as _mpSaveSnapshot: only called from the 'roundScored'
-   *  onEvent hook (a round boundary), never mid-turn, and never for a
-   *  concluded match (matchEnd clears the save instead). */
+  /** Called from both the 'turnEnd' and 'roundScored' onEvent hooks -- every
+   *  safe "between turns" checkpoint per snapshot()'s doc comment, never mid-turn
+   *  (between a draw and its discard, or between a discard and its close decision),
+   *  and never for a concluded match (matchEnd clears the save instead). Unlike MP
+   *  (round-boundary only, see _mpSaveSnapshot), solo has no lockstep constraint
+   *  forcing round-granularity, so it saves every turn boundary too -- a match
+   *  abandoned mid-round now restores mid-round instead of only at the last round
+   *  boundary. */
   _soloSaveSnapshot() {
     if (!this.game || this.mp) return;
     try {

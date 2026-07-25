@@ -584,12 +584,15 @@ class TicTacToeUI {
       this.renderSetup();
     } else if (action === 'set-variant') {
       this._setup.variant = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'set-diff') {
       this._setup.difficulty = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'set-first') {
       this._setup.firstMode = btn.dataset.v;
+      this._saveSetup();
       this.renderSetup();
     } else if (action === 'start') {
       this.startGame();

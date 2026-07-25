@@ -484,9 +484,11 @@ class UnoUI {
       this.renderSetup();
     } else if (action === 'set-players') {
       this.players = Number(btn.dataset.v) || 2;
+      saveSettings(this.players, this.difficulty, this.nextStarter);
       this.renderSetup();
     } else if (action === 'set-diff') {
       this.difficulty = btn.dataset.v;
+      saveSettings(this.players, this.difficulty, this.nextStarter);
       this.renderSetup();
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();

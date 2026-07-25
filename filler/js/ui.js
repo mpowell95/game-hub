@@ -576,6 +576,7 @@ class FillerUI {
         el.classList.toggle('is-active', on);
         el.setAttribute('aria-checked', String(on));
       });
+      saveSettings(this.level, this.nextStarter);
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();
     } else if (action === 'restart') {

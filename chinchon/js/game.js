@@ -459,6 +459,17 @@ export class Game {
         return true;
       }
     }
+    // Turn genuinely complete (no close) and the round continues: this is the
+    // ONLY point where `this._nextTurn` (set to (currentPlayerIndex+1)%n at the
+    // TOP of this turn, before any of the above ran) actually names a player
+    // whose turn has not started -- the same value is held, unchanged, for this
+    // whole method, so emitting earlier (e.g. from 'turnStart', which fires
+    // before this player has drawn) would let a snapshot's resume skip this
+    // player's turn entirely and jump straight to nextTurn's player. See
+    // snapshot()'s doc comment; this is the safe "between turns" checkpoint it
+    // describes. Additive event, MP's onEvent switches ignore unknown types.
+    await this.emit('turnEnd', { playerId: player.id });
+    this._throwIfAborted();
     return false;
   }
 

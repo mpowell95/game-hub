@@ -205,12 +205,31 @@ likewise stays the Spanish term in both languages.
 
 Chinchón: in-hub `module:` — Spanish rummy vs AI. No worker (light heuristic AI). See the rest of this file.
 
-## Solo autosave (batch 9, 2026-07-23, HANDOFF-FB-RESUME)
+## Solo autosave (batch 9, 2026-07-23, HANDOFF-FB-RESUME; extended to mid-round in batch C,
+2026-07-24, HANDOFF-FB3-SETTINGS-RESUME)
 
 Solo play mirrors the existing MP autosave mechanism (`_mpSaveSnapshot`/`_tryRestoreMP`, below)
 rather than inventing a new model. Key: `gamehub.chinchon.solo.v1` — separate from the frozen
 `chinchon-settings` key and from the MP save key `gamehub.chinchon.mp.v1`; none of the three is
 ever read or written by either of the other two paths.
+
+**Mid-round coverage (batch C).** Batch 9 only saved at the `'roundScored'` round boundary
+(mirroring MP, which is round-boundary-only for a genuine lockstep reason). QA found that a
+solo match abandoned before round 1's first round boundary had no save at all, and any
+mid-round exit in a later round lost everything back to the last round boundary. Solo has no
+MP lockstep constraint forcing round-granularity, so it now also saves on `game.js`'s new
+`'turnEnd'` event — emitted only once a turn is genuinely complete (drawn, discarded, and
+either not eligible to close or declined to). **`'turnStart'` was tried first and found
+unsound**: `game.js`'s `_nextTurn` checkpoint is set to `(currentPlayerIndex+1)%n` at the TOP
+of a turn and holds that same value for the turn's whole duration, so a snapshot taken at
+`'turnStart'` resumes at `_nextTurn`'s player — the one AFTER whoever was actually about to
+act — silently skipping that player's entire turn. Caught live in the browser (a save taken at
+the human's own `'turnStart'` resumed straight into the next AI's turn) before it shipped;
+`chinchon/js/test.js`'s M2c block is the regression test (compares a `'turnEnd'`-anchored
+resume's full turn-order sequence against an uninterrupted control run — `T4.2`'s older
+snapshot-roundtrip test only proves two clones of one snapshot agree with each other, which
+would have stayed green even with the `'turnStart'` bug). Everything else about the mechanism
+(30-minute freshness window, silent restore, clearing rules) is unchanged from batch 9 below.
 
 - **Shape**: `{ v: 1, at: Date.now(), snap: this.game.snapshot() }` — identical to the MP save's
   `snap` field, minus the MP-only `code`/`role`/`seq`. `game.snapshot()` already carries both
