@@ -123,7 +123,7 @@ System stack only: `system-ui, -apple-system, 'Segoe UI', sans-serif`.
 | `.un-opponents` | 44px | fixed whether 1 or 3 opponents |
 | `.un-status` | 22px | already has `min-height`, promote to fixed |
 | `.un-mat` | 148px | holds a 92px card + 20px pile count + pending badge headroom |
-| `.un-handwrap` | 152px | 132px fan region + 20px UNO chip slot, reserved even when empty |
+| `.un-handwrap` | 170px | 150px fan region + 20px UNO chip slot, reserved even when empty |
 | `.un-bar` | 40px | |
 
 Shell stays `max-width: 480px`, padding `14px`. Usable interior width **A = 452px**.
@@ -132,7 +132,7 @@ Shell stays `max-width: 480px`, padding `14px`. Usable interior width **A = 452p
 
 ## 5. Layout
 
-**Target viewport, 7 cards (opening hand):**
+**Target viewport, 7 cards (opening hand, one row):**
 
 ```
 ┌────────────────────────────────────────────────┐ 480
@@ -151,60 +151,113 @@ Shell stays `max-width: 480px`, padding `14px`. Usable interior width **A = 452p
 │                                                │
 │                  ┌ UNO ┐  (slot reserved)      │  20
 │         ╭──┬──┬──┬──┬──┬──┬──╮                 │
-│        ╱ ▲│ ●│ ■│ ◆│ ▲│ ●│ ■ ╲                │ 132 fixed
-│       ╱  3│ 5│ +2│ 9│ 0│ ⇄│ 7  ╲               │  arced fan
-│      ╰────┴──┴──┴──┴──┴──┴─────╯                │
+│        ╱ ▲│ ●│ ■│ ◆│ ▲│ ●│ ■ ╲                │
+│       ╱  3│ 5│ +2│ 9│ 0│ ⇄│ 7  ╲               │ 150 fixed, 1 row
+│      ╰────┴──┴──┴──┴──┴──┴─────╯                │  arced fan
 │                                                │
 │   How to play      Restart      New game       │  40
 └────────────────────────────────────────────────┘
 ```
 
-**Worst case, 20 cards (after two stacked +4s):**
+**13-20 cards (two balanced rows, e.g. after a stacked +4):**
 
 ```
-│         ╭┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬╮                  │
-│        ╱▲●■◆▲●■◆▲●■◆▲●■◆▲●■◆╲                  │ 132 same height
-│       ╱ 3 5 2 9 0 ⇄ 7 4 1 8 …╲                 │ fan scales to fit
-│      ╰──────────────────────────╯               │ NEVER scrolls
+│         ╭──┬──┬──┬──┬──┬──┬──╮                 │
+│        ╱ ▲│ ●│ ■│ ◆│ ▲│ ●│ ■ ╲                │ row 0 (top)
+│       ╱  3│ 5│ +2│ 9│ 0│ ⇄│ 7  ╲               │
+│      ╰────┴──┴──┴──┴──┴──┴─────╯                │
+│        ╭──┬──┬──┬──┬──┬──╮                     │ 150 fixed, still full size
+│       ╱ ▲│ ●│ ■│ ◆│ ▲│ ●│ ╲                    │ row 1 (bottom, paints in front,
+│      ╱  4│ 1│ 8│ 2│ ⊘│ 6 │ ╲                   │ overlaps row 0 by ~37%)
+│     ╰────┴──┴──┴──┴──┴──┴────╯                  │
 ```
 
-The fan region height is identical at n=1 and n=30. Only the scale factor changes.
+13 cards splits 7+6 (balanced), never 12+1 (fill-then-spill). Both rows render at their
+full 62px card width — two rows fit inside the fixed 150px region at `fit = 1`.
 
-**Fan geometry (the invariant mechanism).** Cards are absolutely positioned inside
-`.un-fan`, laid out in *design space* at a constant step, then the whole fan is scaled to fit:
+**Worst case, 30 cards (three rows, scaled down):**
 
 ```
-W    = 62                       card width
-STEP = 26                       constant exposed sliver, design space
-c    = (n - 1) / 2              center index
-x_i  = (i - c) * STEP           horizontal offset from center
-rot_i= (i - c) * min(2.4, 26/(n-1))   degrees, total arc capped at ~26°
-y_i  = (i - c)² * 0.55          px downward, capped at 14 — makes the arc
-z_i  = i                        later cards paint on top
-
-need = STEP * (n - 1) + W
-fit  = min(1, (A - 24) / need)      A = 452, 24 = edge breathing room
+│  ╭┬┬┬┬┬┬┬┬┬┬╮                                  │ row 0, fit≈0.72
+│  ╭┬┬┬┬┬┬┬┬┬┬╮                                  │ row 1, fit≈0.72, 150 same height
+│  ╭┬┬┬┬┬┬┬┬┬┬╮                                  │ row 2 (front), fit≈0.72
 ```
 
-`.un-fan` gets `transform: scale(fit)`, `transform-origin: 50% 100%`.
-Each card gets `transform: translateX(x_i) translateY(y_i) rotate(rot_i)` with
+The fan region height is identical at n=1 and n=30. Rows are added (not the region height)
+as the hand grows; only once a 3rd row is needed does the whole fan scale down uniformly.
+
+**Fan geometry (the invariant mechanism, UN-8).** Cards are absolutely positioned inside
+`.un-fan`, laid out in *design space* into balanced rows at a constant horizontal step, then
+the whole fan is scaled to fit its fixed-height box:
+
+```
+W         = 62      card width
+H         = 92      card height
+STEP      = 32      horizontal step, just over 50% of W
+ROW_PITCH = 58      vertical distance between rows (rows overlap ~37%)
+A         = usable interior width, measured (do not hard-code)
+AVAIL     = A - 24  edge breathing room
+
+PER_ROW  = max(1, floor((AVAIL - W) / STEP) + 1)     // 12 at AVAIL = 428
+rows     = ceil(n / PER_ROW)
+perRow   = ceil(n / rows)                            // balance rows, do not fill-then-spill
+
+// card i sits at row r = floor(i / perRow), index j within that row
+// rowN = number of cards actually in row r
+c_j   = (rowN - 1) / 2
+x_ij  = (j - c_j) * STEP
+y_ij  = r * ROW_PITCH + (j - c_j)² * 0.4      // second term capped at 8px
+rot_ij= (j - c_j) * min(1.8, 14 / max(1, rowN - 1))   // degrees, total arc per row ≤ 14°
+z_ij  = r * 100 + j                            // lower rows paint in front
+
+needH = H + ROW_PITCH * (rows - 1)
+fit   = min(1, RESERVED_H / needH)             // RESERVED_H = 150
+shiftY = RESERVED_H - needH                    // see note below; added to every y_ij
+```
+
+`.un-fan` gets `transform: scale(fit)`, `transform-origin: 50% 100%` (the box's bottom -
+"a fan held below the mat"). Because a point sitting exactly at that origin doesn't move under
+`scale()`, `y_ij` must add the constant `shiftY` above so the content's bottom edge always sits
+at `RESERVED_H` **before** scaling: 0 at exactly 2 rows (`needH` already equals `RESERVED_H`),
+positive at 1 row (bottom-aligns it instead of leaving empty space below), negative at 3+ rows
+(content starts above the box, fine under `overflow: visible`). Skipping `shiftY` still
+satisfies `fit ≤ 1`, but a 3-row hand's content drifts past the box's bottom by roughly
+`(needH - RESERVED_H) * fit` px (~42px at n=25) instead of landing inside it - caught by
+measuring `cardsMaxBottom` against `.un-hand`'s bottom in a live browser, not by the `fit`
+math alone. Each card gets `transform: translateX(x_ij) translateY(y_ij) rotate(rot_ij)` with
 `transform-origin: 50% 150%` so rotation swings from a point below the hand, like a held fan.
+Row 0 is the top row; the last row is the bottom row and paints in front, overlapping the row
+above it. New cards continue to arrive at the left end.
 
-At n=7: need=218, fit=1, cards at full 62px.
-At n=14: need=400, fit=1, still full size.
-At n=20: need=556, fit=0.77, cards render ~48px with ~20px slivers.
-At n=30: need=816, fit=0.52, cards ~32px. Small, but every card is visible and it never scrolls.
+**The 50%-visibility invariant.** `STEP` (32) is just over half of `W` (62), so the exposed
+horizontal sliver of every overlapped card is `STEP / W ≈ 51.6%` of its width — and because the
+whole fan scales *uniformly* (`fit` multiplies both `STEP` and `W`), that ratio is unaffected by
+scale. **At least 50% of every card is visible at any hand size**, from n=1 (no overlap at all)
+up through arbitrarily large hands — cards get smaller as rows fill up, never more overlapped
+than the `STEP/W` ratio allows. Only height (`RESERVED_H`) drives `fit`; `PER_ROW` is derived
+from the measured width, so width fits by construction and never needs its own scale factor.
+
+Worked examples (interior width A=452, so PER_ROW=12):
+
+At n=1: 1 row, needH=92, fit=1, cards at full 62px, no overlap (single card).
+At n=7: 1 row (7 ≤ 12), needH=92, fit=1, cards at full size, ~51.6% exposed.
+At n=13: 2 rows (7+6, balanced), needH=150, fit=1, still full size.
+At n=20: 2 rows (10+10), needH=150, fit=1, still full size.
+At n=24: 2 rows (12+12, exactly PER_ROW), needH=150, fit=1, last full-size case.
+At n=25: 3 rows (9+9+7), needH=208, fit=150/208≈0.72, cards render ~45px, still ~51.6% exposed.
+At n=30: 3 rows (10+10+10), needH=208, fit≈0.72, cards ~45px. Small, but every card is at
+least half visible and it never scrolls.
 
 **Why the top-left corner mark matters more than it used to:** with overlap, the only part of a
 buried card the player sees is its left sliver. The corner mark is the entire read. It goes to
-13px, shape above value, inside the exposed 26px column. The bottom-right corner mark is
+13px, shape above value, inside the exposed column. The bottom-right corner mark is
 **removed** — it is never visible in a fan and only steals face area.
 
 **Fan direction (decided).** Cards read **left to right**, and a newly drawn card arrives at the
-**left end**. Paint order stays positional (`z = index`), so each card's exposed strip is its left
-edge and the top-left corner mark is always the visible read. A newly arrived card is therefore at
-the bottom of the stack, so it gets a brief edge highlight on arrival (motion #6a) rather than
-relying on stacking to be noticed.
+**left end**. Paint order stays positional within a row (`z = r*100 + j`), so each card's exposed
+strip is its left edge and the top-left corner mark is always the visible read. A newly arrived
+card is therefore at the bottom of its row's stack, so it gets a brief edge highlight on arrival
+(motion #6a) rather than relying on stacking to be noticed.
 
 ### Hand sort
 
@@ -301,13 +354,13 @@ texture, the chrome is plain, the buttons are unstyled ghosts. Do not add a seco
 
 | Invariant | Mechanism |
 |---|---|
-| **Entire hand visible, any n, never scrolls** | `overflow-x: auto` deleted from `.un-hand`. Fan is absolutely positioned with `overflow: visible` and a computed `scale(fit)` where `fit = min(1, 428/need)`. `fit` is mathematically ≤1 for all n, so the fan cannot exceed its box. There is no scroll container left in the hand subtree. |
+| **Entire hand visible, any n, never scrolls, ≥50% of every card exposed** | `overflow-x: auto` deleted from `.un-hand`. Cards wrap into balanced rows (`rows = ceil(n/PER_ROW)`, `perRow = ceil(n/rows)` — never fill-then-spill), and the whole fan gets a computed `scale(fit)` where `fit = min(1, RESERVED_H/needH)`. `fit` is mathematically ≤1 for all n, so the fan cannot exceed its box's height, and `PER_ROW` is derived from the measured width so it never exceeds the box's width either. Because `STEP` (32) is just over half of `W` (62) and the fan scales uniformly, the exposed fraction of every overlapped card is a constant `STEP/W ≈ 51.6%` regardless of `fit` — the 50%-visibility rule holds by construction at any hand size, not just checked at a few sizes. There is no scroll container left in the hand subtree. |
 | **Zero vertical layout shift** | Every region in §4 has a fixed height set from first paint, including the UNO chip slot (reserved at 20px whether or not the chip is present) and the pending badge (absolutely positioned inside the mat's reserved 148px). Card count changes alter only `transform`, which does not affect layout. |
 | **Colorblind safety** | Two independent shape channels per card: the 46px medallion and the 13px corner mark, both driven by the same `COLOR_META[color].shape`. No state is signalled by hue alone. Color chooser keeps shape+hue chips. Playable state uses lift + shadow, not tint. |
 | **No instructional copy in gameplay UI** | Motion #7 (legal cards lift) and #12 (opponent chip pulse) carry the information that helper sentences would otherwise carry. No new strings are added to `strings.js`. |
 | **System fonts, no external assets** | All shapes are inline SVG generated by the existing `shapeSVG()`. Medallion, gloss, and rim are CSS gradients and filters. Zero new files, so `sw.js` `ASSETS` is unchanged. |
 | **Scoped CSS** | Every new rule is `.un-` prefixed and descendant-scoped under `.un-root`, per the "Adding a game" checklist item 3. |
-| **Minimum tap target** | Constant 26px design-space sliver × 92px height. At `fit < 1` the sliver scales with the card, so the exposed proportion never degrades. The topmost card and the pressed card receive full card area via `z-index`. |
+| **Minimum tap target** | Constant 32px design-space sliver (≥50% of the 62px card width) × 92px height, within its row. At `fit < 1` the sliver scales with the card, so the exposed proportion never degrades. Within a row the topmost card and the pressed card receive full card area via `z-index` (`z = r*100 + j`); across rows the last (bottom) row always paints in front of earlier rows. |
 | **Sort never touches game state** | `handSort` is applied to a *copy* of `players[HUMAN].hand` at render time only. The engine's hand array, the action log, and every id passed to `play()` are unaffected, so sort order cannot reach the lockstep move log, the state hash, or replay. A build where sorting mutates engine state is a correctness bug, not a preference. |
 
 ---

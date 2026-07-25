@@ -220,9 +220,11 @@ these numbers here.
 
 ## Visual rebuild (2026-07-25, per `UNO-DESIGN-SPEC.md` + `HANDOFF-UNO-VISUAL.md`)
 
-Landing in four sessions: UN-1 tokens + UN-3 fan (this section), UN-2/UN-5 card face and
-fixed geometry, UN-4 motion (below), UN-6 hand sort (not yet landed - no `handSort` control
-exists in `ui.js` as of this writing). The spec (repo root) is the contract for all of it.
+Landing in sessions: UN-1 tokens + UN-3 fan (this section), UN-2/UN-5 card face and
+fixed geometry, UN-4 motion (below), UN-8 multi-row fan + UN-9 opponent chip ellipsis
+(session 3.5, two defects found in real device testing - see "The fan" and "Fixed geometry"
+below), UN-6 hand sort (not yet landed - no `handSort` control exists in `ui.js` as of this
+writing). The spec (repo root) is the contract for all of it.
 
 ### The token system (UN-1)
 
@@ -245,26 +247,62 @@ CSS edit: `grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css` must hit token 
   spec §3/§4 scales and are commented as such in the file.
 - Cards are `--un-card-w/h` = 62x92 (`box-sizing: border-box`), small cards 48x71.
 
-### The fan (UN-3) - geometry
+### The fan (UN-3, multi-row since UN-8) - geometry
 
-`fanLayout(n, {W=62, STEP=26, A=428})` in `ui.js` is pure and holds every constant; nothing
-else in the codebase knows the formulas (spec §5): center index `c=(n-1)/2`, `x=(i-c)*STEP`,
-`y=min(14,(i-c)^2*0.55)`, `rot=(i-c)*min(2.4, 26/(n-1))`, `z=i`, `fit=min(1, A/need)` with
-`need=STEP*(n-1)+W`. `_syncFan` passes a measured `A = min(428, .un-hand clientWidth - 24)`
+`fanLayout(n, {W=62, H=92, STEP=32, ROW_PITCH=58, A=452, RESERVED_H=150})` in `ui.js` is pure
+and holds every constant; nothing else in the codebase knows the formulas (spec §5): cards
+wrap into balanced rows (`PER_ROW = max(1, floor((A-24-W)/STEP)+1)`, `rows = ceil(n/PER_ROW)`,
+`perRow = ceil(n/rows)` - never fill-then-spill, e.g. 13 cards is 7+6, not 12+1), then
+`x=(j-c)*STEP`, `y=r*ROW_PITCH + min(8,(j-c)^2*0.4)`, `rot=(j-c)*min(1.8, 14/max(1,rowN-1))`,
+`z=r*100+j` (lower rows paint in front) for card index `j` within row `r`, and
+`fit=min(1, RESERVED_H/needH)` with `needH=H+ROW_PITCH*(rows-1)`. **`STEP` (32) is just over
+half of `W` (62), and the fan scales uniformly, so the exposed fraction of every overlapped
+card is a constant `STEP/W ≈ 51.6%` regardless of `fit` - "at least 50% of every card visible"
+is a proportional guarantee, not something checked at a few hand sizes.** Only height
+(`RESERVED_H`) drives `fit`; `PER_ROW` is derived from the measured width, so width fits by
+construction and two full rows (n up to `2*PER_ROW`) render at full 62px card size before a
+3rd row triggers any scale-down.
+
+`_syncFan` passes the RAW measured `A = min(452, .un-hand clientWidth)` (the 24px edge
+breathing room is subtracted INSIDE `fanLayout`, not by the caller - do not subtract it twice)
 so the fan fits real phone widths, not just the 480px design shell; a `window` resize listener
 re-renders (removed in `destroy()`). Note: the hub's preview browser does not dispatch
 `resize` on viewport emulation - verify rotation refit on a real device, or dispatch the event
 manually.
 
-`.un-hand` is a fixed 132px box (identical at every n - verified n=1/7/14/20/30), no scroll
-container anywhere in the subtree, `overflow-x` banned from the file. Cards are absolutely
-positioned in design space inside `.un-fan`; only `--fit` and per-card `--x/--y/--rot/--z`
-ever change, so card count cannot affect layout. **Display order is the REVERSED engine hand**
-(engine `draw()` pushes to the end; spec §5 wants the newest card at the LEFT end). Paint
-order stays positional (`z = index`, rightward cards on top), so each card's exposed sliver is
-its left edge and the tapped sliver always plays the card under it. The reversal is
-presentation-only - every `data-id` and `play()` call uses the card's real id. (UN-6's
-`sortedHand()` absorbs this reversal as its `draw` mode.)
+**Every card's `y` carries a `shiftY = RESERVED_H - needH` term - load-bearing, do not drop
+it.** `.un-fan`'s `scale(fit)` has `transform-origin: 50% 100%` (the BOX's bottom - "a fan held
+below the mat"). A point sitting exactly AT that origin doesn't move when scaled; anywhere
+else does. Without `shiftY`, cards are laid out from `y=0` (the box's top) regardless of how
+tall the unscaled content is, so a 3-row hand (`needH=208` > `RESERVED_H=150`) scales around a
+point 58px below its own bottom edge and the scaled result drifts ~42px past the box's bottom
+- verified live pre-fix (a synthetic 25-card save via `UnoGame.snapshot()`/localStorage
+injection, since reaching n=25 through normal play takes many turns): `cardsMaxBottom` sat at
+~465px against a `.un-hand` bottom of 418px. `shiftY` pins the content's bottom edge to
+`RESERVED_H` BEFORE scaling (0 at exactly 2 rows, since `needH` already equals `RESERVED_H`;
+positive at 1 row, bottom-aligning it instead of leaving it floating with empty space below;
+negative at 3+ rows, starting the content above the box under `overflow: visible`), so after
+the origin-anchored scale the bottom always lands within a few px of `RESERVED_H` - the
+residual few px is the row's own bow term (capped at 8px, scaled by `fit`), the same kind of
+minor overshoot the pre-UN-8 single-row design already accepted (there capped at 14px). Re-
+verified after the fix: same 25-card save, `cardsMaxBottom` 422.8px against a 418px `.un-hand`
+bottom (~5px, all bow).
+
+`.un-hand` is a fixed 150px box (identical at every n - verified n=1/7/13/20/24/25/30), no
+scroll container anywhere in the subtree, `overflow-x` banned from the file. `.un-fan .un-card`
+has `top: 0` (not a positive offset) - 150px is exactly `needH` at 2 full rows
+(`H=92 + ROW_PITCH=58`), so a 0 offset is what makes 2-row content fill the box height with no
+overflow; do not reintroduce a static top offset without re-deriving `RESERVED_H` to match.
+Cards are absolutely positioned in design space inside `.un-fan`; only `--fit` and per-card
+`--x/--y/--rot/--z` ever change, so card count cannot affect layout. **Display order is the
+REVERSED engine hand** (engine `draw()` pushes to the end; spec §5 wants the newest card at the
+left end - UN-8 kept this convention unchanged, so with multiple rows a newly drawn card lands
+at the left end of the TOP row, not the bottom row, since row 0 gets the smallest indices).
+Paint order stays positional within a row (`z = r*100+j`, rightward cards on top within a row,
+lower rows in front of upper rows), so each card's exposed sliver is its left edge and the
+tapped sliver always plays the card under it. The reversal is presentation-only - every
+`data-id` and `play()` call uses the card's real id. (UN-6's `sortedHand()` absorbs this
+reversal as its `draw` mode.)
 
 ### The card face (UN-2) - pressed plastic, spec §7
 
@@ -356,13 +394,15 @@ a stale `_pendingWildId`, and hand cards render disabled while a color chooser i
 were latent stale-chooser bugs the persistent shell would have made easier to hit;
 `_onChooseColor` additionally re-validates turn + hand membership before calling `play`).
 
-### Fixed geometry (UN-5) - the reserved regions of spec §4
+### Fixed geometry (UN-5, heights updated by UN-8) - the reserved regions of spec §4
 
 `.un-opponents` (44px), `.un-status` (22px, promoted from `min-height`), `.un-mat` (148px),
-`.un-handwrap` (152px), `.un-bar` (40px) are all explicit `height` now, not auto-sized -
+`.un-handwrap` (170px), `.un-bar` (40px) are all explicit `height` now, not auto-sized -
 verified live at every value (`getComputedStyle(el).height` read back exactly 44/22/148/
-152/40px). `.un-mat` and any region with padding also needs `box-sizing: border-box`, or
+170/40px). `.un-mat` and any region with padding also needs `box-sizing: border-box`, or
 the literal spec height becomes the CONTENT height and the padding adds on top of it.
+`.un-handwrap`'s 170px = `.un-hand`'s 150px fan region (was 132px pre-UN-8) + the 20px UNO
+chip slot below it.
 
 **The UNO chip slot was the one that actually moved things.** `.un-unoslot` used to render
 `''` or the chip markup with no CSS of its own, so its height was 0 until the moment a
@@ -372,10 +412,21 @@ moment of a close game. Fixed by giving `.un-unoslot` an unconditional `height: 
 JS (`r.uno.innerHTML = hand.length === 1 ? chipHTML : ''`) did not need to change at all -
 reserving the box in CSS is sufficient regardless of what HTML string lands inside it.
 Verified live: forcing chip markup into an empty slot mid-game left `.un-handwrap`'s
-computed height at 152px before and after, and forcing `.un-pendingbadge` markup into
+computed height at 170px before and after, and forcing `.un-pendingbadge` markup into
 `.un-mat` left it at 148px before and after (both are absolutely positioned, so they were
 never going to affect flow height, but the fixed heights make that true by construction
 rather than by "the content happens to already add up right").
+
+**UN-9: opponent chip ellipsis, not clip.** `.un-opponents` needed `flex-wrap: nowrap` (UN-5)
+to hold its fixed 44px height, but that alone let chips overflow the row at 4 players instead
+of shrinking - the standard flexbox trap where a flex item won't shrink below its content
+width (and `text-overflow: ellipsis` never triggers) without `min-width: 0`. Fixed with
+`.un-oppchip { flex: 1 1 0; min-width: 0; }` (chips share the row equally and can shrink) and
+`.un-oppname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`
+(replacing a fixed `max-width: 90px`, which clipped rather than ellipsizing and didn't scale
+from 2 to 4 players). `.un-opponents` also got `padding: 0 4px` so a chip can never touch the
+shell edge. Verified at 2/3/4 players and with a 20-character custom name: names ellipsize,
+nothing crosses the shell edge.
 
 `.un-opponents` also gained `flex-wrap: nowrap` (was `wrap`) - a wrapped second row of
 chips would need MORE than 44px, which is exactly the shift the fixed height exists to

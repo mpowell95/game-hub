@@ -145,28 +145,50 @@ function cardHTML(card, { live = false, back = false, small = false, extraClass 
   </button>`;
 }
 
-/** Fan geometry, spec §5. Pure: n -> per-card transforms + container fit scale.
- *  Design-space constants live here and nowhere else: W = card width, STEP = the
- *  constant exposed sliver per card, A = usable width (452px shell interior minus
- *  24px breathing room). The caller passes a measured A when the shell is
- *  narrower than the 480px design width, so the fan never overflows on phones.
- *  fit = min(1, A/need) is mathematically <= 1 for all n: the fan CANNOT exceed
- *  its box, which is what retires the old overflow-x scroll container. */
-function fanLayout(n, { W = 62, STEP = 26, A = 428 } = {}) {
-  const c = (n - 1) / 2;
-  const rotStep = n > 1 ? Math.min(2.4, 26 / (n - 1)) : 0; // total arc capped at ~26deg
+/** Fan geometry, spec §5 (UN-8: multi-row). Pure: n -> per-card transforms +
+ *  container fit scale. Design-space constants live here and nowhere else:
+ *  W/H = card size, STEP = horizontal step (just over 50% of W, so at least
+ *  half of every card is always exposed - a proportional guarantee that holds
+ *  at any hand size since the whole fan scales uniformly), ROW_PITCH = vertical
+ *  distance between rows, A = usable interior width as MEASURED by the caller
+ *  (raw, not yet reduced for edge breathing room - that happens here via AVAIL).
+ *  PER_ROW is derived from AVAIL, so width fits by construction; only height
+ *  (RESERVED_H) drives `fit`, so two rows render at full size and a third row
+ *  scales the whole fan down uniformly. Rows are balanced (perRow = ceil(n/rows)),
+ *  never fill-then-spill. Row 0 is the top row; the last row is the bottom row
+ *  and paints in front (z = r*100 + j), overlapping the row above it. */
+function fanLayout(n, { W = 62, H = 92, STEP = 32, ROW_PITCH = 58, A = 452, RESERVED_H = 150 } = {}) {
+  const AVAIL = A - 24;
+  const PER_ROW = Math.max(1, Math.floor((AVAIL - W) / STEP) + 1);
+  const rows = Math.max(1, Math.ceil(n / PER_ROW));
+  const perRow = Math.max(1, Math.ceil(n / rows));
+  const needH = H + ROW_PITCH * (rows - 1);
+  // .un-fan scales around transform-origin 50% 100% (the BOX's bottom, per spec -
+  // "a real fan held below the mat"). For that scale to land needH's bottom edge
+  // back on the box's bottom rather than drifting past it, the bottom edge must
+  // already sit at RESERVED_H before scaling (a point AT the origin doesn't move
+  // when scaled). shiftY does that: 0 at 2 rows (needH===RESERVED_H, content
+  // already fills the box), positive at 1 row (bottom-aligns it instead of
+  // floating at the top), negative at 3+ rows (content starts above the box,
+  // which is fine under overflow:visible, and its bottom still lands exactly on
+  // RESERVED_H pre-scale).
+  const shiftY = RESERVED_H - needH;
   const cards = [];
   for (let i = 0; i < n; i++) {
-    const d = i - c;
+    const r = Math.floor(i / perRow);
+    const j = i - r * perRow;
+    const rowN = Math.min(perRow, n - r * perRow);
+    const c = (rowN - 1) / 2;
+    const d = j - c;
+    const rotStep = Math.min(1.8, 14 / Math.max(1, rowN - 1)); // total arc per row capped at 14deg
     cards.push({
       x: d * STEP,
-      y: Math.min(14, d * d * 0.55), // parabolic arc, capped
+      y: r * ROW_PITCH + Math.min(8, d * d * 0.4) + shiftY, // parabolic bow within a row, capped
       rot: d * rotStep,
-      z: i, // paint order stays positional: later (rightward) cards on top
+      z: r * 100 + j, // lower rows paint in front
     });
   }
-  const need = STEP * (n - 1) + W;
-  const fit = Math.min(1, A / need);
+  const fit = Math.min(1, RESERVED_H / needH);
   return { fit, cards };
 }
 
@@ -641,7 +663,7 @@ class UnoUI {
     if (!fan) return;
     const hostW = fan.parentElement ? fan.parentElement.clientWidth : 0;
     const layout = hostW > 0
-      ? fanLayout(hand.length, { A: Math.min(428, Math.max(24, hostW - 24)) })
+      ? fanLayout(hand.length, { A: Math.min(452, hostW) })
       : fanLayout(hand.length);
     fan.style.setProperty('--fit', String(layout.fit));
 
