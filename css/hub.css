@@ -327,8 +327,11 @@ body {
 }
 .hub-fav:active { transform: scale(0.9); }
 /* Filled vs. outline glyph is a SHAPE difference, not a hue difference (colorblind-safe by
-   construction); full opacity on top is a legibility nicety, not the signal itself. */
-.hub-fav.is-fav { color: #fff; }
+   construction); the gold fill on top is a legibility nicety, not the signal itself - the same
+   soft gold as .hub-keepsake-btn's accent (#F2B705, the colorblind palette's yellow). Without a
+   color difference the ♥/♡ glyphs alone were too subtle to read as "favorited" at 1.2rem over
+   busy tile art. */
+.hub-fav.is-fav { color: #f2b705; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65); }
 
 /* Batch 4 (2026-07-23): custom favorites order. The reorder ghost button sits above the
    favorites group, full-width like .hub-divider so it doesn't compete with any one tile. */
@@ -351,31 +354,33 @@ body {
 }
 .hub-fav-reorder:hover { color: inherit; border-color: var(--hub-muted); }
 
-/* Move arrows replace the heart while a favorite tile is in edit mode: same 40px hit area
-   and corner position as .hub-fav, one on each side so both stay reachable without drag. */
+/* Move arrows replace the heart while a favorite tile is in edit mode, one on each side so both
+   stay reachable without drag. QA (2026-07-24): at the old 40px/0.35-opacity chip the arrows
+   disappeared over busy tile art (Boggle's letter tiles) - bumped to a real 44px target with an
+   opaque backdrop chip plus a border, so they read over ANY art in either theme. */
 .hub-fav-move {
   position: absolute;
   top: 4px;
   z-index: 2;
-  width: 40px; height: 40px;
+  width: 44px; height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
+  border: 1.5px solid rgba(255, 255, 255, 0.65);
   appearance: none;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.78);
   border-radius: 50%;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 800;
   line-height: 1;
   color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 .hub-fav-move:active { transform: scale(0.9); }
 .hub-fav-move:disabled { opacity: 0.35; cursor: default; }
-.hub-fav-up { right: 48px; }
+.hub-fav-up { right: 50px; }
 .hub-fav-down { right: 4px; }
 
 .hub-divider {
@@ -511,3 +516,12 @@ body {
    must include the same override scoped to its own root class, for setup screens rendered
    outside the hub shell. */
 :root.gh-dark .lb-dshape-t3, :root.gh-dark .lb-dshape-t4 { fill: #e6e9f0; }
+/* An INACTIVE pill's border+text is --lb-pill-color, set inline per-pill (diffShapeSVG's tier
+   color); Hard/Expert and the All fallback all use the same near-black #1c2430, which vanishes
+   on the dark surface same as the shapes above. An inline custom property can't be overridden
+   from here, so this targets the resolved properties directly via the pill's own `data-tier`
+   attribute (''=All, '3'=Hard, '4'=Expert) - more specific than the base `.lb-pill` rule, so it
+   wins without `!important`. The ACTIVE (inverted, filled) state is unaffected on purpose. */
+:root.gh-dark .lb-pill:not(.is-active)[data-tier=""],
+:root.gh-dark .lb-pill:not(.is-active)[data-tier="3"],
+:root.gh-dark .lb-pill:not(.is-active)[data-tier="4"] { border-color: #e6e9f0; color: #e6e9f0; }

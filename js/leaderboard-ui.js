@@ -419,8 +419,14 @@ function gameDetail(list, id) {
 // are omitted (no zero-row padding, THE LAW rule 1's mirror: nothing is hidden that has data,
 // nothing is padded that doesn't).
 function playerDetail(list, key) {
+  // Entered from within a game page (`_game` stayed set - the card click that opens a player
+  // never clears it) vs. from the top-level By Player list. Back BEHAVIOR already returns
+  // whence you came either way (this handler only clears `_player`, leaving `_game` intact) -
+  // this is the label only, so it stops claiming "Players" when it's actually going back to
+  // that game's own page.
+  const backLabel = _game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_players');
   const g = list.find((x) => x.key === key);
-  if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${t('lb_back_players')}</button></div>` + emptyState(t('lb_empty_all'));
+  if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button></div>` + emptyState(t('lb_empty_all'));
   if (_playerGame) {
     return `<div class="lb-detail-top">
       <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
@@ -431,7 +437,7 @@ function playerDetail(list, key) {
   const tiers = tiersPresent(g, ALL_IDS);
   const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, ALL_IDS, tier));
   const head = `<div class="lb-detail-top">
-    <button type="button" class="lb-back" data-role="lb-player-back">${t('lb_back_players')}</button>
+    <button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button>
   </div>
   <div class="lb-pdetail-head">
     ${avatarHTML(g)}
@@ -496,9 +502,16 @@ let _connected = false;
 
 const SEGMENTS = [{ id: 'players', labelKey: 'lb_by_player' }, { id: 'games', labelKey: 'lb_by_game' }];
 
+// The segmented highlight follows the CONTENT on screen, not the last segment tapped: a player
+// detail reached from By Game (tap a game, then a player) still shows as "By Player" - `_seg`
+// itself is left untouched so backing out of the player still lands on the game (see the
+// `lb-player-back` handler), but the display must not lie about which content is showing.
+function displaySeg() { return _player ? 'players' : _seg; }
+
 function segsHTML() {
+  const active = displaySeg();
   return SEGMENTS.map((s) =>
-    `<button type="button" class="lb-seg${s.id === _seg ? ' is-active' : ''}" data-seg="${s.id}"${s.id === _seg ? ' aria-current="true"' : ''}>${esc(t(s.labelKey))}</button>`
+    `<button type="button" class="lb-seg${s.id === active ? ' is-active' : ''}" data-seg="${s.id}"${s.id === active ? ' aria-current="true"' : ''}>${esc(t(s.labelKey))}</button>`
   ).join('');
 }
 

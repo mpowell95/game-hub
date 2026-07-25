@@ -695,5 +695,12 @@
 :root.gh-dark .mancala .mc-help-example,
 :root.gh-dark .mancala .mc-help-bullets { color: #b7c3d6; }
 :root.gh-dark .mancala .mc-x { color: #9db0c9; }
+/* QA (2026-07-24) also caught mc-vsname: it inherits --mc-ink like the title did, sitting on
+   the now-dark .mc-vscard (overridden above to a translucent dark panel) - same fix. */
+:root.gh-dark .mancala .mc-vsname { color: #e9eef6; }
 :root.gh-dark .mancala .lb-dshape-t3,
 :root.gh-dark .mancala .lb-dshape-t4 { fill: #e6e9f0; }
+/* QA (2026-07-24): the MANCALA title inherits --mc-ink (dark brown, #241609, the wood board's
+   own untouched ink) from the base `.mancala` rule - the Phase 2 pass overrode every other piece
+   of setup-screen text individually but missed this one, which reads as dark-on-dark. */
+:root.gh-dark .mancala .mc-title { color: #e9eef6; }

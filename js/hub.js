@@ -533,16 +533,47 @@ class Hub {
     } catch { /* never break the hub */ }
   }
 
-  /** Refresh the service worker registration, then hard-reload the page. */
+  /** Tap = check for an update, with feedback on the pill itself. A reload (the only thing that
+   *  "re-renders the whole hub root", which QA caught resurfacing the first-run gate for
+   *  profile-less devices) only happens when a newer build is actually found - checking while
+   *  already current just flashes "Up to date" and reverts, no navigation at all. */
   async _forceUpdate() {
     const el = this.el.version;
+    if (!el || el.disabled) return;
+    const prevText = el.textContent;
+    const prevAria = el.getAttribute('aria-label') || '';
+    const prevStale = el.classList.contains('is-stale');
+    el.disabled = true;
+    el.textContent = t('hub_version_checking');
+    el.setAttribute('aria-label', t('hub_version_checking'));
     try {
-      el.disabled = true;
-      el.textContent = '…';
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg) await reg.update();   // fetches the new sw.js; skipWaiting activates it
-    } catch { /* still reload: network-first serves fresh files regardless */ }
-    location.reload();
+    } catch { /* fall through to a fresh version check regardless */ }
+    const [running, latest] = await Promise.all([this._runningVersion(), this._latestVersion()]);
+    const cur = running || latest;
+    if (!cur) {   // offline / no service worker: nothing truthful learned, restore prior state
+      el.textContent = prevText;
+      el.setAttribute('aria-label', prevAria);
+      el.classList.toggle('is-stale', prevStale);
+      el.disabled = false;
+      return;
+    }
+    if (running && latest && latest !== running) {
+      el.textContent = `${running} → ${latest}`;
+      el.classList.add('is-stale');
+      el.setAttribute('aria-label', t('hub_version_update_aria', { latest }));
+      location.reload();   // a real update was found - this is the actual update action
+      return;
+    }
+    el.classList.remove('is-stale');
+    el.textContent = t('hub_version_up_to_date');
+    el.setAttribute('aria-label', t('hub_version_up_to_date'));
+    setTimeout(() => {
+      el.textContent = cur;
+      el.setAttribute('aria-label', t('hub_version_current_aria', { cur }));
+      el.disabled = false;
+    }, 2000);
   }
 
   /** A device with no profile name is invisible on the leaderboard, so gate it once: pick a name, or
