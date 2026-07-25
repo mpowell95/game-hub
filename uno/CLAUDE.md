@@ -222,9 +222,11 @@ these numbers here.
 
 Landing in sessions: UN-1 tokens + UN-3 fan (this section), UN-2/UN-5 card face and
 fixed geometry, UN-4 motion (below), UN-8 multi-row fan + UN-9 opponent chip ellipsis
-(session 3.5, two defects found in real device testing - see "The fan" and "Fixed geometry"
-below), UN-6 hand sort (not yet landed - no `handSort` control exists in `ui.js` as of this
-writing). The spec (repo root) is the contract for all of it.
+(session 3.5, two defects found in real device testing), UN-10..13 flat-row alignment,
+opponent chip restructure, the dark mat, and viewport fill (session 3.6, four MORE
+defects found in real iPhone testing - see "The fan", "Fixed geometry", and "The mat and
+viewport fill" below), UN-6 hand sort (not yet landed - no `handSort` control exists in
+`ui.js` as of this writing). The spec (repo root) is the contract for all of it.
 
 ### The token system (UN-1)
 
@@ -241,19 +243,28 @@ CSS edit: `grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css` must hit token 
   dark block.
 - Shadows are a three-state stack (`--un-sh-rest/raised/lift`); no component improvises its
   own shadow.
-- Chrome-only extension tokens (`--un-t-title/heading/body/small/tiny/emoji/x`,
+- Chrome-only extension tokens (`--un-t-title/heading/body/small/tiny/emoji/x/oppcount`,
   `--un-r-ctl/badge`, `--un-on-accent`, `--un-unochip-ink`, `--un-scrim`, `--un-card-ink`,
   `--un-back-stripe`) exist so setup/overlay rules carry no literals; they are not part of the
-  spec §3/§4 scales and are commented as such in the file.
+  spec §3/§4 scales and are commented as such in the file. `--un-t-oppcount` (16px) is UN-11's
+  addition, for the opponent chip's count line - no existing scale value was 16px.
+- **`--un-mat-muted` (UN-12) is theme-invariant, matching dark-theme chrome's `--un-muted`**
+  value exactly - added because the chrome `--un-muted` flips to a DARK color in light mode
+  (`#6B7686`) and fails contrast against the always-dark `--un-table` mat there (measured
+  3.71:1, below WCAG AA's 4.5:1 for normal text; light-mode chrome `--un-ink` on the mat is
+  1.09:1, unreadable). Anything painted directly on `.un-mat` (currently `.un-pilecount`,
+  `.un-dir`) uses this, never the chrome `--un-ink`/`--un-muted`. If a future rule needs
+  bright (not muted) text on the mat, add a `--un-mat-ink` the same way - don't reach for the
+  chrome `--un-ink`.
 - Cards are `--un-card-w/h` = 62x92 (`box-sizing: border-box`), small cards 48x71.
 
-### The fan (UN-3, multi-row since UN-8) - geometry
+### The fan (UN-3, multi-row since UN-8, flat since UN-10) - geometry
 
 `fanLayout(n, {W=62, H=92, STEP=32, ROW_PITCH=58, A=452, RESERVED_H=150})` in `ui.js` is pure
 and holds every constant; nothing else in the codebase knows the formulas (spec §5): cards
 wrap into balanced rows (`PER_ROW = max(1, floor((A-24-W)/STEP)+1)`, `rows = ceil(n/PER_ROW)`,
 `perRow = ceil(n/rows)` - never fill-then-spill, e.g. 13 cards is 7+6, not 12+1), then
-`x=(j-c)*STEP`, `y=r*ROW_PITCH + min(8,(j-c)^2*0.4)`, `rot=(j-c)*min(1.8, 14/max(1,rowN-1))`,
+`x=(j-c)*STEP`, `y=r*ROW_PITCH`, `rot=(j-c)*min(1.8, 14/max(1,rowN-1))`,
 `z=r*100+j` (lower rows paint in front) for card index `j` within row `r`, and
 `fit=min(1, RESERVED_H/needH)` with `needH=H+ROW_PITCH*(rows-1)`. **`STEP` (32) is just over
 half of `W` (62), and the fan scales uniformly, so the exposed fraction of every overlapped
@@ -262,6 +273,19 @@ is a proportional guarantee, not something checked at a few hand sizes.** Only h
 (`RESERVED_H`) drives `fit`; `PER_ROW` is derived from the measured width, so width fits by
 construction and two full rows (n up to `2*PER_ROW`) render at full 62px card size before a
 3rd row triggers any scale-down.
+
+**UN-10: `y` has NO bow term any more** (it used to be `r*ROW_PITCH + min(8,(j-c)^2*0.4)` - the
+`(j-c)^2*0.4` was a per-card parabolic dip within a row, capped at 8px). Every card in a row now
+shares the exact same `y` - rows are flat lines, not shallow arcs. This is paired with a CSS
+change (`transform-origin: 50% 100%` on `.un-fan .un-card`, was `50% 150%`): with a shared `y`
+and rotation now pivoting at each card's own bottom edge instead of a point below the whole
+hand, every card's bottom edge lands on the SAME line within its row regardless of its tilt.
+Verified live (per-row `getBoundingClientRect().bottom` spread) at n=7/13/20/25: 1.4-2.9px
+across every row, which is subpixel/rounded-corner noise, not misalignment. Why this mattered:
+the OLD bow, combined with row 7's per-card lift (see "Motion system" below), made the two
+currently-legal cards in a hand visibly float above the rest - reading as broken alignment
+instead of a hint, which is exactly the defect UN-10 was opened for. **Keep the per-row
+rotation and its 14° cap - only the vertical scatter was the bug.**
 
 `_syncFan` passes the RAW measured `A = min(452, .un-hand clientWidth)` (the 24px edge
 breathing room is subtracted INSIDE `fanLayout`, not by the caller - do not subtract it twice)
@@ -282,11 +306,11 @@ injection, since reaching n=25 through normal play takes many turns): `cardsMaxB
 `RESERVED_H` BEFORE scaling (0 at exactly 2 rows, since `needH` already equals `RESERVED_H`;
 positive at 1 row, bottom-aligning it instead of leaving it floating with empty space below;
 negative at 3+ rows, starting the content above the box under `overflow: visible`), so after
-the origin-anchored scale the bottom always lands within a few px of `RESERVED_H` - the
-residual few px is the row's own bow term (capped at 8px, scaled by `fit`), the same kind of
-minor overshoot the pre-UN-8 single-row design already accepted (there capped at 14px). Re-
-verified after the fix: same 25-card save, `cardsMaxBottom` 422.8px against a 418px `.un-hand`
-bottom (~5px, all bow).
+the origin-anchored scale the bottom always lands within a few px of `RESERVED_H` (the small
+residual was, before UN-10, mostly the row's own bow term - capped at 8px, scaled by `fit` -
+plus rounding; UN-10 removed the bow entirely, so it's rounding/rotation-bbox noise only now).
+Re-verified after the `shiftY` fix (and again after UN-10 removed the bow): 25-card save,
+`cardsMaxBottom` within a few px of `.un-hand`'s own bottom, never the ~42px pre-fix drift.
 
 `.un-hand` is a fixed 150px box (identical at every n - verified n=1/7/13/20/24/25/30), no
 scroll container anywhere in the subtree, `overflow-x` banned from the file. `.un-fan .un-card`
@@ -394,15 +418,18 @@ a stale `_pendingWildId`, and hand cards render disabled while a color chooser i
 were latent stale-chooser bugs the persistent shell would have made easier to hit;
 `_onChooseColor` additionally re-validates turn + hand membership before calling `play`).
 
-### Fixed geometry (UN-5, heights updated by UN-8) - the reserved regions of spec §4
+### Fixed geometry (UN-5, heights updated by UN-8/UN-11/UN-13) - the reserved regions of spec §4
 
-`.un-opponents` (44px), `.un-status` (22px, promoted from `min-height`), `.un-mat` (148px),
-`.un-handwrap` (170px), `.un-bar` (40px) are all explicit `height` now, not auto-sized -
-verified live at every value (`getComputedStyle(el).height` read back exactly 44/22/148/
-170/40px). `.un-mat` and any region with padding also needs `box-sizing: border-box`, or
-the literal spec height becomes the CONTENT height and the padding adds on top of it.
-`.un-handwrap`'s 170px = `.un-hand`'s 150px fan region (was 132px pre-UN-8) + the 20px UNO
-chip slot below it.
+`.un-opponents` (52px, was 44px pre-UN-11), `.un-status` (22px, promoted from `min-height`),
+`.un-handwrap` (170px), `.un-bar` (40px) are explicit `height`, not auto-sized - verified live
+at every value (`getComputedStyle(el).height` read back exactly 52/22/170/40px). Regions with
+padding also need `box-sizing: border-box`, or the literal spec height becomes the CONTENT
+height and the padding adds on top of it. `.un-handwrap`'s 170px = `.un-hand`'s 150px fan
+region (was 132px pre-UN-8) + the 20px UNO chip slot below it.
+
+**`.un-mat` is the one exception since UN-13: `min-height: 148px` + `flex: 1 1 auto`, not a
+hard `height`.** It still never shifts on game state (THE LAW) - see "The mat and viewport
+fill" below for why a viewport-driven height is still zero-shift-safe.
 
 **The UNO chip slot was the one that actually moved things.** `.un-unoslot` used to render
 `''` or the chip markup with no CSS of its own, so its height was 0 until the moment a
@@ -412,13 +439,16 @@ moment of a close game. Fixed by giving `.un-unoslot` an unconditional `height: 
 JS (`r.uno.innerHTML = hand.length === 1 ? chipHTML : ''`) did not need to change at all -
 reserving the box in CSS is sufficient regardless of what HTML string lands inside it.
 Verified live: forcing chip markup into an empty slot mid-game left `.un-handwrap`'s
-computed height at 170px before and after, and forcing `.un-pendingbadge` markup into
-`.un-mat` left it at 148px before and after (both are absolutely positioned, so they were
-never going to affect flow height, but the fixed heights make that true by construction
-rather than by "the content happens to already add up right").
+computed height at 170px before and after (both `.un-unoslot` and `.un-pendingbadge`'s host
+are absolutely positioned or otherwise flow-inert, so they were never going to affect flow
+height, but the fixed heights make that true by construction rather than by "the content
+happens to already add up right"). Note this check predates UN-13: `.un-mat` was still a
+hard `height: 148px` when it was verified; UN-13 changed `.un-mat` to `flex: 1 1 auto` +
+`min-height: 148px`, which is a different (also zero-shift, see below) invariant, not a
+regression of this one.
 
 **UN-9: opponent chip ellipsis, not clip.** `.un-opponents` needed `flex-wrap: nowrap` (UN-5)
-to hold its fixed 44px height, but that alone let chips overflow the row at 4 players instead
+to hold its fixed height, but that alone let chips overflow the row at 4 players instead
 of shrinking - the standard flexbox trap where a flex item won't shrink below its content
 width (and `text-overflow: ellipsis` never triggers) without `min-width: 0`. Fixed with
 `.un-oppchip { flex: 1 1 0; min-width: 0; }` (chips share the row equally and can shrink) and
@@ -429,8 +459,75 @@ shell edge. Verified at 2/3/4 players and with a 20-character custom name: names
 nothing crosses the shell edge.
 
 `.un-opponents` also gained `flex-wrap: nowrap` (was `wrap`) - a wrapped second row of
-chips would need MORE than 44px, which is exactly the shift the fixed height exists to
-prevent. `.un-oppname`'s existing `max-width` + ellipsis absorbs long names instead.
+chips would need MORE than the fixed height, which is exactly the shift the fixed height
+exists to prevent.
+
+**UN-11: UN-9's ellipsis fix wasn't enough - names still read as "Co…" at 4 players.**
+`flex:1 1 0`/`min-width:0` stopped the raw clipping, but a single horizontal line of
+`emoji + name + count` simply has no room for a full "Computer 1" once four chips share a
+375px-wide row (confirmed on a real iPhone). The chip is now a **vertical two-line stack**
+(name over count, `flex-direction: column`), which needs far less horizontal room per chip:
+`.un-oppname` is `11px/700/--un-muted` (a caption), `.un-oppcount` is `16px/800/--un-ink`
+(a plain bold number, no more pill background - the chip itself already reads as a pill).
+The robot emoji is gone entirely (it cost ~28px of the horizontal budget for zero
+information once every non-human seat already reads as a chip). `.un-oppname`'s
+`min-width:0`/ellipsis rules are KEPT but now serve only as a fallback for an unusually
+long custom name - the default "Computer 1/2/3" strings must render in full, verified live
+at 4 players on a 375px viewport (`nameEl.scrollWidth > nameEl.clientWidth` was `false` for
+all three). `.un-opponents` grew 44px → 52px to hold the two lines (still fixed at 2, 3, and
+4 players - verified). The UNO badge (`.un-unochip`, shown at exactly one card) is
+absolutely positioned (`.un-oppchip .un-unochip { position: absolute; top: -6px; right:
+-6px; }`, mirroring `.un-colorchip`'s corner-badge pattern) rather than a third flow line,
+so reaching one card never changes the chip's own height - THE LAW's zero-vertical-shift
+rule extends to this row same as everywhere else. `.is-turn`'s `border-color` and motion
+#12's pulse (both untouched by UN-11) still make the active opponent's chip distinguishable.
+
+### The mat and viewport fill (UN-12/UN-13)
+
+**UN-12: `.un-mat` renders `background: var(--un-table); border-radius: var(--un-r-sheet);`.**
+Spec §2 always specified "the mat stays dark in both themes" and `--un-table` has existed,
+theme-invariant, since UN-1 - but nothing ever actually painted it onto `.un-mat` until this
+session. Real device testing found cards floating on the page with no visible playing
+surface. Fixed by the one-line `background`/`border-radius` addition; verified live in both
+themes (`getComputedStyle(mat).backgroundColor` reads the same `rgb(23, 28, 38)` regardless
+of `.gh-dark`, confirming it's genuinely theme-invariant, not coincidentally matching).
+
+**Contrast fallout: two rules inside the mat used the chrome `--un-muted`, which fails on
+the mat's dark ground in light mode.** `.un-pilecount` and `.un-dir` (the play-direction
+arrow) both painted text/icon color from `--un-muted`, which is `#6B7686` in light mode (a
+medium-dark gray, chosen to read on the light chrome background) - measured 3.71:1 against
+`--un-table`, below WCAG AA's 4.5:1 for normal text. Fixed by adding `--un-mat-muted`
+(theme-invariant, `#8B98AC`, matching dark-theme chrome's `--un-muted` value) and pointing
+both rules at it instead (see the token-system section above). Nothing else inside `.un-mat`
+needed a color change: card numerals already use the theme-invariant `--un-card-ink`, the
+pending badge uses `--un-on-accent` on its own colored background, and the wild-color
+chooser overlay (`.un-colorchoose`) has its own opaque `--un-surface` background so it was
+never affected by the mat's background regardless of theme.
+
+**UN-13: `.un-shell.un-game` is `min-height: 100dvh; display: flex; flex-direction: column`,
+and `.un-mat` absorbs the slack (`flex: 1 1 auto; min-height: 148px`, replacing its old hard
+`height: 148px`).** Real device testing found a large dead band below the button bar and an
+oversized gap between the piles and the hand - the shell simply wasn't filling the screen.
+Scoped to `.un-game`, not the bare `.un-shell`, so the setup screen (which has no flexible
+region to absorb extra height) is untouched. `dvh` (dynamic viewport height), not `vh`, so
+mobile Safari/Chrome's address-bar show/hide doesn't clip content - a real difference on
+iPhone, where this was actually found. Verified live at 375×667 and 375×812: shell height
+matches `window.innerHeight` exactly at both, `document.body.scrollHeight` matches too (no
+scroll), and `.un-bar`'s bottom sits exactly `.un-shell`'s own 20px bottom padding above the
+viewport edge at both heights (no residual dead band) - only `.un-mat`'s computed height
+differs between the two (329px vs 474px), every OTHER fixed region (opponents 52px, status
+22px, hand 150px, handwrap 170px) reads byte-identical at both viewport heights.
+
+**Why a viewport-driven `.un-mat` height doesn't violate THE LAW's zero-vertical-shift
+rule.** The rule's actual invariant is "nothing shifts as a RESULT OF GAME STATE" (playing a
+card, drawing, hand size changing) - not "every region is a literal CSS `height`". `.un-mat`'s
+height is now a pure function of the viewport, fixed for the entire lifetime of the mount
+(same caveat every other region already has: a resize/rotation can change things, and
+`_syncFan`'s resize listener already re-renders for exactly that reason). No code path
+changes `.un-mat`'s flex sizing in response to `g.phase`, hand length, pending draws, or
+anything else engine-side - the pile contents stay `align-items:center; justify-content:
+center` inside it regardless of how tall it grows, so they simply recentre rather than
+shifting relative to any fixed reference point.
 
 ### Motion system (UN-4) - spec §6, all 13 rows plus 6a
 
@@ -443,18 +540,27 @@ multi-card penalty draw currently pops in via row 6's single-card path with no s
 between cards.
 
 **The one real conflict with the render architecture: only one `transition` can be active
-on `transform` at a time.** Rows 2 (relayout, 260ms), 7 (legal-card lift, 180ms, staggered),
-and 11 (press, 120ms) all animate the SAME `transform` property on `.un-fan .un-card` (fan
-layout, the "is legal" lift, and the press dip/scale are three extra terms folded into one
-`transform` value via `--un-lift`/`--un-press-scale`, not three separate transforms - CSS
-only has one `transform` per element). Since a transition's duration is resolved from
-whichever selector matches the element AFTER a style change, not from what actually caused
-the change, the three rows can't each keep their own duration independently; they're
-layered by cascade precedence instead - `:active` (row 11) beats `.is-live` (row 7) beats
-the bare `.un-fan .un-card` base rule (row 2), equal specificity broken by source order.
-Practical effect: a card that's both legal AND being relaid-out (e.g. the hand reflows
-mid-turn) animates at row 7's 180ms rhythm, not row 2's 260ms - a minor, deliberate
-approximation, not a bug. Press always wins since it's the most time-sensitive feedback.
+on `transform` at a time.** Rows 2 (relayout, 260ms) and 11 (press, 120ms) both animate the
+SAME `transform` property on `.un-fan .un-card` (fan layout and the press dip/scale are two
+extra terms folded into one `transform` value via `--un-lift`/`--un-press-scale`, not two
+separate transforms - CSS only has one `transform` per element). Since a transition's
+duration is resolved from whichever selector matches the element AFTER a style change, not
+from what actually caused the change, the two rows can't each keep their own duration
+independently; they're layered by cascade precedence instead - `:active` (row 11) beats the
+bare `.un-fan .un-card` base rule (row 2), equal specificity broken by source order. Press
+always wins since it's the most time-sensitive feedback.
+
+**UN-10: row 7 no longer touches `transform` at all - it's `opacity` only**, so it isn't
+part of the conflict above any more. `.is-illegal { opacity: .45; }` is the entire rule; the
+base `.un-fan .un-card`'s `transition` list carries `opacity` permanently (at row 7's
+duration/easing/stagger, `--un-dur-legal`/`--un-ease-legal`/`--un-legal-stagger`) since
+nothing else ever contests that property the way rows 2/11 contest `transform`. Before
+UN-10, row 7 set `--un-lift: -4px` on `.is-live` and WAS part of the three-way transform
+conflict described above (it used to be `:active` beats `.is-live` beats the base rule) -
+that history is why the transform-conflict paragraph above only mentions two rows now, not
+three; do not "helpfully" re-add a `.is-live` transform rule without re-reading why it was
+removed (spec §5/§6, UN-10: the lift, combined with the fan's now-removed bow, made legal
+cards look like they'd popped out of alignment rather than been highlighted).
 
 **Non-persistent regions (mat, opponents, UNO slot) need "did this just happen" flags,
 not transitions.** Only the fan's cards get UN-3c's DOM-persistence exemption; the discard
@@ -617,3 +723,39 @@ The wild-color chooser and win overlay were verified by code review and are exer
 indirectly by `test.js`'s AI-vs-AI games (which choose wild colors and reach
 `phase === 'over'` routinely) but not click-tested end-to-end in the browser this pass -
 worth a manual pass if a report ever suggests that flow is broken.
+
+## Verification (2026-07-25, UN-10..13)
+
+Browser-tested via synthetic saves (`UnoGame.snapshot()` + a hand forced to n cards, written
+directly to `gamehub.uno.save.v1` before mount - reaching n=25 through normal play takes many
+turns) at 375×812 and 375×667:
+
+- **Row alignment (UN-10):** per-row `getBoundingClientRect().bottom` spread at n=7/13/20/25
+  was 1.4-2.9px across every row (subpixel/rounded-corner noise, not misalignment) - down
+  from the pre-fix state where the bow term plus row 7's lift made legal cards visibly float.
+- **Opponent chips (UN-11):** at 4 players, "Computer 1/2/3" all rendered in full
+  (`nameEl.scrollWidth > nameEl.clientWidth` was `false` for all three); `.un-opponents`
+  read exactly 52px.
+- **The mat (UN-12):** `getComputedStyle(mat).backgroundColor` read the identical
+  `rgb(23, 28, 38)` in both light and dark theme (theme toggled the CORRECT way - via
+  `localStorage['gamehub.theme.v1']` before mount, not a raw `classList` hack, since
+  `js/theme.js` re-derives the class from stored/OS preference on load and will silently
+  overwrite a manually-added class). `.un-pilecount`'s color also read identically
+  theme-invariant (`rgb(139, 152, 172)` = `--un-mat-muted`) in both themes.
+  **Caveat:** `uno/index.html` (the standalone page) never imports `js/theme.js` and its
+  `<body>` has a hardcoded light inline background - dark mode is a HUB-level concern only
+  reachable by mounting through the real hub shell, not by loading the standalone page
+  directly. Verification here stamped `.gh-dark` on `<html>` manually to simulate that,
+  which is faithful for everything scoped under `.un-root` (what this session's binds
+  cover) but does NOT exercise the standalone page's own non-`.un-root` chrome - that
+  gap is pre-existing and out of scope, not introduced by this session.
+- **Viewport fill (UN-13):** at both 375×667 and 375×812, shell height matched
+  `window.innerHeight` exactly, `document.body.scrollHeight` matched too (no scroll), and
+  `.un-bar`'s bottom sat exactly the shell's own 20px bottom padding above the viewport
+  edge. Every fixed region (opponents/status/hand/handwrap) read byte-identical between the
+  two heights; only `.un-mat` differed (329px vs 474px), confirming it's the sole flexible
+  region and everything else is still hard-fixed.
+
+`node run-all-tests.mjs` (19 suites) and `node validate-sw-assets.mjs` both clean - this
+session touched only `uno/css/uno.css`, `uno/js/ui.js`'s `fanLayout()`/`_syncFan()`, and
+`sw.js`'s cache version, none of which the engine/AI/lockstep test suites exercise.

@@ -145,9 +145,9 @@ function cardHTML(card, { live = false, back = false, small = false, extraClass 
   </button>`;
 }
 
-/** Fan geometry, spec §5 (UN-8: multi-row). Pure: n -> per-card transforms +
- *  container fit scale. Design-space constants live here and nowhere else:
- *  W/H = card size, STEP = horizontal step (just over 50% of W, so at least
+/** Fan geometry, spec §5 (UN-8: multi-row; UN-10: flat bow). Pure: n -> per-card
+ *  transforms + container fit scale. Design-space constants live here and nowhere
+ *  else: W/H = card size, STEP = horizontal step (just over 50% of W, so at least
  *  half of every card is always exposed - a proportional guarantee that holds
  *  at any hand size since the whole fan scales uniformly), ROW_PITCH = vertical
  *  distance between rows, A = usable interior width as MEASURED by the caller
@@ -156,7 +156,11 @@ function cardHTML(card, { live = false, back = false, small = false, extraClass 
  *  (RESERVED_H) drives `fit`, so two rows render at full size and a third row
  *  scales the whole fan down uniformly. Rows are balanced (perRow = ceil(n/rows)),
  *  never fill-then-spill. Row 0 is the top row; the last row is the bottom row
- *  and paints in front (z = r*100 + j), overlapping the row above it. */
+ *  and paints in front (z = r*100 + j), overlapping the row above it. UN-10: no
+ *  bow term in y - every card in a row sits on the SAME y (rows are flat lines),
+ *  so a card's bottom edge lands on one line across the whole row (paired with
+ *  .un-fan .un-card's transform-origin: 50% 100% in CSS, so per-row rotation
+ *  pivots at each card's own bottom edge instead of swinging it off that line). */
 function fanLayout(n, { W = 62, H = 92, STEP = 32, ROW_PITCH = 58, A = 452, RESERVED_H = 150 } = {}) {
   const AVAIL = A - 24;
   const PER_ROW = Math.max(1, Math.floor((AVAIL - W) / STEP) + 1);
@@ -183,7 +187,7 @@ function fanLayout(n, { W = 62, H = 92, STEP = 32, ROW_PITCH = 58, A = 452, RESE
     const rotStep = Math.min(1.8, 14 / Math.max(1, rowN - 1)); // total arc per row capped at 14deg
     cards.push({
       x: d * STEP,
-      y: r * ROW_PITCH + Math.min(8, d * d * 0.4) + shiftY, // parabolic bow within a row, capped
+      y: r * ROW_PITCH + shiftY, // UN-10: flat - no bow term, every card in the row shares this y
       rot: d * rotStep,
       z: r * 100 + j, // lower rows paint in front
     });
@@ -610,7 +614,6 @@ class UnoUI {
       const pop = unoJustReached(i);
       return `
       <div class="un-oppchip ${g.phase !== 'over' && g.currentPlayer === i ? 'is-turn' : ''} ${this._aiPulsePi === i ? 'un-chip-pulse' : ''}" data-seat="${i}">
-        <span class="un-oppemoji">${esc(this.seats[i].emoji)}</span>
         <span class="un-oppname">${esc(this.seats[i].name)}</span>
         <span class="un-oppcount">${g.players[i].hand.length}</span>
         ${g.players[i].hand.length === 1 ? `<span class="un-unochip ${pop ? 'un-chip-pop' : ''}">${t('uno_banner')}</span>` : ''}
@@ -694,9 +697,12 @@ class UnoUI {
       el.style.setProperty('--y', `${p.y}px`);
       el.style.setProperty('--rot', `${p.rot}deg`);
       el.style.setProperty('--z', String(p.z));
-      el.style.setProperty('--i', String(i)); // row 7's left-to-right lift stagger
+      el.style.setProperty('--i', String(i)); // row 7's left-to-right opacity stagger
       const live = humanTurn && legalIds.has(card.id);
       el.classList.toggle('is-live', live);
+      // UN-10: row 7 is an opacity cue now (illegal cards dim to .45), not a lift, and it
+      // only means anything during the human's own turn - outside it, nothing dims.
+      el.classList.toggle('is-illegal', humanTurn && !live);
       el.dataset.action = live ? 'play-card' : '';
       el.disabled = !live;
       el.tabIndex = live ? 0 : -1;

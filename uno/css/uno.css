@@ -43,6 +43,15 @@
   --un-on-accent: #FFF;      /* text on --un-accent / saturated chips */
   --un-unochip-ink: #2A2200; /* dark ink on the yellow UNO chip */
   --un-scrim: rgba(0, 0, 0, .45);
+  /* UN-12: text painted directly on --un-table (the mat) needs its own theme-invariant
+     muted tone, matching the dark-theme chrome value - --un-muted flips to a DARK color
+     in light mode and would fail contrast on the mat's dark ground there (measured: light
+     --un-muted on --un-table is 3.71:1, below WCAG AA's 4.5:1 for normal text; light
+     --un-ink on --un-table is 1.09:1, unreadable - if a future rule needs bright text on
+     the mat, add a --un-mat-ink alongside this the same way, not a literal). Everything
+     currently drawn inside .un-mat is muted-weight text (pile count, direction arrow), so
+     only this one token exists so far. */
+  --un-mat-muted: #8B98AC;
 
   /* shadow stack - three states only, no component improvises (spec §2) */
   --un-sh-rest: 0 1px 1px rgba(8, 12, 20, .24), 0 2px 5px rgba(8, 12, 20, .20);
@@ -81,6 +90,7 @@
   --un-t-tiny: 11px;
   --un-t-emoji: 40px;
   --un-t-x: 18px;
+  --un-t-oppcount: 16px; /* UN-11: the opponent chip's own count line, no existing scale value fits */
 
   /* space + geometry (spec §4) */
   --un-sp-1: 4px;
@@ -112,6 +122,21 @@
   padding: 14px 14px 20px;
   box-sizing: border-box;
   position: relative;
+}
+/* UN-13: the GAME shell (not setup) fills the viewport, with .un-mat (flex:1 1 auto,
+   below) absorbing the slack, so there's no dead band below .un-bar and no oversized gap
+   between the piles and the hand. dvh, not vh, so mobile browser chrome (the address bar
+   showing/hiding) doesn't clip content. This does not reintroduce layout shift: every
+   OTHER region keeps its spec §4 fixed height, and .un-mat's height depends only on the
+   viewport (fixed for the lifetime of the mount, barring a resize/rotation, which every
+   other fixed-height region here already lives with) - never on game state, so nothing
+   shifts as cards are played, drawn, or the hand grows/shrinks. Scoped to .un-game (not
+   the bare .un-shell) so the setup screen, which has no flexible region to absorb the
+   extra height, is untouched. */
+.un-root .un-shell.un-game {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- setup screen --------------------------------------------------------- */
@@ -183,26 +208,32 @@
 
 /* --- game screen ----------------------------------------------------------- */
 
-/* height: 44px fixed regardless of 1-3 opponents (spec §4) - nowrap so a long name
-   never grows the row to a second line, which would violate the fixed height.
-   Horizontal padding (UN-9) keeps a chip from ever touching the shell edge. */
-.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; align-items: center; height: 44px; overflow: hidden; margin-bottom: 10px; padding: 0 4px; box-sizing: border-box; }
-/* UN-9 fix: flex:1 1 0 shares the row equally among 1-4 chips; min-width:0 is the
-   standard flexbox ellipsis trap fix - a flex item won't shrink below its content
-   width (and text-overflow:ellipsis never triggers) without it. Do NOT "fix" this
-   by shrinking a max-width instead - that clips rather than ellipsizing and doesn't
-   scale cleanly from 2 to 4 players. */
+/* height: 52px fixed regardless of 1-3 opponents (spec §4, UN-11: was 44px, grew for the
+   two-line chip) - nowrap so a long name never grows the row to a second CHIP-external
+   line, which would violate the fixed height. Horizontal padding (UN-9) keeps a chip from
+   ever touching the shell edge. */
+.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; align-items: center; height: 52px; overflow: hidden; margin-bottom: 10px; padding: 0 4px; box-sizing: border-box; }
+/* UN-9: flex:1 1 0 shares the row equally among 1-4 chips; min-width:0 is the standard
+   flexbox ellipsis trap fix - a flex item won't shrink below its content width (and
+   text-overflow:ellipsis never triggers) without it.
+   UN-11: column layout (name over count) replaced the single horizontal line and the
+   robot emoji - "Computer 1" was still reading as "Co…" after UN-9's ellipsis fix simply
+   because a shrunk chip has no room for an emoji + a full name + a count side by side at
+   4 players. Stacking the two text lines needs far less horizontal room per chip, so the
+   full name fits without ellipsis in the common case (see uno/CLAUDE.md's UN-11 note for
+   the measured chip width at 4 players). */
 .un-root .un-oppchip {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 1px;
   flex: 1 1 0;
   min-width: 0;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: var(--un-r-chip);
   background: var(--un-surface);
   border: 2px solid transparent;
-  font-size: var(--un-t-small);
   position: relative;
 }
 .un-root .un-oppchip.is-turn { border-color: var(--un-accent); }
@@ -215,22 +246,36 @@
   40%  { box-shadow: 0 0 0 3px var(--un-accent); }
   100% { box-shadow: 0 0 0 0 var(--un-accent); }
 }
-/* UN-9: min-width:0 lets this shrink inside its flex:1 1 0 .un-oppchip parent; any
-   name (including a 20+ character custom one) ellipsizes instead of clipping or
-   pushing chips past the shell edge. */
-.un-root .un-oppname { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.un-root .un-oppcount {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: var(--un-r-chip);
-  background: var(--un-bg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* UN-11: 11px/700/--un-muted, a small caption over the bold count below it. min-width:0 +
+   ellipsis stay as a FALLBACK only, for an unusually long custom name - "Computer 1/2/3"
+   must always render in full at 4 players (verified live, see uno/CLAUDE.md). */
+.un-root .un-oppname {
+  font-size: var(--un-t-tiny);
   font-weight: 700;
-  font-size: var(--un-t-label);
+  color: var(--un-muted);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* UN-11: 16px/800/--un-ink, plain (the old pill-badge background is gone - the chip
+   itself is already the pill). */
+.un-root .un-oppcount {
+  font-size: var(--un-t-oppcount);
+  font-weight: 800;
+  color: var(--un-ink);
+  line-height: 1;
+}
+/* UN-11: the UNO badge for an OPPONENT chip is absolutely positioned (mirrors
+   .un-colorchip's corner-badge pattern below) so it overlays the pill instead of adding a
+   third flow line - the two-line name/count stack must stay a fixed height regardless of
+   whether a player is at exactly one card (THE LAW's zero-vertical-shift rule extends to
+   this row same as everywhere else). Contrast with .un-unochip-self (the human's own
+   indicator, in the separately-reserved UNO slot below the fan), which stays in normal
+   flow there since that slot is ALREADY reserved at a fixed height whether or not the
+   chip is present. */
+.un-root .un-oppchip .un-unochip { position: absolute; top: -6px; right: -6px; }
 
 .un-root .un-unochip {
   background: var(--un-yellow);
@@ -255,9 +300,15 @@
    zero-vertical-shift rule; blanked to '' while the color chooser is open. */
 .un-root .un-status { text-align: center; margin: 0 0 10px; font-weight: 600; height: 22px; line-height: 22px; overflow: hidden; }
 
-/* height: 148px fixed (spec §4) - holds a 92px card + pile count + pending-badge
-   headroom; box-sizing: border-box so the padding below counts toward the 148px,
-   not on top of it. */
+/* min-height: 148px (spec §4, UN-13: was a fixed height) - still holds a 92px card + pile
+   count + pending-badge headroom at minimum, but now GROWS with flex:1 1 auto to absorb
+   whatever vertical slack the viewport has (see .un-shell.un-game above) - the only region
+   in §4 that isn't a hard fixed height, and it's still zero-vertical-shift-safe because its
+   height depends on the viewport, not on game state (see the .un-shell.un-game comment).
+   box-sizing: border-box so the padding below counts toward that height, not on top of it.
+   UN-12: background/border-radius make this the dark playing surface spec §2's "mat stays
+   dark in both themes" decision actually painted - --un-table is theme-invariant, so this
+   never themes with the surrounding (light or dark) chrome. */
 .un-root .un-mat {
   position: relative;
   display: flex;
@@ -265,8 +316,11 @@
   justify-content: center;
   gap: 20px;
   padding: 10px 0 18px;
-  height: 148px;
+  flex: 1 1 auto;
+  min-height: 148px;
   box-sizing: border-box;
+  background: var(--un-table);
+  border-radius: var(--un-r-sheet);
   perspective: 1200px; /* spec §6 3D scope: .un-mat + .un-fan get perspective, .un-card gets preserve-3d - the whole 3D system */
 }
 
@@ -274,7 +328,9 @@
 .un-root .un-drawpile { cursor: default; }
 .un-root .un-drawpile.is-live { cursor: pointer; }
 .un-root .un-drawpile:disabled .un-card { cursor: default; }
-.un-root .un-pilecount { font-size: var(--un-t-label); color: var(--un-muted); font-weight: 600; }
+/* UN-12: --un-mat-muted, not the chrome --un-muted - this text sits directly on the
+   always-dark .un-mat, so it needs the theme-invariant token (see the token block note). */
+.un-root .un-pilecount { font-size: var(--un-t-label); color: var(--un-mat-muted); font-weight: 600; }
 /* Live +2/+4 stack counter: prominent and central (top of the mat, between the piles),
    not tucked in a corner, so the player can't miss how big the pile has grown. */
 .un-root .un-pendingbadge {
@@ -301,12 +357,13 @@
   50%  { transform: translateX(-50%) scale(1.12); }
   100% { transform: translateX(-50%) scale(1); }
 }
-/* Play-direction arrow (3-4 players only), a quiet signal near the discard pile. */
+/* Play-direction arrow (3-4 players only), a quiet signal near the discard pile.
+   UN-12: --un-mat-muted, not the chrome --un-muted - see .un-pilecount above. */
 .un-root .un-dir {
   position: absolute;
   top: 2px;
   right: 4px;
-  color: var(--un-muted);
+  color: var(--un-mat-muted);
   display: inline-flex;
   line-height: 0;
 }
@@ -529,11 +586,10 @@
   transform-origin: 50% 100%;
   perspective: 1200px; /* spec §6 3D scope */
 }
-/* --un-lift (row 7's "legal cards lift 4px" / row 11's press lift - :active wins the
-   cascade below when both apply, see the rules further down) and --un-press-scale
-   (row 11) are extra terms folded into the SAME transform as the fan layout math - there
-   is only one `transform` property per element, so a card being lifted AND relaid-out
-   animate as one motion, not two. */
+/* --un-lift (row 11's press lift only, as of UN-10 - row 7 no longer lifts, see below)
+   and --un-press-scale (row 11) are extra terms folded into the SAME transform as the
+   fan layout math - there is only one `transform` property per element, so a card being
+   pressed AND relaid-out animate as one motion, not two. */
 .un-root .un-fan .un-card {
   position: absolute;
   left: 50%;
@@ -542,28 +598,35 @@
              box with no overflow - do not reintroduce a static top offset here. */
   --un-lift: 0px;
   --un-press-scale: 1;
+  opacity: 1; /* row 7 (UN-10): illegal cards dim below, via .is-illegal */
   transform: translateX(calc(-50% + var(--x, 0px)))
     translateY(calc(var(--y, 0px) + var(--un-lift, 0px)))
     rotate(var(--rot, 0deg))
     scale(var(--un-press-scale, 1));
-  transform-origin: 50% 150%; /* rotation swings from a point below the hand, like a held fan */
+  /* UN-10: 50% 100% (each card's own bottom edge), not 50% 150% - with the bow term gone
+     from fanLayout's y, every card in a row now shares one y; pivoting rotation at the
+     bottom edge keeps that edge on the shared line instead of swinging it through an arc. */
+  transform-origin: 50% 100%;
   z-index: var(--z, 0);
   /* row 2: hand-size/relayout changes animate transform (and box-shadow, for symmetry
-     with the press/legal states below) at the base rhythm. Rows 7 and 11 below override
-     this transition (not the transform formula) for their own trigger, since only one
+     with the press state below) at the base rhythm. Row 11 below overrides this
+     transition (not the transform formula) for its own trigger, since only one
      `transition` can be active on `transform` at a time - whichever selector wins the
-     cascade sets the duration for WHATEVER transform change is happening at that moment. */
+     cascade sets the duration for WHATEVER transform change is happening at that moment.
+     Opacity (row 7, UN-10) isn't fought over the same way - nothing else touches it - so
+     its transition lives here permanently, staggered left-to-right same as the old lift. */
   transition: transform var(--un-dur-relayout) var(--un-ease-relayout),
-    box-shadow var(--un-dur-relayout) var(--un-ease-relayout);
+    box-shadow var(--un-dur-relayout) var(--un-ease-relayout),
+    opacity var(--un-dur-legal) var(--un-ease-legal) calc(var(--i, 0) * var(--un-legal-stagger));
 }
-/* row 7: turn becomes yours - legal cards lift 4px, staggered 30ms per card left-to-right
-   (--i is the display index, set by _syncFan, and matches the fan's left-to-right paint
-   order per spec §5). */
-.un-root .un-fan .un-card.is-live {
-  --un-lift: -4px;
-  transition: transform var(--un-dur-legal) var(--un-ease-legal) calc(var(--i, 0) * var(--un-legal-stagger)),
-    box-shadow var(--un-dur-legal) var(--un-ease-legal);
-}
+/* row 7 (UN-10 revision): turn becomes yours - illegal cards dim to opacity .45 instead
+   of legal cards lifting 4px. A brightness cue, not a hue cue, so it satisfies the
+   colorblind rule same as the lift did. Only set during the human's own turn (see
+   _syncFan's `humanTurn && !live` - legality has no meaning outside your turn, so nothing
+   dims then). Previously this rule lifted legal cards via --un-lift; the old vertical
+   scatter this produced (combined with the fan's bow) read as broken alignment rather
+   than as a hint - see uno/CLAUDE.md's UN-10 note. */
+.un-root .un-fan .un-card.is-illegal { opacity: .45; }
 /* row 11: press a card - tactile ack. Only enabled (is-live) buttons can become :active,
    so this naturally never fires on a disabled card. Declared after .is-live so it wins
    the cascade (equal specificity, source order breaks the tie) whenever both apply. */

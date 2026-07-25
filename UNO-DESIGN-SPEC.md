@@ -43,12 +43,18 @@ The four card hues are **fixed by THE LAW** and do not change. Everything else i
 --un-wild:   #23232C;  /* four-way */
 
 /* table + chrome */
---un-table:   #171C26;  /* mat field, the dark quiet ground */
---un-bg:      #10141C;  /* page behind the shell */
---un-surface: #1E2531;  /* overlays, chips, sheets */
---un-ink:     #E8ECF3;
---un-muted:   #8B98AC;
---un-border:  rgba(255,255,255,.10);
+--un-table:      #171C26;  /* mat field, the dark quiet ground */
+--un-mat-muted:  #8B98AC;  /* UN-12: text painted ON the mat - theme-invariant, matches
+                               dark-theme --un-muted. --un-muted itself flips to a DARK
+                               color in light mode and fails contrast on the always-dark
+                               mat (measured 3.71:1, below WCAG AA's 4.5:1) - use this,
+                               never the chrome --un-muted, for anything drawn inside
+                               .un-mat (pile count, direction arrow) */
+--un-bg:         #10141C;  /* page behind the shell */
+--un-surface:    #1E2531;  /* overlays, chips, sheets */
+--un-ink:        #E8ECF3;
+--un-muted:      #8B98AC;
+--un-border:     rgba(255,255,255,.10);
 
 /* card surface treatment */
 --un-card-rim:      rgba(255,255,255,.94);  /* printed white border, 3px */
@@ -77,6 +83,11 @@ are theme-invariant, so the cards always sit on the same ground and never have t
 contrast. Light mode changes only the surrounding chrome: `--un-bg` → `#EEF1F6`, `--un-surface` →
 `#FFF`, `--un-ink` → `#1C2430`, `--un-muted` → `#6B7686`, `--un-border` → `rgba(0,0,0,.10)`. The
 dark mat then reads as a deliberate playing surface inset into a light page, which is what it is.
+`.un-mat` itself renders `background: var(--un-table)` (UN-12; this was decided from day one but
+not actually painted until then) — the mat is what makes the screen read as a game board rather
+than a web page. Because the mat's *contents* (pile count, direction arrow) sit directly on that
+always-dark ground, they read against `--un-mat-muted`, not the chrome `--un-muted` above, which
+would go dark-on-dark in light mode.
 
 ---
 
@@ -120,13 +131,24 @@ System stack only: `system-ui, -apple-system, 'Segoe UI', sans-serif`.
 
 | Region | Height | Notes |
 |---|---|---|
-| `.un-opponents` | 44px | fixed whether 1 or 3 opponents |
+| `.un-opponents` | 52px | fixed whether 1 or 3 opponents (UN-11: was 44px, grew for the two-line chip) |
 | `.un-status` | 22px | already has `min-height`, promote to fixed |
-| `.un-mat` | 148px | holds a 92px card + 20px pile count + pending badge headroom |
+| `.un-mat` | **148px floor**, flexible | UN-13: `flex: 1 1 auto; min-height: 148px` — grows to absorb the viewport's slack instead of a hard fixed height (see "Viewport fill" below); still holds a 92px card + 20px pile count + pending badge headroom at minimum |
 | `.un-handwrap` | 170px | 150px fan region + 20px UNO chip slot, reserved even when empty |
 | `.un-bar` | 40px | |
 
 Shell stays `max-width: 480px`, padding `14px`. Usable interior width **A = 452px**.
+
+**Viewport fill (UN-13).** The GAME shell (`.un-shell.un-game`, not the setup screen) is
+`min-height: 100dvh; display: flex; flex-direction: column;` — `dvh`, not `vh`, so mobile browser
+chrome (the address bar showing/hiding) doesn't clip content. Every region above keeps its fixed
+height; only `.un-mat` is flexible (`flex: 1 1 auto`, 148px floor), so it absorbs whatever
+vertical slack the viewport has. This does **not** reintroduce layout shift under THE LAW's
+zero-vertical-shift rule: `.un-mat`'s height depends on the *viewport*, fixed for the life of the
+mount (barring a resize/rotation, which every other fixed-height region here already lives with),
+never on *game state* — nothing shifts as cards are played, drawn, or the hand grows or shrinks.
+The net effect: no dead band below `.un-bar`, and no oversized gap between the piles and the hand
+— the mat simply grows or shrinks to make the column exactly fill the screen.
 
 ---
 
@@ -206,7 +228,8 @@ perRow   = ceil(n / rows)                            // balance rows, do not fil
 // rowN = number of cards actually in row r
 c_j   = (rowN - 1) / 2
 x_ij  = (j - c_j) * STEP
-y_ij  = r * ROW_PITCH + (j - c_j)² * 0.4      // second term capped at 8px
+y_ij  = r * ROW_PITCH                          // UN-10: flat - no bow term. Every card
+                                                // in a row shares this y; only rot_ij varies
 rot_ij= (j - c_j) * min(1.8, 14 / max(1, rowN - 1))   // degrees, total arc per row ≤ 14°
 z_ij  = r * 100 + j                            // lower rows paint in front
 
@@ -225,9 +248,20 @@ satisfies `fit ≤ 1`, but a 3-row hand's content drifts past the box's bottom b
 `(needH - RESERVED_H) * fit` px (~42px at n=25) instead of landing inside it - caught by
 measuring `cardsMaxBottom` against `.un-hand`'s bottom in a live browser, not by the `fit`
 math alone. Each card gets `transform: translateX(x_ij) translateY(y_ij) rotate(rot_ij)` with
-`transform-origin: 50% 150%` so rotation swings from a point below the hand, like a held fan.
-Row 0 is the top row; the last row is the bottom row and paints in front, overlapping the row
-above it. New cards continue to arrive at the left end.
+**`transform-origin: 50% 100%`** (UN-10: each card's own bottom edge, not `50% 150%`) so
+rotation pivots there instead of swinging through an arc below the hand — combined with the flat
+`y_ij` above, every card in a row lands its bottom edge on the exact same line; only the tilt
+varies card to card. Row 0 is the top row; the last row is the bottom row and paints in front,
+overlapping the row above it. New cards continue to arrive at the left end.
+
+**Row alignment (UN-10).** The original single-row design bowed each row into a shallow arc
+(`(j - c_j)² * 0.4`, capped at 8px) and paired it with `transform-origin: 50% 150%` so rotation
+swung from a point below the hand — visually fine on its own, but it combined badly with row 7's
+per-card lift (below): the two effects together made playable cards look like they'd popped out
+of alignment rather than been highlighted. Flattening the bow and pivoting rotation at each
+card's own bottom edge (`50% 100%`) removes the ambiguity: every card's bottom edge sits on one
+line **within its row**, at any hand size, and the only thing that still varies card to card is
+the per-row tilt (still capped at 14° total, per row).
 
 **The 50%-visibility invariant.** `STEP` (32) is just over half of `W` (62), so the exposed
 horizontal sliver of every overlapped card is `STEP / W ≈ 51.6%` of its width — and because the
@@ -258,6 +292,32 @@ buried card the player sees is its left sliver. The corner mark is the entire re
 strip is its left edge and the top-left corner mark is always the visible read. A newly arrived
 card is therefore at the bottom of its row's stack, so it gets a brief edge highlight on arrival
 (motion #6a) rather than relying on stacking to be noticed.
+
+### Opponent chips (UN-11)
+
+A vertical two-line stack, not a single horizontal line:
+
+```
+┌──────────────┐
+│  Computer 1  │   name,  11px / 700, --un-muted
+│      7       │   count, 16px / 800, --un-ink
+└──────────────┘
+```
+
+Session 3.5's ellipsis fix (`flex: 1 1 0; min-width: 0`) stopped the clipping but a horizontal
+`emoji + name + count` layout still didn't leave room for a full name at 4 players — "Computer 1"
+still read as "Co…". Stacking name over count needs far less horizontal room per chip, so the
+full name fits without ellipsis in the common case. The chip keeps `flex: 1 1 0; min-width: 0`
+(still sharing the row equally, still able to shrink) but is now `flex-direction: column`,
+centered. The name line keeps `min-width: 0; overflow: hidden; text-overflow: ellipsis;
+white-space: nowrap` **only as a fallback** for an unusually long custom name — the default
+"Computer 1/2/3" strings must never be shortened to make this work (root `CLAUDE.md`'s "Adding a
+game" checklist: the layout handles any name, not the other way around). The robot emoji is
+dropped entirely — it cost real horizontal room and carried no information once every opponent
+chip already means "computer." `.un-opponents` grows from 44px to **52px** fixed (still fixed at
+2, 3, and 4 players) to hold the two lines. The active opponent's chip stays visually
+distinguishable the same way as before (`.is-turn`'s `border-color`, motion #12's pulse) — UN-11
+didn't touch either.
 
 ### Hand sort
 
@@ -296,7 +356,7 @@ Every entry has a functional job. Anything that couldn't state one was cut.
 | 4 | Card lands on discard | settle: rotate to a stable random −6°..6°, shadow `raised`→`rest` | 180ms | `cubic-bezier(.4,0,.2,1)` | the pile is a stack of real objects |
 | 5 | Wild resolved / first flip | `rotateY(0→180deg)`, `preserve-3d`, shadow peaks at 50% | 380ms | `cubic-bezier(.45,.05,.25,1)` | reveal, not replacement |
 | 6 | Draw | card arcs from deck into the fan, then #2 runs | 380ms | `cubic-bezier(.16,.84,.44,1)` | where the card came from |
-| 7 | Turn becomes yours | legal cards lift 4px, 30ms stagger left→right | 180ms | `cubic-bezier(.4,0,.2,1)` | which cards are playable, without copy |
+| 7 | Turn becomes yours | **(UN-10)** illegal cards dim to `opacity: .45` (legal stays `opacity: 1`), 30ms stagger left→right | 180ms | `cubic-bezier(.4,0,.2,1)` | which cards are playable, without copy |
 | 8 | Penalty stack grows | `.un-pendingbadge` scale 1→1.12→1 | 300ms | `cubic-bezier(.34,1.56,.64,1)` | the stack got bigger, look here |
 | 9 | Penalty draw resolves | drawn cards arrive 90ms apart | per-card 380ms | as #6 | the size of what you just ate |
 | 10 | UNO reached | chip scale .6→1.08→1, opacity 0→1 | 320ms | `cubic-bezier(.34,1.56,.64,1)` | one card left |
@@ -308,6 +368,9 @@ Every entry has a functional job. Anything that couldn't state one was cut.
 **`prefers-reduced-motion: reduce`:** all of the above collapse to `0.01ms` except #10 and #8,
 which become opacity-only fades at 120ms. Fan re-layout is instant. Flips swap face with no
 rotation. No parallax, no arcs. The game must remain fully legible with every animation disabled.
+Row 7 (UN-10) needs no special-case exception here the way #10/#8 do — its opacity change is an
+ordinary CSS `transition`, already covered by the blanket `transition-duration: 0.01ms` collapse,
+so it applies instantly with no separate rule.
 
 **3D scope, deliberately bounded.** `perspective: 1200px` on `.un-mat` and `.un-fan`,
 `transform-style: preserve-3d` on `.un-card`. That is the whole 3D system — enough for real card
@@ -355,9 +418,9 @@ texture, the chrome is plain, the buttons are unstyled ghosts. Do not add a seco
 | Invariant | Mechanism |
 |---|---|
 | **Entire hand visible, any n, never scrolls, ≥50% of every card exposed** | `overflow-x: auto` deleted from `.un-hand`. Cards wrap into balanced rows (`rows = ceil(n/PER_ROW)`, `perRow = ceil(n/rows)` — never fill-then-spill), and the whole fan gets a computed `scale(fit)` where `fit = min(1, RESERVED_H/needH)`. `fit` is mathematically ≤1 for all n, so the fan cannot exceed its box's height, and `PER_ROW` is derived from the measured width so it never exceeds the box's width either. Because `STEP` (32) is just over half of `W` (62) and the fan scales uniformly, the exposed fraction of every overlapped card is a constant `STEP/W ≈ 51.6%` regardless of `fit` — the 50%-visibility rule holds by construction at any hand size, not just checked at a few sizes. There is no scroll container left in the hand subtree. |
-| **Zero vertical layout shift** | Every region in §4 has a fixed height set from first paint, including the UNO chip slot (reserved at 20px whether or not the chip is present) and the pending badge (absolutely positioned inside the mat's reserved 148px). Card count changes alter only `transform`, which does not affect layout. |
-| **Colorblind safety** | Two independent shape channels per card: the 46px medallion and the 13px corner mark, both driven by the same `COLOR_META[color].shape`. No state is signalled by hue alone. Color chooser keeps shape+hue chips. Playable state uses lift + shadow, not tint. |
-| **No instructional copy in gameplay UI** | Motion #7 (legal cards lift) and #12 (opponent chip pulse) carry the information that helper sentences would otherwise carry. No new strings are added to `strings.js`. |
+| **Zero vertical layout shift** | Every region in §4 has a fixed height set from first paint, including the UNO chip slot (reserved at 20px whether or not the chip is present) and the pending badge (absolutely positioned inside the mat's reserved space). Card count changes alter only `transform`, which does not affect layout. **UN-13's one exception**: `.un-mat` is `flex: 1 1 auto` with a 148px floor rather than a hard fixed height — still zero-shift under THE LAW because its height is a function of the *viewport* (fixed for the life of the mount), never of *game state*; nothing about it changes as cards are played, drawn, or the hand grows or shrinks. |
+| **Colorblind safety** | Two independent shape channels per card: the 46px medallion and the 13px corner mark, both driven by the same `COLOR_META[color].shape`. No state is signalled by hue alone. Color chooser keeps shape+hue chips. **Playable state (UN-10) uses opacity, not tint** — illegal cards dim to `.45`, a brightness cue, same colorblind-safe reasoning as the lift it replaced. |
+| **No instructional copy in gameplay UI** | Motion #7 (UN-10: illegal cards dim) and #12 (opponent chip pulse) carry the information that helper sentences would otherwise carry. No new strings are added to `strings.js`. |
 | **System fonts, no external assets** | All shapes are inline SVG generated by the existing `shapeSVG()`. Medallion, gloss, and rim are CSS gradients and filters. Zero new files, so `sw.js` `ASSETS` is unchanged. |
 | **Scoped CSS** | Every new rule is `.un-` prefixed and descendant-scoped under `.un-root`, per the "Adding a game" checklist item 3. |
 | **Minimum tap target** | Constant 32px design-space sliver (≥50% of the 62px card width) × 92px height, within its row. At `fit < 1` the sliver scales with the card, so the exposed proportion never degrades. Within a row the topmost card and the pressed card receive full card area via `z-index` (`z = r*100 + j`); across rows the last (bottom) row always paints in front of earlier rows. |
@@ -375,3 +438,11 @@ texture, the chrome is plain, the buttons are unstyled ghosts. Do not add a seco
 3. **Graceful shrink, no hard `n` cap.** `fit` scales the fan without limit; the invariant holds at
    any hand size (§8).
 4. **Hand sort added**: three modes, one cycling control, persisted, presentation-only (§5, §8).
+5. **(2026-07-25, UN-10..13) Row 7 is opacity, not lift; the mat is actually painted dark; the
+   shell fills the viewport.** Four defects from real iPhone testing: the lift + bow combination
+   read as broken alignment rather than a hint (fixed by flattening the bow and switching row 7
+   to an opacity cue, §5/§6); opponent names still ellipsized in practice despite UN-9's fix, so
+   the chip became a two-line name/count stack and dropped the emoji (§4/§5); `.un-mat` had never
+   actually been painted with `--un-table` despite §2 always specifying it (now fixed, §2); and
+   the shell didn't fill the viewport, leaving a dead band below the button bar (now `.un-mat` is
+   `flex: 1 1 auto` with a 148px floor instead of a hard fixed height, §4/§8).
