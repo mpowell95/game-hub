@@ -5,7 +5,7 @@
 import { makeDeck, cardValue, shuffle } from './deck.js';
 import {
   bestDeadwood, bestPartition, canClose, isChinchon, isDoubleMeld,
-  sixAndOne, classifyClosingHand, attachableCards, generateMelds,
+  sixAndOne, classifyClosingHand, attachableCards, generateMelds, shouldAutoClose,
 } from './meld.js';
 import { Game, makePlayer } from './game.js';
 import { AIAgent } from './ai.js';
@@ -86,6 +86,14 @@ eq('sixAndOne classify category', classifyClosingHand(sao, DEF).category, 'sixAn
 // --- closing eligibility + threshold ---
 const close3 = [C('oros', 5), C('copas', 5), C('espadas', 5), C('bastos', 6), C('bastos', 7), C('bastos', 10), C('oros', 3)];
 assert('canClose with leftover 3 (maxClose 3)', canClose(close3, DEF));
+
+// --- shouldAutoClose (extracted from ui.js's promptClose) ---
+assert('shouldAutoClose true for a genuine chinchón', shouldAutoClose(chinchon, DEF));
+assert('shouldAutoClose true for a double meld (3+4, zero leftover)', shouldAutoClose(dbl, DEF));
+// close3: leftover of 1 card (value 3) -- eligible under the normal single-meld
+// close threshold (maxClose 3, see canClose above) but NOT the stricter
+// zero-leftover auto-close rule.
+assert('shouldAutoClose false for a close-eligible-but-not-fully-melded hand (one leftover)', !shouldAutoClose(close3, DEF));
 const close4 = [C('oros', 5), C('copas', 5), C('espadas', 5), C('bastos', 6), C('bastos', 7), C('bastos', 10), C('oros', 4)];
 assert('cannot close with leftover 4 (maxClose 3)', !canClose(close4, DEF));
 assert('can close leftover 4 when maxClose 4', canClose(close4, { ...DEF, maxClose: 4 }));

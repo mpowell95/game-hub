@@ -69,16 +69,26 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
 
 ### UI notes (2026-07-23)
 
-- **Auto-close on a fully melded hand.** `promptClose()` computes
-  `meld.classifyClosingHand(humanHand, config)` before creating the Close/Keep-playing
-  prompt; if `leftover.length === 0` (category `chinchon` or `doubleMeld` — there is no
-  rational reason to keep playing either: chinchón ends or dominates the match, and a
+- **Auto-close on a fully melded hand.** `promptClose()` (`ui.js:767`) calls
+  `meld.shouldAutoClose(humanHand, config)` before creating the Close/Keep-playing prompt;
+  if it returns `true` (zero leftover cards, category `chinchon` or `doubleMeld` — there is
+  no rational reason to keep playing either: chinchón ends or dominates the match, and a
   doubleMeld's −10 can't be improved by drawing), it resolves `true` immediately with no
   prompt shown. This is implemented entirely at the prompt layer — `game.js`'s
   `decideClose`-driven flow, event order, and MP move emission are byte-identical to a fast
   human tap, so the lockstep invariants and `test-mp-lockstep.mjs`'s mirror are untouched.
   Partial closes (1-3 leftover, under `maxClose`) still prompt as before. AI `decideClose`
   policy is unchanged.
+  - **`shouldAutoClose(hand, cfg)` (2026-07-25, `meld.js`, next to `classifyClosingHand`)**
+    is a pure extraction of that decision — `classifyClosingHand(hand, cfg).leftover.length
+    === 0` — out of `promptClose()`. No DOM/`this`, plain hand array + config in, boolean
+    out. This is the fix for "QA couldn't engineer a real hand to trigger the two-meld
+    auto-close in play, so it was never verified": `chinchon/js/test.js` now asserts it
+    directly against a genuine chinchón (`shouldAutoClose` true), a 3-set+4-run double meld
+    (true), and a close-eligible-but-one-leftover hand under the normal `canClose` threshold
+    (false), proving the rule without needing a played-out example. `promptClose()` just
+    calls the helper now; behavior is unchanged (byte-identical extraction, confirmed against
+    `node chinchon/js/test.js` and `node test-mp-lockstep.mjs`, both green).
 - **The "Ana Banana" title rebrand is gone** (was `ui.js`'s themed `<h1>` + `.cc-title-anita`/
   `.cc-title-bonita` CSS, Matt: "remove Ana banana"). The `anita` deck keeps its own display
   name ("Ana Banana") in the Card deck row and `cards.js` — only the setup screen's giant

@@ -266,6 +266,19 @@ export function classifyClosingHand(hand, cfg) {
 }
 
 /**
+ * Auto-close eligibility: true when `classifyClosingHand(hand, cfg)` resolves
+ * with zero leftover cards (category `chinchon` or `doubleMeld`) -- the two
+ * fully-melded cases where there is no rational reason to keep playing (a
+ * chinchón ends or dominates the match; a doubleMeld's -10 can't be improved
+ * by drawing). Pure wrapper extracted from `ui.js`'s `promptClose()` so the
+ * decision itself is directly unit-testable without a prompt/UI harness --
+ * see chinchon/js/test.js and chinchon/CLAUDE.md.
+ */
+export function shouldAutoClose(hand, cfg) {
+  return classifyClosingHand(hand, cfg).leftover.length === 0;
+}
+
+/**
  * "Place cards on ending": given the closer's locked meld descriptors
  * ({kind:'set',rank,suits} or {kind:'run',suit,minPos,maxPos}), greedily attach
  * as many of `playerHand`'s cards as possible (highest value first, chaining run

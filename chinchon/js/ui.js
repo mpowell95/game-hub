@@ -769,8 +769,9 @@ class ChinchonUI {
     // no rational reason to keep playing -- resolve yes immediately instead of
     // prompting. The engine's decideClose flow, event order and MP move
     // emission are untouched: this is indistinguishable from a fast tap.
-    const cls = meld.classifyClosingHand(this._human().hand, this.game.config);
-    if (cls.leftover.length === 0) return Promise.resolve(true);
+    // Decision logic lives in meld.shouldAutoClose (pure, unit-tested directly
+    // in chinchon/js/test.js) -- this call site only decides what to DO with it.
+    if (meld.shouldAutoClose(this._human().hand, this.game.config)) return Promise.resolve(true);
     return new Promise((resolve) => { this._pending = { kind: 'close', resolve }; this.render(); });
   }
 

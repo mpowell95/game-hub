@@ -21,6 +21,7 @@ const HUMAN = 0;
 const AI_THINK_MS = 650;
 const DRAW_STEP_MS = 420;
 const MAX_SAVE_AGE_MS = 30 * 60 * 1000;
+const PENALTY_TOAST_MS = 2200;
 
 const COLOR_META = {
   red: { hex: '#E0532F', shape: 'square', labelKey: 'color_red' },
@@ -51,6 +52,13 @@ function shapeSVG(shape, fill) {
   if (shape === 'square') return `<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="${fill}"/>`;
   if (shape === 'diamond') return `<rect x="3" y="3" width="6" height="6" fill="${fill}" transform="rotate(45 6 6)"/>`;
   return '';
+}
+
+/** Small curved play-direction arrow (clockwise when `cw`), mirrored for counter-clockwise.
+ *  Style mirrors js/difficulty-tiers.js's inline-SVG glyph pattern (currentColor, aria-hidden). */
+function dirArrowSVG(cw) {
+  const inner = '<path d="M18.4 7.4 A8 8 0 1 0 20 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M13.9 5.7 L19.4 6.7 L18.3 12.1 Z" fill="currentColor"/>';
+  return `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${cw ? inner : `<g transform="translate(24,0) scale(-1,1)">${inner}</g>`}</svg>`;
 }
 
 function colorGlyphHTML(color, size = 12) {
@@ -155,6 +163,8 @@ class UnoUI {
     this.timers = [];
     this._pendingWildId = null;
     this._setupExpanded = null;
+    this._penaltyToast = null;
+    this._penaltyTimer = null;
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
@@ -171,6 +181,7 @@ class UnoUI {
     for (const tm of this.timers) clearTimeout(tm);
     this.timers = [];
     clearTimeout(this._confirmTimer);
+    clearTimeout(this._penaltyTimer);
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     this.container.innerHTML = '';
@@ -246,7 +257,7 @@ class UnoUI {
     saveSettings(this.players, this.difficulty, this.nextStarter);
     clearGame();
     this.seats = this._buildSeats(this.players);
-    this.game = new UnoGame({ playerCount: this.players, startPlayer });
+    this.game = new UnoGame({ playerCount: this.players, startPlayer, onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
     this._afterStateChange();
   }
@@ -255,9 +266,25 @@ class UnoUI {
     this.seats = saved.seats;
     this.players = saved.seats.length;
     this.difficulty = saved.difficulty;
-    this.game = UnoGame.fromSnapshot(saved.snap);
+    this.game = UnoGame.fromSnapshot(saved.snap, { onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
     this._afterStateChange();
+  }
+
+  /** Engine event hook. Announces a penalty draw (a +2 stack lump, a Wild+4 victim, or a
+   *  first-card +2) as a short auto-dismissing toast; the badge/render already show the live
+   *  pending amount, this names the moment the cards actually land. */
+  _onEngineEvent(type, payload) {
+    if (type !== 'penaltyDraw') return;
+    const pi = payload.playerIndex;
+    const n = payload.amount;
+    const name = (this.seats && this.seats[pi]) ? this.seats[pi].name : '';
+    this._penaltyToast = pi === HUMAN ? t('penalty_draw_you', { n }) : t('penalty_draw_opp', { name, n });
+    clearTimeout(this._penaltyTimer);
+    this._penaltyTimer = setTimeout(() => {
+      this._penaltyToast = null;
+      if (this.view === 'game' && this.game) this.renderGame();
+    }, PENALTY_TOAST_MS);
   }
 
   /** Single funnel after every engine action: checkpoint, render, resolve a finished
@@ -333,6 +360,8 @@ class UnoUI {
 
     const showFirstCardChooser = g.phase === 'chooseColor' && g.pendingWild.isFirstCard;
     const showCardWildChooser = this._pendingWildId != null;
+    const chooserOpen = showFirstCardChooser || showCardWildChooser;
+    const showDir = this.seats.length > 2 && g.phase !== 'over';
 
     this.container.innerHTML = `
       <div class="un-root">
@@ -347,21 +376,24 @@ class UnoUI {
               </div>`).join('')}
           </div>
 
-          <p class="un-status" aria-live="polite">${esc(this._seatStatusText())}</p>
+          <p class="un-status" aria-live="polite">${chooserOpen ? '' : esc(this._seatStatusText())}</p>
 
           <div class="un-mat">
             <button type="button" class="un-pile un-drawpile ${drawTappable ? 'is-live' : ''}" data-action="draw-pile"
               ${drawTappable ? '' : 'disabled'} aria-label="${esc(t('aria_draw_pile', { n: g.deck.length }))}">
               ${cardHTML({ id: -1, color: 'wild', kind: 'wild', value: null }, { back: true })}
               <span class="un-pilecount">${g.deck.length}</span>
-              ${g.pendingDraw > 0 ? `<span class="un-pendingbadge">${esc(t('pending_draw', { n: g.pendingDraw }))}</span>` : ''}
             </button>
             <div class="un-pile un-discardpile" aria-label="${esc(t('aria_discard_pile', { card: cardAriaLabel(top) }))}">
               ${cardHTML(top, {})}
               <span class="un-colorchip" data-color="${activeColor || top.color}" aria-hidden="true">${activeColor ? colorGlyphHTML(activeColor, 14) : ''}</span>
             </div>
-            ${showFirstCardChooser || showCardWildChooser ? this._colorChooserHTML() : ''}
+            ${showDir ? `<span class="un-dir" role="img" aria-label="${esc(t(g.direction === 1 ? 'direction_cw' : 'direction_ccw'))}">${dirArrowSVG(g.direction === 1)}</span>` : ''}
+            ${g.pendingDraw > 0 ? `<span class="un-pendingbadge">${esc(t('pending_draw', { n: g.pendingDraw }))}</span>` : ''}
+            ${chooserOpen ? this._colorChooserHTML() : ''}
           </div>
+
+          ${this._penaltyToast ? `<div class="un-toast" role="status">${esc(this._penaltyToast)}</div>` : ''}
 
           <div class="un-handwrap">
             ${g.players[HUMAN].hand.length === 1 ? `<span class="un-unochip un-unochip-self">${t('uno_banner')}</span>` : ''}
@@ -439,6 +471,7 @@ class UnoUI {
           <li>${t('help_bullet1')}</li>
           <li>${t('help_bullet2')}</li>
           <li>${t('help_bullet3')}</li>
+          <li>${t('help_bullet4')}</li>
         </ul>
       </div>`;
     this.container.querySelector('.un-root').appendChild(overlay);

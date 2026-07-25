@@ -68,9 +68,26 @@ values (`easy`/`medium`/`hard`/`expert`) are unchanged, label-only. The difficul
 segmented buttons render a COLORED ski-slope shape (`diffShapeSVG`/`tierOf`, imported from
 `js/difficulty-tiers.js` — the shape now carries an inline `fill` per tier, green/blue/black) before
 the difficulty label, ~1em, via `.cf-root .lb-dshape` sizing rules in `connect-four.css`.
-**Overflow fix (2026-07-24):** `.cf-seg` now has `min-width:0`/`white-space:nowrap`/an ellipsis
-fallback, plus a `max-width:400px` font step-down to 0.8rem, so Expert/Experto (the longest label,
-either language) fits its 4-track grid at 375px without clipping or overlap.
+**Overflow fix (2026-07-24, corrected 2026-07-25):** the 2026-07-24 fix (`min-width:0` +
+`white-space:nowrap` + an ellipsis fallback + a `max-width:400px` font step-down to 0.8rem) was
+wrong: it papered over clipping with an ellipsis instead of preventing it, and the 400px
+breakpoint excluded real devices — an iPhone 16 Pro's 402px viewport sits just above it, so
+FB4 QA found "Ordenador"/"Difícil" still clipping to things like "M…" at that exact width, worse
+in Spanish. Fixed 2026-07-25: `.cf-seg` no longer truncates at all (`overflow:hidden` /
+`text-overflow:ellipsis` removed — a short setting word getting an ellipsis is data loss, not
+overflow control). It's now `display:inline-flex; align-items:center; justify-content:center`
+at every width. The narrow-phone media query moved from `max-width:400px` to `max-width:480px`
+(covers the full 375-430px realistic phone range in one query) and, in addition to the existing
+font step-down (now 0.68rem, `padding:8px 2px`), switches `.cf-seg` to `flex-direction:column`
+so the difficulty row's `diffShapeSVG` icon stacks ABOVE its label instead of forcing icon+text
+onto one line — same technique as `nuts-bolts/css/nuts-bolts.css`'s `.nb-segbtn-label` rule for
+its own 4-track difficulty picker. `white-space` also switches to `normal` at that breakpoint as
+a safety net (a label that still doesn't fit wraps to a second line rather than clipping or
+overlapping its neighbor); the who-first row has no icon so this just centers its (short) text.
+Verified with a real browser at 375/402/430px logical width, both languages, both rows (`.cf-seg`
+`scrollWidth` vs `clientWidth` and each `.cf-segmented` row's own overflow, not just eyeballing
+it): zero overflow anywhere, including "Experto" + its ski-slope icon and "Ordenador" (the longest
+label in either language on either row).
 
 ### Hint panel: per-column exact/estimate mix (2026-07-23, batch 2 of the 2026-07-23 feedback arc)
 

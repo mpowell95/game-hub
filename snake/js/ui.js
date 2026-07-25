@@ -445,7 +445,9 @@ class SnakeUI {
     c.fillRect(head.x * cell + Math.floor(cell / 2) - 1, head.y * cell + Math.floor(cell / 2) - 1, 2, 2);
     if (this.game.food) {
       const f = this.game.food;
-      c.fillStyle = '#28340f';
+      c.fillStyle = '#a8462f';   // muted brick red accent (2026-07-25, Matt opted in): still
+                                 // reads on the pale LCD green, distinct hue from the snake's
+                                 // dark pixels, shape (filled circle) unchanged as the primary cue
       c.beginPath();
       c.arc(f.x * cell + cell / 2, f.y * cell + cell / 2, cell / 2 - 1.5, 0, Math.PI * 2);
       c.fill();

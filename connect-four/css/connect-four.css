@@ -91,14 +91,32 @@
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   min-width: 0;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .cf-seg:hover { color: var(--cf-ink); }
-/* Expert/Experto is the widest label in a 4-track grid (root CLAUDE.md, "Fix the two broken
-   setup layouts") — step the font down on narrow phones so no label clips or overlaps. */
-@media (max-width: 400px) {
-  .cf-seg { font-size: 0.7rem; padding: 10px 2px; letter-spacing: -0.01em; }
+/* Expert/Experto (and Spanish's "Ordenador" on the who-first row) is the widest label in a
+   4-track grid (root CLAUDE.md, "Fix the two broken setup layouts"). Labels must NEVER clip —
+   ellipsis on a short setting word is data loss, not overflow control (2026-07-25 QA: an iPhone
+   16 Pro's 402px viewport sat just above the old 400px breakpoint, so full-size labels rendered
+   and clipped — see this file's CLAUDE.md for the incident). Below 480px (covers the full
+   375-430px realistic phone range) step the font down AND, for segments that carry a
+   diffShapeSVG icon before the label (the difficulty row), stack the icon above the label
+   instead of forcing them onto one line — same technique as nuts-bolts.css's
+   `.nb-segbtn-label` under its own max-width:400px rule. The who-first row has no icon, so this
+   just centers its (already short) text; `white-space: normal` is a safety net so a label that
+   still doesn't fit wraps to a second line rather than clipping or overlapping its neighbor. */
+@media (max-width: 480px) {
+  .cf-seg {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.68rem;
+    padding: 8px 2px;
+    letter-spacing: -0.01em;
+    white-space: normal;
+  }
+  .cf-root .cf-seg .lb-dshape { margin-right: 0; }
 }
 /* Ski-slope difficulty shape (js/difficulty-tiers.js's diffShapeSVG) rendered before the label,
    sized ~1em; shape + label together, never hue alone (colorblind rule, root CLAUDE.md). */

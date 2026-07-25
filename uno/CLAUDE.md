@@ -91,13 +91,45 @@ uno/index.html      standalone host (same init() as in-hub)
 Difficulty ids `easy`/`medium`/`hard` (already mapped to tiers 1-3 in
 `js/difficulty-tiers.js`, so no new tier work was needed). Every decision comes from
 `game.getLegalMoves()` — never invented — and is a plain `{ type: 'play'|'draw', cardId?,
-color? }` action, replayable for a future MP host. Easy is uniform-random over legal
-cards/colors. Medium+ prefers cards matching the hand's majority color, dumps non-number
-cards when an opponent is at ≤2 cards, and holds wilds until nothing else is legal (they're
-naturally last since `pickCard` only reaches the `wilds` fallback once `nonWild` is empty).
-Hard additionally: always answers an active +2 stack with its own +2 if it has one (never
-voluntarily eats the pile), and targets Skip/Reverse/+2 at whichever opponent is about to
-move (`game.peekNext(1)`) when that opponent is also the lowest-card player.
+color? }` action, replayable for a future MP host. **`chooseAction` is a pure function of
+`game`/`playerIndex`/`difficulty`/`rng`** plus ONE optional read-only side channel, `memory`
+(below), so the whole AI stays headless-testable with no DOM.
+
+- **Easy** is uniform-random over legal cards (untouched — do not add heuristics to its
+  branch). Wild colour still comes from `pickWildColor` (hand majority) for every difficulty.
+- **Medium** (`pickCard`, difficulty `'medium'`) prefers the hand's majority colour, dumps
+  non-number cards when an opponent is at ≤2 cards, and holds wilds until nothing else is
+  legal (they're naturally last since the `wilds` fallback is only reached once `nonWild` is
+  empty).
+- **Hard is a light Monte-Carlo planner** (`planHard`), NOT a pure heuristic. For each legal
+  move it plays out `HARD_ROLLOUTS` (=3) quick self-vs-self games with `UnoGame.fromSnapshot`
+  and keeps the move with the best win rate; clones share the caller's `rng`, so the search
+  is a pure, reproducible function of the seed. The **rollout policy is `pickCard` at
+  difficulty `'hard'`** — a shaped heuristic that carries every behaviour the FB4 QA asked for
+  and drives every simulated line: answer an active +2 stack with a +2 (never eat the pile);
+  in 2p, spend Skip/Reverse the instant they're legal (Reverse acts as Skip, so each is a
+  risk-free extra turn toward emptying the hand — the single biggest heads-up lever); hold a
+  lone +2 unless punishing a low opponent or holding two+ (a solo +2 the opponent must answer
+  can start a stacking war you then lose); in 3-4p, only spend an action card when the seat it
+  would structurally hit (the NEXT player — a Skip/Reverse cannot be aimed at an arbitrary
+  seat in this engine, see `_advance`) is the lowest-card opponent at ≤2, otherwise hold the
+  weapons and play a number, majority colour first.
+- **Wild-colour memory** (`memory.byPlayer`, Hard-only, optional): `pickWildColor` takes an
+  `avoid` set of colours OPPONENTS have forced with a wild; it's a mild tie-break (−1 vs a
+  colour-strength weight of ×2), so it only ever breaks a tie between equally-strong colours —
+  never strands the AI in a weak colour to spite an opponent (that variant measured *worse*).
+  `ui.js` builds `memory` from the engine's `colorChosen` events; omit it and play is
+  identical bar that tweak.
+
+**Why a planner and not just the heuristic (measured, do not re-litigate):** a *pure*-heuristic
+Hard topped out at ~52% vs Medium in the 500-game harness — Medium's majority-colour play is
+already strong, so the tempo/targeting edges only bought ~2 points, short of the 55% bar. The
+Monte-Carlo probe (`test.js`) showed the game is NOT luck-capped (even 20 random rollouts win
+~88% vs Medium), so Hard was rebuilt as the rollout planner. **Measured 2026-07-25 over 500
+seeded 2p games each, seat parity alternated to cancel the opener advantage: Hard beats Easy
+85.0%, Hard beats Medium 85.8%** (thresholds 65% / 55%). These are asserted in `test.js` and
+fail the suite if they regress — if you touch `ai.js`, re-run `node uno/js/test.js` and update
+these numbers here.
 
 ## UI notes (`ui.js`)
 
@@ -155,6 +187,31 @@ move (`game.peekNext(1)`) when that opponent is also the lowest-card player.
   chips, never hue alone. Card color names in copy stay Red/Yellow/Green/Blue (English) /
   Rojo/Amarillo/Verde/Azul (Spanish) even though the underlying hex/shape pairing is the
   hub's vermilion/teal convention.
+- **The wild colour chooser blanks the turn-status line while it's open** (FB4 QA fix,
+  2026-07-25). `.un-colorchoose` is `position:absolute; inset:-10px` inside the
+  `position:relative` `.un-mat`, so its "Choose a color" heading used to overlap the
+  `.un-status` line ("Your turn") sitting directly above the mat. `renderGame` now renders
+  `.un-status` empty whenever `chooserOpen` (`showFirstCardChooser || showCardWildChooser`) —
+  the chooser is a modal dialog, so the status text is redundant while it's up. Covers both
+  chooser cases (first-card wild and a mid-hand wild tap) and both languages (the status is
+  blanked, not translated). `.un-status` keeps its `min-height` so layout doesn't jump.
+- **Penalty-draw toast + a prominent pending badge** (FB4 QA, 2026-07-25). The engine already
+  emits `penaltyDraw {playerIndex, amount}` (a +2-stack lump, a Wild+4 victim, or a first-card
+  +2); `ui.js` wires `onEvent` on both the `new UnoGame` and `fromSnapshot` paths to
+  `_onEngineEvent`, which sets a short-lived `this._penaltyToast` ("You drew {n}" for the
+  human / "{name} drew {n}" for an AI) and a `PENALTY_TOAST_MS` (2200) timer that clears it and
+  re-renders. `renderGame` shows it as a `.un-toast` banner; it's transient UI, never
+  snapshotted. The pending-stack badge (`.un-pendingbadge`) moved out of the draw-pile button
+  to a `.un-mat` child, centred at the top of the mat and enlarged (15px), so a growing stack
+  can't be missed. A pending stack and an open colour chooser can never coexist (a +2 stack
+  restricts legal plays to +2s only — `getLegalMoves` with `pendingDraw>0` — so no wild, hence
+  no colour choice), so the two absolutely-positioned elements never collide.
+- **Play-direction indicator (3-4 players only)** (FB4 QA, 2026-07-25). A small curved arrow
+  (`dirArrowSVG`, mirrored for the two directions, `currentColor`, the `js/difficulty-tiers.js`
+  inline-SVG style) sits top-right of `.un-mat` with an aria-label (`direction_cw`/
+  `direction_ccw`). Rendered only when `this.seats.length > 2` (2p Reverse acts as Skip, so
+  direction is meaningless) and flips straight off `g.direction` (`1` = clockwise). Independent
+  of the `.un-oppchip.is-turn` active-player highlight.
 - **The "Uno!" indicator is a persistent computed badge, not a timed toast.** Any seat
   (human or AI) with exactly one card shows a small "UNO!" chip next to their name/count,
   recomputed every render straight from `hand.length === 1` — simpler and more robust
@@ -200,7 +257,7 @@ own `title` key. Art: `GAME_ART['uno']` in `js/game-art.js` (fanned cards, lands
 ```
 node uno/js/test.js
 ```
-97 assertions: deck composition (exact counts per color/kind), +2 stacking accumulation and
+99 assertions: deck composition (exact counts per color/kind), +2 stacking accumulation and
 resolution, penalty draws being a single lump (not draw-until-playable), draw-until-playable
 stopping at the first legal card and forcing its play, reshuffle-on-exhaustion preserving
 the 108-card total, Reverse-as-Skip at 2 players vs. a real direction flip at 3+, every
@@ -209,6 +266,13 @@ for every card kind** (number/skip/reverse at 2p and 4p/+2/wild, plus an end-to-
 `UnoGame` construction opening on the requested seat for all 3 seats of a 3-player game),
 win detection, and 60 full AI-vs-AI random games (20 each at 2/3/4 players, seeded rng) all
 terminating with the card count intact. Wired into `run-all-tests.mjs`.
+
+The final two assertions are the **AI win-rate harness** (`playMatchup`/`hardWinRate`): 500
+seeded 2-player games per matchup, both seats driven by `chooseAction`, Hard's seat alternated
+each game so the opener's tempo advantage cancels (neither seat gets "better" randomness — one
+shared rng stream, only the difficulty label differs). It asserts Hard beats Easy ≥65% and
+Medium ≥55%, and prints the actual rates (85.0% / 85.8% as of 2026-07-25 — see AI notes). The
+harness adds ~10s to the suite (1000 games plus rollouts); that's expected.
 
 ## Verification (2026-07-24)
 

@@ -345,5 +345,85 @@ for (const playerCount of [2, 3, 4]) {
   ok(`random games (${playerCount}p): none threw, card count always 108`, !threw);
 }
 
+// === AI-vs-AI win-rate harness (measured acceptance for the Hard heuristics) ==========
+//
+// Both seats are driven by chooseAction at two different difficulties. Hard must be
+// MEASURABLY stronger, so the suite fails if it doesn't clear the thresholds below. Two
+// guards keep this honest (no fudging the harness in Hard's favour):
+//   - Seat parity is alternated every game (Hard is seat 0 on even seeds, seat 1 on odd),
+//     so the opener's tempo advantage - seat 0 opens every default-startPlayer game -
+//     averages out and cannot be mistaken for AI skill.
+//   - Both seats draw from the SAME seeded rng stream, so neither gets "better" randomness;
+//     the only asymmetry is the difficulty label.
+// A wild colour chosen outside chooseAction's normal play path (the first-card-flip wild,
+// and a forced-drawn wild) uses one shared majority helper for BOTH seats, so that path is
+// symmetric too. The per-game `memory` (opponent wild colours) is rebuilt from every colour
+// actually applied, feeding Hard's wild-colour tie-break exactly as the UI does.
+
+function bestColorFor(hand, rng) {
+  const counts = { red: 0, yellow: 0, green: 0, blue: 0 };
+  for (const c of hand) if (counts[c.color] != null) counts[c.color]++;
+  let best = null, bestN = -1;
+  for (const col of COLORS) if (counts[col] > bestN) { bestN = counts[col]; best = col; }
+  return bestN > 0 ? best : COLORS[Math.floor(rng() * 4)];
+}
+
+function playMatchup(diffs, seed) {
+  const rng = seededRng(seed);
+  const game = new UnoGame({ playerCount: diffs.length, rng });
+  const memory = { byPlayer: {} };
+  const remember = (pi, color) => { (memory.byPlayer[pi] = memory.byPlayer[pi] || {})[color] = true; };
+  let guard = 0;
+  while (game.phase !== 'over' && guard++ < 20000) {
+    if (game.phase === 'chooseColor') {
+      const chooser = game.pendingWild.playerIndex;
+      const color = bestColorFor(game.players[chooser].hand, rng);
+      game.chooseColor(chooser, color);
+      remember(chooser, color);
+      continue;
+    }
+    const pi = game.currentPlayer;
+    const action = chooseAction(game, pi, diffs[pi], rng, memory);
+    if (action.type === 'draw') {
+      const res = game.draw(pi);
+      if (res.forcedPlay) {
+        const card = game.players[pi].hand.find((c) => c.id === res.forcedPlay);
+        const color = (card.kind === 'wild' || card.kind === 'wild4')
+          ? bestColorFor(game.players[pi].hand.filter((c) => c.id !== res.forcedPlay), rng) : undefined;
+        game.play(pi, res.forcedPlay, color);
+        if (color) remember(pi, color);
+      }
+    } else {
+      game.play(pi, action.cardId, action.color);
+      if (action.color) remember(pi, action.color);
+    }
+  }
+  return game;
+}
+
+/** `games` two-player matchups of hard vs `other`, Hard's seat alternated each game to
+ *  cancel the opener advantage. Returns Hard's win fraction. `seedBase` disjoint per call. */
+function hardWinRate(other, games, seedBase) {
+  let hardWins = 0;
+  for (let i = 0; i < games; i++) {
+    const hardSeat = i % 2;                       // alternate which seat is Hard
+    const diffs = hardSeat === 0 ? ['hard', other] : [other, 'hard'];
+    const game = playMatchup(diffs, seedBase + i);
+    if (game.phase === 'over' && game.winner === hardSeat) hardWins++;
+  }
+  return hardWins / games;
+}
+
+{
+  const GAMES = 500;
+  const vsEasy = hardWinRate('easy', GAMES, 100000);
+  const vsMedium = hardWinRate('medium', GAMES, 900000);
+  console.log(`\nUno AI win-rate (2p, ${GAMES} games each):`);
+  console.log(`  Hard vs Easy   : ${(vsEasy * 100).toFixed(1)}%  (threshold >= 65%)`);
+  console.log(`  Hard vs Medium : ${(vsMedium * 100).toFixed(1)}%  (threshold >= 55%)`);
+  ok(`AI: Hard beats Easy >= 65% over ${GAMES} games (was ${(vsEasy * 100).toFixed(1)}%)`, vsEasy >= 0.65);
+  ok(`AI: Hard beats Medium >= 55% over ${GAMES} games (was ${(vsMedium * 100).toFixed(1)}%)`, vsMedium >= 0.55);
+}
+
 console.log(`\nUno tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
