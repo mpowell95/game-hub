@@ -143,11 +143,29 @@ repo requires first** — which is a second, independent reason it must never tr
       through the existing per-game recorders and `recordHeadToHead`; if a change seems to require
       touching stored stats shapes, stop — that's a separate handoff under THE LAW.
 
-**The N-player question (path B) belongs here if it is ever taken up.** Extending `js/net.js` to a
-`guests: []` array reworks shared infrastructure that Chinchón and Escoba already depend on in
-production. It is the one piece of the plan that cannot be validated headlessly, so it needs a
-local pass against real rooms with the existing two games before anything depends on it. The
-standing recommendation remains **path (A) — cap MP at 2 humans** for every game's first pass.
+### The N-player extension (path B) — decided, and its verification lands here
+
+**DECIDED 2026-07-26 (Matt): MP must support 2-4 players for the multi-seat games** (Uno, Monopoly
+Deal, Parchís, Escoba). Extending `js/net.js` to a `guests: []` array is therefore required work,
+not a deferred maybe. See `HANDOFF-MP-ROADMAP.md` phase 3 for scope and the three open seat-count
+questions.
+
+**It cannot be validated in a cloud session at all** — its correctness depends on real
+reconnect and latency behaviour with 3+ concurrent writers, which is precisely what a headless
+`FakeRoom` cannot model. So this pass is mandatory, not optional:
+
+- [ ] Back up first (`node backups/rtdb-backup.mjs`), then review `database.rules.json` against
+      N-seat room traffic **before** the first real 3+ player match.
+- [ ] Chinchón and Escoba's existing **2-player** MP still works after the change — they are in
+      production and are the backward-compatibility test cases.
+- [ ] A real 3-seat match and a real 4-seat match complete on real devices.
+- [ ] Seat identity holds for **every** non-host seat, not just seat 1 — run B2 from each guest
+      device in turn. `_localSeat()` becomes "my index among N" and this is where it breaks.
+- [ ] Mid-match: one seat leaves and does not return. Confirm the agreed behaviour actually happens
+      rather than hanging the remaining players.
+- [ ] Head-to-head records one row per opponent (additive per-opponent, THE LAW rule 2 safe).
+- [ ] An old-build device is handed a new-shape room and degrades gracefully rather than corrupting
+      it (the room `v` field is the hook for this).
 
 ---
 

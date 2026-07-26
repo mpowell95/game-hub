@@ -147,12 +147,24 @@ fresh. **The key is permanent once shipped** — decide before the first write.
   writers, add per-seat join/leave/reconnect. No precedent to copy, and both shipped games would
   have to stay compatible.
 
-**Take (A) for every first pass**, and note it as a known limitation in that game's own
-`CLAUDE.md`, not silently. **Do not attempt (B) as a side effect of one game's MP work** — it
-changes shared infrastructure two games already depend on in production, and it is the one piece
-of this whole plan that genuinely cannot be validated headlessly. If (B) is ever wanted, it needs
-its own handoff, its own approval, and local verification before either it or a dependent game
-starts.
+**DECIDED 2026-07-26 (Matt): path (B) is required, for the multi-seat games only.** MP must
+support 2-4 players in Uno, Monopoly Deal, Parchís and Escoba. See
+`HANDOFF-MP-ROADMAP.md` for the exact per-game targets, three open questions about seat counts,
+and the sequencing.
+
+What this means for a session reading this doc:
+
+- **If your game is inherently 2-player** (Tic Tac Toe, Connect Four, Mancala, Dots and Boxes,
+  Filler, Boggle) — nothing changes. Build exactly 2 human seats, host 0 / guest 1, **do not touch
+  `js/net.js`**. Path B is explicitly not your job.
+- **If your game is multi-seat** (Uno, Monopoly Deal, Parchís, Escoba) — **you are blocked until
+  the `js/net.js` N-player extension ships** (roadmap phase 3). Do not start, and do not build a
+  2-human version intending to extend it later.
+
+**Still true: never change `js/net.js`'s protocol as a side effect of one game's MP work.** Path B
+gets its own handoff, its own review, and its own local verification pass with real devices at 3
+and 4 seats — it is shared infrastructure two production games depend on, and the one piece of
+this plan that cannot be validated headlessly.
 
 ### "Generalize the seat" means two different jobs
 
@@ -302,9 +314,10 @@ per-game spec at `HANDOFF-DOTS-BOXES.md`'s depth is real follow-up work once a s
   handling**, now possible because both lists are visible. Simultaneous reveal, not lockstep. Do
   not retrofit an `appendMove`-per-tile-trace protocol; intermediate progress isn't
   gameplay-relevant here.
-- **Open design question, still open:** should mid-round progress be visible to the opponent (a
-  live score race) or hidden until reveal (closer to how solo already frames "the reveal")? Either
-  is defensible. This was never decided — make it a conscious choice.
+- **DECIDED 2026-07-26 (Matt): hidden until reveal.** Mid-round progress is NOT visible to the
+  opponent — no live score race. The opponent's word list appears only at the end-of-round reveal,
+  matching how solo already frames the reveal as a discrete moment. This was the section's one open
+  design question and it is now closed; implement it that way, don't re-litigate it.
 - **Note:** the synced-countdown design is the other item a web session can't fully de-risk (clock
   skew between two real devices). Design it off the room timestamp, flag it for the local pass.
 
