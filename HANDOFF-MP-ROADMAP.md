@@ -18,30 +18,41 @@ order to do them in, who should do each, and what is still undecided.
 
 ### Which games are which (verified against the code, 2026-07-26)
 
-| Game | Local max today | MP target |
-|---|---|---|
-| Uno | **2-4** (`uno/js/game.js:62` throws outside 2-4) | 2-4 → needs path B |
-| Monopoly Deal | **2-5** (`ui.js:83` takes up to 4 opponents) | see open question 2 below |
-| Parchís | **2-4** | 2-4 → needs path B |
-| Escoba | **2-3** (`escoba/CLAUDE.md:11`, "2-3 players vs AI") | see open question 1 below |
-| Chinchón | **2-4** | see open question 3 below |
-| Tic Tac Toe, Connect Four, Mancala, Dots and Boxes, Filler, Boggle | 2 | 2, no protocol change |
+**Terminology, because "locally" is ambiguous and was used both ways in an earlier draft:**
+
+- **"Seats the game supports today"** = how many player slots its setup screen can fill *before any
+  networking exists*. In every game below that means **you at one seat plus AI at the rest** — it
+  does NOT mean that many humans can play on one device.
+- **Hot-seat** (two real humans sharing one device) exists in exactly **one** game: Mancala's
+  `mode:'friend'`. No game seats more than two humans on one device today.
+- **"Local machine" / "locally" elsewhere in these docs** always means the *other* sense — work that
+  must run on Matt's own machine rather than a cloud container. See `HANDOFF-MP-LOCAL-MACHINE.md`.
+
+| Game | Seats supported today (you + AI) | Hot-seat? | MP target |
+|---|---|---|---|
+| Uno | **2-4** (`uno/js/game.js:62` throws outside 2-4) | no | 2-4 → needs path B |
+| Monopoly Deal | **2-5** (`ui.js:83` takes up to 4 opponents) | no | see open question 2 below |
+| Parchís | **2-4** | no | 2-4 → needs path B |
+| Escoba | **2-3** (`escoba/CLAUDE.md:11`, "2-3 players vs AI") | no | see open question 1 below |
+| Chinchón | **2-4** | no | see open question 3 below |
+| Mancala | 2 | **yes** (`mode:'friend'`) | 2, no protocol change |
+| Tic Tac Toe, Connect Four, Dots and Boxes, Filler, Boggle | 2 | no | 2, no protocol change |
 
 Ball Run, Nuts & Bolts and Snake are out of scope entirely and are not touched by any phase here.
 
 ### Three open questions, flagged not assumed
 
-1. **Escoba maxes at 3 players locally, not 4.** Its own CLAUDE.md says "2-3 players vs AI". So
+1. **Escoba's setup can seat 3 players at most, not 4.** Its own CLAUDE.md says "2-3 players vs AI". So
    "Escoba 2-4" isn't reachable without also extending the *game* to a 4th seat, which is separate
-   work from the network protocol. **Assumed for now: Escoba MP = 2-3, matching its local max.**
-2. **Monopoly Deal supports 2-5 locally**, one more than the "2-4" specified. **Assumed for now:
-   MP = 2-4 as specified**, with the 5-player local mode staying solo-only. Say the word if MP
-   should match local and go to 5.
-3. **Chinchón is 2-4 locally and already has shipped 2-player MP** — the identical position to
+   work from the network protocol. **Assumed for now: Escoba MP = 2-3, matching the seats it supports today.**
+2. **Monopoly Deal's setup can seat 5**, one more than the "2-4" specified. **Assumed for now:
+   MP = 2-4 as specified**, with the 5-seat game staying solo-only. Say the word if MP should
+   match the full 5 instead.
+3. **Chinchón's setup can seat 4 and it already has shipped 2-player MP** — the identical position to
    Escoba, but it wasn't in the list. **Assumed for now: NOT included**, i.e. Chinchón MP stays at
    2 humans. It is cheap to add to phase 4 if wanted, since path B will already exist.
 
-The default in all three cases is "match the game's existing local max, and don't extend a game's
+The default in all three cases is "match the seats the game already supports, and don't extend a game's
 seat count as a side effect of network work." Correct me on any of them and the affected phase-4
 item changes; nothing before phase 4 is affected either way.
 
