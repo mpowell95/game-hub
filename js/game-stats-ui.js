@@ -74,6 +74,14 @@ const DIFF_META = {
   normal: { labelKey: 'gs_diff_intermediate', order: 2 }, medium: { labelKey: 'gs_diff_intermediate', order: 2 }, intermediate: { labelKey: 'gs_diff_intermediate', order: 2 }, average: { labelKey: 'gs_diff_intermediate', order: 2 },
   hard: { labelKey: 'gs_diff_pro', order: 3 }, pro: { labelKey: 'gs_diff_pro', order: 3 }, dificil: { labelKey: 'gs_diff_pro', order: 3 },
   expert: { labelKey: 'gs_diff_expert', order: 4 },
+  // Multiplayer results record under their own bucket rather than inheriting
+  // whatever AI tier the local setup screen happened to show (Tic Tac Toe, MP
+  // phase 1 — see MP_DIFFICULTY in tic-tac-toe/js/ui.js). It is deliberately
+  // unmapped in js/difficulty-tiers.js, so tierOf() returns null: these plays
+  // count in every total and in the leaderboard's All filter, and claim no
+  // tier pill. This row only gives the bucket a real name in the by-difficulty
+  // table instead of the raw-key fallback ("Mp").
+  mp: { labelKey: 'gs_diff_mp', order: 5 },
   legacy: { labelKey: 'gs_diff_legacy', order: 9 },
 };
 

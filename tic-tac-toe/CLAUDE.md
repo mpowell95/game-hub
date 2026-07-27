@@ -5,7 +5,9 @@
 > loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`.
+Hub integration: in-hub `module:`. `isInProgress()` is mode-split (see "Multiplayer" below):
+**solo** returns `false` (autosave/resume, leaving is lossless); **MP** returns `true` while a
+room is joined, since leaving is consequential for the live opponent.
 
 ## Notes
 
@@ -79,6 +81,121 @@ Never cleared on `destroy()` or hub navigation — that is the whole point. `isI
 flipped to the "autosave/resume built in" meaning (root `CLAUDE.md`): it always returns `false`
 now, so the hub's "leave game?" confirm no longer appears for this game. Stats recording is
 untouched — a resumed match records exactly as an uninterrupted one, including ties.
+
+## Multiplayer (2026-07-27, HANDOFF-MP-ROADMAP.md phase 1)
+
+Two human devices over the shared `js/net.js` room protocol, both variants. **Phase 1 of the
+roadmap: this is the game the repo's MP conventions were settled in**, so phases 2-4 copy from
+here. `js/net.js` itself is untouched — 2 human seats, host 0 / guest 1. Extending the protocol
+to 2-4 players is roadmap phase 3 and is not part of this.
+
+**Status: the protocol is proven headlessly against `FakeRoom` (`test-mp-lockstep.mjs`, T1-T7,
+all five invariant probes green). No real room has ever been created — a cloud session cannot
+reach Firebase. Real-room behaviour is unverified** until
+`HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices; B2 (guest seat
+identity) is the priority.
+
+### Seats
+
+`_localSeat()` was built in from the start, not retrofitted. `this.marks` is a two-entry
+seat->mark array (`marks[0]` = the host's seat, `marks[1]` = the guest's); solo is the
+degenerate case where the local human is seat 0, so `marks` is exactly the old
+`humanMark`/`aiMark` pair with the seat made explicit. Everything "self" goes through
+`_localSeat()` -> `_myMark()`/`_oppMark()`, including `_commitStats()`'s win/loss — **a guest
+recording the host's result is a THE LAW rule 2 violation** (a loss written as a win is not
+additive-safe). The old save key's `humanMark`/`aiMark` FIELD names are unchanged (rule 5); only
+the in-memory representation generalized.
+
+### How the room's vocabulary maps
+
+This game has no rounds, no deck, no dealer and no rng, so `net.js`'s existing fields are
+re-used rather than extended:
+
+| `net.js` | Tic Tac Toe |
+|---|---|
+| a `round` record | ONE GAME of a rematch series in this room |
+| `round.n` | the game number |
+| `round.deck` | unused |
+| `round.dealer` | the SEAT that plays X in that game (the "who opens" datum) |
+| `writeResult` | **deliberately never called** — it sets `status:'ended'`, which would kill a room that is meant to host the next game. So `status:'ended'` means exactly one thing here: somebody abandoned the room |
+
+The host is the only side that decides who opens (`_resolveStarter()`, the same
+`firstMode`/`nextStarter` logic solo uses, so Alternate alternates across a series). The guest
+NEVER derives it — it reads the published record. Both sides then start the game through the one
+entry point, `_mpApplyRoundRecord()`.
+
+### The remote seat is not an agent
+
+Chinchón and Escoba's engines `await` a per-player `agent`, so their MP glue swaps in a
+`_makeRemoteAgent()`. This engine is a synchronous `applyMove(state, move)` with the UI deciding
+who acts, so the remote seat is a third kind of **turn owner in the UI's own dispatch**: where
+solo schedules the AI on a timer (`_afterStateChange`'s `AI_THINK_MS` branch), MP renders and
+waits for the next entry in the room's move log. `_isLegal()` is the single legality gate, read
+by the local tap path AND by every remote move before it is applied — one gate for both seats is
+what makes a network-driven seat safe.
+
+### Keys and files
+
+- **`tic-tac-toe/js/hash.js`** — FNV-1a state hash, same construction as `chinchon/js/hash.js`.
+  Nothing is sorted (every array here is positional, unlike a hand of cards). Ultimate's derived
+  routing state (`meta`, `forcedBoard`) is deliberately IN the hash: it is exactly where an
+  Ultimate desync would hide.
+- **`gamehub.tictactoe.mp.v1`** — a THIRD key, alongside the settings key and the solo autosave.
+  Follows Chinchón's separate-key choice, not Escoba's mp-sub-object shape. Permanent (rule 5).
+  Written after every settled move and again at a game's end; 30-minute rejoin window.
+- Room `config` carries only `{ variant }`.
+
+### Which invariant checks apply (`js/CLAUDE.md:271`, probes T1-T7 in `test-mp-lockstep.mjs`)
+
+1. **Decide the game end on `state.over`, never `state.winner`** — `winner` is null at the exact
+   moment a DRAW ends, and Classic is draw-heavy by construction. T2.
+2. **Nothing device-relative is ever transmitted** — `_mpSnapshot()` carries the absolute board
+   plus seat-indexed `xSeat`/`series` only, and `_mpApplyRecovery` re-derives this device's own
+   mark from `_localSeat()`. Solved by construction rather than remapped on arrival. T4.
+3. **Ported by analogy; the literal mechanism does not exist here** — there is no consumable
+   randomness queue in a game with no rng. The failure shape (per-round consumption state leaking
+   into the next round) maps onto the move log: `startRound` clears it atomically with the record,
+   `_mpApplyRoundRecord` rebuilds the cache from that snapshot and resets `appliedSeq`, and every
+   entry carries its game number. T5, which states the non-mapping in its own failure message.
+4. **Autosave AFTER the move's own MP bookkeeping** — `_afterStateChange`'s save runs once the
+   seq has been reserved/advanced, so a rejoin replays only genuinely new entries. T6.
+5. **A boundary restore keeps the series and awaits the host's record** — the series tally is
+   carried through untouched (the `initMatch`-wipe analogue) and a restoring guest blocks on
+   `_mpAwaitNextGame()` rather than guessing who opens. T7.
+
+Additionally: on a hash mismatch the **host takes the seq** (keeping its authoritative state and
+publishing a snapshot) while the **guest latches** (`mp.awaitingRecovery`) until that snapshot
+lands. Without the latch every room update re-delivers the same entry onto the diverged state and
+burns the 3-attempt budget before the host can answer — see `js/CLAUDE.md`'s note that the
+reference games are shielded from this only by their agent interface.
+
+### `isInProgress()` — the exception within the exception
+
+Solo still returns `false` (autosave/resume, leaving is lossless). **MP returns `true` for as
+long as a room is joined**, including BETWEEN games while the opponent sits on the "waiting for
+host" screen: leaving is consequential for them even though this device could rejoin. Same split
+as `chinchon/js/ui.js:2441` and `escoba/js/ui.js:2124`.
+
+### Stats
+
+Both devices record their own result and that is not double-counting (`gamehub.stats` is keyed
+per PLAYER). `_statsCommitted` is set before any write and is the idempotence guard. **MP results
+record under a `'mp'` difficulty bucket**, not the local setup's last AI tier — a human opponent
+has no AI tier. `tierOf('mp')` is null, so the play counts in every total and in the
+leaderboard's All filter and claims no tier pill (`DIFF_META` in `js/game-stats-ui.js` gives it a
+label). `recordHeadToHead('tictactoe', opp, won)` runs in MP only, inside a try/catch that can
+never block the ordinary result. **An abandoned or desynced game is deliberately NOT recorded**:
+it was not played to a conclusion, and inventing a win or loss for it would be fabricating
+history. Games in the series that DID conclude were each recorded at their own end.
+
+### Known limitations (path A, by design)
+
+- Exactly 2 human seats. Not a constraint of this game (it is 2-player anyway), but stated so a
+  phase-3 reader knows nothing here needs revisiting.
+- A move appended while offline advances the local seq with nothing written to the room, leaving
+  a gap the peer waits on. Chinchón and Escoba have the same property; recovery is the backstop.
+  Flagged for the local pass.
+- The 4-character room code is not case- or lookalike-proofed beyond `net.js`'s own alphabet.
 
 ---
 

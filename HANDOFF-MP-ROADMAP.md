@@ -303,7 +303,7 @@ gets reviewed before any code is written.
 |---|---|---|
 | 0a | Docs on `main` | **done** (`275a94b`) |
 | 0b | Connect Four doc row | skipped; folded into phase 2 item 4 |
-| 1 | Tic Tac Toe MP | **shipped**, branch `claude/mp-tictactoe-rruu9j`, reviewed — headless only |
+| 1 | Tic Tac Toe MP | **DONE and merged to `main`** — code + headless proof; protocol proven against `FakeRoom`, real-room behaviour unverified. `tic-tac-toe/js/hash.js`, its `_mp*` methods and the T1-T7 lockstep block are now on `main`, so phase-2 prompts can point at real files |
 | 1v | Tic Tac Toe verification | **NOT a build blocker** (corrected 2026-07-27). Category C done. Remaining B/D items are pre-DEPLOY, batched with every other game |
 | 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | **unblocked — build now**, one per session |
 | 3 | `js/net.js` N-player handoff, then implementation | blocked on phase 2 code landing (not on verification) |

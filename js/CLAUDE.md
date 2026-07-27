@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón and Escoba |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba and Tic Tac Toe |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -270,8 +270,9 @@ below; every other in-hub game keeps its current light-only look until its own P
 
 ### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
 
-Chinchón and Escoba share one lockstep protocol over `js/net.js` (`rooms/<CODE>`: a
-seq-keyed move log, per-round `round` records, a `recovery` field). Both engines apply
+Chinchón, Escoba and Tic Tac Toe share one lockstep protocol over `js/net.js`
+(`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
+Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
 every applied remote move; the host is authoritative for desync recovery. Five
 invariants below each encode a real bug found and fixed by `test-mp-lockstep.mjs`
@@ -306,6 +307,48 @@ of these came back):
    published round record (`_mpAwaitNextRound`) before playing, in both games — the
    next round's deck must come from the host, not a stale `presetDeck` or a local
    shuffle.
+
+### The third consumer: Tic Tac Toe (2026-07-27, roadmap phase 1)
+
+`HANDOFF-MP-ROADMAP.md` phase 1. **The conventions phases 2-4 copy were settled here**, in a
+game that shares none of Chinchón's vocabulary — no rounds, no deck, no dealer, no rng, no
+agent interface. `js/net.js` was NOT touched (2 human seats, host 0 / guest 1); the N-player
+extension is phase 3 and is separate work. Read `tic-tac-toe/CLAUDE.md` for the full write-up
+and `test-mp-lockstep.mjs`'s T1-T7 block for the executable form. What generalizes:
+
+- **`_localSeat()` from the first line, not retrofitted.** `_localSeat()`/`_myMark()`/
+  `_oppMark()`/`_seatOfMark()` replaced the old `humanMark`/`aiMark` fields with a
+  seat-indexed `marks[]`, so solo (local human = seat 0) is the degenerate case of the MP
+  model rather than a separate path.
+- **A snapshot with NOTHING device-relative in it beats remapping after the fact.** Invariant
+  2 is solved by construction: `_mpSnapshot()` transmits only the absolute board plus
+  seat-indexed `xSeat`/`series`, and the receiver derives its own side from `_localSeat()`.
+  Prefer this to Chinchón/Escoba's "trust nothing, remap on arrival" whenever a game's
+  snapshot is being designed fresh.
+- **Vocabulary mapping onto `net.js`'s existing fields, never new fields.** One room hosts a
+  rematch SERIES: a `round` record is one game, `round.n` the game number, `round.deck`
+  unused, `round.dealer` the seat that plays X. `writeResult` is deliberately unused (it sets
+  `status:'ended'`, which would kill a room meant to host the next game), so `status:'ended'`
+  means exactly "somebody abandoned the room".
+- **Invariant 3 has no literal analogue and is ported by analogy, with the reason stated in
+  the probe.** There is no consumable randomness queue in a game with no rng. The failure
+  shape it encodes — per-round consumption state leaking into the next round — maps onto the
+  move log: `startRound` clears `moves` atomically with the record, `_mpApplyRoundRecord`
+  rebuilds the cache from that snapshot and resets `appliedSeq`, and every entry is stamped
+  with its game number. A future game with no equivalent should say so as explicitly.
+- **Divergence handling was tightened, and the reference games have the same latent hole.**
+  On a hash mismatch the host TAKES the seq (keeping its authoritative state and publishing a
+  snapshot) and the guest LATCHES (`mp.awaitingRecovery`) until that snapshot lands. Without
+  the latch, every subsequent room update re-delivers the same entry onto the already-diverged
+  state and burns the three-attempt budget before the host's answer can arrive. Chinchón and
+  Escoba are shielded from this only by their agent interface consuming each delivery exactly
+  once; a flag-driven game (i.e. every game left on the roadmap) needs the latch.
+- **MP results record under a `'mp'` difficulty bucket** (`MP_DIFFICULTY` in
+  `tic-tac-toe/js/ui.js`), not the local setup's last AI tier — the wart
+  `HANDOFF-MP-WEB-SESSION.md` touchpoint 5 flags in both reference games. `tierOf('mp')` is
+  null, so the play counts in every total and in the leaderboard's All filter and claims no
+  tier pill; `DIFF_META` in `js/game-stats-ui.js` gives it a real label. Additive, LAW-safe,
+  and the recommended default for the remaining games.
 
 ---
 

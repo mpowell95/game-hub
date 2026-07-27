@@ -445,6 +445,100 @@
 .ttt-root .ttt-diagram-classic { width: 120px; height: 120px; }
 .ttt-root .ttt-dg-winline { stroke: var(--ttt-gold); stroke-width: 4; stroke-linecap: round; opacity: 0.9; }
 
+/* --- multiplayer lobby + in-game MP chrome -------------------------------------------------
+   Everything here rides on the existing custom properties, so the dark-theme block below
+   themes it for free (only the code display's tinted panel needs its own override). */
+
+.ttt-root .ttt-mp-lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px;
+  background: var(--ttt-surface);
+  border: 1px solid var(--ttt-surface-2);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(20, 40, 80, 0.06);
+}
+.ttt-root .ttt-mp-label {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ttt-muted);
+}
+.ttt-root .ttt-mp-code {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 12px;
+  background: var(--ttt-surface-2);
+  color: var(--ttt-accent-deep);
+}
+.ttt-root .ttt-mp-code-input {
+  font: inherit;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-align: center;
+  text-transform: uppercase;
+  width: 100%;
+  padding: 10px 6px;
+  border-radius: 12px;
+  border: 2px solid var(--ttt-surface-2);
+  background: var(--ttt-surface);
+  color: var(--ttt-ink);
+}
+.ttt-root .ttt-mp-code-input:focus-visible { outline: 3px solid var(--ttt-accent); outline-offset: 1px; }
+.ttt-root .ttt-mp-oppslot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.ttt-root .ttt-mp-oppav { font-size: 22px; line-height: 1; }
+.ttt-root .ttt-mp-oppname { font-size: 15px; font-weight: 800; }
+.ttt-root .ttt-mp-oppempty { font-size: 13px; font-weight: 700; color: var(--ttt-muted); }
+.ttt-root .ttt-mp-summary { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--ttt-muted); }
+.ttt-root .ttt-mp-msg {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ttt-muted);
+  text-align: center;
+}
+/* The "update required" variant is a button, so it must not inherit button chrome. */
+.ttt-root .ttt-mp-msg-action {
+  appearance: none;
+  border: 0;
+  background: none;
+  width: 100%;
+  font: inherit;
+  font-weight: 800;
+  color: var(--ttt-accent-deep);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ttt-root .ttt-btn:disabled { opacity: 0.5; cursor: default; }
+/* Running series tally, shown only in multiplayer (seat-indexed, so each
+   device reads its own record first -- see _seriesLine in ui.js). */
+.ttt-root .ttt-mp-series {
+  margin: -6px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ttt-muted);
+}
+.ttt-root .ttt-card-wait {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ttt-muted);
+  text-align: center;
+}
+
 /* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
    js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
    properties. --ttt-x/--ttt-o/--ttt-gold/--ttt-dead stay UNTOUCHED on purpose, same as Dots and
@@ -469,3 +563,4 @@
 :root.gh-dark .ttt-root .ttt-help-rule { color: var(--ttt-muted); }
 :root.gh-dark .ttt-root .lb-dshape-t3,
 :root.gh-dark .ttt-root .lb-dshape-t4 { fill: #e6e9f0; }
+:root.gh-dark .ttt-root .ttt-mp-code { background: #232d40; }

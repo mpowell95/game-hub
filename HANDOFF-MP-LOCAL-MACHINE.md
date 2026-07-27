@@ -229,4 +229,68 @@ Web sessions append here on completion: game, branch/commit, design choices that
 verified without a real network, anything the headless harness stubbed or elided, and the honest
 status line.
 
-_(empty — no game has shipped its web-session pass yet)_
+### Tic Tac Toe — roadmap phase 1 (2026-07-27)
+
+**Branch `claude/mp-tictactoe-rruu9j`.** Both variants (Classic and Ultimate), 2 human seats,
+host 0 / guest 1. **`js/net.js` was not touched.**
+
+**Status: protocol proven headlessly against FakeRoom; real-room behaviour unverified.**
+No room has ever been created from this session — Firebase is unreachable by network policy
+(`www.gstatic.com:443` → 403 CONNECT), so `net.js` was inert throughout. Nothing below is a
+claim that multiplayer works.
+
+What IS verified here: `node run-all-tests.mjs` → 19 suites ran, 2 skipped (jsdom), 0 failed.
+`node validate-sw-assets.mjs` → v223, 237 entries, all present. `test-mp-lockstep.mjs` gained a
+T1-T7 block driving two real engines against each other over `FakeRoom`, with all five
+`js/CLAUDE.md:271` invariants ported into this game's vocabulary and green. **Each of the five
+was mutation-tested** — the mirror was deliberately broken five ways and each probe went red for
+its own defect, so none of them is green-by-vacuity. Solo play was re-checked in a real browser
+(Playwright + the bundled Chromium): Classic to a finish, Ultimate mid-game autosave and reload
+resume, stats recorded under the chosen AI tier, no MP key written by solo play, the module still
+mounts in-hub, and a failed host/join attempt lands on a graceful "Offline" message instead of a
+crash.
+
+**Design choices that could not be verified without a real network** — these are the ones to
+watch during Category B:
+
+1. **The room hosts a rematch SERIES, not one match.** A `round` record is one game; `round.n`
+   is the game number and `round.dealer` carries the seat that plays X. Consequences to check
+   live: the host tapping "Play again" must move BOTH devices to game 2, the guest must adopt
+   the host's opening seat (which alternates), and the series tally must agree on both screens.
+2. **`net.js`'s `writeResult` is deliberately never called**, because it sets `status:'ended'`
+   and would kill a room meant to host the next game. So `status:'ended'` is read as "the other
+   device abandoned". Check that a real Leave on either side shows the other the "Opponent left"
+   modal, and that backgrounding (hub back button, locking the phone) does NOT.
+3. **Rejoin timing.** The MP autosave has a 30-minute window and the guest re-`joinRoom`s by
+   `deviceId`. Untested against real backgrounding: close the PWA mid-game on the guest, reopen,
+   confirm it lands back on the live board rather than the setup screen, with the series intact.
+4. **The divergence latch.** On a mismatch the host takes the seq and publishes a snapshot; the
+   guest sets `mp.awaitingRecovery` and stops consuming the log until it lands. Under real
+   latency the host's answer takes a round trip that `FakeRoom` resolves in a microtask — worth
+   forcing one desync deliberately if you can, and confirming the "Resyncing..." status clears.
+5. **Heartbeat staleness.** `MP_STALE_MS` is 60s; the "Opponent disconnected" status has only
+   ever been exercised against a fake clock.
+
+**What the harness stubbed or elided** (where to look if something behaves oddly live):
+
+- `net.js`'s room lifecycle: `createRoom`/`joinRoom`/`heartbeat`/`leaveRoom` and the SW-version
+  match on join are all absent from `FakeRoom`. Lobby flow, room codes, the "wrong game" and
+  "room full" errors, and the update-required path are **entirely unexercised**.
+- The local human's tap is stood in for by a scripted policy (`takeTurnIfMine`, marked
+  HARNESS ONLY). All render/DOM paths are outside the harness by construction.
+- `_resolveStarter()` reads localStorage and the setup screen; the harness passes the resolved
+  seat straight in, so the Alternate-across-a-series behaviour is only checked at the protocol
+  level, not through the settings UI.
+- Stats are captured into an array instead of written, so `recordTicTacToe`/`recordHeadToHead`
+  are proven to be CALLED with the right arguments (the guest's own result, the `'mp'` bucket)
+  but not proven to land in `gamehub.stats`. **B2 is still the priority check.**
+- One known real-network gap with no headless expression: a move appended while offline advances
+  the local seq with nothing written to the room, leaving a gap the peer waits on. Chinchón and
+  Escoba have the same property; recovery is the backstop.
+
+**One shared-file change beyond this game:** `js/game-stats-ui.js` gained a `DIFF_META` row and
+`js/strings.js` a `gs_diff_mp` label, so the new `'mp'` difficulty bucket renders with a real
+name. MP results record under that bucket rather than inheriting whatever AI tier the setup
+screen was showing (the wart the web-session doc flags in both reference games). `tierOf('mp')`
+is null, so those plays count in every total and in the leaderboard's All filter and claim no
+tier pill — additive, and no existing record is touched.
