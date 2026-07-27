@@ -1523,19 +1523,25 @@ console.log('\n--- T7: Tic Tac Toe restore at a game boundary (KNOWN-BUG PROBE: 
 // async shape is preserved so the mirror stays honest about what the real glue does.
 //
 // Vocabulary map (js/net.js is untouched, so its field names are reused as-is):
-//   a "round" record  = the ONE game this room ever hosts (no rematch series, unlike Tic Tac
-//                        Toe -- see mancala/CLAUDE.md for why)
-//   round.n           = always 1
+//   a "round" record  = ONE GAME of a rematch series this room hosts, same vocabulary as Tic
+//                        Tac Toe (2026-07-27: Mancala gained a rematch series -- see
+//                        mancala/CLAUDE.md)
+//   round.n           = the game number
 //   round.deck        = unused (no cards, no rng)
-//   round.dealer      = always P1 (the host) -- sides are fixed for the room (see the
-//                        _localSeat() deviation note in mancala/js/ui.js), so there is nothing
-//                        to alternate the way Tic Tac Toe alternates X/O
+//   round.dealer      = the seat that opens that game, alternated by the HOST every game via
+//                        mp.nextDealer (_mpStartNextGame). Sides themselves never swap (host
+//                        stays P1/bottom, guest stays P2/top for the whole room -- see the
+//                        _localSeat() deviation note in mancala/js/ui.js); only who opens does.
 //   writeResult       = deliberately NOT used; status:'ended' means somebody abandoned the room
 // ==================================================================================
 function mancalaNewState(role) {   // _mpNewState (UI-only fields dropped)
   return {
     role, localSeat: role === 'host' ? mP1 : mP2,
-    gameNum: 0, appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    gameNum: 0,
+    nextDealer: mP1,   // host only: who opens the NEXT game (flipped by startNextGame)
+    series: { wins: [0, 0], draws: 0 },   // seat-indexed (P1=0, P2=1), never device-relative
+    lastScoredGame: 0,   // afterGameEnd's idempotence guard
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
     replayMode: false, recoveryAttempts: 0, delivering: false, awaitingRecovery: false,
     // See _mpTryDeliverNextMove's comment in mancala/js/ui.js: an async drain can check "is
     // there a next entry" against a stale cache right as a room update lands with the answer.
@@ -1545,6 +1551,7 @@ function mancalaNewState(role) {   // _mpNewState (UI-only fields dropped)
     lastRecoveryHandled: null, lastRecoveryApplied: null,
   };
 }
+const mancalaNormSeries = (s) => ({ wins: [((s && s.wins) || [])[0] | 0, ((s && s.wins) || [])[1] | 0], draws: (s && s.draws) | 0 });
 
 class MancalaSide {
   constructor(role, room, policy, opts = {}) {
@@ -1556,6 +1563,7 @@ class MancalaSide {
     this.gamesFinished = 0;
     this.statsCommits = [];   // commitStats's result, captured instead of written
     this.saves = [];          // in-memory _mpSaveSnapshot
+    this.roundResets = [];    // harness-only: what each applyRoundRecord reset actually saw
     this._roomCb = (r) => this.roomCallback(r);
     room.onRoom(this._roomCb);
   }
@@ -1645,7 +1653,11 @@ class MancalaSide {
 
   snapshot() {   // _mpSnapshot - nothing device-relative: the absolute board, seat derived locally
     const mp = this.mp;
-    return { v: 1, gameNum: mp.gameNum, state: deep(this.state) };
+    return {
+      v: 1, gameNum: mp.gameNum, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: deep(this.state),
+    };
   }
 
   async applyRecovery(recovery) {   // _mpApplyRecovery
@@ -1653,10 +1665,13 @@ class MancalaSide {
     if (!mp || this.dead) return;
     const snap = deep(recovery.state);
     mp.gameNum = snap.gameNum | 0;
+    mp.nextDealer = snap.nextDealer === mP2 ? mP2 : mP1;
+    mp.series = mancalaNormSeries(snap.series);
     this.state = snap.state;
     mp.appliedSeq = recovery.seq | 0;
     mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
     mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.lastScoredGame = this.state.over ? mp.gameNum : mp.lastScoredGame;
     this.recoveriesApplied++;
     this.room.clearRecovery().catch(() => {});
     await this.afterStateChange();
@@ -1672,16 +1687,41 @@ class MancalaSide {
     mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
     this.statsCommitted = false;
     this.state = mNewGame(round.dealer === mP2 ? mP2 : mP1);
+    // HARNESS ONLY: freeze what the per-game reset actually saw, so M4 can probe the exact
+    // instant a new game begins rather than whatever the log looks like a few microtasks
+    // later (by then the new game's own first move has already landed). Mirrors Tic Tac
+    // Toe's roundResets exactly (test-mp-lockstep.mjs's T5).
+    this.roundResets.push({
+      n: mp.gameNum,
+      dealer: round.dealer === mP2 ? mP2 : mP1,
+      appliedSeq: mp.appliedSeq,
+      cached: mp.movesById.size,
+      staleCached: [...mp.movesById.values()].filter((e) => (e.move.g | 0) !== mp.gameNum).length,
+    });
     await this.afterStateChange();
   }
 
-  async startMatch() {   // _mpStartMatch - host only, single game (no series)
+  /** _mpStartNextGame. The real method alternates mp.nextDealer itself; the harness accepts
+   *  an explicit dealer override for opts-driven tests, defaulting to the alternation. */
+  async startNextGame(dealer) {
     const mp = this.mp;
     if (!mp || mp.role !== 'host' || this.dead) return;
-    const n = 1;
-    await this.room.startRound(n, null, mP1);
+    const n = (mp.gameNum | 0) + 1;
+    const seat = dealer != null ? dealer : (mp.nextDealer === mP2 ? mP2 : mP1);
+    mp.nextDealer = seat === mP1 ? mP2 : mP1;
+    await this.room.startRound(n, null, seat);
     if (this.dead || !this.mp) return;
-    if ((this.mp.gameNum | 0) < n) await this.applyRoundRecord({ n, dealer: mP1 }, null);
+    if ((this.mp.gameNum | 0) < n) await this.applyRoundRecord({ n, dealer: seat }, null);
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd - series tally, idempotent per game number
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (s.winner === null) mp.series.draws += 1;
+    else mp.series.wins[s.winner] += 1;
+    this.save();
   }
 
   /** The MP branch of finishMove - save FIRST is the invariant-4 ordering. FULLY AWAITED here
@@ -1696,7 +1736,8 @@ class MancalaSide {
     this.save();
     if (this.state.over) {
       this.commitStats();
-      this.save();   // finish() - re-save with statsCommitted set (mirrors mancala/js/ui.js's finish())
+      this.afterGameEnd();
+      this.save();   // finish() - re-save with statsCommitted (and any series bump) set
       this.gamesFinished++;
       return;
     }
@@ -1735,7 +1776,10 @@ class MancalaSide {
     if (!mp || !this.state) return;
     this.saves.push({
       v: 1, code: 'M', role: this.role, seq: mp.appliedSeq | 0, at: 0,
-      gameNum: mp.gameNum | 0, statsCommitted: !!this.statsCommitted,
+      gameNum: mp.gameNum | 0, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      lastScoredGame: mp.lastScoredGame | 0,
+      statsCommitted: !!this.statsCommitted,
       state: deep(this.state),
     });
   }
@@ -1753,9 +1797,9 @@ class MancalaSide {
     this.applyRoundRecord(room.round, room);
   }
 
-  hostStartMatch() {   // _mpHostStartMatch
+  hostStartMatch(dealer) {   // _mpHostStartMatch
     this.mp = mancalaNewState('host');
-    return this.startMatch();
+    return this.startNextGame(dealer);
   }
 
   onRoomUpdate(room) {   // _mpOnRoomUpdate
@@ -1791,13 +1835,20 @@ class MancalaSide {
     this.mp = mancalaNewState(this.role);
     const mp = this.mp;
     mp.gameNum = save.gameNum | 0;
+    mp.nextDealer = save.nextDealer === mP2 ? mP2 : mP1;
+    // The series tally is carried through UNTOUCHED, same as Tic Tac Toe's restore (see M6).
+    mp.series = mancalaNormSeries(save.series);
+    mp.lastScoredGame = save.lastScoredGame | 0;
     mp.appliedSeq = save.seq | 0;
     mp.maxKnownSeq = mp.appliedSeq;
     this.state = deep(save.state);
     this.statsCommitted = !!save.statsCommitted;
-    // No rematch series here (unlike Tic Tac Toe), so there is no "boundary between games" to
-    // await -- either the saved game is still live (drain the tail) or it already finished
-    // (commitStats()'s own guard keeps re-showing the result idempotent; see M6).
+    // No separate "boundary between games" await path is needed the way Tic Tac Toe's restore
+    // has one -- either the saved game is still live (drain the tail) or it already finished
+    // (commitStats()'s own guard, plus afterGameEnd's lastScoredGame guard, keep re-showing the
+    // result idempotent; see M6). If the series has since moved on, the ordinary
+    // onRoomUpdate roundN > gameNum branch picks up the next game ONCE the host publishes it --
+    // no separate await path, matching mancala/js/ui.js's _tryRestoreMP.
     if (this.state.over) { this.commitStats(); return; }
     this.tryDeliver();
     this.takeTurnIfMine();
@@ -1912,23 +1963,59 @@ console.log('\n--- M3: Mancala forced desync + recovery (KNOWN-BUG PROBE: recove
   finally { cleanup(room, host, guest); }
 }
 
-// --- M4: INVARIANT 3 ported by analogy - no literal analogue, stated explicitly ----
-console.log('\n--- M4: INVARIANT 3 ported by analogy - no per-round consumption queue exists in Mancala ---');
+// --- M4: INVARIANT 3 ported DIRECTLY - a rematch never reads game 1's log ----------
+console.log('\n--- M4: Mancala rematch (KNOWN-BUG PROBE: stale per-game consumption state) ---');
+// Corrected 2026-07-27: this used to be "ported by analogy, no literal analogue" because
+// Mancala hosted exactly one game per room. Now that it hosts a rematch series (same
+// vocabulary as Tic Tac Toe -- see mancala/CLAUDE.md), the probe ports directly, mirroring
+// Tic Tac Toe's T5 almost line for line.
 {
+  // mcFirstLegal, not mcTieScript: the tie script's seed was hand-found for a game that opens
+  // with P1 (see M2's comment), so replaying it with P2 opening (game 2, alternated) is not
+  // guaranteed to tie -- board symmetry means mcFirstLegal stays decisive and fast regardless
+  // of which seat opens, so it is the safe choice for a test whose whole point is game 2, not
+  // game 1's outcome.
   const { room, host, guest } = makeMancala(mcFirstLegal());
   try {
-    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'M4 game end');
-    ok('M4: NO LITERAL ANALOGUE, stated explicitly rather than dropped silently\n' +
-       '      (invariant 3 protects a PER-ROUND consumption queue - chinchon/js/ui.js\'s\n' +
-       '      config.presetStockResets - from leaking stale state into the NEXT round. Mancala\n' +
-       '      hosts exactly ONE game per room by design (mancala/CLAUDE.md: no rematch series,\n' +
-       '      unlike Tic Tac Toe) - there is no "next round" for anything to leak into, so this\n' +
-       '      failure shape cannot recur here by construction, not by a fix. What still stands as\n' +
-       '      a real regression guard: every log entry either side ever applies carries the SAME\n' +
-       '      game number - if a future change adds a rematch series, THIS assumption is exactly\n' +
-       '      what would need re-examining, and this assertion would be the first thing to break)',
-      Object.values(room.moves).every((m) => (m.move.g | 0) === 1) && host.mp.gameNum === 1 && guest.mp.gameNum === 1,
-      `entries=${Object.keys(room.moves).length}, host.gameNum=${host.mp.gameNum}, guest.gameNum=${guest.mp.gameNum}`);
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'M4 game 1 end');
+    const game1Log = Object.keys(room.moves).length;
+    ok('M4: game 1 opened with the host (P1), mp.nextDealer\'s default at match start',
+      host.roundResets.find((r) => r.n === 1).dealer === mP1 && game1Log > 0);
+    // The host taps "Play again". startNextGame alternates, so game 2 opens with the
+    // GUEST's seat -- the case a seat bug hides in.
+    await host.startNextGame();
+    await until(() => guest.mp.gameNum === 2 || host.failedHard || guest.failedHard, 10000, 'M4 guest adopts game 2');
+    ok('M4: both sides moved to game 2', host.mp.gameNum === 2 && guest.mp.gameNum === 2);
+    // Measured AT the reset (roundResets), not by reading the live board after the fact: by
+    // the time the poll above returns, game 2's own first move may already have been written
+    // and applied, which would make a `state.turn` check racy -- mirrors why Tic Tac Toe's T5
+    // reads mp.xSeat rather than the live board.
+    const hostReset = host.roundResets.find((r) => r.n === 2);
+    const guestReset = guest.roundResets.find((r) => r.n === 2);
+    ok('M4: game 2 alternated the opening seat - P2 (the guest) opens now',
+      !!(hostReset && guestReset) && hostReset.dealer === mP2 && guestReset.dealer === mP2,
+      `hostReset.dealer=${hostReset && hostReset.dealer} guestReset.dealer=${guestReset && guestReset.dealer}`);
+    ok('M4 [KNOWN-BUG PROBE]: game 2 starts from a CLEARED move log on both sides\n' +
+       '      (REGRESSION GUARD, invariant 3 ported directly now that a rematch series exists.\n' +
+       '      net.js startRound clears `moves` atomically with the record, and\n' +
+       '      _mpApplyRoundRecord rebuilds the cache from THAT room snapshot and resets appliedSeq\n' +
+       '      to 0; every entry also carries its game number. Carry any of that over and game 2\n' +
+       '      replays game 1\'s moves - the exact way round 2 replayed round 1\'s shuffle in\n' +
+       '      Chinchon\'s original bug)',
+      !!(hostReset && guestReset)
+        && hostReset.appliedSeq === 0 && guestReset.appliedSeq === 0
+        && hostReset.staleCached === 0 && guestReset.staleCached === 0,
+      `game1 log had ${game1Log} entries; at the game-2 reset ` +
+      `host=${JSON.stringify(hostReset)} guest=${JSON.stringify(guestReset)}`);
+    await until(() => (host.gamesFinished === 2 && guest.gamesFinished === 2) || host.failedHard || guest.failedHard, 15000, 'M4 game 2 end');
+    ok('M4: game 2\'s log holds only game 2\'s moves, all stamped g=2',
+      Object.values(room.moves).every((e) => (e.move.g | 0) === 2),
+      `games=${JSON.stringify([...new Set(Object.values(room.moves).map((e) => e.move.g))])}`);
+    ok('M4: game 2 played to completion with zero mismatches', host.mismatches === 0 && guest.mismatches === 0 && host.gamesFinished === 2 && guest.gamesFinished === 2);
+    const seriesTotal = (s) => s.wins[0] + s.wins[1] + s.draws;
+    ok('M4: the series tally counts both games on both devices, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && seriesTotal(host.mp.series) === 2,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
   } catch (e) { fail++; console.log(`FAIL  M4 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
 }
@@ -1985,8 +2072,8 @@ console.log('\n--- M5: Mancala rejoin from autosave (KNOWN-BUG PROBE: save seq o
   finally { cleanup(room, host, guest); if (restored) restored.kill(); }
 }
 
-// --- M6: INVARIANT 5 ported by analogy - restoring an already-finished match ---------
-console.log('\n--- M6: Mancala restore at match end (KNOWN-BUG PROBE: restore re-runs a finished match) ---');
+// --- M6: INVARIANT 5 ported by analogy - restoring an already-finished game ---------
+console.log('\n--- M6: Mancala restore at a game boundary (KNOWN-BUG PROBE: restore re-runs a finished game) ---');
 {
   const { room, host, guest } = makeMancala(mcFirstLegal());
   let restored = null;
@@ -2001,22 +2088,31 @@ console.log('\n--- M6: Mancala restore at match end (KNOWN-BUG PROBE: restore re
 
     restored = new MancalaSide('guest', new FakeRoom(), mcFirstLegal(), {});
     await restored.restoreFromSave(boundarySave);
-    ok('M6 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED match does not\n' +
+    ok('M6 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED game does not\n' +
        '      re-run or re-initialize it\n' +
-       '      (REGRESSION GUARD, invariant 5 ported: mancala/js/ui.js has no rematch series -\n' +
-       '      unlike Tic Tac Toe\'s round-boundary "next round, scores kept" - so there is no next\n' +
-       '      round to await. The equivalent failure shape here would be _tryRestoreMP calling\n' +
-       '      _mpApplyRoundRecord (which calls newGame()) on a save whose game already ended,\n' +
-       '      silently starting a SECOND match nobody asked for and re-arming statsCommitted for a\n' +
-       '      game that was already recorded - the same class of bug as Chinchon\'s initMatch wipe,\n' +
-       '      just replacing "scores zeroed" with "a phantom rematch begins". The restored side\n' +
-       '      must instead recognize state.over and stop)',
+       '      (REGRESSION GUARD, invariant 5 ported: now that a rematch series exists\n' +
+       '      (2026-07-27, see M4), a boundary restore has a real "next game" it could wrongly\n' +
+       '      derive locally instead of awaiting the host\'s record -- mancala/js/ui.js\'s\n' +
+       '      _tryRestoreMP deliberately does NOT call _mpApplyRoundRecord (which calls\n' +
+       '      newGame()) on a save whose game already ended; that would silently start a SECOND\n' +
+       '      game nobody asked for and re-arm statsCommitted for a game that was already\n' +
+       '      recorded, the same class of bug as Chinchon\'s initMatch wipe, just replacing\n' +
+       '      "scores zeroed" with "a phantom rematch begins". The restored side must instead\n' +
+       '      recognize state.over and stop, relying on the ordinary onRoomUpdate roundN >\n' +
+       '      gameNum branch to pick up the next game once the host actually publishes one)',
       restored.mp.gameNum === boundarySave.gameNum && restored.state.over === true
         && mHash(restored.state) === mHash(boundarySave.state) && restored.statsCommitted === true,
       `gameNum=${restored.mp.gameNum} over=${restored.state && restored.state.over} committed=${restored.statsCommitted}`);
     ok('M6: it did not double-record the finished game it restored',
       restored.statsCommits.length === 0,
       `commits=${JSON.stringify(restored.statsCommits)}`);
+    ok('M6: the series tally is carried through the restore UNTOUCHED, not zeroed\n' +
+       '      (the initMatch-wipe failure shape from js/CLAUDE.md\'s invariant 5, translated to\n' +
+       '      this game\'s vocabulary: a restore that reset mp.series to {wins:[0,0],draws:0}\n' +
+       '      would silently erase the series tally the moment either device backgrounds and\n' +
+       '      restores mid-series)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
+      `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
   } catch (e) { fail++; console.log(`FAIL  M6 did not complete: ${e.message}`); }
   finally { if (restored) restored.kill(); }
 }

@@ -642,6 +642,23 @@
 }
 .mancala .mc-card-score b { font-size: 18px; color: var(--mc-ink); }
 .mancala .mc-card-dash { color: rgba(36, 22, 9, 0.45); }
+/* Running series tally / waiting-for-rematch note, shown only in multiplayer
+   (seat-indexed, so each device reads its own record first -- see _seriesLine
+   in ui.js). Same treatment as tic-tac-toe/css/tic-tac-toe.css's equivalents. */
+.mancala .mc-card-series {
+  margin: -8px 0 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: rgba(36, 22, 9, 0.55);
+}
+.mancala .mc-card-wait {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: rgba(36, 22, 9, 0.55);
+  text-align: center;
+}
 .mancala .mc-card-actions { display: flex; flex-direction: column; gap: 9px; }
 
 .mancala .mc-help {
@@ -756,6 +773,8 @@
 :root.gh-dark .mancala .mc-card-score { color: #9db0c9; }
 :root.gh-dark .mancala .mc-card-score b { color: #e9eef6; }
 :root.gh-dark .mancala .mc-card-dash { color: #6b7d97; }
+:root.gh-dark .mancala .mc-card-series,
+:root.gh-dark .mancala .mc-card-wait { color: #9db0c9; }
 :root.gh-dark .mancala .mc-help-lead { color: #e9eef6; }
 :root.gh-dark .mancala .mc-help-diagram-wrap { background: #232c40; }
 :root.gh-dark .mancala .mc-help-caption,

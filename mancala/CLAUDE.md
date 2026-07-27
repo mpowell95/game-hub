@@ -58,11 +58,26 @@ input over the network instead of the same screen.
   seating; only who moves FIRST would vary, and even that doesn't here (see below). `names()` is
   seat-aware: each device always sees its OWN identity at the physical position its seat renders
   at (host at bottom/p1, guest at top/p2), never assumed.
-- **Single game per room, no rematch series.** Unlike Tic Tac Toe (one room hosts a SERIES of
-  games via `round.n`), Mancala plays exactly one match per room; "Play Again" in MP just leaves
-  the room. `round.n` is always 1, `round.dealer` is always P1 (the host) — there is no
-  alternating starter to transmit, since sides never swap. `writeResult` is deliberately unused,
-  so `status:'ended'` means "somebody abandoned the room" (same convention as Tic Tac Toe).
+- **One room hosts a rematch SERIES, same vocabulary as Tic Tac Toe (2026-07-27, corrected — an
+  earlier version of this file claimed "no rematch series" and "nothing to alternate," which was
+  wrong: which SIDE you sit on and who MOVES FIRST are separate things).** `round.n` is the game
+  number; `round.dealer` is the seat that opens that game, alternated by the HOST every game via
+  `mp.nextDealer` (`_mpStartNextGame()`, the same pattern as solo's `nextStarter`/`startGame()` —
+  Matt's rule that every turn-based game alternates who opens). **Sides themselves never swap** —
+  host stays P1/bottom, guest stays P2/top for the whole room, exactly as before; only which seat
+  the FIRST move belongs to varies game to game. `mp.series` (`{wins:[p1,p2], draws}`, seat-indexed
+  since sides are fixed) tracks the running tally across the series and is shown on the game-over
+  card (`_seriesLine()`); `mp.lastScoredGame` is the idempotence guard for `_mpAfterGameEnd()`
+  (finish() can run more than once for the same game — an overlay re-render, a restore).
+  `mp.nextDealer` and `mp.series` both ride the MP snapshot/save
+  (`_mpSnapshot()`/`_mpSaveSnapshot()`/`_tryRestoreMP()`), so a host that restores mid-series keeps
+  alternating instead of resetting to "host always opens," and a restoring device's series survives
+  intact (same "carried through untouched" rule as Tic Tac Toe's restore — a wipe here would be the
+  `initMatch`-zeroing failure shape from `js/CLAUDE.md`'s invariant 5, translated to this game's
+  vocabulary). The MP game-over overlay's Host sees "Play Again" (`mp-next-game`, calls
+  `_mpStartNextGame()`); the Guest sees a waiting message and Leave, same split as Tic Tac Toe's
+  `isHost` branch. `writeResult` is deliberately unused, so `status:'ended'` still means "somebody
+  abandoned the room" (unchanged).
 - **Remote moves are ANIMATED, not instant-snapped.** Move delivery
   (`_mpTryDeliverNextMove`/`_mpApplyNextEntry`) is async and re-uses the real `playMove()` sow
   animation for a delivered remote move — the whole point of routing input through the existing
@@ -94,13 +109,15 @@ input over the network instead of the same screen.
   Toe (`js/CLAUDE.md`) — not the local setup's last AI-tier setting. `recordHeadToHead('mancala',
   opp, won)` runs alongside, guarded so it can never block the ordinary result.
 - **Invariant coverage**: all five `js/CLAUDE.md` invariants are ported into Mancala's own
-  vocabulary in `test-mp-lockstep.mjs`'s M1-M6 block. Invariant 3 (a per-round consumption
-  queue) has no literal analogue — Mancala hosts exactly one game per room, so there is no "next
-  round" for anything to leak into — M4 states this explicitly rather than dropping the probe
-  silently, the same way Tic Tac Toe's T5 does for the same invariant. Invariant 5 (round-
-  boundary resume keeps scores) is ported by analogy in M6: restoring an ALREADY-FINISHED match
-  must not re-run or re-initialize it (the equivalent of Chinchón's score-zeroing `initMatch`
-  wipe, translated to "no phantom rematch begins").
+  vocabulary in `test-mp-lockstep.mjs`'s M1-M6 block. **Invariant 3 (a per-round consumption
+  queue) is now ported DIRECTLY, not by analogy** (corrected 2026-07-27 alongside the rematch
+  series fix above — the earlier "no literal analogue, Mancala hosts exactly one game per room"
+  reasoning no longer holds now that it doesn't): M4 mirrors Tic Tac Toe's T5, asserting game 2
+  starts from a cleared move log, the dealer alternated, and every log entry is stamped with its
+  own game number. Invariant 5 (round-boundary resume keeps scores) is ported by analogy in M6:
+  restoring an already-finished game must not re-run or re-initialize it, and the series tally
+  carried through the restore must match what it was before (the equivalent of Chinchón's
+  score-zeroing `initMatch` wipe, translated to this game's vocabulary).
 - **New file**: `mancala/js/hash.js`, FNV-1a over `{ pits, turn, over, winner }` — `pits` stays
   positional (never sorted), same reasoning as Tic Tac Toe's board array.
 

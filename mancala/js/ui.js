@@ -1039,6 +1039,35 @@ class MancalaUI {
 
   // --- end of game -----------------------------------------------------------
 
+  /** Series bookkeeping at the end of one game, MP only. Idempotent per game number: finish()
+   *  can run more than once for the same game (a rematch overlay re-render, a restore of a
+   *  finished game). `s.winner` is already P1/P2 (0/1), so it indexes mp.series.wins directly --
+   *  no seat-of-mark remapping needed the way Tic Tac Toe's marks require. */
+  _mpAfterGameEnd() {
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (s.winner === null) mp.series.draws += 1;
+    else mp.series.wins[s.winner] += 1;
+    this._mpSaveSnapshot();   // re-save with the tally and statsCommitted set
+  }
+
+  /** The running series tally, MP only. Read by SEAT so each device sees its own record first --
+   *  the stored counters are seat-indexed, never device-relative (see _mpSnapshot). */
+  _seriesLine() {
+    const mp = this.mp;
+    if (!mp) return '';
+    const n = this.names();
+    const oppName = this._localSeat() === P1 ? n.p2.name : n.p1.name;
+    return t('mp_series', {
+      me: mp.series.wins[this._localSeat()] | 0,
+      them: mp.series.wins[this._remoteSeat()] | 0,
+      d: mp.series.draws | 0,
+      opp: oppName,
+    });
+  }
+
   /** Record the finished game exactly once on THIS device, and show the end-of-game overlay.
    *
    *  Both devices in a multiplayer match run this, and that is NOT double-counting:
@@ -1064,7 +1093,8 @@ class MancalaUI {
         try { recordResult('mancala', LEVEL_KEY[this.level], won); } catch { /* never block the result */ }
       }
     }
-    if (this.mp) this._mpSaveSnapshot();   // re-save with statsCommitted set
+    if (this.mp) this._mpAfterGameEnd();
+    if (this.mp) this._mpSaveSnapshot();   // re-save with statsCommitted (and any series bump) set
 
     const title = this.mp
       ? (won === null ? t('draw') : won ? t('you_win') : t('opp_wins', { name: esc(this._localSeat() === P1 ? n.p2.name : n.p1.name) }))
@@ -1072,6 +1102,8 @@ class MancalaUI {
         ? (won === null ? t('draw') : t('name_wins', { name: esc(n[won ? 'p1' : 'p2'].name) }))
         : (won === true ? t('you_win') : won === false ? t('opp_wins', { name: esc(n.p2.name) }) : t('draw'));
     const oppEmoji = this.mp ? (this._localSeat() === P1 ? n.p2.emoji : n.p1.emoji) : n.p2.emoji;
+    const isHost = !!(this.mp && this.mp.role === 'host');
+    const series = this.mp ? `<p class="mc-card-series">${esc(this._seriesLine())}</p>` : '';
     const overlay = document.createElement('div');
     overlay.className = 'mc-overlay';
     overlay.dataset.role = 'end';
@@ -1086,13 +1118,17 @@ class MancalaUI {
           <span class="mc-card-dash">:</span>
           <span><b>${s.pits[P2_STORE]}</b> ${esc(n.p2.name)}</span>
         </p>
+        ${series}
         <div class="mc-card-actions">
-          ${this.mp
-            ? `<button type="button" class="mc-primary" data-action="mp-leave">${t('mp_leave_btn')}</button>
-               <button type="button" class="mc-ghost mc-small" data-action="close-overlay">${t('view_board')}</button>`
-            : `<button type="button" class="mc-primary" data-action="rematch">${t('play_again')}</button>
+          ${!this.mp
+            ? `<button type="button" class="mc-primary" data-action="rematch">${t('play_again')}</button>
                <button type="button" class="mc-ghost" data-action="newgame">${t('change_setup')}</button>
-               <button type="button" class="mc-ghost mc-small" data-action="close-overlay">${t('view_board')}</button>`}
+               <button type="button" class="mc-ghost mc-small" data-action="close-overlay">${t('view_board')}</button>`
+            : isHost
+              ? `<button type="button" class="mc-primary" data-action="mp-next-game">${t('play_again')}</button>
+                 <button type="button" class="mc-ghost mc-small" data-action="mp-leave">${t('mp_leave_btn')}</button>`
+              : `<p class="mc-card-wait">${esc(t('mp_waiting_rematch', { opp: this._localSeat() === P1 ? n.p2.name : n.p1.name }))}</p>
+                 <button type="button" class="mc-ghost mc-small" data-action="mp-leave">${t('mp_leave_btn')}</button>`}
         </div>
       </div>`;
     this.container.querySelector('.mancala').appendChild(overlay);
@@ -1151,11 +1187,13 @@ class MancalaUI {
   //
   // Room protocol (js/net.js, unchanged): rooms/<CODE> with a seq-keyed move log both sides
   // append into, a `round` record the HOST publishes, a `recovery` field, and heartbeats. Two
-  // roles only. Mancala is a SINGLE game per room (no rematch series -- "Play Again" is a
-  // TicTacToe-only convention this pass didn't need): round.n is always 1, round.dealer is the
-  // seat that moves first (always P1/the host -- see the deviation note above _localSeat()),
-  // round.deck is unused. net.js's writeResult is deliberately NOT used, so status:'ended'
-  // unambiguously means somebody abandoned the room (leaveRoom).
+  // roles only. One room hosts a SERIES of games, same vocabulary as Tic Tac Toe: round.n is
+  // the game number, round.dealer is the seat that moves first in that game (alternated by the
+  // host every game via mp.nextDealer -- see _mpStartNextGame), round.deck is unused. Sides
+  // themselves never swap (host stays P1/bottom, guest stays P2/top for the whole room -- see
+  // the deviation note above _localSeat()); only who OPENS alternates, exactly like solo's
+  // nextStarter. net.js's writeResult is deliberately NOT used, so status:'ended' unambiguously
+  // means somebody abandoned the room (leaveRoom).
   //
   // Move payload: a single pit index (0-5, 7-12), same shape as Tic Tac Toe's Classic variant --
   // Mancala has no board-routing analogue to Ultimate.
@@ -1178,6 +1216,21 @@ class MancalaUI {
       // path, where _mpOnRoomUpdate backfills it from the live room.
       opp: opp || null,
       gameNum: 0,
+      // Host only: which seat opens the NEXT game of the series (flipped by
+      // _mpStartNextGame every time it publishes a round). Game 1 opens with the
+      // host (P1), matching the single-game behavior this replaces. Carried in the
+      // MP snapshot/save so a host that restores mid-series keeps alternating
+      // instead of resetting to "host always opens" -- see _mpSnapshot.
+      nextDealer: P1,
+      // The running series tally, seat-indexed (P1=0, P2=1) and NEVER
+      // device-relative -- same discipline as Tic Tac Toe's mp.series. Sides are
+      // fixed for the room (see the deviation note above _localSeat()), so seat
+      // indexing is exactly as stable as device-relative would be here, but this
+      // stays consistent with the shared convention anyway.
+      series: { wins: [0, 0], draws: 0 },
+      // Idempotence guard for _mpAfterGameEnd: finish() can run more than once for
+      // the same game (a restore of an already-finished game).
+      lastScoredGame: 0,
       appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
       replayMode: false, recoveryAttempts: 0, delivering: false,
       // Set by a GUEST that has flagged a divergence: stops it consuming the log until the
@@ -1198,9 +1251,9 @@ class MancalaUI {
     };
   }
 
-  /** The move payload written to the room log. `g` is the game number this move belongs to
-   *  (always 1 here, since there is no rematch series -- kept as a field anyway so the shape
-   *  matches the reference games and stays extensible). */
+  /** The move payload written to the room log. `g` is the game number this move belongs to:
+   *  an entry from an earlier game of the series can never be consumed as this game's, no
+   *  matter how a stale room snapshot is ordered (see _mpApplyNextEntry). */
   _mpEncodeMove(pit) { return { t: 'move', g: this.mp.gameNum, p: pit | 0 }; }
   _mpDecodeMove(m) { return m.p | 0; }
 
@@ -1302,13 +1355,25 @@ class MancalaUI {
     return false;
   }
 
+  /** Normalize a transmitted/restored series tally to the shape mp.series always holds --
+   *  same defensive shape as tic-tac-toe/js/ui.js's _mpNormalizeSeries. */
+  _mpNormalizeSeries(s) {
+    const w = s && Array.isArray(s.wins) ? s.wins : [];
+    return { wins: [w[0] | 0, w[1] | 0], draws: (s && s.draws) | 0 };
+  }
+
   /** The full-state snapshot the host publishes for recovery, and the payload shape the MP
    *  autosave stores. Nothing device-relative: `state` is the absolute board (pits[] is
    *  positional, never "my side first"), and a receiver derives its own side from
-   *  _localSeat(), never from anything in this object. */
+   *  _localSeat(), never from anything in this object. `nextDealer`/`series` are seat-indexed
+   *  for the same reason. */
   _mpSnapshot() {
     const mp = this.mp;
-    return { v: 1, gameNum: mp.gameNum, state: this.state };
+    return {
+      v: 1, gameNum: mp.gameNum, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: this.state,
+    };
   }
 
   /** Guest side of a resync: rebuild wholesale from the host's snapshot. Unlike the animated
@@ -1320,6 +1385,8 @@ class MancalaUI {
     const snap = recovery && recovery.state;
     if (!snap || !validMpBoardState(snap.state)) return;
     mp.gameNum = snap.gameNum | 0;
+    mp.nextDealer = recovery.state.nextDealer === P2 ? P2 : P1;
+    mp.series = this._mpNormalizeSeries(recovery.state.series);
     this.state = {
       pits: snap.state.pits.slice(), turn: snap.state.turn,
       over: !!snap.state.over, winner: snap.state.winner == null ? null : snap.state.winner,
@@ -1327,6 +1394,7 @@ class MancalaUI {
     mp.appliedSeq = recovery.seq | 0;
     mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
     mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.lastScoredGame = this.state.over ? mp.gameNum : mp.lastScoredGame;
     this.view = 'game'; this.busy = false;
     this.closeOverlays();
     this._mpStatusMsg = '';
@@ -1336,18 +1404,26 @@ class MancalaUI {
     if (this.state.over) this.finish(); else this._mpTryDeliverNextMove();
   }
 
-  /** Host only: publish the (single, since there is no rematch series) game and start it
-   *  locally. round.dealer is always P1 (the host) -- see the deviation note above
-   *  _localSeat(): unlike Tic Tac Toe's symmetric marks, Mancala's sides are fixed for the
-   *  room, so there is nothing to alternate here. */
-  async _mpStartMatch() {
+  /** Host only: publish the next game of the series and start it locally. Sides stay fixed for
+   *  the whole room (see the deviation note above _localSeat(): host is always P1, guest always
+   *  P2 -- that never changes here), but WHICH SEAT MOVES FIRST alternates every game, exactly
+   *  as solo's startGame() alternates nextStarter. mp.nextDealer carries that flip across games
+   *  of the series (and across a host restore -- see _mpSnapshot). */
+  async _mpStartNextGame() {
     const mp = this.mp;
     if (!mp || mp.role !== 'host' || this._dead) return;
-    const n = 1;
-    try { await net.startRound(mp.code, n, null, P1); }
+    const n = (mp.gameNum | 0) + 1;
+    const dealer = mp.nextDealer === P2 ? P2 : P1;
+    mp.nextDealer = dealer === P1 ? P2 : P1;
+    // Publish BEFORE applying locally, same reasoning as tic-tac-toe/js/ui.js's
+    // _mpStartNextGame: startRound clears the room's move log, so a very fast local
+    // action could otherwise be written and then wiped by our own publish.
+    try { await net.startRound(mp.code, n, null, dealer); }
     catch { this._setMpStatus('mp_status_connection_error'); }
     if (this._dead || !this.mp) return;
-    if ((this.mp.gameNum | 0) < n) this._mpApplyRoundRecord({ n, dealer: P1 }, null);
+    // The room update carrying our own record may have raced us here and already
+    // applied it; never rebuild a game that has begun.
+    if ((this.mp.gameNum | 0) < n) this._mpApplyRoundRecord({ n, dealer }, null);
   }
 
   /** Start the local game described by the host's round record. BOTH sides go through here --
@@ -1431,8 +1507,8 @@ class MancalaUI {
 
     const roundN = room.round ? (room.round.n | 0) : 0;
     if (room.round && roundN > (mp.gameNum | 0)) {
-      // A newer record than what this device has applied (can only really happen on a fresh
-      // guest join here, since this game never starts a second round in the same room).
+      // A newer record: either a fresh guest join, or the host started the next game of the
+      // series. Its own room snapshot carries the (cleared) log that goes with it.
       this._mpApplyRoundRecord(room.round, room);
     } else if (roundN === (mp.gameNum | 0) && this.state) {
       const entries = Object.values(room.moves || {});
@@ -1470,13 +1546,13 @@ class MancalaUI {
     this.renderSetup();
   }
 
-  /** Host taps Start in the lobby: the room has a guest, so the game begins. */
+  /** Host taps Start in the lobby: the room has a guest, so game 1 of the series begins. */
   _mpHostStartMatch() {
     const room = this._mpLobbyRoom;
     if (!room || !room.guest || this.mp || this._mpBusy) return;
     this.mp = this._mpNewState('host', this._mpPendingCode, room.guest);
     this._lobby = null;
-    this._mpStartMatch();
+    this._mpStartNextGame();
   }
 
   async _mpJoinSubmit() {
@@ -1609,6 +1685,9 @@ class MancalaUI {
         seq: mp.appliedSeq | 0,
         at: Date.now(),
         gameNum: mp.gameNum | 0,
+        nextDealer: mp.nextDealer,
+        series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+        lastScoredGame: mp.lastScoredGame | 0,
         statsCommitted: !!this._statsCommitted,
         state: this.state,
       }));
@@ -1633,10 +1712,14 @@ class MancalaUI {
   /** Backgrounding/restore: an MP autosave younger than 30 minutes, with the room still alive,
    *  reattaches to the same room and replays whatever landed while this device was away,
    *  instead of dropping the player back on a blank setup screen. Runs once, right after
-   *  mount(). Since Mancala hosts exactly one game per room (no rematch series), there is no
-   *  "boundary between games" case to handle the way tic-tac-toe/js/ui.js's restore does --
-   *  either the saved game is still live (drain the tail) or it already finished (show the
-   *  result once more; finish()'s own `_statsCommitted` guard keeps this idempotent). */
+   *  mount(). Since a boundary save's `state.over` is always true, no separate "waiting for the
+   *  next game" branch is needed here the way tic-tac-toe/js/ui.js's restore has one -- the
+   *  saved position IS the finished game, and either it is still live (drain the tail) or it
+   *  already finished (show the result once more; finish()'s own `_statsCommitted`/
+   *  `lastScoredGame` guards keep this idempotent, including for the series tally). A guest
+   *  waiting on the NEXT game's round record after restoring simply gets it the ordinary way,
+   *  through `_mpOnRoomUpdate`'s roundN > gameNum branch, once the host publishes it -- no
+   *  separate await path needed. */
   async _tryRestoreMP(save) {
     const { code, role } = save;
     try {
@@ -1650,6 +1733,12 @@ class MancalaUI {
     this.mp = this._mpNewState(role, code, null);
     const mp = this.mp;
     mp.gameNum = save.gameNum | 0;
+    mp.nextDealer = save.nextDealer === P2 ? P2 : P1;
+    // The series tally is carried through UNTOUCHED, same as tic-tac-toe/js/ui.js's restore:
+    // a restore that zeroed it would be the initMatch-wipe failure shape from js/CLAUDE.md's
+    // invariant 5, translated to this game's vocabulary.
+    mp.series = this._mpNormalizeSeries(save.series);
+    mp.lastScoredGame = save.lastScoredGame | 0;
     mp.appliedSeq = save.seq | 0;
     mp.maxKnownSeq = mp.appliedSeq;
     this.state = {
@@ -1745,6 +1834,9 @@ class MancalaUI {
       this._mpJoinSubmit();
     } else if (action === 'mp-cancel') {
       this._mpCancelLobby();
+    } else if (action === 'mp-next-game') {
+      this.closeOverlays();
+      this._mpStartNextGame();
     } else if (action === 'mp-leave') {
       this.closeOverlays();
       this._mpLeaveToSetup();

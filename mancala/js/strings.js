@@ -88,6 +88,8 @@ export const STRINGS = {
     mp_opponent_left_title: 'Opponent left',
     mp_opponent_left_sub: 'The room is closed',
     mp_back_to_setup: 'Back to setup',
+    mp_series: 'You {me} · {opp} {them} · Drawn {d}',
+    mp_waiting_rematch: 'Waiting for {opp} to start another game',
   },
   es: {
     title: 'Mancala',
@@ -171,6 +173,8 @@ export const STRINGS = {
     mp_opponent_left_title: 'El rival se fue',
     mp_opponent_left_sub: 'La sala está cerrada',
     mp_back_to_setup: 'Volver a ajustes',
+    mp_series: 'Tú {me} · {opp} {them} · Empates {d}',
+    mp_waiting_rematch: 'Esperando a que {opp} empiece otra partida',
   },
 };
 
