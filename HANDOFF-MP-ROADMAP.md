@@ -283,7 +283,7 @@ gets reviewed before any code is written.
 | 0a | Docs on `main` | **done** (`275a94b`) |
 | 0b | Connect Four doc row | skipped; folded into phase 2 item 4 |
 | 1 | Tic Tac Toe MP | **shipped**, branch `claude/mp-tictactoe-rruu9j`, reviewed — headless only |
-| 1v | Tic Tac Toe verification | **next action**: two real devices, B2 first |
+| 1v | Tic Tac Toe verification | **in progress**: Category C done (backup taken, rules reviewed, no change needed). B0 two-profile pre-pass is the next action; two-device B1-B5 + D after it |
 | 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | blocked on 1v |
 | 3 | `js/net.js` N-player handoff, then implementation | blocked on phase 2 |
 | 4 | UN-6, Uno, Escoba, Chinchón?, Monopoly Deal, Parchís | blocked on 3 |
