@@ -376,13 +376,27 @@ per-game spec at `HANDOFF-DOTS-BOXES.md`'s depth is real follow-up work once a s
      inside a `try/catch` that must **never block the ordinary result from being recorded** ("Never
      allowed to block the result being recorded" is the comment in both files). Solo has no
      `this.mp` and is untouched.
-   - **Known wart — decide, don't inherit:** both games derive the difficulty bucket from the first
-     non-human player's `difficulty`, but the MP remote seat is built by
-     `makePlayer({ id, name, avatar, agent })` with **no `difficulty` field**, so an MP match falls
-     through to the local setup's last AI-difficulty setting (Chinchón) or the literal `'normal'`
-     (Escoba). A real human opponent lands in whatever AI bucket that device had selected. Additive
-     and harmless to existing data, so not a LAW problem — but not meaningful either. Decide up
-     front whether MP results belong in a difficulty bucket at all.
+   - **The difficulty bucket — SETTLED in phase 1, do not re-derive it.** The wart: both reference
+     games derive the bucket from the first non-human player's `difficulty`, but the MP remote seat
+     is built by `makePlayer({ id, name, avatar, agent })` with **no `difficulty` field**, so an MP
+     match falls through to the local setup's last AI-difficulty setting (Chinchón) or the literal
+     `'normal'` (Escoba) — a real human opponent landing in whatever AI bucket that device happened
+     to show. **Tic Tac Toe settled this: MP results record under their own `'mp'` bucket**
+     (`MP_DIFFICULTY` in `tic-tac-toe/js/ui.js`). `byDiff` is free-form (`game-stats.js:383`) and
+     `players-agg.js:110` iterates its keys generically, so the bucket is additive and survives
+     cross-device sync; `tierOf('mp')` is deliberately unmapped, so the play counts in every total
+     and in the leaderboard's All filter while claiming no tier pill; `DIFF_META` in
+     `js/game-stats-ui.js` plus `gs_diff_mp` in `js/strings.js` give it a real EN/ES label instead
+     of a raw-key fallback. **Follow it** — a second convention here would split one player's MP
+     history across two bucket names for no benefit. Full rationale: `js/CLAUDE.md`, "The third
+     consumer: Tic Tac Toe".
+   - **Flag-driven games need the divergence latch.** On a hash mismatch the host takes the seq and
+     publishes a snapshot while the guest **latches** (`mp.awaitingRecovery`) until it lands.
+     Without the latch every subsequent room update re-delivers the same entry onto the
+     already-diverged state and burns the three-attempt budget before the host's answer arrives.
+     Chinchón and Escoba are shielded only incidentally, by their agent interface consuming each
+     delivery exactly once — **every game left on the roadmap is flag-driven and needs the latch
+     explicitly.**
 6. **A lockstep test file** — extend `test-mp-lockstep.mjs` with a section for the new game
    (matching its per-method-citation style) or add `test-mp-lockstep-<game>.mjs`. Either way port
    all five `[KNOWN-BUG PROBE]` invariants into that game's own event vocabulary — the bugs are
