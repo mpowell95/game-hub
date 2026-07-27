@@ -282,8 +282,8 @@ gets reviewed before any code is written.
 |---|---|---|
 | 0a | Docs on `main` | **done** (`275a94b`) |
 | 0b | Connect Four doc row | skipped; folded into phase 2 item 4 |
-| 1 | Tic Tac Toe MP | **ready to send** |
-| 1v | Tic Tac Toe verification | blocked on 1 |
-| 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | blocked on 1v |
+| 1 | Tic Tac Toe MP | **web-session half DONE** (2026-07-27, branch `claude/mp-tictactoe-rruu9j`) — code + headless proof shipped; protocol proven against `FakeRoom`, real-room behaviour unverified. See the inbox in `HANDOFF-MP-LOCAL-MACHINE.md` |
+| 1v | Tic Tac Toe verification | **ready to run** — Category B on two real devices, B2 first |
+| 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | blocked on 1v. The phase-2 prompt's "read Tic Tac Toe's `hash.js`, `_mp*` methods and lockstep test" now points at real files |
 | 3 | `js/net.js` N-player handoff, then implementation | blocked on phase 2 |
 | 4 | UN-6, Uno, Escoba, Chinchón?, Monopoly Deal, Parchís | blocked on 3 |

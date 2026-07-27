@@ -1,13 +1,15 @@
-// test-mp-lockstep.mjs - headless two-engine lockstep simulation for BOTH multiplayer games
-// (Chinchón M2b, Escoba M1). No Firebase, no DOM: an in-file FakeRoom emulates the rooms/<CODE>
-// node (move log, round records, recovery field, result) and two mirrored "glue" sides drive the
-// REAL engine/hash/preset-deck/snapshot modules exactly the way each game's ui.js does.
+// test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL THREE multiplayer games
+// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1). No Firebase, no DOM: an in-file FakeRoom
+// emulates the rooms/<CODE> node (move log, round records, recovery field, result) and two
+// mirrored "glue" sides drive the REAL engine/hash/preset-deck/snapshot modules exactly the way
+// each game's ui.js does.
 //
-// WHY MIRRORS, NOT IMPORTS: chinchon/js/ui.js and escoba/js/ui.js construct DOM in their module
-// class constructors (mount(), stylesheet injection), so they cannot load headless. The engines,
-// hashes, and snapshot paths ARE the real modules; only the ~150 lines of MP glue per game are
-// mirrored here, statement-for-statement, from the citations below. If the glue changes, update
-// the mirror WITH it - each mirror method cites its source so the drift is checkable:
+// WHY MIRRORS, NOT IMPORTS: chinchon/js/ui.js, escoba/js/ui.js and tic-tac-toe/js/ui.js all
+// construct DOM in their module class constructors (mount(), stylesheet injection), so they
+// cannot load headless. The engines, hashes, and snapshot paths ARE the real modules; only the
+// MP glue per game is mirrored here, statement-for-statement, from the citations below. If the
+// glue changes, update the mirror WITH it - each mirror method cites its source so the drift is
+// checkable:
 //
 //   Chinchón (chinchon/js/ui.js):        Escoba (escoba/js/ui.js):
 //     _mpNewState            :1478          _mpNewState            :1702
@@ -27,6 +29,13 @@
 //     onEvent MP hooks       :706-786
 //     _mpSaveSnapshot        :1971
 //     _tryRestoreMP          :1993
+//   Tic Tac Toe (tic-tac-toe/js/ui.js) - every _mp* method plus the seat helpers:
+//     _localSeat/_myMark/_oppMark/_seatOfMark, _isLegal, _mpNewState, _mpEncodeMove/_mpDecodeMove,
+//     _mpAfterLocalMove, _mpTryDeliverNextMove, _mpApplyNextEntry, _mpHandleMismatch, _mpSnapshot,
+//     _mpApplyRecovery, _mpApplyRoundRecord, _mpStartNextGame, _mpAwaitNextGame, _mpAfterGameEnd,
+//     _mpRoomCallback, _mpOnRoomUpdate, _mpSaveSnapshot, _tryRestoreMP, and the MP branch of
+//     _afterStateChange. Named rather than line-numbered on purpose: this game's MP pass shipped
+//     with the file, so the names are stable and line numbers would rot on the first edit.
 //   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
 //   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
@@ -62,6 +71,8 @@ import { Game as CGame, makePlayer as cMakePlayer, DEFAULT_CONFIG as C_DEFAULT }
 import { stateHash as cHash } from './chinchon/js/hash.js';
 import { Game as EGame, makePlayer as eMakePlayer } from './escoba/js/game.js';
 import { stateHash as eHash } from './escoba/js/hash.js';
+import { newGame as tNewGame, applyMove as tApply, legalMoves as tLegal, X as TX, O as TO } from './tic-tac-toe/js/game.js';
+import { stateHash as tHash } from './tic-tac-toe/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -558,6 +569,354 @@ class EscobaSide {
 }
 
 // ==================================================================================
+// TIC TAC TOE side (mirror of tic-tac-toe/js/ui.js's MP glue)
+//
+// Shape difference worth stating once: this game has NO agent interface. Chinchón and
+// Escoba's engines await a per-player `agent` object, so their MP glue swaps in a
+// _makeRemoteAgent(). Tic Tac Toe's engine is a synchronous applyMove(state, move) and
+// the UI decides who acts, so the remote seat is a third kind of TURN OWNER in the UI's
+// own dispatch: where solo schedules the AI on a timer, MP waits for the next entry in
+// the room's move log. Everything else - the seq-keyed log, the per-move hash verify,
+// host-authoritative recovery - is the same protocol.
+//
+// Vocabulary map (js/net.js is untouched, so its field names are reused as-is):
+//   a "round" record  = ONE GAME of a rematch series in the room
+//   round.n           = the game number
+//   round.deck        = unused (no cards)
+//   round.dealer      = the SEAT that plays X in that game (the "who opens" datum)
+//   writeResult       = deliberately NOT used; status:'ended' means somebody abandoned
+// ==================================================================================
+function tttNewState(role, variant) {   // _mpNewState (UI-only fields dropped)
+  return {
+    role, localSeat: role === 'host' ? 0 : 1,
+    variant: variant === 'classic' ? 'classic' : 'ultimate',
+    gameNum: 0, xSeat: 0,
+    series: { wins: [0, 0], draws: 0 },
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    replayMode: false, recoveryAttempts: 0, delivering: false, awaitingRecovery: false,
+    opponentLeft: false, lastRoomSnapshot: null,
+    lastRecoveryHandled: null, lastRecoveryApplied: null,
+    lastScoredGame: 0, awaitingGameN: null, awaitingGameResolve: null,
+  };
+}
+const tttNormSeries = (s) => ({ wins: [((s && s.wins) || [])[0] | 0, ((s && s.wins) || [])[1] | 0], draws: (s && s.draws) | 0 });
+
+class TicTacToeSide {
+  constructor(role, room, policy, opts = {}) {
+    this.role = role; this.room = room; this.policy = policy; this.opts = opts;
+    this.mp = null; this.state = null; this.marks = [TX, TO];
+    this.dead = false; this.failedHard = false;
+    this.mismatches = 0; this.recoveriesApplied = 0; this.errors = [];
+    this.statsCommitted = false;
+    this.gamesFinished = 0;
+    this.statsCommits = [];   // _commitStats's arguments, captured instead of written
+    this.saves = [];          // in-memory _mpSaveSnapshot
+    this.roundResets = [];    // harness-only: what each applyRoundRecord reset actually saw
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+
+  // --- seats: the whole point of _localSeat(). A guest's own seat is 1. -----------
+  localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  remoteSeat() { return 1 - this.localSeat(); }
+  myMark() { return this.marks[this.localSeat()]; }
+  oppMark() { return this.marks[this.remoteSeat()]; }
+  seatOfMark(mark) { return this.marks[0] === mark ? 0 : 1; }
+
+  isLegal(move) {   // _isLegal - the ONE legality gate, read by the local tap AND every remote move
+    const s = this.state;
+    if (!s || s.over) return false;
+    const legal = tLegal(s);
+    return s.variant === 'ultimate'
+      ? legal.some((m) => m.board === move.board && m.cell === move.cell)
+      : legal.includes(move);
+  }
+
+  encodeMove(move) {   // _mpEncodeMove - `g` stamps the game number onto every entry
+    const g = this.mp.gameNum;
+    return this.state.variant === 'ultimate'
+      ? { t: 'move', g, b: move.board | 0, c: move.cell | 0 }
+      : { t: 'move', g, c: move | 0 };
+  }
+  decodeMove(m) {   // _mpDecodeMove
+    return this.state.variant === 'ultimate' ? { board: m.b | 0, cell: m.c | 0 } : (m.c | 0);
+  }
+
+  afterLocalMove(move) {   // _mpAfterLocalMove - seq reserved SYNCHRONOUSLY, before any await
+    const mp = this.mp;
+    if (!mp) return;
+    const seq = ++mp.appliedSeq;
+    const hash = tHash(this.state);
+    this.room.appendMove(this.role, seq, this.encodeMove(move), hash).catch(() => {});
+  }
+
+  tryDeliver() {   // _mpTryDeliverNextMove - the `delivering` flag turns re-entry into iteration
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.state) return;
+    if (this.opts.frozen && this.opts.frozen()) return;   // harness-only freeze (a backgrounded device)
+    mp.delivering = true;
+    try { while (this.applyNextEntry()) { /* drain */ } }
+    finally { mp.delivering = false; }
+  }
+
+  applyNextEntry() {   // _mpApplyNextEntry
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !mp.movesById || !this.state || this.state.over) return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry || !entry.move || entry.move.t !== 'move') return false;
+    if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;   // never consume another game's entry
+    const move = this.decodeMove(entry.move);
+    let agreed = this.isLegal(move);
+    if (agreed) {
+      tApply(this.state, move);
+      if (this.opts.corruptAtSeq === seq && !this._corrupted) {
+        // A pure HASH divergence with zero gameplay effect (winLine is recomputed by the
+        // engine on every move and read by nothing else), so the probe measures detection
+        // and recovery rather than the chaos of an illegal board.
+        this._corrupted = true;
+        this.state.winLine = [0, 1, 2];
+      }
+      agreed = tHash(this.state) === entry.h;
+    }
+    if (!agreed) { this.mismatches++; return this.onDivergence(seq); }
+    mp.appliedSeq = seq;
+    mp.recoveryAttempts = 0;
+    if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+    this.afterStateChange();
+    return true;
+  }
+
+  onDivergence(seq) {   // _mpOnDivergence - host takes the seq and publishes; guest latches
+    const mp = this.mp;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; return false; }
+    if (mp.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+      this.afterStateChange();
+      return true;
+    }
+    mp.awaitingRecovery = true;
+    this.room.requestRecovery(seq).catch(() => {});
+    return false;
+  }
+
+  snapshot() {   // _mpSnapshot - seat-indexed/absolute ONLY, nothing device-relative
+    const mp = this.mp;
+    return {
+      v: 1, variant: mp.variant, gameNum: mp.gameNum, xSeat: mp.xSeat,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: deep(this.state),
+    };
+  }
+
+  applyRecovery(recovery) {   // _mpApplyRecovery - own mark RE-DERIVED from own seat
+    const mp = this.mp;
+    if (!mp || this.dead) return;
+    const snap = deep(recovery.state);
+    mp.variant = snap.variant;
+    mp.gameNum = snap.gameNum | 0;
+    mp.xSeat = snap.xSeat === 1 ? 1 : 0;
+    mp.series = tttNormSeries(snap.series);
+    this.marks = mp.xSeat === 0 ? [TX, TO] : [TO, TX];
+    this.state = snap.state;
+    mp.appliedSeq = recovery.seq | 0;
+    mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
+    mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+    this.afterStateChange();
+  }
+
+  applyRoundRecord(round, room) {   // _mpApplyRoundRecord - the ONE place a game's seat->mark is decided
+    const mp = this.mp;
+    if (!mp || this.dead || !round) return;
+    mp.gameNum = round.n | 0;
+    mp.xSeat = round.dealer === 1 ? 1 : 0;
+    this.marks = mp.xSeat === 0 ? [TX, TO] : [TO, TX];
+    mp.appliedSeq = 0; mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    const entries = Object.values((room && room.moves) || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    this.statsCommitted = false;
+    this.state = tNewGame(mp.variant, TX);
+    // HARNESS ONLY: freeze what the per-game reset actually saw, so T5 can probe the
+    // exact instant a new game begins rather than whatever the log looks like a few
+    // microtasks later (by then the new game's own first move has already landed).
+    this.roundResets.push({
+      n: mp.gameNum,
+      appliedSeq: mp.appliedSeq,
+      cached: mp.movesById.size,
+      staleCached: [...mp.movesById.values()].filter((e) => (e.move.g | 0) !== mp.gameNum).length,
+    });
+    this.afterStateChange();
+  }
+
+  /** _mpStartNextGame. The real method resolves who opens through _resolveStarter()
+   *  (localStorage + the setup screen); the harness passes the resolved seat in, which
+   *  is the only thing that method contributes. Default: alternate, so game 2 puts X on
+   *  the GUEST's seat - the case a seat bug hides in. */
+  async startNextGame(xSeat) {
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this.dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const seat = xSeat != null ? xSeat : (mp.gameNum | 0) % 2;
+    await this.room.startRound(n, null, seat);
+    if (this.dead || !this.mp) return;
+    if ((this.mp.gameNum | 0) < n) this.applyRoundRecord({ n, dealer: seat }, null);
+  }
+
+  awaitNextGame() {   // _mpAwaitNextGame - the guest NEVER derives who opens locally
+    const mp = this.mp;
+    const target = (mp.gameNum | 0) + 1;
+    const room = mp.lastRoomSnapshot;
+    if (room && room.round && (room.round.n | 0) >= target) {
+      this.applyRoundRecord(room.round, room);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => { mp.awaitingGameN = target; mp.awaitingGameResolve = resolve; });
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd - series tally, idempotent per game number
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (s.isDraw) mp.series.draws += 1;
+    else mp.series.wins[this.seatOfMark(s.winner)] += 1;
+    this.save();
+  }
+
+  commitStats() {   // _commitStats - `won` resolves through myMark(), i.e. through localSeat()
+    if (this.statsCommitted) return;
+    this.statsCommitted = true;
+    const s = this.state;
+    const won = s.isDraw ? null : (s.winner === this.myMark());
+    this.statsCommits.push({ game: this.mp.gameNum, variant: s.variant, difficulty: 'mp', won });
+  }
+
+  save() {   // _mpSaveSnapshot - seq read AFTER this move's own MP bookkeeping
+    const mp = this.mp;
+    if (!mp || !this.state) return;
+    this.saves.push({
+      v: 1, code: 'T', role: this.role, seq: mp.appliedSeq | 0, at: 0,
+      variant: mp.variant, gameNum: mp.gameNum | 0, xSeat: mp.xSeat | 0,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      midGame: !this.state.over, statsCommitted: !!this.statsCommitted,
+      state: deep(this.state),
+    });
+  }
+
+  afterStateChange() {   // _afterStateChange, MP branch (save FIRST is the invariant-4 ordering)
+    if (this.dead) return;
+    this.save();
+    if (this.state.over) {
+      this.commitStats();      // finish(): _commitStats then _mpAfterGameEnd
+      this.afterGameEnd();
+      this.gamesFinished++;
+      return;
+    }
+    this.tryDeliver();
+    this.takeTurnIfMine();
+  }
+
+  /** HARNESS ONLY: stands in for the local human's tap. The real UI waits for a click on
+   *  a live cell; humanMove() below is the real method it calls. */
+  takeTurnIfMine() {
+    if (this.dead || !this.state || this.state.over) return;
+    if (this.state.turn !== this.myMark()) return;
+    queueMicrotask(() => {
+      if (this.dead || !this.state || this.state.over) return;
+      if (this.state.turn !== this.myMark()) return;
+      this.humanMove(this.policy(this.state));
+    });
+  }
+
+  humanMove(move) {   // humanMove - local apply, MP bookkeeping, then the funnel
+    if (!this.state || this.state.over || this.state.turn !== this.myMark()) return;
+    if (!this.isLegal(move)) return;
+    tApply(this.state, move);
+    this.afterLocalMove(move);
+    this.afterStateChange();
+  }
+
+  roomCallback(room) {   // _mpRoomCallback
+    if (this.dead) return;
+    if (this.mp) { this.onRoomUpdate(room); return; }
+    if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+  }
+
+  guestStart(room) {   // _mpGuestStartMatch
+    if (this.mp || this.dead) return;
+    this.mp = tttNewState('guest', room.config && room.config.variant);
+    this.mp.lastRoomSnapshot = room;
+    this.applyRoundRecord(room.round, room);
+  }
+
+  hostStartMatch(variant, xSeat) {   // _mpHostStartMatch
+    this.mp = tttNewState('host', variant);
+    return this.startNextGame(xSeat);
+  }
+
+  onRoomUpdate(room) {   // _mpOnRoomUpdate
+    if (this.dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.status === 'ended' && !mp.opponentLeft) { mp.opponentLeft = true; return; }
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this.applyRecovery(room.recovery);
+      }
+    }
+    const roundN = room.round ? (room.round.n | 0) : 0;
+    if (room.round && roundN > (mp.gameNum | 0)) {
+      this.applyRoundRecord(room.round, room);
+    } else if (roundN === (mp.gameNum | 0)) {
+      const entries = Object.values(room.moves || {});
+      mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+      const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+      if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+      mp.maxKnownSeq = maxSeq;
+      this.tryDeliver();
+      this.takeTurnIfMine();
+    }
+    // roundN < gameNum: a snapshot that predates the record we already applied. Its move
+    // log belongs to the previous game and is ignored entirely.
+    if (mp.awaitingGameResolve && room.round && roundN >= mp.awaitingGameN) {
+      const resolve = mp.awaitingGameResolve;
+      mp.awaitingGameN = null; mp.awaitingGameResolve = null;
+      resolve();
+    }
+  }
+
+  async restoreFromSave(save) {   // _tryRestoreMP (the join/heartbeat half elided: FakeRoom is always reachable)
+    this.mp = tttNewState(this.role, save.variant);
+    const mp = this.mp;
+    mp.gameNum = save.gameNum | 0;
+    mp.xSeat = save.xSeat === 1 ? 1 : 0;
+    mp.appliedSeq = save.seq | 0;
+    mp.maxKnownSeq = mp.appliedSeq;
+    mp.series = tttNormSeries(save.series);
+    mp.lastScoredGame = save.midGame ? 0 : mp.gameNum;
+    this.marks = mp.xSeat === 0 ? [TX, TO] : [TO, TX];
+    this.state = deep(save.state);
+    this.statsCommitted = !!save.statsCommitted;
+    if (save.midGame) { this.tryDeliver(); this.takeTurnIfMine(); return; }
+    if (this.state.over) this.commitStats();
+    if (this.role === 'guest') await this.awaitNextGame();
+    else await this.startNextGame();
+  }
+
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+}
+
+// ==================================================================================
 // Deterministic scripted agents
 // ==================================================================================
 // Chinchón: always draw stock; discard the highest-value card (tie: id order);
@@ -571,6 +930,18 @@ const chinchonScript = (closePolicy) => ({
 // Escoba: play the first hand card; let the engine's legalize() coerce to its first
 // (mandatory) capture option - deterministic and exercises real capture combos.
 const escobaScript = () => (view) => ({ cardId: view.hand[0].id, captureIds: [] });
+// Tic Tac Toe: both sides run the SAME deterministic policy, so the move stream is
+// identical no matter which seat is deciding (only the deciding side's choice is ever
+// used; the other receives it through the room).
+//   tttFirstLegal - always legalMoves(s)[0]. DECISIVE on Classic (X completes 2-4-6 on
+//                   move 7) and plays a full Ultimate game through real board routing.
+//   tttDrawScript - a hand-checked Classic cell order that fills all nine cells with no
+//                   line. The DRAW is what invariant 1's probe needs: a drawn game is
+//                   over with winner === null, so any "is it finished" gate written
+//                   against `winner` instead of `over` hangs exactly there (see T2).
+const tttFirstLegal = () => (s) => tLegal(s)[0];
+const TTT_DRAW_CELLS = [0, 2, 1, 3, 5, 4, 6, 7, 8];
+const tttDrawScript = () => (s) => TTT_DRAW_CELLS[s.moves];
 
 // Scenario runners
 // ==================================================================================
@@ -593,6 +964,15 @@ async function makeEscoba(opts = {}) {
   const host = new EscobaSide('host', room, escobaScript(), opts.host || {});
   const guest = new EscobaSide('guest', room, escobaScript(), Object.assign({ autoStart: true }, opts.guest || {}));
   host.hostStart({ targetScore: 21, deckMode: 'spanish' });
+  return { room, host, guest };
+}
+
+function makeTicTacToe(variant, policy, opts = {}) {
+  const room = new FakeRoom();
+  room.config = { variant };
+  const host = new TicTacToeSide('host', room, policy, opts.host || {});
+  const guest = new TicTacToeSide('guest', room, policy, Object.assign({ autoStart: true }, opts.guest || {}));
+  host.hostStartMatch(variant, opts.xSeat != null ? opts.xSeat : 0);
   return { room, host, guest };
 }
 
@@ -847,6 +1227,275 @@ console.log('\n--- C4: Chinchón rejoin from autosave (KNOWN-BUG PROBE: restore 
       `scores at save=${JSON.stringify(scoresAtSave)} (round ${boundarySave.snap.round}), after restore=${JSON.stringify(restoredScores)} (round ${restoredRound})`);
   } catch (e) { fail++; console.log(`FAIL  C4 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
+}
+
+
+// ==================================================================================
+// TIC TAC TOE (phase 1, HANDOFF-MP-ROADMAP.md). T1/T3 are ordinary lockstep coverage;
+// T2/T4/T5/T6/T7 are the five js/CLAUDE.md:271 invariants ported into this game's own
+// vocabulary. Invariant 3 is the one that does not map literally - its reason is in
+// T5's own message, not silently dropped.
+// ==================================================================================
+
+// --- T1: Classic full game + the seat-identity (THE LAW rule 2) check ---------------
+console.log('\n--- T1: Tic Tac Toe Classic full game, lockstep, hash-verified every applied move ---');
+{
+  const { room, host, guest } = makeTicTacToe('classic', tttFirstLegal());
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'T1 game end');
+    ok('T1: both sides completed the game (no hard failure)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('T1: zero hash mismatches across the whole game', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('T1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('T1: final states hash-identical', tHash(host.state) === tHash(guest.state));
+    ok('T1: same winner on both sides', host.state.winner === guest.state.winner, `host=${host.state.winner} guest=${guest.state.winner}`);
+    ok('T1: no move-log overwrites (the shared seq never collided)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('T1: host holds seat 0 / X, guest holds seat 1 / O',
+      host.localSeat() === 0 && host.myMark() === TX && guest.localSeat() === 1 && guest.myMark() === TO,
+      `host seat ${host.localSeat()} mark ${host.myMark()} / guest seat ${guest.localSeat()} mark ${guest.myMark()}`);
+    const hc = host.statsCommits[0], gc = guest.statsCommits[0];
+    ok('T1: each device recorded exactly one result, in the mp difficulty bucket',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1 && hc.difficulty === 'mp' && gc.difficulty === 'mp',
+      JSON.stringify([host.statsCommits, guest.statsCommits]));
+    ok('T1: the guest recorded ITS OWN result, not the host\'s (X won, so host=true / guest=false)\n' +
+       '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
+       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+      hc.won === true && gc.won === false, `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
+  } catch (e) { fail++; console.log(`FAIL  T1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- T2: INVARIANT 1 ported - a DRAW is a game end, and winner is null at it --------
+console.log('\n--- T2: Tic Tac Toe drawn game (KNOWN-BUG PROBE: guest hangs at a winner-less end) ---');
+{
+  const { room, host, guest } = makeTicTacToe('classic', tttDrawScript());
+  try {
+    await until(() => host.gamesFinished || host.failedHard || guest.failedHard, 15000, 'T2 host game end');
+    ok('T2: the scripted game really is a DRAW (all nine cells, no line)',
+      host.state.over && host.state.isDraw && host.state.winner === null,
+      `over=${host.state.over} isDraw=${host.state.isDraw} winner=${host.state.winner} moves=${host.state.moves}`);
+    ok('T2: zero hash mismatches', host.mismatches === 0 && guest.mismatches === 0);
+    await new Promise((r) => setTimeout(r, 400));
+    ok('T2 [KNOWN-BUG PROBE]: the GUEST also concludes a drawn game, and records it\n' +
+       '      (REGRESSION GUARD, invariant 1 in Tic Tac Toe\'s vocabulary: every "is this game\n' +
+       '      finished" gate must key on state.OVER, which applyMove sets before returning for a\n' +
+       '      win AND a draw - never on state.winner, which is null at the exact moment a drawn\n' +
+       '      game ends. This is Chinchon\'s payload.matchOver bug in a game with no rounds: there,\n' +
+       '      gating on game.winner deadlocked the guest at every points/rounds ending and silently\n' +
+       '      skipped its stats recording. Classic vs a perfect opponent is DRAW-HEAVY by\n' +
+       '      construction (Classic Pro is solved), so a winner-gated end would strand the guest on\n' +
+       '      the majority of real games and lose the play from its gamehub.stats)',
+      guest.gamesFinished === 1 && guest.statsCommits.length === 1,
+      `guest.gamesFinished=${guest.gamesFinished} commits=${JSON.stringify(guest.statsCommits)} state.over=${guest.state && guest.state.over}`);
+    ok('T2: both devices recorded the draw AS a draw (won === null, never a fabricated win/loss)',
+      host.statsCommits[0].won === null && guest.statsCommits[0].won === null,
+      JSON.stringify([host.statsCommits[0], guest.statsCommits[0]]));
+  } catch (e) { fail++; console.log(`FAIL  T2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- T3: Ultimate - the board-routing variant --------------------------------------
+console.log('\n--- T3: Tic Tac Toe Ultimate full game (board routing stays in step) ---');
+{
+  const { room, host, guest } = makeTicTacToe('ultimate', tttFirstLegal());
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 30000, 'T3 game end');
+    ok('T3: both sides completed the Ultimate game', host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('T3: zero hash mismatches', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('T3: it really was a long routed game, not a 9-move accident', host.state.moves > 9, `moves=${host.state.moves}`);
+    ok('T3: final states hash-identical', tHash(host.state) === tHash(guest.state));
+    ok('T3: both sides agree on the META-BOARD and the FORCED BOARD\n' +
+       '      (the derived routing state is what an Ultimate desync hides in - the wrong sub-board\n' +
+       '      unlocked on the remote side. tic-tac-toe/js/hash.js puts meta and forcedBoard IN the\n' +
+       '      hash precisely so that shows up as a detected mismatch instead of silent divergence)',
+      JSON.stringify(host.state.meta) === JSON.stringify(guest.state.meta) && host.state.forcedBoard === guest.state.forcedBoard,
+      `meta host=${JSON.stringify(host.state.meta)} guest=${JSON.stringify(guest.state.meta)}; forced host=${host.state.forcedBoard} guest=${guest.state.forcedBoard}`);
+    ok('T3: no move-log overwrites', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+  } catch (e) { fail++; console.log(`FAIL  T3 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- T4: INVARIANT 2 ported - forced desync, recovery, seat identity ----------------
+console.log('\n--- T4: Tic Tac Toe forced desync + recovery (KNOWN-BUG PROBE: recovery swaps the seats) ---');
+{
+  const { room, host, guest } = makeTicTacToe('classic', tttFirstLegal(), { guest: { corruptAtSeq: 3 } });
+  try {
+    await until(() => guest.recoveriesApplied >= 1 || guest.failedHard || host.failedHard, 15000, 'T4 recovery applied');
+    ok('T4: corruption was DETECTED as a hash mismatch', guest.mismatches >= 1, `guest mismatches=${guest.mismatches}`);
+    ok('T4: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1, `recoveries=${guest.recoveriesApplied}`);
+    ok('T4 [KNOWN-BUG PROBE]: after recovery the guest still plays ITS OWN seat\n' +
+       '      (REGRESSION GUARD, invariant 2: a transmitted snapshot\'s "which side am I" fields are\n' +
+       '      the SENDER\'s. tic-tac-toe/js/ui.js\'s _mpSnapshot therefore transmits nothing\n' +
+       '      device-relative at all - only the absolute board and the seat-indexed xSeat/series -\n' +
+       '      and _mpApplyRecovery re-derives this device\'s own mark from _localSeat(). If a\n' +
+       '      sender-relative field (a "humanMark", a "myWins") is ever added to that snapshot, a\n' +
+       '      recovered guest starts playing the HOST\'s side of the board: it is prompted on the\n' +
+       '      opponent\'s turns, its own turns wait forever, and it records the host\'s result as its\n' +
+       '      own - the rule-2 loss the whole seat indirection exists to prevent)',
+      guest.myMark() === TO && guest.marks[1] === TO && host.myMark() === TX,
+      `guest marks=${JSON.stringify(guest.marks)} myMark=${guest.myMark()} / host myMark=${host.myMark()}`);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'T4 game end after recovery');
+    ok('T4: the game finished cleanly on both sides after recovery',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('T4: final states hash-identical after recovery', tHash(host.state) === tHash(guest.state));
+    ok('T4: the recovered guest still recorded ITS OWN result',
+      host.statsCommits[0].won === true && guest.statsCommits[0].won === false,
+      `host.won=${host.statsCommits[0].won} guest.won=${guest.statsCommits[0].won}`);
+  } catch (e) { fail++; console.log(`FAIL  T4 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- T5: INVARIANT 3 ported by analogy - a rematch never reads game 1's log ---------
+console.log('\n--- T5: Tic Tac Toe rematch (KNOWN-BUG PROBE: stale per-game consumption state) ---');
+{
+  const { room, host, guest } = makeTicTacToe('classic', tttDrawScript());
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'T5 game 1 end');
+    const game1Log = Object.keys(room.moves).length;
+    const seqAtEndOfGame1 = host.mp.appliedSeq;
+    // The host taps "Play again". startNextGame alternates, so game 2 puts X on the
+    // GUEST's seat - the case a seat bug hides in.
+    await host.startNextGame();
+    await until(() => guest.mp.gameNum === 2 || host.failedHard || guest.failedHard, 10000, 'T5 guest adopts game 2');
+    ok('T5: both sides moved to game 2', host.mp.gameNum === 2 && guest.mp.gameNum === 2);
+    ok('T5: game 2 alternated the opening seat - X is now the GUEST',
+      host.mp.xSeat === 1 && guest.myMark() === TX && host.myMark() === TO,
+      `xSeat=${host.mp.xSeat} guest mark=${guest.myMark()} host mark=${host.myMark()}`);
+    // Measured AT the reset, not after it: by the time the poll above returns, game 2's
+    // own first move has already been written and applied.
+    const hostReset = host.roundResets.find((r) => r.n === 2);
+    const guestReset = guest.roundResets.find((r) => r.n === 2);
+    ok('T5 [KNOWN-BUG PROBE]: game 2 starts from a CLEARED move log on both sides\n' +
+       '      (REGRESSION GUARD, invariant 3 ported BY ANALOGY. The original mechanism -\n' +
+       '      config.presetStockResets, a shift()-consumed queue that must not be indexed by a\n' +
+       '      per-round counter - has NO Tic Tac Toe equivalent: this game has no deck, no rng and\n' +
+       '      no per-round consumable of any kind, so that literal probe cannot be ported and is\n' +
+       '      not being silently dropped. What DOES port is the failure shape it encodes: per-round\n' +
+       '      consumption state leaking into the next round. Here the consumable is the seq-keyed\n' +
+       '      move log. net.js startRound clears `moves` atomically with the record, and\n' +
+       '      _mpApplyRoundRecord rebuilds the cache from THAT room snapshot and resets appliedSeq\n' +
+       '      to 0; every entry also carries its game number. Carry any of that over and game 2\n' +
+       '      replays game 1\'s moves - the exact way round 2 replayed round 1\'s shuffle)',
+      !!(hostReset && guestReset)
+        && hostReset.appliedSeq === 0 && guestReset.appliedSeq === 0
+        && hostReset.staleCached === 0 && guestReset.staleCached === 0,
+      `game1 log had ${game1Log} entries (seq reached ${seqAtEndOfGame1}); at the game-2 reset ` +
+      `host=${JSON.stringify(hostReset)} guest=${JSON.stringify(guestReset)}`);
+    await until(() => (host.gamesFinished === 2 && guest.gamesFinished === 2) || host.failedHard || guest.failedHard, 15000, 'T5 game 2 end');
+    ok('T5: game 2\'s log holds only game 2\'s moves (9 entries, all stamped g=2)',
+      Object.values(room.moves).length === 9 && Object.values(room.moves).every((e) => (e.move.g | 0) === 2),
+      `entries=${Object.values(room.moves).length} games=${JSON.stringify([...new Set(Object.values(room.moves).map((e) => e.move.g))])}`);
+    ok('T5: game 2 played to completion with zero mismatches', host.mismatches === 0 && guest.mismatches === 0 && host.gamesFinished === 2 && guest.gamesFinished === 2);
+    ok('T5: the series tally counts both games on both devices, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && host.mp.series.draws === 2,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  T5 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- T6: INVARIANT 4 ported - the autosave's seq matches its own snapshot -----------
+console.log('\n--- T6: Tic Tac Toe rejoin from autosave (KNOWN-BUG PROBE: save seq off-by-one) ---');
+{
+  // In-band freeze (same reasoning as E4): stop the guest's DELIVERY once it has applied
+  // seq 3, mimicking a device backgrounded mid-game with the host one move ahead.
+  let guestRef = null;
+  const { room, host, guest } = makeTicTacToe('classic', tttFirstLegal(), {
+    guest: { frozen: () => guestRef !== null && guestRef.mp !== null && guestRef.mp.appliedSeq >= 3 },
+  });
+  guestRef = guest;
+  let restored = null;
+  try {
+    await until(() => guest.mp && guest.mp.appliedSeq >= 4 && room.moves['0005'], 15000, 'T6 guest frozen with a tail waiting');
+    await new Promise((r) => setTimeout(r, 100));
+    const midSaves = guest.saves.filter((s) => s.midGame);
+    const lastSave = midSaves[midSaves.length - 1];
+    guest.kill();
+
+    // Mechanism probe, direct. CORRECT: the saved state contains exactly moves 1..seq, so
+    // it hashes equal to the log entry AT seq and NOT to the entry at seq+1 (which the
+    // restore path is about to replay onto it).
+    const atSeq = room.moves[String(lastSave.seq | 0).padStart(4, '0')];
+    const atNext = room.moves[String((lastSave.seq | 0) + 1).padStart(4, '0')];
+    const savedHash = tHash(lastSave.state);
+    ok('T6 [KNOWN-BUG PROBE]: the autosave\'s seq matches its own snapshot\n' +
+       '      (REGRESSION GUARD, invariant 4: tic-tac-toe/js/ui.js\'s _afterStateChange must run\n' +
+       '      the move\'s MP bookkeeping FIRST - _mpAfterLocalMove reserving+appending the seq, or\n' +
+       '      _mpApplyNextEntry advancing it - and only THEN call _mpSaveSnapshot. Saving first\n' +
+       '      stores mp.seq one LOW relative to the move already inside the snapshot, so\n' +
+       '      _tryRestoreMP rebuilds post-move-N state with appliedSeq N-1 and re-applies move N:\n' +
+       '      a guaranteed desync on every rejoin, which is the exact case the 30-minute restore\n' +
+       '      window exists for. Escoba shipped this bug on its play hook)',
+      !!atSeq && savedHash === atSeq.h && !(atNext && savedHash === atNext.h),
+      `save.seq=${lastSave.seq}; entry@seq ${atSeq ? (savedHash === atSeq.h ? 'matches the snapshot (correct)' : 'does NOT match') : 'absent'}; entry@seq+1 ${atNext ? (savedHash === atNext.h ? 'ALSO matches - the save is one behind' : 'does not match (correct)') : 'absent'}`);
+
+    // End-to-end: a fresh device restores from that save and replays the tail.
+    restored = new TicTacToeSide('guest', room, tttFirstLegal(), {});
+    await restored.restoreFromSave(lastSave);
+    await until(() => restored.gamesFinished > 0 || restored.mismatches > 0 || restored.failedHard, 15000, 'T6 restored guest finishes');
+    ok('T6: the restored guest replayed the tail cleanly (zero mismatches, no hard failure)',
+      restored.mismatches === 0 && !restored.failedHard,
+      `restored mismatches=${restored.mismatches} appliedSeq=${restored.mp.appliedSeq} failedHard=${restored.failedHard}`);
+    ok('T6: the restored guest reached the same finished game as the host',
+      !!restored.state && restored.state.over && tHash(restored.state) === tHash(host.state),
+      `restored over=${restored.state && restored.state.over} host over=${host.state.over}`);
+    ok('T6: the restored guest kept its own seat (1) and its own mark',
+      restored.localSeat() === 1 && restored.myMark() === TO, `seat=${restored.localSeat()} mark=${restored.myMark()}`);
+  } catch (e) { fail++; console.log(`FAIL  T6 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); if (restored) restored.kill(); }
+}
+
+// --- T7: INVARIANT 5 ported - a boundary restore keeps the series and waits ---------
+console.log('\n--- T7: Tic Tac Toe restore at a game boundary (KNOWN-BUG PROBE: restore wipes the series) ---');
+{
+  const { room, host, guest } = makeTicTacToe('classic', tttDrawScript());
+  let restored = null;
+  const isoRoom = new FakeRoom();
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'T7 game 1 end');
+    await new Promise((r) => setTimeout(r, 50));
+    const boundarySaves = guest.saves.filter((sv) => !sv.midGame);
+    const boundarySave = deep(boundarySaves[boundarySaves.length - 1]);
+    ok('T7: the guest wrote a BOUNDARY save carrying the series tally',
+      !!boundarySave && boundarySave.midGame === false && boundarySave.series.draws === 1 && boundarySave.statsCommitted === true,
+      JSON.stringify(boundarySave && { midGame: boundarySave.midGame, series: boundarySave.series, statsCommitted: boundarySave.statsCommitted }));
+    cleanup(room, host, guest);   // the live match is no longer needed
+
+    // Restore onto an isolated room that has NOT yet been given the next game's record.
+    // The promise is deliberately NOT awaited: a guest MUST block here.
+    isoRoom.config = { variant: 'classic' };
+    isoRoom.status = 'active';
+    restored = new TicTacToeSide('guest', isoRoom, tttDrawScript(), {});
+    const pending = restored.restoreFromSave(boundarySave);
+    await new Promise((r) => setTimeout(r, 150));
+    ok('T7: the restored guest WAITS for the host\'s record instead of starting a game itself',
+      restored.mp.gameNum === boundarySave.gameNum && restored.mp.awaitingGameN === boundarySave.gameNum + 1 && restored.state.over,
+      `gameNum=${restored.mp.gameNum} awaitingGameN=${restored.mp.awaitingGameN} state.over=${restored.state.over}`);
+    ok('T7: it did not double-record the finished game it restored',
+      restored.statsCommits.length === 0 && restored.statsCommitted === true,
+      `commits=${JSON.stringify(restored.statsCommits)} statsCommitted=${restored.statsCommitted}`);
+
+    // The host now publishes game 2 with X on the GUEST's seat - a value the guest could
+    // not have derived locally (its own setup would have said otherwise).
+    await isoRoom.startRound(boundarySave.gameNum + 1, null, 1);
+    await until(() => restored.mp.gameNum === boundarySave.gameNum + 1, 10000, 'T7 restored guest adopts the host record');
+    await pending;
+    ok('T7 [KNOWN-BUG PROBE]: the restore KEPT the series tally (no wipe) and took the host\'s\n' +
+       '      opening seat rather than deriving one\n' +
+       '      (REGRESSION GUARD, invariant 5: a boundary snapshot must resume with the NEXT game,\n' +
+       '      records kept - never a fresh match init that zeroes them - and a restoring GUEST must\n' +
+       '      await the host\'s freshly published round record before playing. Chinchon shipped the\n' +
+       '      other branch: playMatch fell through to initMatch(), every totalScore was ZEROED and\n' +
+       '      the match restarted at round 1; with BOTH devices restoring at once there was no\n' +
+       '      authoritative host left to recover from and the scores were simply gone, a THE-LAW-\n' +
+       '      class loss. Here the equivalents are the series tally and, in place of the next\n' +
+       '      round\'s deck, which seat plays X - derive it locally and the two devices disagree\n' +
+       '      about who moves first, which desyncs on move one)',
+      restored.mp.series.draws === boundarySave.series.draws
+        && JSON.stringify(restored.mp.series.wins) === JSON.stringify(boundarySave.series.wins)
+        && restored.mp.xSeat === 1 && restored.myMark() === TX,
+      `series at save=${JSON.stringify(boundarySave.series)} after restore=${JSON.stringify(restored.mp.series)}; xSeat=${restored.mp.xSeat} myMark=${restored.myMark()}`);
+  } catch (e) { fail++; console.log(`FAIL  T7 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); if (restored) restored.kill(); isoRoom.dead = true; }
 }
 
 console.log(fail
