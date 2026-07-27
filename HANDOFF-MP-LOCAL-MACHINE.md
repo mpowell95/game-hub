@@ -71,9 +71,32 @@ This is the only game in the whole plan that cannot be *started* in a cloud sess
 protocol headlessly against `FakeRoom` and nothing more; it is instructed to hand off with exactly
 that claim. Everything below is what turns that into a real one.
 
-Run this per game, with **two real devices** (not two tabs on one machine — same-device tabs share
-a clock, a network path, and often a `deviceId`, which hides precisely the bugs this pass exists
-to find).
+Run this per game in **two stages**. An earlier version of this doc said only "two real devices,
+not two tabs on one machine", which was too coarse and stalled the Tic Tac Toe pass — it lumped
+together two setups that are genuinely different.
+
+### B0 — the two-PROFILE pre-pass (one machine, no phones needed)
+
+**Two separate browser profiles** (e.g. Chrome profile A + a Chrome guest window, or Chrome +
+Firefox) — **not two tabs in the same profile.** The distinction is the whole point: tabs in one
+profile share `localStorage`, so they share `gamehub.deviceId` (`js/game-stats.js:135-144`) and
+therefore share one `gamehub.stats` store, which hides exactly the seat and stats bugs this pass
+exists to find. Two profiles have **separate `localStorage`, separate `deviceId`, separate stats
+stores** — and on Matt's machine Firebase is reachable, so these are real rooms with a real move
+log and real recovery.
+
+**B0 covers, for real:** B1 (happy path), **all of B2 including whether the guest's result
+actually lands in its own `gamehub.stats`**, B3's mismatch/recovery and leave/re-enter items, and
+B5. Do this first, every time — it is most of the risk, available immediately.
+
+**B0 cannot cover** (genuinely needs stage two): real latency between distinct network paths, clock
+skew, true app backgrounding / airplane mode / the 30-minute reattach, and everything in
+Category D.
+
+### B1-B5 — the two-DEVICE pass (two real phones)
+
+Everything below, on two real devices. After a clean B0 this is a shorter, targeted session: the
+protocol is already known to work, so you are testing the physical realities B0 cannot simulate.
 
 ### B1 — the happy path
 - [ ] Host creates a room; the 4-char code appears. Guest joins by code. Both reach the game screen.
