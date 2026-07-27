@@ -355,3 +355,77 @@ harness by construction — the harness proves the PROTOCOL and the seq/hash boo
 instead of written, so `recordResult`/`recordHeadToHead` are proven to be CALLED with the right
 arguments (the guest's own result, the `'mp'` bucket) but not proven to land in `gamehub.stats`
 — **B2 is still the priority check, same as every other MP game.**
+
+### Filler — roadmap phase 2 (2026-07-27)
+
+**Branch `claude/filler-multiplayer-lr1obv`.** Two human seats, host P1 (bottom-left corner) /
+guest P2 (top-right corner), fixed for the whole room, following Mancala's deviation from the Tic
+Tac Toe template (the corners are physically different fixed positions, not interchangeable
+marks). **`js/net.js` was not touched.** Full design write-up: `filler/CLAUDE.md`'s
+"Multiplayer" section and `js/CLAUDE.md`'s "The fifth consumer: Filler".
+
+**Status: protocol proven headlessly against FakeRoom; real-room behaviour unverified.** Same
+network-policy wall as every prior MP game in this doc — no room has ever been created from this
+session (Firebase is unreachable in this environment).
+
+What IS verified: `node run-all-tests.mjs` → 19 suites, 2 skipped (jsdom), 0 failed, including a
+new F1-F6 block in `test-mp-lockstep.mjs` that ports all five `js/CLAUDE.md:271` invariants into
+Filler's own vocabulary (F4 ports invariant 3 DIRECTLY, since Filler had a rematch series from
+the first line of this pass, unlike Mancala's original single-game shape). `node
+validate-sw-assets.mjs` → green, `CACHE` bumped `v225` → `v226` for the new `filler/js/hash.js`.
+Solo play, the setup screen's new Solo/Host/Join mode selector, and the Join code-entry screen
+were all checked in a real Chromium tab via Playwright (`node server.mjs` +
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) — board renders, a solo move plays and the
+AI replies, no console errors, no regressions in the existing solo/autosave path.
+
+**Design choices that could not be verified without a real network** — these are the ones to
+watch during Category B, in priority order:
+
+1. **The seed rides `round.deck`, not room `config` — a deliberate deviation from the handoff
+   doc's literal wording.** The doc said "transmit the SEED in room config", but this room hosts
+   a REMATCH SERIES (a fresh seed every game) and `room.config` is fixed once at `createRoom`, so
+   the seed rides `round.deck` instead (the field Chinchón uses for its own per-round deck
+   order). Verified offline that two engines seeded from the same 32-bit int
+   (`newGame(mulberry32(seed))`) hash identically — never verified over an actual Firebase
+   round-trip, where `round.deck` is a plain number surviving RTDB's JSON encoding. Should be a
+   non-issue (it's just an integer), but it is the one piece of the seeding design with zero real
+   round-trip coverage.
+2. **Remote moves are animated (the real flood-fill ripple) and PACED with a settle beat
+   (`MP_DELIVER_SETTLE_MS = 150`) before the next log entry is even checked**, the same
+   "route input through the real render path" reasoning as Mancala's animated sow — but this is
+   the sharpest edge of B4's "latency question a web session cannot de-risk" for this game.
+   Confirm a real remote move's ripple actually plays smoothly end-to-end over real network
+   timing on two real devices, and that the 150ms settle beat feels right (not sluggish, not so
+   short that overlapping ripples from a fast exchange look glitchy) — neither can be judged
+   against `FakeRoom`'s synthetic microtask timing.
+3. **A second, independently-found instance of Mancala's async-delivery race.** Because delivery
+   here is animated AND paced, the same shape applies: a room update carrying a fresh move can
+   land in the gap opened by the settle-await, right after the drain loop's own "nothing left to
+   apply" check already read a stale cache. Fixed the same way (`mp.redeliverRequested`,
+   documented in both `filler/js/ui.js` and `js/CLAUDE.md`) and proven against `FakeRoom`'s
+   synthetic microtask timing only — real network jitter is a different, unproven timing regime.
+   Any B3/B4 stall or "opponent's move never landed" symptom on Filler should be looked at with
+   this mechanism first, same as Mancala's item 3 above.
+4. **`game.js`'s `applyMove` mutates its argument** (unlike Mancala's/Tic Tac Toe's pure
+   engines), so both the local-move and remote-entry paths speculate on a `cloneGame()` clone and
+   only commit it once the hash agrees. This is a code-shape difference proven correct by the
+   F1/F3 hash-equality and forced-desync assertions, but — like every other game in this doc —
+   never exercised against a REAL corrupted network payload, only a harness-injected one.
+5. **B2 (guest seat identity) is the priority check, same as every MP game before this one**:
+   confirm the guest genuinely sees itself at the top-right corner (never the host's
+   bottom-left), and that a guest's own win/loss is recorded as its own, not the host's.
+
+**What the harness stubbed or elided** (same shape as every prior game's list in this doc — not
+repeated in full): `net.js`'s room lifecycle (createRoom/joinRoom/heartbeat/leaveRoom, SW-version
+match) is entirely absent from `FakeRoom`; the local human's tap is a scripted policy
+(`takeTurnIfMine`/`humanMove`, HARNESS ONLY, always "the first legal color" — chosen because it
+happens to produce both a decisive game and a genuine tie depending only on the seed, verified
+offline against the real engine); all render/DOM/animation paths are outside the harness by
+construction (the harness has no ripple to await, only the async SHAPE of one) — the harness
+proves the PROTOCOL and the seq/hash bookkeeping, never that the ripple itself looks right; stats
+are captured into an array instead of written, so `recordResult`/`recordHeadToHead` are proven to
+be CALLED with the right arguments (the guest's own result, the `'mp'` bucket) but not proven to
+land in `gamehub.stats` — **B2 is still the priority check.**
+
+**Honest status line: protocol proven headlessly against FakeRoom; real-room behaviour
+unverified.**
