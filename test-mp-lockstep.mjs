@@ -1,6 +1,6 @@
-// test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL FOUR multiplayer games
-// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1, Mancala phase 2). No Firebase, no DOM: an
-// in-file FakeRoom
+// test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL FIVE multiplayer games
+// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1, Mancala phase 2, Filler phase 2). No Firebase,
+// no DOM: an in-file FakeRoom
 // emulates the rooms/<CODE> node (move log, round records, recovery field, result) and two
 // mirrored "glue" sides drive the REAL engine/hash/preset-deck/snapshot modules exactly the way
 // each game's ui.js does.
@@ -43,6 +43,13 @@
 //     _mpOnDivergence, _mpSnapshot, _mpApplyRecovery, _mpStartMatch/_mpApplyRoundRecord,
 //     _mpRoomCallback/_mpOnRoomUpdate, _mpSaveSnapshot/_mpLoadSave, _tryRestoreMP, and the MP
 //     branch of finishMove/finish. Also named rather than line-numbered, same reasoning.
+//   Filler (filler/js/ui.js) - the same _mp* family plus _localSeat/_remoteSeat, _isLegal,
+//     _mpNewState, _mpEncodeMove/_mpDecodeMove, _mpAfterLocalMove, _mpTryDeliverNextMove/
+//     _mpApplyNextEntry (ASYNC and PACED, like Mancala's - see the class comment below for why),
+//     _mpOnDivergence, _mpNormalizeSeries, _mpSnapshot, _mpApplyRecovery, _mpStartNextGame/
+//     _mpApplyRoundRecord, _mpAfterGameEnd/_seriesLine, _mpRoomCallback/_mpOnRoomUpdate,
+//     _mpSaveSnapshot/_mpLoadSave, _tryRestoreMP, and the MP branch of _afterMove/finish. Also
+//     named rather than line-numbered, same reasoning.
 //   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
 //   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
@@ -82,6 +89,8 @@ import { newGame as tNewGame, applyMove as tApply, legalMoves as tLegal, X as TX
 import { stateHash as tHash } from './tic-tac-toe/js/hash.js';
 import { P1 as mP1, P2 as mP2, P1_STORE as mP1_STORE, P2_STORE as mP2_STORE, newGame as mNewGame, legalMoves as mLegal, applyMove as mApply } from './mancala/js/game.js';
 import { stateHash as mHash } from './mancala/js/hash.js';
+import { P1 as fP1, P2 as fP2, newGame as fNewGame, cloneGame as fCloneGame, legalColors as fLegalColors, applyMove as fApplyMove } from './filler/js/game.js';
+import { stateHash as fHash } from './filler/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -2114,6 +2123,629 @@ console.log('\n--- M6: Mancala restore at a game boundary (KNOWN-BUG PROBE: rest
       JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
       `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
   } catch (e) { fail++; console.log(`FAIL  M6 did not complete: ${e.message}`); }
+  finally { if (restored) restored.kill(); }
+}
+
+// ==================================================================================
+// FILLER side (mirror of filler/js/ui.js's MP glue)
+//
+// Shape difference worth stating once, beyond what Mancala's own comment already covers: like
+// Mancala, this game has no agent interface and its engine's applyMove(state, color) MUTATES
+// its argument (unlike Mancala's pure applyMove, which returns a new state) -- so both the local
+// move path and the remote-entry path here speculate on a CLONE (cloneGame) and only commit it
+// to `this.state` once the hash agrees, exactly mirroring filler/js/ui.js's _mpAfterLocalMove/
+// _mpApplyNextEntry. Delivery is ASYNC and PACED like Mancala's (each remote move gets the same
+// flood-fill ripple a local move gets, and a settle beat runs before the next entry is even
+// checked), so this harness's tryDeliver()/applyNextEntry() are async and await each other, same
+// as MancalaSide -- the harness itself has no animation to await (headless), but the async shape
+// stays honest about what the real glue does, and is what makes the redeliverRequested race
+// reproducible here too.
+//
+// Vocabulary map (js/net.js is untouched, so its field names are reused as-is):
+//   a "round" record  = ONE GAME of a rematch series this room hosts, same vocabulary as Tic Tac
+//                        Toe/Mancala.
+//   round.n           = the game number
+//   round.deck        = the board SEED for that game (a 32-bit int), NOT a deck order -- Filler
+//                        is the first game on the roadmap to give this field a real payload
+//                        (see the DEVIATION note in filler/js/ui.js's class comment: the
+//                        handoff's literal wording said "seed in room config", but a rematch
+//                        series needs a FRESH seed each game, and room.config is fixed once at
+//                        createRoom, so the seed rides round.deck instead, same field Chinchón
+//                        uses for its own per-round deck order). Both sides call
+//                        newGame(mulberry32(seed)) locally; the board itself is never
+//                        transmitted.
+//   round.dealer      = the seat that opens that game, alternated by the HOST every game via
+//                        mp.nextDealer (_mpStartNextGame). Sides themselves never swap (host
+//                        stays P1/bottom-left, guest stays P2/top-right for the whole room);
+//                        only who opens does.
+//   writeResult       = deliberately NOT used; status:'ended' means somebody abandoned the room
+// ==================================================================================
+
+const fMulberry32 = (seed) => {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+};
+const fPlain = (s) => ({
+  colors: Array.from(s.colors), owner: Array.from(s.owner), turn: s.turn,
+  counts: s.counts.slice(), current: s.current.slice(), over: s.over, winner: s.winner,
+  moves: s.moves, dryMoves: s.dryMoves,
+});
+const fFromPlain = (p) => ({
+  colors: Uint8Array.from(p.colors), owner: Uint8Array.from(p.owner), turn: p.turn === fP2 ? fP2 : fP1,
+  counts: p.counts.slice(), current: p.current.slice(), over: !!p.over, winner: p.winner | 0,
+  moves: p.moves | 0, dryMoves: p.dryMoves | 0,
+});
+
+function fillerNewState(role) {   // _mpNewState (UI-only fields dropped)
+  return {
+    role, localSeat: role === 'host' ? fP1 : fP2,
+    gameNum: 0,
+    nextDealer: fP1,   // host only: who opens the NEXT game (flipped by startNextGame)
+    // Indexed DIRECTLY by seat value (P1=1, P2=2 in game.js), index 0 unused -- see
+    // filler/js/ui.js's _mpNewState comment on why this differs from Mancala's 0-indexed pair.
+    series: { wins: [0, 0, 0], draws: 0 },
+    lastScoredGame: 0,   // afterGameEnd's idempotence guard
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    replayMode: false, recoveryAttempts: 0, delivering: false, awaitingRecovery: false,
+    // See _mpTryDeliverNextMove's comment in filler/js/ui.js: an async, PACED drain can check
+    // "is there a next entry" against a stale cache right as a room update lands with the
+    // answer. This is a real bug shape this harness surfaces, not a test-only concern -- fixed
+    // in ui.js too (same as mancala/js/ui.js's redeliverRequested).
+    redeliverRequested: false,
+    opponentLeft: false, lastRoomSnapshot: null,
+    lastRecoveryHandled: null, lastRecoveryApplied: null,
+  };
+}
+const fillerNormSeries = (s) => ({ wins: [0, ((s && s.wins) || [])[1] | 0, ((s && s.wins) || [])[2] | 0], draws: (s && s.draws) | 0 });
+
+class FillerSide {
+  constructor(role, room, policy, opts = {}) {
+    this.role = role; this.room = room; this.policy = policy; this.opts = opts;
+    this.mp = null; this.state = null;
+    this.dead = false; this.failedHard = false;
+    this.mismatches = 0; this.recoveriesApplied = 0;
+    this.statsCommitted = false;
+    this.gamesFinished = 0;
+    this.statsCommits = [];   // commitStats's result, captured instead of written
+    this.saves = [];          // in-memory _mpSaveSnapshot
+    this.roundResets = [];    // harness-only: what each applyRoundRecord reset actually saw
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+
+  localSeat() { return this.mp ? this.mp.localSeat : fP1; }
+  remoteSeat() { return 3 - this.localSeat(); }   // P1=1, P2=2: the other one.
+
+  isLegal(color) {   // _isLegal - the ONE legality gate, read by the local tap AND every remote move
+    const s = this.state;
+    if (!s || s.over) return false;
+    return fLegalColors(s).indexOf(color) >= 0;
+  }
+
+  encodeMove(color) { return { t: 'move', g: this.mp.gameNum, c: color | 0 }; }   // _mpEncodeMove
+  decodeMove(m) { return m.c | 0; }   // _mpDecodeMove
+
+  afterLocalMove(color) {   // _mpAfterLocalMove - seq reserved SYNCHRONOUSLY, before any await;
+    // speculates on a CLONE since fApplyMove mutates its argument (unlike Mancala's pure one).
+    const mp = this.mp;
+    if (!mp) return;
+    const trial = fCloneGame(this.state);
+    fApplyMove(trial, color);
+    const seq = ++mp.appliedSeq;
+    const h = fHash(trial);
+    this.room.appendMove(this.role, seq, this.encodeMove(color), h).catch(() => {});
+  }
+
+  async tryDeliver() {   // _mpTryDeliverNextMove - ASYNC + PACED (see the class comment above)
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.state) return;
+    if (this.opts.frozen && this.opts.frozen()) return;   // harness-only freeze (a backgrounded device)
+    mp.delivering = true;
+    mp.redeliverRequested = false;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (await this.applyNextEntry()) continue;
+        if (mp.redeliverRequested) { mp.redeliverRequested = false; continue; }
+        break;
+      }
+    } finally { mp.delivering = false; }
+  }
+
+  async applyNextEntry() {   // _mpApplyNextEntry
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !mp.movesById || !this.state || this.state.over) return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry || !entry.move || entry.move.t !== 'move') return false;
+    if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;   // never consume another game's entry
+    const color = this.decodeMove(entry.move);
+    let agreed = this.isLegal(color);
+    let trial = null;
+    if (agreed) {
+      trial = fCloneGame(this.state);
+      fApplyMove(trial, color);
+      if (this.opts.corruptAtSeq === seq && !this._corrupted) {
+        // A pure HASH divergence with zero effect on the real gameplay path (the corrupted
+        // trial is only ever used for the comparison below -- it is discarded, never committed,
+        // unless the hash happens to still agree, which it won't).
+        this._corrupted = true;
+        trial.counts = trial.counts.slice();
+        trial.counts[fP1] += 1;
+      }
+      agreed = fHash(trial) === entry.h;
+    }
+    if (!agreed) { this.mismatches++; return this.onDivergence(seq); }
+    mp.appliedSeq = seq;
+    mp.recoveryAttempts = 0;
+    if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+    this.state = trial;
+    await this.afterStateChange();
+    return true;
+  }
+
+  onDivergence(seq) {   // _mpOnDivergence - host takes the seq and publishes; guest latches
+    const mp = this.mp;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; return false; }
+    if (mp.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+      return true;
+    }
+    mp.awaitingRecovery = true;
+    this.room.requestRecovery(seq).catch(() => {});
+    return false;
+  }
+
+  snapshot() {   // _mpSnapshot - nothing device-relative: the absolute board, seat derived locally
+    const mp = this.mp;
+    return {
+      v: 1, gameNum: mp.gameNum, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: deep(fPlain(this.state)),
+    };
+  }
+
+  async applyRecovery(recovery) {   // _mpApplyRecovery
+    const mp = this.mp;
+    if (!mp || this.dead) return;
+    const snap = deep(recovery.state);
+    mp.gameNum = snap.gameNum | 0;
+    mp.nextDealer = snap.nextDealer === fP2 ? fP2 : fP1;
+    mp.series = fillerNormSeries(snap.series);
+    this.state = fFromPlain(snap.state);
+    mp.appliedSeq = recovery.seq | 0;
+    mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
+    mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.lastScoredGame = this.state.over ? mp.gameNum : mp.lastScoredGame;
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+    await this.afterStateChange();
+  }
+
+  async applyRoundRecord(round, room) {   // _mpApplyRoundRecord - board built from round.deck (the seed)
+    const mp = this.mp;
+    if (!mp || this.dead || !round) return;
+    mp.gameNum = round.n | 0;
+    mp.appliedSeq = 0; mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    const entries = Object.values((room && room.moves) || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    this.statsCommitted = false;
+    this.state = fNewGame(fMulberry32(round.deck >>> 0));
+    if (round.dealer === fP2) this.state.turn = fP2;
+    // HARNESS ONLY: freeze what the per-game reset actually saw, so F4 can probe the exact
+    // instant a new game begins rather than whatever the log looks like a few microtasks
+    // later. Mirrors Tic Tac Toe's/Mancala's roundResets exactly.
+    this.roundResets.push({
+      n: mp.gameNum,
+      dealer: round.dealer === fP2 ? fP2 : fP1,
+      appliedSeq: mp.appliedSeq,
+      cached: mp.movesById.size,
+      staleCached: [...mp.movesById.values()].filter((e) => (e.move.g | 0) !== mp.gameNum).length,
+    });
+    await this.afterStateChange();
+  }
+
+  /** _mpStartNextGame. The real method rolls a fresh Math.random() seed every game; the harness
+   *  accepts an explicit seed for reproducibility, defaulting to a deterministic per-game value
+   *  so a run is never flaky. The real method alternates mp.nextDealer itself; the harness also
+   *  accepts an explicit dealer override for opts-driven tests, defaulting to the alternation. */
+  async startNextGame(dealer, seed) {
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this.dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const seat = dealer != null ? dealer : (mp.nextDealer === fP2 ? fP2 : fP1);
+    mp.nextDealer = seat === fP1 ? fP2 : fP1;
+    const useSeed = (seed != null ? seed : (1000 + n)) >>> 0;
+    await this.room.startRound(n, useSeed, seat);
+    if (this.dead || !this.mp) return;
+    if ((this.mp.gameNum | 0) < n) await this.applyRoundRecord({ n, deck: useSeed, dealer: seat }, null);
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd - series tally, idempotent per game number
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (s.winner === 0) mp.series.draws += 1;
+    else mp.series.wins[s.winner] += 1;
+    this.save();
+  }
+
+  async afterStateChange() {   // the MP branch of _afterMove - save FIRST is the invariant-4 ordering
+    if (this.dead) return;
+    this.save();
+    if (this.state.over) {
+      this.commitStats();
+      this.afterGameEnd();
+      this.save();   // finish() - re-save with statsCommitted (and any series bump) set
+      this.gamesFinished++;
+      return;
+    }
+    await this.tryDeliver();
+    await this.takeTurnIfMine();
+  }
+
+  /** HARNESS ONLY: stands in for the local human's tap. The real UI waits for a click on a
+   *  live color button; humanMove() below is the real method it calls. */
+  async takeTurnIfMine() {
+    if (this.dead || !this.state || this.state.over) return;
+    if (this.state.turn !== this.localSeat()) return;
+    await this.humanMove(this.policy(this.state));
+  }
+
+  async humanMove(color) {   // humanMove - local apply, MP bookkeeping, then the funnel
+    if (!this.state || this.state.over || this.state.turn !== this.localSeat()) return;
+    if (!this.isLegal(color)) return;
+    this.afterLocalMove(color);
+    fApplyMove(this.state, color);
+    await this.afterStateChange();
+  }
+
+  commitStats() {   // finish() - `won` resolves through localSeat()
+    if (this.statsCommitted) return;
+    this.statsCommitted = true;
+    const s = this.state;
+    const won = s.winner === 0 ? null : (s.winner === this.localSeat());
+    this.statsCommits.push({ difficulty: 'mp', won });
+  }
+
+  save() {   // _mpSaveSnapshot - seq read AFTER this move's own MP bookkeeping
+    const mp = this.mp;
+    if (!mp || !this.state) return;
+    this.saves.push({
+      v: 1, code: 'F', role: this.role, seq: mp.appliedSeq | 0, at: 0,
+      gameNum: mp.gameNum | 0, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      lastScoredGame: mp.lastScoredGame | 0,
+      statsCommitted: !!this.statsCommitted,
+      state: deep(fPlain(this.state)),
+    });
+  }
+
+  roomCallback(room) {   // _mpRoomCallback
+    if (this.dead) return;
+    if (this.mp) { this.onRoomUpdate(room); return; }
+    if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+  }
+
+  guestStart(room) {   // _mpGuestStartMatch
+    if (this.mp || this.dead) return;
+    this.mp = fillerNewState('guest');
+    this.mp.lastRoomSnapshot = room;
+    this.applyRoundRecord(room.round, room);
+  }
+
+  hostStartMatch(dealer, seed) {   // _mpHostStartMatch
+    this.mp = fillerNewState('host');
+    return this.startNextGame(dealer, seed);
+  }
+
+  onRoomUpdate(room) {   // _mpOnRoomUpdate
+    if (this.dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.status === 'ended' && !mp.opponentLeft) { mp.opponentLeft = true; return; }
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this.applyRecovery(room.recovery);
+      }
+    }
+    const roundN = room.round ? (room.round.n | 0) : 0;
+    if (room.round && roundN > (mp.gameNum | 0)) {
+      this.applyRoundRecord(room.round, room);
+    } else if (roundN === (mp.gameNum | 0) && this.state) {
+      const entries = Object.values(room.moves || {});
+      mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+      const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+      if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+      mp.maxKnownSeq = maxSeq;
+      mp.redeliverRequested = true;
+      this.tryDeliver();
+    }
+  }
+
+  async restoreFromSave(save) {   // _tryRestoreMP (the join/heartbeat half elided: FakeRoom is always reachable)
+    this.mp = fillerNewState(this.role);
+    const mp = this.mp;
+    mp.gameNum = save.gameNum | 0;
+    mp.nextDealer = save.nextDealer === fP2 ? fP2 : fP1;
+    // The series tally is carried through UNTOUCHED, same as Tic Tac Toe's/Mancala's restore.
+    mp.series = fillerNormSeries(save.series);
+    mp.lastScoredGame = save.lastScoredGame | 0;
+    mp.appliedSeq = save.seq | 0;
+    mp.maxKnownSeq = mp.appliedSeq;
+    this.state = fFromPlain(deep(save.state));
+    this.statsCommitted = !!save.statsCommitted;
+    // No separate "boundary between games" await path is needed the way Tic Tac Toe's restore
+    // has one -- either the saved game is still live (drain the tail) or it already finished
+    // (commitStats()'s own guard, plus afterGameEnd's lastScoredGame guard, keep re-showing the
+    // result idempotent; see F6). If the series has since moved on, the ordinary onRoomUpdate
+    // roundN > gameNum branch picks up the next game ONCE the host publishes it -- no separate
+    // await path, matching filler/js/ui.js's _tryRestoreMP.
+    if (this.state.over) { this.commitStats(); return; }
+    this.tryDeliver();
+    this.takeTurnIfMine();
+  }
+
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+}
+
+function makeFiller(policy, opts = {}) {
+  const room = new FakeRoom();
+  room.config = {};
+  const host = new FillerSide('host', room, policy, opts.host || {});
+  const guest = new FillerSide('guest', room, policy, Object.assign({ autoStart: true }, opts.guest || {}));
+  host.hostStartMatch(opts.dealer, opts.seed);
+  return { room, host, guest };
+}
+
+// Filler: a single deterministic policy - always the FIRST legal color (fLegalColors(s)[0]).
+// Unlike Tic Tac Toe/Mancala's split into a decisive vs. a tie-seeking script, this ONE policy
+// produces both outcomes depending only on the seed (verified offline against the real engine):
+// it never seeks captures, so nearly every game ends via the dry-move stalemate guard rather
+// than a full board, and whether that stalemate is decisive or an exact tie depends on the
+// board's own color layout for that seed. seed 1 (dealt to a first-legal-vs-first-legal game)
+// is decisive (P2 wins, 50 moves); seed 4 is a genuine TIE (equal territory, 24 moves) - what
+// invariant 1's probe (F2) needs: a tied game is over with winner === 0 (never a real seat), so
+// any "is it finished" gate written against `winner` instead of `over` hangs exactly there.
+const fFirstLegal = () => (s) => fLegalColors(s)[0];
+
+// --- F1: Filler full match + the seat-identity (THE LAW rule 2) check --------------
+console.log('\n--- F1: Filler full match, lockstep, hash-verified every applied move ---');
+{
+  const { room, host, guest } = makeFiller(fFirstLegal(), { seed: 1 });
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'F1 game end');
+    ok('F1: both sides completed the game (no hard failure)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('F1: zero hash mismatches across the whole game', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('F1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('F1: final states hash-identical', fHash(host.state) === fHash(guest.state));
+    ok('F1: same winner on both sides', host.state.winner === guest.state.winner, `host=${host.state.winner} guest=${guest.state.winner}`);
+    ok('F1: no move-log overwrites (the shared seq never collided)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('F1: host holds seat P1 (bottom-left), guest holds seat P2 (top-right)',
+      host.localSeat() === fP1 && guest.localSeat() === fP2, `host=${host.localSeat()} guest=${guest.localSeat()}`);
+    const hc = host.statsCommits[0], gc = guest.statsCommits[0];
+    ok('F1: each device recorded exactly one result, in the mp difficulty bucket',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1 && hc.difficulty === 'mp' && gc.difficulty === 'mp',
+      JSON.stringify([host.statsCommits, guest.statsCommits]));
+    ok('F1: the guest recorded ITS OWN result, not the host\'s\n' +
+       '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
+       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+      hc.won === (host.state.winner === fP1) && gc.won === (guest.state.winner === fP2) && hc.won !== gc.won,
+      `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
+  } catch (e) { fail++; console.log(`FAIL  F1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- F2: INVARIANT 1 ported - a TIE is a game end, and winner is 0 (no real seat) at it -----
+console.log('\n--- F2: Filler tied game (KNOWN-BUG PROBE: a `winner`-keyed gate hangs at a winner-less end) ---');
+{
+  const { room, host, guest } = makeFiller(fFirstLegal(), { seed: 4 });
+  try {
+    await until(() => host.gamesFinished || host.failedHard || guest.failedHard, 15000, 'F2 host game end');
+    ok('F2: the scripted game really is a TIE (equal territory, winner 0)',
+      host.state.over === true && host.state.winner === 0 && host.state.counts[fP1] === host.state.counts[fP2],
+      `over=${host.state.over} winner=${host.state.winner} p1=${host.state.counts[fP1]} p2=${host.state.counts[fP2]}`);
+    ok('F2: zero hash mismatches', host.mismatches === 0 && guest.mismatches === 0);
+    ok('F2 [KNOWN-BUG PROBE]: the GUEST also concludes a tied game, and records it\n' +
+       '      (REGRESSION GUARD, invariant 1 ported: filler/js/ui.js\'s _afterMove/finish() must\n' +
+       '      gate on state.over, NEVER on state.winner - winner is 0 (no real seat) for a genuine\n' +
+       '      tie, so a gate written against "if (winner)" would silently skip both the end-of-game\n' +
+       '      overlay and the stats commit on a tied match, the same shape as Chinchon\'s original\n' +
+       '      match-end deadlock, ported to a game with no points/rounds of its own)',
+      guest.gamesFinished === 1 && guest.state.over === true && guest.state.winner === 0,
+      `guest.gamesFinished=${guest.gamesFinished} over=${guest.state && guest.state.over} winner=${guest.state && guest.state.winner}`);
+    ok('F2: both devices recorded the tie AS a draw (won === null, never a fabricated win/loss)',
+      host.statsCommits[0].won === null && guest.statsCommits[0].won === null,
+      JSON.stringify([host.statsCommits[0], guest.statsCommits[0]]));
+  } catch (e) { fail++; console.log(`FAIL  F2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- F3: INVARIANT 2 ported - forced desync, recovery, seat identity ----------------
+console.log('\n--- F3: Filler forced desync + recovery (KNOWN-BUG PROBE: recovery swaps the seats) ---');
+{
+  const { room, host, guest } = makeFiller(fFirstLegal(), { seed: 1, guest: { corruptAtSeq: 3 } });
+  try {
+    await until(() => guest.recoveriesApplied >= 1 || guest.failedHard || host.failedHard, 15000, 'F3 recovery applied');
+    ok('F3: corruption was DETECTED as a hash mismatch', guest.mismatches >= 1, `guest mismatches=${guest.mismatches}`);
+    ok('F3: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1, `recoveries=${guest.recoveriesApplied}`);
+    ok('F3 [KNOWN-BUG PROBE]: after recovery the guest still plays ITS OWN seat (P2), never the\n' +
+       '      HOST\'s (P1)\n' +
+       '      (REGRESSION GUARD, invariant 2: a transmitted snapshot must carry nothing device-\n' +
+       '      relative. filler/js/ui.js\'s _mpSnapshot transmits only { gameNum, state } - the\n' +
+       '      absolute board - and _localSeat() is fixed at match start (host=P1, guest=P2) and\n' +
+       '      never re-derived from anything in the recovery payload, so there is no isHuman-style\n' +
+       '      flag here to get swapped the way Chinchon/Escoba\'s original bug swapped one)',
+      guest.localSeat() === fP2, `guest.localSeat()=${guest.localSeat()}`);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'F3 game end after recovery');
+    ok('F3: the game finished cleanly on both sides after recovery',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('F3: final states hash-identical after recovery', fHash(host.state) === fHash(guest.state));
+    ok('F3: the recovered guest still recorded ITS OWN result',
+      guest.statsCommits[0].won === (guest.state.winner === fP2), `guest.won=${guest.statsCommits[0].won} winner=${guest.state.winner}`);
+  } catch (e) { fail++; console.log(`FAIL  F3 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- F4: INVARIANT 3 ported DIRECTLY - a rematch never reads game 1's log ----------
+console.log('\n--- F4: Filler rematch (KNOWN-BUG PROBE: stale per-game consumption state) ---');
+{
+  const { room, host, guest } = makeFiller(fFirstLegal(), { seed: 1001 });
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'F4 game 1 end');
+    const game1Log = Object.keys(room.moves).length;
+    ok('F4: game 1 opened with the host (P1), mp.nextDealer\'s default at match start',
+      host.roundResets.find((r) => r.n === 1).dealer === fP1 && game1Log > 0);
+    // The host taps "Play again". startNextGame alternates, so game 2 opens with the GUEST's
+    // seat -- the case a seat bug hides in. A fresh seed (1002) is rolled, never game 1's.
+    await host.startNextGame(undefined, 1002);
+    await until(() => guest.mp.gameNum === 2 || host.failedHard || guest.failedHard, 10000, 'F4 guest adopts game 2');
+    ok('F4: both sides moved to game 2', host.mp.gameNum === 2 && guest.mp.gameNum === 2);
+    // Measured AT the reset (roundResets), not by reading the live board after the fact: by the
+    // time the poll above returns, game 2's own first move may already have been written and
+    // applied, which would make a `state.turn` check racy -- mirrors why Tic Tac Toe's/
+    // Mancala's own invariant-3 probe reads the frozen reset rather than the live board.
+    const hostReset = host.roundResets.find((r) => r.n === 2);
+    const guestReset = guest.roundResets.find((r) => r.n === 2);
+    ok('F4: game 2 alternated the opening seat - P2 (the guest) opens now',
+      !!(hostReset && guestReset) && hostReset.dealer === fP2 && guestReset.dealer === fP2,
+      `hostReset.dealer=${hostReset && hostReset.dealer} guestReset.dealer=${guestReset && guestReset.dealer}`);
+    ok('F4 [KNOWN-BUG PROBE]: game 2 starts from a CLEARED move log on both sides\n' +
+       '      (REGRESSION GUARD, invariant 3 ported directly (a rematch series exists from the\n' +
+       '      start here, same as Mancala\'s post-2026-07-27 shape). net.js startRound clears\n' +
+       '      `moves` atomically with the record, and _mpApplyRoundRecord rebuilds the cache from\n' +
+       '      THAT room snapshot and resets appliedSeq to 0; every entry also carries its game\n' +
+       '      number. Carry any of that over and game 2 replays game 1\'s moves - the exact way\n' +
+       '      round 2 replayed round 1\'s shuffle in Chinchon\'s original bug)',
+      !!(hostReset && guestReset)
+        && hostReset.appliedSeq === 0 && guestReset.appliedSeq === 0
+        && hostReset.staleCached === 0 && guestReset.staleCached === 0,
+      `game1 log had ${game1Log} entries; at the game-2 reset ` +
+      `host=${JSON.stringify(hostReset)} guest=${JSON.stringify(guestReset)}`);
+    await until(() => (host.gamesFinished === 2 && guest.gamesFinished === 2) || host.failedHard || guest.failedHard, 15000, 'F4 game 2 end');
+    ok('F4: game 2\'s log holds only game 2\'s moves, all stamped g=2',
+      Object.values(room.moves).every((e) => (e.move.g | 0) === 2),
+      `games=${JSON.stringify([...new Set(Object.values(room.moves).map((e) => e.move.g))])}`);
+    ok('F4: game 2 played to completion with zero mismatches', host.mismatches === 0 && guest.mismatches === 0 && host.gamesFinished === 2 && guest.gamesFinished === 2);
+    const seriesTotal = (s) => s.wins[fP1] + s.wins[fP2] + s.draws;
+    ok('F4: the series tally counts both games on both devices, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && seriesTotal(host.mp.series) === 2,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  F4 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- F5: INVARIANT 4 ported - rejoin from autosave -----------------------------------
+console.log('\n--- F5: Filler rejoin from autosave (KNOWN-BUG PROBE: save seq off-by-one) ---');
+{
+  // In-band freeze (same reasoning as Mancala's M5/Tic Tac Toe's T6): stop the guest's DELIVERY
+  // once it has applied seq 5, mimicking a device backgrounded mid-game with the host one or
+  // more moves ahead.
+  let guestRef = null;
+  const { room, host, guest } = makeFiller(fFirstLegal(), {
+    seed: 1,
+    guest: { frozen: () => guestRef !== null && guestRef.mp !== null && guestRef.mp.appliedSeq >= 5 },
+  });
+  guestRef = guest;
+  let restored = null;
+  try {
+    await until(() => guest.mp && guest.mp.appliedSeq >= 5 && room.moves['0006'], 15000, 'F5 guest frozen with a tail waiting');
+    await new Promise((r) => setTimeout(r, 100));
+    const midSaves = guest.saves.filter((s) => !s.state.over);
+    const lastSave = midSaves[midSaves.length - 1];
+    guest.kill();
+
+    // Mechanism probe, direct. CORRECT: the saved state contains exactly moves 1..seq, so it
+    // hashes equal to the log entry AT seq and NOT to the entry at seq+1 (which the restore
+    // path is about to replay onto it).
+    const atSeq = room.moves[String(lastSave.seq | 0).padStart(4, '0')];
+    const atNext = room.moves[String((lastSave.seq | 0) + 1).padStart(4, '0')];
+    const savedHash = fHash(fFromPlain(lastSave.state));
+    ok('F5 [KNOWN-BUG PROBE]: the autosave\'s seq matches its own snapshot\n' +
+       '      (REGRESSION GUARD, invariant 4: filler/js/ui.js\'s _afterMove/_mpApplyNextEntry must\n' +
+       '      run the move\'s MP bookkeeping FIRST - _mpAfterLocalMove reserving+appending the seq\n' +
+       '      before the real applyMove(), or _mpApplyNextEntry advancing appliedSeq before the\n' +
+       '      ripple settle-await - and only THEN call _mpSaveSnapshot. Saving first stores mp.seq\n' +
+       '      one LOW relative to the move already inside the snapshot, so _tryRestoreMP rebuilds\n' +
+       '      post-move-N state with appliedSeq N-1 and re-applies move N: a guaranteed desync on\n' +
+       '      every rejoin, the exact case the 30-minute restore window exists for. Escoba shipped\n' +
+       '      this bug on its play hook)',
+      !!atSeq && savedHash === atSeq.h && !(atNext && savedHash === atNext.h),
+      `save.seq=${lastSave.seq}; entry@seq ${atSeq ? (savedHash === atSeq.h ? 'matches the snapshot (correct)' : 'does NOT match') : 'absent'}; entry@seq+1 ${atNext ? (savedHash === atNext.h ? 'ALSO matches - the save is one behind' : 'does not match (correct)') : 'absent'}`);
+
+    // End-to-end: a fresh device restores from that save and replays the tail.
+    restored = new FillerSide('guest', room, fFirstLegal(), {});
+    await restored.restoreFromSave(lastSave);
+    await until(() => restored.gamesFinished > 0 || restored.mismatches > 0 || restored.failedHard, 15000, 'F5 restored guest finishes');
+    ok('F5: the restored guest replayed the tail cleanly (zero mismatches, no hard failure)',
+      restored.mismatches === 0 && !restored.failedHard,
+      `restored mismatches=${restored.mismatches} appliedSeq=${restored.mp.appliedSeq} failedHard=${restored.failedHard}`);
+    ok('F5: the restored guest reached the same finished game as the host',
+      !!restored.state && restored.state.over && fHash(restored.state) === fHash(host.state),
+      `restored over=${restored.state && restored.state.over} host over=${host.state.over}`);
+    ok('F5: the restored guest kept its own seat (P2)',
+      restored.localSeat() === fP2, `seat=${restored.localSeat()}`);
+  } catch (e) { fail++; console.log(`FAIL  F5 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); if (restored) restored.kill(); }
+}
+
+// --- F6: INVARIANT 5 ported by analogy - restoring an already-finished game ---------
+console.log('\n--- F6: Filler restore at a game boundary (KNOWN-BUG PROBE: restore re-runs a finished game) ---');
+{
+  const { room, host, guest } = makeFiller(fFirstLegal(), { seed: 1 });
+  let restored = null;
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'F6 game end');
+    await new Promise((r) => setTimeout(r, 30));
+    const boundarySave = deep(guest.saves[guest.saves.length - 1]);
+    ok('F6: the guest\'s final save is a BOUNDARY save (state over, statsCommitted true)',
+      !!boundarySave && boundarySave.state.over === true && boundarySave.statsCommitted === true,
+      JSON.stringify({ over: boundarySave.state.over, statsCommitted: boundarySave.statsCommitted }));
+    cleanup(room, host, guest);
+
+    restored = new FillerSide('guest', new FakeRoom(), fFirstLegal(), {});
+    await restored.restoreFromSave(boundarySave);
+    ok('F6 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED game does not\n' +
+       '      re-run or re-initialize it\n' +
+       '      (REGRESSION GUARD, invariant 5 ported: a rematch series exists here from the start\n' +
+       '      (see F4), so a boundary restore has a real "next game" it could wrongly derive\n' +
+       '      locally instead of awaiting the host\'s record -- filler/js/ui.js\'s _tryRestoreMP\n' +
+       '      deliberately does NOT call _mpApplyRoundRecord (which calls newGame()) on a save\n' +
+       '      whose game already ended; that would silently start a SECOND game nobody asked for\n' +
+       '      and re-arm statsCommitted for a game that was already recorded, the same class of\n' +
+       '      bug as Chinchon\'s initMatch wipe, just replacing "scores zeroed" with "a phantom\n' +
+       '      rematch begins". The restored side must instead recognize state.over and stop,\n' +
+       '      relying on the ordinary onRoomUpdate roundN > gameNum branch to pick up the next\n' +
+       '      game once the host actually publishes one)',
+      restored.mp.gameNum === boundarySave.gameNum && restored.state.over === true
+        && fHash(restored.state) === fHash(fFromPlain(boundarySave.state)) && restored.statsCommitted === true,
+      `gameNum=${restored.mp.gameNum} over=${restored.state && restored.state.over} committed=${restored.statsCommitted}`);
+    ok('F6: it did not double-record the finished game it restored',
+      restored.statsCommits.length === 0,
+      `commits=${JSON.stringify(restored.statsCommits)}`);
+    ok('F6: the series tally is carried through the restore UNTOUCHED, not zeroed\n' +
+       '      (the initMatch-wipe failure shape from js/CLAUDE.md\'s invariant 5, translated to\n' +
+       '      this game\'s vocabulary: a restore that reset mp.series to {wins:[0,0,0],draws:0}\n' +
+       '      would silently erase the series tally the moment either device backgrounds and\n' +
+       '      restores mid-series)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
+      `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  F6 did not complete: ${e.message}`); }
   finally { if (restored) restored.kill(); }
 }
 

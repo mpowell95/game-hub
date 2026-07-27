@@ -313,6 +313,87 @@
 .fl-card-score b { color: var(--fl-ink); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .fl-card-dash { color: var(--fl-muted); }
 .fl-card-actions { display: grid; gap: 8px; }
+/* Running series tally / waiting-for-rematch note, shown only in multiplayer (seat-indexed, so
+   each device reads its own record first -- see _seriesLine in ui.js). Same treatment as
+   mancala/css/mancala.css's/tic-tac-toe/css/tic-tac-toe.css's equivalents. */
+.fl-card-series {
+  margin: -8px 0 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--fl-muted);
+}
+.fl-card-wait {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--fl-muted);
+}
+
+/* --- multiplayer lobby (host/join) ----------------------------------------------- */
+.fl-mp-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.fl-mp-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fl-muted);
+  margin-top: 6px;
+}
+.fl-mp-code {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;   /* balance the trailing letter-spacing */
+}
+.fl-mp-code-input {
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 2px solid var(--fl-edge);
+  width: 100%;
+  max-width: 200px;
+  background: var(--fl-surface);
+  color: var(--fl-ink);
+}
+.fl-mp-oppslot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  min-height: 1.4em;
+}
+.fl-mp-oppempty { opacity: 0.6; font-style: italic; font-weight: 700; }
+.fl-mp-msg {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--fl-muted);
+  min-height: 1.2em;
+  text-align: center;
+  margin: 2px 0 4px;
+}
+.fl-mp-msg-action {
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+  color: inherit;
+}
 
 .fl-help {
   max-width: 360px;

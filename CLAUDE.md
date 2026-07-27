@@ -124,7 +124,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe and Mancala |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala and Filler |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -304,7 +304,7 @@ working in that folder).
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
 | Dots and Boxes | in-hub `module:` | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
-| Filler | in-hub `module:` | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
+| Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |

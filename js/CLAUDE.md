@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe and Mancala |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala and Filler |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -270,7 +270,7 @@ below; every other in-hub game keeps its current light-only look until its own P
 
 ### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
 
-Chinchón, Escoba, Tic Tac Toe and Mancala share one lockstep protocol over `js/net.js`
+Chinchón, Escoba, Tic Tac Toe, Mancala and Filler share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
@@ -380,6 +380,35 @@ established:
   comments in `mancala/js/ui.js`). **Any future game whose remote-move delivery is genuinely
   async (not just Tic Tac Toe's synchronous shape) needs this same flag** — Dots and Boxes'
   per-edge chain capture is the next candidate on the roadmap and should check for exactly this.
+
+### The fifth consumer: Filler (2026-07-27, roadmap phase 2)
+
+`HANDOFF-MP-WEB-SESSION.md`'s tier-2 lineup, the third of that tier to ship (after Mancala).
+`js/net.js` was NOT touched. Full write-up: `filler/CLAUDE.md`; executable form:
+`test-mp-lockstep.mjs`'s F1-F6 block. Two things worth stating beyond what Mancala already
+established:
+
+- **`applyMove` MUTATES its argument, unlike Mancala's/Tic Tac Toe's pure engines.** Both the
+  local-move path (`_mpAfterLocalMove`) and the remote-entry path (`_mpApplyNextEntry`) speculate
+  on a `cloneGame()` clone and only commit it to `this.state` once the hash agrees — a corrupted
+  or illegal entry is discarded before it can ever touch the live board, rather than needing to
+  be rolled back after the fact.
+- **The redeliverRequested race generalizes past Mancala's animated-sow case.** Filler's remote
+  moves are ANIMATED (the same flood-fill ripple a local move gets) and PACED (a settle beat runs
+  before the drain loop even checks for the next entry), so this is a second, independently-found
+  instance of the exact race `mancala/CLAUDE.md` documents: any game whose remote delivery is
+  genuinely async — not just "has an await somewhere," but has a real gap between committing one
+  entry and checking for the next — needs the `redeliverRequested` latch, confirming the earlier
+  note that Dots and Boxes' per-edge chain capture should expect the same shape.
+- **Seeding deviates from the handoff doc's literal wording, on purpose.** The doc said "transmit
+  the SEED in room config"; Filler hosts a REMATCH SERIES (a fresh seed every game, not one for
+  the whole room) and `room.config` is fixed once at `createRoom`, so the seed rides `round.deck`
+  instead — the same field Chinchón uses for its own per-round deck order, and the first time any
+  other game on the roadmap has given that field a real payload. The board itself is never
+  transmitted; both sides call `newGame(mulberry32(seed))` and reach byte-identical boards.
+- **Invariant 3 ports DIRECTLY, not by analogy** — unlike Mancala's original single-game shape
+  (later corrected once its own rematch series shipped), Filler had a rematch series from the
+  first line of this pass, so F4 mirrors Mancala's post-correction M4 almost line for line.
 
 ---
 
