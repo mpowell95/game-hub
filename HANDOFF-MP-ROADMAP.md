@@ -182,6 +182,20 @@ guest seat-identity check, is the priority**: a guest recording the host's resul
 
 ---
 
+## Parked — after multiplayer
+
+**Swipe-back gesture for in-hub games.** On iPhone, swiping right returns you to the hub from
+Monopoly Deal and Parchis (they use `href:`, so they are real page navigations with a real history
+entry). Every other game uses `module:` and mounts in place, so `js/hub.js` never touches browser
+history and there is nothing to swipe back to. Fix: have `hub.js` `pushState` on mount and unmount
+on `popstate`.
+
+**Decided (Matt, 2026-07-27): keep the "leave game?" confirm.** A swipe cannot be reliably
+cancelled once it begins, so the confirm has to be reconciled with the gesture rather than dropped
+— most games autosave and resume losslessly, but swiping out of a live MP match abandons the room
+on the opponent, and that case must still warn. Do this AFTER the multiplayer work, since MP is
+what makes the tradeoff awkward.
+
 ## Verification is a pre-DEPLOY gate, not a per-game build gate (corrected 2026-07-27)
 
 An earlier version of this roadmap blocked each game's build on the previous game's two-device
