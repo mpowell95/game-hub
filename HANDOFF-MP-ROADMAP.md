@@ -182,6 +182,27 @@ guest seat-identity check, is the priority**: a guest recording the host's resul
 
 ---
 
+## Verification is a pre-DEPLOY gate, not a per-game build gate (corrected 2026-07-27)
+
+An earlier version of this roadmap blocked each game's build on the previous game's two-device
+verification. **That was wrong and it stalled phase 1 for no reason.** Writing Mancala's MP glue
+does not depend on anyone having played Tic Tac Toe on two phones — different game, different
+files, and the conventions to copy are already written down in `js/CLAUDE.md` ("The third
+consumer: Tic Tac Toe").
+
+The correct rule:
+
+- **Building is never blocked.** Work through the phases as fast as sessions allow. Each game
+  still owes its headless proof — the five invariant probes green in `test-mp-lockstep.mjs` — which
+  is what actually catches protocol bugs, and needs no devices at all.
+- **Deploying to real players is blocked** until `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B and D
+  have been walked once. Do it **as one batched pass covering every game that has shipped**, not
+  per game. B2 (a guest's result landing in the guest's own `gamehub.stats`) is the item that
+  matters most, because getting it wrong writes a wrong result into real history (THE LAW rule 2).
+- **The accepted risk of building ahead:** if the protocol has a real-world bug, N games copied the
+  pattern and the fix lands in N places instead of one. That is rework, not data loss, and it is a
+  deliberate trade — Matt's call, made 2026-07-27.
+
 ## Prompts
 
 ### Phase 1 — Tic Tac Toe (Opus, high effort)
@@ -283,7 +304,7 @@ gets reviewed before any code is written.
 | 0a | Docs on `main` | **done** (`275a94b`) |
 | 0b | Connect Four doc row | skipped; folded into phase 2 item 4 |
 | 1 | Tic Tac Toe MP | **shipped**, branch `claude/mp-tictactoe-rruu9j`, reviewed — headless only |
-| 1v | Tic Tac Toe verification | **in progress**: Category C done (backup taken, rules reviewed, no change needed). B0 two-profile pre-pass is the next action; two-device B1-B5 + D after it |
-| 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | blocked on 1v |
-| 3 | `js/net.js` N-player handoff, then implementation | blocked on phase 2 |
+| 1v | Tic Tac Toe verification | **NOT a build blocker** (corrected 2026-07-27). Category C done. Remaining B/D items are pre-DEPLOY, batched with every other game |
+| 2 | Mancala, Filler, Dots and Boxes, Connect Four, Boggle | **unblocked — build now**, one per session |
+| 3 | `js/net.js` N-player handoff, then implementation | blocked on phase 2 code landing (not on verification) |
 | 4 | UN-6, Uno, Escoba, Chinchón?, Monopoly Deal, Parchís | blocked on 3 |
