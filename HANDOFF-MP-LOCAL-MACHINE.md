@@ -355,3 +355,81 @@ harness by construction — the harness proves the PROTOCOL and the seq/hash boo
 instead of written, so `recordResult`/`recordHeadToHead` are proven to be CALLED with the right
 arguments (the guest's own result, the `'mp'` bucket) but not proven to land in `gamehub.stats`
 — **B2 is still the priority check, same as every other MP game.**
+
+---
+
+### Dots and Boxes — roadmap phase 2 (2026-07-27)
+
+**Branch `claude/dots-boxes-multiplayer-edqxve`**, built on top of the already-merged Tic Tac Toe
+and Mancala MP passes (`js/net.js` untouched, same convention). Two human seats, host = network
+seat 0 / guest = network seat 1. Full design write-up: `dots-boxes/CLAUDE.md`'s "Multiplayer"
+section and `js/CLAUDE.md`'s "The fifth consumer: Dots and Boxes".
+
+**Status: protocol proven headlessly against `FakeRoom`; real-room behaviour unverified.** Same
+network-policy wall as every prior game in this doc — no room has ever been created from this
+session (`www.gstatic.com` → 403 CONNECT).
+
+What IS verified: `node run-all-tests.mjs` → 19 suites, 2 skipped (jsdom), 0 failed, including a
+new DB1-DB6 block in `test-mp-lockstep.mjs` that ports all five `js/CLAUDE.md:271` invariants
+into this game's vocabulary (DB2 states explicitly why invariant 1 has no literal `winner` field
+to gate on here — `isOver(s)` is purely `drawnEdges >= totalEdges`). `node
+validate-sw-assets.mjs` → green, `CACHE` bumped `v225` → `v226` for the new
+`dots-boxes/js/hash.js`. Solo play (both standalone `/dots-boxes/` and hub-mounted) and the new
+MP setup/lobby screens (mode segmented control, Host/Join lobby, code entry) were smoke-tested
+in a real headless Chromium via Playwright — mounts clean, no console/page errors, a full solo
+game plays to completion. The MP lobby screens render and their buttons are wired, but **no
+`mp-host`/`mp-join-submit` tap was actually exercised end-to-end**, since that requires a real
+`js/net.js` round-trip this session cannot make.
+
+**Design choices that could not be verified without a real network** — these are the ones to
+watch during Category B, in priority order:
+
+1. **MOVE GRANULARITY — one lockstep move per drawn EDGE, never a whole chain batched into one
+   move. This was this game's own explicit open design question, and it is the single biggest
+   unknown handed to this pass.** A single real turn can chain-capture many boxes (completing a
+   box's 4th side grants another move), so one turn is many rapid `appendMove` calls — a handful
+   on Small/Medium, but potentially dozens in a row on Large's endgame (220 total edges). The
+   headless proof (DB1, using a 2x2 test board) confirms the PROTOCOL stays correct across a
+   multi-box chain — hash-verified after every single edge, turn tracked correctly throughout —
+   but says nothing about whether dozens of rapid round-trips inside one real turn feel
+   responsive, or even complete without a visible stall, over a real network. **This is the
+   number one thing to watch in B3/B4: play a long chain on Large (the AI's Pro-tier chain logic
+   in `ai.js` is a good source of realistic long chains to copy for a human vs. human test) and
+   watch whether the sequence of drawn edges lands smoothly or visibly lags/stutters.** If it's
+   too slow, the fix is to batch a whole chain's edges into one move payload — a bigger change,
+   deliberately deferred until proven necessary rather than built speculatively.
+2. **Remote edges are paced, not instant-snapped**: each remote edge gets a fixed
+   `MP_DELIVER_STEP_MS` (260ms) delay before the next one in the log is delivered, so a chain
+   reads as a sequence of drawn edges (matching the AI's own chain pacing) rather than the whole
+   capture snapping in at once. Combined with point 1: on a long real chain this pacing alone
+   adds real wall-clock time (dozens of edges × 260ms) on top of whatever the network round-trip
+   itself costs. Confirm during B3/B4 whether 260ms per edge still feels right at real latency,
+   or whether it should shrink for long chains specifically.
+3. **A THIRD seat-assignment shape** (distinct from Tic Tac Toe's swappable marks and Mancala's
+   fixed board halves): engine seat 0/1 is symmetric like Tic Tac Toe's, but there is no per-seat
+   "mark" object to swap — just the existing `humanSeat`/`aiSeat` integers, now fed from a new
+   `mp.dealer` field (the network seat that opens the current game) instead of solo's starter
+   logic. Confirm during B2 that a real device never renders the WRONG player's lines in the
+   WRONG color (the colorblind-load-bearing red/blue split), which is exactly where a seat-
+   remapping bug would show up first.
+4. **A boundary restore RE-SHOWS the finished game's overlay** (host sees "Play again", decides
+   when game N+1 starts; guest just waits) — a third pattern beyond Tic Tac Toe's
+   auto-start-next-game-on-restore and Mancala's silent no-op. Confirm during B3 (mid-match
+   backgrounding) that reopening the app after a match finished while backgrounded shows the
+   correct final score, not a blank board or a duplicate "you won" card.
+5. **Board size is host-only and travels via room `config`** (`{ size }`) — the guest never
+   picks one. Confirm the guest's lobby screen shows the host's chosen size correctly before the
+   match starts, and that a Large room (220 edges) doesn't time out or choke `net.js`'s room
+   document size in practice (untested at that scale here — the headless suite deliberately uses
+   a tiny 2x2 test board for speed, per its own header comment, so Large's real edge/move-log
+   volume has never been exercised even headlessly).
+
+**What the harness stubbed or elided** (same shape as every prior game's list — not repeated in
+full): `net.js`'s room lifecycle is entirely absent from `FakeRoom`; the local human's tap is a
+scripted policy (`takeTurnIfMine`/`humanMove`, HARNESS ONLY); the harness's paced-delivery delay
+is 1ms, not the real UI's 260ms, to keep the suite fast — the delay's PURPOSE (opening the
+`redeliverRequested` race) is proven, its real-world DURATION is not; stats are captured into an
+array instead of written; the harness never plays a board larger than 2x2, so Large's 220-edge
+volume (move-log size, room-document write frequency during a long chain) is unverified even
+headlessly — **B2 is still the priority check, same as every other MP game, and the Large-board
+chain-latency check above is this game's own specific addition to the standard B3/B4 pass.**

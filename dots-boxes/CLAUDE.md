@@ -67,4 +67,109 @@ mount). Cleared on game end (`_afterStateChange`'s over branch, plus a belt-and-
 never on hub navigation or `destroy()`, which is the entire point. `isInProgress()` flipped from
 the literal "match live right now" meaning to the autosave/resume meaning (root CLAUDE.md's "two
 legitimate meanings" paragraph): it now always returns `false` for solo play, so the hub's
-leave-confirm no longer appears — leaving costs nothing.
+leave-confirm no longer appears — leaving costs nothing. (Multiplayer below is the exception
+within the exception: `true` for as long as a room is joined.)
+
+## Multiplayer (roadmap phase 2, web-session pass only — see the status line at the end)
+
+Two human seats over the shared `js/net.js` room protocol (`js/CLAUDE.md`'s "Multiplayer
+lockstep — invariants", extended by "The third consumer: Tic Tac Toe" and "The fourth consumer:
+Mancala" — Dots and Boxes is the fifth). `js/net.js` itself is untouched.
+
+- **MOVE GRANULARITY, the one design decision this web session could not fully de-risk: ONE
+  LOCKSTEP MOVE PER DRAWN EDGE**, matching `game.js`'s own `applyMove(state, edge)` grain — the
+  simplest thing that can work, and explicitly NOT a whole chain capture batched into one move. A
+  single real turn can chain-capture many boxes (completing a box's 4th side grants another
+  move, see `game.js`'s header comment), so this means many rapid `appendMove` calls inside one
+  turn — up to dozens on a Large board's endgame. That is a real latency question that cannot be
+  settled without a network; it is flagged in the handoff for the local device pass, and if it
+  proves too slow, the fix is to batch a whole chain's edges into one move payload (a bigger
+  change, deferred until proven necessary).
+- **Engine seat 0/1 is SYMMETRIC, unlike Mancala's physically different board halves** — a box
+  can be claimed by either seat, so `humanSeat`/`aiSeat` (the ENGINE seats) are reassigned every
+  game, the same "swappable marks" shape as Tic Tac Toe's `marks[]`, not Mancala's fixed-seat
+  deviation. `_localSeat()` (host = network seat 0, guest = network seat 1) stays fixed for the
+  whole room; `mp.dealer` is the NETWORK seat that plays ENGINE seat 0 (i.e. opens) in the
+  CURRENT game, and `humanSeat = _localSeat() === mp.dealer ? 0 : 1` is recomputed every time a
+  game starts (`_mpApplyRoundRecord`) or recovers (`_mpApplyRecovery`) — every existing render/
+  game-logic path already reads `humanSeat`/`aiSeat`, so nothing else needed to change.
+- **One room hosts a rematch SERIES**, same vocabulary as Tic Tac Toe/Mancala: `round.n` is the
+  game number, `round.dealer` is the network seat that opens (see above), alternated by the HOST
+  every game via `_resolveStarter()` (the same `firstMode`/`nextStarter` alternation logic solo
+  already uses — `startGame()` and `_mpStartNextGame()` both call it). `mp.series`
+  (`{wins:[seat0,seat1], draws}`, seat-indexed by NETWORK seat) tracks the running tally and is
+  shown on the game-over card (`_seriesLine()`); `mp.lastScoredGame` is `_mpAfterGameEnd()`'s
+  idempotence guard. `writeResult` is deliberately unused, so `status:'ended'` still means
+  "somebody abandoned the room."
+- **Remote edges are delivered ASYNC and PACED, not instant-snapped**: `_mpApplyNextEntry`
+  applies the edge, renders it (so the capture pop can play), then `await`s a fixed
+  `MP_DELIVER_STEP_MS` (260ms, matching the `is-claim` pop's own CSS duration) before the next
+  entry in the log can be delivered — so a chain capture reads as a sequence of drawn edges,
+  mirroring the AI's own `AI_CHAIN_STEP_MS` pacing instead of the whole chain snapping in at
+  once. That `await` opens the same race Mancala's M1 probe caught: a room update carrying a
+  fresh edge can land in the gap right after the drain loop's own "nothing left to apply" check
+  already read a stale cache. `mp.redeliverRequested`, set by `_mpOnRoomUpdate` whenever it
+  refreshes the move-log cache and checked by the drain loop before it releases
+  `mp.delivering`, is the fix — same flag, same reasoning, as `mancala/js/ui.js`'s.
+- **The divergence latch is explicit**, same reasoning as every flag-driven game on the roadmap:
+  on a hash mismatch the host takes the seq and publishes a snapshot; the guest latches
+  (`mp.awaitingRecovery`) until that snapshot lands, or every subsequent room update would
+  re-deliver the same entry onto the already-diverged state and burn the recovery-attempt budget
+  before the host's answer could arrive.
+- **A boundary restore RE-SHOWS the finished game's overlay rather than deriving or
+  auto-starting the next game** — `_tryRestoreMP` calls `this.finish()` on a non-`midGame` save,
+  same shape as `mancala/js/ui.js`'s restore, deliberately NOT `tic-tac-toe/js/ui.js`'s
+  auto-`_mpStartNextGame()`-on-restore shape (there is no settled convention here — see
+  `HANDOFF-MP-WEB-SESSION.md`'s save-key note, which applies equally to this choice). The host
+  sees "Play again" and decides when game N+1 starts, exactly as if it had never left; the guest
+  just waits. `finish()`'s own `_statsCommitted` guard (already restored from the save) keeps
+  this idempotent, so there is no separate `_mpAwaitNextGame()`/`_mpStartNextGame()` restore
+  branch to get wrong.
+- **MP save key**: `gamehub.dotsboxes.mp.v1`, a third key distinct from `gamehub.dotsboxes.v1`
+  (settings) and `gamehub.dotsboxes.save.v1` (solo autosave) — permanent once shipped (THE LAW
+  rule 5). Follows Chinchón's/Tic Tac Toe's/Mancala's separate-key convention, not Escoba's
+  mp-sub-object shape. Room `config` carries only `{ size }` — the guest never picks a board
+  size, it arrives from the host.
+- **MP results record under the `'mp'` difficulty bucket** (`MP_DIFFICULTY`), settled by Tic Tac
+  Toe (`js/CLAUDE.md`) — not the local setup's last AI-difficulty setting, and the capturable-box
+  hint (Beginner-only in solo) never renders in MP regardless of the local setup's last
+  difficulty, since there is no AI tier to key it off. `recordHeadToHead('dotsboxes', opp, won)`
+  runs alongside, guarded so it can never block the ordinary result. The `db` sub-counter
+  (`boxes`/`bestChain`) is recorded for MP matches exactly like solo — `js/players-agg.js`'s
+  existing `db` branch needs no MP-specific change, since it already sums/maxes generically
+  regardless of which difficulty bucket the play landed under.
+- **Invariant coverage**: all five `js/CLAUDE.md` invariants are ported into Dots and Boxes' own
+  vocabulary in `test-mp-lockstep.mjs`'s DB1-DB6 block, on a small fast 2x2 test board (12 edges,
+  4 boxes) so the whole block runs quickly:
+  - **Invariant 1 has no literal `winner` field to gate on in the first place** — `isOver(s)` is
+    purely `drawnEdges >= totalEdges`, so DB2's probe states that non-mapping explicitly rather
+    than pretending there was a `winner`-keyed gate to fix; the real equivalent mistake would be
+    gating game-end on a derived proxy instead of `isOver(state)` directly, and DB2 proves the
+    GUEST reaches the same tied conclusion as the host.
+  - **Invariant 2** (DB3) is solved by construction, same as Tic Tac Toe/Mancala: `_mpSnapshot`
+    transmits only `{ gameNum, dealer, state }` — nothing device-relative — and `humanSeat`/
+    `aiSeat` are RE-DERIVED from `_localSeat()` + the snapshot's `dealer` on every recovery, never
+    trusted from the payload.
+  - **Invariant 3** (DB4) ports DIRECTLY, same as Mancala's post-rematch-series correction: game
+    2's move-log cache and `appliedSeq` are provably reset at the exact instant of
+    `_mpApplyRoundRecord` (captured via a harness-only `roundResets` probe, mirroring Tic Tac
+    Toe's T5/Mancala's M4, to avoid a race against game 2's own first edge already having landed
+    by the time a poll resolves).
+  - **Invariant 4** (DB5) is a rejoin mid-CHAIN on purpose (not just mid-alternation), since a
+    chain is exactly where an off-by-one seq would first show up in this game.
+  - **Invariant 5** (DB6) is ported by analogy to this game's boundary-restore-re-shows-the-
+    overlay shape (see above): the restored guest must recognize `isOver(state)` and stop, never
+    re-run or re-initialize the game it restored, and the series tally must survive untouched.
+- **New file**: `dots-boxes/js/hash.js`, FNV-1a over `{ rows, cols, hEdges, vEdges, boxes, turn,
+  drawnEdges }` — every array stays positional (never sorted), same reasoning as Tic Tac Toe's
+  board array and Mancala's pits array. `turn`/`drawnEdges` are included deliberately: they are
+  exactly where a chain-capture desync would hide, since `applyMove()` only flips `turn` when a
+  move claims nothing.
+
+**Status line (web-session pass): protocol proven headlessly against `FakeRoom`, all six DB-series
+probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real devices are
+required for `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment cannot reach
+Firebase at all. **The per-edge move granularity under real chain-capture latency (Large board,
+many rapid edges in one turn) is the one thing this pass could not de-risk and is flagged
+explicitly for that pass** — see the handoff entry there. Nothing here has been played on a real
+phone yet.

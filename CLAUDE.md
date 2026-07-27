@@ -124,7 +124,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe and Mancala |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala and Dots and Boxes |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -194,8 +194,8 @@ export default { init, destroy, isInProgress };
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
-    Chinchón's, Tic Tac Toe's and Mancala's MP paths are each the exception within the
-    exception: `isInProgress()` returns `true` only while an active multiplayer match is live
+    Chinchón's, Tic Tac Toe's, Mancala's and Dots and Boxes' MP paths are each the exception
+    within the exception: `isInProgress()` returns `true` only while an active multiplayer match is live
     (leaving mid-MP genuinely abandons the room), so one function answers two different
     questions depending on solo-vs-MP context.
   When adding a game, decide up front which meaning applies and say so in a comment next to
@@ -302,7 +302,7 @@ working in that folder).
 | Boggle | in-hub `module:` | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
-| Dots and Boxes | in-hub `module:` | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
+| Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:` | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
