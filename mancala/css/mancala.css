@@ -549,6 +549,71 @@
   color: rgba(36, 22, 9, 0.6);
 }
 
+/* --- multiplayer lobby (host/join) -------------------------------------- */
+.mancala .mc-mp-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.mancala .mc-mp-label {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(36, 22, 9, 0.65);
+  margin-top: 6px;
+}
+.mancala .mc-mp-code {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;   /* balance the trailing letter-spacing */
+}
+.mancala .mc-mp-code-input {
+  font: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 3px solid var(--mc-ink);
+  width: 100%;
+  max-width: 200px;
+  background: #fff;
+  color: var(--mc-ink);
+}
+.mancala .mc-mp-oppslot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  min-height: 1.4em;
+}
+.mancala .mc-mp-oppempty { opacity: 0.6; font-style: italic; font-weight: 700; }
+.mancala .mc-mp-msg {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(36, 22, 9, 0.7);
+  min-height: 1.2em;
+  text-align: center;
+  margin: 2px 0 4px;
+}
+.mancala .mc-mp-msg-action {
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+  color: inherit;
+}
+
 /* --- overlays (end card, help) ----------------------------------------- */
 
 .mancala .mc-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 18px; }
@@ -577,6 +642,23 @@
 }
 .mancala .mc-card-score b { font-size: 18px; color: var(--mc-ink); }
 .mancala .mc-card-dash { color: rgba(36, 22, 9, 0.45); }
+/* Running series tally / waiting-for-rematch note, shown only in multiplayer
+   (seat-indexed, so each device reads its own record first -- see _seriesLine
+   in ui.js). Same treatment as tic-tac-toe/css/tic-tac-toe.css's equivalents. */
+.mancala .mc-card-series {
+  margin: -8px 0 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: rgba(36, 22, 9, 0.55);
+}
+.mancala .mc-card-wait {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: rgba(36, 22, 9, 0.55);
+  text-align: center;
+}
 .mancala .mc-card-actions { display: flex; flex-direction: column; gap: 9px; }
 
 .mancala .mc-help {
@@ -676,7 +758,10 @@
 :root.gh-dark .mancala .mc-vslabel,
 :root.gh-dark .mancala .mc-resumenote,
 :root.gh-dark .mancala .mc-id-chip,
+:root.gh-dark .mancala .mc-mp-label,
+:root.gh-dark .mancala .mc-mp-msg,
 :root.gh-dark .mancala .mc-segbtn { color: #9db0c9; }
+:root.gh-dark .mancala .mc-mp-code-input { background: #1b2333; color: #e9eef6; border-color: #4a5a75; }
 :root.gh-dark .mancala .mc-vscard { background: rgba(255, 255, 255, 0.06); border-color: rgba(233, 238, 246, 0.2); }
 :root.gh-dark .mancala .mc-seg { background: rgba(233, 238, 246, 0.1); }
 :root.gh-dark .mancala .mc-segbtn.is-active { background: #2b3547; color: #e9eef6; }
@@ -688,6 +773,8 @@
 :root.gh-dark .mancala .mc-card-score { color: #9db0c9; }
 :root.gh-dark .mancala .mc-card-score b { color: #e9eef6; }
 :root.gh-dark .mancala .mc-card-dash { color: #6b7d97; }
+:root.gh-dark .mancala .mc-card-series,
+:root.gh-dark .mancala .mc-card-wait { color: #9db0c9; }
 :root.gh-dark .mancala .mc-help-lead { color: #e9eef6; }
 :root.gh-dark .mancala .mc-help-diagram-wrap { background: #232c40; }
 :root.gh-dark .mancala .mc-help-caption,

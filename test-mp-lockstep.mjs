@@ -1,5 +1,6 @@
-// test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL THREE multiplayer games
-// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1). No Firebase, no DOM: an in-file FakeRoom
+// test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL FOUR multiplayer games
+// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1, Mancala phase 2). No Firebase, no DOM: an
+// in-file FakeRoom
 // emulates the rooms/<CODE> node (move log, round records, recovery field, result) and two
 // mirrored "glue" sides drive the REAL engine/hash/preset-deck/snapshot modules exactly the way
 // each game's ui.js does.
@@ -36,6 +37,12 @@
 //     _mpRoomCallback, _mpOnRoomUpdate, _mpSaveSnapshot, _tryRestoreMP, and the MP branch of
 //     _afterStateChange. Named rather than line-numbered on purpose: this game's MP pass shipped
 //     with the file, so the names are stable and line numbers would rot on the first edit.
+//   Mancala (mancala/js/ui.js) - the same _mp* family plus _localSeat/_remoteSeat/_humanSide,
+//     _isLegal, _mpNewState, _mpEncodeMove/_mpDecodeMove, _mpAfterLocalMove,
+//     _mpTryDeliverNextMove/_mpApplyNextEntry (ASYNC here - see the class comment below for why),
+//     _mpOnDivergence, _mpSnapshot, _mpApplyRecovery, _mpStartMatch/_mpApplyRoundRecord,
+//     _mpRoomCallback/_mpOnRoomUpdate, _mpSaveSnapshot/_mpLoadSave, _tryRestoreMP, and the MP
+//     branch of finishMove/finish. Also named rather than line-numbered, same reasoning.
 //   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
 //   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
@@ -73,6 +80,8 @@ import { Game as EGame, makePlayer as eMakePlayer } from './escoba/js/game.js';
 import { stateHash as eHash } from './escoba/js/hash.js';
 import { newGame as tNewGame, applyMove as tApply, legalMoves as tLegal, X as TX, O as TO } from './tic-tac-toe/js/game.js';
 import { stateHash as tHash } from './tic-tac-toe/js/hash.js';
+import { P1 as mP1, P2 as mP2, P1_STORE as mP1_STORE, P2_STORE as mP2_STORE, newGame as mNewGame, legalMoves as mLegal, applyMove as mApply } from './mancala/js/game.js';
+import { stateHash as mHash } from './mancala/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -1496,6 +1505,616 @@ console.log('\n--- T7: Tic Tac Toe restore at a game boundary (KNOWN-BUG PROBE: 
       `series at save=${JSON.stringify(boundarySave.series)} after restore=${JSON.stringify(restored.mp.series)}; xSeat=${restored.mp.xSeat} myMark=${restored.myMark()}`);
   } catch (e) { fail++; console.log(`FAIL  T7 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); if (restored) restored.kill(); isoRoom.dead = true; }
+}
+
+// ==================================================================================
+// MANCALA side (mirror of mancala/js/ui.js's MP glue)
+//
+// Shape difference worth stating once, beyond what Tic Tac Toe's own comment already covers:
+// like Tic Tac Toe, this game has no agent interface and its engine is a synchronous
+// applyMove(state, pit) -- but mancala/js/ui.js's playMove() ANIMATES every sow (stones fly pit
+// to pit), and a remote move is deliberately routed through that same animated call rather than
+// an instant-snap side channel (better UX, and it's the whole point of "route seat 1's input
+// over the network instead of the same screen" rather than building a second rendering path).
+// That makes the real UI's remote-delivery loop asynchronous and SEQUENTIAL (each move must
+// finish animating before the next one in the log can be applied). This harness mirrors that:
+// tryDeliver()/applyNextEntry() are async and await each other, unlike Tic Tac Toe's tight
+// synchronous `while` drain. The harness itself has no animation to await (headless), but the
+// async shape is preserved so the mirror stays honest about what the real glue does.
+//
+// Vocabulary map (js/net.js is untouched, so its field names are reused as-is):
+//   a "round" record  = ONE GAME of a rematch series this room hosts, same vocabulary as Tic
+//                        Tac Toe (2026-07-27: Mancala gained a rematch series -- see
+//                        mancala/CLAUDE.md)
+//   round.n           = the game number
+//   round.deck        = unused (no cards, no rng)
+//   round.dealer      = the seat that opens that game, alternated by the HOST every game via
+//                        mp.nextDealer (_mpStartNextGame). Sides themselves never swap (host
+//                        stays P1/bottom, guest stays P2/top for the whole room -- see the
+//                        _localSeat() deviation note in mancala/js/ui.js); only who opens does.
+//   writeResult       = deliberately NOT used; status:'ended' means somebody abandoned the room
+// ==================================================================================
+function mancalaNewState(role) {   // _mpNewState (UI-only fields dropped)
+  return {
+    role, localSeat: role === 'host' ? mP1 : mP2,
+    gameNum: 0,
+    nextDealer: mP1,   // host only: who opens the NEXT game (flipped by startNextGame)
+    series: { wins: [0, 0], draws: 0 },   // seat-indexed (P1=0, P2=1), never device-relative
+    lastScoredGame: 0,   // afterGameEnd's idempotence guard
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    replayMode: false, recoveryAttempts: 0, delivering: false, awaitingRecovery: false,
+    // See _mpTryDeliverNextMove's comment in mancala/js/ui.js: an async drain can check "is
+    // there a next entry" against a stale cache right as a room update lands with the answer.
+    // This is a real bug this harness surfaced, not a test-only concern -- fixed in ui.js too.
+    redeliverRequested: false,
+    opponentLeft: false, lastRoomSnapshot: null,
+    lastRecoveryHandled: null, lastRecoveryApplied: null,
+  };
+}
+const mancalaNormSeries = (s) => ({ wins: [((s && s.wins) || [])[0] | 0, ((s && s.wins) || [])[1] | 0], draws: (s && s.draws) | 0 });
+
+class MancalaSide {
+  constructor(role, room, policy, opts = {}) {
+    this.role = role; this.room = room; this.policy = policy; this.opts = opts;
+    this.mp = null; this.state = null;
+    this.dead = false; this.failedHard = false;
+    this.mismatches = 0; this.recoveriesApplied = 0;
+    this.statsCommitted = false;
+    this.gamesFinished = 0;
+    this.statsCommits = [];   // commitStats's result, captured instead of written
+    this.saves = [];          // in-memory _mpSaveSnapshot
+    this.roundResets = [];    // harness-only: what each applyRoundRecord reset actually saw
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+
+  localSeat() { return this.mp ? this.mp.localSeat : mP1; }
+  remoteSeat() { return 1 - this.localSeat(); }
+
+  isLegal(pit) {   // _isLegal - the ONE legality gate, read by the local tap AND every remote move
+    const s = this.state;
+    if (!s || s.over) return false;
+    return mLegal(s).includes(pit);
+  }
+
+  encodeMove(pit) { return { t: 'move', g: this.mp.gameNum, p: pit | 0 }; }   // _mpEncodeMove
+  decodeMove(m) { return m.p | 0; }   // _mpDecodeMove
+
+  afterLocalMove(pit) {   // _mpAfterLocalMove - seq reserved SYNCHRONOUSLY, before any await
+    const mp = this.mp;
+    if (!mp) return;
+    const result = mApply(this.state, pit);
+    if (!result) return;
+    const seq = ++mp.appliedSeq;
+    const hash = mHash(result.state);
+    this.room.appendMove(this.role, seq, this.encodeMove(pit), hash).catch(() => {});
+  }
+
+  async tryDeliver() {   // _mpTryDeliverNextMove - ASYNC here (see the class comment above)
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.state) return;
+    if (this.opts.frozen && this.opts.frozen()) return;   // harness-only freeze (a backgrounded device)
+    mp.delivering = true;
+    mp.redeliverRequested = false;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (await this.applyNextEntry()) continue;
+        if (mp.redeliverRequested) { mp.redeliverRequested = false; continue; }
+        break;
+      }
+    } finally { mp.delivering = false; }
+  }
+
+  async applyNextEntry() {   // _mpApplyNextEntry
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !mp.movesById || !this.state || this.state.over) return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry || !entry.move || entry.move.t !== 'move') return false;
+    if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;   // never consume another game's entry
+    const pit = this.decodeMove(entry.move);
+    let agreed = this.isLegal(pit);
+    let result = null;
+    if (agreed) {
+      result = mApply(this.state, pit);
+      if (this.opts.corruptAtSeq === seq && !this._corrupted) {
+        // A pure HASH divergence with zero effect on the real gameplay path (the corrupted
+        // result is only ever used for the comparison below -- it is never committed to
+        // this.state unless the hash happens to still agree, which it won't).
+        this._corrupted = true;
+        result = { state: { ...result.state, pits: result.state.pits.slice() }, events: result.events };
+        result.state.pits[0] += 1;
+      }
+      agreed = !!result && mHash(result.state) === entry.h;
+    }
+    if (!agreed) { this.mismatches++; return this.onDivergence(seq); }
+    mp.appliedSeq = seq;
+    mp.recoveryAttempts = 0;
+    if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+    this.state = result.state;
+    await this.afterStateChange();
+    return true;
+  }
+
+  onDivergence(seq) {   // _mpOnDivergence - host takes the seq and publishes; guest latches
+    const mp = this.mp;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; return false; }
+    if (mp.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+      return true;
+    }
+    mp.awaitingRecovery = true;
+    this.room.requestRecovery(seq).catch(() => {});
+    return false;
+  }
+
+  snapshot() {   // _mpSnapshot - nothing device-relative: the absolute board, seat derived locally
+    const mp = this.mp;
+    return {
+      v: 1, gameNum: mp.gameNum, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: deep(this.state),
+    };
+  }
+
+  async applyRecovery(recovery) {   // _mpApplyRecovery
+    const mp = this.mp;
+    if (!mp || this.dead) return;
+    const snap = deep(recovery.state);
+    mp.gameNum = snap.gameNum | 0;
+    mp.nextDealer = snap.nextDealer === mP2 ? mP2 : mP1;
+    mp.series = mancalaNormSeries(snap.series);
+    this.state = snap.state;
+    mp.appliedSeq = recovery.seq | 0;
+    mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
+    mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.lastScoredGame = this.state.over ? mp.gameNum : mp.lastScoredGame;
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+    await this.afterStateChange();
+  }
+
+  async applyRoundRecord(round, room) {   // _mpApplyRoundRecord
+    const mp = this.mp;
+    if (!mp || this.dead || !round) return;
+    mp.gameNum = round.n | 0;
+    mp.appliedSeq = 0; mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    const entries = Object.values((room && room.moves) || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    this.statsCommitted = false;
+    this.state = mNewGame(round.dealer === mP2 ? mP2 : mP1);
+    // HARNESS ONLY: freeze what the per-game reset actually saw, so M4 can probe the exact
+    // instant a new game begins rather than whatever the log looks like a few microtasks
+    // later (by then the new game's own first move has already landed). Mirrors Tic Tac
+    // Toe's roundResets exactly (test-mp-lockstep.mjs's T5).
+    this.roundResets.push({
+      n: mp.gameNum,
+      dealer: round.dealer === mP2 ? mP2 : mP1,
+      appliedSeq: mp.appliedSeq,
+      cached: mp.movesById.size,
+      staleCached: [...mp.movesById.values()].filter((e) => (e.move.g | 0) !== mp.gameNum).length,
+    });
+    await this.afterStateChange();
+  }
+
+  /** _mpStartNextGame. The real method alternates mp.nextDealer itself; the harness accepts
+   *  an explicit dealer override for opts-driven tests, defaulting to the alternation. */
+  async startNextGame(dealer) {
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this.dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const seat = dealer != null ? dealer : (mp.nextDealer === mP2 ? mP2 : mP1);
+    mp.nextDealer = seat === mP1 ? mP2 : mP1;
+    await this.room.startRound(n, null, seat);
+    if (this.dead || !this.mp) return;
+    if ((this.mp.gameNum | 0) < n) await this.applyRoundRecord({ n, dealer: seat }, null);
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd - series tally, idempotent per game number
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (s.winner === null) mp.series.draws += 1;
+    else mp.series.wins[s.winner] += 1;
+    this.save();
+  }
+
+  /** The MP branch of finishMove - save FIRST is the invariant-4 ordering. FULLY AWAITED here
+   *  (unlike Tic Tac Toe's fire-and-forget `this._mpTryDeliverNextMove();`), because Mancala's
+   *  own tryDeliver()/applyNextEntry() are async (see the class comment): a harness auto-play
+   *  driver that fired tryDeliver and immediately read `this.state.turn` afterward (the same
+   *  shape as TicTacToeSide, whose tryDeliver is fully synchronous) would race ahead of the
+   *  drain and read STALE state. Awaiting end-to-end removes that race entirely; it has no
+   *  bearing on the real UI, which has no auto-play driver at all. */
+  async afterStateChange() {
+    if (this.dead) return;
+    this.save();
+    if (this.state.over) {
+      this.commitStats();
+      this.afterGameEnd();
+      this.save();   // finish() - re-save with statsCommitted (and any series bump) set
+      this.gamesFinished++;
+      return;
+    }
+    await this.tryDeliver();
+    await this.takeTurnIfMine();
+  }
+
+  /** HARNESS ONLY: stands in for the local human's tap. The real UI waits for a click on a
+   *  live pit; humanMove() below is the real method it calls. */
+  async takeTurnIfMine() {
+    if (this.dead || !this.state || this.state.over) return;
+    if (this.state.turn !== this.localSeat()) return;
+    await this.humanMove(this.policy(this.state));
+  }
+
+  async humanMove(pit) {   // humanMove - local apply, MP bookkeeping, then the funnel
+    if (!this.state || this.state.over || this.state.turn !== this.localSeat()) return;
+    if (!this.isLegal(pit)) return;
+    const result = mApply(this.state, pit);
+    if (!result) return;
+    this.afterLocalMove(pit);
+    this.state = result.state;
+    await this.afterStateChange();
+  }
+
+  commitStats() {   // finish() - `won` resolves through localSeat()
+    if (this.statsCommitted) return;
+    this.statsCommitted = true;
+    const s = this.state;
+    const won = s.winner === null ? null : (s.winner === this.localSeat());
+    this.statsCommits.push({ difficulty: 'mp', won });
+  }
+
+  save() {   // _mpSaveSnapshot - seq read AFTER this move's own MP bookkeeping
+    const mp = this.mp;
+    if (!mp || !this.state) return;
+    this.saves.push({
+      v: 1, code: 'M', role: this.role, seq: mp.appliedSeq | 0, at: 0,
+      gameNum: mp.gameNum | 0, nextDealer: mp.nextDealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      lastScoredGame: mp.lastScoredGame | 0,
+      statsCommitted: !!this.statsCommitted,
+      state: deep(this.state),
+    });
+  }
+
+  roomCallback(room) {   // _mpRoomCallback
+    if (this.dead) return;
+    if (this.mp) { this.onRoomUpdate(room); return; }
+    if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+  }
+
+  guestStart(room) {   // _mpGuestStartMatch
+    if (this.mp || this.dead) return;
+    this.mp = mancalaNewState('guest');
+    this.mp.lastRoomSnapshot = room;
+    this.applyRoundRecord(room.round, room);
+  }
+
+  hostStartMatch(dealer) {   // _mpHostStartMatch
+    this.mp = mancalaNewState('host');
+    return this.startNextGame(dealer);
+  }
+
+  onRoomUpdate(room) {   // _mpOnRoomUpdate
+    if (this.dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.status === 'ended' && !mp.opponentLeft) { mp.opponentLeft = true; return; }
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this.applyRecovery(room.recovery);
+      }
+    }
+    const roundN = room.round ? (room.round.n | 0) : 0;
+    if (room.round && roundN > (mp.gameNum | 0)) {
+      this.applyRoundRecord(room.round, room);
+    } else if (roundN === (mp.gameNum | 0) && this.state) {
+      const entries = Object.values(room.moves || {});
+      mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+      const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+      if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+      mp.maxKnownSeq = maxSeq;
+      mp.redeliverRequested = true;
+      this.tryDeliver();
+    }
+  }
+
+  async restoreFromSave(save) {   // _tryRestoreMP (the join/heartbeat half elided: FakeRoom is always reachable)
+    this.mp = mancalaNewState(this.role);
+    const mp = this.mp;
+    mp.gameNum = save.gameNum | 0;
+    mp.nextDealer = save.nextDealer === mP2 ? mP2 : mP1;
+    // The series tally is carried through UNTOUCHED, same as Tic Tac Toe's restore (see M6).
+    mp.series = mancalaNormSeries(save.series);
+    mp.lastScoredGame = save.lastScoredGame | 0;
+    mp.appliedSeq = save.seq | 0;
+    mp.maxKnownSeq = mp.appliedSeq;
+    this.state = deep(save.state);
+    this.statsCommitted = !!save.statsCommitted;
+    // No separate "boundary between games" await path is needed the way Tic Tac Toe's restore
+    // has one -- either the saved game is still live (drain the tail) or it already finished
+    // (commitStats()'s own guard, plus afterGameEnd's lastScoredGame guard, keep re-showing the
+    // result idempotent; see M6). If the series has since moved on, the ordinary
+    // onRoomUpdate roundN > gameNum branch picks up the next game ONCE the host publishes it --
+    // no separate await path, matching mancala/js/ui.js's _tryRestoreMP.
+    if (this.state.over) { this.commitStats(); return; }
+    this.tryDeliver();
+    this.takeTurnIfMine();
+  }
+
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+}
+
+function makeMancala(policy, opts = {}) {
+  const room = new FakeRoom();
+  room.config = {};
+  const host = new MancalaSide('host', room, policy, opts.host || {});
+  const guest = new MancalaSide('guest', room, policy, Object.assign({ autoStart: true }, opts.guest || {}));
+  host.hostStartMatch();
+  return { room, host, guest };
+}
+
+// Mancala: deterministic scripted policies, same shape as Tic Tac Toe's (both sides run the
+// SAME policy; only the DECIDING side's choice is ever used).
+//   mcFirstLegal - always legalMoves(s)[0]. A real, decisive, fast game (10 moves vs AI-less
+//                  "always leftmost legal pit" play on both sides) -- verified offline.
+//   mcTieScript  - a seeded pseudo-random legal-move policy (mulberry32) that reaches a genuine
+//                  TIE (winner === null, over === true) after 46 moves. Found by an offline
+//                  search over mulberry32 seeds against the real engine (game.js has no rng of
+//                  its own, so this is purely a test-authoring device, not new engine surface);
+//                  seed 23 is the first hit. This is what invariant 1's probe (M2) needs: a tied
+//                  game is over with winner === null, so any "is it finished" gate written
+//                  against `winner` instead of `over` hangs exactly there.
+const mcFirstLegal = () => (s) => mLegal(s)[0];
+const mcTieScript = (seed) => {
+  let a = seed | 0;
+  const rng = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return (s) => { const legal = mLegal(s); return legal[Math.floor(rng() * legal.length)]; };
+};
+
+// --- M1: Mancala full match + the seat-identity (THE LAW rule 2) check -------------
+console.log('\n--- M1: Mancala full match, lockstep, hash-verified every applied move ---');
+{
+  const { room, host, guest } = makeMancala(mcFirstLegal());
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'M1 game end');
+    ok('M1: both sides completed the game (no hard failure)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('M1: zero hash mismatches across the whole game', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('M1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('M1: final states hash-identical', mHash(host.state) === mHash(guest.state));
+    ok('M1: same winner on both sides', host.state.winner === guest.state.winner, `host=${host.state.winner} guest=${guest.state.winner}`);
+    ok('M1: no move-log overwrites (the shared seq never collided)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('M1: host holds seat P1 (bottom), guest holds seat P2 (top)',
+      host.localSeat() === mP1 && guest.localSeat() === mP2, `host=${host.localSeat()} guest=${guest.localSeat()}`);
+    const hc = host.statsCommits[0], gc = guest.statsCommits[0];
+    ok('M1: each device recorded exactly one result, in the mp difficulty bucket',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1 && hc.difficulty === 'mp' && gc.difficulty === 'mp',
+      JSON.stringify([host.statsCommits, guest.statsCommits]));
+    ok('M1: the guest recorded ITS OWN result, not the host\'s\n' +
+       '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
+       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+      hc.won === (host.state.winner === mP1) && gc.won === (guest.state.winner === mP2) && hc.won !== gc.won,
+      `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
+  } catch (e) { fail++; console.log(`FAIL  M1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- M2: INVARIANT 1 ported - a TIE is a game end, and winner is null at it --------
+console.log('\n--- M2: Mancala tied game (KNOWN-BUG PROBE: a `winner`-keyed gate hangs at a winner-less end) ---');
+{
+  const { room, host, guest } = makeMancala(mcTieScript(23));
+  try {
+    await until(() => host.gamesFinished || host.failedHard || guest.failedHard, 15000, 'M2 host game end');
+    ok('M2: the scripted game really is a TIE (equal stores, winner null)',
+      host.state.over === true && host.state.winner === null && host.state.pits[mP1_STORE] === host.state.pits[mP2_STORE],
+      `over=${host.state.over} winner=${host.state.winner} p1=${host.state.pits[mP1_STORE]} p2=${host.state.pits[mP2_STORE]}`);
+    ok('M2: zero hash mismatches', host.mismatches === 0 && guest.mismatches === 0);
+    ok('M2 [KNOWN-BUG PROBE]: the GUEST also concludes a tied game, and records it\n' +
+       '      (REGRESSION GUARD, invariant 1 ported: mancala/js/ui.js\'s finishMove/finish() must\n' +
+       '      gate on events.over/state.over, NEVER on state.winner - winner is null for a genuine\n' +
+       '      tie, so a gate written against "if (winner)" would silently skip both the end-of-game\n' +
+       '      overlay and the stats commit on a tied match, the same shape as Chinchon\'s original\n' +
+       '      match-end deadlock, ported to a game with no points/rounds of its own)',
+      guest.gamesFinished === 1 && guest.state.over === true && guest.state.winner === null,
+      `guest.gamesFinished=${guest.gamesFinished} over=${guest.state && guest.state.over} winner=${guest.state && guest.state.winner}`);
+    ok('M2: both devices recorded the tie AS a draw (won === null, never a fabricated win/loss)',
+      host.statsCommits[0].won === null && guest.statsCommits[0].won === null,
+      JSON.stringify([host.statsCommits[0], guest.statsCommits[0]]));
+  } catch (e) { fail++; console.log(`FAIL  M2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- M3: INVARIANT 2 ported - forced desync, recovery, seat identity ----------------
+console.log('\n--- M3: Mancala forced desync + recovery (KNOWN-BUG PROBE: recovery swaps the seats) ---');
+{
+  const { room, host, guest } = makeMancala(mcFirstLegal(), { guest: { corruptAtSeq: 3 } });
+  try {
+    await until(() => guest.recoveriesApplied >= 1 || guest.failedHard || host.failedHard, 15000, 'M3 recovery applied');
+    ok('M3: corruption was DETECTED as a hash mismatch', guest.mismatches >= 1, `guest mismatches=${guest.mismatches}`);
+    ok('M3: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1, `recoveries=${guest.recoveriesApplied}`);
+    ok('M3 [KNOWN-BUG PROBE]: after recovery the guest still plays ITS OWN seat (P2), never the\n' +
+       '      HOST\'s (P1)\n' +
+       '      (REGRESSION GUARD, invariant 2: a transmitted snapshot must carry nothing device-\n' +
+       '      relative. mancala/js/ui.js\'s _mpSnapshot transmits only { gameNum, state } - the\n' +
+       '      absolute board - and _localSeat() is fixed at match start (host=P1, guest=P2) and\n' +
+       '      never re-derived from anything in the recovery payload, so there is no isHuman-style\n' +
+       '      flag here to get swapped the way Chinchon/Escoba\'s original bug swapped one)',
+      guest.localSeat() === mP2, `guest.localSeat()=${guest.localSeat()}`);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'M3 game end after recovery');
+    ok('M3: the game finished cleanly on both sides after recovery',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('M3: final states hash-identical after recovery', mHash(host.state) === mHash(guest.state));
+    ok('M3: the recovered guest still recorded ITS OWN result',
+      guest.statsCommits[0].won === (guest.state.winner === mP2), `guest.won=${guest.statsCommits[0].won} winner=${guest.state.winner}`);
+  } catch (e) { fail++; console.log(`FAIL  M3 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- M4: INVARIANT 3 ported DIRECTLY - a rematch never reads game 1's log ----------
+console.log('\n--- M4: Mancala rematch (KNOWN-BUG PROBE: stale per-game consumption state) ---');
+// Corrected 2026-07-27: this used to be "ported by analogy, no literal analogue" because
+// Mancala hosted exactly one game per room. Now that it hosts a rematch series (same
+// vocabulary as Tic Tac Toe -- see mancala/CLAUDE.md), the probe ports directly, mirroring
+// Tic Tac Toe's T5 almost line for line.
+{
+  // mcFirstLegal, not mcTieScript: the tie script's seed was hand-found for a game that opens
+  // with P1 (see M2's comment), so replaying it with P2 opening (game 2, alternated) is not
+  // guaranteed to tie -- board symmetry means mcFirstLegal stays decisive and fast regardless
+  // of which seat opens, so it is the safe choice for a test whose whole point is game 2, not
+  // game 1's outcome.
+  const { room, host, guest } = makeMancala(mcFirstLegal());
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'M4 game 1 end');
+    const game1Log = Object.keys(room.moves).length;
+    ok('M4: game 1 opened with the host (P1), mp.nextDealer\'s default at match start',
+      host.roundResets.find((r) => r.n === 1).dealer === mP1 && game1Log > 0);
+    // The host taps "Play again". startNextGame alternates, so game 2 opens with the
+    // GUEST's seat -- the case a seat bug hides in.
+    await host.startNextGame();
+    await until(() => guest.mp.gameNum === 2 || host.failedHard || guest.failedHard, 10000, 'M4 guest adopts game 2');
+    ok('M4: both sides moved to game 2', host.mp.gameNum === 2 && guest.mp.gameNum === 2);
+    // Measured AT the reset (roundResets), not by reading the live board after the fact: by
+    // the time the poll above returns, game 2's own first move may already have been written
+    // and applied, which would make a `state.turn` check racy -- mirrors why Tic Tac Toe's T5
+    // reads mp.xSeat rather than the live board.
+    const hostReset = host.roundResets.find((r) => r.n === 2);
+    const guestReset = guest.roundResets.find((r) => r.n === 2);
+    ok('M4: game 2 alternated the opening seat - P2 (the guest) opens now',
+      !!(hostReset && guestReset) && hostReset.dealer === mP2 && guestReset.dealer === mP2,
+      `hostReset.dealer=${hostReset && hostReset.dealer} guestReset.dealer=${guestReset && guestReset.dealer}`);
+    ok('M4 [KNOWN-BUG PROBE]: game 2 starts from a CLEARED move log on both sides\n' +
+       '      (REGRESSION GUARD, invariant 3 ported directly now that a rematch series exists.\n' +
+       '      net.js startRound clears `moves` atomically with the record, and\n' +
+       '      _mpApplyRoundRecord rebuilds the cache from THAT room snapshot and resets appliedSeq\n' +
+       '      to 0; every entry also carries its game number. Carry any of that over and game 2\n' +
+       '      replays game 1\'s moves - the exact way round 2 replayed round 1\'s shuffle in\n' +
+       '      Chinchon\'s original bug)',
+      !!(hostReset && guestReset)
+        && hostReset.appliedSeq === 0 && guestReset.appliedSeq === 0
+        && hostReset.staleCached === 0 && guestReset.staleCached === 0,
+      `game1 log had ${game1Log} entries; at the game-2 reset ` +
+      `host=${JSON.stringify(hostReset)} guest=${JSON.stringify(guestReset)}`);
+    await until(() => (host.gamesFinished === 2 && guest.gamesFinished === 2) || host.failedHard || guest.failedHard, 15000, 'M4 game 2 end');
+    ok('M4: game 2\'s log holds only game 2\'s moves, all stamped g=2',
+      Object.values(room.moves).every((e) => (e.move.g | 0) === 2),
+      `games=${JSON.stringify([...new Set(Object.values(room.moves).map((e) => e.move.g))])}`);
+    ok('M4: game 2 played to completion with zero mismatches', host.mismatches === 0 && guest.mismatches === 0 && host.gamesFinished === 2 && guest.gamesFinished === 2);
+    const seriesTotal = (s) => s.wins[0] + s.wins[1] + s.draws;
+    ok('M4: the series tally counts both games on both devices, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && seriesTotal(host.mp.series) === 2,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  M4 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- M5: INVARIANT 4 ported - rejoin from autosave -----------------------------------
+console.log('\n--- M5: Mancala rejoin from autosave (KNOWN-BUG PROBE: save seq off-by-one) ---');
+{
+  // In-band freeze (same reasoning as T6): stop the guest's DELIVERY once it has applied
+  // seq 5, mimicking a device backgrounded mid-game with the host one or more moves ahead.
+  let guestRef = null;
+  const { room, host, guest } = makeMancala(mcTieScript(23), {
+    guest: { frozen: () => guestRef !== null && guestRef.mp !== null && guestRef.mp.appliedSeq >= 5 },
+  });
+  guestRef = guest;
+  let restored = null;
+  try {
+    await until(() => guest.mp && guest.mp.appliedSeq >= 5 && room.moves['0006'], 15000, 'M5 guest frozen with a tail waiting');
+    await new Promise((r) => setTimeout(r, 100));
+    const midSaves = guest.saves.filter((s) => !s.state.over);
+    const lastSave = midSaves[midSaves.length - 1];
+    guest.kill();
+
+    // Mechanism probe, direct. CORRECT: the saved state contains exactly moves 1..seq, so it
+    // hashes equal to the log entry AT seq and NOT to the entry at seq+1 (which the restore
+    // path is about to replay onto it).
+    const atSeq = room.moves[String(lastSave.seq | 0).padStart(4, '0')];
+    const atNext = room.moves[String((lastSave.seq | 0) + 1).padStart(4, '0')];
+    const savedHash = mHash(lastSave.state);
+    ok('M5 [KNOWN-BUG PROBE]: the autosave\'s seq matches its own snapshot\n' +
+       '      (REGRESSION GUARD, invariant 4: mancala/js/ui.js\'s finishMove must run the move\'s\n' +
+       '      MP bookkeeping FIRST - _mpAfterLocalMove reserving+appending the seq before\n' +
+       '      playMove(), or _mpApplyNextEntry advancing appliedSeq before awaiting playMove() -\n' +
+       '      and only THEN call _mpSaveSnapshot. Saving first stores mp.seq one LOW relative to\n' +
+       '      the move already inside the snapshot, so _tryRestoreMP rebuilds post-move-N state\n' +
+       '      with appliedSeq N-1 and re-applies move N: a guaranteed desync on every rejoin, the\n' +
+       '      exact case the 30-minute restore window exists for. Escoba shipped this bug on its\n' +
+       '      play hook)',
+      !!atSeq && savedHash === atSeq.h && !(atNext && savedHash === atNext.h),
+      `save.seq=${lastSave.seq}; entry@seq ${atSeq ? (savedHash === atSeq.h ? 'matches the snapshot (correct)' : 'does NOT match') : 'absent'}; entry@seq+1 ${atNext ? (savedHash === atNext.h ? 'ALSO matches - the save is one behind' : 'does not match (correct)') : 'absent'}`);
+
+    // End-to-end: a fresh device restores from that save and replays the tail.
+    restored = new MancalaSide('guest', room, mcTieScript(23), {});
+    await restored.restoreFromSave(lastSave);
+    await until(() => restored.gamesFinished > 0 || restored.mismatches > 0 || restored.failedHard, 15000, 'M5 restored guest finishes');
+    ok('M5: the restored guest replayed the tail cleanly (zero mismatches, no hard failure)',
+      restored.mismatches === 0 && !restored.failedHard,
+      `restored mismatches=${restored.mismatches} appliedSeq=${restored.mp.appliedSeq} failedHard=${restored.failedHard}`);
+    ok('M5: the restored guest reached the same finished game as the host',
+      !!restored.state && restored.state.over && mHash(restored.state) === mHash(host.state),
+      `restored over=${restored.state && restored.state.over} host over=${host.state.over}`);
+    ok('M5: the restored guest kept its own seat (P2)',
+      restored.localSeat() === mP2, `seat=${restored.localSeat()}`);
+  } catch (e) { fail++; console.log(`FAIL  M5 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); if (restored) restored.kill(); }
+}
+
+// --- M6: INVARIANT 5 ported by analogy - restoring an already-finished game ---------
+console.log('\n--- M6: Mancala restore at a game boundary (KNOWN-BUG PROBE: restore re-runs a finished game) ---');
+{
+  const { room, host, guest } = makeMancala(mcFirstLegal());
+  let restored = null;
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'M6 game end');
+    await new Promise((r) => setTimeout(r, 30));
+    const boundarySave = deep(guest.saves[guest.saves.length - 1]);
+    ok('M6: the guest\'s final save is a BOUNDARY save (state over, statsCommitted true)',
+      !!boundarySave && boundarySave.state.over === true && boundarySave.statsCommitted === true,
+      JSON.stringify({ over: boundarySave.state.over, statsCommitted: boundarySave.statsCommitted }));
+    cleanup(room, host, guest);
+
+    restored = new MancalaSide('guest', new FakeRoom(), mcFirstLegal(), {});
+    await restored.restoreFromSave(boundarySave);
+    ok('M6 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED game does not\n' +
+       '      re-run or re-initialize it\n' +
+       '      (REGRESSION GUARD, invariant 5 ported: now that a rematch series exists\n' +
+       '      (2026-07-27, see M4), a boundary restore has a real "next game" it could wrongly\n' +
+       '      derive locally instead of awaiting the host\'s record -- mancala/js/ui.js\'s\n' +
+       '      _tryRestoreMP deliberately does NOT call _mpApplyRoundRecord (which calls\n' +
+       '      newGame()) on a save whose game already ended; that would silently start a SECOND\n' +
+       '      game nobody asked for and re-arm statsCommitted for a game that was already\n' +
+       '      recorded, the same class of bug as Chinchon\'s initMatch wipe, just replacing\n' +
+       '      "scores zeroed" with "a phantom rematch begins". The restored side must instead\n' +
+       '      recognize state.over and stop, relying on the ordinary onRoomUpdate roundN >\n' +
+       '      gameNum branch to pick up the next game once the host actually publishes one)',
+      restored.mp.gameNum === boundarySave.gameNum && restored.state.over === true
+        && mHash(restored.state) === mHash(boundarySave.state) && restored.statsCommitted === true,
+      `gameNum=${restored.mp.gameNum} over=${restored.state && restored.state.over} committed=${restored.statsCommitted}`);
+    ok('M6: it did not double-record the finished game it restored',
+      restored.statsCommits.length === 0,
+      `commits=${JSON.stringify(restored.statsCommits)}`);
+    ok('M6: the series tally is carried through the restore UNTOUCHED, not zeroed\n' +
+       '      (the initMatch-wipe failure shape from js/CLAUDE.md\'s invariant 5, translated to\n' +
+       '      this game\'s vocabulary: a restore that reset mp.series to {wins:[0,0],draws:0}\n' +
+       '      would silently erase the series tally the moment either device backgrounds and\n' +
+       '      restores mid-series)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
+      `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  M6 did not complete: ${e.message}`); }
+  finally { if (restored) restored.kill(); }
 }
 
 console.log(fail

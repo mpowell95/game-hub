@@ -294,3 +294,64 @@ name. MP results record under that bucket rather than inheriting whatever AI tie
 screen was showing (the wart the web-session doc flags in both reference games). `tierOf('mp')`
 is null, so those plays count in every total and in the leaderboard's All filter and claim no
 tier pill — additive, and no existing record is touched.
+
+### Mancala — roadmap phase 2 (2026-07-27)
+
+**Branch `claude/mp-mancala-impl`**, built on top of the not-yet-merged Tic Tac Toe branch
+(`claude/mp-tictactoe-rruu9j`) so the shared `'mp'`-bucket infrastructure above didn't need
+re-inventing on a second branch. Two human seats, host P1 (bottom) / guest P2 (top), fixed for
+the whole room. **`js/net.js` was not touched.** Full design write-up:
+`mancala/CLAUDE.md`'s "Multiplayer" section and `js/CLAUDE.md`'s "The fourth consumer: Mancala".
+
+**Status: protocol proven headlessly against FakeRoom; real-room behaviour unverified.** Same
+network-policy wall as Tic Tac Toe above — no room has ever been created from this session.
+
+What IS verified: `node run-all-tests.mjs` → 19 suites, 2 skipped (jsdom), 0 failed, including a
+new M1-M6 block in `test-mp-lockstep.mjs` that ports all five `js/CLAUDE.md:271` invariants into
+Mancala's vocabulary (M4 states explicitly why invariant 3 has no literal analogue here, the
+same way Tic Tac Toe's T5 does — Mancala hosts exactly one game per room). `node
+validate-sw-assets.mjs` → green, `CACHE` bumped `v223` → `v224` for the new `mancala/js/hash.js`.
+
+**Design choices that could not be verified without a real network** — these are the ones to
+watch during Category B, in priority order:
+
+1. **Host = P1 (bottom), guest = P2 (top), fixed for the whole room — never swapped, unlike Tic
+   Tac Toe's X/O.** This is a deliberate deviation (Mancala's sides are physically different
+   halves of the board, not symmetric marks), documented in `mancala/js/ui.js` and
+   `mancala/CLAUDE.md`. Consequence nobody has looked at on a real screen: **the GUEST always
+   sees their own pits/identity at the TOP of their device**, the mirror of what "my side is the
+   bottom" might lead a player to expect. Confirm during B2 this reads as an intentional seat
+   assignment, not a bug, and that neither device ever shows the WRONG player's identity at
+   either position.
+2. **Remote moves are animated (the real stone-sowing flight), not instant-snapped.** The whole
+   point of routing input through the existing `playMove()` instead of a second rendering path —
+   but it makes delivery async/sequential in a way none of the other three MP games are. This is
+   the sharpest edge of B4's "latency question a web session cannot de-risk" for this game:
+   confirm a real remote move's animation actually plays smoothly end-to-end over real network
+   timing on two real devices, not just that the final board converges (which the headless
+   proof already covers).
+3. **A real async-delivery race was found and fixed while testing headlessly, not just
+   theorized.** A room update carrying a fresh move could land in the microtask gap opened by
+   awaiting one animated delivery, right after the drain loop's own "nothing left to apply"
+   check already read a stale cache — the entry would then sit undelivered until an UNRELATED
+   room update happened to trigger a new drain, which might never come. `test-mp-lockstep.mjs`'s
+   M1 (a fast, decisive game) hung on this reliably before the fix
+   (`mp.redeliverRequested`, documented in both `mancala/js/ui.js` and `js/CLAUDE.md`). **The fix
+   is proven against `FakeRoom`'s synthetic microtask timing only** — real network jitter is a
+   different, unproven timing regime with a much wider window for the same race to reopen in a
+   different shape. Any B3/B4 stall, missed move, or "opponent's stones never landed" symptom on
+   Mancala should be looked at with this specific mechanism in mind first.
+4. **No rematch series** — a scope decision, not a limitation discovered mid-build. Mancala
+   plays exactly one game per room; "Play Again" in MP just leaves the room (unlike Tic Tac
+   Toe's one-room-multiple-games). `round.n`/`round.dealer` are reserved (currently always
+   1/P1) if a future session wants to add one.
+
+**What the harness stubbed or elided** (same shape as Tic Tac Toe's list above — not repeated in
+full): `net.js`'s room lifecycle (createRoom/joinRoom/heartbeat/leaveRoom, SW-version match) is
+entirely absent from `FakeRoom`; the local human's tap is a scripted policy
+(`takeTurnIfMine`/`humanMove`, HARNESS ONLY); all render/DOM/animation paths are outside the
+harness by construction — the harness proves the PROTOCOL and the seq/hash bookkeeping around
+`playMove()`, never that the animation itself looks right; stats are captured into an array
+instead of written, so `recordResult`/`recordHeadToHead` are proven to be CALLED with the right
+arguments (the guest's own result, the `'mp'` bucket) but not proven to land in `gamehub.stats`
+— **B2 is still the priority check, same as every other MP game.**

@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba and Tic Tac Toe |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe and Mancala |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -270,7 +270,7 @@ below; every other in-hub game keeps its current light-only look until its own P
 
 ### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
 
-Chinchón, Escoba and Tic Tac Toe share one lockstep protocol over `js/net.js`
+Chinchón, Escoba, Tic Tac Toe and Mancala share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
@@ -349,6 +349,37 @@ and `test-mp-lockstep.mjs`'s T1-T7 block for the executable form. What generaliz
   null, so the play counts in every total and in the leaderboard's All filter and claims no
   tier pill; `DIFF_META` in `js/game-stats-ui.js` gives it a real label. Additive, LAW-safe,
   and the recommended default for the remaining games.
+
+### The fourth consumer: Mancala (2026-07-27, roadmap phase 2)
+
+`HANDOFF-MP-ROADMAP.md` phase 2, the easiest tier-2 game per `HANDOFF-MP-WEB-SESSION.md`
+(`mancala/js/ui.js:622`'s pre-existing `mode:'friend'` hot-seat already proved two human-driven
+seats work). `js/net.js` was NOT touched. Full write-up: `mancala/CLAUDE.md`; executable form:
+`test-mp-lockstep.mjs`'s M1-M6 block. Two things generalize beyond what Tic Tac Toe already
+established:
+
+- **A symmetric-seat template does not always apply, and forcing it would be worse than
+  deviating.** Tic Tac Toe's X/O marks are interchangeable, so its `marks[]` reassigns them to
+  whichever seat opens each game. Mancala's P1/P2 are physically different halves of the board
+  (fixed pit ranges, fixed rendered position), so `_localSeat()` fixes host=P1/guest=P2 for the
+  whole room instead — closer to a real board's fixed seating than to Tic Tac Toe's swappable
+  marks. **Read the game's own shape before copying a reference's seat model verbatim**; state
+  the deviation explicitly where `_localSeat()` is defined, the way `mancala/js/ui.js` does.
+- **An ASYNC delivery loop (a flag-driven game whose remote moves animate, not instant-snap)
+  needs one MORE piece than the sync template: a redeliver-request flag.** Tic Tac Toe's drain
+  loop is a tight synchronous `while`, so nothing can interleave mid-drain. Mancala's remote
+  moves are routed through the real animated `playMove()` (better UX than a second instant-snap
+  path — the reused animation is the whole point of "route input over the network instead of the
+  same screen"), which makes the drain loop `await` between entries. That opens a real race,
+  found by `test-mp-lockstep.mjs`'s M1 (a fast, decisive game hung reliably before the fix): a
+  room update carrying the next move can land in the microtask gap right after the drain loop's
+  own "nothing left to apply" check already read a stale cache, and the entry then sits
+  undelivered until some UNRELATED room update happens to trigger a new drain — which may never
+  come. Fixed with `mp.redeliverRequested`, set whenever the room-update handler refreshes the
+  move-log cache and checked by the drain loop before it releases `mp.delivering` (see both
+  comments in `mancala/js/ui.js`). **Any future game whose remote-move delivery is genuinely
+  async (not just Tic Tac Toe's synchronous shape) needs this same flag** — Dots and Boxes'
+  per-edge chain capture is the next candidate on the roadmap and should check for exactly this.
 
 ---
 
