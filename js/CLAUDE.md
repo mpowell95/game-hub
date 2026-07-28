@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes and Pool |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -452,6 +452,35 @@ reason. What else generalizes or deviates:
   branch to get wrong. **Confirms `HANDOFF-MP-WEB-SESSION.md`'s save-key note that there is no
   settled convention here** — a third game, a third answer, all correct for their own game's
   shape.
+
+### The seventh consumer: Pool (physics build, not the MP roadmap doc)
+
+Full write-up: `pool/CLAUDE.md`. `js/net.js` was NOT touched. Built alongside Pool's initial
+implementation rather than as its own roadmap phase, so it deviates from the others in a way
+worth stating plainly rather than forcing it into their vocabulary:
+
+- **A "move" is shot PARAMETERS, not a discrete game move.** Every reference game above transmits
+  something from its own finite move vocabulary (a mark, a pit index, an edge). Pool's engine is
+  continuous physics, so what's transmitted is `{dir, power, offset, elevation}` plus an optional
+  cue-ball placement — and this is exactly where `physics.js`'s determinism guarantee (same
+  inputs, same fixed-step simulation, same result, every time — see that file's own header
+  comment) stops being just a fairness requirement and becomes the entire reason lockstep is
+  affordable here: nothing about a settled table ever needs to be transmitted, only the shot that
+  produced it.
+- **`round.dealer` is repurposed as "the seat that breaks,"** the same slot Tic Tac Toe uses for
+  "the seat that plays X" and Dots and Boxes for `mp.dealer` — a third re-use of the same field
+  for a third game's own "who opens" concept, not a new field.
+- **No in-room rematch series** — one game per room, unlike every reference game's `round.n`
+  series. A rematch is a fresh room. Kept out of scope for this first pass; the field is there
+  (`round.n` is still written as `1`) if a series is added later.
+- **The shooter still applies its own shot immediately** (same "don't make the mover wait on a
+  round trip to see their own move" principle as every reference game), and the peer applies the
+  identical params on delivery and verifies a state hash (`pool/js/hash.js`) — structurally the
+  same mover-applies/peer-verifies shape as the others, just carrying physics parameters instead
+  of a board move.
+- **Status: unverified beyond inline reasoning.** No `test-mp-lockstep.mjs` block exists for this
+  game yet (unlike all six reference games), and nothing has been played on two real devices or
+  against a `FakeRoom` harness. Flagged honestly in `pool/CLAUDE.md` rather than claimed proven.
 
 ---
 

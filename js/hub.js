@@ -219,6 +219,15 @@ const GAMES = [
     accent: '#E0532F',
     art: GAME_ART["uno"],
   },
+  {
+    id: 'pool',
+    title: { en: 'Pool', es: 'Billar' },
+    blurb: { en: 'Real cue-ball physics: draw, follow, english. 8-ball vs. the computer, a friend, or practice alone.',
+      es: 'Física real de la bola blanca: efecto, retroceso, seguimiento. Bola 8 contra la computadora, un amigo, o práctica libre.' },
+    module: '../pool/js/ui.js',
+    accent: '#0b3d2e',
+    art: GAME_ART["pool"],
+  },
 ];
 
 class Hub {
