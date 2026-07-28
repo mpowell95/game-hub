@@ -124,6 +124,7 @@ class PoolUI {
     this._raf = null;
     window.removeEventListener('resize', this._boundResize);
     document.removeEventListener('visibilitychange', this._boundVis);
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
     net.disconnect();
     this.root.innerHTML = '';
@@ -252,6 +253,15 @@ class PoolUI {
 
   // ---- canvas + camera ------------------------------------------------
   _renderGame() {
+    // Transient input state from a previous game (or a quit mid-aim) must never
+    // carry into a new one — otherwise a stale dashed aim line/cue stick shows
+    // before the player has touched anything on the fresh table.
+    this._aiming = false;
+    this._pulling = false;
+    this._power = 0;
+    this._placingCue = false;
+    this._quitArmed = false;
+    this._foulMsg = null;
     this.el.innerHTML = `
       <div class="pl-game">
         <div class="pl-hud">
@@ -261,6 +271,7 @@ class PoolUI {
           <div class="pl-hud-right">
             ${this.mode === 'practice' ? `<button type="button" class="pl-icon-btn" data-role="rerack" title="${t('new_game')}">↺</button>` : ''}
             <button type="button" class="pl-icon-btn" data-role="camera" title="${t('camera')}">🎥</button>
+            <span class="pl-quit-confirm" data-role="quit-confirm" hidden>${t('quit_confirm')}</span>
             <button type="button" class="pl-icon-btn" data-role="quit" title="${t('quit')}">✕</button>
           </div>
         </div>
@@ -301,6 +312,14 @@ class PoolUI {
     this._bindTablePointer();
     window.addEventListener('resize', this._boundResize);
     document.addEventListener('visibilitychange', this._boundVis);
+    // ResizeObserver, not just the window 'resize' event: a flex-layout settle,
+    // a font swap, or an orientation change all resize .pl-table-wrap without
+    // ever firing 'resize' on window, and the FIRST layout pass after mount is
+    // exactly one of those (see _resizeCanvas's zero-size guard/retry below).
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => this._resizeCanvas());
+      this._resizeObserver.observe(this.tableWrap);
+    }
     this._resizeCanvas();
     this._paintHud();
     this._drawSpin();
@@ -315,8 +334,17 @@ class PoolUI {
   }
 
   _resizeCanvas() {
-    if (!this.canvas) return;
+    if (!this.canvas || this._dead) return;
     const rect = this.tableWrap.getBoundingClientRect();
+    // The very first layout pass after mount can report a 0 (or near-0) box
+    // before the flex chain has settled — computing _scale from that produces
+    // garbage (this was the actual cause of the table rendering as a squeezed
+    // strip / the rack rendering as an unscaled blob). Never commit a bogus
+    // scale; retry next frame instead until a real size shows up.
+    if (rect.width < 20 || rect.height < 20) {
+      requestAnimationFrame(() => this._resizeCanvas());
+      return;
+    }
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
@@ -396,11 +424,16 @@ class PoolUI {
     ctx.strokeStyle = '#3a2418';
     ctx.lineWidth = 14;
     ctx.strokeRect(tl.cx, tl.cy, br.cx - tl.cx, br.cy - tl.cy);
-    ctx.fillStyle = '#111';
     for (const p of pocketCenters()) {
       const c = this._toCanvas(p.x, p.y);
+      const pr = this._scale * R * 1.9;
+      const grad = ctx.createRadialGradient(c.cx, c.cy, pr * 0.15, c.cx, c.cy, pr);
+      grad.addColorStop(0, '#000');
+      grad.addColorStop(0.7, '#0a0a0a');
+      grad.addColorStop(1, '#2a2a2a');
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(c.cx, c.cy, this._scale * R * 1.9, 0, Math.PI * 2);
+      ctx.arc(c.cx, c.cy, pr, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -447,6 +480,24 @@ class PoolUI {
         ctx.fillStyle = BALL_COLOR[b.number];
         ctx.fillRect(c.cx - rad, c.cy - rad * 0.55, rad * 2, rad * 1.1);
       }
+      // A soft highlight so balls read as spheres, not flat colored discs.
+      const hg = ctx.createRadialGradient(
+        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 0.05,
+        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 1.3,
+      );
+      hg.addColorStop(0, 'rgba(255,255,255,0.55)');
+      hg.addColorStop(0.35, 'rgba(255,255,255,0.12)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
+      const sg = ctx.createRadialGradient(
+        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 0.1,
+        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 1.2,
+      );
+      sg.addColorStop(0, 'rgba(0,0,0,0.22)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
       ctx.restore();
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, rad, 0, Math.PI * 2);
@@ -471,29 +522,34 @@ class PoolUI {
     const cue = ballById(this.game.balls, 'cue');
     if (!cue || cue.pocketed) return;
     const c = this._toCanvas(cue.x, cue.y);
+    const dirx = Math.cos(this._aimAngle), diry = Math.sin(this._aimAngle);
+    // Forward dashed guideline (the direction the cue ball will travel).
     const len = Math.max(this._cw, this._ch);
-    const ex = c.cx + Math.cos(this._aimAngle) * len;
-    const ey = c.cy + Math.sin(this._aimAngle) * len;
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
     ctx.setLineDash([6, 8]);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(c.cx, c.cy);
-    ctx.lineTo(ex, ey);
+    ctx.moveTo(c.cx + dirx * (this._scale * R + 4), c.cy + diry * (this._scale * R + 4));
+    ctx.lineTo(c.cx + dirx * len, c.cy + diry * len);
     ctx.stroke();
     ctx.restore();
-    if (this._pulling) {
-      const pull = this._power / 4.2 * this._scale * 0.35;
-      ctx.save();
-      ctx.strokeStyle = '#ffce3a';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(c.cx - Math.cos(this._aimAngle) * (this._scale * R + 6), c.cy - Math.sin(this._aimAngle) * (this._scale * R + 6));
-      ctx.lineTo(c.cx - Math.cos(this._aimAngle) * (this._scale * R + 6 + pull), c.cy - Math.sin(this._aimAngle) * (this._scale * R + 6 + pull));
-      ctx.stroke();
-      ctx.restore();
-    }
+    // The cue stick itself, receding from the ball as power charges — the real
+    // "you are now charging a shot" visual the dashed line alone can't give.
+    const ballR = this._scale * R;
+    const pullPx = Math.min(1, this._power / 4.2) * this._scale * 0.55;
+    const tipGap = ballR + 5 + pullPx;
+    const stickLen = this._scale * 0.7;
+    const butt = tipGap + stickLen;
+    ctx.save();
+    ctx.strokeStyle = this._pulling ? '#e8d3a0' : 'rgba(232,211,160,0.55)';
+    ctx.lineWidth = Math.max(2.5, this._scale * 0.018);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(c.cx - dirx * tipGap, c.cy - diry * tipGap);
+    ctx.lineTo(c.cx - dirx * butt, c.cy - diry * butt);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawSpin() {
@@ -537,13 +593,32 @@ class PoolUI {
       near.classList.toggle('is-lit', this._isMySeat(seat));
       far.classList.toggle('is-lit', !this._isMySeat(seat));
     }
-    if (this._foulMsg) {
-      const slot = this.el.querySelector('[data-role="foul-slot"]');
-      if (slot) {
-        slot.innerHTML = `<button type="button" class="pl-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`;
-        slot.querySelector('[data-role="foul-explain"]').addEventListener('click', () => alert(this._foulMsg));
-      }
+    const slot = this.el.querySelector('[data-role="foul-slot"]');
+    if (slot) {
+      slot.innerHTML = this._foulMsg
+        ? `<button type="button" class="pl-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`
+        : '';
+      const btn = slot.querySelector('[data-role="foul-explain"]');
+      if (btn) btn.addEventListener('click', () => this._showFoulToast());
     }
+  }
+
+  /** A native alert() blocks the whole page's main thread/input pipeline until
+   *  dismissed — a real correctness bug (it can make drags elsewhere look
+   *  "stuck"), not just a UX wart. This is a plain, non-blocking DOM popover
+   *  instead, matching the build guide's "tapping the icon can explain it,
+   *  nothing else appears" (a native dialog is itself an extra surface). */
+  _showFoulToast() {
+    if (!this._foulMsg) return;
+    const slot = this.el.querySelector('[data-role="foul-slot"]');
+    if (!slot) return;
+    let toast = slot.querySelector('.pl-foul-toast');
+    if (toast) { toast.remove(); return; } // tap again to dismiss
+    toast = document.createElement('div');
+    toast.className = 'pl-foul-toast';
+    toast.textContent = this._foulMsg;
+    slot.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3200);
   }
 
   // ---- pointer input: aim / power / spin / elevation ----------------------
@@ -563,24 +638,61 @@ class PoolUI {
       this._offset = { a, b };
       this._drawSpin();
     };
-    c.addEventListener('pointerdown', (e) => { dragging = true; c.setPointerCapture(e.pointerId); setFromEvent(e); });
+    c.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      setFromEvent(e); // apply the visual update first: capture is a nice-to-have, never a prerequisite
+      try { c.setPointerCapture(e.pointerId); } catch { /* invalid/synthetic pointer id: drag still works via move/up */ }
+    });
     c.addEventListener('pointermove', (e) => { if (dragging) setFromEvent(e); });
     c.addEventListener('pointerup', () => { dragging = false; });
     c.addEventListener('dblclick', () => { this._offset = { a: 0, b: 0 }; this._drawSpin(); });
   }
 
+  // ONE continuous drag, no lift-then-repress in the middle. Earlier draft
+  // required a release to "arm" a second power-pull press, but a real
+  // touchscreen mints a brand-new pointerId on every fresh contact, so the
+  // code was never able to recognize that second press as the same shot: aim
+  // locked, the power meter never moved, and no shot ever fired. This is the
+  // standard mobile-pool-app pattern instead: while ONE finger is down, its
+  // live distance from the cue ball IS the power (further away = harder,
+  // "stretch and release"), and its live angle relative to the cue ball IS
+  // the aim, both continuously — release above a small threshold shoots,
+  // anything smaller (or no real drag at all) is just a tap and cancels
+  // cleanly on its own, no separate cancel gesture needed. A second finger
+  // held down damps the aim-angle update rate for fine adjustment (build
+  // guide's "a second finger held down makes the drag much finer").
   _bindTablePointer() {
     const c = this.canvas;
     let primaryId = null;
     let fineMode = false;
-    let lastAngle = 0;
-    let pullStart = null;
 
-    const angleTo = (wx, wy, cue) => Math.atan2(cue.y - wy, cue.x - wx);
+    const angleAndDistFromCue = (px, py) => {
+      const cue = ballById(this.game.balls, 'cue');
+      const cc = this._toCanvas(cue.x, cue.y);
+      const dx = px - cc.cx, dy = py - cc.cy;
+      return { angle: Math.atan2(-dy, -dx), dist: Math.hypot(dx, dy) };
+    };
+
+    const updateAimPower = (px, py) => {
+      const { angle, dist } = angleAndDistFromCue(px, py);
+      if (fineMode) {
+        let delta = angle - this._aimAngle;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        while (delta < -Math.PI) delta += Math.PI * 2;
+        this._aimAngle += delta * 0.22;
+      } else {
+        this._aimAngle = angle;
+      }
+      const DEADZONE_PX = this._scale * R * 1.4;
+      const worldPull = Math.max(0, dist - DEADZONE_PX) / this._scale;
+      this._power = Math.max(0, Math.min(4.2, worldPull * 2.6));
+      this._pulling = this._power > 0.05;
+    };
 
     c.addEventListener('pointerdown', (e) => {
       if (!this.game || this.game.over) return;
       this._pointers.set(e.pointerId, e);
+      const rect = c.getBoundingClientRect();
       if (this._placingCue) {
         if (primaryId === null) primaryId = e.pointerId;
         return;
@@ -588,15 +700,10 @@ class PoolUI {
       if (!this._canShootNow()) return;
       if (primaryId === null) {
         primaryId = e.pointerId;
-        const cue = ballById(this.game.balls, 'cue');
-        const rect = c.getBoundingClientRect();
-        const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
-        this._aimAngle = angleTo(w.x, w.y, cue);
-        lastAngle = this._aimAngle;
         this._aiming = true;
-        this._pulling = false;
         this._power = 0;
-        pullStart = null;
+        this._pulling = false;
+        updateAimPower(e.clientX - rect.left, e.clientY - rect.top);
       } else if (this._pointers.size === 2) {
         fineMode = true;
       }
@@ -605,38 +712,15 @@ class PoolUI {
     c.addEventListener('pointermove', (e) => {
       if (!this._pointers.has(e.pointerId)) return;
       this._pointers.set(e.pointerId, e);
+      const rect = c.getBoundingClientRect();
       if (this._placingCue) {
         if (e.pointerId !== primaryId) return;
-        const rect = c.getBoundingClientRect();
         const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
         this._tryPlaceCuePreview(w.x, w.y);
         return;
       }
       if (e.pointerId !== primaryId || !this._aiming) return;
-      const cue = ballById(this.game.balls, 'cue');
-      const rect = c.getBoundingClientRect();
-      const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
-      if (!this._pulling) {
-        const rawAngle = angleTo(w.x, w.y, cue);
-        if (fineMode) {
-          let delta = rawAngle - lastAngle;
-          while (delta > Math.PI) delta -= Math.PI * 2;
-          while (delta < -Math.PI) delta += Math.PI * 2;
-          this._aimAngle += delta * 0.22;
-        } else {
-          this._aimAngle = rawAngle;
-        }
-        lastAngle = rawAngle;
-      } else {
-        // Power pull: distance from pull-start along the aim axis; large sideways
-        // deviation cancels the shot instead of firing it (build guide's rule).
-        const cuec = this._toCanvas(cue.x, cue.y);
-        const dx = e.clientX - rect.left - pullStart.cx, dy = e.clientY - rect.top - pullStart.cy;
-        const along = dx * -Math.cos(this._aimAngle) + dy * -Math.sin(this._aimAngle);
-        const perp = Math.abs(dx * -Math.sin(this._aimAngle) - dy * Math.cos(this._aimAngle));
-        if (perp > 46) { this._pulling = false; this._power = 0; this._aiming = true; return; }
-        this._power = Math.max(0, Math.min(4.2, along / this._scale * 3.2));
-      }
+      updateAimPower(e.clientX - rect.left, e.clientY - rect.top);
     });
 
     const finish = (e) => {
@@ -652,17 +736,9 @@ class PoolUI {
         return;
       }
       if (e.pointerId !== primaryId) { if (this._pointers.size < 2) fineMode = false; return; }
-      if (!this._pulling && this._aiming) {
-        // First release after aiming: arm the power-pull phase instead of firing.
-        const rect = c.getBoundingClientRect();
-        pullStart = { cx: e.clientX - rect.left, cy: e.clientY - rect.top };
-        this._pulling = true;
-        this._pointers.set(e.pointerId, e);
-        c.setPointerCapture(e.pointerId);
-        return;
-      }
-      if (this._pulling && this._power > 0.15) this._commitShot();
+      const power = this._power;
       this._aiming = false; this._pulling = false; this._power = 0; primaryId = null; fineMode = false;
+      if (power > 0.35) this._commitShot(power);
     };
     c.addEventListener('pointerup', finish);
     c.addEventListener('pointercancel', finish);
@@ -685,10 +761,9 @@ class PoolUI {
     this._saveProgress();
   }
 
-  async _commitShot() {
+  async _commitShot(power) {
     if (!this._canShootNow()) return;
     const dir = { x: Math.cos(this._aimAngle), y: Math.sin(this._aimAngle) };
-    const power = this._power;
     const offset = { ...this._offset };
     const elevation = this._elevation;
     const seat = this.game.turnSeat;
@@ -762,8 +837,18 @@ class PoolUI {
     }
     this._quitArmed = true;
     const btn = this.el.querySelector('[data-role="quit"]');
-    if (btn) { btn.title = t('quit_confirm'); btn.classList.add('is-confirm'); }
-    setTimeout(() => { this._quitArmed = false; if (btn) btn.classList.remove('is-confirm'); }, 3500);
+    // A title= tooltip never shows on a touch device (no hover), so the
+    // original "tap again" affordance was invisible on a phone — a tap could
+    // quit silently with nothing ever shown on screen. This badge is real,
+    // visible, on-screen text instead.
+    const badge = this.el.querySelector('[data-role="quit-confirm"]');
+    if (btn) btn.classList.add('is-confirm');
+    if (badge) badge.hidden = false;
+    setTimeout(() => {
+      this._quitArmed = false;
+      if (btn) btn.classList.remove('is-confirm');
+      if (badge) badge.hidden = true;
+    }, 3500);
   }
 
   // ---- AI turn driver -------------------------------------------------
