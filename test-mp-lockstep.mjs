@@ -1,5 +1,5 @@
 // test-mp-lockstep.mjs - headless two-engine lockstep simulation for ALL FIVE multiplayer games
-// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1, Mancala phase 2, Filler phase 2). No Firebase,
+// (Chinchón M2b, Escoba M1, Tic Tac Toe phase 1, Mancala/Filler/Dots and Boxes phase 2). No Firebase,
 // no DOM: an in-file FakeRoom
 // emulates the rooms/<CODE> node (move log, round records, recovery field, result) and two
 // mirrored "glue" sides drive the REAL engine/hash/preset-deck/snapshot modules exactly the way
@@ -91,6 +91,8 @@ import { P1 as mP1, P2 as mP2, P1_STORE as mP1_STORE, P2_STORE as mP2_STORE, new
 import { stateHash as mHash } from './mancala/js/hash.js';
 import { P1 as fP1, P2 as fP2, newGame as fNewGame, cloneGame as fCloneGame, legalColors as fLegalColors, applyMove as fApplyMove } from './filler/js/game.js';
 import { stateHash as fHash } from './filler/js/hash.js';
+import { newGame as dNewGame, legalMoves as dLegal, applyMove as dApply, edgeKey as dEdgeKey, isOver as dIsOver, score as dScore } from './dots-boxes/js/game.js';
+import { stateHash as dHash } from './dots-boxes/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -2746,6 +2748,639 @@ console.log('\n--- F6: Filler restore at a game boundary (KNOWN-BUG PROBE: resto
       JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
       `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
   } catch (e) { fail++; console.log(`FAIL  F6 did not complete: ${e.message}`); }
+  finally { if (restored) restored.kill(); }
+}
+
+
+// ==================================================================================
+// DOTS AND BOXES side (mirror of dots-boxes/js/ui.js's MP glue)
+//
+// Shape: no agent interface, engine is a synchronous applyMove(state, edge) that MUTATES its
+// argument in place and returns { claimed, again, boxes } rather than a new state (Tic Tac Toe's
+// shape, not Mancala's pure-returns-a-new-state one) -- so this class re-uses TTT's "state stays
+// the same reference" pattern for humanMove()/applyNextEntry(), not Mancala's `this.state =
+// result.state` reassignment.
+//
+// MOVE GRANULARITY (the one design decision this web session could not fully de-risk without a
+// real network -- see this file's header and dots-boxes/js/ui.js's own header comment): ONE
+// LOCKSTEP MOVE PER DRAWN EDGE, matching applyMove()'s own grain. A single real turn can chain-
+// capture many boxes (completing a box's 4th side grants another move, see game.js's header), so
+// this is many rapid appendMove calls inside one turn, not one batched "chain" move -- the
+// simplest thing that can work. `turn` only flips when a move claims nothing, so both sides stay
+// in lockstep on "whose turn is it" after every single edge, verified by the hash check on every
+// one of them (dots-boxes/js/hash.js includes `turn` and `drawnEdges` in the canonical form for
+// exactly this reason).
+//
+// DELIVERY IS ASYNC, same reasoning as Mancala: dots-boxes/js/ui.js's real _mpApplyNextEntry
+// gives each remote edge a brief PACED delay (MP_DELIVER_STEP_MS, so a chain capture's box-claim
+// pop animation has time to play before the next edge lands) before the next log entry can be
+// delivered -- that await is exactly the gap mancala/js/ui.js's redeliverRequested flag exists
+// to cover (a room update landing mid-delay, right after the drain loop's own "nothing left to
+// apply" check already read a stale cache). This harness mirrors the async shape with a much
+// shorter delay (1ms vs. the real 260ms) to keep the suite fast -- the race the delay opens is
+// the same regardless of its duration.
+//
+// Vocabulary map (js/net.js is untouched, so its field names are reused as-is):
+//   a "round" record  = ONE GAME of a rematch series this room hosts, same vocabulary as Tic Tac
+//                        Toe/Mancala.
+//   round.n           = the game number
+//   round.deck        = unused (no cards, no rng)
+//   round.dealer      = the NETWORK seat (0 host / 1 guest) that plays ENGINE seat 0 (i.e.
+//                        opens) that game, alternated by the HOST every game
+//                        (_resolveStarter()/startNextGame). Engine seat 0/1 is SYMMETRIC here
+//                        (unlike Mancala's physically different board halves), so which engine
+//                        seat a network seat plays is reassigned every game -- Tic Tac Toe's
+//                        "swappable marks" shape, not Mancala's fixed-seat deviation. humanSeat/
+//                        aiSeat below are the resolved ENGINE seats.
+//   writeResult       = deliberately NOT used; status:'ended' means somebody abandoned the room
+// ==================================================================================
+const DB_ROWS = 2, DB_COLS = 2;   // small, fast board (12 edges, 4 boxes) for the whole suite
+
+function dbNewState(role) {   // _mpNewState (UI-only fields dropped)
+  return {
+    role, localSeat: role === 'host' ? 0 : 1,
+    gameNum: 0,
+    dealer: 0,   // the NETWORK seat that plays engine seat 0 (opens) in the CURRENT game
+    series: { wins: [0, 0], draws: 0 },   // seat-indexed by NETWORK seat, never device-relative
+    lastScoredGame: 0,   // afterGameEnd's idempotence guard
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    replayMode: false, recoveryAttempts: 0, delivering: false, awaitingRecovery: false,
+    // See tryDeliver()'s comment: an async drain can check "is there a next entry" against a
+    // stale cache right as a room update lands with the answer. Real bug this harness surfaces
+    // for Mancala's identical shape, fixed in both games' real ui.js too.
+    redeliverRequested: false,
+    opponentLeft: false, lastRoomSnapshot: null,
+    lastRecoveryHandled: null, lastRecoveryApplied: null,
+  };
+}
+const dbNormSeries = (s) => ({ wins: [((s && s.wins) || [])[0] | 0, ((s && s.wins) || [])[1] | 0], draws: (s && s.draws) | 0 });
+
+class DotsBoxesSide {
+  constructor(role, room, policy, opts = {}) {
+    this.role = role; this.room = room; this.policy = policy; this.opts = opts;
+    this.mp = null; this.state = null;
+    this.humanSeat = 0; this.aiSeat = 1;   // resolved ENGINE seats, set by applyRoundRecord/applyRecovery
+    this.dead = false; this.failedHard = false;
+    this.mismatches = 0; this.recoveriesApplied = 0;
+    this.statsCommitted = false;
+    this.gamesFinished = 0;
+    this.statsCommits = [];   // commitStats's result, captured instead of written
+    this.saves = [];          // in-memory _mpSaveSnapshot
+    this.roundResets = [];    // harness-only: what each applyRoundRecord reset actually saw
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+
+  localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  remoteSeat() { return 1 - this.localSeat(); }
+
+  isLegal(edge) {   // _isLegal - the ONE legality gate, read by the local tap AND every remote move
+    const s = this.state;
+    if (!s || dIsOver(s)) return false;
+    return dLegal(s).some((m) => dEdgeKey(m) === dEdgeKey(edge));
+  }
+
+  encodeMove(edge) { return { t: 'move', g: this.mp.gameNum, e: edge.type, r: edge.r | 0, c: edge.c | 0 }; }   // _mpEncodeMove
+  decodeMove(m) { return { type: m.e === 'v' ? 'v' : 'h', r: m.r | 0, c: m.c | 0 }; }   // _mpDecodeMove
+
+  afterLocalMove(edge) {   // _mpAfterLocalMove - seq reserved SYNCHRONOUSLY, before any await
+    const mp = this.mp;
+    if (!mp) return;
+    const seq = ++mp.appliedSeq;
+    const hash = dHash(this.state);
+    this.room.appendMove(this.role, seq, this.encodeMove(edge), hash).catch(() => {});
+  }
+
+  delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+  async tryDeliver() {   // _mpTryDeliverNextMove - ASYNC (see the class comment above)
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.state) return;
+    if (this.opts.frozen && this.opts.frozen()) return;   // harness-only freeze (a backgrounded device)
+    mp.delivering = true;
+    mp.redeliverRequested = false;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (await this.applyNextEntry()) continue;
+        if (mp.redeliverRequested) { mp.redeliverRequested = false; continue; }
+        break;
+      }
+    } finally { mp.delivering = false; }
+  }
+
+  async applyNextEntry() {   // _mpApplyNextEntry
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !mp.movesById || !this.state || dIsOver(this.state)) return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry || !entry.move || entry.move.t !== 'move') return false;
+    if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;   // never consume another game's entry
+    const edge = this.decodeMove(entry.move);
+    let agreed = this.isLegal(edge);
+    let res = null;
+    if (agreed) {
+      res = dApply(this.state, edge);   // mutates this.state in place
+      if (this.opts.corruptAtSeq === seq && !this._corrupted) {
+        // A pure HASH divergence, zero bearing on real gameplay (drawnEdges is never read for
+        // legality; overwritten wholesale by the next recovery), same device as T3/M3's approach.
+        this._corrupted = true;
+        this.state.drawnEdges += 1;
+      }
+      agreed = dHash(this.state) === entry.h;
+    }
+    if (!agreed) { this.mismatches++; return this.onDivergence(seq); }
+    mp.appliedSeq = seq;
+    mp.recoveryAttempts = 0;
+    if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+    // Harness-only pacing (see the class comment: 1ms here vs. the real ui.js's 260ms) -- the
+    // await is what opens the redeliverRequested race.
+    await this.delay(1);
+    if (this.dead || !this.mp) return false;
+    await this.afterStateChange();
+    return true;
+  }
+
+  onDivergence(seq) {   // _mpOnDivergence - host takes the seq and publishes; guest latches
+    const mp = this.mp;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; return false; }
+    if (mp.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+      return true;
+    }
+    mp.awaitingRecovery = true;
+    this.room.requestRecovery(seq).catch(() => {});
+    return false;
+  }
+
+  snapshot() {   // _mpSnapshot - nothing device-relative: absolute state, seat re-derived locally
+    const mp = this.mp;
+    return {
+      v: 1, gameNum: mp.gameNum, dealer: mp.dealer,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      state: deep(this.state),
+    };
+  }
+
+  async applyRecovery(recovery) {   // _mpApplyRecovery - engine seat RE-DERIVED from network seat
+    const mp = this.mp;
+    if (!mp || this.dead) return;
+    const snap = deep(recovery.state);
+    mp.gameNum = snap.gameNum | 0;
+    mp.dealer = snap.dealer === 1 ? 1 : 0;
+    mp.series = dbNormSeries(snap.series);
+    this.humanSeat = this.localSeat() === mp.dealer ? 0 : 1;
+    this.aiSeat = 1 - this.humanSeat;
+    this.state = snap.state;
+    mp.appliedSeq = recovery.seq | 0;
+    mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
+    mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.lastScoredGame = dIsOver(this.state) ? mp.gameNum : mp.lastScoredGame;
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+    await this.afterStateChange();
+  }
+
+  async applyRoundRecord(round, room) {   // _mpApplyRoundRecord - the ONE place a game's dealer is decided
+    const mp = this.mp;
+    if (!mp || this.dead || !round) return;
+    mp.gameNum = round.n | 0;
+    mp.dealer = round.dealer === 1 ? 1 : 0;
+    this.humanSeat = this.localSeat() === mp.dealer ? 0 : 1;
+    this.aiSeat = 1 - this.humanSeat;
+    mp.appliedSeq = 0; mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    const entries = Object.values((room && room.moves) || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    this.statsCommitted = false;
+    this.state = dNewGame(DB_ROWS, DB_COLS);
+    // HARNESS ONLY: freeze what the per-game reset actually saw, so DB4 can probe the exact
+    // instant a new game begins, same reasoning as T5/M4's roundResets.
+    this.roundResets.push({
+      n: mp.gameNum,
+      dealer: mp.dealer,
+      appliedSeq: mp.appliedSeq,
+      cached: mp.movesById.size,
+      staleCached: [...mp.movesById.values()].filter((e) => (e.move.g | 0) !== mp.gameNum).length,
+    });
+    await this.afterStateChange();
+  }
+
+  /** _mpStartNextGame. The real method resolves who opens through _resolveStarter(); the
+   *  harness passes the resolved dealer in, defaulting to alternation (game 1 = host, game 2 =
+   *  guest, ...), matching the real default (firstMode 'alternate' on a fresh settings store). */
+  async startNextGame(dealer) {
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this.dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const seat = dealer != null ? dealer : (mp.gameNum | 0) % 2;
+    await this.room.startRound(n, null, seat);
+    if (this.dead || !this.mp) return;
+    if ((this.mp.gameNum | 0) < n) await this.applyRoundRecord({ n, dealer: seat }, null);
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd - series tally, idempotent per game number
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !dIsOver(s)) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    const sc = dScore(s);
+    const humanScore = this.humanSeat === 0 ? sc.p0 : sc.p1, aiScore = this.aiSeat === 0 ? sc.p0 : sc.p1;
+    if (humanScore === aiScore) mp.series.draws += 1;
+    else mp.series.wins[humanScore > aiScore ? this.localSeat() : this.remoteSeat()] += 1;
+    this.save();
+  }
+
+  commitStats() {   // _commitStats - `won` resolves through humanSeat, i.e. through localSeat()/dealer
+    if (this.statsCommitted) return;
+    this.statsCommitted = true;
+    const s = this.state;
+    const sc = dScore(s);
+    const humanScore = this.humanSeat === 0 ? sc.p0 : sc.p1, aiScore = this.aiSeat === 0 ? sc.p0 : sc.p1;
+    const won = humanScore === aiScore ? null : humanScore > aiScore;
+    this.statsCommits.push({ difficulty: 'mp', won, humanScore, aiScore });
+  }
+
+  save() {   // _mpSaveSnapshot - seq read AFTER this move's own MP bookkeeping
+    const mp = this.mp;
+    if (!mp || !this.state) return;
+    this.saves.push({
+      v: 1, code: 'D', role: this.role, seq: mp.appliedSeq | 0, at: 0,
+      gameNum: mp.gameNum | 0, dealer: mp.dealer | 0,
+      series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
+      midGame: !dIsOver(this.state), statsCommitted: !!this.statsCommitted,
+      lastScoredGame: mp.lastScoredGame | 0,
+      state: deep(this.state),
+    });
+  }
+
+  /** _afterStateChange, MP branch (save FIRST is the invariant-4 ordering). Fully awaited
+   *  end-to-end for the same reason as MancalaSide: this class's own tryDeliver()/
+   *  applyNextEntry() are async, so a harness auto-play driver that fired-and-forgot would race
+   *  ahead and read stale state; the real UI has no such driver. */
+  async afterStateChange() {
+    if (this.dead) return;
+    this.save();
+    if (dIsOver(this.state)) {
+      this.commitStats();
+      this.afterGameEnd();
+      this.save();   // finish() - re-save with statsCommitted (and any series bump) set
+      this.gamesFinished++;
+      return;
+    }
+    await this.tryDeliver();
+    await this.takeTurnIfMine();
+  }
+
+  /** HARNESS ONLY: stands in for the local human's tap. Naturally repeats for a chain capture --
+   *  after a capturing move, `state.turn` stays this seat, so afterStateChange calls this again
+   *  and the policy just plays the next edge of its own chain, mirroring a real player clicking
+   *  through a capture streak. */
+  async takeTurnIfMine() {
+    if (this.dead || !this.state || dIsOver(this.state)) return;
+    if (this.state.turn !== this.humanSeat) return;
+    await this.humanMove(this.policy(this.state));
+  }
+
+  async humanMove(edge) {   // humanMove - local apply, MP bookkeeping, then the funnel
+    if (!this.state || dIsOver(this.state) || this.state.turn !== this.humanSeat) return;
+    if (!this.isLegal(edge)) return;
+    dApply(this.state, edge);   // mutates this.state in place
+    this.afterLocalMove(edge);
+    await this.afterStateChange();
+  }
+
+  roomCallback(room) {   // _mpRoomCallback
+    if (this.dead) return;
+    if (this.mp) { this.onRoomUpdate(room); return; }
+    if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+  }
+
+  guestStart(room) {   // _mpGuestStartMatch
+    if (this.mp || this.dead) return;
+    this.mp = dbNewState('guest');
+    this.mp.lastRoomSnapshot = room;
+    this.applyRoundRecord(room.round, room);
+  }
+
+  hostStartMatch(dealer) {   // _mpHostStartMatch
+    this.mp = dbNewState('host');
+    return this.startNextGame(dealer);
+  }
+
+  async onRoomUpdate(room) {   // _mpOnRoomUpdate
+    if (this.dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.status === 'ended' && !mp.opponentLeft) { mp.opponentLeft = true; return; }
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        await this.applyRecovery(room.recovery);
+      }
+    }
+    const roundN = room.round ? (room.round.n | 0) : 0;
+    if (room.round && roundN > (mp.gameNum | 0)) {
+      await this.applyRoundRecord(room.round, room);
+    } else if (roundN === (mp.gameNum | 0)) {
+      const entries = Object.values(room.moves || {});
+      mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+      const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+      if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+      mp.maxKnownSeq = maxSeq;
+      mp.redeliverRequested = true;
+      this.tryDeliver();
+    }
+  }
+
+  async restoreFromSave(save) {   // _tryRestoreMP (the join/heartbeat half elided: FakeRoom is always reachable)
+    this.mp = dbNewState(this.role);
+    const mp = this.mp;
+    mp.gameNum = save.gameNum | 0;
+    mp.dealer = save.dealer === 1 ? 1 : 0;
+    mp.series = dbNormSeries(save.series);
+    mp.lastScoredGame = save.midGame ? 0 : (save.lastScoredGame | 0);
+    mp.appliedSeq = save.seq | 0;
+    mp.maxKnownSeq = mp.appliedSeq;
+    this.humanSeat = this.localSeat() === mp.dealer ? 0 : 1;
+    this.aiSeat = 1 - this.humanSeat;
+    this.state = deep(save.state);
+    this.statsCommitted = !!save.statsCommitted;
+    if (save.midGame) { await this.tryDeliver(); await this.takeTurnIfMine(); return; }
+    // A BOUNDARY save: re-show the finished game's result (finish()'s own idempotence guard,
+    // mirrored here as commitStats(), covers the double-count risk) rather than deriving or
+    // auto-starting the next game -- mirrors mancala/js/ui.js's restore, deliberately NOT tic-
+    // tac-toe/js/ui.js's auto-startNextGame-on-restore shape. See dots-boxes/js/ui.js's
+    // _tryRestoreMP comment for why this game picked Mancala's shape.
+    if (dIsOver(this.state)) this.commitStats();
+  }
+
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+}
+
+function makeDotsBoxes(policy, opts = {}) {
+  const room = new FakeRoom();
+  room.config = { size: 'small' };
+  const host = new DotsBoxesSide('host', room, policy, opts.host || {});
+  const guest = new DotsBoxesSide('guest', room, policy, Object.assign({ autoStart: true }, opts.guest || {}));
+  host.hostStartMatch();
+  return { room, host, guest };
+}
+
+// Dots and Boxes: deterministic scripted policies, same shape as Tic Tac Toe's/Mancala's (both
+// sides run the SAME policy; only the DECIDING side's choice is ever used).
+//   dbLastLegal  - always legalMoves(s)[legalMoves.length-1]. On the 2x2 test board this is a
+//                  real, decisive game (4-0) that includes a genuine multi-box CHAIN CAPTURE --
+//                  verified offline -- exactly what DB1 needs to prove the per-edge move
+//                  granularity: many lockstep moves inside one real turn, not one batched move.
+//   dbFirstLegal - always legalMoves(s)[0]. On the 2x2 board this reaches a genuine TIE (2-2,
+//                  drawnEdges === totalEdges) -- verified offline -- what invariant 1's probe
+//                  (DB2) needs.
+const dbLastLegal = () => (s) => { const l = dLegal(s); return l[l.length - 1]; };
+const dbFirstLegal = () => (s) => dLegal(s)[0];
+
+// --- DB1: Dots and Boxes full match + the seat-identity (THE LAW rule 2) check -----
+console.log('\n--- DB1: Dots and Boxes full match, lockstep, hash-verified every applied EDGE ---');
+{
+  const { room, host, guest } = makeDotsBoxes(dbLastLegal());
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'DB1 game end');
+    ok('DB1: both sides completed the game (no hard failure)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('DB1: zero hash mismatches across the whole game', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('DB1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('DB1: final states hash-identical', dHash(host.state) === dHash(guest.state));
+    ok('DB1: it really was a decisive game with a real chain capture, not a trivial accident\n' +
+       '      (all 12 edges logged, but a 2x2 board has only 4 boxes, and the score is 4-0 -- one\n' +
+       '      side must have captured MULTIPLE boxes across MULTIPLE lockstep moves without the\n' +
+       '      turn ever passing back, proving per-edge granularity actually threads a chain\n' +
+       '      correctly rather than only ever exercising single, non-chaining moves)',
+      Object.keys(room.moves).length === 12 && (host.state.boxes.flat().filter((o) => o === 0).length === 4
+        || host.state.boxes.flat().filter((o) => o === 1).length === 4),
+      `edges=${Object.keys(room.moves).length} boxes=${JSON.stringify(host.state.boxes)}`);
+    ok('DB1: no move-log overwrites (the shared seq never collided)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('DB1: host holds network seat 0, guest holds network seat 1',
+      host.localSeat() === 0 && guest.localSeat() === 1, `host=${host.localSeat()} guest=${guest.localSeat()}`);
+    const hc = host.statsCommits[0], gc = guest.statsCommits[0];
+    ok('DB1: each device recorded exactly one result, in the mp difficulty bucket',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1 && hc.difficulty === 'mp' && gc.difficulty === 'mp',
+      JSON.stringify([host.statsCommits, guest.statsCommits]));
+    ok('DB1: the guest recorded ITS OWN result, not the host\'s\n' +
+       '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
+       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+      hc.won !== gc.won, `host.won=${hc.won} guest.won=${gc.won}`);
+  } catch (e) { fail++; console.log(`FAIL  DB1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- DB2: INVARIANT 1 ported - a TIE is a game end, and there is no `winner` field to mis-gate on --
+console.log('\n--- DB2: Dots and Boxes tied game (KNOWN-BUG PROBE: an equal-score gate hangs at a tie) ---');
+{
+  const { room, host, guest } = makeDotsBoxes(dbFirstLegal());
+  try {
+    // Waits for BOTH sides here, unlike T2/M2's host-only wait: DB's remote delivery has a real
+    // (harness: 1ms) paced setTimeout between entries (mirroring the production pacing delay,
+    // see the class comment above), so the guest's tail replay does not necessarily finish
+    // inside the same microtask flush as the host's local finish the way Mancala's does.
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'DB2 both sides game end');
+    const sc = dScore(host.state);
+    ok('DB2: the scripted game really is a TIE (equal boxes, all edges drawn)',
+      dIsOver(host.state) && sc.p0 === sc.p1, `over=${dIsOver(host.state)} p0=${sc.p0} p1=${sc.p1}`);
+    ok('DB2: zero hash mismatches', host.mismatches === 0 && guest.mismatches === 0);
+    ok('DB2 [KNOWN-BUG PROBE]: the GUEST also concludes a tied game, and records it\n' +
+       '      (REGRESSION GUARD, invariant 1 ported: unlike Chinchon/Tic Tac Toe/Mancala, this\n' +
+       '      game has no `winner` FIELD on its state to gate on in the first place -- isOver(s) is\n' +
+       '      purely drawnEdges>=totalEdges, so there is no separate "match over" flag that could\n' +
+       '      lag behind a genuine tie the way a points/rounds `winner` can. The equivalent mistake\n' +
+       '      here would be gating game-end on a derived proxy (e.g. "every box has an owner",\n' +
+       '      which is NOT equivalent on a board with an odd edge count if one were ever added) -\n' +
+       '      dots-boxes/js/ui.js\'s _afterStateChange/finish() gate on isOver(state) directly, and\n' +
+       '      that must stay true for the GUEST\'s copy too, not just the host\'s)',
+      guest.gamesFinished === 1 && dIsOver(guest.state) && dScore(guest.state).p0 === dScore(guest.state).p1,
+      `guest.gamesFinished=${guest.gamesFinished} over=${guest.state && dIsOver(guest.state)}`);
+    ok('DB2: both devices recorded the tie AS a tie (won === null, never a fabricated win/loss)',
+      host.statsCommits[0].won === null && guest.statsCommits[0].won === null,
+      JSON.stringify([host.statsCommits[0], guest.statsCommits[0]]));
+  } catch (e) { fail++; console.log(`FAIL  DB2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- DB3: INVARIANT 2 ported - forced desync, recovery, seat identity --------------
+console.log('\n--- DB3: Dots and Boxes forced desync + recovery (KNOWN-BUG PROBE: recovery swaps the seats) ---');
+{
+  const { room, host, guest } = makeDotsBoxes(dbLastLegal(), { guest: { corruptAtSeq: 3 } });
+  try {
+    await until(() => guest.recoveriesApplied >= 1 || guest.failedHard || host.failedHard, 15000, 'DB3 recovery applied');
+    ok('DB3: corruption was DETECTED as a hash mismatch', guest.mismatches >= 1, `guest mismatches=${guest.mismatches}`);
+    ok('DB3: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1, `recoveries=${guest.recoveriesApplied}`);
+    ok('DB3 [KNOWN-BUG PROBE]: after recovery the guest still holds ITS OWN network seat (1),\n' +
+       '      never the HOST\'s (0)\n' +
+       '      (REGRESSION GUARD, invariant 2: a transmitted snapshot must carry nothing device-\n' +
+       '      relative. dots-boxes/js/ui.js\'s _mpSnapshot transmits only { gameNum, dealer, state }\n' +
+       '      - all absolute/seat-indexed - and localSeat() is fixed at match start (host=0,\n' +
+       '      guest=1) and never re-derived from the recovery payload, so there is no isHuman-style\n' +
+       '      flag here to get swapped the way Chinchon/Escoba\'s original bug swapped one; the\n' +
+       '      humanSeat/aiSeat ENGINE seats are re-derived from localSeat()+dealer on every\n' +
+       '      recovery, which is what this probe actually exercises)',
+      guest.localSeat() === 1, `guest.localSeat()=${guest.localSeat()}`);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'DB3 game end after recovery');
+    ok('DB3: the game finished cleanly on both sides after recovery',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('DB3: final states hash-identical after recovery', dHash(host.state) === dHash(guest.state));
+    ok('DB3: the recovered guest still recorded ITS OWN result',
+      guest.statsCommits[0].won === (guest.statsCommits[0].humanScore > guest.statsCommits[0].aiScore),
+      JSON.stringify(guest.statsCommits[0]));
+  } catch (e) { fail++; console.log(`FAIL  DB3 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- DB4: INVARIANT 3 ported DIRECTLY - a rematch never reads game 1's log ---------
+console.log('\n--- DB4: Dots and Boxes rematch (KNOWN-BUG PROBE: stale per-game consumption state) ---');
+{
+  const { room, host, guest } = makeDotsBoxes(dbLastLegal());
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'DB4 game 1 end');
+    const game1Log = Object.keys(room.moves).length;
+    ok('DB4: game 1 opened with the host (network seat 0), the default at match start',
+      host.roundResets.find((r) => r.n === 1).dealer === 0 && game1Log > 0);
+    // The host taps "Play again". startNextGame alternates, so game 2 opens with the GUEST's
+    // network seat -- the case a seat bug hides in.
+    await host.startNextGame();
+    await until(() => guest.mp.gameNum === 2 || host.failedHard || guest.failedHard, 10000, 'DB4 guest adopts game 2');
+    ok('DB4: both sides moved to game 2', host.mp.gameNum === 2 && guest.mp.gameNum === 2);
+    // Measured AT the reset (roundResets), not by reading the live board after the fact - see
+    // T5/M4's identical reasoning: by the time the poll above returns, game 2's own first move
+    // may already have landed, which would make a live-state check racy.
+    const hostReset = host.roundResets.find((r) => r.n === 2);
+    const guestReset = guest.roundResets.find((r) => r.n === 2);
+    ok('DB4: game 2 alternated the opening network seat - seat 1 (the guest) opens now',
+      !!(hostReset && guestReset) && hostReset.dealer === 1 && guestReset.dealer === 1,
+      `hostReset.dealer=${hostReset && hostReset.dealer} guestReset.dealer=${guestReset && guestReset.dealer}`);
+    ok('DB4 [KNOWN-BUG PROBE]: game 2 starts from a CLEARED move log on both sides\n' +
+       '      (REGRESSION GUARD, invariant 3 ported directly: net.js startRound clears `moves`\n' +
+       '      atomically with the record, and _mpApplyRoundRecord rebuilds the cache from THAT\n' +
+       '      room snapshot and resets appliedSeq to 0; every entry also carries its game number.\n' +
+       '      Carry any of that over and game 2 replays game 1\'s edges - the exact way round 2\n' +
+       '      replayed round 1\'s shuffle in Chinchon\'s original bug)',
+      !!(hostReset && guestReset)
+        && hostReset.appliedSeq === 0 && guestReset.appliedSeq === 0
+        && hostReset.staleCached === 0 && guestReset.staleCached === 0,
+      `game1 log had ${game1Log} entries; at the game-2 reset ` +
+      `host=${JSON.stringify(hostReset)} guest=${JSON.stringify(guestReset)}`);
+    await until(() => (host.gamesFinished === 2 && guest.gamesFinished === 2) || host.failedHard || guest.failedHard, 15000, 'DB4 game 2 end');
+    ok('DB4: game 2\'s log holds only game 2\'s moves, all stamped g=2',
+      Object.values(room.moves).every((e) => (e.move.g | 0) === 2),
+      `games=${JSON.stringify([...new Set(Object.values(room.moves).map((e) => e.move.g))])}`);
+    ok('DB4: game 2 played to completion with zero mismatches', host.mismatches === 0 && guest.mismatches === 0 && host.gamesFinished === 2 && guest.gamesFinished === 2);
+    const seriesTotal = (s) => s.wins[0] + s.wins[1] + s.draws;
+    ok('DB4: the series tally counts both games on both devices, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && seriesTotal(host.mp.series) === 2,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  DB4 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- DB5: INVARIANT 4 ported - rejoin from autosave mid-chain ----------------------
+console.log('\n--- DB5: Dots and Boxes rejoin from autosave (KNOWN-BUG PROBE: save seq off-by-one) ---');
+{
+  // In-band freeze (same reasoning as T6/M5): stop the guest's DELIVERY once it has applied
+  // seq 5, mimicking a device backgrounded mid-game with the host one or more moves ahead --
+  // deliberately mid-CHAIN on the dbLastLegal script, so this also exercises restoring into the
+  // middle of a capture streak, not just an ordinary alternating exchange.
+  let guestRef = null;
+  const { room, host, guest } = makeDotsBoxes(dbLastLegal(), {
+    guest: { frozen: () => guestRef !== null && guestRef.mp !== null && guestRef.mp.appliedSeq >= 5 },
+  });
+  guestRef = guest;
+  let restored = null;
+  try {
+    await until(() => guest.mp && guest.mp.appliedSeq >= 5 && room.moves['0006'], 15000, 'DB5 guest frozen with a tail waiting');
+    await new Promise((r) => setTimeout(r, 50));
+    const midSaves = guest.saves.filter((s) => s.midGame);
+    const lastSave = midSaves[midSaves.length - 1];
+    guest.kill();
+
+    // Mechanism probe, direct. CORRECT: the saved state contains exactly edges 1..seq, so it
+    // hashes equal to the log entry AT seq and NOT to the entry at seq+1 (which the restore
+    // path is about to replay onto it).
+    const atSeq = room.moves[String(lastSave.seq | 0).padStart(4, '0')];
+    const atNext = room.moves[String((lastSave.seq | 0) + 1).padStart(4, '0')];
+    const savedHash = dHash(lastSave.state);
+    ok('DB5 [KNOWN-BUG PROBE]: the autosave\'s seq matches its own snapshot\n' +
+       '      (REGRESSION GUARD, invariant 4: dots-boxes/js/ui.js\'s _afterStateChange must run the\n' +
+       '      move\'s MP bookkeeping FIRST - _mpAfterLocalMove reserving+appending the seq before\n' +
+       '      the funnel, or _mpApplyNextEntry advancing appliedSeq before the paced delay/funnel -\n' +
+       '      and only THEN call _mpSaveSnapshot. Saving first stores mp.seq one LOW relative to\n' +
+       '      the edge already inside the snapshot, so _tryRestoreMP rebuilds post-edge-N state\n' +
+       '      with appliedSeq N-1 and re-applies edge N: a guaranteed desync on every rejoin, the\n' +
+       '      exact case the 30-minute restore window exists for. Escoba shipped this bug on its\n' +
+       '      play hook)',
+      !!atSeq && savedHash === atSeq.h && !(atNext && savedHash === atNext.h),
+      `save.seq=${lastSave.seq}; entry@seq ${atSeq ? (savedHash === atSeq.h ? 'matches the snapshot (correct)' : 'does NOT match') : 'absent'}; entry@seq+1 ${atNext ? (savedHash === atNext.h ? 'ALSO matches - the save is one behind' : 'does not match (correct)') : 'absent'}`);
+
+    // End-to-end: a fresh device restores from that save and replays the tail.
+    restored = new DotsBoxesSide('guest', room, dbLastLegal(), {});
+    await restored.restoreFromSave(lastSave);
+    await until(() => restored.gamesFinished > 0 || restored.mismatches > 0 || restored.failedHard, 15000, 'DB5 restored guest finishes');
+    ok('DB5: the restored guest replayed the tail cleanly (zero mismatches, no hard failure)',
+      restored.mismatches === 0 && !restored.failedHard,
+      `restored mismatches=${restored.mismatches} appliedSeq=${restored.mp.appliedSeq} failedHard=${restored.failedHard}`);
+    ok('DB5: the restored guest reached the same finished game as the host',
+      !!restored.state && dIsOver(restored.state) && dHash(restored.state) === dHash(host.state),
+      `restored over=${restored.state && dIsOver(restored.state)} host over=${dIsOver(host.state)}`);
+    ok('DB5: the restored guest kept its own network seat (1)',
+      restored.localSeat() === 1, `seat=${restored.localSeat()}`);
+  } catch (e) { fail++; console.log(`FAIL  DB5 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); if (restored) restored.kill(); }
+}
+
+// --- DB6: INVARIANT 5 ported by analogy - restoring an already-finished game -------
+console.log('\n--- DB6: Dots and Boxes restore at a game boundary (KNOWN-BUG PROBE: restore re-runs a finished game) ---');
+{
+  const { room, host, guest } = makeDotsBoxes(dbLastLegal());
+  let restored = null;
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'DB6 game end');
+    await new Promise((r) => setTimeout(r, 30));
+    const boundarySave = deep(guest.saves[guest.saves.length - 1]);
+    ok('DB6: the guest\'s final save is a BOUNDARY save (state over, statsCommitted true)',
+      !!boundarySave && boundarySave.state.drawnEdges === boundarySave.state.totalEdges && boundarySave.statsCommitted === true,
+      JSON.stringify({ drawnEdges: boundarySave.state.drawnEdges, totalEdges: boundarySave.state.totalEdges, statsCommitted: boundarySave.statsCommitted }));
+    cleanup(room, host, guest);
+
+    restored = new DotsBoxesSide('guest', new FakeRoom(), dbLastLegal(), {});
+    await restored.restoreFromSave(boundarySave);
+    ok('DB6 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED game does not\n' +
+       '      re-run or re-initialize it\n' +
+       '      (REGRESSION GUARD, invariant 5 ported: a boundary restore has a real "next game" it\n' +
+       '      could wrongly derive locally instead of awaiting the host\'s record -\n' +
+       '      dots-boxes/js/ui.js\'s _tryRestoreMP deliberately does NOT call _mpApplyRoundRecord\n' +
+       '      (which calls newGame()) on a save whose game already ended; that would silently\n' +
+       '      start a SECOND game nobody asked for and re-arm statsCommitted for a game that was\n' +
+       '      already recorded, the same class of bug as Chinchon\'s initMatch wipe, just replacing\n' +
+       '      "scores zeroed" with "a phantom rematch begins". The restored side must instead\n' +
+       '      recognize isOver(state) and stop, relying on the ordinary onRoomUpdate roundN >\n' +
+       '      gameNum branch to pick up the next game once the host actually publishes one)',
+      restored.mp.gameNum === boundarySave.gameNum && dIsOver(restored.state)
+        && dHash(restored.state) === dHash(boundarySave.state) && restored.statsCommitted === true,
+      `gameNum=${restored.mp.gameNum} over=${restored.state && dIsOver(restored.state)} committed=${restored.statsCommitted}`);
+    ok('DB6: it did not double-record the finished game it restored',
+      restored.statsCommits.length === 0,
+      `commits=${JSON.stringify(restored.statsCommits)}`);
+    ok('DB6: the series tally is carried through the restore UNTOUCHED, not zeroed\n' +
+       '      (the initMatch-wipe failure shape from js/CLAUDE.md\'s invariant 5, translated to\n' +
+       '      this game\'s vocabulary: a restore that reset mp.series to {wins:[0,0],draws:0}\n' +
+       '      would silently erase the series tally the moment either device backgrounds and\n' +
+       '      restores mid-series)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series),
+      `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
+  } catch (e) { fail++; console.log(`FAIL  DB6 did not complete: ${e.message}`); }
   finally { if (restored) restored.kill(); }
 }
 

@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala and Filler |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -270,7 +270,7 @@ below; every other in-hub game keeps its current light-only look until its own P
 
 ### Multiplayer lockstep — invariants (M1/M2b, hardened July 2026)
 
-Chinchón, Escoba, Tic Tac Toe, Mancala and Filler share one lockstep protocol over `js/net.js`
+Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
@@ -409,6 +409,49 @@ established:
 - **Invariant 3 ports DIRECTLY, not by analogy** — unlike Mancala's original single-game shape
   (later corrected once its own rematch series shipped), Filler had a rematch series from the
   first line of this pass, so F4 mirrors Mancala's post-correction M4 almost line for line.
+### The sixth consumer: Dots and Boxes (2026-07-27, roadmap phase 2)
+
+`HANDOFF-MP-ROADMAP.md` phase 2. `js/net.js` was NOT touched. Full write-up: `dots-boxes/
+CLAUDE.md`; executable form: `test-mp-lockstep.mjs`'s DB1-DB6 block. The prediction in the
+Mancala section above was correct — this game needed `redeliverRequested` for exactly the stated
+reason. What else generalizes or deviates:
+
+- **MOVE GRANULARITY was this game's own open design question, decided web-session-only: ONE
+  LOCKSTEP MOVE PER DRAWN EDGE**, matching `game.js`'s `applyMove(state, edge)` grain, never a
+  whole chain capture batched into one move. A single real turn can chain-capture many boxes
+  (completing a box's 4th side grants another move), so one turn is many rapid `appendMove`
+  calls — up to dozens on a Large board's endgame. **This is the one thing a web session cannot
+  fully de-risk**: whether that many rapid round-trips inside one turn is fast enough over a real
+  network is a latency question, not a protocol question, and is flagged explicitly for the local
+  device pass.
+- **A THIRD seat-assignment shape, distinct from both Tic Tac Toe's and Mancala's.** Tic Tac
+  Toe's X/O marks are symmetric and swap per game (`marks[]`); Mancala's P1/P2 are physically
+  fixed board halves that never swap (`_localSeat()` deviation). Dots and Boxes' engine seat 0/1
+  is symmetric like Tic Tac Toe's (a box can be claimed by either seat) — but this game has no
+  per-seat "mark" object to swap, just plain `humanSeat`/`aiSeat` integers already used
+  throughout the solo engine/render code. So `_localSeat()` (host = network seat 0, guest =
+  network seat 1) stays fixed for the room, exactly like every other game, while a NEW field,
+  `mp.dealer` (the network seat that plays engine seat 0 — i.e. opens — in the current game), is
+  the thing that actually varies per game; `humanSeat = _localSeat() === mp.dealer ? 0 : 1` is
+  recomputed at every game start/recovery. Net effect: solo's existing `humanSeat`/`aiSeat`
+  fields needed zero changes to become MP-safe, only WHERE they get assigned changed — a cheaper
+  retrofit than either reference game's seat model needed.
+- **Invariant 1 has no literal `winner` field to gate on in this game at all** — `isOver(s)` is
+  purely `drawnEdges >= totalEdges`, with no separate match-end flag that could lag behind a
+  genuine tie the way Chinchón's points/rounds `winner` or a `s.over`-vs-`s.winner` split can.
+  `test-mp-lockstep.mjs`'s DB2 states this non-mapping explicitly in its own probe message rather
+  than inventing a `winner`-keyed gate that was never there to break, per the standing rule (see
+  Tic Tac Toe's invariant 3 note above) that a future game with no literal analogue should say so.
+- **A boundary restore RE-SHOWS the finished game's overlay, a third pattern beyond Tic Tac
+  Toe's auto-`_mpStartNextGame()`-on-restore and Mancala's silent no-op-until-the-next-room-
+  update.** `_tryRestoreMP` calls `this.finish()` directly on a non-`midGame` save (same
+  reasoning as Mancala's restore, which this most resembles) — the host sees "Play again" and
+  decides when game N+1 starts exactly as if it had never left, the guest just waits, and
+  `finish()`'s own idempotence guard (`_statsCommitted`, already restored from the save) is the
+  whole safety net, so there is no separate `_mpAwaitNextGame()`/`_mpStartNextGame()` restore
+  branch to get wrong. **Confirms `HANDOFF-MP-WEB-SESSION.md`'s save-key note that there is no
+  settled convention here** — a third game, a third answer, all correct for their own game's
+  shape.
 
 ---
 
