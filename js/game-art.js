@@ -351,7 +351,7 @@ export const GAME_ART = {
               </g>
             </g>
           </svg>`,
-  pool: `<svg viewBox="0 0 160 90" aria-hidden="true">
+  poolv2: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#3a2418"/>
             <rect x="10" y="10" width="140" height="70" rx="4" fill="#0b3d2e"/>
             <g fill="#111">
