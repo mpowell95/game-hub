@@ -30,6 +30,21 @@ directory name is not a display name. Full rationale and the enumerated identifi
 `business-deal/CLAUDE.md`. If an audit calls this split "contradictory," the audit is mistaken.
 This is closed.
 
+## Poolv2 naming (settled — do not change)
+
+The billiards game in this repo is called **Poolv2**, everywhere: display title, folder
+(`poolv2/`), hub id, stats id `'poolv2'`, storage keys `gamehub.poolv2.*`, CSS prefix `.p2-`.
+It is **not** a version number to be tidied away, and it is **not** "Pool with a stray suffix" —
+Matt has a second, separate pool game in development, and the whole point of the name is that the
+two never collide in a folder, a URL, a stats key, a room tag, or an injected stylesheet. **The
+plain `pool` namespace is deliberately left free for that other game.** Do not rename this to
+"Pool", do not shorten the folder, and do not "align" the display name with anything.
+
+The rename from `pool`/`.pl-` happened before this game ever shipped (it was never on `main`, so
+no player ever recorded a `'pool'` stat and no device ever wrote a `gamehub.pool.*` key) — that
+is why re-keying was allowed here and is NOT a precedent for renaming a shipped game's ids, which
+THE LAW rule 5 forbids outright. Full detail: `poolv2/CLAUDE.md`.
+
 ## THE LAW: player data is never deleted, never lost, never put at risk
 
 THE LAW is Matt's, in his own words, set after a migration made his entire Ball Run history
@@ -124,7 +139,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes and Pool |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes and Poolv2 |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -159,7 +174,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
 object bundling them. All thirteen in-hub module games (Connect Four, Chinchón, Escoba, Filler,
-Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool) export all
+Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Poolv2) export all
 three; grep-verify before assuming otherwise:
 
 ```js
@@ -185,18 +200,18 @@ export default { init, destroy, isInProgress };
     in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
-    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts, Uno, Pool
+    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts, Uno, Poolv2
     (solo/practice)): returns
     `false` for solo play even mid-game, because leaving is lossless — each game snapshots
     after every state-changing event and picks up where it left off on return. Save keys:
     `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
     `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
     `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`, `gamehub.uno.save.v1`,
-    `gamehub.pool.save.v1`
+    `gamehub.poolv2.save.v1`
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
-    Chinchón's, Tic Tac Toe's, Mancala's, Dots and Boxes' and Pool's MP paths are each the exception
+    Chinchón's, Tic Tac Toe's, Mancala's, Dots and Boxes' and Poolv2's MP paths are each the exception
     within the exception: `isInProgress()` returns `true` only while an active multiplayer match is live
     (leaving mid-MP genuinely abandons the room), so one function answers two different
     questions depending on solo-vs-MP context.
@@ -310,7 +325,7 @@ working in that folder).
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
-| Pool | in-hub `module:`, **multiplayer** (`gamehub.pool.mp.v1`) | `.pl-root` / `.pl-` | `gamehub.pool.v1` | `recordResult('pool', …)` |
+| Poolv2 | in-hub `module:`, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` | `recordResult('poolv2', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |

@@ -1,8 +1,8 @@
-# Pool — Build Spec
+# Poolv2 — Build Spec
 
 **Audience: a fresh session with zero memory of this build.** This is the document to work from
 if you are building this game again from nothing, rebuilding a part of it, or extending it. It is
-deliberately more prescriptive than `pool/CLAUDE.md`, which records what was decided; this one
+deliberately more prescriptive than `poolv2/CLAUDE.md`, which records what was decided; this one
 tells you *what to build, in what order, and why each choice is the one to make*.
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
@@ -10,12 +10,21 @@ tells you *what to build, in what order, and why each choice is the one to make*
 > (full rationale in `js/CLAUDE.md`). Everything below about storage keys, autosave and stats is
 > subordinate to it: writes additive, keys never repurposed, no silent write failures.
 
+### The name, before anything else
+
+The game is **Poolv2** and every identifier in this document uses that namespace: folder
+`poolv2/`, hub id and stats id `poolv2`, keys `gamehub.poolv2.*`, room tag `'poolv2'`, CSS prefix
+`.p2-`. There is a **second, separate pool game in development**, and the plain `pool` namespace
+is reserved for it. If you are building from this spec, do not "clean up" the name and do not
+reach for `pool` anywhere — a collision in the folder, the stats bucket or the injected
+stylesheet is exactly what this naming prevents. Full rationale: `poolv2/CLAUDE.md`, "The name".
+
 ### Provenance of this document
 
 The original brief was a chat-supplied document called **"Pool App: General Build Guide."** It is
 not checked into this repo and does not appear anywhere in git history — it lived in the session
 that built the game. What survives of it is quoted verbatim inside the code and in
-`pool/CLAUDE.md`, in roughly twenty inline citations ("per the build guide's item 3", "build guide
+`poolv2/CLAUDE.md`, in roughly twenty inline citations ("per the build guide's item 3", "build guide
 §4, no hidden randomness", "the build guide's explicit ask", and so on). Sections 1-4 below
 reconstruct its requirements from those citations plus the two lines quoted directly in the task
 that commissioned this file. Where a requirement is a reconstruction rather than a quotation, it
@@ -68,7 +77,7 @@ rule being applied correctly. Spend the budget on the model.
 
 ## 2. The physics model
 
-Everything in this section lives in `pool/js/physics.js`, which is **pure and headless**: no DOM,
+Everything in this section lives in `poolv2/js/physics.js`, which is **pure and headless**: no DOM,
 no `import.meta`, no browser globals. That is load-bearing three times over — it lets the AI run
 lookaheads by calling the same engine, it lets a future test suite run under plain Node, and it
 makes the multiplayer design in §5 possible at all.
@@ -358,7 +367,7 @@ speed-dependent cushions and pocket capture, all pure and Node-importable, with 
 as the single settle function shared by rendering, AI and multiplayer verification.
 
 *What a next session should do:* **write the test file that does not exist.** There is no
-`pool/*.test.mjs` and no pool entry in `run-all-tests.mjs`. The engine is the most testable thing
+`poolv2/*.test.mjs` and no pool entry in `run-all-tests.mjs`. The engine is the most testable thing
 in this repo — it is pure, deterministic, and has published expected behavior. Minimum suite:
 stop/draw/follow produce the expected sign of post-contact cue velocity; a straight full-ball hit
 transfers essentially all velocity; the 30-degree rule holds within tolerance for a rolling cue
@@ -373,7 +382,7 @@ Only now open the canvas. Render the table, render the balls, and wire the gestu
 gesture, a separate spin picker canvas and a separate elevation slider.
 
 *What a next session should do:* the guide asked for **pinch-zoom and pan**, which were deferred
-(honestly, in `pool/CLAUDE.md`) and are still missing. This is the highest-value *feel* work left,
+(honestly, in `poolv2/CLAUDE.md`) and are still missing. This is the highest-value *feel* work left,
 because fine aim on a phone is genuinely hard at full-table zoom. Note before you start: pinch is
 a two-finger gesture and two fingers currently mean "fine aim mode" (§4). You must resolve that
 collision explicitly in the priority table before writing any code.
@@ -545,10 +554,10 @@ to the turn logic, only new transport code.
 
 Multiplayer rides the repo's existing `js/net.js` room layer (`rooms/<CODE>`) unchanged, the same
 protocol as Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes. What is *different*
-about Pool is what a "move" is.
+about Poolv2 is what a "move" is.
 
 Every other game in this hub transmits a value from a finite move vocabulary: a mark, a pit index,
-an edge. Pool's engine is continuous physics, so there is no such vocabulary. **A Pool move is the
+an edge. Poolv2's engine is continuous physics, so there is no such vocabulary. **A Poolv2 move is the
 shot's parameters:**
 
 ```js
@@ -586,7 +595,7 @@ does.
 Other conventions: `round.dealer` is repurposed as "the seat that breaks" (the third game in this
 repo to re-use that slot for its own "who opens" concept — do not add a field). Host is seat 0,
 guest is seat 1. One game per room; a rematch is a fresh room. Results record under a `'mp'`
-difficulty bucket via `recordResult('pool', 'mp', won)` with `recordHeadToHead('pool', opp, won)`
+difficulty bucket via `recordResult('poolv2', 'mp', won)` with `recordHeadToHead('poolv2', opp, won)`
 alongside, guarded so head-to-head can never block the ordinary result.
 
 ### 5.3 Storage keys
@@ -595,9 +604,9 @@ Three keys, never shared — the repo's settled convention:
 
 | Key | Contents |
 |---|---|
-| `gamehub.pool.v1` | settings (currently just `difficulty`) |
-| `gamehub.pool.save.v1` | solo/practice autosave: `{mode, difficulty, game}`, cleared on game end or explicit Quit |
-| `gamehub.pool.mp.v1` | MP rejoin snapshot: `{role, code, seq, game}` |
+| `gamehub.poolv2.v1` | settings (currently just `difficulty`) |
+| `gamehub.poolv2.save.v1` | solo/practice autosave: `{mode, difficulty, game}`, cleared on game end or explicit Quit |
+| `gamehub.poolv2.mp.v1` | MP rejoin snapshot: `{role, code, seq, game}` |
 
 Autosave is **silent restore** — straight onto the table on mount, no "resume?" prompt, matching
 Mancala and Tic Tac Toe. Anything malformed is treated as "no save" and never crashes. MP is never
@@ -612,26 +621,26 @@ opponent has not left (leaving abandons a real person's game).
 ## 6. Known gaps, ranked
 
 Ranked by what to fix first. Each is a task, not a caveat. Items 1-4 and 6-9 were found by reading
-the code for this document; the rest come from `pool/CLAUDE.md`'s own "Known limitations" and
+the code for this document; the rest come from `poolv2/CLAUDE.md`'s own "Known limitations" and
 multiplayer "Status" note.
 
 **1. Multiplayer does not transmit ball-in-hand placement — fix before anyone plays online.**
-`pool/CLAUDE.md` states that placement travels as part of the same move. The code does not do
+`poolv2/CLAUDE.md` states that placement travels as part of the same move. The code does not do
 this: `_mpLocalShoot` sends `{g, dir, power, offset, elevation}` and nothing else, while
 `_commitCuePlacement` mutates the local cue position only. So after any foul, the shooter places
 the cue ball, shoots, and the peer re-simulates the same strike **from a different cue-ball
 position** — divergent table, hash mismatch, recovery snapshot, every single time. Fouls are
 common, so this is close to "MP desyncs routinely."
 *Task:* add `place: {x, y} | null` to the move payload; apply it before the strike in **both**
-`_mpLocalShoot` and `_mpApplyNextEntry`; then correct the claim in `pool/CLAUDE.md`. Do not split
+`_mpLocalShoot` and `_mpApplyNextEntry`; then correct the claim in `poolv2/CLAUDE.md`. Do not split
 placement into its own lockstep entry — placement and strike must never be able to desync from
 each other.
 
 **2. There is no headless multiplayer lockstep test.** Six other MP games each have a block in
-`test-mp-lockstep.mjs`; Pool has none, and `run-all-tests.mjs` has no pool suite at all. The MP
+`test-mp-lockstep.mjs`; Poolv2 has none, and `run-all-tests.mjs` has no Poolv2 suite at all. The MP
 path is "proven by construction," which is to say unproven — and gap #1 is exactly the kind of
 thing that suite exists to catch.
-*Task:* add a Pool block to `test-mp-lockstep.mjs` driving two engine instances over a `FakeRoom`,
+*Task:* add a Poolv2 block to `test-mp-lockstep.mjs` driving two engine instances over a `FakeRoom`,
 mirroring the `ui.js` MP glue with per-method citations the way the existing blocks do. Port the
 five [KNOWN-BUG PROBE] regression assertions. Add a case where a shot follows a foul, so #1 cannot
 regress. Register it in `run-all-tests.mjs`.
@@ -651,7 +660,7 @@ clamp, revisit the masse term, which was fitted as a first-order approximation f
 elevations.
 
 **5. Multiplayer has never been played on two real devices.** No device testing, no `FakeRoom`
-harness run. This is stated honestly in `pool/CLAUDE.md` rather than claimed as verified — keep it
+harness run. This is stated honestly in `poolv2/CLAUDE.md` rather than claimed as verified — keep it
 that way until it is actually true.
 *Task:* after #1 and #2, play a full game host↔guest on two phones. Watch for: both seats seeing
 the same rack, ball-in-hand round-tripping, the break seat matching `round.dealer`, recovery
@@ -711,13 +720,13 @@ backlog from §6.
 
 **Engine**
 
-- [ ] 1. `pool/js/physics.js` — pure, headless, SI units, no randomness. Ball state carries
+- [ ] 1. `poolv2/js/physics.js` — pure, headless, SI units, no randomness. Ball state carries
       `(vx, vy)` **and** `(wx, wy, wz)`. Implement in this order: `slip` → `naturalRollSpin` →
       `stepBall` (slide/roll split + independent `wz` decay + masse term) → `strikeCueBall`
       (squirt → `cos(elevation)` speed → spin from offset) → `resolveBallCollision` (normal
       exchange, tangential kept, throw nudge) → `reflectCushion` (speed-dependent COR) →
       `pocketCenters` → `tick` → `simulateToRest`. Use §2.8's constants verbatim.
-- [ ] 2. `pool/js/table.js` — fixed rack, no shuffle; `FOOT_SPOT`/`HEAD_SPOT`; 0.5-1% rack
+- [ ] 2. `poolv2/js/table.js` — fixed rack, no shuffle; `FOOT_SPOT`/`HEAD_SPOT`; 0.5-1% rack
       clearance so it does not self-jam.
 - [ ] 3. Verify by hand in Node before drawing anything: stop shot stops, draw comes back, follow
       follows, hard rail rebounds shorter than soft, two identical runs give identical output.
@@ -726,7 +735,7 @@ backlog from §6.
 
 **Controls**
 
-- [ ] 5. `pool/js/ui.js` skeleton: `init` / `destroy` / `isInProgress` + default export, a
+- [ ] 5. `poolv2/js/ui.js` skeleton: `init` / `destroy` / `isInProgress` + default export, a
       module-level `let instance`, idempotent CSS injection via
       `new URL('../css/pool.css', import.meta.url)`.
 - [ ] 6. **Write `_localSeat()` / `_isMySeat()` now, before any turn logic exists**, and route
@@ -738,9 +747,9 @@ backlog from §6.
 
 **Rules, opponent, practice**
 
-- [ ] 9. `pool/js/rules.js` — pure `newGame` / `legalTarget` / `resolveShot` / `placeCueBall`,
+- [ ] 9. `poolv2/js/rules.js` — pure `newGame` / `legalTarget` / `resolveShot` / `placeCueBall`,
       reading only physics' event log. One named rulebook.
-- [ ] 10. `pool/js/ai.js` — ghost-ball candidates × 6 pockets, `pathBlocked` at `1.95R`, score with
+- [ ] 10. `poolv2/js/ai.js` — ghost-ball candidates × 6 pockets, `pathBlocked` at `1.95R`, score with
       real `simulateToRest` lookahead, tiers vary error and `topN` only.
 - [ ] 11. Practice mode: same physics and controls, no rules, no stats, re-rack button — and
       handle the scratch case (§6 #3).
@@ -748,36 +757,36 @@ backlog from §6.
 **Hub integration** (root `CLAUDE.md`'s "Adding a game" checklist is authoritative)
 
 - [ ] 12. `pool/index.html` standalone host calling `init(document.getElementById('pool'))`;
-      `pool/css/pool.css` with **every rule descendant-scoped under `.pl-root`** (Mancala's
-      discipline, not a bare prefix); `pool/js/strings.js` with `en`/`es` and every user-visible
+      `poolv2/css/poolv2.css` with **every rule descendant-scoped under `.p2-root`** (Mancala's
+      discipline, not a bare prefix); `poolv2/js/strings.js` with `en`/`es` and every user-visible
       string through `t()` at render time.
-- [ ] 13. Persist under `gamehub.pool.v1`; autosave `gamehub.pool.save.v1`; MP
-      `gamehub.pool.mp.v1`. Silent resume, malformed treated as no save.
-- [ ] 14. Register in `js/hub.js` `GAMES` (`module: '../pool/js/ui.js'`, id/title/blurb/accent),
+- [ ] 13. Persist under `gamehub.poolv2.v1`; autosave `gamehub.poolv2.save.v1`; MP
+      `gamehub.poolv2.mp.v1`. Silent resume, malformed treated as no save.
+- [ ] 14. Register in `js/hub.js` `GAMES` (`module: '../poolv2/js/ui.js'`, id/title/blurb/accent),
       add landscape `viewBox="0 0 160 90"` art to `js/game-art.js`, add `pool` to the stats/
       leaderboard game lists (`js/game-stats.js`, `js/game-stats-ui.js`, `js/leaderboard-ui.js`)
       and the title string to `js/strings.js`.
-- [ ] 15. Record with `recordResult('pool', difficulty, won)`. Pool stores **no per-game
+- [ ] 15. Record with `recordResult('poolv2', difficulty, won)`. Poolv2 stores **no per-game
       sub-counter**, so no `js/players-agg.js` branch is needed — but if you ever add one (pot
       percentage, longest run), the three-edit rule applies and the `players-agg.js` branch is the
       one that gets forgotten.
-- [ ] 16. Add every `pool/` file to `ASSETS` in `sw.js`, **bump `CACHE`**, then run
+- [ ] 16. Add every `poolv2/` file to `ASSETS` in `sw.js`, **bump `CACHE`**, then run
       `node validate-sw-assets.mjs` and `node run-all-tests.mjs`. Both must be green before commit.
 
 **Multiplayer**
 
-- [ ] 17. `pool/js/hash.js` — FNV-1a over settled positions rounded to 0.5 mm plus divergent rule
+- [ ] 17. `poolv2/js/hash.js` — FNV-1a over settled positions rounded to 0.5 mm plus divergent rule
       state.
 - [ ] 18. MP over `js/net.js`, untouched: host seat 0 / guest seat 1, `round.dealer` = breaking
       seat, move = shot parameters **plus placement** (§6 #1), shooter applies immediately and
       publishes `{move, hash}`, peer re-applies and verifies, host-authoritative recovery capped at
       3 attempts.
-- [ ] 19. Add the Pool block to `test-mp-lockstep.mjs`, including a foul-then-placement case
+- [ ] 19. Add the Poolv2 block to `test-mp-lockstep.mjs`, including a foul-then-placement case
       (§6 #2).
 - [ ] 20. Play a real host↔guest game on two devices before calling multiplayer done (§6 #5).
 
 **Documentation**
 
-- [ ] 21. Keep `pool/CLAUDE.md` current — THE LAW rule 9: a milestone is not done until CLAUDE.md
+- [ ] 21. Keep `poolv2/CLAUDE.md` current — THE LAW rule 9: a milestone is not done until CLAUDE.md
       reflects it. When you close a gap in §6, update **both** files: strike it here, correct the
       claim there.

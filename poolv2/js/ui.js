@@ -1,10 +1,10 @@
-// ui.js — Pool UI module. Hub contract: init(container)/destroy()/isInProgress().
+// ui.js — Poolv2 UI module. Hub contract: init(container)/destroy()/isInProgress().
 //
 // Setup screen: Filler's flat/segmented pattern (root CLAUDE.md marks it acceptable
-// for a small game, vs. Escoba's fuller accordion) — Pool has only two real
+// for a small game, vs. Escoba's fuller accordion) — Poolv2 has only two real
 // choices (mode, difficulty). CSS scoping follows Mancala's discipline (every rule
-// descendant-scoped under .pl-root). Settings key follows the current convention,
-// gamehub.pool.v1.
+// descendant-scoped under .p2-root). Settings key follows the current convention,
+// gamehub.poolv2.v1.
 //
 // SEAT MODEL, built in from the start (root CLAUDE.md's explicit ask): every
 // "whose turn / did I win / which side is mine" read goes through _localSeat().
@@ -34,9 +34,9 @@ import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
-const SETTINGS_KEY = 'gamehub.pool.v1';
-const SAVE_KEY = 'gamehub.pool.save.v1';
-const MP_SAVE_KEY = 'gamehub.pool.mp.v1';
+const SETTINGS_KEY = 'gamehub.poolv2.v1';
+const SAVE_KEY = 'gamehub.poolv2.save.v1';
+const MP_SAVE_KEY = 'gamehub.poolv2.mp.v1';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 
 const BALL_COLOR = {
@@ -140,11 +140,11 @@ class PoolUI {
 
   // ---- stylesheet ---------------------------------------------------------
   _ensureCss() {
-    if (document.getElementById('pl-css')) return;
+    if (document.getElementById('p2-css')) return;
     const link = document.createElement('link');
-    link.id = 'pl-css';
+    link.id = 'p2-css';
     link.rel = 'stylesheet';
-    link.href = new URL('../css/pool.css', import.meta.url).href;
+    link.href = new URL('../css/poolv2.css', import.meta.url).href;
     document.head.appendChild(link);
   }
 
@@ -153,7 +153,7 @@ class PoolUI {
     this._ensureCss();
     this.root.innerHTML = '';
     const div = document.createElement('div');
-    div.className = 'pl-root';
+    div.className = 'p2-root';
     this.root.appendChild(div);
     this.el = div;
     if (this.view === 'setup') this._renderSetup();
@@ -163,35 +163,35 @@ class PoolUI {
   _renderSetup() {
     const savedMp = readJSON(MP_SAVE_KEY);
     this.el.innerHTML = `
-      <div class="pl-setup">
-        <h1 class="pl-title">${t('title')}</h1>
-        <p class="pl-tagline">${t('tagline')}</p>
-        <div class="pl-row">
-          <div class="pl-label">${t('mode')}</div>
-          <div class="pl-seg" data-role="mode">
+      <div class="p2-setup">
+        <h1 class="p2-title">${t('title')}</h1>
+        <p class="p2-tagline">${t('tagline')}</p>
+        <div class="p2-row">
+          <div class="p2-label">${t('mode')}</div>
+          <div class="p2-seg" data-role="mode">
             <button type="button" data-v="ai" class="${this.mode === 'ai' ? 'is-active' : ''}">${t('mode_ai')}</button>
             <button type="button" data-v="practice" class="${this.mode === 'practice' ? 'is-active' : ''}">${t('mode_practice')}</button>
             <button type="button" data-v="online" class="${this.mode === 'online' ? 'is-active' : ''}">${t('mode_online')}</button>
           </div>
         </div>
-        <div class="pl-row" data-if="ai" style="${this.mode === 'ai' ? '' : 'display:none'}">
-          <div class="pl-label">${t('difficulty')}</div>
-          <div class="pl-seg" data-role="diff">
+        <div class="p2-row" data-if="ai" style="${this.mode === 'ai' ? '' : 'display:none'}">
+          <div class="p2-label">${t('difficulty')}</div>
+          <div class="p2-seg" data-role="diff">
             ${['beginner', 'intermediate', 'pro'].map((d) => `<button type="button" data-v="${d}" class="${this.settings.difficulty === d ? 'is-active' : ''}">${t('diff_' + d)}</button>`).join('')}
           </div>
         </div>
-        <div class="pl-online" data-if="online" style="${this.mode === 'online' ? '' : 'display:none'}">
-          ${savedMp ? `<button type="button" class="pl-btn" data-role="rejoin">${t('rejoin')}</button>` : ''}
-          <button type="button" class="pl-btn" data-role="create-room">${t('create_room')}</button>
-          <div class="pl-joinrow">
-            <input type="text" maxlength="4" placeholder="${t('enter_code')}" data-role="code-input" class="pl-code-input">
-            <button type="button" class="pl-btn" data-role="join-room">${t('join_room')}</button>
+        <div class="p2-online" data-if="online" style="${this.mode === 'online' ? '' : 'display:none'}">
+          ${savedMp ? `<button type="button" class="p2-btn" data-role="rejoin">${t('rejoin')}</button>` : ''}
+          <button type="button" class="p2-btn" data-role="create-room">${t('create_room')}</button>
+          <div class="p2-joinrow">
+            <input type="text" maxlength="4" placeholder="${t('enter_code')}" data-role="code-input" class="p2-code-input">
+            <button type="button" class="p2-btn" data-role="join-room">${t('join_room')}</button>
           </div>
-          <div class="pl-mp-status" data-role="mp-status"></div>
+          <div class="p2-mp-status" data-role="mp-status"></div>
         </div>
-        <div class="pl-actions">
-          <button type="button" class="pl-btn pl-btn-primary" data-role="start" ${this.mode === 'online' ? 'disabled' : ''}>${t('start')}</button>
-          <button type="button" class="pl-btn pl-btn-ghost" data-role="howto">${t('howto')}</button>
+        <div class="p2-actions">
+          <button type="button" class="p2-btn p2-btn-primary" data-role="start" ${this.mode === 'online' ? 'disabled' : ''}>${t('start')}</button>
+          <button type="button" class="p2-btn p2-btn-ghost" data-role="howto">${t('howto')}</button>
         </div>
       </div>`;
     this.el.querySelector('[data-role="mode"]').addEventListener('click', (e) => {
@@ -218,10 +218,10 @@ class PoolUI {
 
   _openHelp() {
     const dlg = document.createElement('div');
-    dlg.className = 'pl-dialog-overlay';
+    dlg.className = 'p2-dialog-overlay';
     dlg.innerHTML = `
-      <div class="pl-dialog">
-        <button type="button" class="pl-x" data-role="close" aria-label="${t('cancel')}">✕</button>
+      <div class="p2-dialog">
+        <button type="button" class="p2-x" data-role="close" aria-label="${t('cancel')}">✕</button>
         <p><strong>${t('title')}</strong>: 8-ball.</p>
         <p>${t('solids')} vs ${t('stripes')}. ${t('open_table')} until someone legally pockets a group ball.</p>
         <p>${t('place_cue')}</p>
@@ -253,35 +253,35 @@ class PoolUI {
   // ---- canvas + camera ------------------------------------------------
   _renderGame() {
     this.el.innerHTML = `
-      <div class="pl-game">
-        <div class="pl-hud">
-          <div class="pl-hud-left">
-            <span class="pl-turn-text" data-role="turn-text"></span>
+      <div class="p2-game">
+        <div class="p2-hud">
+          <div class="p2-hud-left">
+            <span class="p2-turn-text" data-role="turn-text"></span>
           </div>
-          <div class="pl-hud-right">
-            ${this.mode === 'practice' ? `<button type="button" class="pl-icon-btn" data-role="rerack" title="${t('new_game')}">↺</button>` : ''}
-            <button type="button" class="pl-icon-btn" data-role="camera" title="${t('camera')}">🎥</button>
-            <button type="button" class="pl-icon-btn" data-role="quit" title="${t('quit')}">✕</button>
+          <div class="p2-hud-right">
+            ${this.mode === 'practice' ? `<button type="button" class="p2-icon-btn" data-role="rerack" title="${t('new_game')}">↺</button>` : ''}
+            <button type="button" class="p2-icon-btn" data-role="camera" title="${t('camera')}">🎥</button>
+            <button type="button" class="p2-icon-btn" data-role="quit" title="${t('quit')}">✕</button>
           </div>
         </div>
-        <div class="pl-table-wrap" data-role="table-wrap">
+        <div class="p2-table-wrap" data-role="table-wrap">
           <canvas data-role="canvas"></canvas>
-          <div class="pl-rail-glow pl-rail-near" data-role="rail-near"></div>
-          <div class="pl-rail-glow pl-rail-far" data-role="rail-far"></div>
-          <div class="pl-foul-slot" data-role="foul-slot"></div>
+          <div class="p2-rail-glow p2-rail-near" data-role="rail-near"></div>
+          <div class="p2-rail-glow p2-rail-far" data-role="rail-far"></div>
+          <div class="p2-foul-slot" data-role="foul-slot"></div>
         </div>
-        <div class="pl-controls">
-          <div class="pl-spin-wrap">
-            <div class="pl-spin-label">${t('spin')}</div>
-            <canvas class="pl-spin" data-role="spin" width="72" height="72"></canvas>
+        <div class="p2-controls">
+          <div class="p2-spin-wrap">
+            <div class="p2-spin-label">${t('spin')}</div>
+            <canvas class="p2-spin" data-role="spin" width="72" height="72"></canvas>
           </div>
-          <div class="pl-power-wrap">
-            <div class="pl-power-label">${t('power')}</div>
-            <div class="pl-power-meter"><div class="pl-power-fill" data-role="power-fill"></div></div>
+          <div class="p2-power-wrap">
+            <div class="p2-power-label">${t('power')}</div>
+            <div class="p2-power-meter"><div class="p2-power-fill" data-role="power-fill"></div></div>
           </div>
-          <div class="pl-elev-wrap">
-            <div class="pl-elev-label">${t('elevate_cue')}</div>
-            <input type="range" min="0" max="45" value="0" data-role="elev" class="pl-elev-slider">
+          <div class="p2-elev-wrap">
+            <div class="p2-elev-label">${t('elevate_cue')}</div>
+            <input type="range" min="0" max="45" value="0" data-role="elev" class="p2-elev-slider">
           </div>
         </div>
       </div>`;
@@ -311,7 +311,7 @@ class PoolUI {
 
   _toggleCamera() {
     this._camera = this._camera === 'top' ? 'behind' : 'top';
-    this.tableWrap.classList.toggle('pl-camera-behind', this._camera === 'behind');
+    this.tableWrap.classList.toggle('p2-camera-behind', this._camera === 'behind');
   }
 
   _resizeCanvas() {
@@ -540,7 +540,7 @@ class PoolUI {
     if (this._foulMsg) {
       const slot = this.el.querySelector('[data-role="foul-slot"]');
       if (slot) {
-        slot.innerHTML = `<button type="button" class="pl-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`;
+        slot.innerHTML = `<button type="button" class="p2-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`;
         slot.querySelector('[data-role="foul-explain"]').addEventListener('click', () => alert(this._foulMsg));
       }
     }
@@ -723,10 +723,10 @@ class PoolUI {
   _onGameOver(actingSeat, outcome) {
     const iWon = this.game.winner === this._localSeat();
     if (this.mode === 'ai') {
-      recordResult('pool', this.settings.difficulty, iWon);
+      recordResult('poolv2', this.settings.difficulty, iWon);
     } else if (this.mp) {
-      recordResult('pool', 'mp', iWon);
-      if (this.mp.opp) { try { recordHeadToHead('pool', this.mp.opp, iWon); } catch { /* never block the result */ } }
+      recordResult('poolv2', 'mp', iWon);
+      if (this.mp.opp) { try { recordHeadToHead('poolv2', this.mp.opp, iWon); } catch { /* never block the result */ } }
       if (this.mp.role === 'host') net.writeResult(this.mp.code, { winner: this.game.winner }).catch(() => {});
       clearKey(MP_SAVE_KEY);
     }
@@ -736,14 +736,14 @@ class PoolUI {
 
   _showEndDialog(iWon) {
     const dlg = document.createElement('div');
-    dlg.className = 'pl-dialog-overlay';
+    dlg.className = 'p2-dialog-overlay';
     dlg.innerHTML = `
-      <div class="pl-dialog">
-        <button type="button" class="pl-x" data-role="close" aria-label="${t('cancel')}">✕</button>
+      <div class="p2-dialog">
+        <button type="button" class="p2-x" data-role="close" aria-label="${t('cancel')}">✕</button>
         <h2>${iWon ? t('you_win') : t('opp_wins', { opp: this._oppName() })}</h2>
-        <div class="pl-actions">
-          ${this.mp ? '' : `<button type="button" class="pl-btn pl-btn-primary" data-role="again">${t('play_again')}</button>`}
-          <button type="button" class="pl-btn" data-role="new">${t('new_game')}</button>
+        <div class="p2-actions">
+          ${this.mp ? '' : `<button type="button" class="p2-btn p2-btn-primary" data-role="again">${t('play_again')}</button>`}
+          <button type="button" class="p2-btn" data-role="new">${t('new_game')}</button>
         </div>
       </div>`;
     dlg.querySelector('[data-role="close"]').addEventListener('click', () => dlg.remove());
@@ -806,7 +806,7 @@ class PoolUI {
   async _mpCreateRoom() {
     const status = this.el.querySelector('[data-role="mp-status"]');
     if (status) status.textContent = t('joining');
-    const res = await net.createRoom('pool', {}, this._myIdentity());
+    const res = await net.createRoom('poolv2', {}, this._myIdentity());
     if (res.error) { if (status) status.textContent = res.error === 'offline' ? t('online_offline') : t('room_full'); return; }
     this.mp = {
       role: 'host', code: res.code, localSeat: 0, opp: null,

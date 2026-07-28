@@ -1,4 +1,4 @@
-# Pool (`pool/`)
+# Poolv2 (`poolv2/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
 > never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`,
@@ -6,9 +6,27 @@
 > saves, and stats written by this game are governed by it: writes additive, keys never
 > repurposed, no silent write failures.
 
+## The name (settled — do not change)
+
+**Poolv2, everywhere**: display title (both languages), folder `poolv2/`, hub id `poolv2`, stats
+id `'poolv2'`, storage keys `gamehub.poolv2.*`, room game tag `'poolv2'`, CSS root `.p2-root` and
+prefix `.p2-`. Matt has a **second, separate pool game in development**, and the name exists so
+the two can never collide — not in a folder, a URL, a stats bucket, a multiplayer room tag, or an
+injected stylesheet (module stylesheets are injected into the shared `document.head` and never
+removed on `destroy()`, so a shared CSS prefix between two pool games would genuinely cross-style
+them). **The plain `pool` namespace is deliberately left free for that other game.** Do not
+rename this to "Pool", do not treat the `v2` as a version number to tidy away, and do not
+"align" the folder with the display name in the other direction.
+
+Renamed from `pool`/`.pl-` on 2026-07-28, **before this game had ever shipped**: it was never
+merged to `main`, so no deployed build ever wrote a `'pool'` stat bucket or a `gamehub.pool.*`
+key on any device, and there was no player data to carry, orphan, or hide. That is the only
+reason re-keying was permissible, and it is **not** a precedent — renaming a shipped game's ids
+or storage keys is forbidden outright by THE LAW rule 5.
+
 Hub integration: in-hub `module:`, not immersive (keeps the hub header, unlike Escoba/Mancala/
 Ball Run). `isInProgress()` is mode-split (root CLAUDE.md's "two legitimate meanings" note):
-**solo (vs. computer) and practice both autosave/resume** (`gamehub.pool.save.v1`, silent restore
+**solo (vs. computer) and practice both autosave/resume** (`gamehub.poolv2.save.v1`, silent restore
 straight onto the table, no "resume?" prompt — same pattern as Mancala/Tic Tac Toe), so it returns
 `false` for them; **MP returns `true`** for as long as a room is joined, since leaving is
 consequential for the other person.
@@ -139,9 +157,9 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   is applied before the strike, both locally and on delivery, so the two are never allowed to
   desync from each other.
 - **MP results record under a `'mp'` difficulty bucket**, matching every other MP game in this
-  repo, via the generic `recordResult('pool', 'mp', won)` (Pool has no per-game sub-counter, so
+  repo, via the generic `recordResult('poolv2', 'mp', won)` (Poolv2 has no per-game sub-counter, so
   no `players-agg.js` branch was needed — see "Adding a game" item 7's three-edit rule, which only
-  applies to a game that stores something richer than played/won/lost). `recordHeadToHead('pool',
+  applies to a game that stores something richer than played/won/lost). `recordHeadToHead('poolv2',
   opp, won)` runs alongside, guarded so it can never block the ordinary result.
 - **Status: proven only by construction/inline reasoning, not by a headless lockstep test suite**
   (unlike the six reference games, which each have a `test-mp-lockstep.mjs` block). Nothing here
@@ -150,14 +168,14 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 
 ## Settings and keys
 
-- `gamehub.pool.v1` — settings (currently just `difficulty`).
-- `gamehub.pool.save.v1` — solo/practice autosave (the whole `rules.js` state, cleared on game
+- `gamehub.poolv2.v1` — settings (currently just `difficulty`).
+- `gamehub.poolv2.save.v1` — solo/practice autosave (the whole `rules.js` state, cleared on game
   end or an explicit Quit).
-- `gamehub.pool.mp.v1` — MP rejoin snapshot (role, room code, applied seq, state), separate key
+- `gamehub.poolv2.mp.v1` — MP rejoin snapshot (role, room code, applied seq, state), separate key
   per the repo's established three-key convention (settings / solo save / MP save never share a
   key).
-- Recorder: `recordResult('pool', difficulty, won)`; MP additionally calls
-  `recordHeadToHead('pool', opp, won)`.
+- Recorder: `recordResult('poolv2', difficulty, won)`; MP additionally calls
+  `recordHeadToHead('poolv2', opp, won)`.
 
 ## Known limitations (stated honestly, not hidden)
 
