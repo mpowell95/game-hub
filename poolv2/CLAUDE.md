@@ -155,16 +155,28 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   `clearRecovery`, unchanged from `net.js`).
 - **Ball-in-hand is part of the same move**, not a separate lockstep entry — placement (if any)
   is applied before the strike, both locally and on delivery, so the two are never allowed to
-  desync from each other.
+  desync from each other. **(Corrected 2026-07-28, BUILD-SPEC.md §6 #1.)** This paragraph
+  described the intended design from the start, but the code did not match it until this date:
+  `_mpLocalShoot` sent `{g, dir, power, offset, elevation}` with no `place`, while
+  `_commitCuePlacement` mutated only the local cue position, so after every foul the peer
+  re-simulated the same strike from the wrong cue-ball position — a hash mismatch (and a
+  host-authoritative recovery snapshot) on effectively every foul. Fixed by queuing the
+  placement on `mp.pendingPlacement` in `_commitCuePlacement`, attaching it as `move.place` in
+  `_mpLocalShoot`, and applying it via `rules.placeCueBall` in `_mpApplyNextEntry` **before**
+  re-running the strike.
 - **MP results record under a `'mp'` difficulty bucket**, matching every other MP game in this
   repo, via the generic `recordResult('poolv2', 'mp', won)` (Poolv2 has no per-game sub-counter, so
   no `players-agg.js` branch was needed — see "Adding a game" item 7's three-edit rule, which only
   applies to a game that stores something richer than played/won/lost). `recordHeadToHead('poolv2',
   opp, won)` runs alongside, guarded so it can never block the ordinary result.
-- **Status: proven only by construction/inline reasoning, not by a headless lockstep test suite**
-  (unlike the six reference games, which each have a `test-mp-lockstep.mjs` block). Nothing here
-  has been played on two real devices or against a `FakeRoom` harness yet — flagged honestly
-  rather than claimed as verified.
+- **Status: proven by a headless lockstep test suite as of 2026-07-28** —
+  `test-mp-lockstep.mjs`'s P1 (a scripted rally against a `FakeRoom`, hash-verified every applied
+  move, with a `[KNOWN-BUG PROBE]` asserting every ball-in-hand placement sent is also applied on
+  the peer — the regression guard for the #1 fix above) and P2 (forced hash mismatch → detection →
+  host-authoritative recovery → re-convergence), mirroring `poolv2/js/ui.js`'s real MP glue
+  method-for-method the same way the six reference games' blocks do. **Still not played on two
+  real devices** — that remains open (BUILD-SPEC.md §6 #5), flagged honestly rather than claimed
+  as verified.
 
 ## Settings and keys
 
@@ -183,5 +195,39 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   pan yet (the build guide's controls section asks for both — deferred, not silently dropped).
 - No shot clock, no jump shots (elevation currently only drives curve/masse, not an actual
   vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above.
-- No i18n live re-render via `onLangChange` (strings resolve at render time only, same minimum
-  bar every other game meets — see root CLAUDE.md item 9).
+- No in-room rematch series (one game per room; a rematch is a fresh room and code).
+- The AI is the only source of randomness in the game (`Math.random()` for aim/power jitter and
+  the `topN` pick) and runs synchronously on the main thread — unseeded (no AI replay) and can
+  briefly freeze a slow phone on a full rack.
+- Corner pockets use the same plain capture circle as side pockets — no jaw geometry (a real
+  corner pocket has a narrower, diagonally-cut mouth). A small, known fidelity gap, not modeled.
+
+### Fixed 2026-07-28 (BUILD-SPEC.md §6 items, in that doc's own ranking)
+
+- **#1 MP ball-in-hand placement now travels with the move that follows it** — see
+  "Multiplayer" above; this was the "fix before anyone plays online" item.
+- **#2 headless MP lockstep test added** — `test-mp-lockstep.mjs`'s P1/P2 blocks; see
+  "Multiplayer" above.
+- **#3 practice-mode scratch no longer strands the cue ball.** `_settleLocal`'s practice branch
+  never ran `rules.resolveShot`, so the scratch scrub that un-pockets the cue ball never ran
+  either — the cue stayed `pocketed: true` until a full re-rack. Now a practice scratch drops
+  straight into ball-in-hand placement instead.
+- **#4 the elevation slider is capped at 28°**, matching `strikeCueBall`'s real clamp
+  (`0.5` rad ≈ 28.6°) — the slider used to run to 45° with the top third doing nothing.
+- **#6 the no-rail foul now requires a rail strictly AFTER the cue ball's first contact**, not
+  merely a rail contact anywhere in the shot. `physics.js`'s `tick()`/`simulateToRest()` now also
+  return an ordered `log` (hits/rails/pockets in resolution order); `rules.js`'s
+  `railAfterFirstCueContact()` walks it to find any rail after the first cue hit. Before this, a
+  cue ball that clipped a rail before touching anything, then touched a ball and nothing else,
+  was incorrectly scored legal.
+- **#9 the foul warning icon clears once `_foulMsg` is null** (it used to persist into later
+  shots once shown), and tapping it opens an in-page dialog instead of a native `alert()`.
+- **#11 the unused `CORNER_JAW` constant was removed** rather than left declared-but-unread (see
+  the fidelity gap above — it is not modeled, on purpose, until someone implements it for real).
+- **#13 live language re-render**: the setup and game views now re-render on `onLangChange`
+  (`_startLoop()` cancels any prior RAF loop first, so a re-render mid-game can't leak a second
+  animation loop against a detached canvas).
+
+Still open, ranked per BUILD-SPEC.md §6: #5 (two-real-device MP play), #7 (in-room rematch
+series), #8 (AI seeding/threading), #10 (pinch-zoom/pan), #12 (deliberately deferred rules
+features — a second named rulebook, not edits to Bar Rules 8-Ball).

@@ -29,7 +29,7 @@ import { chooseShot } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
-import { makeT } from '../../js/i18n.js';
+import { makeT, onLangChange } from '../../js/i18n.js';
 import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
@@ -89,6 +89,11 @@ class PoolUI {
     this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._tryAutoResume();
     this.render();
+    // Live language re-render (root CLAUDE.md item 9's minimum bar is render-time-only;
+    // this is the optional live re-label, BUILD-SPEC §6 #13). Re-running the current
+    // view's render is safe mid-game because _startLoop() now cancels any prior RAF loop
+    // and every other piece of live state (game/mp/sim*) lives on `this`, not a closure.
+    this._offLang = onLangChange(() => { if (!this._dead) this.render(); });
   }
 
   /** Silent autosave/resume (solo/practice only, never MP — a room rejoin is its
@@ -122,6 +127,7 @@ class PoolUI {
     this._dead = true;
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
+    if (this._offLang) { this._offLang(); this._offLang = null; }
     window.removeEventListener('resize', this._boundResize);
     document.removeEventListener('visibilitychange', this._boundVis);
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
@@ -281,7 +287,7 @@ class PoolUI {
           </div>
           <div class="p2-elev-wrap">
             <div class="p2-elev-label">${t('elevate_cue')}</div>
-            <input type="range" min="0" max="45" value="0" data-role="elev" class="p2-elev-slider">
+            <input type="range" min="0" max="28" value="0" data-role="elev" class="p2-elev-slider">
           </div>
         </div>
       </div>`;
@@ -333,6 +339,10 @@ class PoolUI {
 
   // ---- main loop --------------------------------------------------------
   _startLoop() {
+    // A re-render mid-game (e.g. the language toggle re-mounting _renderGame, see
+    // onLangChange below) must not leave the PREVIOUS loop running against a canvas
+    // that's no longer in the DOM — cancel it before arming a new one.
+    if (this._raf) cancelAnimationFrame(this._raf);
     const loop = (now) => {
       if (this._dead) return;
       const dtReal = this._lastT ? Math.min((now - this._lastT) / 1000, 0.05) : 0;
@@ -346,6 +356,7 @@ class PoolUI {
           this._simEvents.hits.push(...ev.hits);
           this._simEvents.rails += ev.rails;
           this._simEvents.pocketed.push(...ev.pocketed);
+          this._simEvents.log.push(...ev.log);
           this._simAccum -= step; steps++;
         }
         if (!isMoving(this.game.balls)) {
@@ -370,7 +381,7 @@ class PoolUI {
     strikeCueBall(cue, dir, power, offset, elevation);
     this._simulating = true;
     this._simAccum = 0;
-    this._simEvents = { hits: [], rails: 0, pocketed: [] };
+    this._simEvents = { hits: [], rails: 0, pocketed: [], log: [] };
     return new Promise((resolve) => { this._simResolve = resolve; });
   }
 
@@ -537,13 +548,28 @@ class PoolUI {
       near.classList.toggle('is-lit', this._isMySeat(seat));
       far.classList.toggle('is-lit', !this._isMySeat(seat));
     }
-    if (this._foulMsg) {
-      const slot = this.el.querySelector('[data-role="foul-slot"]');
-      if (slot) {
+    const slot = this.el.querySelector('[data-role="foul-slot"]');
+    if (slot) {
+      if (this._foulMsg) {
         slot.innerHTML = `<button type="button" class="p2-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`;
-        slot.querySelector('[data-role="foul-explain"]').addEventListener('click', () => alert(this._foulMsg));
+        slot.querySelector('[data-role="foul-explain"]').addEventListener('click', () => this._openFoulDialog());
+      } else {
+        slot.innerHTML = '';
       }
     }
+  }
+
+  _openFoulDialog() {
+    const dlg = document.createElement('div');
+    dlg.className = 'p2-dialog-overlay';
+    dlg.innerHTML = `
+      <div class="p2-dialog">
+        <button type="button" class="p2-x" data-role="close" aria-label="${t('cancel')}">✕</button>
+        <p>${this._foulMsg || ''}</p>
+      </div>`;
+    dlg.querySelector('[data-role="close"]').addEventListener('click', () => dlg.remove());
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.remove(); });
+    this.el.appendChild(dlg);
   }
 
   // ---- pointer input: aim / power / spin / elevation ----------------------
@@ -682,6 +708,10 @@ class PoolUI {
     if (overlaps) return; // refuses illegal spots on its own, per the build guide
     this.game = rules.placeCueBall(this.game, cx, cy);
     this._placingCue = false;
+    // MP: placement travels as part of the NEXT move (see BUILD-SPEC §6 #1) so it can
+    // never desync from the strike that follows it. Applied locally now (so the shooter
+    // aims from the real spot); queued here so _mpLocalShoot can attach it to the move.
+    if (this.mp) this.mp.pendingPlacement = { x: cx, y: cy };
     this._saveProgress();
   }
 
@@ -701,7 +731,21 @@ class PoolUI {
   }
 
   _settleLocal(events, seat) {
-    if (this.mode === 'practice') { this._foulMsg = null; this._paintHud(); this._saveProgress(); return; }
+    if (this.mode === 'practice') {
+      this._foulMsg = null;
+      // Practice never runs rules.resolveShot, so the scratch scrub that un-pockets the
+      // cue ball never runs either (BUILD-SPEC §6 #3). Handle it directly here: drop
+      // straight into ball-in-hand placement rather than leaving the cue ball gone
+      // until the whole table is re-racked.
+      if (events.pocketed.indexOf('cue') >= 0) {
+        const cue = ballById(this.game.balls, 'cue');
+        if (cue) { cue.pocketed = false; cue.vx = 0; cue.vy = 0; cue.wx = 0; cue.wy = 0; cue.wz = 0; }
+        this._placingCue = true;
+      }
+      this._paintHud();
+      this._saveProgress();
+      return;
+    }
     const { state, outcome } = rules.resolveShot(this.game, events);
     this.game = state;
     this._applyOutcomeUi(outcome, seat);
@@ -811,7 +855,7 @@ class PoolUI {
     this.mp = {
       role: 'host', code: res.code, localSeat: 0, opp: null,
       appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
-      awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false,
+      awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
     };
     net.heartbeat(res.code, 'host');
     if (status) status.textContent = t('share_code', { code: res.code });
@@ -831,7 +875,7 @@ class PoolUI {
     this.mp = {
       role: 'guest', code: code.toUpperCase(), localSeat: 1, opp: null,
       appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
-      awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false,
+      awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
     };
     net.heartbeat(this.mp.code, 'guest');
     await net.onRoom(this.mp.code, (room) => this._mpRoomCallback(room));
@@ -849,7 +893,7 @@ class PoolUI {
       this.mp = {
         role: save.role, code: save.code, localSeat: save.role === 'host' ? 0 : 1, opp: null,
         appliedSeq: save.seq | 0, movesById: new Map(), maxKnownSeq: save.seq | 0, delivering: false,
-        awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false,
+        awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
       };
       this.game = save.game;
       net.heartbeat(this.mp.code, this.mp.role);
@@ -923,6 +967,11 @@ class PoolUI {
   async _mpLocalShoot(dir, power, offset, elevation) {
     const mp = this.mp;
     const seat = this.game.turnSeat;
+    // Placement (if any) was already applied locally by _commitCuePlacement; it rides
+    // along with this move so the peer applies it before re-running the strike (BUILD-SPEC
+    // §6 #1 — placement and strike must never be able to desync from each other).
+    const place = mp.pendingPlacement || null;
+    mp.pendingPlacement = null;
     const events = await this._runShot(dir, power, offset, elevation);
     const { state, outcome } = rules.resolveShot(this.game, events);
     this.game = state;
@@ -931,7 +980,7 @@ class PoolUI {
     const seq = ++mp.appliedSeq;
     mp.maxKnownSeq = Math.max(mp.maxKnownSeq, seq);
     this._mpSaveProgress();
-    net.appendMove(mp.code, mp.role, seq, { g: mp.gameNum, dir, power, offset, elevation }, h).catch(() => {});
+    net.appendMove(mp.code, mp.role, seq, { g: mp.gameNum, dir, power, offset, elevation, place }, h).catch(() => {});
     if (this.game.over) this._onGameOver(seat, outcome);
     else if (this.game.ballInHand && this._isMySeat(this.game.turnSeat)) this._placingCue = true;
   }
@@ -955,6 +1004,9 @@ class PoolUI {
     if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;
     if (entry.by === mp.role) { mp.appliedSeq = seq; return true; } // already applied locally
     const move = entry.move;
+    // Apply the peer's cue-ball placement (if this shot followed a foul) BEFORE
+    // re-running the strike, exactly as the shooter's own device did (BUILD-SPEC §6 #1).
+    if (move.place) this.game = rules.placeCueBall(this.game, move.place.x, move.place.y);
     const events = await this._runShot(move.dir, move.power, move.offset, move.elevation);
     const seat = this.game.turnSeat;
     const { state, outcome } = rules.resolveShot(this.game, events);

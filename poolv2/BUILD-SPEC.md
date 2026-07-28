@@ -624,7 +624,12 @@ Ranked by what to fix first. Each is a task, not a caveat. Items 1-4 and 6-9 wer
 the code for this document; the rest come from `poolv2/CLAUDE.md`'s own "Known limitations" and
 multiplayer "Status" note.
 
-**1. Multiplayer does not transmit ball-in-hand placement — fix before anyone plays online.**
+> **Status (2026-07-28): items 1, 2, 3, 4, 6, 9, 11 and 13 are FIXED** — see each item's own
+> `[FIXED 2026-07-28]` note below for what changed, and `poolv2/CLAUDE.md`'s "Multiplayer" and
+> "Known limitations" sections (which this doc's own rule says to correct alongside this one) for
+> the corrected claims. Still open: 5, 7, 8, 10, 12.
+
+**1. [FIXED 2026-07-28] Multiplayer does not transmit ball-in-hand placement — fix before anyone plays online.**
 `poolv2/CLAUDE.md` states that placement travels as part of the same move. The code does not do
 this: `_mpLocalShoot` sends `{g, dir, power, offset, elevation}` and nothing else, while
 `_commitCuePlacement` mutates the local cue position only. So after any foul, the shooter places
@@ -636,7 +641,7 @@ common, so this is close to "MP desyncs routinely."
 placement into its own lockstep entry — placement and strike must never be able to desync from
 each other.
 
-**2. There is no headless multiplayer lockstep test.** Six other MP games each have a block in
+**2. [FIXED 2026-07-28] There is no headless multiplayer lockstep test.** Six other MP games each have a block in
 `test-mp-lockstep.mjs`; Poolv2 has none, and `run-all-tests.mjs` has no Poolv2 suite at all. The MP
 path is "proven by construction," which is to say unproven — and gap #1 is exactly the kind of
 thing that suite exists to catch.
@@ -645,7 +650,7 @@ mirroring the `ui.js` MP glue with per-method citations the way the existing blo
 five [KNOWN-BUG PROBE] regression assertions. Add a case where a shot follows a foul, so #1 cannot
 regress. Register it in `run-all-tests.mjs`.
 
-**3. In practice mode a scratch permanently removes the cue ball.** `_settleLocal` returns early
+**3. [FIXED 2026-07-28] In practice mode a scratch permanently removes the cue ball.** `_settleLocal` returns early
 for practice, so `rules.resolveShot` never runs, so the scrub that un-pockets the cue ball never
 runs either. The cue stays `pocketed: true`, is not drawn, and cannot be aimed. The only escape is
 the re-rack button, which throws away the whole table.
@@ -653,7 +658,7 @@ the re-rack button, which throws away the whole table.
 ball-in-hand placement, which is friendlier for a practice table) without invoking the rules
 engine.
 
-**4. The elevation slider's top third does nothing.** The slider runs 0-45 degrees; `strikeCueBall`
+**4. [FIXED 2026-07-28] The elevation slider's top third does nothing.** The slider runs 0-45 degrees; `strikeCueBall`
 clamps elevation to 0.5 rad ≈ 28.6 degrees. Everything above 28.6 is silently identical.
 *Task:* either cap the slider at 28 degrees, or raise the physics clamp — but if you raise the
 clamp, revisit the masse term, which was fitted as a first-order approximation for small
@@ -666,7 +671,7 @@ that way until it is actually true.
 the same rack, ball-in-hand round-tripping, the break seat matching `round.dealer`, recovery
 firing and clearing, and the result recording once per device.
 
-**6. The no-rail foul does not check rail timing.** `events.rails` counts every cushion contact
+**6. [FIXED 2026-07-28] The no-rail foul does not check rail timing.** `events.rails` counts every cushion contact
 during the whole shot, including the cue ball hitting a rail *before* it touches any ball. Real
 8-ball requires a rail *after* contact. Today, cue-ball-off-the-rail-then-nothing is scored legal.
 *Task:* have `tick` tag rail events with whether first cue contact has occurred (or have the rules
@@ -684,7 +689,7 @@ calls synchronously.
 *Task:* seed the RNG (so AI games are reproducible and replayable) and move the search off the
 main thread or budget it across frames.
 
-**9. A foul warning icon, once shown, is never cleared.** `_paintHud` writes the foul slot when
+**9. [FIXED 2026-07-28] A foul warning icon, once shown, is never cleared.** `_paintHud` writes the foul slot when
 `_foulMsg` is set but never empties it when the message clears, so the ⚠ persists into later
 shots.
 *Task:* clear the slot's contents whenever `_foulMsg` is null. While you are there, replace the
@@ -695,7 +700,7 @@ pan; both were deferred, not dropped. The camera toggle is a cosmetic CSS tilt.
 *Task:* pan and pinch-zoom first (biggest aiming benefit, no physics implications) — and see §4
 rule 6 about the two-finger conflict before writing any code.
 
-**11. `CORNER_JAW` is declared and never used.** Corner pockets are the same plain capture circle
+**11. [FIXED 2026-07-28, by removal] `CORNER_JAW` is declared and never used.** Corner pockets are the same plain capture circle
 as side pockets, though the comment describes pulling the capture point inward along the diagonal.
 Bar players feel corner-pocket geometry, so this is a real (if small) fidelity gap.
 *Task:* either implement the jaw offset or delete the constant. Do not leave a documented constant
@@ -706,7 +711,7 @@ curve only, never a vertical launch), no called shots or pockets, no safety-spec
 *Task:* if any of these are wanted, they belong in a **second named rulebook**, not as edits to
 Bar Rules 8-Ball.
 
-**13. No live language re-render.** Strings resolve at render time only; there is no
+**13. [FIXED 2026-07-28] No live language re-render.** Strings resolve at render time only; there is no
 `onLangChange` subscription, so a mid-game language switch does not repaint. This meets the repo's
 stated minimum bar and is the lowest-priority item here.
 *Task:* subscribe in `_renderGame`, unsubscribe in `destroy()`.

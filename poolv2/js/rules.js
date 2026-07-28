@@ -38,6 +38,25 @@ function pottedKinds(state, events) {
   return events.pocketed.map((id) => ({ id, kind: id === 'cue' ? 'cue' : kindOf(state.balls, id) }));
 }
 
+/** Real 8-ball requires a rail AFTER the cue ball's first contact, not merely a rail
+ *  contact anywhere in the shot (a cue ball that clips a rail before touching
+ *  anything, then touches a ball and nothing else, must still foul). Walks the
+ *  ordered event log physics.js produces (hits/rails/pockets in resolution order,
+ *  concatenated across every tick of the shot) rather than a plain rail count. */
+function railAfterFirstCueContact(events) {
+  const log = events.log || [];
+  let contactIndex = -1;
+  for (let i = 0; i < log.length; i++) {
+    const e = log[i];
+    if (e.t === 'hit' && (e.a === 'cue' || e.b === 'cue')) { contactIndex = i; break; }
+  }
+  if (contactIndex < 0) return false;
+  for (let i = contactIndex + 1; i < log.length; i++) {
+    if (log[i].t === 'rail') return true;
+  }
+  return false;
+}
+
 function remainingOfKind(balls, kind) {
   return balls.filter((b) => b.kind === kind && !b.pocketed).length;
 }
@@ -75,7 +94,7 @@ export function resolveShot(state, events) {
   else if (firstKind === null) { foul = true; foulReason = 'no_contact'; }
   else if (firstKind === 'eight' && !legal.allowEight) { foul = true; foulReason = 'wrong_ball_eight'; }
   else if (firstKind !== 'eight' && legal.kinds.indexOf(firstKind) < 0) { foul = true; foulReason = 'wrong_ball'; }
-  else if (potted.length === 0 && events.rails === 0) { foul = true; foulReason = 'no_rail'; }
+  else if (potted.length === 0 && !railAfterFirstCueContact(events)) { foul = true; foulReason = 'no_rail'; }
 
   // Group assignment: the first legal, non-foul pot of a money ball (not the 8)
   // while the table is open decides both players' groups.

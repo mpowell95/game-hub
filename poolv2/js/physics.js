@@ -25,9 +25,9 @@ export const TABLE = {
   h: 1.9812,
 };
 export const POCKET_R = R * 1.9;   // capture radius at each pocket center
-// Corner pockets are cut on a diagonal, so their effective mouth center is pulled
-// slightly outside the true corner; jaw radius nudges the capture point inward.
-export const CORNER_JAW = R * 0.9;
+// Note: corner pockets use the same plain capture circle as side pockets. Real
+// corner pockets are cut on a diagonal with a narrower effective mouth (the "jaw"),
+// which is a known fidelity gap (BUILD-SPEC §6 #11) — not modeled here.
 
 // Friction coefficients (dimensionless, published-range values):
 export const MU_SLIDE = 0.2;    // cloth sliding friction
@@ -230,17 +230,25 @@ export function isMoving(balls) {
 /** One physics tick over every live ball: integrate, resolve ball-ball collisions,
  *  cushions, and pocket capture. Returns an event log fragment for this tick:
  *  { hits: [{a,b}] (ball ids that touched), rails: number (cushion contacts this
- *  tick), pocketed: [ball ids captured this tick] } — the rules engine and AI use
- *  these to score/legalize a shot without caring about rendering. */
+ *  tick), pocketed: [ball ids captured this tick], log: [...] } — `log` is the same
+ *  three kinds of event (`{t:'hit',a,b}` / `{t:'rail',id}` / `{t:'pocket',id}`) but
+ *  in a single ORDERED sequence (hits, then rails, then pockets, matching this
+ *  function's own resolution order), so callers can ask "did X happen before Y"
+ *  within a shot — e.g. whether any rail contact came after the cue ball's first
+ *  hit, which a plain count can't answer. The rules engine and AI use these to
+ *  score/legalize a shot without caring about rendering. */
 export function tick(balls, dt) {
-  const events = { hits: [], rails: 0, pocketed: [] };
+  const events = { hits: [], rails: 0, pocketed: [], log: [] };
   const hw = TABLE.w / 2, hh = TABLE.h / 2;
   const pockets = pocketCenters();
   const live = balls.filter((b) => !b.pocketed);
   for (const b of live) stepBall(b, dt);
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
-      if (resolveBallCollision(live[i], live[j])) events.hits.push({ a: live[i].id, b: live[j].id });
+      if (resolveBallCollision(live[i], live[j])) {
+        events.hits.push({ a: live[i].id, b: live[j].id });
+        events.log.push({ t: 'hit', a: live[i].id, b: live[j].id });
+      }
     }
   }
   for (const b of live) {
@@ -250,7 +258,7 @@ export function tick(balls, dt) {
     else if (b.x + R > hw) { b.x = hw - R; reflectCushion(b, -1, 0); hitRail = true; }
     if (b.y - R < -hh) { b.y = -hh + R; reflectCushion(b, 0, 1); hitRail = true; }
     else if (b.y + R > hh) { b.y = hh - R; reflectCushion(b, 0, -1); hitRail = true; }
-    if (hitRail) events.rails++;
+    if (hitRail) { events.rails++; events.log.push({ t: 'rail', id: b.id }); }
   }
   for (const b of live) {
     if (b.pocketed) continue;
@@ -258,6 +266,7 @@ export function tick(balls, dt) {
       if (len(b.x - p.x, b.y - p.y) < POCKET_R) {
         b.pocketed = true; b.vx = 0; b.vy = 0; b.wx = 0; b.wy = 0; b.wz = 0; b.moving = false;
         events.pocketed.push(b.id);
+        events.log.push({ t: 'pocket', id: b.id });
         break;
       }
     }
@@ -272,13 +281,14 @@ export function tick(balls, dt) {
  *  no rendering in between — same function, same result either way. */
 export function simulateToRest(balls, dt = 1 / 240, maxSeconds = 20) {
   let t = 0;
-  const allEvents = { hits: [], rails: 0, pocketed: [] };
+  const allEvents = { hits: [], rails: 0, pocketed: [], log: [] };
   while (t < maxSeconds) {
     if (!isMoving(balls)) break;
     const ev = tick(balls, dt);
     allEvents.hits.push(...ev.hits);
     allEvents.rails += ev.rails;
     allEvents.pocketed.push(...ev.pocketed);
+    allEvents.log.push(...ev.log);
     t += dt;
   }
   return allEvents;
