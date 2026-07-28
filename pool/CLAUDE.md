@@ -159,6 +159,67 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 - Recorder: `recordResult('pool', difficulty, won)`; MP additionally calls
   `recordHeadToHead('pool', opp, won)`.
 
+## First-playtest fixes (2026-07-28, CiC UI/UX review)
+
+The initial ship was, in Matt's words, "really really bad" — a real-device/CiC review (mobile
+viewport, actual play vs. computer) found the game close to unplayable. Every finding was
+root-caused and fixed rather than patched over; the two worth understanding for future work:
+
+- **The table rendered as a squeezed strip and the rack as an unscaled blob — a CSS layout bug,
+  not a rendering bug.** `.hub-game` (`css/hub.css`) sets no explicit `height` on the container a
+  module mounts into; it's a plain block child sized to content, not to the hub's available
+  viewport. `.pl-root`'s original `height:100%` had nothing definite to resolve against, which
+  collapsed the whole `.pl-table-wrap`/canvas chain down toward the bare HTML canvas element's
+  default 300×150 intrinsic size — then CSS stretched that tiny raster to fill a differently-shaped
+  box, which is what read as a low-fidelity/placeholder table. Two-part fix: `.pl-root` now sets
+  `min-height:100dvh` (Escoba's own precedent for the same shared-shell gap, `css/escoba.css`) so
+  it has a real, self-sufficient height regardless of the ancestor chain; **and**, since a
+  `min-height` on an ancestor still doesn't give a *percentage-height* child (`.pl-game{height:100%}`)
+  anything definite to resolve against per spec, `.pl-game` and the flex chain below it use
+  `flex:1` (flex-grow) instead, which doesn't have that restriction. `_resizeCanvas()` also now
+  guards against a `<20px` rect (the real first-layout-pass race that triggered this even after
+  the CSS was right) with a `requestAnimationFrame` retry, and a `ResizeObserver` replaced the
+  `window.resize`-only listener so an internal flex settle or orientation change is caught too.
+- **Shots did not reliably fire, and once fired, the game could hang indefinitely — two separate
+  bugs, both in `ui.js`/`physics.js`, not one.** (1) The original aim/power gesture required a
+  *lift*, then a *second, separate press* to charge power — but a real touchscreen mints a brand
+  new `pointerId` on every fresh contact, and the code's `primaryId` never got reassigned to it,
+  so the second press was silently ignored: the power meter never moved and no shot ever fired.
+  Replaced with the standard single continuous-drag "slingshot" model (`_bindTablePointer`): aim
+  angle and power both derive live from the current pointer's distance/angle to the cue ball while
+  ONE press is held; release above a small threshold shoots. (2) Separately — and the more
+  serious bug — `physics.js`'s sliding/rolling friction applied a FIXED per-step decrement
+  regardless of how small the residual slip/speed already was. Kinetic friction is genuinely
+  constant-magnitude while sliding (correct physics), but a fixed-magnitude-per-step *integrator*
+  can overshoot PAST zero slip at low speed, flip its sign, and get "corrected" by an equally
+  oversized decrement next step — a stable limit cycle that never actually reached zero. A ball
+  would settle into an imperceptible but perpetual creep instead of stopping, so `isMoving()`
+  never returned `false`, `resolveShot()` never ran, and the game just sat there after a shot with
+  no visible symptom beyond "nothing happens" (which is exactly how the reviewer read it). Fixed
+  by deriving the exact, finite slide-to-roll crossing time analytically (`|u|` shrinks at the
+  constant rate `(7/2)·mu_slide·g`, a real result of combining the linear and angular equations of
+  motion — see `physics.js`'s comment above the fix) and clamping both the sliding and rolling
+  branches to that crossing point instead of a naive fixed step. Verified with a 30-shot varied
+  batch (`simulateToRest`) — every one settles to exact zero velocity, none hang or run past a few
+  physics-seconds. **This is the class of bug `test-mp-lockstep.mjs`-style regression coverage
+  would catch early; Pool still has none (see "Multiplayer" above) — adding a settle-time
+  assertion to a future headless Pool test suite is the concrete next step, not just an aspiration.**
+- Smaller fixes from the same review, each real but lower-severity: a native `alert()` on the foul
+  icon replaced with a non-blocking DOM toast (a blocking dialog freezes the whole page's input
+  pipeline until dismissed — a correctness bug, not just a UX wart, and the most likely explanation
+  for the reviewer's separate note about input appearing to "stall"); the spin picker's
+  `setPointerCapture` call reordered after the visual update and wrapped in `try/catch` so a
+  capture failure can no longer suppress the tap entirely; the quit confirmation now renders real
+  on-screen text (`leave_game_confirm`/`quit_confirm`) instead of a `title=` tooltip, which never
+  shows on a touch device (no hover) and could let a second tap quit with nothing ever visibly
+  confirmed; transient aim/power state is now reset at the top of every `_renderGame()` so a
+  stale aim line from a quit game never bleeds into a fresh one; balls and pockets gained cheap
+  radial-gradient shading so they read as spheres/depth rather than flat placeholder discs.
+- **Not yet addressed, flagged for a future pass**: the hub's own "Add to Home Screen" bottom
+  sheet (`js/a2hs.js`, shared shell code, out of this game's scope) can cover the setup screen's
+  Start/How to Play buttons on a first visit — a real obstacle, but a hub-wide component issue,
+  not specific to Pool.
+
 ## Known limitations (stated honestly, not hidden)
 
 - Camera is top-down plus a cosmetic tilt toggle; no real 3D perspective, no working pinch-zoom/

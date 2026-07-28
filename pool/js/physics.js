@@ -72,6 +72,21 @@ function naturalRollSpin(vx, vy) {
   return { wx: -vy / R, wy: vx / R };
 }
 
+/** Rolling-resistance deceleration, clamped so it can never overshoot past
+ *  zero speed in one step (the same overshoot-oscillation bug as the sliding
+ *  branch, just simpler to hit here since there's only one rate to clamp). */
+function applyRollFriction(b, dt) {
+  if (dt <= 0) return;
+  const sp = len(b.vx, b.vy);
+  if (sp > 1e-9) {
+    const dec = Math.min(MU_ROLL * G * dt, sp);
+    b.vx -= (b.vx / sp) * dec;
+    b.vy -= (b.vy / sp) * dec;
+  }
+  const roll = naturalRollSpin(b.vx, b.vy);
+  b.wx = roll.wx; b.wy = roll.wy;
+}
+
 /** Advance one ball by dt under cloth friction (sliding, then rolling) plus a
  *  simplified masse curve term when the ball still carries side-spin from an
  *  elevated-cue strike. Mutates `b` in place. */
@@ -87,37 +102,58 @@ export function stepBall(b, dt) {
   const u = slip(b);
   const uMag = len(u.x, u.y);
   if (uMag > SLIDE_EPS) {
-    // Sliding: cloth friction decelerates translation and spins the ball toward roll.
+    // Sliding: cloth friction decelerates translation and spins the ball toward
+    // roll. Kinetic friction is CONSTANT magnitude regardless of slip speed, so
+    // combining the linear (dv/dt = -mu*g*u_hat) and angular EOMs gives a slip
+    // vector |u| that shrinks at a CONSTANT rate (7/2 * mu*g) with a FIXED
+    // direction until it hits exactly zero (see pool/CLAUDE.md's physics
+    // section) — the transition happens in finite, computable time. A naive
+    // fixed-magnitude-per-step decrement doesn't know that: once |u| gets
+    // smaller than one step's worth of decrement, it overshoots PAST zero,
+    // flipping u's direction, which then gets "corrected" by an equally
+    // oversized decrement next step — a stable limit cycle that never
+    // actually reaches zero. That bug made shots settle into an imperceptible
+    // but perpetual creep instead of stopping, so isMoving() never returned
+    // false and a shot could hang "in progress" indefinitely. Clamp to the
+    // exact crossing point instead.
     const ux = u.x / uMag, uy = u.y / uMag;
     const aLin = MU_SLIDE * G;
-    b.vx -= aLin * ux * dt;
-    b.vy -= aLin * uy * dt;
     const spinRate = (5 / (2 * R)) * MU_SLIDE * G;
-    b.wx += -spinRate * uy * dt;
-    b.wy += spinRate * ux * dt;
-    // Curve (masse): only meaningful with side-spin present; a raised-cue shot's
-    // curve is applied once at strike time via extra initial wz + this ongoing
-    // lateral nudge while still sliding, then stops once rolling begins.
-    if (spinMag > STOP_W) {
-      const sp = len(b.vx, b.vy);
-      if (sp > 1e-6) {
-        const perp = { x: -b.vy / sp, y: b.vx / sp };
-        const curveA = CURVE_COEFF * b.wz * 0.002;
-        b.vx += perp.x * curveA;
-        b.vy += perp.y * curveA;
+    const uCloseRate = 3.5 * MU_SLIDE * G; // (7/2)*mu*g, derived above
+    const tCross = uMag / uCloseRate;
+    if (tCross < dt) {
+      // This step crosses from sliding into rolling partway through: advance
+      // only the fraction that completes the transition, snap to the exact
+      // natural-roll spin (kills any float residue), then spend the rest of
+      // dt as ordinary rolling friction.
+      b.vx -= aLin * ux * tCross;
+      b.vy -= aLin * uy * tCross;
+      b.wx += -spinRate * uy * tCross;
+      b.wy += spinRate * ux * tCross;
+      const roll = naturalRollSpin(b.vx, b.vy);
+      b.wx = roll.wx; b.wy = roll.wy;
+      applyRollFriction(b, dt - tCross);
+    } else {
+      b.vx -= aLin * ux * dt;
+      b.vy -= aLin * uy * dt;
+      b.wx += -spinRate * uy * dt;
+      b.wy += spinRate * ux * dt;
+      // Curve (masse): only meaningful with side-spin present; a raised-cue
+      // shot's curve is applied once at strike time via extra initial wz and
+      // this ongoing lateral nudge while still sliding, then stops once
+      // rolling begins.
+      if (spinMag > STOP_W) {
+        const sp = len(b.vx, b.vy);
+        if (sp > 1e-6) {
+          const perp = { x: -b.vy / sp, y: b.vx / sp };
+          const curveA = CURVE_COEFF * b.wz * 0.002;
+          b.vx += perp.x * curveA;
+          b.vy += perp.y * curveA;
+        }
       }
     }
   } else {
-    // Rolling without slipping: lower rolling resistance, spin stays locked to v.
-    const sp = len(b.vx, b.vy);
-    if (sp > 1e-6) {
-      const aRoll = MU_ROLL * G;
-      const nvx = b.vx - (b.vx / sp) * aRoll * dt;
-      const nvy = b.vy - (b.vy / sp) * aRoll * dt;
-      b.vx = nvx; b.vy = nvy;
-    }
-    const roll = naturalRollSpin(b.vx, b.vy);
-    b.wx = roll.wx; b.wy = roll.wy;
+    applyRollFriction(b, dt);
   }
   // Vertical-axis (side) spin decays independently under spin friction.
   if (spinMag > 0) {
