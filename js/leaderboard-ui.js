@@ -67,6 +67,7 @@ const GAME_META = [
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
   { id: 'uno', labelKey: 'game_title_uno' },
+  { id: 'pool', labelKey: 'game_title_pool' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
