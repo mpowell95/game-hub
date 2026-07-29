@@ -8,10 +8,10 @@
 // the world without changing the control model (brief section 6, item 2).
 
 import {
-  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BASE_TRACK_WIDTH, MIN_TRACK_WIDTH,
+  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
   NARROW_STEP, CURVES_ENABLED, CURVE_SEGMENTS, CURVE_LATERAL_PER_SEGMENT, OBSTACLE_MIN_GAP, BALL_DIAMETER,
   OBSTACLE_SIZE, OBSTACLE_MIN_STRAIGHT_AFTER, LATERAL_MAX_SPEED_BASE,
-  LATERAL_SPEED_SCALE_WITH_FORWARD, TUNNEL_SEGMENTS, TUNNEL_MIN_STRAIGHT_AFTER, difficultyConfig,
+  LATERAL_SPEED_SCALE_WITH_FORWARD, TUNNEL_SEGMENTS, TUNNEL_MIN_STRAIGHT_AFTER, difficultyConfig, mapConfig,
   OBSTACLE_FIRST_EVENT_MIN_M, OBSTACLE_FIRST_EVENT_MAX_M, OBSTACLE_EVENT_GAP_BASE_M,
   OBSTACLE_EVENT_GAP_JITTER_FRAC, OBSTACLE_EVENT_GAP_SHRINK_PER_TIER, OBSTACLE_EVENT_GAP_MIN_M,
   OBSTACLE_SPACING_SAFETY_FACTOR, OBSTACLE_COMBINE_SPAN_BW, OBSTACLE_COMBINE_MIN_CORRIDOR_BW,
@@ -42,7 +42,9 @@ function pickWeighted(rng, weights) {
 }
 
 export class Track {
-  constructor(difficultyKey, seed) {
+  constructor(mapKey, difficultyKey, seed) {
+    this.mapKey = mapKey;
+    this.map = mapConfig(mapKey);
     this.difficultyKey = difficultyKey;
     this.cfg = difficultyConfig(difficultyKey);
     this.rng = makeRng(seed >>> 0 || 1);
@@ -75,7 +77,7 @@ export class Track {
     this._firstObstaclePending = true;
 
     this._cx = 0; // running centerline X as segments are appended
-    this._width = BASE_TRACK_WIDTH * BALL_DIAMETER;
+    this._width = this.map.baseTrackWidth * BALL_DIAMETER;
 
     this.ensureAhead(SEGMENTS_AHEAD * SEGMENT_LENGTH);
   }
@@ -173,7 +175,7 @@ export class Track {
       showSpeedLabel: !!fields.showSpeedLabel,
     };
     this._cx = seg.cx1;
-    this._width = Math.max(MIN_TRACK_WIDTH * BALL_DIAMETER, seg.w1);
+    this._width = Math.max(this.map.minTrackWidth * BALL_DIAMETER, seg.w1);
     this.frontZ = z1;
     this.segments.push(seg);
     return seg;
@@ -199,7 +201,7 @@ export class Track {
 
   emitNarrow() {
     const current = this._width / BALL_DIAMETER;
-    const target = Math.max(MIN_TRACK_WIDTH, current - NARROW_STEP - Math.floor(this.rng() * 2));
+    const target = Math.max(this.map.minTrackWidth, current - NARROW_STEP - Math.floor(this.rng() * 2));
     const taperSteps = 3;
     const holdSteps = 3 + Math.floor(this.rng() * 3);
     const deltaDown = ((target - current) * BALL_DIAMETER) / taperSteps;
@@ -391,7 +393,7 @@ export class Track {
   /** Interpolated centerline X and track width at world distance z. */
   frameAt(z) {
     const seg = this.segmentAt(z);
-    if (!seg) return { cx: 0, width: BASE_TRACK_WIDTH * BALL_DIAMETER, segment: null };
+    if (!seg) return { cx: 0, width: this.map.baseTrackWidth * BALL_DIAMETER, segment: null };
     const t = Math.min(1, Math.max(0, (z - seg.z0) / (seg.z1 - seg.z0)));
     return {
       cx: seg.cx0 + (seg.cx1 - seg.cx0) * t,
@@ -416,7 +418,7 @@ export class Track {
    */
   localFrameAt(z) {
     const seg = this.segmentAt(z);
-    if (!seg) return { cx: 0, width: BASE_TRACK_WIDTH * BALL_DIAMETER, yaw: 0, nx: 1, nz: 0, segment: null };
+    if (!seg) return { cx: 0, width: this.map.baseTrackWidth * BALL_DIAMETER, yaw: 0, nx: 1, nz: 0, segment: null };
     const t = Math.min(1, Math.max(0, (z - seg.z0) / (seg.z1 - seg.z0)));
     const cx = seg.cx0 + (seg.cx1 - seg.cx0) * t;
     const width = seg.w0 + (seg.w1 - seg.w0) * t;

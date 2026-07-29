@@ -145,12 +145,17 @@ function fieldTiersPresent(list, gameIds) {
 // things (see js/leaderboard-rank.js's soloRating comment for the same distinction).
 const BR_TIER_KEYS = ['easy', 'medium', 'hard'];
 const SN_TIER_KEYS = ['easy', 'medium', 'hard'];
+/** BALLRUNMAP2ORBITALSPEC.md Phase 1: combines Classic's `br` and Orbital's `brOrbital` buckets
+ *  (Math.max, same as the players-agg.js combine) so a player who has only played the new map is
+ *  not shown as 0 here - THE LAW rule 1, the same gap game-stats-ui.js's headlineOf closes. */
 function brBestAt(g, tier) {
   const br = g.games.ballrun.br;
-  if (!br) return 0;
-  if (tier == null) return br.bestObstacles | 0;
+  const brOrbital = g.games.ballrun.brOrbital;
+  if (!br && !brOrbital) return 0;
+  if (tier == null) return Math.max((br && br.bestObstacles) | 0, (brOrbital && brOrbital.bestObstacles) | 0);
   const key = BR_TIER_KEYS[tier - 1];
-  return key ? (br.bestObstaclesByDiff || {})[key] | 0 : 0;
+  if (!key) return 0;
+  return Math.max((br && (br.bestObstaclesByDiff || {})[key]) | 0, (brOrbital && (brOrbital.bestObstaclesByDiff || {})[key]) | 0);
 }
 function snBestAt(g, tier) {
   const sn = (g.games.snake || {}).sn;

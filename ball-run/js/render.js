@@ -8,9 +8,7 @@ import * as THREE from '../vendor/three.module.min.js';
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_SIZE, TILE_SIZE,
   CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
-  CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK,
-  COLOR_VOID, COLOR_BALL, COLOR_TRACK_TILE, COLOR_TRACK_GROUT, COLOR_OBSTACLE, COLOR_OBSTACLE_EDGE,
-  COLOR_TUNNEL_WALL, COLOR_TUNNEL_EDGE, COLOR_CHEVRON, COLOR_SHADOW, CRASH_SHAKE_MS, difficultyConfig,
+  CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
 } from './config.js';
 
 const FLOOR_POOL_SIZE = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
@@ -23,14 +21,14 @@ const OBSTACLE_POOL_SIZE = 24;
 // bordered 2x2 pattern into every segment's plane independent of its world
 // size, so segment joins showed as duplicated/misaligned seams - a "venetian
 // blind" look instead of one continuous tiled ribbon).
-function buildTileTexture() {
+function buildTileTexture(colors) {
   const size = 256;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#' + COLOR_TRACK_TILE.toString(16).padStart(6, '0');
+  ctx.fillStyle = '#' + colors.trackTile.toString(16).padStart(6, '0');
   ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = '#' + COLOR_TRACK_GROUT.toString(16).padStart(6, '0');
+  ctx.strokeStyle = '#' + colors.trackGrout.toString(16).padStart(6, '0');
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.moveTo(0, 0); ctx.lineTo(size, 0);
@@ -42,14 +40,14 @@ function buildTileTexture() {
   return tex;
 }
 
-function buildTunnelFloorTexture(withLabel) {
+function buildTunnelFloorTexture(colors, withLabel) {
   const w = 256, h = 512;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#' + COLOR_TRACK_TILE.toString(16).padStart(6, '0');
+  ctx.fillStyle = '#' + colors.trackTile.toString(16).padStart(6, '0');
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#' + COLOR_CHEVRON.toString(16).padStart(6, '0');
+  ctx.strokeStyle = '#' + colors.chevron.toString(16).padStart(6, '0');
   ctx.lineWidth = 22;
   ctx.lineCap = 'round';
   for (let i = 0; i < 3; i++) {
@@ -75,14 +73,14 @@ function buildTunnelFloorTexture(withLabel) {
   return tex;
 }
 
-function buildTunnelWallTexture() {
+function buildTunnelWallTexture(colors) {
   const size = 256;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#' + COLOR_TUNNEL_WALL.toString(16).padStart(6, '0');
+  ctx.fillStyle = '#' + colors.tunnelWall.toString(16).padStart(6, '0');
   ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = '#' + COLOR_TUNNEL_EDGE.toString(16).padStart(6, '0');
+  ctx.strokeStyle = '#' + colors.tunnelEdge.toString(16).padStart(6, '0');
   ctx.lineWidth = 5;
   ctx.beginPath();
   for (let i = 0; i <= size; i += size / 4) {
@@ -97,10 +95,15 @@ function buildTunnelWallTexture() {
 }
 
 export class Renderer {
-  constructor(canvas) {
+  /** `mapKey` selects the map's color set (config.js's `MAPS`) for every texture/material this
+   *  renderer builds. Textures/materials are built once, here, in the constructor — a map
+   *  change is picked up by tearing down and constructing a fresh Renderer at setup time (ui.js
+   *  already does this on every run start/restart), never by mutating an existing one per frame. */
+  constructor(canvas, mapKey) {
     this.canvas = canvas;
+    this.colors = mapConfig(mapKey).colors;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    this.renderer.setClearColor(COLOR_VOID, 1);
+    this.renderer.setClearColor(this.colors.void, 1);
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 
     this.scene = new THREE.Scene();
@@ -128,22 +131,23 @@ export class Renderer {
   }
 
   _buildTextures() {
-    this.tileTex = buildTileTexture();
-    this.tunnelFloorTex = buildTunnelFloorTexture(false);
-    this.tunnelFloorLabelTex = buildTunnelFloorTexture(true);
-    this.tunnelWallTex = buildTunnelWallTexture();
+    const colors = this.colors;
+    this.tileTex = buildTileTexture(colors);
+    this.tunnelFloorTex = buildTunnelFloorTexture(colors, false);
+    this.tunnelFloorLabelTex = buildTunnelFloorTexture(colors, true);
+    this.tunnelWallTex = buildTunnelWallTexture(colors);
   }
 
   _buildBall() {
     const geo = new THREE.SphereGeometry(BALL_RADIUS, 24, 18);
-    const mat = new THREE.MeshStandardMaterial({ color: COLOR_BALL, roughness: 0.3, metalness: 0.15 });
+    const mat = new THREE.MeshStandardMaterial({ color: this.colors.ball, roughness: 0.3, metalness: 0.15 });
     this.ball = new THREE.Mesh(geo, mat);
     this.ball.position.set(0, BALL_RADIUS, 0);
     this.scene.add(this.ball);
     this._ballGeo = geo; this._ballMat = mat;
 
     const shadowGeo = new THREE.CircleGeometry(BALL_RADIUS * 0.9, 20);
-    const shadowMat = new THREE.MeshBasicMaterial({ color: COLOR_SHADOW, transparent: true, opacity: 0.35 });
+    const shadowMat = new THREE.MeshBasicMaterial({ color: this.colors.shadow, transparent: true, opacity: 0.35 });
     this.ballShadow = new THREE.Mesh(shadowGeo, shadowMat);
     this.ballShadow.rotation.x = -Math.PI / 2;
     this.ballShadow.position.set(0, 0.02, 0);
@@ -184,7 +188,7 @@ export class Renderer {
     const geo = new THREE.PlaneGeometry(1, 1);
     this._wallGeo = geo;
     this.wallMat = new THREE.MeshStandardMaterial({
-      map: this.tunnelWallTex, color: COLOR_TUNNEL_EDGE, emissive: COLOR_TUNNEL_EDGE, emissiveIntensity: 0.25,
+      map: this.tunnelWallTex, color: this.colors.tunnelEdge, emissive: this.colors.tunnelEdge, emissiveIntensity: 0.25,
       roughness: 0.5, side: THREE.DoubleSide,
     });
     this.wallPool = [];
@@ -201,9 +205,9 @@ export class Renderer {
     const edgesGeo = new THREE.EdgesGeometry(geo);
     this._obstacleGeo = geo; this._obstacleEdgesGeo = edgesGeo;
     this.obstacleMat = new THREE.MeshStandardMaterial({
-      color: COLOR_OBSTACLE, emissive: COLOR_OBSTACLE, emissiveIntensity: 0.5, roughness: 0.4,
+      color: this.colors.obstacle, emissive: this.colors.obstacle, emissiveIntensity: 0.5, roughness: 0.4,
     });
-    this.obstacleEdgeMat = new THREE.LineBasicMaterial({ color: COLOR_OBSTACLE_EDGE });
+    this.obstacleEdgeMat = new THREE.LineBasicMaterial({ color: this.colors.obstacleEdge });
     this.obstaclePool = [];
     for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
       const mesh = new THREE.Mesh(geo, this.obstacleMat);

@@ -144,6 +144,18 @@ export function aggregatePlayers(all) {
         dst.br.bestObstacles = Math.max(dst.br.bestObstacles | 0, src.br.bestObstacles | 0);
         const sbd = src.br.bestObstaclesByDiff || {};
         for (const k of Object.keys(sbd)) dst.br.bestObstaclesByDiff[k] = Math.max(dst.br.bestObstaclesByDiff[k] | 0, sbd[k] | 0);
+        // Orbital (BALLRUNMAP2ORBITALSPEC.md, Phase 1): a second, independent best-score bucket
+        // for the second map, same combine shape as `br` above. Root CLAUDE.md's "Adding a game"
+        // item 7 is explicit that a sub-counter missing its own branch here is silently dropped
+        // the moment a second device syncs, even though `br`/`total` stay correct - so this is
+        // added alongside `br`'s branch from Orbital's first day, not bolted on after a report.
+        if (src.brOrbital) {
+          if (!dst.brOrbital) dst.brOrbital = { runs: 0, bestObstacles: 0, bestObstaclesByDiff: {} };
+          dst.brOrbital.runs += src.brOrbital.runs | 0;
+          dst.brOrbital.bestObstacles = Math.max(dst.brOrbital.bestObstacles | 0, src.brOrbital.bestObstacles | 0);
+          const sbdO = src.brOrbital.bestObstaclesByDiff || {};
+          for (const k of Object.keys(sbdO)) dst.brOrbital.bestObstaclesByDiff[k] = Math.max(dst.brOrbital.bestObstaclesByDiff[k] | 0, sbdO[k] | 0);
+        }
       } else if (g === 'tictactoe' && src.tt) {
         // Ties are a first-class, explicitly-stored category here (see game-stats.js), so the
         // combined cross-device view must carry them forward too - dropping `tt` here would zero

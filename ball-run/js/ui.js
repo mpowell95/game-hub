@@ -6,7 +6,7 @@
 import { Sim, RunState } from './sim.js';
 import { Renderer } from './render.js';
 import { InputController } from './input.js';
-import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, difficultyConfig } from './config.js';
+import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, DEFAULT_MAP, MAPS } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBallRun, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
@@ -18,16 +18,23 @@ const t = makeT(STRINGS);
 // config.js's own DIFFICULTIES[].label stays English (a tuning/config module, same discipline as
 // sim.js/track.js) — this maps the same keys onto translated display text instead.
 const DIFF_LABEL_KEY = { easy: 'diff_easy', medium: 'diff_medium', hard: 'diff_hard' };
+const MAP_LABEL_KEY = { classic: 'map_classic', orbital: 'map_orbital' };
 
 // Fourth-playthrough item 2: the local per-difficulty personal best changed from distance (meters)
 // to obstacle count. Renamed (not just re-valued) so old meter-based bests under the old
 // 'ballrun.best.' prefix are simply never read as if they were counts - a fresh key, per this
 // module's existing plain-localStorage convention (no old data is touched or deleted, it's just
-// orphaned under its old key).
+// orphaned under its old key). BALLRUNMAP2ORBITALSPEC.md Phase 1: this prefix is now the LEGACY,
+// difficulty-only (no map) shape - frozen in place per THE LAW rule 5, read only by
+// migrateBestScoresToMaps() below. Live reads/writes go through BEST_KEY_PREFIX + '<map>.<diff>'
+// (bestKey()) instead.
 const BEST_KEY_PREFIX = 'ballrun.bestObstacles.';
+const BEST_MAP_MIGRATED_KEY = 'ballrun.bestObstacles.mapMigrated.v1';
 const DIFFICULTY_KEY = 'ballrun.difficulty';
+const MAP_KEY = 'ballrun.map';
 const SEEN_HELP_KEY = 'ballrun.seenHelp';
 const DIFF_ORDER = ['easy', 'medium', 'hard'];
+const MAP_ORDER = ['classic', 'orbital'];
 
 // Fifth-playthrough incident: a player's finished runs never reached the shared stats store, and
 // the only trace of the failure was a swallowed exception nobody could see. `recordBallRun` writing
@@ -69,17 +76,25 @@ function markRunLogSynced(ts) {
  *  failures internally, so its returned object can show an incremented count even when nothing was
  *  actually written to localStorage. Returns true only on a confirmed-on-disk new run. Never throws;
  *  logs loudly on any failure so a connected debugging session can see it. */
+// BALLRUNMAP2ORBITALSPEC.md Phase 1: an entry's `map` field defaults to 'classic' for run-log
+// entries written before this map existed (still awaiting retry from a prior session) - they were
+// all genuinely Classic runs, so this is a real default, not a guess. `recordBallRun`'s own default
+// mirrors this so the two can never disagree.
+function brBucketKey(map) { return map === 'orbital' ? 'brOrbital' : 'br'; }
+
 function trySyncRunEntry(entry) {
+  const map = entry.map || 'classic';
+  const bucketKey = brBucketKey(map);
   let before = -1;
-  try { before = loadStats().games.ballrun.br.runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
+  try { before = loadStats().games.ballrun[bucketKey].runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
   try {
-    recordBallRun(entry.score, entry.difficulty);
+    recordBallRun(entry.score, entry.difficulty, map);
   } catch (err) {
     console.error('[ball-run] recordBallRun threw', { entry, err });
     return false;
   }
   let after = -1;
-  try { after = loadStats().games.ballrun.br.runs | 0; } catch (err) { console.error('[ball-run] post-write stats read failed', err); return false; }
+  try { after = loadStats().games.ballrun[bucketKey].runs | 0; } catch (err) { console.error('[ball-run] post-write stats read failed', err); return false; }
   if (after >= 0 && (before < 0 || after > before)) return true;
   console.error('[ball-run] recordBallRun did not confirm a new run (persist may have failed)', { entry, before, after });
   return false;
@@ -108,15 +123,48 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
-function loadBest(difficulty) {
+function bestKey(map, difficulty) { return `${BEST_KEY_PREFIX}${map}.${difficulty}`; }
+
+/** One-time, guarded migration of the local per-difficulty best-score key onto the new
+ *  per-map-per-difficulty shape (BALLRUNMAP2ORBITALSPEC.md section 4: "do not lose anything").
+ *  Every pre-Phase-1 best IS a Classic best (Orbital didn't exist yet), so this copies each old
+ *  `ballrun.bestObstacles.<diff>` value forward to `ballrun.bestObstacles.classic.<diff>`,
+ *  verifies the write by an immediate fresh re-read, and marks itself done only once every
+ *  difficulty has either migrated clean or had nothing to migrate. The old keys are NEVER
+ *  written to or deleted - if a re-read ever disagreed, this key is simply not folded into the
+ *  "done" guard and the next app open retries it, exactly like the shared-store retry pattern
+ *  above (RUN_LOG_KEY). */
+function migrateBestScoresToMaps() {
   try {
-    const v = parseInt(localStorage.getItem(BEST_KEY_PREFIX + difficulty) || '0', 10);
+    if (localStorage.getItem(BEST_MAP_MIGRATED_KEY) === '1') return;
+    let allOk = true;
+    for (const d of DIFF_ORDER) {
+      const oldKey = BEST_KEY_PREFIX + d;
+      const oldRaw = localStorage.getItem(oldKey);
+      if (oldRaw === null) continue; // nothing to migrate for this difficulty
+      const newKey = bestKey('classic', d);
+      if (localStorage.getItem(newKey) !== null) continue; // never overwrite an existing new-shape value
+      localStorage.setItem(newKey, oldRaw);
+      if (localStorage.getItem(newKey) !== oldRaw) {
+        console.error('[ball-run] best-score map migration failed to verify by re-read', { difficulty: d, oldKey, newKey });
+        allOk = false;
+      }
+    }
+    if (allOk) localStorage.setItem(BEST_MAP_MIGRATED_KEY, '1');
+  } catch (err) {
+    console.error('[ball-run] best-score map migration threw', err);
+  }
+}
+
+function loadBest(map, difficulty) {
+  try {
+    const v = parseInt(localStorage.getItem(bestKey(map, difficulty)) || '0', 10);
     return Number.isFinite(v) && v > 0 ? v : 0;
   } catch { return 0; }
 }
 
-function saveBest(difficulty, obstaclesPassed) {
-  try { localStorage.setItem(BEST_KEY_PREFIX + difficulty, String(Math.floor(obstaclesPassed))); } catch { /* ignore */ }
+function saveBest(map, difficulty, obstaclesPassed) {
+  try { localStorage.setItem(bestKey(map, difficulty), String(Math.floor(obstaclesPassed))); } catch { /* ignore */ }
 }
 
 function loadSavedDifficulty() {
@@ -128,6 +176,17 @@ function loadSavedDifficulty() {
 
 function saveDifficulty(v) {
   try { localStorage.setItem(DIFFICULTY_KEY, v); } catch { /* ignore */ }
+}
+
+function loadSavedMap() {
+  try {
+    const v = localStorage.getItem(MAP_KEY);
+    return MAP_ORDER.includes(v) ? v : null;
+  } catch { return null; }
+}
+
+function saveMap(v) {
+  try { localStorage.setItem(MAP_KEY, v); } catch { /* ignore */ }
 }
 
 // Skill tiers (build guide section 5) map 1:1 onto Ball Run's three difficulties.
@@ -221,11 +280,15 @@ class BallRunUI {
     // Retry any run recorded locally last session that never confirmed reaching the shared
     // stats/leaderboard store (see RUN_LOG_KEY above). Cheap no-op when there's nothing to retry.
     try { reconcileRunLog(); } catch (err) { console.error('[ball-run] reconcile on open failed', err); }
+    // One-time, guarded local best-score migration onto the per-map shape (see its own doc
+    // comment). Cheap no-op once migrated.
+    migrateBestScoresToMaps();
 
     const profile = loadProfile();
     const opp = profile && profile.opponents && profile.opponents[0];
     const skillDefault = SKILL_TO_DIFFICULTY[opp && opp.skill];
     this.difficulty = loadSavedDifficulty() || skillDefault || DEFAULT_DIFFICULTY;
+    this.map = loadSavedMap() || DEFAULT_MAP;
 
     this.reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -256,6 +319,29 @@ class BallRunUI {
     window.addEventListener('orientationchange', this._onResize);
   }
 
+  /** Map picker (BALLRUNMAP2ORBITALSPEC.md section 4: "two cards, name plus a small visual
+   *  preview swatch. No description text, no helper copy"). Each swatch is a tiny inline SVG
+   *  built straight from that map's own `MAPS[key].colors` (config.js) — the same colors
+   *  render.js actually paints the track with, never a separate art asset to keep in sync. */
+  mapCardsHTML() {
+    return MAP_ORDER.map((m) => {
+      const c = MAPS[m].colors;
+      const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+      return `
+      <button type="button" class="br-mapcard${m === this.map ? ' is-selected' : ''}"
+        data-map="${m}" role="radio" aria-checked="${m === this.map}" aria-label="${t(MAP_LABEL_KEY[m])}">
+        <svg class="br-mapswatch" viewBox="0 0 48 30" aria-hidden="true">
+          <rect width="48" height="30" fill="${hex(c.void)}"/>
+          <path d="M4 28 L24 6 L44 28 Z" fill="${hex(c.trackTile)}"/>
+          <path d="M4 28 L24 6" stroke="${hex(c.obstacleEdge)}" stroke-width="2" fill="none"/>
+          <path d="M44 28 L24 6" stroke="${hex(c.obstacleEdge)}" stroke-width="2" fill="none"/>
+          <circle cx="24" cy="22" r="3.2" fill="${hex(c.ball)}"/>
+        </svg>
+        <span>${t(MAP_LABEL_KEY[m])}</span>
+      </button>`;
+    }).join('');
+  }
+
   /** Standard 3-option segmented control (colored shape + label), same shape as every other
    *  game's difficulty picker (2026-07-24 redesign — see root CLAUDE.md, "Ball Run setup
    *  redesign": no faces, no slider, no blurb). */
@@ -275,6 +361,7 @@ class BallRunUI {
       <div class="br-root">
         <section class="br-setup" data-role="setup">
           <h1 class="br-title">${t('title')}</h1>
+          <div class="br-mapcards" data-role="map-cards" role="radiogroup" aria-label="${t('map_aria')}">${this.mapCardsHTML()}</div>
           <div class="br-best" data-role="setup-best"></div>
           <div class="br-segmented" data-role="diff-segmented" role="radiogroup" aria-label="${t('diff_aria')}">${this.diffSegsHTML()}</div>
           <div class="br-setup-actions">
@@ -335,6 +422,7 @@ class BallRunUI {
       root,
       setup: q('[data-role="setup"]'),
       setupBest: q('[data-role="setup-best"]'),
+      mapCards: q('[data-role="map-cards"]'),
       diffSegmented: q('[data-role="diff-segmented"]'),
       play: q('[data-role="play"]'),
       helpOpen: q('[data-role="help-open"]'),
@@ -364,6 +452,18 @@ class BallRunUI {
 
     this.syncBestUi();
 
+    this.el.mapCards.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-map]');
+      if (!card) return;
+      this.map = card.dataset.map;
+      saveMap(this.map);
+      this.el.mapCards.querySelectorAll('.br-mapcard').forEach((b) => {
+        const on = b.dataset.map === this.map;
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-checked', String(on));
+      });
+      this.syncBestUi();
+    });
     this.el.diffSegmented.addEventListener('click', (e) => {
       const seg = e.target.closest('[data-diff]');
       if (!seg) return;
@@ -412,7 +512,7 @@ class BallRunUI {
   }
 
   syncBestUi() {
-    const best = loadBest(this.difficulty);
+    const best = loadBest(this.map, this.difficulty);
     this.el.setupBest.textContent = best > 0 ? t('best_passed', { n: best }) : t('no_runs_yet');
   }
 
@@ -434,8 +534,8 @@ class BallRunUI {
     this.el.resumeGate.hidden = true;
 
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    this.sim = new Sim(this.difficulty, seed);
-    this.renderer = new Renderer(this.el.canvas);
+    this.sim = new Sim(this.map, this.difficulty, seed);
+    this.renderer = new Renderer(this.el.canvas, this.map);
     this.input = new InputController(this.el.canvas);
     this._resultRecorded = false;
 
@@ -544,16 +644,16 @@ class BallRunUI {
     // against the personal best. Distance is shown once as secondary flavor info only.
     const score = this.sim.score;
     const distance = Math.floor(this.sim.z);
-    const prevBest = loadBest(this.difficulty);
+    const prevBest = loadBest(this.map, this.difficulty);
     const isNewBest = score > prevBest;
-    if (isNewBest) saveBest(this.difficulty, score);
+    if (isNewBest) saveBest(this.map, this.difficulty, score);
     // Shared cross-device stats/leaderboard store, additive alongside the local best above (which
     // stays the source of truth for the pre-game/game-over "your best" display).
     if (!this._resultRecorded) {
       this._resultRecorded = true;
       // Sixth-playthrough fix: write the raw result to the flight-recorder log FIRST, before
       // touching the shared store at all, so the run is never lost even if the write below fails.
-      const logEntry = { ts: Date.now(), difficulty: this.difficulty, score, distance, synced: false };
+      const logEntry = { ts: Date.now(), difficulty: this.difficulty, map: this.map, score, distance, synced: false };
       appendRunLog(logEntry);
       if (trySyncRunEntry(logEntry)) markRunLogSynced(logEntry.ts);
       // Fifth-playthrough fix: previously the only thing that pushed a finished run up to Firebase

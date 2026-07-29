@@ -19,10 +19,11 @@ export const RunState = Object.freeze({
 });
 
 export class Sim {
-  constructor(difficultyKey, seed) {
+  constructor(mapKey, difficultyKey, seed) {
+    this.mapKey = mapKey;
     this.difficultyKey = difficultyKey;
     this.cfg = difficultyConfig(difficultyKey);
-    this.track = new Track(difficultyKey, seed);
+    this.track = new Track(mapKey, difficultyKey, seed);
 
     this.state = RunState.PLAYING;
     this.elapsed = 0;       // seconds of active play (paused time excluded)

@@ -45,6 +45,14 @@
 //                                                   // _brRunsRefolded: the archived `runs` play count (unit-
 //                                                   // agnostic, unlike the meter bests) is folded BACK into the
 //                                                   // live br.runs once - see refoldBallRunLegacyRuns
+//         brOrbital: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } } },  // Ball
+//                                                   // Run's second map (BALLRUNMAP2ORBITALSPEC.md, Phase 1),
+//                                                   // same shape as `br` - a fresh sibling key, not a migration:
+//                                                   // all pre-existing history IS Classic history (Orbital
+//                                                   // didn't exist before), so `br` itself needs no change at
+//                                                   // all, only a new bucket for the new map. `total`/`byDiff`
+//                                                   // above stay combined across both maps (an overall play
+//                                                   // count is still meaningful either way).
 //       tictactoe: {
 //         total, byDiff,                           // classic recordResult-shaped (beginner/intermediate/pro)
 //         tt: { classic: { played, won, lost, tied }, ultimate: { played, won, lost, tied } } },
@@ -280,6 +288,19 @@ function ensureBr(g) {
   for (const d of BR_DIFFS) if (!Number.isFinite(g.br.bestObstaclesByDiff[d])) g.br.bestObstaclesByDiff[d] = 0;
 }
 
+/** Ball Run's second map, Orbital (BALLRUNMAP2ORBITALSPEC.md, Phase 1). `br` above is Classic's
+ *  bucket and stays completely untouched by this - all pre-existing history IS Classic history
+ *  (Orbital didn't exist before this), so there is nothing to migrate or carry forward here, only
+ *  a fresh, empty, additive sibling key for the new map. Same shape as `br`, same Math.max-only
+ *  discipline (THE LAW rule 2). */
+function ensureBrOrbital(g) {
+  if (!g.brOrbital || typeof g.brOrbital !== 'object') g.brOrbital = { runs: 0, bestObstacles: 0, bestObstaclesByDiff: {} };
+  if (!Number.isFinite(g.brOrbital.runs)) g.brOrbital.runs = 0;
+  if (!Number.isFinite(g.brOrbital.bestObstacles)) g.brOrbital.bestObstacles = 0;
+  if (!g.brOrbital.bestObstaclesByDiff || typeof g.brOrbital.bestObstaclesByDiff !== 'object') g.brOrbital.bestObstaclesByDiff = {};
+  for (const d of BR_DIFFS) if (!Number.isFinite(g.brOrbital.bestObstaclesByDiff[d])) g.brOrbital.bestObstaclesByDiff[d] = 0;
+}
+
 /** Fourth-playthrough item 2: Ball Run's recorded metric changed from bestDistance/bestByDiff
  *  (meters) to bestObstacles/bestObstaclesByDiff (obstacle rows passed) - old meter values are NOT
  *  comparable to counts and are never converted. One-time, guarded migration (same fold-once pattern
@@ -431,6 +452,7 @@ function normalize(raw) {
   ensureNb(st.games.nutsbolts);
   ensureEs(st.games.escoba);
   ensureBr(st.games.ballrun);
+  ensureBrOrbital(st.games.ballrun);
   ensureTt(st.games.tictactoe);
   ensureDb(st.games.dotsboxes);
   ensureBg(st.games.boggle);
@@ -558,6 +580,7 @@ export function loadStats() {
   changed = seedSnWallsLegacy(st.games.snake) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
+  ensureBrOrbital(st.games.ballrun);
   if (changed) persist(st);
   return st;
 }
@@ -654,17 +677,23 @@ export function recordEscoba(difficulty, won, extras) {
  *  obstacle-row score (floored, never negative - fourth-playthrough item 2: obstacle rows passed,
  *  not meters, see the header comment block and migrateBallRunMetric). A run has no opponent and no
  *  loss state, so it counts as played+won (mirrors Nuts & Bolts); `lost` is never touched. Additive;
- *  bestObstacles/bestObstaclesByDiff only ever go up, matching every other best-tracking field here. */
-export function recordBallRun(obstaclesPassed, difficulty) {
+ *  bestObstacles/bestObstaclesByDiff only ever go up, matching every other best-tracking field here.
+ *  `mapKey` (BALLRUNMAP2ORBITALSPEC.md, Phase 1) defaults to 'classic' so any caller that hasn't
+ *  been updated for maps yet keeps writing exactly where it always did; `total`/`byDiff` are bumped
+ *  regardless of map (an overall play count is still meaningful across maps), only the per-map
+ *  best-score bucket (`br` for Classic, `brOrbital` for Orbital) is chosen by it. */
+export function recordBallRun(obstaclesPassed, difficulty, mapKey = 'classic') {
   const st = loadStats();
   const g = st.games.ballrun;
   ensureBr(g);
+  ensureBrOrbital(g);
+  const mapBucket = mapKey === 'orbital' ? g.brOrbital : g.br;
   const d = BR_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
   const score = Number.isFinite(obstaclesPassed) ? Math.max(0, Math.floor(obstaclesPassed)) : 0;
   if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
-  g.br.runs += 1;
-  g.br.bestObstacles = Math.max(g.br.bestObstacles | 0, score);
-  if (d) g.br.bestObstaclesByDiff[d] = Math.max(g.br.bestObstaclesByDiff[d] | 0, score);
+  mapBucket.runs += 1;
+  mapBucket.bestObstacles = Math.max(mapBucket.bestObstacles | 0, score);
+  if (d) mapBucket.bestObstaclesByDiff[d] = Math.max(mapBucket.bestObstaclesByDiff[d] | 0, score);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

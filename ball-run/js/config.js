@@ -194,3 +194,68 @@ export const COLOR_SHADOW = 0x000000;
 export function difficultyConfig(key) {
   return DIFFICULTIES[key] || DIFFICULTIES[DEFAULT_DIFFICULTY];
 }
+
+// --- Maps (BALLRUNMAP2ORBITALSPEC.md, Phase 1: map plumbing) ---------------
+//
+// A map owns the track geometry it plays at (baseTrackWidth/minTrackWidth, both in
+// ball-widths, per brief section 5) and its own color set. Difficulty tuning
+// (DIFFICULTIES above) and event-type generation are shared for now: Orbital ships in
+// Phase 1 as a PURE VISUAL RE-SKIN of Classic's rules (same spec, section 7, Phase 1) —
+// mechanically different event types (Split, Jump) and their own tuning land in Phases
+// 2 and 3, not here. Reusing the same DIFFICULTIES object (not a clone) means a future
+// Classic retune is automatically inherited by Orbital until Orbital's own numbers are
+// deliberately split out; do that split explicitly when Phase 2/3 need diverging tuning,
+// don't let it happen by accident.
+export const MAPS = {
+  classic: {
+    key: 'classic',
+    label: 'Classic',
+    baseTrackWidth: BASE_TRACK_WIDTH,
+    minTrackWidth: MIN_TRACK_WIDTH,
+    difficulties: DIFFICULTIES,
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump yet (Phase 2/3)
+    colors: {
+      void: COLOR_VOID,
+      ball: COLOR_BALL,
+      trackTile: COLOR_TRACK_TILE,
+      trackGrout: COLOR_TRACK_GROUT,
+      obstacle: COLOR_OBSTACLE,
+      obstacleEdge: COLOR_OBSTACLE_EDGE,
+      tunnelWall: COLOR_TUNNEL_WALL,
+      tunnelEdge: COLOR_TUNNEL_EDGE,
+      chevron: COLOR_CHEVRON,
+      shadow: COLOR_SHADOW,
+    },
+  },
+  orbital: {
+    key: 'orbital',
+    label: 'Orbital',
+    baseTrackWidth: BASE_TRACK_WIDTH,
+    minTrackWidth: MIN_TRACK_WIDTH,
+    difficulties: DIFFICULTIES,
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'],
+    // Visual identity (spec section 5): near-black deep navy void, dark slate deck panels
+    // with lighter seams, a continuous amber (#ffce3a) edge stripe since this map is about
+    // falling off, light gray cargo blocks with an amber emissive outline, a ribbed amber-
+    // chevron airlock tunnel, pale cyan drone-sphere ball. Never red/green (colorblind
+    // rule). "Sign-off on the Orbital color set" is an explicit open item for Matt
+    // (spec section 9) — these are a first pass, not final.
+    colors: {
+      void: 0x03060f,
+      ball: 0x8fe9ff,
+      trackTile: 0x1c2333,
+      trackGrout: 0x3c4a66,
+      obstacle: 0xaab2bd,
+      obstacleEdge: 0xffce3a,
+      tunnelWall: 0x1c2436,
+      tunnelEdge: 0xffce3a,
+      chevron: 0xffce3a,
+      shadow: 0x000000,
+    },
+  },
+};
+export const DEFAULT_MAP = 'classic';
+
+export function mapConfig(key) {
+  return MAPS[key] || MAPS[DEFAULT_MAP];
+}
