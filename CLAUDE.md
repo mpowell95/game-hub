@@ -124,7 +124,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes and Pool |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -185,7 +185,7 @@ export default { init, destroy, isInProgress };
     in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
-    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle, Nuts & Bolts, Uno, Pool
+    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle (solo), Nuts & Bolts, Uno, Pool
     (solo/practice)): returns
     `false` for solo play even mid-game, because leaving is lossless — each game snapshots
     after every state-changing event and picks up where it left off on return. Save keys:
@@ -196,10 +196,10 @@ export default { init, destroy, isInProgress };
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
-    Chinchón's, Tic Tac Toe's, Mancala's, Dots and Boxes' and Pool's MP paths are each the exception
-    within the exception: `isInProgress()` returns `true` only while an active multiplayer match is live
-    (leaving mid-MP genuinely abandons the room), so one function answers two different
-    questions depending on solo-vs-MP context.
+    Chinchón's, Tic Tac Toe's, Mancala's, Dots and Boxes', Pool's and Boggle's MP paths are each
+    the exception within the exception: `isInProgress()` returns `true` only while an active
+    multiplayer match is live (leaving mid-MP genuinely abandons the room), so one function
+    answers two different questions depending on solo-vs-MP context.
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
 - An `immersive: true` entry in `hub.js`'s `GAMES` array (currently Escoba, Mancala, Ball Run)
@@ -301,7 +301,7 @@ working in that folder).
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |
-| Boggle | in-hub `module:` | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
+| Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |

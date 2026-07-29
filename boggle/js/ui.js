@@ -34,10 +34,29 @@ import { loadDictionary, isValidWord } from './dict.js';
 import { shakePlayableBoard, solveBoard } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordBoggle, loadStats } from '../../js/game-stats.js';
+import { recordBoggle, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import * as net from '../../js/net.js';
+import { roundEndsAt, wonFor, bothResultsIn } from './mp-round.js';
 import STRINGS from './strings.js';
+
+// MULTIPLAYER (2026-07-28). Two human devices race the SAME shaken board over
+// the shared js/net.js room protocol -- js/net.js gained exactly one new
+// function for this, reportRoundResult (see its own JSDoc there). This is
+// deliberately NOT the lockstep move-log protocol Chinchon/Escoba/Tic Tac
+// Toe/Mancala/Filler/Dots and Boxes share: a Boggle round has NO shared
+// mutable state during play (this game already has no duplicate-word
+// cancellation between the human and the AI, and that stays true against a
+// second human -- see boggle/CLAUDE.md), so there is nothing for the two
+// sides to diverge on and nothing to hash-verify. Both sides independently
+// shake/receive the same 16 faces, run their own local countdown, score
+// themselves, and report their own result; see boggle/CLAUDE.md's
+// "Multiplayer" section and js/CLAUDE.md's "Nth consumer: Boggle" for the
+// full write-up. The pure timing/comparison helpers both sides share live in
+// mp-round.js (test-boggle-mp.mjs exercises them headlessly -- this game's
+// stand-in for the other games' test-mp-lockstep.mjs blocks, since there is
+// no move log here to replay against a FakeRoom).
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.boggle.v1';
@@ -48,6 +67,19 @@ const SETTINGS_KEY = 'gamehub.boggle.v1';
 // only the board letters + found words + time remaining + the round's own
 // settings are persisted. Never touch SETTINGS_KEY's shape or values.
 const SAVE_KEY = 'gamehub.boggle.save.v1';
+// The MULTIPLAYER autosave, a THIRD key -- distinct from both of the above and
+// never read or written by either of them (THE LAW rule 5: never renamed or
+// repurposed once shipped). Follows Tic Tac Toe/Dots and Boxes's separate-key
+// convention, not Escoba's mp-sub-object-in-the-solo-key shape.
+const MP_SAVE_KEY = 'gamehub.boggle.mp.v1';
+const MP_CODE_LEN = 4;
+const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
+// The difficulty bucket an MP result records under -- there is no AI tier in
+// a human-vs-human round. 'mp' is unmapped in js/difficulty-tiers.js
+// (tierOf('mp') === null), so it counts in every total/leaderboard "All"
+// filter and claims no tier pill -- same convention Tic Tac Toe/Dots and Boxes
+// established (js/CLAUDE.md's "third consumer" section).
+const MP_DIFFICULTY = 'mp';
 
 // Ids stay module-scope (storage vocabulary); display labels resolve through t()
 // inside the render functions, same pattern as every other bilingual game.
@@ -184,6 +216,21 @@ class BoggleUI {
     // save it was trying to restore.
     this._restoring = false;
 
+    // Multiplayer session state, or null in solo -- `if (this.mp)` is the
+    // whole mode test, same convention as tic-tac-toe/js/ui.js and
+    // dots-boxes/js/ui.js. `this.mp` holds { role, code, opp, gameNum,
+    // series:{wins,losses,ties}, reportedN, startedAt, timerMinutes }.
+    this.mp = null;
+    this._mode = 'solo';          // 'solo' | 'host' | 'join'; deliberately NOT persisted
+    this._lobby = null;           // null | 'host' | 'join' (setup-screen sub-view)
+    this._mpBusy = false;
+    this._mpError = '';
+    this._mpStatusMsg = '';
+    this._mpJoinCode = '';
+    this._mpPendingCode = null;
+    this._mpJoinedCode = null;
+    this._mpLobbyRoom = null;
+
     // Swipe-trace state. `_tracing` = a pointer is currently down on the board;
     // `_traceMoved` = it has reached a second tile, which is what separates a
     // DRAG (submit on release) from a TAP (keep the path, wait for more taps);
@@ -210,6 +257,7 @@ class BoggleUI {
     this._lastPointerAt = 0;
 
     this._onClick = (e) => this.onClick(e);
+    this._onInput = (e) => this.onInput(e);
     this._onPointerDown = (e) => this._pointerDown(e);
     this._onPointerMove = (e) => this._pointerMove(e);
     this._onPointerUp = (e) => this._pointerUp(e);
@@ -225,11 +273,28 @@ class BoggleUI {
     // backgrounding mid-word-entry too. Skipped while a resume is still
     // loading the dictionary -- nothing has changed yet, and touching the
     // save here (saveGame() clears it when view isn't 'game') would wipe the
-    // very save resumeGame() was in the middle of restoring.
+    // very save resumeGame() was in the middle of restoring. MP never writes
+    // the solo slot (mirrors saveGame's own `if (ui.mp) return`, enforced
+    // inside saveGame itself).
     if (!this._restoring) saveGame(this);
     this.stopTimer();
     this._detachBoardPointer();
-    if (this.root) this.root.removeEventListener('click', this._onClick);
+    // Deliberately do NOT abandon an MP room here: destroy() runs for ANY hub
+    // teardown, including just navigating back to the launcher mid-round,
+    // which is exactly what the MP autosave's 30-minute rejoin window exists
+    // for (same reasoning as tic-tac-toe/js/ui.js's destroy()). Only the
+    // LOCAL listener and heartbeat stop; an explicit abandon is
+    // _mpLeaveMatch(). A hosted room that never reached a round is the one
+    // exception -- nobody depends on it yet, so it is released rather than
+    // left occupying a code until its 24h TTL.
+    if (!this.mp && this._lobby === 'host' && this._mpPendingCode) {
+      net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
+    }
+    try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this.root) {
+      this.root.removeEventListener('click', this._onClick);
+      this.root.removeEventListener('input', this._onInput);
+    }
     this.container.innerHTML = '';
     this._board = null;
   }
@@ -238,10 +303,18 @@ class BoggleUI {
   // snapshots after every scored word and on destroy(), and resumes silently
   // into the same board, found-words list and countdown on the next mount.
   // Per root CLAUDE.md's "two legitimate meanings" note on isInProgress(),
-  // that makes this the SECOND meaning (Escoba/Mancala's) -- leaving costs
-  // nothing, so this returns false even mid-round.
+  // SOLO uses the SECOND meaning (Escoba/Mancala's) -- leaving costs nothing,
+  // so this returns false even mid-round.
+  //
+  // MULTIPLAYER is the exception within the exception, same as Tic Tac Toe/
+  // Dots and Boxes: leaving is consequential for the live opponent (their
+  // room goes stale, they are left racing a clock alone) even though this
+  // device could rejoin, so the hub's "leave game?" confirm IS wanted. True
+  // for as long as a room is joined -- lobby, live round, or the between-
+  // rounds reveal screen all count, since leaving during any of them strands
+  // the opponent exactly the same way.
   isInProgress() {
-    return false;
+    return !!this.mp;
   }
 
   // --- settings persistence -------------------------------------------------
@@ -265,17 +338,27 @@ class BoggleUI {
 
   /** Identity is read fresh from the profile every render (never persisted),
    *  so profile edits always show -- same precedence rule as every other
-   *  game module: last-used settings > shared profile > built-in default. */
+   *  game module: last-used settings > shared profile > built-in default.
+   *  In multiplayer the opponent half comes from the live room instead: a
+   *  real person, not the profile's configured AI (mirrors tic-tac-toe/js/
+   *  ui.js's _identity()). */
   _identity() {
     let profile = null;
     try { profile = loadProfile(); } catch { profile = null; }
     const opp = profile && profile.opponents && profile.opponents[0];
+    const mpOpp = this.mp && this.mp.opp;
     return {
       humanName: (profile && profile.name) || t('you'),
       humanEmoji: (profile && profile.emoji) || '🙂',
-      oppName: (opp && opp.name) || t('computer'),
-      oppEmoji: (opp && opp.emoji) || '🤖',
+      oppName: (mpOpp && mpOpp.name) || (opp && opp.name) || (this.mp ? t('mp_opponent_label') : t('computer')),
+      oppEmoji: (mpOpp && mpOpp.avatar) || (opp && opp.emoji) || (this.mp ? '🙂' : '🤖'),
     };
+  }
+
+  /** Who this device is, in js/net.js's room vocabulary. */
+  _myIdentity() {
+    const id = this._identity();
+    return { name: id.humanName, avatar: id.humanEmoji, deviceId: deviceId() };
   }
 
   _statsLine() {
@@ -295,6 +378,17 @@ class BoggleUI {
     this.root = this.container.querySelector('.bg-root');
     this.shell = this.root.querySelector('[data-role="shell"]');
     this.root.addEventListener('click', this._onClick);
+    this.root.addEventListener('input', this._onInput);
+    // A live MULTIPLAYER room takes precedence over the solo save (starting
+    // an MP match clears the solo slot's view, so in practice only one of
+    // the two is ever fresh) and is restored asynchronously, since it has a
+    // room to rejoin first -- mirrors tic-tac-toe/js/ui.js's mount().
+    const mpSave = this._mpLoadSave();
+    if (mpSave) {
+      this.renderSetup();
+      this._tryRestoreMP(mpSave);
+      return;
+    }
     // A saved round wins over setup, straight onto the live board -- no
     // "resume?" dialog, same silent pattern as Escoba/Mancala.
     const save = loadGame();
@@ -329,6 +423,10 @@ class BoggleUI {
     return this._seg('set-diff', s.difficulty, DIFFICULTIES, DIFF_LABEL_KEY, true);
   }
 
+  _modeSeg() {
+    return this._seg('set-mode', this._mode, ['solo', 'host', 'join'], { solo: 'mode_solo', host: 'mode_host', join: 'mode_join' });
+  }
+
   renderSetup() {
     if (this._dead) return;
     this.closeOverlays();
@@ -338,21 +436,600 @@ class BoggleUI {
     const id = this._identity();
     const s = this._setup;
     const stats = this._statsLine();
-    this.shell.innerHTML = `
+    const head = `
       <h1 class="bg-title">${esc(t('title'))}</h1>
       <p class="bg-sub">${esc(t('tagline'))}</p>
       ${stats ? `<p class="bg-stats">${esc(stats)}</p>` : ''}
-      <div class="bg-vscard">
+      ${this._modeSeg()}`;
+
+    if (this._lobby) {
+      this.shell.innerHTML = head + this._lobbyHTML();
+      return;
+    }
+    if (this._mode === 'join') {
+      this.shell.innerHTML = head + this._joinBodyHTML();
+      return;
+    }
+    const hosting = this._mode === 'host';
+    this.shell.innerHTML = head + `
+      ${hosting ? '' : `<div class="bg-vscard">
         <div class="bg-vsside"><span class="bg-vsemoji">${esc(id.humanEmoji)}</span><span class="bg-vsname">${esc(id.humanName)}</span></div>
         <span class="bg-vslabel">${esc(t('vs'))}</span>
         <div class="bg-vsside"><span class="bg-vsemoji">${esc(id.oppEmoji)}</span><span class="bg-vsname">${esc(id.oppName)}</span></div>
-      </div>
+      </div>`}
       <div class="bg-summary">
         ${this._row('timer', esc(t('row_timer')), t(TIMER_LABEL_KEY[s.timerMinutes]), this._timerContent())}
-        ${this._row('difficulty', esc(t('row_difficulty')), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
+        ${hosting ? '' : this._row('difficulty', esc(t('row_difficulty')), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
       </div>
-      <button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('start'))}</button>
+      ${hosting
+        ? `<p class="bg-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+           <button type="button" class="bg-btn bg-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${esc(t('mp_host_btn'))}</button>`
+        : `<button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('start'))}</button>`}
       <button type="button" class="bg-link" data-action="help">${esc(t('howto'))}</button>`;
+  }
+
+  // --- multiplayer lobby ------------------------------------------------------
+  //
+  // Structural template: tic-tac-toe/js/ui.js's mode segment + host/join lobby
+  // screens (Boggle has no AI difficulty to offer in MP, so the difficulty row
+  // is simply omitted while hosting/joined -- there is no opponent tier to set).
+
+  /** Join mode's body: the code input lives on the setup screen itself, never
+   *  its own pre-join screen -- _lobby only switches to 'join' once the join
+   *  has actually succeeded. Mirrors Tic Tac Toe/Chinchon's Join mode. */
+  _joinBodyHTML() {
+    const err = this._mpError;
+    const msg = err === 'version'
+      ? `<button type="button" class="bg-mp-msg bg-mp-msg-action" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`
+      : `<p class="bg-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? t('mp_joining') : t('mp_join_hint')))}</p>`;
+    return `<div class="bg-mp-lobby">
+      <span class="bg-mp-label">${esc(t('mp_enter_code'))}</span>
+      <input class="bg-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
+        value="${esc(this._mpJoinCode)}"
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${esc(t('mp_code_aria'))}">
+      ${msg}
+      <button type="button" class="bg-btn bg-btn-primary" data-action="mp-join-submit">${esc(t('mp_join_btn'))}</button>
+    </div>`;
+  }
+
+  _lobbyHTML() {
+    const back = `<button type="button" class="bg-btn bg-btn-ghost" data-action="mp-cancel">${esc(t('mp_back_btn'))}</button>`;
+    if (this._lobby === 'host') {
+      const room = this._mpLobbyRoom;
+      const guest = room && room.guest;
+      const code = this._mpPendingCode;
+      const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_share_code'));
+      return `<div class="bg-mp-lobby">
+        <span class="bg-mp-label">${esc(t('mp_code_aria'))}</span>
+        <div class="bg-mp-code">${code ? esc(code) : '····'}</div>
+        <span class="bg-mp-label">${esc(t('mp_opponent_label'))}</span>
+        <div class="bg-mp-oppslot">${guest
+          ? `<span class="bg-mp-oppav">${esc(guest.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(guest.name || '')}</span>`
+          : `<span class="bg-mp-oppempty">${esc(t('mp_waiting_opponent'))}</span>`}</div>
+        <p class="bg-mp-summary">${esc(t(TIMER_LABEL_KEY[this._setup.timerMinutes]))}</p>
+        <p class="bg-mp-msg" data-role="mp-msg">${esc(msg)}</p>
+        <button type="button" class="bg-btn bg-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${esc(t('mp_start_btn'))}</button>
+        ${back}
+      </div>`;
+    }
+    const room = this._mpLobbyRoom;
+    const host = room && room.host;
+    const timerMinutes = room && room.config && room.config.timerMinutes;
+    return `<div class="bg-mp-lobby">
+      <span class="bg-mp-label">${esc(t('mp_code_aria'))}</span>
+      <div class="bg-mp-code">${esc(this._mpJoinedCode || '')}</div>
+      <span class="bg-mp-label">${esc(t('mp_host_label'))}</span>
+      <div class="bg-mp-oppslot">${host
+        ? `<span class="bg-mp-oppav">${esc(host.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(host.name || '')}</span>`
+        : `<span class="bg-mp-oppempty">&ndash;</span>`}</div>
+      ${TIMERS.includes(timerMinutes) ? `<p class="bg-mp-summary">${esc(t(TIMER_LABEL_KEY[timerMinutes]))}</p>` : ''}
+      <p class="bg-mp-msg" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
+      ${back}
+    </div>`;
+  }
+
+  /** Keep the code input's message slot fresh without re-rendering the input
+   *  itself (which would drop what the player is typing). */
+  _syncMpMsgSlot() {
+    const slot = this.shell && this.shell.querySelector('[data-role="mp-msg"]');
+    if (!slot) return;
+    slot.textContent = this._mpError || (this._mpBusy ? t('mp_joining') : t('mp_join_hint'));
+  }
+
+  // --- multiplayer session -----------------------------------------------------
+  //
+  // Room vocabulary mapping (js/net.js's fields are reused, never extended --
+  // see js/CLAUDE.md's "Nth consumer: Boggle" for the full reasoning):
+  //   a `round` record   -> ONE ROUND of a rematch series in this room
+  //   round.n            -> the round number
+  //   round.deck         -> the 16 shaken board FACES (grid.map(row=>row.map(t=>t.face))),
+  //                         a third re-use of this field for a third game's own
+  //                         payload (Chinchon's per-round deck order, Filler's rng seed)
+  //   round.dealer       -> repurposed as the round's START TIMESTAMP (epoch ms), not a
+  //                         seat -- Boggle has no "who opens" concept, but both sides
+  //                         DO need to agree on exactly when the shared clock started,
+  //                         including after a rejoin. Deriving the end time from this
+  //                         (mp-round.js's roundEndsAt) means neither side ever needs to
+  //                         remember or persist its own remainingSec -- a rejoin just
+  //                         recomputes from the room record, which is also simpler and
+  //                         more correct than TTT/Escoba's persisted-seq approach.
+  //   `hostResult`/`guestResult` -> reportRoundResult's new sibling fields (js/net.js),
+  //                         each stamped with its own round number so a rematch's fresh
+  //                         round can never be satisfied by the previous round's still-
+  //                         present result (see mp-round.js's bothResultsIn).
+  //   `writeResult`      -> never called. It sets status:'ended', which would kill a
+  //                         room meant to host the next round; status:'ended' means
+  //                         exactly one thing here too: somebody abandoned the room.
+
+  async _mpHostCreate() {
+    if (this._mpBusy) return;
+    this._mpBusy = true; this._mpError = '';
+    this.renderSetup();
+    const config = { timerMinutes: this._setup.timerMinutes };
+    const res = await net.createRoom('boggle', config, this._myIdentity());
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'busy' ? t('mp_err_could_not_create_room') : t('mp_err_offline');
+      this.renderSetup();
+      return;
+    }
+    this._lobby = 'host';
+    this._mpPendingCode = res.code;
+    this._mpLobbyRoom = null;
+    net.heartbeat(res.code, 'host');
+    await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
+    if (this._dead) return;
+    this.renderSetup();
+  }
+
+  _mpHostStartMatch() {
+    const room = this._mpLobbyRoom;
+    if (!room || !room.guest || this.mp || this._mpBusy) return;
+    const code = this._mpPendingCode;
+    this._lobby = null;
+    this._mpPendingCode = null;
+    this.mp = {
+      role: 'host', code, opp: room.guest, gameNum: 0, reportedN: 0,
+      statsCommittedGameNum: 0, series: { wins: 0, losses: 0, ties: 0 },
+      startedAt: 0, timerMinutes: this._setup.timerMinutes, myResult: null,
+    };
+    this._mpHostStartRound(1);
+  }
+
+  async _mpJoinSubmit() {
+    if (this._mpBusy) return;
+    const code = this._mpJoinCode;
+    if (code.length !== MP_CODE_LEN) return;
+    this._mpBusy = true; this._mpError = '';
+    this._syncMpMsgSlot();
+    const res = await net.joinRoom(code, this._myIdentity());
+    this._mpBusy = false;
+    if (this._dead) return;
+    if (res.error) {
+      this._mpError = res.error === 'not-found' ? t('mp_err_room_not_found')
+        : res.error === 'full' ? t('mp_err_room_full')
+        : res.error === 'version' ? 'version'
+        : t('mp_err_offline');
+      this.renderSetup();
+      return;
+    }
+    // net.js is game-agnostic, so a wrong-game join must be caught client-side.
+    if (res.room && res.room.game !== 'boggle') {
+      this._mpError = t('mp_err_wrong_game');
+      this.renderSetup();
+      return;
+    }
+    this._mpPendingCode = code;
+    this._mpJoinedCode = code;
+    this._lobby = 'join';
+    net.heartbeat(code, 'guest');
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    if (this._dead) return;
+    this._mpLobbyRoom = res.room;
+    if (res.room && res.room.status === 'active' && res.room.round) this._mpGuestJoinMatch(res.room);
+    else this.renderSetup();
+  }
+
+  _mpGuestJoinMatch(room) {
+    if (this.mp) return; // superseded by a faster path (e.g. the room callback beat us here)
+    this._lobby = null;
+    this.mp = {
+      role: 'guest', code: this._mpJoinedCode, opp: room.host, gameNum: 0, reportedN: 0,
+      statsCommittedGameNum: 0, series: { wins: 0, losses: 0, ties: 0 },
+      startedAt: 0, timerMinutes: (room.config && room.config.timerMinutes) || this._setup.timerMinutes,
+      myResult: null,
+    };
+    this._mpApplyRoundRecord(room.round);
+  }
+
+  _mpCancelLobby() {
+    const code = this._mpPendingCode;
+    const role = this._lobby === 'host' ? 'host' : 'guest';
+    this._lobby = null;
+    this._mpError = ''; this._mpBusy = false; this._mpJoinCode = '';
+    this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
+    if (code) net.leaveRoom(code, role).catch(() => { /* best-effort */ });
+    net.disconnect();
+    this.renderSetup();
+  }
+
+  /** One onRoom callback for the whole lobby+match lifetime (js/net.js allows
+   *  exactly one at a time). Before a match exists this just keeps the lobby
+   *  screen's opponent slot fresh; once `this.mp` is set, every update routes
+   *  through `_mpOnRoomUpdate`. */
+  _mpRoomCallback(room) {
+    if (this._dead) return;
+    this._mpLobbyRoom = room;
+    if (this.mp) { this._mpOnRoomUpdate(room); return; }
+    if (this._lobby === 'join' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
+      this._mpGuestJoinMatch(room);
+      return;
+    }
+    if (this._lobby) this.renderSetup();
+  }
+
+  /** Every live-room update once a match is underway: refresh the opponent's
+   *  identity (head-to-head capture -- see js/CLAUDE.md's "Head-to-head
+   *  capture" section: never left null at commit time), notice the room was
+   *  abandoned, apply a new round the host just started, or flip a still-open
+   *  "waiting for opponent" card to the reveal the instant their result lands
+   *  -- all without the viewer having to do anything. */
+  _mpOnRoomUpdate(room) {
+    const mp = this.mp;
+    if (!mp || !room) return;
+    const other = mp.role === 'host' ? room.guest : room.host;
+    if (other && other.deviceId) mp.opp = other;
+
+    if (room.status === 'ended' && !mp.opponentLeft) {
+      mp.opponentLeft = true;
+      this._mpEndDueToOpponentLeft();
+      return;
+    }
+
+    if (room.round && room.round.n && room.round.n !== mp.gameNum) {
+      this._mpApplyRoundRecord(room.round);
+      return;
+    }
+
+    if (mp.gameNum && this.view === 'game' && this._roundOver) {
+      if (bothResultsIn(room.hostResult, room.guestResult, mp.gameNum)) {
+        this._mpOpenReveal(room.hostResult, room.guestResult);
+      }
+    }
+  }
+
+  /** Host generates a fresh quality-gated board (exactly as solo's
+   *  startGame() does) and publishes it via net.startRound, repurposing
+   *  round.deck to carry the 16 face strings and round.dealer to carry the
+   *  round's start timestamp (see the block comment above). Applied locally
+   *  right away rather than waiting for the room echo -- the host already
+   *  knows the board it just wrote, same "the mover doesn't wait on a round
+   *  trip to see their own move" principle every reference game follows. */
+  async _mpHostStartRound(n) {
+    const mp = this.mp;
+    if (!mp) return;
+    this.closeOverlays();
+    this.view = 'loading';
+    this.renderLoading();
+    let dict;
+    try {
+      dict = await loadDictionary();
+    } catch (err) {
+      if (this._dead || !this.mp) return;
+      console.error('[Boggle] MP dictionary load failed (host)', err);
+      this.renderLoadError();
+      return;
+    }
+    if (this._dead || !this.mp) return;
+    this._trieRoot = dict.root;
+    const shake = shakePlayableBoard(this._trieRoot);
+    const faces = shake.board.grid.map((row) => row.map((tile) => tile.face));
+    const startedAt = Date.now();
+    try {
+      await net.startRound(mp.code, n, faces, startedAt);
+    } catch (err) {
+      if (this._dead || !this.mp) return;
+      console.error('[Boggle] MP startRound failed', err);
+      this._mpError = t('mp_err_offline');
+      this.renderLoadError();
+      return;
+    }
+    if (this._dead || !this.mp) return;
+    await this._mpApplyRoundRecord({ n, deck: faces, dealer: startedAt });
+  }
+
+  /** Build the round locally from the room's published record -- the GUEST's
+   *  only path to a board (it never generates its own), and also the path
+   *  the HOST itself uses right after publishing (see _mpHostStartRound). Both
+   *  sides always end up with the identical 16 faces and the identical end
+   *  timestamp, so nothing about the board or the clock is ever locally
+   *  guessed. */
+  async _mpApplyRoundRecord(round) {
+    const mp = this.mp;
+    if (!mp || !round) return;
+    mp.gameNum = round.n;
+    mp.startedAt = round.dealer;
+    const cfgTimer = this._mpLobbyRoom && this._mpLobbyRoom.config && this._mpLobbyRoom.config.timerMinutes;
+    mp.timerMinutes = TIMERS.includes(cfgTimer) ? cfgTimer : mp.timerMinutes;
+    mp.myResult = null;
+    this._path = [];
+    this._found = new Map();
+    this._feedback = null;
+    this._roundOver = false;
+    this._solveExpanded = false;
+    this._result = null;
+    this.closeOverlays();
+    this.view = 'loading';
+    this.renderLoading();
+    let dict;
+    try {
+      dict = await loadDictionary();
+    } catch (err) {
+      if (this._dead || !this.mp) return;
+      console.error('[Boggle] MP dictionary load failed (guest)', err);
+      this.renderLoadError();
+      return;
+    }
+    // Superseded if the room moved on again (another rematch) while this
+    // device was still loading the dictionary, or if the match ended/was
+    // left in the meantime.
+    if (this._dead || !this.mp || this.mp.gameNum !== round.n) return;
+    this._trieRoot = dict.root;
+    this._board = boardFromFaces(round.deck);
+    this._solved = solveBoard(this._board.grid, this._trieRoot);
+    this._tapMode = false;
+    this._tracing = false;
+    this._traceMoved = false;
+    this.view = 'game';
+    this._endsAt = roundEndsAt(mp.startedAt, mp.timerMinutes);
+    this._remainingSec = Math.ceil(Math.max(0, this._endsAt - Date.now()) / 1000);
+    this._mpSaveSnapshot();
+    if (this._remainingSec <= 0) { this.finish(); return; } // rejoined after the round already ended
+    this.renderGame();
+    this.startTimer();
+  }
+
+  /** MP branch of finish(): compute the same score/words/longestWord solo
+   *  does, report it independently (both sides call this -- neither is
+   *  authoritative over "the" result, see js/net.js's reportRoundResult),
+   *  then show either the reveal (if the opponent's result already landed,
+   *  e.g. they finished first on a shorter effective connection) or a
+   *  waiting card. `reportedN` guards against reporting the same round twice
+   *  (a rejoin that lands after the round already ended, see
+   *  _mpApplyRoundRecord's early finish() call above). */
+  _mpFinishRound(humanWords, humanScore, longestWord) {
+    const mp = this.mp;
+    if (!mp) return;
+    this._path = [];
+    this.renderGame();
+    if (mp.reportedN !== mp.gameNum) {
+      mp.reportedN = mp.gameNum;
+      const myResult = { n: mp.gameNum, score: humanScore, words: humanWords.length, longestWord };
+      mp.myResult = myResult;
+      this._mpSaveSnapshot();
+      net.reportRoundResult(mp.code, mp.role, myResult).catch((err) => {
+        console.error('[Boggle] MP reportRoundResult failed -- the opponent will not see this result until a retry lands', err);
+      });
+    }
+    const room = this._mpLobbyRoom;
+    if (room && bothResultsIn(room.hostResult, room.guestResult, mp.gameNum)) {
+      this._mpOpenReveal(room.hostResult, room.guestResult);
+    } else {
+      this._mpOpenWaiting();
+    }
+  }
+
+  _mpOpenWaiting() {
+    this.closeOverlays();
+    const id = this._identity();
+    const mine = this.mp && this.mp.myResult;
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    overlay.dataset.role = 'mp-wait';
+    overlay.innerHTML = `
+      <div class="bg-scrim"></div>
+      <div class="bg-card bg-end" role="dialog" aria-modal="true" aria-label="${esc(t('aria_round_over'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
+        <span class="bg-card-emoji">⏳</span>
+        <h3 class="bg-card-title">${esc(t('mp_waiting_result', { opp: id.oppName }))}</h3>
+        <div class="bg-end-tallies">
+          <div class="bg-tally"><b>${mine ? mine.score : 0}</b><span>${esc(t('points'))}</span></div>
+          <div class="bg-tally"><b>${mine ? mine.words : 0}</b><span>${esc(t('words'))}</span></div>
+        </div>
+        <div class="bg-card-actions">
+          <button type="button" class="bg-btn bg-btn-ghost" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(overlay);
+  }
+
+  /** Compute + (once per round, per device) commit the same win/loss/tie stats
+   *  solo does, under the 'mp' bucket, plus recordHeadToHead -- then show the
+   *  reveal card. Both host and guest call this independently on their own
+   *  device; that is not double-counting (gamehub.stats is keyed per PLAYER,
+   *  see js/CLAUDE.md's "Whose stats are these"). `statsCommittedGameNum` is
+   *  the idempotence guard, since a room update can call this again (e.g. the
+   *  opponent leaving right after) without re-crediting the same round. */
+  _mpOpenReveal(hostResult, guestResult) {
+    const mp = this.mp;
+    if (!mp) return;
+    this.stopTimer();
+    this.closeOverlays();
+    const isHost = mp.role === 'host';
+    const mine = isHost ? hostResult : guestResult;
+    const theirs = isHost ? guestResult : hostResult;
+    const won = wonFor(mine.score, theirs.score);
+    if (mp.statsCommittedGameNum !== mp.gameNum) {
+      mp.statsCommittedGameNum = mp.gameNum;
+      try { recordBoggle(MP_DIFFICULTY, won, { words: mine.words, score: mine.score, longestWord: mine.longestWord }); } catch { /* never block the result */ }
+      const opp = mp.opp;
+      if (opp) { try { recordHeadToHead('boggle', opp, won); } catch { /* never block the result */ } }
+      if (won === true) mp.series.wins += 1; else if (won === false) mp.series.losses += 1; else mp.series.ties += 1;
+      this._mpSaveSnapshot();
+    }
+    const id = this._identity();
+    const title = won === null ? t('tie_game') : won ? t('you_win') : t('opp_wins', { opp: id.oppName });
+    const emoji = won === null ? '🤝' : won ? '🏆' : id.oppEmoji;
+    const actions = isHost
+      ? `<button type="button" class="bg-btn bg-btn-primary" data-action="mp-rematch" ${this._mpBusy ? 'disabled' : ''}>${esc(t('play_again'))}</button>
+         <button type="button" class="bg-btn bg-btn-ghost" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>`
+      : `<p class="bg-card-sub">${esc(t('mp_rematch_wait'))}</p>
+         <button type="button" class="bg-btn bg-btn-ghost" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>`;
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    overlay.dataset.role = 'mp-reveal';
+    overlay.innerHTML = `
+      <div class="bg-scrim"></div>
+      <div class="bg-card bg-end" role="dialog" aria-modal="true" aria-label="${esc(t('aria_round_over'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
+        <span class="bg-card-emoji">${emoji}</span>
+        <h3 class="bg-card-title">${esc(title)}</h3>
+        <p class="bg-card-sub">${esc(t('mp_end_sub', { score1: mine.score, score2: theirs.score, timer: t(TIMER_LABEL_KEY[mp.timerMinutes]) }))}</p>
+        <div class="bg-end-tallies">
+          <div class="bg-tally"><b>${mine.words}</b><span>${esc(t('your_words', { name: id.humanName }))}</span></div>
+          <div class="bg-tally"><b>${theirs.words}</b><span>${esc(t('your_words', { name: id.oppName }))}</span></div>
+        </div>
+        <div class="bg-card-actions">${actions}</div>
+      </div>`;
+    this.root.appendChild(overlay);
+  }
+
+  _mpRematch() {
+    if (!this.mp || this.mp.role !== 'host' || this._mpBusy) return;
+    this._mpBusy = true;
+    const n = this.mp.gameNum + 1;
+    this._mpHostStartRound(n).finally(() => { this._mpBusy = false; });
+  }
+
+  _mpEndDueToOpponentLeft() {
+    this.stopTimer();
+    net.stopHeartbeat();
+    this._mpClearSave();
+    const id = this._identity();
+    this.closeOverlays();
+    this.mp = null;
+    this._mode = 'solo';
+    this._lobby = null;
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    overlay.dataset.role = 'mp-end';
+    overlay.innerHTML = `
+      <div class="bg-scrim"></div>
+      <div class="bg-card" role="dialog" aria-modal="true" aria-label="${esc(t('mp_opponent_left_title'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
+        <h3 class="bg-card-title">${esc(t('mp_opponent_left_title'))}</h3>
+        <p class="bg-card-sub">${esc(t('mp_opponent_left_sub', { opp: id.oppName }))}</p>
+        <div class="bg-card-actions"><button type="button" class="bg-btn bg-btn-primary" data-action="change-settings">${esc(t('back_to_setup'))}</button></div>
+      </div>`;
+    this.root.appendChild(overlay);
+  }
+
+  /** Explicit abandon (the "Leave match" button, from the lobby, mid-round,
+   *  the waiting card, or the reveal card). Unlike destroy() (which never
+   *  abandons the room -- see its own comment), this always marks the room
+   *  ended, exactly like every reference game's own leave action. */
+  _mpLeaveMatch() {
+    if (!this.mp) return;
+    this.stopTimer();
+    const { code, role } = this.mp;
+    this._mpClearSave();
+    this.closeOverlays();
+    this.mp = null;
+    this._mode = 'solo';
+    this._lobby = null;
+    net.leaveRoom(code, role).catch(() => { /* best-effort */ });
+    this.view = 'setup';
+    this.renderSetup();
+  }
+
+  /** A version-mismatched room can never be joined by this build (js/net.js's
+   *  joinRoom rejects it before this ever runs) -- the clearest recovery is
+   *  the same one the hub's own version pill offers: force the service
+   *  worker to check for an update, then reload. */
+  async _mpForceUpdate() {
+    try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch { /* ignore */ }
+    try { location.reload(); } catch { /* ignore */ }
+  }
+
+  // --- multiplayer persistence (gamehub.boggle.mp.v1) ---------------------
+  //
+  // A minimal snapshot -- unlike solo's save, this never needs to carry the
+  // board's own faces or the found-words list: both are always re-derivable
+  // from the room's own published round record (round.deck, round.dealer),
+  // which is exactly why round.dealer was repurposed to carry the start
+  // timestamp above. That keeps a rejoin's local state trivially consistent
+  // with the room instead of racing a second, locally-remembered copy of it.
+
+  _mpSaveSnapshot() {
+    const mp = this.mp;
+    if (!mp) return;
+    try {
+      saveJSON(MP_SAVE_KEY, {
+        v: 1,
+        code: mp.code, role: mp.role, opp: mp.opp,
+        gameNum: mp.gameNum | 0,
+        reportedN: mp.reportedN | 0,
+        statsCommittedGameNum: mp.statsCommittedGameNum | 0,
+        series: { wins: mp.series.wins | 0, losses: mp.series.losses | 0, ties: mp.series.ties | 0 },
+        timerMinutes: mp.timerMinutes,
+        at: Date.now(),
+      });
+    } catch { /* private mode / quota */ }
+  }
+
+  _mpLoadSave() {
+    const raw = loadJSON(MP_SAVE_KEY, null);
+    if (!raw || raw.v !== 1 || !raw.code) return null;
+    if (raw.role !== 'host' && raw.role !== 'guest') return null;
+    if (Date.now() - (raw.at || 0) > MP_RESTORE_MAX_AGE_MS) { this._mpClearSave(); return null; }
+    return raw;
+  }
+
+  _mpClearSave() { try { localStorage.removeItem(MP_SAVE_KEY); } catch { /* ignore */ } }
+
+  /** Backgrounding/restore: an MP autosave younger than 30 minutes, with the
+   *  room still alive, reattaches to the same room instead of dropping the
+   *  player back on a blank setup screen. Runs once, right after mount(). The
+   *  round itself is never restored from local memory -- once reattached,
+   *  the live room record (`_mpRoomCallback` -> `_mpOnRoomUpdate` ->
+   *  `_mpApplyRoundRecord`) is what actually rebuilds the board and the
+   *  clock, exactly as a normal mid-series round transition would. */
+  async _tryRestoreMP(save) {
+    const { code, role } = save;
+    try {
+      if (role === 'guest') {
+        const res = await net.joinRoom(code, this._myIdentity());
+        if (res.error || (res.room && res.room.status === 'ended')) { this._mpClearSave(); return; }
+      } else if (!(await net.init())) return;
+    } catch { return; }
+    if (this._dead || this.mp || this.view === 'game') return; // superseded by a faster user action
+
+    this.mp = {
+      role, code, opp: save.opp || null,
+      gameNum: save.gameNum | 0, reportedN: save.reportedN | 0,
+      statsCommittedGameNum: save.statsCommittedGameNum | 0,
+      series: {
+        wins: (save.series && save.series.wins) | 0,
+        losses: (save.series && save.series.losses) | 0,
+        ties: (save.series && save.series.ties) | 0,
+      },
+      startedAt: 0, timerMinutes: TIMERS.includes(save.timerMinutes) ? save.timerMinutes : 1.5,
+      myResult: null,
+    };
+    net.heartbeat(code, role);
+    await net.onRoom(code, (room) => this._mpRoomCallback(room));
+    if (this._dead) return;
+    const room = this._mpLobbyRoom;
+    if (!room || room.status === 'ended') { this._mpEndDueToOpponentLeft(); return; }
+    if (room.round && room.round.n) {
+      this._mpApplyRoundRecord(room.round);
+    } else {
+      // The room exists but no round has started yet (e.g. this device was
+      // the host and left before ever calling _mpHostStartRound) -- nothing
+      // to rejoin into; treat like an ordinary lobby wait.
+      this.renderSetup();
+    }
   }
 
   // --- loading ------------------------------------------------------------
@@ -366,13 +1043,21 @@ class BoggleUI {
       </div>`;
   }
 
+  /** MP-aware: `start`/`change-settings` (Try again / Back to setup) only make
+   *  sense for SOLO's own retry path -- in MP there is no local "try again"
+   *  (the board comes from the room, not a fresh local shake), so a
+   *  dictionary-load failure mid-match offers only Leave match instead of
+   *  quietly starting an unrelated solo game underneath a live room. */
   renderLoadError() {
     if (this._dead) return;
+    const actions = this.mp
+      ? `<button type="button" class="bg-btn bg-btn-primary" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>`
+      : `<button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('try_again'))}</button>
+         <button type="button" class="bg-link" data-action="change-settings">${esc(t('back_to_setup'))}</button>`;
     this.shell.innerHTML = `
       <div class="bg-loading">
         <p>${esc(t('load_error'))}</p>
-        <button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('try_again'))}</button>
-        <button type="button" class="bg-link" data-action="change-settings">${esc(t('back_to_setup'))}</button>
+        ${actions}
       </div>`;
   }
 
@@ -862,12 +1547,15 @@ class BoggleUI {
       .map(([w, pts]) => `<li><span>${esc(w)}</span><b>${pts}</b></li>`).join('');
     const mm = String(Math.floor(this._remainingSec / 60)).padStart(2, '0');
     const ss = String(this._remainingSec % 60).padStart(2, '0');
+    const id = this._identity();
+    const mpLine = this.mp ? `<p class="bg-mp-status">${esc(t('vs'))} ${esc(id.oppEmoji)} ${esc(id.oppName)}</p>` : '';
     this.shell.innerHTML = `
       <div class="bg-topbar">
         <div class="bg-timer ${this._remainingSec <= 10 ? 'is-low' : ''}" data-role="timer" aria-live="polite">${mm}:${ss}</div>
         <div class="bg-scorebox"><b>${score}</b><span>${esc(t('points'))}</span></div>
         <div class="bg-scorebox"><b>${this._found.size}</b><span>${esc(t('words'))}</span></div>
       </div>
+      ${mpLine}
       ${this._boardHtml()}
       <div class="bg-wordbar">
         <div class="bg-wordbar-text ${word ? '' : 'is-empty'}">${word ? esc(word) : esc(t('wordbar_hint'))}</div>
@@ -883,7 +1571,9 @@ class BoggleUI {
       </div>
       <div class="bg-actions">
         <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="help">${esc(t('howto'))}</button>
-        <button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="change-settings">${esc(t('give_up'))}</button>
+        ${this.mp
+          ? `<button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>`
+          : `<button type="button" class="bg-btn bg-btn-ghost bg-btn-small" data-action="change-settings">${esc(t('give_up'))}</button>`}
       </div>`;
     // renderGame() replaces the board element, so the pointer listeners have to
     // be re-bound to the NEW node (and the old ones dropped) every time.
@@ -902,16 +1592,23 @@ class BoggleUI {
   finish() {
     this.stopTimer();
     this._roundOver = true;
-    clearGame(); // round is over and recorded; nothing left to resume into
+    if (!this.mp) clearGame(); // round is over and recorded; nothing left to resume into (MP has its own save, untouched here)
     const humanWords = [...this._found.entries()].map(([word, score]) => ({ word, score }));
     const humanScore = humanWords.reduce((s, w) => s + w.score, 0);
-    const aiWords = selectAiWords(this._solved, this._setup.difficulty);
-    const aiScore = totalScore(aiWords);
-    const won = humanScore === aiScore ? null : humanScore > aiScore;
     const longestWord = humanWords.reduce(
       (best, w) => (w.word.length > best.len ? { word: w.word, len: w.word.length } : best),
       { word: '', len: 0 },
     );
+    if (this.mp) {
+      // No AI in multiplayer: both sides are real people, scored against
+      // each other's independently reported result (see _mpFinishRound and
+      // js/net.js's reportRoundResult).
+      this._mpFinishRound(humanWords, humanScore, longestWord);
+      return;
+    }
+    const aiWords = selectAiWords(this._solved, this._setup.difficulty);
+    const aiScore = totalScore(aiWords);
+    const won = humanScore === aiScore ? null : humanScore > aiScore;
     const extras = { words: humanWords.length, score: humanScore, longestWord };
     try { recordBoggle(this._setup.difficulty, won, extras); } catch { /* never block the result */ }
     this._result = { humanWords, humanScore, aiWords, aiScore, won };
@@ -1030,6 +1727,16 @@ class BoggleUI {
 
   // --- events -------------------------------------------------------------
 
+  onInput(e) {
+    const el = e.target.closest('[data-role="mp-code-input"]');
+    if (!el) return;
+    const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
+    if (el.value !== clean) el.value = clean;
+    this._mpJoinCode = clean;
+    if (this._mpError) { this._mpError = ''; this._syncMpMsgSlot(); }
+    if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
+  }
+
   onClick(e) {
     const btn = e.target.closest('[data-action]');
     if (!btn || !this.root.contains(btn)) return;
@@ -1046,6 +1753,25 @@ class BoggleUI {
       this._setup.difficulty = btn.dataset.v;
       this._saveSetup();
       this.renderSetup();
+    } else if (action === 'set-mode') {
+      this._mode = btn.dataset.v;
+      this._setupExpanded = null;
+      this._mpError = '';
+      this.renderSetup();
+    } else if (action === 'mp-host') {
+      this._mpHostCreate();
+    } else if (action === 'mp-start') {
+      this._mpHostStartMatch();
+    } else if (action === 'mp-join-submit') {
+      this._mpJoinSubmit();
+    } else if (action === 'mp-cancel') {
+      this._mpCancelLobby();
+    } else if (action === 'mp-rematch') {
+      this._mpRematch();
+    } else if (action === 'mp-leave') {
+      this._mpLeaveMatch();
+    } else if (action === 'mp-update-required') {
+      this._mpForceUpdate();
     } else if (action === 'start') {
       this.startGame();
     } else if (action === 'tile') {

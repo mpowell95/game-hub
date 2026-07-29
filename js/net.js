@@ -141,6 +141,28 @@ export async function writeResult(code, result) {
   await _api.update(roomRef(code), { result, status: 'ended', updated: Date.now() });
 }
 
+/** EITHER peer: publish its OWN finished round's result, under `<role>Result`
+ *  (`hostResult`/`guestResult`, both siblings of `result` above, never
+ *  overwriting it). Added for Boggle (2026-07-28) -- see js/CLAUDE.md's
+ *  "Nth consumer: Boggle" section for the full reasoning, in short: a Boggle
+ *  round is a simultaneous, independent sprint with no shared mutable state
+ *  during play (no move by one side can affect the other's board), so there
+ *  is nothing to lockstep and no single side is authoritative over "the"
+ *  result the way a host is in every other game here. `writeResult` does not
+ *  fit for two reasons: it is documented host-only (a bare host call would
+ *  silently drop the guest's own outcome), and it sets `status:'ended'`,
+ *  which this room must NOT do mid-series (status:'ended' means "abandoned"
+ *  everywhere else in this file). Both sides call this independently after
+ *  their own local timer ends; the caller is expected to embed a round
+ *  number in `result` so a stale prior round's entry can never be mistaken
+ *  for the current one once a rematch overwrites it. Scope discipline is
+ *  unchanged: still `rooms/<CODE>` only. */
+export async function reportRoundResult(code, role, result) {
+  if (!(await init())) throw new Error('net offline');
+  if (role !== 'host' && role !== 'guest') throw new Error('reportRoundResult: bad role');
+  await _api.update(roomRef(code), { [`${role}Result`]: { ...result, at: Date.now() }, updated: Date.now() });
+}
+
 /** Host only: publish a full-state recovery snapshot after a hash mismatch. */
 export async function writeRecovery(code, seq, snapshot) {
   if (!(await init())) throw new Error('net offline');
@@ -198,7 +220,7 @@ export function disconnect() {
 }
 
 export default {
-  init, createRoom, joinRoom, startRound, appendMove, writeResult,
+  init, createRoom, joinRoom, startRound, appendMove, writeResult, reportRoundResult,
   writeRecovery, requestRecovery, clearRecovery,
   onRoom, heartbeat, stopHeartbeat, leaveRoom, disconnect,
 };

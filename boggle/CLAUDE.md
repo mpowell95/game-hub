@@ -114,6 +114,87 @@ and, on the swipe path only, the Android vibration — the same variable that us
   ever showing up alongside the already-bold word-bar weight), not a hue-only pair — never
   red/green regardless.
 
+## Multiplayer (2026-07-28)
+
+Two human devices race the SAME shaken board over the shared `js/net.js` room protocol.
+`isInProgress()` gained a SECOND meaning here (see root CLAUDE.md's "two legitimate meanings,
+exception within the exception"): solo is unchanged (always `false`, autosave/resume, see above);
+**MP returns `true` for as long as a room is joined** — lobby, a live round, or the between-rounds
+reveal screen all count, since leaving during any of them strands the opponent exactly the same
+way. `gamehub.boggle.mp.v1` is a THIRD storage key, never touching the solo settings key
+(`gamehub.boggle.v1`) or the solo autosave (`gamehub.boggle.save.v1`) — THE LAW rule 5.
+
+**The key design call: this is NOT the lockstep move-log protocol the other six MP games share**
+(Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes). A Boggle round has no shared
+mutable state during play at all — this game already has no duplicate-word cancellation between
+the human and the AI (see the top of this file), and that stays true against a second human: both
+sides play the identical board completely independently against their own copy of the clock, and
+nothing either player does can affect the other's board or score. There is nothing to diverge on
+and nothing to hash-verify, so building a move log here would test a protocol this game does not
+run. The full reasoning, and the new `js/net.js` function this needed, is written up in
+`js/CLAUDE.md`'s "Nth consumer: Boggle" section (in the "Multiplayer lockstep — invariants" area,
+even though this game isn't lockstep — that's where every MP consumer's write-up lives, precedent
+included).
+
+- **Room vocabulary**: `round.deck` carries the 16 shaken board FACES
+  (`grid.map(row => row.map(t => t.face))`, the exact same shape `boggle/js/ui.js`'s solo
+  `boardFromFaces()`/save already uses) — a third re-use of this field for a third game's own
+  payload (Chinchón's per-round deck order, Filler's rng seed; see js/CLAUDE.md's "fifth
+  consumer: Filler" section for that precedent). `round.dealer` is repurposed as the round's
+  START TIMESTAMP (epoch ms), not a seat — Boggle has no "who opens" concept, but both sides DO
+  need to agree on exactly when the shared clock started, including after a rejoin, and deriving
+  the end time from this one number (`boggle/js/mp-round.js`'s `roundEndsAt`) means NEITHER side
+  ever needs to persist its own `remainingSec` — a rejoin just recomputes from the room record.
+  This is the third re-use of `round.dealer` too (Tic Tac Toe: the seat that plays X; Pool: the
+  seat that breaks; here: a timestamp, not a seat at all).
+- **`reportRoundResult(code, role, result)`**, the one new `js/net.js` function this game needed
+  (see its own JSDoc there): writes `hostResult`/`guestResult` as siblings of `result`, since BOTH
+  peers — not just the host — need to publish an outcome, and neither is authoritative over "the"
+  result the way a host is everywhere else. `writeResult` (host-only, sets `status:'ended'`) does
+  not fit for two reasons: a bare host call would silently drop the guest's own outcome, and
+  `status:'ended'` would kill a room meant to host the next round — `status:'ended'` means exactly
+  one thing here too: somebody abandoned the room. Each reported result carries its OWN round
+  number (`n`) precisely because `startRound` never clears `hostResult`/`guestResult` — without
+  that per-result stamp, a rematch's fresh round would read as "both results already in" the
+  instant it started, using the previous round's still-present entries
+  (`boggle/js/mp-round.js`'s `bothResultsIn` is the guard, and `test-boggle-mp.mjs` has a
+  dedicated case for exactly this).
+- **Both sides start their own local countdown** the moment a round record arrives
+  (`_mpApplyRoundRecord`), derived from `roundEndsAt(round.dealer, config.timerMinutes)` — never
+  from "when I personally saw the board." A rejoin mid-round (the 30-minute `gamehub.boggle.mp.v1`
+  window) recomputes the same way and, if the round already ended while this device was away,
+  calls `finish()` immediately instead of rendering a live timer.
+- **No AI, no difficulty setting.** The MP setup screen (mode segment: Solo/Host/Join, same
+  pattern as Tic Tac Toe's) hides the difficulty row entirely while hosting or joined — there is
+  no opponent tier to set against a real person. `finish()`'s MP branch skips `selectAiWords`/
+  `totalScore` completely and instead reports the human's own score via `reportRoundResult`,
+  waiting (via the room's already-open `onRoom` subscription) for both `hostResult` and
+  `guestResult` to land before showing the reveal card — a plain "waiting for {opp}" card shows
+  in between, with a Leave button (an explicit abandon; the reveal/waiting cards' own top-right ×
+  only dismisses the card, per the standing win/lose-popup rule, it never forces a decision).
+- **Stats**: `recordBoggle(difficulty, won, extras)` is called with `MP_DIFFICULTY = 'mp'`,
+  exactly the convention `js/CLAUDE.md`'s "third consumer: Tic Tac Toe" section established —
+  `tierOf('mp')` is null, so it claims no difficulty pill but still counts in every total. MP
+  results feed the SAME `bg` sub-counter (`played`/`won`/`lost`/`tied`/`words`/`bestScore`/
+  `longestWord`) solo does, additively — no new counter shape, no `players-agg.js` change needed
+  (that branch already sums whatever `bg` holds regardless of bucket). `recordHeadToHead('boggle',
+  opp, won)` runs alongside it; the opponent identity is captured into `this.mp.opp` and refreshed
+  on every room update (`_mpOnRoomUpdate`), never left null at commit time — see js/CLAUDE.md's
+  "Head-to-head capture" convention.
+- **Rematch series, one room**: `round.n` increments per rematch, same convention as Tic Tac
+  Toe/Filler/Dots and Boxes. Only the HOST can start the next round (`_mpRematch`), mirroring how
+  those games decide who starts the next game.
+- **Tests**: `boggle/js/mp-round.js` holds the pure, DOM-free timing/comparison helpers both
+  peers share (`roundEndsAt`, `remainingMs`, `wonFor`, `bothResultsIn`); `test-boggle-mp.mjs`
+  (repo root, registered in `run-all-tests.mjs`) exercises them headlessly. This is deliberately
+  NOT a `test-mp-lockstep.mjs` block — there is no move log to replay against a `FakeRoom`, so
+  forcing this game into that harness would test a protocol it does not run; a smaller, honest,
+  dedicated test file covers what actually needs a regression tripwire instead.
+- **Status: unverified beyond inline reasoning and the headless pure-logic tests above.** Like
+  Pool's first pass (`pool/CLAUDE.md`), nothing has been played on two real devices, and there is
+  no `FakeRoom`-driven integration test the way the six lockstep games have — Boggle's protocol
+  has no move log for such a harness to replay. Flagged honestly rather than claimed proven.
+
 ## i18n (2026-07-23) — UI translates, gameplay stays English
 
 Ana reported two things the same afternoon: garbled board tiles ("sometimes instead of one

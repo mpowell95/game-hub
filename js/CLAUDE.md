@@ -91,7 +91,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes and Pool |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below) |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -481,6 +481,59 @@ worth stating plainly rather than forcing it into their vocabulary:
 - **Status: unverified beyond inline reasoning.** No `test-mp-lockstep.mjs` block exists for this
   game yet (unlike all six reference games), and nothing has been played on two real devices or
   against a `FakeRoom` harness. Flagged honestly in `pool/CLAUDE.md` rather than claimed proven.
+
+### The eighth consumer: Boggle (2026-07-28) — deliberately NOT lockstep
+
+Full write-up: `boggle/CLAUDE.md`'s "Multiplayer" section. `js/net.js` gained exactly ONE new
+function for this, `reportRoundResult` (see its own JSDoc in `js/net.js`) — every other consumer
+above left `js/net.js` completely untouched, and this is the first genuine addition to its surface
+since M1. Read this section before assuming Boggle's MP should look like the other seven; it
+deliberately does not, for a reason none of them share:
+
+- **There is no shared mutable state during play, so there is nothing to lockstep.** Every
+  reference game above transmits moves from a finite vocabulary (a mark, a pit index, an edge, a
+  shot's parameters) because one player's action changes a board the OTHER player's next action
+  depends on — that dependency is exactly what a move log, a hash check, and a divergence-recovery
+  protocol exist to keep in sync. A Boggle round has no such dependency: both players trace words
+  on their OWN copy of the identical board, against their OWN copy of the clock, and nothing either
+  one does — finding a word, missing one, running out the clock — can ever affect what the other
+  one sees or can do. This game already has no duplicate-word cancellation between the human and
+  the AI (see `boggle/CLAUDE.md`'s opening paragraph), and that property is exactly what makes a
+  second human safe to play against with the same "no shared state" design: there was never
+  anything here for two independent players to diverge ON. Building a move log, a state hash, and
+  a recovery protocol for this game would faithfully implement invariants 1-5 above against a
+  divergence that cannot occur — testing a failure mode this game's own design rules out.
+- **The protocol is "simultaneous, independent, self-report" instead.** The host shakes a
+  quality-gated board exactly as solo does (`shakePlayableBoard`) and publishes it; the guest
+  never generates its own. Both sides then run their OWN local countdown and, when it ends, compute
+  their OWN score locally and report it — `reportRoundResult` is the function that lets BOTH peers
+  do this, which is precisely why none of the existing lockstep functions fit: `appendMove`
+  assumes a shared, strictly-increasing seq that both sides apply to the SAME state (there is no
+  such state here); `writeResult` is documented host-only and sets `status:'ended'`, which would
+  kill a room meant to host the next round the instant either side's timer ran out. A round is
+  "over" only once BOTH `hostResult` and `guestResult` have landed — checked by
+  `boggle/js/mp-round.js`'s `bothResultsIn`, which requires each result to be stamped with the
+  round's own number for exactly the reason DB1-style analogues elsewhere guard per-round state:
+  `startRound` never clears the previous round's result fields, so without the round-number stamp
+  a rematch's fresh round would read as "already both in" using stale data.
+- **`round.deck`/`round.dealer` are repurposed again**, a fourth and fifth re-use of fields already
+  reused by Chinchón (deck order), Filler (an rng seed), Tic Tac Toe (the seat that plays X), Dots
+  and Boxes (`mp.dealer`, the seat that opens), and Pool (the seat that breaks): `round.deck` here
+  carries the 16 shaken board FACES, and `round.dealer` carries the round's START TIMESTAMP (epoch
+  ms) rather than a seat at all — Boggle has no "who opens" concept, but both sides do need to
+  agree on exactly when the shared clock started, including after a rejoin, and deriving the end
+  time from one shared number means neither side ever needs to persist its own remaining-time
+  value locally.
+- **No `test-mp-lockstep.mjs` block.** That harness replays a move log against a `FakeRoom`, and
+  there is no move log here to replay. `boggle/js/mp-round.js` holds the pure, DOM-free
+  round-timing and result-comparison helpers both peers share, and `test-boggle-mp.mjs` (repo
+  root) is this game's dedicated, honestly-scoped stand-in — smaller than the other games'
+  lockstep blocks because there is genuinely less to prove, not because less was checked. Forcing
+  this game into `test-mp-lockstep.mjs`'s shape would have manufactured invariants to test rather
+  than admit none of the lockstep-specific ones apply.
+- **Status: unverified beyond inline reasoning and the headless pure-logic tests.** Like Pool's
+  first pass, nothing has been played on two real devices. Flagged honestly in `boggle/CLAUDE.md`
+  rather than claimed proven.
 
 ---
 
