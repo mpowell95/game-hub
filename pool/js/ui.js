@@ -180,7 +180,6 @@ class PoolUI {
     this._pulling = false;
     this._offset = { a: 0, b: 0 };
     this._elevation = 0;
-    this._camera = 'top';
     this._placingCue = false;
     this._foulMsg = null;
     this._boundResize = () => this._resizeCanvas();
@@ -444,7 +443,6 @@ class PoolUI {
           <span class="pl-turn-text" data-role="turn-text"></span>
           <span class="pl-quit-confirm" data-role="quit-confirm" hidden>${t('quit_confirm')}</span>
           ${this.mode === 'practice' ? `<button type="button" class="pl-btn" data-role="rerack">${t('new_game')}</button>` : ''}
-          <button type="button" class="pl-btn" data-role="camera">${t('camera')}</button>
           <button type="button" class="pl-btn" data-role="quit">${t('quit')}</button>
         </div>
       </div>`;
@@ -455,7 +453,6 @@ class PoolUI {
     this.ctx = this.canvas.getContext('2d');
     this._layoutStage();
     this.el.querySelector('[data-role="quit"]').addEventListener('click', () => this._confirmQuit());
-    this.el.querySelector('[data-role="camera"]').addEventListener('click', () => this._toggleCamera());
     const rerack = this.el.querySelector('[data-role="rerack"]');
     if (rerack) rerack.addEventListener('click', () => { this.game = rules.newGame(); this._saveProgress(); this._drawFrame(); this._paintHud(); });
     this._bindSpinButton();
@@ -489,13 +486,17 @@ class PoolUI {
     applyRect(this.el.querySelector('[data-role="power-track"]'), CONFIG.POWER_TRACK);
     applyRect(this.tableWrap, CONFIG.TABLE_BOX);
     // Spin panel: backdrop covers the table only (spec §6.2), the box itself
-    // is a centered square anchored near the closed-state button.
+    // is a centered SQUARE anchored near the closed-state button. Sized in real
+    // px off STAGE_W alone — deriving it as a fraction of each axis separately
+    // made it 240x149 on the 1202x744 stage, i.e. the "cue ball" rendered as a
+    // flat ellipse rather than a ball.
     applyRect(this.el.querySelector('[data-role="spin-backdrop"]'), CONFIG.TABLE_BOX);
-    const half = CONFIG.SPIN_PANEL_SIZE / 2;
-    applyRect(this.el.querySelector('[data-role="spin-box"]'), {
-      x0: CONFIG.SPIN_PANEL_CX - half, x1: CONFIG.SPIN_PANEL_CX + half,
-      y0: CONFIG.SPIN_PANEL_CY - half, y1: CONFIG.SPIN_PANEL_CY + half,
-    });
+    const side = CONFIG.SPIN_PANEL_SIZE * CONFIG.STAGE_W;
+    const box = this.el.querySelector('[data-role="spin-box"]');
+    box.style.width = side + 'px';
+    box.style.height = side + 'px';
+    box.style.left = (CONFIG.SPIN_PANEL_CX * CONFIG.STAGE_W - side / 2) + 'px';
+    box.style.top = (CONFIG.SPIN_PANEL_CY * CONFIG.STAGE_H - side / 2) + 'px';
   }
 
   /** Landscape-only (handoff §9 constraint 2): scale the fixed 1202x744 stage
@@ -508,7 +509,10 @@ class PoolUI {
     if (!this.stageOuter || this._dead) return;
     const rect = this.stageOuter.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 20) {
-      requestAnimationFrame(() => this._resizeStage());
+      // Re-run the CANVAS sizing too once a real box shows up: _resizeCanvas
+      // reads this._stageScale for its backing-store resolution, and on the
+      // first layout pass that value doesn't exist yet.
+      requestAnimationFrame(() => { this._resizeStage(); this._resizeCanvas(); });
       return;
     }
     const portrait = rect.height > rect.width;
@@ -522,32 +526,61 @@ class PoolUI {
     this._stageScale = scale;
   }
 
-  _toggleCamera() {
-    this._camera = this._camera === 'top' ? 'behind' : 'top';
-    this.tableWrap.classList.toggle('pl-camera-behind', this._camera === 'behind');
-  }
+  // The v1 "camera" toggle (a cosmetic perspective()/rotateX() tilt on the
+  // table box) is GONE, not disabled: it skewed the table into a trapezoid
+  // that no longer matched the canvas's own flat top-down geometry, so pockets
+  // and balls sat visibly off their drawn positions. It is also not in the
+  // spec, and handoff §9 constraint 8 says not to add what the spec doesn't
+  // ask for. Removed rather than left as a broken control.
 
   _resizeCanvas() {
     if (!this.canvas || this._dead) return;
-    const rect = this.tableWrap.getBoundingClientRect();
+    // NEVER getBoundingClientRect() here. .pl-table-wrap lives inside .pl-stage,
+    // which carries `transform: scale(s)`, and getBoundingClientRect() returns
+    // the POST-TRANSFORM box. Writing that back as canvas.style.width (a LAYOUT
+    // size, inside the already-scaled stage) makes the browser scale it a second
+    // time: at s=0.5 the table drew at QUARTER size in the top-left corner with
+    // the wrap's own background filling the rest, which is exactly how this
+    // shipped and was rightly called unusable. offsetWidth/offsetHeight are
+    // layout sizes and are transform-independent, which is what's wanted.
+    // (The stage is fixed 1202x744 by design, so these are in fact constant —
+    // CONFIG.TABLE_BOX's fractions x STAGE_W/H — but reading them keeps this
+    // correct automatically if the CONFIG rect ever changes.)
+    const cssW = this.tableWrap.offsetWidth;
+    const cssH = this.tableWrap.offsetHeight;
     // The very first layout pass after mount can report a 0 (or near-0) box
-    // before the flex chain has settled — computing _scale from that produces
-    // garbage (this was the actual cause of the table rendering as a squeezed
-    // strip / the rack rendering as an unscaled blob). Never commit a bogus
-    // scale; retry next frame instead until a real size shows up.
-    if (rect.width < 20 || rect.height < 20) {
+    // before the flex chain has settled — committing that produces garbage.
+    // Never commit a bogus size; retry next frame until a real one shows up.
+    if (cssW < 20 || cssH < 20) {
       requestAnimationFrame(() => this._resizeCanvas());
       return;
     }
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    this.canvas.style.width = rect.width + 'px';
-    this.canvas.style.height = rect.height + 'px';
+    // Backing store also multiplies by the stage's scale, so a stage scaled UP
+    // on a big screen still rasterises sharp rather than being a magnified
+    // low-res bitmap. Capped so a huge display can't allocate an absurd canvas.
+    const stageScale = this._stageScale || 1;
+    const dpr = Math.min((window.devicePixelRatio || 1) * stageScale, 3);
+    this.canvas.width = Math.max(1, Math.round(cssW * dpr));
+    this.canvas.height = Math.max(1, Math.round(cssH * dpr));
+    this.canvas.style.width = cssW + 'px';
+    this.canvas.style.height = cssH + 'px';
     this._dpr = dpr;
-    this._cw = rect.width; this._ch = rect.height;
-    this._scale = Math.min(this._cw / TABLE.w, this._ch / TABLE.h) * 0.9;
+    this._cw = cssW; this._ch = cssH;
     if (SHOW_TABLE_RENDER) this._drawFrame();
+  }
+
+  /** A pointer event -> canvas LAYOUT coordinates (the same space _toCanvas
+   *  and _toWorld speak). getBoundingClientRect() gives the canvas's visual,
+   *  post-transform box, and clientX/clientY are visual too — so their
+   *  difference is in VISUAL px and must be divided by the stage scale to
+   *  become layout px. Skipping that divide is the same class of bug as sizing
+   *  the canvas off a transformed rect (see _resizeCanvas): it made aiming
+   *  progressively wronger the further the stage was from 1:1 scale, i.e.
+   *  on every phone. One helper, so there is one place to get this right. */
+  _pointerLocal(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const s = this._stageScale || 1;
+    return { x: (e.clientX - rect.left) / s, y: (e.clientY - rect.top) / s };
   }
 
   // ---- stage <-> physics coordinate mapping (handoff §5: exactly ONE place) --
@@ -1196,7 +1229,6 @@ class PoolUI {
     c.addEventListener('pointerdown', (e) => {
       if (!this.game || this.game.over) return;
       this._pointers.set(e.pointerId, e);
-      const rect = c.getBoundingClientRect();
       if (this._placingCue) {
         if (primaryId === null) primaryId = e.pointerId;
         return;
@@ -1207,7 +1239,8 @@ class PoolUI {
         this._aiming = true;
         this._power = 0;
         this._pulling = false;
-        updateAimPower(e.clientX - rect.left, e.clientY - rect.top);
+        const p = this._pointerLocal(e);
+        updateAimPower(p.x, p.y);
       } else if (this._pointers.size === 2) {
         fineMode = true;
       }
@@ -1216,15 +1249,16 @@ class PoolUI {
     c.addEventListener('pointermove', (e) => {
       if (!this._pointers.has(e.pointerId)) return;
       this._pointers.set(e.pointerId, e);
-      const rect = c.getBoundingClientRect();
       if (this._placingCue) {
         if (e.pointerId !== primaryId) return;
-        const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const p = this._pointerLocal(e);
+        const w = this._toWorld(p.x, p.y);
         this._tryPlaceCuePreview(w.x, w.y);
         return;
       }
       if (e.pointerId !== primaryId || !this._aiming) return;
-      updateAimPower(e.clientX - rect.left, e.clientY - rect.top);
+      const p = this._pointerLocal(e);
+      updateAimPower(p.x, p.y);
     });
 
     const finish = (e) => {
@@ -1232,8 +1266,8 @@ class PoolUI {
       this._pointers.delete(e.pointerId);
       if (this._placingCue) {
         if (e.pointerId === primaryId) {
-          const rect = c.getBoundingClientRect();
-          const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
+          const p = this._pointerLocal(e);
+          const w = this._toWorld(p.x, p.y);
           this._commitCuePlacement(w.x, w.y);
           primaryId = null;
         }

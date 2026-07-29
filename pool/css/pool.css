@@ -360,14 +360,20 @@
 .pl-root .pl-power-cue-bumper { flex: 0 0 8px; background: #0a0a0a; border-radius: 3px; }
 
 /* ---- table placeholder (Phase 2 replaces this with the real render) ---- */
+/* No background colour here on purpose. The canvas paints every pixel of this
+   box (rails, felt, pockets, balls, cue). A background is only ever visible
+   when the canvas is MIS-SIZED, where it reads as a flat blue slab beside a
+   shrunken table — which is exactly how the canvas-sizing bug presented. Left
+   transparent so that failure mode is obvious rather than camouflaged. */
 .pl-root .pl-table-wrap {
   position: absolute;
   border-radius: 4px;
-  background: var(--pl-felt-mid);
   touch-action: none;
 }
-.pl-root .pl-table-wrap canvas { display: block; width: 100%; height: 100%; }
-.pl-root .pl-table-wrap.pl-camera-behind { transform: perspective(900px) rotateX(18deg) scale(1.04); }
+/* Explicit px, written by _resizeCanvas. NOT width/height:100% — a percentage
+   would silently paper over a wrong backing-store size by stretching the
+   bitmap, which is how the original squeezed-strip bug hid in plain sight. */
+.pl-root .pl-table-wrap canvas { display: block; }
 
 /* ---- dock: quit/camera/rerack/status, deliberately OUTSIDE the stage so it
    never competes with the reference's own composition. Provisional pending
