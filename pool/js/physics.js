@@ -17,14 +17,18 @@ export const R = 0.028575;          // ball radius (m) - standard 57.15mm diamet
 export const BALL_D = 2 * R;
 export const G = 9.81;
 
-// Table: a 7-ft "bar box" playing surface, 39in x 78in (0.9906m x 1.9812m) — the
-// common ratio-2:1 size, good for a mobile screen. Cushion (rail) face sits at the
-// playing-surface edge; pockets are capture circles at the 6 standard positions.
+// Table: a 6-ft "bar box" playing surface, 36in x 72in (0.9144m x 1.8288m) — the
+// visual rebuild's TABLE change (HANDOFF-POOL-VISUAL-REBUILD.md §5, 2026-07-29).
+// The build spec's ballRadius = feltW/64 forces a 6-ft box at regulation ball size
+// (64R = 1.8288m exactly); the table was previously modeled as a 7-ft box (78in),
+// which rendered balls ~8% small against the reference. Still exactly 2:1, still
+// SI meters, physics model untouched — only these two constants moved.
 export const TABLE = {
-  w: 0.9906,
-  h: 1.9812,
+  w: 0.9144,
+  h: 1.8288,
 };
-export const POCKET_R = R * 1.9;   // capture radius at each pocket center
+export const POCKET_R = R * 1.9;        // corner pocket capture radius (spec §8.4)
+export const POCKET_R_SIDE = R * 2.05;  // side pocket capture radius, wider (spec §8.4)
 // Corner pockets are cut on a diagonal, so their effective mouth center is pulled
 // slightly outside the true corner; jaw radius nudges the capture point inward.
 export const CORNER_JAW = R * 0.9;
@@ -249,13 +253,16 @@ export function reflectCushion(b, nx, ny) {
   b.moving = true;
 }
 
-/** All 6 pocket centers for TABLE, in table-local coordinates, origin at center. */
+/** All 6 pocket centers for TABLE, in table-local coordinates, origin at center.
+ *  `side: true` marks the two pockets at the midpoints of the long rails (the
+ *  x=+-hw, y=0 pair) — real side pockets have a wider mouth than the four
+ *  corners (spec §8.4, POCKET_R_SIDE vs POCKET_R). */
 export function pocketCenters() {
   const hw = TABLE.w / 2, hh = TABLE.h / 2;
   return [
-    { x: -hw, y: -hh }, { x: hw, y: -hh },
-    { x: -hw, y: 0 }, { x: hw, y: 0 },
-    { x: -hw, y: hh }, { x: hw, y: hh },
+    { x: -hw, y: -hh, side: false }, { x: hw, y: -hh, side: false },
+    { x: -hw, y: 0, side: true }, { x: hw, y: 0, side: true },
+    { x: -hw, y: hh, side: false }, { x: hw, y: hh, side: false },
   ];
 }
 
@@ -291,7 +298,8 @@ export function tick(balls, dt) {
   for (const b of live) {
     if (b.pocketed) continue;
     for (const p of pockets) {
-      if (len(b.x - p.x, b.y - p.y) < POCKET_R) {
+      const pr = p.side ? POCKET_R_SIDE : POCKET_R;
+      if (len(b.x - p.x, b.y - p.y) < pr) {
         b.pocketed = true; b.vx = 0; b.vy = 0; b.wx = 0; b.wy = 0; b.wz = 0; b.moving = false;
         events.pocketed.push(b.id);
         break;

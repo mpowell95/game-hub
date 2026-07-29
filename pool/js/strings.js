@@ -65,6 +65,8 @@ export const STRINGS = {
     breaking: 'Break',
     solid_shape_aria: 'Solid ball',
     stripe_shape_aria: 'Striped ball',
+    rotate_device: 'Rotate your device',
+    spin_aria: 'Spin (english)',
   },
   es: {
     title: 'Billar',
@@ -129,6 +131,8 @@ export const STRINGS = {
     breaking: 'Rompiendo',
     solid_shape_aria: 'Bola lisa',
     stripe_shape_aria: 'Bola rayada',
+    rotate_device: 'Gira tu dispositivo',
+    spin_aria: 'Efecto (inglés)',
   },
 };
 

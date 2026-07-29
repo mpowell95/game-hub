@@ -6,22 +6,31 @@
 > saves, and stats written by this game are governed by it: writes additive, keys never
 > repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`, not immersive (keeps the hub header, unlike Escoba/Mancala/
-Ball Run). `isInProgress()` is mode-split (root CLAUDE.md's "two legitimate meanings" note):
-**solo (vs. computer) and practice both autosave/resume** (`gamehub.pool.save.v1`, silent restore
+Hub integration: in-hub `module:`, **immersive** (visual rebuild, 2026-07-29 — the hub header
+collapses to a floating back button, matching Escoba/Mancala/Ball Run; see "The visual rebuild"
+below for why). `isInProgress()` is mode-split (root CLAUDE.md's "two legitimate meanings" note):
+**solo (vs. computer) and practice both autosave/resume** (`gamehub.pool.save.v2`, silent restore
 straight onto the table, no "resume?" prompt — same pattern as Mancala/Tic Tac Toe), so it returns
 `false` for them; **MP returns `true`** for as long as a room is joined, since leaving is
 consequential for the other person.
 
-## One named rulebook: "Bar Rules 8-Ball" (`js/rules.js`)
+## The rulebook: standard 8-ball ball-in-hand (`js/rules.js`)
 
-Per the build guide's item 3 ("one game mode with one named rulebook"), this is the only mode
-shipped. Simplified from full BCA "egyptian" 8-ball on purpose, to keep the rules engine's surface
-small and unambiguous:
+**Changed 2026-07-29** (visual rebuild, spec §13.5 / `HANDOFF-POOL-VISUAL-REBUILD.md` §6.4,
+Matt's call). v1 shipped "Bar Rules 8-Ball" — ball-in-hand anywhere, always, after any foul. That
+is now replaced:
 
-- **Ball-in-hand after any foul is anywhere on the table** (the common bar-table variant), not
-  restricted to behind the head string. `rules.placeCueBall` refuses nothing itself; the UI's
-  placement drag is the one that keeps the cue off other balls (`_commitCuePlacement` in `ui.js`).
+- **Ball-in-hand after any ordinary foul is anywhere on the table.** Only a **scratch on the very
+  first shot (the break)** restricts it to behind the head string (screen `u < 0.25`, i.e. physics
+  `y < HEAD_SPOT.y`). A scratch on any LATER shot is anywhere, same as every other foul.
+  `resolveShot` computes this as `headStringRestricted = ballInHand && cueScratched && isBreakShot`,
+  where `isBreakShot` reads `!state.broken` from the shot's INPUT state (before `broken` flips to
+  `true` at the end of every `resolveShot` call). `rules.placeCueBall` itself still refuses
+  nothing — the UI (`ui.js`'s `_placementLegal`) is what keeps the cue off other balls, out of
+  pockets, on the felt, and (new) behind the head string when restricted; the placement ghost
+  renders a white ring when the pointer's current spot is legal, red when it isn't, and
+  `_commitCuePlacement` silently refuses an illegal drop. The AI's own placement search
+  (`_aiPlacementSpot`) respects the same restriction.
 - Legal-shot gate: the cue ball's FIRST contact must be a ball of the shooter's own group (or
   either group while the table is open, or the 8-ball once the shooter's group is fully cleared);
   after that, either a ball must be pocketed or something must touch a rail, or it's a foul.
@@ -34,6 +43,78 @@ small and unambiguous:
 - No 4-rails-on-the-break rule, no called shots/pockets beyond the 8-ball itself, no safety-specific
   fouls beyond the generic contact/rail gate above. These are known, deliberate simplifications,
   not oversights — a fuller ruleset is a separate future mode, not a change to this one.
+- `pool/js/test-rules.mjs` (wired into `run-all-tests.mjs`) is the regression suite for the
+  head-string restriction specifically: break scratch restricted, later scratch not, break
+  no-contact foul not (must be a scratch specifically), later wrong-ball foul not.
+
+## The visual rebuild (2026-07-29)
+
+v1's engine (physics/table/rules/ai/hash) survived untouched except for two real,
+narrowly-scoped changes below; everything else in this section is `js/ui.js` and
+`css/pool.css` being replaced wholesale to match a reference screenshot
+(`8ball-pool-build-spec.md`, amended by `HANDOFF-POOL-VISUAL-REBUILD.md` — read the
+handoff first, it wins where the two disagree). Full context, including six phase-by-phase
+verification writeups, lives in the session that did this work; the durable facts:
+
+- **`TABLE` shrank to a 6-ft bar box, `{ w: 0.9144, h: 1.8288 }`** (was 7-ft, `0.9906 x 1.9812`).
+  The build spec's `ballRadius = feltW/64` only holds exactly at the 6-ft size (regulation
+  `R = 0.028575` x 64 = 1.8288m); at the old size the balls rendered ~8% small against the
+  reference. Still exactly 2:1, still SI meters, the collision/friction MODEL is byte-identical —
+  two constants moved, nothing else.
+- **Pockets gained a real side/corner split**: `POCKET_R` (corners) stays `1.90R`; a new
+  `POCKET_R_SIDE = 2.05R` applies to the two pockets at the midpoints of the long rails
+  (`pocketCenters()` now tags each entry `{side: bool}`; `tick()`'s capture check reads the right
+  radius per pocket). Previously one `POCKET_R` applied to all six.
+- **The renderer is now felt-fraction space, not the old center-origin/scale-factor space.**
+  Canvas drawing (table, balls, cue) works in `u,v` (0-1 across the felt, left-right / top-bottom
+  on screen) via `_feltLocalRect()`/`_uvToLocal()`/`_ballRadiusLocal()` in `ui.js`. **The ONE place
+  screen space converts to/from physics.js's table-local meters is `_toCanvas`/`_toWorld`**
+  (handoff §5's explicit ask) — screen `u` tracks physics `y` (TABLE's long axis, matching the
+  rack sitting at `u~0.75` against `FOOT_SPOT.y = +TABLE.h*0.25`), screen `v` tracks physics `x`
+  (the short axis, an arbitrary but fixed left/right choice). Nothing else in the file should ever
+  do this conversion its own way.
+- **A separate `loadScreenshotState()` path** (bound to `?debug=1` and Shift+S, spec §11) renders
+  the exact reference ball layout and cue angle from `SCREENSHOT_STATE` — plain `u,v` fractions,
+  entirely bypassing `this.game`/physics. It's a verification tool, not gameplay; `_drawFrame`
+  branches on `this._screenshotBalls` being set to pick it over the real `this.game.balls` render.
+- **Hard constraint, unchanged from the spec and worth restating: no aim-assist, ever.** No
+  guideline, no ghost-ball circle, no deflection/tangent line, no cushion-bounce prediction. v1's
+  `_drawAimLine` drew a dashed forward guideline alongside the cue stick — that violated this and
+  was deleted outright when the cue renderer was rewritten as `_drawLiveCue` (stick only).
+- **Game-economy chrome is gone**: the green menu button, gold rank star, chat bubble, coin
+  pot/stake display, and red rank badge (spec §4.1/4.2/4.3/4.7/4.10) are none of them rebuilt —
+  this hub has no currency/XP/chat. The remaining HUD elements (name plate, ball row, avatar x2,
+  name plate, ball row, turn indicator) are re-spaced with flexbox rather than the spec's literal
+  fractions, since those fractions accounted for the removed elements. Quit/camera/new-game moved
+  to a small text-button dock BELOW the stage (not in the spec, which assumes a native app shell
+  with its own external chrome) — provisional, flagged to Matt, not reversed as of this writing.
+  **Stats still record exactly as before** (`recordResult('pool', ...)`) even though nothing shows
+  them during play.
+- **No shot clock at all** (spec §13.8 removed per Matt's call) — the turn-indicator's cue-ball
+  socket stays static, whose-turn is communicated only by the avatar frame's active glow (green)
+  plus a small triangle badge (colorblind rule: never color alone).
+- **Storage keys moved to `.v2`** (`gamehub.pool.v2` settings, `.save.v2` solo/practice autosave,
+  `.mp.v2` MP rejoin) because the rulebook change makes a v1 save genuinely incompatible with the
+  current code. **The v1 keys stay on disk, untouched, never read, never deleted** (THE LAW rule 5).
+- **The end-of-game overlay** (spec §15, minus the coins §6.2 removes) dims the table specifically
+  (not the whole stage), puts a small gold "WINNER" plate on the winning avatar
+  (`.pl-avatar-winner::before`), and centers a green Play Again button below the table — plus a
+  close (X), which the spec omits but every win/lose popup in this hub gets (root `CLAUDE.md`).
+- **Palette is sampled from the reference PNG directly** (`pool best.png`, repo root), not eyeballed
+  from the spec's own hex list (spec §19 says sampled values win). Two real deviations from the
+  spec worth knowing: the HUD bar has a blue-purple cast and a faint diagonal weave, not a flat
+  neutral grey; the rails are darker/duller than the spec's brighter red-brown, brightest at the
+  felt-facing bevel rather than following a simple top-lit gradient.
+- **A second height-trap bug, distinct from the one below, was found and fixed during this
+  rebuild**: with the stage as a plain (non-absolutely-positioned) flex child, its fixed 1202x744
+  intrinsic size pushed `.pl-root` to 789px tall against a 375px viewport when mounted immersive on
+  a landscape phone — 552px unreachable by scroll — even though every ancestor already had
+  `min-height:0`/`flex:1` set correctly. Fixed by taking `.pl-stage` out of flow entirely
+  (`position:absolute`, centered via `top/left:50%` + `translate(-50%,-50%) scale(s)` in
+  `_resizeStage()`), so its fixed size can never inflate a flex ancestor. `.pl-root`'s own
+  `min-height` also moved from a blind `100dvh` to `calc(100dvh - 98px)`, matching immersive mode's
+  own top-padding budget (`css/hub.css`'s `.hub-main-immersive` rule) — see `.pl-root`'s own CSS
+  comment in `pool.css` for the full writeup and how to re-measure if either budget changes.
 
 ## Physics (`js/physics.js`) — grounded in published billiards physics, not tuned by feel
 
@@ -150,14 +231,21 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 
 ## Settings and keys
 
-- `gamehub.pool.v1` — settings (currently just `difficulty`).
-- `gamehub.pool.save.v1` — solo/practice autosave (the whole `rules.js` state, cleared on game
+**`.v2` since the 2026-07-29 visual rebuild** (the rulebook change makes a v1 save shape
+genuinely incompatible — THE LAW rule 5: `gamehub.pool.v1` / `.save.v1` / `.mp.v1` stay on disk,
+untouched, never read, never deleted):
+
+- `gamehub.pool.v2` — settings (currently just `difficulty`).
+- `gamehub.pool.save.v2` — solo/practice autosave (the whole `rules.js` state, cleared on game
   end or an explicit Quit).
-- `gamehub.pool.mp.v1` — MP rejoin snapshot (role, room code, applied seq, state), separate key
+- `gamehub.pool.mp.v2` — MP rejoin snapshot (role, room code, applied seq, state), separate key
   per the repo's established three-key convention (settings / solo save / MP save never share a
   key).
 - Recorder: `recordResult('pool', difficulty, won)`; MP additionally calls
-  `recordHeadToHead('pool', opp, won)`.
+  `recordHeadToHead('pool', opp, won)`. **Unchanged by the rebuild** — the stats id `'pool'` is
+  frozen (THE LAW rules 1/5) and results record exactly as before even though the HUD no longer
+  displays anything during play (the game-economy chrome that used to imply a win counter is gone,
+  see "The visual rebuild" above).
 
 ## First-playtest fixes (2026-07-28, CiC UI/UX review)
 
@@ -224,7 +312,21 @@ root-caused and fixed rather than patched over; the two worth understanding for 
 
 - Camera is top-down plus a cosmetic tilt toggle; no real 3D perspective, no working pinch-zoom/
   pan yet (the build guide's controls section asks for both — deferred, not silently dropped).
-- No shot clock, no jump shots (elevation currently only drives curve/masse, not an actual
-  vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above.
+- No shot clock (removed on purpose, see "The visual rebuild"), no jump shots (elevation currently
+  only drives curve/masse, not an actual vertical launch), no called-shot/safety-specific fouls
+  beyond the generic rulebook above.
+- **No cue-elevation UI control** — `this._elevation` stays `0` always; the build spec has no
+  elevation control either (curve/masse only shows up via side-spin + a raised cue in the physics
+  model, and nothing in this UI raises the cue). A known, deliberate gap, not an oversight.
+- **The quit/camera/new-game dock below the stage is provisional** — the reference is a native app
+  shell with its own external chrome, so this hub needed *something* for those affordances that
+  the spec doesn't speak to. Flagged to Matt during the rebuild; not yet revisited.
+- **Shot-settle animation is unverified in the in-house preview browser** — its `requestAnimationFrame`
+  essentially never fires when the pane isn't actively composited (confirmed: a 2-second rAF-counting
+  loop returned zero callbacks), so the `_startLoop` render/simulation-drain loop, while unchanged
+  standard code, could only be verified by direct state inspection (pointer gesture → correct
+  `_power`/`_aiming` transitions → `_simulating` flips true), not by watching an actual shot settle
+  on screen. `physics.js`'s own settle behavior IS verified headless (`test-physics.mjs`, no rAF
+  dependency). Confirm the actual animation on a real device before assuming it's smooth.
 - No i18n live re-render via `onLangChange` (strings resolve at render time only, same minimum
   bar every other game meets — see root CLAUDE.md item 9).

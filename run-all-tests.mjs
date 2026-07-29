@@ -28,6 +28,8 @@ const SUITES = [
   { file: 'boggle/js/test.js' },
   { file: 'snake/js/test.js' },
   { file: 'uno/js/test.js' },
+  { file: 'pool/js/test-physics.mjs' },
+  { file: 'pool/js/test-rules.mjs' },
   // shared-module suites
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },

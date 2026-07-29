@@ -1,8 +1,10 @@
-// rules.js — pure 8-ball rule engine (no DOM, no physics stepping). Named rulebook:
-// "Bar Rules 8-Ball" — the single simplified ruleset the build guide's item 3 asks
-// for (one mode, one rulebook), documented in pool/CLAUDE.md. Ball-in-hand after any
-// foul is anywhere on the table (the common simplified bar-table variant), rather
-// than the full BCA egyptian-rule head-string restriction.
+// rules.js — pure 8-ball rule engine (no DOM, no physics stepping). Standard
+// 8-ball ball-in-hand (visual rebuild, 2026-07-29, spec §13.5 / handoff §6.4):
+// ball-in-hand after any ordinary foul is anywhere on the table; ONLY a
+// scratch on the very first shot (the break) restricts it to behind the head
+// string (screen u < 0.25, i.e. physics y < HEAD_SPOT.y). Every other foul,
+// including a scratch on any later shot, stays anywhere. This replaces v1's
+// "Bar Rules 8-Ball" (ball-in-hand anywhere, always) — see pool/CLAUDE.md.
 import { rackBalls, ballById } from './table.js';
 
 export function newGame() {
@@ -16,6 +18,7 @@ export function newGame() {
     winner: null,
     lastFoul: null,        // last foul reason, for UI toast; cleared each shot
     broken: false,
+    headStringRestricted: false, // true only for ball-in-hand right after a scratch on the break
   };
 }
 
@@ -58,6 +61,7 @@ export function legalTarget(state, seat) {
 export function resolveShot(state, events) {
   const seat = state.turnSeat;
   const opp = seat === 0 ? 1 : 0;
+  const isBreakShot = !state.broken; // state.broken reflects the shot BEFORE this one
   const st = {
     ...state,
     balls: state.balls.map((b) => ({ ...b })),
@@ -111,6 +115,10 @@ export function resolveShot(state, events) {
 
   st.turnSeat = gameOver ? seat : (continues ? seat : opp);
   st.ballInHand = !gameOver && (foul || cueScratched);
+  // Spec §13.5: restricted to behind the head string ONLY for a scratch on
+  // the break; every other foul (including a scratch on a later shot) is
+  // ball-in-hand anywhere.
+  st.headStringRestricted = st.ballInHand && cueScratched && isBreakShot;
   st.over = gameOver;
   st.winner = gameOver ? winner : null;
   st.lastFoul = foulReason;

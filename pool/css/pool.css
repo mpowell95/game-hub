@@ -1,32 +1,55 @@
-/* pool.css — Mancala's CSS-scoping discipline: every rule descendant-scoped
-   under .pl-root, every class prefixed .pl-, every custom property --pl-.
-   Quiet and real per the build guide: one dark felt, wood rails, no glow,
-   no trails, no celebration effects. */
+/* pool.css — visual rebuild (2026-07-29). Root class .pl-root, every class
+   prefixed .pl-, every custom property --pl-, every rule descendant-scoped
+   under .pl-root (Mancala's discipline, root CLAUDE.md "Adding a game" #3).
+
+   Palette sampled directly from `pool best.png` (see pool/CLAUDE.md) — the HUD
+   bar has a blue-purple cast and a faint diagonal weave, not spec's flat
+   neutral grey; the rails are darker/duller than spec's brighter red-brown,
+   with the brightest tone at the felt-facing bevel, not a top-lit sweep.
+
+   Phase 1 (static shell): stage scaling, background, top HUD, potted tray,
+   spin button (closed state), power meter graphic. No table/canvas drawing
+   yet — that's Phase 2. */
 .pl-root {
-  --pl-bg: #12100d;
-  --pl-surface: #1b1815;
+  --pl-felt-center: #80c9dc;
+  --pl-felt-mid: #4f9dc2;
+  --pl-felt-edge: #256074;
+  --pl-rail-dark: #4a1013;
+  --pl-rail-mid: #6e1f22;
+  --pl-rail-bevel: #8a4041;
+  --pl-hud-bg: #2c2b38;
+  --pl-hud-bg-2: #201f2a;
+  --pl-plate-bg: #1c1b23;
+  --pl-plate-border: #37354a;
   --pl-ink: #f2ede4;
-  --pl-muted: #a99f92;
+  --pl-muted: #a9a3ba;
   --pl-accent: #ffce3a;
-  --pl-rail-wood: #3a2418;
-  /* .hub-game (css/hub.css) sets no explicit height on the container this module
-     mounts into — a plain block child of a flex row, sized to CONTENT, not to the
-     hub's available viewport. height:100% against that resolves to nothing
-     definite, which collapsed the whole table-wrap/canvas chain down to the
-     canvas element's bare 300x150 default intrinsic size (the "narrow blob rack,
-     table doesn't fill its box" bug). min-height:100dvh (Escoba's own fix for the
-     same shared-shell gap, css/escoba.css) gives this root a real, self-sufficient
-     height regardless of what the ancestor chain provides. */
+  --pl-active: #84cc2b;
+  --pl-inactive: #4a4858;
+  --pl-page-bg: #05070b;
+
+  /* NOT a blind 100dvh (that was the actual overflow bug, found live: mounted
+     immersive in the hub at 812x375, .pl-root came out 789px tall against a
+     375px viewport, 552px of unreachable scroll). .hub-game has no explicit
+     height, and immersive mode ALSO adds ~98px of top padding to .hub-main
+     (css/hub.css's `.hub-main-immersive` rule: max(safe-area-inset-top,54px)+44px,
+     98px at minimum) that a plain 100dvh child doesn't know about — the two
+     stack and blow past the real viewport. escoba.css's `.eb-mat` sets the
+     precedent for this exact shared-shell gap: a `min-height: calc(100dvh -
+     Npx)` chrome budget, not a raw 100dvh. 98px is the immersive minimum
+     (safe-area only adds MORE, so this is a floor, not an exact figure) —
+     re-measure via document.documentElement.scrollHeight vs window.innerHeight
+     if the immersive padding formula or this file's own dock height changes. */
   min-height: 100vh;
-  min-height: 100dvh;
+  min-height: calc(100dvh - 98px);
   display: flex;
   flex-direction: column;
-  background: var(--pl-bg);
+  background: var(--pl-page-bg);
   color: var(--pl-ink);
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* ---- setup screen ---- */
+/* ---- setup screen (unchanged visual language, not in the spec's scope) ---- */
 .pl-root .pl-setup {
   padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
   max-width: 480px;
@@ -42,8 +65,8 @@
   flex: 1 1 auto;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid #3a352e;
-  background: var(--pl-surface);
+  border: 1px solid var(--pl-plate-border);
+  background: var(--pl-plate-bg);
   color: var(--pl-ink);
   font-size: 14px;
   cursor: pointer;
@@ -53,8 +76,8 @@
 .pl-root .pl-btn {
   padding: 12px 18px;
   border-radius: 10px;
-  border: 1px solid #3a352e;
-  background: var(--pl-surface);
+  border: 1px solid var(--pl-plate-border);
+  background: var(--pl-plate-bg);
   color: var(--pl-ink);
   font-size: 15px;
   cursor: pointer;
@@ -62,14 +85,14 @@
 .pl-root .pl-btn-primary { background: var(--pl-accent); color: #201a08; font-weight: 700; border-color: var(--pl-accent); }
 .pl-root .pl-btn-ghost { background: transparent; }
 .pl-root .pl-btn:disabled { opacity: 0.4; cursor: default; }
-.pl-root .pl-online { margin: 10px 0 4px; padding: 14px; border-radius: 12px; background: var(--pl-surface); }
+.pl-root .pl-online { margin: 10px 0 4px; padding: 14px; border-radius: 12px; background: var(--pl-plate-bg); }
 .pl-root .pl-joinrow { display: flex; gap: 8px; margin-top: 10px; }
 .pl-root .pl-code-input {
   flex: 1;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid #3a352e;
-  background: var(--pl-bg);
+  border: 1px solid var(--pl-plate-border);
+  background: var(--pl-page-bg);
   color: var(--pl-ink);
   font-size: 16px;
   letter-spacing: 0.12em;
@@ -79,11 +102,11 @@
 
 /* ---- how-to / end dialogs ---- */
 .pl-root .pl-dialog-overlay {
-  position: absolute; inset: 0; background: rgba(0,0,0,0.55);
-  display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px;
+  position: absolute; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 30; padding: 16px;
 }
 .pl-root .pl-dialog {
-  position: relative; background: var(--pl-surface); border-radius: 16px; padding: 22px 20px;
+  position: relative; background: var(--pl-plate-bg); border-radius: 16px; padding: 22px 20px;
   max-width: 380px; width: 100%; text-align: center;
 }
 .pl-root .pl-dialog p { text-align: left; font-size: 14px; color: var(--pl-muted); }
@@ -93,70 +116,324 @@
   border: none; background: rgba(255,255,255,0.08); color: var(--pl-ink); font-size: 15px; cursor: pointer;
 }
 
-/* ---- game screen ---- */
+/* ---- game screen: fixed 1202x744 stage, uniformly scaled -------------- */
 /* flex:1 (not height:100%): .pl-root only sets min-height, and a percentage
    height needs an ancestor with a definite `height`, not `min-height`, to
-   resolve against (min-height alone left this at `auto`/content-size — the
-   actual remaining cause of the squeezed-table bug, after the min-height fix
-   above). flex-grow doesn't have that requirement: it fills whatever space
-   the flex container actually ends up with, however that size was set. */
+   resolve against. See pool/CLAUDE.md's "the height trap" for the full story
+   of why this exact substitution shipped as a squeezed strip once already. */
 .pl-root .pl-game { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-.pl-root .pl-hud {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; min-height: 36px;
-}
-.pl-root .pl-turn-text { font-size: 14px; font-weight: 600; }
-.pl-root .pl-hud-right { display: flex; gap: 8px; }
-.pl-root .pl-icon-btn {
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid #3a352e;
-  background: var(--pl-surface); color: var(--pl-ink); font-size: 16px; cursor: pointer;
-}
-.pl-root .pl-icon-btn.is-confirm { background: #a83232; color: #fff; }
-.pl-root .pl-quit-confirm { font-size: 12px; color: #ffb4b4; font-weight: 600; }
 
-.pl-root .pl-table-wrap {
-  position: relative; flex: 1; min-height: 0; margin: 0 8px;
-  border-radius: 10px; overflow: hidden; background: var(--pl-rail-wood);
-  transition: transform 0.35s ease;
+.pl-root .pl-stage-outer {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  background: var(--pl-page-bg);
+}
+
+.pl-root .pl-stage {
+  /* position:absolute takes the stage's fixed 1202x744 layout box OUT OF FLOW,
+     so it can never inflate .pl-stage-outer's own size (the real cause of a
+     second height-trap bug found live in this rebuild: with the stage as a
+     plain flex child, its fixed intrinsic size pushed .pl-stage-outer, then
+     .pl-game, then .pl-root past its own min-height, past .hub-main's
+     immersive-adjusted flex-basis, and 552px off the bottom of a 375px-tall
+     landscape-phone viewport, even though every ancestor already had
+     min-height:0/flex:1 set correctly — a fixed-size CONTENT box bypasses
+     that chain entirely, only a definite-height ANCESTOR or taking the child
+     out of flow stops it). Centered via top/left 50% + translate(-50%,-50%),
+     combined with the scale() JS sets — translate is unaffected by the scale
+     factor since it's evaluated in the parent's coordinate space first. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1202px;
+  height: 744px;
+  transform-origin: center center;
+  border-radius: 6px;
+  border: 4px solid #000;
+  overflow: hidden;
+  background: linear-gradient(180deg, #1b2836 0%, #0b1219 100%);
+}
+.pl-root .pl-stage::after {
+  /* radial vignette, per spec §3 */
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,0.55) 100%);
+}
+
+/* ---- top HUD bar -------------------------------------------------------- */
+.pl-root .pl-bar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, var(--pl-hud-bg) 0%, var(--pl-hud-bg-2) 100%);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.6);
+}
+
+.pl-root .pl-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.pl-root .pl-player--p2 { flex-direction: row-reverse; }
+
+.pl-root .pl-namecol { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.pl-root .pl-plate {
+  background: var(--pl-plate-bg);
+  border: 1px solid var(--pl-plate-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-root .pl-player--p1 .pl-plate { text-align: right; }
+.pl-root .pl-player--p2 .pl-plate { text-align: left; }
+
+.pl-root .pl-ballrow { display: flex; gap: 3px; align-items: center; }
+.pl-root .pl-player--p2 .pl-ballrow { flex-direction: row-reverse; }
+.pl-root .pl-mini {
+  width: 15px; height: 15px; border-radius: 50%; flex: none;
+  position: relative; box-shadow: inset 0 -1px 1px rgba(0,0,0,0.6), 0 1px 1px rgba(0,0,0,0.6);
+}
+.pl-root .pl-mini.is-potted {
+  background: #171a1e; box-shadow: inset 0 0 0 1.5px #33383e; opacity: 0.85;
+}
+
+.pl-root .pl-avatar {
+  flex: none;
+  width: 46px; height: 46px;
+  border-radius: 4px;
+  border: 3px solid var(--pl-inactive);
+  background: var(--pl-plate-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  position: relative;
+}
+.pl-root .pl-avatar.is-active {
+  border-color: var(--pl-active);
+  box-shadow: 0 0 8px rgba(132,204,43,0.7);
+}
+/* Colorblind-safe: active turn is never color-only (root CLAUDE.md's
+   accessibility rule) — a small triangle badge backs up the green glow. */
+.pl-root .pl-avatar.is-active::after {
+  content: '';
+  position: absolute; top: -6px; right: -6px;
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 9px solid var(--pl-active);
+}
+
+.pl-root .pl-turn-indicator {
+  flex: none;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: #0a0c0e;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.9);
+  display: flex; align-items: center; justify-content: center;
+}
+.pl-root .pl-turn-cue {
+  width: 42%; height: 42%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #ffffff 0%, #f8f8f3 35%, #cfcfc7 100%);
+}
+
+/* ---- potted-ball tray --------------------------------------------------- */
+.pl-root .pl-tray {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(8,20,30,0.5);
+  border: 1.5px solid rgba(140,185,215,0.55);
+}
+.pl-root .pl-tray::before, .pl-root .pl-tray::after {
+  content: '';
+  position: absolute; left: 0; border-radius: 999px; pointer-events: none;
+}
+.pl-root .pl-tray::before { top: 4px; bottom: 4px; right: 5%; border: 1.5px solid rgba(140,185,215,0.40); }
+.pl-root .pl-tray::after { top: 8px; bottom: 8px; right: 10%; border: 1.5px solid rgba(140,185,215,0.28); }
+.pl-root .pl-tray-balls {
+  position: absolute; inset: 0; display: flex; align-items: center; gap: 4px; padding-left: 3%;
+}
+.pl-root .pl-tray-ball { width: 18px; height: 18px; border-radius: 50%; flex: none; box-shadow: inset 0 -1px 1px rgba(0,0,0,0.6); }
+
+/* ---- spin (english) control, closed state ------------------------------- */
+.pl-root .pl-spin-btn {
+  position: absolute;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #3a7fd0 0%, #1a4a8f 100%);
+  border: 2px solid #6fa8e0;
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,0.45);
+  overflow: hidden;
+  cursor: pointer;
+}
+.pl-root .pl-spin-btn::before {
+  content: '';
+  position: absolute; inset: -20%;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f0f4f8 0 5px, #d63a2f 5px 10px, #f0f4f8 10px 15px, transparent 15px 21px
+  );
+}
+
+/* ---- spin (english) selector, open state (spec §6.2) -------------------- */
+.pl-root .pl-spin-panel { position: absolute; inset: 0; z-index: 15; }
+.pl-root .pl-spin-panel[hidden] { display: none; }
+.pl-root .pl-spin-backdrop { position: absolute; background: rgba(0,0,0,0.55); }
+.pl-root .pl-spin-box {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+}
+.pl-root .pl-spin-close {
+  position: absolute; top: -2px; right: -2px; width: 26px; height: 26px;
+  border-radius: 50%; border: none; background: rgba(255,255,255,0.12); color: #fff;
+  font-size: 15px; line-height: 1; cursor: pointer; z-index: 1;
+}
+.pl-root .pl-spin-ball {
+  position: relative;
+  width: 78%; height: 78%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #ffffff 0%, #f8f8f3 40%, #c8c8c0 100%);
+  border: 2px solid #c8c8c0;
   touch-action: none;
 }
-.pl-root .pl-table-wrap.pl-camera-behind { transform: perspective(900px) rotateX(28deg) scale(1.05); }
-.pl-root .pl-table-wrap canvas[data-role="canvas"] { display: block; width: 100%; height: 100%; }
-
-.pl-root .pl-rail-glow {
-  position: absolute; left: 8px; right: 8px; height: 4px; opacity: 0;
-  background: var(--pl-accent); transition: opacity 0.25s ease; pointer-events: none;
+.pl-root .pl-spin-cross-v, .pl-root .pl-spin-cross-h {
+  position: absolute; background: rgba(120,120,120,0.5);
 }
-.pl-root .pl-rail-near { bottom: 0; }
-.pl-root .pl-rail-far { top: 0; }
-.pl-root .pl-rail-glow.is-lit { opacity: 0.85; }
+.pl-root .pl-spin-cross-v { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+.pl-root .pl-spin-cross-h { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+.pl-root .pl-spin-dot {
+  position: absolute; left: 50%; top: 50%; width: 15%; height: 15%;
+  border-radius: 50%; background: #e03028; border: 2px solid #7a1410;
+  transform: translate(-50%, -50%);
+  box-shadow: inset 2px -2px 0 -1px rgba(255,255,255,0.6);
+  pointer-events: none;
+}
 
-.pl-root .pl-foul-slot { position: absolute; top: 8px; left: 8px; }
+/* ---- power meter (right edge) ------------------------------------------- */
+.pl-root .pl-power-track {
+  position: absolute;
+  border-radius: 999px;
+  background: #0b1218;
+  border: 1px solid #2a3a48;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.8);
+  overflow: hidden;
+}
+.pl-root .pl-power-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+  background: linear-gradient(180deg, #d63a2f 0%, #e8c72a 55%, #3fbf4a 100%);
+  transition: height 0.05s linear;
+}
+.pl-root .pl-power-cue {
+  position: absolute; left: 50%; top: 0; width: 46%; height: 100%; transform: translateX(-50%);
+  display: flex; flex-direction: column;
+}
+.pl-root .pl-power-cue-shaft {
+  flex: 0 0 50%;
+  background: linear-gradient(90deg, #e8c79c, #c79a5e 55%, #a8763f);
+  position: relative;
+}
+.pl-root .pl-power-cue-joint { flex: 0 0 4px; background: linear-gradient(180deg, #d6dade, #8a9096); }
+.pl-root .pl-power-cue-butt {
+  flex: 0 0 38%;
+  background: linear-gradient(180deg, #16233f, #0b1424);
+  display: flex; align-items: center; justify-content: space-evenly;
+}
+.pl-root .pl-power-cue-butt span {
+  width: 5px; height: 5px; background: #f0f2f5; transform: rotate(45deg); display: block;
+}
+.pl-root .pl-power-cue-bumper { flex: 0 0 8px; background: #0a0a0a; border-radius: 3px; }
+
+/* ---- table placeholder (Phase 2 replaces this with the real render) ---- */
+.pl-root .pl-table-wrap {
+  position: absolute;
+  border-radius: 4px;
+  background: var(--pl-felt-mid);
+  touch-action: none;
+}
+.pl-root .pl-table-wrap canvas { display: block; width: 100%; height: 100%; }
+.pl-root .pl-table-wrap.pl-camera-behind { transform: perspective(900px) rotateX(18deg) scale(1.04); }
+
+/* ---- dock: quit/camera/rerack/status, deliberately OUTSIDE the stage so it
+   never competes with the reference's own composition. Provisional pending
+   final placement call (Phase 1 review) — v1 had these as HUD icon buttons,
+   the spec has no equivalent since the reference is a native app shell. ---- */
+.pl-root .pl-dock {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  font-size: 13px;
+}
+.pl-root .pl-dock .pl-btn { padding: 6px 12px; font-size: 13px; }
+.pl-root .pl-dock .pl-btn.is-confirm { background: #a83232; color: #fff; border-color: #a83232; }
+.pl-root .pl-turn-text { font-size: 13px; font-weight: 600; flex: 1 1 auto; min-width: 0; }
+.pl-root .pl-quit-confirm { font-size: 12px; color: #ffb4b4; font-weight: 600; }
+
+.pl-root .pl-foul-slot { position: absolute; top: 6px; left: 6px; }
 .pl-root .pl-foul-icon {
-  width: 30px; height: 30px; border-radius: 50%; border: none;
-  background: #a83232; color: #fff; font-size: 15px; cursor: pointer;
+  width: 26px; height: 26px; border-radius: 50%; border: none;
+  background: #a83232; color: #fff; font-size: 13px; cursor: pointer;
 }
 .pl-root .pl-foul-toast {
-  position: absolute; top: 36px; left: 0; max-width: 220px;
+  position: absolute; top: 32px; left: 0; max-width: 220px;
   background: #a83232; color: #fff; font-size: 13px; padding: 8px 10px;
   border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.35);
 }
 
-.pl-root .pl-controls {
-  display: flex; align-items: center; gap: 18px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  flex-wrap: wrap;
+/* ---- end-of-game overlay (spec §15, minus the coins, plus a close X) ---- */
+.pl-root .pl-end-dim { position: absolute; background: rgba(0,0,0,0.6); border-radius: 4px; z-index: 20; }
+.pl-root .pl-end-actions {
+  position: absolute; z-index: 21;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
-.pl-root .pl-spin-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.pl-root .pl-spin-label, .pl-root .pl-power-label, .pl-root .pl-elev-label {
-  font-size: 11px; color: var(--pl-muted); text-transform: uppercase; letter-spacing: 0.04em;
+.pl-root .pl-end-title { color: #fff; font-weight: 700; font-size: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+.pl-root .pl-end-btns { display: flex; gap: 10px; }
+.pl-root .pl-end-again {
+  padding: 10px 20px; border-radius: 8px; border: 1.5px solid #2f5a08; cursor: pointer;
+  background: linear-gradient(180deg, #84cc2b 0%, #4d8a12 100%);
+  color: #0e1a04; font-weight: 700; font-size: 14px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.35);
 }
-.pl-root .pl-power-wrap { flex: 1; min-width: 100px; }
-.pl-root .pl-power-meter { height: 10px; border-radius: 6px; background: var(--pl-surface); overflow: hidden; margin-top: 4px; }
-.pl-root .pl-power-fill { height: 100%; width: 0%; background: var(--pl-accent); }
-.pl-root .pl-elev-wrap { display: flex; flex-direction: column; min-width: 110px; }
-.pl-root .pl-elev-slider { width: 100%; }
+.pl-root .pl-end-close {
+  position: absolute; top: -34px; right: 0; width: 28px; height: 28px; border-radius: 50%;
+  border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 16px; cursor: pointer;
+}
+/* Winner plate: a small gold banner over the winning avatar (spec §15's "gold
+   plate over the winner's avatar reading WINNER"), toggled by a class instead
+   of a second positioned overlay since the avatar already has a known box. */
+.pl-root .pl-avatar-winner { position: relative; }
+.pl-root .pl-avatar-winner::before {
+  content: 'WINNER';
+  position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%);
+  background: linear-gradient(180deg, #ffd85a, #e0a020);
+  color: #4a2f00; font-size: 8px; font-weight: 800; letter-spacing: 0.03em;
+  padding: 2px 5px; border-radius: 4px; border: 1px solid #8a5c05; white-space: nowrap;
+  z-index: 5;
+}
 
-/* Pool's felt/wood palette is permanently dark regardless of the hub's
+/* ---- portrait rotate overlay --------------------------------------------- */
+.pl-root .pl-rotate-overlay {
+  position: fixed; inset: 0; z-index: 50; background: #05070b;
+  display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+  color: var(--pl-ink); text-align: center; padding: 24px;
+}
+.pl-root .pl-rotate-overlay.is-shown { display: flex; }
+.pl-root .pl-rotate-glyph { font-size: 48px; }
+
+/* Pool's felt/HUD palette is permanently dark regardless of the hub's
    light/dark/auto toggle (js/theme.js) — same precedent as Nuts & Bolts'
-   workshop palette (root CLAUDE.md's theme-support section): a pool table
-   looks like a pool table in every hub theme, no :root.gh-dark override needed. */
+   workshop palette (root CLAUDE.md's theme-support section). */
