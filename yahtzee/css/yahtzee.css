@@ -417,3 +417,54 @@
   .yz-root .yz-sparkle, .yz-root .yz-play-btn.yz-on, .yz-root .yz-score-box.yz-selected{ animation-duration:.01s; }
   .yz-root .yz-die, .yz-root .yz-die .yz-cube{ transition-duration:.02s; }
 }
+
+/* ---------- Setup / lobby screen (not part of the pixel-exact spec; functional only) ---------- */
+.yz-root #screenHost{
+  width:100%; height:100%; display:grid; place-items:center; overflow:auto;
+}
+.yz-root .yz-setup{
+  width:min(360px, 92vw); display:flex; flex-direction:column; align-items:stretch; gap:14px;
+  padding:24px; box-sizing:border-box;
+}
+.yz-root .yz-setup-title{
+  font:800 32px "Baloo 2",sans-serif; color:var(--yz-hdr-top); text-align:center; margin:0 0 4px;
+}
+.yz-root .yz-seg{
+  display:flex; border-radius:12px; overflow:hidden; border:2px solid var(--yz-hdr-top);
+}
+.yz-root .yz-seg-btn{
+  flex:1; padding:10px 6px; border:none; background:#fff; color:var(--yz-hdr-top);
+  font:700 13px "Baloo 2",sans-serif; cursor:pointer;
+}
+.yz-root .yz-seg-btn.yz-seg-active{ background:var(--yz-hdr-top); color:#fff; }
+
+.yz-root .yz-setup-btn{
+  padding:14px; border-radius:14px; border:none; font:800 18px "Baloo 2",sans-serif; cursor:pointer;
+}
+.yz-root .yz-setup-btn-primary{ background:var(--yz-play-on-a); color:#1F4A0A; }
+.yz-root .yz-setup-btn-primary:disabled{ opacity:.5; cursor:not-allowed; }
+.yz-root .yz-setup-btn-ghost{ background:#eee; color:#444; }
+
+.yz-root .yz-mp-lobby{ display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.yz-root .yz-mp-label{ font:700 12px "Baloo 2",sans-serif; color:#666; text-transform:uppercase; letter-spacing:.05em; }
+.yz-root .yz-mp-code{
+  font:800 40px "Baloo 2",sans-serif; letter-spacing:.12em; text-align:center; color:var(--yz-hdr-top);
+  background:#fff; border:2px dashed var(--yz-hdr-top); border-radius:12px; padding:10px;
+}
+.yz-root .yz-mp-code-input{
+  font:800 30px "Baloo 2",sans-serif; letter-spacing:.15em; text-align:center; text-transform:uppercase;
+  border:2px solid var(--yz-hdr-top); border-radius:12px; padding:10px; color:var(--yz-hdr-top);
+}
+.yz-root .yz-mp-oppslot{
+  display:flex; align-items:center; gap:8px; background:#fff; border-radius:10px; padding:8px 10px; min-height:24px;
+}
+.yz-root .yz-mp-oppav{ font-size:22px; }
+.yz-root .yz-mp-oppname{ font:700 15px "Baloo 2",sans-serif; }
+.yz-root .yz-mp-oppempty{ font:700 13px "Baloo 2",sans-serif; color:#888; }
+.yz-root .yz-mp-msg{ font:700 13px "Baloo 2",sans-serif; color:#555; text-align:center; margin:0; min-height:16px; }
+
+.yz-root .yz-mp-leave{
+  position:absolute; right:10px; top:20px; z-index:56;
+  background:rgba(0,0,0,.5); color:#fff; border:none; border-radius:10px; padding:6px 12px;
+  font:700 13px "Baloo 2",sans-serif; cursor:pointer;
+}

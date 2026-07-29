@@ -101,25 +101,113 @@ same spirit as any other in-repo dev-only hook.
 None yet. `MODE` is a hardcoded constant, not a saved preference; there is no settings screen. If
 one is added, use `gamehub.yahtzee.v1` per the standard convention (root CLAUDE.md item 4).
 
-## Multiplayer
+## Multiplayer (2026-07-28)
 
-**Not yet implemented.** Requested (Matt, 2026-07-28: "Yahtzee must be MP compatible as well")
-after the hub-wiring pass above shipped. This needs its own setup/lobby screen (this game
-currently has none at all — it drops straight into a solo-vs-AI game on mount) plus a lockstep
-design against `js/net.js`. The natural shape, closest to Pool's precedent (`js/CLAUDE.md`'s
-"seventh consumer" section): a roll's dice VALUES are random, so — like a Pool shot's physics
-parameters — the roller generates them locally and transmits the result as the move; the peer
-applies the identical values and verifies a state hash, rather than trying to synchronize the RNG
-itself. Category selection and hold-toggles are small, already-discrete moves that fit the
-standard lockstep vocabulary directly. Not started as of this note; see `js/CLAUDE.md`'s
-multiplayer-lockstep section before building it; add a `### The Nth consumer: Yahtzee` entry there
-once it ships, per the documentation convention every prior MP game followed.
+Shipped. Two human seats over the shared `js/net.js` room protocol (`gamehub.tictactoe.mp.v1`-
+style conventions, `js/CLAUDE.md`'s "third consumer" section), adapted to this game's roll/hold/
+commit turn shape. `js/net.js` itself is untouched. Deliberately **simpler** than the reference
+games in two stated ways:
+
+1. **No in-room rematch series** (Pool's precedent, `js/CLAUDE.md`'s "seventh consumer"): one game
+   per room. A rematch is a fresh room — `room.round.n` is always `1`.
+2. **No autosave/rejoin window.** `destroy()` while an MP room is live always calls
+   `net.leaveRoom()`, ending the room for both sides, rather than persisting a save to rejoin
+   later. This applies to ANY teardown, including the hub's own back-navigation — unlike Tic Tac
+   Toe/Chinchón/Escoba, which deliberately do NOT abandon a room on ordinary hub navigation (their
+   30-minute rejoin window depends on that). Simpler and more honest than a half-abandoned room
+   with no UI to rejoin it, but a real capability gap if that's ever wanted later.
+
+**Setup/lobby screen** (new — this game had none before): a `view: 'setup' | 'game'` module-level
+state machine. `init()` always opens on setup; `#screenHost`'s `innerHTML` swaps between the
+lobby markup and the existing full game `MARKUP` template (`mountSetupScreen()` /
+`mountGameScreen()`). A segmented Vs Computer / Host Online / Join Online control mirrors Tic Tac
+Toe's phase-1 shape; the room-code input auto-submits at 4 characters, same as every reference
+game. All setup/lobby/game input is one delegated click/input listener on the persistent `.yz-root`
+(`onRootClick`/`onRootInput`), not per-element listeners, so it survives the screen swap without
+re-wiring.
+
+**Seats and rendering perspective — the part that took real design work.** Every reference game's
+`_localSeat()` note assumes the engine's own state already has a "seat" concept to hang off. This
+game's engine didn't: `state.players[0]`/`[1]` were built (Phase 2, solo) as **viewer-relative**
+— `[0]` is always "the box column, me", `[1]` is always "the numeral column, them" — because that
+is exactly what the shared two-player scorecard's box-vs-numeral contract means (see "Game engine
+notes" above). For MP, both devices must hash-verify an IDENTICAL representation, which a
+viewer-relative one can never be (the host's `players[0]` and the guest's `players[0]` would be
+different people). The fix: `state.players[0]`/`[1]` became **ABSOLUTE** during MP — `[0]` is
+always the host's data, `[1]` always the guest's, exactly like `state.dice`/`state.current` — and
+`localSeat()`/`remoteSeat()` (`localSeat()` returns `state.mp.localSeat`, fixed at match start;
+`0` in solo, always) are the ONLY thing that changed: every render function that used to read
+`state.players[0]` for the box column and `state.players[1]` for the numeral column now reads
+`state.players[localSeat()]` and `state.players[remoteSeat()]` instead. Since `localSeat()` is
+always `0` outside MP, this is a no-op for solo — verified by re-running the full 42-assertion
+solo suite after the change with zero regressions, and independently by the real two-device MP
+test asserting each device's OWN screen renders itself in the box column and the OTHER player in
+the opponent-numeral column (the exact "shared card" contract, now proven under real MP, not just
+solo).
+
+**Move vocabulary** (`net.appendMove`'s `move` payload — three types, not the single generic
+"move" the board-game references use):
+- `{t:'roll', dice:[v0..v4]}` — like a Pool shot's physics parameters (`js/CLAUDE.md`'s "seventh
+  consumer"), a roll's dice VALUES are random, so the roller generates them locally with real
+  `Math.random()` and transmits the RESULT; the peer adopts the identical values (respecting its
+  own already-synced held flags) rather than trying to synchronize the RNG itself. The peer's
+  screen still plays the full CSS-cube tumble animation for a remote roll, same as a local one.
+- `{t:'hold', i}` — toggle hold on die `i`.
+- `{t:'commit', cat}` — the category being filled. **The resulting score is never transmitted.**
+  `previewScore()`/`applyCommit()` are pure functions of already-synced state (dice + both
+  players' scores), so both sides compute the identical result deterministically, including the
+  joker rule and bonus-Yahtzee logic — a remote-committed Yahtzee triggers the FULL celebration
+  set piece on both screens, not just the committer's.
+- Category selection (the ghost-preview highlight) is never synced — purely local UI state.
+
+**Async remote delivery needs the `redeliverRequested` latch** (`js/CLAUDE.md`'s Mancala/Filler
+generalization note): applying a remote `'roll'` move `await`s the full ~860ms tumble animation
+before the drain loop checks for the next entry, so `mpTryDeliverNextMove()`/`mpApplyNextEntry()`
+follow Mancala's pattern exactly — `mp.redeliverRequested` is set (not delivered immediately) if a
+room update arrives while `mp.delivering` is already true, and drained once the current entry
+finishes.
+
+**Recovery**: same shape as every reference game — on a hash mismatch the host takes the seq and
+publishes a full snapshot (`mpSnapshot()`/`applyMpSnapshot()`, absolute/seat-indexed, no
+device-relative field); the guest latches (`mp.awaitingRecovery`) until that snapshot lands, per
+`js/CLAUDE.md`'s explicit warning about what happens without the latch (every subsequent room
+update re-delivers the same diverged entry and burns the attempt budget before the host can
+answer). `MP_RECOVERY_MAX_ATTEMPTS = 3`, same as Tic Tac Toe.
+
+**`round.dealer`** carries the ABSOLUTE seat (0 or 1) that plays first — always `0` (the host)
+here, since there's no rematch series to alternate the opener across. A sixth reuse of that field,
+after Tic Tac Toe (who plays X), Dots and Boxes (who opens), Pool (who breaks), Boggle
+(round-start timestamp) and Filler (an rng seed via `round.deck` instead).
+
+**Status: verified against real Firebase, two real browser contexts** (not a `FakeRoom` mock —
+this game has no `test-mp-lockstep.mjs` entry yet, see Tests below). Confirmed: room
+create/join/start, real random dice rolls syncing byte-identical between devices, a hold+reroll
+staying in sync, category commits agreeing on score on both sides, turn passing correctly,
+`localSeat()`-relative rendering (the perspective-flip described above) holding on BOTH screens
+simultaneously, and the explicit Leave button ending the room and notifying the other side. Not
+yet verified: the hash-mismatch/recovery path itself (never forced to diverge in testing), and
+opponent-disconnect-via-heartbeat-staleness detection (no `MP_STALE_MS` UI was built — only an
+explicit Leave or an opponent's own `destroy()` ends a room here, there is no passive
+"opponent seems to have vanished" indicator).
+
+**Known gaps, stated honestly:**
+- No stats recording for MP results (or solo results — this game has no stats recorder integration
+  at all yet, see "Settings / persistence" above; MP doesn't change that scope).
+- No staleness/disconnect detection beyond the explicit Leave button and the other side's own
+  `status:'ended'` write.
+- No i18n — all lobby/setup strings are plain English literals, consistent with the base game
+  (also not yet on the shared `js/i18n.js` layer).
+- Add a `### The Nth consumer: Yahtzee` entry to `js/CLAUDE.md`'s multiplayer-lockstep section
+  (per the documentation convention every prior MP game followed) — not yet done as of this note.
 
 ## Tests
 
 No automated test files are checked into this repo for this game yet (the build-phase headless
 Playwright scripts — scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
-motion`, module lifecycle/leak checks — were run ad hoc from a scratch directory during
-development, not committed). If this game gains real regression coverage, follow the pattern of
-`test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. — a checked-in, `run-all-tests.mjs`-wired
-suite — rather than leaving verification to a session's own scratch scripts again.
+motion`, module lifecycle/leak checks, and the real two-device MP test described above — were run
+ad hoc from a scratch directory during development, not committed). If this game gains real
+regression coverage, follow the pattern of `test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. —
+a checked-in, `run-all-tests.mjs`-wired suite — rather than leaving verification to a session's own
+scratch scripts again. A `FakeRoom`-backed lockstep test (matching the seven reference games' own
+suite) would also let the recovery/divergence path finally be exercised, which the real-Firebase
+pass above could not force.

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v239';
+const CACHE = 'game-hub-v240';
 
 const ASSETS = [
   './',
@@ -177,6 +177,7 @@ const ASSETS = [
   './yahtzee/index.html',
   './yahtzee/css/yahtzee.css',
   './yahtzee/js/ui.js',
+  './yahtzee/js/hash.js',
   './pool/index.html',
   './pool/css/pool.css',
   './pool/js/ui.js',
