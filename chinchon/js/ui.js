@@ -1684,32 +1684,19 @@ class ChinchonUI {
   /** The one non-obvious mechanic: melding a HAND into runs/sets, not just
    *  matching pairs. A 7-card hand split into a highlighted run of 4
    *  (consecutive ranks, one suit) and a set of 3 (one rank, three suits) --
-   *  shape/outline carry the grouping, never color alone. Generic pip glyphs
-   *  (no real suit art needed here), so no suit vocabulary appears in the
-   *  diagram itself. */
+   *  shape/outline carry the grouping, never color alone. Real Anita deck
+   *  card faces (via cardFaceHTML, same renderer the live hand uses), not a
+   *  generic pip diagram -- matches what the player actually sees on the
+   *  table, and matches Escoba's how-to-play diagram (which has always used
+   *  real card faces). */
   _helpDiagram() {
-    const w = 40, h = 56, gap = 6;
-    const n = 7;
-    const totalW = n * w + (n - 1) * gap;
-    const x = (i) => i * (w + gap);
-    const runRanks = ['4', '5', '6', '7'];
-    const setRank = '9';
-    let cells = '';
-    for (let i = 0; i < 4; i++) {
-      cells += `<g transform="translate(${x(i)},0)">
-        <rect width="${w}" height="${h}" rx="6" class="cc-dg-card cc-dg-run"/>
-        <text x="${w / 2}" y="${h / 2 + 6}" class="cc-dg-pip">${runRanks[i]}</text>
-      </g>`;
-    }
-    for (let i = 0; i < 3; i++) {
-      cells += `<g transform="translate(${x(4 + i)},0)">
-        <rect width="${w}" height="${h}" rx="6" class="cc-dg-card cc-dg-set"/>
-        <text x="${w / 2}" y="${h / 2 + 6}" class="cc-dg-pip">${setRank}</text>
-      </g>`;
-    }
-    return `<svg class="cc-diagram" viewBox="0 0 ${totalW} ${h + 4}" role="img" aria-label="${t('help_diagram_aria')}">
-      ${cells}
-    </svg>`;
+    const run = [4, 5, 6, 7].map((rank) => ({ id: `help-run-${rank}`, suit: 'bastos', rank }));
+    const set = ['oros', 'copas', 'espadas'].map((suit) => ({ id: `help-set-${suit}`, suit, rank: 9 }));
+    const mini = (card, cls) => `<div class="cc-help-cardwrap ${cls}">${cardFaceHTML(card, { static: true, mini: true })}</div>`;
+    return `<div class="cc-help-demo" role="img" aria-label="${t('help_diagram_aria')}">
+      ${run.map((c) => mini(c, 'is-run')).join('')}
+      ${set.map((c) => mini(c, 'is-set')).join('')}
+    </div>`;
   }
 
   // --- in-game menu ---------------------------------------------------------
