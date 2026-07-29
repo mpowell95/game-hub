@@ -61,13 +61,17 @@ const GAME_MARKUP = `
 
     <div class="yz-pod yz-p1 yz-active" id="pod1">
       <div class="yz-avatar" id="p1avatar">&#128578;</div>
-      <div class="yz-pod-total" id="p1total">0</div>
-      <div class="yz-pod-name" id="p1name">You</div>
+      <div class="yz-pod-text">
+        <div class="yz-pod-total" id="p1total">0</div>
+        <div class="yz-pod-name" id="p1name">You</div>
+      </div>
     </div>
 
     <div class="yz-pod yz-p2 yz-idle" id="pod2">
-      <div class="yz-pod-total" id="p2total">0</div>
-      <div class="yz-pod-name" id="p2name">Computer</div>
+      <div class="yz-pod-text">
+        <div class="yz-pod-total" id="p2total">0</div>
+        <div class="yz-pod-name" id="p2name">Computer</div>
+      </div>
       <div class="yz-avatar" id="p2avatar">&#129302;</div>
     </div>
 
