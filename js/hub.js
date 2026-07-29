@@ -227,6 +227,7 @@ const GAMES = [
     module: '../pool/js/ui.js',
     accent: '#0b3d2e',
     art: GAME_ART["pool"],
+    devOnly: true,
   },
   {
     id: 'poolv2',
@@ -235,6 +236,7 @@ const GAMES = [
       es: 'Una reconstrucción de Pool desde cero: física real de la bola blanca, revancha, pellizco para acercar.' },
     module: '../poolv2/js/ui.js',
     accent: '#ffce3a',
+    devOnly: true,
     art: GAME_ART["poolv2"],
   },
 ];
