@@ -62,15 +62,37 @@ snake/index.html     standalone host (same init() as in-hub)
 
 ## Stats
 
-`recordSnake(length, difficulty)` in `js/game-stats.js` — solo pattern (no loss axis, mirrors
-Ball Run): every finished run counts played+won; `sn: { runs, bestLen, bestLenByDiff }` with
-Math.max-only bests (`bestLen` = final snake length, start 3 + food eaten). Recorded once per
-run in `_endRun()` BEFORE the modal shows, so a fast "play again" can't skip it. The three
+`recordSnake(length, difficulty, walls)` in `js/game-stats.js` — solo pattern (no loss axis,
+mirrors Ball Run): every finished run counts played+won; `sn: { runs, bestLen, bestLenByDiff }`
+with Math.max-only bests (`bestLen` = final snake length, start 3 + food eaten). Recorded once
+per run in `_endRun()` BEFORE the modal shows, so a fast "play again" can't skip it. The three
 mandatory sub-counter surfaces all exist (root checklist item 7): the `sn` branch in
 `js/players-agg.js` (regression case in players-agg.test.mjs), `snakeScreen` in
 `js/game-stats-ui.js`, and `snakeRows`/tile/headline in `js/leaderboard-ui.js`. Snake is in
 players-agg's `SOLO` set and joins `soloRating()`'s best-relative-to-field axis in
 `js/leaderboard-rank.js` (guarded — pre-Snake remote records have no `snake` key).
+
+**Walls-mode leaderboard split (2026-07-28).** Matt: Walls off (wrap) is strictly easier than
+Walls on (no wall death), so a combined leaderboard number buried every Walls on score under an
+easier ruleset's. `sn` gained three additive sibling fields alongside the originals — never
+replacing them, since `bestLen`/`bestLenByDiff`/`runs` stay the combined-across-modes totals
+every existing screen still reads: `bestLenByWalls: {on,off}`, `bestLenByDiffWalls: {on:{},
+off:{}}`, `runsByWalls: {on,off}`. `recordSnake` bumps both the legacy combined fields AND the
+matching walls-bucket every run. **One-time local seed** (`seedSnWallsLegacy` in
+`js/game-stats.js`, guarded by `g._snWallsSeeded`, runs from `loadStats()` next to the other
+one-time migrations): every run recorded before this shipped has no walls tag at all, and per
+Matt's explicit call that whole history is seeded into the `off` bucket (a policy decision, not
+a recovered fact — same footing as the Ana/Natalia date rule, `js/CLAUDE.md`). The `js/players-agg.js`
+snake branch aggregates the three new fields the same way as the originals (max for bests, sum
+for runs) with a guard for a remote record from a device that hasn't reloaded since this shipped
+(no walls fields at all — treated as contributing nothing to the split, not as a crash). Display:
+`game-stats-ui.js`'s `snakeScreen` renders two per-diff tables (Walls off, Walls on) instead of
+one; `leaderboard-ui.js`'s Snake game-detail page renders a two-number split card (`snCardHTML`,
+modeled on Tic Tac Toe's `ttCardHTML` ultimate/classic split) instead of one metric, respecting
+the difficulty pill (unlike TT's variants, Snake's bests ARE per-tier storage). The top-level "By
+Game" list still shows one combined leader (unaffected) — the split only shows once you drill
+into Snake's own page. This is still a rule VARIANT, not a difficulty tier: it does not fork
+`easy`/`medium`/`hard` stats ids, per the "Rules" section above.
 
 ## Settings & persistence
 

@@ -332,24 +332,35 @@ function boggleScreen(rec) {
 const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
 /** Snake: no wins/losses (a run ends in a crash), so the honest numbers are runs played and the
- *  longest snake reached, overall and per speed tier — Ball Run's screen shape. */
+ *  longest snake reached, overall and per speed tier — Ball Run's screen shape. The walls-mode
+ *  split (2026-07-28) adds a second per-diff table: Walls off is easier (no wall death), so a
+ *  combined table would let it bury every Walls on best under an easier ruleset's scores. Both
+ *  tables read the split fields ensureSn() guarantees exist (seeded once from the legacy combined
+ *  fields, which stay the overall numbers in the tallies row above — nothing here can regress
+ *  those). */
 function snakeScreen(rec) {
   const sn = (rec && rec.sn) || {};
   const runs = sn.runs | 0, best = sn.bestLen | 0;
   if (!runs) return emptyState('Snake');
-  const bd = sn.bestLenByDiff || {};
-  const rows = SN_DIFFS.map(([k, labelKey]) =>
-    `<tr><th scope="row">${t(labelKey)}</th><td>${bd[k] | 0}</td></tr>`).join('');
+  const bdw = sn.bestLenByDiffWalls || { on: {}, off: {} };
+  const wallsTable = (walls, labelKey) => {
+    const bd = bdw[walls] || {};
+    const rows = SN_DIFFS.map(([k, dLabelKey]) =>
+      `<tr><th scope="row">${t(dLabelKey)}</th><td>${bd[k] | 0}</td></tr>`).join('');
+    return `
+    <h4 class="gs-tbl-h">${t(labelKey)}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  };
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${runs}</b><span>${t('gs_runs')}</span></div>
       <div class="gs-tally"><b>${best}</b><span>${t('gs_sn_longest')}</span></div>
     </div>
-    <h4 class="gs-tbl-h">${t('gs_sn_longest_by_diff')}</h4>
-    <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    ${wallsTable('off', 'gs_sn_walls_off')}
+    ${wallsTable('on', 'gs_sn_walls_on')}`;
 }
 
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —

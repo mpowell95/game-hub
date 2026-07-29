@@ -165,11 +165,27 @@ export function aggregatePlayers(all) {
         // Same THE-LAW-rule-1 hazard as every sub-counter above (missed twice before this list
         // existed): without this branch Snake's runs and length bests blank out the moment a
         // second device syncs. Counters add; the length bests take the max, never a sum.
-        if (!dst.sn) dst.sn = { runs: 0, bestLen: 0, bestLenByDiff: {} };
+        if (!dst.sn) dst.sn = { runs: 0, bestLen: 0, bestLenByDiff: {}, bestLenByWalls: { on: 0, off: 0 }, bestLenByDiffWalls: { on: {}, off: {} }, runsByWalls: { on: 0, off: 0 } };
         dst.sn.runs += src.sn.runs | 0;
         dst.sn.bestLen = Math.max(dst.sn.bestLen | 0, src.sn.bestLen | 0);
         const sbd = src.sn.bestLenByDiff || {};
         for (const k of Object.keys(sbd)) dst.sn.bestLenByDiff[k] = Math.max(dst.sn.bestLenByDiff[k] | 0, sbd[k] | 0);
+        // Walls-mode split (2026-07-28). `src.sn.bestLenByWalls`/etc. may be absent on a remote
+        // record from a device that hasn't reloaded (and so re-seeded) since this shipped -- guard
+        // rather than assume, same as every other optional sub-field here.
+        if (!dst.sn.bestLenByWalls) dst.sn.bestLenByWalls = { on: 0, off: 0 };
+        if (!dst.sn.bestLenByDiffWalls) dst.sn.bestLenByDiffWalls = { on: {}, off: {} };
+        if (!dst.sn.runsByWalls) dst.sn.runsByWalls = { on: 0, off: 0 };
+        const sbw = src.sn.bestLenByWalls || {};
+        const sbdw = src.sn.bestLenByDiffWalls || {};
+        const srw = src.sn.runsByWalls || {};
+        for (const w of ['on', 'off']) {
+          dst.sn.bestLenByWalls[w] = Math.max(dst.sn.bestLenByWalls[w] | 0, sbw[w] | 0);
+          dst.sn.runsByWalls[w] += srw[w] | 0;
+          if (!dst.sn.bestLenByDiffWalls[w]) dst.sn.bestLenByDiffWalls[w] = {};
+          const swd = sbdw[w] || {};
+          for (const k of Object.keys(swd)) dst.sn.bestLenByDiffWalls[w][k] = Math.max(dst.sn.bestLenByDiffWalls[w][k] | 0, swd[k] | 0);
+        }
       } else if (g === 'boggle' && src.bg) {
         // Same THE-LAW-rule-1 hazard as tictactoe's tt above: `total` aggregates fine on its
         // own, but Boggle's Stats screen reads `bg` for ties, best score, words found and the

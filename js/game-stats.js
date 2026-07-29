@@ -125,6 +125,10 @@ export const BR_DIFFS = ['easy', 'medium', 'hard'];
 // Snake difficulties (easy|medium|hard — speed tiers; same axis shape as Ball Run, own constant
 // so the two games can diverge without a rename).
 export const SN_DIFFS = ['easy', 'medium', 'hard'];
+// Snake's rule-variant axis (walls kill vs wrap-around), split out for the leaderboard (2026-07-28)
+// — a rule variant, not a difficulty tier, so it stays a separate constant, never folded into
+// SN_DIFFS (see snake/CLAUDE.md: wrap games record under the same easy/medium/hard ids).
+export const SN_WALLS = ['on', 'off'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -316,13 +320,46 @@ function refoldBallRunLegacyRuns(st) {
 /** Snake: the solo-run counters, Ball Run's proven shape (a run has no opponent and no loss
  *  state — it ends in a crash — so `sn.runs` is the true play count and the length bests are
  *  the scoreboard, Math.max only, per THE LAW rule 2). `bestLen` is the snake's LENGTH (start 3
- *  + food eaten) — the iconic "how long did it get" number. */
+ *  + food eaten) — the iconic "how long did it get" number. `bestLen`/`bestLenByDiff`/`runs`
+ *  stay the combined-across-modes totals forever (rule 1: whatever already reads them keeps
+ *  working). `bestLenByWalls`/`bestLenByDiffWalls`/`runsByWalls` (2026-07-28, the walls-mode
+ *  leaderboard split) are the SAME numbers again, bucketed by `'on'|'off'` — additive fields
+ *  alongside the originals, never replacing them. */
 function ensureSn(g) {
   if (!g.sn || typeof g.sn !== 'object') g.sn = { runs: 0, bestLen: 0, bestLenByDiff: {} };
   if (!Number.isFinite(g.sn.runs)) g.sn.runs = 0;
   if (!Number.isFinite(g.sn.bestLen)) g.sn.bestLen = 0;
   if (!g.sn.bestLenByDiff || typeof g.sn.bestLenByDiff !== 'object') g.sn.bestLenByDiff = {};
   for (const d of SN_DIFFS) if (!Number.isFinite(g.sn.bestLenByDiff[d])) g.sn.bestLenByDiff[d] = 0;
+  if (!g.sn.bestLenByWalls || typeof g.sn.bestLenByWalls !== 'object') g.sn.bestLenByWalls = { on: 0, off: 0 };
+  for (const w of SN_WALLS) if (!Number.isFinite(g.sn.bestLenByWalls[w])) g.sn.bestLenByWalls[w] = 0;
+  if (!g.sn.bestLenByDiffWalls || typeof g.sn.bestLenByDiffWalls !== 'object') g.sn.bestLenByDiffWalls = { on: {}, off: {} };
+  for (const w of SN_WALLS) {
+    if (!g.sn.bestLenByDiffWalls[w] || typeof g.sn.bestLenByDiffWalls[w] !== 'object') g.sn.bestLenByDiffWalls[w] = {};
+    for (const d of SN_DIFFS) if (!Number.isFinite(g.sn.bestLenByDiffWalls[w][d])) g.sn.bestLenByDiffWalls[w][d] = 0;
+  }
+  if (!g.sn.runsByWalls || typeof g.sn.runsByWalls !== 'object') g.sn.runsByWalls = { on: 0, off: 0 };
+  for (const w of SN_WALLS) if (!Number.isFinite(g.sn.runsByWalls[w])) g.sn.runsByWalls[w] = 0;
+}
+
+/** One-time seed (2026-07-28, Snake walls-mode leaderboard split). Every run recorded before this
+ *  milestone carries no `walls` tag at all — Matt's explicit call is to treat that entire history
+ *  as Walls off (a policy decision, not a recovered fact, the same footing as the Ana/Natalia date
+ *  rule in js/CLAUDE.md), so it seeds the off-bucket from the legacy `bestLen`/`bestLenByDiff`/
+ *  `runs` ONCE. The legacy fields themselves are never touched by this (THE LAW rule 5) and keep
+ *  being updated by every future run regardless of mode, so anything still reading them (My Stats'
+ *  combined tallies, the leaderboard's "Longest snake" texture chip) stays correct. Guarded so it
+ *  can never re-run and clobber a real Walls-on score with a stale legacy value. */
+function seedSnWallsLegacy(g) {
+  if (g._snWallsSeeded) return false;
+  g._snWallsSeeded = true;
+  const sn = g.sn;
+  sn.bestLenByWalls.off = Math.max(sn.bestLenByWalls.off | 0, sn.bestLen | 0);
+  for (const d of SN_DIFFS) {
+    sn.bestLenByDiffWalls.off[d] = Math.max(sn.bestLenByDiffWalls.off[d] | 0, sn.bestLenByDiff[d] | 0);
+  }
+  sn.runsByWalls.off += sn.runs | 0;
+  return true;
 }
 
 /** Tic Tac Toe: the per-variant W/L/Tie counters. Draw-heavy by design (Pro
@@ -494,6 +531,7 @@ export function loadStats() {
   changed = (store.forked ? latchChinchonSeed(st) : seedChinchonExtras(st)) || changed;
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   changed = refoldBallRunLegacyRuns(st) || changed;
+  changed = seedSnWallsLegacy(st.games.snake) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   if (changed) persist(st);
@@ -686,19 +724,26 @@ export function recordBoggle(difficulty, won, extras) {
 }
 
 /** Snake: record one finished run. `length` is the snake's final length (start 3 + food eaten);
- *  `difficulty` is easy|medium|hard (speed tiers). A run has no opponent and no loss state, so it
- *  counts as played+won and `lost` is never touched (mirrors Ball Run / Nuts & Bolts). Additive;
- *  the length bests only ever go up. */
-export function recordSnake(length, difficulty) {
+ *  `difficulty` is easy|medium|hard (speed tiers); `walls` is 'on'|'off' (defaults to 'on', the
+ *  game's own classic default — an unrecognized value also reads as 'on', same tolerance as the
+ *  setup screen's own save-shape read in snake/js/ui.js). A run has no opponent and no loss state,
+ *  so it counts as played+won and `lost` is never touched (mirrors Ball Run / Nuts & Bolts).
+ *  Additive; the length bests only ever go up, in BOTH the combined legacy fields (still updated
+ *  every run, per THE LAW rule 1) and their walls-mode-split counterparts. */
+export function recordSnake(length, difficulty, walls) {
   const st = loadStats();
   const g = st.games.snake;
   ensureSn(g);
   const d = SN_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const w = SN_WALLS.indexOf(walls) >= 0 ? walls : 'on';
   const len = Number.isFinite(length) ? Math.max(0, Math.floor(length)) : 0;
   if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
   g.sn.runs += 1;
   g.sn.bestLen = Math.max(g.sn.bestLen | 0, len);
   if (d) g.sn.bestLenByDiff[d] = Math.max(g.sn.bestLenByDiff[d] | 0, len);
+  g.sn.runsByWalls[w] += 1;
+  g.sn.bestLenByWalls[w] = Math.max(g.sn.bestLenByWalls[w] | 0, len);
+  if (d) g.sn.bestLenByDiffWalls[w][d] = Math.max(g.sn.bestLenByDiffWalls[w][d] | 0, len);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

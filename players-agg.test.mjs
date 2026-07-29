@@ -195,6 +195,38 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('snake: totals still aggregate alongside', grp.games.snake.total.played, 6);
 }
 
+// ---- Snake's walls-mode split (2026-07-28 leaderboard split) survives the combine, and a
+// pre-split device (no bestLenByWalls/bestLenByDiffWalls/runsByWalls at all) doesn't blow up ----
+{
+  const all = {
+    d1: rec({ playerId: 'SN222', name: 'Wriggler' }, {
+      snake: {
+        total: { played: 3, won: 3, lost: 0 },
+        byDiff: { medium: { played: 3, won: 3, lost: 0 } },
+        sn: {
+          runs: 3, bestLen: 30, bestLenByDiff: { easy: 0, medium: 30, hard: 0 },
+          bestLenByWalls: { on: 12, off: 30 },
+          bestLenByDiffWalls: { on: { easy: 0, medium: 12, hard: 0 }, off: { easy: 0, medium: 30, hard: 0 } },
+          runsByWalls: { on: 1, off: 2 },
+        },
+      },
+    }, 100),
+    d2: rec({ playerId: 'sn222', name: 'Wriggler' }, {
+      snake: {
+        total: { played: 1, won: 1, lost: 0 },
+        byDiff: { medium: { played: 1, won: 1, lost: 0 } },
+        sn: { runs: 1, bestLen: 18, bestLenByDiff: { easy: 0, medium: 18, hard: 0 } },   // pre-split device
+      },
+    }, 200),
+  };
+  const grp = aggregatePlayers(all)[0];
+  const sn = grp.games.snake.sn;
+  eq('snake walls: on/off bests take the max, not the sum', [sn.bestLenByWalls.on, sn.bestLenByWalls.off], [12, 30]);
+  eq('snake walls: per-diff on/off bests take the max per tier', sn.bestLenByDiffWalls.off.medium, 30);
+  eq('snake walls: runsByWalls sums (pre-split device contributes 0)', [sn.runsByWalls.on, sn.runsByWalls.off], [1, 2]);
+  eq('snake walls: combined bestLen still aggregates regardless of the split', sn.bestLen, 30);
+}
+
 // ---- aggregateForViewer: fresh device with my code shows my other devices' history ----
 {
   const all = { other: rec({ playerId: 'ME777', name: 'Me' }, { business: comp(9, 6, 3) }, 100) };

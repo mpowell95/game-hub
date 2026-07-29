@@ -141,6 +141,25 @@ function snBestAt(g, tier) {
   const key = SN_TIER_KEYS[tier - 1];
   return key ? (sn.bestLenByDiff || {})[key] | 0 : 0;
 }
+// Walls-mode split (2026-07-28): Walls off is strictly easier (no wall death), so a combined
+// number buries every Walls on score under an easier ruleset's — this reads the per-mode field
+// `js/game-stats.js`/`js/players-agg.js` both keep in step with the combined `sn.bestLen*` above.
+// Falls back to the combined legacy field ONLY for 'off' (Matt's explicit call: every pre-split
+// score is Walls off, same as the one-time local seed in game-stats.js) so a remote record that
+// hasn't re-synced since this shipped still shows correctly instead of reading as a zero.
+function snBestAtWalls(g, tier, walls) {
+  const sn = (g.games.snake || {}).sn;
+  if (!sn) return 0;
+  const bw = sn.bestLenByWalls, bdw = sn.bestLenByDiffWalls;
+  if (tier == null) {
+    if (bw) return bw[walls] | 0;
+    return walls === 'off' ? sn.bestLen | 0 : 0;
+  }
+  const key = SN_TIER_KEYS[tier - 1];
+  if (!key) return 0;
+  if (bdw && bdw[walls]) return bdw[walls][key] | 0;
+  return walls === 'off' ? (sn.bestLenByDiff || {})[key] | 0 : 0;
+}
 /** The number a game's leaderboard is ranked by, at `tier`. Nuts & Bolts needs no special case:
  *  every solve increments both `played` and `won` by exactly 1 (recordNutsBolts), so winsAtTier
  *  already equals "levels solved at this tier". */
@@ -369,6 +388,27 @@ function ttCardHTML(g, i) {
   </button>`;
 }
 
+// Snake's walls-mode split (2026-07-28) — TicTacToe's ultimate/classic split above is the
+// template: two numbers per card instead of one, no toggle. Unlike TT's variants, Snake's bests
+// ARE per-tier storage, so this one respects the difficulty pill (`_diff`), unlike ttCardHTML.
+function snCardHTML(g, i) {
+  const me = g.key === _meKey ? ' is-me' : '';
+  const off = snBestAtWalls(g, _diff, 'off');
+  const on = snBestAtWalls(g, _diff, 'on');
+  return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
+    <div class="lb-pcard-row">
+      <span class="lb-medal${medalClass(i)}">${i + 1}</span>
+      ${avatarHTML(g)}
+      <span class="lb-pname">${rankName(g)}</span>
+      <span class="lb-pchev" aria-hidden="true">&rsaquo;</span>
+    </div>
+    <div class="lb-tt-split">
+      <span class="lb-tt-val"><b>${off}</b><span>${esc(t('lb_sn_walls_off'))}</span></span>
+      <span class="lb-tt-val"><b>${on}</b><span>${esc(t('lb_sn_walls_on'))}</span></span>
+    </div>
+  </button>`;
+}
+
 function gameDetail(list, id) {
   const art = GAME_ART[hubIdOf(id)] || '';
   const head = `<div class="lb-detail-top">
@@ -402,6 +442,7 @@ function gameDetail(list, id) {
   const cardsHtml = rows.length
     ? `<div class="lb-plist">${rows.map((g, i) => {
         if (id === 'tictactoe') return ttCardHTML(g, i);
+        if (id === 'snake') return snCardHTML(g, i);
         const metric = gameMetricAt(g, id, _diff);
         const games = playsAtTier(g, [id], _diff);
         const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
