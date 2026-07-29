@@ -43,6 +43,26 @@ const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'g
 // simply never rendered. Matched by deviceId prefix.
 const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test1", preview bot
 
+// --- sort preference (2026-07-29, HANDOFF-LB-FILTER-SORT.md) ----------------------------------
+// gamehub.lb.sort.v1 - follows js/favorites.js as the model (try/catch read, defensive
+// normalize, best-effort write, never throws). A PREFERENCE, not history: THE LAW rule 2's
+// carve-out applies, same class as favorites/theme/language. Unlike the difficulty filter
+// (_diff, resets to All every open), the sort choice PERSISTS across opens (Matt, D6).
+const SORT_KEY = 'gamehub.lb.sort.v1';
+const VALID_SORTS = new Set(['alpha', 'played', 'wins']);
+function loadSort() {
+  try {
+    const raw = localStorage.getItem(SORT_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && VALID_SORTS.has(v.sort) ? v.sort : 'played';   // 'played' is the default (D5)
+  } catch { return 'played'; }
+}
+function saveSort(sort) {
+  try {
+    localStorage.setItem(SORT_KEY, JSON.stringify({ version: 1, sort, updatedAt: Date.now() }));
+  } catch { /* best-effort; never throw into the caller */ }
+}
+
 // Every game, ALPHABETICAL BY TITLE - the hub launcher's convention (CLAUDE.md, "Adding a game",
 // item 5). Fixed order: a tile never moves between visits, unlike the old plays-sorted tab strip.
 // `id` is the STATS id (game-stats.js's GAMES); js/game-art.js is keyed by the HUB registry id, so
@@ -126,8 +146,24 @@ function playsAtTier(group, gameIds, tier) {
 }
 /** Solo plays (Ball Run/Snake runs, Nuts & Bolts solves) at `tier`. Every solo record bumps
  *  `total.played` exactly once per run/solve, so plays IS the run count — no need to read the
- *  br/sn/nb sub-counters, and this stays tier-filterable like everything else on this screen. */
+ *  br/sn/nb sub-counters, and this stays tier-filterable like everything else on this screen.
+ *  Kept in place though its only caller (metaLine) lost its call sites 2026-07-29 (HANDOFF-LB-
+ *  FILTER-SORT.md §0/§3.6) — the documented solo-plays helper, so the next session doesn't have
+ *  to re-derive it. */
 function runsAtTier(group, tier) { return playsAtTier(group, SOLO_IDS, tier); }
+/** Total plays across EVERY game, competitive + solo runs (Matt, 2026-07-29): the leaderboard
+ *  card's "played" number. Deliberately ALL_IDS, not COMP_IDS — see HANDOFF-LB-FILTER-SORT.md §0
+ *  for why folding runs in here is the rule-1-safe choice. */
+function playedOf(g, tier) { return playsAtTier(g, ALL_IDS, tier); }
+/** Cross-game wins: competitive games only, UNCHANGED from before this redesign. A solo run is
+ *  not a win (HANDOFF-LB-SOLO-RUNS.md, still in force). Do not "make them consistent" by moving
+ *  wins onto ALL_IDS — that would re-fold solo runs into the wins number, exactly the bug that
+ *  handoff fixed. The asymmetry is deliberate. */
+function winsOf(g, tier) { return winsAtTier(g, COMP_IDS, tier); }
+/** The unit word for a `{n} ...` count string (e.g. 'lb_played_count' -> 'played'), reused for
+ *  the card's big-number stacked unit so it never needs its own translation key — deriving it
+ *  from the same string that already renders the small subline keeps the two in lockstep. */
+function unitWord(countKey) { return t(countKey, { n: '' }).trim(); }
 /** Sorted tiers (1-4) this player/field has ANY play in, across `gameIds`. */
 function tiersPresent(group, gameIds) {
   const mix = tierMix(group, gameIds);
@@ -198,16 +234,75 @@ const DIFF_PILLS = [
   { tier: 4, labelKey: 'gs_diff_expert' },
 ];
 
-/** The filter row, single-select, shared between By Player and By Game (and carried into a game
- *  page). `showExpert` hides the Expert pill where tier-4 data cannot exist (a specific game with
- *  no tier-4 bucket in the field); By Player/By Game always show it (cross-game context). */
-function pillsHTML(showExpert) {
+// --- control row: filter + sort dropdowns (2026-07-29, HANDOFF-LB-FILTER-SORT.md) -------------
+// Replaces the old 5-pill difficulty row (`pillsHTML`). Two triggers, each opening a dropdown
+// menu anchored under itself (Matt's explicit choice, D4) - not a bottom sheet, not a native
+// <select>. `_menu` (null|'diff'|'sort') tracks which one is open; rerender() closes/opens them
+// by re-emitting this markup, same as every other piece of state in this file.
+const SORT_ITEMS_DEFAULT = [
+  { sort: 'alpha', labelKey: 'lb_sort_alpha' },
+  { sort: 'played', labelKey: 'lb_sort_played' },
+  { sort: 'wins', labelKey: 'lb_sort_wins' },
+];
+// A game board's third sort option is labeled by ITS OWN metric (Wins/Obstacles/Longest/Solved),
+// keyed off the same unitKeyOf() map/game-stats-ui.js already uses for the metric's own unit.
+const UNIT_TO_SORT_LABEL = {
+  lb_unit_wins: 'lb_sort_wins',
+  lb_unit_obstacles: 'lb_sort_obstacles',
+  lb_unit_longest: 'lb_sort_longest',
+  lb_unit_solved: 'lb_sort_solved',
+};
+function sortItemsFor(id) {
+  const labelKey = UNIT_TO_SORT_LABEL[unitKeyOf(id)] || 'lb_sort_wins';
+  return [
+    { sort: 'alpha', labelKey: 'lb_sort_alpha' },
+    { sort: 'played', labelKey: 'lb_sort_played' },
+    { sort: 'wins', labelKey },
+  ];
+}
+
+/** The filter dropdown's menu panel. `showExpert` hides the Expert item where tier-4 data cannot
+ *  exist (a specific game with no tier-4 bucket in the field); By Player/By Game always show it
+ *  (cross-game context). Colorblind rule preserved: each item still carries its tier SHAPE
+ *  (`diffShapeSVG`), never hue alone; the selected item is marked by `aria-checked` plus a
+ *  trailing checkmark (CSS `.lb-mitem.is-sel::after`), also never by hue alone. */
+function diffMenuHTML(showExpert) {
   const items = showExpert ? DIFF_PILLS : DIFF_PILLS.filter((p) => p.tier !== 4);
-  return `<div class="lb-pills" role="group" aria-label="${t('lb_diff_filter_aria')}">${items.map((p) => {
-    const active = _diff === p.tier;
+  return `<div class="lb-menu" role="menu" aria-label="${t('lb_diff_filter_aria')}">${items.map((p) => {
+    const sel = _diff === p.tier;
     const color = p.tier ? TIER_COLOR[p.tier] : '#1c2430';
-    return `<button type="button" class="lb-pill${active ? ' is-active' : ''}" data-tier="${p.tier == null ? '' : p.tier}" style="--lb-pill-color:${color}" aria-pressed="${active}">${p.tier ? diffShapeSVG(p.tier) : ''}<span>${esc(t(p.labelKey))}</span></button>`;
+    return `<button type="button" role="menuitemradio" aria-checked="${sel}" class="lb-mitem${sel ? ' is-sel' : ''}" data-tier="${p.tier == null ? '' : p.tier}" style="--lb-pill-color:${color}">${p.tier ? diffShapeSVG(p.tier) : ''}<span>${esc(t(p.labelKey))}</span></button>`;
   }).join('')}</div>`;
+}
+
+/** The sort dropdown's menu panel. `items` is `SORT_ITEMS_DEFAULT` (By Player) or `sortItemsFor(id)`
+ *  (a game board, D8's third option labeled by that game's own metric). */
+function sortMenuHTML(items) {
+  return `<div class="lb-menu" role="menu" aria-label="${t('lb_sort_aria')}">${items.map((it) => {
+    const sel = _sort === it.sort;
+    return `<button type="button" role="menuitemradio" aria-checked="${sel}" class="lb-mitem${sel ? ' is-sel' : ''}" data-sort="${it.sort}"><span>${esc(t(it.labelKey))}</span></button>`;
+  }).join('')}</div>`;
+}
+
+/** The control row: filter always renders, sort renders only when `sortOptions` is given
+ *  (D3: By Game's top-level tab has no sort control - alphabetical by title, as today). */
+function controlsHTML({ showExpert = true, sortOptions = null } = {}) {
+  const diffItem = DIFF_PILLS.find((p) => p.tier === _diff) || DIFF_PILLS[0];
+  const diffOpen = _menu === 'diff';
+  const filterSide = `<div class="lb-ctrl" data-ctrl="diff">
+    <span class="lb-ctrl-lbl">${t('lb_filter_label')}</span>
+    <button type="button" class="lb-ctrl-btn" data-menu="diff" aria-haspopup="menu" aria-expanded="${diffOpen}">${esc(t(diffItem.labelKey))}</button>
+    ${diffOpen ? diffMenuHTML(showExpert) : ''}
+  </div>`;
+  if (!sortOptions) return `<div class="lb-ctrls">${filterSide}</div>`;
+  const activeItem = sortOptions.find((it) => it.sort === _sort) || sortOptions[0];
+  const sortOpen = _menu === 'sort';
+  const sortSide = `<div class="lb-ctrl lb-ctrl-sort" data-ctrl="sort">
+    <span class="lb-ctrl-lbl">${t('lb_sort_label')}</span>
+    <button type="button" class="lb-ctrl-btn" data-menu="sort" aria-haspopup="menu" aria-expanded="${sortOpen}">${esc(t(activeItem.labelKey))}</button>
+    ${sortOpen ? sortMenuHTML(sortOptions) : ''}
+  </div>`;
+  return `<div class="lb-ctrls">${filterSide}${sortSide}</div>`;
 }
 
 /** Mini tile row: one tile per tier in `tiers`, showing `valueFn(tier)`'s win/metric count.
@@ -228,10 +323,10 @@ function miniTilesHTML(tiers, valueFn) {
 // --- By Player ---------------------------------------------------------------
 function medalClass(i) { return i === 0 ? ' is-gold' : i === 1 ? ' is-silver' : i === 2 ? ' is-bronze' : ''; }
 
-/** The card's sub-line. `games` is COMPETITIVE plays and `runs` is solo plays; together they are
- *  exactly the all-games play count this line used to show, so nothing became invisible (THE LAW
- *  rule 1) — it is now split so a run is never read as a game won. A zero part is dropped rather
- *  than rendered as "0". */
+/** The card's OLD sub-line ("N games · N runs"). Unused since 2026-07-29 (Matt: "Remove the N
+ *  games N runs line... just don't show it on this screen") — left in place, along with its two
+ *  string keys, per HANDOFF-LB-FILTER-SORT.md §0/§3.6: nothing deleted, just not rendered, and
+ *  the helper is here if it's ever wanted back. */
 function metaLine(games, runs) {
   const parts = [];
   if (games > 0 || !runs) parts.push(t('lb_games_count', { n: games }));
@@ -239,42 +334,67 @@ function metaLine(games, runs) {
   return parts.join(' &middot; ');
 }
 
-/** `unitKey` lets a game page label the number by its own metric (obstacles/longest/solved) -
- *  By Player always passes the default (cross-game wins). Every card is now a button opening
- *  the player detail screen (HANDOFF-FB-LEADERBOARD.md item 1). `runs` (solo plays) is optional -
- *  the game-detail call site passes none, keeping that per-game screen's meta line unchanged. */
-function playerCardHTML(g, i, wins, games, tilesHtml, unitKey, runs) {
+/** Two-row card (2026-07-29 redesign). `big` is `{val, unit}` for the large row-1 number (the
+ *  metric currently sorted by); `subText` is the small, muted, right-aligned row-2 number (the
+ *  OTHER metric, already formatted, e.g. "105 wins"/"246 played"); `tilesHtml` is the tier-tile
+ *  row (unchanged, wins-per-tier always - see gameDetail/playerListHTML, it never follows the
+ *  sort). Every card is a button opening the player detail screen. */
+function playerCardHTML(g, i, big, subText, tilesHtml) {
   const me = g.key === _meKey ? ' is-me' : '';
+  const footer = (tilesHtml || subText)
+    ? `<div class="lb-pfoot">${tilesHtml || ''}${subText ? `<span class="lb-psub">${esc(subText)}</span>` : ''}</div>`
+    : '';
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       <span class="lb-medal${medalClass(i)}">${i + 1}</span>
       ${avatarHTML(g)}
       <span class="lb-pname">${rankName(g)}</span>
-      <span class="lb-pnum"><b>${wins}</b><span>${esc(t(unitKey || 'lb_wins_unit'))}</span></span>
+      <span class="lb-pnum"><b>${big.val}</b><span>${esc(big.unit)}</span></span>
       <span class="lb-pchev" aria-hidden="true">&rsaquo;</span>
     </div>
-    <div class="lb-pmeta">${metaLine(games, runs)}</div>
-    ${tilesHtml}
+    ${footer}
   </button>`;
 }
 
+/** By Player sort (D5/D6): 'alpha' | 'played' | 'wins', persisted in `_sort`. Row filter is
+ *  UNCHANGED (playedOf(g,_diff) > 0, exactly `playsAtTier(g, ALL_IDS, _diff) > 0` — a solo-only
+ *  player stays listed). */
 function playerListHTML(list) {
-  const rows = list.filter((g) => playsAtTier(g, ALL_IDS, _diff) > 0);   // UNCHANGED: a solo-only player stays listed
+  const rows = list.filter((g) => playedOf(g, _diff) > 0);
   if (!rows.length) return emptyState(t('lb_empty_all'));
-  rows.sort((a, b) => {
-    const w = winsAtTier(b, COMP_IDS, _diff) - winsAtTier(a, COMP_IDS, _diff);
-    if (w) return w;
-    const gg = playsAtTier(a, COMP_IDS, _diff) - playsAtTier(b, COMP_IDS, _diff);   // fewer games wins ties
-    if (gg) return gg;
-    return (b.updatedAt || 0) - (a.updatedAt || 0);
-  });
+  if (_sort === 'alpha') {
+    rows.sort((a, b) => {
+      const n = (a.name || '').localeCompare(b.name || '');
+      if (n) return n;
+      const w = winsOf(b, _diff) - winsOf(a, _diff);
+      if (w) return w;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  } else if (_sort === 'played') {
+    rows.sort((a, b) => {
+      const p = playedOf(b, _diff) - playedOf(a, _diff);
+      if (p) return p;
+      const w = winsOf(b, _diff) - winsOf(a, _diff);
+      if (w) return w;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  } else {   // 'wins'
+    rows.sort((a, b) => {
+      const w = winsOf(b, _diff) - winsOf(a, _diff);
+      if (w) return w;
+      const p = playedOf(a, _diff) - playedOf(b, _diff);   // fewer plays wins ties (today's tie-break, preserved)
+      if (p) return p;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  }
   return `<div class="lb-plist">${rows.map((g, i) => {
-    const wins = winsAtTier(g, COMP_IDS, _diff);
-    const games = playsAtTier(g, COMP_IDS, _diff);
-    const runs = runsAtTier(g, _diff);
+    const wins = winsOf(g, _diff);
+    const played = playedOf(g, _diff);
     const tiers = tiersPresent(g, COMP_IDS);
-    const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, COMP_IDS, tier));
-    return playerCardHTML(g, i, wins, games, tiles, null, runs);
+    const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, COMP_IDS, tier));   // wins per tier, ALWAYS - never follows the sort (§1b)
+    const big = _sort === 'played' ? { val: played, unit: unitWord('lb_played_count') } : { val: wins, unit: t('lb_wins_unit') };
+    const subText = _sort === 'played' ? t('lb_wins_count', { n: wins }) : t('lb_played_count', { n: played });
+    return playerCardHTML(g, i, big, subText, tiles);
   }).join('')}</div>`;
 }
 
@@ -395,6 +515,10 @@ function textureHTML(list, id) {
 // but never change these two numbers. `tt` stores `tied` explicitly, so this needs no derivation.
 function ttVariantWins(v) { return Math.max(0, Math.min((v && v.won) | 0, (v && v.played) | 0)); }
 
+// Two side-by-side numbers, no single headline value — left STRUCTURALLY ALONE by the 2026-07-29
+// filter/sort redesign (HANDOFF-LB-FILTER-SORT.md §3.5): no big/small swap, no secondary number.
+// They still sit under the new control row, and Alphabetical/Games Played still reorder them
+// (see sortRows below) — only the "wins" sort (this game's own metric) keeps its bespoke order.
 function ttCardHTML(g, i) {
   const me = g.key === _meKey ? ' is-me' : '';
   const tt = (g.games.tictactoe && g.games.tictactoe.tt) || null;
@@ -423,6 +547,7 @@ function ttCardHTML(g, i) {
 // Snake's walls-mode split (2026-07-28) — TicTacToe's ultimate/classic split above is the
 // template: two numbers per card instead of one, no toggle. Unlike TT's variants, Snake's bests
 // ARE per-tier storage, so this one respects the difficulty pill (`_diff`), unlike ttCardHTML.
+// Same "leave structurally alone" note as ttCardHTML above applies here (§3.5).
 function snCardHTML(g, i) {
   const me = g.key === _meKey ? ' is-me' : '';
   const off = snBestAtWalls(g, _diff, 'off');
@@ -441,17 +566,31 @@ function snCardHTML(g, i) {
   </button>`;
 }
 
-function gameDetail(list, id) {
-  const art = GAME_ART[hubIdOf(id)] || '';
-  const head = `<div class="lb-detail-top">
-    <button type="button" class="lb-back" data-role="lb-back">${t('lb_back_games')}</button>
-    <span class="lb-detail-art">${art}</span>
-    <h3 class="lb-detail-h">${esc(labelOf(id))}</h3>
-  </div>`;
-  const fieldTiers = fieldTiersPresent(list, [id]);
-  const showExpert = fieldTiers.includes(4);
-  const pills = pillsHTML(showExpert);
-  const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0);
+/** D8's three orders for a game board. 'alpha'/'played' are generic (name/plays, then this
+ *  game's own metric as a tie-break, then recency) and apply to EVERY game including Tic Tac Toe
+ *  and Snake. 'wins' (= "this game's own metric") is left EXACTLY as it was before this redesign -
+ *  Tic Tac Toe's ultimate -> classic -> recency order, every other game's metric -> plays -> recency. */
+function sortRows(rows, id, sort) {
+  if (sort === 'alpha') {
+    rows.sort((a, b) => {
+      const n = (a.name || '').localeCompare(b.name || '');
+      if (n) return n;
+      const m = gameMetricAt(b, id, _diff) - gameMetricAt(a, id, _diff);
+      if (m) return m;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+    return;
+  }
+  if (sort === 'played') {
+    rows.sort((a, b) => {
+      const p = playsAtTier(b, [id], _diff) - playsAtTier(a, [id], _diff);
+      if (p) return p;
+      const m = gameMetricAt(b, id, _diff) - gameMetricAt(a, id, _diff);
+      if (m) return m;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+    return;
+  }
   if (id === 'tictactoe') {
     rows.sort((a, b) => {
       const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
@@ -471,17 +610,34 @@ function gameDetail(list, id) {
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
   }
+}
+
+function gameDetail(list, id) {
+  const art = GAME_ART[hubIdOf(id)] || '';
+  const head = `<div class="lb-detail-top">
+    <button type="button" class="lb-back" data-role="lb-back">${t('lb_back_games')}</button>
+    <span class="lb-detail-art">${art}</span>
+    <h3 class="lb-detail-h">${esc(labelOf(id))}</h3>
+  </div>`;
+  const fieldTiers = fieldTiersPresent(list, [id]);
+  const showExpert = fieldTiers.includes(4);
+  const controls = controlsHTML({ showExpert, sortOptions: sortItemsFor(id) });
+  const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0);
+  sortRows(rows, id, _sort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist">${rows.map((g, i) => {
         if (id === 'tictactoe') return ttCardHTML(g, i);
         if (id === 'snake') return snCardHTML(g, i);
         const metric = gameMetricAt(g, id, _diff);
-        const games = playsAtTier(g, [id], _diff);
+        const played = playsAtTier(g, [id], _diff);
         const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
-        return playerCardHTML(g, i, metric, games, tiles, unitKeyOf(id));
+        const metricUnit = t(unitKeyOf(id));
+        const big = _sort === 'played' ? { val: played, unit: unitWord('lb_played_count') } : { val: metric, unit: metricUnit };
+        const subText = _sort === 'played' ? `${metric} ${metricUnit}` : t('lb_played_count', { n: played });
+        return playerCardHTML(g, i, big, subText, tiles);
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
-  return head + pills + cardsHtml + textureHTML(list, id);
+  return head + controls + cardsHtml + textureHTML(list, id);
 }
 
 // --- player detail (drill-in from either card list) --------------------------
@@ -507,9 +663,11 @@ function playerDetail(list, key) {
       <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
     </div>` + screenFor(_playerGame, { games: g.games });
   }
-  const wins = winsAtTier(g, COMP_IDS, null);
-  const games = playsAtTier(g, COMP_IDS, null);
-  const runs = runsAtTier(g, null);
+  // No sort control on this screen, so the header always leads with wins (D1's default) - the
+  // meta line becomes a single "N played" (playedOf, all games incl. runs), replacing the old
+  // "N games · N runs" metaLine() (see that function's own comment for why it's kept, unused).
+  const wins = winsOf(g, null);
+  const played = playedOf(g, null);
   const tiers = tiersPresent(g, COMP_IDS);
   const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, COMP_IDS, tier));
   const head = `<div class="lb-detail-top">
@@ -519,7 +677,7 @@ function playerDetail(list, key) {
     ${avatarHTML(g)}
     <span class="lb-pdetail-id">
       <span class="lb-pdetail-name">${rankName(g)}</span>
-      <span class="lb-pdetail-meta">${metaLine(games, runs)}</span>
+      <span class="lb-pdetail-meta">${t('lb_played_count', { n: played })}</span>
     </span>
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
@@ -562,7 +720,9 @@ function currentBody() {
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
   if (_game) return gameDetail(list, _game);
-  return pillsHTML(true) + (_seg === 'games' ? gameListHTML(list) : playerListHTML(list));
+  // D3: Sort renders on By Player, not on By Game (that tab stays alphabetical by title, as today).
+  const controls = _seg === 'games' ? controlsHTML({ showExpert: true }) : controlsHTML({ showExpert: true, sortOptions: SORT_ITEMS_DEFAULT });
+  return controls + (_seg === 'games' ? gameListHTML(list) : playerListHTML(list));
 }
 
 let _host = null;
@@ -571,6 +731,8 @@ let _game = null;           // non-null => showing that game's detail board
 let _player = null;         // non-null (a group key) => showing that player's detail screen
 let _playerGame = null;     // non-null => drilled into that game from WITHIN player detail
 let _diff = null;           // null (All) | 1-4, shared between By Player/By Game and a game page
+let _sort = 'played';       // 'alpha' | 'played' | 'wins' (or a game's own metric on a game board) - persisted, see loadSort/saveSort
+let _menu = null;           // null | 'diff' | 'sort' - which control-row dropdown is open
 let _all = {};
 let _meKey = '';
 let _unsub = null;
@@ -606,6 +768,7 @@ function renderOffline() {
 
 function onKey(e) {
   if (e.key !== 'Escape') return;
+  if (_menu) { _menu = null; rerender(); return; }   // Esc closes an open dropdown FIRST, ahead of everything else
   if (_playerGame) { _playerGame = null; rerender(); return; }   // Esc backs out of a player's game first
   if (_player) { _player = null; rerender(); return; }   // then out of a player before a game
   if (_game) { _game = null; rerender(); return; }   // Esc backs out of a game before closing
@@ -613,17 +776,29 @@ function onKey(e) {
 }
 
 function onClick(e) {
+  // Outside click closes an open dropdown. Checked BEFORE every other handler (including the
+  // scrim's own [data-role="lb-close"], which would otherwise close the whole overlay) so a tap
+  // meant only to dismiss the menu can't also open a player detail or close the panel.
+  if (_menu && !e.target.closest('.lb-menu, [data-menu]')) { _menu = null; rerender(); return; }
+  const menuBtn = e.target.closest('[data-menu]');
+  if (menuBtn) { _menu = _menu === menuBtn.dataset.menu ? null : menuBtn.dataset.menu; rerender(); return; }
+  const mitem = e.target.closest('.lb-mitem');
+  if (mitem) {
+    if (mitem.dataset.tier !== undefined) {
+      const raw = mitem.dataset.tier;
+      _diff = raw === '' ? null : Number(raw);
+    } else if (mitem.dataset.sort) {
+      _sort = mitem.dataset.sort;
+      saveSort(_sort);
+    }
+    _menu = null;
+    rerender();
+    return;
+  }
   if (e.target.closest('[data-role="lb-close"]')) { closeLeaderboard(); return; }
   if (e.target.closest('[data-role="lb-pgame-back"]')) { _playerGame = null; rerender(); return; }
   if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
   if (e.target.closest('[data-role="lb-back"]')) { _game = null; rerender(); return; }
-  const pill = e.target.closest('.lb-pill');
-  if (pill) {
-    const raw = pill.dataset.tier;
-    _diff = raw === '' ? null : Number(raw);
-    rerender();
-    return;
-  }
   const seg = e.target.closest('.lb-seg');
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
@@ -655,7 +830,9 @@ export async function openLeaderboard() {
   _game = null;
   _player = null;
   _playerGame = null;
-  _diff = null;   // resets to All every time the overlay opens (not persisted)
+  _diff = null;   // resets to All every time the overlay opens (not persisted, D7)
+  _sort = loadSort();   // persisted across opens (D6)
+  _menu = null;
   _all = {};
   _connected = false;
   _meKey = '';   // resolved in currentBody() once records load (identity needs the whole graph)
@@ -708,20 +885,29 @@ function ensureCss() {
     '.lb-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
     '.lb-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
     // Control band: shared 36px height, 999px-radius pills, 12px text.
-    '.lb-segs{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-controls,36px);padding:0 16px;background:var(--hub-bg,#f4f6fb)}',
+    // padding-top (not touching --gh-band-controls, shared with the hub top bar/My Stats) trims
+    // the gap under .lb-top's border to ~8px (Matt's spacing note 1, 2026-07-29).
+    '.lb-segs{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-controls,36px);padding:8px 16px 0;background:var(--hub-bg,#f4f6fb)}',
     '.lb-seg{flex:1 1 0;appearance:none;cursor:pointer;padding:8px 12px;font-size:12px;font-weight:700;color:var(--hub-muted,#5b6b82);background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:999px}',
     '.lb-seg.is-active{color:#fff;font-weight:800;background:var(--hub-ink,#16243a);border-color:var(--hub-ink,#16243a)}',
-    // Filter band: shared 34px height, the difficulty pills.
-    '.lb-pills{display:flex;align-items:center;gap:6px;min-height:var(--gh-band-filter,34px);padding:0 2px;overflow-x:auto;-webkit-overflow-scrolling:touch}',
-    '.lb-pill{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;appearance:none;cursor:pointer;border:1.5px solid var(--lb-pill-color,#1c2430);color:var(--lb-pill-color,#1c2430);background:#fff;border-radius:999px;padding:5px 11px;font-size:.76rem;font-weight:800}',
-    '.lb-pill.is-active{background:var(--lb-pill-color,#1c2430);color:#fff}',
+    // Control row (2026-07-29): filter + sort dropdown triggers, replacing the old pill row.
+    // Shared 34px height, same band as the old pills.
+    '.lb-ctrls{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:var(--gh-band-filter,34px)}',
+    '.lb-ctrl{position:relative;display:flex;align-items:center;gap:6px;min-width:0}',
+    '.lb-ctrl-lbl{font-size:.72rem;font-weight:700;color:var(--hub-muted,#5b6b82)}',
+    '.lb-ctrl-btn{appearance:none;cursor:pointer;border-radius:999px;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);color:var(--hub-ink,#16243a);padding:5px 11px;font-size:.76rem;font-weight:800}',
+    // Sort menu anchors right (under its trigger, right-aligned row); filter menu anchors left.
+    '.lb-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:3;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;box-shadow:0 8px 24px rgba(20,40,80,.16);padding:4px;min-width:150px}',
+    '.lb-ctrl-sort .lb-menu{left:auto;right:0}',
+    '.lb-mitem{display:flex;align-items:center;gap:7px;width:100%;text-align:left;appearance:none;cursor:pointer;background:none;border:0;padding:8px 10px;border-radius:8px;font-size:.82rem;font-weight:700;color:var(--hub-ink,#16243a)}',
+    '.lb-mitem.is-sel{background:var(--hub-surface-2,#eef2f8)}',
+    // The checkmark is CSS-only (never hue alone) so a selected diff item's shape/color stays
+    // exactly as diffShapeSVG rendered it - the ✓ is the selection signal, not a recolor.
+    '.lb-mitem.is-sel::after{content:"\\2713";margin-left:auto;font-weight:900}',
     // No base `fill` declared here (2026-07-24): diffShapeSVG's svg now carries its own inline
-    // fill (the TIER_COLOR per tier); circle/rect inherit it since neither has a fill of its
-    // own. A CSS rule that targets the svg itself (not just an inherited value) still wins over
-    // that presentation attribute, which is exactly what the active-pill invert below needs.
+    // fill (the TIER_COLOR per tier); circle/rect inherit it since neither has a fill of its own.
     '.lb-dshape{width:11px;height:11px;display:block}',
     '.lb-dshape-x2{width:19px;height:11px}',
-    '.lb-pill.is-active .lb-dshape{fill:#fff}',
     '.lb-body{padding:10px 16px 8px}',
     '.lb-h3{margin:18px 0 8px;font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
     // Player/game-detail card list.
@@ -754,12 +940,16 @@ function ensureCss() {
     '.lb-medal.is-bronze{background:#e0b490;color:#5c3a1e}',
     '.lb-av{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--hub-surface-2,#eef2f8);font-size:.9rem;line-height:1}',
     '.lb-av.is-initial{font-size:.7rem;font-weight:900;color:var(--hub-muted,#5b6b82)}',
-    '.lb-pname{flex:1 1 auto;min-width:0;font-size:.92rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-pname{flex:1 1 auto;min-width:0;font-size:1.15rem;font-weight:800;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pnum{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}',
-    '.lb-pnum b{font-size:1.3rem;font-weight:700;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.lb-pnum b{font-size:1.45rem;font-weight:700;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
     '.lb-pnum span{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
     '.lb-pmeta{margin:4px 0 0 34px;font-size:.72rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
-    '.lb-tiles{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0 34px}',
+    // Row 2: tier tiles (left) + the other number, small and muted (right) - one line, wrapper
+    // owns the indent/margin the tiles used to carry on their own.
+    '.lb-pfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 0 34px}',
+    '.lb-psub{flex:0 0 auto;font-size:.74rem;font-weight:700;color:var(--hub-muted,#5b6b82);font-variant-numeric:tabular-nums}',
+    '.lb-tiles{display:flex;flex-wrap:wrap;gap:5px;margin:0}',
     '.lb-tile2{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:8px;background:var(--hub-surface-2,#eef2f8);border:1.5px solid transparent;font-size:.72rem;font-weight:800;color:var(--hub-muted,#5b6b82)}',
     '.lb-tile2 .lb-dshape{fill:var(--lb-pill-color,#5b6b82)}',
     '.lb-tile2.is-sel{border-color:var(--lb-pill-color,#1c2430);color:var(--hub-ink,#16243a);background:#fff}',
