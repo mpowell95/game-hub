@@ -21,7 +21,9 @@
 // physics locally and must reach the same settled table. The shooter applies its
 // own shot immediately (no round-trip wait to see your own shot), then transmits
 // it with the resulting state hash; the peer applies the same params on delivery
-// and verifies the hash, exactly like the reference games.
+// and verifies the hash, exactly like the reference games. One room hosts a
+// REMATCH SERIES (round.n / round.dealer alternated by the host via
+// mp.nextDealer), same vocabulary as Tic Tac Toe/Mancala/Filler/Dots and Boxes.
 import { R, TABLE, strikeCueBall, tick, isMoving, pocketCenters } from './physics.js';
 import { ballById } from './table.js';
 import * as rules from './rules.js';
@@ -40,10 +42,10 @@ const SAVE_KEY = 'gamehub.poolv2.save.v1';
 const MP_SAVE_KEY = 'gamehub.poolv2.mp.v1';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // Pinch-zoom/pan tiebreak (BUILD-SPEC.md §4 rule 6): two fingers meant "fine aim"
-// ONLY once aiming has already committed with one finger down. To tell "about to
-// pinch" from "about to aim" on the very first touch, aim commit is held for this
-// short window; a second finger landing before it elapses reads as a pinch instead.
-// A single finger that MOVES before the window elapses commits aim immediately
+// once aiming had already committed with one finger down. To tell "about to pinch"
+// from "about to aim" on the very first touch, aim commit is held for this short
+// window; a second finger landing before it elapses reads as a pinch instead. A
+// single finger that MOVES before the window elapses commits aim immediately
 // (below this threshold), so ordinary single-finger aiming never feels delayed.
 const PINCH_WINDOW_MS = 90;
 const PENDING_MOVE_COMMIT_PX = 6;
@@ -97,16 +99,16 @@ class PoolUI {
     this._camPan = { x: 0, y: 0 };
     this._placingCue = false;
     this._foulMsg = null;
-    this._boundResize = () => this._resizeCanvas();
-    this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._aiRng = null;
     this._aiSeed = null;
+    this._boundResize = () => this._resizeCanvas();
+    this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._setupWorker();
     this._tryAutoResume();
     this.render();
     // Live language re-render (root CLAUDE.md item 9's minimum bar is render-time-only;
     // this is the optional live re-label, BUILD-SPEC §6 #13). Re-running the current
-    // view's render is safe mid-game because _startLoop() now cancels any prior RAF loop
+    // view's render is safe mid-game because _startLoop() cancels any prior RAF loop
     // and every other piece of live state (game/mp/sim*) lives on `this`, not a closure.
     this._offLang = onLangChange(() => { if (!this._dead) this.render(); });
   }
@@ -124,76 +126,6 @@ class PoolUI {
     this.game = save.game;
     this.view = 'game';
     if (this.mode === 'ai') this._ensureAiRng(save.aiSeed);
-  }
-
-  // ---- AI RNG (BUILD-SPEC.md §6 #8: seed the RNG so AI games are reproducible) ---
-  /** (Re)seed this game's AI generator. `seed` restores a specific seed (resume);
-   *  omitted, a fresh one is drawn. One generator lives for the whole game so its
-   *  sequence of draws (one _nextAiSubSeed() per AI turn) is itself reproducible
-   *  given the top-level seed, worker or not. */
-  _ensureAiRng(seed) {
-    this._aiSeed = (seed != null ? seed : ((Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0)) >>> 0;
-    this._aiRng = mulberry32(this._aiSeed);
-  }
-
-  /** One sub-seed per AI turn, drawn from this game's own seeded generator so the
-   *  worker (which gets a fresh mulberry32(seed) per request, not the live
-   *  generator object — Workers can't receive closures) reproduces the exact same
-   *  draw a main-thread call would have made at that point in the game. */
-  _nextAiSubSeed() {
-    if (!this._aiRng) this._ensureAiRng();
-    return Math.floor(this._aiRng() * 0xffffffff) >>> 0;
-  }
-
-  // ---- AI worker (BUILD-SPEC.md §6 #8: move the search off the main thread) ------
-  _setupWorker() {
-    try {
-      this._worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-      this._workerCallbacks = new Map();
-      this._workerReqId = 0;
-      this._worker.onmessage = (e) => {
-        const cb = this._workerCallbacks.get(e.data.id);
-        if (!cb) return; // stale/unknown
-        this._workerCallbacks.delete(e.data.id);
-        if (e.data.error) cb.reject(new Error(e.data.error));
-        else cb.resolve(e.data);
-      };
-      this._worker.onerror = () => {
-        for (const cb of this._workerCallbacks.values()) cb.reject(new Error('worker error'));
-        this._workerCallbacks.clear();
-        this._disableWorker();
-      };
-    } catch {
-      this._worker = null; // workers unavailable -> main-thread fallback
-    }
-  }
-
-  _disableWorker() {
-    if (this._worker) { this._worker.terminate(); this._worker = null; }
-  }
-
-  _postToWorker(params) {
-    return new Promise((resolve, reject) => {
-      this._workerCallbacks.set(params.id, { resolve, reject });
-      this._worker.postMessage(params);
-    });
-  }
-
-  /** Run ai.js's chooseShot off the main thread when a worker is available, same
-   *  fallback discipline as connect-four/js/ui.js's requestAIMove: try the worker,
-   *  disable it and fall through to an inline call on any failure. The seed always
-   *  comes from THIS game's seeded generator (_nextAiSubSeed), so the AI's
-   *  decisions stay reproducible/replayable given the game's aiSeed whether or not
-   *  the worker path is actually taken. */
-  async _chooseShotOffThread(state, seat, difficulty) {
-    const seed = this._nextAiSubSeed();
-    if (this._worker) {
-      try {
-        const res = await this._postToWorker({ id: ++this._workerReqId, state, seat, difficulty, seed });
-        return res.shot;
-      } catch { this._disableWorker(); }
-    }
-    return chooseShot(state, seat, difficulty, mulberry32(seed));
   }
 
   // ---- seat model -------------------------------------------------------
@@ -216,6 +148,7 @@ class PoolUI {
     if (this._offLang) { this._offLang(); this._offLang = null; }
     window.removeEventListener('resize', this._boundResize);
     document.removeEventListener('visibilitychange', this._boundVis);
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
     net.disconnect();
     this._disableWorker();
@@ -345,8 +278,87 @@ class PoolUI {
     writeJSON(SAVE_KEY, { mode: this.mode, difficulty: this.settings.difficulty, game: this.game, aiSeed: this._aiSeed });
   }
 
+  // ---- AI RNG (BUILD-SPEC.md §6 #8: seed the RNG so AI games are reproducible) ---
+  /** (Re)seed this game's AI generator. `seed` restores a specific seed (resume);
+   *  omitted, a fresh one is drawn. One generator lives for the whole game so its
+   *  sequence of draws (one _nextAiSubSeed() per AI turn) is itself reproducible
+   *  given the top-level seed, worker or not. */
+  _ensureAiRng(seed) {
+    this._aiSeed = (seed != null ? seed : ((Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0)) >>> 0;
+    this._aiRng = mulberry32(this._aiSeed);
+  }
+
+  /** One sub-seed per AI turn, drawn from this game's own seeded generator so the
+   *  worker (which gets a fresh mulberry32(seed) per request, not the live
+   *  generator object — Workers can't receive closures) reproduces the exact same
+   *  draw a main-thread call would have made at that point in the game. */
+  _nextAiSubSeed() {
+    if (!this._aiRng) this._ensureAiRng();
+    return Math.floor(this._aiRng() * 0xffffffff) >>> 0;
+  }
+
+  // ---- AI worker (BUILD-SPEC.md §6 #8: move the search off the main thread) ------
+  _setupWorker() {
+    try {
+      this._worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+      this._workerCallbacks = new Map();
+      this._workerReqId = 0;
+      this._worker.onmessage = (e) => {
+        const cb = this._workerCallbacks.get(e.data.id);
+        if (!cb) return; // stale/unknown
+        this._workerCallbacks.delete(e.data.id);
+        if (e.data.error) cb.reject(new Error(e.data.error));
+        else cb.resolve(e.data);
+      };
+      this._worker.onerror = () => {
+        for (const cb of this._workerCallbacks.values()) cb.reject(new Error('worker error'));
+        this._workerCallbacks.clear();
+        this._disableWorker();
+      };
+    } catch {
+      this._worker = null; // workers unavailable -> main-thread fallback
+    }
+  }
+
+  _disableWorker() {
+    if (this._worker) { this._worker.terminate(); this._worker = null; }
+  }
+
+  _postToWorker(params) {
+    return new Promise((resolve, reject) => {
+      this._workerCallbacks.set(params.id, { resolve, reject });
+      this._worker.postMessage(params);
+    });
+  }
+
+  /** Run ai.js's chooseShot off the main thread when a worker is available, same
+   *  fallback discipline as connect-four/js/ui.js's requestAIMove: try the worker,
+   *  disable it and fall through to an inline call on any failure. The seed always
+   *  comes from THIS game's seeded generator (_nextAiSubSeed), so the AI's
+   *  decisions stay reproducible/replayable given the game's aiSeed whether or not
+   *  the worker path is actually taken. */
+  async _chooseShotOffThread(state, seat, difficulty) {
+    const seed = this._nextAiSubSeed();
+    if (this._worker) {
+      try {
+        const res = await this._postToWorker({ id: ++this._workerReqId, state, seat, difficulty, seed });
+        return res.shot;
+      } catch { this._disableWorker(); }
+    }
+    return chooseShot(state, seat, difficulty, mulberry32(seed));
+  }
+
   // ---- canvas + camera ------------------------------------------------
   _renderGame() {
+    // Transient input state from a previous game (or a quit mid-aim) must never
+    // carry into a new one — otherwise a stale dashed aim line/cue stick shows
+    // before the player has touched anything on the fresh table.
+    this._aiming = false;
+    this._pulling = false;
+    this._power = 0;
+    this._placingCue = false;
+    this._quitArmed = false;
+    this._foulMsg = null;
     this.el.innerHTML = `
       <div class="p2-game">
         <div class="p2-hud">
@@ -356,6 +368,7 @@ class PoolUI {
           <div class="p2-hud-right">
             ${this.mode === 'practice' ? `<button type="button" class="p2-icon-btn" data-role="rerack" title="${t('new_game')}">↺</button>` : ''}
             <button type="button" class="p2-icon-btn" data-role="camera" title="${t('camera')}">🎥</button>
+            <span class="p2-quit-confirm" data-role="quit-confirm" hidden>${t('quit_confirm')}</span>
             <button type="button" class="p2-icon-btn" data-role="quit" title="${t('quit')}">✕</button>
           </div>
         </div>
@@ -396,6 +409,14 @@ class PoolUI {
     this._bindTablePointer();
     window.addEventListener('resize', this._boundResize);
     document.addEventListener('visibilitychange', this._boundVis);
+    // ResizeObserver, not just the window 'resize' event: a flex-layout settle,
+    // a font swap, or an orientation change all resize .p2-table-wrap without
+    // ever firing 'resize' on window, and the FIRST layout pass after mount is
+    // exactly one of those (see _resizeCanvas's zero-size guard/retry below).
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => this._resizeCanvas());
+      this._resizeObserver.observe(this.tableWrap);
+    }
     this._resizeCanvas();
     this._paintHud();
     this._drawSpin();
@@ -410,8 +431,17 @@ class PoolUI {
   }
 
   _resizeCanvas() {
-    if (!this.canvas) return;
+    if (!this.canvas || this._dead) return;
     const rect = this.tableWrap.getBoundingClientRect();
+    // The very first layout pass after mount can report a 0 (or near-0) box
+    // before the flex chain has settled — computing _scale from that produces
+    // garbage (this was the actual cause of the table rendering as a squeezed
+    // strip / the rack rendering as an unscaled blob). Never commit a bogus
+    // scale; retry next frame instead until a real size shows up.
+    if (rect.width < 20 || rect.height < 20) {
+      requestAnimationFrame(() => this._resizeCanvas());
+      return;
+    }
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
@@ -439,7 +469,7 @@ class PoolUI {
   // ---- main loop --------------------------------------------------------
   _startLoop() {
     // A re-render mid-game (e.g. the language toggle re-mounting _renderGame, see
-    // onLangChange below) must not leave the PREVIOUS loop running against a canvas
+    // onLangChange above) must not leave the PREVIOUS loop running against a canvas
     // that's no longer in the DOM — cancel it before arming a new one.
     if (this._raf) cancelAnimationFrame(this._raf);
     const loop = (now) => {
@@ -506,12 +536,17 @@ class PoolUI {
     ctx.strokeStyle = '#3a2418';
     ctx.lineWidth = 14;
     ctx.strokeRect(tl.cx, tl.cy, br.cx - tl.cx, br.cy - tl.cy);
-    ctx.fillStyle = '#111';
     const z = this._camZoom || 1;
     for (const p of pocketCenters()) {
       const c = this._toCanvas(p.x, p.y);
+      const pr = this._scale * z * R * 1.9;
+      const grad = ctx.createRadialGradient(c.cx, c.cy, pr * 0.15, c.cx, c.cy, pr);
+      grad.addColorStop(0, '#000');
+      grad.addColorStop(0.7, '#0a0a0a');
+      grad.addColorStop(1, '#2a2a2a');
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(c.cx, c.cy, this._scale * z * R * 1.9, 0, Math.PI * 2);
+      ctx.arc(c.cx, c.cy, pr, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -559,6 +594,24 @@ class PoolUI {
         ctx.fillStyle = BALL_COLOR[b.number];
         ctx.fillRect(c.cx - rad, c.cy - rad * 0.55, rad * 2, rad * 1.1);
       }
+      // A soft highlight so balls read as spheres, not flat colored discs.
+      const hg = ctx.createRadialGradient(
+        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 0.05,
+        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 1.3,
+      );
+      hg.addColorStop(0, 'rgba(255,255,255,0.55)');
+      hg.addColorStop(0.35, 'rgba(255,255,255,0.12)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
+      const sg = ctx.createRadialGradient(
+        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 0.1,
+        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 1.2,
+      );
+      sg.addColorStop(0, 'rgba(0,0,0,0.22)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
       ctx.restore();
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, rad, 0, Math.PI * 2);
@@ -583,30 +636,35 @@ class PoolUI {
     const cue = ballById(this.game.balls, 'cue');
     if (!cue || cue.pocketed) return;
     const c = this._toCanvas(cue.x, cue.y);
+    const z = this._camZoom || 1;
+    const dirx = Math.cos(this._aimAngle), diry = Math.sin(this._aimAngle);
+    // Forward dashed guideline (the direction the cue ball will travel).
     const len = Math.max(this._cw, this._ch);
-    const ex = c.cx + Math.cos(this._aimAngle) * len;
-    const ey = c.cy + Math.sin(this._aimAngle) * len;
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
     ctx.setLineDash([6, 8]);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(c.cx, c.cy);
-    ctx.lineTo(ex, ey);
+    ctx.moveTo(c.cx + dirx * (this._scale * z * R + 4), c.cy + diry * (this._scale * z * R + 4));
+    ctx.lineTo(c.cx + dirx * len, c.cy + diry * len);
     ctx.stroke();
     ctx.restore();
-    if (this._pulling) {
-      const z = this._camZoom || 1;
-      const pull = this._power / 4.2 * this._scale * z * 0.35;
-      ctx.save();
-      ctx.strokeStyle = '#ffce3a';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(c.cx - Math.cos(this._aimAngle) * (this._scale * z * R + 6), c.cy - Math.sin(this._aimAngle) * (this._scale * z * R + 6));
-      ctx.lineTo(c.cx - Math.cos(this._aimAngle) * (this._scale * z * R + 6 + pull), c.cy - Math.sin(this._aimAngle) * (this._scale * z * R + 6 + pull));
-      ctx.stroke();
-      ctx.restore();
-    }
+    // The cue stick itself, receding from the ball as power charges — the real
+    // "you are now charging a shot" visual the dashed line alone can't give.
+    const ballR = this._scale * z * R;
+    const pullPx = Math.min(1, this._power / 4.2) * this._scale * z * 0.55;
+    const tipGap = ballR + 5 + pullPx;
+    const stickLen = this._scale * z * 0.7;
+    const butt = tipGap + stickLen;
+    ctx.save();
+    ctx.strokeStyle = this._pulling ? '#e8d3a0' : 'rgba(232,211,160,0.55)';
+    ctx.lineWidth = Math.max(2.5, this._scale * z * 0.018);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(c.cx - dirx * tipGap, c.cy - diry * tipGap);
+    ctx.lineTo(c.cx - dirx * butt, c.cy - diry * butt);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawSpin() {
@@ -652,26 +710,30 @@ class PoolUI {
     }
     const slot = this.el.querySelector('[data-role="foul-slot"]');
     if (slot) {
-      if (this._foulMsg) {
-        slot.innerHTML = `<button type="button" class="p2-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`;
-        slot.querySelector('[data-role="foul-explain"]').addEventListener('click', () => this._openFoulDialog());
-      } else {
-        slot.innerHTML = '';
-      }
+      slot.innerHTML = this._foulMsg
+        ? `<button type="button" class="p2-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`
+        : '';
+      const btn = slot.querySelector('[data-role="foul-explain"]');
+      if (btn) btn.addEventListener('click', () => this._showFoulToast());
     }
   }
 
-  _openFoulDialog() {
-    const dlg = document.createElement('div');
-    dlg.className = 'p2-dialog-overlay';
-    dlg.innerHTML = `
-      <div class="p2-dialog">
-        <button type="button" class="p2-x" data-role="close" aria-label="${t('cancel')}">✕</button>
-        <p>${this._foulMsg || ''}</p>
-      </div>`;
-    dlg.querySelector('[data-role="close"]').addEventListener('click', () => dlg.remove());
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.remove(); });
-    this.el.appendChild(dlg);
+  /** A native alert() blocks the whole page's main thread/input pipeline until
+   *  dismissed — a real correctness bug (it can make drags elsewhere look
+   *  "stuck"), not just a UX wart. This is a plain, non-blocking DOM popover
+   *  instead, matching the build guide's "tapping the icon can explain it,
+   *  nothing else appears" (a native dialog is itself an extra surface). */
+  _showFoulToast() {
+    if (!this._foulMsg) return;
+    const slot = this.el.querySelector('[data-role="foul-slot"]');
+    if (!slot) return;
+    let toast = slot.querySelector('.p2-foul-toast');
+    if (toast) { toast.remove(); return; } // tap again to dismiss
+    toast = document.createElement('div');
+    toast.className = 'p2-foul-toast';
+    toast.textContent = this._foulMsg;
+    slot.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3200);
   }
 
   // ---- pointer input: aim / power / spin / elevation ----------------------
@@ -691,51 +753,79 @@ class PoolUI {
       this._offset = { a, b };
       this._drawSpin();
     };
-    c.addEventListener('pointerdown', (e) => { dragging = true; c.setPointerCapture(e.pointerId); setFromEvent(e); });
+    c.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      setFromEvent(e); // apply the visual update first: capture is a nice-to-have, never a prerequisite
+      try { c.setPointerCapture(e.pointerId); } catch { /* invalid/synthetic pointer id: drag still works via move/up */ }
+    });
     c.addEventListener('pointermove', (e) => { if (dragging) setFromEvent(e); });
     c.addEventListener('pointerup', () => { dragging = false; });
     c.addEventListener('dblclick', () => { this._offset = { a: 0, b: 0 }; this._drawSpin(); });
   }
 
+  // ONE continuous drag, no lift-then-repress in the middle. Earlier draft
+  // required a release to "arm" a second power-pull press, but a real
+  // touchscreen mints a brand-new pointerId on every fresh contact, so the
+  // code was never able to recognize that second press as the same shot: aim
+  // locked, the power meter never moved, and no shot ever fired. This is the
+  // standard mobile-pool-app pattern instead: while ONE finger is down, its
+  // live distance from the cue ball IS the power (further away = harder,
+  // "stretch and release"), and its live angle relative to the cue ball IS
+  // the aim, both continuously — release above a small threshold shoots,
+  // anything smaller (or no real drag at all) is just a tap and cancels
+  // cleanly on its own, no separate cancel gesture needed. A second finger
+  // held down damps the aim-angle update rate for fine adjustment (build
+  // guide's "a second finger held down makes the drag much finer") — UNLESS
+  // that second finger arrives before the FIRST one has committed to aiming,
+  // in which case it's read as a pinch-zoom/pan gesture instead (BUILD-SPEC.md
+  // §4 rule 6, §6 #10): see the PINCH_WINDOW_MS doc comment above.
   _bindTablePointer() {
     const c = this.canvas;
     let primaryId = null;
     let fineMode = false;
-    let lastAngle = 0;
-    let pullStart = null;
     // Pending-aim state: the brief window after the FIRST finger touches down,
     // during which a second finger still reads as "meant to pinch" rather than
-    // "meant to fine-aim" (see PINCH_WINDOW_MS's doc comment). primaryId stays
-    // null the whole time we're pending -- that's what lets a second finger
-    // arriving here fall straight into the pinch branch below.
-    let pendingId = null, pendingTimer = null, pendingW = null, pendingCX = 0, pendingCY = 0;
+    // "meant to fine-aim". primaryId stays null the whole time we're pending —
+    // that's what lets a second finger arriving here fall into the pinch branch.
+    let pendingId = null, pendingTimer = null, pendingCX = 0, pendingCY = 0;
     // Pinch/pan state, live only while exactly the two pointers below are down.
     let pinch = null; // { id1, id2, startDist, startMidCX, startMidCY, startZoom, startPanX, startPanY }
 
-    const angleTo = (wx, wy, cue) => Math.atan2(cue.y - wy, cue.x - wx);
-    const clientToWorld = (e) => {
-      const rect = c.getBoundingClientRect();
-      return this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
-    };
-
-    const commitAim = (pointerId, w) => {
+    const angleAndDistFromCue = (px, py) => {
       const cue = ballById(this.game.balls, 'cue');
-      primaryId = pointerId;
-      this._aimAngle = angleTo(w.x, w.y, cue);
-      lastAngle = this._aimAngle;
-      this._aiming = true;
-      this._pulling = false;
-      this._power = 0;
-      pullStart = null;
-      this._drawFrame();
-    };
-    const clearPending = () => {
-      if (pendingTimer) clearTimeout(pendingTimer);
-      pendingTimer = null; pendingId = null; pendingW = null;
+      const cc = this._toCanvas(cue.x, cue.y);
+      const dx = px - cc.cx, dy = py - cc.cy;
+      return { angle: Math.atan2(-dy, -dx), dist: Math.hypot(dx, dy) };
     };
 
-    const dist = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
-    const mid = (p1, p2) => ({ x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 });
+    const updateAimPower = (px, py) => {
+      const { angle, dist } = angleAndDistFromCue(px, py);
+      if (fineMode) {
+        let delta = angle - this._aimAngle;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        while (delta < -Math.PI) delta += Math.PI * 2;
+        this._aimAngle += delta * 0.22;
+      } else {
+        this._aimAngle = angle;
+      }
+      const z = this._camZoom || 1;
+      const DEADZONE_PX = this._scale * z * R * 1.4;
+      const worldPull = Math.max(0, dist - DEADZONE_PX) / (this._scale * z);
+      this._power = Math.max(0, Math.min(4.2, worldPull * 2.6));
+      this._pulling = this._power > 0.05;
+    };
+
+    const commitAim = (pointerId, px, py) => {
+      primaryId = pointerId;
+      this._aiming = true;
+      this._power = 0;
+      this._pulling = false;
+      updateAimPower(px, py);
+    };
+    const clearPending = () => { if (pendingTimer) clearTimeout(pendingTimer); pendingTimer = null; pendingId = null; };
+
+    const dist2 = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+    const mid2 = (p1, p2) => ({ x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 });
     const clampPan = () => {
       const z = this._camZoom;
       const maxX = Math.max(0, (TABLE.w / 2) * (1 - 1 / z) + TABLE.w * 0.15);
@@ -748,10 +838,10 @@ class PoolUI {
       if (pts.length < 2) return;
       const [p1, p2] = pts;
       const rect = c.getBoundingClientRect();
-      const m = mid(p1, p2);
+      const m = mid2(p1, p2);
       pinch = {
         id1: p1.pointerId, id2: p2.pointerId,
-        startDist: dist(p1, p2) || 1,
+        startDist: dist2(p1, p2) || 1,
         startMidCX: m.x - rect.left, startMidCY: m.y - rect.top,
         startZoom: this._camZoom, startPanX: this._camPan.x, startPanY: this._camPan.y,
       };
@@ -760,8 +850,8 @@ class PoolUI {
       const p1 = this._pointers.get(pinch.id1), p2 = this._pointers.get(pinch.id2);
       if (!p1 || !p2) return;
       const rect = c.getBoundingClientRect();
-      const zoom = Math.max(CAM_ZOOM_MIN, Math.min(CAM_ZOOM_MAX, pinch.startZoom * ((dist(p1, p2) || 1) / pinch.startDist)));
-      const m = mid(p1, p2);
+      const zoom = Math.max(CAM_ZOOM_MIN, Math.min(CAM_ZOOM_MAX, pinch.startZoom * ((dist2(p1, p2) || 1) / pinch.startDist)));
+      const m = mid2(p1, p2);
       // Pan by the midpoint's screen delta, converted to world units at the
       // CURRENT zoom so panning tracks the fingers 1:1 regardless of zoom level.
       const dCX = (m.x - rect.left) - pinch.startMidCX, dCY = (m.y - rect.top) - pinch.startMidCY;
@@ -774,6 +864,7 @@ class PoolUI {
     c.addEventListener('pointerdown', (e) => {
       if (!this.game || this.game.over) return;
       this._pointers.set(e.pointerId, e);
+      const rect = c.getBoundingClientRect();
       if (this._placingCue) {
         if (primaryId === null) primaryId = e.pointerId;
         return;
@@ -789,12 +880,12 @@ class PoolUI {
       if (!this._canShootNow()) return;
       if (primaryId === null) {
         pendingId = e.pointerId;
-        pendingW = clientToWorld(e);
         pendingCX = e.clientX; pendingCY = e.clientY;
+        const px = e.clientX - rect.left, py = e.clientY - rect.top;
         pendingTimer = setTimeout(() => {
           pendingTimer = null;
           if (!this._pointers.has(pendingId)) return; // lifted before it fired
-          commitAim(pendingId, pendingW);
+          commitAim(pendingId, px, py);
         }, PINCH_WINDOW_MS);
       } else if (this._pointers.size === 2) {
         fineMode = true;
@@ -804,49 +895,26 @@ class PoolUI {
     c.addEventListener('pointermove', (e) => {
       if (!this._pointers.has(e.pointerId)) return;
       this._pointers.set(e.pointerId, e);
+      const rect = c.getBoundingClientRect();
       if (pinch) { updatePinch(); return; }
       if (this._placingCue) {
         if (e.pointerId !== primaryId) return;
-        const w = clientToWorld(e);
+        const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
         this._tryPlaceCuePreview(w.x, w.y);
         return;
       }
       if (pendingTimer && e.pointerId === pendingId) {
         // A single finger that moves before the pinch window elapses was never
-        // going to pinch (its partner never showed up) -- commit aim right away
+        // going to pinch (its partner never showed up) — commit aim right away
         // so ordinary aiming doesn't feel delayed.
         if (Math.hypot(e.clientX - pendingCX, e.clientY - pendingCY) > PENDING_MOVE_COMMIT_PX) {
           clearTimeout(pendingTimer); pendingTimer = null;
-          commitAim(pendingId, clientToWorld(e));
+          commitAim(pendingId, e.clientX - rect.left, e.clientY - rect.top);
         }
         return;
       }
       if (e.pointerId !== primaryId || !this._aiming) return;
-      const cue = ballById(this.game.balls, 'cue');
-      const rect = c.getBoundingClientRect();
-      const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
-      if (!this._pulling) {
-        const rawAngle = angleTo(w.x, w.y, cue);
-        if (fineMode) {
-          let delta = rawAngle - lastAngle;
-          while (delta > Math.PI) delta -= Math.PI * 2;
-          while (delta < -Math.PI) delta += Math.PI * 2;
-          this._aimAngle += delta * 0.22;
-        } else {
-          this._aimAngle = rawAngle;
-        }
-        lastAngle = rawAngle;
-      } else {
-        // Power pull: distance from pull-start along the aim axis; large sideways
-        // deviation cancels the shot instead of firing it (build guide's rule).
-        // Deliberately NOT zoom-scaled: the same physical finger swipe should
-        // always mean the same power, regardless of the current camera zoom.
-        const dx = e.clientX - rect.left - pullStart.cx, dy = e.clientY - rect.top - pullStart.cy;
-        const along = dx * -Math.cos(this._aimAngle) + dy * -Math.sin(this._aimAngle);
-        const perp = Math.abs(dx * -Math.sin(this._aimAngle) - dy * Math.cos(this._aimAngle));
-        if (perp > 46) { this._pulling = false; this._power = 0; this._aiming = true; return; }
-        this._power = Math.max(0, Math.min(4.2, along / this._scale * 3.2));
-      }
+      updateAimPower(e.clientX - rect.left, e.clientY - rect.top);
     });
 
     const finish = (e) => {
@@ -861,24 +929,17 @@ class PoolUI {
       if (pendingTimer && e.pointerId === pendingId) { clearPending(); return; }
       if (this._placingCue) {
         if (e.pointerId === primaryId) {
-          const w = clientToWorld(e);
+          const rect = c.getBoundingClientRect();
+          const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
           this._commitCuePlacement(w.x, w.y);
           primaryId = null;
         }
         return;
       }
       if (e.pointerId !== primaryId) { if (this._pointers.size < 2) fineMode = false; return; }
-      if (!this._pulling && this._aiming) {
-        // First release after aiming: arm the power-pull phase instead of firing.
-        const rect = c.getBoundingClientRect();
-        pullStart = { cx: e.clientX - rect.left, cy: e.clientY - rect.top };
-        this._pulling = true;
-        this._pointers.set(e.pointerId, e);
-        c.setPointerCapture(e.pointerId);
-        return;
-      }
-      if (this._pulling && this._power > 0.15) this._commitShot();
+      const power = this._power;
       this._aiming = false; this._pulling = false; this._power = 0; primaryId = null; fineMode = false;
+      if (power > 0.35) this._commitShot(power);
     };
     c.addEventListener('pointerup', finish);
     c.addEventListener('pointercancel', finish);
@@ -905,10 +966,9 @@ class PoolUI {
     this._saveProgress();
   }
 
-  async _commitShot() {
+  async _commitShot(power) {
     if (!this._canShootNow()) return;
     const dir = { x: Math.cos(this._aimAngle), y: Math.sin(this._aimAngle) };
-    const power = this._power;
     const offset = { ...this._offset };
     const elevation = this._elevation;
     const seat = this.game.turnSeat;
@@ -1017,8 +1077,18 @@ class PoolUI {
     }
     this._quitArmed = true;
     const btn = this.el.querySelector('[data-role="quit"]');
-    if (btn) { btn.title = t('quit_confirm'); btn.classList.add('is-confirm'); }
-    setTimeout(() => { this._quitArmed = false; if (btn) btn.classList.remove('is-confirm'); }, 3500);
+    // A title= tooltip never shows on a touch device (no hover), so the
+    // original "tap again" affordance was invisible on a phone — a tap could
+    // quit silently with nothing ever shown on screen. This badge is real,
+    // visible, on-screen text instead.
+    const badge = this.el.querySelector('[data-role="quit-confirm"]');
+    if (btn) btn.classList.add('is-confirm');
+    if (badge) badge.hidden = false;
+    setTimeout(() => {
+      this._quitArmed = false;
+      if (btn) btn.classList.remove('is-confirm');
+      if (badge) badge.hidden = true;
+    }, 3500);
   }
 
   // ---- AI turn driver -------------------------------------------------

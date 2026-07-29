@@ -376,6 +376,13 @@ inputs gives byte-identical output twice in a row.
 
 ### Step 2 — Controls (`ui.js` pointer layer)
 
+> **Superseded 2026-07-28 — read `poolv2/CLAUDE.md`'s "Controls" section, not this description,
+> for what actually ships.** The three-phase gesture described below turned out to be unplayable
+> on a real touchscreen (a fresh contact always mints a new `pointerId`, so the "second press"
+> the pull phase needed never registered) and was replaced with one continuous drag. Kept here as
+> build history, per this doc's own §6 rule of striking gaps here and correcting the claim in
+> CLAUDE.md — this paragraph is the "correct the claim" step for that fix.
+
 Only now open the canvas. Render the table, render the balls, and wire the gesture stack in §4.
 
 *What this build did:* one canvas, one pointer stream, the three-phase aim → pull → release
@@ -473,6 +480,13 @@ next.
 ---
 
 ## 4. Controls, as a decision record
+
+> **Superseded 2026-07-28** — the priority table below describes the original two-phase gesture,
+> replaced after a real playtest (see §3's note and `poolv2/CLAUDE.md`'s "Controls" section). The
+> GOVERNING PRINCIPLE ("phase decides, not finger count") still holds and still governs the new
+> gesture and its pinch-zoom tiebreak — only the specific phases/rows changed. Rule 6 below (the
+> pinch-zoom tiebreak requirement) is what `poolv2/js/ui.js`'s `PINCH_WINDOW_MS` pending-aim window
+> implements.
 
 The guide asked for the gesture priority to be **written down as a rule**. This is that rule. It
 is binding: a change to any line here is a change to how the game feels, and it must be made

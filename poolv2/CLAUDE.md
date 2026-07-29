@@ -18,11 +18,20 @@ them). **The plain `pool` namespace is deliberately left free for that other gam
 rename this to "Pool", do not treat the `v2` as a version number to tidy away, and do not
 "align" the folder with the display name in the other direction.
 
-Renamed from `pool`/`.pl-` on 2026-07-28, **before this game had ever shipped**: it was never
-merged to `main`, so no deployed build ever wrote a `'pool'` stat bucket or a `gamehub.pool.*`
-key on any device, and there was no player data to carry, orphan, or hide. That is the only
-reason re-keying was permissible, and it is **not** a precedent — renaming a shipped game's ids
-or storage keys is forbidden outright by THE LAW rule 5.
+Renamed from `pool`/`.pl-` on 2026-07-28. **Correction (2026-07-28, later the same day):** the
+rename was originally justified as "this game never shipped, never merged to main" — that turned
+out to be wrong. `pool/` (the original, unrenamed game) merged into `main` via PR #2/#3 in
+parallel with this branch's own work, and `main` deploys straight to GitHub Pages with no separate
+release step, so `pool/` has been live in production since 2026-07-28. **The actual reason this
+folder is allowed to be separately named `poolv2/`, not a THE-LAW-rule-5 violation, is Matt's own
+call**: Matt found the shipped `pool/` game bad and asked for a from-scratch rebuild to evaluate as
+a possible replacement, named `v2` on purpose so he can review and play it before it replaces
+anything. `poolv2/` is therefore its own independent game with its own identity
+(`gamehub.poolv2.*`, stats id `'poolv2'`) — not a rename of `pool/`'s identity, and never merged
+into `main`/deployed until Matt approves. `pool/`'s own ids/keys are untouched and stay that way;
+if `poolv2` is ever approved to replace `pool`, that is a separate, deliberate decision (likely:
+retire `pool/` from the hub while leaving its stats/keys frozen per THE LAW rule 5, not renaming
+`poolv2/` back to `pool/`).
 
 Hub integration: in-hub `module:`, not immersive (keeps the hub header, unlike Escoba/Mancala/
 Ball Run). `isInProgress()` is mode-split (root CLAUDE.md's "two legitimate meanings" note):
@@ -94,28 +103,33 @@ trajectory, because both devices reach the same table by re-running the same phy
   headless test cheap: `simulateToRest` on a cloned ball array is the same function the UI drives
   frame-by-frame, just called in a tight loop with no rendering in between).
 
-## Controls (`ui.js`) — the gesture-priority rule the build guide asks to be written down
+## Controls (`ui.js`) — one continuous drag, corrected after a real playtest
 
-One continuous drag on the table does three things depending on phase, and **the phase, not the
-finger count alone, decides which gesture wins**:
+**Corrected 2026-07-28.** The original design (still described in `BUILD-SPEC.md` §3, kept there
+as build history) was a two-phase gesture: first touch aims, releasing "arms" a power-pull, a
+second press-drag sets power. A first-playtest review (Chrome-in-Chrome, actual mobile-viewport
+play) found this close to unplayable: a real touchscreen mints a **brand-new `pointerId` on every
+fresh contact**, so the code's `primaryId` never recognized the second press as the same shot —
+aim locked, the power meter never moved, and no shot ever fired. This is now the standard
+mobile-pool-app pattern instead, **one continuous drag, no lift-then-repress**:
 
-1. **First touch-down starts AIM.** The aim line points from the cue ball away from the finger
-   (a "slingshot" pull, the same convention as the mainstream mobile pool apps this guide is
-   describing) and recomputes directly off the pointer's absolute angle to the cue ball — fast,
-   coarse. **A second finger held down while aiming switches to FINE mode**: the angle no longer
-   snaps to the pointer's absolute position, it *integrates* small deltas at a reduced
-   sensitivity (`× 0.22`), for the last small adjustment the build guide asks for.
-2. **Releasing the first finger (with aim locked) arms POWER-PULL, it does not fire.** A second
-   press-drag along the (now fixed) aim axis sets power by how far it's pulled; **drifting too far
-   sideways off that axis cancels the pull and drops power to zero** (`perp > 46px`) rather than
-   firing — the build guide's explicit "drag sideways to cancel" rule.
-3. **Releasing during an armed pull with `power > 0.15` shoots.** Anything smaller is treated as
-   "didn't really mean to shoot" and just resets, so a light accidental tap never fires a shot.
+- While ONE finger is down, its live distance from the cue ball IS the power ("stretch and
+  release" — farther = harder), and its live angle relative to the cue ball IS the aim, both
+  continuously. A small dead zone near the cue ball (`DEADZONE_PX`) means light contact doesn't
+  register as a shot yet.
+- **Releasing above a small power threshold (`power > 0.35`) shoots.** Anything smaller (or no
+  real drag at all) is just a tap and cancels cleanly on its own — no separate cancel gesture
+  needed, unlike the old "drag sideways to cancel" rule this replaced.
+- **A second finger held down while aiming switches to FINE mode**: the angle no longer snaps to
+  the pointer's absolute position, it *integrates* small deltas at a reduced sensitivity
+  (`× 0.22`), for the last small adjustment the build guide asks for — **but only once aiming has
+  already committed with the first finger.** See pinch-zoom below for what a second finger means
+  *before* that.
 
 Spin (a small cue-ball-face picker, drag inside sets `{a, b}` in [-1,1], double-tap resets to
-center) and cue elevation (a plain slider, not a gesture — raising the cue via drag would compete
-directly with aim/power on the same touch surface, so it was deliberately kept off the shared
-gesture stream) are separate controls with their own hit areas, never competing with the table's
+center) and cue elevation (a plain slider, capped at 28° to match `strikeCueBall`'s real clamp —
+not a gesture, since raising the cue via drag would compete directly with aim/power on the same
+touch surface) are separate controls with their own hit areas, never competing with the table's
 own pointer stream. Camera (`🎥` toggle, top-down vs. a purely cosmetic `perspective()`/`rotateX()`
 CSS tilt for "behind the cue") is visual only — the physics coordinate system never changes.
 
@@ -270,12 +284,49 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   cue ball that clipped a rail before touching anything, then touched a ball and nothing else,
   was incorrectly scored legal.
 - **#9 the foul warning icon clears once `_foulMsg` is null** (it used to persist into later
-  shots once shown), and tapping it opens an in-page dialog instead of a native `alert()`.
+  shots once shown), and tapping it now opens a non-blocking toast (`_showFoulToast`) instead of a
+  native `alert()` — a native `alert()` blocks the whole page's input pipeline until dismissed, a
+  real correctness bug, not just a UX wart.
 - **#11 the unused `CORNER_JAW` constant was removed** rather than left declared-but-unread (see
   the fidelity gap above — it is not modeled, on purpose, until someone implements it for real).
 - **#13 live language re-render**: the setup and game views now re-render on `onLangChange`
   (`_startLoop()` cancels any prior RAF loop first, so a re-render mid-game can't leak a second
   animation loop against a detached canvas).
+
+### Ported from Pool v1's first-playtest fixes (2026-07-28, CiC UI/UX review)
+
+Pool v1 (`pool/`) got a real-device/CiC playtest review the same day, independently of this game's
+own gap-closing pass above, and found it "close to unplayable" (Matt's words). Poolv2 was built
+before that review and shares the same original code, so it had the identical bugs; these fixes
+were ported over (with `.p2-`/`poolv2` naming) rather than re-discovered from scratch:
+
+- **The table rendered as a squeezed strip and the rack as an unscaled blob — a CSS layout bug.**
+  `.hub-game` (`css/hub.css`) sets no explicit `height` on the container a module mounts into, so
+  `.p2-root`'s old `height:100%` had nothing definite to resolve against, which collapsed the
+  whole `.p2-table-wrap`/canvas chain toward the canvas element's bare 300×150 default. Fixed with
+  `min-height:100dvh` on `.p2-root` (Escoba's precedent for the same shared-shell gap) plus
+  `flex:1` (not a percentage height) down the chain, a `<20px` zero-size guard + `requestAnimationFrame`
+  retry in `_resizeCanvas()`, and a `ResizeObserver` (not just `window.resize`) so a flex settle or
+  orientation change is caught too.
+- **The gesture rewrite** — see "Controls" above; this was the more severe of the two bugs, since
+  it meant shots simply never fired on a real touchscreen.
+- **A ball could settle into an imperceptible but perpetual creep and never actually stop.**
+  `physics.js`'s sliding/rolling friction applied a FIXED per-step decrement regardless of how
+  small the residual slip already was — correct in magnitude (kinetic friction is genuinely
+  constant while sliding) but wrong as an *integrator*: a fixed-magnitude step can overshoot past
+  zero slip at low speed, flip sign, and get "corrected" by an equally oversized decrement next
+  step, a stable limit cycle that never reaches true zero. `isMoving()` would then never return
+  `false`, so a shot could just sit there with no visible symptom. Fixed by deriving the exact,
+  finite slide-to-roll crossing time analytically (`|u|` shrinks at the constant rate
+  `(7/2)·mu_slide·g`) and clamping both branches to that crossing point instead of a naive fixed
+  step.
+- Smaller ports from the same review: the spin picker's `setPointerCapture` reordered after the
+  visual update and wrapped in `try/catch` (a capture failure could otherwise suppress the tap
+  entirely); the quit confirmation now renders real on-screen text
+  (`p2-quit-confirm`/`quit_confirm`) instead of a `title=` tooltip, which never shows on a touch
+  device; transient aim/power/camera state resets at the top of every `_renderGame()` so nothing
+  stale bleeds into a fresh game; balls and pockets gained radial-gradient shading so they read as
+  spheres/depth rather than flat discs.
 
 ### Fixed 2026-07-28, second pass (BUILD-SPEC.md §6 items, remaining ranked gaps)
 

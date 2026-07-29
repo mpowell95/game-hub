@@ -9,7 +9,16 @@
   --p2-muted: #a99f92;
   --p2-accent: #ffce3a;
   --p2-rail-wood: #3a2418;
-  height: 100%;
+  /* .hub-game (css/hub.css) sets no explicit height on the container this module
+     mounts into — a plain block child of a flex row, sized to CONTENT, not to the
+     hub's available viewport. height:100% against that resolves to nothing
+     definite, which collapsed the whole table-wrap/canvas chain down to the
+     canvas element's bare 300x150 default intrinsic size (the "narrow blob rack,
+     table doesn't fill its box" bug). min-height:100dvh (Escoba's own fix for the
+     same shared-shell gap, css/escoba.css) gives this root a real, self-sufficient
+     height regardless of what the ancestor chain provides. */
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--p2-bg);
@@ -85,7 +94,13 @@
 }
 
 /* ---- game screen ---- */
-.p2-root .p2-game { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* flex:1 (not height:100%): .p2-root only sets min-height, and a percentage
+   height needs an ancestor with a definite `height`, not `min-height`, to
+   resolve against (min-height alone left this at `auto`/content-size — the
+   actual remaining cause of the squeezed-table bug, after the min-height fix
+   above). flex-grow doesn't have that requirement: it fills whatever space
+   the flex container actually ends up with, however that size was set. */
+.p2-root .p2-game { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .p2-root .p2-hud {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; min-height: 36px;
@@ -97,6 +112,7 @@
   background: var(--p2-surface); color: var(--p2-ink); font-size: 16px; cursor: pointer;
 }
 .p2-root .p2-icon-btn.is-confirm { background: #a83232; color: #fff; }
+.p2-root .p2-quit-confirm { font-size: 12px; color: #ffb4b4; font-weight: 600; }
 
 .p2-root .p2-table-wrap {
   position: relative; flex: 1; min-height: 0; margin: 0 8px;
@@ -119,6 +135,11 @@
 .p2-root .p2-foul-icon {
   width: 30px; height: 30px; border-radius: 50%; border: none;
   background: #a83232; color: #fff; font-size: 15px; cursor: pointer;
+}
+.p2-root .p2-foul-toast {
+  position: absolute; top: 36px; left: 0; max-width: 220px;
+  background: #a83232; color: #fff; font-size: 13px; padding: 8px 10px;
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.35);
 }
 
 .p2-root .p2-controls {
