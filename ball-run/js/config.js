@@ -194,3 +194,150 @@ export const COLOR_SHADOW = 0x000000;
 export function difficultyConfig(key) {
   return DIFFICULTIES[key] || DIFFICULTIES[DEFAULT_DIFFICULTY];
 }
+
+// --- Maps (BALLRUNMAP2ORBITALSPEC.md, Phase 1: map plumbing) ---------------
+//
+// A map owns the track geometry it plays at (baseTrackWidth/minTrackWidth, both in
+// ball-widths, per brief section 5) and its own color set. Difficulty tuning
+// (DIFFICULTIES above) is shared for now: Orbital's DIFFICULTIES came from Phase 1's pure
+// re-skin and haven't been retuned around Split yet (spec section 6: "these numbers are
+// guesses... expect to retune all of these with Matt"). Reusing the same DIFFICULTIES
+// object (not a clone) means a future Classic retune is automatically inherited by
+// Orbital until Orbital's own numbers are deliberately split out; do that split
+// explicitly when they need to diverge, don't let it happen by accident.
+export const MAPS = {
+  classic: {
+    key: 'classic',
+    label: 'Classic',
+    baseTrackWidth: BASE_TRACK_WIDTH,
+    minTrackWidth: MIN_TRACK_WIDTH,
+    difficulties: DIFFICULTIES,
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump/pickups (Orbital only)
+    colors: {
+      void: COLOR_VOID,
+      ball: COLOR_BALL,
+      trackTile: COLOR_TRACK_TILE,
+      trackGrout: COLOR_TRACK_GROUT,
+      obstacle: COLOR_OBSTACLE,
+      obstacleEdge: COLOR_OBSTACLE_EDGE,
+      tunnelWall: COLOR_TUNNEL_WALL,
+      tunnelEdge: COLOR_TUNNEL_EDGE,
+      chevron: COLOR_CHEVRON,
+      shadow: COLOR_SHADOW,
+      // Classic has no `pickups` config (never spawns one), but Renderer builds the pickup mesh
+      // pools unconditionally for every map (same reason floorPool2/accentPool are always built -
+      // one Renderer code path, map-specific data decides what's ever actually visible), so these
+      // still need real values. Chosen from Classic's own existing palette, not Orbital's.
+      orb: 0xf0942e,
+      life: 0xa34ce8,
+    },
+  },
+  orbital: {
+    key: 'orbital',
+    label: 'Orbital',
+    baseTrackWidth: BASE_TRACK_WIDTH,
+    minTrackWidth: MIN_TRACK_WIDTH,
+    difficulties: DIFFICULTIES,
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel', 'split', 'jump'], // Phase 3: jump lands
+    // Split tuning (Phase 2, spec sections 2 & 6 — "these numbers are guesses, not tuned
+    // values"). All widths in ball-widths (BW), matching every other geometry constant in
+    // this file; Track converts to world units. `minStraightAfter` mirrors
+    // TUNNEL_MIN_STRAIGHT_AFTER's role for tunnels: forces a clean stretch after the event
+    // so Splits can't chain into each other.
+    split: {
+      totalWidthBW: 9,
+      voidHalfBW: 1.25, // a 2.5 BW gap
+      widenSegs: 3,
+      holdMinSegs: 4,
+      holdMaxSegs: 7,
+      closeSegs: 3,
+      narrowBackSegs: 3,
+      cadenceM: 120, // roughly every 120m (spec: not yet split out per-difficulty like tunnels are)
+      minStraightAfter: 3,
+      sideIdenticalChance: 0.5,
+      sideObstacleChance: 0.35, // remaining 0.15 rolls 'unequal' lane widths
+    },
+    // Jump tuning (Phase 3, spec sections 3 & 6 — same "starting guess" disclaimer as Split's).
+    // Unlike Split's mutually-exclusive side-variety roll, the spec's difficulty list is
+    // "pick one or more per jump" (section 3): narrower/offset/split/height-change are each their
+    // own independent chance and can combine freely on the same jump (a plain flat jump with none
+    // of them rolled is also a valid, and the most common, outcome).
+    jump: {
+      gapMinSegs: 2,
+      gapMaxSegs: 4,
+      cadenceM: 160, // offset from split's 120m so the two schedules don't collide (section 6)
+      landingHoldSegs: 4,
+      recoverySegs: 3,
+      minStraightAfter: 3,
+      gravity: 22, // world units/sec^2 - a dedicated constant (spec: "a new gravity constant"),
+                   // deliberately separate from FALL_GRAVITY (the crash-fall animation) so a
+                   // flight-arc retune never silently changes how a crash looks, or vice versa
+      apexCapBW: 3, // ball-diameters above launch height; a rolled gap that would exceed this is
+                    // shortened at generation time (section 3), never played as rolled
+      narrowChance: 0.4, // chance the landing pad is narrower than the launch pad
+      narrowStepBW: 1.5, // ball-widths narrower, when rolled
+      offsetChance: 0.4, // chance the landing pad is laterally offset (steer in the air)
+      splitChance: 0.3, // chance the landing pad is itself split (voidHalfWidth > 0)
+      // A split landing pad needs its OWN dedicated width, same reason Split's own event widens
+      // before opening a void: Orbital's normal 5-BW track can't fit two minTrackWidth (3 BW)
+      // lanes at all (2*3 = 6 > 5), let alone with a gap between them. When `splitChance` rolls,
+      // this REPLACES whatever the `narrowChance` roll would have picked, rather than trying to
+      // reconcile "narrower" and "split" as competing width requirements (chosen once here,
+      // verified >= 2*minTrackWidth + 2*splitVoidHalfBW so it's never a runtime coin flip whether
+      // the split will fit).
+      splitVoidHalfBW: 0.75, // a 1.5 BW gap - smaller than Split's own 2.5 BW, a landing pad's fork is a smaller moment than a full Split event
+      splitTotalWidthBW: 8, // >= 2*3 (minTrackWidth) + 2*0.75 (splitVoidHalfBW) = 7.5, with margin
+      heightChance: 0.35, // chance the landing is at a different height
+      heightStepBW: 2, // ball-diameters of height change, when rolled (BALL_DIAMETER-based like
+                        // every other geometry constant, converted to world units by Track)
+      dropChance: 0.7, // of a height change, how often it's a drop-down vs. a step-up
+                        // ("a drop-down reads great as the deck gives out", section 3)
+    },
+    // Pickups (Phase 4, spec section 7: "extra lives and collectibles... much cheaper once
+    // Phases 1 to 3 exist" - true here, since a pickup is just an extra point-in-space payload
+    // attached to an ordinary already-generated 'straight' segment, never its own event type or
+    // geometry change; see track.js's maybePlacePickup()). Distance-paced like the obstacle
+    // scheduler, not weighted-random - `cadenceM` is a mean, jittered per spawn. Orbs are pure
+    // bonus score, never a hazard; lives are capped so they can't be stockpiled without limit.
+    pickups: {
+      orbCadenceM: 30,
+      orbCadenceJitterFrac: 0.3,
+      orbValue: 1, // added straight to `sim.score`, same tally Split/Jump already add to
+      lifeCadenceM: 350,
+      lifeCadenceJitterFrac: 0.3,
+      maxLives: 2,
+      lifeInvincibleS: 2, // grace window after a life is spent (sim.js's invincibility timer)
+      radiusBW: 0.6, // collection radius, ball-widths - a little more forgiving than obstacle collision, since missing a reward should never feel like a hazard's hitbox
+    },
+    // Visual identity (spec section 5): near-black deep navy void, dark slate deck panels
+    // with lighter seams, a continuous amber (#ffce3a) edge stripe since this map is about
+    // falling off, light gray cargo blocks with an amber emissive outline, a ribbed amber-
+    // chevron airlock tunnel, pale cyan drone-sphere ball. Never red/green (colorblind
+    // rule). "Sign-off on the Orbital color set" is an explicit open item for Matt
+    // (spec section 9) — these are a first pass, not final. Split's divider/void-edge
+    // stripes (render.js) reuse `obstacleEdge` — the same amber "attention" color. Pickups
+    // (Phase 4) get their own two hues, both distinguished by SHAPE too (never hue alone,
+    // root CLAUDE.md's colorblind rule): a yellow sphere for orbs (matches the root palette's
+    // "yellow circle" convention) and a teal octahedron for the rarer extra-life pickup
+    // ("teal diamond" convention - an octahedron is the closest 3D analogue to a flat diamond).
+    colors: {
+      void: 0x03060f,
+      ball: 0x8fe9ff,
+      trackTile: 0x1c2333,
+      trackGrout: 0x3c4a66,
+      obstacle: 0xaab2bd,
+      obstacleEdge: 0xffce3a,
+      tunnelWall: 0x1c2436,
+      tunnelEdge: 0xffce3a,
+      chevron: 0xffce3a,
+      shadow: 0x000000,
+      orb: 0xf2b705,
+      life: 0x178a7a,
+    },
+  },
+};
+export const DEFAULT_MAP = 'classic';
+
+export function mapConfig(key) {
+  return MAPS[key] || MAPS[DEFAULT_MAP];
+}

@@ -225,20 +225,38 @@ function escobaScreen(rec) {
 // --- Ball Run (solo, difficulty-scaled, obstacles-passed-is-the-score) ------
 const BR_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
-/** Ball Run: no wins/losses (only a crash or a fall ends a run), so the honest numbers are runs
- *  played and the best obstacle count reached, overall and per difficulty (fourth-playthrough item
- *  2: the score is obstacle rows passed, not meters). */
-function ballRunScreen(rec) {
-  const br = (rec && rec.br) || {};
-  const legacy = (rec && rec.brLegacyMeters) || null;
-  const runs = br.runs | 0, best = br.bestObstacles | 0;
-  // A device with only pre-metric-change history still has runs (refolded from the archive in
-  // game-stats.js), so the empty state genuinely means "never played", not "played before the
-  // scoring change" - sixth-playthrough incident, where zeroed runs hid real history.
-  if (!runs && !legacy) return emptyState('Ball Run');
-  const bd = br.bestObstaclesByDiff || {};
+/** One map's best-by-difficulty table (`br` for Classic, `brOrbital` for Orbital). */
+function brMapTable(bucket, headingKey) {
+  const bd = (bucket && bucket.bestObstaclesByDiff) || {};
   const rows = BR_DIFFS.map(([k, labelKey]) =>
     `<tr><th scope="row">${t(labelKey)}</th><td>${t('gs_br_obstacles_cell', { n: bd[k] | 0 })}</td></tr>`).join('');
+  return `
+    <h4 class="gs-tbl-h">${t(headingKey)}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/** Ball Run: no wins/losses (only a crash or a fall ends a run), so the honest numbers are runs
+ *  played and the best obstacle count reached, overall and per difficulty (fourth-playthrough item
+ *  2: the score is obstacle rows passed, not meters). BALLRUNMAP2ORBITALSPEC.md Phase 1: `br` is
+ *  Classic's bucket (untouched, same shape it always had), `brOrbital` is the new second map's own
+ *  sibling bucket - both are shown, runs/best combine across maps for the headline tallies (a
+ *  player's total Ball Run history, not just one map's), and per-difficulty tables are broken out
+ *  per map since a map's own best is not the same achievement as another map's. */
+function ballRunScreen(rec) {
+  const br = (rec && rec.br) || {};
+  const brOrbital = (rec && rec.brOrbital) || {};
+  const legacy = (rec && rec.brLegacyMeters) || null;
+  const runs = (br.runs | 0) + (brOrbital.runs | 0);
+  const best = Math.max(br.bestObstacles | 0, brOrbital.bestObstacles | 0);
+  // A device with only pre-metric-change history still has runs (refolded from the archive in
+  // game-stats.js), so the empty state genuinely means "never played", not "played before the
+  // scoring change" - sixth-playthrough incident, where zeroed runs hid real history. A player who
+  // has only ever played Orbital must not read as empty either - their history lives in
+  // brOrbital.runs, not br.runs.
+  if (!runs && !legacy) return emptyState('Ball Run');
   // Scores from before the scoring change are meters, not obstacle counts - the units are not
   // comparable, so they are shown as their own clearly-labeled record instead of being converted
   // (which would fabricate numbers) or hidden (which reads as deleted data).
@@ -251,16 +269,16 @@ function ballRunScreen(rec) {
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
       <tbody>${legacyRows}</tbody>
     </table>` : '';
+  // Orbital's table only renders once the player has actually recorded a run there - an
+  // all-zero table for a map nobody has tried yet would just be clutter, not hidden history.
+  const orbitalHtml = brOrbital.runs ? brMapTable(brOrbital, 'gs_br_best_by_diff_orbital') : '';
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${runs}</b><span>${t('gs_runs')}</span></div>
       <div class="gs-tally"><b>${best}</b><span>${t('gs_br_best')}</span></div>
     </div>
-    <h4 class="gs-tbl-h">${t('gs_br_best_by_diff')}</h4>
-    <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>${legacyHtml}`;
+    ${brMapTable(br, orbitalHtml ? 'gs_br_best_by_diff_classic' : 'gs_br_best_by_diff')}
+    ${orbitalHtml}${legacyHtml}`;
 }
 
 // --- Tic Tac Toe (played by variant, ties shown explicitly) -----------------
@@ -390,7 +408,7 @@ function snakeScreen(rec) {
  *  become unreachable). */
 function hasPlays(id, rec) {
   if (id === 'connect4') return c4Totals(rec.grid).plays > 0;
-  if (id === 'ballrun') return !!((rec.br && rec.br.runs) || rec.brLegacyMeters);
+  if (id === 'ballrun') return !!((rec.br && rec.br.runs) || (rec.brOrbital && rec.brOrbital.runs) || rec.brLegacyMeters);
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   return ((rec.total || {}).played | 0) > 0;
@@ -400,7 +418,7 @@ function hasPlays(id, rec) {
  *  (the stored `won` counter, ties excluded — the same maths the leaderboard uses) for
  *  competitive games, the game's own solo metric for Ball Run/Snake/Nuts & Bolts. */
 function headlineOf(id, rec) {
-  if (id === 'ballrun') return { n: (rec.br && rec.br.bestObstacles) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'ballrun') return { n: Math.max((rec.br && rec.br.bestObstacles) | 0, (rec.brOrbital && rec.brOrbital.bestObstacles) | 0), unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };

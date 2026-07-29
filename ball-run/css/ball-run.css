@@ -93,6 +93,47 @@
 .br-root .lb-dshape-t3,
 .br-root .lb-dshape-t4 { fill: #e6e9f0; }
 
+/* Map picker (BALLRUNMAP2ORBITALSPEC.md section 4): two cards, a small color swatch built from
+   the map's own config.js colors plus a label, no description text. Sits above the difficulty
+   segmented control, same reserved-space-no-layout-shift discipline as everything else on this
+   screen. */
+.br-mapcards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin-top: 4px;
+  width: 100%;
+  max-width: 320px;
+}
+.br-mapcard {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--br-ink-dim);
+  cursor: pointer;
+}
+.br-mapcard.is-selected {
+  border-color: var(--br-orange);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--br-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.br-mapswatch {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+}
+
 /* Standard 3-option segmented difficulty control (2026-07-24 redesign, root CLAUDE.md's "Ball
    Run setup redesign" — replaces the old face icons + range slider, matches every other game's
    difficulty picker shape). */
@@ -207,6 +248,24 @@
   border-radius: 50%;
   background: #39f4ff;
   box-shadow: 0 0 6px #39f4ff;
+}
+
+/* Pickups (Phase 4, Orbital only): banked extra-life count. Stays empty (0 height content, same
+   reserved-but-collapsible shape as .br-hud-tiers) on Classic and on Orbital before any life is
+   ever collected - never shifts layout when it does appear. A small diamond (clip-path'd square,
+   rotated) rather than a plain dot, so it reads as a distinct marker from the tier pips above it
+   even in a single screenshot, not just by position. */
+.br-hud-lives {
+  display: flex;
+  gap: 5px;
+  min-height: 9px;
+}
+.br-life {
+  width: 9px;
+  height: 9px;
+  background: #178a7a;
+  box-shadow: 0 0 6px #178a7a;
+  transform: rotate(45deg);
 }
 
 /* [hidden] must win over the flex layout below (class specificity otherwise beats the UA default). */
