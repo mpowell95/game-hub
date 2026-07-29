@@ -1,0 +1,419 @@
+/* yahtzee.css — scoped entirely under .yz-root (see root CLAUDE.md "Adding a game", axis: CSS scoping). */
+
+.yz-root{
+  /* header */
+  --yz-hdr-top:#D53922;  --yz-hdr-bot:#CB3219;
+  --yz-pod-active:#F4584A;
+  --yz-pod-idle:#7B1B0F;
+  --yz-hdr-text:#FFFFFF;
+
+  /* rules under the header */
+  --yz-gold-rule:#FBBB01;  --yz-amber-shadow:#B74A0D;  --yz-orange-strip:#FBA62F;
+
+  /* playfield */
+  --yz-blue-field:#0878CE;  --yz-cyan-rim:#10AEEF;  --yz-cyan-rim-hi:#84DCF1;
+  --yz-teal-inset:#067299;
+
+  /* scorecard */
+  --yz-card-border:#EAB74D;  --yz-card-border-lo:#B1640A;  --yz-card-hi:#FEFAEE;
+  --yz-row-a:#FDCF61;
+  --yz-row-b:#F7BC4C;
+  --yz-groove-dark:#D89334;  --yz-groove-light:#FFDC8E;
+  --yz-divider:#FCF6F3;
+
+  /* score boxes */
+  --yz-box-top:#FFF5D3;  --yz-box-bot:#FDD08F;  --yz-box-border:#C1894B;
+  --yz-box-inner-shadow:rgba(140,80,10,.38);
+
+  /* numerals */
+  --yz-ink:#8B4A0C;
+  --yz-ink-ghost:rgba(139,74,12,.45);
+
+  /* category icons */
+  --yz-icon-red-top:#FE4B4B;  --yz-icon-red-bot:#CB2222;  --yz-icon-red-edge:#9E1515;
+  --yz-icon-white:#FFFFFF;    --yz-yahtzee-gold:#FFC93C;
+
+  /* dice */
+  --yz-die-top:#FFFFFF;  --yz-die-bot:#E3DDD0;  --yz-die-edge:#B9B2A4;  --yz-pip:#15181C;
+  --yz-die-hold:#FFD54A;
+
+  /* buttons */
+  --yz-roll-rim:#0A88C4;  --yz-roll-a:#9BF2FA; --yz-roll-b:#33FEFE; --yz-roll-c:#04D5F2;
+  --yz-roll-d:#027BAD;    --yz-roll-lip:#012B4B;
+  --yz-play-on-a:#8CD44C; --yz-play-on-b:#3F7A1B; --yz-play-lip:#1F4A0A;
+  --yz-play-off-a:#4F822D; --yz-play-off-b:#29650F; --yz-play-off-text:#90958E;
+
+  /* Fixed to the viewport rather than flowing inside the hub's padded,
+     max-width-720px .hub-main: the only way to get true edge-to-edge
+     full-bleed both standalone and mounted in the hub (same pattern as
+     ball-run/css/ball-run.css). dvh so iOS Safari's collapsing toolbar
+     chrome never causes a scrollable overflow. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  margin: 0;
+  font-family: "Baloo 2","Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+.yz-root, .yz-root *{ box-sizing: border-box; }
+
+.yz-root #fit{
+  transform-origin: center center;
+}
+
+.yz-root #stage{
+  position:relative;
+  width:410px;
+  height:730px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.yz-root .yz-abs{ position:absolute; }
+
+/* ---------- Header ---------- */
+.yz-root .yz-hdr{
+  position:absolute; left:0; top:0; width:410px; height:64px;
+  background:linear-gradient(180deg,var(--yz-hdr-top),var(--yz-hdr-bot));
+}
+
+.yz-root .yz-chevron{ position:absolute; left:24px; top:24px; width:12px; height:20px; }
+
+.yz-root .yz-pod{
+  position:absolute; top:12px; width:130px; height:47px; border-radius:24px;
+  transition: background-color .25s ease;
+}
+.yz-root .yz-pod.yz-p1{ left:75px; width:130px; }
+.yz-root .yz-pod.yz-p2{ left:204px; width:126px; }
+.yz-root .yz-pod.yz-active{ background:var(--yz-pod-active); }
+.yz-root .yz-pod.yz-idle{ background:var(--yz-pod-idle); }
+
+.yz-root .yz-pod-total{
+  position:absolute; left:45px; top:0; font:800 30px/1 "Baloo 2",sans-serif;
+  color:var(--yz-hdr-text); white-space:nowrap;
+}
+.yz-root .yz-pod.yz-p1 .yz-pod-total{ transform:translateY(19px); }
+.yz-root .yz-pod.yz-p2 .yz-pod-total{ left:28px; transform:translateY(19px); }
+
+.yz-root .yz-pod-name{
+  position:absolute; left:45px; top:0; font:700 13px/1 "Baloo 2",sans-serif;
+  color:var(--yz-hdr-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:78px;
+  transform:translateY(41px);
+}
+.yz-root .yz-pod.yz-p2 .yz-pod-name{ left:28px; }
+
+.yz-root .yz-avatar{
+  position:absolute; top:31px; transform:translate(-50%,-50%);
+  border-radius:50%; display:grid; place-items:center;
+  background:linear-gradient(180deg,#7DBE3C,#4E8C1E);
+  font-size:22px; line-height:1;
+}
+.yz-root .yz-pod.yz-p1 .yz-avatar{ left:11px; width:42px; height:42px; border:4px solid #FDFCF2; }
+.yz-root .yz-pod.yz-p2 .yz-avatar{ left:123px; width:45px; height:45px; border:4px solid #C610A7; }
+
+.yz-root .yz-kebab{ position:absolute; left:377px; top:18px; width:8px; height:28px; }
+.yz-root .yz-kebab span{
+  display:block; width:5px; height:5px; border-radius:50%; background:#fff; margin:0 auto 6px;
+}
+.yz-root .yz-kebab span:last-child{ margin-bottom:0; }
+
+/* ---------- Rules ---------- */
+.yz-root .yz-rule-gold{ position:absolute; left:0; top:64px; width:410px; height:4px; background:var(--yz-gold-rule); }
+.yz-root .yz-rule-amber{ position:absolute; left:0; top:68px; width:410px; height:4px; background:var(--yz-amber-shadow); }
+.yz-root .yz-rule-orange{ position:absolute; left:0; top:72px; width:410px; height:14px; background:var(--yz-orange-strip); }
+
+/* ---------- Playfield ---------- */
+.yz-root .yz-playfield{
+  position:absolute; left:0; top:87px; width:410px; height:643px; background:var(--yz-blue-field);
+}
+.yz-root .yz-frame{
+  position:absolute; left:0; top:0; width:410px; height:465px; border-radius:18px;
+  background:var(--yz-cyan-rim);
+  box-shadow: inset 0 2px 0 var(--yz-cyan-rim-hi), inset 0 -8px 12px rgba(3,60,86,.55);
+}
+.yz-root .yz-frame::after{
+  content:""; position:absolute; left:6px; top:6px; right:6px; bottom:6px; border-radius:14px;
+  box-shadow: inset 0 0 0 6px var(--yz-teal-inset);
+  pointer-events:none;
+}
+
+/* ---------- Scorecard ---------- */
+.yz-root .yz-scorecard{
+  position:absolute; left:16px; top:12px; width:381px; height:467px; border-radius:16px;
+  background:var(--yz-card-hi);
+  border:3px solid var(--yz-card-border);
+  box-shadow: inset 0 0 0 1px var(--yz-card-hi), inset 0 -1px 0 var(--yz-card-border-lo);
+  overflow:hidden;
+}
+.yz-root .yz-row-band{ position:absolute; left:0; width:381px; height:66.5px; }
+.yz-root .yz-groove{ position:absolute; left:0; width:381px; height:2px; }
+.yz-root .yz-groove .yz-groove-d{ height:1px; background:var(--yz-groove-dark); }
+.yz-root .yz-groove .yz-groove-l{ height:1px; background:var(--yz-groove-light); }
+
+.yz-root .yz-col-rule{ position:absolute; top:0; width:1px; height:467px; background:rgba(200,145,80,.45); }
+.yz-root .yz-center-divider{ position:absolute; top:0; width:3px; height:467px; background:var(--yz-divider);
+  box-shadow: -1px 0 0 #F7D189, 1px 0 0 #F7D189; }
+
+.yz-root .yz-cat-icon{
+  position:absolute; width:48px; height:48px; border-radius:12px;
+  background:linear-gradient(180deg,var(--yz-icon-red-top),var(--yz-icon-red-bot));
+  box-shadow: 0 0 0 2px #fff, inset 0 2px 0 rgba(255,255,255,.45), 0 2px 0 var(--yz-icon-red-edge), 0 3px 4px rgba(0,0,0,.25);
+  display:grid; place-items:center;
+}
+.yz-root .yz-cat-icon.yz-wide{ width:49px; }
+
+.yz-root .yz-score-box{
+  position:absolute; width:48px; height:47px; border-radius:9px;
+  background:linear-gradient(180deg,var(--yz-box-top),var(--yz-box-bot));
+  border:2px solid var(--yz-box-border);
+  box-shadow: inset 0 3px 4px var(--yz-box-inner-shadow), inset 0 -1px 0 rgba(255,255,255,.7);
+  display:grid; place-items:center;
+}
+.yz-root .yz-score-box .yz-num{
+  font:800 24px/1 "Baloo 2",sans-serif; color:var(--yz-ink);
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+
+.yz-root .yz-opp-num{
+  position:absolute; width:68px; height:47px; text-align:right;
+  font:800 24px/47px "Baloo 2",sans-serif; color:var(--yz-ink);
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+.yz-root .yz-opp-num.yz-previewable{ cursor:pointer; }
+.yz-root .yz-opp-num.yz-previewable:active{ filter:brightness(1.06); transform:translateY(-1px); }
+.yz-root .yz-opp-num .yz-ghost-text{ color:var(--yz-ink-ghost); }
+
+.yz-root .yz-num.yz-ghost{ color:var(--yz-ink-ghost); }
+.yz-root .yz-score-box.yz-previewable{ cursor:pointer; }
+.yz-root .yz-score-box.yz-previewable:active{ filter:brightness(1.06); transform:translateY(-1px); }
+.yz-root .yz-score-box.yz-selected{
+  box-shadow: 0 0 0 3px var(--yz-die-hold), inset 0 3px 4px var(--yz-box-inner-shadow), inset 0 -1px 0 rgba(255,255,255,.7);
+  animation: yzSelectedRingPulse 1s ease-in-out infinite;
+}
+@keyframes yzSelectedRingPulse{
+  0%,100%{ box-shadow: 0 0 0 3px var(--yz-die-hold), inset 0 3px 4px var(--yz-box-inner-shadow), inset 0 -1px 0 rgba(255,255,255,.7); }
+  50%{ box-shadow: 0 0 0 5px var(--yz-die-hold), inset 0 3px 4px var(--yz-box-inner-shadow), inset 0 -1px 0 rgba(255,255,255,.7); }
+}
+
+/* score-commit: flash + bounce + row shimmer (spec 10.2) */
+@keyframes yzBoxFlash{
+  0%{ background:linear-gradient(180deg,var(--yz-box-top),var(--yz-box-bot)); }
+  25%{ background:#FFF9E6; }
+  100%{ background:linear-gradient(180deg,var(--yz-box-top),var(--yz-box-bot)); }
+}
+.yz-root .yz-score-box.yz-flash{ animation: yzBoxFlash .5s ease-out 1; }
+@keyframes yzNumBounce{
+  0%{ transform:scale(1); } 30%{ transform:scale(1.7); } 65%{ transform:scale(.92); } 100%{ transform:scale(1); }
+}
+.yz-root .yz-num.yz-bounce{ display:inline-block; animation: yzNumBounce .34s cubic-bezier(.34,1.56,.64,1) 1; }
+.yz-root .yz-opp-num .yz-num.yz-bounce{ display:inline-block; }
+.yz-root .yz-row-band.yz-shimmer::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(100deg, transparent 30%, rgba(255,255,255,.6) 50%, transparent 70%);
+  background-size:250% 100%; background-position:150% 0;
+  animation: yzShimmerSweep .5s ease-out 1;
+}
+@keyframes yzShimmerSweep{ from{ background-position:150% 0; } to{ background-position:-50% 0; } }
+
+.yz-root .yz-cat-icon.yz-pulse-gold{ animation: yzIconPulseGold .9s ease-in-out 2; }
+@keyframes yzIconPulseGold{
+  0%,100%{ box-shadow: 0 0 0 2px #fff, inset 0 2px 0 rgba(255,255,255,.45), 0 2px 0 var(--yz-icon-red-edge), 0 3px 4px rgba(0,0,0,.25); }
+  50%{ box-shadow: 0 0 0 4px var(--yz-yahtzee-gold), 0 0 16px 4px rgba(255,201,60,.7), inset 0 2px 0 rgba(255,255,255,.45), 0 2px 0 var(--yz-icon-red-edge), 0 3px 4px rgba(0,0,0,.25); }
+}
+
+/* turn change: pod cross-fade (background-color transition already on .yz-pod) + incoming pulse */
+@keyframes yzPodPulse{ 0%{ transform:scale(1); } 45%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
+.yz-root .yz-pod.yz-pulse{ animation: yzPodPulse .25s ease-out 1; }
+
+/* pip icon */
+.yz-root .yz-pips{ position:relative; width:48px; height:48px; }
+.yz-root .yz-pips i{ position:absolute; width:8px; height:8px; border-radius:50%; background:var(--yz-icon-white); transform:translate(-50%,-50%); }
+.yz-root .yz-p-tl{ left:14px; top:14px; } .yz-root .yz-p-tr{ left:34px; top:14px; }
+.yz-root .yz-p-ml{ left:14px; top:24px; } .yz-root .yz-p-mr{ left:34px; top:24px; }
+.yz-root .yz-p-bl{ left:14px; top:34px; } .yz-root .yz-p-br{ left:34px; top:34px; }
+.yz-root .yz-p-c{ left:24px; top:24px; }
+
+.yz-root .yz-xn{ color:#fff; font:800 26px/1 "Baloo 2",sans-serif; font-style:italic; letter-spacing:-1px; }
+.yz-root .yz-xn small{ font-size:19px; }
+
+.yz-root .yz-house{
+  width:30px; height:28px;
+  background:#fff;
+  clip-path: polygon(50% 0%, 100% 42%, 86% 42%, 86% 100%, 14% 100%, 14% 42%, 0% 42%);
+  position:relative;
+}
+.yz-root .yz-house::after{
+  content:""; position:absolute; left:39%; top:58%; width:22%; height:42%; background:var(--yz-icon-red-bot);
+  border-radius:2px 2px 0 0;
+}
+
+.yz-root .yz-straight-fan{ position:relative; width:44px; height:34px; }
+.yz-root .yz-straight-fan .yz-card{
+  position:absolute; width:13px; height:18px; background:#fff; border-radius:3px; top:0; left:15.5px;
+}
+.yz-root .yz-straight-fan .yz-card:nth-child(1){ transform:translateX(-11px) rotate(-16deg); }
+.yz-root .yz-straight-fan .yz-card:nth-child(2){ transform:rotate(0deg); }
+.yz-root .yz-straight-fan .yz-card:nth-child(3){ transform:translateX(11px) rotate(16deg); }
+.yz-root .yz-straight-fan .yz-banner{
+  position:absolute; left:50%; bottom:-2px; transform:translateX(-50%);
+  width:34px; height:12px; background:#fff; border-radius:6px;
+  display:grid; place-items:center;
+  font:800 9px/1 "Baloo 2",sans-serif; color:#D42E2E; letter-spacing:.5px;
+}
+
+.yz-root .yz-yahtzee-word{
+  font:14px "Luckiest Guy",cursive; color:var(--yz-yahtzee-gold);
+  -webkit-text-stroke:2.5px #8B1A00; paint-order:stroke fill;
+  transform:skewX(-8deg);
+}
+
+.yz-root .yz-chance-q{ color:#fff; font:800 30px/1 "Baloo 2",sans-serif; }
+
+/* sparkles */
+.yz-root .yz-sparkle{ position:absolute; width:9px; height:9px; color:#fff; animation:yzTwinkle 1.8s ease-in-out infinite; }
+@keyframes yzTwinkle{ 0%,100%{ opacity:.3; transform:scale(.7);} 50%{ opacity:1; transform:scale(1);} }
+
+/* ---------- Dice tray: real CSS 3D cubes ---------- */
+.yz-root .yz-die{ position:absolute; width:56px; height:56px; top:591px; perspective:600px; transition: transform .14s ease-out; }
+.yz-root .yz-die-shadow{
+  position:absolute; left:5px; bottom:-8px; width:46px; height:10px; border-radius:50%;
+  background:rgba(0,20,50,.4); filter:blur(2px); transition: transform .18s, opacity .18s, filter .18s;
+}
+.yz-root .yz-die .yz-cube{
+  position:relative; width:56px; height:56px; transform-style:preserve-3d;
+  transform: rotateX(0deg) rotateY(0deg);
+}
+.yz-root .yz-face{
+  position:absolute; inset:0; width:56px; height:56px; border-radius:11px; backface-visibility:hidden;
+  background:linear-gradient(160deg,#FFFFFF 0%, #FFFFFF 45%, var(--yz-die-bot) 100%);
+  border:1px solid var(--yz-die-edge);
+  box-shadow: inset 0 2px 0 #fff;
+}
+.yz-root .yz-face .yz-pip{ position:absolute; width:9px; height:9px; border-radius:50%; background:var(--yz-pip); }
+.yz-root .yz-face.yz-f1{ transform: translateZ(28px); }
+.yz-root .yz-face.yz-f6{ transform: rotateY(180deg) translateZ(28px); }
+.yz-root .yz-face.yz-f2{ transform: rotateX(90deg) translateZ(28px); }
+.yz-root .yz-face.yz-f5{ transform: rotateX(-90deg) translateZ(28px); }
+.yz-root .yz-face.yz-f3{ transform: rotateY(90deg) translateZ(28px); }
+.yz-root .yz-face.yz-f4{ transform: rotateY(-90deg) translateZ(28px); }
+
+.yz-root .yz-die.yz-held{ transform: translateY(-10px); }
+.yz-root .yz-die.yz-held .yz-cube .yz-face{ box-shadow: inset 0 2px 0 #fff, 0 0 0 3px var(--yz-die-hold), 0 0 10px 3px rgba(255,213,74,.55); }
+
+/* ---------- Buttons ---------- */
+.yz-root .yz-roll-btn{
+  position:absolute; left:10px; top:664px; width:257px; height:59px; border-radius:16px;
+  background:linear-gradient(180deg,#0A88C4 0%, #0A88C4 5%, #9BF2FA 9%, #56FEF9 22%, #33FEFE 42%, #04D5F2 72%, #027BAD 92%, #012B4B 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.55), 0 4px 0 var(--yz-roll-lip), 0 5px 6px rgba(0,0,0,.28);
+  border:none; padding:0; transition: transform 60ms, box-shadow 60ms;
+}
+.yz-root .yz-roll-btn.yz-disabled{ filter:saturate(.55); box-shadow:none; cursor:not-allowed; }
+.yz-root .yz-roll-btn:active:not(.yz-disabled){ transform:translateY(3px); box-shadow:none; }
+.yz-root .yz-roll-btn .yz-label{
+  position:absolute; left:28px; top:50%; transform:translateY(-50%);
+  font:800 26px/1 "Baloo 2",sans-serif; color:#fff;
+  -webkit-text-stroke:4px #05496E; paint-order:stroke fill;
+}
+.yz-root .yz-roll-pip{
+  position:absolute; top:676px; width:22px; height:22px; border-radius:6px;
+  display:grid; place-items:center; font:800 14px/1 "Baloo 2",sans-serif;
+}
+.yz-root .yz-roll-pip.yz-lit{ background:#fff; box-shadow: inset 0 -2px 0 #B9CEDB; color:#0A5A84; }
+.yz-root .yz-roll-pip.yz-dim{ background:rgba(1,60,95,.35); color:rgba(255,255,255,.3); }
+
+.yz-root .yz-play-btn{
+  position:absolute; left:279px; top:672px; width:126px; height:51px; border-radius:16px;
+  border:none; padding:0; transition: transform 60ms, box-shadow 60ms;
+}
+.yz-root .yz-play-btn.yz-off{
+  background:linear-gradient(180deg,var(--yz-play-off-a),var(--yz-play-off-b));
+  box-shadow: 0 5px 6px rgba(0,0,0,.28);
+  cursor:not-allowed;
+}
+.yz-root .yz-play-btn.yz-off .yz-label{ color:var(--yz-play-off-text); font:800 22px/1 "Baloo 2",sans-serif; }
+.yz-root .yz-play-btn.yz-on{
+  background:linear-gradient(180deg,var(--yz-play-on-a),var(--yz-play-on-b));
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.5), 0 4px 0 var(--yz-play-lip), 0 5px 6px rgba(0,0,0,.28);
+  animation: yzPlayPulse 1.6s ease-in-out infinite;
+}
+.yz-root .yz-play-btn.yz-on:active{ transform:translateY(3px); box-shadow:none; animation:none; }
+.yz-root .yz-play-btn.yz-on .yz-label{ color:#fff; -webkit-text-stroke:3px #234E08; paint-order:stroke fill; font:800 22px/1 "Baloo 2",sans-serif; }
+@keyframes yzPlayPulse{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.04);} }
+.yz-root .yz-play-btn .yz-label{ position:absolute; inset:0; display:grid; place-items:center; }
+
+/* ---------- Overlay / toast / celebration (spec 10.3 set piece) ---------- */
+.yz-root #toast{
+  position:absolute; left:50%; top:16px; transform:translateX(-50%); opacity:0; pointer-events:none;
+  background:rgba(0,0,0,.6); color:var(--yz-yahtzee-gold); font:800 15px "Baloo 2",sans-serif;
+  padding:6px 14px; border-radius:10px; transition:opacity .3s, transform .3s; z-index:60; white-space:nowrap;
+}
+.yz-root #toast.yz-show{ opacity:1; transform:translateX(-50%) translateY(8px); }
+
+.yz-root #celebration{ position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:55; }
+.yz-root #cel-flash{ position:absolute; inset:0; background:#fff; opacity:0; }
+.yz-root #cel-flash.yz-play{ animation: yzCelFlash .14s ease-out 1; }
+@keyframes yzCelFlash{ 0%{opacity:0;} 40%{opacity:.38;} 100%{opacity:0;} }
+
+.yz-root #cel-rays{
+  position:absolute; left:205px; top:300px; width:560px; height:560px; margin:-280px 0 0 -280px;
+  background: repeating-conic-gradient(from 0deg, #FFE680 0deg 3deg, transparent 3deg 22.5deg);
+  border-radius:50%; opacity:0;
+}
+.yz-root #cel-rays.yz-play{ animation: yzCelRays 2.6s linear 1; }
+@keyframes yzCelRays{
+  0%{ transform:rotate(0deg) scale(.3); opacity:0; }
+  15%{ opacity:.85; }
+  85%{ opacity:.85; }
+  100%{ transform:rotate(360deg) scale(1.9); opacity:0; }
+}
+
+.yz-root #cel-text{
+  position:absolute; left:205px; top:300px; transform:translate(-50%,-50%) scale(.15) rotate(-20deg);
+  font:62px "Luckiest Guy",cursive; white-space:nowrap;
+  background:linear-gradient(180deg,#FFF2B0,#FFC400,#FF8A00);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  -webkit-text-stroke:7px #8B1A00; paint-order:stroke fill;
+  filter: drop-shadow(0 6px 0 #6B1200) drop-shadow(0 10px 14px rgba(0,0,0,.5));
+  opacity:0;
+}
+.yz-root #cel-text.yz-play{ animation: yzCelText 2.6s cubic-bezier(.34,1.56,.64,1) 1; }
+@keyframes yzCelText{
+  0%{ transform:translate(-50%,-50%) scale(.15) rotate(-20deg); opacity:0; }
+  28%{ transform:translate(-50%,-50%) scale(1.32) rotate(7deg); opacity:1; }
+  40%{ transform:translate(-50%,-50%) scale(.93) rotate(-4deg); opacity:1; }
+  52%{ transform:translate(-50%,-50%) scale(1.09) rotate(2deg); opacity:1; }
+  62%{ transform:translate(-50%,-50%) scale(1) rotate(0deg); opacity:1; }
+  88%{ transform:translate(-50%,-50%) scale(1) rotate(0deg); opacity:1; }
+  100%{ transform:translate(-50%,-50%) scale(1.15) translateY(-38px) rotate(0deg); opacity:0; }
+}
+
+.yz-root #cel-confetti{ position:absolute; inset:0; }
+.yz-root .yz-confetti-piece{ position:absolute; left:205px; top:300px; will-change:transform,opacity; }
+
+@media (prefers-reduced-motion: reduce){
+  .yz-root #cel-rays.yz-play{ animation-duration:.05s; }
+  .yz-root #cel-text.yz-play{ animation-duration:.2s; }
+  .yz-root #cel-flash.yz-play{ animation-duration:.05s; }
+}
+
+.yz-root #overlay{
+  position:absolute; inset:0; display:none; place-items:center; background:rgba(0,0,0,.55); z-index:50;
+}
+.yz-root #overlay.yz-show{ display:grid; }
+.yz-root .yz-overlay-card{
+  background:var(--yz-orange-strip); border:4px solid var(--yz-gold-rule); border-radius:20px;
+  padding:26px 30px; text-align:center; color:#5C2E00; font:800 18px "Baloo 2",sans-serif; max-width:320px;
+}
+.yz-root .yz-overlay-title{ font-size:26px; margin-bottom:14px; }
+.yz-root .yz-overlay-scores{ margin-bottom:18px; font-weight:700; line-height:1.6; }
+.yz-root .yz-overlay-card .yz-play-btn{ position:static; display:inline-block; }
+
+@media (prefers-reduced-motion: reduce){
+  .yz-root .yz-sparkle, .yz-root .yz-play-btn.yz-on, .yz-root .yz-score-box.yz-selected{ animation-duration:.01s; }
+  .yz-root .yz-die, .yz-root .yz-die .yz-cube{ transition-duration:.02s; }
+}

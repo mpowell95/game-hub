@@ -22,16 +22,20 @@ const rec = (profile, games, updatedAt = 1000) => ({ profile, stats: { games }, 
 const one = (games, name = 'P') => aggregatePlayers({ d1: rec({ name }, games) })[0];
 
 // ---------------------------------------------------------------------------
-console.log('\n-- record(): draws fold into wins, and W + L always equals Plays --');
+console.log('\n-- record(): a DRAW IS NOT A WIN, and W + L never exceeds Plays --');
 
-eq('draw-heavy Tic Tac Toe 2W/2L/10D', record({ played: 14, won: 2, lost: 2 }), { wins: 12, losses: 2, played: 14 });
+// The 2026-07-28 reversal (Matt: "Tictactoe ties are being counted as wins. That's wrong.").
+// This record used to render 12 wins; the ten draws are draws.
+eq('draw-heavy Tic Tac Toe 2W/2L/10D', record({ played: 14, won: 2, lost: 2 }), { wins: 2, losses: 2, played: 14 });
 eq('clean record passes through', record({ played: 18, won: 15, lost: 3 }), { wins: 15, losses: 3, played: 18 });
 eq('empty record', record({}), { wins: 0, losses: 0, played: 0 });
 eq('missing total', record(undefined), { wins: 0, losses: 0, played: 0 });
-// A legacy record where won + lost exceeds played must NOT produce a negative win count.
+// A legacy record where won + lost exceeds played must NOT inflate either number.
 eq('legacy won+lost > played', record({ played: 10, won: 8, lost: 7 }), { wins: 3, losses: 7, played: 10 });
 // ...and one where lost alone exceeds played still reconciles (losses clamp to played).
 eq('corrupt lost > played', record({ played: 4, won: 0, lost: 9 }), { wins: 0, losses: 4, played: 4 });
+// A solo game's every-run-is-a-win shape is untouched by the reversal: `won` is genuinely stored.
+eq('solo run record (played+1/won+1) keeps its wins', record({ played: 40, won: 40, lost: 0 }), { wins: 40, losses: 0, played: 40 });
 
 {
   const fixtures = [
@@ -39,8 +43,11 @@ eq('corrupt lost > played', record({ played: 4, won: 0, lost: 9 }), { wins: 0, l
     { played: 10, won: 8, lost: 7 }, { played: 4, won: 0, lost: 9 }, { played: 250, won: 3, lost: 240 },
     { played: 7, won: 7, lost: 0 }, { played: 33, won: 0, lost: 33 },
   ];
-  const bad = fixtures.filter((f) => { const r = record(f); return r.wins + r.losses !== r.played || r.wins < 0 || r.losses < 0; });
-  ok('W + L === Plays for every fixture, never negative', bad.length === 0, `offenders: ${JSON.stringify(bad)}`);
+  const bad = fixtures.filter((f) => { const r = record(f); return r.wins + r.losses > r.played || r.wins < 0 || r.losses < 0; });
+  ok('W + L <= Plays for every fixture, never negative', bad.length === 0, `offenders: ${JSON.stringify(bad)}`);
+  // No stored win may go missing: `wins` is the stored counter whenever the record is coherent.
+  const dropped = fixtures.filter((f) => (f.won | 0) + (f.lost | 0) <= (f.played | 0) && record(f).wins !== (f.won | 0));
+  ok('every stored win survives on a coherent record', dropped.length === 0, `offenders: ${JSON.stringify(dropped)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,11 +242,14 @@ console.log('\n-- THE LAW rule 1: nobody visible before the change is invisible 
       `rated ${r.plays} of ${stored} stored`);
   }
 
-  // The draw-heavy record is the headline correctness fix: it used to render 2-2 beside 14 plays.
+  // The draw-heavy record is the headline correctness fix (2026-07-28): ten stalemates against an
+  // unbeatable Classic Pro used to render as 12 wins. Wins are the 2 real ones; the plays all stay.
   const draws = list.find((g) => g.name === 'Draws');
   const dr = record(draws.games.tictactoe.total);
-  eq('draw-heavy Tic Tac Toe now reconciles', [dr.wins, dr.losses, dr.played], [12, 2, 14]);
-  ok('...and its win rate matches its W-L', Math.round((dr.wins / dr.played) * 100) === 86);
+  eq('draw-heavy Tic Tac Toe counts only real wins', [dr.wins, dr.losses, dr.played], [2, 2, 14]);
+  ok('...and the 10 draws are still stored and countable', draws.games.tictactoe.tt.classic.tied === 10);
+  ok('...and none of the 14 plays went missing', dr.played === 14
+    && ranked.find((r) => r.group.name === 'Draws').plays === 14);
 
   // Legacy-bucket player keeps every play and is rated.
   const vieja = ranked.find((r) => r.group.name === 'Vieja');

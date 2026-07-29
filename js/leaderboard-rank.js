@@ -8,17 +8,20 @@
 //
 // Two rules carry most of the weight:
 //
-// 1. A DRAW COUNTS AS A WIN, for every player, in every game. Against Tic Tac Toe's Classic Pro
-//    ("exhaustive minimax, unbeatable by design", CLAUDE.md) a draw is the best achievable result,
-//    so it earns credit. It also makes every record reconcile: bumpTotals() increments `played` but
-//    neither `won` nor `lost` on a draw, so a stored 2W/2L/10D record used to render as W-L "2-2"
-//    beside Plays "14" and a 14% win rate - three numbers that contradicted each other. Derived at
-//    render time, NEVER stored: see record().
+// 1. A DRAW IS NOT A WIN (Matt, 2026-07-28: "Tictactoe ties are being counted as wins. That's
+//    wrong."). `wins` is the stored `won` counter and nothing else. This REVERSES the original
+//    draws-as-wins rule, which folded every tie into the wins number for every game - most visibly
+//    in Tic Tac Toe, where Classic vs Pro is unbeatable by design and therefore draw-heavy, so a
+//    long stalemate streak read as a winning streak. The reconciliation argument that motivated the
+//    old rule (W + L === Plays) is dropped deliberately: plays now legitimately exceed wins +
+//    losses by the number of draws, which is the honest shape.
 // 2. Difficulty is WEIGHTED, not filtered. Every play counts; harder tiers count for more.
 //
-// Draws stay visible in their own right on the My Stats screen (game-stats-ui.js shows Tic Tac
-// Toe's, Dots and Boxes' and Boggle's explicit W/L/T), which is the surface that satisfies THE LAW
-// rule 1 for the raw breakdown. The leaderboard is the ranked view and uses the simplified rule.
+// Draws are not shown as their own number on the leaderboard (Matt's call, same day): they stay
+// visible in their own right on the My Stats screen (game-stats-ui.js shows Tic Tac Toe's, Dots
+// and Boxes' and Boggle's explicit W/L/T), which is the surface that satisfies THE LAW rule 1 for
+// the raw breakdown. Nothing stored changed - `played`/`won`/`lost` are byte-identical before and
+// after, and this is reversible by editing these functions and nothing else.
 
 import { COMPETITIVE } from './players-agg.js';
 import { tierOf, TIER_WEIGHT } from './difficulty-tiers.js';
@@ -27,14 +30,17 @@ import { tierOf, TIER_WEIGHT } from './difficulty-tiers.js';
  *  Wilson already pushes those players down; the flag just makes the reason legible. */
 export const PROVISIONAL_PLAYS = 5;
 
-/** Draws-as-wins, derived. `wins = played - losses`, not `won + (played - won - lost)`: same result,
- *  one operation, and it cannot go negative on a legacy record where `won + lost > played`. Losses
- *  are clamped to `played` too, so W + L === Plays holds for EVERY record, however malformed. */
+/** Wins are the STORED `won` counter: a draw is not a win (see rule 1 in the header). Losses clamp
+ *  to `played`, and wins clamp to whatever `played` has left after losses, so W + L <= Plays holds
+ *  for EVERY record however malformed (a legacy record with `won + lost > played` cannot inflate
+ *  either number, and neither can go negative). The difference, `played - wins - losses`, is the
+ *  draw count - not surfaced here, since no caller displays it. */
 export function record(total) {
   const t = total || {};
   const played = Math.max(0, t.played | 0);
   const losses = Math.min(Math.max(0, t.lost | 0), played);
-  return { wins: played - losses, losses, played };
+  const wins = Math.min(Math.max(0, t.won | 0), played - losses);
+  return { wins, losses, played };
 }
 
 /**
@@ -50,19 +56,22 @@ export function bucketsOf(game) {
   const g = game || {};
   const bd = g.byDiff || {};
   const out = [];
-  let sumPlayed = 0, sumLosses = 0;
+  let sumPlayed = 0, sumWins = 0, sumLosses = 0;
   for (const key of Object.keys(bd)) {
     const b = bd[key] || {};
     const r = record(b);
     if (r.played <= 0) continue;
-    sumPlayed += r.played; sumLosses += r.losses;
+    sumPlayed += r.played; sumWins += r.wins; sumLosses += r.losses;
     out.push({ key, tier: tierOf(key), played: r.played, wins: r.wins, losses: r.losses });
   }
   const t = record(g.total);
   const restPlayed = t.played - sumPlayed;
   if (restPlayed > 0) {
+    // Wins in the remainder are the total's own wins that no bucket accounted for - derived, not
+    // assumed: a play with no difficulty bucket is not automatically a win now that draws are not.
     const restLosses = Math.max(0, Math.min(t.losses - sumLosses, restPlayed));
-    out.push({ key: '', tier: null, played: restPlayed, wins: restPlayed - restLosses, losses: restLosses });
+    const restWins = Math.max(0, Math.min(t.wins - sumWins, restPlayed - restLosses));
+    out.push({ key: '', tier: null, played: restPlayed, wins: restWins, losses: restLosses });
   }
   return out;
 }

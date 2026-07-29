@@ -399,6 +399,33 @@ export const GAME_ART = {
             <circle cx="140" cy="72" r="11" fill="#ffce3a"/>
             <text x="140" y="72" font-size="13" font-weight="700" fill="#201a08" text-anchor="middle" dominant-baseline="central">2</text>
           </svg>`,
+  yahtzee: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#0878CE"/>
+            <g transform="translate(38 52) rotate(-10)">
+              <rect x="-19" y="-19" width="38" height="38" rx="8" fill="#fff" stroke="#B9B2A4" stroke-width="1.5"/>
+              <circle cx="-9" cy="-9" r="3.2" fill="#15181C"/>
+              <circle cx="9" cy="-9" r="3.2" fill="#15181C"/>
+              <circle cx="0" cy="0" r="3.2" fill="#15181C"/>
+              <circle cx="-9" cy="9" r="3.2" fill="#15181C"/>
+              <circle cx="9" cy="9" r="3.2" fill="#15181C"/>
+            </g>
+            <g transform="translate(100 34) rotate(12)">
+              <rect x="-16" y="-16" width="32" height="32" rx="7" fill="#fff" stroke="#B9B2A4" stroke-width="1.5"/>
+              <circle cx="-7.5" cy="-7.5" r="2.9" fill="#15181C"/>
+              <circle cx="0" cy="0" r="2.9" fill="#15181C"/>
+              <circle cx="7.5" cy="7.5" r="2.9" fill="#15181C"/>
+            </g>
+            <g transform="translate(128 63) rotate(-6)">
+              <rect x="-15" y="-15" width="30" height="30" rx="7" fill="url(#yzTileIcon)" stroke="#9E1515" stroke-width="1.5"/>
+              <circle cx="0" cy="0" r="3.4" fill="#fff"/>
+            </g>
+            <defs>
+              <linearGradient id="yzTileIcon" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#FE4B4B"/>
+                <stop offset="1" stop-color="#CB2222"/>
+              </linearGradient>
+            </defs>
+          </svg>`,
 };
 
 export default GAME_ART;

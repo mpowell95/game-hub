@@ -376,8 +376,8 @@ function hasPlays(id, rec) {
 }
 
 /** The headline number + unit for a game's row in the shared game-list drill-down: wins
- *  (draws-as-wins, the same maths the leaderboard uses) for competitive games, the game's own
- *  solo metric for Ball Run/Snake/Nuts & Bolts. */
+ *  (the stored `won` counter, ties excluded — the same maths the leaderboard uses) for
+ *  competitive games, the game's own solo metric for Ball Run/Snake/Nuts & Bolts. */
 function headlineOf(id, rec) {
   if (id === 'ballrun') return { n: (rec.br && rec.br.bestObstacles) | 0, unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };

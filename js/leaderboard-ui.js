@@ -387,12 +387,13 @@ function textureHTML(list, id) {
 }
 
 // Tic Tac Toe's game page shows the Ultimate/Classic split instead of one wins number (Matt:
-// "tic tac toe leaderboard just show ultimate vs classic") — same draws-as-wins rule per variant
-// (wins = played - lost), computed straight from the `tt` sub-counter, which has no per-tier
+// "tic tac toe leaderboard just show ultimate vs classic") — same not-a-draw rule per variant as
+// leaderboard-rank.js's record() (wins = the stored `won`, ties excluded; Matt, 2026-07-28),
+// computed straight from the `tt` sub-counter, which has no per-tier
 // storage (like Chinchón closes/Boggle words in textureHTML below), so it is filter-INDEPENDENT:
 // the difficulty pills still gate which players are listed (via the generic total/byDiff bucket),
-// but never change these two numbers.
-function ttVariantWins(v) { return Math.max(0, (v && v.played | 0) - (v && v.lost | 0)); }
+// but never change these two numbers. `tt` stores `tied` explicitly, so this needs no derivation.
+function ttVariantWins(v) { return Math.max(0, Math.min((v && v.won) | 0, (v && v.played) | 0)); }
 
 function ttCardHTML(g, i) {
   const me = g.key === _meKey ? ' is-me' : '';

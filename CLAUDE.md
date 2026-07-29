@@ -315,6 +315,7 @@ working in that folder).
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
+| Yahtzee | in-hub `module:`, immersive | `.yz-root` / `.yz-` | none yet (no persisted settings) | none yet (no stats recorder yet) |
 
 The root-class/prefix cells were verified against each game's actual CSS on 2026-07-23 (note
 Tic Tac Toe is `.ttt-`, three letters, and Filler/Mancala use pre-convention full-word root

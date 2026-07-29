@@ -220,6 +220,16 @@ const GAMES = [
     art: GAME_ART["uno"],
   },
   {
+    id: 'yahtzee',
+    title: 'Yahtzee',
+    blurb: { en: 'Roll, hold, and fill the card. 13 categories, upper bonus, and the joker rule.',
+      es: 'Tira, retén y llena la tarjeta. 13 categorías, bono superior, y la regla del comodín.' },
+    module: '../yahtzee/js/ui.js',
+    immersive: true,
+    accent: '#D53922',
+    art: GAME_ART["yahtzee"],
+  },
+  {
     id: 'pool',
     title: { en: 'Pool', es: 'Billar' },
     blurb: { en: 'Real cue-ball physics: draw, follow, english. 8-ball vs. the computer, a friend, or practice alone.',

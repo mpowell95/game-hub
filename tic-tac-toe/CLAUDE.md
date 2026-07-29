@@ -13,6 +13,15 @@ room is joined, since leaving is consequential for the live opponent.
 
 Two variants, one segmented control in setup: **Classic** (3x3) and **Ultimate** (nine 3x3 boards nested in a 3x3 meta-board; the cell you play picks which board your opponent plays next, a resolved target board grants a free move, and a small board that fills with no winner is DEAD — counts for neither side, never playable again). Pure engine (`tic-tac-toe/js/game.js`) + `ai.js`, no DOM, same synchronous shape as Filler/Mancala (no async agent interface — a move has no multi-step resolution to pace). Three shared-vocabulary tiers (beginner/intermediate/pro) per variant: Classic Pro is **exhaustive minimax, unbeatable by design** (a perfect opponent can only draw it — intentional, not a bug); Ultimate Pro is iterative-deepening alpha-beta under a ~380ms budget (Mancala's Pro tier is the precedent for that number), with a 4-term eval (positional small-board ownership, meta-line potential, in-board two-in-a-row, and a heavily-weighted "send penalty" for handing the opponent a good board or a free move — the term that makes it play like Ultimate instead of nine unrelated games). Setup screen is Escoba's accordion pattern. Settings in `gamehub.tictactoe.v1`. Results via `recordTicTacToe(variant, difficulty, won)`: maintains the shared `total`/`byDiff` bucket (draws derived, like every other game) AND an explicit per-variant `tt.classic`/`tt.ultimate` `{played,won,lost,tied}` breakdown — `tied` is stored explicitly there (not derived) because this game is draw-heavy, especially Classic vs Pro; the Stats tab shows all six W/L/T numbers, never folded away.
 
+**A tie is not a win, anywhere it is displayed (Matt, 2026-07-28: "Tictactoe ties are being counted
+as wins. That's wrong.").** This game is where the repo-wide draws-as-wins display rule was most
+obviously broken — Classic Pro is unbeatable by design, so a long stalemate streak rendered as a
+winning streak on both the Leaderboard and My Stats. The fix is entirely in the shared read-time
+transform (`record()`/`bucketsOf()` in `js/leaderboard-rank.js`, plus `ttVariantWins()` in
+`js/leaderboard-ui.js` for this game's own Ultimate/Classic card); nothing this game stores changed,
+and `recordTicTacToe` is byte-identical. Full rationale: `js/CLAUDE.md`, "The leaderboard's rating
+model".
+
 The How-to-play screen pattern in the root CLAUDE.md was worked out on this game;
 `openHelp()` in `js/ui.js` is its reference implementation.
 
