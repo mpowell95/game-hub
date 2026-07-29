@@ -232,7 +232,7 @@ export const MAPS = {
     baseTrackWidth: BASE_TRACK_WIDTH,
     minTrackWidth: MIN_TRACK_WIDTH,
     difficulties: DIFFICULTIES,
-    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel', 'split'], // Phase 2: split lands; jump is Phase 3
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel', 'split', 'jump'], // Phase 3: jump lands
     // Split tuning (Phase 2, spec sections 2 & 6 — "these numbers are guesses, not tuned
     // values"). All widths in ball-widths (BW), matching every other geometry constant in
     // this file; Track converts to world units. `minStraightAfter` mirrors
@@ -250,6 +250,42 @@ export const MAPS = {
       minStraightAfter: 3,
       sideIdenticalChance: 0.5,
       sideObstacleChance: 0.35, // remaining 0.15 rolls 'unequal' lane widths
+    },
+    // Jump tuning (Phase 3, spec sections 3 & 6 — same "starting guess" disclaimer as Split's).
+    // Unlike Split's mutually-exclusive side-variety roll, the spec's difficulty list is
+    // "pick one or more per jump" (section 3): narrower/offset/split/height-change are each their
+    // own independent chance and can combine freely on the same jump (a plain flat jump with none
+    // of them rolled is also a valid, and the most common, outcome).
+    jump: {
+      gapMinSegs: 2,
+      gapMaxSegs: 4,
+      cadenceM: 160, // offset from split's 120m so the two schedules don't collide (section 6)
+      landingHoldSegs: 4,
+      recoverySegs: 3,
+      minStraightAfter: 3,
+      gravity: 22, // world units/sec^2 - a dedicated constant (spec: "a new gravity constant"),
+                   // deliberately separate from FALL_GRAVITY (the crash-fall animation) so a
+                   // flight-arc retune never silently changes how a crash looks, or vice versa
+      apexCapBW: 3, // ball-diameters above launch height; a rolled gap that would exceed this is
+                    // shortened at generation time (section 3), never played as rolled
+      narrowChance: 0.4, // chance the landing pad is narrower than the launch pad
+      narrowStepBW: 1.5, // ball-widths narrower, when rolled
+      offsetChance: 0.4, // chance the landing pad is laterally offset (steer in the air)
+      splitChance: 0.3, // chance the landing pad is itself split (voidHalfWidth > 0)
+      // A split landing pad needs its OWN dedicated width, same reason Split's own event widens
+      // before opening a void: Orbital's normal 5-BW track can't fit two minTrackWidth (3 BW)
+      // lanes at all (2*3 = 6 > 5), let alone with a gap between them. When `splitChance` rolls,
+      // this REPLACES whatever the `narrowChance` roll would have picked, rather than trying to
+      // reconcile "narrower" and "split" as competing width requirements (chosen once here,
+      // verified >= 2*minTrackWidth + 2*splitVoidHalfBW so it's never a runtime coin flip whether
+      // the split will fit).
+      splitVoidHalfBW: 0.75, // a 1.5 BW gap - smaller than Split's own 2.5 BW, a landing pad's fork is a smaller moment than a full Split event
+      splitTotalWidthBW: 8, // >= 2*3 (minTrackWidth) + 2*0.75 (splitVoidHalfBW) = 7.5, with margin
+      heightChance: 0.35, // chance the landing is at a different height
+      heightStepBW: 2, // ball-diameters of height change, when rolled (BALL_DIAMETER-based like
+                        // every other geometry constant, converted to world units by Track)
+      dropChance: 0.7, // of a height change, how often it's a drop-down vs. a step-up
+                        // ("a drop-down reads great as the deck gives out", section 3)
     },
     // Visual identity (spec section 5): near-black deep navy void, dark slate deck panels
     // with lighter seams, a continuous amber (#ffce3a) edge stripe since this map is about

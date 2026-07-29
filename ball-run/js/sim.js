@@ -13,6 +13,8 @@ import { Track } from './track.js';
 
 export const RunState = Object.freeze({
   PLAYING: 'playing',
+  AIRBORNE: 'airborne', // mid-Jump flight (BALLRUNMAP2ORBITALSPEC.md section 3): no edge/obstacle/
+                         // void checks, only the landing check can end this - steering still works
   CRASHING: 'crashing', // obstacle hit: forward motion stopped, brief beat before game-over
   FALLING: 'falling',   // off the edge: gravity drop, camera holds, brief beat before game-over
   GAME_OVER: 'gameover',
@@ -55,12 +57,25 @@ export class Sim {
 
     // Guards so a tunnel's speed-tier bonus is only ever applied once.
     this._countedTunnelIndex = -1;
+
+    // Jump (Orbital only, section 3): `y` is the ball's world HEIGHT, kept in sync every tick
+    // regardless of state - `track.frameAt(z).y` while grounded (always 0 outside a Jump's own
+    // segments), physics-integrated while AIRBORNE. render.js reads this directly for the ball's
+    // vertical position and the camera's height damping; it is 0 for the lifetime of any run that
+    // never encounters a Jump (Classic, or Orbital before Phase 3), so this is a no-op change for
+    // every map/event this file already supported.
+    this.y = 0;
+    this.vy = 0;
+    this.jumpLandingY = 0;
+    this.jumpGravity = 0;
+    this._lastGapEntryIndex = -1; // guards a jump's launch to fire exactly once, mirrors _countedTunnelIndex
   }
 
   /** One fixed-step tick. dragAxis is the normalized drag delta accumulated this tick; keyAxis is -1/0/1. */
   step(dragAxis, keyAxis) {
     const dt = SIM_DT;
     if (this.state === RunState.PLAYING) this.stepPlaying(dt, dragAxis, keyAxis);
+    else if (this.state === RunState.AIRBORNE) this.stepAirborne(dt, dragAxis, keyAxis);
     else if (this.state === RunState.CRASHING) this.stepCrashing(dt);
     else if (this.state === RunState.FALLING) this.stepFalling(dt);
   }
@@ -96,9 +111,24 @@ export class Sim {
     // --- Track frame at the ball's new position ---
     const frame = this.track.frameAt(this.z);
     const halfWidth = frame.width / 2;
+    this.y = frame.y; // grounded height sync (Jump only; 0 everywhere else) - launchJump below
+                       // overrides this to an exact 0 the instant a jump's gap is entered, since
+                       // this per-tick frame lookup can already be a little way into the gap's own
+                       // height ramp by the time this check fires (see launchJump's own comment)
+
+    // --- Jump launch (section 3): the instant z enters a jump's gap, go airborne. `jumpMeta` is
+    // set ONLY on a gap's first segment (track.js's emitJump), so this fires exactly once per
+    // jump - no separate "is this the first gap segment" query needed, unlike the tunnel-tier
+    // guard below, which has no such marker to key off. ---
+    const seg = frame.segment;
+    if (seg && seg.jumpMeta && seg.index !== this._lastGapEntryIndex) {
+      this._lastGapEntryIndex = seg.index;
+      this.launchJump(seg.jumpMeta);
+      return; // airborne now - none of this tick's grounded checks below apply (section 3: "no
+              // edge check, no obstacle check, no void check" while in flight)
+    }
 
     // --- Speedpoint tunnel entry: apply the next speed tier once per tunnel ---
-    const seg = frame.segment;
     if (seg && seg.isTunnel && seg.index !== this._countedTunnelIndex) {
       // Only count once, at the first tunnel segment of the event (the event's own index run is monotonic).
       const isFirstTunnelSegment = !this.track.segments.some((s) => s.isTunnel && s.index === seg.index - 1);
@@ -123,14 +153,18 @@ export class Sim {
     // void band is a fall, same crash reason/animation as the outer edge (spec: "Sim change
     // (small)") - reuses the existing FALLING state, no new game-over path. `frame.voidHalfWidth`
     // is 0 for every non-Split segment, so this is a no-op on Classic and on Orbital outside a
-    // Split event.
-    if (frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - frame.voidCenter) < frame.voidHalfWidth) {
+    // Split event. `frame.voidCenter` is relative to the pad's own center (`frame.wCenter`, a
+    // Jump offset-landing thing - 0 everywhere else), so the void's true position relative to cx
+    // is their sum.
+    if (frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth) {
       this.beginCrash('edge');
       return;
     }
 
-    // --- Edge fall: ball's CENTER passes the track edge (brief section 5) ---
-    if (Math.abs(this.lateralOffset) > halfWidth) {
+    // --- Edge fall: ball's CENTER passes the track edge (brief section 5). `frame.wCenter` is a
+    // Jump offset-landing pad's own center, relative to cx (0 everywhere else, including every
+    // grounded segment outside that one variety). ---
+    if (Math.abs(this.lateralOffset - frame.wCenter) > halfWidth) {
       this.beginCrash('edge');
       return;
     }
@@ -152,6 +186,84 @@ export class Sim {
       if (seg.type === 'obstacle') this.score += 1;
       else if (seg.scoreOnce) this.score += 1;
       this._lastScoredSegmentIndex = seg.index;
+    }
+  }
+
+  /**
+   * Jump launch (BALLRUNMAP2ORBITALSPEC.md section 3, "the critical design rule"): forward speed
+   * is not player-controlled, so a fixed gap length would make a straight-ahead jump missable
+   * through no fault of the player (a slow early run falls short, a fast late run makes it
+   * trivial). The launch impulse is computed HERE, at the moment of launch, from `this.speed` -
+   * the ball's ACTUAL current forward speed, not track.js's generation-time estimate - so the
+   * ball always lands exactly on the landing edge (`meta.gapLength`/`meta.landingY`, baked onto
+   * the gap's first segment by emitJump()). `launchY` is always exactly 0, never
+   * `this.y`/`frame.y`: by the tick this fires, `this.z` has already advanced a little way into
+   * the gap's own segment (fixed-timestep steps don't land exactly on a z boundary), so the
+   * grounded-height sync a few lines up in stepPlaying may already read a hair into the height
+   * ramp - the spec's formula assumes a clean launchY of 0 (track stays flat outside Jump
+   * segments), so this hardcodes it rather than trusting a slightly-overshot frame lookup.
+   */
+  launchJump(meta) {
+    const jumpCfg = this.track.map.jump;
+    const launchY = 0;
+    const t = meta.gapLength / this.speed;
+    this.vy = (meta.landingY - launchY) / t + 0.5 * jumpCfg.gravity * t;
+    this.y = launchY;
+    this.jumpLandingY = meta.landingY;
+    this.jumpGravity = jumpCfg.gravity;
+    this.state = RunState.AIRBORNE;
+  }
+
+  /** Mid-Jump flight (section 3). Forward motion and steering are IDENTICAL to stepPlaying's (same
+   *  speed ramp, same lateral model) - only the vertical axis and the landing check are new, and
+   *  no edge/obstacle/void check runs while airborne (explicit in the spec). Forward speed keeps
+   *  ramping during flight, so real elapsed flight time comes out a little SHORTER than the
+   *  `t` planned in launchJump() (never longer, since speed is never below its launch value) - the
+   *  ball lands marginally past the computed point, never short, and landing is detected by z
+   *  actually crossing the landing edge rather than by trusting the integrated `y` to be exact at
+   *  a precomputed time, so this never needs a fudge factor (spec's own note). */
+  stepAirborne(dt, dragAxis, keyAxis) {
+    this.elapsed += dt;
+
+    const ramped = this.cfg.baseSpeed + this.cfg.speedRampPerSec * this.elapsed + this.cfg.tierBonus * this.tiersPassed;
+    this.speed = Math.min(this.cfg.maxSpeed, ramped);
+    this.z += this.speed * dt;
+    this.rollAngle -= (this.speed * dt) / BALL_RADIUS;
+
+    // Steering still works in the air (section 3) - identical model to stepPlaying's.
+    const inputAxis = dragAxis !== 0 ? dragAxis : keyAxis * dt * 1.6;
+    const lateralMax = LATERAL_MAX_SPEED_BASE * (1 + LATERAL_SPEED_SCALE_WITH_FORWARD * (this.speed / this.cfg.baseSpeed - 1));
+    const commandedVelocity = -(inputAxis / dt) * DRAG_SENSITIVITY;
+    const clampedCommand = Math.max(-lateralMax, Math.min(lateralMax, commandedVelocity));
+    const damp = Math.min(1, LATERAL_DAMPING * dt);
+    this.lateralVelocity += (clampedCommand - this.lateralVelocity) * damp;
+    this.lateralOffset += this.lateralVelocity * dt;
+
+    // Pure projectile motion from the launch impulse - never overridden until landing snaps it.
+    this.vy -= this.jumpGravity * dt;
+    this.y += this.vy * dt;
+
+    this.track.ensureAhead(this.z + SEGMENTS_AHEAD * SEGMENT_LENGTH);
+    this.track.trimBehind(this.z - SEGMENTS_BEHIND * SEGMENT_LENGTH);
+
+    // --- Landing (section 3): "the instant z crosses the landing edge." frame.segment stops being
+    // a gap segment the moment z reaches the landing pad's own first segment. ---
+    const frame = this.track.frameAt(this.z);
+    const seg = frame.segment;
+    if (seg && !seg.isGap) {
+      const halfWidth = frame.width / 2;
+      const inVoid = frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth;
+      if (Math.abs(this.lateralOffset - frame.wCenter) > halfWidth || inVoid) {
+        // "Yes, missing the landing kills you. Matt confirmed." Same FALLING state/animation as
+        // every other edge fall - no new game-over path.
+        this.beginCrash('edge');
+        return;
+      }
+      this.y = this.jumpLandingY;
+      this.vy = 0;
+      this.state = RunState.PLAYING;
+      this.score += 1; // "+1 on a successful landing" (section 3) - a one-time event, not the
+                       // generic segment-crossing scan updateScore() uses for obstacles/Splits
     }
   }
 

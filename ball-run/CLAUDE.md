@@ -112,11 +112,10 @@ it."). Phase 2 (Split) and Phase 3 (Jump) are what make it mechanically differen
     genuinely untouched. A standalone headless check of `migrateBestScoresToMaps()`'s exact logic
     (old key untouched, new key created once, a real post-migration value never clobbered by a
     re-run) is in this milestone's session notes, not committed as a repo script.
-- **What was NOT done in Phase 1 (now done, see Phase 2 below):** Split. **Still not done:** Jump
-  (height axis, `worldPointAt` growing a Y component — the spec's own flagged highest-risk change,
-  touching every caller), pickups. Orbital's own difficulty/geometry tuning is also still
-  Classic's numbers verbatim outside of Split's own constants below — retuning the rest is
-  explicitly out of scope until Jump exists too (spec section 6).
+- **What was NOT done in Phase 1 (now done, see Phase 2 and Phase 3 below):** Split, Jump. **Still
+  not done:** pickups (spec's Phase 4, deliberately deferred). Orbital's own difficulty/geometry
+  tuning is also still Classic's numbers verbatim outside of Split's/Jump's own constants —
+  retuning the rest is explicitly out of scope (spec section 6).
 
 ## Split (BALLRUNMAP2ORBITALSPEC.md, Phase 2 shipped 2026-07-29)
 
@@ -197,3 +196,105 @@ No height axis; that's Jump (Phase 3, not started).
   zero console exceptions, with two runs surviving well past the first Split's ~120m cadence
   (164m and 112m) — confirming the whole integration (rendering, physics, HUD, scoring, restart)
   holds up under real play, not just scripted state.
+
+## Jump (BALLRUNMAP2ORBITALSPEC.md, Phase 3 shipped 2026-07-29)
+
+The spec's own flagged biggest lift: a real height axis, on a game that had never had one. Only
+reachable when `this.map.jump` exists (Orbital), so Classic never generates or steps through any
+of this — verified by re-running the same seeded headless Classic sim as Phase 1/2's own checks
+and confirming byte-identical output.
+
+- **Segments gained `y0`/`y1`** (world units, interpolated exactly like `w0`/`w1`/`void0`/`void1` —
+  0 for every non-Jump segment) and **`wCenter`** (world units, constant per segment like
+  `voidCenter` — see its own landmine below). `Sim` gained `y`/`vy` (the ball's real height and
+  vertical velocity) plus a NEW `AIRBORNE` run state, distinct from `PLAYING`/`CRASHING`/
+  `FALLING`/`GAME_OVER`.
+- **The critical design rule, implemented literally**: forward speed is not player-controlled, so
+  `Sim.launchJump()` computes the launch impulse AT THE MOMENT OF LAUNCH from `this.speed` (the
+  ball's actual current speed that tick), not `track.js`'s generation-time estimate -
+  `vy0 = (landingY - 0) / t + 0.5 * gravity * t` where `t = gapLength / speed`. `gapLength`/
+  `landingY` are baked onto the gap's first segment (`jumpMeta`) at generation time; `launchY` is
+  hardcoded to exactly 0 rather than read from `this.y` at the trigger tick, since fixed-timestep
+  stepping can already be a little way into the gap's own height ramp by the instant this fires.
+- **`stepAirborne()`**: identical forward-speed/lateral-steering model to `stepPlaying()` (section
+  3: "steering still works"), but vertical motion is pure projectile integration
+  (`vy -= gravity*dt; y += vy*dt`) with **no edge/obstacle/void check** (explicit in the spec) -
+  only the landing check can end it. Forward speed keeps ramping during flight exactly as if
+  grounded, so real flight time comes out a little SHORTER than planned (never longer), meaning
+  the ball lands marginally past the computed point, never short (section 3's own note) - landing
+  is detected by z actually crossing the landing edge, never by trusting the integrated `y` at a
+  precomputed time, so no fudge factor is needed.
+- **Landing** (section 3, literal): the instant z crosses into a non-gap segment, check
+  `|lateralOffset - wCenter| > landingWidth/2` or inside the landing's void band - either crashes
+  (`beginCrash('edge')`, the existing FALLING state, no new game-over path; "yes, missing the
+  landing kills you"), otherwise snap `y` to the target, zero `vy`, resume `PLAYING`, and
+  `score += 1` directly (a one-time event, not `updateScore()`'s generic segment-crossing scan -
+  unlike Split, no segment carries a scoring flag for Jump).
+- **Difficulty, independently rollable** ("pick one or more per jump", not Split's mutually
+  exclusive side-variety): narrower landing pad, laterally-offset landing pad, landing pad itself
+  split, and a height change (drop more likely than a rise). All four config-driven chances in
+  `MAPS.orbital.jump`.
+  - **A split landing pad needs its OWN dedicated width** (`splitTotalWidthBW: 8`), not whatever
+    the `narrower` roll would have picked - Orbital's normal 5-BW track can't fit two
+    minTrackWidth (3 BW) lanes at all (2×3=6>5), the same reason Split's own event widens before
+    opening a void. Found via a generated-track audit (an early version's feasibility check could
+    never actually pass, since the ambient width was structurally too narrow).
+  - **The apex cap can't be satisfied by monotonically shortening the gap** (a second bug found via
+    audit): for a flat/drop-down landing, a shorter gap always lowers the required launch
+    velocity, but for a STEP-UP the relationship inverts - `vy0(t) = landingY/t + 0.5*gravity*t`
+    diverges as t shrinks toward 0 just as much as it does as t grows large (a genuine interior
+    minimum, not a monotonic edge), so a very short, fast flight leaves no time to climb and needs
+    an EVEN BIGGER impulse. `emitJump()` now searches every `gapSegs` value actually allowed
+    (`gapMinSegs`..`gapMaxSegs`) for whichever keeps the apex smallest, and if NOTHING in range
+    fits under the cap, drops the height variety entirely (flat landing) rather than ship a jump
+    whose apex violates the spec's own cap - the same "drop rather than ship a violation"
+    principle `placeObstacleRow`'s 3b.3 already uses.
+  - **The recovery ramp has the exact same width/void sequencing landmine Split's own event
+    does** (a third bug found via audit): when the landing pad was split, shrinking width and void
+    back to baseline SIMULTANEOUSLY can pass through an intermediate segment where neither the
+    full split-landing width nor the narrowed single-lane width is actually present, breaking the
+    two-lanes-≥-minTrackWidth invariant even though both endpoints are individually safe. Fixed
+    the same way Split's Close-then-Narrow-back already is: void reaches 0 FIRST (width held at
+    the landing value), only then does width narrow back (void already 0).
+  - **The offset-landing variety is NOT a `dcx` centerline shift, on purpose** - this is the
+    landmine worth remembering. A `dcx` drift (what curves use) moves `cx` itself, and the ball's
+    `lateralOffset` is measured relative to whatever segment's `cx` it currently occupies - which
+    is exactly the trick that lets an unsteered ball ride a curve for free. That is precisely
+    backwards for this variety, whose entire point is that NOT steering misses the pad ("so you
+    must steer in the air", section 3). `wCenter` shifts where the pad's safe zone sits without
+    moving the reference frame the ball's offset is measured against, so an unsteered ball's
+    offset stays exactly where it was at launch while the pad moves out from under it. Both
+    `sim.js`'s edge/void checks and `render.js`'s floor/void-strip positioning read `wCenter`
+    (`voidCenter` is relative to `wCenter`, not `cx`, when both varieties combine on one landing
+    pad) - verified directly: an unsteered `Sim.step()` run misses a genuinely offset pad, and a
+    scan over partial-duration steering durations (2 through 15 of 19 airborne ticks, out of a
+    max useful ~19) all land successfully, confirming a real, controllable skill window rather
+    than a frame-perfect or trivially-free input.
+  - Reachability (offset magnitude) reuses the exact same time/speed-derived spacing math as
+    everywhere else on this map (landmine #2) - the algebraic inverse of `minSpacingFor`'s
+    "required spacing from a lateral distance": the safely-coverable lateral distance is the
+    bare-minimum-reachable distance divided by `OBSTACLE_SPACING_SAFETY_FACTOR`.
+- **`render.js`**: the gap renders NOTHING (`isGap`, no floor/walls/accents - "the floor is
+  genuinely gone", section 3); floor/void-strip/obstacle positions all gained a `midY` offset (0
+  outside Jump); the ball's rendered height reads `sim.y` directly, NOT `worldPointAt`'s own `y`
+  (track-interpolated, a look-ahead approximation used only by the camera - the two deliberately
+  diverge mid-flight, see `worldPointAt`'s own doc comment, the file's "landmine #1" auditing
+  point). The ball shadow stays on the deck reference below the ball and shrinks with height
+  above it (section 3). **Camera height damping** (`_camLagY`, same `CAMERA_LAG` easing as
+  lateral) shifts both the camera's position AND its look-at target together - `camera.up` is
+  never touched anywhere in this file (verified: only Y-position/look-at values change, never
+  pitch/roll/up), so the twice-rejected camera bank cannot reappear even mid-flight.
+- **Verified**: `node run-all-tests.mjs` all green (20 suites, 0 failed; no suite needed changes).
+  Headless: 2746 generated jump events (3 difficulties × 60 seeds) checked width/void/height/
+  wCenter all restore to baseline by event end, lane validity throughout (806 split-landings, 0
+  violations), apex never exceeds the cap (0 violations after both fixes above), and landing width
+  never drops below minTrackWidth. Direct `Sim.step()` runs confirmed: successful flat landing
+  (unsteered), a split landing correctly REQUIRES steering (unsteered = fall in the void,
+  steered = land + score), and an offset landing correctly requires steering (unsteered = miss,
+  partial steering across a real controllable range = land). Browser (Playwright): a direct
+  Sim+Renderer mid-flight render matches the spec's visual description (no floor, ball elevated,
+  shrinking shadow); **72 full real-input runs** across two steering strategies (wide-random and
+  gentle-centered) on Orbital, zero page errors and zero console exceptions throughout, with the
+  longest reaching 167m - past both the Split (~120m) and Jump (~160m) cadences in the same run,
+  ending in a real fall with the score (2 obstacles passed) correctly reflected on the game-over
+  screen.
