@@ -759,6 +759,7 @@ class BoggleUI {
     this._roundOver = false;
     this._solveExpanded = false;
     this._result = null;
+    this._mpRevealResults = null;
     this.closeOverlays();
     this.view = 'loading';
     this.renderLoading();
@@ -805,7 +806,7 @@ class BoggleUI {
     this.renderGame();
     if (mp.reportedN !== mp.gameNum) {
       mp.reportedN = mp.gameNum;
-      const myResult = { n: mp.gameNum, score: humanScore, words: humanWords.length, longestWord };
+      const myResult = { n: mp.gameNum, score: humanScore, words: humanWords.length, longestWord, foundWords: humanWords.map((w) => w.word) };
       mp.myResult = myResult;
       this._mpSaveSnapshot();
       net.reportRoundResult(mp.code, mp.role, myResult).catch((err) => {
@@ -856,6 +857,7 @@ class BoggleUI {
     if (!mp) return;
     this.stopTimer();
     this.closeOverlays();
+    this._mpRevealResults = { hostResult, guestResult };
     const isHost = mp.role === 'host';
     const mine = isHost ? hostResult : guestResult;
     const theirs = isHost ? guestResult : hostResult;
@@ -889,10 +891,39 @@ class BoggleUI {
         <div class="bg-end-tallies">
           <div class="bg-tally"><b>${mine.words}</b><span>${esc(t('your_words', { name: id.humanName }))}</span></div>
           <div class="bg-tally"><b>${theirs.words}</b><span>${esc(t('your_words', { name: id.oppName }))}</span></div>
+          <div class="bg-tally"><b>${this._solved.length}</b><span>${esc(t('possible_on_board'))}</span></div>
         </div>
+        <button type="button" class="bg-link" data-action="toggle-solve">${esc(t(this._solveExpanded ? 'hide_words' : 'browse_words'))}</button>
+        ${this._solveExpanded ? this._mpFullSolveHtml(mine, theirs) : ''}
         <div class="bg-card-actions">${actions}</div>
       </div>`;
     this.root.appendChild(overlay);
+  }
+
+  /** MP twin of `_fullSolveHtml`: every findable word on the shared board,
+   *  marked with each side's own emoji if THEY found it -- built from the
+   *  `foundWords` string arrays both peers reported via reportRoundResult
+   *  (see `_mpFinishRound`), the same shared `this._solved` list both sides
+   *  computed locally off the identical board (never transmitted itself,
+   *  only the board faces are -- see `_mpApplyRoundRecord`). `|| []` covers
+   *  a result restored from a pre-fix MP save/room record that predates the
+   *  `foundWords` field, so an old in-flight match never throws here. */
+  _mpFullSolveHtml(mine, theirs) {
+    const id = this._identity();
+    const mineSet = new Set(mine.foundWords || []);
+    const theirsSet = new Set(theirs.foundWords || []);
+    const sorted = [...this._solved].sort((a, b) => b.score - a.score || a.word.localeCompare(b.word));
+    const rows = sorted.map((e) => {
+      const gotIt = mineSet.has(e.word);
+      const theyGotIt = theirsSet.has(e.word);
+      const owners = `${gotIt ? esc(id.humanEmoji) : ''}${theyGotIt ? esc(id.oppEmoji) : ''}` || '&ndash;';
+      return `<li class="bg-solve-row ${gotIt ? 'is-mine' : ''} ${theyGotIt ? 'is-theirs' : ''}">
+        <span class="bg-solve-word">${esc(e.word)}</span>
+        <span class="bg-solve-pts">${e.score}</span>
+        <span class="bg-solve-owners" aria-hidden="true">${owners}</span>
+      </li>`;
+    }).join('');
+    return `<ul class="bg-solve-list">${rows}</ul>`;
   }
 
   _mpRematch() {
@@ -1797,7 +1828,11 @@ class BoggleUI {
       this.openHelp();
     } else if (action === 'toggle-solve') {
       this._solveExpanded = !this._solveExpanded;
-      this.openEndOverlay();
+      if (this.mp && this._mpRevealResults) {
+        this._mpOpenReveal(this._mpRevealResults.hostResult, this._mpRevealResults.guestResult);
+      } else {
+        this.openEndOverlay();
+      }
     } else if (action === 'close-overlay') {
       this.closeOverlays();
     }

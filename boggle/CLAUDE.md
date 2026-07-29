@@ -195,6 +195,27 @@ included).
   no `FakeRoom`-driven integration test the way the six lockstep games have — Boggle's protocol
   has no move log for such a harness to replay. Flagged honestly rather than claimed proven.
 
+### Fix: opponent's actual words were invisible (first real two-device play, 2026-07-28)
+
+The one real-device playtest above surfaced exactly what "unverified" was warning about: Matt
+reported "I couldn't see her words and she couldn't see the words I got." Root cause: the initial
+build's `reportRoundResult` payload (`_mpFinishRound`) only ever sent `words: humanWords.length`
+— a COUNT, never the words themselves — so there was no data on either device to show what the
+other side actually found, even though the reveal screen already had tally numbers. Solo mode's
+equivalent screen never had this problem because it never needed to transmit anything: the AI's
+word list comes from a local, already-known `selectAiWords` sample of the same solve.
+
+Fixed by adding a `foundWords` array (plain word strings) to the `reportRoundResult` payload
+alongside the existing `words` count (kept, since `recordBoggle`'s `extras.words` and the tally
+numbers both still read the count, not the array — additive, not a replacement). The reveal card
+gained the same "Browse words" expandable list solo's `openEndOverlay` already has
+(`_mpFullSolveHtml`, a straight MP twin of `_fullSolveHtml`): every word `this._solved` found on
+the shared board, marked with whichever side's emoji found it, built from both peers' `foundWords`
+sets. `foundWords || []` guards a result restored from a pre-fix in-flight MP save/room record, so
+an old match already underway when this shipped can't throw. The `toggle-solve` click handler,
+previously hardcoded to solo's `openEndOverlay()`, now re-opens whichever overlay is live
+(`this._mpRevealResults`, stashed by `_mpOpenReveal` for exactly this re-render).
+
 ## i18n (2026-07-23) — UI translates, gameplay stays English
 
 Ana reported two things the same afternoon: garbled board tiles ("sometimes instead of one
