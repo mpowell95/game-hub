@@ -326,7 +326,8 @@ If a later redesign adds or renames a root class, the table follows the code.
 ## The shared profile
 
 A **user profile** (`profile/index.html`, backed by `js/profile-store.js`) stores a name, emoji,
-preferred color, and up to 3 computer opponents (name, emoji, skill 1-3) in
+preferred color, up to 3 computer opponents (name, emoji, skill 1-3), and a short free-text message
+shown on that player's own Leaderboard detail screen, in
 `localStorage["gamehub.profile"]`. It is **defaults-only**: every game prefills from it, and every value
 stays editable in that game's own setup. A pill in the hub top bar links to the page ("Set up your
 profile", or "👤 Name" once set).

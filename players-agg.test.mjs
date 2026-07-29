@@ -196,7 +196,11 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 }
 
 // ---- Snake's walls-mode split (2026-07-28 leaderboard split) survives the combine, and a
-// pre-split device (no bestLenByWalls/bestLenByDiffWalls/runsByWalls at all) doesn't blow up ----
+// pre-split device (no bestLenByWalls/bestLenByDiffWalls/runsByWalls at all) contributes its
+// legacy combined bests/runs to the OFF bucket instead of silently contributing zero -- the real
+// bug found in production: every device reads 0-0 on the leaderboard split until IT ITSELF
+// reloads and runs the local seed, which could be days after this ships, so aggregation must
+// apply the same "pre-split history is Walls off" policy per-source-device, not wait for it. ----
 {
   const all = {
     d1: rec({ playerId: 'SN222', name: 'Wriggler' }, {
@@ -223,8 +227,63 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   const sn = grp.games.snake.sn;
   eq('snake walls: on/off bests take the max, not the sum', [sn.bestLenByWalls.on, sn.bestLenByWalls.off], [12, 30]);
   eq('snake walls: per-diff on/off bests take the max per tier', sn.bestLenByDiffWalls.off.medium, 30);
-  eq('snake walls: runsByWalls sums (pre-split device contributes 0)', [sn.runsByWalls.on, sn.runsByWalls.off], [1, 2]);
+  eq('snake walls: a pre-split source device\'s runs land in OFF, not 0', [sn.runsByWalls.on, sn.runsByWalls.off], [1, 3]);
   eq('snake walls: combined bestLen still aggregates regardless of the split', sn.bestLen, 30);
+}
+
+// ---- Snake walls split: a solo pre-split device (never resynced since this shipped) must NOT
+// read 0-0 on the leaderboard -- this is the exact bug report ("0-0 for everyone"): a fresh
+// aggregate over ONLY legacy-shaped records had no bestLenByWalls anywhere to fall back on. ----
+{
+  const all = {
+    d1: rec({ playerId: 'SN333', name: 'Legacy' }, {
+      snake: {
+        total: { played: 5, won: 5, lost: 0 },
+        byDiff: { hard: { played: 5, won: 5, lost: 0 } },
+        sn: { runs: 5, bestLen: 40, bestLenByDiff: { easy: 0, medium: 0, hard: 40 } },
+      },
+    }, 100),
+  };
+  const sn = aggregatePlayers(all)[0].games.snake.sn;
+  eq('snake walls: an all-legacy player is NOT 0-0, their history reads as Walls off', [sn.bestLenByWalls.off, sn.bestLenByWalls.on], [40, 0]);
+  eq('snake walls: an all-legacy player\'s per-diff off bucket carries the real best', sn.bestLenByDiffWalls.off.hard, 40);
+  eq('snake walls: an all-legacy player\'s runs land in off, not lost', sn.runsByWalls.off, 5);
+}
+
+// ---- Player message: newest-messageAt wins, NOT rec.updatedAt (HANDOFF-PROFILE-MESSAGE.md) ----
+{
+  // 1. two devices of one person, only device A has a message -> the group shows A's message.
+  const all1 = {
+    d1: rec({ playerId: 'MSG11', name: 'TP', message: "Who's the King of Games now?", messageAt: 500 }, {}, 100),
+    d2: rec({ playerId: 'msg11', name: 'TP' }, {}, 200),   // no message field at all
+  };
+  const g1 = aggregatePlayers(all1)[0];
+  eq('message: only-device-A message wins', g1.message, "Who's the King of Games now?");
+  eq('message: no crash / defaults to empty when a device has no message field', g1.messageAt, 500);
+
+  // 2. device B then syncs with a NEWER rec.updatedAt but messageAt:0 -> A's message SURVIVES.
+  // This is the regression that motivated the separate stamp: keying off rec.updatedAt would let
+  // a device that merely re-synced (never touched the message) blank it out.
+  const all2 = {
+    d1: rec({ playerId: 'MSG11', name: 'TP', message: "Who's the King of Games now?", messageAt: 500 }, {}, 100),
+    d2: rec({ playerId: 'msg11', name: 'TP' }, {}, 99999),   // newer sync time, messageAt 0
+  };
+  const g2 = aggregatePlayers(all2)[0];
+  eq('message: survives a newer-updatedAt device with messageAt 0', g2.message, "Who's the King of Games now?");
+
+  // 3. device A clears it with a newer messageAt -> the group's message is ''.
+  const all3 = {
+    d1: rec({ playerId: 'MSG11', name: 'TP', message: '', messageAt: 600 }, {}, 100),
+    d2: rec({ playerId: 'msg11', name: 'TP', message: "Who's the King of Games now?", messageAt: 500 }, {}, 200),
+  };
+  const g3 = aggregatePlayers(all3)[0];
+  eq('message: a newer-messageAt CLEAR beats an older set message', g3.message, '');
+
+  // 4. a device with no message field at all (every record in production today) -> message: '', no crash.
+  const all4 = { d1: rec({ playerId: 'MSG22', name: 'NoMsg' }, {}, 100) };
+  const g4 = aggregatePlayers(all4)[0];
+  eq('message: legacy record with no message field -> empty, no crash', g4.message, '');
+  eq('message: legacy record with no messageAt field -> 0', g4.messageAt, 0);
 }
 
 // ---- aggregateForViewer: fresh device with my code shows my other devices' history ----

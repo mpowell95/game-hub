@@ -5,7 +5,7 @@
 //
 // Contract (see HUB-01-PROFILE-SPEC.md):
 //   { version:1, name, emoji, preferredColor:"yellow"|"blue"|"red"|"green"|null,
-//     opponents:[{name, emoji, skill:1|2|3}], updatedAt }
+//     opponents:[{name, emoji, skill:1|2|3}], message, messageAt, updatedAt }
 // Readers must treat missing or malformed data as "no profile" (returns null).
 
 const KEY = 'gamehub.profile';
@@ -52,6 +52,8 @@ function normalize(p) {
       emoji: glyph(o && o.emoji, '🤖'),
       skill: tier(o && o.skill),
     })),
+    message: text(p.message, '', 80),
+    messageAt: Number.isFinite(+p.messageAt) ? +p.messageAt : 0,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : null,
   };
 }

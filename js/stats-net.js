@@ -84,7 +84,10 @@ export async function syncMyStats() {
   try {
     const prof = loadProfile() || {};
     const rec = {
-      profile: { name: prof.name || '', emoji: prof.emoji || '', playerId: prof.playerId || '' },
+      profile: {
+        name: prof.name || '', emoji: prof.emoji || '', playerId: prof.playerId || '',
+        message: prof.message || '', messageAt: +prof.messageAt || 0,
+      },
       stats: loadStats(),
       updatedAt: _api.serverTimestamp(),
     };
@@ -135,7 +138,7 @@ export async function lookupCodeOwner(playerCode) {
     if (!name || name.toLowerCase() === 'you') continue;                       // skip the placeholder
     if ((typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase() !== want) continue;
     const at = +rec.updatedAt || 0;
-    if (at >= bestAt) { bestAt = at; best = { name, emoji: p.emoji || '' }; }
+    if (at >= bestAt) { bestAt = at; best = { name, emoji: p.emoji || '', message: p.message || '', messageAt: +p.messageAt || 0 }; }
   }
   return best;
 }

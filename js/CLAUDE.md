@@ -557,13 +557,28 @@ and detect which tiers a player has played; **do not delete leaderboard-rank.js'
 **Everything here is still a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>`
 are read-only to this feature — nothing is stored, migrated or normalized.
 
-- **A draw (or a solo run/solve) counts as a win**, for every player, in every game, derived at
-  render time via `bucketsOf()`'s `wins = played - losses` (never stored). Solo games (Ball
-  Run/Nuts & Bolts/Snake) populate `total`/`byDiff` with the same `{played,won,lost}` shape as
-  every competitive game (`lost` just never gets touched), so `winsAtTier()` in `leaderboard-ui.js`
-  works generically across ALL 13 games with no special-casing for "solo" — a solve/run at a tier
-  IS a win at that tier, per Matt's explicit instruction. **Known, accepted property:** solo volume
-  inflates win counts with no rating left to discount it; Matt is trading precision for legibility.
+- **A draw counts as a win**, for every player, in every COMPETITIVE game, derived at render time
+  via `bucketsOf()`'s `wins = played - losses` (never stored). **Solo games (Ball Run/Snake/Nuts &
+  Bolts) are counted and labeled as RUNS, separately from wins — not folded into the wins number
+  (Matt, 2026-07-28, HANDOFF-LB-SOLO-RUNS.md).** `winsAtTier()` itself is unchanged and still
+  works generically across every game's `total`/`byDiff` shape (solo games populate it identically
+  to competitive ones, `lost` just never touched); what changed is which game ids the CALLERS feed
+  it. `js/leaderboard-ui.js` derives two lists from `ALL_IDS`: `COMP_IDS` (competitive games,
+  drives the cross-game wins number, the By Player sort, and the win tiles) and `SOLO_IDS`
+  (Ball Run/Snake/Nuts & Bolts, summed via `runsAtTier()` into a separate "N runs" line on the
+  same card, via `playsAtTier`). `SOLO` in `js/players-agg.js` is the single source of that game
+  membership — both id lists are derived from it, never hardcoded a second time. The By Player
+  list FILTER still stays on `ALL_IDS` (a solo-only player is still listed, showing 0 wins plus
+  their runs — narrowing that filter would make a real player vanish, THE LAW rule 1). My Stats'
+  overview (`game-stats-ui.js`'s `overviewTotals`) makes the same split: a third "Runs" tally,
+  shown only when > 0. **This is a DISPLAY split only — no stored counter changed**, no migration,
+  no new storage key, no recorder edit; `recordBallRun`/`recordSnake`/`recordNutsBolts` and every
+  stored `won` counter are byte-identical before and after. Each solo game's own game page (By
+  Game row, game detail screen, "who leads what" chips) is untouched and still ranks by its real
+  metric (best obstacles / longest / solved) — the fix was confined to the cross-game number that
+  let volume alone top the board. The bullet that used to stand here ("solo volume inflates win
+  counts... trading precision for legibility") described the OLD, now-fixed behavior; do not
+  revive it as a design goal.
 - **Difficulty is a single-select FILTER now, not a weighting.** Five pills — All (default),
   Beginner, Intermediate, Pro, Expert — shared between By Player and By Game and carried into a
   game's own page; resets to All every time the overlay opens (not persisted). Ski-slope shapes
@@ -833,7 +848,7 @@ this is the full detail.
 
 ```js
 { version:1, name, emoji, preferredColor:"yellow"|"blue"|"red"|"green"|null,
-  opponents:[{name, emoji, skill:1|2|3}], updatedAt }
+  opponents:[{name, emoji, skill:1|2|3}], message, messageAt, updatedAt }
 ```
 
 - **The profile page is the primary writer; games stay read-only consumers.** One
@@ -845,6 +860,15 @@ this is the full detail.
 - Readers **try/catch** and treat missing or malformed data as "no profile", falling back silently to
   built-in defaults. A profile must never crash a game.
 - **Extend additively; never rename fields.** `skill` tolerates a future 4; the UI emits 1-3.
+- **`message`/`messageAt` (HANDOFF-PROFILE-MESSAGE.md, 2026-07-28):** a free-text field (max 80
+  chars), shown only on that player's own detail screen in the Leaderboard
+  (`playerDetail()` in `js/leaderboard-ui.js`). `messageAt` is a separate epoch-ms edit
+  stamp, NOT `rec.updatedAt` (the record's sync time) — `js/players-agg.js`'s merge picks the
+  message from whichever device has the **newest `messageAt`**, so a device that merely
+  re-syncs without touching the message (still `messageAt: 0`) can never blank out a message
+  set elsewhere. This is a **preference, not history**: THE LAW rule 2's carve-out applies
+  (same class as favorites/theme/language), so clearing the message to `''` with a newer
+  `messageAt` is expected to win — no tombstone, no soft-delete.
 
 ### `js/profile-store.js`
 

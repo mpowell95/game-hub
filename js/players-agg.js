@@ -70,7 +70,7 @@ export function identityKey(profileLike, fallbackId) {
 /** Aggregate the players/ map (deviceId -> record) into an UNSORTED list of one-per-person groups.
  *  Each group's `games[g]` is in the CANONICAL stats shape ({ total, byDiff, +grid/cc/es/nb }) so the
  *  same object doubles as a valid `st.games` for the Stats screens. Group also carries roll-ups:
- *  { key, playerId, name, emoji, devices, updatedAt, games, comp:{played,won,lost},
+ *  { key, playerId, name, emoji, message, messageAt, devices, updatedAt, games, comp:{played,won,lost},
  *  solo:{solved,bestLevel,moves}, totalPlays }. */
 export function aggregatePlayers(all) {
   const groups = new Map();
@@ -82,7 +82,7 @@ export function aggregatePlayers(all) {
     const playerId = codeOf(prof) || null;
     let grp = groups.get(key);
     if (!grp) {
-      grp = { key, playerId, name: '', emoji: '', devices: 0, updatedAt: 0, games: {} };
+      grp = { key, playerId, name: '', emoji: '', message: '', messageAt: 0, devices: 0, updatedAt: 0, games: {} };
       for (const g of GAMES) grp.games[g] = { total: { played: 0, won: 0, lost: 0 }, byDiff: {} };
       groups.set(key, grp);
     }
@@ -100,6 +100,12 @@ export function aggregatePlayers(all) {
         grp.name = rawName; grp._nameAt = upd;
       }
     }
+    // Message: newest EDIT wins, keyed off messageAt (the profile's own edit stamp), NOT rec.updatedAt
+    // (the record's sync time). A device that merely re-synced without ever setting a message has
+    // messageAt 0 and can never overwrite. A CLEARED message with a newer stamp is allowed to win:
+    // this is a preference, not history (THE LAW rule 2's carve-out), so clearing must work.
+    const msgAt = +prof.messageAt || 0;
+    if (msgAt >= grp.messageAt) { grp.messageAt = msgAt; grp.message = (prof.message || '').trim(); }
     const games = (rec.stats && rec.stats.games) || {};
     for (const g of GAMES) {
       const src = games[g] || {};
@@ -170,15 +176,21 @@ export function aggregatePlayers(all) {
         dst.sn.bestLen = Math.max(dst.sn.bestLen | 0, src.sn.bestLen | 0);
         const sbd = src.sn.bestLenByDiff || {};
         for (const k of Object.keys(sbd)) dst.sn.bestLenByDiff[k] = Math.max(dst.sn.bestLenByDiff[k] | 0, sbd[k] | 0);
-        // Walls-mode split (2026-07-28). `src.sn.bestLenByWalls`/etc. may be absent on a remote
-        // record from a device that hasn't reloaded (and so re-seeded) since this shipped -- guard
-        // rather than assume, same as every other optional sub-field here.
+        // Walls-mode split (2026-07-28). `src.sn.bestLenByWalls`/etc. are absent on a remote
+        // record from a device that hasn't reloaded (and so run the local seed) since this
+        // shipped -- which, the moment this ships, is EVERY device until it next opens the hub.
+        // Without a fallback here, every player reads 0/0 on the leaderboard split until their
+        // own device happens to resync, silently contradicting the local seed's policy (all
+        // pre-split history is Walls off) for however long that takes. So a source record with no
+        // split fields at all contributes its legacy bestLen/bestLenByDiff/runs to the OFF bucket
+        // right here, same policy, applied at aggregation time instead of waiting for a reload.
         if (!dst.sn.bestLenByWalls) dst.sn.bestLenByWalls = { on: 0, off: 0 };
         if (!dst.sn.bestLenByDiffWalls) dst.sn.bestLenByDiffWalls = { on: {}, off: {} };
         if (!dst.sn.runsByWalls) dst.sn.runsByWalls = { on: 0, off: 0 };
-        const sbw = src.sn.bestLenByWalls || {};
-        const sbdw = src.sn.bestLenByDiffWalls || {};
-        const srw = src.sn.runsByWalls || {};
+        const hasSplit = !!src.sn.bestLenByWalls;
+        const sbw = hasSplit ? src.sn.bestLenByWalls : { on: 0, off: src.sn.bestLen | 0 };
+        const sbdw = hasSplit ? (src.sn.bestLenByDiffWalls || {}) : { on: {}, off: sbd };
+        const srw = hasSplit ? (src.sn.runsByWalls || {}) : { on: 0, off: src.sn.runs | 0 };
         for (const w of ['on', 'off']) {
           dst.sn.bestLenByWalls[w] = Math.max(dst.sn.bestLenByWalls[w] | 0, sbw[w] | 0);
           dst.sn.runsByWalls[w] += srw[w] | 0;
@@ -230,6 +242,8 @@ export function aggregateForViewer(all, profileLike, myDeviceId, localStats) {
     name: (profileLike && profileLike.name) || baseProf.name || '',
     emoji: (profileLike && profileLike.emoji) || baseProf.emoji || '',
     playerId: (profileLike && profileLike.playerId) || baseProf.playerId || '',
+    message: (profileLike && profileLike.message) || baseProf.message || '',
+    messageAt: (profileLike && +profileLike.messageAt) || +baseProf.messageAt || 0,
   });
   merged[myDeviceId] = { profile: myProf, stats: localStats, updatedAt: Number.MAX_SAFE_INTEGER };
   const myKey = buildIdentity(merged).keyFor(myProf, myDeviceId);

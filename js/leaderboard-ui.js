@@ -20,7 +20,7 @@
 // SHAPE per tier (circle/square/diamond/double-diamond), never hue alone; the viewer's own row uses
 // a border highlight, never color alone.
 
-import { aggregatePlayers, buildIdentity } from './players-agg.js';
+import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
@@ -72,6 +72,13 @@ const GAME_META = [
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
+// Solo games (Ball Run/Snake/Nuts & Bolts) record every run/solve as played+1, won+1 (game-stats.js's
+// recordBallRun/recordSnake/recordNutsBolts — a crash on obstacle 0 is a "win"), so folding them into
+// the cross-game wins number let volume alone top the board. Matt, 2026-07-28: they are RUNS, counted
+// and labeled separately. Derived from ALL_IDS (not players-agg's COMPETITIVE) so this file's two lists
+// can never disagree about which games it renders.
+const COMP_IDS = ALL_IDS.filter((id) => !SOLO.has(id));
+const SOLO_IDS = ALL_IDS.filter((id) => SOLO.has(id));
 // hubIdOf/unitKeyOf now live in game-stats-ui.js (single source, HANDOFF-FB2-STATS-NAV.md) so
 // this file and My Stats' game-list drill-down can never disagree on a game's thumbnail or unit.
 
@@ -88,6 +95,13 @@ function avatarHTML(g) {
   if (emoji) return `<span class="lb-av" aria-hidden="true">${esc(emoji)}</span>`;
   const initial = ((g.name || '?').trim()[0] || '?').toUpperCase();
   return `<span class="lb-av is-initial" aria-hidden="true">${esc(initial)}</span>`;
+}
+
+/** The player's own message, shown only on their detail screen. Empty renders nothing at all -
+ *  there is no data to hide, so no placeholder row. esc() is mandatory: this is free player text. */
+function messageHTML(g) {
+  const m = (g.message || '').trim();
+  return m ? `<p class="lb-pmsg">${esc(m)}</p>` : '';
 }
 
 // --- difficulty tier maths ---------------------------------------------------
@@ -110,6 +124,10 @@ function playsAtTier(group, gameIds, tier) {
   for (const id of gameIds) for (const b of bucketsOf(group.games[id])) if (tier == null || b.tier === tier) n += b.played;
   return n;
 }
+/** Solo plays (Ball Run/Snake runs, Nuts & Bolts solves) at `tier`. Every solo record bumps
+ *  `total.played` exactly once per run/solve, so plays IS the run count — no need to read the
+ *  br/sn/nb sub-counters, and this stays tier-filterable like everything else on this screen. */
+function runsAtTier(group, tier) { return playsAtTier(group, SOLO_IDS, tier); }
 /** Sorted tiers (1-4) this player/field has ANY play in, across `gameIds`. */
 function tiersPresent(group, gameIds) {
   const mix = tierMix(group, gameIds);
@@ -210,10 +228,22 @@ function miniTilesHTML(tiers, valueFn) {
 // --- By Player ---------------------------------------------------------------
 function medalClass(i) { return i === 0 ? ' is-gold' : i === 1 ? ' is-silver' : i === 2 ? ' is-bronze' : ''; }
 
+/** The card's sub-line. `games` is COMPETITIVE plays and `runs` is solo plays; together they are
+ *  exactly the all-games play count this line used to show, so nothing became invisible (THE LAW
+ *  rule 1) — it is now split so a run is never read as a game won. A zero part is dropped rather
+ *  than rendered as "0". */
+function metaLine(games, runs) {
+  const parts = [];
+  if (games > 0 || !runs) parts.push(t('lb_games_count', { n: games }));
+  if (runs > 0) parts.push(t('lb_runs_count', { n: runs }));
+  return parts.join(' &middot; ');
+}
+
 /** `unitKey` lets a game page label the number by its own metric (obstacles/longest/solved) -
  *  By Player always passes the default (cross-game wins). Every card is now a button opening
- *  the player detail screen (HANDOFF-FB-LEADERBOARD.md item 1). */
-function playerCardHTML(g, i, wins, games, tilesHtml, unitKey) {
+ *  the player detail screen (HANDOFF-FB-LEADERBOARD.md item 1). `runs` (solo plays) is optional -
+ *  the game-detail call site passes none, keeping that per-game screen's meta line unchanged. */
+function playerCardHTML(g, i, wins, games, tilesHtml, unitKey, runs) {
   const me = g.key === _meKey ? ' is-me' : '';
   return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
@@ -223,27 +253,28 @@ function playerCardHTML(g, i, wins, games, tilesHtml, unitKey) {
       <span class="lb-pnum"><b>${wins}</b><span>${esc(t(unitKey || 'lb_wins_unit'))}</span></span>
       <span class="lb-pchev" aria-hidden="true">&rsaquo;</span>
     </div>
-    <div class="lb-pmeta">${t('lb_games_count', { n: games })}</div>
+    <div class="lb-pmeta">${metaLine(games, runs)}</div>
     ${tilesHtml}
   </button>`;
 }
 
 function playerListHTML(list) {
-  const rows = list.filter((g) => playsAtTier(g, ALL_IDS, _diff) > 0);
+  const rows = list.filter((g) => playsAtTier(g, ALL_IDS, _diff) > 0);   // UNCHANGED: a solo-only player stays listed
   if (!rows.length) return emptyState(t('lb_empty_all'));
   rows.sort((a, b) => {
-    const w = winsAtTier(b, ALL_IDS, _diff) - winsAtTier(a, ALL_IDS, _diff);
+    const w = winsAtTier(b, COMP_IDS, _diff) - winsAtTier(a, COMP_IDS, _diff);
     if (w) return w;
-    const gg = playsAtTier(a, ALL_IDS, _diff) - playsAtTier(b, ALL_IDS, _diff);   // fewer games wins ties
+    const gg = playsAtTier(a, COMP_IDS, _diff) - playsAtTier(b, COMP_IDS, _diff);   // fewer games wins ties
     if (gg) return gg;
     return (b.updatedAt || 0) - (a.updatedAt || 0);
   });
   return `<div class="lb-plist">${rows.map((g, i) => {
-    const wins = winsAtTier(g, ALL_IDS, _diff);
-    const games = playsAtTier(g, ALL_IDS, _diff);
-    const tiers = tiersPresent(g, ALL_IDS);
-    const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, ALL_IDS, tier));
-    return playerCardHTML(g, i, wins, games, tiles);
+    const wins = winsAtTier(g, COMP_IDS, _diff);
+    const games = playsAtTier(g, COMP_IDS, _diff);
+    const runs = runsAtTier(g, _diff);
+    const tiers = tiersPresent(g, COMP_IDS);
+    const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, COMP_IDS, tier));
+    return playerCardHTML(g, i, wins, games, tiles, null, runs);
   }).join('')}</div>`;
 }
 
@@ -475,10 +506,11 @@ function playerDetail(list, key) {
       <button type="button" class="lb-back" data-role="lb-pgame-back">${t('lb_back_games')}</button>
     </div>` + screenFor(_playerGame, { games: g.games });
   }
-  const wins = winsAtTier(g, ALL_IDS, null);
-  const games = playsAtTier(g, ALL_IDS, null);
-  const tiers = tiersPresent(g, ALL_IDS);
-  const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, ALL_IDS, tier));
+  const wins = winsAtTier(g, COMP_IDS, null);
+  const games = playsAtTier(g, COMP_IDS, null);
+  const runs = runsAtTier(g, null);
+  const tiers = tiersPresent(g, COMP_IDS);
+  const tiles = miniTilesHTML(tiers, (tier) => winsAtTier(g, COMP_IDS, tier));
   const head = `<div class="lb-detail-top">
     <button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button>
   </div>
@@ -486,12 +518,12 @@ function playerDetail(list, key) {
     ${avatarHTML(g)}
     <span class="lb-pdetail-id">
       <span class="lb-pdetail-name">${rankName(g)}</span>
-      <span class="lb-pdetail-meta">${t('lb_games_count', { n: games })}</span>
+      <span class="lb-pdetail-meta">${metaLine(games, runs)}</span>
     </span>
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${tiles}`;
-  return head + gsGameListHTML(g.games);
+  return head + messageHTML(g) + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -712,6 +744,7 @@ function ensureCss() {
     '.lb-pdetail-id{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}',
     '.lb-pdetail-name{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pdetail-meta{font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
+    '.lb-pmsg{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--hub-surface-2,#f4f4f5);color:var(--hub-ink,#18181b);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
     '.lb-pgame{margin-top:10px}',
     '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
     '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',

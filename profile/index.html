@@ -213,6 +213,13 @@
         </div>
         <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
 
+        <div class="pf-name-wrap" style="margin-top:12px">
+          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Message for other players</label>
+          <textarea class="pf-input" id="pf-you-msg" rows="2" maxlength="80"
+                    placeholder="Shown when someone opens your profile"
+                    data-i18n-placeholder="pf_msg_placeholder"></textarea>
+        </div>
+
         <details class="pf-collapse pf-subcollapse">
           <summary data-i18n="pf_color_summary">Preferred color</summary>
           <div class="pf-swatches" id="pf-colors"></div>
@@ -350,12 +357,13 @@
       `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="${hex}">${SHAPES[shape]}</svg>`;
 
     // Working state. Starts from the stored profile, or blank defaults if none.
-    const state = loadProfile() || { name: '', emoji: '🙂', preferredColor: null, opponents: [] };
+    const state = loadProfile() || { name: '', emoji: '🙂', preferredColor: null, opponents: [], message: '', messageAt: 0 };
 
     const $ = (sel) => document.querySelector(sel);
     const els = {
       youEmoji: $('#pf-you-emoji'),
       youName: $('#pf-you-name'),
+      youMsg: $('#pf-you-msg'),
       colors: $('#pf-colors'),
       themeSeg: $('#pf-theme-seg'),
       opps: $('#pf-opps'),
@@ -493,6 +501,14 @@
     // -- You fields --------------------------------------------------------------
     els.youEmoji.addEventListener('click', () => openPicker('you', state.emoji));
     els.youName.addEventListener('input', () => { state.name = els.youName.value; scheduleSave(); });
+    els.youMsg.addEventListener('input', () => {
+      state.message = els.youMsg.value;
+      state.messageAt = Date.now();
+      scheduleSave();
+    });
+    // Push it up immediately so the message is visible to other players without waiting for the
+    // next hub load. Best-effort, same pattern as the code-link path at line 537.
+    els.youMsg.addEventListener('change', () => { try { net.syncMyStats(); } catch { /* best-effort */ } });
     // Username reservation: on blur, if the name is owned by another player's code, revert and explain.
     // Otherwise claim it for my code (releasing my previous name). Offline just skips the check.
     els.youName.addEventListener('change', async () => {
@@ -528,7 +544,10 @@
       let owner = null;
       try { owner = await net.lookupCodeOwner(c); } catch { owner = null; }
       state.playerId = c;
-      if (owner && owner.name) { state.name = owner.name; if (owner.emoji) state.emoji = owner.emoji; prevName = owner.name; }
+      if (owner && owner.name) {
+        state.name = owner.name; if (owner.emoji) state.emoji = owner.emoji; prevName = owner.name;
+        if (owner.messageAt >= state.messageAt) { state.message = owner.message || ''; state.messageAt = owner.messageAt; }
+      }
       commitNow();
       hydrate();
       els.code.textContent = c; els.codeLink.value = '';
@@ -547,6 +566,7 @@
       const keepCode = state.playerId || null;
       clearProfile();
       state.name = ''; state.emoji = '🙂'; state.preferredColor = null; state.opponents = []; state.playerId = keepCode;
+      state.message = ''; state.messageAt = Date.now();
       prevName = '';
       commitNow();
       ensurePlayerId();
@@ -600,6 +620,7 @@
     function hydrate() {
       els.youEmoji.textContent = state.emoji;
       els.youName.value = state.name;
+      els.youMsg.value = state.message || '';
       els.code.textContent = state.playerId || '—————';
       renderColors();
       renderOpps();
