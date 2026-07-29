@@ -89,9 +89,9 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
-| `js/leaderboard-rank.js` | pure, headless-testable ranking: draws-as-wins, difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
+| `js/leaderboard-rank.js` | pure, headless-testable ranking: wins are the stored `won` (a draw is NOT a win, 2026-07-28), difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below) |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) that only Chinchón uses so far; see "The ninth consumer" |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -272,6 +272,9 @@ below; every other in-hub game keeps its current light-only look until its own P
 
 Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
+**All five invariants below survive the 3-4 seat extension unchanged** (2026-07-28, Chinchón
+only — see "The ninth consumer"); invariant 2 is the only one whose IMPLEMENTATION moved, from
+`role === 'host' ? 0 : 1` to `mp.seat`.
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
 every applied remote move; the host is authoritative for desync recovery. Five
@@ -535,6 +538,68 @@ deliberately does not, for a reason none of them share:
   first pass, nothing has been played on two real devices. Flagged honestly in `boggle/CLAUDE.md`
   rather than claimed proven.
 
+### The ninth consumer: Chinchón at 3-4 seats (2026-07-28) — the N-player extension
+
+This is **phase 3**, the work the Tic Tac Toe section above deferred ("`js/net.js` was NOT
+touched (2 human seats, host 0 / guest 1); the N-player extension is phase 3 and is separate
+work"). Matt: "Chinchón only allows 2 players to play in multiplayer. It should be up to 4."
+Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "Multiplayer at
+3-4 seats"; executable form: `test-mp-lockstep.mjs`'s C5-C7.
+
+- **The extension is additive, and that is load-bearing rather than merely tidy.** Eight other
+  games read `room.host`/`room.guest` directly and pass the literal strings `'host'`/`'guest'`
+  to `heartbeat`/`leaveRoom`/`appendMove`. So an N-seat room adds NEW sibling fields (`seats`,
+  `maxSeats`) and keeps `host`/`guest` populated — seat 0 mirrors to `host`, seat 1 to `guest`,
+  including their `lastSeen` heartbeat stamps. Every pre-existing signature still means exactly
+  what it meant: **omit the new argument and the behaviour is byte-identical.** `createRoom`
+  gains `opts.seats`; `joinSeat`/`vacateSeat` are new exports rather than changes to
+  `joinRoom`/`leaveRoom`; `heartbeat` accepts an integer where it accepted a path fragment;
+  `writeRecovery`/`requestRecovery`/`clearRecovery` gain a trailing optional `seat`. **Zero edits
+  were needed in escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/, poolv2/ or
+  boggle/**, and C7 asserts the seatless legacy path still behaves as before.
+- **Two genuine correctness bugs exist only at 3+ seats, and both were found by scoping rather
+  than by symptoms** — worth stating because neither could ever reproduce on a 2-seat room, so
+  no amount of playing the existing games would have surfaced them:
+  1. **Seat claiming must be transactional.** `joinRoom` does `get` then `update`, which is safe
+     when there is exactly one slot to win and hands two simultaneous joiners the same index
+     once there are three. `joinSeat` claims via `runTransaction` (the Firebase database module
+     is exposed wholesale by `firebase-boot.js`, so no new import) and then **re-reads the
+     committed roster** to find where it actually landed — the updater may run several times,
+     and its last-run local variable is not a statement of fact. Two devices holding the same
+     engine player id diverge on the first move with no way back.
+  2. **`recovery` was ONE shared field carrying two different shapes** — the host's answer
+     `{state, seq}` and a guest's plea `{requested}` — which simply overwrite each other. With
+     one guest that never mattered. With three, guest B's request clobbers the host's answer
+     before guest A reads it, so guest A never resyncs, burns its three-attempt budget and drops
+     to "Connection error". **This sits under the safety net every other MP guarantee depends
+     on.** Now `recovery/requests/<seat>` and `recovery/answers/<seat>`: they cannot collide by
+     construction, the host answers each pleading seat independently, and a healthy device never
+     rebuilds from a snapshot addressed to somebody else. A guest forgets its dedupe stamp when
+     its answer node goes absent, so an answer re-issued inside the same millisecond can't be
+     mistaken for the spent one.
+- **A departure ends the match for the whole table, deliberately.** `leaveRoom` was NOT changed.
+  Chinchón's engine cannot drop a seat from a live match without every other device diverging on
+  the next deal, and inventing that is a rules change, not a networking one. `vacateSeat` is the
+  LOBBY-only counterpart — one person backing out before the match starts must not evict the
+  other three, which is what the old unconditional `leaveRoom` in `_mpCancelLobby` did.
+- **The seat index IS the engine's player id**, on every device, for the whole match. That one
+  identity is what lets a device derive its whole side from `mp.seat`, and it makes invariant 2
+  (device-relative `isHuman`) a one-line change rather than a redesign: `mySeat = mp.seat`
+  instead of `role === 'host' ? 0 : 1`. **A game whose seats are not interchangeable would need
+  more** — this worked cheaply because Chinchón's seats are symmetric, the way Tic Tac Toe's
+  marks are and Mancala's board halves are not.
+- **Invariants 1-5 survive N seats unchanged.** The one worth naming explicitly: the single
+  `pendingResolve` slot is correct at four seats rather than lucky, because Chinchón is strictly
+  turn-based, so the engine awaits exactly one agent at a time and only one remote seat can ever
+  be mid-decision. **A game where several seats could act simultaneously would need a slot per
+  seat** — say so there rather than copying this shape blind.
+- **`test-mp-lockstep.mjs`'s `FakeRoom` is now N-seat** (`new FakeRoom(seatCount)`, default 2 so
+  every pre-existing scenario builds the room it always did) with a monotonic stamp standing in
+  for `Date.now()` on recovery records — a synchronous harness produces colliding millisecond
+  stamps and would make the per-seat dedupe untestable. `ChinchonSide` is keyed by seat.
+- **Status: headless only.** C5-C7 pass against a `FakeRoom`; nothing has been played by three
+  or four real devices. Same honest caveat as Pool and Boggle.
+
 ---
 
 ## The leaderboard's rating model (2026-07-22)
@@ -557,8 +622,21 @@ and detect which tiers a player has played; **do not delete leaderboard-rank.js'
 **Everything here is still a read-time DISPLAY TRANSFORM.** `gamehub.stats` and `players/<deviceId>`
 are read-only to this feature — nothing is stored, migrated or normalized.
 
-- **A draw counts as a win**, for every player, in every COMPETITIVE game, derived at render time
-  via `bucketsOf()`'s `wins = played - losses` (never stored). **Solo games (Ball Run/Snake/Nuts &
+- **A draw is NOT a win** (Matt, 2026-07-28: "Tictactoe ties are being counted as wins. That's
+  wrong."). `record()`/`bucketsOf()` in `js/leaderboard-rank.js` return the STORED `won` counter,
+  clamped, and nothing more; the old rule derived `wins = played - losses`, which promoted every
+  tie. **This reversed the previous "a draw counts as a win" design** — do not reinstate it, and
+  do not treat the reconciliation argument it rested on (that W + L should equal Plays) as a
+  constraint: plays now legitimately exceed wins + losses by the draw count. Most visible in Tic
+  Tac Toe (Classic Pro is unbeatable by design, so it is draw-heavy and a stalemate streak read as
+  a winning streak), but the rule was and is shared by every competitive game. **Draws are NOT
+  given their own leaderboard number** (Matt's call, same day): they stay visible on My Stats,
+  which already renders explicit W/L/T for Tic Tac Toe, Dots and Boxes and Boggle straight from
+  each game's own sub-counter — that is the rule-1 surface for them. Second site, kept in step by
+  hand: `ttVariantWins()` in `js/leaderboard-ui.js`, the Ultimate/Classic split on Tic Tac Toe's
+  own leaderboard card, which reads `tt.<variant>.won` (the `tt` sub-counter stores `tied`
+  explicitly, so nothing is derived there). **DISPLAY-only, as ever — no stored counter changed**,
+  no migration, no recorder edit. **Solo games (Ball Run/Snake/Nuts &
   Bolts) are counted and labeled as RUNS, separately from wins — not folded into the wins number
   (Matt, 2026-07-28, HANDOFF-LB-SOLO-RUNS.md).** `winsAtTier()` itself is unchanged and still
   works generically across every game's `total`/`byDiff` shape (solo games populate it identically
@@ -653,10 +731,11 @@ zero-row); nothing about the per-game `screenFor` screens themselves changed.
   unit label again.
 - **My Stats' overview** (`overviewHTML`/`overviewTotals` in `game-stats-ui.js`): profile emoji +
   name, then two headline tallies — total games played and total wins — summed across every
-  visible game via `record()` (imported from `js/leaderboard-rank.js`, the same draws-as-wins
-  maths the leaderboard uses: `wins = played - losses`). Solo games (Ball Run/Snake/Nuts & Bolts)
-  count toward both totals the same as competitive games, since `total`/`byDiff` are populated
-  identically for solo play (see "The leaderboard's rating model" above).
+  visible game via `record()` (imported from `js/leaderboard-rank.js`, the same maths the
+  leaderboard uses: `wins` is the stored `won` counter, and a draw is NOT a win). Solo games
+  (Ball Run/Snake/Nuts & Bolts) count toward `plays` the same as competitive games, but their
+  wins are shown as a separate third "Runs" tally rather than folded in (see "The leaderboard's
+  rating model" above).
 - **A game's presence in the list uses its OWN empty-state gate**, not a generic `total.played`
   check (`hasPlays()` in `game-stats-ui.js` mirrors each `screenFor` variant's own condition:
   Connect 4 sums `c4Totals(grid)`, Ball Run also checks the legacy-meters archive, Snake/Nuts &

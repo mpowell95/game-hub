@@ -294,6 +294,65 @@ would have stayed green even with the `'turnStart'` bug). Everything else about 
 - Stats recording is untouched — a resumed solo game records exactly as an uninterrupted one
   (same `_commitStats()` call, same recorder).
 
+## Multiplayer at 3-4 seats (2026-07-28)
+
+Matt: "Chinchón only allows 2 players to play in multiplayer. It should be up to 4." The host
+now picks the table size (2/3/4, the same selector solo already used — Host mode used to render
+a hardcoded, non-interactive "2"), and the lobby lists every seat until the table is full.
+
+**Humans only.** An unfilled seat is never played by an AI, and **Start stays disabled until
+every seat is filled** — the host chose the size up front, so a half-full room means somebody is
+still on their way. Backing out changes the size; there is no "start early with who's here".
+
+**The engine needed ZERO changes.** `game.js` was already N-generic and this was verified rather
+than assumed before any code was written: dealing (`:244`), turn rotation (`advance()` `:180`),
+round-open seat (`:255`), dealer rotation (`:395`), the `everyoneHadTurn()` close gate (`:181`),
+`resolveRoundScoring()`'s closer-vs-everyone-else loop (`:478-521`), `checkMatchEnd()` (`:530`),
+`finalizeStandings()` (`:542`) and `snapshot()`/`fromSnapshot` all loop `this.players`. Solo has
+offered 2-4 players since Pass 2, so all of it was already exercised daily. The whole change is
+in the NETWORK layer and this file's MP glue.
+
+- **`mp.seat` (an integer) replaced the host/guest binary.** The room's seat index IS the
+  engine's player id, on every device, for the whole match — that single identity is what the
+  rest of the seat model rests on. `mp.isHost` is `seat === 0`. Everything that asked
+  `mp.role === 'host'` asks `mp.isHost`; everything that asked `=== 'guest'` asks `!mp.isHost`,
+  because with three guests "guest" stopped naming one device.
+- **`_makeRemoteAgent(seatId)`** closes over its own seat, and `_remotePlayer()` is gone. That
+  helper returned `players.find(p => !p.isHuman)` — the FIRST remote seat, correct only when
+  there is exactly one. It was harmlessly wrong before (its one caller, the declined-close path,
+  only read the `isHuman` flag, which every remote seat shares); it is not harmless now that
+  `p.id` steers recovery addressing.
+- **`_mpBuildPlayers(room, mySeat, count)`** builds the table from the room's seat roster in seat
+  order on every device, setting `isHuman` only for our own seat (invariant 2, by construction).
+  Names/avatars come from the roster so every device labels the table identically — and they are
+  cosmetic to the protocol anyway (`hash.js` hashes cards and scores, never names), so a missing
+  roster entry degrades to a placeholder instead of desyncing.
+- **`config.seats` rides the room config** so a joining or REJOINING device can size its players
+  array from the room record alone. The MP save gained `seat`; it still writes the old `role`
+  too, so a match live across the deploy window resumes either way, and a rejoin that lands on a
+  different seat than the save claims is abandoned rather than resumed wrong.
+- **Head-to-head now records EVERY opponent** (`_commitStats` looped `mp.opps`, was a single
+  `mp.opp`). At 3-4 seats the old code silently dropped one or two people's records. `won` means
+  "I finished ahead of the whole table", not a pairwise result — stated here because the counters
+  are per-opponent and could be misread as pairwise later.
+- **Leaving mid-match still ends the match for the whole table** (unchanged behaviour, now a
+  documented decision): the engine cannot drop a seat from a live match without every other
+  device diverging on the next deal. Backing out of the LOBBY is different — a non-host frees
+  only its own seat (`net.vacateSeat`), because one person changing their mind must not evict
+  the other three. Only the host leaving takes the room with it.
+- **Two real 3+-seat bugs were fixed in `js/net.js`**, neither reachable with two seats: seat
+  claiming is now transactional (`joinSeat`), and recovery records are seat-addressed. See
+  `js/CLAUDE.md`'s "The ninth consumer" section for both.
+
+Tests: `test-mp-lockstep.mjs` C5 (four-seat full match, all four hashes identical, each device
+owning exactly its own seat, plus the remote-agent-knows-its-seat probe), C6 (four-seat desync →
+recovery addressed to the seat that authored the diverging move, then whole-table convergence),
+C7 (per-seat recovery records cannot clobber each other, and the seatless legacy path is
+provably unchanged). C1-C4 are unchanged in substance and still green.
+
+**Not verified on real devices.** Everything above is proven headlessly against a `FakeRoom`;
+nothing has been played by three or four actual phones. Same honest caveat Pool and Boggle carry.
+
 ## MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
 "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`)
 

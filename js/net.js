@@ -18,6 +18,57 @@ import { getStatsApp } from './firebase-boot.js';
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 const HEARTBEAT_MS = 10000;
+const MAX_SEATS = 8;
+
+// --- N-SEAT ROOMS (2026-07-28, Chinchón 3-4 player MP) --------------------
+//
+// Every function below that mentions a SEAT is an ADDITIVE extension. This
+// module shipped as a strictly 2-seat protocol (`host` + `guest`) and eight
+// games are built on that shape; `js/CLAUDE.md`'s Tic Tac Toe section called
+// the N-player extension "phase 3 and separate work". This is that phase.
+//
+// The contract for every change here: **omit the seat argument and you get
+// today's byte-identical behaviour.** An N-seat room is opted into at
+// createRoom (`opts.seats`), which adds two NEW sibling fields, `seats` and
+// `maxSeats`, and leaves `host`/`guest` populated exactly as before (seat 0
+// mirrors to `host`, seat 1 to `guest`) so a room is still legible to the
+// 2-seat readers in every other game. No existing signature changed meaning,
+// so escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/, poolv2/
+// and boggle/ needed zero edits for this.
+//
+// Two genuine 3+-seat CORRECTNESS problems are fixed here, neither of which
+// could occur with two seats:
+//
+//   1. Seat claiming must be TRANSACTIONAL. joinRoom() below does a `get`
+//      then an `update`, which is safe when there is exactly one seat to win
+//      but hands two simultaneous joiners the same index once there are
+//      three. joinSeat() claims through runTransaction instead and then
+//      re-reads the committed roster to find where it actually landed,
+//      rather than trusting the updater's last-run local variable.
+//   2. `recovery` was ONE shared field carrying two different shapes -- the
+//      host's answer `{state, seq}` and a guest's plea `{requested}` -- which
+//      simply overwrite each other. With one guest that is harmless (the two
+//      never race meaningfully). With three, guest B's request clobbers the
+//      host's answer before guest A has read it, so guest A never resyncs and
+//      burns its three-attempt budget straight into "Connection error" -- and
+//      recovery is the safety net every other MP guarantee sits on top of.
+//      Seat-addressed callers now use `recovery/requests/<seat>` and
+//      `recovery/answers/<seat>`, which cannot collide by construction.
+//
+// Deliberately NOT changed: leaveRoom() still ends the room for everyone. A
+// player dropping out mid-match ends the match for the whole table (see
+// chinchon/CLAUDE.md) -- Chinchón's engine has no way to remove a seat from a
+// live match without every other device diverging, and inventing one is a
+// rules change, not a networking change. vacateSeat() below is the LOBBY-only
+// counterpart: it frees a seat of someone who backed out before the match
+// started, without killing the room the others are still sitting in.
+
+/** localStorage-free seat->path helper. A numeric seat addresses the new
+ *  `seats/<n>` roster; a legacy 'host'/'guest' string passes straight
+ *  through, so every pre-existing caller keeps writing where it always did. */
+function seatPath(seatOrRole) {
+  return typeof seatOrRole === 'number' ? `seats/${seatOrRole}` : seatOrRole;
+}
 
 let _db = null, _api = null;
 let _unsubRoom = null, _heartbeatTimer = null;
@@ -62,9 +113,14 @@ function getSwVersion() {
   });
 }
 
-/** Create a room for `game` with `config`, hosted by `me` = {name, avatar, deviceId}. */
-export async function createRoom(game, config, me) {
+/** Create a room for `game` with `config`, hosted by `me` = {name, avatar, deviceId}.
+ *  `opts.seats` (2-8) opts into an N-SEAT room: `seats`/`maxSeats` are written
+ *  alongside the unchanged `host`/`guest` fields, and the returned result also
+ *  carries the host's own seat (always 0). Omit `opts` for a classic 2-seat
+ *  room -- the written record is then byte-identical to what this always wrote. */
+export async function createRoom(game, config, me, opts) {
   if (!(await init())) return { error: 'offline' };
+  const want = opts && opts.seats ? Math.max(2, Math.min(MAX_SEATS, opts.seats | 0)) : 0;
   const swv = await getSwVersion();
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = randomCode();
@@ -79,42 +135,127 @@ export async function createRoom(game, config, me) {
         config, host: { ...me, lastSeen: now }, guest: null,
         round: null, moves: null, recovery: null, result: null,
       };
+      if (want) {
+        room.maxSeats = want;
+        room.seats = { 0: { ...me, lastSeen: now } };
+      }
       await _api.set(roomRef(code), room);
-      return { code };
+      return { code, seat: want ? 0 : null };
     } catch { /* transient failure on this code: try the next one */ }
   }
   return { error: 'busy' };
 }
 
-/** Join (or rejoin) `code` as `me` = {name, avatar, deviceId}. */
+/** Shared joinability gate for joinRoom/joinSeat: reads the room and returns
+ *  either `{ error }` or `{ room }`. Factored out so the two join paths can
+ *  never drift on the TTL / protocol-version / service-worker-version rules.
+ *
+ *  Mid-deploy desync guard (S4-5/S5-9): the host's swv was already recorded at
+ *  createRoom via the same GET_VERSION read. A joiner on a different SW build
+ *  would lockstep a different build's state shape against the host's and
+ *  hash-mismatch into the recovery loop instead of a clean "update required"
+ *  message. 'unknown' on either side (no active controller yet, or the
+ *  postMessage round-trip timed out) is never treated as a mismatch - this
+ *  check must never block a join it can't actually verify. */
+async function readJoinableRoom(CODE, label) {
+  const snap = await _api.get(roomRef(CODE));
+  const room = snap.val();
+  const now = Date.now();
+  if (!room || room.status === 'ended' || (now - (room.updated || 0)) > ROOM_TTL_MS) return { error: 'not-found' };
+  if (room.v !== 1) return { error: 'version' };
+  const mySwv = await getSwVersion();
+  if (room.swv && room.swv !== 'unknown' && mySwv !== 'unknown' && room.swv !== mySwv) {
+    return { error: 'version' };
+  }
+  if (room.swv === 'unknown' || mySwv === 'unknown') {
+    console.warn(`[net] ${label}: sw version unknown on host or joiner, allowing join without a version check`, { roomSwv: room.swv, mySwv });
+  }
+  return { room };
+}
+
+/** Join (or rejoin) `code` as `me` = {name, avatar, deviceId}. The classic
+ *  2-seat path, unchanged: one guest slot, first-come. */
 export async function joinRoom(code, me) {
   if (!(await init())) return { error: 'offline' };
   const CODE = String(code || '').trim().toUpperCase();
   try {
-    const snap = await _api.get(roomRef(CODE));
-    const room = snap.val();
+    const gate = await readJoinableRoom(CODE, 'joinRoom');
+    if (gate.error) return { error: gate.error };
+    const room = gate.room;
     const now = Date.now();
-    if (!room || room.status === 'ended' || (now - (room.updated || 0)) > ROOM_TTL_MS) return { error: 'not-found' };
-    if (room.v !== 1) return { error: 'version' };
-    // Mid-deploy desync guard (S4-5/S5-9): the host's swv was already recorded at createRoom via
-    // the same GET_VERSION read. A joiner on a different SW build would lockstep a different
-    // build's state shape against the host's and hash-mismatch into the recovery loop instead of
-    // a clean "update required" message. 'unknown' on either side (no active controller yet, or
-    // the postMessage round-trip timed out) is never treated as a mismatch - this check must
-    // never block a join it can't actually verify.
-    const mySwv = await getSwVersion();
-    if (room.swv && room.swv !== 'unknown' && mySwv !== 'unknown' && room.swv !== mySwv) {
-      return { error: 'version' };
-    }
-    if (room.swv === 'unknown' || mySwv === 'unknown') {
-      console.warn('[net] joinRoom: sw version unknown on host or guest, allowing join without a version check', { roomSwv: room.swv, mySwv });
-    }
     const rejoined = !!(room.guest && room.guest.deviceId === me.deviceId);
     if (room.guest && !rejoined) return { error: 'full' };
     await _api.update(roomRef(CODE), { guest: { ...me, lastSeen: now }, updated: now });
     const fresh = await _api.get(roomRef(CODE));
     return { ok: true, room: fresh.val(), rejoined };
   } catch { return { error: 'offline' }; }
+}
+
+/** N-seat join (or rejoin): claim the lowest free seat in an `opts.seats` room.
+ *  Returns `{ ok, seat, rejoined, room }` or `{ error }`.
+ *
+ *  The claim goes through runTransaction because, unlike the single-guest slot
+ *  above, three people can be racing for two free indices -- a `get`-then-
+ *  `update` hands two of them the same seat, and two devices holding the same
+ *  engine player id diverge on the very first move with no way back. The
+ *  committed roster is then re-read to find where this device ACTUALLY landed
+ *  rather than trusting the updater closure's last-run local: runTransaction
+ *  may invoke the updater several times, and reading the result is the only
+ *  statement of fact about the outcome.
+ *
+ *  A room created WITHOUT `opts.seats` has no roster to claim, so it is
+ *  reported as 'version' (the caller is a newer build than the room). */
+export async function joinSeat(code, me) {
+  if (!(await init())) return { error: 'offline' };
+  const CODE = String(code || '').trim().toUpperCase();
+  try {
+    const gate = await readJoinableRoom(CODE, 'joinSeat');
+    if (gate.error) return { error: gate.error };
+    const room = gate.room;
+    const maxSeats = room.maxSeats | 0;
+    if (!maxSeats) return { error: 'version' };
+
+    const res = await _api.runTransaction(_api.ref(_db, `rooms/${CODE}/seats`), (seats) => {
+      const s = seats || {};
+      for (let i = 0; i < maxSeats; i++) {
+        if (s[i] && s[i].deviceId === me.deviceId) { s[i] = { ...me, lastSeen: Date.now() }; return s; }
+      }
+      for (let i = 1; i < maxSeats; i++) {
+        if (!s[i]) { s[i] = { ...me, lastSeen: Date.now() }; return s; }
+      }
+      return undefined;   // every seat taken by someone else: abort, no write
+    });
+    if (!res || !res.committed) return { error: 'full' };
+
+    const finalSeats = (res.snapshot && res.snapshot.val()) || {};
+    let seat = -1;
+    for (let i = 0; i < maxSeats; i++) {
+      if (finalSeats[i] && finalSeats[i].deviceId === me.deviceId) { seat = i; break; }
+    }
+    if (seat < 0) return { error: 'full' };
+    const rejoined = !!(room.seats && room.seats[seat] && room.seats[seat].deviceId === me.deviceId);
+
+    // Mirror seat 1 into the legacy `guest` field so an N-seat room stays
+    // legible to anything still reading the 2-seat shape.
+    const now = Date.now();
+    const patch = { updated: now };
+    if (seat === 1) patch.guest = { ...me, lastSeen: now };
+    await _api.update(roomRef(CODE), patch);
+    const fresh = await _api.get(roomRef(CODE));
+    return { ok: true, seat, rejoined, room: fresh.val() };
+  } catch { return { error: 'offline' }; }
+}
+
+/** LOBBY-only seat release: free `seat` without ending the room, for a player
+ *  who backed out before the match started. Never call this for seat 0 (the
+ *  host abandoning IS the room ending -- use leaveRoom) and never mid-match,
+ *  where a departure ends the match for the whole table by design. */
+export async function vacateSeat(code, seat) {
+  if (!(await init())) return;
+  const now = Date.now();
+  const patch = { [`seats/${seat}`]: null, updated: now };
+  if (seat === 1) patch.guest = null;
+  try { await _api.update(roomRef(code), patch); } catch { /* best-effort; the TTL reclaims it anyway */ }
 }
 
 /** Host only: publish the round's deck order + dealer, reset the move log. */
@@ -163,22 +304,60 @@ export async function reportRoundResult(code, role, result) {
   await _api.update(roomRef(code), { [`${role}Result`]: { ...result, at: Date.now() }, updated: Date.now() });
 }
 
-/** Host only: publish a full-state recovery snapshot after a hash mismatch. */
-export async function writeRecovery(code, seq, snapshot) {
+/** Host only: publish a full-state recovery snapshot after a hash mismatch.
+ *  With `seat` given, the snapshot is addressed to THAT seat
+ *  (`recovery/answers/<seat>`) and retires that seat's outstanding request in
+ *  the same write; without it, the legacy single shared `recovery` field is
+ *  written exactly as before. Addressing matters for two reasons once there is
+ *  more than one guest: a healthy guest must not tear down and rebuild its
+ *  live game from a snapshot meant for someone else, and two answers written
+ *  back-to-back must not overwrite each other before their recipients read
+ *  them. */
+export async function writeRecovery(code, seq, snapshot, seat) {
   if (!(await init())) throw new Error('net offline');
-  await _api.update(roomRef(code), { recovery: { state: snapshot, seq, at: Date.now() }, updated: Date.now() });
+  const at = Date.now();
+  if (seat == null) {
+    await _api.update(roomRef(code), { recovery: { state: snapshot, seq, at }, updated: at });
+    return;
+  }
+  await _api.update(roomRef(code), {
+    [`recovery/answers/${seat}`]: { state: snapshot, seq, at },
+    [`recovery/requests/${seat}`]: null,
+    updated: at,
+  });
 }
 
 /** Guest side of a mismatch: flags the desync for the host to notice and
- *  respond with writeRecovery (M1 simplification: no direct push channel). */
-export async function requestRecovery(code, seq) {
+ *  respond with writeRecovery (M1 simplification: no direct push channel).
+ *  With `seat` given, the plea goes to this seat's OWN child
+ *  (`recovery/requests/<seat>`) instead of the shared field, so it cannot
+ *  clobber another seat's pending answer. */
+export async function requestRecovery(code, seq, seat) {
   if (!(await init())) throw new Error('net offline');
-  await _api.update(roomRef(code), { recovery: { requested: seq, at: Date.now() }, updated: Date.now() });
+  const at = Date.now();
+  if (seat == null) {
+    await _api.update(roomRef(code), { recovery: { requested: seq, at }, updated: at });
+    return;
+  }
+  await _api.update(roomRef(code), { [`recovery/requests/${seat}`]: { seq, at }, updated: at });
 }
 
-export async function clearRecovery(code) {
+/** Clear the whole shared recovery field (no seat), or just one seat's
+ *  answer+request (seat given). RTDB prunes `recovery` itself once its last
+ *  child is nulled, so a settled N-seat room ends up with no recovery node at
+ *  all, same as the 2-seat path. */
+export async function clearRecovery(code, seat) {
   if (!(await init())) throw new Error('net offline');
-  await _api.update(roomRef(code), { recovery: null, updated: Date.now() });
+  const now = Date.now();
+  if (seat == null) {
+    await _api.update(roomRef(code), { recovery: null, updated: now });
+    return;
+  }
+  await _api.update(roomRef(code), {
+    [`recovery/answers/${seat}`]: null,
+    [`recovery/requests/${seat}`]: null,
+    updated: now,
+  });
 }
 
 /** One onValue on rooms/CODE for the whole module (at most one at a time -
@@ -192,13 +371,21 @@ export async function onRoom(code, cb) {
   return _unsubRoom;
 }
 
-/** Presence ping every ~10s: updates <role>/lastSeen so the peer can detect a
- *  stale opponent. Replaces any prior interval (one heartbeat at a time). */
+/** Presence ping every ~10s: updates <role>/lastSeen so peers can detect a
+ *  stale player. Replaces any prior interval (one heartbeat at a time).
+ *  `role` is either a legacy 'host'/'guest' string or a numeric seat; seats 0
+ *  and 1 additionally keep the legacy `host`/`guest` stamps fresh so an
+ *  N-seat room's staleness is readable both ways. */
 export function heartbeat(code, role) {
   stopHeartbeat();
+  const path = seatPath(role);
   _heartbeatTimer = setInterval(() => {
     if (!_api || !_db) return;
-    _api.update(roomRef(code), { [`${role}/lastSeen`]: Date.now(), updated: Date.now() }).catch(() => {});
+    const now = Date.now();
+    const patch = { [`${path}/lastSeen`]: now, updated: now };
+    if (role === 0) patch['host/lastSeen'] = now;
+    else if (role === 1) patch['guest/lastSeen'] = now;
+    _api.update(roomRef(code), patch).catch(() => {});
   }, HEARTBEAT_MS);
 }
 
@@ -206,7 +393,10 @@ export function stopHeartbeat() {
   if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
 }
 
-/** Explicit abandon: mark the room ended, then detach everything. */
+/** Explicit abandon: mark the room ended, then detach everything. This ends
+ *  the room for EVERY seat, N-seat rooms included -- see the N-SEAT ROOMS note
+ *  at the top of this file for why a mid-match departure deliberately ends the
+ *  match for the whole table, and vacateSeat() for the lobby-only counterpart. */
 export async function leaveRoom(code, role) {
   try { if (await init()) await _api.update(roomRef(code), { status: 'ended', updated: Date.now() }); }
   finally { disconnect(); }
@@ -220,7 +410,7 @@ export function disconnect() {
 }
 
 export default {
-  init, createRoom, joinRoom, startRound, appendMove, writeResult, reportRoundResult,
+  init, createRoom, joinRoom, joinSeat, vacateSeat, startRound, appendMove, writeResult, reportRoundResult,
   writeRecovery, requestRecovery, clearRecovery,
   onRoom, heartbeat, stopHeartbeat, leaveRoom, disconnect,
 };

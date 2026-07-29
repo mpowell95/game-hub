@@ -131,15 +131,31 @@ function until(cond, ms, label) {
 
 // --- the fake rooms/<CODE> node ---------------------------------------------------
 class FakeRoom {
-  constructor() {
+  // `seatCount` mirrors net.js's `maxSeats` (createRoom's opts.seats). It
+  // defaults to 2, so every pre-existing scenario in this file constructs
+  // exactly the room it always did.
+  constructor(seatCount = 2) {
     this.status = 'waiting'; this.round = null; this.moves = {}; this.recovery = null; this.result = null;
     this.config = null;      // the host's published room config (net.js createRoom stores it)
+    this.maxSeats = seatCount;
     this.listeners = new Set();
     this.overwrites = [];   // {seq, oldBy, newBy}: a same-seq entry replaced with DIFFERENT content
+    // Durable log of every seat-addressed recovery answer ever written. The
+    // live `recovery` field is cleared by the next startRound, so an assertion
+    // that reads it after the fact can miss a write that really happened.
+    this.recoveryWrites = [];
     this.dead = false;      // harness kill-switch: a finished scenario silences its room
+    // Monotonic stamp standing in for net.js's Date.now() on recovery records.
+    // Real writes are separated by network round-trips; a synchronous harness
+    // would produce colliding millisecond stamps and make the per-seat dedupe
+    // untestable, so the ONE thing faked here is the clock's resolution.
+    this._stampN = 0;
   }
+  _stamp() { return ++this._stampN; }
   snapshotRoom() {
-    return deep({ status: this.status, round: this.round, moves: this.moves, recovery: this.recovery, result: this.result, config: this.config, host: { lastSeen: Date.now() }, guest: { lastSeen: Date.now() } });
+    const seats = {};
+    for (let i = 0; i < this.maxSeats; i++) seats[i] = { lastSeen: Date.now() };
+    return deep({ status: this.status, round: this.round, moves: this.moves, recovery: this.recovery, result: this.result, config: this.config, seats, maxSeats: this.maxSeats, host: { lastSeen: Date.now() }, guest: { lastSeen: Date.now() } });
   }
   _notify() { if (this.dead) return; for (const cb of [...this.listeners]) queueMicrotask(() => { if (!this.dead) cb(this.snapshotRoom()); }); }
   onRoom(cb) { this.listeners.add(cb); queueMicrotask(() => cb(this.snapshotRoom())); }   // onValue fires immediately
@@ -154,14 +170,43 @@ class FakeRoom {
     this._notify();
   }
   async writeResult(result) { this.result = result; this.status = 'ended'; this._notify(); }        // net.js:140-143
-  async writeRecovery(seq, snapshot) { this.recovery = { state: snapshot, seq, at: Date.now() }; this._notify(); }   // net.js:145-149
-  async requestRecovery(seq) { this.recovery = { requested: seq, at: Date.now() }; this._notify(); }                 // net.js:153-156
-  async clearRecovery() { this.recovery = null; this._notify(); }
+  // Recovery, mirroring net.js's dual shape: omit `seat` and you get the legacy
+  // single shared `recovery` field (what Escoba/TTT/Mancala/Filler/DotsBoxes
+  // still use below); pass one and the record is seat-addressed under
+  // recovery/answers/<seat> + recovery/requests/<seat>.
+  async writeRecovery(seq, snapshot, seat) {                                         // net.js writeRecovery
+    if (seat == null) { this.recovery = { state: snapshot, seq, at: this._stamp() }; this._notify(); return; }
+    this.recoveryWrites.push({ seat, seq });
+    const r = this.recovery && (this.recovery.answers || this.recovery.requests) ? this.recovery : {};
+    r.answers = Object.assign({}, r.answers);
+    r.answers[seat] = { state: snapshot, seq, at: this._stamp() };
+    if (r.requests) { r.requests = Object.assign({}, r.requests); delete r.requests[seat]; }
+    this.recovery = r;
+    this._notify();
+  }
+  async requestRecovery(seq, seat) {                                                 // net.js requestRecovery
+    if (seat == null) { this.recovery = { requested: seq, at: this._stamp() }; this._notify(); return; }
+    const r = this.recovery && (this.recovery.answers || this.recovery.requests) ? this.recovery : {};
+    r.requests = Object.assign({}, r.requests);
+    r.requests[seat] = { seq, at: this._stamp() };
+    this.recovery = r;
+    this._notify();
+  }
+  async clearRecovery(seat) {                                                        // net.js clearRecovery
+    if (seat == null) { this.recovery = null; this._notify(); return; }
+    const r = this.recovery;
+    if (!r) { this._notify(); return; }
+    if (r.answers) { r.answers = Object.assign({}, r.answers); delete r.answers[seat]; }
+    if (r.requests) { r.requests = Object.assign({}, r.requests); delete r.requests[seat]; }
+    const empty = !Object.keys(r.answers || {}).length && !Object.keys(r.requests || {}).length;
+    this.recovery = empty ? null : r;   // RTDB prunes a node once its last child is nulled
+    this._notify();
+  }
 }
 
 const MP_RECOVERY_MAX_ATTEMPTS = 3;   // chinchon/js/ui.js:50 / escoba/js/ui.js:50
 
-function mpNewState() {   // chinchon/js/ui.js:1470-1481 / escoba/js/ui.js:1696-1706 (UI-only fields dropped)
+function mpNewState() {   // chinchon/js/ui.js _mpNewState / escoba/js/ui.js (UI-only fields dropped)
   return {
     appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
     pendingResolve: null, pendingType: null, pendingSeq: null, pendingHash: null,
@@ -171,13 +216,25 @@ function mpNewState() {   // chinchon/js/ui.js:1470-1481 / escoba/js/ui.js:1696-
   };
 }
 
+/** Chinchón's own MP state: same as above but with the per-seat recovery
+ *  bookkeeping the N-seat protocol needs (`lastRecoveryHandled` became a map
+ *  of seat -> stamp, because the host answers each seat independently). */
+function cMpNewState(seat) {   // chinchon/js/ui.js _mpNewState
+  return Object.assign(mpNewState(), { seat, isHost: seat === 0, lastRecoveryHandled: {} });
+}
+
 // ==================================================================================
 // CHINCHÓN side (mirror of chinchon/js/ui.js's MP glue; citations per method)
 // ==================================================================================
 class ChinchonSide {
-  constructor(role, room, script, opts = {}) {
-    this.role = role; this.room = room; this.script = script; this.opts = opts;
-    this.mp = mpNewState();
+  // SEATS: a side is identified by its integer seat (0 = host), matching
+  // chinchon/js/ui.js's `mp.seat`. `role` is kept as a derived convenience for
+  // the existing 2-seat assertions and for appendMove's `by` field readability.
+  constructor(seat, room, script, opts = {}) {
+    this.seat = seat; this.isHost = seat === 0;
+    this.role = seat === 0 ? 'host' : 'guest';
+    this.room = room; this.script = script; this.opts = opts;
+    this.mp = cMpNewState(seat);
     this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
     this.mismatches = 0; this.recoveriesApplied = 0; this.errors = [];
     this.saves = [];   // in-memory _mpSaveSnapshot (:1933-1941)
@@ -197,16 +254,19 @@ class ChinchonSide {
     room.onRoom(this._roomCb);
   }
   human() { return this.game.players.find((p) => p.isHuman); }
-  remotePlayer() { return this.game.players.find((p) => !p.isHuman); }   // :1468
-  remoteAgent() {   // :1498-1514
+  /** Per-seat, mirroring _makeRemoteAgent(seatId). The old remotePlayer()
+   *  helper this replaced returned the FIRST non-human player, which is the
+   *  right one only when there is exactly one of them. */
+  remoteAgent(seatId) {   // chinchon/js/ui.js _makeRemoteAgent
     const side = this;
     return {
       isHuman: false,
+      seat: seatId,
       chooseDraw() { return side.awaitDecision('draw'); },
       chooseDiscard() { return side.awaitDecision('discard'); },
       async decideClose() {
         const kind = await side.awaitDecision('close');
-        if (!kind) await side.afterDecision(side.remotePlayer(), null);   // :1509
+        if (!kind) await side.afterDecision(side.game.byId(seatId), null);
         return kind;
       },
       async choosePlacements(view, locked, attachable) { return attachable.map((c) => c.id); },
@@ -249,9 +309,9 @@ class ChinchonSide {
     const mp = this.mp;
     if (!mp || this.dead) return;
     if (p.isHuman) {
-      const seq = ++mp.appliedSeq;   // reserved synchronously (:1582)
+      const seq = ++mp.appliedSeq;   // reserved synchronously
       const hash = cHash(this.game);
-      this.room.appendMove(this.role, seq, moveIfLocal, hash).catch(() => {});
+      this.room.appendMove(this.seat, seq, moveIfLocal, hash).catch(() => {});
       return;
     }
     const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
@@ -266,33 +326,37 @@ class ChinchonSide {
       return;
     }
     this.mismatches++;
-    await this.handleMismatch(expectedSeq);
+    // Captured here, while the log entry still exists: the next startRound
+    // clears room.moves, so C6 cannot read the author after the fact.
+    if (this.lastMismatchAuthor == null) this.lastMismatchAuthor = (mp.movesById.get(expectedSeq) || {}).by;
+    await this.handleMismatch(expectedSeq, p.id);   // p.id IS the seat
   }
-  sendStockReset(order) {   // _mpSendStockReset @ :1604-1610
+  sendStockReset(order) {   // _mpSendStockReset
     const mp = this.mp;
     if (!mp || this.dead) return;
     const seq = ++mp.appliedSeq;
     const hash = cHash(this.game);
-    this.room.appendMove(this.role, seq, { t: 'stock-reset', order }, hash).catch(() => {});
+    this.room.appendMove(this.seat, seq, { t: 'stock-reset', order }, hash).catch(() => {});
   }
-  async handleMismatch(seq) {   // _mpHandleMismatch @ :1615-1625
+  async handleMismatch(seq, bySeat) {   // _mpHandleMismatch (seat-addressed recovery)
     const mp = this.mp;
+    this.lastMismatchSeat = bySeat;   // harness-only: what C6 asserts on
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; if (this.game) this.game.abort(); return; }
     try {
-      if (this.role === 'host') await this.room.writeRecovery(mp.appliedSeq, this.game.snapshot());
-      else await this.room.requestRecovery(seq);
+      if (this.isHost) await this.room.writeRecovery(mp.appliedSeq, this.game.snapshot(), bySeat);
+      else await this.room.requestRecovery(seq, this.seat);
     } catch { /* retried on next room update */ }
   }
   applyRecovery(recovery) {   // _mpApplyRecovery (seat-remapped isHuman + boundary-aware start - the C3/E3 fix)
     const mp = this.mp;
     if (!mp || this.dead) return;
     const snap = deep(recovery.state);
-    const mySeat = this.role === 'host' ? 0 : 1;
+    const mySeat = this.mp.seat;
     const agentsById = {};
     for (const sp of snap.players) {
       sp.isHuman = sp.id === mySeat;
-      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent(sp.id);
     }
     if (this.game) this.game.abort();
     this.recoveriesApplied++;
@@ -300,8 +364,8 @@ class ChinchonSide {
     mp.appliedSeq = recovery.seq;
     mp.pendingResolve = null; mp.pendingType = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
-    this.room.clearRecovery().catch(() => {});
-    if (!snap.midRound && this.role === 'guest') this.awaitNextRound().then(() => this.startLoop());
+    this.room.clearRecovery(this.seat).catch(() => {});
+    if (!snap.midRound && !this.isHost) this.awaitNextRound().then(() => this.startLoop());
     else this.startLoop();
   }
   awaitNextRound() {   // _mpAwaitNextRound @ :1657-1667
@@ -313,20 +377,32 @@ class ChinchonSide {
   }
   roomCallback(room) {   // _mpRoomCallback @ :1721-1728 + _mpOnRoomUpdate @ :1731-1780
     if (this.dead) return;
-    if (!this.game) {   // guest auto-start (:1726-1727)
-      if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+    if (!this.game) {   // non-host auto-start
+      if (!this.isHost && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
       return;
     }
     const mp = this.mp;
     mp.lastRoomSnapshot = room;
-    if (room.recovery) {
-      if (this.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
-        mp.lastRecoveryHandled = room.recovery.requested;
-        this.room.writeRecovery(mp.appliedSeq, this.game.snapshot()).catch(() => {});
+    // Seat-addressed recovery: the host answers each pleading seat separately
+    // and dedupes per seat; a non-host applies ONLY the answer written for its
+    // own seat, and forgets its dedupe stamp once that answer is cleared.
+    const rec = room.recovery;
+    if (this.isHost && rec && rec.requests) {
+      for (const key of Object.keys(rec.requests)) {
+        const seat = Number(key);
+        const req = rec.requests[key];
+        if (!req || seat === mp.seat) continue;
+        if (mp.lastRecoveryHandled[seat] === req.at) continue;
+        mp.lastRecoveryHandled[seat] = req.at;
+        this.room.writeRecovery(mp.appliedSeq, this.game.snapshot(), seat).catch(() => {});
       }
-      if (this.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
-        mp.lastRecoveryApplied = room.recovery.seq;
-        this.applyRecovery(room.recovery);
+    }
+    if (!this.isHost) {
+      const mine = rec && rec.answers && rec.answers[mp.seat];
+      if (!mine) mp.lastRecoveryApplied = null;
+      else if (mine.state && mine.at !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = mine.at;
+        this.applyRecovery(mine);
       }
     }
     const entries = Object.values(room.moves || {});
@@ -351,59 +427,65 @@ class ChinchonSide {
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart':
-        if (this.role === 'host') await this.room.startRound(this.game.round, this.game.lastDeckOrder, this.game.dealerIndex);   // :716-719
+        if (this.isHost) await this.room.startRound(this.game.round, this.game.lastDeckOrder, this.game.dealerIndex);
         break;
       case 'turnStart':
-        if (this.role === 'guest') await this.awaitStockReset();   // :729
+        if (!this.isHost) await this.awaitStockReset();
         break;
-      case 'draw': await this.afterDecision(p, { t: 'draw', src: payload.source }); break;              // :735
-      case 'discard': await this.afterDecision(p, { t: 'discard', cardId: payload.card.id }); break;    // :741
-      case 'close': await this.afterDecision(p, { t: 'close', kind: true }); break;                     // :745
+      case 'draw': await this.afterDecision(p, { t: 'draw', src: payload.source }); break;
+      case 'discard': await this.afterDecision(p, { t: 'discard', cardId: payload.card.id }); break;
+      case 'close': await this.afterDecision(p, { t: 'close', kind: true }); break;
       case 'roundScored':
-        // _mpSaveSnapshot + guest gate, both on payload.matchOver (the engine decides
+        // _mpSaveSnapshot + non-host gate, both on payload.matchOver (the engine decides
         // the match end BEFORE emitting and announces it in the payload - the C1 fix)
-        if (!payload.matchOver) this.saves.push({ v: 1, code: 'T', role: this.role, seq: this.mp.appliedSeq, at: 0, snap: deep(this.game.snapshot()) });
-        if (this.role === 'guest' && !payload.matchOver) await this.awaitNextRound();
+        if (!payload.matchOver) this.saves.push({ v: 1, code: 'T', seat: this.seat, role: this.role, seq: this.mp.appliedSeq, at: 0, snap: deep(this.game.snapshot()) });
+        if (!this.isHost && !payload.matchOver) await this.awaitNextRound();
         break;
       case 'matchEnd':
         this.matchEnded = true;
-        if (this.role === 'host') await this.room.writeResult({ winnerId: this.game.winner.id });   // :772-775
+        if (this.isHost) await this.room.writeResult({ winnerId: this.game.winner.id });
         break;
     }
   }
   startLoop() { this.game.playMatch().catch((e) => { this.errors.push(e); }); }
-  hostStart(config) {   // _mpHostStart @ :1802-1826
+  /** _mpBuildPlayers: seat order on every device, isHuman only for our own
+   *  seat. Names are cosmetic (chinchon/js/hash.js hashes cards and scores). */
+  buildPlayers(count) {
+    const players = [];
+    for (let i = 0; i < count; i++) {
+      const mine = i === this.seat;
+      players.push(cMakePlayer({
+        id: i, name: `P${i}`, avatar: String(i), isHuman: mine,
+        agent: mine ? this.localAgent : this.remoteAgent(i),
+      }));
+    }
+    return players;
+  }
+  hostStart(config, seatCount = 2) {   // _mpHostStart
     const cfg = Object.assign({}, C_DEFAULT, config);
-    if (cfg.placeOnEnding === 'manual') cfg.placeOnEnding = 'auto';   // _mpBuildConfig @ :1487-1491
-    cfg.onStockReset = (order) => this.sendStockReset(order);         // :1811
-    const players = [
-      cMakePlayer({ id: 0, name: 'Host', avatar: 'H', isHuman: true, agent: this.localAgent }),
-      cMakePlayer({ id: 1, name: 'Guest', avatar: 'G', isHuman: false, agent: this.remoteAgent() }),
-    ];
-    this.bindGame(new CGame({ players, config: cfg, rng: mulberry32(1234) }));
+    if (cfg.placeOnEnding === 'manual') cfg.placeOnEnding = 'auto';   // _mpBuildConfig
+    cfg.onStockReset = (order) => this.sendStockReset(order);
+    this.bindGame(new CGame({ players: this.buildPlayers(seatCount), config: cfg, rng: mulberry32(1234) }));
     this.startLoop();
   }
-  guestStart(room) {   // _mpGuestStartMatch @ :1867-1893
+  guestStart(room) {   // _mpGuestStartMatch
     const cfg = Object.assign({}, C_DEFAULT, room.round ? this._roomConfig : {});
     Object.assign(cfg, this._roomConfig || {});
     if (cfg.placeOnEnding === 'manual') cfg.placeOnEnding = 'auto';
-    cfg.presetDeck = room.round.deck;   // :1874
-    const players = [
-      cMakePlayer({ id: 0, name: 'Host', avatar: 'H', isHuman: false, agent: this.remoteAgent() }),
-      cMakePlayer({ id: 1, name: 'Guest', avatar: 'G', isHuman: true, agent: this.localAgent }),
-    ];
-    this.bindGame(new CGame({ players, config: cfg }));
+    cfg.presetDeck = room.round.deck;
+    const seatCount = (this._roomConfig && this._roomConfig.seats) || room.maxSeats || 2;
+    this.bindGame(new CGame({ players: this.buildPlayers(seatCount), config: cfg }));
     this.startLoop();
   }
   async restoreFromSave(save) {   // _tryRestoreMP (join/heartbeat elided; FakeRoom always reachable)
     const agentsById = {};
-    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
-    this.mp = mpNewState();
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent(sp.id);
+    this.mp = cMpNewState(this.seat);
     this.mp.appliedSeq = save.seq | 0;
     this.bindGame(CGame.fromSnapshot(deep(save.snap), agentsById));
     // Boundary saves (the only kind chinchon MP writes) wait for the host's next-round
     // record before playing, mirroring the fixed _tryRestoreMP.
-    if (this.role === 'guest' && !save.snap.midRound) await this.awaitNextRound();
+    if (!this.isHost && !save.snap.midRound) await this.awaitNextRound();
     if (this.dead) return;
     this.startLoop();
   }
@@ -1010,13 +1092,27 @@ function makeTicTacToe(variant, policy, opts = {}) {
 }
 
 async function makeChinchon(config, closePolicy, opts = {}) {
-  const room = new FakeRoom();
-  room.config = config;
-  const host = new ChinchonSide('host', room, chinchonScript(closePolicy), opts.host || {});
-  const guest = new ChinchonSide('guest', room, chinchonScript(closePolicy), Object.assign({ autoStart: true }, opts.guest || {}));
-  guest._roomConfig = config;
-  host.hostStart(config);
-  return { room, host, guest };
+  const { room, sides } = await makeChinchonN(2, config, closePolicy, opts);
+  return { room, host: sides[0], guest: sides[1], sides };
+}
+
+/** N-seat table (2026-07-28). Seat 0 hosts; every other seat auto-starts when
+ *  the host publishes round 1. `opts.host` / `opts.guest` keep working for the
+ *  2-seat scenarios; `opts.seatOpts[i]` addresses any seat by index. */
+async function makeChinchonN(seatCount, config, closePolicy, opts = {}) {
+  const room = new FakeRoom(seatCount);
+  const roomConfig = Object.assign({}, config, { seats: seatCount });
+  room.config = roomConfig;
+  const sides = [];
+  for (let i = 0; i < seatCount; i++) {
+    const perSeat = (opts.seatOpts && opts.seatOpts[i]) || (i === 0 ? opts.host : opts.guest) || {};
+    const sideOpts = i === 0 ? Object.assign({}, perSeat) : Object.assign({ autoStart: true }, perSeat);
+    const side = new ChinchonSide(i, room, chinchonScript(closePolicy), sideOpts);
+    side._roomConfig = roomConfig;
+    sides.push(side);
+  }
+  sides[0].hostStart(config, seatCount);
+  return { room, sides };
 }
 
 // --- E1: Escoba full match ---------------------------------------------------------
@@ -1242,7 +1338,7 @@ console.log('\n--- C4: Chinchón rejoin from autosave (KNOWN-BUG PROBE: restore 
     const isoRoom = new FakeRoom();
     isoRoom.round = nextRound;
     isoRoom.status = 'active';
-    const restored = new ChinchonSide('guest', isoRoom, chinchonScript(true), {});
+    const restored = new ChinchonSide(1, isoRoom, chinchonScript(true), {});
     await restored.restoreFromSave(boundarySave);
     const restoredScores = restored.game ? restored.game.players.map((p) => p.totalScore) : null;
     const restoredRound = restored.game ? restored.game.round : null;
@@ -1260,6 +1356,149 @@ console.log('\n--- C4: Chinchón rejoin from autosave (KNOWN-BUG PROBE: restore 
       `scores at save=${JSON.stringify(scoresAtSave)} (round ${boundarySave.snap.round}), after restore=${JSON.stringify(restoredScores)} (round ${restoredRound})`);
   } catch (e) { fail++; console.log(`FAIL  C4 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
+}
+
+// ==================================================================================
+// C5-C7: the 3-4 SEAT extension (2026-07-28). js/net.js was a strictly 2-seat
+// protocol until this; js/CLAUDE.md's Tic Tac Toe section called the N-player
+// extension "phase 3 and separate work". Chinchón's ENGINE was already N-generic
+// (dealing, rotation, closing/scoring, matchOver, standings and snapshot all loop
+// this.players), so C5-C7 test the NETWORK layer and the seat model, which are
+// what actually changed.
+// ==================================================================================
+
+// --- C5: four-seat full match -------------------------------------------------------
+console.log('\n--- C5: Chinchón FOUR-seat full match, lockstep, hash-verified on every device ---');
+{
+  const { room, sides } = await makeChinchonN(4, { victoryCondition: 'points', scoreLimit: 1 }, true);
+  try {
+    await until(() => sides[0].matchEnded || sides.some((s) => s.failedHard), 20000, 'C5 host match end');
+    await new Promise((r) => setTimeout(r, 500));   // let the other three conclude
+    ok('C5: all four seats completed (no hard failure)',
+      sides.every((s) => s.matchEnded) && !sides.some((s) => s.failedHard),
+      `ended=${sides.map((s) => s.matchEnded).join(',')} failed=${sides.map((s) => s.failedHard).join(',')}`);
+    ok('C5: zero hash mismatches anywhere at the table',
+      sides.every((s) => s.mismatches === 0), sides.map((s) => s.mismatches).join(','));
+    ok('C5: zero recoveries needed', sides.every((s) => s.recoveriesApplied === 0));
+    const hashes = sides.map((s) => cHash(s.game));
+    ok('C5: all four final states hash-identical', new Set(hashes).size === 1, hashes.join(' '));
+    const winners = sides.map((s) => s.game.winner && s.game.winner.id);
+    ok('C5: same winner on all four devices', new Set(winners).size === 1, winners.join(','));
+    ok('C5: every seat dealt in (four players, four hands)', sides[0].game.players.length === 4);
+    ok('C5: no move-log overwrites (one shared seq, four writers, strict turn order)',
+      room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    // The device-relative isHuman flag (invariant 2) at four seats: each device
+    // must own exactly one seat, and it must be its OWN.
+    ok('C5: each device owns exactly its own seat as the local human',
+      sides.every((s, i) => {
+        const humans = s.game.players.filter((p) => p.isHuman);
+        return humans.length === 1 && humans[0].id === i;
+      }), sides.map((s) => s.game.players.filter((p) => p.isHuman).map((p) => p.id).join('/')).join(' '));
+    ok('C5 [KNOWN-BUG PROBE]: every remote agent knows its OWN seat\n' +
+       '      (REGRESSION GUARD: _makeRemoteAgent takes a seatId and closes over it. The code\n' +
+       '      this replaced built seat-less agents and, where one needed to name "the player"\n' +
+       '      it spoke for - the declined-close path, which has no engine event to hook -\n' +
+       '      called _remotePlayer(): players.find(p => !p.isHuman), the FIRST remote seat.\n' +
+       '      That was harmlessly wrong at two seats, since _mpAfterDecision only read the\n' +
+       '      isHuman flag and every remote seat has the same one. At four seats, with p.id\n' +
+       '      now steering recovery addressing (C6), it would silently blame seat 1 for a\n' +
+       '      close declined by seat 2 or 3)',
+      sides.every((s) => s.game.players.filter((p) => !p.isHuman).every((p) => p.agent.seat === p.id)),
+      sides.map((s) => s.game.players.map((p) => `${p.id}:${p.isHuman ? 'me' : p.agent.seat}`).join(' ')).join(' | '));
+    ok('C5: no engine errors', !sides.some((s) => s.errors.length), String(sides.flatMap((s) => s.errors)[0] || ''));
+  } catch (e) { fail++; console.log(`FAIL  C5 did not complete: ${e.message}`); }
+  finally { cleanup(room, ...sides); }
+}
+
+// --- C6: recovery is addressed to the seat that actually diverged --------------------
+console.log('\n--- C6: four-seat desync (KNOWN-BUG PROBE: recovery aimed at the first remote seat) ---');
+{
+  // Corrupt the host's own application of some mid-round remote move; whichever
+  // seat authored that seq is the one the host must answer.
+  const { room, sides } = await makeChinchonN(4, { victoryCondition: 'points', scoreLimit: 1 }, true,
+    { seatOpts: { 0: { corruptAtSeq: 5 } } });
+  try {
+    await until(() => sides[0].lastMismatchSeat != null || sides.some((s) => s.failedHard), 15000, 'C6 mismatch');
+    const authoredBy = sides[0].lastMismatchAuthor;
+    ok('C6: the corruption was DETECTED as a hash mismatch', sides[0].mismatches > 0);
+    ok('C6: the corrupted seq was authored by a NON-FIRST remote seat (else this probe\n' +
+       '      would pass even with the old first-remote-seat behaviour)',
+      authoredBy > 1, `authored by seat ${authoredBy}`);
+    ok('C6 [KNOWN-BUG PROBE]: the mismatch is attributed to the seat that AUTHORED the move\n' +
+       '      (REGRESSION GUARD: the host must answer the seat that actually diverged. Before\n' +
+       '      seat-addressing there was nothing to get wrong here - writeRecovery took no seat\n' +
+       '      and broadcast one shared field at the whole table - so this is a guard on the NEW\n' +
+       '      contract, not a replay of an old bug. What it catches is _mpAfterDecision losing\n' +
+       '      p.id, which would send every recovery snapshot to one arbitrary seat while the\n' +
+       '      genuinely diverged one waits forever. C5 guards the related half: that each remote\n' +
+       '      agent knows its OWN seat rather than resolving "the" opponent by first-non-human)',
+      sides[0].lastMismatchSeat === authoredBy, `attributed=${sides[0].lastMismatchSeat} authored=${authoredBy}`);
+    ok('C6: the FIRST recovery snapshot is addressed to that same seat',
+      room.recoveryWrites.length > 0 && room.recoveryWrites[0].seat === authoredBy,
+      JSON.stringify(room.recoveryWrites.slice(0, 4)));
+    // The host is the corrupted party here, so the authority model says the
+    // whole table should converge onto ITS state - including the two seats that
+    // never diverged on their own. That is the end-to-end proof that seat-
+    // addressed recovery actually lands at four seats, not just that it was
+    // addressed correctly.
+    await until(() => sides[0].matchEnded || sides.some((s) => s.failedHard), 20000, 'C6 match end');
+    await new Promise((r) => setTimeout(r, 500));
+    ok('C6: nobody hard-failed (no seat burned its three-attempt recovery budget)',
+      !sides.some((s) => s.failedHard), sides.map((s) => s.failedHard).join(','));
+    ok('C6: recovery was actually APPLIED by the diverged seat', sides[authoredBy].recoveriesApplied > 0);
+    ok('C6: all four seats reached the same final state after recovering',
+      new Set(sides.map((s) => cHash(s.game))).size === 1, sides.map((s) => cHash(s.game)).join(' '));
+  } catch (e) { fail++; console.log(`FAIL  C6 did not complete: ${e.message}`); }
+  finally { cleanup(room, ...sides); }
+}
+
+// --- C7: per-seat recovery records cannot clobber each other ------------------------
+console.log('\n--- C7: recovery fan-out (KNOWN-BUG PROBE: one shared recovery field) ---');
+{
+  // A focused protocol test, not a played match: the failure is in the shape of
+  // the room record itself, and a match would only reach it by luck of timing.
+  const room = new FakeRoom(4);
+  try {
+    await room.writeRecovery(7, { tag: 'for-seat-1' }, 1);       // host answers seat 1
+    await room.requestRecovery(9, 2);                            // seat 2 pleads, mid-flight
+    const a = (room.recovery && room.recovery.answers) || {};
+    ok('C7 [KNOWN-BUG PROBE]: a later seat\'s recovery REQUEST does not erase an earlier\n' +
+       '      seat\'s pending recovery ANSWER\n' +
+       '      (REGRESSION GUARD: js/net.js used ONE shared `recovery` field carrying two\n' +
+       '      different shapes - the host\'s answer {state,seq} and a guest\'s plea\n' +
+       '      {requested} - which simply overwrite each other. With one guest that never\n' +
+       '      mattered. With three, the guest waiting on the erased answer never resyncs,\n' +
+       '      burns its three-attempt budget and drops to "Connection error" - and recovery\n' +
+       '      is the safety net every other MP guarantee in this repo sits on top of)',
+      !!(a[1] && a[1].state && a[1].state.tag === 'for-seat-1'), JSON.stringify(room.recovery));
+    ok('C7: the pleading seat\'s request is recorded alongside it, not instead of it',
+      !!(room.recovery.requests && room.recovery.requests[2] && room.recovery.requests[2].seq === 9));
+
+    await room.writeRecovery(9, { tag: 'for-seat-2' }, 2);       // host answers seat 2
+    const a2 = room.recovery.answers || {};
+    ok('C7: answering a second seat leaves the first seat\'s answer intact',
+      !!(a2[1] && a2[1].state.tag === 'for-seat-1' && a2[2] && a2[2].state.tag === 'for-seat-2'));
+    ok('C7: answering a seat retires that seat\'s own outstanding request',
+      !(room.recovery.requests && room.recovery.requests[2]));
+
+    await room.clearRecovery(1);                                  // seat 1 applied its answer
+    ok('C7: one seat clearing its answer does not disturb another\'s',
+      !room.recovery.answers[1] && !!room.recovery.answers[2]);
+    await room.clearRecovery(2);
+    ok('C7: the recovery node is pruned once its last child is cleared (RTDB semantics)',
+      room.recovery === null, JSON.stringify(room.recovery));
+
+    // And the legacy 2-seat path is deliberately UNCHANGED - this is what the
+    // other five games in this file still use, and what the bug above looks like.
+    const legacy = new FakeRoom();
+    await legacy.writeRecovery(3, { tag: 'shared' });
+    await legacy.requestRecovery(4);
+    ok('C7: the seatless legacy path still behaves exactly as before (shared field, last\n' +
+       '      write wins) - proving the fix is additive and Escoba/TTT/Mancala/Filler/\n' +
+       '      DotsBoxes are untouched by it',
+      legacy.recovery.requested === 4 && legacy.recovery.state === undefined, JSON.stringify(legacy.recovery));
+  } catch (e) { fail++; console.log(`FAIL  C7 did not complete: ${e.message}`); }
+  finally { room.dead = true; }
 }
 
 

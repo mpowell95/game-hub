@@ -548,6 +548,26 @@
 .cc-mp-oppslot-empty { color: var(--cc-muted); font-size: 1.1rem; }
 .cc-mp-oppname { color: var(--cc-ink); }
 
+/* --- seat list (3-4 player MP, 2026-07-28) ---------------------------------
+   One row per seat in both lobbies, replacing the single .cc-mp-oppslot a
+   2-seat room needed. Built on the same surface/ink variables so it themes
+   with everything else; an empty seat is dimmed rather than hidden, so the
+   table's size is legible before anyone has joined. */
+.cc-root .cc-mp-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-root .cc-mp-seat {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px; border-radius: 12px;
+  background: var(--cc-surface-2); font-weight: 700;
+  border: 2px solid transparent;
+}
+.cc-root .cc-mp-seat.is-me { border-color: var(--cc-accent); }
+.cc-root .cc-mp-seat:not(.is-filled) { opacity: 0.6; }
+.cc-root .cc-mp-seat-label {
+  min-width: 5.5em; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted);
+}
+.cc-root .cc-mp-seat-you { font-size: 0.72rem; font-weight: 700; color: var(--cc-muted); }
+
 .cc-mp-summary {
   margin: 0; min-height: 1.1em; text-align: center; font-size: 0.78rem; font-weight: 600;
   color: var(--cc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

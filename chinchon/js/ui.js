@@ -178,6 +178,10 @@ class ChinchonUI {
     this._mpError = '';
     this._mpJoinCode = '';
     this._mpStatusMsg = '';
+    // Our seat in the room we are joining/hosting, held from the moment the
+    // seat is claimed (which is BEFORE this.mp exists) until the lobby is left.
+    // 0 is the host. Null whenever no room is in play.
+    this._mpSeat = null;
 
     const ui = this;
     this.humanAgent = {
@@ -362,7 +366,7 @@ class ChinchonUI {
     if (!this.mp && (this._screen === 'host-lobby' || this._screen === 'join-lobby')) net.disconnect();
     this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
     this._setupExpanded = null;
-    this.mp = null;
+    this.mp = null; this._mpSeat = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
@@ -414,18 +418,19 @@ class ChinchonUI {
         <button class="cc-step" data-action="rule-step" data-field="${field}" data-d="1">+</button></span></div>`;
 
     // --- Players row: count + human identity + (solo/join) AI name inputs.
-    // Host online is 2-player only: a fixed, non-interactive "2" instead of
-    // the count selector, and no AI rows (the second seat is the remote
-    // guest, shown once they join the lobby, not here). ---
+    // Host online picks the TABLE SIZE here (2-4, same selector solo uses) and
+    // shows no AI rows -- every other seat is a real person who joins the
+    // lobby with their own name. Before 3-4 player MP this was a fixed,
+    // non-interactive "2". ---
     const opponentNames = isHost ? [] : s.aiNames.slice(0, s.count - 1);
-    const playersValue = isHost ? `2 · ${esc(s.humanName)} · ${t('online_word')}`
+    const playersValue = isHost ? `${s.count} · ${esc(s.humanName)} · ${t('online_word')}`
       : esc([s.humanName, ...opponentNames].join(' vs '));
     const aiNameRows = opponentNames.map((name, i) => `<div class="cc-player-row">
       <span class="cc-av">${s.aiAvatars[i]}</span>
       <input class="cc-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="${t('aria_opponent_name', { n: i + 1 })}">
     </div>`).join('');
     const playersContent = `
-      ${isHost ? `<div class="cc-locked-count" aria-label="2 · ${t('online_word')}">2</div>` : seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
+      ${seg('set-count', String(s.count), [['2', '2'], ['3', '3'], ['4', '4']])}
       <div class="cc-player-row">
         <button class="cc-av cc-av-btn" data-action="open-avatar" title="${t('avatar_choose_title')}">${s.humanAvatar}</button>
         <input class="cc-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="${t('aria_your_name')}">
@@ -586,38 +591,61 @@ class ChinchonUI {
       .join(' · ');
   }
 
+  /** The whole table, one row per seat, in seat order -- the same list on the
+   *  host's lobby and every joiner's, so everyone sees who else has arrived
+   *  and how many chairs are still empty. Replaces the single opponent slot
+   *  that was all a 2-seat room ever needed. Our own row is marked so a player
+   *  can find themselves without having to recognise their own name. */
+  _renderMpSeatList(room) {
+    const count = this._mpSeatCount(room);
+    const seats = (room && room.seats) || {};
+    const mySeat = this._mpSeat;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const occ = seats[i];
+      const isMe = i === mySeat;
+      const label = i === 0 ? t('mp_host_label') : t('mp_seat_n', { n: i + 1 });
+      rows.push(`<li class="cc-mp-seat ${occ ? 'is-filled' : ''} ${isMe ? 'is-me' : ''}">
+        <span class="cc-mp-seat-label">${label}</span>
+        ${occ
+          ? `<span class="cc-av">${occ.avatar || '🙂'}</span><span class="cc-mp-oppname">${esc(occ.name || '')}</span>${isMe ? `<span class="cc-mp-seat-you">${t('mp_seat_you')}</span>` : ''}`
+          : `<span class="cc-mp-oppslot-empty">${t('mp_seat_waiting')}</span>`}
+      </li>`);
+    }
+    return `<ul class="cc-mp-seats">${rows.join('')}</ul>`;
+  }
+
   _renderMpLobby() {
     const back = `<button class="cc-btn cc-btn-ghost" data-action="mp-cancel">${t('mp_back_btn')}</button>`;
+    const room = this._mpLobbyRoom;
+    const seatCount = this._mpSeatCount(room);
+    const filled = this._mpFilledSeats(room);
     if (this._screen === 'host-lobby') {
-      const room = this._mpLobbyRoom;
-      const guest = room && room.guest;
       const code = this._mpPendingCode;
       const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
+      // Humans only: every seat must be filled before Start unlocks. The
+      // counter is shown so a waiting host can see exactly what it is waiting
+      // for rather than staring at a disabled button.
+      const ready = filled >= seatCount;
       return `<div class="cc-mp-lobby">
         <span class="cc-label">${t('aria_room_code')}</span>
         ${code ? `<div class="cc-mp-code">${esc(code)}</div>` : `<div class="cc-mp-code cc-mp-code-empty">····</div>`}
-        <span class="cc-label">${t('mp_opponent_label')}</span>
-        <div class="cc-mp-oppslot">${guest
-          ? `<span class="cc-av">${guest.avatar}</span><span class="cc-mp-oppname">${esc(guest.name)}</span>`
-          : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
+        <span class="cc-label">${t('mp_players_label', { filled, total: seatCount })}</span>
+        ${this._renderMpSeatList(room)}
         <p class="cc-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
-        <p class="cc-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-        <button class="cc-btn cc-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${t('mp_start_btn')}</button>
+        <p class="cc-mp-msg" data-role="mp-msg">${esc(msg || (ready ? '' : t('mp_waiting_players', { n: seatCount - filled })))}</p>
+        <button class="cc-btn cc-btn-primary" data-action="mp-start" ${ready ? '' : 'disabled'}>${t('mp_start_btn')}</button>
         ${back}
       </div>`;
     }
     // The only other lobby state is 'join-lobby', only ever entered once a
     // join has actually succeeded (see _mpJoinSubmit) -- waiting on the host
-    // to tap Start. Mirrored shape of the host lobby's opponent slot.
-    const room = this._mpLobbyRoom;
-    const host = room && room.host;
+    // to tap Start. Same seat list as the host sees.
     return `<div class="cc-mp-lobby">
       <span class="cc-label">${t('aria_room_code')}</span>
       <div class="cc-mp-code">${esc(this._mpJoinedCode)}</div>
-      <span class="cc-label">${t('mp_host_label')}</span>
-      <div class="cc-mp-oppslot">${host
-        ? `<span class="cc-av">${host.avatar}</span><span class="cc-mp-oppname">${esc(host.name)}</span>`
-        : `<span class="cc-mp-oppslot-empty">—</span>`}</div>
+      <span class="cc-label">${t('mp_players_label', { filled, total: seatCount })}</span>
+      ${this._renderMpSeatList(room)}
       <p class="cc-mp-msg" data-role="mp-msg">${t('mp_waiting_host')}</p>
       ${back}
     </div>`;
@@ -823,7 +851,7 @@ class ChinchonUI {
         // any turn plays, so the guest can preset its own engine to match.
         // Read right here: lastDeckOrder was just set by startRound(), which
         // ran synchronously before this event, with no await in between.
-        if (this.mp && this.mp.role === 'host') {
+        if (this.mp && this.mp.isHost) {
           try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealerIndex); }
           catch { this._setMpStatus('mp_status_connection_error'); }
         }
@@ -836,7 +864,7 @@ class ChinchonUI {
         // has arrived, so the guest's own tryResetStock() call finds
         // config.presetStockResets already populated instead of falling
         // through to a local (non-deterministic) shuffle.
-        if (this.mp && this.mp.role === 'guest') await this._mpAwaitStockReset();
+        if (this.mp && !this.mp.isHost) await this._mpAwaitStockReset();
         if (p && !p.isHuman) await this.beat(BEAT_TURN);
         break;
       case 'turnEnd':
@@ -895,7 +923,7 @@ class ChinchonUI {
         // AFTER this emit, so winner is still null here on the final round -
         // gating on it deadlocked the guest ("Waiting for host", forever, no
         // stats recorded) at every normal match end (test-mp-lockstep.mjs C1).
-        if (this.mp && this.mp.role === 'guest' && !payload.matchOver) await this._mpAwaitNextRound();
+        if (this.mp && !this.mp.isHost && !payload.matchOver) await this._mpAwaitNextRound();
         break;
       case 'matchEnd':
         this._matchEnded = true;
@@ -903,7 +931,7 @@ class ChinchonUI {
         this._chartView = false;
         if (this.mp) {
           this._mpClearSave();
-          if (this.mp.role === 'host') {
+          if (this.mp.isHost) {
             try { await net.writeResult(this.mp.code, { winnerId: this.game.winner.id, standings: this.game.standings.map((pl) => ({ id: pl.id, totalScore: pl.totalScore })) }); }
             catch { /* best-effort: the match already concluded locally either way */ }
           }
@@ -943,8 +971,19 @@ class ChinchonUI {
     });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
     // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
-    const opp = this.mp && this.mp.opp;
-    if (opp) { try { recordHeadToHead('chinchon', opp, won); } catch { /* never block the result */ } }
+    //
+    // EVERY opponent at the table, not just one. This read `this.mp.opp` (a single
+    // identity) while the room only ever had two seats; at three or four it would have
+    // silently dropped one or two people's head-to-head records entirely. `won` is
+    // whether WE won the match, so in a 3-4 way it means "I finished ahead of the whole
+    // table", not a pairwise result against each named opponent -- recordHeadToHead's
+    // counters are per-opponent and purely additive (THE LAW rule 2), so this is honest
+    // as long as nothing later reads it as head-to-head-only form.
+    const opps = (this.mp && this.mp.opps) || [];
+    for (const opp of opps) {
+      if (!opp || !opp.deviceId) continue;
+      try { recordHeadToHead('chinchon', opp, won); } catch { /* never block the result */ }
+    }
   }
 
   /** Hidden challenge: on a qualifying human match win (exactly 1 opponent at Average or
@@ -1742,36 +1781,103 @@ class ChinchonUI {
     return { name: this._setup.humanName || t('you'), avatar: this._setup.humanAvatar, deviceId: deviceId() };
   }
 
-  /** The remote seat, unambiguous in a 2-player MP match: whichever player
-   *  isn't the local human. Used where an agent callback needs "the player
-   *  object" but isn't itself passed one (RemoteAgent's decideClose). */
-  _remotePlayer() { return this.game.players.find((p) => !p.isHuman); }
-
-  _mpNewState(role, code, opp) {
+  /** SEATS (2026-07-28, 3-4 player MP). The room's seat index IS the engine's
+   *  player id, on every device, for the whole match -- that identity is the
+   *  single load-bearing fact this whole file's MP half now rests on. It is
+   *  what lets a device derive its own side from one integer (`mp.seat`)
+   *  instead of a host/guest binary, and it is why `_mpBuildPlayers` walks
+   *  seats 0..count-1 in order rather than putting "me" first.
+   *
+   *  `mp.seat === 0` is the host. Everything that used to ask
+   *  `mp.role === 'host'` now asks `mp.isHost`, and everything that asked
+   *  `=== 'guest'` now asks `!mp.isHost` -- with three guests, "guest" stopped
+   *  naming one device. Nothing else about the lockstep protocol changed:
+   *  Chinchón is strictly turn-based, so exactly one seat is ever awaiting a
+   *  decision, and the single `pendingResolve` slot below survives N seats for
+   *  that reason (not by accident -- see _mpTryDeliverNextMove). */
+  _mpNewState(seat, code, opps) {
     return {
-      role, code,
-      // Who we are playing, `{ name, avatar, deviceId }` from the room (js/net.js). This was
-      // accepted as a parameter and then discarded, so every multiplayer match forgot its
-      // opponent the moment it ended; _commitStats now records it. Null on the restore path,
-      // where _mpOnRoomUpdate backfills it from the live room.
-      opp: opp || null,
+      seat, isHost: seat === 0, code,
+      // Who we are playing: an ARRAY of `{ seat, name, avatar, deviceId }`, one per
+      // occupied seat that isn't ours. This was a single `opp` field, which silently
+      // dropped one or two opponents' head-to-head records in a 3-4 player match (and
+      // before that was discarded entirely, so every MP match forgot its opponents the
+      // moment it ended). Empty on the restore path, where _mpOnRoomUpdate backfills it
+      // from the live room.
+      opps: opps || [],
       appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
       pendingResolve: null, pendingType: null, pendingSeq: null, pendingHash: null,
       replayMode: false, recoveryAttempts: 0,
       opponentLeft: false, lastRoomSnapshot: null,
-      lastRecoveryHandled: null, lastRecoveryApplied: null,
+      // Per-seat now, not scalar: the host answers each seat's recovery plea
+      // independently, so one dedupe stamp per seat (see _mpOnRoomUpdate).
+      lastRecoveryHandled: {}, lastRecoveryApplied: null,
       awaitingRoundN: null, awaitingRoundResolve: null,
       awaitingStockReset: null,
     };
+  }
+
+  /** How many seats this match has. Read from the engine once it exists (the
+   *  authority), else from the room config the host locked in at createRoom. */
+  _mpSeatCount(room) {
+    // Only trust the engine once a MATCH is actually running (this.mp set) --
+    // in a lobby `this.game` may still hold a previous solo match's players.
+    if (this.mp && this.game && this.game.players) return this.game.players.length;
+    const n = room && room.config && room.config.seats;
+    return clamp(n || (room && room.maxSeats) || 2, 2, 4);
+  }
+
+  /** Build the engine's players from the room's seat roster, in seat order, on
+   *  every device. `isHuman` is set ONLY for our own seat -- it is a
+   *  device-RELATIVE flag (it decides which seat prompts locally and which
+   *  sends vs verifies in _mpAfterDecision), which is exactly the property
+   *  invariant 2 exists to protect. Names/avatars come from the roster rather
+   *  than local setup so every device labels the table identically; they are
+   *  cosmetic to the protocol either way (chinchon/js/hash.js hashes cards and
+   *  scores, never names), so a missing roster entry falls back harmlessly. */
+  _mpBuildPlayers(room, mySeat, count) {
+    const seats = (room && room.seats) || {};
+    const s = this._setup;
+    const players = [];
+    for (let i = 0; i < count; i++) {
+      const occ = seats[i] || {};
+      const mine = i === mySeat;
+      players.push(makePlayer({
+        id: i,
+        name: (mine ? (s.humanName || occ.name) : occ.name) || t('mp_seat_n', { n: i + 1 }),
+        avatar: (mine ? (s.humanAvatar || occ.avatar) : occ.avatar) || '🙂',
+        isHuman: mine,
+        agent: mine ? this.humanAgent : this._makeRemoteAgent(i),
+      }));
+    }
+    return players;
+  }
+
+  /** Everyone at the table who isn't us, as `{seat, name, avatar, deviceId}`. */
+  _mpOpponentsFrom(room, mySeat, count) {
+    const seats = (room && room.seats) || {};
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      if (i === mySeat) continue;
+      const occ = seats[i];
+      if (occ && occ.deviceId) out.push({ seat: i, name: occ.name, avatar: occ.avatar, deviceId: occ.deviceId });
+    }
+    return out;
   }
 
   /** Manual lay-off prompts every non-closer for a choice mid-scoring; M2b's
    *  move protocol doesn't sync that decision (out of scope -- the T1
    *  move-type list is draw/discard/close/stock-reset only), so MP coerces
    *  'manual' to 'auto' (same net effect on the hand, no prompt needed). */
-  _mpBuildConfig(cfg) {
+  _mpBuildConfig(cfg, seats) {
     const c = Object.assign({}, DEFAULT_CONFIG, cfg);
     if (c.placeOnEnding === 'manual') c.placeOnEnding = 'auto';
+    // How many seats the match has, carried IN the room config so a joining or
+    // rejoining device can size its players array from the room record alone,
+    // with no separate lookup and no dependence on how many seats happen to be
+    // filled at the moment it reads. Additive: absent on a 2-seat room, where
+    // _mpSeatCount falls back to 2.
+    if (seats) c.seats = clamp(seats, 2, 4);
     return c;
   }
 
@@ -1780,18 +1886,23 @@ class ChinchonUI {
    *  or a heuristic. choosePlacements is never actually exercised (manual
    *  placement is coerced away for MP, see _mpBuildConfig) but is defined
    *  defensively so a stale/edge-case config can never hit a missing method. */
-  _makeRemoteAgent() {
+  _makeRemoteAgent(seatId) {
     const ui = this;
     return {
       isHuman: false,
+      seat: seatId,
       chooseDraw() { return ui._mpAwaitDecisionValue('draw'); },
       chooseDiscard() { return ui._mpAwaitDecisionValue('discard'); },
       async decideClose() {
         const kind = await ui._mpAwaitDecisionValue('close');
         // A DECLINED close has no engine event to hook (playTurn() just
         // returns false with no state change) -- verify immediately, since
-        // no mutation is coming for this decision either.
-        if (!kind) await ui._mpAfterDecision(ui._remotePlayer(), null);
+        // no mutation is coming for this decision either. The agent must name
+        // its OWN seat here: this used to call _remotePlayer(), which returned
+        // the first non-human player. With one opponent that was always the
+        // right one; with three it silently verified the wrong seat's decision
+        // whenever a non-first remote seat declined a close.
+        if (!kind) await ui._mpAfterDecision(ui.game.byId(seatId), null);
         return kind;
       },
       async choosePlacements(view, locked, attachable) { return attachable.map((c) => c.id); },
@@ -1805,6 +1916,10 @@ class ChinchonUI {
    *  any LEADING 'stock-reset' entries first: those need no agent decision at
    *  all (see tryResetStock()'s doc comment in game.js), just an append to
    *  config.presetStockResets before the log can be seen as "caught up". */
+  /** One pending slot for the whole table, and that is correct rather than
+   *  lucky: Chinchón is strictly turn-based, so the engine awaits exactly one
+   *  agent at a time and at most one remote seat can be mid-decision. A game
+   *  where several seats could act simultaneously would need a slot per seat. */
   _mpTryDeliverNextMove() {
     const mp = this.mp;
     if (!mp || !mp.movesById) return;
@@ -1871,7 +1986,7 @@ class ChinchonUI {
       // race a subsequent awaited send and collide on the same seq number.
       const seq = ++mp.appliedSeq;
       const hash = stateHash(this.game);
-      net.appendMove(mp.code, mp.role, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
+      net.appendMove(mp.code, mp.seat, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
       return;
     }
     const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
@@ -1884,7 +1999,10 @@ class ChinchonUI {
       if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
       return;
     }
-    await this._mpHandleMismatch(expectedSeq);
+    // `p.id` IS the room seat (see the SEATS note on _mpNewState), so the host
+    // can address its recovery snapshot at whichever seat's move failed to
+    // verify instead of broadcasting it at the whole table.
+    await this._mpHandleMismatch(expectedSeq, p.id);
   }
 
   /** Host's onStockReset hook (config.onStockReset, wired in _mpHostStart):
@@ -1896,21 +2014,29 @@ class ChinchonUI {
     if (!mp) return;
     const seq = ++mp.appliedSeq;
     const hash = stateHash(this.game);
-    net.appendMove(mp.code, mp.role, seq, { t: 'stock-reset', order }, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
+    net.appendMove(mp.code, mp.seat, seq, { t: 'stock-reset', order }, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
   }
 
-  /** Desync: guest can only flag it (host is authoritative in M2b, matching
-   *  M1's Escoba protocol); host rebuilds a snapshot for the guest either
-   *  way. Three consecutive failed attempts end the match. */
-  async _mpHandleMismatch(seq) {
+  /** Desync: a non-host can only flag it (the host is authoritative, matching
+   *  M1's Escoba protocol); the host rebuilds a snapshot for the diverged seat
+   *  either way. Three consecutive failed attempts end the match.
+   *
+   *  Both writes are SEAT-ADDRESSED (`js/net.js`'s `recovery/requests/<seat>`
+   *  and `recovery/answers/<seat>`). With one guest the old shared `recovery`
+   *  field was harmless; with three it was a real correctness bug in the
+   *  safety net itself -- one guest's plea and the host's answer to a
+   *  different guest are two different shapes written to the same key, so
+   *  whichever landed second erased the other, and the guest waiting on the
+   *  erased answer never resynced and burned its whole attempt budget. */
+  async _mpHandleMismatch(seq, bySeat) {
     const mp = this.mp;
     if (!mp) return;
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
     this._setMpStatus('mp_status_resyncing');
     try {
-      if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
-      else await net.requestRecovery(mp.code, seq);
+      if (mp.isHost) await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot(), bySeat);
+      else await net.requestRecovery(mp.code, seq, mp.seat);
     } catch { /* the next room update (heartbeat-driven) retries this naturally */ }
   }
 
@@ -1921,21 +2047,22 @@ class ChinchonUI {
    *  Seat mapping: the snapshot's isHuman flags are the SENDER's (host's)
    *  perspective. isHuman is device-RELATIVE - it decides which seat prompts
    *  locally and which seat sends vs verifies in _mpAfterDecision - so the
-   *  flags must be remapped by SEAT (host is always id 0, guest id 1, fixed
-   *  at match start) and normalized before rebuilding. Trusting the
-   *  transmitted flags handed this device's human agent to the HOST's seat
-   *  and a RemoteAgent to its own (test-mp-lockstep.mjs C3/E3), leaving the
-   *  recovered player prompted for the opponent's cards while their own
-   *  turns waited on the network forever. */
+   *  flags must be remapped by SEAT (the room's seat index is the engine's
+   *  player id on every device, fixed at match start) and normalized before
+   *  rebuilding. Trusting the transmitted flags handed this device's human
+   *  agent to the HOST's seat and a RemoteAgent to its own (test-mp-lockstep.mjs
+   *  C3/E3), leaving the recovered player prompted for the opponent's cards
+   *  while their own turns waited on the network forever. This is invariant 2,
+   *  and `mySeat` is the only line of it that had to change for N seats. */
   _mpApplyRecovery(recovery) {
     const mp = this.mp;
     if (!mp || this._dead) return;
     const snap = recovery.state;
-    const mySeat = mp.role === 'host' ? 0 : 1;
+    const mySeat = mp.seat;
     const agentsById = {};
     for (const sp of snap.players) {
       sp.isHuman = sp.id === mySeat;
-      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent(sp.id);
     }
     if (this.game) this.game.abort();
     this._resolvePending(null); this._resolvePlace([]); this._resolveModal();
@@ -1947,7 +2074,7 @@ class ChinchonUI {
     mp.pendingResolve = null; mp.pendingType = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
     this._clearMpStatus();
-    net.clearRecovery(mp.code).catch(() => {});
+    net.clearRecovery(mp.code, mp.seat).catch(() => {});
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this._buildPiles();
@@ -1960,7 +2087,7 @@ class ChinchonUI {
     // round modal was open) resumes with the NEXT round, whose deck must come from
     // the host's round record first - same gate the live 'roundScored' hook uses.
     // Without it the guest would deal a locally-shuffled round and desync again.
-    if (!snap.midRound && mp.role === 'guest') this._mpAwaitNextRound().then(start);
+    if (!snap.midRound && !mp.isHost) this._mpAwaitNextRound().then(start);
     else start();
   }
 
@@ -1987,7 +2114,7 @@ class ChinchonUI {
     this._mpClearSave();
     const mp = this.mp;
     this.mp = null;
-    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.role); } catch { /* best-effort */ } }
+    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.seat); } catch { /* best-effort */ } }
     else net.disconnect();
     this.render();
     this._renderMpErrorModal();
@@ -2045,11 +2172,13 @@ class ChinchonUI {
     if (this._dead || !this.mp || !room) return;
     const mp = this.mp;
     mp.lastRoomSnapshot = room;
-    // Keep the opponent's identity current from the live room (and fill it in at all on the
-    // restore/rejoin path, which starts with none). Only overwritten while the other side is
-    // actually present, so a mid-match departure leaves the last known identity intact.
-    const other = mp.role === 'host' ? room.guest : room.host;
-    if (other && other.deviceId) mp.opp = other;
+    const seatCount = this._mpSeatCount(room);
+    // Keep every opponent's identity current from the live room (and fill them in at
+    // all on the restore/rejoin path, which starts with none). Only overwritten while
+    // somebody is actually present, so a mid-match departure leaves the last known
+    // roster intact for _commitStats.
+    const live = this._mpOpponentsFrom(room, mp.seat, seatCount);
+    if (live.length) mp.opps = live;
 
     // An abandon (leaveRoom) sets status:'ended' with no result; a natural
     // conclusion (writeResult) sets both together -- result == null is what
@@ -2062,22 +2191,53 @@ class ChinchonUI {
       return;
     }
 
-    const oppKey = mp.role === 'host' ? 'guest' : 'host';
-    const opp = room[oppKey];
-    if (opp && !mp.opponentLeft) {
-      const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
-      if (stale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
-      else if (!stale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
+    // Staleness across the whole table: ANY seat going quiet is worth showing,
+    // so this now scans every occupied seat instead of watching one peer's
+    // lastSeen. The message stays singular-agnostic ("A player disconnected")
+    // rather than naming whoever it happened to notice first.
+    const seats = room.seats || {};
+    if (!mp.opponentLeft) {
+      let anyStale = false;
+      for (let i = 0; i < seatCount; i++) {
+        if (i === mp.seat) continue;
+        const occ = seats[i] || (i === 0 ? room.host : i === 1 ? room.guest : null);
+        if (occ && (Date.now() - (occ.lastSeen || 0)) > MP_STALE_MS) { anyStale = true; break; }
+      }
+      if (anyStale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
+      else if (!anyStale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
 
-    if (room.recovery) {
-      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
-        mp.lastRecoveryHandled = room.recovery.requested;
-        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot()); } catch { /* the requester retries */ }
+    // Recovery, seat-addressed (js/net.js's recovery/requests + recovery/answers).
+    // The host answers each pleading seat independently and dedupes per seat; a
+    // non-host applies ONLY the answer addressed to itself, so a healthy device
+    // never tears down its live game to rebuild from a snapshot meant for
+    // somebody else. Dedupe is on the host's `at` stamp rather than `seq`
+    // because the same seq can legitimately be answered twice (two separate
+    // divergences at the same point in the log).
+    const rec = room.recovery;
+    if (mp.isHost && rec && rec.requests) {
+      for (const key of Object.keys(rec.requests)) {
+        const seat = Number(key);
+        const req = rec.requests[key];
+        if (!req || seat === mp.seat) continue;
+        if (mp.lastRecoveryHandled[seat] === req.at) continue;
+        mp.lastRecoveryHandled[seat] = req.at;
+        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot(), seat); }
+        catch { /* the requester retries */ }
       }
-      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
-        mp.lastRecoveryApplied = room.recovery.seq;
-        this._mpApplyRecovery(room.recovery);
+    }
+    if (!mp.isHost) {
+      const mine = rec && rec.answers && rec.answers[mp.seat];
+      // Applying our answer clears it (net.clearRecovery(code, seat)), so the
+      // node going ABSENT is what proves the last one is spent -- forget the
+      // dedupe stamp then, and whatever arrives next counts as new. Without
+      // this, an answer re-issued inside the same millisecond as the one just
+      // applied would compare equal on `at` and be skipped, leaving a diverged
+      // device waiting on a snapshot it already threw away.
+      if (!mine) mp.lastRecoveryApplied = null;
+      else if (mine.state && mine.at !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = mine.at;
+        this._mpApplyRecovery(mine);
       }
     }
 
@@ -2102,8 +2262,9 @@ class ChinchonUI {
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
     const me = this._myIdentity();
-    const config = this._mpBuildConfig(this._setup.config);
-    const res = await net.createRoom('chinchon', config, me);
+    const seats = clamp(this._setup.count || 2, 2, 4);
+    const config = this._mpBuildConfig(this._setup.config, seats);
+    const res = await net.createRoom('chinchon', config, me, { seats });
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -2112,25 +2273,36 @@ class ChinchonUI {
       return;
     }
     this._mpPendingCode = res.code;
-    net.heartbeat(res.code, 'host');
+    this._mpSeat = res.seat != null ? res.seat : 0;
+    net.heartbeat(res.code, 0);
     await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
     this.renderSetup();
   }
 
+  /** How many of the room's seats are actually occupied right now. */
+  _mpFilledSeats(room) {
+    const seats = (room && room.seats) || {};
+    const count = this._mpSeatCount(room);
+    let n = 0;
+    for (let i = 0; i < count; i++) if (seats[i] && seats[i].deviceId) n++;
+    return n;
+  }
+
   async _mpHostStart() {
     const room = this._mpLobbyRoom;
-    if (!room || !room.guest || this._mpBusy || this.mp) return;
+    if (!room || this._mpBusy || this.mp) return;
+    const seatCount = this._mpSeatCount(room);
+    // Humans only: the table has to be full before the match can start. The
+    // host chose the size up front, so a half-full room means somebody is
+    // still on their way, not that a seat should be filled with an AI.
+    if (this._mpFilledSeats(room) < seatCount) return;
     const code = this._mpPendingCode;
-    this.mp = this._mpNewState('host', code, room.guest);
+    this.mp = this._mpNewState(0, code, this._mpOpponentsFrom(room, 0, seatCount));
     if (this.game) this.game.abort();
     this.syncSetupInputs();
-    const s = this._setup;
-    const config = this._mpBuildConfig(s.config);
+    const config = this._mpBuildConfig(this._setup.config, seatCount);
     config.onStockReset = (order) => this._mpSendStockReset(order);
-    const players = [
-      makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
-      makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
-    ];
+    const players = this._mpBuildPlayers(room, 0, seatCount);
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
@@ -2150,7 +2322,7 @@ class ChinchonUI {
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
     const me = this._myIdentity();
-    const res = await net.joinRoom(code, me);
+    const res = await net.joinSeat(code, me);
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -2174,8 +2346,9 @@ class ChinchonUI {
     }
     this._mpPendingCode = code;
     this._mpJoinedCode = code;
+    this._mpSeat = res.seat;
     this._screen = 'join-lobby';   // only now: a failed attempt stays on the setup screen's Join mode
-    net.heartbeat(code, 'guest');
+    net.heartbeat(code, res.seat);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this._mpLobbyRoom = res.room;
     this.renderSetup();
@@ -2185,19 +2358,19 @@ class ChinchonUI {
   _mpGuestStartMatch(room) {
     if (this.mp || this._dead) return;
     const code = this._mpJoinedCode;
-    this.mp = this._mpNewState('guest', code, room.host);
+    const mySeat = this._mpSeat;
+    if (mySeat == null) return;
+    const seatCount = this._mpSeatCount(room);
+    this.mp = this._mpNewState(mySeat, code, this._mpOpponentsFrom(room, mySeat, seatCount));
     if (this.game) this.game.abort();
-    const s = this._setup;
-    const config = this._mpBuildConfig(room.config || {});
+    const config = this._mpBuildConfig(room.config || {}, seatCount);
     config.presetDeck = room.round.deck;
     // Dealer rotation in Chinchón is fully deterministic (initMatch() always
-    // starts at 0, finishRoundAfterPlay() always advances by 1) -- unlike
-    // Escoba's randomly-picked round-1 dealer, there is nothing to force
-    // here; both engines reach the identical dealerIndex on their own.
-    const players = [
-      makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
-      makePlayer({ id: 1, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
-    ];
+    // starts at 0, finishRoundAfterPlay() always advances by 1 modulo the seat
+    // count) -- unlike Escoba's randomly-picked round-1 dealer, there is
+    // nothing to force here; every engine at the table reaches the identical
+    // dealerIndex on its own, at any seat count.
+    const players = this._mpBuildPlayers(room, mySeat, seatCount);
     this.game = new Game({ players, config });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
@@ -2210,13 +2383,20 @@ class ChinchonUI {
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP match error', err); });
   }
 
+  /** Backing out of the LOBBY. The host leaving takes the room with it (there
+   *  is nobody left to start the match), but anyone else just frees their own
+   *  seat -- with three or four seats, one person changing their mind must not
+   *  evict the others, which is what the old unconditional leaveRoom did. */
   _mpCancelLobby() {
     const code = this._mpPendingCode;
-    const role = this._screen === 'host-lobby' ? 'host' : 'guest';
+    const isHost = this._screen === 'host-lobby';
+    const seat = this._mpSeat;
     this._screen = 'setup';
     this._mpError = ''; this._mpBusy = false; this._mpJoinCode = '';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
-    if (code) net.leaveRoom(code, role).catch(() => {});
+    this._mpSeat = null;
+    if (code && isHost) net.leaveRoom(code, 0).catch(() => {});
+    else if (code && seat != null) { net.vacateSeat(code, seat).catch(() => {}); net.disconnect(); }
     else net.disconnect();
     this.renderSetup();
   }
@@ -2227,8 +2407,12 @@ class ChinchonUI {
     const mp = this.mp;
     if (this.game) this.game.abort();
     this.mp = null;
+    this._mpSeat = null;
     this._mpClearSave();
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    // Mid-match, ANY seat leaving ends the room for the whole table -- see the
+    // N-SEAT ROOMS note in js/net.js. The engine cannot drop a seat from a live
+    // match without every other device diverging on the very next deal.
+    if (mp && mp.code) net.leaveRoom(mp.code, mp.seat).catch(() => {});
     else net.disconnect();
     this.showSetup();
   }
@@ -2254,7 +2438,14 @@ class ChinchonUI {
     if (!this.game || !this.mp) return;
     try {
       saveJSON(STORE_MP_SAVE, {
-        v: 1, code: this.mp.code, role: this.mp.role, seq: this.mp.appliedSeq,
+        v: 1, code: this.mp.code, seat: this.mp.seat, seq: this.mp.appliedSeq,
+        // `role` is written alongside `seat` purely so a save taken by the
+        // previous (2-seat) build and a save taken by this one are both
+        // readable by both builds during the deploy window -- the 30-minute
+        // freshness window means the overlap is short, but a restore that
+        // throws would strand a live match. Additive, never read when `seat`
+        // is present.
+        role: this.mp.isHost ? 'host' : 'guest',
         at: Date.now(), snap: this.game.snapshot(),
       });
     } catch { /* private mode / quota */ }
@@ -2277,26 +2468,34 @@ class ChinchonUI {
     if (!save) return;
     const age = Date.now() - (save.at || 0);
     if (age > MP_RESTORE_MAX_AGE_MS) { this._mpClearSave(); return; }
-    const { code, role } = save;
-    if (!code || !role || !save.snap) return;
+    const code = save.code;
+    // `seat` is this build's field; `role` is what the previous 2-seat build
+    // wrote. Accepting both means a match live across the deploy still resumes.
+    const seat = save.seat != null ? (save.seat | 0) : (save.role === 'guest' ? 1 : save.role === 'host' ? 0 : null);
+    if (!code || seat == null || !save.snap) return;
     try {
-      if (role === 'guest') {
-        const res = await net.joinRoom(code, this._myIdentity());
+      if (seat !== 0) {
+        const res = await net.joinSeat(code, this._myIdentity());
         if (res.error || (res.room && res.room.status === 'ended')) { this._mpClearSave(); return; }
+        // A rejoin is meant to land on the seat we already held. If the room
+        // somehow hands us a different one, the snapshot's isHuman flags would
+        // be attached to the wrong player -- abandon rather than resume wrong.
+        if (res.seat !== seat) { this._mpClearSave(); return; }
       } else if (!(await net.init())) return;
     } catch { return; }
     if (this._dead || this.mp || this.game) return;   // superseded by a faster user action meanwhile
 
     const agentsById = {};
-    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
-    this.mp = this._mpNewState(role, code, null);
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent(sp.id);
+    this._mpSeat = seat;
+    this.mp = this._mpNewState(seat, code, []);
     this.mp.appliedSeq = save.seq | 0;
     this.game = Game.fromSnapshot(save.snap, agentsById);
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
     this._matchEnded = false;
-    net.heartbeat(code, role);
+    net.heartbeat(code, seat);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
     this._buildPiles();
@@ -2307,7 +2506,7 @@ class ChinchonUI {
     // host side needs no wait: it shuffles and publishes its own next round. If the
     // host hasn't advanced yet (still on its round modal), this waits in place and
     // the onRoom subscription above resolves it when the record lands.
-    if (role === 'guest' && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
+    if (seat !== 0 && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
     if (this._dead) return;
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón MP restore error', err); });
   }
