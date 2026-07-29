@@ -118,6 +118,19 @@ function validDbBoardState(s, size) {
   return s.turn === 0 || s.turn === 1;
 }
 
+/** Sanitize a restored "most recently drawn edge" marker (solo save, MP save, recovery
+ *  snapshot) against a board size. Purely cosmetic (it drives the is-last glow only, never
+ *  game state and never the MP hash), so a bad value degrades to null — it must NEVER
+ *  invalidate the save it arrived in. */
+function sanitizeEdge(raw, rows, cols) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = Math.round(Number(raw.r)), c = Math.round(Number(raw.c));
+  if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) return null;
+  if (raw.type === 'h' && r <= rows && c < cols) return { type: 'h', r, c };
+  if (raw.type === 'v' && r < rows && c <= cols) return { type: 'v', r, c };
+  return null;
+}
+
 /** Persist the in-progress match so leaving (hub, Menu, a reload, or closing
  *  the PWA) never loses it. Only ever holds ONE unfinished game; cleared the
  *  moment it finishes or a new one starts. Mirrors mancala/js/ui.js's
@@ -141,6 +154,7 @@ function saveGame(ui) {
       humanSeat: ui.humanSeat,
       aiSeat: ui.aiSeat,
       lastCaptured: ui._lastCaptured,
+      lastEdge: ui._lastEdge,
       humanChainRun: ui._humanChainRun,
       humanBestChainThisGame: ui._humanBestChainThisGame,
     }));
@@ -184,6 +198,7 @@ function loadGame() {
       humanSeat,
       aiSeat: 1 - humanSeat,
       lastCaptured: Array.isArray(raw.lastCaptured) ? raw.lastCaptured.filter((p) => Array.isArray(p) && p.length === 2) : [],
+      lastEdge: sanitizeEdge(raw.lastEdge, rows, cols),
       humanChainRun: Math.max(0, Math.round(Number(raw.humanChainRun)) || 0),
       humanBestChainThisGame: Math.max(0, Math.round(Number(raw.humanBestChainThisGame)) || 0),
     };
@@ -205,6 +220,7 @@ class DotsBoxesUI {
     this.aiTimer = null;
     this._chaining = false;
     this._lastCaptured = [];
+    this._lastEdge = null;
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
     this._confirmTimer = null;
@@ -614,6 +630,7 @@ class DotsBoxesUI {
     const meta = SIZE_META[this._setup.size];
     this.state = newGame(meta.rows, meta.cols);
     this._lastCaptured = [];
+    this._lastEdge = null;
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
     this.view = 'game';
@@ -640,6 +657,7 @@ class DotsBoxesUI {
       totalEdges: saved.totalEdges,
     };
     this._lastCaptured = saved.lastCaptured;
+    this._lastEdge = saved.lastEdge;
     this._humanChainRun = saved.humanChainRun;
     this._humanBestChainThisGame = saved.humanBestChainThisGame;
     this.view = 'game';
@@ -689,6 +707,7 @@ class DotsBoxesUI {
         if (this._dead || !this.state || isOver(this.state)) return;
         const move = chooseMove(this.state, this._setup.difficulty);
         const res = applyMove(this.state, move);
+        this._lastEdge = { type: move.type, r: move.r, c: move.c };
         this._lastCaptured = res.boxes;
         this._afterStateChange(res.again);
       }, delay);
@@ -713,6 +732,7 @@ class DotsBoxesUI {
     if (this.mp && this.mp.awaitingRecovery) return;
     if (!this._isLegal(edge)) return;
     const res = applyMove(this.state, edge);
+    this._lastEdge = { type: edge.type, r: edge.r, c: edge.c };
     this._lastCaptured = res.boxes;
     if (res.claimed > 0) {
       this._humanChainRun += res.claimed;
@@ -753,6 +773,10 @@ class DotsBoxesUI {
     const rows = s.rows, cols = s.cols;
     const canClickNow = !isOver(s) && !this.busy && s.turn === this.humanSeat && !(this.mp && this.mp.awaitingRecovery);
     const claimed = this._lastCaptured || [];
+    // The most recently drawn edge, whoever drew it — the "where did they just play?" cue
+    // (is-last, a slow glow in dots-boxes.css). Suppressed once the board is full so the
+    // final board sits calm behind the game-over overlay.
+    const last = isOver(s) ? null : this._lastEdge;
     const parts = [];
     for (let mr = 0; mr <= 2 * rows; mr++) {
       const rowIsDots = mr % 2 === 0;
@@ -765,7 +789,8 @@ class DotsBoxesUI {
           const owner = s.hEdges[r][c];
           const drawn = owner !== null;
           const live = canClickNow && !drawn;
-          parts.push(`<button type="button" class="db-edge db-edge-h ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
+          const isLast = !!last && last.type === 'h' && last.r === r && last.c === c;
+          parts.push(`<button type="button" class="db-edge db-edge-h ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''} ${isLast ? 'is-last' : ''}"
             data-action="edge" data-etype="h" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
             aria-label="${t('edge_h_aria', { state: t(drawn ? 'line_drawn' : 'draw_line'), r: r + 1, c1: c + 1, c2: c + 2 })}">
             <span class="db-line" aria-hidden="true"></span></button>`);
@@ -774,7 +799,8 @@ class DotsBoxesUI {
           const owner = s.vEdges[r][c];
           const drawn = owner !== null;
           const live = canClickNow && !drawn;
-          parts.push(`<button type="button" class="db-edge db-edge-v ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''}"
+          const isLast = !!last && last.type === 'v' && last.r === r && last.c === c;
+          parts.push(`<button type="button" class="db-edge db-edge-v ${drawn ? 'is-drawn' : ''} ${this._ownerClass(owner)} ${live ? 'is-live' : ''} ${isLast ? 'is-last' : ''}"
             data-action="edge" data-etype="v" data-r="${r}" data-c="${c}" ${live ? '' : 'disabled'}
             aria-label="${t('edge_v_aria', { state: t(drawn ? 'line_drawn' : 'draw_line'), c: c + 1, r1: r + 1, r2: r + 2 })}">
             <span class="db-line" aria-hidden="true"></span></button>`);
@@ -1205,6 +1231,7 @@ class DotsBoxesUI {
     mp.appliedSeq = seq;
     mp.recoveryAttempts = 0;
     if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+    this._lastEdge = { type: edge.type, r: edge.r, c: edge.c };
     this._lastCaptured = res.boxes;
     this.busy = true;
     this.renderGame();   // show the just-drawn edge (and any capture pop) before pacing the next
@@ -1252,6 +1279,7 @@ class DotsBoxesUI {
       series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
       state: this.state,
       lastCaptured: this._lastCaptured,
+      lastEdge: this._lastEdge,
       humanBestChainThisGame: this._humanBestChainThisGame,
     };
   }
@@ -1281,6 +1309,7 @@ class DotsBoxesUI {
       totalEdges: st.totalEdges | 0,
     };
     this._lastCaptured = Array.isArray(snap.lastCaptured) ? snap.lastCaptured.filter((p) => Array.isArray(p) && p.length === 2) : [];
+    this._lastEdge = sanitizeEdge(snap.lastEdge, this.state.rows, this.state.cols);
     this._humanChainRun = 0;
     this._humanBestChainThisGame = Math.max(0, Math.round(Number(snap.humanBestChainThisGame)) || 0);
     mp.appliedSeq = recovery.seq | 0;
@@ -1326,6 +1355,7 @@ class DotsBoxesUI {
     const meta = SIZE_META[mp.size];
     this.state = newGame(meta.rows, meta.cols);
     this._lastCaptured = [];
+    this._lastEdge = null;
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
     this.view = 'game';
@@ -1616,6 +1646,7 @@ class DotsBoxesUI {
         lastScoredGame: mp.lastScoredGame | 0,
         state: this.state,
         lastCaptured: this._lastCaptured,
+        lastEdge: this._lastEdge,
         humanChainRun: this._humanChainRun,
         humanBestChainThisGame: this._humanBestChainThisGame,
       }));
@@ -1675,6 +1706,7 @@ class DotsBoxesUI {
       totalEdges: st.totalEdges | 0,
     };
     this._lastCaptured = Array.isArray(save.lastCaptured) ? save.lastCaptured.filter((p) => Array.isArray(p) && p.length === 2) : [];
+    this._lastEdge = sanitizeEdge(save.lastEdge, this.state.rows, this.state.cols);
     this._humanChainRun = Math.max(0, Math.round(Number(save.humanChainRun)) || 0);
     this._humanBestChainThisGame = Math.max(0, Math.round(Number(save.humanBestChainThisGame)) || 0);
     this._statsCommitted = !!save.statsCommitted;

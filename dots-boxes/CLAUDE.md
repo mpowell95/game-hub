@@ -17,6 +17,23 @@ i18n: `dots-boxes/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render 
 (`small`/`medium`/`large`) and difficulty keys (`beginner`/`intermediate`/`pro`) stay canonical;
 only their display labels translate.
 
+### Most-recent-move glow (2026-07-28)
+
+The most recently drawn edge, whoever drew it, pulses (`is-last`, a slow owner-colored halo —
+`--db-human`/`--db-ai`, matching the line's own ownership color, since a halo is reinforcement
+and must never compete with the colorblind-safe line-color/glyph read) so "where did they just
+play?" is obvious at a glance. Driven by `_lastEdge`, a cosmetic UI field on the instance
+(`{type, r, c}`) deliberately kept OUTSIDE `this.state` — `hash.js` and `validDbBoardState()`
+never see it, so it can never affect the MP divergence check. Threaded through the same three
+move sites as `_lastCaptured` (AI move, human tap, a delivered remote move), cleared wherever
+`_lastCaptured` is cleared (constructor, `startGame()`, `_mpApplyRoundRecord()`), and persisted
+as an additive `lastEdge` field in all three save/restore paths (solo autosave, MP autosave, MP
+recovery snapshot) — a bad or missing value degrades to `null` via a shared `sanitizeEdge()`
+validator and never invalidates the save it arrived in (a cosmetic highlight can never cost a
+player a live match). Suppressed once `isOver(state)` so the final board sits calm behind the
+game-over overlay. Under reduced motion the halo is held steady, not removed (`animation: none`
++ a static `box-shadow`) — killing it outright would drop the cue entirely for those players.
+
 ### First-move alternation, ski-slope shapes, dropped diff prose, Restart (2026-07-24, batch 8)
 
 `gamehub.dotsboxes.v1` gained three fields, additive on top of the frozen `size`/`difficulty`/

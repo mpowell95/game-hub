@@ -349,6 +349,19 @@
 .db-root .db-edge.is-live:active .db-line { opacity: 0.9; }
 .db-root .db-edge:focus-visible { outline: 2px solid var(--db-accent); outline-offset: 2px; z-index: 3; }
 
+/* Most-recent-move cue: the last drawn edge glows in and out until the next one is drawn, so
+   "where did they just play?" is answerable at a glance on a board that is otherwise a wall of
+   identical lines. The halo is the DRAWER's own color (--db-human/--db-ai, the same ownership
+   colors the line itself uses), and it is a HALO, not a hue swap -- the line keeps its own
+   color and thickness, so the cue never competes with the colorblind-safe read of who owns
+   what. Gold is deliberately not reused here: it already means "this box is capturable". */
+.db-root .db-edge.is-last .db-line { --db-glow: var(--db-line-on); animation: db-lastmove 1300ms ease-in-out infinite; }
+.db-root .db-edge.is-last.is-human .db-line { --db-glow: var(--db-human); }
+.db-root .db-edge.is-last.is-ai .db-line { --db-glow: var(--db-ai); }
+/* Large is 10x10: a full-size halo would bleed into the neighboring edge's track and read as
+   two lit edges, so it shrinks with the board (same reasoning as the --db-tap cap above). */
+.db-root .db-board[data-size="large"] .db-edge.is-last .db-line { animation-name: db-lastmove-sm; }
+
 /* An UNCLAIMED box is plain white, on purpose -- tinting every box on the
    board (even empty ones) is what read as noisy in an earlier pass. A
    CLAIMED box gets a real color fill (its owner's --db-human-tint/
@@ -379,9 +392,18 @@
 
 @keyframes db-pop { from { transform: scale(0.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes db-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes db-lastmove {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 9px 3px var(--db-glow); }
+}
+@keyframes db-lastmove-sm {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 5px 1px var(--db-glow); }
+}
 @media (prefers-reduced-motion: reduce) {
   .db-root .db-box.is-claim .db-glyph { animation: none; }
   .db-root .db-box.is-capturable { animation: none; }
+  .db-root .db-edge.is-last .db-line { animation: none; box-shadow: 0 0 7px 2px var(--db-glow); }
 }
 
 /* --- actions / end overlay ------------------------------------------------*/
