@@ -379,8 +379,14 @@ class BallRunUI {
             </div>
             <div class="br-hud-distance" data-role="distance">0 m</div>
             <div class="br-hud-tiers" data-role="tiers"></div>
+            <div class="br-hud-orbs" data-role="orbs" aria-label="${t('orbs_aria')}" hidden>
+              <span class="br-orb-dot"></span>
+              <span data-role="orbs-value">0</span>
+            </div>
             <div class="br-hud-lives" data-role="lives" aria-label="${t('lives_aria')}"></div>
           </div>
+          <div class="br-floaters" data-role="floaters" aria-hidden="true"></div>
+          <div class="br-life-used" data-role="life-used" aria-live="polite"></div>
           <div class="br-gate" data-role="resume-gate" hidden>
             <button type="button" class="br-btn br-btn-primary" data-role="resume">${t('resume')}</button>
           </div>
@@ -434,7 +440,11 @@ class BallRunUI {
       scoreValue: q('[data-role="score-value"]'),
       distance: q('[data-role="distance"]'),
       tiers: q('[data-role="tiers"]'),
+      orbs: q('[data-role="orbs"]'),
+      orbsValue: q('[data-role="orbs-value"]'),
       lives: q('[data-role="lives"]'),
+      floaters: q('[data-role="floaters"]'),
+      lifeUsed: q('[data-role="life-used"]'),
       resumeGate: q('[data-role="resume-gate"]'),
       resumeBtn: q('[data-role="resume"]'),
       gameover: q('[data-role="gameover"]'),
@@ -541,6 +551,15 @@ class BallRunUI {
     this.input = new InputController(this.el.canvas);
     this._resultRecorded = false;
 
+    // Pickups HUD state (Phase 4 follow-up): force every pickup-driven readout to redraw on the
+    // next updateHud() call, and clear any leftover floaters/banner from a previous run - restart
+    // reuses this same DOM (Play Again, back-to-setup-and-Play) rather than remounting it.
+    this._lastShownOrbs = -1;
+    this._lastShownLives = -1;
+    this.el.floaters.innerHTML = '';
+    this.el.lifeUsed.classList.remove('is-active');
+    if (this._lifeUsedTimer) { clearTimeout(this._lifeUsedTimer); this._lifeUsedTimer = 0; }
+
     this.handleResize();
     this.renderer.resetCamera(0);
     this.updateHud(true);
@@ -591,6 +610,13 @@ class BallRunUI {
       if (this.sim.isOver()) break;
     }
 
+    // Pickup animations (Phase 4 follow-up): drained here, once per RENDERED frame, not once per
+    // sim.step() - several ticks can run per frame under the fixed-timestep accumulator above, and
+    // splice-draining the whole queue at once (rather than peeking the last entry) means a frame
+    // that happened to contain two collections in the same render still animates both instead of
+    // silently dropping one.
+    if (this.sim.pickupEvents.length) this.handlePickupEvents(this.sim.pickupEvents.splice(0));
+
     this.renderer.render(this.sim, this.reducedMotion);
     this.updateHud();
 
@@ -620,10 +646,68 @@ class BallRunUI {
     // spawns a life pickup (Classic, or Orbital before this phase), so this row stays empty and
     // this is a no-op for every map/event this file already supported.
     const lives = this.sim.lives || 0;
-    if (this._lastShownLives !== lives) {
+    if (force || this._lastShownLives !== lives) {
       this._lastShownLives = lives;
       this.el.lives.innerHTML = Array.from({ length: lives }, () => '<span class="br-life"></span>').join('');
     }
+    // Orb counter (follow-up to Phase 4): a persistent running tally, separate from the lives row
+    // above - reserved-but-hidden on any map/run with no pickups config at all (Classic), same
+    // "no-op unless the map actually uses it" shape as lives.
+    const hasPickups = !!this.sim.track.map.pickups;
+    const orbs = this.sim.orbsCollected || 0;
+    if (force || this._lastShownOrbs !== orbs) {
+      this._lastShownOrbs = orbs;
+      this.el.orbs.hidden = !hasPickups;
+      this.el.orbsValue.textContent = String(orbs);
+    }
+  }
+
+  /** Pickup animations (Phase 4 follow-up): a "+1" floater for an orb, a distinct pink "+1 life"
+   *  floater for a life pickup, and an unmissable banner (not just a floater - Matt asked for
+   *  something "obvious") when a banked life is actually spent. Anchored to the HUD elements the
+   *  respective counters live on, not the ball's screen position - the ball can be anywhere
+   *  laterally, but the score/orb/life counters are always in the same place, so anchoring there
+   *  reads as "this number just changed" rather than requiring the player to track a floater
+   *  drifting across a moving 3D scene. */
+  handlePickupEvents(events) {
+    for (const ev of events) {
+      if (ev.type === 'orb') this.spawnFloater(this.el.score, '+1', 'br-floater-orb');
+      else if (ev.type === 'life') this.spawnFloater(this.el.lives, '+1', 'br-floater-life');
+      else if (ev.type === 'lifeSpent') this.showLifeUsedBanner();
+    }
+  }
+
+  spawnFloater(anchorEl, text, extraClass) {
+    if (!anchorEl || !this.el.floaters) return;
+    const hudRect = this.el.hud.getBoundingClientRect();
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const span = document.createElement('span');
+    span.className = `br-floater ${extraClass}`;
+    span.textContent = text;
+    span.style.left = `${anchorRect.left - hudRect.left + anchorRect.width / 2}px`;
+    span.style.top = `${anchorRect.top - hudRect.top}px`;
+    this.el.floaters.appendChild(span);
+    // Reduced motion (non-negotiable-adjacent accessibility rule this file already follows for
+    // camera shake): skip the animation and just remove after a short flat display instead of
+    // never showing feedback at all.
+    const duration = this.reducedMotion ? 500 : 900;
+    span.addEventListener('animationend', () => span.remove());
+    if (this.reducedMotion) setTimeout(() => span.remove(), duration);
+  }
+
+  showLifeUsedBanner() {
+    const el = this.el.lifeUsed;
+    if (!el) return;
+    el.textContent = t('life_used');
+    // Retrigger the CSS animation even if a second life is spent while the first banner is still
+    // showing - remove-then-reflow-then-readd is the standard trick for restarting a CSS animation
+    // on the same element/class pair.
+    el.classList.remove('is-active');
+    // eslint-disable-next-line no-unused-expressions
+    void el.offsetWidth;
+    el.classList.add('is-active');
+    if (this._lifeUsedTimer) clearTimeout(this._lifeUsedTimer);
+    this._lifeUsedTimer = setTimeout(() => { el.classList.remove('is-active'); this._lifeUsedTimer = 0; }, 1600);
   }
 
   // --- Pause / resume (non-negotiable 4) ------------------------------------
@@ -721,6 +805,7 @@ class BallRunUI {
   destroy() {
     this.stopLoop();
     this.teardownRun(true);
+    if (this._lifeUsedTimer) { clearTimeout(this._lifeUsedTimer); this._lifeUsedTimer = 0; }
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('orientationchange', this._onResize);

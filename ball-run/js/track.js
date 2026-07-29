@@ -505,17 +505,41 @@ export class Track {
     return this.fillObstacleCubes(-half, half, gapCenter - gapBW / 2, gapCenter + gapBW / 2);
   }
 
-  /** Split's per-lane obstacle row (BALLRUNMAP2ORBITALSPEC.md section 2, "side variety" ~35%
-   *  roll): confined to ONE lane's own [loBW, hiBW] range, with `gapBW` (the standard
-   *  OBSTACLE_MIN_GAP) reserved somewhere inside just that lane rather than centered on the whole
-   *  corridor. The caller only ever invokes this for one side, so the OTHER lane is never touched
-   *  and stays clean by construction - "every Split must have at least one clean lane" (landmine
-   *  #7) holds trivially, not by a separate check. */
-  buildLaneObstacleRow(loBW, hiBW, gapBW) {
-    const laneWidth = hiBW - loBW;
-    const maxGapCenterOffset = Math.max(0, (laneWidth - gapBW) / 2);
-    const gapCenter = (loBW + hiBW) / 2 + (this.rng() * 2 - 1) * maxGapCenterOffset;
-    return this.fillObstacleCubes(loBW, hiBW, gapCenter - gapBW / 2, gapCenter + gapBW / 2);
+  /** Split's per-lane obstacle row placement (BALLRUNMAP2ORBITALSPEC.md section 2, "side variety"
+   *  ~35% roll, generalized this round to MULTIPLE rows once Hold got long enough - "I want the
+   *  paths to be actual separate paths for a while" - for a single row to no longer fill it).
+   *  Confined to ONE lane's own [loBW, hiBW] range - the caller only ever passes one side's bounds,
+   *  so the OTHER lane is never touched and stays clean by construction ("every Split must have at
+   *  least one clean lane", landmine #7), same guarantee the single-row version had.
+   *
+   *  Reuses the exact reachability primitives `placeObstacleRow`'s own retry loop uses
+   *  (`minSpacingFor`/`estimateSpeedAt`/`lateralMaxAtSpeed`, landmine #2 - never hand-roll a
+   *  simpler version, the precise mistake behind the "46m wall" bug) but does NOT retry by pushing
+   *  extra segments the way `placeObstacleRow` does: the Hold phase's segment budget is fixed by
+   *  `holdSegs` (rolled once by the caller), so a slot whose candidate row isn't reachable from the
+   *  previous one in this same lane sequence is simply left clean instead - the multi-row analogue
+   *  of 3b.3's "drop rather than ship a violation", just without growing the track to try again.
+   *  Returns a gapCenter (absolute lateral, ball-widths) or `null` if this slot should stay clean. */
+  laneObstacleGapCenter(loBW, hiBW, prevGapCenter, prevRowZ, z0) {
+    const gapBW = OBSTACLE_MIN_GAP;
+    const maxOffset = Math.max(0, (hiBW - loBW - gapBW) / 2);
+    const laneMid = (loBW + hiBW) / 2;
+    let gapCenter = laneMid + (this.rng() * 2 - 1) * maxOffset;
+    if (prevGapCenter === null) return gapCenter;
+
+    const actualSpacing = z0 - prevRowZ;
+    let required = this.minSpacingFor(gapCenter, prevGapCenter, z0);
+    if (actualSpacing < required) {
+      // Same shift-toward-the-previous-row repair as placeObstacleRow's 3a/3b.1, clamped to this
+      // lane's own bounds rather than the whole track's.
+      const speed = this.estimateSpeedAt(z0);
+      const maxLateralSpeed = this.lateralMaxAtSpeed(speed);
+      const maxLateralDistBW = (actualSpacing * maxLateralSpeed) / (speed * OBSTACLE_SPACING_SAFETY_FACTOR * BALL_DIAMETER);
+      gapCenter = clamp(gapCenter, prevGapCenter - maxLateralDistBW, prevGapCenter + maxLateralDistBW);
+      gapCenter = clamp(gapCenter, laneMid - maxOffset, laneMid + maxOffset);
+      required = this.minSpacingFor(gapCenter, prevGapCenter, z0);
+    }
+    return actualSpacing >= required ? gapCenter : null;
   }
 
   emitTunnel() {
@@ -578,10 +602,22 @@ export class Track {
     }
     const voidCenter = voidCenterBW * BALL_DIAMETER;
 
-    let obstacleHoldIndex = -1, obstacleLeftLane = true;
+    // Obstacle-row slots (this round's follow-up, generalizing the old single `obstacleHoldIndex`):
+    // spread `numRows` candidate positions evenly across the now much-longer Hold phase, each with
+    // a little jitter so rows don't land in lockstep across different generated Splits. This is
+    // only a proposal of WHERE to try - laneObstacleGapCenter (below, in the Hold loop) is the
+    // actual reachability GO/NO-GO for each slot, and a slot it rejects is simply left clean.
+    let obstacleLeftLane = true;
+    let obstacleRowIndices = [];
     if (sideRoll === 'obstacle') {
-      obstacleHoldIndex = Math.floor(this.rng() * holdSegs);
       obstacleLeftLane = this.rng() < 0.5;
+      const numRows = holdSegs >= 14 ? 3 : holdSegs >= 8 ? 2 : 1;
+      for (let n = 0; n < numRows; n++) {
+        const frac = (n + 0.5) / numRows;
+        const jitter = (this.rng() - 0.5) * (holdSegs / numRows) * 0.6;
+        const idx = Math.max(0, Math.min(holdSegs - 1, Math.round(frac * holdSegs + jitter)));
+        obstacleRowIndices.push(idx);
+      }
     }
 
     // --- Widen: width grows to totalWidth, void stays 0. Telegraph a lit divider line at lateral
@@ -594,14 +630,21 @@ export class Track {
     const openDelta = voidHalf / openSegs;
     for (let i = 0; i < openSegs; i++) this.pushSegment({ type: 'split', dVoid: openDelta, voidCenter });
 
-    // --- Hold: steady void at full voidHalf; this is where the side-variety obstacle row (if
-    // rolled) sits, confined to ONE lane, leaving the other completely clean.
+    // --- Hold: steady void at full voidHalf; this is where the side-variety obstacle row(s) (if
+    // rolled) sit, confined to ONE lane, leaving the other completely clean.
+    const laneLo = obstacleLeftLane ? -halfWidthBW : voidCenterBW + cfg.voidHalfBW;
+    const laneHi = obstacleLeftLane ? voidCenterBW - cfg.voidHalfBW : halfWidthBW;
+    let laneGapCenter = null, laneRowZ = null;
     for (let i = 0; i < holdSegs; i++) {
       let obstacles = null;
-      if (i === obstacleHoldIndex) {
-        const laneLo = obstacleLeftLane ? -halfWidthBW : voidCenterBW + cfg.voidHalfBW;
-        const laneHi = obstacleLeftLane ? voidCenterBW - cfg.voidHalfBW : halfWidthBW;
-        obstacles = this.buildLaneObstacleRow(laneLo, laneHi, OBSTACLE_MIN_GAP);
+      if (sideRoll === 'obstacle' && obstacleRowIndices.includes(i)) {
+        const z0 = this.frontZ;
+        const gapCenter = this.laneObstacleGapCenter(laneLo, laneHi, laneGapCenter, laneRowZ, z0);
+        if (gapCenter !== null) {
+          obstacles = this.fillObstacleCubes(laneLo, laneHi, gapCenter - OBSTACLE_MIN_GAP / 2, gapCenter + OBSTACLE_MIN_GAP / 2);
+          laneGapCenter = gapCenter;
+          laneRowZ = z0;
+        }
       }
       this.pushSegment({ type: 'split', voidCenter, obstacles });
     }

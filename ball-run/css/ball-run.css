@@ -252,20 +252,128 @@
 
 /* Pickups (Phase 4, Orbital only): banked extra-life count. Stays empty (0 height content, same
    reserved-but-collapsible shape as .br-hud-tiers) on Classic and on Orbital before any life is
-   ever collected - never shifts layout when it does appear. A small diamond (clip-path'd square,
-   rotated) rather than a plain dot, so it reads as a distinct marker from the tier pips above it
-   even in a single screenshot, not just by position. */
+   ever collected - never shifts layout when it does appear. A small heart (the standard two-
+   circle-plus-rotated-square CSS trick), not the old teal diamond - a heart reads unambiguously
+   as "life" without a legend, and matches the light pink 3D pickup mesh (render.js's
+   buildHeartGeometry, colors.life). */
 .br-hud-lives {
   display: flex;
-  gap: 5px;
+  gap: 7px;
   min-height: 9px;
+  padding-top: 2px; /* the heart's two top lobes sit above its own box; keep them clear of .br-hud-tiers */
 }
 .br-life {
+  position: relative;
+  width: 9px;
+  height: 8px;
+  background: #ffb3c6;
+  box-shadow: 0 0 6px #ffb3c6;
+  transform: rotate(-45deg);
+}
+.br-life::before,
+.br-life::after {
+  content: '';
+  position: absolute;
   width: 9px;
   height: 9px;
-  background: #178a7a;
-  box-shadow: 0 0 6px #178a7a;
-  transform: rotate(45deg);
+  border-radius: 50%;
+  background: #ffb3c6;
+}
+.br-life::before { top: -4.5px; left: 0; }
+.br-life::after { top: 0; left: 4.5px; }
+
+/* Orb counter (follow-up to Phase 4): a persistent running tally alongside the tier pips, a small
+   yellow dot marker so it reads as distinct from both the lives row and the tier pips even without
+   color (colorblind rule: shape/position, never hue alone) - matches the orb pickup's own sphere
+   color (render.js/config.js colors.orb). Hidden entirely on any map with no pickups config
+   (Classic), same reserved-but-collapsible convention as .br-hud-lives. */
+.br-hud-orbs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--br-ink-dim);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  font-variant-numeric: tabular-nums;
+}
+.br-hud-orbs[hidden] { display: none; }
+.br-orb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f2b705;
+  box-shadow: 0 0 6px #f2b705;
+  flex: 0 0 auto;
+}
+
+/* Pickup floaters (follow-up to Phase 4): a "+1" that rises and fades from wherever the
+   corresponding counter lives in the HUD - the counter itself is always in the same screen
+   position, so anchoring there reads as "that number just changed" without asking the player to
+   track a floater drifting across a moving 3D scene. Absolutely positioned within .br-game (not
+   .br-hud, which is a flex column with no fixed pixel origin for its children); spawnFloater()
+   in ui.js sets left/top in pixels relative to .br-hud's own bounding box. */
+.br-floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 4;
+}
+.br-floater {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-weight: 900;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.75);
+  animation: br-floater-rise 0.9s ease-out forwards;
+}
+.br-floater-orb { color: #f2b705; }
+.br-floater-life { color: #ffb3c6; }
+@keyframes br-floater-rise {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, -8px) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -36px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .br-floater { animation: none; opacity: 1; transform: translate(-50%, -14px); }
+}
+
+/* Life-used banner (follow-up to Phase 4, "We need an obvious animation for when a life is used
+   too"): deliberately a distinct, more prominent shape than the +1 floaters above - a centered
+   pill that pops and holds briefly rather than a small rising number - so spending a banked life
+   reads as a significant, different-in-kind event from simply collecting one. */
+.br-life-used {
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(20, 8, 14, 0.55);
+  border: 2px solid #ffb3c6;
+  color: #ffb3c6;
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+}
+.br-life-used.is-active {
+  animation: br-life-used-pop 1.6s ease-out forwards;
+}
+@keyframes br-life-used-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  22% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .br-life-used.is-active { animation: none; opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* [hidden] must win over the flex layout below (class specificity otherwise beats the UA default). */

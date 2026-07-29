@@ -433,6 +433,79 @@ Two fixes from Matt's playtest after the four phases above shipped, both about J
     failed, no suite needed changes) and `node validate-sw-assets.mjs` clean (no new files were
     added, so no `sw.js` bump was needed).
 
+- **Pickup HUD animations (this round's other ask - "+1 animation... an obvious animation for when
+  a life is used... a counter for these too").** `sim.js`'s `pickupEvents` queue (added alongside
+  the missed-landing fix above) is drained once per RENDERED frame in `ui.js`'s `frame()` - after
+  the fixed-timestep step loop, before render - via `splice(0)`, not peeked, so a frame containing
+  two collections (possible since several sim ticks can run per render frame) animates both instead
+  of dropping one.
+  - **`handlePickupEvents()`** dispatches each drained event: `'orb'` and `'life'` each spawn a
+    `spawnFloater()` "+1" anchored to the HUD element whose COUNTER just changed (the score cube
+    for orbs, the lives row for a life) - not the ball's screen position, which can be anywhere
+    laterally and would make the player track a floater drifting across a moving 3D scene instead
+    of reading "that number just changed". `'lifeSpent'` shows a distinct, more prominent centered
+    pill (`showLifeUsedBanner()`, "Extra life used!") rather than another floater - Matt asked for
+    something "obvious", and conflating a spend with a collect would undersell the more significant
+    event. Both respect `this.reducedMotion` (the same `prefers-reduced-motion` flag `render.js`'s
+    camera shake already reads): floaters skip the CSS animation and just hold-then-remove; the
+    banner's `@media (prefers-reduced-motion: reduce)` override does the same.
+  - **A new persistent orb counter** (`.br-hud-orbs`/`.br-orb-dot`, `orbsCollected`) sits below the
+    tier pips, same reserved-but-hidden convention as the lives row - `hidden` whenever
+    `sim.track.map.pickups` doesn't exist (Classic), always visible (even at 0) on any Orbital run.
+  - **The lives row is now hearts, not the old teal-diamond CSS shape** - `.br-life` is the
+    standard two-circle-plus-rotated-square CSS heart trick, colored `#ffb3c6` to match
+    `render.js`'s 3D heart mesh and `colors.life` (this round's earlier color/shape change).
+  - **State reset on restart**: `startRun()` resets `_lastShownOrbs`/`_lastShownLives` to `-1`,
+    clears `.br-floaters`' innerHTML, and clears the life-used banner's `is-active` class/pending
+    timeout - Play Again and back-to-setup-then-Play all reuse this same DOM (the module contract's
+    "same container, next game" rule), so leftover state from the previous run must not bleed into
+    the next one. The pending `_lifeUsedTimer` is also cleared in `destroy()` (module contract:
+    "destroy() must be leak-free").
+  - **Verified**: structural DOM checks (a fresh `init(container)` instance, pickup events pushed
+    directly onto `sim.pickupEvents` the same way `sim.js`'s `collectPickup`/`spendLifeIfAny` do,
+    one real `frame()` call) confirmed the orb counter increments, the life-count heart row grows,
+    and the life-used banner activates with the correct text - zero console errors. Playwright
+    screenshots confirmed the heart icons render as recognizable pink hearts (not a malformed
+    shape) and the life-used banner is legible and well-positioned. A real scripted Play-through
+    produced zero page/render errors (same pre-existing offline-Firebase/404 noise as elsewhere in
+    this file, unrelated to this change).
+
+- **Split's Hold phase can now place MULTIPLE obstacle rows in its chosen lane, not just one** -
+  necessary once this round's earlier Split retuning (`holdMinSegs`/`holdMaxSegs`: 4-7 to 10-18)
+  meant a single row no longer filled the phase, leaving most of the "real fork, parallel paths"
+  feeling empty on the obstacle-variety side.
+  - **`track.js`'s `buildLaneObstacleRow` (single-shot) is gone, replaced by
+    `laneObstacleGapCenter(loBW, hiBW, prevGapCenter, prevRowZ, z0)`**, which returns a gapCenter
+    or `null` for one candidate slot rather than building cubes directly - `emitSplit()`'s Hold
+    loop calls `fillObstacleCubes` itself once a slot is accepted, so the shared "cubes fill
+    [loBW,hiBW] minus a safe gap, anchored at the gap edge" core stays the single source both this
+    and the full-width `buildObstacleRow` use (unchanged - a pure refactor for that path).
+  - **Reuses the exact reachability primitives `placeObstacleRow`'s own retry loop uses**
+    (`minSpacingFor`/`estimateSpeedAt`/`lateralMaxAtSpeed`, landmine #2 - never hand-roll a
+    simpler version, the precise mistake behind the "46m wall" bug) but does **not** retry by
+    pushing extra segments the way `placeObstacleRow` does for the main obstacle scheduler: the
+    Hold phase's segment budget is fixed by `holdSegs` (rolled once, up front), so a slot whose
+    candidate row isn't reachable from the previous row in this same lane sequence is simply left
+    clean instead of triggering a retry-push that would grow the Split event unpredictably - a
+    bounded, simpler analogue of 3b.3's "drop rather than ship a violation".
+  - **Candidate slots** (`obstacleRowIndices`): `1`/`2`/`3` rows depending on `holdSegs` (`<8` /
+    `<14` / `>=14`), spread evenly across the Hold phase with a little jitter so different
+    generated Splits don't all place rows at identical fractional positions. This is only a
+    proposal of WHERE to try - `laneObstacleGapCenter` is the actual accept/reject per slot.
+  - **The other lane is still never touched, by construction** (landmine #7): `laneLo`/`laneHi`
+    are computed once from `obstacleLeftLane`, same as the old single-row version, and every row
+    this event places is confined to that one range - there is no code path that could place a
+    cube outside it.
+  - **Verified**: headless, 2658 generated Split events (3 difficulties × 30 seeds, `orbital`
+    only) - every obstacle-bearing segment's cubes confirmed on ONE side of the void only (0
+    violations), never inside the void band itself (0 violations), and both resulting lanes still
+    `>= minTrackWidth` (0 violations, the two-lane invariant the width-formula margin exists for).
+    34.0% of events carried the obstacle variety (config's `sideObstacleChance: 0.35`, sampling
+    noise accounts for the rest), averaging ~2.6 rows per obstacle-variety event (was exactly 1
+    before this change) with a maximum of 3, and zero slots were dropped for being unreachable
+    across the whole sweep. `node run-all-tests.mjs` all green (20 suites, 0 failed, no suite
+    needed changes) and `node validate-sw-assets.mjs` clean.
+
 ## Build status: complete
 
 All four phases of BALLRUNMAP2ORBITALSPEC.md have shipped (Phase 1 map plumbing, Phase 2 Split,
