@@ -228,6 +228,15 @@ const GAMES = [
     accent: '#0b3d2e',
     art: GAME_ART["pool"],
   },
+  {
+    id: 'poolv2',
+    title: { en: 'Poolv2', es: 'Poolv2' },
+    blurb: { en: 'A from-scratch rebuild of Pool: real cue-ball physics, rematch series, pinch-zoom.',
+      es: 'Una reconstrucción de Pool desde cero: física real de la bola blanca, revancha, pellizco para acercar.' },
+    module: '../poolv2/js/ui.js',
+    accent: '#ffce3a',
+    art: GAME_ART["poolv2"],
+  },
 ];
 
 class Hub {
