@@ -227,6 +227,7 @@ const GAMES = [
     module: '../pool/js/ui.js',
     accent: '#0b3d2e',
     art: GAME_ART["pool"],
+    devOnly: true,
   },
   {
     id: 'poolv2',
@@ -236,6 +237,7 @@ const GAMES = [
     module: '../poolv2/js/ui.js',
     accent: '#ffce3a',
     art: GAME_ART["poolv2"],
+    devOnly: true,
   },
 ];
 
