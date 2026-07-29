@@ -3451,6 +3451,8 @@ class PoolSide {
       awaitingRecovery: false, recoveryAttempts: 0, opp: null, gameNum: 0,
       pendingPlacement: null, lastRecoveryHandled: null, lastRecoveryApplied: null,
       lastRoomSnapshot: null, redeliverRequested: false,
+      // Rematch series (BUILD-SPEC.md §6 #7): poolv2/js/ui.js's mp.nextDealer/series/lastScoredGame.
+      nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
     };
     this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
     this._shooting = false; this._corrupted = false; this.moveCount = 0;
@@ -3462,7 +3464,15 @@ class PoolSide {
   isMySeat(seat) { return seat === this.localSeat(); }   // _isMySeat :116
   kill() { this.dead = true; this.room.offRoom(this._roomCb); }
 
-  hostStart() { this.room.startRound(1, null, 0); }   // the host-start branch of _mpRoomCallback :933
+  hostStart() { this.startNextGameSeries(); }   // the host-start branch of _mpRoomCallback :933, now routed through the series starter
+
+  async startNextGameSeries() {   // _mpStartNextGameSeries
+    if (this.role !== 'host') return;
+    const n = (this.mp.gameNum | 0) + 1;
+    const dealer = this.mp.nextDealer === 1 ? 1 : 0;
+    this.mp.nextDealer = dealer === 0 ? 1 : 0;
+    await this.room.startRound(n, null, dealer);
+  }
 
   async roomCallback(room) {   // _mpRoomCallback :906-941
     if (!room || this.dead) return;
@@ -3500,7 +3510,13 @@ class PoolSide {
     this.matchEnded = false;
   }
 
-  snapshot() { return { balls: this.game.balls, rules: { ...this.game, balls: undefined } }; }   // _mpSnapshot :954
+  snapshot() {   // _mpSnapshot :954, now carrying series bookkeeping (BUILD-SPEC §6 #7)
+    return {
+      balls: this.game.balls, rules: { ...this.game, balls: undefined },
+      gameNum: this.mp.gameNum, nextDealer: this.mp.nextDealer,
+      series: { wins: this.mp.series.wins.slice() }, lastScoredGame: this.mp.lastScoredGame,
+    };
+  }
 
   applyRecovery(recovery) {   // _mpApplyRecovery :956-966
     const snap = recovery.state;
@@ -3509,6 +3525,10 @@ class PoolSide {
     this.mp.maxKnownSeq = Math.max(this.mp.maxKnownSeq | 0, this.mp.appliedSeq);
     this.mp.awaitingRecovery = false;
     this.mp.recoveryAttempts = 0;
+    if (snap.gameNum != null) this.mp.gameNum = snap.gameNum | 0;
+    if (snap.nextDealer != null) this.mp.nextDealer = snap.nextDealer === 1 ? 1 : 0;
+    if (snap.series) this.mp.series = { wins: [snap.series.wins[0] | 0, snap.series.wins[1] | 0] };
+    if (snap.lastScoredGame != null) this.mp.lastScoredGame = snap.lastScoredGame | 0;
     this.recoveriesApplied++;
     this.room.clearRecovery().catch(() => {});
   }
@@ -3615,7 +3635,14 @@ class PoolSide {
     }
   }
 
-  onGameOver(outcome) { this.matchEnded = true; this.winner = outcome.winner; }
+  onGameOver(outcome) { this.matchEnded = true; this.winner = outcome.winner; this.afterGameEnd(outcome); }
+
+  afterGameEnd(outcome) {   // _mpAfterGameEnd :BUILD-SPEC §6 #7, idempotent per game number
+    const mp = this.mp;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (outcome.winner != null) mp.series.wins[outcome.winner] += 1;
+  }
 
   /** Settled: either a real win/loss, or the harness's scripted-shot cap was reached and
    *  nothing is mid-flight (no drain in progress, no shot in flight, no open recovery). */
@@ -3682,6 +3709,63 @@ console.log('\n--- P2: Poolv2 forced desync -> detected + recovered ---');
       pHash(host.game) === pHash(guest.game), `host=${pHash(host.game)} guest=${pHash(guest.game)}`);
     ok('P2: the guest kept its own network seat (1) through recovery', guest.localSeat() === 1, `seat=${guest.localSeat()}`);
   } catch (e) { fail++; console.log(`FAIL  P2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- P3: rematch series (BUILD-SPEC §6 #7) ------------------------------------------
+// Deliberately does NOT depend on random shots actually potting the 8-ball (P1/P2
+// already cover shot-by-shot hash agreement; this test is about the SERIES state
+// machine, not physics luck), so game-over is forced directly on both sides the same
+// way a real settled shot's rules.resolveShot would leave it: .over=true, .winner set.
+console.log('\n--- P3: Poolv2 rematch series (KNOWN-BUG PROBE: writeResult would kill the room) ---');
+{
+  const { room, host, guest } = makePoolv2({ seed: 21, cap: 8 });
+  try {
+    await until(() => host.game && guest.game, 5000, 'P3 game 1 start');
+    host.game.over = true; host.game.winner = 0;
+    guest.game.over = true; guest.game.winner = 0;
+    host.onGameOver({ winner: 0 });
+    guest.onGameOver({ winner: 0 });
+    ok('P3: game 1\'s win is tallied on both sides, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && host.mp.series.wins[0] === 1,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+    host.afterGameEnd({ winner: 0 });
+    ok('P3: afterGameEnd is idempotent (a duplicate call for the same game number does not double-count)',
+      host.mp.series.wins[0] === 1, `wins=${JSON.stringify(host.mp.series)}`);
+
+    // Host taps "Play again" -> starts game 2 of the series.
+    await host.startNextGameSeries();
+    await until(() => (host.mp.gameNum | 0) === 2 && (guest.mp.gameNum | 0) === 2, 5000, 'P3 game 2 start');
+    ok('P3 [KNOWN-BUG PROBE]: starting the next game did NOT end the room\n' +
+       '      (REGRESSION GUARD: the code this rematch series replaced called net.writeResult on\n' +
+       '      every game-over, which sets status:\'ended\' - the ONE thing that status means in\n' +
+       '      every other MP-capable game in this repo is "somebody abandoned the room". Had that\n' +
+       '      call survived, room.status would be \'ended\' here and no second game could ever\n' +
+       '      start in this room)',
+      room.status !== 'ended', `status=${room.status}`);
+    ok('P3: game 2 opened with the OTHER seat (the dealer alternated via mp.nextDealer)',
+      host.game.turnSeat === 1 && guest.game.turnSeat === 1,
+      `host.turnSeat=${host.game.turnSeat} guest.turnSeat=${guest.game.turnSeat}`);
+    ok('P3: the series tally from game 1 survived into game 2 (applyRoundRecord never touches it)',
+      host.mp.series.wins[0] === 1 && guest.mp.series.wins[0] === 1,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+
+    // Boundary restore: a guest resyncing mid-series must not lose the tally (same
+    // failure class as mancala/js/ui.js's M6, dots-boxes/js/ui.js's DB6).
+    const snap = host.snapshot();
+    const restored = new PoolSide('guest', room, poolScript(99), { shared: { cap: 8, shotsTaken: 0, placementsSent: 0, placementsApplied: 0 } });
+    restored.mp.gameNum = 0;
+    restored.applyRecovery({ seq: host.mp.appliedSeq, state: snap });
+    ok('P3 [KNOWN-BUG PROBE]: a recovery snapshot carries the series tally and round number, and\n' +
+       '      applying it does not reset the tally to {wins:[0,0]}\n' +
+       '      (REGRESSION GUARD: every mp object literal in _mpCreateRoom/_mpJoinRoom starts the\n' +
+       '      series fresh at {wins:[0,0]} - if _mpApplyRecovery ever stopped restoring\n' +
+       '      series/gameNum/nextDealer from the snapshot, a guest that needs to resync mid-series\n' +
+       '      would silently lose the tally the moment recovery fires)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(host.mp.series) && restored.mp.gameNum === host.mp.gameNum,
+      `restored=${JSON.stringify(restored.mp.series)} gameNum=${restored.mp.gameNum} host=${JSON.stringify(host.mp.series)} gameNum=${host.mp.gameNum}`);
+    restored.kill();
+  } catch (e) { fail++; console.log(`FAIL  P3 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
 }
 

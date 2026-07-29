@@ -119,6 +119,24 @@ gesture stream) are separate controls with their own hit areas, never competing 
 own pointer stream. Camera (`🎥` toggle, top-down vs. a purely cosmetic `perspective()`/`rotateX()`
 CSS tilt for "behind the cue") is visual only — the physics coordinate system never changes.
 
+**Pinch-zoom/pan (added 2026-07-28, BUILD-SPEC.md §6 #10).** Two fingers already meant "fine aim"
+(above), so a real tiebreak was required before this could be built — BUILD-SPEC.md §4 rule 6
+demanded it be written down first: **two fingers only ever mean fine aim once aiming has already
+committed with one finger down.** To make that distinction on the very first touch (a genuine
+two-finger pinch vs. one finger about to aim, with a second about to arrive), aim commit is held
+for a short window (`PINCH_WINDOW_MS`, 90ms) after the first touch; a second finger landing inside
+that window reads as a pinch instead, and the pending aim is discarded. A single finger that moves
+more than `PENDING_MOVE_COMMIT_PX` (6px) before the window elapses commits aim immediately, so
+ordinary single-finger aiming never feels delayed. The pinch gesture itself works regardless of
+whose turn it is (looking around the table is not gated on `_canShootNow()`), zooms `[1, 2.5]×`
+around the pinch midpoint, and pans by the midpoint's screen delta converted to world units at the
+current zoom (1:1 with the fingers). Panning is clamped so the table can't be pushed fully
+off-screen. The gesture ends the moment either finger lifts — a fresh single-finger touch is
+required to start aiming afterward, never a fallthrough from a pinch into aim/pull. Camera resets
+to `{zoom: 1, pan: {0,0}}` at the start of every new game (solo start, practice re-rack, and MP
+round record) so nobody starts a fresh rack still zoomed in on the last one. `_toCanvas`/`_toWorld`
+fold zoom/pan in centrally, so drawing, aiming and cue placement never special-case the camera.
+
 ## AI opponent (`js/ai.js`)
 
 Enumerates ghost-ball aims at every legal target ball × every pocket, rejects any aim whose
@@ -130,6 +148,19 @@ aiming/power error and how often the AI settles for a merely-good candidate inst
 one found (`topN`); **the physics itself never changes per tier**. Ball-in-hand placement for the
 AI (`_aiPlacementSpot` in `ui.js`) scans a small fixed grid for the first non-overlapping spot —
 deterministic, no attempt at "smart" safety placement.
+
+**Seeded and off-main-thread (added 2026-07-28, BUILD-SPEC.md §6 #8).** `chooseShot` now takes an
+injected `rng` (`js/rng.js`'s `mulberry32`, defaulting to `Math.random` for callers that don't
+care) instead of calling `Math.random()` itself, so a game's AI decisions are reproducible given a
+seed. `ui.js` owns one seeded generator per AI game (`_ensureAiRng`/`_aiSeed`, persisted in the
+solo autosave so a resumed game keeps the same seed), and draws one sub-seed per AI turn
+(`_nextAiSubSeed`) — that sub-seed, not the live generator object, is what crosses to
+`js/worker.js`, since a Worker can't receive a closure. The search itself (up to ~90 full
+`simulateToRest` lookaheads per decision) now runs in a module worker
+(`new Worker(new URL('./worker.js', import.meta.url), {type:'module'})`, same pattern as
+`connect-four/js/worker.js`) so it no longer stalls the table for the length of an AI turn;
+`_chooseShotOffThread` falls back to an inline (main-thread) call on any worker failure, same
+fallback discipline as Connect Four's `requestAIMove`.
 
 ## Multiplayer (2 human seats, `js/net.js`)
 
@@ -143,8 +174,23 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   always seat 0 the way some earlier games in this repo had to be rewritten to stop doing.
 - **A move is just the shot's parameters** (`{g, dir, power, offset, elevation}`), never a
   trajectory — physics.js's determinism is what makes this safe. The room's `round.dealer` field
-  is repurposed as "the seat that breaks" (one game per room; a rematch is a fresh room, no
-  in-room rematch series, unlike the reference games — kept out of scope for this first pass).
+  is repurposed as "the seat that breaks."
+- **In-room rematch series (added 2026-07-28, BUILD-SPEC.md §6 #7).** One room now hosts a whole
+  series, same vocabulary as Tic Tac Toe/Mancala/Filler/Dots and Boxes: `round.n` is the game
+  number (`mp.gameNum`), `round.dealer` alternates every game via host-only `mp.nextDealer`
+  (`_mpStartNextGameSeries`), and `mp.series.wins[seat]` is a seat-indexed tally (never
+  device-relative), bumped idempotently per game number by `_mpAfterGameEnd`/`mp.lastScoredGame`.
+  `net.js`'s `writeResult` is now deliberately NEVER called (it used to fire on every game-over) —
+  it sets `status:'ended'`, which would have killed the room a rematch needs to keep living in;
+  `status:'ended'` means exactly one thing in this room now, same as every other MP-capable game
+  here: somebody abandoned it (`_confirmQuit`/the end-dialog's "New game"). The end-of-game dialog
+  shows the running series (`_seriesLine`) and, for the host, a "Play again" button that starts the
+  next game in place; the guest sees a waiting message. Series bookkeeping (gameNum/nextDealer/
+  series/lastScoredGame) rides along in every MP autosave (`gamehub.poolv2.mp.v1`) and every
+  recovery snapshot (`_mpSnapshot`/`_mpApplyRecovery`), so neither a rejoin nor a resync loses the
+  tally mid-series — the same failure class Mancala's M6/Dots and Boxes' DB6 regression tests
+  guard against. Poolv2's rules.js never produces a draw, so unlike those games there is no draws
+  counter. Regression-tested by `test-mp-lockstep.mjs`'s P3 block (below).
 - **The shooter applies its own shot immediately** (no round-trip wait to see your own shot
   land — `_mpLocalShoot`), computes the resulting `hash.js` state hash, and appends
   `{move, hash}` to the room's move log. **The peer applies the identical shot params on
@@ -172,11 +218,13 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 - **Status: proven by a headless lockstep test suite as of 2026-07-28** —
   `test-mp-lockstep.mjs`'s P1 (a scripted rally against a `FakeRoom`, hash-verified every applied
   move, with a `[KNOWN-BUG PROBE]` asserting every ball-in-hand placement sent is also applied on
-  the peer — the regression guard for the #1 fix above) and P2 (forced hash mismatch → detection →
-  host-authoritative recovery → re-convergence), mirroring `poolv2/js/ui.js`'s real MP glue
-  method-for-method the same way the six reference games' blocks do. **Still not played on two
-  real devices** — that remains open (BUILD-SPEC.md §6 #5), flagged honestly rather than claimed
-  as verified.
+  the peer — the regression guard for the #1 fix above), P2 (forced hash mismatch → detection →
+  host-authoritative recovery → re-convergence), and P3 (the rematch series: a game-1 win tallies
+  on both sides, starting game 2 does NOT end the room, the dealer alternates, and a recovery
+  snapshot carries the series tally/round number through a mid-series resync), mirroring
+  `poolv2/js/ui.js`'s real MP glue method-for-method the same way the six reference games' blocks
+  do. **Still not played on two real devices** — that remains open (BUILD-SPEC.md §6 #5), flagged
+  honestly rather than claimed as verified.
 
 ## Settings and keys
 
@@ -191,16 +239,17 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 
 ## Known limitations (stated honestly, not hidden)
 
-- Camera is top-down plus a cosmetic tilt toggle; no real 3D perspective, no working pinch-zoom/
-  pan yet (the build guide's controls section asks for both — deferred, not silently dropped).
+- Camera is top-down plus a cosmetic tilt toggle, now with pinch-zoom/pan (2026-07-28); still no
+  real 3D perspective — the physics coordinate system itself never rotates or moves.
 - No shot clock, no jump shots (elevation currently only drives curve/masse, not an actual
-  vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above.
-- No in-room rematch series (one game per room; a rematch is a fresh room and code).
-- The AI is the only source of randomness in the game (`Math.random()` for aim/power jitter and
-  the `topN` pick) and runs synchronously on the main thread — unseeded (no AI replay) and can
-  briefly freeze a slow phone on a full rack.
+  vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above. These
+  are deliberate (BUILD-SPEC.md §6 #12): if wanted, they belong in a second named rulebook, not
+  edits to Bar Rules 8-Ball.
 - Corner pockets use the same plain capture circle as side pockets — no jaw geometry (a real
   corner pocket has a narrower, diagonally-cut mouth). A small, known fidelity gap, not modeled.
+- **Multiplayer has still never been played on two real devices** (BUILD-SPEC.md §6 #5) — the
+  headless lockstep suite (P1-P3 below) proves the protocol is self-consistent, not that it holds
+  up over a real network between two phones. Keep this stated honestly until it's actually true.
 
 ### Fixed 2026-07-28 (BUILD-SPEC.md §6 items, in that doc's own ranking)
 
@@ -228,6 +277,14 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   (`_startLoop()` cancels any prior RAF loop first, so a re-render mid-game can't leak a second
   animation loop against a detached canvas).
 
-Still open, ranked per BUILD-SPEC.md §6: #5 (two-real-device MP play), #7 (in-room rematch
-series), #8 (AI seeding/threading), #10 (pinch-zoom/pan), #12 (deliberately deferred rules
-features — a second named rulebook, not edits to Bar Rules 8-Ball).
+### Fixed 2026-07-28, second pass (BUILD-SPEC.md §6 items, remaining ranked gaps)
+
+- **#7 in-room rematch series** — see "Multiplayer" above; regression-tested by
+  `test-mp-lockstep.mjs`'s P3 block.
+- **#8 the AI's RNG is now seeded and its search runs off the main thread** — see "AI opponent"
+  above.
+- **#10 pinch-zoom and pan** — see "Controls" above.
+
+Still open, ranked per BUILD-SPEC.md §6: **#5 (two-real-device MP play — the one item here that
+genuinely cannot be verified without two physical phones; see "Known limitations")** and #12
+(deliberately deferred rules features — a second named rulebook, not edits to Bar Rules 8-Ball).

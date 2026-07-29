@@ -26,6 +26,7 @@ import { R, TABLE, strikeCueBall, tick, isMoving, pocketCenters } from './physic
 import { ballById } from './table.js';
 import * as rules from './rules.js';
 import { chooseShot } from './ai.js';
+import { mulberry32 } from './rng.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
@@ -38,6 +39,15 @@ const SETTINGS_KEY = 'gamehub.poolv2.v1';
 const SAVE_KEY = 'gamehub.poolv2.save.v1';
 const MP_SAVE_KEY = 'gamehub.poolv2.mp.v1';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Pinch-zoom/pan tiebreak (BUILD-SPEC.md §4 rule 6): two fingers meant "fine aim"
+// ONLY once aiming has already committed with one finger down. To tell "about to
+// pinch" from "about to aim" on the very first touch, aim commit is held for this
+// short window; a second finger landing before it elapses reads as a pinch instead.
+// A single finger that MOVES before the window elapses commits aim immediately
+// (below this threshold), so ordinary single-finger aiming never feels delayed.
+const PINCH_WINDOW_MS = 90;
+const PENDING_MOVE_COMMIT_PX = 6;
+const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 2.5;
 
 const BALL_COLOR = {
   1: '#F5D033', 2: '#1F5FA8', 3: '#D0342C', 4: '#6A3FA0', 5: '#E0752D', 6: '#1E7A46', 7: '#7B3F2E',
@@ -83,10 +93,15 @@ class PoolUI {
     this._offset = { a: 0, b: 0 };
     this._elevation = 0;
     this._camera = 'top';
+    this._camZoom = 1;
+    this._camPan = { x: 0, y: 0 };
     this._placingCue = false;
     this._foulMsg = null;
     this._boundResize = () => this._resizeCanvas();
     this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
+    this._aiRng = null;
+    this._aiSeed = null;
+    this._setupWorker();
     this._tryAutoResume();
     this.render();
     // Live language re-render (root CLAUDE.md item 9's minimum bar is render-time-only;
@@ -108,6 +123,77 @@ class PoolUI {
     if (save.difficulty) this.settings.difficulty = save.difficulty;
     this.game = save.game;
     this.view = 'game';
+    if (this.mode === 'ai') this._ensureAiRng(save.aiSeed);
+  }
+
+  // ---- AI RNG (BUILD-SPEC.md §6 #8: seed the RNG so AI games are reproducible) ---
+  /** (Re)seed this game's AI generator. `seed` restores a specific seed (resume);
+   *  omitted, a fresh one is drawn. One generator lives for the whole game so its
+   *  sequence of draws (one _nextAiSubSeed() per AI turn) is itself reproducible
+   *  given the top-level seed, worker or not. */
+  _ensureAiRng(seed) {
+    this._aiSeed = (seed != null ? seed : ((Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0)) >>> 0;
+    this._aiRng = mulberry32(this._aiSeed);
+  }
+
+  /** One sub-seed per AI turn, drawn from this game's own seeded generator so the
+   *  worker (which gets a fresh mulberry32(seed) per request, not the live
+   *  generator object — Workers can't receive closures) reproduces the exact same
+   *  draw a main-thread call would have made at that point in the game. */
+  _nextAiSubSeed() {
+    if (!this._aiRng) this._ensureAiRng();
+    return Math.floor(this._aiRng() * 0xffffffff) >>> 0;
+  }
+
+  // ---- AI worker (BUILD-SPEC.md §6 #8: move the search off the main thread) ------
+  _setupWorker() {
+    try {
+      this._worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+      this._workerCallbacks = new Map();
+      this._workerReqId = 0;
+      this._worker.onmessage = (e) => {
+        const cb = this._workerCallbacks.get(e.data.id);
+        if (!cb) return; // stale/unknown
+        this._workerCallbacks.delete(e.data.id);
+        if (e.data.error) cb.reject(new Error(e.data.error));
+        else cb.resolve(e.data);
+      };
+      this._worker.onerror = () => {
+        for (const cb of this._workerCallbacks.values()) cb.reject(new Error('worker error'));
+        this._workerCallbacks.clear();
+        this._disableWorker();
+      };
+    } catch {
+      this._worker = null; // workers unavailable -> main-thread fallback
+    }
+  }
+
+  _disableWorker() {
+    if (this._worker) { this._worker.terminate(); this._worker = null; }
+  }
+
+  _postToWorker(params) {
+    return new Promise((resolve, reject) => {
+      this._workerCallbacks.set(params.id, { resolve, reject });
+      this._worker.postMessage(params);
+    });
+  }
+
+  /** Run ai.js's chooseShot off the main thread when a worker is available, same
+   *  fallback discipline as connect-four/js/ui.js's requestAIMove: try the worker,
+   *  disable it and fall through to an inline call on any failure. The seed always
+   *  comes from THIS game's seeded generator (_nextAiSubSeed), so the AI's
+   *  decisions stay reproducible/replayable given the game's aiSeed whether or not
+   *  the worker path is actually taken. */
+  async _chooseShotOffThread(state, seat, difficulty) {
+    const seed = this._nextAiSubSeed();
+    if (this._worker) {
+      try {
+        const res = await this._postToWorker({ id: ++this._workerReqId, state, seat, difficulty, seed });
+        return res.shot;
+      } catch { this._disableWorker(); }
+    }
+    return chooseShot(state, seat, difficulty, mulberry32(seed));
   }
 
   // ---- seat model -------------------------------------------------------
@@ -132,6 +218,7 @@ class PoolUI {
     document.removeEventListener('visibilitychange', this._boundVis);
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
     net.disconnect();
+    this._disableWorker();
     this.root.innerHTML = '';
   }
 
@@ -240,12 +327,14 @@ class PoolUI {
   _startLocalGame() {
     this.mp = null;
     this.game = rules.newGame();
+    if (this.mode === 'ai') this._ensureAiRng();
     this._afterNewGame();
   }
 
   _afterNewGame() {
     this.view = 'game';
     this._foulMsg = null;
+    this._resetCamera();
     this.render();
   }
 
@@ -253,7 +342,7 @@ class PoolUI {
   _saveProgress() {
     if (this.mode === 'online') return;
     if (!this.game || this.game.over) { clearKey(SAVE_KEY); return; }
-    writeJSON(SAVE_KEY, { mode: this.mode, difficulty: this.settings.difficulty, game: this.game });
+    writeJSON(SAVE_KEY, { mode: this.mode, difficulty: this.settings.difficulty, game: this.game, aiSeed: this._aiSeed });
   }
 
   // ---- canvas + camera ------------------------------------------------
@@ -299,7 +388,7 @@ class PoolUI {
     this.el.querySelector('[data-role="quit"]').addEventListener('click', () => this._confirmQuit());
     this.el.querySelector('[data-role="camera"]').addEventListener('click', () => this._toggleCamera());
     const rerack = this.el.querySelector('[data-role="rerack"]');
-    if (rerack) rerack.addEventListener('click', () => { this.game = rules.newGame(); this._saveProgress(); this._drawFrame(); });
+    if (rerack) rerack.addEventListener('click', () => { this.game = rules.newGame(); this._resetCamera(); this._saveProgress(); this._drawFrame(); });
     this.el.querySelector('[data-role="elev"]').addEventListener('input', (e) => {
       this._elevation = (Number(e.target.value) || 0) * Math.PI / 180;
     });
@@ -334,8 +423,18 @@ class PoolUI {
     this._drawFrame();
   }
 
-  _toCanvas(x, y) { return { cx: this._cw / 2 + x * this._scale, cy: this._ch / 2 + y * this._scale }; }
-  _toWorld(cx, cy) { return { x: (cx - this._cw / 2) / this._scale, y: (cy - this._ch / 2) / this._scale }; }
+  // Pinch-zoom/pan (BUILD-SPEC.md §6 #10): _camZoom/_camPan fold in here, so every
+  // existing caller of _toCanvas/_toWorld (drawing, aim, placement) automatically
+  // respects the current view without its own zoom-awareness.
+  _toCanvas(x, y) {
+    const z = this._camZoom || 1;
+    return { cx: this._cw / 2 + (x - this._camPan.x) * this._scale * z, cy: this._ch / 2 + (y - this._camPan.y) * this._scale * z };
+  }
+  _toWorld(cx, cy) {
+    const z = this._camZoom || 1;
+    return { x: (cx - this._cw / 2) / (this._scale * z) + this._camPan.x, y: (cy - this._ch / 2) / (this._scale * z) + this._camPan.y };
+  }
+  _resetCamera() { this._camZoom = 1; this._camPan = { x: 0, y: 0 }; }
 
   // ---- main loop --------------------------------------------------------
   _startLoop() {
@@ -408,10 +507,11 @@ class PoolUI {
     ctx.lineWidth = 14;
     ctx.strokeRect(tl.cx, tl.cy, br.cx - tl.cx, br.cy - tl.cy);
     ctx.fillStyle = '#111';
+    const z = this._camZoom || 1;
     for (const p of pocketCenters()) {
       const c = this._toCanvas(p.x, p.y);
       ctx.beginPath();
-      ctx.arc(c.cx, c.cy, this._scale * R * 1.9, 0, Math.PI * 2);
+      ctx.arc(c.cx, c.cy, this._scale * z * R * 1.9, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -426,10 +526,11 @@ class PoolUI {
 
   _drawBalls(ctx) {
     const legal = this._legalNumbersForLocal();
+    const z = this._camZoom || 1;
     for (const b of this.game.balls) {
       if (b.pocketed) continue;
       const c = this._toCanvas(b.x, b.y);
-      const rad = this._scale * R;
+      const rad = this._scale * z * R;
       const isLegal = legal && legal.kinds && (legal.kinds.indexOf(b.kind) >= 0 || (b.kind === 'eight' && legal.allowEight));
       if (isLegal) {
         ctx.beginPath();
@@ -495,13 +596,14 @@ class PoolUI {
     ctx.stroke();
     ctx.restore();
     if (this._pulling) {
-      const pull = this._power / 4.2 * this._scale * 0.35;
+      const z = this._camZoom || 1;
+      const pull = this._power / 4.2 * this._scale * z * 0.35;
       ctx.save();
       ctx.strokeStyle = '#ffce3a';
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(c.cx - Math.cos(this._aimAngle) * (this._scale * R + 6), c.cy - Math.sin(this._aimAngle) * (this._scale * R + 6));
-      ctx.lineTo(c.cx - Math.cos(this._aimAngle) * (this._scale * R + 6 + pull), c.cy - Math.sin(this._aimAngle) * (this._scale * R + 6 + pull));
+      ctx.moveTo(c.cx - Math.cos(this._aimAngle) * (this._scale * z * R + 6), c.cy - Math.sin(this._aimAngle) * (this._scale * z * R + 6));
+      ctx.lineTo(c.cx - Math.cos(this._aimAngle) * (this._scale * z * R + 6 + pull), c.cy - Math.sin(this._aimAngle) * (this._scale * z * R + 6 + pull));
       ctx.stroke();
       ctx.restore();
     }
@@ -601,8 +703,73 @@ class PoolUI {
     let fineMode = false;
     let lastAngle = 0;
     let pullStart = null;
+    // Pending-aim state: the brief window after the FIRST finger touches down,
+    // during which a second finger still reads as "meant to pinch" rather than
+    // "meant to fine-aim" (see PINCH_WINDOW_MS's doc comment). primaryId stays
+    // null the whole time we're pending -- that's what lets a second finger
+    // arriving here fall straight into the pinch branch below.
+    let pendingId = null, pendingTimer = null, pendingW = null, pendingCX = 0, pendingCY = 0;
+    // Pinch/pan state, live only while exactly the two pointers below are down.
+    let pinch = null; // { id1, id2, startDist, startMidCX, startMidCY, startZoom, startPanX, startPanY }
 
     const angleTo = (wx, wy, cue) => Math.atan2(cue.y - wy, cue.x - wx);
+    const clientToWorld = (e) => {
+      const rect = c.getBoundingClientRect();
+      return this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
+    };
+
+    const commitAim = (pointerId, w) => {
+      const cue = ballById(this.game.balls, 'cue');
+      primaryId = pointerId;
+      this._aimAngle = angleTo(w.x, w.y, cue);
+      lastAngle = this._aimAngle;
+      this._aiming = true;
+      this._pulling = false;
+      this._power = 0;
+      pullStart = null;
+      this._drawFrame();
+    };
+    const clearPending = () => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = null; pendingId = null; pendingW = null;
+    };
+
+    const dist = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+    const mid = (p1, p2) => ({ x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 });
+    const clampPan = () => {
+      const z = this._camZoom;
+      const maxX = Math.max(0, (TABLE.w / 2) * (1 - 1 / z) + TABLE.w * 0.15);
+      const maxY = Math.max(0, (TABLE.h / 2) * (1 - 1 / z) + TABLE.h * 0.15);
+      this._camPan.x = Math.max(-maxX, Math.min(maxX, this._camPan.x));
+      this._camPan.y = Math.max(-maxY, Math.min(maxY, this._camPan.y));
+    };
+    const startPinch = () => {
+      const pts = [...this._pointers.values()];
+      if (pts.length < 2) return;
+      const [p1, p2] = pts;
+      const rect = c.getBoundingClientRect();
+      const m = mid(p1, p2);
+      pinch = {
+        id1: p1.pointerId, id2: p2.pointerId,
+        startDist: dist(p1, p2) || 1,
+        startMidCX: m.x - rect.left, startMidCY: m.y - rect.top,
+        startZoom: this._camZoom, startPanX: this._camPan.x, startPanY: this._camPan.y,
+      };
+    };
+    const updatePinch = () => {
+      const p1 = this._pointers.get(pinch.id1), p2 = this._pointers.get(pinch.id2);
+      if (!p1 || !p2) return;
+      const rect = c.getBoundingClientRect();
+      const zoom = Math.max(CAM_ZOOM_MIN, Math.min(CAM_ZOOM_MAX, pinch.startZoom * ((dist(p1, p2) || 1) / pinch.startDist)));
+      const m = mid(p1, p2);
+      // Pan by the midpoint's screen delta, converted to world units at the
+      // CURRENT zoom so panning tracks the fingers 1:1 regardless of zoom level.
+      const dCX = (m.x - rect.left) - pinch.startMidCX, dCY = (m.y - rect.top) - pinch.startMidCY;
+      this._camZoom = zoom;
+      this._camPan = { x: pinch.startPanX - dCX / (this._scale * zoom), y: pinch.startPanY - dCY / (this._scale * zoom) };
+      clampPan();
+      this._drawFrame();
+    };
 
     c.addEventListener('pointerdown', (e) => {
       if (!this.game || this.game.over) return;
@@ -611,18 +778,24 @@ class PoolUI {
         if (primaryId === null) primaryId = e.pointerId;
         return;
       }
+      if (pinch) return;
+      if (this._pointers.size === 2 && primaryId === null) {
+        // Two fingers with no committed aim yet: always the camera gesture,
+        // whether or not it's my turn (BUILD-SPEC.md §4 rule 6's tiebreak).
+        clearPending();
+        startPinch();
+        return;
+      }
       if (!this._canShootNow()) return;
       if (primaryId === null) {
-        primaryId = e.pointerId;
-        const cue = ballById(this.game.balls, 'cue');
-        const rect = c.getBoundingClientRect();
-        const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
-        this._aimAngle = angleTo(w.x, w.y, cue);
-        lastAngle = this._aimAngle;
-        this._aiming = true;
-        this._pulling = false;
-        this._power = 0;
-        pullStart = null;
+        pendingId = e.pointerId;
+        pendingW = clientToWorld(e);
+        pendingCX = e.clientX; pendingCY = e.clientY;
+        pendingTimer = setTimeout(() => {
+          pendingTimer = null;
+          if (!this._pointers.has(pendingId)) return; // lifted before it fired
+          commitAim(pendingId, pendingW);
+        }, PINCH_WINDOW_MS);
       } else if (this._pointers.size === 2) {
         fineMode = true;
       }
@@ -631,11 +804,21 @@ class PoolUI {
     c.addEventListener('pointermove', (e) => {
       if (!this._pointers.has(e.pointerId)) return;
       this._pointers.set(e.pointerId, e);
+      if (pinch) { updatePinch(); return; }
       if (this._placingCue) {
         if (e.pointerId !== primaryId) return;
-        const rect = c.getBoundingClientRect();
-        const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const w = clientToWorld(e);
         this._tryPlaceCuePreview(w.x, w.y);
+        return;
+      }
+      if (pendingTimer && e.pointerId === pendingId) {
+        // A single finger that moves before the pinch window elapses was never
+        // going to pinch (its partner never showed up) -- commit aim right away
+        // so ordinary aiming doesn't feel delayed.
+        if (Math.hypot(e.clientX - pendingCX, e.clientY - pendingCY) > PENDING_MOVE_COMMIT_PX) {
+          clearTimeout(pendingTimer); pendingTimer = null;
+          commitAim(pendingId, clientToWorld(e));
+        }
         return;
       }
       if (e.pointerId !== primaryId || !this._aiming) return;
@@ -656,7 +839,8 @@ class PoolUI {
       } else {
         // Power pull: distance from pull-start along the aim axis; large sideways
         // deviation cancels the shot instead of firing it (build guide's rule).
-        const cuec = this._toCanvas(cue.x, cue.y);
+        // Deliberately NOT zoom-scaled: the same physical finger swipe should
+        // always mean the same power, regardless of the current camera zoom.
         const dx = e.clientX - rect.left - pullStart.cx, dy = e.clientY - rect.top - pullStart.cy;
         const along = dx * -Math.cos(this._aimAngle) + dy * -Math.sin(this._aimAngle);
         const perp = Math.abs(dx * -Math.sin(this._aimAngle) - dy * Math.cos(this._aimAngle));
@@ -668,10 +852,16 @@ class PoolUI {
     const finish = (e) => {
       if (!this._pointers.has(e.pointerId)) return;
       this._pointers.delete(e.pointerId);
+      if (pinch) {
+        // Ends the moment either finger lifts; a fresh single-finger touch is
+        // required to start aiming afterward (no fallthrough into aim/pull).
+        if (e.pointerId === pinch.id1 || e.pointerId === pinch.id2) pinch = null;
+        return;
+      }
+      if (pendingTimer && e.pointerId === pendingId) { clearPending(); return; }
       if (this._placingCue) {
         if (e.pointerId === primaryId) {
-          const rect = c.getBoundingClientRect();
-          const w = this._toWorld(e.clientX - rect.left, e.clientY - rect.top);
+          const w = clientToWorld(e);
           this._commitCuePlacement(w.x, w.y);
           primaryId = null;
         }
@@ -771,8 +961,12 @@ class PoolUI {
     } else if (this.mp) {
       recordResult('poolv2', 'mp', iWon);
       if (this.mp.opp) { try { recordHeadToHead('poolv2', this.mp.opp, iWon); } catch { /* never block the result */ } }
-      if (this.mp.role === 'host') net.writeResult(this.mp.code, { winner: this.game.winner }).catch(() => {});
-      clearKey(MP_SAVE_KEY);
+      // net.js's writeResult is deliberately NOT called here: it sets status:'ended',
+      // which would kill the room this rematch series is hosted in. status:'ended'
+      // means exactly one thing in this room now -- somebody left (see _confirmQuit /
+      // the end-dialog's "new game" handler below) -- same convention as every other
+      // MP-capable game in this repo (BUILD-SPEC.md §6 #7).
+      this._mpAfterGameEnd();
     }
     clearKey(SAVE_KEY);
     this._showEndDialog(iWon);
@@ -781,19 +975,36 @@ class PoolUI {
   _showEndDialog(iWon) {
     const dlg = document.createElement('div');
     dlg.className = 'p2-dialog-overlay';
+    const isHost = !!(this.mp && this.mp.role === 'host');
+    const seriesLine = this.mp ? `<p class="p2-series">${this._seriesLine()}</p>` : '';
+    const actions = !this.mp
+      ? `<button type="button" class="p2-btn p2-btn-primary" data-role="again">${t('play_again')}</button>
+         <button type="button" class="p2-btn" data-role="new">${t('new_game')}</button>`
+      : isHost
+        ? `<button type="button" class="p2-btn p2-btn-primary" data-role="mp-next">${t('play_again')}</button>
+           <button type="button" class="p2-btn" data-role="new">${t('new_game')}</button>`
+        : `<p class="p2-mp-wait">${t('mp_waiting_rematch', { opp: this._oppName() })}</p>
+           <button type="button" class="p2-btn" data-role="new">${t('new_game')}</button>`;
     dlg.innerHTML = `
       <div class="p2-dialog">
         <button type="button" class="p2-x" data-role="close" aria-label="${t('cancel')}">✕</button>
         <h2>${iWon ? t('you_win') : t('opp_wins', { opp: this._oppName() })}</h2>
+        ${seriesLine}
         <div class="p2-actions">
-          ${this.mp ? '' : `<button type="button" class="p2-btn p2-btn-primary" data-role="again">${t('play_again')}</button>`}
-          <button type="button" class="p2-btn" data-role="new">${t('new_game')}</button>
+          ${actions}
         </div>
       </div>`;
     dlg.querySelector('[data-role="close"]').addEventListener('click', () => dlg.remove());
     const again = dlg.querySelector('[data-role="again"]');
     if (again) again.addEventListener('click', () => { dlg.remove(); this._startLocalGame(); });
-    dlg.querySelector('[data-role="new"]').addEventListener('click', () => { dlg.remove(); this.view = 'setup'; this.mp = null; this.render(); });
+    const mpNext = dlg.querySelector('[data-role="mp-next"]');
+    if (mpNext) mpNext.addEventListener('click', () => { dlg.remove(); this._mpStartNextGameSeries(); });
+    dlg.querySelector('[data-role="new"]').addEventListener('click', () => {
+      dlg.remove();
+      if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
+      clearKey(MP_SAVE_KEY);
+      this.mp = null; this.view = 'setup'; this.render();
+    });
     this.el.appendChild(dlg);
   }
 
@@ -823,8 +1034,9 @@ class PoolUI {
       const spot = this._aiPlacementSpot();
       this.game = rules.placeCueBall(this.game, spot.x, spot.y);
     }
-    const shot = chooseShot(this.game, seat, this.settings.difficulty);
+    const shot = await this._chooseShotOffThread(this.game, seat, this.settings.difficulty);
     this._aiThinking = false;
+    if (this._dead || !this.game || this.game.over || this.game.turnSeat !== seat) return;
     if (!shot) return;
     const events = await this._runShot(shot.dir, shot.power, shot.offset, shot.elevation);
     this._settleLocal(events, seat);
@@ -856,6 +1068,12 @@ class PoolUI {
       role: 'host', code: res.code, localSeat: 0, opp: null,
       appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
       awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
+      // Rematch series (BUILD-SPEC.md §6 #7, ported from Mancala): gameNum tracks
+      // which round.n this device is on; nextDealer alternates who breaks each game
+      // (host-only, flipped in _mpStartNextGameSeries); series is the seat-indexed
+      // win tally, NEVER device-relative; lastScoredGame guards _mpAfterGameEnd so a
+      // re-render/recovery can never double-count the same game's result.
+      gameNum: 0, nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
     };
     net.heartbeat(res.code, 'host');
     if (status) status.textContent = t('share_code', { code: res.code });
@@ -876,6 +1094,7 @@ class PoolUI {
       role: 'guest', code: code.toUpperCase(), localSeat: 1, opp: null,
       appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
       awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
+      gameNum: 0, nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
     };
     net.heartbeat(this.mp.code, 'guest');
     await net.onRoom(this.mp.code, (room) => this._mpRoomCallback(room));
@@ -894,6 +1113,12 @@ class PoolUI {
         role: save.role, code: save.code, localSeat: save.role === 'host' ? 0 : 1, opp: null,
         appliedSeq: save.seq | 0, movesById: new Map(), maxKnownSeq: save.seq | 0, delivering: false,
         awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
+        // Series tally/round bookkeeping is carried through UNTOUCHED from the save,
+        // never reset here (see js/CLAUDE.md's rematch-series invariant: a restore
+        // that reset this to {wins:[0,0]} would silently erase the series the
+        // moment either device backgrounds and restores mid-series).
+        gameNum: save.gameNum | 0, nextDealer: save.nextDealer === 1 ? 1 : 0,
+        series: this._mpNormalizeSeries(save.series), lastScoredGame: save.lastScoredGame | 0,
       };
       this.game = save.game;
       net.heartbeat(this.mp.code, this.mp.role);
@@ -932,10 +1157,12 @@ class PoolUI {
     mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
     if (this.view === 'game') this._paintHud();
     this._mpDrain();
-    // Host starts round 1 the first time both seats are present.
+    // Host starts round 1 the first time both seats are present, via the same path
+    // a rematch uses (mp.nextDealer starts at 0, so game 1 opens with the host, same
+    // as the single-game behavior this replaces).
     if (mp.role === 'host' && !room.round && room.guest && !mp.starting) {
       mp.starting = true;
-      await net.startRound(mp.code, 1, null, 0);
+      this._mpStartNextGameSeries();
     }
   }
 
@@ -947,11 +1174,75 @@ class PoolUI {
     mp.maxKnownSeq = 0;
     this.game = rules.newGame();
     this.game.turnSeat = round.dealer === 1 ? 1 : 0;
+    this._foulMsg = null;
+    this._resetCamera();
     this.view = 'game';
     this.render();
   }
 
-  _mpSnapshot() { return { balls: this.game.balls, rules: { ...this.game, balls: undefined } }; }
+  /** Host only: publish the next game of the series (round.n + 1) and start it
+   *  locally. Sides stay fixed for the whole room (host is always seat 0, guest
+   *  always seat 1); only who BREAKS alternates, carried across games (and across a
+   *  host restore, via _mpSnapshot/_mpSaveProgress) by mp.nextDealer. BUILD-SPEC.md
+   *  §6 #7, ported from mancala/js/ui.js's _mpStartNextGame. */
+  async _mpStartNextGameSeries() {
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this._dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const dealer = mp.nextDealer === 1 ? 1 : 0;
+    mp.nextDealer = dealer === 0 ? 1 : 0;
+    // Publish BEFORE applying locally: startRound clears the room's move log, so a
+    // very fast local action could otherwise be written and then wiped by our own
+    // publish (same reasoning as tic-tac-toe/mancala's _mpStartNextGame).
+    try { await net.startRound(mp.code, n, null, dealer); }
+    catch { /* connection issue surfaces via the room callback/status, same as elsewhere */ }
+    if (this._dead || !this.mp) return;
+    // The room update carrying our own record may have raced us here and already
+    // applied it; never rebuild a game that has begun.
+    if ((this.mp.gameNum | 0) < n) this._mpApplyRoundRecord({ n, dealer }, null);
+  }
+
+  /** Series bookkeeping at the end of one game, MP only. Idempotent per game number
+   *  (lastScoredGame): _onGameOver can run more than once for the same game across a
+   *  recovery/re-render. Poolv2's rules.js never produces a draw (the 8-ball always
+   *  has a winner), so unlike Mancala/Tic Tac Toe there is no draws counter. */
+  _mpAfterGameEnd() {
+    const mp = this.mp;
+    if (!mp || !this.game || !this.game.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (this.game.winner != null) mp.series.wins[this.game.winner] += 1;
+    this._mpSaveProgress();
+  }
+
+  /** The running series tally, MP only. Read by SEAT so each device sees its own
+   *  record first -- the stored counters are seat-indexed, never device-relative. */
+  _seriesLine() {
+    const mp = this.mp;
+    if (!mp) return '';
+    return t('mp_series', {
+      me: mp.series.wins[this._localSeat()] | 0,
+      them: mp.series.wins[this._oppSeat()] | 0,
+      opp: this._oppName(),
+    });
+  }
+
+  /** Normalize a transmitted/restored series tally to the shape mp.series always
+   *  holds -- same defensive shape as the reference games' _mpNormalizeSeries. */
+  _mpNormalizeSeries(s) {
+    const w = s && Array.isArray(s.wins) ? s.wins : [];
+    return { wins: [w[0] | 0, w[1] | 0] };
+  }
+
+  _mpSnapshot() {
+    return {
+      balls: this.game.balls, rules: { ...this.game, balls: undefined },
+      // Series bookkeeping rides along with every recovery snapshot so a guest that
+      // resyncs mid-series never loses its place in the rematch (BUILD-SPEC §6 #7).
+      gameNum: this.mp.gameNum, nextDealer: this.mp.nextDealer,
+      series: { wins: this.mp.series.wins.slice() }, lastScoredGame: this.mp.lastScoredGame,
+    };
+  }
 
   _mpApplyRecovery(recovery) {
     const snap = recovery.state;
@@ -960,8 +1251,13 @@ class PoolUI {
     this.mp.maxKnownSeq = Math.max(this.mp.maxKnownSeq | 0, this.mp.appliedSeq);
     this.mp.awaitingRecovery = false;
     this.mp.recoveryAttempts = 0;
+    if (snap.gameNum != null) this.mp.gameNum = snap.gameNum | 0;
+    if (snap.nextDealer != null) this.mp.nextDealer = snap.nextDealer === 1 ? 1 : 0;
+    if (snap.series) this.mp.series = this._mpNormalizeSeries(snap.series);
+    if (snap.lastScoredGame != null) this.mp.lastScoredGame = snap.lastScoredGame | 0;
     this.render();
     net.clearRecovery(this.mp.code).catch(() => {});
+    if (this.game.over) this._onGameOver(this.game.turnSeat, null);
   }
 
   async _mpLocalShoot(dir, power, offset, elevation) {
@@ -1037,7 +1333,11 @@ class PoolUI {
 
   _mpSaveProgress() {
     if (!this.mp) return;
-    writeJSON(MP_SAVE_KEY, { role: this.mp.role, code: this.mp.code, seq: this.mp.appliedSeq, game: this.game });
+    writeJSON(MP_SAVE_KEY, {
+      role: this.mp.role, code: this.mp.code, seq: this.mp.appliedSeq, game: this.game,
+      gameNum: this.mp.gameNum, nextDealer: this.mp.nextDealer,
+      series: { wins: this.mp.series.wins.slice() }, lastScoredGame: this.mp.lastScoredGame,
+    });
   }
 }
 

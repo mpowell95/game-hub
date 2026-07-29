@@ -65,6 +65,8 @@ export const STRINGS = {
     breaking: 'Break',
     solid_shape_aria: 'Solid ball',
     stripe_shape_aria: 'Striped ball',
+    mp_series: 'You {me} · {opp} {them}',
+    mp_waiting_rematch: 'Waiting for {opp} to start another game',
   },
   es: {
     title: 'Poolv2',
@@ -129,6 +131,8 @@ export const STRINGS = {
     breaking: 'Rompiendo',
     solid_shape_aria: 'Bola lisa',
     stripe_shape_aria: 'Bola rayada',
+    mp_series: 'Tú {me} · {opp} {them}',
+    mp_waiting_rematch: 'Esperando a que {opp} empiece otra partida',
   },
 };
 

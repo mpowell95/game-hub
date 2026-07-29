@@ -66,6 +66,11 @@ function powerFor(cueDist, potDist) {
   return Math.max(0.9, Math.min(4.2, 0.9 + total * 1.6));
 }
 
+/** Default RNG when a caller doesn't supply one (kept so this file stays a drop-in
+ *  for direct callers/tests that don't care about seeding). ui.js always passes a
+ *  seeded generator from rng.js so a real game's AI decisions are reproducible. */
+const defaultRng = Math.random;
+
 function simulateCandidate(state, seat, cand, jitter) {
   const balls = cloneBalls(state.balls);
   const cue = ballById(balls, 'cue');
@@ -90,10 +95,13 @@ function simulateCandidate(state, seat, cand, jitter) {
 }
 
 /** Choose a shot for `seat` given `state` (rules.js shape) at `difficulty`
- *  ('beginner'|'intermediate'|'pro'). Returns { dir:{x,y}, power, offset:{a,b},
- *  elevation } ready to pass straight into physics.js's strikeCueBall, or null if
- *  no legal target exists (shouldn't happen with balls left on the table). */
-export function chooseShot(state, seat, difficulty) {
+ *  ('beginner'|'intermediate'|'pro'). `rng` is a `() => [0,1)` generator (rng.js's
+ *  mulberry32, seeded by the caller); defaults to Math.random for callers that don't
+ *  care about reproducibility. Returns { dir:{x,y}, power, offset:{a,b}, elevation }
+ *  ready to pass straight into physics.js's strikeCueBall, or null if no legal
+ *  target exists (shouldn't happen with balls left on the table). */
+export function chooseShot(state, seat, difficulty, rng) {
+  const rnd = rng || defaultRng;
   const tier = TIERS[difficulty] || TIERS.intermediate;
   const cands = candidateShots(state, seat);
   if (!cands.length) {
@@ -108,11 +116,11 @@ export function chooseShot(state, seat, difficulty) {
     return { dir, power: 1.1, offset: { a: 0, b: 0 }, elevation: 0 };
   }
   const scored = cands.map((c) => {
-    const jitter = { aim: (Math.random() * 2 - 1) * tier.aimErr, power: (Math.random() * 2 - 1) * tier.powerErr };
+    const jitter = { aim: (rnd() * 2 - 1) * tier.aimErr, power: (rnd() * 2 - 1) * tier.powerErr };
     const r = simulateCandidate(state, seat, c, jitter);
     return { ...r, targetId: c.targetId };
   });
   scored.sort((a, b) => b.score - a.score);
-  const pick = scored[Math.floor(Math.random() * Math.min(tier.topN, scored.length))];
+  const pick = scored[Math.floor(rnd() * Math.min(tier.topN, scored.length))];
   return { dir: pick.dir, power: pick.power, offset: { a: 0, b: 0.15 }, elevation: 0 };
 }

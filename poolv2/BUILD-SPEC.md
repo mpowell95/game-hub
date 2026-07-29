@@ -624,10 +624,12 @@ Ranked by what to fix first. Each is a task, not a caveat. Items 1-4 and 6-9 wer
 the code for this document; the rest come from `poolv2/CLAUDE.md`'s own "Known limitations" and
 multiplayer "Status" note.
 
-> **Status (2026-07-28): items 1, 2, 3, 4, 6, 9, 11 and 13 are FIXED** — see each item's own
-> `[FIXED 2026-07-28]` note below for what changed, and `poolv2/CLAUDE.md`'s "Multiplayer" and
-> "Known limitations" sections (which this doc's own rule says to correct alongside this one) for
-> the corrected claims. Still open: 5, 7, 8, 10, 12.
+> **Status (2026-07-28): items 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 and 13 are FIXED** — see each item's
+> own `[FIXED 2026-07-28]` note below for what changed, and `poolv2/CLAUDE.md`'s "Multiplayer",
+> "Controls", "AI opponent" and "Known limitations" sections (which this doc's own rule says to
+> correct alongside this one) for the corrected claims. Still open: **5** (two-real-device MP
+> play — cannot be verified without two physical phones) and **12** (deliberately deferred rules
+> features).
 
 **1. [FIXED 2026-07-28] Multiplayer does not transmit ball-in-hand placement — fix before anyone plays online.**
 `poolv2/CLAUDE.md` states that placement travels as part of the same move. The code does not do
@@ -678,12 +680,12 @@ during the whole shot, including the cue ball hitting a rail *before* it touches
 layer walk an ordered event stream instead of a count). Note this changes the hash-relevant rule
 state, so it must land on both MP peers together.
 
-**7. No in-room rematch series.** One game per room; a rematch means creating a new room and
+**7. [FIXED 2026-07-28] No in-room rematch series.** One game per room; a rematch means creating a new room and
 re-sharing a code. Every reference MP game in this repo supports a `round.n` series with an
 alternating opener, and the field is already written as `1`.
 *Task:* port the Mancala rematch-series pattern; alternate the breaking seat via `round.dealer`.
 
-**8. The AI is the only randomness in the game, and it blocks the main thread.** `Math.random()`
+**8. [FIXED 2026-07-28] The AI is the only randomness in the game, and it blocks the main thread.** `Math.random()`
 drives aim/power jitter and the `topN` pick, and a decision can run ~90 full `simulateToRest`
 calls synchronously.
 *Task:* seed the RNG (so AI games are reproducible and replayable) and move the search off the
@@ -695,7 +697,7 @@ shots.
 *Task:* clear the slot's contents whenever `_foulMsg` is null. While you are there, replace the
 `alert()` behind it with an in-page dialog, matching the rest of the repo.
 
-**10. No real 3D camera, no zoom, no pan.** The guide's controls section asked for pinch-zoom and
+**10. [FIXED 2026-07-28] No real 3D camera, no zoom, no pan.** The guide's controls section asked for pinch-zoom and
 pan; both were deferred, not dropped. The camera toggle is a cosmetic CSS tilt.
 *Task:* pan and pinch-zoom first (biggest aiming benefit, no physics implications) — and see §4
 rule 6 about the two-finger conflict before writing any code.
