@@ -50,6 +50,15 @@
 //     _mpApplyRoundRecord, _mpAfterGameEnd/_seriesLine, _mpRoomCallback/_mpOnRoomUpdate,
 //     _mpSaveSnapshot/_mpLoadSave, _tryRestoreMP, and the MP branch of _afterMove/finish. Also
 //     named rather than line-numbered, same reasoning.
+//   Poolv2 (poolv2/js/ui.js) - BUILD-SPEC.md §6 #2's "the test file that does not exist":
+//     _localSeat/_isMySeat, _mpRoomCallback, _mpApplyRoundRecord, _mpSnapshot, _mpApplyRecovery,
+//     _mpLocalShoot, _mpDrain, _mpApplyNextEntry, _mpHandleMismatch, _mpSaveProgress, and the
+//     ball-in-hand placement queued by _commitCuePlacement and consumed by both of the last two.
+//     A "move" here is shot PARAMETERS over CONTINUOUS physics, not a discrete move from a finite
+//     vocabulary like every reference game above - both sides literally re-run physics.js's
+//     deterministic simulateToRest() with identical inputs rather than applying a symbolic move,
+//     which is why this mirror drives the REAL physics/rules/hash modules directly (all four are
+//     pure/headless per poolv2/js/physics.js's own header) rather than reimplementing gameplay.
 //   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
 //   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
@@ -93,6 +102,10 @@ import { P1 as fP1, P2 as fP2, newGame as fNewGame, cloneGame as fCloneGame, leg
 import { stateHash as fHash } from './filler/js/hash.js';
 import { newGame as dNewGame, legalMoves as dLegal, applyMove as dApply, edgeKey as dEdgeKey, isOver as dIsOver, score as dScore } from './dots-boxes/js/game.js';
 import { stateHash as dHash } from './dots-boxes/js/hash.js';
+import { R as pR, TABLE as pTABLE, strikeCueBall as pStrike, simulateToRest as pSimulateToRest } from './poolv2/js/physics.js';
+import { ballById as pBallById } from './poolv2/js/table.js';
+import * as pRules from './poolv2/js/rules.js';
+import { stateHash as pHash } from './poolv2/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -3382,6 +3395,378 @@ console.log('\n--- DB6: Dots and Boxes restore at a game boundary (KNOWN-BUG PRO
       `restored=${JSON.stringify(restored.mp.series)} saved=${JSON.stringify(boundarySave.series)}`);
   } catch (e) { fail++; console.log(`FAIL  DB6 did not complete: ${e.message}`); }
   finally { if (restored) restored.kill(); }
+}
+
+// ==================================================================================
+// POOLV2 (mirror of poolv2/js/ui.js's MP glue; citations per method). BUILD-SPEC.md
+// §6 #2: "there is no headless multiplayer lockstep test... add a Poolv2 block". A
+// "move" here is shot PARAMETERS over continuous physics, not a symbolic move from a
+// finite vocabulary, so this mirror drives the REAL physics.js/rules.js/hash.js
+// (all pure/headless) with a deterministic scripted "shooter" instead of reimplementing
+// gameplay logic. No aiming intelligence: shots are pseudo-random within valid ranges,
+// which - realistically, given 15 balls packed on a small table - fouls (and therefore
+// ball-in-hand placements) happen often, giving natural coverage of BUILD-SPEC §6 #1
+// (placement must travel with the move that follows it) without scripting it by hand.
+// ==================================================================================
+
+const MP_RECOVERY_MAX_ATTEMPTS_P2 = 3;   // poolv2/js/ui.js:40
+
+/** Deterministic per-shot parameters, pure function of a move index (mulberry32-seeded
+ *  so two different sides asking for the SAME index would get the SAME params - not
+ *  needed here since only the actual shooter ever calls it for its own index, but kept
+ *  reproducible so a failing run is replayable by hand). Power/offset/elevation stay
+ *  inside the real UI's usable ranges (physics.js §2.8 in BUILD-SPEC.md). */
+function poolScript(seed) {
+  return (i) => {
+    const rng = mulberry32((seed + i * 104729) >>> 0);
+    const angle = rng() * Math.PI * 2;
+    const power = 1.2 + rng() * 2.2;              // 1.2 - 3.4 m/s
+    const a = (rng() - 0.5) * 0.9;                 // -0.45 - 0.45 (within the ±0.62 clamp)
+    const b = (rng() - 0.5) * 0.9;
+    const elevation = rng() * 0.15;                // radians, well under the 0.5 clamp
+    return { dir: { x: Math.cos(angle), y: Math.sin(angle) }, power, offset: { a, b }, elevation };
+  };
+}
+
+/** _aiPlacementSpot (poolv2/js/ui.js:816-823), copied verbatim as a standalone function -
+ *  it isn't exported (ui.js isn't headless-loadable, it constructs DOM), so the harness
+ *  needs its own copy to place the cue ball legally without a UI drag gesture. */
+function poolFreeSpot(balls) {
+  const candidates = [];
+  for (let gx = -0.4; gx <= 0.4; gx += 0.08) {
+    for (let gy = -0.85; gy <= 0.85; gy += 0.12) candidates.push({ x: gx, y: gy });
+  }
+  for (const c of candidates) {
+    const blocked = balls.some((b) => b.id !== 'cue' && !b.pocketed && Math.hypot(b.x - c.x, b.y - c.y) < 2.1 * pR);
+    if (!blocked) return c;
+  }
+  return { x: 0, y: -pTABLE.h * 0.25 };
+}
+
+class PoolSide {
+  constructor(role, room, script, opts = {}) {
+    this.role = role; this.room = room; this.script = script; this.opts = opts;
+    this.mp = {   // mpNewState-equivalent, poolv2/js/ui.js's mp fields (74, 811-815/831-835)
+      appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
+      awaitingRecovery: false, recoveryAttempts: 0, opp: null, gameNum: 0,
+      pendingPlacement: null, lastRecoveryHandled: null, lastRecoveryApplied: null,
+      lastRoomSnapshot: null, redeliverRequested: false,
+      // Rematch series (BUILD-SPEC.md §6 #7): poolv2/js/ui.js's mp.nextDealer/series/lastScoredGame.
+      nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
+    };
+    this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
+    this._shooting = false; this._corrupted = false; this.moveCount = 0;
+    this.mismatches = 0; this.recoveriesApplied = 0; this.errors = []; this.saves = [];
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+  localSeat() { return this.role === 'host' ? 0 : 1; }   // _localSeat :114
+  isMySeat(seat) { return seat === this.localSeat(); }   // _isMySeat :116
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+
+  hostStart() { this.startNextGameSeries(); }   // the host-start branch of _mpRoomCallback :933, now routed through the series starter
+
+  async startNextGameSeries() {   // _mpStartNextGameSeries
+    if (this.role !== 'host') return;
+    const n = (this.mp.gameNum | 0) + 1;
+    const dealer = this.mp.nextDealer === 1 ? 1 : 0;
+    this.mp.nextDealer = dealer === 0 ? 1 : 0;
+    await this.room.startRound(n, null, dealer);
+  }
+
+  async roomCallback(room) {   // _mpRoomCallback :906-941
+    if (!room || this.dead) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.recovery) {
+      if (this.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (this.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        this.applyRecovery(room.recovery);
+      }
+    }
+    if (room.round && (room.round.n | 0) !== (mp.gameNum | 0)) this.applyRoundRecord(room.round);
+    const entries = Object.values(room.moves || {}).sort((a, b) => a.seq - b.seq);
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    // Not a literal poolv2/js/ui.js field: the harness's own drain loop has a real await
+    // gap (applyNextEntry/localShoot/maybeAct all await), so a room update landing while a
+    // PRIOR roomCallback's drain() is still in flight would otherwise be silently dropped -
+    // the exact async-delivery race js/CLAUDE.md documents for Mancala/Filler/Dots and
+    // Boxes (mancala/js/ui.js's `mp.redeliverRequested`). Mirrored here for the same reason.
+    mp.redeliverRequested = true;
+    await this.drain();
+  }
+
+  applyRoundRecord(round) {   // _mpApplyRoundRecord :942-953
+    const mp = this.mp;
+    mp.gameNum = round.n | 0;
+    mp.appliedSeq = 0; mp.movesById = new Map(); mp.maxKnownSeq = 0;
+    this.game = pRules.newGame();
+    this.game.turnSeat = round.dealer === 1 ? 1 : 0;
+    this.matchEnded = false;
+  }
+
+  snapshot() {   // _mpSnapshot :954, now carrying series bookkeeping (BUILD-SPEC §6 #7)
+    return {
+      balls: this.game.balls, rules: { ...this.game, balls: undefined },
+      gameNum: this.mp.gameNum, nextDealer: this.mp.nextDealer,
+      series: { wins: this.mp.series.wins.slice() }, lastScoredGame: this.mp.lastScoredGame,
+    };
+  }
+
+  applyRecovery(recovery) {   // _mpApplyRecovery :956-966
+    const snap = recovery.state;
+    this.game = { ...snap.rules, balls: snap.balls.map((b) => ({ ...b })) };
+    this.mp.appliedSeq = recovery.seq | 0;
+    this.mp.maxKnownSeq = Math.max(this.mp.maxKnownSeq | 0, this.mp.appliedSeq);
+    this.mp.awaitingRecovery = false;
+    this.mp.recoveryAttempts = 0;
+    if (snap.gameNum != null) this.mp.gameNum = snap.gameNum | 0;
+    if (snap.nextDealer != null) this.mp.nextDealer = snap.nextDealer === 1 ? 1 : 0;
+    if (snap.series) this.mp.series = { wins: [snap.series.wins[0] | 0, snap.series.wins[1] | 0] };
+    if (snap.lastScoredGame != null) this.mp.lastScoredGame = snap.lastScoredGame | 0;
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+  }
+
+  /** _commitCuePlacement's ball-in-hand branch (poolv2/js/ui.js:704-716), minus the drag
+   *  gesture: pick a legal free spot, apply locally, queue it for the NEXT move. */
+  placeCueBallLocally() {
+    const spot = poolFreeSpot(this.game.balls);
+    this.game = pRules.placeCueBall(this.game, spot.x, spot.y);
+    this.mp.pendingPlacement = { x: spot.x, y: spot.y };
+  }
+
+  async localShoot() {   // _mpLocalShoot :967-986
+    if (this.opts.shared.shotsTaken >= this.opts.shared.cap) return;
+    this._shooting = true;
+    try {
+      const mp = this.mp;
+      const seat = this.game.turnSeat;
+      const place = mp.pendingPlacement || null;
+      mp.pendingPlacement = null;
+      const shot = this.script(this.moveCount++);
+      const cue = pBallById(this.game.balls, 'cue');
+      pStrike(cue, shot.dir, shot.power, shot.offset, shot.elevation);
+      const events = pSimulateToRest(this.game.balls);
+      const { state, outcome } = pRules.resolveShot(this.game, events);
+      this.game = state;
+      let h = pHash(this.game);
+      const seq = ++mp.appliedSeq;
+      mp.maxKnownSeq = Math.max(mp.maxKnownSeq, seq);
+      this.opts.shared.shotsTaken++;
+      if (place) this.opts.shared.placementsSent++;
+      await this.room.appendMove(this.role, seq, { g: mp.gameNum, dir: shot.dir, power: shot.power, offset: shot.offset, elevation: shot.elevation, place }, h);
+      if (this.game.over) this.onGameOver(outcome);
+      else if (this.game.ballInHand && this.isMySeat(this.game.turnSeat)) this.placeCueBallLocally();
+    } finally { this._shooting = false; }
+  }
+
+  async drain() {   // _mpDrain :988-996, plus the redeliverRequested loop (see roomCallback)
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.game) return;
+    mp.delivering = true;
+    try {
+      do {
+        mp.redeliverRequested = false;
+        while (await this.applyNextEntry()) { /* keep draining */ }
+      } while (mp.redeliverRequested);
+    } finally { mp.delivering = false; }
+    await this.maybeAct();
+  }
+
+  /** Not a literal poolv2/js/ui.js method: the real app's next shot comes from the
+   *  player's own next pointer gesture, and a post-recovery ball-in-hand is picked up by
+   *  _renderGame()'s `if (game.ballInHand && _isMySeat(...)) _placingCue = true` re-arming
+   *  the drag gesture (poolv2/js/ui.js:314). The harness needs an explicit "take my turn
+   *  now" trigger for both cases to auto-play the scripted rally; guarded by
+   *  _shooting/mp.delivering so a re-entrant room notification can never double-act on the
+   *  same turn, and pendingPlacement so an ALREADY-placed ball-in-hand (the ordinary
+   *  post-shot path, which places before this ever runs) is never placed twice. */
+  async maybeAct() {
+    if (this.dead || !this.mp || !this.game || this.game.over) return;
+    if (this._shooting || this.mp.delivering || this.mp.awaitingRecovery) return;
+    if (this.opts.shared.shotsTaken >= this.opts.shared.cap) return;
+    if (!this.isMySeat(this.game.turnSeat)) return;
+    if (this.game.ballInHand && !this.mp.pendingPlacement) this.placeCueBallLocally();
+    await this.localShoot();
+  }
+
+  async applyNextEntry() {   // _mpApplyNextEntry :998-1024
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !this.game || this.game.over) return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry) return false;
+    if ((entry.move.g | 0) !== (mp.gameNum | 0)) return false;
+    if (entry.by === this.role) { mp.appliedSeq = seq; return true; }
+    const move = entry.move;
+    if (move.place) { this.game = pRules.placeCueBall(this.game, move.place.x, move.place.y); this.opts.shared.placementsApplied++; }
+    const cue = pBallById(this.game.balls, 'cue');
+    pStrike(cue, move.dir, move.power, move.offset, move.elevation);
+    const events = pSimulateToRest(this.game.balls);
+    const { state, outcome } = pRules.resolveShot(this.game, events);
+    this.game = state;
+    let h = pHash(this.game);
+    if (this.opts.corruptAtSeq === seq && !this._corrupted) { this._corrupted = true; h = (h ^ 0xdeadbeef) >>> 0; }   // forced-mismatch harness hook, mirrors mancala/js/ui.js's corruptAtSeq pattern
+    if (h !== entry.h) { this.handleMismatch(seq); return false; }
+    mp.appliedSeq = seq;
+    mp.recoveryAttempts = 0;
+    if (this.game.over) { this.onGameOver(outcome); return false; }
+    if (this.game.ballInHand && this.isMySeat(this.game.turnSeat)) this.placeCueBallLocally();
+    return true;
+  }
+
+  handleMismatch(seq) {   // _mpHandleMismatch :1025-1034
+    const mp = this.mp;
+    this.mismatches++;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS_P2) { this.failedHard = true; return; }
+    if (this.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+    } else {
+      mp.awaitingRecovery = true;
+      this.room.requestRecovery(seq).catch(() => {});
+    }
+  }
+
+  onGameOver(outcome) { this.matchEnded = true; this.winner = outcome.winner; this.afterGameEnd(outcome); }
+
+  afterGameEnd(outcome) {   // _mpAfterGameEnd :BUILD-SPEC §6 #7, idempotent per game number
+    const mp = this.mp;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    if (outcome.winner != null) mp.series.wins[outcome.winner] += 1;
+  }
+
+  /** Settled: either a real win/loss, or the harness's scripted-shot cap was reached and
+   *  nothing is mid-flight (no drain in progress, no shot in flight, no open recovery). */
+  isIdle() {
+    return !this.dead && this.game && !this._shooting && !this.mp.delivering && !this.mp.awaitingRecovery
+      && (this.game.over || this.opts.shared.shotsTaken >= this.opts.shared.cap);
+  }
+}
+
+function makePoolv2(opts = {}) {
+  const room = new FakeRoom();
+  const shared = { cap: opts.cap || 24, shotsTaken: 0, placementsSent: 0, placementsApplied: 0 };
+  const seed = opts.seed || 1;
+  const host = new PoolSide('host', room, poolScript(seed), Object.assign({ shared }, opts.host || {}));
+  const guest = new PoolSide('guest', room, poolScript(seed + 1), Object.assign({ shared }, opts.guest || {}));
+  host.hostStart();
+  return { room, host, guest, shared };
+}
+
+// --- P1: scripted rally, hash-verified every applied move, incl. foul-then-placement ---
+console.log('\n--- P1: Poolv2 scripted rally (KNOWN-BUG PROBE: BUILD-SPEC §6 #1, placement desyncing from its shot) ---');
+{
+  const { room, host, guest, shared } = makePoolv2({ seed: 7, cap: 24 });
+  try {
+    await until(() => (host.isIdle() && guest.isIdle() && host.mp.appliedSeq === guest.mp.appliedSeq) || host.failedHard || guest.failedHard, 20000, 'P1 settle');
+    ok('P1: both sides settled with no hard failure', !host.failedHard && !guest.failedHard,
+      `host.failedHard=${host.failedHard} guest.failedHard=${guest.failedHard}`);
+    ok('P1: zero hash mismatches across the whole rally', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('P1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('P1: final states hash-identical', pHash(host.game) === pHash(guest.game), `host=${pHash(host.game)} guest=${pHash(guest.game)}`);
+    ok('P1: no move-log overwrites', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('P1: the scripted rally really did exercise at least one foul (random unaimed shots on a\n' +
+       '      packed table foul often; if this ever reads 0, the script/physics changed enough that\n' +
+       '      the probe below is not testing anything)',
+      shared.placementsSent > 0, `placementsSent=${shared.placementsSent}`);
+    ok('P1 [KNOWN-BUG PROBE]: EVERY sent placement was applied (and hash-agreed) on the peer\n' +
+       '      (REGRESSION GUARD, BUILD-SPEC.md §6 #1: ball-in-hand placement must travel as part\n' +
+       '      of the NEXT move, applied before the strike, on BOTH sides. Before the fix,\n' +
+       '      _mpLocalShoot sent {g,dir,power,offset,elevation} with no `place`, while\n' +
+       '      _commitCuePlacement mutated only the local cue position - so after every foul the\n' +
+       '      peer re-simulated the same strike from the WRONG cue-ball position: a hash mismatch\n' +
+       '      on effectively every foul, i.e. "MP desyncs routinely." Zero mismatches above, with\n' +
+       '      placementsSent>0, is the actual proof; this assertion just names the count so a\n' +
+       '      partial regression - some placements silently dropped - cannot hide behind it)',
+      shared.placementsApplied === shared.placementsSent,
+      `placementsSent=${shared.placementsSent} placementsApplied=${shared.placementsApplied}`);
+  } catch (e) { fail++; console.log(`FAIL  P1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- P2: forced desync -> detection + host-authoritative recovery -------------------
+console.log('\n--- P2: Poolv2 forced desync -> detected + recovered ---');
+{
+  // corruption targets seq 3 - always the HOST's shot as seen by the guest, at this seed
+  // (seq 2 is the guest's own move and would take the "already applied locally" shortcut,
+  // never touching the corruption hook at all - see mancala/js/ui.js's own seq-4 comment
+  // for the same reasoning).
+  const { room, host, guest } = makePoolv2({ seed: 13, cap: 16, guest: { corruptAtSeq: 3 } });
+  try {
+    await until(() => (host.isIdle() && guest.isIdle() && host.mp.appliedSeq === guest.mp.appliedSeq) || host.failedHard || guest.failedHard, 20000, 'P2 settle');
+    ok('P2: corruption was DETECTED as a hash mismatch', guest.mismatches >= 1, `guest mismatches=${guest.mismatches}`);
+    ok('P2: recovery was applied (not a hard failure)', guest.recoveriesApplied >= 1 && !guest.failedHard, `applied=${guest.recoveriesApplied} failedHard=${guest.failedHard}`);
+    ok('P2: after recovery both sides re-converged to an identical hash',
+      pHash(host.game) === pHash(guest.game), `host=${pHash(host.game)} guest=${pHash(guest.game)}`);
+    ok('P2: the guest kept its own network seat (1) through recovery', guest.localSeat() === 1, `seat=${guest.localSeat()}`);
+  } catch (e) { fail++; console.log(`FAIL  P2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- P3: rematch series (BUILD-SPEC §6 #7) ------------------------------------------
+// Deliberately does NOT depend on random shots actually potting the 8-ball (P1/P2
+// already cover shot-by-shot hash agreement; this test is about the SERIES state
+// machine, not physics luck), so game-over is forced directly on both sides the same
+// way a real settled shot's rules.resolveShot would leave it: .over=true, .winner set.
+console.log('\n--- P3: Poolv2 rematch series (KNOWN-BUG PROBE: writeResult would kill the room) ---');
+{
+  const { room, host, guest } = makePoolv2({ seed: 21, cap: 8 });
+  try {
+    await until(() => host.game && guest.game, 5000, 'P3 game 1 start');
+    host.game.over = true; host.game.winner = 0;
+    guest.game.over = true; guest.game.winner = 0;
+    host.onGameOver({ winner: 0 });
+    guest.onGameOver({ winner: 0 });
+    ok('P3: game 1\'s win is tallied on both sides, seat-indexed the same way',
+      JSON.stringify(host.mp.series) === JSON.stringify(guest.mp.series) && host.mp.series.wins[0] === 1,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+    host.afterGameEnd({ winner: 0 });
+    ok('P3: afterGameEnd is idempotent (a duplicate call for the same game number does not double-count)',
+      host.mp.series.wins[0] === 1, `wins=${JSON.stringify(host.mp.series)}`);
+
+    // Host taps "Play again" -> starts game 2 of the series.
+    await host.startNextGameSeries();
+    await until(() => (host.mp.gameNum | 0) === 2 && (guest.mp.gameNum | 0) === 2, 5000, 'P3 game 2 start');
+    ok('P3 [KNOWN-BUG PROBE]: starting the next game did NOT end the room\n' +
+       '      (REGRESSION GUARD: the code this rematch series replaced called net.writeResult on\n' +
+       '      every game-over, which sets status:\'ended\' - the ONE thing that status means in\n' +
+       '      every other MP-capable game in this repo is "somebody abandoned the room". Had that\n' +
+       '      call survived, room.status would be \'ended\' here and no second game could ever\n' +
+       '      start in this room)',
+      room.status !== 'ended', `status=${room.status}`);
+    ok('P3: game 2 opened with the OTHER seat (the dealer alternated via mp.nextDealer)',
+      host.game.turnSeat === 1 && guest.game.turnSeat === 1,
+      `host.turnSeat=${host.game.turnSeat} guest.turnSeat=${guest.game.turnSeat}`);
+    ok('P3: the series tally from game 1 survived into game 2 (applyRoundRecord never touches it)',
+      host.mp.series.wins[0] === 1 && guest.mp.series.wins[0] === 1,
+      `host=${JSON.stringify(host.mp.series)} guest=${JSON.stringify(guest.mp.series)}`);
+
+    // Boundary restore: a guest resyncing mid-series must not lose the tally (same
+    // failure class as mancala/js/ui.js's M6, dots-boxes/js/ui.js's DB6).
+    const snap = host.snapshot();
+    const restored = new PoolSide('guest', room, poolScript(99), { shared: { cap: 8, shotsTaken: 0, placementsSent: 0, placementsApplied: 0 } });
+    restored.mp.gameNum = 0;
+    restored.applyRecovery({ seq: host.mp.appliedSeq, state: snap });
+    ok('P3 [KNOWN-BUG PROBE]: a recovery snapshot carries the series tally and round number, and\n' +
+       '      applying it does not reset the tally to {wins:[0,0]}\n' +
+       '      (REGRESSION GUARD: every mp object literal in _mpCreateRoom/_mpJoinRoom starts the\n' +
+       '      series fresh at {wins:[0,0]} - if _mpApplyRecovery ever stopped restoring\n' +
+       '      series/gameNum/nextDealer from the snapshot, a guest that needs to resync mid-series\n' +
+       '      would silently lose the tally the moment recovery fires)',
+      JSON.stringify(restored.mp.series) === JSON.stringify(host.mp.series) && restored.mp.gameNum === host.mp.gameNum,
+      `restored=${JSON.stringify(restored.mp.series)} gameNum=${restored.mp.gameNum} host=${JSON.stringify(host.mp.series)} gameNum=${host.mp.gameNum}`);
+    restored.kill();
+  } catch (e) { fail++; console.log(`FAIL  P3 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
 }
 
 console.log(fail

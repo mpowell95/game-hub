@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v229';
+const CACHE = 'game-hub-v231';
 
 const ASSETS = [
   './',
@@ -180,6 +180,17 @@ const ASSETS = [
   './pool/js/ai.js',
   './pool/js/hash.js',
   './pool/js/strings.js',
+  './poolv2/index.html',
+  './poolv2/css/poolv2.css',
+  './poolv2/js/ui.js',
+  './poolv2/js/physics.js',
+  './poolv2/js/table.js',
+  './poolv2/js/rules.js',
+  './poolv2/js/ai.js',
+  './poolv2/js/hash.js',
+  './poolv2/js/strings.js',
+  './poolv2/js/rng.js',
+  './poolv2/js/worker.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,
