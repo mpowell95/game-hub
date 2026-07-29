@@ -74,6 +74,20 @@
 //                                                   // `longestWord` are bests (Math.max / longer-only, per THE
 //                                                   // LAW rule 2 -- never overwritten with a lower value); see
 //                                                   // recordBoggle
+//       yahtzee: {
+//         total, byDiff,                           // difficulty is 'ai' (solo vs the AI, no tiers exist)
+//                                                   // or 'mp' (multiplayer) -- both are unrecognized by
+//                                                   // difficulty-tiers.js and read as a legacy/no-pill
+//                                                   // bucket in the leaderboard, same convention as every
+//                                                   // other MP game's 'mp' difficulty (see tictactoe)
+//         yz: { played, won, lost, tied, yahtzees, bestScore } },  // a 13-round match scored against an
+//                                                   // opponent's total, so it CAN tie -- `tied` is stored
+//                                                   // EXPLICITLY, same reasoning as tictactoe/dotsboxes/
+//                                                   // boggle above; `yahtzees` is the human's cumulative
+//                                                   // count of Yahtzee-box scores of 50 PLUS bonus Yahtzees
+//                                                   // across every game (additive); `bestScore` is the
+//                                                   // highest single-game total ever reached (Math.max
+//                                                   // only, per THE LAW rule 2); see recordYahtzee
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -81,7 +95,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -393,6 +407,15 @@ function ensureBg(g) {
   if (!Number.isFinite(g.bg.longestWord.len)) g.bg.longestWord.len = 0;
 }
 
+/** Yahtzee: the per-match W/L/Tie counters plus the human's cumulative Yahtzee count
+ *  and best single-game total. A 13-round match is scored against an opponent's
+ *  total, so it CAN tie -- `tied` is tracked explicitly, same reasoning as
+ *  ensureTt/ensureDb/ensureBg above. */
+function ensureYz(g) {
+  if (!g.yz || typeof g.yz !== 'object') g.yz = { played: 0, won: 0, lost: 0, tied: 0, yahtzees: 0, bestScore: 0 };
+  for (const k of ['played', 'won', 'lost', 'tied', 'yahtzees', 'bestScore']) if (!Number.isFinite(g.yz[k])) g.yz[k] = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -411,6 +434,7 @@ function normalize(raw) {
   ensureTt(st.games.tictactoe);
   ensureDb(st.games.dotsboxes);
   ensureBg(st.games.boggle);
+  ensureYz(st.games.yahtzee);
   ensureSn(st.games.snake);
   return st;
 }
@@ -723,6 +747,31 @@ export function recordBoggle(difficulty, won, extras) {
   return st;
 }
 
+/** Yahtzee: record a finished 13-round match. Maintains total/byDiff (as recordResult) AND the
+ *  `yz` breakdown. `difficulty` is 'ai' (solo vs the AI) or 'mp' (multiplayer) -- neither is a
+ *  real tier, same convention as recordTicTacToe's 'mp' bucket. `won` is true, false, or null for
+ *  a tie (matching totals) -- a tie increments `played` and `tied` only, matching
+ *  recordTicTacToe/recordDotsBoxes/recordBoggle. `extras` = { yahtzees, score } for THIS game:
+ *  `yahtzees` (first Yahtzee scored + every bonus Yahtzee) is added to the running total;
+ *  `bestScore` only ever raises the stored best (Math.max), per THE LAW rule 2. Additive; never
+ *  overwrites. */
+export function recordYahtzee(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.yahtzee;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureYz(g);
+  const e = extras || {};
+  g.yz.played += 1;
+  if (won === true) g.yz.won += 1;
+  else if (won === false) g.yz.lost += 1;
+  else g.yz.tied += 1;
+  g.yz.yahtzees += Math.max(0, e.yahtzees | 0);
+  g.yz.bestScore = Math.max(g.yz.bestScore | 0, e.score | 0);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Snake: record one finished run. `length` is the snake's final length (start 3 + food eaten);
  *  `difficulty` is easy|medium|hard (speed tiers); `walls` is 'on'|'off' (defaults to 'on', the
  *  game's own classic default — an unrecognized value also reads as 'on', same tolerance as the
@@ -786,7 +835,7 @@ export function recordHeadToHead(gameId, opponent, won) {
 export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
-  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordHeadToHead,
+  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

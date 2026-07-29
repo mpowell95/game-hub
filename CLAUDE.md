@@ -124,7 +124,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle and Yahtzee |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -315,7 +315,7 @@ working in that folder).
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
-| Yahtzee | in-hub `module:`, immersive | `.yz-root` / `.yz-` | none yet (no persisted settings) | none yet (no stats recorder yet) |
+| Yahtzee | in-hub `module:`, immersive, **multiplayer** (`js/net.js`, no persisted MP save key) | `.yz-root` / `.yz-` | none yet (no persisted settings) | `recordYahtzee` |
 
 The root-class/prefix cells were verified against each game's actual CSS on 2026-07-23 (note
 Tic Tac Toe is `.ttt-`, three letters, and Filler/Mancala use pre-convention full-word root

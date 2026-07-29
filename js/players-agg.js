@@ -215,6 +215,16 @@ export function aggregatePlayers(all) {
         if ((slw.len | 0) > (dst.bg.longestWord.len | 0)) {
           dst.bg.longestWord = { word: typeof slw.word === 'string' ? slw.word : '', len: slw.len | 0 };
         }
+      } else if (g === 'yahtzee' && src.yz) {
+        // Same THE-LAW-rule-1 hazard as boggle's bg above: `total` aggregates fine on its own,
+        // but Yahtzee's Stats screen reads `yz` for ties, Yahtzee count and best score, so
+        // dropping it here would blank all three the moment a second device syncs. Counters
+        // add; the best score takes the max across devices.
+        if (!dst.yz) dst.yz = { played: 0, won: 0, lost: 0, tied: 0, yahtzees: 0, bestScore: 0 };
+        dst.yz.played += src.yz.played | 0; dst.yz.won += src.yz.won | 0;
+        dst.yz.lost += src.yz.lost | 0; dst.yz.tied += src.yz.tied | 0;
+        dst.yz.yahtzees += src.yz.yahtzees | 0;
+        dst.yz.bestScore = Math.max(dst.yz.bestScore | 0, src.yz.bestScore | 0);
       }
     }
   }

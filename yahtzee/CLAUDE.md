@@ -191,23 +191,62 @@ explicit Leave or an opponent's own `destroy()` ends a room here, there is no pa
 "opponent seems to have vanished" indicator).
 
 **Known gaps, stated honestly:**
-- No stats recording for MP results (or solo results — this game has no stats recorder integration
-  at all yet, see "Settings / persistence" above; MP doesn't change that scope).
 - No staleness/disconnect detection beyond the explicit Leave button and the other side's own
   `status:'ended'` write.
 - No i18n — all lobby/setup strings are plain English literals, consistent with the base game
-  (also not yet on the shared `js/i18n.js` layer).
+  (also not yet on the shared `js/i18n.js` layer). The stats screen's own strings (Won/Lost/
+  Tied/Played/Yahtzees/Best score, the game title) DO go through `js/strings.js`/`t()` — see
+  "Stats" below — since that infrastructure is shared with every other game, not this game's own.
 - Add a `### The Nth consumer: Yahtzee` entry to `js/CLAUDE.md`'s multiplayer-lockstep section
   (per the documentation convention every prior MP game followed) — not yet done as of this note.
 
+## Stats (2026-07-28)
+
+Wired into the shared `js/game-stats.js` recorder (Matt: "stats should be recorded" — added
+right after the MP pass above, in response to the CLAUDE.md draft calling out its own absence
+as a gap). `recordYahtzee(difficulty, won, extras)`, called once per finished match from
+`endTurn()` via a `commitStatsOnce()` idempotence guard (`state.statsCommitted`, same pattern
+as every reference game's `_statsCommitted`) — fires for BOTH a local commit and a remote
+MP commit, since every game-ending commit funnels through the same `applyCommit()` → `endTurn()`
+path regardless of who made it.
+
+- **`difficulty`** is `'ai'` (solo vs the computer) or `'mp'` (multiplayer) — this game has no
+  real difficulty tiers, so both are unrecognized by `difficulty-tiers.js` and read as a
+  legacy/no-pill bucket, same convention as Tic Tac Toe's `'mp'` bucket
+  (`js/CLAUDE.md`'s "third consumer" section).
+- **`won`** is `true`/`false`/`null` (tie) from comparing `totalScore(me)` vs `totalScore(them)` —
+  a 13-round match CAN tie (equal totals), so `won: null` increments `played`+`tied` only, the
+  same shape as Tic Tac Toe/Dots and Boxes/Boggle's own tie-capable recorders.
+- **`extras.yahtzees`** is this game's count of Yahtzee-box scores of 50 plus every bonus
+  Yahtzee (`state.yahtzeeBonusCount[localSeat()]`), added to a running total. **`extras.score`**
+  is this game's final total, folded into a Math.max-only `bestScore` — per THE LAW rule 2,
+  never overwritten with a lower value.
+- **Each device records its own perspective independently** (`localSeat()`-relative, same as
+  every other stat this game touches) — that is not double-counting; `gamehub.stats` is keyed
+  per player, not per room.
+- All three required edits per root `CLAUDE.md`'s "Adding a game" item 7 are done: the
+  `ensureYz()`/`recordYahtzee()` writer in `js/game-stats.js`, a rendering screen in
+  `js/game-stats-ui.js` (`yahtzeeScreen`, Won/Lost/Tied/Played + Yahtzees + Best score — visible
+  in both My Stats and the Leaderboard's player detail, since both share `gameListHTML`/
+  `screenFor`), and an explicit `g === 'yahtzee' && src.yz` branch in `js/players-agg.js` so the
+  `yz` sub-counter survives a cross-device combine instead of blanking to zero — verified by a
+  dedicated `players-agg.test.mjs` case (counters sum, `bestScore` takes the max, not the sum).
+- `game_title_yahtzee`/`gs_yz_yahtzees`/`gs_yz_best` added to `js/strings.js` (EN+ES) —
+  `test-i18n-strings.mjs` green.
+- Verified: a real headless 13-round game recorded correctly to `localStorage['gamehub.stats']`
+  (`total`/`byDiff.ai`/`yz` all populated, `won`/`yahtzees`/`bestScore` matching the actual game),
+  and the My Stats overlay renders the drill-down screen with real numbers after seeding a fixture.
+
 ## Tests
 
-No automated test files are checked into this repo for this game yet (the build-phase headless
-Playwright scripts — scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
-motion`, module lifecycle/leak checks, and the real two-device MP test described above — were run
-ad hoc from a scratch directory during development, not committed). If this game gains real
-regression coverage, follow the pattern of `test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. —
-a checked-in, `run-all-tests.mjs`-wired suite — rather than leaving verification to a session's own
-scratch scripts again. A `FakeRoom`-backed lockstep test (matching the seven reference games' own
-suite) would also let the recovery/divergence path finally be exercised, which the real-Firebase
-pass above could not force.
+No automated test files are checked into this repo for this game yet, WITH ONE EXCEPTION —
+`players-agg.test.mjs`'s Yahtzee case above IS committed and wired into `run-all-tests.mjs`.
+Everything else (scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
+motion`, module lifecycle/leak checks, the real two-device MP test, and the stats-recording
+check described above) were run ad hoc from a scratch directory during development, not
+committed. If this game gains real regression coverage, follow the pattern of
+`test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. — a checked-in, `run-all-tests.mjs`-wired
+suite — rather than leaving verification to a session's own scratch scripts again. A
+`FakeRoom`-backed lockstep test (matching the seven reference games' own suite) would also let
+the recovery/divergence path finally be exercised, which the real-Firebase pass above could not
+force.

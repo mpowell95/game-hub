@@ -43,6 +43,7 @@ const TABS = [
   { id: 'uno', labelKey: 'game_title_uno' },
   { id: 'pool', labelKey: 'game_title_pool' },
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
+  { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -329,6 +330,26 @@ function boggleScreen(rec) {
     </div>`;
 }
 
+/** Yahtzee: Won/Lost/Tied/Played shown explicitly (a 13-round match is scored against an
+ *  opponent's total, so it CAN tie, same reasoning as dotsBoxesScreen/boggleScreen/
+ *  ticTacToeScreen above), plus the human's cumulative Yahtzee count and best single-game
+ *  total ever reached -- never folded away, per THE LAW rule 1. */
+function yahtzeeScreen(rec) {
+  const yz = (rec && rec.yz) || { played: 0, won: 0, lost: 0, tied: 0, yahtzees: 0, bestScore: 0 };
+  if (!(yz.played | 0)) return emptyState('Yahtzee');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${yz.won | 0}</b><span>${t('gs_won')}</span></div>
+      <div class="gs-tally"><b>${yz.lost | 0}</b><span>${t('gs_lost')}</span></div>
+      <div class="gs-tally"><b>${yz.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${yz.played | 0}</b><span>${t('gs_played')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${yz.yahtzees | 0}</b><span>${t('gs_yz_yahtzees')}</span></div>
+      <div class="gs-tally"><b>${yz.bestScore | 0}</b><span>${t('gs_yz_best')}</span></div>
+    </div>`;
+}
+
 // --- Snake (solo, speed-tiered, longest-snake-is-the-score) -----------------
 const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
@@ -461,6 +482,7 @@ function screenFor(id, st) {
   if (id === 'tictactoe') return ticTacToeScreen(rec);
   if (id === 'dotsboxes') return dotsBoxesScreen(rec);
   if (id === 'boggle') return boggleScreen(rec);
+  if (id === 'yahtzee') return yahtzeeScreen(rec);
   if (id === 'snake') return snakeScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }

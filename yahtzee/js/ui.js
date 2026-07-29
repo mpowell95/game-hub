@@ -36,7 +36,7 @@
 
 import * as net from '../../js/net.js';
 import { stateHash } from './hash.js';
-import { deviceId } from '../../js/game-stats.js';
+import { deviceId, recordYahtzee } from '../../js/game-stats.js';
 
 const MODE = 'ai'; // 'ai' | 'hotseat' -- solo-mode default; irrelevant once in MP
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
@@ -181,6 +181,7 @@ function newGame(mpInfo){
     phase: 'idle',
     yahtzeeBonusCount: [0,0],
     gameOver: false,
+    statsCommitted: false,
     mp: mpInfo ? {
       role: mpInfo.role, code: mpInfo.code, localSeat: mpInfo.role==='host' ? 0 : 1,
       opp: mpInfo.opp, appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0,
@@ -377,6 +378,24 @@ function commitSelection(){
   if(isMp) mpAfterLocalMove({ t:'commit', cat });
 }
 
+// Records this device's own result once the match is over. Each device records
+// its own perspective independently (per js/CLAUDE.md's head-to-head/MP stats
+// convention) -- that is not double-counting, gamehub.stats is keyed per player.
+// `_statsCommitted`-style idempotence guard (state.statsCommitted) matches every
+// other game's pattern, since endTurn can in principle run more than once at a
+// gameOver boundary (e.g. a late remote entry after local gameOver already fired).
+function commitStatsOnce(){
+  if(!state || state.statsCommitted) return;
+  state.statsCommitted = true;
+  const me = state.players[localSeat()], opp = state.players[remoteSeat()];
+  const myTotal = totalScore(me), oppTotal = totalScore(opp);
+  const won = myTotal===oppTotal ? null : (myTotal>oppTotal);
+  const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[localSeat()]||0);
+  const difficulty = state.mp ? 'mp' : MODE;
+  try{ recordYahtzee(difficulty, won, { yahtzees, score: myTotal }); }
+  catch(e){ /* never block the result */ }
+}
+
 function endTurn(effects){
   state.selected = null;
   state.dice.forEach(d=>{ d.held=false; });
@@ -386,6 +405,7 @@ function endTurn(effects){
   if(gameOver){
     state.phase = 'gameOver';
     state.gameOver = true;
+    commitStatsOnce();
   } else {
     state.current = 1 - state.current;
     state.phase = 'idle';

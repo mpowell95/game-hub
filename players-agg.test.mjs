@@ -163,6 +163,32 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('boggle: longest word keeps its own text and length together', bg.longestWord, { word: 'QUITTERS', len: 8 });
 }
 
+// ---- Yahtzee's yz sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// `total` aggregating correctly is NOT enough: the Yahtzee Stats screen reads `yz` for
+// ties, Yahtzee count and best score. Without the yz branch, all three blank out the
+// moment a second device syncs. Counters add; bestScore takes the max, same shape as
+// boggle's bg branch above.
+{
+  const all = {
+    d1: rec({ playerId: 'YZ111', name: 'Dice' }, {
+      yahtzee: {
+        total: { played: 3, won: 2, lost: 0 },
+        yz: { played: 3, won: 2, lost: 0, tied: 1, yahtzees: 2, bestScore: 288 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'yz111', name: 'Dice' }, {
+      yahtzee: {
+        total: { played: 2, won: 0, lost: 2 },
+        yz: { played: 2, won: 0, lost: 2, tied: 0, yahtzees: 1, bestScore: 312 },
+      },
+    }, 200),
+  };
+  const yz = aggregatePlayers(all)[0].games.yahtzee.yz;
+  eq('yahtzee: W/L/T counters summed across devices', [yz.played, yz.won, yz.lost, yz.tied], [5, 2, 2, 1]);
+  eq('yahtzee: yahtzees summed', yz.yahtzees, 3);
+  eq('yahtzee: bestScore is the max, not the sum or the last one', yz.bestScore, 312);
+}
+
 // ---- Snake's sn sub-counter survives the cross-device combine (THE LAW rule 1) ----
 // The per-game regression case "Adding a game" item 7 requires: without the sn branch the
 // Snake Stats screen and leaderboard read zero runs/bests as soon as a second device syncs.
