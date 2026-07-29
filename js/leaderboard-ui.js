@@ -43,6 +43,14 @@ const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'g
 // simply never rendered. Matched by deviceId prefix.
 const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test1", preview bot
 
+// The one reusable QA profile name (2026-07-29). Device-id prefixes above only hide devices that
+// already existed when the prefix was written; a fresh test pass mints a new device id every time
+// (new browser/profile/incognito), so a NAME match is what actually stays durable across repeat
+// testing. Use this exact name (any case) when testing so the account never surfaces on the
+// leaderboard - its plays stay recorded and visible on My Stats on that device, same as any other
+// hidden record, just never rendered here. Case-insensitive, trimmed.
+const HIDDEN_NAMES = new Set(['zzztest']);
+
 // --- sort preference (2026-07-29, HANDOFF-LB-FILTER-SORT.md) ----------------------------------
 // gamehub.lb.sort.v1 - follows js/favorites.js as the model (try/catch read, defensive
 // normalize, best-effort write, never throws). A PREFERENCE, not history: THE LAW rule 2's
@@ -716,7 +724,10 @@ function currentBody() {
   const recs = visibleRecords();
   // Only players who have set a profile name are listed. Devices with no name keep every game they
   // recorded; that history joins a player automatically the moment the device sets a name.
-  const list = aggregatePlayers(recs).filter((g) => (g.name || '').trim());
+  const list = aggregatePlayers(recs).filter((g) => {
+    const name = (g.name || '').trim();
+    return name && !HIDDEN_NAMES.has(name.toLowerCase());
+  });
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
   if (_game) return gameDetail(list, _game);

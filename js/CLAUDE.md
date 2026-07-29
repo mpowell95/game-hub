@@ -602,6 +602,30 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
 
 ---
 
+## Hiding test/debug accounts from the leaderboard (2026-07-29)
+
+`js/leaderboard-ui.js` has two hide lists, checked in `visibleRecords()`/`currentBody()`. Neither
+ever deletes anything (THE LAW rule 5) — a hidden record's plays stay in Firebase and still show
+on that device's own My Stats; only the shared leaderboard omits the row.
+
+- **`HIDDEN_PREFIX`** — deviceId prefixes, for specific old records already identified by hand
+  (`'4392d978'`, `'f8ad1b82'`, `'zzz-prev'`). Only hides devices that existed when the prefix was
+  added; a fresh test pass (new browser/incognito/profile) mints a new deviceId every time, so this
+  list does not stay ahead of new testing on its own.
+- **`HIDDEN_NAMES`** — profile names (case-insensitive), for durable use: pick a name once and it
+  stays hidden no matter how many new device ids use it. **The standing QA name is `zzztest`** —
+  use it (any case) whenever testing something the leaderboard would otherwise show, so test plays
+  never surface as a fake player. Reusing the same name also has a side benefit: `players-agg.js`'s
+  identity graph unions any two nameless-of-code devices that share a name, so repeated test runs
+  under `zzztest` collapse into one aggregate group instead of piling up new rows.
+
+If a new stray test/debug record turns up by device id instead (e.g. found via
+`node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
+`You` records were found on 2026-07-29), add its id to `HIDDEN_PREFIX` rather than guessing a name
+match — a name-only fix would miss it if the record used a different name.
+
+---
+
 ## The leaderboard's rating model (2026-07-22)
 
 **2026-07-23 redesign (wins-only display, rating retired from the UI):** Matt's call, third
