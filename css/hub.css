@@ -507,21 +507,19 @@ body {
 :root.gh-dark .lb-top,
 :root.gh-dark .gs-top { background: rgba(14, 20, 32, 0.94); }
 :root.gh-dark .lb-seg.is-active { background: var(--hub-accent); border-color: var(--hub-accent); }
-:root.gh-dark .lb-pill,
+/* 2026-07-29 (HANDOFF-LB-FILTER-SORT.md): the old pill row (.lb-pill, [data-tier] on a pill
+   button) was replaced by the filter/sort dropdown control row. .lb-tile2.is-sel (the tier
+   tiles, unchanged) keeps its override; .lb-ctrl-btn/.lb-menu/.lb-mitem.is-sel are the new
+   equivalents for the control row's own hardcoded-color spots. */
 :root.gh-dark .lb-tile2.is-sel { background: var(--hub-surface); }
+:root.gh-dark .lb-ctrl-btn { background: var(--hub-surface); border-color: var(--hub-surface-2); color: var(--hub-ink); }
+:root.gh-dark .lb-menu { background: var(--hub-surface); border-color: var(--hub-surface-2); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+:root.gh-dark .lb-mitem.is-sel { background: var(--hub-surface-2); }
 /* Tiers 3/4's near-black ski-slope shapes (#1c2430) vanish on a dark surface. diffShapeSVG's
    svg carries its own inline fill attribute (the TIER_COLOR); a CSS rule targeting that same
    svg element still wins over its own presentation attribute, which is what this override
    relies on (2026-07-24, batch A). Every game's own Phase 2 dark-mode pass (HANDOFF-FB-THEME.md)
    must include the same override scoped to its own root class, for setup screens rendered
-   outside the hub shell. */
+   outside the hub shell. Still applies to the filter dropdown's menu items (.lb-mitem), which
+   render the same diffShapeSVG output the old pills did. */
 :root.gh-dark .lb-dshape-t3, :root.gh-dark .lb-dshape-t4 { fill: #e6e9f0; }
-/* An INACTIVE pill's border+text is --lb-pill-color, set inline per-pill (diffShapeSVG's tier
-   color); Hard/Expert and the All fallback all use the same near-black #1c2430, which vanishes
-   on the dark surface same as the shapes above. An inline custom property can't be overridden
-   from here, so this targets the resolved properties directly via the pill's own `data-tier`
-   attribute (''=All, '3'=Hard, '4'=Expert) - more specific than the base `.lb-pill` rule, so it
-   wins without `!important`. The ACTIVE (inverted, filled) state is unaffected on purpose. */
-:root.gh-dark .lb-pill:not(.is-active)[data-tier=""],
-:root.gh-dark .lb-pill:not(.is-active)[data-tier="3"],
-:root.gh-dark .lb-pill:not(.is-active)[data-tier="4"] { border-color: #e6e9f0; color: #e6e9f0; }

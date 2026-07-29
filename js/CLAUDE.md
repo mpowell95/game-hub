@@ -88,7 +88,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data. Owns one preference key of its own, `gamehub.lb.sort.v1` (the sort choice, alongside `gamehub.favorites.v1`/`gamehub.theme.v1`/`gamehub.lang.v1` — THE LAW rule 2's carve-out) |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: wins are the stored `won` (a draw is NOT a win, 2026-07-28), difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) that only Chinchón uses so far; see "The ninth consumer" |
@@ -602,6 +602,30 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
 
 ---
 
+## Hiding test/debug accounts from the leaderboard (2026-07-29)
+
+`js/leaderboard-ui.js` has two hide lists, checked in `visibleRecords()`/`currentBody()`. Neither
+ever deletes anything (THE LAW rule 5) — a hidden record's plays stay in Firebase and still show
+on that device's own My Stats; only the shared leaderboard omits the row.
+
+- **`HIDDEN_PREFIX`** — deviceId prefixes, for specific old records already identified by hand
+  (`'4392d978'`, `'f8ad1b82'`, `'zzz-prev'`). Only hides devices that existed when the prefix was
+  added; a fresh test pass (new browser/incognito/profile) mints a new deviceId every time, so this
+  list does not stay ahead of new testing on its own.
+- **`HIDDEN_NAMES`** — profile names (case-insensitive), for durable use: pick a name once and it
+  stays hidden no matter how many new device ids use it. **The standing QA name is `zzztest`** —
+  use it (any case) whenever testing something the leaderboard would otherwise show, so test plays
+  never surface as a fake player. Reusing the same name also has a side benefit: `players-agg.js`'s
+  identity graph unions any two nameless-of-code devices that share a name, so repeated test runs
+  under `zzztest` collapse into one aggregate group instead of piling up new rows.
+
+If a new stray test/debug record turns up by device id instead (e.g. found via
+`node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
+`You` records were found on 2026-07-29), add its id to `HIDDEN_PREFIX` rather than guessing a name
+match — a name-only fix would miss it if the record used a different name.
+
+---
+
 ## The leaderboard's rating model (2026-07-22)
 
 **2026-07-23 redesign (wins-only display, rating retired from the UI):** Matt's call, third
@@ -657,13 +681,16 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   let volume alone top the board. The bullet that used to stand here ("solo volume inflates win
   counts... trading precision for legibility") described the OLD, now-fixed behavior; do not
   revive it as a design goal.
-- **Difficulty is a single-select FILTER now, not a weighting.** Five pills — All (default),
-  Beginner, Intermediate, Pro, Expert — shared between By Player and By Game and carried into a
-  game's own page; resets to All every time the overlay opens (not persisted). Ski-slope shapes
-  (circle/square/diamond/double-diamond, `diffShapeSVG()` in leaderboard-ui.js) carry the tier,
-  color is secondary (colorblind rule). **Legacy/unknown buckets (`tierOf()` returns null) count in
-  All ONLY** and appear under no tier pill — dropping them from All would be a rule 1 regression on
-  exactly the data `foldLegacy` exists to preserve. `difficulty-tiers.js` itself is untouched.
+- **Difficulty is a single-select FILTER, chosen from a DROPDOWN (2026-07-29, HANDOFF-LB-FILTER-
+  SORT.md — the old 5-pill row is gone).** All (default), Beginner, Intermediate, Pro, Expert —
+  shared between By Player and By Game and carried into a game's own page; resets to All every
+  time the overlay opens (not persisted, D7). Ski-slope shapes (circle/square/diamond/
+  double-diamond, `diffShapeSVG()` in leaderboard-ui.js) still carry the tier on each menu item,
+  color is secondary (colorblind rule); the selected item is marked by `aria-checked` plus a
+  trailing checkmark (`.lb-mitem.is-sel::after`), never by hue alone. **Legacy/unknown buckets
+  (`tierOf()` returns null) count in All ONLY** and appear under no tier item — dropping them from
+  All would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
+  `difficulty-tiers.js` itself is untouched.
 - **Ball Run and Snake are the one place "wins at a tier" and "the game's own metric" diverge** —
   their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`), not a play count, so
   `leaderboard-ui.js` special-cases `brBestAt()`/`snBestAt()` for them; every other game (including
@@ -672,8 +699,35 @@ are read-only to this feature — nothing is stored, migrated or normalized.
 - **Everyone with any recorded play at the selected filter is listed** (`plays > 0` at that tier;
   under All, any play at all) — the same visibility bar as the old rating-based board, now applied
   per-filter instead of once. A Beginner-only player must still be visible under the default (All).
-- Sort: wins (or metric) desc → fewer games wins ties (better economy) → `updatedAt` desc — same
-  shape as the old rating tie-break, just without the rating.
+- **Sort is now a SEPARATE dropdown, also anchored under its trigger (D4), with three orders**
+  (2026-07-29, HANDOFF-LB-FILTER-SORT.md; replaces the old single fixed wins-desc order):
+
+  | Sort | By Player order | Game board order |
+  |---|---|---|
+  | Alphabetical | name → wins desc → `updatedAt` desc | name → this game's metric desc → `updatedAt` desc |
+  | Games Played | `playedOf` desc → wins desc → `updatedAt` desc | plays desc → metric desc → `updatedAt` desc |
+  | Wins (= the game's own metric on a board) | wins desc → **`playedOf` asc** (fewer plays wins ties) → `updatedAt` desc | untouched from before this redesign: Tic Tac Toe's ultimate→classic→recency; every other game's metric→plays→recency |
+
+  By Player's `playedOf`/`winsOf` are thin wrappers (`playsAtTier`/`winsAtTier` over
+  `ALL_IDS`/`COMP_IDS` respectively — see the solo-runs paragraph above for why they stay two
+  different id lists). **Sort choice PERSISTS** (`gamehub.lb.sort.v1`, `{version,sort,updatedAt}`,
+  a THE-LAW-rule-2-preference same class as favorites/theme/language — D6), unlike the difficulty
+  filter. **By Game's top-level tab has no sort control at all** (D3) — it stays alphabetical by
+  title, as it always has; a game's own drill-in board gets both filter AND sort, the third sort
+  option labeled by that game's own metric (`unitKeyOf(id)` → the matching `lb_sort_*` string).
+  Tic Tac Toe's and Snake's two-number split cards (`ttCardHTML`/`snCardHTML`) are left
+  structurally alone — no big/small swap — but Alphabetical/Games Played still reorder them.
+- **The card itself is two rows now** (`playerCardHTML`, replacing the old three-ish stack): row 1
+  is rank/avatar/name/the metric CURRENTLY SORTED BY (large, its unit stacked underneath); row 2 is
+  the tier tiles (unchanged — always wins-per-tier, never follows the sort) plus the OTHER metric,
+  small and muted, right-aligned. The old **`N games · N runs` line is off this screen** (Matt,
+  2026-07-29: "just don't show it on this screen") — `metaLine()` and `runsAtTier()` are UNUSED but
+  left in place per THE LAW rule 9's spirit (nothing deleted, just not rendered; the helper is
+  there if it's ever wanted back). The card's "played" number (`playedOf`) counts **all** plays,
+  competitive + solo runs — this does **not** revive the pre-`HANDOFF-LB-SOLO-RUNS.md` behavior of
+  folding runs into WINS; `winsOf` stays competitive-only, unchanged. The player detail screen
+  (no sort control there) always leads with wins (D1's default) and shows a single `N played`
+  meta line (`lb_played_count`) in `metaLine`'s place.
 
 **`js/game-art.js`** is the single source for every hub-launcher tile's inline SVG art, keyed by the
 HUB registry id (`GAMES[].id]` — moved out of `js/hub.js`'s GAMES array so the Leaderboard's By Game
