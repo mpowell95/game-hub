@@ -18,6 +18,7 @@ import { isDevProfile } from './challenge/hooks.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
+import { SOLO } from './players-agg.js';
 import { record } from './leaderboard-rank.js';
 
 const t = makeT(STRINGS);
@@ -413,17 +414,21 @@ export function gameListHTML(games) {
   return `<div class="gs-glist">${rows.join('')}</div>`;
 }
 
-/** Sum across every visible game: total plays and total wins (draws-as-wins, same maths the
- *  leaderboard uses) — the two headline numbers on My Stats' overview screen. */
+/** Sum across every visible game: total plays, competitive wins, and solo runs. Ball Run/Snake
+ *  runs and Nuts & Bolts solves are recorded as played+1/won+1 (they have no loss axis), so folding
+ *  them into "Wins" made a crash read as a victory — they are counted and labeled as runs instead
+ *  (Matt, 2026-07-28; same split as the Leaderboard's By Player card). `plays` still counts every
+ *  game, solo included: it was always an honest number and stays one. */
 function overviewTotals(games) {
   const g = games || {};
-  let plays = 0, wins = 0;
+  let plays = 0, wins = 0, runs = 0;
   for (const tab of visibleTabs()) {
     const tot = (g[tab.id] || {}).total || {};
     plays += tot.played | 0;
-    wins += record(tot).wins;
+    if (SOLO.has(tab.id)) runs += tot.played | 0;
+    else wins += record(tot).wins;
   }
-  return { plays, wins };
+  return { plays, wins, runs };
 }
 
 function overviewHTML(st) {
@@ -441,6 +446,7 @@ function overviewHTML(st) {
       <div class="gs-tallies is-4">
         <div class="gs-tally"><b>${totals.plays}</b><span>${t('gs_total_games')}</span></div>
         <div class="gs-tally"><b>${totals.wins}</b><span>${t('gs_wins')}</span></div>
+        ${totals.runs > 0 ? `<div class="gs-tally"><b>${totals.runs}</b><span>${t('gs_runs')}</span></div>` : ''}
       </div>
     </div>`;
 }
