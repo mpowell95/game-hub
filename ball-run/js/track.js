@@ -59,6 +59,11 @@ export class Track {
     this.lastWasTunnel = false;
     this.pendingObstacleGapCenter = null; // previous obstacle row's gap center, for spacing chaining
     this.pendingObstacleRowZ = null; // previous obstacle row's z0, for spacing chaining (item 3)
+    // Split (Orbital only, BALLRUNMAP2ORBITALSPEC.md section 2/6): same deterministic-cadence
+    // shape as tunnels above. `this.map.split` is undefined on any map without it (Classic), so
+    // every place that reads it is guarded on that.
+    this.lastSplitZ = 0;
+    this.lastWasSplit = false;
 
     // Distance-paced obstacle scheduler (Matt's second-playthrough item 2): the first event is
     // guaranteed inside the 40-60m window on every run, every difficulty, independent of the RNG's
@@ -78,6 +83,7 @@ export class Track {
 
     this._cx = 0; // running centerline X as segments are appended
     this._width = this.map.baseTrackWidth * BALL_DIAMETER;
+    this._void = 0; // running void half-width (Split only; every other event leaves this at 0)
 
     this.ensureAhead(SEGMENTS_AHEAD * SEGMENT_LENGTH);
   }
@@ -113,23 +119,37 @@ export class Track {
     const tunnelDue = !this.lastWasTunnel && this.frontZ - this.lastTunnelZ >= cfg.tunnelSpacingMeters;
     if (tunnelDue) type = 'tunnel';
 
+    // Split (Orbital only, spec section 6): same deterministic-meter-cadence shape as tunnels,
+    // never drawn from the weighted-random pool. Tunnel wins if both are due on the same tick
+    // (tunnels are the speed-pacing backbone - spec section 6 says keep them); the split just
+    // stays due and fires on the very next event, same pattern as obstacle-vs-tunnel below. The
+    // extra `!this.lastWasSplit` guard mirrors tunnel's own - straightsOwed alone doesn't
+    // guarantee the cadence gap can't already be due again the instant it's cleared.
+    const splitCfg = this.map.split;
+    const splitDue = !!splitCfg && !this.lastWasSplit && type !== 'tunnel'
+      && this.frontZ - this.lastSplitZ >= splitCfg.cadenceM;
+    if (splitDue) type = 'split';
+
     // Obstacle occurrence is distance-paced, not weighted-random (item 2): fire as soon as this
-    // event's start distance reaches the scheduled threshold. Tunnel wins if both are due on the
-    // same tick; the obstacle stays due and fires on the very next event instead.
-    const obstacleDue = type !== 'tunnel' && this.frontZ >= this.nextObstacleZ;
+    // event's start distance reaches the scheduled threshold. Tunnel/split win if due on the same
+    // tick; the obstacle stays due and fires on the very next event instead.
+    const obstacleDue = type !== 'tunnel' && type !== 'split' && this.frontZ >= this.nextObstacleZ;
     if (obstacleDue) type = 'obstacle';
 
-    // A multi-segment event (curve/narrow) can span up to ~20m in one generateEvent() call, and
+    // A multi-segment event (curve/narrow/split) can span well past one generateEvent() call, and
     // the due check above only runs once per call - so a long event picked just before the
     // threshold could sail straight past it (this is what let the first obstacle land outside its
     // guaranteed window before this fix). Only step down to a single short segment when the
     // SPECIFIC type just picked would actually overshoot, not for the whole approach window, so
-    // curves/narrows still generate normally right up until they'd cross the line. Scoped to the
-    // first event only (see this._firstObstaclePending) so a tight later cadence can't veto curves
-    // for the rest of the run.
+    // curves/narrows/splits still generate normally right up until they'd cross the line. Scoped
+    // to the first event only (see this._firstObstaclePending) so a tight later cadence can't veto
+    // curves for the rest of the run. (In practice split's own ~120m cadence means this branch is
+    // basically unreachable for it - the 40-60m first-obstacle window always closes first - but it
+    // is handled for correctness rather than assumed away.)
     if (this._firstObstaclePending && !obstacleDue && type !== 'tunnel') {
       const worstCaseSpanM = type === 'curve' ? CURVE_SEGMENTS * SEGMENT_LENGTH
         : type === 'narrow' ? 11 * SEGMENT_LENGTH // taper(3) + hold(up to 5) + taper(3)
+        : type === 'split' ? (splitCfg.widenSegs + 8 + splitCfg.holdMaxSegs + splitCfg.closeSegs + splitCfg.narrowBackSegs) * SEGMENT_LENGTH // +8: generous guess for the fairness-derived Open phase, computed for real inside emitSplit()
         : 3 * SEGMENT_LENGTH; // straight, worst case
       if (this.frontZ + worstCaseSpanM > this.nextObstacleZ) type = 'straight-step';
     }
@@ -142,9 +162,11 @@ export class Track {
     else if (type === 'narrow') this.emitNarrow();
     else if (type === 'obstacle') this.emitObstacleRows();
     else if (type === 'tunnel') this.emitTunnel();
+    else if (type === 'split') this.emitSplit();
     else this.emitStraight();
 
     this.lastWasTunnel = type === 'tunnel';
+    this.lastWasSplit = type === 'split';
   }
 
   /** Meters until the next obstacle event, from `estimatedTier` speed tiers in (mild shrink per tier, floored). */
@@ -169,13 +191,23 @@ export class Track {
       cx1: this._cx + (fields.dcx || 0),
       w0: this._width,
       w1: this._width + (fields.dw || 0),
+      // Split only (BALLRUNMAP2ORBITALSPEC.md section 2): void0/void1 are the segment's start/end
+      // void half-width, interpolated exactly like w0/w1 above; voidCenter is constant across a
+      // whole Split event (0 unless the 'unequal' side-variety rolled an off-centerline gap), so
+      // it needs no start/end pair. Both default to 0 for every other event type.
+      void0: this._void,
+      void1: Math.max(0, this._void + (fields.dVoid || 0)),
+      voidCenter: fields.voidCenter || 0,
       type: fields.type,
       isTunnel: !!fields.isTunnel,
+      telegraph: !!fields.telegraph, // Split's Widen-phase divider line (render.js, visual only)
+      scoreOnce: !!fields.scoreOnce, // Split's single +1, on its very last segment
       obstacles: fields.obstacles || null,
       showSpeedLabel: !!fields.showSpeedLabel,
     };
     this._cx = seg.cx1;
     this._width = Math.max(this.map.minTrackWidth * BALL_DIAMETER, seg.w1);
+    this._void = seg.void1;
     this.frontZ = z1;
     this.segments.push(seg);
     return seg;
@@ -342,23 +374,39 @@ export class Track {
     this.straightsOwed = Math.max(this.straightsOwed, OBSTACLE_MIN_STRAIGHT_AFTER);
   }
 
+  /** Cubes fill [loBW, hiBW] minus the safe gap [gapLo, gapHi] (ball-widths, relative to the
+   *  centerline) - the shared core between buildObstacleRow (the full track width) and Split's
+   *  buildLaneObstacleRow (one lane's own range). Anchor each fill's cube grid AT the gap edge
+   *  (not at the outer bound) so no cube can ever encroach into the safety gap: a grid anchored at
+   *  the outer bound instead could land its nearest-to-gap cube anywhere up to just short of
+   *  gapLo/gapHi, shrinking the true passable width below the configured gap (found via a
+   *  generated-track audit). Cube pitch in ball-widths (item 3: cubes are 1.5 ball-diameters, not
+   *  1, so the fill grid must step by the cube's own size or adjacent cubes would overlap). */
+  fillObstacleCubes(loBW, hiBW, gapLo, gapHi) {
+    const cubeBW = OBSTACLE_SIZE / BALL_DIAMETER;
+    const cubes = [];
+    for (let x = gapLo - cubeBW / 2; x > loBW; x -= cubeBW) cubes.push({ lateral: x });
+    for (let x = gapHi + cubeBW / 2; x < hiBW; x += cubeBW) cubes.push({ lateral: x });
+    return cubes.map((c) => ({ lateral: c.lateral * BALL_DIAMETER }));
+  }
+
   /** Cubes fill the track minus a `gapBW`-wide safe gap centered at `gapCenter` (ball-widths, relative to centerline). */
   buildObstacleRow(widthBW, gapBW, gapCenter) {
     const half = widthBW / 2;
-    const gapLo = gapCenter - gapBW / 2;
-    const gapHi = gapCenter + gapBW / 2;
-    const cubes = [];
-    // Cube pitch in ball-widths (item 3: cubes are now 1.5 ball-diameters, not 1, so the fill grid
-    // must step by the cube's own size or adjacent cubes would overlap).
-    const cubeBW = OBSTACLE_SIZE / BALL_DIAMETER;
-    // Anchor each fill's cube grid AT the gap edge (not at the track edge) so
-    // no cube can ever encroach into the safety gap: a cube grid anchored at
-    // the track edge instead could land its nearest-to-gap cube anywhere up
-    // to just short of gapLo/gapHi, shrinking the true passable width below
-    // the configured OBSTACLE_MIN_GAP (found via a generated-track audit).
-    for (let x = gapLo - cubeBW / 2; x > -half; x -= cubeBW) cubes.push({ lateral: x });
-    for (let x = gapHi + cubeBW / 2; x < half; x += cubeBW) cubes.push({ lateral: x });
-    return cubes.map((c) => ({ lateral: c.lateral * BALL_DIAMETER }));
+    return this.fillObstacleCubes(-half, half, gapCenter - gapBW / 2, gapCenter + gapBW / 2);
+  }
+
+  /** Split's per-lane obstacle row (BALLRUNMAP2ORBITALSPEC.md section 2, "side variety" ~35%
+   *  roll): confined to ONE lane's own [loBW, hiBW] range, with `gapBW` (the standard
+   *  OBSTACLE_MIN_GAP) reserved somewhere inside just that lane rather than centered on the whole
+   *  corridor. The caller only ever invokes this for one side, so the OTHER lane is never touched
+   *  and stays clean by construction - "every Split must have at least one clean lane" (landmine
+   *  #7) holds trivially, not by a separate check. */
+  buildLaneObstacleRow(loBW, hiBW, gapBW) {
+    const laneWidth = hiBW - loBW;
+    const maxGapCenterOffset = Math.max(0, (laneWidth - gapBW) / 2);
+    const gapCenter = (loBW + hiBW) / 2 + (this.rng() * 2 - 1) * maxGapCenterOffset;
+    return this.fillObstacleCubes(loBW, hiBW, gapCenter - gapBW / 2, gapCenter + gapBW / 2);
   }
 
   emitTunnel() {
@@ -368,6 +416,104 @@ export class Track {
       this.pushSegment({ type: 'tunnel', isTunnel: true, showSpeedLabel: showLabel });
     }
     this.straightsOwed = TUNNEL_MIN_STRAIGHT_AFTER;
+    this.pendingObstacleGapCenter = null;
+    this.pendingObstacleRowZ = null;
+  }
+
+  /**
+   * Split (Orbital only, BALLRUNMAP2ORBITALSPEC.md section 2): the track widens, a void band
+   * opens down the centerline, holds, closes, then narrows back - ONE wide segment with a void
+   * band, never two separate tracks. This is the whole trick: the single-centerline coordinate
+   * model, the one-segment collision check, and everything built on top of them (worldPointAt,
+   * the camera, obstacle placement) stay completely untouched. Only reachable when
+   * `this.map.split` exists (generateEvent() gates splitDue on it), so Classic never calls this.
+   */
+  emitSplit() {
+    const cfg = this.map.split;
+    this.lastSplitZ = this.frontZ;
+
+    const totalWidth = cfg.totalWidthBW * BALL_DIAMETER;
+    const voidHalf = cfg.voidHalfBW * BALL_DIAMETER;
+    const baseWidth = this._width;
+
+    // Fairness rule (section 2, "do not skip this"): a player centered on the void when it opens
+    // must have time to steer clear, AT THIS EVENT'S ACTUAL forward speed. Reuses the exact same
+    // time-derived spacing math as obstacle-row spacing (estimateSpeedAt/lateralMaxAtSpeed/
+    // OBSTACLE_SPACING_SAFETY_FACTOR) rather than hand-rolling a simpler version - landmine #2,
+    // the precise mistake that caused the "46m wall" bug.
+    const speed = this.estimateSpeedAt(this.frontZ);
+    const maxLateralSpeed = this.lateralMaxAtSpeed(speed);
+    const timeNeeded = voidHalf / maxLateralSpeed;
+    const openLengthWorld = timeNeeded * speed * OBSTACLE_SPACING_SAFETY_FACTOR;
+    const openSegs = Math.max(1, Math.ceil(openLengthWorld / SEGMENT_LENGTH));
+
+    const holdSegs = cfg.holdMinSegs + Math.floor(this.rng() * (cfg.holdMaxSegs - cfg.holdMinSegs + 1));
+
+    // Side variety (section 2): rolled once, up front, since every phase below depends on the
+    // outcome - the void's center offset for 'unequal', which Hold segment (if any) carries the
+    // row for 'obstacle'. ~50% identical lanes / ~35% one lane carries a single obstacle row /
+    // ~15% unequal lane widths.
+    const r = this.rng();
+    const sideRoll = r < cfg.sideIdenticalChance ? 'identical'
+      : r < cfg.sideIdenticalChance + cfg.sideObstacleChance ? 'obstacle'
+      : 'unequal';
+
+    const halfWidthBW = cfg.totalWidthBW / 2;
+    let voidCenterBW = 0;
+    if (sideRoll === 'unequal') {
+      // Both lanes must stay >= this.map.minTrackWidth (section 2's width formula, generalized:
+      // SPLIT_TOTAL_WIDTH >= 2*MIN_TRACK_WIDTH + 2*SPLIT_VOID_HALF holds the void centered; an
+      // off-center void trades that margin between the two lanes instead of spending it evenly).
+      const maxOffsetBW = Math.max(0, halfWidthBW - cfg.voidHalfBW - this.map.minTrackWidth);
+      voidCenterBW = (this.rng() < 0.5 ? -1 : 1) * maxOffsetBW * (0.4 + this.rng() * 0.6);
+    }
+    const voidCenter = voidCenterBW * BALL_DIAMETER;
+
+    let obstacleHoldIndex = -1, obstacleLeftLane = true;
+    if (sideRoll === 'obstacle') {
+      obstacleHoldIndex = Math.floor(this.rng() * holdSegs);
+      obstacleLeftLane = this.rng() < 0.5;
+    }
+
+    // --- Widen: width grows to totalWidth, void stays 0. Telegraph a lit divider line at lateral
+    // 0 the whole time (visual only, render.js) so the player learns the shape by seeing it once -
+    // no instructional text anywhere (landmine #8).
+    const widenDelta = (totalWidth - baseWidth) / cfg.widenSegs;
+    for (let i = 0; i < cfg.widenSegs; i++) this.pushSegment({ type: 'split', dw: widenDelta, telegraph: true });
+
+    // --- Open: voidHalfWidth grows 0 -> voidHalf, over the fairness-derived length above. ---
+    const openDelta = voidHalf / openSegs;
+    for (let i = 0; i < openSegs; i++) this.pushSegment({ type: 'split', dVoid: openDelta, voidCenter });
+
+    // --- Hold: steady void at full voidHalf; this is where the side-variety obstacle row (if
+    // rolled) sits, confined to ONE lane, leaving the other completely clean.
+    for (let i = 0; i < holdSegs; i++) {
+      let obstacles = null;
+      if (i === obstacleHoldIndex) {
+        const laneLo = obstacleLeftLane ? -halfWidthBW : voidCenterBW + cfg.voidHalfBW;
+        const laneHi = obstacleLeftLane ? voidCenterBW - cfg.voidHalfBW : halfWidthBW;
+        obstacles = this.buildLaneObstacleRow(laneLo, laneHi, OBSTACLE_MIN_GAP);
+      }
+      this.pushSegment({ type: 'split', voidCenter, obstacles });
+    }
+
+    // --- Close: voidHalfWidth shrinks back to 0. ---
+    const closeDelta = -voidHalf / cfg.closeSegs;
+    for (let i = 0; i < cfg.closeSegs; i++) this.pushSegment({ type: 'split', dVoid: closeDelta, voidCenter });
+
+    // --- Narrow back: width returns to normal. Scored on the very last segment only (section 2,
+    // "Scoring": "+1 on clearing a Split, same as clearing an obstacle row") - once the player has
+    // survived the WHOLE event, including any in-lane obstacle, not just the fork itself; mirrors
+    // how an obstacle row only scores once its own far edge is crossed.
+    const narrowDelta = (baseWidth - totalWidth) / cfg.narrowBackSegs;
+    for (let i = 0; i < cfg.narrowBackSegs; i++) {
+      this.pushSegment({ type: 'split', dw: narrowDelta, scoreOnce: i === cfg.narrowBackSegs - 1 });
+    }
+
+    // Force a clean stretch after the event so Splits can't chain (section 2), and reset the
+    // obstacle-spacing chain the same way a tunnel does - the width swing invalidates the previous
+    // corridor reference no less than a tunnel's does.
+    this.straightsOwed = cfg.minStraightAfter;
     this.pendingObstacleGapCenter = null;
     this.pendingObstacleRowZ = null;
   }
@@ -393,11 +539,16 @@ export class Track {
   /** Interpolated centerline X and track width at world distance z. */
   frameAt(z) {
     const seg = this.segmentAt(z);
-    if (!seg) return { cx: 0, width: this.map.baseTrackWidth * BALL_DIAMETER, segment: null };
+    if (!seg) return { cx: 0, width: this.map.baseTrackWidth * BALL_DIAMETER, voidHalfWidth: 0, voidCenter: 0, segment: null };
     const t = Math.min(1, Math.max(0, (z - seg.z0) / (seg.z1 - seg.z0)));
     return {
       cx: seg.cx0 + (seg.cx1 - seg.cx0) * t,
       width: seg.w0 + (seg.w1 - seg.w0) * t,
+      // Split only (section 2): voidHalfWidth is interpolated exactly like width above (it ramps
+      // within a segment during Open/Close); voidCenter is constant across a segment so no
+      // interpolation is needed. Both are 0 for every non-Split segment.
+      voidHalfWidth: (seg.void0 || 0) + ((seg.void1 || 0) - (seg.void0 || 0)) * t,
+      voidCenter: seg.voidCenter || 0,
       segment: seg,
     };
   }

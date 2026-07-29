@@ -199,13 +199,12 @@ export function difficultyConfig(key) {
 //
 // A map owns the track geometry it plays at (baseTrackWidth/minTrackWidth, both in
 // ball-widths, per brief section 5) and its own color set. Difficulty tuning
-// (DIFFICULTIES above) and event-type generation are shared for now: Orbital ships in
-// Phase 1 as a PURE VISUAL RE-SKIN of Classic's rules (same spec, section 7, Phase 1) —
-// mechanically different event types (Split, Jump) and their own tuning land in Phases
-// 2 and 3, not here. Reusing the same DIFFICULTIES object (not a clone) means a future
-// Classic retune is automatically inherited by Orbital until Orbital's own numbers are
-// deliberately split out; do that split explicitly when Phase 2/3 need diverging tuning,
-// don't let it happen by accident.
+// (DIFFICULTIES above) is shared for now: Orbital's DIFFICULTIES came from Phase 1's pure
+// re-skin and haven't been retuned around Split yet (spec section 6: "these numbers are
+// guesses... expect to retune all of these with Matt"). Reusing the same DIFFICULTIES
+// object (not a clone) means a future Classic retune is automatically inherited by
+// Orbital until Orbital's own numbers are deliberately split out; do that split
+// explicitly when they need to diverge, don't let it happen by accident.
 export const MAPS = {
   classic: {
     key: 'classic',
@@ -213,7 +212,7 @@ export const MAPS = {
     baseTrackWidth: BASE_TRACK_WIDTH,
     minTrackWidth: MIN_TRACK_WIDTH,
     difficulties: DIFFICULTIES,
-    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump yet (Phase 2/3)
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump (Orbital only)
     colors: {
       void: COLOR_VOID,
       ball: COLOR_BALL,
@@ -233,13 +232,32 @@ export const MAPS = {
     baseTrackWidth: BASE_TRACK_WIDTH,
     minTrackWidth: MIN_TRACK_WIDTH,
     difficulties: DIFFICULTIES,
-    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'],
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel', 'split'], // Phase 2: split lands; jump is Phase 3
+    // Split tuning (Phase 2, spec sections 2 & 6 — "these numbers are guesses, not tuned
+    // values"). All widths in ball-widths (BW), matching every other geometry constant in
+    // this file; Track converts to world units. `minStraightAfter` mirrors
+    // TUNNEL_MIN_STRAIGHT_AFTER's role for tunnels: forces a clean stretch after the event
+    // so Splits can't chain into each other.
+    split: {
+      totalWidthBW: 9,
+      voidHalfBW: 1.25, // a 2.5 BW gap
+      widenSegs: 3,
+      holdMinSegs: 4,
+      holdMaxSegs: 7,
+      closeSegs: 3,
+      narrowBackSegs: 3,
+      cadenceM: 120, // roughly every 120m (spec: not yet split out per-difficulty like tunnels are)
+      minStraightAfter: 3,
+      sideIdenticalChance: 0.5,
+      sideObstacleChance: 0.35, // remaining 0.15 rolls 'unequal' lane widths
+    },
     // Visual identity (spec section 5): near-black deep navy void, dark slate deck panels
     // with lighter seams, a continuous amber (#ffce3a) edge stripe since this map is about
     // falling off, light gray cargo blocks with an amber emissive outline, a ribbed amber-
     // chevron airlock tunnel, pale cyan drone-sphere ball. Never red/green (colorblind
     // rule). "Sign-off on the Orbital color set" is an explicit open item for Matt
-    // (spec section 9) — these are a first pass, not final.
+    // (spec section 9) — these are a first pass, not final. Split's divider/void-edge
+    // stripes (render.js) reuse `obstacleEdge` — the same amber "attention" color.
     colors: {
       void: 0x03060f,
       ball: 0x8fe9ff,

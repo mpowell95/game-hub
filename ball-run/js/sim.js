@@ -119,6 +119,16 @@ export class Sim {
       }
     }
 
+    // --- Void fall (Split, BALLRUNMAP2ORBITALSPEC.md section 2): the ball's CENTER inside the
+    // void band is a fall, same crash reason/animation as the outer edge (spec: "Sim change
+    // (small)") - reuses the existing FALLING state, no new game-over path. `frame.voidHalfWidth`
+    // is 0 for every non-Split segment, so this is a no-op on Classic and on Orbital outside a
+    // Split event.
+    if (frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - frame.voidCenter) < frame.voidHalfWidth) {
+      this.beginCrash('edge');
+      return;
+    }
+
     // --- Edge fall: ball's CENTER passes the track edge (brief section 5) ---
     if (Math.abs(this.lateralOffset) > halfWidth) {
       this.beginCrash('edge');
@@ -128,9 +138,11 @@ export class Sim {
     this.updateScore();
   }
 
-  /** Score any obstacle-row segments the ball has now fully cleared (z past the segment's far edge).
-   * Never runs on a step that just crashed (both crash paths return before this call), so a row the
-   * run ends on is never scored. */
+  /** Score any obstacle-row segments the ball has now fully cleared (z past the segment's far
+   * edge), plus a Split's own single +1 on its designated last segment (`scoreOnce`, section 2:
+   * "same as clearing an obstacle row" - one point for the whole event, not one per segment).
+   * Never runs on a step that just crashed (both crash paths return before this call), so a row
+   * or Split the run ends on is never scored. */
   updateScore() {
     const segs = this.track.segments;
     for (let i = 0; i < segs.length; i++) {
@@ -138,6 +150,7 @@ export class Sim {
       if (seg.index <= this._lastScoredSegmentIndex) continue;
       if (seg.z1 > this.z) break; // ascending order: nothing past this one has been cleared yet either
       if (seg.type === 'obstacle') this.score += 1;
+      else if (seg.scoreOnce) this.score += 1;
       this._lastScoredSegmentIndex = seg.index;
     }
   }

@@ -112,8 +112,88 @@ it."). Phase 2 (Split) and Phase 3 (Jump) are what make it mechanically differen
     genuinely untouched. A standalone headless check of `migrateBestScoresToMaps()`'s exact logic
     (old key untouched, new key created once, a real post-migration value never clobbered by a
     re-run) is in this milestone's session notes, not committed as a repo script.
-- **What's NOT done yet (Phases 2-4 of the spec, not started):** Split (`voidHalfWidth`, the
-  telegraph line, side variety), Jump (height axis, `worldPointAt` growing a Y component — the
-  spec's own flagged highest-risk change, touching every caller), pickups. Orbital's own
-  difficulty/geometry tuning is also still Classic's numbers verbatim — retuning it is explicitly
-  out of scope until Orbital has mechanics of its own to tune around (spec section 6).
+- **What was NOT done in Phase 1 (now done, see Phase 2 below):** Split. **Still not done:** Jump
+  (height axis, `worldPointAt` growing a Y component — the spec's own flagged highest-risk change,
+  touching every caller), pickups. Orbital's own difficulty/geometry tuning is also still
+  Classic's numbers verbatim outside of Split's own constants below — retuning the rest is
+  explicitly out of scope until Jump exists too (spec section 6).
+
+## Split (BALLRUNMAP2ORBITALSPEC.md, Phase 2 shipped 2026-07-29)
+
+Orbital's first mechanically-different event, Classic still has none of this. **One wide segment
+with a void band down the middle, never two separate tracks** — the whole point (spec section 2)
+is that the single-centerline coordinate model, the one-segment collision check, and everything
+built on top of them (`worldPointAt`, the camera, obstacle placement) stay completely untouched.
+No height axis; that's Jump (Phase 3, not started).
+
+- **Data**: every segment gained `void0`/`void1` (world units, interpolated exactly like `w0`/`w1`
+  — the half-width of the void band, ramping within a segment during Open/Close) and `voidCenter`
+  (world units, constant across a whole Split event — 0 for the `identical`/`obstacle` side
+  varieties, an off-centerline offset for `unequal`). Both default to 0 for every non-Split
+  segment, so Classic and every other Orbital event type are unaffected — verified by re-running
+  the exact same seeded headless Classic sim as Phase 1's own check and confirming byte-identical
+  output (same steps/state/score/z).
+- **`config.js`'s `MAPS.orbital.split`** owns every Split constant (`totalWidthBW: 9`,
+  `voidHalfBW: 1.25`, phase segment counts, `cadenceM: 120`, the side-variety chances) — Classic's
+  map object has no `split` key at all, and `track.js` gates every Split code path on
+  `this.map.split` being truthy, so `'split'` can never be picked for a map that doesn't define
+  it. **These are still the spec's own "starting guess" numbers (section 6), not retuned.**
+- **`Track.generateEvent()`**: Split is a deterministic meter cadence like tunnels
+  (`lastSplitZ`/`cadenceM`), never drawn from the weighted-random pool. Tunnel wins if both are
+  due on the same tick (tunnels stay the speed-pacing backbone, spec section 6); a due Split
+  otherwise stays due and fires on the very next event, same pattern the obstacle scheduler
+  already used against tunnels. The first-obstacle-window worst-case-span veto (the "46m wall"
+  fix's sibling) got a `'split'` case for correctness, though in practice Split's own ~120m
+  cadence means the 40-60m first-obstacle window always closes before a Split could ever be due.
+- **`Track.emitSplit()`**: five phases (Widen 3 / Open N / Hold 4-7 / Close 3 / Narrow-back 3),
+  built with the same `pushSegment` calls every other event type uses.
+  - **Open's length is fairness-derived, not the spec table's "4" guess** (section 2, "do not skip
+    this"): `timeNeeded = voidHalf / lateralMaxAtSpeed(estimateSpeedAt(z))`, then
+    `openLength = timeNeeded * speed * OBSTACLE_SPACING_SAFETY_FACTOR`, reusing the EXACT same
+    `Track` methods obstacle-row spacing already uses — landmine #2, the precise mistake that
+    caused the original "46m wall" bug, deliberately not hand-rolled a second time.
+  - **Side variety** (~50/35/15, rolled once up front): `identical` (both lanes clean),
+    `obstacle` (one Hold segment gets a `buildLaneObstacleRow()` row confined to ONE lane — the
+    other is never touched by that call, so it stays clean *by construction*, not by a separate
+    check — landmine #7), `unequal` (`voidCenter` offset within the headroom
+    `SPLIT_TOTAL_WIDTH/2 - voidHalf - minTrackWidth` leaves both lanes, biased 40-100% of that
+    headroom so it's never maxed out every time).
+  - `buildObstacleRow`/the new `buildLaneObstacleRow` now share a `fillObstacleCubes(loBW, hiBW,
+    gapLo, gapHi)` core (a pure refactor — full-width obstacle rows are byte-identical to before);
+    `buildLaneObstacleRow` is the same anchor-at-the-gap-edge logic applied to an arbitrary
+    `[loBW, hiBW]` range instead of `[-half, half]`.
+  - **Scoring** (`scoreOnce`, section 2: "+1 on clearing a Split, same as clearing an obstacle
+    row"): stamped on the Narrow-back phase's LAST segment only, one point for the whole event no
+    matter how many segments it spans — verified for every generated event across 90 seeded runs
+    (3 difficulties × 30 seeds) that each Split has exactly one `scoreOnce` segment.
+  - Forces `straightsOwed = cfg.minStraightAfter` and resets the obstacle-spacing chain
+    (`pendingObstacleGapCenter`/`pendingObstacleRowZ`) after, mirroring `emitTunnel()` exactly —
+    the width swing invalidates the previous corridor reference no less than a tunnel's does.
+- **`Track.frameAt()`** gained `voidHalfWidth`/`voidCenter` in its return value (0/0 for every
+  non-Split frame), interpolated the same way as `width`.
+- **`sim.js`'s crash check**: `Math.abs(this.lateralOffset - frame.voidCenter) <
+  frame.voidHalfWidth` triggers `beginCrash('edge')` — reuses the existing FALLING state and
+  game-over path verbatim, exactly as the spec's "Sim change (small)" promised. Verified via real
+  `Sim.step()` calls (not just direct state pokes): a ball centered in an open void falls, a ball
+  in either clear lane doesn't.
+- **`render.js`**: `_layoutFloor` renders a void-bearing segment as TWO floor strips (`floorPool`
+  = left, the new `floorPool2` = right, index-paired, both hidden whenever a slot's segment has no
+  void — i.e. always on Classic and most of Orbital too, so this costs nothing outside an actual
+  Split). A new `accentPool` (thin amber `MeshBasicMaterial` planes, `this.colors.obstacleEdge` —
+  the same "attention" amber Orbital already uses for obstacle/tunnel edges) draws either the
+  Widen-phase telegraph divider at lateral 0 (section 2: lit once, no instructional text anywhere
+  — landmine #8) or the void band's two inner edges (section 5: "same amber stripe on both inner
+  edges"), never both on one segment. `dispose()` releases all of the new pools' geometries/
+  materials/textures — non-negotiable 7 still holds.
+- **Verified**: `node run-all-tests.mjs` all green (20 suites, 0 failed; no suite needed changes).
+  Headless: 90 seeded generations (3 difficulties × 30 seeds) checked void-vs-track-width bounds,
+  both-lanes-≥-minTrackWidth, telegraph-never-overlaps-an-open-void, obstacles-never-inside-the-
+  void, and exactly-one-`scoreOnce`-per-event — zero violations. `Sim.step()` calls confirmed the
+  void crash fires/doesn't fire exactly where expected. Browser (Playwright): direct
+  Sim+Renderer construction confirmed the telegraph line, the two-strip void rendering (clear lane
+  and dead-center-in-the-void views), and the `unequal` variety's asymmetric strips all render as
+  designed; **15 full real-input runs** (actual Play button, actual randomized pointer-drag
+  steering through `input.js`, actual restart flow) on Orbital/Easy produced zero page errors and
+  zero console exceptions, with two runs surviving well past the first Split's ~120m cadence
+  (164m and 112m) — confirming the whole integration (rendering, physics, HUD, scoring, restart)
+  holds up under real play, not just scripted state.
