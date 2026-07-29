@@ -304,6 +304,7 @@ export class Track {
       telegraph: !!fields.telegraph, // Split's Widen-phase divider line (render.js, visual only)
       scoreOnce: !!fields.scoreOnce, // Split's single +1, on its very last segment
       jumpMeta: fields.jumpMeta || null, // { gapLength, landingY }, only on a jump's first gap segment
+      jumpLanding: !!fields.jumpLanding, // true only on a jump's first landing-hold segment (render.js's distance-visible gate marker)
       obstacles: fields.obstacles || null,
       showSpeedLabel: !!fields.showSpeedLabel,
       // Pickups (Phase 4, Orbital only): never set at push time - maybePlacePickup() mutates this
@@ -741,8 +742,18 @@ export class Track {
     // --- Landing hold: steady at the landing target. Scoring ("+1 on a successful landing",
     // section 3) is NOT a segment flag here (unlike Split) - it's awarded directly by sim.js's own
     // landing-transition code, a one-time event rather than a z-crossing scan.
+    //
+    // `jumpLanding: true` on ONLY the first landing-hold segment (mirrors `jumpMeta`'s `i === 0`
+    // marker on the gap above) - this is where the landing pad's real width/void/offset first
+    // exist at their full target value, so it's the one place render.js needs to plant a
+    // distance-visible warning gate. A grounded floor plane read from a shallow chase-cam angle
+    // foreshortens to near-nothing at range (the same "holes blend into black" problem Split's
+    // void has, worse here since the gap itself renders no floor at all to give a distance cue) -
+    // a vertical gate is legible from much farther away because it isn't subject to that
+    // foreshortening, so a player can read a narrow/offset/split landing BEFORE committing to the
+    // jump instead of discovering it mid-air with no time left to react.
     for (let i = 0; i < cfg.landingHoldSegs; i++) {
-      this.pushSegment({ type: 'jump', voidCenter: 0, wCenter: offset });
+      this.pushSegment({ type: 'jump', voidCenter: 0, wCenter: offset, jumpLanding: i === 0 });
     }
 
     // --- Recovery: ramp width/void/height/wCenter back to the launch pad's own baseline. "Keep

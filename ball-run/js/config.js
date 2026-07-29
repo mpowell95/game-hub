@@ -227,9 +227,10 @@ export const MAPS = {
       // Classic has no `pickups` config (never spawns one), but Renderer builds the pickup mesh
       // pools unconditionally for every map (same reason floorPool2/accentPool are always built -
       // one Renderer code path, map-specific data decides what's ever actually visible), so these
-      // still need real values. Chosen from Classic's own existing palette, not Orbital's.
+      // still need real values. Orange orb fits Classic's own palette; the life heart stays the
+      // same light pink as Orbital's - it's the pickup's own identity, not a map-specific hue.
       orb: 0xf0942e,
-      life: 0xa34ce8,
+      life: 0xffb3c6,
     },
   },
   orbital: {
@@ -244,12 +245,20 @@ export const MAPS = {
     // this file; Track converts to world units. `minStraightAfter` mirrors
     // TUNNEL_MIN_STRAIGHT_AFTER's role for tunnels: forces a clean stretch after the event
     // so Splits can't chain into each other.
+    // Retuned (Matt, follow-up): the original 2.5-BW gap and 4-7 segment hold read as "pick
+    // left or right, it's over in a second" rather than a real fork - two lanes that are
+    // genuinely on their own for a while, converging back later. `voidHalfBW`/`totalWidthBW`
+    // widened so the gap and each lane both read as unmistakably real (each lane is now ~4 BW,
+    // close to the launch pad's own 5 BW width, not a sliver); `holdMinSegs`/`holdMaxSegs`
+    // roughly tripled so a chosen lane runs 20-36 world units before the paths reunite - several
+    // real seconds, not an instant. `totalWidthBW` still satisfies section 2's own formula
+    // (>= 2*minTrackWidth + 2*voidHalfBW = 2*3 + 2*2.5 = 11) with margin.
     split: {
-      totalWidthBW: 9,
-      voidHalfBW: 1.25, // a 2.5 BW gap
+      totalWidthBW: 13,
+      voidHalfBW: 2.5, // a 5 BW gap - unmistakably impassable, not a crack
       widenSegs: 3,
-      holdMinSegs: 4,
-      holdMaxSegs: 7,
+      holdMinSegs: 10,
+      holdMaxSegs: 18,
       closeSegs: 3,
       narrowBackSegs: 3,
       cadenceM: 120, // roughly every 120m (spec: not yet split out per-difficulty like tunnels are)
@@ -318,8 +327,9 @@ export const MAPS = {
     // stripes (render.js) reuse `obstacleEdge` — the same amber "attention" color. Pickups
     // (Phase 4) get their own two hues, both distinguished by SHAPE too (never hue alone,
     // root CLAUDE.md's colorblind rule): a yellow sphere for orbs (matches the root palette's
-    // "yellow circle" convention) and a teal octahedron for the rarer extra-life pickup
-    // ("teal diamond" convention - an octahedron is the closest 3D analogue to a flat diamond).
+    // "yellow circle" convention) and a light pink HEART for the rarer extra-life pickup
+    // (Matt, follow-up: the earlier teal-diamond pass read ambiguously - a heart reads as
+    // "life" on sight, no legend needed).
     colors: {
       void: 0x03060f,
       ball: 0x8fe9ff,
@@ -332,7 +342,7 @@ export const MAPS = {
       chevron: 0xffce3a,
       shadow: 0x000000,
       orb: 0xf2b705,
-      life: 0x178a7a,
+      life: 0xffb3c6,
     },
   },
 };

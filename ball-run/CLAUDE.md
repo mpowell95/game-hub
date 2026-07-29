@@ -368,6 +368,71 @@ only, same as everything else in this build; Classic never spawns one.
   above rather than an observed in-browser collection; the collection code path itself is
   byte-identical to the orb path already proven live.
 
+## Post-ship feedback fixes (2026-07-29, second round)
+
+Two fixes from Matt's playtest after the four phases above shipped, both about Jump specifically:
+
+- **Life color/shape (batch 1 of this round)**: `MAPS.classic.colors.life`/`MAPS.orbital.colors.life`
+  both changed to a light pink (`0xffb3c6`) - the old teal diamond (`OctahedronGeometry`) read too
+  close to the obstacle/edge amber and wasn't obviously "life" at a glance. `render.js`'s
+  `buildHeartGeometry()` replaces the octahedron with a small extruded heart (`THREE.Shape` +
+  bezier curves, `DoubleSide` material), and `_layoutPickups()`'s rotation changed from a full
+  tumble to a Y-only medallion spin with a fixed slight forward tilt - a heart tumbling on X too
+  would read as an unrecognizable blob partway through the rotation, unlike the old octahedron's
+  symmetric shape. Split's own config (`totalWidthBW`/`voidHalfBW`/`holdMinSegs`/`holdMaxSegs`)
+  was also retuned wider/longer in the same round ("I want the paths to be actual separate paths
+  for a while... a fork in the road, choose a path, now you're just on this path") - `9→13` BW
+  total width, `1.25→2.5` BW void half-width (a full 5-BW gap, unmistakably impassable rather than
+  a crack), `4-7→10-18` segments of Hold. The width formula's own margin check
+  (`totalWidthBW >= 2*minTrackWidth + 2*voidHalfBW`, i.e. `13 >= 2*3 + 2*2.5 = 11`) still holds.
+
+- **A missed Jump landing silently ignored banked lives (real bug, found from a bug report, not
+  an audit)**: Matt: "some jumps kill you unfairly too... I go off the jump and die immediately
+  because there was a hole in the middle of the landing zone... Extra lives collected do not save
+  you from this either." `stepAirborne()`'s landing check called `beginCrash('edge')`
+  unconditionally on a miss - every OTHER hazard in this file (an obstacle hit, a Split void fall,
+  a grounded edge fall) goes through `spendLifeIfAny()`/the active invincibility window first, but
+  the landing check was written before pickups existed and was never updated when Phase 4 added
+  them. Fixed: a missed landing now checks `invincible` and falls through to `spendLifeIfAny()`
+  exactly like every other hazard, before crashing - verified directly via `Sim.step()` (a
+  monkey-patched `frameAt` forcing a guaranteed-miss landing): 0 lives banked still crashes
+  (`falling`/`edge`, unchanged), 1 life banked survives (state stays `playing`, the life is spent,
+  `lives` drops to 0), an active grace window alone (no life needed) also survives. A
+  saved-but-missed landing does **not** score the "+1 on a successful landing" point (that stays
+  gated on `!missed`) - surviving a miss via a banked life is a different outcome from actually
+  sticking the landing, and conflating them would make an unlimited-lives run indistinguishable
+  from a perfect one on the scoreboard.
+- **The landing pad was genuinely unreadable until the player was already airborne, which is the
+  other half of the same complaint** ("I was never shown the landing zone, and I hadn't landed
+  yet"). The pad's own floor tile (with its width/void/offset already computed) WAS being rendered
+  in the generation window the whole time - the real problem is that a flat floor plane read from
+  a low chase-cam angle foreshortens to almost nothing at range, and Jump's gap renders literally
+  no floor at all in between (`"the floor is genuinely gone"`, Phase 3's own spec quote) to give
+  any depth/scale cue leading up to it - the same "holes blend into black" problem Split's void
+  has, worse here since there's nothing at all bridging the gap visually. Fixed with a new small
+  `gatePool` (`GATE_POOL_SIZE: 4`, `render.js`): plain vertical `MeshBasicMaterial` planes, DoubleSide,
+  `this.colors.obstacleEdge`, planted at the landing pad's own left/right edges and - when the pad
+  is itself split - its two void inner edges too, using the exact same `voidHW`/`wCenter`/
+  `halfWidth` values that segment's own floor strips are built from (so the gate lines up with the
+  floor precisely, never a separately-computed estimate that could drift). A vertical plane doesn't
+  suffer the grazing-angle foreshortening a horizontal floor decal does, so a narrow/offset/split
+  landing is now legible from the approach, not just once the ball is already in flight and out of
+  time to react.
+  - **`track.js`**: `pushSegment` gained a `jumpLanding` boolean field (mirrors `jumpMeta`'s
+    `i === 0` pattern), set true on only the FIRST segment of `emitJump()`'s landing-hold loop -
+    the one place the pad's real target width/void/offset first exist at full value. Default
+    `false` everywhere else, so Classic and every other Orbital segment are unaffected.
+  - **Verified**: headless, 40 seeded `orbital`/`hard` tracks (2000+ segments each) confirmed every
+    generated jump has exactly one `jumpLanding` segment and it's never on a gap segment. Browser
+    (Playwright): direct Sim+Renderer construction seeking out a real generated jump confirmed the
+    gate pool actually populates (2 gates for a plain landing pad, would be 4 for a split one - the
+    pool size fits the worst case exactly); a scripted real-input Play-through (Orbital/Hard, 240
+    steering ticks) produced zero page errors and zero render-related console errors (the only
+    console output was an expected offline Firebase-sync warning and an unrelated benign 404, both
+    pre-existing and unrelated to this change). `node run-all-tests.mjs` all green (20 suites, 0
+    failed, no suite needed changes) and `node validate-sw-assets.mjs` clean (no new files were
+    added, so no `sw.js` bump was needed).
+
 ## Build status: complete
 
 All four phases of BALLRUNMAP2ORBITALSPEC.md have shipped (Phase 1 map plumbing, Phase 2 Split,

@@ -80,6 +80,13 @@ export class Sim {
     this.lives = 0;
     this.invincibleUntil = 0;
     this.orbsCollected = 0;
+    // Transient event queue (Phase 4 follow-up): `{ type: 'orb'|'life'|'lifeSpent' }` pushed the
+    // instant each happens, so render.js/ui.js can trigger a one-shot animation (a "+1" floater,
+    // "extra life used!") tied to the actual moment rather than inferring it from a value change
+    // next frame. Plain data, no callbacks - matches this file's "owns plain-data state only"
+    // discipline. ui.js drains (splices) this every rendered frame, since several ticks can run
+    // per frame under the fixed-timestep accumulator and none should be missed.
+    this.pickupEvents = [];
   }
 
   /** One fixed-step tick. dragAxis is the normalized drag delta accumulated this tick; keyAxis is -1/0/1. */
@@ -212,6 +219,7 @@ export class Sim {
     } else if (pickup.type === 'life') {
       this.lives = Math.min(cfg.maxLives, this.lives + 1);
     }
+    this.pickupEvents.push({ type: pickup.type });
   }
 
   /** If a life is banked, spend one and open the invincibility grace window; returns whether a
@@ -220,6 +228,7 @@ export class Sim {
     if (this.lives <= 0) return false;
     this.lives -= 1;
     this.invincibleUntil = this.elapsed + this.track.map.pickups.lifeInvincibleS;
+    this.pickupEvents.push({ type: 'lifeSpent' });
     return true;
   }
 
@@ -304,17 +313,33 @@ export class Sim {
     if (seg && !seg.isGap) {
       const halfWidth = frame.width / 2;
       const inVoid = frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth;
-      if (Math.abs(this.lateralOffset - frame.wCenter) > halfWidth || inVoid) {
-        // "Yes, missing the landing kills you. Matt confirmed." Same FALLING state/animation as
-        // every other edge fall - no new game-over path.
-        this.beginCrash('edge');
-        return;
+      const missed = Math.abs(this.lateralOffset - frame.wCenter) > halfWidth || inVoid;
+      if (missed) {
+        // A missed landing is a hazard like any other (an obstacle hit, a void fall, an edge
+        // fall) and MUST go through the same life-save path as all three - a banked life or an
+        // active grace window saves the run here too. This was a real bug: the original code
+        // called beginCrash('edge') unconditionally, so "extra lives" silently never covered the
+        // one hazard players actually asked about ("Extra lives collected do not save you from
+        // this either" - Matt, 2026-07-29). The grace window is also the fairness answer to "I
+        // was never shown the landing zone before I had to commit" - a life now buys a real
+        // second chance on a landing the player couldn't have seen coming in time to react.
+        const invincible = this.elapsed < this.invincibleUntil;
+        if (!invincible && !this.spendLifeIfAny()) {
+          // "Yes, missing the landing kills you. Matt confirmed." Same FALLING state/animation as
+          // every other edge fall - no new game-over path.
+          this.beginCrash('edge');
+          return;
+        }
       }
       this.y = this.jumpLandingY;
       this.vy = 0;
       this.state = RunState.PLAYING;
-      this.score += 1; // "+1 on a successful landing" (section 3) - a one-time event, not the
-                       // generic segment-crossing scan updateScore() uses for obstacles/Splits
+      if (!missed) {
+        this.score += 1; // "+1 on a successful landing" (section 3) - a one-time event, not the
+                          // generic segment-crossing scan updateScore() uses for obstacles/Splits.
+                          // A missed-but-saved landing scores nothing - surviving a miss is not
+                          // the same as sticking the landing.
+      }
     }
   }
 

@@ -17,16 +17,45 @@ const OBSTACLE_POOL_SIZE = 24;
 // Pickups (Phase 4, Orbital only): sparse compared to obstacles (30m+ mean cadence vs. tight
 // obstacle spacing), so a small pool comfortably covers everything ever visible in the render
 // window at once. Two separate pools (not one shared one) since each pickup type is its own
-// GEOMETRY, not just a color swap - a sphere for orbs, an octahedron for the rarer life pickup
-// (root CLAUDE.md's colorblind rule: shape marker, never hue alone).
+// GEOMETRY, not just a color swap - a sphere for orbs, a heart for the rarer life pickup
+// (root CLAUDE.md's colorblind rule: shape marker, never hue alone - and a heart reads as
+// "life" on sight, no legend needed).
 const ORB_POOL_SIZE = 6;
 const LIFE_POOL_SIZE = 2;
+
+/** A small extruded heart, built from a parametric 2D outline (two lobes + a point), the same
+ *  "no image assets, everything procedural" discipline the canvas textures elsewhere in this
+ *  file already follow. `size` is roughly the heart's overall width. */
+function buildHeartGeometry(size) {
+  const s = size / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(0, -s * 0.9);
+  shape.bezierCurveTo(-s * 1.3, -s * 0.1, -s * 1.1, s * 0.75, -s * 0.5, s * 0.75);
+  shape.bezierCurveTo(-s * 0.15, s * 0.75, 0, s * 0.4, 0, s * 0.15);
+  shape.bezierCurveTo(0, s * 0.4, s * 0.15, s * 0.75, s * 0.5, s * 0.75);
+  shape.bezierCurveTo(s * 1.1, s * 0.75, s * 1.3, -s * 0.1, 0, -s * 0.9);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: size * 0.35, bevelEnabled: true, bevelThickness: size * 0.06, bevelSize: size * 0.06, bevelSegments: 2,
+  });
+  geo.center();
+  return geo;
+}
 // Split (Orbital only, BALLRUNMAP2ORBITALSPEC.md section 2): a void-bearing segment renders as
 // TWO floor strips instead of one, so every floor slot gets a second, independently-scaled quad
 // (floorPool2, hidden whenever that slot's segment has no void - i.e. always, on Classic). Also
 // up to 2 thin amber accent lines per slot: either the Widen-phase telegraph (1 line, at lateral
 // 0) or the void band's two inner edges (2 lines) - never both on the same segment.
 const ACCENT_POOL_SIZE = FLOOR_POOL_SIZE * 2;
+
+// Jump landing-pad warning gates (Orbital only): tall vertical planes standing at a landing pad's
+// left/right edges and, when the pad is itself split, its two void inner edges too - 4 slots
+// covers the worst case (a split+narrower landing) with room to spare, and only one landing pad
+// is ever in the generation window at a time. Unlike the flat floor accent lines (`accentPool`),
+// these stay legible at a distance: a plane roughly facing the camera doesn't foreshorten to
+// nothing the way a horizontal floor decal does at a shallow chase-cam angle, which is exactly
+// what made a hazardous landing pad unreadable until the player was already airborne and out of
+// time to react.
+const GATE_POOL_SIZE = 4;
 
 // One repeatable TILE_SIZE-unit tile: grout drawn only on the top/left edges
 // so REPEAT-wrapping produces a single continuous grid line per tile boundary
@@ -143,6 +172,7 @@ export class Renderer {
     this._buildWallPool();
     this._buildObstaclePool();
     this._buildAccentPool();
+    this._buildGatePool();
     this._buildPickupPools();
   }
 
@@ -238,12 +268,31 @@ export class Renderer {
     }
   }
 
-  /** Pickups (Phase 4, Orbital only): a small sphere for orbs, a small octahedron for the rarer
-   *  life pickup - distinct GEOMETRY, not just color, per root CLAUDE.md's colorblind rule
-   *  ("pair each hue with a shape marker, never hue alone"). Both emissive so they read clearly
-   *  against the dark deck without needing their own light. Built once regardless of map (same
-   *  reason every other pool here is) - `this.colors.orb`/`.life` exist on every map's palette
-   *  even though only Orbital's `map.jump`-sibling `map.pickups` config ever actually spawns one. */
+  /** Jump landing-pad warning gates (see GATE_POOL_SIZE's own comment). Plain vertical planes,
+   *  DoubleSide (approached from either side of a curve), a bright warning color distinct from
+   *  the amber accent lines so a gate reads as "look here" from far away, not just "edge of
+   *  something". Built once regardless of map, same as every other pool here. */
+  _buildGatePool() {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    this._gateGeo = geo;
+    this.gateMat = new THREE.MeshBasicMaterial({ color: this.colors.obstacleEdge, side: THREE.DoubleSide });
+    this.gatePool = [];
+    for (let i = 0; i < GATE_POOL_SIZE; i++) {
+      const mesh = new THREE.Mesh(geo, this.gateMat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.gatePool.push(mesh);
+    }
+  }
+
+  /** Pickups (Phase 4, Orbital only): a small sphere for orbs, a small heart for the rarer life
+   *  pickup - distinct GEOMETRY, not just color, per root CLAUDE.md's colorblind rule ("pair each
+   *  hue with a shape marker, never hue alone"). Both emissive so they read clearly against the
+   *  dark deck without needing their own light; the heart's material is DoubleSide since its
+   *  extruded front/back faces should both read correctly regardless of which way a given render
+   *  happens to wind (cheap insurance, this pool is only 2 meshes). Built once regardless of map
+   *  (same reason every other pool here is) - `this.colors.orb`/`.life` exist on every map's
+   *  palette even though only Orbital's `map.jump`-sibling `map.pickups` config ever spawns one. */
   _buildPickupPools() {
     const orbGeo = new THREE.SphereGeometry(BALL_RADIUS * 0.55, 16, 12);
     this._orbGeo = orbGeo;
@@ -256,9 +305,11 @@ export class Renderer {
       this.orbPool.push(mesh);
     }
 
-    const lifeGeo = new THREE.OctahedronGeometry(BALL_RADIUS * 0.7);
+    const lifeGeo = buildHeartGeometry(BALL_RADIUS * 1.5);
     this._lifeGeo = lifeGeo;
-    this.lifeMat = new THREE.MeshStandardMaterial({ color: this.colors.life, emissive: this.colors.life, emissiveIntensity: 0.6, roughness: 0.35 });
+    this.lifeMat = new THREE.MeshStandardMaterial({
+      color: this.colors.life, emissive: this.colors.life, emissiveIntensity: 0.55, roughness: 0.3, side: THREE.DoubleSide,
+    });
     this.lifePool = [];
     for (let i = 0; i < LIFE_POOL_SIZE; i++) {
       const mesh = new THREE.Mesh(lifeGeo, this.lifeMat);
@@ -365,6 +416,10 @@ export class Renderer {
     const visible = track.segments.filter((s) => s.z1 >= zBack && s.z0 <= zFront);
 
     let wallIdx = 0;
+    let gateIdx = 0; // Jump landing gates: at most one landing pad is ever in the window at once,
+                      // reset/hidden below before the loop so a landing pad that's scrolled out of
+                      // range doesn't leave a stale gate visible.
+    for (const g of this.gatePool) g.visible = false;
     for (let i = 0; i < FLOOR_POOL_SIZE; i++) {
       const mesh = this.floorPool[i];
       const mesh2 = this.floorPool2[i];
@@ -491,6 +546,34 @@ export class Renderer {
         accentB.visible = false;
       }
 
+      // Jump landing-pad warning gate (see GATE_POOL_SIZE's own comment): planted on the pad's
+      // first segment only, at the pad's own edges - and, when the pad is itself split, at the
+      // void's two inner edges too - so a hazardous landing is legible from the approach, not
+      // just once the player is already airborne. `voidHW`/`wCenter`/`halfWidth` are the exact
+      // values this same segment's floor strips above were just built from, so the gate lines up
+      // with the floor precisely rather than being a separate, potentially-drifting estimate.
+      if (seg.jumpLanding) {
+        const gateH = 2.4;
+        const placeGate = (lateral) => {
+          if (gateIdx >= this.gatePool.length) return;
+          const g = this.gatePool[gateIdx++];
+          g.visible = true;
+          g.position.set(midCx + lateral * nx, midY + gateH / 2, midZ + lateral * nz);
+          g.rotation.y = yaw;
+          g.scale.set(gateH * 0.12, gateH, 1);
+        };
+        if (voidHW > 0.001) {
+          const voidC = wCenter + (seg.voidCenter || 0);
+          placeGate(wCenter - halfWidth);
+          placeGate(voidC - voidHW);
+          placeGate(voidC + voidHW);
+          placeGate(wCenter + halfWidth);
+        } else {
+          placeGate(wCenter - halfWidth);
+          placeGate(wCenter + halfWidth);
+        }
+      }
+
       if (seg.isTunnel && left && right) {
         const wallH = 3.2;
         left.visible = true; right.visible = true;
@@ -579,7 +662,10 @@ export class Renderer {
       if (!p) { mesh.visible = false; continue; }
       mesh.visible = true;
       mesh.position.set(p.x, p.y + BALL_RADIUS + bob, p.z);
-      mesh.rotation.set(spin * 0.6, spin, 0);
+      // A gentle medallion spin around Y with a slight fixed forward tilt - unlike the old
+      // octahedron, a heart tumbling on X too would read as an unrecognizable blob partway
+      // through the rotation, so only Y turns continuously here.
+      mesh.rotation.set(0.15, spin, 0);
     }
   }
 
@@ -671,6 +757,7 @@ export class Renderer {
     this.floorMatPool2.forEach((m) => m.dispose());
     this.floorTexPool2.forEach((t) => t.dispose());
     this._accentGeo.dispose(); this.accentMat.dispose();
+    this._gateGeo.dispose(); this.gateMat.dispose();
     this._orbGeo.dispose(); this.orbMat.dispose();
     this._lifeGeo.dispose(); this.lifeMat.dispose();
     this._wallGeo.dispose(); this.wallMat.dispose();
