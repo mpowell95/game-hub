@@ -212,7 +212,7 @@ export const MAPS = {
     baseTrackWidth: BASE_TRACK_WIDTH,
     minTrackWidth: MIN_TRACK_WIDTH,
     difficulties: DIFFICULTIES,
-    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump (Orbital only)
+    eventTypes: ['straight', 'narrow', 'obstacle', 'tunnel'], // no split/jump/pickups (Orbital only)
     colors: {
       void: COLOR_VOID,
       ball: COLOR_BALL,
@@ -224,6 +224,12 @@ export const MAPS = {
       tunnelEdge: COLOR_TUNNEL_EDGE,
       chevron: COLOR_CHEVRON,
       shadow: COLOR_SHADOW,
+      // Classic has no `pickups` config (never spawns one), but Renderer builds the pickup mesh
+      // pools unconditionally for every map (same reason floorPool2/accentPool are always built -
+      // one Renderer code path, map-specific data decides what's ever actually visible), so these
+      // still need real values. Chosen from Classic's own existing palette, not Orbital's.
+      orb: 0xf0942e,
+      life: 0xa34ce8,
     },
   },
   orbital: {
@@ -287,13 +293,33 @@ export const MAPS = {
       dropChance: 0.7, // of a height change, how often it's a drop-down vs. a step-up
                         // ("a drop-down reads great as the deck gives out", section 3)
     },
+    // Pickups (Phase 4, spec section 7: "extra lives and collectibles... much cheaper once
+    // Phases 1 to 3 exist" - true here, since a pickup is just an extra point-in-space payload
+    // attached to an ordinary already-generated 'straight' segment, never its own event type or
+    // geometry change; see track.js's maybePlacePickup()). Distance-paced like the obstacle
+    // scheduler, not weighted-random - `cadenceM` is a mean, jittered per spawn. Orbs are pure
+    // bonus score, never a hazard; lives are capped so they can't be stockpiled without limit.
+    pickups: {
+      orbCadenceM: 30,
+      orbCadenceJitterFrac: 0.3,
+      orbValue: 1, // added straight to `sim.score`, same tally Split/Jump already add to
+      lifeCadenceM: 350,
+      lifeCadenceJitterFrac: 0.3,
+      maxLives: 2,
+      lifeInvincibleS: 2, // grace window after a life is spent (sim.js's invincibility timer)
+      radiusBW: 0.6, // collection radius, ball-widths - a little more forgiving than obstacle collision, since missing a reward should never feel like a hazard's hitbox
+    },
     // Visual identity (spec section 5): near-black deep navy void, dark slate deck panels
     // with lighter seams, a continuous amber (#ffce3a) edge stripe since this map is about
     // falling off, light gray cargo blocks with an amber emissive outline, a ribbed amber-
     // chevron airlock tunnel, pale cyan drone-sphere ball. Never red/green (colorblind
     // rule). "Sign-off on the Orbital color set" is an explicit open item for Matt
     // (spec section 9) — these are a first pass, not final. Split's divider/void-edge
-    // stripes (render.js) reuse `obstacleEdge` — the same amber "attention" color.
+    // stripes (render.js) reuse `obstacleEdge` — the same amber "attention" color. Pickups
+    // (Phase 4) get their own two hues, both distinguished by SHAPE too (never hue alone,
+    // root CLAUDE.md's colorblind rule): a yellow sphere for orbs (matches the root palette's
+    // "yellow circle" convention) and a teal octahedron for the rarer extra-life pickup
+    // ("teal diamond" convention - an octahedron is the closest 3D analogue to a flat diamond).
     colors: {
       void: 0x03060f,
       ball: 0x8fe9ff,
@@ -305,6 +331,8 @@ export const MAPS = {
       tunnelEdge: 0xffce3a,
       chevron: 0xffce3a,
       shadow: 0x000000,
+      orb: 0xf2b705,
+      life: 0x178a7a,
     },
   },
 };

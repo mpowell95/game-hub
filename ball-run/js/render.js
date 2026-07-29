@@ -6,7 +6,7 @@
 
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, OBSTACLE_SIZE, TILE_SIZE,
+  SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
   CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
 } from './config.js';
@@ -14,6 +14,13 @@ import {
 const FLOOR_POOL_SIZE = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
 const WALL_POOL_SIZE = (SEGMENTS_AHEAD + SEGMENTS_BEHIND) * 2; // left + right per segment
 const OBSTACLE_POOL_SIZE = 24;
+// Pickups (Phase 4, Orbital only): sparse compared to obstacles (30m+ mean cadence vs. tight
+// obstacle spacing), so a small pool comfortably covers everything ever visible in the render
+// window at once. Two separate pools (not one shared one) since each pickup type is its own
+// GEOMETRY, not just a color swap - a sphere for orbs, an octahedron for the rarer life pickup
+// (root CLAUDE.md's colorblind rule: shape marker, never hue alone).
+const ORB_POOL_SIZE = 6;
+const LIFE_POOL_SIZE = 2;
 // Split (Orbital only, BALLRUNMAP2ORBITALSPEC.md section 2): a void-bearing segment renders as
 // TWO floor strips instead of one, so every floor slot gets a second, independently-scaled quad
 // (floorPool2, hidden whenever that slot's segment has no void - i.e. always, on Classic). Also
@@ -136,6 +143,7 @@ export class Renderer {
     this._buildWallPool();
     this._buildObstaclePool();
     this._buildAccentPool();
+    this._buildPickupPools();
   }
 
   _buildTextures() {
@@ -230,6 +238,36 @@ export class Renderer {
     }
   }
 
+  /** Pickups (Phase 4, Orbital only): a small sphere for orbs, a small octahedron for the rarer
+   *  life pickup - distinct GEOMETRY, not just color, per root CLAUDE.md's colorblind rule
+   *  ("pair each hue with a shape marker, never hue alone"). Both emissive so they read clearly
+   *  against the dark deck without needing their own light. Built once regardless of map (same
+   *  reason every other pool here is) - `this.colors.orb`/`.life` exist on every map's palette
+   *  even though only Orbital's `map.jump`-sibling `map.pickups` config ever actually spawns one. */
+  _buildPickupPools() {
+    const orbGeo = new THREE.SphereGeometry(BALL_RADIUS * 0.55, 16, 12);
+    this._orbGeo = orbGeo;
+    this.orbMat = new THREE.MeshStandardMaterial({ color: this.colors.orb, emissive: this.colors.orb, emissiveIntensity: 0.6, roughness: 0.35 });
+    this.orbPool = [];
+    for (let i = 0; i < ORB_POOL_SIZE; i++) {
+      const mesh = new THREE.Mesh(orbGeo, this.orbMat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.orbPool.push(mesh);
+    }
+
+    const lifeGeo = new THREE.OctahedronGeometry(BALL_RADIUS * 0.7);
+    this._lifeGeo = lifeGeo;
+    this.lifeMat = new THREE.MeshStandardMaterial({ color: this.colors.life, emissive: this.colors.life, emissiveIntensity: 0.6, roughness: 0.35 });
+    this.lifePool = [];
+    for (let i = 0; i < LIFE_POOL_SIZE; i++) {
+      const mesh = new THREE.Mesh(lifeGeo, this.lifeMat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.lifePool.push(mesh);
+    }
+  }
+
   _buildWallPool() {
     const geo = new THREE.PlaneGeometry(1, 1);
     this._wallGeo = geo;
@@ -292,6 +330,11 @@ export class Renderer {
     this.ball.rotation.x = sim.rollAngle;
     // Slight roll bank into turns, purely cosmetic.
     this.ball.rotation.z = Math.max(-0.4, Math.min(0.4, -sim.lateralVelocity * 0.06));
+    // Invincibility pulse (Phase 4): a spent life's grace window reads on the ball itself, no HUD
+    // text needed - a gentle size pulse, cheap (just a scale mutation on the existing shared ball
+    // mesh, no new material/geometry) and unmistakable without being distracting mid-recovery.
+    const invincible = sim.state === 'playing' && sim.elapsed < sim.invincibleUntil;
+    this.ball.scale.setScalar(invincible ? 1 + 0.12 * Math.sin(sim.elapsed * 18) : 1);
 
     // Shadow: "keep the shadow on the deck below the ball and scale it down as height increases"
     // (section 3) - the depth cue that makes a Jump landing readable. `groundY` is the track's own
@@ -309,6 +352,7 @@ export class Renderer {
     // world Z, which includes a small lateral-offset contribution from worldPointAt above).
     this._layoutFloor(track, sim.z);
     this._layoutObstacles(track, sim.z);
+    this._layoutPickups(track, sim.z, sim.elapsed);
 
     this._layoutCamera(sim, reducedMotion);
 
@@ -497,6 +541,48 @@ export class Renderer {
     }
   }
 
+  /** Pickups (Phase 4, Orbital only): a gentle bob (sine on Y) and a slow spin, cheap depth/
+   *  attention cues with no text needed - `elapsed` is `sim.elapsed`, the same clock everything
+   *  else here already reads (never a fresh `Date.now()`, which would desync from the fixed-
+   *  timestep sim on a paused/backgrounded tab). Never on a `seg.isGap` segment (pickups are
+   *  never placed there - track.js's `_findPickupSlot` excludes it - but guarded here too since
+   *  nothing should ever try to render inside an invisible gap). */
+  _layoutPickups(track, ballZ, elapsed) {
+    const zFront = ballZ + SEGMENTS_AHEAD * SEGMENT_LENGTH;
+    const zBack = ballZ - 4;
+    const orbs = [], lives = [];
+    for (const seg of track.segments) {
+      if (seg.z1 < zBack || seg.z0 > zFront || !seg.pickup || seg.isGap) continue;
+      const midCx = (seg.cx0 + seg.cx1) / 2;
+      const midZ = (seg.z0 + seg.z1) / 2;
+      const midY = ((seg.y0 || 0) + (seg.y1 || 0)) / 2;
+      const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
+      const nx = Math.cos(yaw), nz = -Math.sin(yaw);
+      const lateral = (seg.wCenter || 0) + seg.pickup.lateral;
+      const p = { x: midCx + lateral * nx, y: midY, z: midZ + lateral * nz };
+      (seg.pickup.type === 'life' ? lives : orbs).push(p);
+      if (orbs.length >= ORB_POOL_SIZE && lives.length >= LIFE_POOL_SIZE) break;
+    }
+    const bob = Math.sin(elapsed * 3) * 0.12;
+    const spin = elapsed * 1.6;
+    for (let i = 0; i < ORB_POOL_SIZE; i++) {
+      const mesh = this.orbPool[i];
+      const p = orbs[i];
+      if (!p) { mesh.visible = false; continue; }
+      mesh.visible = true;
+      mesh.position.set(p.x, p.y + BALL_RADIUS + bob, p.z);
+      mesh.rotation.y = spin;
+    }
+    for (let i = 0; i < LIFE_POOL_SIZE; i++) {
+      const mesh = this.lifePool[i];
+      const p = lives[i];
+      if (!p) { mesh.visible = false; continue; }
+      mesh.visible = true;
+      mesh.position.set(p.x, p.y + BALL_RADIUS + bob, p.z);
+      mesh.rotation.set(spin * 0.6, spin, 0);
+    }
+  }
+
   /**
    * Camera locked to the track's local frame (item 1 fix): both position and look-at target are
    * computed from track.worldPointAt at track-distances behind/ahead of the ball, using the SAME
@@ -585,6 +671,8 @@ export class Renderer {
     this.floorMatPool2.forEach((m) => m.dispose());
     this.floorTexPool2.forEach((t) => t.dispose());
     this._accentGeo.dispose(); this.accentMat.dispose();
+    this._orbGeo.dispose(); this.orbMat.dispose();
+    this._lifeGeo.dispose(); this.lifeMat.dispose();
     this._wallGeo.dispose(); this.wallMat.dispose();
     this._obstacleGeo.dispose(); this._obstacleEdgesGeo.dispose();
     this.obstacleMat.dispose(); this.obstacleEdgeMat.dispose();

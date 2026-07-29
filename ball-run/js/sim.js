@@ -4,7 +4,7 @@
 // meshes every animation frame. step() advances exactly one SIM_DT tick.
 
 import {
-  SIM_DT, BALL_RADIUS, SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
+  SIM_DT, BALL_RADIUS, BALL_DIAMETER, SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND,
   OBSTACLE_SIZE, DRAG_SENSITIVITY, LATERAL_MAX_SPEED_BASE,
   LATERAL_SPEED_SCALE_WITH_FORWARD, LATERAL_DAMPING, FALL_GRAVITY,
   CRASH_BEAT_MS, difficultyConfig,
@@ -69,6 +69,17 @@ export class Sim {
     this.jumpLandingY = 0;
     this.jumpGravity = 0;
     this._lastGapEntryIndex = -1; // guards a jump's launch to fire exactly once, mirrors _countedTunnelIndex
+
+    // Pickups (Phase 4, Orbital only): `lives` is a banked extra-chance count (0 on every map/run
+    // that never spawns one - Classic, or Orbital before this phase - so this is a no-op change
+    // for everything this file already supported). `invincibleUntil` is an `elapsed` timestamp;
+    // spending a life buys a grace window during which the obstacle/void/edge checks below are
+    // skipped entirely, not "survive this one hit" - see stepPlaying's own comment on why.
+    // `orbsCollected` is a secondary flavor stat (mirrors `tiersPassed`), not the score itself -
+    // an orb's value is added straight to `this.score`, the same tally Split/Jump already add to.
+    this.lives = 0;
+    this.invincibleUntil = 0;
+    this.orbsCollected = 0;
   }
 
   /** One fixed-step tick. dragAxis is the normalized drag delta accumulated this tick; keyAxis is -1/0/1. */
@@ -138,13 +149,33 @@ export class Sim {
       }
     }
 
+    // --- Pickups (Phase 4, Orbital only): collect before any crash check below can consume this
+    // same segment - an orb/life sitting on a segment is never a hazard, so there is no ordering
+    // concern the way there could be with an obstacle. `seg.pickup` is cleared on collection so a
+    // second pass over the same segment (this ball doesn't move fast enough to skip a whole
+    // segment most ticks, but the guard costs nothing either way) can never double-collect it. */
+    if (seg && seg.pickup) {
+      const radius = this.track.map.pickups.radiusBW * BALL_DIAMETER;
+      if (Math.abs(this.lateralOffset - (frame.wCenter + seg.pickup.lateral)) < radius + BALL_RADIUS) {
+        this.collectPickup(seg.pickup);
+        seg.pickup = null;
+      }
+    }
+
+    // --- Invincibility (Phase 4): a spent life buys a grace window, not "survive this one hit" -
+    // while it's active, EVERY hazard check below is skipped outright, so a ball drifting outside
+    // bounds or sitting against an obstacle gets real time to recover rather than immediately
+    // re-triggering the same crash next tick. The window is deliberately not extended by passing
+    // through more hazards during it - it always expires at the time it was granted.
+    const invincible = this.elapsed < this.invincibleUntil;
+
     // --- Obstacle collision ---
-    if (seg && seg.obstacles && seg.obstacles.length) {
+    if (!invincible && seg && seg.obstacles && seg.obstacles.length) {
       const halfCube = OBSTACLE_SIZE / 2;
       for (const cube of seg.obstacles) {
         if (Math.abs(this.lateralOffset - cube.lateral) < halfCube + BALL_RADIUS) {
-          this.beginCrash('obstacle');
-          return;
+          if (!this.spendLifeIfAny()) { this.beginCrash('obstacle'); return; }
+          break; // one spent life covers every cube this tick, not one consumed per cube
         }
       }
     }
@@ -156,20 +187,40 @@ export class Sim {
     // Split event. `frame.voidCenter` is relative to the pad's own center (`frame.wCenter`, a
     // Jump offset-landing thing - 0 everywhere else), so the void's true position relative to cx
     // is their sum.
-    if (frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth) {
-      this.beginCrash('edge');
-      return;
+    if (!invincible && frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth) {
+      if (!this.spendLifeIfAny()) { this.beginCrash('edge'); return; }
     }
 
     // --- Edge fall: ball's CENTER passes the track edge (brief section 5). `frame.wCenter` is a
     // Jump offset-landing pad's own center, relative to cx (0 everywhere else, including every
     // grounded segment outside that one variety). ---
-    if (Math.abs(this.lateralOffset - frame.wCenter) > halfWidth) {
-      this.beginCrash('edge');
-      return;
+    if (!invincible && Math.abs(this.lateralOffset - frame.wCenter) > halfWidth) {
+      if (!this.spendLifeIfAny()) { this.beginCrash('edge'); return; }
     }
 
     this.updateScore();
+  }
+
+  /** Pickups (Phase 4): `type: 'orb'` adds straight to the score (the same tally Split/Jump
+   *  already add to, not a separate stat) and a secondary flavor counter; `type: 'life'` banks an
+   *  extra chance, capped so it can't be stockpiled without limit. */
+  collectPickup(pickup) {
+    const cfg = this.track.map.pickups;
+    if (pickup.type === 'orb') {
+      this.score += cfg.orbValue;
+      this.orbsCollected += 1;
+    } else if (pickup.type === 'life') {
+      this.lives = Math.min(cfg.maxLives, this.lives + 1);
+    }
+  }
+
+  /** If a life is banked, spend one and open the invincibility grace window; returns whether a
+   *  life was actually available so the caller can fall through to a real crash when it wasn't. */
+  spendLifeIfAny() {
+    if (this.lives <= 0) return false;
+    this.lives -= 1;
+    this.invincibleUntil = this.elapsed + this.track.map.pickups.lifeInvincibleS;
+    return true;
   }
 
   /** Score any obstacle-row segments the ball has now fully cleared (z past the segment's far

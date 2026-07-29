@@ -379,6 +379,7 @@ class BallRunUI {
             </div>
             <div class="br-hud-distance" data-role="distance">0 m</div>
             <div class="br-hud-tiers" data-role="tiers"></div>
+            <div class="br-hud-lives" data-role="lives" aria-label="${t('lives_aria')}"></div>
           </div>
           <div class="br-gate" data-role="resume-gate" hidden>
             <button type="button" class="br-btn br-btn-primary" data-role="resume">${t('resume')}</button>
@@ -433,6 +434,7 @@ class BallRunUI {
       scoreValue: q('[data-role="score-value"]'),
       distance: q('[data-role="distance"]'),
       tiers: q('[data-role="tiers"]'),
+      lives: q('[data-role="lives"]'),
       resumeGate: q('[data-role="resume-gate"]'),
       resumeBtn: q('[data-role="resume"]'),
       gameover: q('[data-role="gameover"]'),
@@ -613,6 +615,14 @@ class BallRunUI {
     if (this._lastShownTiers !== tierCount) {
       this._lastShownTiers = tierCount;
       this.el.tiers.innerHTML = Array.from({ length: tierCount }, () => '<span class="br-pip"></span>').join('');
+    }
+    // Pickups (Phase 4, Orbital only): `sim.lives` stays 0 for the lifetime of any run that never
+    // spawns a life pickup (Classic, or Orbital before this phase), so this row stays empty and
+    // this is a no-op for every map/event this file already supported.
+    const lives = this.sim.lives || 0;
+    if (this._lastShownLives !== lives) {
+      this._lastShownLives = lives;
+      this.el.lives.innerHTML = Array.from({ length: lives }, () => '<span class="br-life"></span>').join('');
     }
   }
 

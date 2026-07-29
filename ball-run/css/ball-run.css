@@ -250,6 +250,24 @@
   box-shadow: 0 0 6px #39f4ff;
 }
 
+/* Pickups (Phase 4, Orbital only): banked extra-life count. Stays empty (0 height content, same
+   reserved-but-collapsible shape as .br-hud-tiers) on Classic and on Orbital before any life is
+   ever collected - never shifts layout when it does appear. A small diamond (clip-path'd square,
+   rotated) rather than a plain dot, so it reads as a distinct marker from the tier pips above it
+   even in a single screenshot, not just by position. */
+.br-hud-lives {
+  display: flex;
+  gap: 5px;
+  min-height: 9px;
+}
+.br-life {
+  width: 9px;
+  height: 9px;
+  background: #178a7a;
+  box-shadow: 0 0 6px #178a7a;
+  transform: rotate(45deg);
+}
+
 /* [hidden] must win over the flex layout below (class specificity otherwise beats the UA default). */
 .br-gate[hidden], .br-overlay[hidden], .br-help-overlay[hidden] { display: none; }
 

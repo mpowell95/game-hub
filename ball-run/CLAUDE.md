@@ -298,3 +298,85 @@ and confirming byte-identical output.
   longest reaching 167m - past both the Split (~120m) and Jump (~160m) cadences in the same run,
   ending in a real fall with the score (2 obstacles passed) correctly reflected on the game-over
   screen.
+
+## Pickups (BALLRUNMAP2ORBITALSPEC.md Phase 4, shipped 2026-07-29) — the last phase, build complete
+
+The spec's own section 7 deferred this to last on purpose ("much cheaper once Phases 1 to 3
+exist"), and named only "extra lives and collectibles" - no dedicated spec section like Split's
+(2) or Jump's (3) exists for this one, so the shape below (two pickup types, their cadences, the
+invincibility mechanic) is this session's own design, not a literal spec transcription. Orbital
+only, same as everything else in this build; Classic never spawns one.
+
+- **The whole reason this really was cheap**: a pickup is never its own event type or geometry
+  change. `maybePlacePickup()` runs at the end of every `generateEvent()` call and, once an orb's
+  or a life's distance cadence is due, attaches a `{ type, lateral }` payload directly onto
+  whatever plain `'straight'` segment that same call already generated - no new phase
+  choreography, no new width/void/height fields, no interaction with Split/Jump/tunnel/obstacle
+  generation to reason through. `_findPickupSlot()` only ever considers segments from THIS call
+  (never scans backward into older ones) and excludes anything hazard/geometry-bearing
+  (`isGap`, any `void1 > 0`, tunnels, obstacles) by construction, so pickup placement never has to
+  reason about voids, lanes, or in-flight state at all - verified across 40 seeds × 3 difficulties
+  (7644 total spawns): every one landed on a plain straight segment, inside its own track width,
+  never on a hazard.
+- **Orbs are pure bonus score** (`orbValue: 1`, added straight to `sim.score` - the same tally
+  Split/Jump already add to, not a separate stat) - collecting one is never risky, so its
+  collection radius (`radiusBW: 0.6`) is deliberately more forgiving than an obstacle's hitbox: a
+  missed orb should read as "didn't reach it," never as "clipped something."
+- **Lives are a banked extra chance, capped (`maxLives: 2`)**, spent automatically the instant a
+  hit would otherwise end the run:
+  - **The mechanic is a grace WINDOW, not "survive this one hit."** Spending a life
+    (`spendLifeIfAny()`) opens `lifeInvincibleS` (2s) of invincibility during which the obstacle/
+    void/edge checks are skipped OUTRIGHT, not "the next hit is free" - a ball that's still
+    drifting outside bounds, or sitting against the obstacle it just hit, gets real time to
+    recover rather than immediately re-triggering the same crash the very next tick. The window is
+    never extended by passing through more hazards during it; it always expires at the time it was
+    granted.
+  - **Verified directly via `Sim.step()`** (not just generation checks, since this is pure runtime
+    behavior with nothing to audit at generation time): colliding with an obstacle while a life is
+    banked survives (life spent, invincibility engaged, state stays `PLAYING`); the identical
+    collision with zero lives banked crashes normally (`CRASHING`, `crashReason: 'obstacle'`) -
+    confirming the fallback path is intact, not just the survive path.
+  - **HUD**: a small teal diamond row (`.br-hud-lives`/`.br-life`), same reserved-but-collapsible
+    shape as the existing tier-pip row - empty (and taking no visible space) on Classic and on any
+    Orbital run before a life is ever collected, so this is a no-op UI change for every map/event
+    that predates this phase.
+  - **Ball visual**: a gentle scale pulse while invincible (`render.js`, a sine on the SHARED ball
+    mesh's own scale - no new material/geometry), the depth/attention cue that lets a player
+    actually see the grace window is active without any HUD text.
+- **Shape, not just hue, per root CLAUDE.md's colorblind rule** ("pair each hue with a shape
+  marker, never hue alone"): orbs are a small yellow SPHERE (matches the root palette's own
+  "yellow circle" convention), the rarer life pickup is a small teal OCTAHEDRON (the closest 3D
+  analogue to the root palette's "teal diamond") - genuinely different geometry, not a recolored
+  copy of the same mesh, so the two remain distinguishable even without color at all.
+- **`render.js`**: two small dedicated pools (`orbPool`/`lifePool`, sizes 6/2 - pickups are sparse
+  enough that even the visible-window worst case never approaches these), each with its own
+  once-built geometry/material; `dispose()` releases both. A gentle bob (sine on Y) plus a slow
+  spin, both driven by `sim.elapsed` (the same clock every other animated element here already
+  reads, never a fresh wall-clock timer that would desync from the fixed-timestep sim on a paused
+  tab).
+- **Verified**: `node run-all-tests.mjs` all green (20 suites, 0 failed; no suite needed changes).
+  Headless: 7644 generated pickup spawns (3 difficulties × 40 seeds) checked every one is on a
+  plain hazard-free straight segment, inside track width - 0 violations. Direct `Sim.step()`
+  confirmed orb collection (score +1, `orbsCollected` +1), life collection (`lives` +1, capped),
+  and the full life-spend/invincibility/fallback-when-empty sequence described above. Browser
+  (Playwright): direct Sim+Renderer renders of both pickup types match the intended shape/color
+  design; **54 full real-input runs** across two steering strategies on Orbital produced zero page
+  errors and zero console exceptions, with orbs visibly collected in real play (game-over score
+  climbing to 6 in one run) - runs didn't happen to survive far enough to reach a live life
+  pickup in this pass (its ~350m mean cadence is past what scripted/random steering reliably
+  reaches), so that one path's real-browser exercise rests on the direct `Sim.step()` verification
+  above rather than an observed in-browser collection; the collection code path itself is
+  byte-identical to the orb path already proven live.
+
+## Build status: complete
+
+All four phases of BALLRUNMAP2ORBITALSPEC.md have shipped (Phase 1 map plumbing, Phase 2 Split,
+Phase 3 Jump, Phase 4 pickups here). Orbital is now a fully mechanically-distinct second map,
+selectable from Ball Run's setup screen, with its own best-score tracking (per THE LAW, Classic's
+history was never touched at any phase) and its own visual identity. Genuinely open, per the
+spec's own section 9 and this session's own notes above: every tuning number in this file is a
+first-pass guess awaiting Matt's playtest (cadences, gap lengths, apex cap, pickup cadences/
+values, the whole Orbital color set); whether Splits/Jumps should count toward the speed tier the
+way tunnels do; whether a missed-Jump-landing fall should read differently from a normal edge
+fall, since the ball is already falling from height; a wider variant map (mentioned once in the
+spec's Phase 4 aside, never scoped).

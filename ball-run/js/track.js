@@ -69,6 +69,13 @@ export class Track {
     // without it.
     this.lastJumpZ = 0;
     this.lastWasJump = false;
+    // Pickups (Phase 4, Orbital only): distance-paced like the obstacle scheduler, jittered per
+    // spawn rather than a fixed cadence. `this.map.pickups` is undefined on any map without it.
+    if (this.map.pickups) {
+      const pk = this.map.pickups;
+      this.nextOrbZ = pk.orbCadenceM * (1 + (this.rng() * 2 - 1) * pk.orbCadenceJitterFrac);
+      this.nextLifeZ = pk.lifeCadenceM * (1 + (this.rng() * 2 - 1) * pk.lifeCadenceJitterFrac);
+    }
 
     // Distance-paced obstacle scheduler (Matt's second-playthrough item 2): the first event is
     // guaranteed inside the 40-60m window on every run, every difficulty, independent of the RNG's
@@ -174,6 +181,7 @@ export class Track {
 
     if (this.straightsOwed > 0) { type = 'straight'; this.straightsOwed--; }
 
+    const frontZBefore = this.frontZ;
     if (type === 'straight') this.emitStraight();
     else if (type === 'straight-step') this.emitStraight(1);
     else if (type === 'curve') this.emitCurve();
@@ -187,6 +195,60 @@ export class Track {
     this.lastWasTunnel = type === 'tunnel';
     this.lastWasSplit = type === 'split';
     this.lastWasJump = type === 'jump';
+    this.maybePlacePickup(frontZBefore);
+  }
+
+  /**
+   * Pickups (Phase 4, Orbital only, BALLRUNMAP2ORBITALSPEC.md section 7: "extra lives and
+   * collectibles... much cheaper once Phases 1 to 3 exist"). True here: a pickup is never its own
+   * event type or geometry change, just an extra point-in-space payload attached to whatever
+   * plain 'straight' segment this same generateEvent() call already pushed, once its distance
+   * cadence is due. `this.map.pickups` is undefined on any map without it (Classic), so this is a
+   * no-op there.
+   */
+  maybePlacePickup(frontZBefore) {
+    const cfg = this.map.pickups;
+    if (!cfg) return;
+    if (this.frontZ >= this.nextOrbZ) {
+      const seg = this._findPickupSlot(frontZBefore);
+      if (seg) {
+        seg.pickup = { type: 'orb', lateral: this._safePickupLateral(seg) };
+        this.nextOrbZ = this.frontZ + cfg.orbCadenceM * (1 + (this.rng() * 2 - 1) * cfg.orbCadenceJitterFrac);
+      }
+      // If no suitable segment existed this call (e.g. this event was a hazard), nextOrbZ is left
+      // as-is, so the next call - almost always a plain straight or narrow event, per the
+      // weighted pool - tries again immediately rather than skipping a whole cadence interval.
+    }
+    if (this.frontZ >= this.nextLifeZ) {
+      const seg = this._findPickupSlot(frontZBefore);
+      if (seg) {
+        seg.pickup = { type: 'life', lateral: this._safePickupLateral(seg) };
+        this.nextLifeZ = this.frontZ + cfg.lifeCadenceM * (1 + (this.rng() * 2 - 1) * cfg.lifeCadenceJitterFrac);
+      }
+    }
+  }
+
+  /** A plain, hazard-free segment among THIS call's newly pushed ones (never scans further back -
+   *  a pickup always lands within the event that was due, not retroactively on an older one),
+   *  with no pickup on it yet (so an orb and a life due on the same event land on two different
+   *  segments rather than stacking on one). Deliberately excludes every hazard/geometry-changing
+   *  type (obstacle rows, tunnels, Split's void, a Jump's gap/landing/recovery) so pickup
+   *  placement never has to reason about voids, lanes, or in-flight state at all. */
+  _findPickupSlot(frontZBefore) {
+    for (let i = this.segments.length - 1; i >= 0; i--) {
+      const s = this.segments[i];
+      if (s.z0 < frontZBefore) break;
+      if (s.type === 'straight' && !s.isGap && !s.pickup && (s.void1 || 0) === 0) return s;
+    }
+    return null;
+  }
+
+  /** A lateral position comfortably inside the segment's own width (60% of the half-width),
+   *  never near the edge - a missed pickup should read as "didn't reach it," never as "clipped
+   *  the wall trying." */
+  _safePickupLateral(seg) {
+    const halfW = ((seg.w0 + seg.w1) / 2) / 2;
+    return (this.rng() * 2 - 1) * halfW * 0.6;
   }
 
   /** Meters until the next obstacle event, from `estimatedTier` speed tiers in (mild shrink per tier, floored). */
@@ -244,6 +306,11 @@ export class Track {
       jumpMeta: fields.jumpMeta || null, // { gapLength, landingY }, only on a jump's first gap segment
       obstacles: fields.obstacles || null,
       showSpeedLabel: !!fields.showSpeedLabel,
+      // Pickups (Phase 4, Orbital only): never set at push time - maybePlacePickup() mutates this
+      // directly onto an already-generated plain 'straight' segment once one is due, same
+      // after-the-fact placement as everything else pickups touch being deliberately unaffected
+      // by generation (no new event type, no geometry change). { type: 'orb'|'life', lateral }.
+      pickup: null,
     };
     this._cx = seg.cx1;
     this._width = Math.max(this.map.minTrackWidth * BALL_DIAMETER, seg.w1);
