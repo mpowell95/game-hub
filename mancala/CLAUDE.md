@@ -121,6 +121,19 @@ input over the network instead of the same screen.
 - **New file**: `mancala/js/hash.js`, FNV-1a over `{ pits, turn, over, winner }` — `pits` stays
   positional (never sorted), same reasoning as Tic Tac Toe's board array.
 
+### Bug: solo results stopped recording after the first game of a session (fixed 2026-07-30)
+
+Found by an audit of every game with a `_statsCommitted`-style idempotence guard, triggered by
+the identical bug in Dots and Boxes (see `dots-boxes/CLAUDE.md`). Solo `startGame(mode)` never
+reset `this._statsCommitted` back to `false` — only `_mpApplyRoundRecord` (the MP rematch path)
+did. So every game after the first one played in a session (Play again, Restart, and New game all
+call this same `startGame()` on the same instance, never a fresh one) silently recorded nothing at
+all, win, loss or tie — `finish()`'s `if (!this._statsCommitted)` guard just skipped the write.
+Fixed by adding the same reset `startGame()`'s MP counterpart already had. `test-mancala-stats.mjs`
+(repo root) is the regression tripwire: plays three consecutive solo games in one mounted session
+via the real (pure) engine and asserts the stats store's `played` count increments after every one
+— confirmed red against the pre-fix code (stuck at `played=1`), green with the fix.
+
 **Status line (2026-07-27, web-session pass): protocol proven headlessly against `FakeRoom`, all
 six M-series probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real
 devices are required for `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment

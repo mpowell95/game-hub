@@ -515,6 +515,13 @@ class FillerUI {
     clearGame();                 // a new game replaces any saved one
     this.state = newGame();
     if (starter === P2) this.state.turn = P2;
+    // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
+    // (finish()'s `if (!this._statsCommitted)` would otherwise silently skip every game after the
+    // first one played in a session -- Play again/Restart/New game all call startGame() again on
+    // this SAME instance rather than remounting, so nothing else was clearing it. The MP rematch
+    // path (_mpApplyRoundRecord) already resets it per game; this brings solo in line -- same bug,
+    // same fix, as dots-boxes/js/ui.js's startGame() 2026-07-30).
+    this._statsCommitted = false;
     this.view = 'game';
     this.busy = false;
     this.renderGame();
@@ -1564,6 +1571,7 @@ let instance = null;
 export function init(container) {
   if (instance) instance.destroy();
   instance = new FillerUI(container);
+  return instance;   // test hook (see test-filler-stats.mjs); hub.js's `m.init(el)` ignores it
 }
 
 export function destroy() {
