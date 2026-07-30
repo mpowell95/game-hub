@@ -195,6 +195,17 @@ settled by Tic Tac Toe (`js/CLAUDE.md`) - not the local setup's last AI-difficul
 result. An abandoned or desynced game is deliberately NOT recorded - it was not played to a
 conclusion.
 
+**Bug: solo results stopped recording after the first game of a session (fixed 2026-07-30).**
+Found by an audit of every game with a `_statsCommitted`-style guard, triggered by the identical
+bug in Dots and Boxes (see `dots-boxes/CLAUDE.md`). Solo `startGame()` never reset
+`this._statsCommitted` back to `false` - only `_mpApplyRoundRecord` (the MP rematch path) did. So
+every game after the first one played in a session (Play again, Restart, and New game all call
+this same `startGame()` on the same instance, never a fresh one) silently recorded nothing at all,
+win, loss or tie. Fixed by adding the same reset `startGame()`'s MP counterpart already had.
+`test-filler-stats.mjs` (repo root) is the regression tripwire: plays three consecutive solo games
+in one mounted session via the real engine and asserts the stats store's `played` count increments
+after every one - confirmed red against the pre-fix code (stuck at `played=1`), green with the fix.
+
 ### Known limitations (path A, by design)
 
 - Exactly 2 human seats - not a constraint of this game (it is 2-player anyway), stated so a
