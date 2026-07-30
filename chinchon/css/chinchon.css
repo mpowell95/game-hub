@@ -440,7 +440,16 @@
    outline style, never color alone: the run gets a solid accent ring
    (connected sequence), the set a dashed good-color ring (same rank,
    different cards) -- each card's own printed art is the rest of the cue. */
-.cc-help-demo { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+/* Two explicit rows (never flex-wrap, which used to split the set 2+1
+   depending on container width) so a run and a set always read as two
+   distinct groups, each under its own label. */
+.cc-help-demo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.cc-help-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cc-help-group-label {
+  margin: 0; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--cc-muted);
+}
+.cc-help-row { display: flex; justify-content: center; gap: 5px; }
 .cc-help-cardwrap { position: relative; }
 .cc-help-cardwrap.is-run .cc-card { box-shadow: 0 0 0 2.5px var(--cc-accent), 0 1px 3px rgba(20, 40, 80, 0.3); }
 .cc-help-cardwrap.is-set::after {
