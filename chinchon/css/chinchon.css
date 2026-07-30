@@ -435,15 +435,18 @@
 .cc-help-sheet { text-align: center; max-width: 360px; }
 .cc-help-lead { margin: 4px 0 0; font-size: 0.95rem; font-weight: 800; color: var(--cc-ink); }
 .cc-diagram-wrap { display: flex; justify-content: center; margin: 4px 0 2px; }
-.cc-diagram { width: 100%; max-width: 300px; height: auto; }
-.cc-dg-card { fill: var(--cc-surface-2); stroke: var(--cc-muted); stroke-width: 1.5; }
-/* The run and the set are told apart by outline style, never color alone:
-   the run gets a solid accent outline (connected sequence), the set a
-   dashed outline (same rank, different cards) -- plus each card's own
-   number, so the grouping reads without relying on hue. */
-.cc-dg-run { stroke: var(--cc-accent); stroke-width: 2.5; }
-.cc-dg-set { stroke: var(--cc-good); stroke-width: 2.5; stroke-dasharray: 4 3; }
-.cc-dg-pip { font-size: 22px; font-weight: 800; fill: var(--cc-ink); text-anchor: middle; }
+/* Real Anita deck card faces (cardFaceHTML), not a drawn diagram -- matches
+   what the player sees on the table. The run and the set are told apart by
+   outline style, never color alone: the run gets a solid accent ring
+   (connected sequence), the set a dashed good-color ring (same rank,
+   different cards) -- each card's own printed art is the rest of the cue. */
+.cc-help-demo { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.cc-help-cardwrap { position: relative; }
+.cc-help-cardwrap.is-run .cc-card { box-shadow: 0 0 0 2.5px var(--cc-accent), 0 1px 3px rgba(20, 40, 80, 0.3); }
+.cc-help-cardwrap.is-set::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 0.55em;
+  border: 2px dashed var(--cc-good); pointer-events: none;
+}
 .cc-help-caption { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--cc-muted); }
 .cc-help-rules { margin: 0; padding-left: 18px; text-align: left; font-size: 0.78rem; font-weight: 600; color: var(--cc-muted); display: flex; flex-direction: column; gap: 4px; }
 .cc-help-rules li { line-height: 1.35; }
