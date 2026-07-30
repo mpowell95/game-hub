@@ -1748,6 +1748,7 @@ let instance = null;
 export function init(container) {
   if (instance) instance.destroy();
   instance = new DotsBoxesUI(container);
+  return instance;   // test hook (see test-dotsboxes-stats.mjs); hub.js's `m.init(el)` ignores it
 }
 
 export function destroy() {
