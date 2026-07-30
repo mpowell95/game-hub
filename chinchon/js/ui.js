@@ -1693,9 +1693,18 @@ class ChinchonUI {
     const run = [4, 5, 6, 7].map((rank) => ({ id: `help-run-${rank}`, suit: 'bastos', rank }));
     const set = ['oros', 'copas', 'espadas'].map((suit) => ({ id: `help-set-${suit}`, suit, rank: 9 }));
     const mini = (card, cls) => `<div class="cc-help-cardwrap ${cls}">${cardFaceHTML(card, { static: true, mini: true })}</div>`;
+    // Two explicit rows (never left to flex-wrap, which used to split the
+    // set 2+1 across rows depending on container width) so a run and a set
+    // are always visually distinct groups, each with its own label.
     return `<div class="cc-help-demo" role="img" aria-label="${t('help_diagram_aria')}">
-      ${run.map((c) => mini(c, 'is-run')).join('')}
-      ${set.map((c) => mini(c, 'is-set')).join('')}
+      <div class="cc-help-group">
+        <p class="cc-help-group-label">${t('help_label_run')}</p>
+        <div class="cc-help-row">${run.map((c) => mini(c, 'is-run')).join('')}</div>
+      </div>
+      <div class="cc-help-group">
+        <p class="cc-help-group-label">${t('help_label_set')}</p>
+        <div class="cc-help-row">${set.map((c) => mini(c, 'is-set')).join('')}</div>
+      </div>
     </div>`;
   }
 
