@@ -633,6 +633,12 @@ class DotsBoxesUI {
     this._lastEdge = null;
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
+    // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
+    // (_commitStats()'s `if (this._statsCommitted) return` would otherwise silently skip every
+    // game after the first one played in a session -- Play again/Restart/change-settings all
+    // reuse this same instance rather than remounting, so nothing else was clearing it. The MP
+    // rematch path (_mpApplyRoundRecord) already resets it per game; this brings solo in line).
+    this._statsCommitted = false;
     this.view = 'game';
     this._afterStateChange(false);
   }
