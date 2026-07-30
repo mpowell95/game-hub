@@ -852,11 +852,20 @@ Seed only with sync unreachable (offline, or Firebase blocked in devtools) or in
 test (`node run-all-tests.mjs`'s suites construct `gamehub.stats`-shaped fixtures directly in
 Node, never through a browser that can reach the network).
 
-**Known gap, not yet fixed:** the leaderboard lists only players with a profile name
-(`(g.name || '').trim()` in `leaderboard-ui.js`, predates the 2026-07-22 overhaul). Devices that
-recorded plays without ever setting a profile name are mirrored to Firebase but appear on no screen -
-16 plays across 9 devices as of 2026-07-22. That is stored-but-invisible, rule 1. Fixing it needs a
-display identity for a nameless device, which is a product decision, not just a filter change.
+**Fixed (2026-07-30):** the leaderboard used to list only players with a profile name
+(`(g.name || '').trim()` gate in `currentBody()`, predating the 2026-07-22 overhaul). A device
+that recorded real plays (e.g. Dots and Boxes wins vs the computer) without ever setting a
+profile name was mirrored to Firebase but appeared on no screen at all - stored-but-invisible,
+rule 1, and the reported symptom was literally "I won a bunch of times but it's not on the
+leaderboard." `currentBody()` no longer filters on name presence (only `HIDDEN_NAMES`, the
+test/debug list, still excludes a row); `rankName()` now returns the `lb_unnamed_player`
+string ("Unnamed player" / "Jugador sin nombre") for a blank name instead of `''`, so a nameless
+device's row renders with a `?` avatar and that label rather than being silently dropped by the
+By Player and By Game lists (`currentBody()`'s `list` feeds both). **Display-time fix only** - no
+stored field changed, no migration, `players-agg.js` untouched; the moment that device's owner
+sets a real profile name, their existing rows already carry the same identity key and just relabel
+themselves next render. The device still keeps whatever it recorded under `HIDDEN_NAMES` if a
+name is later set to one of those (e.g. `zzztest`).
 
 ### The Ana/Natalia correction (2026-07-23) — what was done, and how certain it actually is
 
