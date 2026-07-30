@@ -17,6 +17,33 @@ i18n: `dots-boxes/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render 
 (`small`/`medium`/`large`) and difficulty keys (`beginner`/`intermediate`/`pro`) stay canonical;
 only their display labels translate.
 
+### Bug: solo results stopped recording after the first game of a session (fixed 2026-07-30)
+
+A player (TP) reported beating the computer "a bunch of times" with none of it showing on the
+leaderboard. THE LAW rule 8: believed immediately, and the recording/aggregation/leaderboard-
+display code was re-read end to end before touching anything — all of it was correct. The actual
+bug was TP's own hunch: **solo `startGame()` (`ui.js`) never reset `this._statsCommitted` back to
+`false`.** That flag is `_commitStats()`'s idempotence guard (`if (this._statsCommitted) return;`)
+— it starts `false` in the constructor, flips `true` the moment ONE game's result is recorded, and
+solo's `startGame()` had no line clearing it again. `startGame()` is the shared entry point for a
+fresh game, "Play again" (`rematch`), Restart, and "Menu → Start" after change-settings — none of
+them create a new instance (only leaving the hub and reopening the game does, via the constructor)
+— so **every game after the first one played in a session recorded nothing at all**, win, loss or
+tie, completely silently (`recordDotsBoxes` never even ran). A player who opens the game once and
+plays several rematches in a row (the normal way to play) gets exactly one recorded result for the
+whole session, no matter how many games they actually won. The multiplayer path
+(`_mpApplyRoundRecord`) already reset this same flag for every game of a rematch series — it just
+never got copied into solo's equivalent function, which is why this game alone had the bug (every
+other game with a `_statsCommitted` guard — Chinchón, Escoba, Filler, Mancala, Tic Tac Toe — resets
+it in its own new-game path already; grepped and confirmed before writing this section, not
+assumed). Fix: `startGame()` now sets `this._statsCommitted = false` right alongside the rest of
+its per-game reset block (`_lastCaptured`/`_lastEdge`/`_humanChainRun`/etc.), mirroring
+`_mpApplyRoundRecord`. No stored data changed, no migration — this is a write-path bug fix, not a
+display fix; games played before this landed were never recorded and cannot be recovered (there
+was nothing stored to carry forward). `node run-all-tests.mjs` stays green (no test exercised a
+second solo `startGame()` call in one session before this, which is exactly how the bug went
+unnoticed by every existing suite).
+
 ### Most-recent-move glow (2026-07-28)
 
 The most recently drawn edge, whoever drew it, pulses (`is-last`, a slow owner-colored halo —

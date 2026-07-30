@@ -45,6 +45,7 @@ const SUITES = [
   // jsdom-dependent smoke suites (optional)
   { file: 'smoke-match.mjs', optionalDep: 'jsdom' },
   { file: 'smoke-ui.mjs', optionalDep: 'jsdom' },
+  { file: 'test-dotsboxes-stats.mjs', optionalDep: 'jsdom' },
 ];
 
 let failures = 0, ran = 0, skipped = 0;

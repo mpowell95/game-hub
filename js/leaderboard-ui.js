@@ -114,7 +114,11 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
 function labelOf(id) { const m = GAME_META.find((g) => g.id === id); return m ? t(m.labelKey) : id; }
 
 // --- identity chrome --------------------------------------------------------
-function rankName(g) { return esc(g.name || ''); }
+/** A device that has recorded plays but never set a profile name used to be omitted from the
+ *  leaderboard entirely (THE LAW rule 1: stored, never shown - js/CLAUDE.md's "Known gap, not
+ *  yet fixed"). It is no longer hidden; it renders under this fallback label instead so its wins
+ *  are visible like everyone else's. Fixed at DISPLAY time only - no stored field changes. */
+function rankName(g) { const n = (g.name || '').trim(); return n ? esc(n) : esc(t('lb_unnamed_player')); }
 
 /** The player's synced profile emoji (aggregated in players-agg.js), falling back to their first
  *  initial in a neutral circle. */
@@ -727,11 +731,13 @@ function visibleRecords() {
 
 function currentBody() {
   const recs = visibleRecords();
-  // Only players who have set a profile name are listed. Devices with no name keep every game they
-  // recorded; that history joins a player automatically the moment the device sets a name.
+  // Every player with any recorded play is listed, named or not (THE LAW rule 1 - see
+  // rankName()'s fallback label above). A device with no name still joins a real player
+  // automatically the moment it sets one, via players-agg.js's identity graph; HIDDEN_NAMES
+  // (test/debug accounts) is the only name-based exclusion left.
   const list = aggregatePlayers(recs).filter((g) => {
     const name = (g.name || '').trim();
-    return name && !HIDDEN_NAMES.has(name.toLowerCase());
+    return !HIDDEN_NAMES.has(name.toLowerCase());
   });
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
