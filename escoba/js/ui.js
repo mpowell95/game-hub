@@ -878,8 +878,14 @@ class EscobaUI {
     this.el.actions.innerHTML = this.renderActions();
   }
 
+  /** Cards / oros / escobas, the three counters that actually decide the round
+   *  score (most cards, most oros, escobas). Oros is counted off the captured
+   *  pile rather than tracked separately -- the pile is the source of truth in
+   *  both numbering modes, and every suit id is canonical (deck.js SUITS). */
   _pileChips(p) {
+    const coins = p.captured.reduce((n, c) => n + (c.suit === 'oros' ? 1 : 0), 0);
     return `<span class="eb-pile-chip" title="${esc(t('title_captured'))}">🂠 ${p.captured.length}</span>` +
+      `<span class="eb-pile-chip eb-pile-coins" title="${esc(t('title_coins'))}">🪙 ${coins}</span>` +
       (p.escobas ? `<span class="eb-pile-chip eb-pile-escoba" title="${esc(t('title_escobas_round'))}">🧹 ${p.escobas}</span>` : '');
   }
 

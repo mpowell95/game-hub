@@ -140,6 +140,38 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   sizes, card sizing, hub chrome), re-measure via `document.documentElement.scrollHeight`
   vs `window.innerHeight` rather than guessing; that constant is the one thing in this
   file not derived from a principled formula.
+- **Three pile counters, and the row rules that hold them** (2026-07-31). Every player pod
+  shows cards (`🂠`), oros (`🪙`) and, once it happens, escobas (`🧹`) - the three things
+  `scoreRound()` actually pays for. `_pileChips()` in `ui.js` renders all three for
+  opponents and self alike; the oros count is derived off `p.captured` (`c.suit === 'oros'`)
+  rather than tracked separately, so it is right in both numbering modes and after any
+  resume. The layouts they sit in each have a hard rule:
+  - **The self chip is one row, always** (`.eb-self-chip`). It spans the full row width
+    (it used to hug its content) and never wraps: the score and the counters are
+    `flex: none`, the name block is the only flexible item, so it absorbs the slack and
+    ellipses when there isn't any. Verified down to 320px with a long name and two-digit
+    counters. Anything added here later is fixed-size, or it shrinks the name.
+  - **The opponent foot's line breaks are structural, not content-driven.** With one
+    opponent the pill is the whole top bar and everything sits on one line. With two, the
+    four items can't share a line, so `.eb-opp-n2 .eb-opp-foot` becomes an explicit 2x2
+    **grid** (fan + cards above, oros + escobas below) instead of a wrapping flex row. A
+    wrapping row re-flowed as a counter ticked from 9 to 10, which changed the top bar's
+    height mid-round and shoved the mat - the exact class of thing the zero-layout-shift
+    rule exists to prevent. The grid's row count can't depend on the values, and it holds
+    whether or not the escoba chip is present. The two-opponent pill also drops a size
+    class (counters, avatar, score, padding) so a 3-player top bar measures the same
+    ~92px it did before the oros counter existed, and a `max-width: 359px` block drops the
+    counters one class further for SE-class phones. That media block MUST stay below the
+    rules it overrides - a media query adds no specificity, and `.eb-opp-n2 .eb-pile-chip`
+    otherwise wins on source order (it did, silently, first time around).
+- **The card's corner value badge is theme-pinned, deliberately.** `.eb-card-val` sits on
+  the card art, which is light in *both* themes, so its ink is the literal `#16243a`, never
+  `var(--eb-ink)`: that variable flips to near-white under `.gh-dark`, which is exactly how
+  the badge became pale-on-white and unreadable in dark mode (reported 2026-07-31). Same
+  reasoning as `.eb-dealer-dot`, pinned the other way. `.eb-pile-escoba`'s dark-brown ink
+  has the mirror-image problem and gets a `:root.gh-dark` override instead, since its own
+  gold-tint chip does follow the theme's surface. Rule of thumb for this file: a surface
+  that themes takes a variable; ink on a surface that does NOT theme takes a literal.
 - **Mat-anchored overlays, each solving a "feedback lives where the eyes already are"
   problem**: the running capture sum (`.eb-sum-chip`, bottom-center), the persistent
   "last hand" state flag (`.eb-lasthand-chip`, top-right, `#ffce3a` + bold text + icon,

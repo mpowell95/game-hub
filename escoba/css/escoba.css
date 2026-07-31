@@ -210,7 +210,33 @@
 }
 .eb-opp-score b, .eb-self-score b { font-size: 1.5rem; font-weight: 900; line-height: 1; color: var(--eb-ink); }
 .eb-opp-score span, .eb-self-score span { font-size: 0.68rem; font-weight: 800; color: var(--eb-muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.eb-opp-foot { display: flex; align-items: center; gap: 6px; min-height: 21px; }
+/* The opponent's foot is the tightest strip in the layout: the hand fan plus
+   three pile counters (cards / oros / escobas) inside a pill that is the whole
+   top bar with one opponent, but barely 100px wide with two. One opponent: a
+   plain single row, everything fits. */
+.eb-opp-foot { display: flex; align-items: center; gap: 5px; min-height: 21px; min-width: 0; }
+
+/* Two opponents: the four items cannot share one line at that width, so the
+   foot becomes an explicit 2x2 GRID rather than a flex row left to wrap when
+   it must. The break points are then structural (fan + cards above, oros +
+   escobas below) instead of content-driven, which is what keeps the pill
+   exactly two lines tall no matter what the counters read and whether or not
+   the escoba counter is present yet -- a wrapping row re-flowed as a count
+   ticked from 9 to 10, and the top bar changing height mid-round would shove
+   the mat and everything under it (the zero-layout-shift rule this whole
+   screen is built on). The counters also drop a size class here, and the rest
+   of the pill tightens by about what the second line costs, so a 3-player top
+   bar stays the height it was before the oros counter existed rather than
+   taking that height out of the mat. */
+.eb-opp-n2 .eb-opp-foot {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center; gap: 2px 4px;
+}
+.eb-opp-n2 .eb-pile-chip { justify-self: start; font-size: 0.62rem; padding: 2px 5px; }
+.eb-opp-n2 .eb-mini-cards em { font-size: 0.68rem; margin-left: 4px; }
+.eb-opp-n2 .eb-opp-pill { padding: 6px 8px; gap: 2px; }
+.eb-opp-n2 .eb-opp-score b { font-size: 1.3rem; }
+.eb-opp-n2 .eb-opp-av { font-size: 1.15rem; }
 
 /* Mini card-back fan: proper card proportions (2:3-ish) so opponents' hand
    size reads as "cards" at a glance, not abstract rectangles. Capped at 3
@@ -226,11 +252,33 @@
   font-style: normal; font-weight: 800; font-size: 0.74rem; color: var(--eb-ink);
   margin-left: 5px; font-variant-numeric: tabular-nums;
 }
+/* Pile counters: cards / oros / escobas. Three of them now (oros joined on
+   2026-07-31), so they are sized to survive the tightest case in the layout --
+   two opponent pills side by side on a 390px phone -- rather than the roomiest.
+   flex: none + nowrap: a counter never wraps to a second line or gets squeezed
+   into an ambiguous width; the name beside it is the only thing that ellipses. */
 .eb-pile-chip {
-  font-size: 0.72rem; font-weight: 800; color: var(--eb-muted);
-  background: var(--eb-surface-2); border-radius: 999px; padding: 3px 8px; white-space: nowrap;
+  flex: none;
+  font-size: 0.7rem; font-weight: 800; color: var(--eb-muted);
+  background: var(--eb-surface-2); border-radius: 999px; padding: 3px 6px; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
+.eb-pile-coins { background: rgba(212, 160, 23, 0.1); }
 .eb-pile-escoba { background: rgba(212, 160, 23, 0.18); color: #7a5502; }
+
+/* Sub-360px phones (SE-class): every counter takes a size class down so three
+   of them still sit inside the pill that holds them -- the single-opponent
+   foot is a nowrap row and would otherwise spill past its own pill once the
+   counts reach two digits. With two opponents, half of an already-third-width
+   pill is ~30px per grid cell, so those go down one class further. This block
+   has to sit BELOW the rules it overrides: a media query adds no specificity,
+   and .eb-opp-n2 .eb-pile-chip above would otherwise win on source order. */
+@media (max-width: 359px) {
+  .eb-pile-chip { font-size: 0.62rem; padding: 2px 4px; }
+  .eb-opp-n2 .eb-pile-chip { font-size: 0.56rem; padding: 1px 4px; }
+  .eb-opp-n2 .eb-mini-cards i { width: 10px; height: 15px; }
+  .eb-opp-n2 .eb-mini-cards i + i { margin-left: -5px; }
+}
 
 /* Round / target: full words now that the crammed abbreviation is gone
    (the old "Last" pill moved to the mat as a stateful chip, see below). */
@@ -341,10 +389,15 @@
 }
 .eb-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
 .eb-card[data-action] { cursor: pointer; }
+/* The corner value badge sits ON the card art, which is light in BOTH themes,
+   so its ink is a fixed literal, never var(--eb-ink): that variable flips to
+   near-white in dark mode, which put pale text on the badge's white pill and
+   made the number unreadable (reported 2026-07-31). Same reasoning as
+   .eb-dealer-dot, which is pinned the other way round. */
 .eb-card-val {
   position: absolute; right: -5px; bottom: -5px; z-index: 2;
   min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px;
-  background: #fff; color: var(--eb-ink); border: 1.5px solid var(--eb-ink);
+  background: #fff; color: #16243a; border: 1.5px solid #16243a;
   font-size: 0.68rem; font-weight: 900; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
@@ -473,18 +526,32 @@
   100% { transform: translateY(-50%) translateX(0)      rotate(0deg); }
 }
 
-/* Self chip: same big-score anchor as the opponent cards. */
+/* Self chip: same big-score anchor as the opponent cards.
+   It spans the FULL row width (it used to hug its content and centre itself)
+   because it now carries three pile counters -- cards, oros, escobas -- and
+   they have to share the row with the name and the score. One row is a hard
+   rule here, not a preference: nothing in this chip may ever wrap, since the
+   self row sits in the zero-layout-shift column and a second line would shove
+   the hand and the action bar down mid-game.
+   How the row is guaranteed: the chip never wraps (flex-wrap: nowrap), the
+   score and the counters are flex: none, and the name block is the single
+   flexible item -- it absorbs all the slack and ellipses when there isn't any.
+   Anything added here later must follow the same rule: fixed-size, or shrink
+   the name. */
 .eb-self-row { display: flex; justify-content: center; }
 .eb-self-chip {
-  display: flex; align-items: center; gap: 12px; max-width: 100%;
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
+  width: 100%; max-width: 100%;
   background: var(--eb-surface); border: 1px solid var(--eb-surface-2);
-  border-radius: 16px; padding: 8px 16px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
+  border-radius: 16px; padding: 8px 12px; box-shadow: 0 2px 10px rgba(20, 40, 80, 0.06);
 }
 .eb-self-chip.is-active { border-color: var(--eb-gold); box-shadow: 0 0 0 2px var(--eb-gold), 0 2px 12px rgba(212, 160, 23, 0.35); animation: eb-active-pulse 1.6s ease-in-out infinite; }
-.eb-self-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.eb-self-av { position: relative; font-size: 1.4rem; line-height: 1; }
-.eb-self-name { font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eb-self-piles { display: flex; gap: 6px; margin-left: 4px; }
+.eb-self-top { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+.eb-self-av { position: relative; flex: none; font-size: 1.4rem; line-height: 1; }
+.eb-self-name { min-width: 0; font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-self-score { flex: none; }
+.eb-self-score b { font-size: 1.35rem; }
+.eb-self-piles { display: flex; flex: none; flex-wrap: nowrap; gap: 5px; margin-left: auto; }
 
 /* Hand: fixed-height row regardless of card count (3-8ish cards typical).
    Extra top padding is the reserved headroom for a lifted selected card
@@ -775,5 +842,9 @@
 :root.gh-dark .eb-root .eb-sheet-x:hover { background: #2f3a50; }
 :root.gh-dark .eb-root .eb-grid { stroke: rgba(233, 238, 246, 0.14); }
 :root.gh-dark .eb-root .eb-dealer-dot { background: #0a1420; border-color: rgba(255, 255, 255, 0.35); }
+/* The escoba counter's ink is a dark brown literal (it reads on the gold tint
+   in light mode); on the dark surface that tint sits over, it needs the light
+   end of the same gold instead. */
+:root.gh-dark .eb-root .eb-pile-escoba { color: #f0c04a; }
 :root.gh-dark .eb-root .lb-dshape-t3,
 :root.gh-dark .eb-root .lb-dshape-t4 { fill: #e6e9f0; }
