@@ -92,6 +92,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: wins are the stored `won` (a draw is NOT a win, 2026-07-28), difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) that only Chinchón uses so far; see "The ninth consumer" |
+| `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -602,27 +603,88 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
 
 ---
 
-## Hiding test/debug accounts from the leaderboard (2026-07-29)
+## Hiding test/debug accounts from the leaderboard (2026-07-29, widened 2026-07-31)
 
-`js/leaderboard-ui.js` has two hide lists, checked in `visibleRecords()`/`currentBody()`. Neither
-ever deletes anything (THE LAW rule 5) — a hidden record's plays stay in Firebase and still show
-on that device's own My Stats; only the shared leaderboard omits the row.
+`js/leaderboard-ui.js` decides who renders in `visibleRecords()` (device ids) and `isHiddenRow()`
+(names), both read by `currentBody()`. Nothing here ever deletes anything (THE LAW rule 5) — a
+hidden record's plays stay in Firebase and still show on that device's own My Stats; only the
+shared leaderboard omits the row.
 
 - **`HIDDEN_PREFIX`** — deviceId prefixes, for specific old records already identified by hand
   (`'4392d978'`, `'f8ad1b82'`, `'zzz-prev'`). Only hides devices that existed when the prefix was
   added; a fresh test pass (new browser/incognito/profile) mints a new deviceId every time, so this
   list does not stay ahead of new testing on its own.
-- **`HIDDEN_NAMES`** — profile names (case-insensitive), for durable use: pick a name once and it
-  stays hidden no matter how many new device ids use it. **The standing QA name is `zzztest`** —
-  use it (any case) whenever testing something the leaderboard would otherwise show, so test plays
-  never surface as a fake player. Reusing the same name also has a side benefit: `players-agg.js`'s
-  identity graph unions any two nameless-of-code devices that share a name, so repeated test runs
-  under `zzztest` collapse into one aggregate group instead of piling up new rows.
+- **`HIDDEN_NAMES` + `HIDDEN_NAME_PREFIX`** — profile names (case-insensitive, trimmed), for
+  durable use: a name stays hidden no matter how many new device ids use it. The name rule was an
+  exact set holding only `zzztest` until 2026-07-31, which is why **"Tester" kept coming back** —
+  only the single device `4392d978` was hidden, so the same name in any new browser was a brand-new
+  visible row. Matt: *"No test accounts should ever appear on the leaderboard."* It is now a PREFIX
+  rule — any name starting with **`test`** (Test, Tester, test1, testing) or **`zzz`**, plus the
+  exact names `qa`, `dev`, `demo`, `preview`, `prueba`. **The standing QA name is still `zzztest`**;
+  reusing one name also makes `players-agg.js` collapse repeat test runs into one group rather than
+  piling up rows. The rule is deliberately blunt — a real player is not called "Testxyz" — but it is
+  a prefix, not a substring, so "Contest" and "Tess" are safe. Regression cases (both directions)
+  are in `test-leaderboard-rank.mjs`'s "who is allowed on the board" block, which MIRRORS
+  `isHiddenRow()`; keep the two in step.
+- **Nameless devices are hidden too, as of 2026-07-31** — see "Nameless devices" below, which
+  supersedes the 2026-07-30 entry in "Sync health". This is only safe because `js/name-gate.js`
+  now makes a nameless device impossible to create; do not carry one change without the other.
 
 If a new stray test/debug record turns up by device id instead (e.g. found via
 `node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
 `You` records were found on 2026-07-29), add its id to `HIDDEN_PREFIX` rather than guessing a name
 match — a name-only fix would miss it if the record used a different name.
+
+### Nameless devices — the gate, and why hiding them is not rule 1 again (2026-07-31)
+
+**This supersedes "Fixed (2026-07-30)" under "Sync health" below.** Both halves are load-bearing;
+read them as one change.
+
+Matt, seeing ~20 "Unnamed player" rows the day after the 07-30 fix shipped: *"The app should not be
+playable without entering a name."*
+
+What produced those rows: **the first-run gate only ever covered the hub.** Every game also ships a
+standalone page (`<game>/index.html`, precached in `sw.js` and reachable by direct URL), plus
+Monopoly Deal and Parchís as whole classic-script apps — all ungated. A device could play there
+indefinitely, record real plays, and mirror them to `players/<statsId>` with `profile.name: ''`
+(`stats-net.js` writes whatever the profile holds, and `hub.js` syncs on load *before* the gate is
+answered, so even closing the tab on the gate left a permanent nameless record). `players-agg.js`
+cannot prove two nameless, code-less devices are one person, so each stayed its own row forever —
+20 devices, 20 rows, unmergeable.
+
+The fix is a pair:
+
+1. **`js/name-gate.js`** (+ `css/name-gate.css`, `js/name-gate-auto.js`) — the gate moved OUT of
+   `hub.js` and became the one shared implementation, called by every entry point. `hub.js`'s
+   `initFirstRun()` is now just a call site; each module game's standalone page does
+   `await requireName()` **before** `init()`, so the game never mounts; the two classic-script apps
+   load `name-gate-auto.js` as a deferred module, which overlays them (they boot but cannot be
+   played). The overlay has no close button, no scrim handler and no Escape — that is the point.
+   Offline it accepts the name locally and claims it on a later sync, exactly as the hub's gate
+   always behaved.
+2. **`isHiddenRow()`** in `leaderboard-ui.js` stops rendering nameless (and `'You'`-named) rows.
+
+**Why this is not the stored-but-invisible bug again.** A nameless record can no longer be
+*created*, so every one that exists is pre-gate history — and its owner is gated into naming
+themselves the next time they open anything. The instant they do, `players-agg.js`'s identity graph
+attaches that same untouched record to their real row and every play reappears on the board.
+Nothing is deleted, nothing stops syncing, and in the meantime the owner still sees all of it on
+their own My Stats. The 07-30 fix was right *for a world where a nameless device was reachable*;
+this closes that world instead. `test-leaderboard-rank.mjs` asserts the round trip (hidden while
+nameless → every play on the board, in the right person's row, once named).
+
+**If you ever remove the gate, restore the 07-30 behaviour first** — hiding nameless rows without
+it is the exact rule 1 violation `59f8e9b` fixed.
+
+Two caveats worth knowing:
+
+- **Parchís is built from the sibling `../Parchís/` folder** (root CLAUDE.md), which is not in this
+  repo. Its gate `<script>` tag lives in the built `parchis/index.html` here and **will be lost on
+  the next build** unless the same line is added to the source.
+- **Monopoly Deal's nested SW is the exclusive controller of its page's fetches**, so the gate's
+  root-scope module graph is listed in `business-deal/sw.js`'s own `ASSETS` (same reasoning as its
+  in-scope `game-stats-global.js` copy, ARCH-REVIEW.md S4-1) — otherwise the gate would silently
+  fail to load offline and BD would be ungated there.
 
 ---
 
@@ -852,7 +914,12 @@ Seed only with sync unreachable (offline, or Firebase blocked in devtools) or in
 test (`node run-all-tests.mjs`'s suites construct `gamehub.stats`-shaped fixtures directly in
 Node, never through a browser that can reach the network).
 
-**Fixed (2026-07-30):** the leaderboard used to list only players with a profile name
+**Fixed (2026-07-30), then SUPERSEDED (2026-07-31)** — read this entry together with "Nameless
+devices" above, which reverses the display half of it. The diagnosis below is still correct and is
+why the gate now exists; what changed is that a nameless device is no longer reachable, so the
+leaderboard hides these rows again instead of labelling them:
+
+the leaderboard used to list only players with a profile name
 (`(g.name || '').trim()` gate in `currentBody()`, predating the 2026-07-22 overhaul). A device
 that recorded real plays (e.g. Dots and Boxes wins vs the computer) without ever setting a
 profile name was mirrored to Firebase but appeared on no screen at all - stored-but-invisible,
@@ -876,13 +943,15 @@ to split them by.** Separately `usernames/natalia` held `{ code: "89N3N" }` — 
 why Natalia's brand-new phone answered "Taken. Use that code instead." the first time she tried to
 claim her own name.
 
-**Root cause of the stale registry entry** (verified in code, still unfixed): `js/hub.js`'s
-first-run "fr-save" handler calls `claimUsername(name, code, '')` — a hardcoded empty *previous
-name*, so the gate can register a new name but can never release the one it replaces.
-`profile/index.html`'s rename flow passes the real previous name and releases correctly. The bug
-only fires when a device's local profile is reset and then re-claimed through the hub's gate rather
-than the profile page. `js/stats-net.js` already exports `adminReleaseUsername(name)` for exactly
-this repair; nothing in the UI calls it.
+**Root cause of the stale registry entry** — `js/hub.js`'s first-run "fr-save" handler called
+`claimUsername(name, code, '')`, a hardcoded empty *previous name*, so the gate could register a new
+name but could never release the one it replaced. It only fired when a device's local profile was
+reset and re-claimed through the hub's gate rather than the profile page (`profile/index.html`'s
+rename flow always passed the real previous name and released correctly). **Fixed in `cdefd6c`
+(2026-07-24)**, which started passing `cur.name || ''`; that fix moved with the gate into
+`js/name-gate.js` (2026-07-31) and is still there — an earlier version of this paragraph said "still
+unfixed" and was stale. `js/stats-net.js` exports `adminReleaseUsername(name)` for repairing a
+registry entry already stranded by the old behaviour; nothing in the UI calls it.
 
 **What was actually written** (`fix-natalia-record.mjs`, applied and verified):
 `players/660e7098-85cf-4293-96ad-888dabc50773` = Natalia, player code **`C5PXN`**, holding 8 plays;

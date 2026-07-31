@@ -6,10 +6,13 @@
 //
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
-import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode } from './profile-store.js';
+import { loadProfile } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
-import { syncMyStats, usernameStatus, claimUsername, lookupCodeOwner } from './stats-net.js';
-import { statsOwner } from './game-stats.js';
+import { syncMyStats } from './stats-net.js';
+// The first-run "choose a name" gate lives in name-gate.js now (2026-07-31) so the hub and every
+// standalone game page run the same one; the profile/code/username plumbing it used to do inline
+// here moved with it.
+import { requireName, hasName } from './name-gate.js';
 import { getLang, setLang, makeT } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
@@ -359,27 +362,6 @@ class Hub {
             </div>
           </div>
         </div>
-        <div class="hub-fr" data-role="firstrun" hidden>
-          <div class="hub-fr-scrim"></div>
-          <div class="hub-fr-card" role="dialog" aria-modal="true" aria-label="${t('hub_fr_dialog_aria')}">
-            <h2 class="hub-fr-h">${t('hub_fr_title')}</h2>
-            <div class="hub-fr-row hub-fr-langrow" role="group" aria-label="${t('hub_fr_langrow_aria')}">
-              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="en">English</button>
-              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-lang" data-lang="es">Español</button>
-            </div>
-            <div class="hub-fr-row">
-              <input class="hub-fr-input" data-role="fr-name" type="text" maxlength="20" placeholder="${t('hub_fr_name_placeholder')}" autocomplete="off">
-              <button type="button" class="hub-cbtn hub-cbtn-danger" data-role="fr-save">${t('hub_fr_save')}</button>
-            </div>
-            <div class="hub-fr-or">${t('hub_fr_or')}</div>
-            <div class="hub-fr-row">
-              <input class="hub-fr-input" data-role="fr-code" type="text" maxlength="5" placeholder="${t('hub_fr_code_placeholder')}"
-                     autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.16em">
-              <button type="button" class="hub-cbtn hub-cbtn-ghost" data-role="fr-link">${t('hub_fr_link')}</button>
-            </div>
-            <p class="hub-fr-msg" data-role="fr-msg" role="status" aria-live="polite"></p>
-          </div>
-        </div>
       </div>`;
 
     this.el = {
@@ -487,7 +469,7 @@ class Hub {
       });
     }
 
-    this.initFirstRun(prof);
+    this.initFirstRun();
     this._initVersionPill();
   }
 
@@ -607,75 +589,17 @@ class Hub {
     }, 2000);
   }
 
-  /** A device with no profile name is invisible on the leaderboard, so gate it once: pick a name, or
-   *  link an existing player code. Nothing is lost either way - games already recorded on this device
-   *  join that player the moment the name or code lands. Also catches devices that played unnamed. */
-  initFirstRun(prof) {
-    const box = this.root.querySelector('[data-role="firstrun"]');
-    if (!box) return;
-    if (prof && (prof.name || '').trim()) { box.hidden = true; return; }
-    const nameIn = box.querySelector('[data-role="fr-name"]');
-    const codeIn = box.querySelector('[data-role="fr-code"]');
-    const msgEl = box.querySelector('[data-role="fr-msg"]');
-    const say = (t) => { msgEl.textContent = t || ''; };
-    box.hidden = false;
-    setTimeout(() => { try { nameIn.focus(); } catch { /* ignore */ } }, 60);
-
-    const finish = () => { box.hidden = true; this.render(); this._syncStats(); };
-
-    // Language choice, part of first-run per the i18n plan: takes effect IMMEDIATELY (so the
-    // rest of first run — and everything after — is already in the chosen language), persists in
-    // gamehub.lang.v1, and needs no Save. Each button is self-labeled in its own language, so
-    // this row never needs translating.
-    const langBtns = Array.from(box.querySelectorAll('[data-role="fr-lang"]'));
-    const paintLang = () => langBtns.forEach((b) =>
-      b.setAttribute('aria-pressed', String(b.dataset.lang === getLang())));
-    paintLang();
-    langBtns.forEach((b) => b.addEventListener('click', () => { setLang(b.dataset.lang); paintLang(); }));
-
-    box.querySelector('[data-role="fr-save"]').addEventListener('click', async () => {
-      const name = (nameIn.value || '').trim();
-      if (!name) { say(t('hub_fr_msg_enter_name')); return; }
-      const cur = loadProfile() || {};
-      // Which code this device should record under (see game-stats.js's "WHOSE stats these are"):
-      //   - the profile's own code, if it still has one;
-      //   - else the code that already OWNS this device's stats, but ONLY when the name typed
-      //     matches that owner's name. That is the same person setting themselves up again after
-      //     losing their profile, and minting a fresh code would fork them away from their own
-      //     history for no reason;
-      //   - else a brand-new code. A different name is a different person, and giving them their
-      //     own code is exactly what stops two people on one phone blending into one record.
-      const owner = statsOwner();
-      const sameAsOwner = !!(owner && (owner.name || '').trim().toLowerCase() === name.toLowerCase());
-      const code = cur.playerId || (sameAsOwner ? owner.code : null) || newPlayerCode();
-      say(t('hub_fr_msg_checking'));
-      let status = 'offline';
-      try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
-      if (status === 'taken') { say(t('hub_fr_msg_taken')); return; }
-      saveProfile(Object.assign({}, cur, { name, playerId: code }));
-      // The real previous name, not '' - the hardcoded empty string here is what left "natalia"
-      // reserved against Ana's code when the shared device was renamed through this gate, so the
-      // registry said the name was taken by someone who no longer used it and Natalia could never
-      // claim her own name (CLAUDE.md, "The Ana/Natalia correction"). claimUsername only releases a
-      // previous name it can prove this code owned, so passing it is safe even when it is stale.
-      try { claimUsername(name, code, cur.name || ''); } catch { /* best-effort */ }
-      finish();
-    });
-
-    box.querySelector('[data-role="fr-link"]').addEventListener('click', async () => {
-      const code = canonicalizeCode(codeIn.value);
-      if (!code) { say(t('hub_fr_msg_invalid_code')); return; }
-      say(t('hub_fr_msg_linking'));
-      const cur = loadProfile() || {};
-      // Adopt the player's existing name/emoji so this device joins as THEM. Without this the blank
-      // name normalizes to 'You' and, being the newest device, would rename the whole player.
-      let owner = null;
-      try { owner = await lookupCodeOwner(code); } catch { owner = null; }
-      const next = Object.assign({}, cur, { playerId: code });
-      if (owner && owner.name) { next.name = owner.name; if (owner.emoji) next.emoji = owner.emoji; }
-      saveProfile(next);
-      finish();
-    });
+  /** A device with no profile name cannot record plays under an identity, so gate it: pick a name,
+   *  or link an existing player code. Nothing is lost either way - games already recorded on this
+   *  device join that player the moment the name or code lands.
+   *
+   *  The gate itself moved to js/name-gate.js (2026-07-31) so the standalone game pages, which had
+   *  no gate at all and are exactly where the leaderboard's "Unnamed player" rows came from, run the
+   *  SAME one. This method is now just the hub's call site; `requireName()` is a no-op when a name
+   *  already exists, and idempotent, so calling it from every render() is safe. */
+  initFirstRun() {
+    if (hasName()) return;
+    requireName().then(() => { this.render(); this._syncStats(); });
   }
 
   /** The language toggle's face: ONE state at a time (the active language), Matt's flag-knob

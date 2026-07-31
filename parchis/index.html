@@ -251,6 +251,13 @@
 <div id="overlay"></div>
 <div id="live" class="pc-sr" role="status" aria-live="polite" aria-atomic="true"></div>
 
+<!-- The app is not playable without a name (js/name-gate.js). Same deferred-module approach as
+     Monopoly Deal: this page is one big classic-script app with no mount point to await, so the
+     gate overlays it until a name is entered.
+     NOTE: this file is BUILT from the sibling ../Parchís/ folder (root CLAUDE.md), which is not in
+     this repo - re-apply this line there, or the next build drops it. -->
+<script type="module" src="../js/name-gate-auto.js"></script>
+
 <!-- module: engine.js -->
 <script>
 /*

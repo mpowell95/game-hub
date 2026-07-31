@@ -69,6 +69,12 @@
        must be reachable from BD's OWN nested SW cache when offline (ARCH-REVIEW.md S4-1). -->
   <script src="js/game-stats-global.js"></script>
   <script src="js/ui.js"></script>
+  <!-- The app is not playable without a name (js/name-gate.js). This page is a classic-script app
+       with no single mount point to await, so the gate arrives as a deferred module and overlays
+       everything until a name is entered; the UI below still boots, it just cannot be played.
+       The root-scope modules it pulls in are added to THIS worker's ASSETS (see sw.js) because BD's
+       nested SW is the exclusive controller of BD's page fetches. -->
+  <script type="module" src="../js/name-gate-auto.js"></script>
   <script>
     window.addEventListener('DOMContentLoaded', function () {
       const ui = new UI.BusinessDealUI();
