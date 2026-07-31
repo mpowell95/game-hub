@@ -55,10 +55,12 @@ function platform() {
 // name gate, leave-game confirm) that might already be open.
 function onLauncherScreen() {
   const game = document.querySelector('[data-role="game"]');
-  const firstrun = document.querySelector('[data-role="firstrun"]');
   const confirmBox = document.querySelector('[data-role="confirm"]');
   if (game && !game.hidden) return false;
-  if (firstrun && !firstrun.hidden) return false;
+  // The name gate moved out of the hub shell into js/name-gate.js (2026-07-31): it is now its own
+  // element appended to <body>, present only while open, instead of a [data-role="firstrun"] node
+  // in the hub markup toggled with `hidden`. Its mere PRESENCE is the "open" signal.
+  if (document.querySelector('.ng-root')) return false;
   if (confirmBox && !confirmBox.hidden) return false;
   return true;
 }

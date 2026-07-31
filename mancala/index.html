@@ -23,7 +23,12 @@
 
   <!-- Standalone host. In the hub, the shell calls init(container)/destroy() instead. -->
   <script type="module">
+    // The app is not playable without a name (see js/name-gate.js): this standalone page is a
+    // door into the hub too, and an ungated one is where the leaderboard's nameless device
+    // records came from. `requireName()` is a no-op once this device has a name.
+    import { requireName } from '../js/name-gate.js';
     import { init } from './js/ui.js';
+    await requireName();
     init(document.getElementById('mancala'));
   </script>
 </body>

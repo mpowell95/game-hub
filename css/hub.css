@@ -173,29 +173,9 @@ body {
 .hub-version:disabled { cursor: wait; }
 .hub-version.is-stale { color: var(--hub-accent); border-color: var(--hub-accent); font-weight: 800; }
 
-/* First-run gate: a device with no profile name must pick one (or link a code) before it can be
-   seen on the leaderboard. Shown once, then never again on that device. */
-.hub-fr { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; }
-.hub-fr[hidden] { display: none; }
-.hub-fr-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, .58); }
-.hub-fr-card {
-  position: relative; width: 100%; max-width: 360px; margin: 0 16px; padding: 20px;
-  background: var(--hub-surface); border-radius: 16px; box-shadow: 0 16px 50px rgba(9, 24, 48, .4);
-}
-.hub-fr-h { margin: 0 0 14px; font-size: 1.05rem; font-weight: 800; color: var(--hub-ink); }
-.hub-fr-row { display: flex; align-items: center; gap: 8px; }
-.hub-fr-input {
-  font: inherit; flex: 1 1 auto; min-width: 0; padding: 10px 12px; border-radius: 10px;
-  border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2); color: var(--hub-ink);
-}
-.hub-fr-input:focus { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: #fff; }
-.hub-fr-or { text-align: center; color: var(--hub-muted); font-size: .8rem; font-weight: 700; margin: 12px 0; }
-.hub-fr-msg { margin: 10px 0 0; min-height: 1.1em; font-size: .85rem; font-weight: 600; color: var(--hub-muted); }
-.hub-fr .hub-cbtn { flex: 0 0 auto; }
-/* First-run language row: two self-labeled chips, the active one filled. Selection is carried by
-   aria-pressed (a real state, not a color), so the style just follows the attribute. */
-.hub-fr-langrow .hub-cbtn { flex: 1 1 0; }
-.hub-fr-langrow .hub-cbtn[aria-pressed="true"] { background: var(--hub-accent, #1769d4); color: #fff; }
+/* The first-run "choose a name" gate is no longer part of the hub shell: it moved to
+   js/name-gate.js + css/name-gate.css (2026-07-31) so the standalone game pages run the same
+   gate. Its .hub-fr* rules were removed with the markup. */
 
 .hub-main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px 16px 40px; }
 /* The floating immersive back button (above) overlays .hub-main since
@@ -498,7 +478,6 @@ body {
 }
 :root.gh-dark .hub-top { background: rgba(14, 20, 32, 0.92); }
 :root.gh-dark .hub-top.hub-top-immersive .hub-back { background: rgba(27, 35, 51, 0.92); }
-:root.gh-dark .hub-fr-input:focus,
 :root.gh-dark .hub-cbtn-ghost { background: var(--hub-surface-2); }
 /* The Leaderboard/My Stats overlays' own injected CSS hardcodes a couple of literal
    colors instead of --hub-* vars (a light-mode-only top-band tint and two segmented/

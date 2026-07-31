@@ -6,14 +6,17 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v244';
+const CACHE = 'game-hub-v245';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/hub.css',
+  './css/name-gate.css',
   './js/hub.js',
+  './js/name-gate.js',
+  './js/name-gate-auto.js',
   './js/a2hs.js',
   './js/favorites.js',
   './js/i18n.js',

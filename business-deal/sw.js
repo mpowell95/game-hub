@@ -6,7 +6,7 @@
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v31';
+const CACHE = 'business-deal-hub-v32';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.
@@ -23,6 +23,22 @@ const ASSETS = [
   // from THIS cache, since BD's own nested SW is the exclusive controller of BD's page fetches.
   './js/game-stats-global.js',
   './js/ui.js',
+  // The shared name gate (2026-07-31). Root-scope, NOT in-scope copies: it is an ES module with a
+  // real import graph (profile-store -> game-stats -> stats-net -> firebase-boot), and duplicating
+  // that here would fork five shared modules. Same reason as game-stats-global.js above still
+  // applies to the CACHING though - BD's nested SW controls every fetch this page makes, so these
+  // have to live in THIS cache to survive offline. Firebase's own SDK is a dynamic CDN import that
+  // is expected to fail offline; the gate handles that (a name entered offline is claimed later).
+  '../js/name-gate-auto.js',
+  '../js/name-gate.js',
+  '../js/profile-store.js',
+  '../js/game-stats.js',
+  '../js/stats-net.js',
+  '../js/firebase-boot.js',
+  '../js/firebase-config.js',
+  '../js/i18n.js',
+  '../js/strings.js',
+  '../css/name-gate.css',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];

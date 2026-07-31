@@ -257,5 +257,59 @@ console.log('\n-- THE LAW rule 1: nobody visible before the change is invisible 
   ok('legacy-bucket player has a real rating', vieja.rating != null);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n-- who is allowed on the board: no test accounts, no nameless devices (2026-07-31) --');
+{
+  // MIRROR of js/leaderboard-ui.js's isHiddenRow() + HIDDEN_NAMES/HIDDEN_NAME_PREFIX. That file is
+  // DOM-only (it injects CSS and reads game-stats-ui.js) so it cannot be imported headless; this is
+  // the same mirroring pattern test-mp-lockstep.mjs uses for the ui.js MP glue.
+  // KEEP IN STEP WITH js/leaderboard-ui.js - if the rule changes there, change it here.
+  const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);
+  const HIDDEN_NAME_PREFIX = ['test', 'zzz'];
+  const isHiddenRow = (g) => {
+    const name = (g.name || '').trim().toLowerCase();
+    if (!name || name === 'you') return true;
+    if (HIDDEN_NAMES.has(name)) return true;
+    return HIDDEN_NAME_PREFIX.some((p) => name.startsWith(p));
+  };
+  const board = (all) => aggregatePlayers(all).filter((g) => !isHiddenRow(g));
+  const c4 = (played, won) => ({ connect4: { total: { played, won, lost: played - won }, byDiff: { medium: { played, won, lost: played - won } } } });
+
+  // Matt, 2026-07-31: "No test accounts should ever appear on the leaderboard." The old exact-match
+  // list only held 'zzztest', so every one of these except zzztest used to render.
+  for (const n of ['Tester', 'tester', 'test1', 'Testing', 'TEST', 'zzztest', 'zzzPrev', 'QA', 'Demo']) {
+    ok(`hidden: "${n}"`, board({ d: rec({ name: n }, c4(4, 2)) }).length === 0);
+  }
+  // ...without eating ordinary players. "Zed99" is the shape of a real row on the board (a name
+  // with digits is not a test account by itself); "Tess"/"Zoe"/"Contest" are the near-misses that
+  // prove the rule is a PREFIX match, not a substring one.
+  for (const n of ['Zed99', 'Tess', 'Zoe', 'Matt', 'Ana', 'Contest']) {
+    ok(`visible: "${n}"`, board({ d: rec({ name: n }, c4(4, 2)) }).length === 1);
+  }
+
+  // Nameless devices: the "Unnamed player" rows. Each is its own ungroupable row (players-agg.js
+  // cannot prove two nameless devices are one person), which is why 20+ of them appeared at once.
+  const nameless = { n1: rec({ name: '' }, c4(2, 0)), n2: rec({ name: '' }, c4(3, 1)), n3: rec({ name: 'You' }, c4(1, 0)) };
+  ok('three nameless devices produce three ungroupable rows', aggregatePlayers(nameless).length === 3);
+  ok('...and none of them render', board(nameless).length === 0);
+
+  // THE LAW rule 1, the part that makes hiding them safe: hidden is not lost. js/name-gate.js gates
+  // every entry point, so a nameless device's owner is made to name themselves; the instant they do,
+  // players-agg.js's identity graph attaches the SAME stored record to their real row, plays and
+  // all. Nothing is migrated, deleted or rewritten - only the profile name changes.
+  const before = { ana: rec({ name: 'Ana', playerId: 'AAA11' }, c4(10, 6), 5000), ghost: rec({ name: '' }, c4(7, 3), 6000) };
+  ok('before: Ana is on the board and the nameless device is not', board(before).length === 1);
+  const anaOnly = board(before).find((g) => g.name === 'Ana');
+  eq('before: Ana shows only her own plays', anaOnly.games.connect4.total.played, 10);
+
+  // Same record, same stats object - the owner just passed the gate and linked Ana's player code.
+  const after = { ana: before.ana, ghost: rec({ name: 'Ana', playerId: 'AAA11' }, c4(7, 3), 6000) };
+  const rows = board(after);
+  ok('after naming: still one row, no orphan', rows.length === 1);
+  eq('after naming: every previously-hidden play is now ON the board', rows[0].games.connect4.total.played, 17);
+  eq('...including its wins', rows[0].games.connect4.total.won, 9);
+  ok('...and the row is Ana, not a new player', rows[0].name === 'Ana' && rows[0].devices === 2);
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);
 process.exit(fail ? 1 : 0);

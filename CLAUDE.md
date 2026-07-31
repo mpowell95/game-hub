@@ -111,6 +111,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | Module | Role |
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers |
+| `js/name-gate.js` | the shared, undismissable "choose a name" gate; every entry point calls it (`js/name-gate-auto.js` is its deferred form for classic-script pages) |
 | `js/favorites.js` | hub-only launcher favorites (`gamehub.favorites.v1`) |
 | `js/i18n.js` | the EN/ES language layer: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange`; Parchís's proven t() as a shared module |
 | `js/theme.js` | the light/dark/auto theme layer: `getTheme`/`setTheme`/`resolvedTheme` (`gamehub.theme.v1`), `onThemeChange`; stamps `.gh-dark` on `<html>` |
@@ -178,6 +179,12 @@ export default { init, destroy, isInProgress };
   module game's `index.html` must also be in `sw.js`'s `ASSETS` list (run
   `node validate-sw-assets.mjs` to check) — Connect Four's was missing for a long time before
   a July 2026 fix, which silently broke offline standalone play with no other symptom.
+- **A standalone page must gate on the name before it mounts** (2026-07-31). Its inline module is
+  `import { requireName } from '../js/name-gate.js';` then `await requireName();` **before**
+  `init(...)` — copy the block from any existing game's `index.html`. A standalone page is a door
+  into the hub like any other, and the ungated ones are exactly where the leaderboard's ~20
+  permanent "Unnamed player" rows came from (`js/CLAUDE.md`, "Nameless devices"). The app is not
+  playable without a name; a new game must not reopen that hole.
 - `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
   navigating back to the launcher) and has **two legitimate meanings** depending on whether
   the game can resume:

@@ -43,13 +43,38 @@ const TIER_LABEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'g
 // simply never rendered. Matched by deviceId prefix.
 const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test1", preview bot
 
-// The one reusable QA profile name (2026-07-29). Device-id prefixes above only hide devices that
-// already existed when the prefix was written; a fresh test pass mints a new device id every time
-// (new browser/profile/incognito), so a NAME match is what actually stays durable across repeat
-// testing. Use this exact name (any case) when testing so the account never surfaces on the
-// leaderboard - its plays stay recorded and visible on My Stats on that device, same as any other
-// hidden record, just never rendered here. Case-insensitive, trimmed.
-const HIDDEN_NAMES = new Set(['zzztest']);
+// Test/QA profile names (2026-07-29, widened 2026-07-31). Device-id prefixes above only hide
+// devices that already existed when the prefix was written; a fresh test pass mints a new device id
+// every time (new browser/profile/incognito), so a NAME match is what actually stays durable across
+// repeat testing. That is why "Tester" kept reappearing: only the ONE device `4392d978` was hidden,
+// so the same name on any new browser was a brand-new, visible row. Matt (2026-07-31): no test
+// account should ever appear on the leaderboard.
+//
+// So the rule is now a PREFIX rule, not an exact list: any name starting with "test" (Test, Tester,
+// test1, testing) or "zzz" (zzztest and friends), plus the exact names below. Deliberately blunt -
+// a real player is not called "Testxyz", and the cost of a miss is a test row on the family board.
+// Hidden here only: those plays stay recorded, stay synced, and stay visible on My Stats on the
+// device that made them, same as every other hidden record. Case-insensitive, trimmed.
+const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);
+const HIDDEN_NAME_PREFIX = ['test', 'zzz'];
+
+/** True for a row that must never render: a test/QA account, or a device with no real name.
+ *
+ *  Nameless rows (2026-07-31, superseding the 2026-07-30 "show players who never set a profile
+ *  name" change): the app is no longer PLAYABLE without a name - js/name-gate.js gates the hub and
+ *  every standalone game page - so a nameless record can only be pre-gate history, and its owner is
+ *  gated into naming themselves the next time they open anything. At that moment players-agg.js's
+ *  identity graph attaches that exact history to their real row and it reappears here, because the
+ *  record was never altered. Until then it stays synced and fully visible to its owner on My Stats.
+ *  THE LAW rule 1 is about history no screen shows; this history has a screen, and a way back onto
+ *  this one. Do not re-hide nameless rows WITHOUT that gate in place - that combination is the
+ *  stored-but-invisible bug 59f8e9b fixed. */
+function isHiddenRow(g) {
+  const name = (g.name || '').trim().toLowerCase();
+  if (!name || name === 'you') return true;                          // 'You' is profile-store's blank default
+  if (HIDDEN_NAMES.has(name)) return true;
+  return HIDDEN_NAME_PREFIX.some((p) => name.startsWith(p));
+}
 
 // --- sort preference (2026-07-29, HANDOFF-LB-FILTER-SORT.md) ----------------------------------
 // gamehub.lb.sort.v1 - follows js/favorites.js as the model (try/catch read, defensive
@@ -114,10 +139,10 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
 function labelOf(id) { const m = GAME_META.find((g) => g.id === id); return m ? t(m.labelKey) : id; }
 
 // --- identity chrome --------------------------------------------------------
-/** A device that has recorded plays but never set a profile name used to be omitted from the
- *  leaderboard entirely (THE LAW rule 1: stored, never shown - js/CLAUDE.md's "Known gap, not
- *  yet fixed"). It is no longer hidden; it renders under this fallback label instead so its wins
- *  are visible like everyone else's. Fixed at DISPLAY time only - no stored field changes. */
+/** The fallback label is unreachable in normal rendering as of 2026-07-31: isHiddenRow() filters
+ *  nameless rows out before they get here, now that js/name-gate.js makes a nameless device
+ *  impossible to create. Kept as a defensive label so a row that somehow arrives nameless renders
+ *  as something rather than as a blank line. */
 function rankName(g) { const n = (g.name || '').trim(); return n ? esc(n) : esc(t('lb_unnamed_player')); }
 
 /** The player's synced profile emoji (aggregated in players-agg.js), falling back to their first
@@ -731,14 +756,9 @@ function visibleRecords() {
 
 function currentBody() {
   const recs = visibleRecords();
-  // Every player with any recorded play is listed, named or not (THE LAW rule 1 - see
-  // rankName()'s fallback label above). A device with no name still joins a real player
-  // automatically the moment it sets one, via players-agg.js's identity graph; HIDDEN_NAMES
-  // (test/debug accounts) is the only name-based exclusion left.
-  const list = aggregatePlayers(recs).filter((g) => {
-    const name = (g.name || '').trim();
-    return !HIDDEN_NAMES.has(name.toLowerCase());
-  });
+  // Every real player with any recorded play is listed. Test accounts and nameless devices are not
+  // - see isHiddenRow() above for both rules and why the nameless one is safe now.
+  const list = aggregatePlayers(recs).filter((g) => !isHiddenRow(g));
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
   if (_game) return gameDetail(list, _game);

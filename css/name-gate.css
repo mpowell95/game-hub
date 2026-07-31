@@ -1,0 +1,90 @@
+/* name-gate.css - the shared "choose a name" gate (js/name-gate.js).
+ *
+ * Self-contained on purpose: this renders on bare standalone game pages that load no hub chrome, so
+ * it can rely on NOTHING but the page's own reset. Every rule is descendant-scoped under .ng-root
+ * (root CLAUDE.md, "Adding a game" item 3 - a prefix alone is not isolation), and the palette is
+ * duplicated here rather than read from hub.css's custom properties, which are not defined outside
+ * the hub. Dark mode follows the OS by default; an explicit theme.js preference, when the device has
+ * one, arrives as `data-ng-theme` on .ng-root and wins (see name-gate.js's themeAttr).
+ */
+
+.ng-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;   /* above every game's own chrome, including the immersive full-bleed ones */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.ng-root .ng-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, .58); }
+
+.ng-root .ng-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 16px;
+  padding: 20px;
+  background: #fff;
+  color: #0f2540;
+  border-radius: 16px;
+  box-shadow: 0 16px 50px rgba(9, 24, 48, .4);
+}
+
+.ng-root .ng-h { margin: 0 0 6px; font-size: 1.05rem; font-weight: 800; }
+.ng-root .ng-lead { margin: 0 0 14px; font-size: .85rem; font-weight: 600; color: #5b6b82; }
+.ng-root .ng-row { display: flex; align-items: center; gap: 8px; }
+.ng-root .ng-langrow { margin-bottom: 14px; }
+.ng-root .ng-langrow .ng-btn { flex: 1 1 0; }
+
+.ng-root .ng-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 1rem;   /* >=16px: anything smaller makes iOS Safari zoom the page on focus */
+  color: inherit;
+  background: #f4f6fb;
+  border: 1px solid #d5deec;
+  border-radius: 10px;
+}
+.ng-root .ng-input:focus { outline: 2px solid #1769d4; outline-offset: 1px; background: #fff; }
+
+.ng-root .ng-btn {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.ng-root .ng-btn:disabled { opacity: .55; cursor: default; }
+.ng-root .ng-btn-primary { background: #1769d4; color: #fff; }
+.ng-root .ng-btn-ghost { background: #eef2f9; color: #22405f; border-color: #d5deec; }
+.ng-root .ng-btn-ghost[aria-pressed="true"] { background: #1769d4; color: #fff; border-color: #1769d4; }
+
+.ng-root .ng-or { text-align: center; color: #5b6b82; font-size: .8rem; font-weight: 700; margin: 12px 0; }
+.ng-root .ng-msg { margin: 10px 0 0; min-height: 1.1em; font-size: .85rem; font-weight: 600; color: #5b6b82; }
+
+/* Dark. `data-ng-theme` is stamped by name-gate.js from theme.js's stored preference when there IS
+ * one ('light' or 'dark'); an explicit choice must win over the OS, in both directions, which is
+ * why the media query below excludes [data-ng-theme="light"] rather than just being overridden. */
+@media (prefers-color-scheme: dark) {
+  .ng-root:not([data-ng-theme="light"]) .ng-card { background: #16202f; color: #e8eef7; }
+  .ng-root:not([data-ng-theme="light"]) .ng-lead,
+  .ng-root:not([data-ng-theme="light"]) .ng-or,
+  .ng-root:not([data-ng-theme="light"]) .ng-msg { color: #9fb0c6; }
+  .ng-root:not([data-ng-theme="light"]) .ng-input { background: #101828; border-color: #2b3a4f; }
+  .ng-root:not([data-ng-theme="light"]) .ng-input:focus { background: #16202f; }
+  .ng-root:not([data-ng-theme="light"]) .ng-btn-ghost { background: #1e2b3d; color: #cfdcec; border-color: #2b3a4f; }
+}
+
+.ng-root[data-ng-theme="dark"] .ng-card { background: #16202f; color: #e8eef7; }
+.ng-root[data-ng-theme="dark"] .ng-lead,
+.ng-root[data-ng-theme="dark"] .ng-or,
+.ng-root[data-ng-theme="dark"] .ng-msg { color: #9fb0c6; }
+.ng-root[data-ng-theme="dark"] .ng-input { background: #101828; border-color: #2b3a4f; }
+.ng-root[data-ng-theme="dark"] .ng-input:focus { background: #16202f; }
+.ng-root[data-ng-theme="dark"] .ng-btn-ghost { background: #1e2b3d; color: #cfdcec; border-color: #2b3a4f; }
