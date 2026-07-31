@@ -50,6 +50,17 @@ one incident at a time). They are the enforcement detail behind the root's one-l
    game-stats.js and the flight recorder in ball-run/js/ui.js are the reference pattern:
    log locally FIRST, then write the shared store, verify by fresh re-read, retry
    unsynced entries on every app open.
+
+   **The queue is not deleted until the write is PROVEN** (2026-07-31, the Monopoly Deal
+   pending-stats drain): `drainPendingBusinessDeal` in game-stats.js used to remove
+   `gamehub.bd.pendingStats.v1` inside `loadStats()` while the store write that absorbed
+   those plays only happened afterwards (`if (changed) persist(st)`), which can fail on a
+   full quota — one failed write and the plays were gone from both places, silently. It now
+   persists, re-reads the store to confirm the counts landed, and only then drops the queue;
+   anything unproven leaves the queue exactly as it was for the next load. Entries are only
+   ever re-applied when the store did NOT keep them, so this cannot double-count. Regression
+   test: `test-bd-drain.mjs`. **Any "hand data off from a local queue to a store" path owes
+   the same ordering** — write, verify, then delete, never delete-then-write.
 7. **Test migrations against real history, not fresh stores.** A migration test that
    seeds a synthetic new-shape store proves nothing. Extract the actual old writer code
    (`git show <old-commit>:js/game-stats.js`), have it write the store the way real

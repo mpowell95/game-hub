@@ -278,23 +278,22 @@ bank it," so it must never travel to the peer.
 stacking a second one), since the second `_onGameOver` is now a no-op for stats but still opens
 the dialog.
 
-**Found in the same audit, deliberately NOT fixed here — the mirror-image hole (open).** When the
-mismatching device is the **host**, `_mpApplyNextEntry` calls `_mpHandleMismatch` and returns
-*before* `_onGameOver`, so a hash mismatch on the game-WINNING shot leaves the host on a finished
-table with **no result recorded and no end dialog** (it can't shoot — `_canShootNow` is false —
-so Quit is the only way out). The guest is fine: it requests recovery and the host's snapshot
-brings it through `_mpApplyRecovery` → `_onGameOver`. This is an under-count, the opposite of the
-bug above, and it wants a deliberate decision rather than a drive-by fix: the host already
-declares itself authoritative there (`mp.appliedSeq = seq` + `writeRecovery`), so the fix is
-one line in `_mpHandleMismatch`'s host branch — `if (this.game.over) this._onGameOver(this.game
-.turnSeat, null);` — now that `_onGameOver` is idempotent and can safely run from a second place.
-`pool/` has the same hole on BOTH sides (its `_mpApplyRecovery` never records at all), and would
-need `_commitStats` first. Neither is fixed as of 2026-07-31.
+**The mirror-image hole, found in the same audit and fixed alongside it.** When the mismatching
+device is the **host**, `_mpApplyNextEntry` calls `_mpHandleMismatch` and returns *before*
+`_onGameOver`, so a hash mismatch on the game-WINNING shot left the host on a finished table with
+no result recorded and no end dialog (it can't shoot — `_canShootNow` is false — so Quit was the
+only way out). The guest was already covered: it requests recovery, and the host's snapshot brings
+it through `_mpApplyRecovery` -> `_onGameOver`. The host declares its own state authoritative in
+that branch (`mp.appliedSeq = seq` + `writeRecovery`), so that is where it now finishes:
+`if (this.game && this.game.over) this._onGameOver(this.game.turnSeat, null)`. Safe precisely
+because `_commitStats` above made `_onGameOver` idempotent — the two fixes are one change, not two.
+`pool/` had the same hole on BOTH sides and was fixed the same day (`pool/CLAUDE.md`).
 
 Regression test: `test-poolv2-stats.mjs` (jsdom, optional dep, in `run-all-tests.mjs`). It drives
-the real `ui.js`: the recovery leg goes through the actual `_mpApplyRecovery`, and it asserts both
-directions — one game recorded exactly once across a recovery (including the disagreeing-winner
-shape), *and* three solo games in a row plus a two-game MP series each recording every game.
+the real `ui.js`: the recovery leg goes through the actual `_mpApplyRecovery` and the host leg through the actual
+`_mpHandleMismatch`, and it asserts both directions — one game recorded exactly once across a
+recovery (including the disagreeing-winner shape), *and* three solo games in a row, a two-game MP
+series, and the host's mismatch path each recording every game.
 
 ## Settings and keys
 

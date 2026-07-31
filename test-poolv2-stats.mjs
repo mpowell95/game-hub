@@ -69,12 +69,12 @@ function overGame(winner) {
 
 const OPP = { deviceId: 'opp-device-1', name: 'Opponent' };
 
-/** The guest side of a live room, mid-series, as _mpApplyRoundRecord/_mpRejoin leave it. */
-function guestSession(instance, gameNum) {
+/** A live room, mid-series, as _mpApplyRoundRecord/_mpRejoin leave it. */
+function mpSession(instance, role, gameNum) {
   instance.mode = 'online';
   instance.view = 'game';
   instance.mp = {
-    role: 'guest', code: 'TESTRM', localSeat: 1, opp: OPP,
+    role, code: 'TESTRM', localSeat: role === 'host' ? 0 : 1, opp: OPP,
     appliedSeq: 6, movesById: new Map(), maxKnownSeq: 6, delivering: false,
     awaitingRecovery: false, recoveryAttempts: 0, opponentLeft: false, pendingPlacement: null,
     gameNum, nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: null,
@@ -85,7 +85,7 @@ const instance = init(document.getElementById('app'));
 ok(!!instance, 'init() returns the instance (test hook)');
 
 // ---- 1. MP: the winning shot, then the host's recovery for the same game -----------------
-guestSession(instance, 1);
+mpSession(instance, 'guest', 1);
 instance.game = overGame(1);                 // guest is seat 1, so the guest won this one
 instance._onGameOver(1, null);               // what _mpLocalShoot/_mpApplyNextEntry do
 ok(played() === 1, `the finished game recorded once (played === 1, got ${played()})`);
@@ -126,6 +126,21 @@ for (let i = 1; i <= 3; i++) {
   instance._onGameOver(0, null);
   ok(played() === 2 + i, `[KNOWN-BUG PROBE] solo game ${i} of 3 recorded (played === ${2 + i}, got ${played()})`);
 }
+
+// ---- 4. The HOST side of the same incident: it must still record -------------------------
+// When the mismatch is on the host's own replay of the winning shot, _mpApplyNextEntry returns
+// via _mpHandleMismatch before reaching its `if (this.game.over) this._onGameOver(...)` line,
+// which used to leave the host on a finished table with no result and no dialog. The host
+// declares its own state authoritative there (appliedSeq + writeRecovery), so that is where it
+// now finishes. Last block on purpose: nothing below depends on these counts.
+mpSession(instance, 'host', 2);
+instance._mpApplyRoundRecord({ n: 3, dealer: 0 }, null);   // fresh game, guard cleared
+instance.game = overGame(0);                 // host is seat 0, so the host won
+const beforeHost = played();
+instance._mpHandleMismatch(9);
+ok(played() === beforeHost + 1, `[KNOWN-BUG PROBE] the host records the game it just declared authoritative (played === ${beforeHost + 1}, got ${played()}) - before the fix this game vanished on the host`);
+instance._onGameOver(0, null);               // anything that runs afterwards adds nothing
+ok(played() === beforeHost + 1, `the guard holds against a later _onGameOver (played === ${beforeHost + 1}, got ${played()})`);
 
 console.log(`\nPoolv2 stats regression: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

@@ -737,6 +737,13 @@ function applyMpRecovery(recovery){
   const mp = state && state.mp;
   if(!mp || destroyed || !recovery || !recovery.state) return;
   applyMpSnapshot(recovery.state);
+  // The snapshot we just adopted can BE a finished match: the peer plays on (roll/hold/commit
+  // are separate log entries, so it can take several turns) while this device is stuck awaiting
+  // a resync, so what comes back is whatever the room had reached, gameOver included. Without
+  // this the match ended on screen and was never recorded at all -- commitStatsOnce normally
+  // runs from endTurn, which this path skips entirely (fixed 2026-07-31). Idempotent by its own
+  // state.statsCommitted guard, so a device that already recorded through endTurn is unaffected.
+  if(state.gameOver) commitStatsOnce();
   mp.appliedSeq = recovery.seq|0;
   mp.maxKnownSeq = Math.max(mp.maxKnownSeq|0, mp.appliedSeq);
   mp.recoveryAttempts = 0;
@@ -1428,6 +1435,9 @@ export function init(container){
     render, newGame, doRoll, toggleHold, selectCategory, commitSelection, endTurn,
     categoryScore, previewScore, availableCategories, totalScore, upperSum, upperBonus,
     isGameOver, aiChooseHolds, pickCategoryForAI, localSeat, remoteSeat,
+    // MP move-apply pipeline, for test-yahtzee-stats.mjs (the resync path records the match).
+    mpSnapshot, mpApplySnapshot: applyMpSnapshot, mpApplyRecovery: applyMpRecovery,
+    mpCommitStatsOnce: commitStatsOnce, CATEGORIES_ALL: CATEGORIES,
     startSolo(){
       newGame();
       view = 'game';

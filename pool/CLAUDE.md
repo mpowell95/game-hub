@@ -247,41 +247,45 @@ untouched, never read, never deleted):
   displays anything during play (the game-economy chrome that used to imply a win counter is gone,
   see "The visual rebuild" above).
 
-### Why `_onGameOver` has no `_statsCommitted` guard (audited 2026-07-31 — safe, don't "fix" it)
+### Bug: an MP hash mismatch on the winning shot left the match uncounted (fixed 2026-07-31)
 
-Most games in this repo guard their recorder with a `_statsCommitted` flag, and Poolv2 had to be
-given one the same day (`poolv2/CLAUDE.md`, "an MP recovery could record the same finished game
-twice"). Pool does not need one, and the reason is structural, not luck: **every one of its three
-`_onGameOver` call sites sits immediately after a not-over → over transition, and every path that
-can produce that transition is itself gated on the game not already being over.**
+Found by the same audit that fixed Poolv2's opposite bug (`poolv2/CLAUDE.md`, a recovery recording
+one game twice). Pool never double-counted — its three `_onGameOver` call sites each sat on a
+not-over -> over transition whose upstream paths are all gated on the game not already being over
+(`_canShootNow()` for `_settleLocal`/`_mpLocalShoot`, an explicit `over` check in
+`_maybeDriveAiOrMp` and at the top of `_mpApplyNextEntry`). The failure was the other direction:
 
-- `_settleLocal` (solo/AI) — reached only from `_commitShot`, gated by `_canShootNow()`
-  (`!this.game.over` plus `!this._simulating`), or from `_maybeDriveAiOrMp`, which returns early
-  on `this.game.over` both before and after its think delay.
-- `_mpLocalShoot` — same `_canShootNow()` gate upstream.
-- `_mpApplyNextEntry` — returns false on `this.game.over` before applying anything, and returns
-  false immediately after calling `_onGameOver`, which also stops `_mpDrain`'s loop.
+- `_mpApplyNextEntry` resolves the peer's shot into the local state, compares hashes, and on a
+  mismatch returns via `_mpHandleMismatch` **before** its `if (this.game.over) this._onGameOver(...)`
+  line. So the mismatching device sat on a finished table with no result recorded and no end
+  dialog — it can't even shoot (`_canShootNow` is false), Quit was the only way out.
+- `_mpApplyRecovery` never recorded anything at all, so the device that resynced through the
+  host's snapshot silently inherited a finished game it had never banked.
 
-The one difference from Poolv2 that matters: **Pool's `_mpApplyRecovery` does not call
-`_onGameOver`** (Poolv2's does, and that is exactly where its double-count came from), and Pool has
-no in-room rematch series — `_onGameOver` clears `MP_SAVE_KEY`, so a rejoin can't land back on a
-finished game either. Both saves also refuse to persist/restore a finished game (`_saveProgress`
-clears on `over`, `_tryAutoResume` rejects an `over` save), so no resume path can re-record.
+Between them, a state-hash disagreement on the game-WINNING shot meant that match was recorded on
+**neither** device. Not theoretical: a hash mismatch is the realistic failure mode here (float
+non-associativity across two JS engines over hundreds of fixed physics steps), which is the entire
+reason the recovery machinery exists.
 
-If any of that changes — a recovery path that lands on a finished game, an in-room rematch series,
-a resume that can restore a finished game — this stops being safe and Pool needs Poolv2's
-`_commitStats` treatment, guard **and** per-game reset together.
+Fix: both paths now finish the game. `_mpApplyRecovery` records when the snapshot it adopted is
+over; `_mpHandleMismatch`'s host branch records when the state the host just published as
+authoritative is over. That gives `_onGameOver` several call sites for one finished game, so it
+also gained `_commitStats` — a local `_statsCommitted` flag set BEFORE any write, cleared **per
+game** by `_startLocalGame` and `_mpApplyRoundRecord`. The per-game reset is the load-bearing half:
+Dots and Boxes and Filler both shipped this guard without one and silently recorded nothing after
+the first game of a session (2026-07-30). `_showEndDialog` got the matching treatment — it replaces
+an open dialog instead of stacking a second dim + button row over the first.
 
-**What the same audit did find here (open, not fixed 2026-07-31): the opposite failure.**
-`_mpApplyNextEntry` calls `_mpHandleMismatch` and returns *before* `_onGameOver`, and
-`_mpApplyRecovery` never records at all — so if the state hashes disagree on the **game-winning**
-shot, that MP game is recorded on neither device: the mismatching side is left on a finished table
-with no result and no end dialog, and the side that resyncs through a recovery snapshot silently
-inherits a finished game it never banked. An MP hash mismatch is the realistic failure mode for
-this game (float non-associativity across two engines, hundreds of physics steps), so this is not
-theoretical. Fixing it means recording from the recovery path too, which needs an idempotence
-guard first (`poolv2/CLAUDE.md`'s `_commitStats`, guard + per-game reset together) — a change to a
-live, shipped game, so it's flagged here for a deliberate decision rather than done in passing.
+Regression test: `test-pool-stats.mjs` (jsdom, optional dep, in `run-all-tests.mjs`), which drives
+the real `ui.js` through `_mpApplyRecovery` and `_mpHandleMismatch` and asserts all three
+properties together: a recovery-ended match IS recorded, an already-recorded game is NOT recorded
+again, and consecutive solo games each still record.
+
+Unchanged and still true: both saves refuse to persist or restore a finished game
+(`_saveProgress` clears on `over`, `_tryAutoResume` rejects an `over` save) and `_onGameOver`
+clears `MP_SAVE_KEY`, so no resume path can re-enter a finished game. Pool still has no in-room
+rematch series — `_mpApplyRoundRecord` resets the guard anyway, so adding one later needs no
+further stats work.
 
 ## First-playtest fixes (2026-07-28, CiC UI/UX review)
 

@@ -538,9 +538,30 @@ const PENDING_BD_KEY = 'gamehub.bd.pendingStats.v1';
 function drainPendingBusinessDeal(st) {
   const q = readJSON(PENDING_BD_KEY);
   if (!Array.isArray(q) || !q.length) return false;
+  const ids = [];
   for (const e of q) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+    if (ids.indexOf(e.game) < 0) ids.push(e.game);
+  }
+  // THE LAW rule 6, and the reason this is not just a removeItem: the queue IS the only copy of
+  // these plays. It used to be deleted here, inside loadStats(), while the store write that
+  // absorbed them only happened later (`if (changed) persist(st)`) and can fail on a full quota
+  // -- one failed write and the plays were gone from both places, silently. So: write first,
+  // prove it landed by a FRESH re-read (persist() returning true is not enough on its own,
+  // same reasoning as ball-run's trySyncRunEntry), and only then drop the queue. If anything is
+  // unproven the queue stays exactly as it is and the next hub load drains it again -- these
+  // entries are only ever re-applied when the store did NOT keep them.
+  if (!persist(st)) {
+    console.error('[game-stats] pending Monopoly Deal stat(s) could not be saved; keeping the queue for the next load');
+    return true;
+  }
+  const back = readJSON(statsKey());
+  const landed = !!(back && back.games) && ids.every((id) => back.games[id]
+    && (back.games[id].total.played | 0) >= (st.games[id].total.played | 0));
+  if (!landed) {
+    console.error('[game-stats] pending Monopoly Deal stat(s) did not survive a re-read; keeping the queue for the next load');
+    return true;
   }
   try { localStorage.removeItem(PENDING_BD_KEY); } catch { /* ignore */ }
   console.warn(`[game-stats] drained ${q.length} pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable`);

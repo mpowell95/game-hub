@@ -72,10 +72,17 @@ in-flight WAAPI animations all live) and confirms zero errors fire afterward:
 Not part of the visible game; no UI references it. Sets `init()`-time so it always matches the
 live instance. Lets Playwright drive deterministic rounds (`forceDice([...])` bypasses real
 randomness/animation) to assert scoring math and full-game flow headlessly, and exposes `render`
-so a test can force a synchronous re-render after mutating `getState()` directly. The verification
-scripts that exercise it aren't checked into this repo (built ad hoc during the build phases); the
-seam itself is small and harmless enough to leave in permanently rather than strip for shipping,
-same spirit as any other in-repo dev-only hook.
+so a test can force a synchronous re-render after mutating `getState()` directly. Most of the
+verification scripts that exercise it aren't checked into this repo (built ad hoc during the build
+phases); the seam itself is small and harmless enough to leave in permanently rather than strip
+for shipping, same spirit as any other in-repo dev-only hook.
+
+**The MP move-apply pipeline is part of the seam too** (2026-07-31): `mpSnapshot`,
+`mpApplySnapshot`, `mpApplyRecovery`, `mpCommitStatsOnce` and `CATEGORIES_ALL`, added so
+`test-yahtzee-stats.mjs` — the first checked-in automated test for this game — can drive the
+resync path that was swallowing finished matches. The original seam comment already promised
+`__yzTest.mp*` keys; these are them. Note `mpApplyRecovery` ends in `render()`, so a test must
+mount the game screen first (`startSolo()` does it) before swapping state under it.
 
 ## Game engine notes
 
@@ -224,6 +231,19 @@ path regardless of who made it.
 - **Each device records its own perspective independently** (`localSeat()`-relative, same as
   every other stat this game touches) — that is not double-counting; `gamehub.stats` is keyed
   per player, not per room.
+- **Bug: an MP resync could swallow the whole match (fixed 2026-07-31).** `commitStatsOnce()` ran
+  from `endTurn()` and nowhere else, but `applyMpRecovery` -> `applyMpSnapshot` sets
+  `state.gameOver` **directly** from the snapshot, and `mpTryDeliverNextMove()` then bails on
+  `gameOver` — so a device whose match ended while it was resyncing showed the final scorecard and
+  recorded nothing at all. Reachable because roll/hold/commit are each their own log entry: a
+  device that diverges on a hash mid-turn sits in `mp.awaitingRecovery` while the opponent plays
+  on to the end, and the snapshot that comes back is a finished match. Fixed with one line in
+  `applyMpRecovery` — `if(state.gameOver) commitStatsOnce();` — which is safe exactly because the
+  guard already exists: a device that finished normally through `endTurn` is unaffected. Same
+  incident and same day as `pool/` and `poolv2/`, which had the identical hole in their own
+  recovery paths (see `pool/CLAUDE.md`); **any future MP game must check what its resync path does
+  with an already-finished game, not just its move path.** Regression test:
+  `test-yahtzee-stats.mjs`.
 - All three required edits per root `CLAUDE.md`'s "Adding a game" item 7 are done: the
   `ensureYz()`/`recordYahtzee()` writer in `js/game-stats.js`, a rendering screen in
   `js/game-stats-ui.js` (`yahtzeeScreen`, Won/Lost/Tied/Played + Yahtzees + Best score — visible
@@ -239,12 +259,16 @@ path regardless of who made it.
 
 ## Tests
 
-No automated test files are checked into this repo for this game yet, WITH ONE EXCEPTION —
-`players-agg.test.mjs`'s Yahtzee case above IS committed and wired into `run-all-tests.mjs`.
+Two suites are checked in and wired into `run-all-tests.mjs`: `players-agg.test.mjs`'s Yahtzee case
+(the `yz` sub-counter surviving a cross-device combine) and **`test-yahtzee-stats.mjs`**
+(2026-07-31, jsdom, optional dep — the resync-swallows-the-match bug in "Stats" above, plus the
+counterweight that the guard still only covers ONE match so a session's second and third matches
+still record). It drives the real `ui.js` through `window.__yzTest`.
+
 Everything else (scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
-motion`, module lifecycle/leak checks, the real two-device MP test, and the stats-recording
-check described above) were run ad hoc from a scratch directory during development, not
-committed. If this game gains real regression coverage, follow the pattern of
+motion`, module lifecycle/leak checks, the real two-device MP test, and the original
+stats-recording check) were run ad hoc from a scratch directory during development, not
+committed. If this game gains more regression coverage, follow the pattern of
 `test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. — a checked-in, `run-all-tests.mjs`-wired
 suite — rather than leaving verification to a session's own scratch scripts again. A
 `FakeRoom`-backed lockstep test (matching the seven reference games' own suite) would also let

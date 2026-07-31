@@ -182,6 +182,9 @@ class PoolUI {
     this._elevation = 0;
     this._placingCue = false;
     this._foulMsg = null;
+    // Per-game stats idempotence guard (see _commitStats). Reset by _startLocalGame and
+    // _mpApplyRoundRecord, i.e. once per game, never once per mount.
+    this._statsCommitted = false;
     this._boundResize = () => this._resizeCanvas();
     this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._boundScreenshotKey = (e) => { if (e.shiftKey && (e.key === 'S' || e.key === 's')) this.loadScreenshotState(); };
@@ -354,6 +357,10 @@ class PoolUI {
   _startLocalGame() {
     this.mp = null;
     this.game = rules.newGame();
+    // A new game gets its own result: clear the per-game guard, or _commitStats would skip
+    // every game after the first one played in this session (Play again / New game reuse this
+    // same instance -- the bug Dots and Boxes and Filler both shipped, 2026-07-30).
+    this._statsCommitted = false;
     this._afterNewGame();
   }
 
@@ -1356,13 +1363,39 @@ class PoolUI {
     this._paintHud();
   }
 
+  /** Record the finished game exactly once on THIS device.
+   *
+   *  Both devices in a multiplayer match run this, and that is NOT double-counting:
+   *  gamehub.stats is keyed per PLAYER (statsKey()/statsId(), "Whose stats are these" in
+   *  js/CLAUDE.md), so two devices each writing "I played one game" is two different people each
+   *  correctly getting one. Idempotence is the local _statsCommitted flag, set BEFORE any write.
+   *
+   *  Added 2026-07-31 for the MISSING-result bug, not a double-count: _onGameOver used to be
+   *  reachable only from a not-over -> over transition, so nothing was being counted twice, but
+   *  a state-hash mismatch on the game-WINNING shot returned before it on both devices (the
+   *  mismatching side via _mpHandleMismatch, the resyncing side because _mpApplyRecovery never
+   *  recorded at all) and that whole match went uncounted. Both paths now call _onGameOver, and
+   *  this guard is what keeps the extra call sites from turning one game into two results
+   *  (regression test: test-pool-stats.mjs). The flag is per GAME, not per mount: _startLocalGame
+   *  and _mpApplyRoundRecord clear it, which is the half Dots and Boxes and Filler each got wrong
+   *  (results silently stopped recording after the first game of a session). */
+  _commitStats(iWon) {
+    if (this._statsCommitted) return;
+    this._statsCommitted = true;
+    if (this.mode === 'ai') {
+      try { recordResult('pool', this.settings.difficulty, iWon); } catch { /* never block the result */ }
+    } else if (this.mp) {
+      try { recordResult('pool', 'mp', iWon); } catch { /* never block the result */ }
+      if (this.mp.opp) { try { recordHeadToHead('pool', this.mp.opp, iWon); } catch { /* never block the result */ } }
+    }
+  }
+
   _onGameOver(actingSeat, outcome) {
     const iWon = this.game.winner === this._localSeat();
-    if (this.mode === 'ai') {
-      recordResult('pool', this.settings.difficulty, iWon);
-    } else if (this.mp) {
-      recordResult('pool', 'mp', iWon);
-      if (this.mp.opp) { try { recordHeadToHead('pool', this.mp.opp, iWon); } catch { /* never block the result */ } }
+    this._commitStats(iWon);
+    // `mode !== 'ai' && mp` is the ORIGINAL mode branch this function opened with, kept exactly
+    // as it was when the recording moved out into _commitStats.
+    if (this.mode !== 'ai' && this.mp) {
       if (this.mp.role === 'host') net.writeResult(this.mp.code, { winner: this.game.winner }).catch(() => {});
       clearKey(MP_SAVE_KEY);
     }
@@ -1375,6 +1408,13 @@ class PoolUI {
    *  omits it): dim the table, a gold WINNER plate over the winning avatar,
    *  a green Play Again button centered below the table. */
   _showEndDialog(iWon) {
+    // _onGameOver can now run twice for one finished game (the winning shot, then a recovery
+    // carrying the same over-state), so this replaces whatever is already on screen instead of
+    // stacking a second dim + a second set of buttons over the first.
+    const oldDim = this.stage && this.stage.querySelector('.pl-end-dim');
+    const oldActions = this.stage && this.stage.querySelector('.pl-end-actions');
+    if (oldDim) oldDim.remove();
+    if (oldActions) oldActions.remove();
     const winnerSeat = this.game.winner;
     const av = this.el.querySelector(`[data-role="p${winnerSeat === 0 ? '1' : '2'}-avatar"]`);
     if (av) av.classList.add('pl-avatar-winner');
@@ -1564,6 +1604,7 @@ class PoolUI {
     mp.maxKnownSeq = 0;
     this.game = rules.newGame();
     this.game.turnSeat = round.dealer === 1 ? 1 : 0;
+    this._statsCommitted = false;   // a new round is a new game, with its own result
     this.view = 'game';
     this.render();
   }
@@ -1579,6 +1620,12 @@ class PoolUI {
     this.mp.recoveryAttempts = 0;
     this.render();
     net.clearRecovery(this.mp.code).catch(() => {});
+    // The snapshot we just adopted can BE a finished game: the peer plays on while this device
+    // is stuck awaiting a resync, so the state that comes back is whatever the room had reached,
+    // game-over included. Without this the match ended on screen and was never recorded at all
+    // (fixed 2026-07-31). _onGameOver is idempotent via _commitStats, so it is safe here even
+    // when this device already recorded the same game through its own shot.
+    if (this.game.over) this._onGameOver(this.game.turnSeat, null);
   }
 
   async _mpLocalShoot(dir, power, offset, elevation) {
@@ -1638,6 +1685,13 @@ class PoolUI {
     if (mp.role === 'host') {
       mp.appliedSeq = seq;
       net.writeRecovery(mp.code, seq, this._mpSnapshot()).catch(() => {});
+      // The host declares its own state authoritative here (it just published it as the
+      // recovery snapshot), so if that state is a finished game, this is where the host
+      // finishes: _mpApplyNextEntry returned before its own _onGameOver call when the hashes
+      // disagreed, which left the host on a finished table with no result and no end dialog
+      // (fixed 2026-07-31, same incident as _mpApplyRecovery above; idempotent via
+      // _commitStats).
+      if (this.game && this.game.over) this._onGameOver(this.game.turnSeat, null);
     } else {
       mp.awaitingRecovery = true;
       net.requestRecovery(mp.code, seq).catch(() => {});
@@ -1651,7 +1705,10 @@ class PoolUI {
 }
 
 let instance = null;
-export function init(container) { instance = new PoolUI(container); }
+export function init(container) {
+  instance = new PoolUI(container);
+  return instance;   // test hook (see test-pool-stats.mjs); hub.js's `m.init(el)` ignores it
+}
 export function destroy() { if (instance) { instance.destroy(); instance = null; } }
 export function isInProgress() { return instance ? instance.isInProgress() : false; }
 export default { init, destroy, isInProgress };

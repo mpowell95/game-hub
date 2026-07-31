@@ -40,6 +40,7 @@ const SUITES = [
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },
   { file: 'test-stats-identity.mjs' },
+  { file: 'test-bd-drain.mjs' },
   { file: 'test-mp-lockstep.mjs' },
   { file: 'test-boggle-mp.mjs' },
   // jsdom-dependent smoke suites (optional)
@@ -48,7 +49,9 @@ const SUITES = [
   { file: 'test-dotsboxes-stats.mjs', optionalDep: 'jsdom' },
   { file: 'test-filler-stats.mjs', optionalDep: 'jsdom' },
   { file: 'test-mancala-stats.mjs', optionalDep: 'jsdom' },
+  { file: 'test-pool-stats.mjs', optionalDep: 'jsdom' },
   { file: 'test-poolv2-stats.mjs', optionalDep: 'jsdom' },
+  { file: 'test-yahtzee-stats.mjs', optionalDep: 'jsdom' },
 ];
 
 let failures = 0, ran = 0, skipped = 0;

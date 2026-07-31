@@ -1435,6 +1435,13 @@ class PoolUI {
     if (mp.role === 'host') {
       mp.appliedSeq = seq;
       net.writeRecovery(mp.code, seq, this._mpSnapshot()).catch(() => {});
+      // The host declares its own state authoritative here (it just published it as the
+      // recovery snapshot), so if that state is a finished game, this is where the host
+      // finishes: _mpApplyNextEntry returned before its own _onGameOver call when the hashes
+      // disagreed, which left the host on a finished table with no result and no end dialog
+      // (fixed 2026-07-31; the guest already came through _mpApplyRecovery). Idempotent via
+      // _commitStats.
+      if (this.game && this.game.over) this._onGameOver(this.game.turnSeat, null);
     } else {
       mp.awaitingRecovery = true;
       net.requestRecovery(mp.code, seq).catch(() => {});
