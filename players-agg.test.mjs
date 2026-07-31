@@ -326,5 +326,35 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('viewer: own device uses LOCAL not stale remote (10 + other 1 = 11)', g2.games.business.total.played, 11);
 }
 
+// ---- NAME_ALIAS: two spellings of one person fold into ONE row, with a pinned label ----
+// Regression for Lili (2026-07-31), who kept splitting back into "Lili" + "Lill". A rename done in
+// Firebase does not hold: syncMyStats() re-mirrors each device's own local profile on every hub
+// load, so the phone still spelling it "Lill" rewrote the record back. The alias is read-time, so
+// it survives that. Both orderings of "which device synced last" are checked, because the display
+// name is otherwise chosen by recency and would flicker.
+{
+  for (const [lastSynced, label] of [['lill', 'Lill device synced last'], ['lili', 'Lili device synced last']]) {
+    const all = {
+      d1: rec({ name: 'Lili' }, { connect4: comp(10, 6, 4) }, lastSynced === 'lili' ? 900 : 100),
+      d2: rec({ name: 'Lill' }, { connect4: comp(4, 1, 3) }, lastSynced === 'lill' ? 900 : 100),
+    };
+    const list = aggregatePlayers(all);
+    eq(`alias (${label}): one row, not two`, list.length, 1);
+    eq(`alias (${label}): row is labelled "Lili"`, list[0].name, 'Lili');
+    eq(`alias (${label}): both devices' plays are combined`, list[0].games.connect4.total.played, 14);
+    eq(`alias (${label}): ...and their wins`, list[0].games.connect4.total.won, 7);
+    eq(`alias (${label}): counted as two devices`, list[0].devices, 2);
+  }
+  // Case and surrounding whitespace must not defeat it (profile names are free text).
+  const messy = { a: rec({ name: '  LILL ' }, { connect4: comp(2, 1, 1) }), b: rec({ name: 'lili' }, { connect4: comp(3, 2, 1) }, 50) };
+  eq('alias: case/whitespace insensitive', aggregatePlayers(messy).length, 1);
+  eq('alias: still labelled "Lili"', aggregatePlayers(messy)[0].name, 'Lili');
+  // ...without swallowing anyone else. "Lilian" is a different person, not an alias key.
+  const other = { a: rec({ name: 'Lili' }, { connect4: comp(2, 1, 1) }), b: rec({ name: 'Lilian' }, { connect4: comp(3, 2, 1) }) };
+  eq('alias: exact match only, "Lilian" stays separate', aggregatePlayers(other).length, 2);
+  // A name with no DISPLAY_NAME entry is shown exactly as the device wrote it (unchanged behaviour).
+  eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

@@ -24,8 +24,29 @@ const emptyGrid = () => {
 };
 
 // Alternate profile names known to be the same person (hand-maintained for this family hub).
-const NAME_ALIAS = { matt: 'mattyice' };
+// Keys and values are LOWERCASED names; the value is the identity everything folds into.
+//
+// `lill` -> `lili` (2026-07-31): Lili has two devices whose local profiles spell her name
+// differently, so she rendered as two rows. This was "fixed" once before by editing the record in
+// Firebase, and it came back - because a server-side rename does not stick. `stats-net.js`'s
+// syncMyStats() mirrors each device's OWN localStorage profile up on every hub load, so the phone
+// still holding `name: "Lill"` simply rewrote the record back the next time it opened the app.
+// Aliasing here is immune to that: it is applied at READ time, on every render, no matter what the
+// devices push. (The durable alternative is renaming the profile ON the device itself, or linking
+// both devices to one player code - either would also work, and this alias stays harmless if so.)
+const NAME_ALIAS = { matt: 'mattyice', lill: 'lili' };
 const canonName = (n) => NAME_ALIAS[n] || n;
+
+// Preferred DISPLAY spelling for a folded identity, keyed by the canonical (lowercased) name.
+// Grouping alone is not enough: `grp.name` below takes the most recently active device's raw name,
+// so a merged Lili would still have flickered between "Lili" and "Lill" depending on which phone
+// synced last. An entry here pins the row's label. Names with no entry are displayed exactly as the
+// device wrote them (which is why `mattyice` has none - its display behaviour is unchanged).
+const DISPLAY_NAME = { lili: 'Lili' };
+const displayName = (raw) => {
+  const s = (typeof raw === 'string' ? raw : '').trim();
+  return DISPLAY_NAME[canonName(s.toLowerCase())] || s;
+};
 
 const codeOf = (p) => (typeof (p || {}).playerId === 'string' ? p.playerId : '').trim().toUpperCase();
 const nameOf = (p) => canonName((typeof (p || {}).name === 'string' ? p.name : '').trim().toLowerCase());
@@ -97,7 +118,9 @@ export function aggregatePlayers(all) {
     if (rawName) {
       const curPlace = isPlaceholderName(grp.name), newPlace = isPlaceholderName(rawName);
       if (!grp.name || (curPlace && !newPlace) || (curPlace === newPlace && upd >= (grp._nameAt || 0))) {
-        grp.name = rawName; grp._nameAt = upd;
+        // displayName() pins the label for a folded identity (see DISPLAY_NAME above); every other
+        // name passes through untouched.
+        grp.name = displayName(rawName); grp._nameAt = upd;
       }
     }
     // Message: newest EDIT wins, keyed off messageAt (the profile's own edit stamp), NOT rec.updatedAt
