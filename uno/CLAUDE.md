@@ -570,6 +570,30 @@ handoff). `game_title_uno` lives in `js/strings.js` (both languages) and in `uno
 own `title` key. Art: `GAME_ART['uno']` in `js/game-art.js` (fanned cards, landscape
 160x90). Head-to-head capture is MP-only and out of scope until Uno gets a multiplayer pass.
 
+**Why `finish()` has no `_statsCommitted` guard (audited 2026-07-31 — safe, don't "fix" it).**
+Most games in this repo guard their recorder with a per-game `_statsCommitted` flag, and Poolv2
+had to be given one the same day (`poolv2/CLAUDE.md`). Uno needs no guard because `finish()` has
+**exactly one call site** — `_afterStateChange()`'s `if (g.phase === 'over')` — and every route
+into that funnel either starts a fresh game or immediately follows an engine call that **throws**
+once `phase === 'over'` (`game.js`'s `play()`/`draw()` both open with a phase check), so the
+funnel is unreachable a second time on an already-finished game:
+
+- `startGame()` / `resumeGame()` — a fresh game, or a save that `loadGame()` only returns when
+  `snap.phase !== 'over'` (and `saveGame()` refuses to write an over game in the first place, so
+  a finished match can never be resumed and re-recorded).
+- `_aiStep()` — returns immediately unless `phase === 'playing'`.
+- `_onPlayCard`/`_onChooseColor` — both check the phase before touching the engine.
+- the draw-pile click and the auto-draw timer — these call `g.draw(...)` **first**; on a finished
+  game that throws, so `_afterStateChange()` is never reached. This is the one place safety rests
+  on the engine's exception rather than a UI check, and it is why the draw-pile branch of
+  `_onClick` must keep calling the engine before the funnel, never after.
+
+Uno also has no multiplayer, so none of the recovery/replay paths that made Poolv2 re-enter its
+game-over handler exist here. **If Uno ever gets an MP pass, or a resume path that can restore a
+finished game, it needs Poolv2's `_commitStats` treatment** — the guard and its per-game reset
+together, never the guard alone (a guard with no reset is the Dots and Boxes/Filler bug of
+2026-07-30: results silently stop recording after the first game of a session).
+
 ## Tests
 
 ```

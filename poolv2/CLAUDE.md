@@ -240,6 +240,62 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   do. **Still not played on two real devices** — that remains open (BUILD-SPEC.md §6 #5), flagged
   honestly rather than claimed as verified.
 
+## Bug: an MP recovery could record the same finished game twice (fixed 2026-07-31)
+
+`_onGameOver` wrote `recordResult`/`recordHeadToHead` with no idempotence guard, and it has **two
+real call sites for one finished game**:
+
+1. the shot that ends it (`_mpLocalShoot` / `_mpApplyNextEntry`, both `if (this.game.over)
+   this._onGameOver(...)`), and
+2. **`_mpApplyRecovery`**, which ends with `if (this.game.over) this._onGameOver(...)` — because a
+   recovery snapshot can itself be a finished game.
+
+Those two meet on the realistic MP failure path, not a contrived one. A guest wins with its own
+shot and records the win; the host replays that shot, its hash disagrees (float non-associativity
+across two engines over hundreds of physics steps — the reason the recovery machinery exists at
+all), so the host publishes a host-authoritative snapshot of its own already-over state; the guest
+applies it and records **the same game a second time**. Worse, if the host's authoritative state
+named the other winner, the second write was a *loss* for a game already banked as a *win* — one
+game, two contradictory results, neither removable, because writes are additive (THE LAW rule 2).
+Nothing in the stats store distinguishes a phantom play from a real one afterwards.
+
+`_mpAfterGameEnd`'s comment already said "`_onGameOver` can run more than once for the same game
+across a recovery/re-render" and guarded the **series tally** with `mp.lastScoredGame`; the stats
+write next to it was simply never given the same treatment.
+
+Fix: `_commitStats(iWon)`, the same shape Dots and Boxes/Filler/Mancala/Tic Tac Toe use — a local
+`_statsCommitted` flag set BEFORE any write, cleared **per game** by `_startLocalGame` (solo Play
+again) and `_mpApplyRoundRecord` (the next game of an MP series), never per mount. Clearing it per
+game is the load-bearing half: Dots and Boxes and Filler both shipped this guard without a reset
+and silently recorded nothing after the first game of a session (2026-07-30), so the guard and its
+resets are one change, never two. The flag also rides the MP autosave (`statsCommitted` in
+`_mpSaveProgress`/`_mpRejoin`) because an MP save, unlike the solo one, legitimately holds a
+finished game (the room and its series outlive it) — a rejoin onto one must not let a later
+recovery re-record it. It is deliberately **not** in `_mpSnapshot`: it answers "did THIS device
+bank it," so it must never travel to the peer.
+
+`_showEndDialog` got the matching treatment (it removes any dialog already on screen instead of
+stacking a second one), since the second `_onGameOver` is now a no-op for stats but still opens
+the dialog.
+
+**Found in the same audit, deliberately NOT fixed here — the mirror-image hole (open).** When the
+mismatching device is the **host**, `_mpApplyNextEntry` calls `_mpHandleMismatch` and returns
+*before* `_onGameOver`, so a hash mismatch on the game-WINNING shot leaves the host on a finished
+table with **no result recorded and no end dialog** (it can't shoot — `_canShootNow` is false —
+so Quit is the only way out). The guest is fine: it requests recovery and the host's snapshot
+brings it through `_mpApplyRecovery` → `_onGameOver`. This is an under-count, the opposite of the
+bug above, and it wants a deliberate decision rather than a drive-by fix: the host already
+declares itself authoritative there (`mp.appliedSeq = seq` + `writeRecovery`), so the fix is
+one line in `_mpHandleMismatch`'s host branch — `if (this.game.over) this._onGameOver(this.game
+.turnSeat, null);` — now that `_onGameOver` is idempotent and can safely run from a second place.
+`pool/` has the same hole on BOTH sides (its `_mpApplyRecovery` never records at all), and would
+need `_commitStats` first. Neither is fixed as of 2026-07-31.
+
+Regression test: `test-poolv2-stats.mjs` (jsdom, optional dep, in `run-all-tests.mjs`). It drives
+the real `ui.js`: the recovery leg goes through the actual `_mpApplyRecovery`, and it asserts both
+directions — one game recorded exactly once across a recovery (including the disagreeing-winner
+shape), *and* three solo games in a row plus a two-game MP series each recording every game.
+
 ## Settings and keys
 
 - `gamehub.poolv2.v1` — settings (currently just `difficulty`).
@@ -249,7 +305,8 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
   per the repo's established three-key convention (settings / solo save / MP save never share a
   key).
 - Recorder: `recordResult('poolv2', difficulty, won)`; MP additionally calls
-  `recordHeadToHead('poolv2', opp, won)`.
+  `recordHeadToHead('poolv2', opp, won)`. Both live in `_commitStats`, guarded per game by
+  `_statsCommitted` (see the bug section above) — never call them from anywhere else.
 
 ## Known limitations (stated honestly, not hidden)
 

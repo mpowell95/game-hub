@@ -101,6 +101,9 @@ class PoolUI {
     this._foulMsg = null;
     this._aiRng = null;
     this._aiSeed = null;
+    // Per-game stats idempotence guard (see _commitStats). Reset by _startLocalGame and
+    // _mpApplyRoundRecord, i.e. once per game, never once per mount.
+    this._statsCommitted = false;
     this._boundResize = () => this._resizeCanvas();
     this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._setupWorker();
@@ -260,6 +263,10 @@ class PoolUI {
   _startLocalGame() {
     this.mp = null;
     this.game = rules.newGame();
+    // A new game gets its own result: clear the per-game guard, or _commitStats would skip
+    // every game after the first one played in this session (Play again / New game reuse this
+    // same instance -- the bug Dots and Boxes and Filler both shipped, 2026-07-30).
+    this._statsCommitted = false;
     if (this.mode === 'ai') this._ensureAiRng();
     this._afterNewGame();
   }
@@ -1014,13 +1021,38 @@ class PoolUI {
     this._paintHud();
   }
 
+  /** Record the finished game exactly once on THIS device.
+   *
+   *  Both devices in a multiplayer match run this, and that is NOT double-counting:
+   *  gamehub.stats is keyed per PLAYER (statsKey()/statsId(), "Whose stats are these" in
+   *  js/CLAUDE.md), so two devices each writing "I played one game" is two different people each
+   *  correctly getting one. Idempotence is the local _statsCommitted flag, set BEFORE any write
+   *  -- _onGameOver has two real call sites for ONE finished game (the shot that ends it, and
+   *  _mpApplyRecovery when the snapshot it applies is already over), so without the flag a
+   *  hash-mismatch recovery on the winning shot recorded the same game twice, and recorded a
+   *  LOSS the second time whenever the peer's authoritative state named the other winner
+   *  (2026-07-31; regression test: test-poolv2-stats.mjs). The flag is per GAME, not per mount:
+   *  _startLocalGame and _mpApplyRoundRecord clear it, which is the half Dots and Boxes and
+   *  Filler each got wrong in the opposite direction (results silently stopped recording after
+   *  the first game of a session). */
+  _commitStats(iWon) {
+    if (this._statsCommitted) return;
+    this._statsCommitted = true;
+    if (this.mode === 'ai') {
+      try { recordResult('poolv2', this.settings.difficulty, iWon); } catch { /* never block the result */ }
+    } else if (this.mp) {
+      try { recordResult('poolv2', 'mp', iWon); } catch { /* never block the result */ }
+      if (this.mp.opp) { try { recordHeadToHead('poolv2', this.mp.opp, iWon); } catch { /* never block the result */ } }
+    }
+  }
+
   _onGameOver(actingSeat, outcome) {
     const iWon = this.game.winner === this._localSeat();
-    if (this.mode === 'ai') {
-      recordResult('poolv2', this.settings.difficulty, iWon);
-    } else if (this.mp) {
-      recordResult('poolv2', 'mp', iWon);
-      if (this.mp.opp) { try { recordHeadToHead('poolv2', this.mp.opp, iWon); } catch { /* never block the result */ } }
+    this._commitStats(iWon);
+    // `mode !== 'ai' && mp` is the ORIGINAL mode branch this function opened with, kept
+    // exactly as it was when the recording moved out into _commitStats: series bookkeeping
+    // belongs to an online room, never to a game against the computer.
+    if (this.mode !== 'ai' && this.mp) {
       // net.js's writeResult is deliberately NOT called here: it sets status:'ended',
       // which would kill the room this rematch series is hosted in. status:'ended'
       // means exactly one thing in this room now -- somebody left (see _confirmQuit /
@@ -1033,6 +1065,12 @@ class PoolUI {
   }
 
   _showEndDialog(iWon) {
+    // _onGameOver can run twice for one finished game (the winning shot, then an MP recovery
+    // carrying the same over-state) -- the stats write is idempotent via _commitStats, and the
+    // dialog is idempotent here: replace any dialog already on screen rather than stacking a
+    // second one on top of it.
+    const openDlg = this.el && this.el.querySelector('.p2-dialog-overlay');
+    if (openDlg) openDlg.remove();
     const dlg = document.createElement('div');
     dlg.className = 'p2-dialog-overlay';
     const isHost = !!(this.mp && this.mp.role === 'host');
@@ -1191,6 +1229,7 @@ class PoolUI {
         series: this._mpNormalizeSeries(save.series), lastScoredGame: save.lastScoredGame | 0,
       };
       this.game = save.game;
+      this._statsCommitted = !!save.statsCommitted;   // see _commitStats / _mpSaveProgress
       net.heartbeat(this.mp.code, this.mp.role);
       await net.onRoom(this.mp.code, (room) => this._mpRoomCallback(room));
       this.view = 'game';
@@ -1244,6 +1283,7 @@ class PoolUI {
     mp.maxKnownSeq = 0;
     this.game = rules.newGame();
     this.game.turnSeat = round.dealer === 1 ? 1 : 0;
+    this._statsCommitted = false;   // next game of the series gets its own result (see _commitStats)
     this._foulMsg = null;
     this._resetCamera();
     this.view = 'game';
@@ -1407,12 +1447,20 @@ class PoolUI {
       role: this.mp.role, code: this.mp.code, seq: this.mp.appliedSeq, game: this.game,
       gameNum: this.mp.gameNum, nextDealer: this.mp.nextDealer,
       series: { wins: this.mp.series.wins.slice() }, lastScoredGame: this.mp.lastScoredGame,
+      // Device-LOCAL, never sent over the wire (_mpSnapshot deliberately omits it): "this device
+      // already banked this game's result." An MP save can hold a finished game (unlike the solo
+      // save, the room and its series outlive the game), so a rejoin that lands on one must not
+      // let a later recovery re-record it. Each device tracks its own.
+      statsCommitted: !!this._statsCommitted,
     });
   }
 }
 
 let instance = null;
-export function init(container) { instance = new PoolUI(container); }
+export function init(container) {
+  instance = new PoolUI(container);
+  return instance;   // test hook (see test-poolv2-stats.mjs); hub.js's `m.init(el)` ignores it
+}
 export function destroy() { if (instance) { instance.destroy(); instance = null; } }
 export function isInProgress() { return instance ? instance.isInProgress() : false; }
 export default { init, destroy, isInProgress };

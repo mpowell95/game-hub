@@ -48,6 +48,7 @@ const SUITES = [
   { file: 'test-dotsboxes-stats.mjs', optionalDep: 'jsdom' },
   { file: 'test-filler-stats.mjs', optionalDep: 'jsdom' },
   { file: 'test-mancala-stats.mjs', optionalDep: 'jsdom' },
+  { file: 'test-poolv2-stats.mjs', optionalDep: 'jsdom' },
 ];
 
 let failures = 0, ran = 0, skipped = 0;
