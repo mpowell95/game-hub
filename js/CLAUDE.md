@@ -934,6 +934,37 @@ sets a real profile name, their existing rows already carry the same identity ke
 themselves next render. The device still keeps whatever it recorded under `HIDDEN_NAMES` if a
 name is later set to one of those (e.g. `zzztest`).
 
+### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
+
+`players-agg.js` has two hand-maintained maps for a person whose devices disagree about their name:
+
+- **`NAME_ALIAS`** (lowercased → lowercased) folds alternate spellings into one identity, used by
+  `nameOf()` so the identity graph unions those devices. Currently `matt → mattyice`,
+  `lill → lili`.
+- **`DISPLAY_NAME`** (canonical lowercased → preferred label) pins what the merged row is CALLED.
+  Grouping alone is not enough: `grp.name` takes the most recently active device's raw name, so a
+  merged row would otherwise flip between spellings depending on which phone synced last. Currently
+  `lili → 'Lili'`. A name with no entry displays exactly as the device wrote it, which is why
+  `mattyice` has none — its behaviour is unchanged.
+
+**Lili is the reason this section exists.** She appeared twice, "Lili" and "Lill". It was corrected
+once by editing the record in Firebase, and it came back within days. That is not a fluke and it
+will happen to any server-side rename: **`stats-net.js`'s `syncMyStats()` mirrors each device's OWN
+`localStorage` profile up on every hub load, tab-hide, return-to-launcher and reconnect.** The phone
+still spelling it "Lill" simply rewrote `players/<id>/profile.name` back to "Lill" the next time it
+opened the app. The remote record is a MIRROR, not a master — nothing server-side survives contact
+with the device that owns it.
+
+So there are exactly three durable fixes, and only the first needs no access to her phone:
+
+1. **Alias it here** (what was done) — read-time, applied on every render, immune to resync.
+2. **Rename the profile ON the device** (profile page), so the device stops pushing the old spelling.
+3. **Link both devices to one player code**, which makes the name irrelevant to grouping entirely.
+
+Regression cases (both sync orderings, case/whitespace, and "Lilian" NOT being swallowed) are in
+`players-agg.test.mjs`. When adding an alias, add its test alongside — a wrong alias silently merges
+two real people, which is the one failure mode here that loses information.
+
 ### The Ana/Natalia correction (2026-07-23) — what was done, and how certain it actually is
 
 Ana and Natalia shared one physical device (`players/1f75ff86-...`, code `89N3N`, "Anita Bonita")
