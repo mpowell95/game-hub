@@ -45,6 +45,10 @@ const BOT_DRAW_MS = 420;
 const AFTER_PLAY_MS = 420;
 const ROUND_CARD_MS = 700;
 
+// Breathing room under the play stack, in px. Small on purpose: every pixel spent here is a
+// pixel the felt does not get.
+const GAP = 6;
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** tiles.js is i18n-free, so the aria label for a face-up tile is composed here. */
@@ -148,13 +152,18 @@ class DominoesUI {
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    // orientationchange and the visual viewport (a collapsing URL bar) both change the usable
+    // height without necessarily firing a plain window resize.
     this._onResize = () => { this._fit(); this._layoutBoard(); };
+    this._vv = window.visualViewport || null;
     this._offLang = onLangChange(() => { if (this.view === 'setup') this.renderSetup(); else this._syncChrome(); });
 
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('orientationchange', this._onResize);
+    if (this._vv) this._vv.addEventListener('resize', this._onResize);
 
     const save = loadSave();
     if (save && save.snap && save.snap.phase !== 'matchOver') this.resume(save);
@@ -172,6 +181,8 @@ class DominoesUI {
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('orientationchange', this._onResize);
+    if (this._vv) this._vv.removeEventListener('resize', this._onResize);
     this.container.innerHTML = '';
     this.el = null;
     this.game = null;
@@ -324,14 +335,28 @@ class DominoesUI {
     if (this.dealing) this.later(() => { this.dealing = false; }, 900);
   }
 
-  /** The play stack owns a fixed height so nothing in it can ever reflow. Measured rather than
-   *  assumed, because the same markup runs inside the hub's padded content area and on the
-   *  standalone page with no chrome above it at all. */
+  /** The play stack owns a fixed height so nothing in it can ever reflow, and a game screen that
+   *  SCROLLS at all is a bug — you should never have to move the page to see the whole board.
+   *
+   *  Two passes, because one is not enough and the first version proved it. Pass 1 measures where
+   *  the game starts and fills the viewport from there. Pass 2 then asks the document how tall it
+   *  actually ended up: whatever sits BELOW the game in the host page (the hub's content padding,
+   *  for one) still counts toward the scroll height, and the only way to know how much is to
+   *  measure it rather than to hard-code an allowance for one particular host.
+   *
+   *  `visualViewport` over `innerHeight` because a phone's collapsing URL bar changes the usable
+   *  height without changing innerHeight; `+ scrollY` because getBoundingClientRect is relative
+   *  to the viewport, so measuring an already-scrolled page gave a too-tall answer. */
   _fit() {
     if (!this.el) return;
-    const top = this.el.root.getBoundingClientRect().top;
-    const h = Math.max(420, Math.min(880, Math.round(window.innerHeight - top - 10)));
-    this.el.root.style.setProperty('--dm-h', h + 'px');
+    const root = this.el.root;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const top = root.getBoundingClientRect().top + window.scrollY;
+    const clamp = (n) => Math.max(340, Math.min(880, Math.round(n)));
+    const set = (n) => root.style.setProperty('--dm-h', clamp(n) + 'px');
+    set(vh - top - GAP);
+    const over = document.documentElement.scrollHeight - vh;
+    if (over > 0) set(vh - top - GAP - over);
   }
 
   _syncChrome() {
@@ -396,8 +421,8 @@ class DominoesUI {
       const isTarget = targets.has(e.side);
       parts.push(`<button type="button" class="dm-end ${scoringNow ? 'is-scoring' : ''} ${isTarget ? 'is-target' : ''}"
         ${isTarget ? `data-action="drop" data-side="${e.side}"` : 'tabindex="-1" aria-hidden="true"'}
-        aria-label="${esc(t('aria_end', { v: e.value }))}"
-        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${e.value}</button>`);
+        aria-label="${esc(t('aria_end', { v: e.contrib, m: e.value }))}"
+        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${e.contrib}</button>`);
     }
     this.el.chain.innerHTML = parts.join('');
     this.el.chain.classList.toggle('is-picking', targets.size > 0);

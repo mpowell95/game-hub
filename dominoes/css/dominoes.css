@@ -136,7 +136,9 @@
 .dm-root .dm-play {
   display: flex; flex-direction: column;
   height: var(--dm-h);
-  min-height: 420px;
+  /* Low on purpose: the header, both hand rows and the floor are fixed, so the felt is what
+     absorbs a short viewport. A high min-height here just pushed the stack past the fold. */
+  min-height: 340px;
   position: relative;
   overflow: hidden;
   border-radius: 18px;
