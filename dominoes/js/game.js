@@ -69,45 +69,49 @@ export function branchesOpen(c) {
   return i > 0 && i < c.line.length - 1;
 }
 
-/** Every side a tile could legally be added to, as { side, value }. An empty chain returns a
- *  single { side: 'left', value: null } meaning "anything opens". */
+/** Every side a tile could legally be added to. Each entry carries BOTH numbers, and the
+ *  distinction is the whole reason this bug existed:
+ *    `value`   the pip you must MATCH to play there
+ *    `contrib` what that end adds to the All Fives count
+ *  They differ for a double at the end of a run, which lies crosswise and so exposes both of its
+ *  halves (a 6-6 at an end contributes 12, but you still play a 6 on it). `countEnds` is now
+ *  literally the sum of `contrib`, so what the board shows and what it scores cannot drift apart.
+ *  An empty chain returns a single opening pseudo-end. */
 export function openEnds(c) {
-  // An empty board offers ONE pseudo-end so an opening lead is a single move per tile, not two
-  // identical ones; placeOn ignores the side while the chain is empty.
-  if (!c.line.length) return [{ side: 'right', value: null }];
+  if (!c.line.length) return [{ side: 'right', value: null, contrib: 0 }];
   const last = c.line[c.line.length - 1];
+  const first = c.line[0];
+  // The round's opening tile alone is BOTH ends at once, so its halves are one each and a 5-5
+  // opener counts 10, not 20. Every other double at a run end doubles.
+  const lone = c.line.length === 1 && !c.up.length && !c.down.length;
+  const dbl = (e) => e.a === e.b;
   const ends = [
-    { side: 'left', value: c.line[0].a },
-    { side: 'right', value: last.b },
+    { side: 'left', value: first.a, contrib: (!lone && dbl(first)) ? first.a * 2 : first.a },
+    { side: 'right', value: last.b, contrib: (!lone && dbl(last)) ? last.b * 2 : last.b },
   ];
   for (const side of ['up', 'down']) {
     const arm = c[side];
-    if (arm.length) ends.push({ side, value: arm[arm.length - 1].b });
-    else if (branchesOpen(c)) ends.push({ side, value: TILES[c.spinnerId][0] });
+    if (arm.length) {
+      const T = arm[arm.length - 1];
+      ends.push({ side, value: T.b, contrib: dbl(T) ? T.b * 2 : T.b });
+    } else if (branchesOpen(c)) {
+      // An OPEN but unplayed branch side. It exposes one half of the spinner, so the two of them
+      // together contribute the spinner's full value - which is the main spec's "while the
+      // spinner has no arms yet, it counts as a single end of its full value", arrived at from
+      // the other direction. Leaving these out of the count (while still drawing a badge for
+      // each and accepting plays on them) is the scoring bug this replaced.
+      const v = TILES[c.spinnerId][0];
+      ends.push({ side, value: v, contrib: v });
+    }
   }
   return ends;
 }
 
-/** The All Fives count: the sum of the open ends. A double at an end contributes BOTH halves.
- *  Two rules that trip people up, both from the spec:
- *   - a lone first tile counts once (a 5-5 opener is 10, not 20 — it is one end, not two);
- *   - the spinner's unplayed perpendicular sides are NOT ends yet, so an interior spinner
- *     contributes nothing of its own. */
+/** The All Fives count: the sum of what every open end contributes. One line, because openEnds
+ *  above already carries the per-end contribution - the two used to compute the ends separately
+ *  and disagreed with each other (see its comment). */
 export function countEnds(c) {
-  if (!c.line.length) return 0;
-  if (c.line.length === 1 && !c.up.length && !c.down.length) {
-    const e = c.line[0];
-    return e.a === e.b ? e.a * 2 : e.a + e.b;
-  }
-  const L = c.line[0], R = c.line[c.line.length - 1];
-  let sum = (L.a === L.b ? L.a * 2 : L.a) + (R.a === R.b ? R.b * 2 : R.b);
-  for (const side of ['up', 'down']) {
-    const arm = c[side];
-    if (!arm.length) continue;
-    const T = arm[arm.length - 1];
-    sum += T.a === T.b ? T.b * 2 : T.b;
-  }
-  return sum;
+  return openEnds(c).reduce((sum, e) => sum + e.contrib, 0);
 }
 
 /** Place `tileId` on `side` of a chain, MUTATING it. Assumes the move is legal. */

@@ -30,8 +30,8 @@ eq(countEnds(emptyChain()), 0, 'empty board counts nothing');
 eq(countEnds(chainOf([[5, 5]])), 10, 'a lone double counts both halves ONCE (5-5 opener = 10)');
 eq(countEnds(chainOf([[3, 5]])), 8, 'a lone non-double counts both ends');
 eq(countEnds(chainOf([[5, 5], [5, 3, 'right']])), 13, 'double at an end contributes 10, other end 3');
-eq(countEnds(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 7,
-  'an interior spinner contributes nothing of its own (4 + 3)');
+eq(countEnds(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 17,
+  'an open but unplayed spinner contributes its FULL value across its two free sides (4 + 3 + 5 + 5)');
 ok(!branchesOpen(chainOf([[5, 5], [5, 3, 'right']])), 'branches shut while the spinner is at an end');
 ok(branchesOpen(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 'branches open once the line passes the spinner both ways');
 eq(scoreOf(10), 10, 'a multiple of five scores');
@@ -45,16 +45,45 @@ eq(scoreOf(0), 0, 'zero never scores');
   eq(ends.length, 4, 'an open spinner exposes four ends');
   ok(ends.some((e) => e.side === 'up' && e.value === 5), 'both branch ends show the spinner value');
   placeOn(c, idOf(5, 2), 'up');
-  eq(countEnds(c), 9, 'a branch end joins the count (4 + 3 + 2)');
+  eq(countEnds(c), 14, 'playing a branch replaces that side\'s 5 with its own end (4 + 3 + 2 + 5)');
   placeOn(c, idOf(5, 1), 'down');
-  eq(countEnds(c), 10, 'the second branch joins too (4 + 3 + 2 + 1)');
+  eq(countEnds(c), 10, 'the second branch replaces the other 5 too (4 + 3 + 2 + 1)');
 }
 
 {
-  // A double hung on a branch counts both halves there as well.
-  const c = chainOf([[6, 6], [6, 4, 'right'], [6, 2, 'left']]);
-  placeOn(c, idOf(6, 6) === -1 ? 0 : idOf(2, 2), 'left');
-  eq(countEnds(c), 8, 'a double at the left end counts 4 (2+2), right end 4');
+  // A double at the end of a RUN lies crosswise, so both of its halves are exposed and it counts
+  // twice over. Kept clear of an open spinner so it tests only that.
+  const c = chainOf([[4, 4], [4, 6, 'right']]);
+  eq(countEnds(c), 14, 'a double at the left end counts 8 (4+4), right end 6');
+  placeOn(c, idOf(6, 6), 'right');
+  eq(countEnds(c), 20, 'and a double at the right end counts 12 (6+6)');
+}
+
+{
+  // THE INVARIANT, and the bug that made it worth pinning: every open end draws a badge and
+  // accepts a play, so what the badges show has to be exactly what the board scores. It was not
+  // -- an open spinner's two unplayed sides were drawn and playable but counted zero, which made
+  // scoring look broken (see dominoes/CLAUDE.md, "The badges and the count are one number").
+  const boards = [
+    chainOf([[6, 6]]),
+    chainOf([[6, 6], [6, 2, 'right']]),
+    chainOf([[6, 6], [6, 2, 'right'], [6, 3, 'left']]),
+    chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']]),
+    chainOf([[3, 5]]),
+  ];
+  for (const c of boards) {
+    const sum = openEnds(c).reduce((a, e) => a + e.contrib, 0);
+    eq(sum, countEnds(c), 'badge contributions sum to the count');
+  }
+  const open = chainOf([[6, 6], [6, 2, 'right'], [6, 3, 'left']]);
+  const sides = openEnds(open);
+  eq(sides.filter((e) => e.side === 'up')[0].contrib, 6, 'an unplayed branch side contributes one HALF of the spinner');
+  eq(sides.filter((e) => e.side === 'up')[0].value, 6, 'and you still match a 6 to play there');
+  const lone = openEnds(chainOf([[6, 6]]));
+  eq(lone[0].contrib + lone[1].contrib, 12, 'the lone opening double is 12 across its two ends, not 24');
+  const runEnd = openEnds(chainOf([[6, 6], [6, 2, 'right']]));
+  eq(runEnd.find((e) => e.side === 'left').contrib, 12, 'a double at a run end contributes both halves');
+  eq(runEnd.find((e) => e.side === 'left').value, 6, 'while still matching on 6');
 }
 
 // --- legality -------------------------------------------------------------------------------
@@ -389,7 +418,7 @@ function firstOverlap(tiles) {
 
 // --- full-match integrity sweep -----------------------------------------------------------------
 {
-  let matches = 0, overlapSeen = 0, badCount = 0, lostTiles = 0;
+  let matches = 0, overlapSeen = 0, badCount = 0, lostTiles = 0, badgeDrift = 0;
   for (let seed = 1; seed <= 60; seed++) {
     const rnd = mulberry32(seed * 977);
     const g = new DominoesGame({ target: 300, rng: rnd });
@@ -406,9 +435,12 @@ function firstOverlap(tiles) {
         // Every tile ever dealt is still accounted for, and the chain still lays out cleanly.
         const placed = g.line.length + g.up.length + g.down.length;
         if (placed + g.hands[0].length + g.hands[1].length + g.boneyard.length !== 28) lostTiles++;
-        const { tiles } = layoutChain(g.chain);
+        const { tiles, ends } = layoutChain(g.chain);
         if (tiles.length !== placed) badCount++;
         if (firstOverlap(tiles)) overlapSeen++;
+        // The badges the player adds up must equal the number the board scores, on every board
+        // a real match can reach - not just the handful pinned by hand above.
+        if (ends.reduce((a, e) => a + e.contrib, 0) !== g.countEnds()) badgeDrift++;
       } else if (need === 'draw') g.draw(seat);
       else g.pass(seat);
     }
@@ -419,6 +451,7 @@ function firstOverlap(tiles) {
   eq(lostTiles, 0, 'no tile is ever lost or duplicated mid-match');
   eq(badCount, 0, 'the layout always renders every placed tile');
   eq(overlapSeen, 0, 'no chain in 60 full matches ever overlaps itself');
+  eq(badgeDrift, 0, 'the end badges always sum to the score the board is showing');
   ok(matches === 60, 'all 60 matches ran');
 }
 
@@ -438,10 +471,14 @@ function firstOverlap(tiles) {
         const before = g.scores.slice();
         const res = g.play(seat, m.tileId, m.side);
         plays++;
-        const gained = g.scores[seat] - before[seat];
-        const fromPlay = gained - (res.bonus || 0);
-        if (fromPlay !== 0 && fromPlay % 5 !== 0) bad++;
-        if (g.scores[1 - seat] !== before[1 - seat]) bad++;
+        // IN-PLAY scoring only. A play that ends the round also runs the A1 settle, which pays
+        // BOTH sides their opponent's leftover pips - raw counts, not fives, and not only to the
+        // mover - so those plays are checked by the A1 blocks above, not here.
+        if (!res.roundOver) {
+          const gained = g.scores[seat] - before[seat];
+          if (gained !== 0 && gained % 5 !== 0) bad++;
+          if (g.scores[1 - seat] !== before[1 - seat]) bad++;
+        }
       } else if (need === 'draw') g.draw(seat);
       else g.pass(seat);
     }

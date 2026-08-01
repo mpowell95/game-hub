@@ -19,6 +19,8 @@
 // the other run. A DOUBLE never turns a corner — it is laid crosswise in the current direction
 // and the turn waits for the next tile, which keeps the corner rule to one shape instead of two.
 
+import { openEnds } from './game.js';
+
 const LONG = 4, SHORT = 2;
 
 // Extent limits, in units, measured from the origin. Chosen so a run turns at roughly five
@@ -170,11 +172,8 @@ export function layoutChain(chain) {
 
   // Branches hang off the spinner's two free sides. The spinner is laid crosswise to whatever
   // direction its own run was heading, so "perpendicular" is read off its rendered shape rather
-  // than assumed to be up/down — after an elbow it genuinely is left/right.
-  const ends = [
-    { side: 'left', value: line[0].a, ...endAnchor(lEnd) },
-    { side: 'right', value: line[line.length - 1].b, ...endAnchor(rEnd) },
-  ];
+  // than assumed to be up/down - after an elbow it genuinely is left/right.
+  const anchors = { left: endAnchor(lEnd), right: endAnchor(rEnd) };
   const spin = chain.spinnerId == null ? null : tiles.find((t) => t.id === chain.spinnerId);
   const spinIdx = chain.spinnerId == null ? -1 : line.findIndex((e) => e.id === chain.spinnerId);
   const open = spinIdx > 0 && spinIdx < line.length - 1;
@@ -185,12 +184,13 @@ export function layoutChain(chain) {
     const downDir = spin.vertical ? 'down' : 'right';
     const uEnd = walk(chain.up.map((e) => ({ ...e })), upStart, upDir, rects, tiles);
     const dEnd = walk(chain.down.map((e) => ({ ...e })), downStart, downDir, rects, tiles);
-    const spinVal = spin.values[0];
-    if (chain.up.length) ends.push({ side: 'up', value: chain.up[chain.up.length - 1].b, ...endAnchor(uEnd) });
-    else if (open) ends.push({ side: 'up', value: spinVal, ...endAnchor({ P: upStart, dir: upDir }) });
-    if (chain.down.length) ends.push({ side: 'down', value: chain.down[chain.down.length - 1].b, ...endAnchor(dEnd) });
-    else if (open) ends.push({ side: 'down', value: spinVal, ...endAnchor({ P: downStart, dir: downDir }) });
+    anchors.up = chain.up.length ? endAnchor(uEnd) : endAnchor({ P: upStart, dir: upDir });
+    anchors.down = chain.down.length ? endAnchor(dEnd) : endAnchor({ P: downStart, dir: downDir });
   }
+  // WHICH ends exist, what they match and what they score is game.js's call, not this module's -
+  // an earlier version re-derived all three here and drifted out of step with the engine. This
+  // only says where each one sits.
+  const ends = openEnds(chain).map((e) => ({ ...e, ...(anchors[e.side] || { x: 0, y: 0 }) }));
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const r of rects) {

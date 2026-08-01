@@ -20,10 +20,20 @@ next mount, so leaving mid-match is lossless and the hub's "leave game?" confirm
 
 **Not immersive on purpose.** The spec's own header band carries a back chevron; immersive mode
 would put the hub's floating back button in exactly that corner, so the game keeps the ordinary
-hub header for going back and its teal band carries only the difficulty chip, the scoreboard and
-restart. The play stack measures its own height from `getBoundingClientRect().top` (`_fit()`),
-which is why the same markup works under the hub's padded content area and on the bare
-standalone page.
+hub header for going back and its teal band carries the back-to-setup chevron, the difficulty
+chip, the scoreboard and restart.
+
+**`_fit()` is two passes, and both are needed** (fixed 2026-08-01 after a report of having to
+scroll to see the whole board). Pass 1 fills the viewport from wherever the game starts; pass 2
+asks the document how tall it actually ended up and gives back the overflow, because whatever
+sits BELOW the game in the host page — the hub's content padding, for one — still counts toward
+the scroll height, and the only honest way to know how much is to measure it rather than
+hard-code an allowance for one host. It reads `visualViewport.height` (a phone's collapsing URL
+bar changes the usable height without changing `innerHeight`) and adds `scrollY` to the client
+rect (measuring an already-scrolled page gave a too-tall answer). Re-runs on `resize`,
+`orientationchange` and `visualViewport` resize. **A game screen that scrolls at all is a bug**;
+`.dm-play`'s `min-height` is deliberately low (340px) so the felt, not the page, absorbs a short
+viewport.
 
 ## Layout & responsibilities
 
@@ -77,11 +87,47 @@ regardless. An earlier version folded on the first free corner and produced zig-
 one still folded only on the limit and let long runs walk straight through a branch.
 
 **The last-resort branch can overlap, and that is accepted.** A double with nowhere legal to go
-is placed anyway rather than dropped. Measured over 119,195 boards from 800 full simulated
-matches: **two** overlapping boards, both on 27-tile chains (a 21-tile line with a 6-tile
-branch). The fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and
+is placed anyway rather than dropped. Measured over 86,258 boards from 800 full simulated
+matches: **one** overlapping board, on a 27-tile chain. The fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and
 reserving corridors for the branches would need a two-pass layout to buy back two boards in a
 hundred thousand.
+
+## The badges and the count are one number
+
+`openEnds()` returns, for every open end, **two** numbers, and confusing them is what broke
+scoring for the first two days this game was live:
+
+- **`value`** — the pip you must MATCH to play there.
+- **`contrib`** — what that end adds to the All Fives count.
+
+They differ for a double at the end of a run: it lies crosswise, so both of its halves are
+exposed and it contributes twice over (a 6-6 at an end contributes 12) while you still play a 6
+on it. `countEnds()` is now literally `sum(contrib)`, and the end badge renders `contrib`, so
+**what the player adds up on screen is exactly what the board scores**. `dominoes/js/test.js`
+pins that as an invariant over every board a full simulated match can reach, not just a handful
+of hand-written ones.
+
+Three cases worth having in your head, all pinned by tests:
+
+| Board | Ends | Count |
+|---|---|---|
+| lone 5-5 opener | it is BOTH ends at once, 5 each | 10, not 20 |
+| 6-6 at the end of a run | one end, crosswise, both halves exposed | 12 |
+| open spinner, no arms yet | its two free sides, one half each | 6 + 6 = its full value |
+
+**The bug (fixed 2026-08-01, reported from real play as "only some tiles are counting as
+points").** `openEnds` reported an open spinner's two unplayed branch sides — the UI drew a badge
+for each and accepted plays on them — while `countEnds` computed the ends separately and left
+them out. An interior 6-6 therefore contributed **0** instead of 12, so a board whose badges read
+3 + 2 + 6 + 6 = 17 scored on 5. Over 21,203 simulated placements that suppressed scoring from
+**33.5% of plays to 23.7%**, and it made the badges lie about the thing they exist to show. It
+also directly contradicted the main spec's §7.5 ("while the spinner has no arms yet, it counts as
+a single end of its full value").
+
+The root cause was duplication: `countEnds` re-derived the ends instead of using `openEnds`, and
+`board.js` re-derived them a third time for the badge anchors. All three are one function now —
+`board.js` imports `openEnds` and only decides where each end SITS. If you ever find yourself
+computing "what are the ends" anywhere but `openEnds`, that is the bug coming back.
 
 ## Rules (All Fives)
 
@@ -107,10 +153,9 @@ hundred thousand.
 4. Doubles lie crosswise. The **first double played** is the spinner; its two perpendicular sides
    open only once the main line has a tile on both of its in-line sides (the standard rule), and
    an unplayed branch side is **not** an end and counts nothing.
-5. **Counting**: sum the open ends after each placement; a multiple of five scores itself. A
-   double at an end contributes **both** halves. Two cases that trip people up and are both
-   pinned by tests: a lone first tile counts **once** (a 5-5 opener is 10, not 20), and an
-   interior spinner contributes nothing of its own.
+5. **Counting**: sum the open ends after each placement; a multiple of five scores itself. See
+   "The badges and the count are one number" below — that section is the whole rule, and it is
+   where the one real scoring bug this game has had is written up.
 6. **At a round end BOTH players score the pips left in their OPPONENT's hand** (addendum A1,
    which corrected the main spec). Going out is simply the case where one of those two totals is
    zero; a blocked round pays each side the other's leftovers rather than paying one side the
@@ -146,8 +191,8 @@ snapshot restore like everything else.
 
 Measured over 600 matches per pairing, re-run after the A1/A3 rule changes (`node
 dominoes/js/test.js` covers legality and termination; the strength numbers came from a throwaway
-sweep): medium beats easy 97.5%, hard beats easy 97.8%, hard beats medium 69.0%, and easy against
-itself is 49.8%, which is the honest size of the first-mover edge.
+sweep, re-run after the scoring fix): medium beats easy 96.8%, hard beats easy 98.7%, hard beats
+medium 67.3%, and easy against itself is 50.3%, which is the honest size of the first-mover edge.
 
 ## Reading the game state without words
 
@@ -164,15 +209,15 @@ There is not one instructional sentence in the play screen. Four channels carry 
   ends already add to a five, a rounded square when they do not — with the green/amber hues only
   reinforcing it.
 
-  **Addendum A2 needed no change here, and that is a decision, not an oversight.** A2 is titled
-  "Green badge confirmed" and confirms exactly what is implemented: green when the open ends add
-  to a multiple of five, amber when they do not. Its trailing "green shows the number you would
-  gain" was read as restating what green MEANS at the level of the board, not as redefining the
-  badge's number, for two reasons. A per-end "gain" is undefined until a tile is chosen (the same
-  end scores differently depending on what you play there), and a badge on a 5-5 end would have
-  to read 10 while you still have to match a **5** to play there — which breaks the one job the
-  number does, telling you what fits. The main spec's own wording ("showing that end's pip
-  value") stands.
+  **The badge number is the end's CONTRIBUTION, not the pip you match** (changed 2026-08-01
+  alongside the scoring fix above; an earlier build showed the match value and argued for it
+  here). A 6-6 at a run end reads 12 even though you play a 6 on it. That is the trade: the badge
+  gives up being a placement hint so that the badges always sum to the score, which is the one
+  thing a player has to be able to do in All Fives. It also matches addendum A2's "green shows
+  the number you would gain" and the reference screenshots' badge value of 10, which is only
+  reachable as a doubled 5-5. Placement is not hurt: illegal tiles are already dimmed, and
+  lifting a tile lights only the ends it can legally go on, so the badge number was never how you
+  found a legal move.
 - **What just happened** — a `+5` and a star burst at the tile that caused it, plus the header
   score counting up. Never a log, never a banner.
 
@@ -263,13 +308,15 @@ the ordinary wins metric with no extra wiring.
 ```
 node dominoes/js/test.js
 ```
-539 assertions: the set's integrity, every All Fives counting case above (including the lone
+553 assertions: the set's integrity, every All Fives counting case above (including the lone
 double and the interior spinner), branch opening, legality including a tile that fits both ends,
 chain bookkeeping, the non-destructive `countAfter` preview, the deal, drawing and passing
 legality, a snapshot round trip, board geometry (crosswise doubles, branch direction, a folded
 run, no overlaps), the bot tiers' choices and legality, plus a 60-full-match sweep asserting that
-no tile is ever lost, every placed tile is laid out, no chain overlaps itself, and in-play scores
-are always multiples of five credited only to the mover.
+no tile is ever lost, every placed tile is laid out, no chain overlaps itself, **the end badges
+always sum to the score the board is showing**, and in-play scores are always multiples of five
+credited only to the mover (round-ending plays are excluded there — the A1 settle pays both
+sides raw pip counts, and its own blocks cover it).
 
 The addendum's rule changes each have their own block, and they are the ones to keep green:
 **A1** going out (opponent's leftovers, zero back the other way) and blocked rounds both ways,
