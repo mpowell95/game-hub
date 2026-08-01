@@ -8,6 +8,14 @@ The old phone classic, built 2026-07-23 at a family member's request — **in Sp
 it the first game born on the shared i18n layer (`js/i18n.js`) and the reference implementation
 for it.
 
+> **There is a second Snake in the tree, and it is not a fork.** `snake-v2/` is a hidden
+> (`devOnly`) preview of Snake's chrome rebuilt on the shared UI layer (`css/ui.css`), created
+> 2026-08-01. It **imports** this game's `js/game.js` and spreads its `js/strings.js` rather than
+> copying either, and it loads `css/snake.css` for the board and D-pad, so the rules, the
+> dictionary and the play surface here are its only source. It records no stats. Nothing in this
+> folder was changed for it. See `snake-v2/CLAUDE.md`; if that direction is approved, the work
+> lands in THIS folder's own files and `snake-v2/` is deleted.
+
 Hub integration: in-hub `module:` (`snake/js/ui.js`), not immersive. `isInProgress()` uses the
 LITERAL meaning (no mid-run resume, same class as Ball Run only — every other module game
 autosaves/resumes since batch 9, HANDOFF-FB-RESUME.md, 2026-07-23): `true` while a run is live

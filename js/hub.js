@@ -254,6 +254,21 @@ const GAMES = [
     devOnly: true,
   },
   {
+    // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side review against
+    // the real Snake, which is untouched and still in the list above. Gated devOnly like poolv2.
+    // Shares Snake's ENGINE by import (never a copy) and its board/D-pad CSS, so only the chrome
+    // differs. Records NO stats: see the header of snake-v2/js/ui.js for why a preview build must
+    // not write into real history. Deliberately absent from sw.js while under review.
+    id: 'snake-v2',
+    title: { en: 'Snake v2', es: 'Snake v2' },
+    blurb: { en: 'The same Snake, restyled on the shared UI layer. A preview: runs are not saved.',
+      es: 'El mismo Snake, con la nueva capa de interfaz. Vista previa: las partidas no se guardan.' },
+    module: '../snake-v2/js/ui.js',
+    accent: '#3f7d2c',
+    art: GAME_ART["snake-v2"],
+    devOnly: true,
+  },
+  {
     // Not a game: the review surface for the shared design layer in css/ui.css. Gated devOnly
     // exactly like poolv2 above, so it renders only for isDevProfile() (Matt or the tester) and
     // no player ever sees the card. Records no stats, writes no storage key, and is deliberately

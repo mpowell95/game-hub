@@ -1,0 +1,147 @@
+/* snake-v2/css/snake-v2.css - Snake v2's chrome, on the shared layer.
+ *
+ * This file is SMALL on purpose. That is the whole result being demonstrated: the buttons,
+ * segmented controls, cards, chips and modal all come from css/ui.css, so what is left here is
+ * only layout plus the handful of things genuinely specific to Snake's screens. The real Snake's
+ * snake.css is 270 lines; the chrome half of it is replaced by roughly 90 here.
+ *
+ * LOADING ORDER (see _ensureCss in ../js/ui.js): css/ui.css, then snake/css/snake.css, then this
+ * file. The root element carries BOTH `.sn-root` and `.sv-root`, so Snake's own stylesheet still
+ * supplies the LCD board and all six D-pad looks unchanged, and the rules below override only the
+ * chrome around them.
+ *
+ * SCOPING: every rule is descendant-scoped under `.sv-root`, per the repo convention (Mancala's
+ * discipline). No bare top-level `.sv-` rules. The two exceptions are commented where they occur:
+ * both target elements this build appends to <body>, outside the mounted container.
+ */
+
+.sv-root {
+  --sv-max: 460px;
+}
+
+/* --- setup ------------------------------------------------------------------------------- */
+.sv-root .sv-setup {
+  max-width: var(--sv-max);
+  margin: 0 auto;
+  padding: 22px 16px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-sp-3, 12px);
+}
+
+.sv-root .sv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gh-sp-2, 8px);
+  margin-bottom: var(--gh-sp-1, 4px);
+}
+.sv-root .sv-title {
+  margin: 0;
+  font-size: var(--gh-fs-2xl, 34px);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--gh-ink, #16243a);
+}
+.sv-root .sv-tag {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--gh-fs-sm, 14px);
+  color: var(--gh-muted, #5b6b82);
+}
+
+/* The preview notice. Uses the teal from the colorblind-safe set as a left rule rather than a
+ * tinted background, so it reads as information rather than as a warning state. */
+.sv-root .sv-notice {
+  margin: 0;
+  padding: var(--gh-sp-3, 12px) var(--gh-sp-4, 16px);
+  border-left: 4px solid var(--gh-cb-teal, #178A7A);
+  border-radius: 0 var(--gh-r-md, 12px) var(--gh-r-md, 12px) 0;
+  background: var(--gh-surface-2, #eef2f8);
+  color: var(--gh-ink, #16243a);
+  font-size: var(--gh-fs-sm, 14px);
+  line-height: 1.55;
+}
+
+.sv-root .sv-field { display: flex; flex-direction: column; gap: var(--gh-sp-2, 8px); }
+
+/* The segmented control stretches to the card width here: three difficulty options on a phone
+ * want the full row, not an inline pill hugging its content. */
+.sv-root .sv-seg { display: flex; }
+.sv-root .sv-seg .gh-seg__item { flex: 1 1 0; padding: 0 var(--gh-sp-2, 8px); }
+
+/* Snake's difficulty ski-slope shapes, inherited from snake.css's own .lb-dshape sizing. Only
+ * the gap to the label needs restating, since the shared segment sets its own flex gap. */
+.sv-root .gh-seg__item .lb-dshape { margin-right: .35em; }
+
+/* The D-pad picker keeps snake.css's swatch rendering (real mini pads, not scaled crops) and
+ * only loses its own container chrome, which the card now provides. */
+.sv-root .sn-dpad-options { justify-content: flex-start; gap: 4px; }
+
+.sv-root .sv-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-sp-2, 8px);
+  margin-top: var(--gh-sp-2, 8px);
+}
+
+/* --- run --------------------------------------------------------------------------------- */
+.sv-root .sv-game {
+  max-width: var(--sv-max);
+  margin: 0 auto;
+  padding: 12px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gh-sp-3, 12px);
+}
+.sv-root .sv-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gh-sp-2, 8px);
+}
+/* The HUD chips carry live numbers, so their digits must not reflow as the score climbs. */
+.sv-root .sv-hud .gh-chip {
+  gap: var(--gh-sp-1, 4px);
+  font-variant-numeric: tabular-nums;
+}
+.sv-root .sv-hud .gh-chip b { color: var(--gh-ink, #16243a); }
+
+.sv-root .sv-footnote {
+  margin: 0;
+  font-size: var(--gh-fs-xs, 12px);
+  color: var(--gh-muted, #5b6b82);
+  text-align: center;
+}
+
+/* --- overlays ----------------------------------------------------------------------------
+ * `.sv-modal` is appended INSIDE .sn-boardwrap (so it covers the board, matching the real
+ * Snake), which is position:relative in snake.css. The shared .gh-overlay is position:fixed,
+ * so it is pinned back to its container here. */
+.sv-root .sv-modal { position: absolute; }
+
+/* Inside the board, the modal is only as wide as the board itself, and the shared action row's
+ * default intrinsic widths ("Play again" + "Setup") overflow that and wrap onto two lines. Let
+ * them share the row instead. Not a fix to the primitive: at full page width the default is
+ * right, and it is this container that is narrow. */
+.sv-root .sv-modal .gh-modal__actions .gh-btn { flex: 1 1 auto; }
+
+.sv-root .sv-modal-line {
+  margin: 0 0 var(--gh-sp-2, 8px);
+  font-size: var(--gh-fs-md, 16px);
+  color: var(--gh-ink, #16243a);
+}
+.sv-root .sv-help-goal { margin: 0 0 var(--gh-sp-3, 12px); font-size: var(--gh-fs-md, 16px); }
+.sv-root .sv-help-art {
+  width: 100%;
+  height: auto;
+  margin-bottom: var(--gh-sp-3, 12px);
+  color: var(--gh-muted, #5b6b82);
+}
+
+/* The two deliberate non-descendant rules: the help overlay is appended to <body> (so it
+ * survives a screen re-render, same as the real Snake's), which puts it OUTSIDE the mounted
+ * container. It still carries .sv-root itself, so these stay namespaced. */
+.sv-help-overlay { position: fixed; }
+.sv-help-overlay .gh-modal { text-align: left; }

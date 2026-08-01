@@ -330,6 +330,27 @@ export const GAME_ART = {
             <rect x="112" y="24" width="5" height="5" fill="#c9dd9a"/>
             <circle cx="136" cy="27" r="7" fill="none" stroke="#28340f" stroke-width="3.5"/>
           </svg>`,
+
+  // Snake v2: the SAME LCD board (the play surface this build deliberately leaves alone), sitting
+  // on a strip of the new chrome (a pill button and two chips in the shared accent). The tile
+  // says what the build is: unchanged game, restyled surroundings.
+  'snake-v2': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#16243a"/>
+            <rect x="6" y="5" width="148" height="56" rx="6" fill="#c9dd9a"/>
+            <g fill="#28340f">
+              <rect x="20" y="40" width="9" height="9" rx="1.5"/><rect x="31" y="40" width="9" height="9" rx="1.5"/>
+              <rect x="42" y="40" width="9" height="9" rx="1.5"/><rect x="42" y="29" width="9" height="9" rx="1.5"/>
+              <rect x="42" y="18" width="9" height="9" rx="1.5"/><rect x="53" y="18" width="9" height="9" rx="1.5"/>
+              <rect x="64" y="18" width="9" height="9" rx="1.5"/><rect x="75" y="18" width="9" height="9" rx="1.5"/>
+            </g>
+            <rect x="77" y="20" width="4" height="4" fill="#c9dd9a"/>
+            <circle cx="112" cy="34" r="6" fill="none" stroke="#28340f" stroke-width="3"/>
+            <rect x="6" y="68" width="62" height="16" rx="8" fill="#1769d4"/>
+            <rect x="22" y="74" width="30" height="4" rx="2" fill="#dbe8f8"/>
+            <rect x="74" y="68" width="38" height="16" rx="8" fill="none" stroke="#9db0c9" stroke-width="1.6"/>
+            <rect x="118" y="68" width="36" height="16" rx="8" fill="#2b3547"/>
+          </svg>`,
+
   uno: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#2b2b33"/>
             <g transform="translate(80 52)">
