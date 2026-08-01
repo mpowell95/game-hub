@@ -113,6 +113,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers |
 | `js/name-gate.js` | the shared, undismissable "choose a name" gate; every entry point calls it (`js/name-gate-auto.js` is its deferred form for classic-script pages) |
 | `js/favorites.js` | hub-only launcher favorites (`gamehub.favorites.v1`) |
+| `js/new-badge.js` | the launcher's time-limited "New" pill: pure date maths over each `GAMES` entry's `released` field (no storage, no DOM) |
 | `js/i18n.js` | the EN/ES language layer: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange`; Parchís's proven t() as a shared module |
 | `js/theme.js` | the light/dark/auto theme layer: `getTheme`/`setTheme`/`resolvedTheme` (`gamehub.theme.v1`), `onThemeChange`; stamps `.gh-dark` on `<html>` |
 | `js/game-stats.js` | unified stats, keyed per PLAYER (`statsKey()`/`statsId()`); one recorder per game |
@@ -146,6 +147,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
+| `test-new-badge.mjs` | (2026-08-01) headless unit tests for `js/new-badge.js` (window edges, malformed/absent dates, future dates), plus a scrape of the real `GAMES` registry asserting every `released` date that IS present parses — a typo'd date is the silent failure here (the game ships, the pill never appears) |
 | `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
 | `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates |
@@ -253,6 +255,13 @@ When restructuring an old game, migrate it toward the reference for each axis in
    - in-hub module → `module: '../<game>/js/ui.js'`
    - separately-deployed app → `href: '/<game>/'`
    - plus `id, title, blurb, badge, accent, art` (inline SVG — see the art requirement below).
+   - **plus `released: 'YYYY-MM-DD'`, the day the game actually goes live.** It is the only
+     input to the launcher's "New" pill (`js/new-badge.js`): the tile wears it for
+     `NEW_DAYS` (7) days and then stops on its own — no follow-up commit, nothing stored, no
+     cleanup. Omitting it is not a crash, it just means the game ships unannounced, which is
+     why `test-new-badge.mjs` exists. Pre-existing games deliberately carry NO date (they were
+     already live when the badge shipped, 2026-08-01) — do not backfill git commit dates, they
+     are not release dates.
    - Array position is irrelevant: the launcher grid renders **favorites first, then
      alphabetically by display `title` within each group** (`localeCompare`), computed at
      render time in `js/hub.js` from `js/favorites.js`. A new entry needs no special handling
