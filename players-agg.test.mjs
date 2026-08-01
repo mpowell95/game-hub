@@ -189,6 +189,34 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('yahtzee: bestScore is the max, not the sum or the last one', yz.bestScore, 312);
 }
 
+// ---- Dominoes' dm sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires. The Dominoes Stats screen reads
+// `dm` for ties, rounds played, cumulative points and the best single round, so without the dm
+// branch all four blank out the moment a second device syncs, even though `total` stays correct.
+// Counters add; bestRound takes the max. `tied` is real here: both players score the pips left
+// in the opponent's hand at every round end, so both totals can pass the target in one settle.
+{
+  const all = {
+    d1: rec({ playerId: 'DM111', name: 'Bones' }, {
+      dominoes: {
+        total: { played: 3, won: 2, lost: 1 },
+        dm: { played: 3, won: 2, lost: 1, tied: 0, rounds: 11, bestRound: 46, points: 780 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'dm111', name: 'Bones' }, {
+      dominoes: {
+        total: { played: 2, won: 0, lost: 1 },
+        dm: { played: 2, won: 0, lost: 1, tied: 1, rounds: 7, bestRound: 31, points: 410 },
+      },
+    }, 200),
+  };
+  const dm = aggregatePlayers(all)[0].games.dominoes.dm;
+  eq('dominoes: W/L/T counters summed across devices', [dm.played, dm.won, dm.lost, dm.tied], [5, 2, 2, 1]);
+  eq('dominoes: rounds summed', dm.rounds, 18);
+  eq('dominoes: points summed', dm.points, 1190);
+  eq('dominoes: bestRound is the max, not the sum or the last one', dm.bestRound, 46);
+}
+
 // ---- Snake's sn sub-counter survives the cross-device combine (THE LAW rule 1) ----
 // The per-game regression case "Adding a game" item 7 requires: without the sn branch the
 // Snake Stats screen and leaderboard read zero runs/bests as soon as a second device syncs.

@@ -80,6 +80,15 @@ const GAMES = [
     art: GAME_ART["parchis"],
   },
   {
+    id: 'dominoes',
+    title: { en: 'Dominoes', es: 'Dominó' },
+    blurb: { en: 'All Fives vs. a bot. Score whenever the open ends add up to a five, race to 300.',
+      es: 'All Fives contra un bot. Anota cuando los extremos abiertos sumen un múltiplo de cinco, carrera a 300.' },
+    module: '../dominoes/js/ui.js',
+    accent: '#0E5C77',
+    art: GAME_ART["dominoes"],
+  },
+  {
     id: 'escoba',
     title: 'Escoba',
     blurb: { en: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',

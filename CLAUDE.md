@@ -159,9 +159,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 ### The module contract
 
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
-object bundling them. All thirteen in-hub module games (Connect Four, Chinchón, Escoba, Filler,
-Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool) export all
-three; grep-verify before assuming otherwise:
+object bundling them. All fourteen in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
+Filler, Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool)
+export all three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
@@ -199,7 +199,7 @@ export default { init, destroy, isInProgress };
     `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
     `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
     `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`, `gamehub.uno.save.v1`,
-    `gamehub.pool.save.v1`
+    `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
@@ -269,7 +269,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -311,6 +311,7 @@ working in that folder).
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
+| Dominoes | in-hub `module:` | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
