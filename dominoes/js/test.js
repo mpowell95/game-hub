@@ -117,20 +117,24 @@ eq(scoreOf(0), 0, 'zero never scores');
   }
 }
 {
-  // Going out pays the raw pip total left in the other hand, NOT rounded to a five.
+  // A1: going out pays the raw pip total left in the other hand, NOT rounded to a five, and the
+  // player who went out has nothing left for the opponent to score.
   const g = new DominoesGame({ rng: mulberry32(1) });
   g.startMatch();
   g.hands = [[idOf(3, 4)], [idOf(1, 2), idOf(6, 5)]];   // 3 + 11 = 14 pips against seat 0
   g.line = []; g.up = []; g.down = []; g.spinnerId = null; g.originId = null;
+  g.openerTileId = idOf(3, 4);
   g.scores = [0, 0]; g.roundScore = [0, 0]; g.turn = 0; g.phase = 'playing';
   const res = g.play(0, idOf(3, 4), 'right');
   ok(res.wentOut, 'emptying the hand ends the round');
   eq(res.bonus, 14, 'the bonus is the raw remaining pip count');
-  eq(g.scores[0], 14, 'the 3-4 opener counts 7, which is not a five, so only the bonus scores');
+  eq(g.scores[0], 14, 'the 3-4 opener counts 7, which is not a five, so only the leftovers score');
+  eq(g.scores[1], 0, 'the player who went out leaves nothing for the opponent to score');
 }
 
 {
-  // Blocked round: the lower pip total takes the difference.
+  // A1: a blocked round pays BOTH sides the pips left in the OTHER hand -- not the difference,
+  // and not only the lighter hand.
   const g = new DominoesGame({ rng: mulberry32(2) });
   g.startMatch();
   g.line = [{ id: idOf(0, 0), a: 0, b: 0 }]; g.up = []; g.down = [];
@@ -141,22 +145,89 @@ eq(scoreOf(0), 0, 'zero never scores');
   g.pass(0);
   g.pass(1);
   eq(g.phase, 'roundOver', 'two passes in a row block the round');
-  eq(g.roundWinner, 0, 'the lighter hand wins a blocked round');
-  eq(g.scores[0], 18, 'the blocked winner takes the difference (21 - 3)');
+  eq(g.roundWinner, 0, 'the lighter hand is named the blocked round\'s winner');
+  eq(g.scores[0], 21, 'seat 0 scores the pips left in seat 1\'s hand');
+  eq(g.scores[1], 3, 'and seat 1 scores the pips left in seat 0\'s hand');
   eq(g.roundEndReason, 'blocked', 'the reason is recorded for the modal');
 }
 
 {
-  // Equal pips on a block: nobody scores, nobody is declared the winner.
+  // A1: equal pips on a block still pay BOTH sides (equally); nobody is declared the winner.
   const g = new DominoesGame({ rng: mulberry32(3) });
   g.startMatch();
-  g.line = [{ id: idOf(0, 0), a: 0, b: 0 }]; g.up = []; g.down = [];
-  g.spinnerId = idOf(0, 0); g.originId = idOf(0, 0);
-  g.hands = [[idOf(1, 2)], [idOf(1, 2) === idOf(3, 0) ? idOf(1, 2) : idOf(3, 0)]];
+  // Ends of 6, so neither one-tile hand can play (0-3 would have matched a 0-0 spinner).
+  g.line = [{ id: idOf(6, 6), a: 6, b: 6 }]; g.up = []; g.down = [];
+  g.spinnerId = idOf(6, 6); g.originId = idOf(6, 6);
+  g.hands = [[idOf(1, 2)], [idOf(3, 0)]];              // 3 vs 3
   g.boneyard = []; g.scores = [0, 0]; g.roundScore = [0, 0]; g.turn = 0; g.phase = 'playing';
   g.pass(0); g.pass(1);
   eq(g.roundWinner, null, 'equal pips leave a blocked round with no winner');
-  eq(g.scores[0] + g.scores[1], 0, 'and nobody scores');
+  eq([g.scores[0], g.scores[1]].join(), '3,3', 'and both sides still score the other\'s leftovers');
+}
+
+{
+  // A1 + A4: both sides can cross the target in the same settle, so a match CAN end level.
+  const g = new DominoesGame({ target: 50, rng: mulberry32(31) });
+  g.startMatch();
+  g.line = [{ id: idOf(0, 0), a: 0, b: 0 }]; g.up = []; g.down = [];
+  g.spinnerId = idOf(0, 0); g.originId = idOf(0, 0);
+  g.hands = [[idOf(6, 6)], [idOf(6, 6) === idOf(5, 5) ? idOf(6, 6) : idOf(5, 5)]];  // 12 vs 10
+  g.boneyard = []; g.scores = [40, 42]; g.roundScore = [0, 0]; g.turn = 0; g.phase = 'playing';
+  g.pass(0); g.pass(1);
+  eq(g.phase, 'matchOver', 'both totals crossing the target ends the match');
+  eq([g.scores[0], g.scores[1]].join(), '50,54', 'each side banked the other hand\'s pips');
+  eq(g.matchWinner, 1, 'the higher total wins even though both passed the line');
+}
+
+{
+  // A4: reaching the target is "reach OR PASS", so a final total above it is a normal win.
+  const g = new DominoesGame({ target: 300, rng: mulberry32(32) });
+  g.startMatch();
+  g.line = [{ id: idOf(0, 0), a: 0, b: 0 }]; g.up = []; g.down = [];
+  g.spinnerId = idOf(0, 0); g.originId = idOf(0, 0);
+  g.hands = [[idOf(2, 3)], [idOf(4, 5)]];
+  g.boneyard = []; g.scores = [295, 60]; g.roundScore = [0, 0]; g.turn = 0; g.phase = 'playing';
+  g.pass(0); g.pass(1);
+  eq(g.scores[0], 304, 'a winning total may overshoot the target');
+  eq(g.matchWinner, 0, 'and it still wins');
+}
+
+{
+  // A3: every round opens with the highest double in play, and the lead is FORCED.
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = new DominoesGame({ rng: mulberry32(seed * 131) });
+    g.startMatch();
+    const doubles = [...g.hands[0], ...g.hands[1]].filter((id) => TILES[id][0] === TILES[id][1]);
+    const seat = g.turn;
+    ok(g.hands[seat].includes(g.openerTileId), `seed ${seed}: the opener holds the forced lead`);
+    const moves = g.legalMoves(seat);
+    eq(moves.length, 1, `seed ${seed}: the opening lead is the seat's ONLY legal move`);
+    eq(moves[0].tileId, g.openerTileId, `seed ${seed}: and it is the forced tile`);
+    eq(g.legalMoves(1 - seat).length, 0, `seed ${seed}: the other seat cannot open`);
+    if (doubles.length) {
+      const top = doubles.slice().sort((a, b) => TILES[b][0] - TILES[a][0])[0];
+      eq(g.openerTileId, top, `seed ${seed}: the lead is the HIGHEST double in play`);
+      // ...and that makes it the spinner the moment it lands, with no wait-for-a-double logic.
+      g.play(seat, g.openerTileId, 'right');
+      eq(g.spinnerId, top, `seed ${seed}: the opening double IS the spinner`);
+    } else {
+      ok(!isDouble(g.openerTileId), `seed ${seed}: with no double dealt, the heaviest tile leads`);
+    }
+  }
+}
+
+{
+  // A3, round 2+: the lead is decided by the new deal, NOT by who won the previous round --
+  // the "previous round's winner leads" rule is deliberately gone (see dominoes/CLAUDE.md).
+  const g = new DominoesGame({ rng: mulberry32(77) });
+  g.startMatch();
+  g.startRound();
+  const doubles = [...g.hands[0], ...g.hands[1]].filter((id) => TILES[id][0] === TILES[id][1]);
+  if (doubles.length) {
+    const top = doubles.slice().sort((a, b) => TILES[b][0] - TILES[a][0])[0];
+    eq(g.openerTileId, top, 'round 2 also opens on the highest double dealt');
+    ok(g.hands[g.turn].includes(top), 'and the seat holding it leads');
+  }
 }
 
 {
@@ -184,6 +255,7 @@ eq(scoreOf(0), 0, 'zero never scores');
   g.startMatch();
   g.hands = [[idOf(2, 3)], [idOf(6, 6), idOf(5, 5)]];
   g.line = []; g.up = []; g.down = []; g.spinnerId = null; g.originId = null;
+  g.openerTileId = idOf(2, 3);
   g.scores = [40, 0]; g.roundScore = [0, 0]; g.turn = 0; g.phase = 'playing';
   const res = g.play(0, idOf(2, 3), 'right');
   ok(res.matchOver, 'crossing the target ends the match');

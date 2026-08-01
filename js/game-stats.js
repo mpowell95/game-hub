@@ -98,10 +98,13 @@
 //                                                   // only, per THE LAW rule 2); see recordYahtzee
 //       dominoes: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard (the bot tier)
-//         dm: { played, won, lost, rounds, bestRound, points } },  // a match is a race to a target
-//                                                   // score, so exactly one side crosses it and there
-//                                                   // is no tie to store (unlike tictactoe/dotsboxes/
-//                                                   // boggle/yahtzee above); `rounds` is the human's
+//         dm: { played, won, lost, tied, rounds, bestRound, points } },  // BOTH players score the
+//                                                   // pips left in the opponent's hand at every round
+//                                                   // end, so both totals can cross the target in the
+//                                                   // same settle and the match CAN end level --
+//                                                   // `tied` is stored EXPLICITLY, same reasoning as
+//                                                   // tictactoe/dotsboxes/boggle/yahtzee above (it is
+//                                                   // rare, not impossible); `rounds` is the human's
 //                                                   // cumulative count of rounds played and `points`
 //                                                   // their cumulative match-score total, both
 //                                                   // additive; `bestRound` is the highest single
@@ -448,13 +451,14 @@ function ensureYz(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'yahtzees', 'bestScore']) if (!Number.isFinite(g.yz[k])) g.yz[k] = 0;
 }
 
-/** Dominoes: the per-match W/L counters plus the human's cumulative rounds and points and their
- *  best single round. A match is a RACE to a target score, so exactly one side ever crosses it
- *  and there is no tie to store -- deliberately unlike ensureTt/ensureDb/ensureBg/ensureYz
- *  above, whose games can genuinely end level. `bestRound` is Math.max only (THE LAW rule 2). */
+/** Dominoes: the per-match W/L/Tie counters plus the human's cumulative rounds and points and
+ *  their best single round. Every round end pays BOTH players the pips left in the opponent's
+ *  hand, so both totals can cross the target in the same settle and the match can end level --
+ *  `tied` is tracked explicitly, same reasoning as ensureTt/ensureDb/ensureBg/ensureYz above.
+ *  `bestRound` is Math.max only (THE LAW rule 2). */
 function ensureDm(g) {
-  if (!g.dm || typeof g.dm !== 'object') g.dm = { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
-  for (const k of ['played', 'won', 'lost', 'rounds', 'bestRound', 'points']) if (!Number.isFinite(g.dm[k])) g.dm[k] = 0;
+  if (!g.dm || typeof g.dm !== 'object') g.dm = { played: 0, won: 0, lost: 0, tied: 0, rounds: 0, bestRound: 0, points: 0 };
+  for (const k of ['played', 'won', 'lost', 'tied', 'rounds', 'bestRound', 'points']) if (!Number.isFinite(g.dm[k])) g.dm[k] = 0;
 }
 
 /** Fill any missing structure so the rest of the code can assume a full shape. */
@@ -824,8 +828,10 @@ export function recordYahtzee(difficulty, won, extras) {
 
 /** Dominoes: record one finished MATCH (a race to the target score, not a single round).
  *  Maintains total/byDiff (as recordResult) AND the `dm` breakdown. `difficulty` is the bot tier
- *  (easy|medium|hard). `won` is true or false -- there is no tie, since a match ends the instant
- *  one side crosses the target, so nothing here mirrors recordTicTacToe's `tied`.
+ *  (easy|medium|hard). `won` is true, false, or null for a tie -- both players score the pips
+ *  left in the opponent's hand at every round end, so both totals can pass the target in the
+ *  same settle and land equal; a tie increments `played` and `tied` only, matching
+ *  recordTicTacToe/recordDotsBoxes/recordBoggle/recordYahtzee.
  *  `extras` = { rounds, bestRound, points } for THIS match: `rounds` (rounds played) and
  *  `points` (the human's final score) are added to the running totals; `bestRound` only ever
  *  raises the stored best (Math.max), per THE LAW rule 2. Additive; never overwrites. */
@@ -836,7 +842,9 @@ export function recordDominoes(difficulty, won, extras) {
   ensureDm(g);
   const e = extras || {};
   g.dm.played += 1;
-  if (won === true) g.dm.won += 1; else g.dm.lost += 1;
+  if (won === true) g.dm.won += 1;
+  else if (won === false) g.dm.lost += 1;
+  else g.dm.tied += 1;
   g.dm.rounds += Math.max(0, e.rounds | 0);
   g.dm.points += Math.max(0, e.points | 0);
   g.dm.bestRound = Math.max(g.dm.bestRound | 0, e.bestRound | 0);

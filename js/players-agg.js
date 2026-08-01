@@ -265,8 +265,9 @@ export function aggregatePlayers(all) {
         // own, but Dominoes' Stats screen reads `dm` for rounds played, cumulative points and
         // the best single round, so dropping it here would blank all three the moment a second
         // device syncs. Counters add; the best round takes the max, never a sum.
-        if (!dst.dm) dst.dm = { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
+        if (!dst.dm) dst.dm = { played: 0, won: 0, lost: 0, tied: 0, rounds: 0, bestRound: 0, points: 0 };
         dst.dm.played += src.dm.played | 0; dst.dm.won += src.dm.won | 0; dst.dm.lost += src.dm.lost | 0;
+        dst.dm.tied += src.dm.tied | 0;
         dst.dm.rounds += src.dm.rounds | 0;
         dst.dm.points += src.dm.points | 0;
         dst.dm.bestRound = Math.max(dst.dm.bestRound | 0, src.dm.bestRound | 0);

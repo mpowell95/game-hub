@@ -369,16 +369,18 @@ function yahtzeeScreen(rec) {
     </div>`;
 }
 
-/** Dominoes: Won/Lost/Played, with no Tied cell -- a match is a race to the target score, so
- *  exactly one side crosses it (see ensureDm in js/game-stats.js). Plus the human's cumulative
- *  rounds and points and their best single round, never folded away, per THE LAW rule 1. */
+/** Dominoes: Won/Lost/Tied/Played shown explicitly (both players score the opponent's leftovers
+ *  at every round end, so both totals can pass the target in the same settle and land equal --
+ *  see ensureDm in js/game-stats.js), plus the human's cumulative rounds and points and their
+ *  best single round, never folded away, per THE LAW rule 1. */
 function dominoesScreen(rec) {
-  const dm = (rec && rec.dm) || { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
+  const dm = (rec && rec.dm) || { played: 0, won: 0, lost: 0, tied: 0, rounds: 0, bestRound: 0, points: 0 };
   if (!(dm.played | 0)) return emptyState('Dominoes');
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${dm.won | 0}</b><span>${t('gs_won')}</span></div>
       <div class="gs-tally"><b>${dm.lost | 0}</b><span>${t('gs_lost')}</span></div>
+      <div class="gs-tally"><b>${dm.tied | 0}</b><span>${t('gs_tied')}</span></div>
       <div class="gs-tally"><b>${dm.played | 0}</b><span>${t('gs_played')}</span></div>
     </div>
     <div class="gs-tallies is-4">

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v250';
+const CACHE = 'game-hub-v251';
 
 const ASSETS = [
   './',
@@ -187,6 +187,8 @@ const ASSETS = [
   './dominoes/js/game.js',
   './dominoes/js/board.js',
   './dominoes/js/ai.js',
+  './dominoes/js/tiles.js',
+  './dominoes/js/tutorial.js',
   './dominoes/js/strings.js',
   './uno/',
   './uno/index.html',

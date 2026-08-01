@@ -5,8 +5,13 @@
 > which is always loaded alongside this file (full rule rationale: `js/CLAUDE.md`).
 
 Double-six **All Fives** against one bot, built 2026-08-01 from a written spec derived from a
-reference app's screenshots. You score during play whenever the open ends add up to a multiple of
-five; first to the target score (300 by default) takes the match.
+reference app's screenshots, plus **Addendum 1**, which corrected the spec on three rules and
+specified the how-to-play carousel. You score during play whenever the open ends add up to a
+multiple of five; first to the target score (300 by default) takes the match.
+
+**Where the addendum overrode the main spec, the addendum wins**, and the three places that
+matters are called out in "Rules" below: both players score at a round end (A1), every round is
+opened by the highest double and the lead is forced (A3), and the target is reach-OR-PASS (A4).
 
 Hub integration: in-hub `module:` (`dominoes/js/ui.js`), **not immersive**, no multiplayer.
 `isInProgress()` uses the **autosave/resume** meaning (returns `false` always): the match
@@ -28,6 +33,8 @@ dominoes/js/game.js     pure rules engine: the set, hands, boneyard, the chain, 
 dominoes/js/board.js    pure geometry: the chain's grid rectangles, spinner branches, elbows,
                         bounding box. Recomputed from scratch on every render
 dominoes/js/ai.js       the three bot tiers (pure; the "thinking" pause lives in ui.js)
+dominoes/js/tiles.js    the domino as markup, i18n-free, shared by the board and the tutorial
+dominoes/js/tutorial.js the eight-page How to Play carousel and its illustrations
 dominoes/js/ui.js       DOM shell: setup, play screen, boneyard drawer, round card, animations
 dominoes/js/strings.js  every user-visible string, { en, es }
 dominoes/js/test.js     headless assertions for all three pure modules (node dominoes/js/test.js)
@@ -70,18 +77,30 @@ regardless. An earlier version folded on the first free corner and produced zig-
 one still folded only on the limit and let long runs walk straight through a branch.
 
 **The last-resort branch can overlap, and that is accepted.** A double with nowhere legal to go
-is placed anyway rather than dropped. Measured over 119,229 boards from 800 full simulated
-matches: **one** overlapping board, on a 27-tile chain (a 21-tile line with a 6-tile branch). The
-fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and reserving corridors
-for the branches would need a two-pass layout to buy back that one board in a hundred thousand.
+is placed anyway rather than dropped. Measured over 119,195 boards from 800 full simulated
+matches: **two** overlapping boards, both on 27-tile chains (a 21-tile line with a 6-tile
+branch). The fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and
+reserving corridors for the branches would need a two-pass layout to buy back two boards in a
+hundred thousand.
 
 ## Rules (All Fives)
 
 1. Double-six set, 28 tiles, 7 each, the remaining 14 are the boneyard.
-2. **Round 1's lead goes to whoever holds the highest double** (the heaviest tile if neither
-   does); later rounds are opened by the previous round's winner. The opener may lead **any**
-   tile — the traditional "and must lead that double" clause is deliberately not enforced, so
-   every round starts with a real choice.
+2. **Every round is opened by the highest double in play, and the lead is FORCED** (addendum A3:
+   "the very first tile is always a double and always the spinner"). `startRound` computes
+   `openerTileId` and seats the turn with whoever was dealt it; `legalMoves()` returns exactly
+   that one move while the board is empty, so the opener has no choice and the other seat has no
+   moves at all.
+   - **This supersedes the main spec's §7.2 on two counts, deliberately.** The spec said later
+     rounds are opened by the previous round's winner, and an earlier build of this game let the
+     opener lead any tile. Neither survives A3's invariant: a previous-winner lead only opens
+     with a double by luck, and a free choice almost never does. `leader` is gone from the engine
+     entirely; the deal alone decides who opens.
+   - The **heaviest-tile fallback** still exists for the one case A3 cannot cover: all seven
+     doubles sitting in the boneyard (~1 deal in a few hundred). That round opens without a
+     spinner and the first double played later becomes one, on the unchanged code path.
+   - Nice side effect, and the reason it is worth doing beyond fidelity: on the first turn of
+     every round exactly one tile in your hand is lit, which teaches the rule with no text.
 3. On your turn: play a tile matching an open end, or draw until you can. Passing is only legal
    with an empty boneyard, and drawing is only legal with no play — `requiredAction()` is the one
    function that decides which, for both seats.
@@ -92,12 +111,16 @@ for the branches would need a two-pass layout to buy back that one board in a hu
    double at an end contributes **both** halves. Two cases that trip people up and are both
    pinned by tests: a lone first tile counts **once** (a 5-5 opener is 10, not 20), and an
    interior spinner contributes nothing of its own.
-6. Going out pays the **raw** pip total left in the other hand, never rounded to a five — which
-   is why a round total like 31 is legitimate while an in-play score never is. A blocked round
-   pays the lower hand the difference; **equal pips score nothing and name no winner** rather
-   than inventing one.
-7. First to the target score wins. A match is a **race**, so exactly one side ever crosses the
-   line and there is no tie to record (see "Stats").
+6. **At a round end BOTH players score the pips left in their OPPONENT's hand** (addendum A1,
+   which corrected the main spec). Going out is simply the case where one of those two totals is
+   zero; a blocked round pays each side the other's leftovers rather than paying one side the
+   difference, and equal hands pay both equally with no winner named. These are **raw** pip
+   counts, never rounded to a five, which is why a round total like 31 is legitimate while an
+   in-play score never is. `_settleRound` is the single function that does this for both endings.
+7. **Reach OR PASS the target** to win (addendum A4 — a final total of 304 is a normal win, not
+   an edge case). Because both sides gain at every settle, both totals can cross in the SAME
+   settle, so `matchWinner` is null on a genuine draw and every caller has to cope with that
+   (`dm.tied`, the finished card's medal-less rows).
 
 `_deadlocked()` is checked after every placement so a round where neither side can move and the
 boneyard is empty ends immediately, instead of sitting in a dead state waiting for two passes
@@ -121,10 +144,10 @@ ends it could not match at that moment are values it demonstrably does not hold.
 real information a dominoes player ever gets, and it lives on the engine so it survives a
 snapshot restore like everything else.
 
-Measured over 600 matches per pairing (`node dominoes/js/test.js` covers legality and
-termination; the strength numbers came from a throwaway sweep): medium beats easy 97.5%, hard
-beats easy 99.2%, hard beats medium 69.0%, and easy against itself is 48.5%, which is the honest
-size of the first-mover edge.
+Measured over 600 matches per pairing, re-run after the A1/A3 rule changes (`node
+dominoes/js/test.js` covers legality and termination; the strength numbers came from a throwaway
+sweep): medium beats easy 97.5%, hard beats easy 97.8%, hard beats medium 69.0%, and easy against
+itself is 49.8%, which is the honest size of the first-mover edge.
 
 ## Reading the game state without words
 
@@ -140,12 +163,64 @@ There is not one instructional sentence in the play screen. Four channels carry 
   badges. **Colorblind rule: the scoring state is carried by SHAPE first** — a circle when the
   ends already add to a five, a rounded square when they do not — with the green/amber hues only
   reinforcing it.
+
+  **Addendum A2 needed no change here, and that is a decision, not an oversight.** A2 is titled
+  "Green badge confirmed" and confirms exactly what is implemented: green when the open ends add
+  to a multiple of five, amber when they do not. Its trailing "green shows the number you would
+  gain" was read as restating what green MEANS at the level of the board, not as redefining the
+  badge's number, for two reasons. A per-end "gain" is undefined until a tile is chosen (the same
+  end scores differently depending on what you play there), and a badge on a 5-5 end would have
+  to read 10 while you still have to match a **5** to play there — which breaks the one job the
+  number does, telling you what fits. The main spec's own wording ("showing that end's pip
+  value") stands.
 - **What just happened** — a `+5` and a star burst at the tile that caused it, plus the header
   score counting up. Never a log, never a banner.
 
 Everything else (bot thinking, the boneyard drawer, a pass, the round card) is an **overlay**.
 The header, both hand rows and the floor keep fixed space, so nothing in the play screen ever
 reflows.
+
+## How to play: the eight-page carousel (`tutorial.js`)
+
+Addendum §B/§C. Opened from the purple `?` on the setup screen; a near-black card holding a
+**white** block, which is the whole visual hook — nothing else in this game is white like that.
+Eight pages, one illustration and one sentence each, the captions verbatim from §C
+(`tut_1`..`tut_8` in `strings.js`).
+
+**The illustrations are the real game rendered small, not eight drawings.** They use the same
+`tileHTML` the board uses and the same `layoutChain` geometry, on a frame whose three background
+colours are swapped to the tutorial palette (cyan header, peach felt, flat red floor — cyan for
+the bot's side, red for yours, so the art itself teaches which end is which). Every board is
+built by running the engine's own `placeOn`, so an illustration can never show a position the
+rules would reject, and a change to a tile or to the layout follows into the tutorial for free.
+`miniBoard()` returns an `at(a, b)` helper so a page hangs the pointing hand off the exact tile
+its caption is about rather than a guessed coordinate.
+
+Two teaching devices, both from §B: the **amber ring** (`.dm-ring`, around the 6-6 in your hand
+on page 2 and around both open ends on page 4) and the **cartoon pointing hand** (`.dm-point`,
+drawn in a faded red on the blocked page, off to the side away from any tile, which reads as
+"this tap does nothing").
+
+Navigation deviates from the addendum in one place, on purpose: the two side buttons jump to the
+FIRST and LAST page exactly as specified, which leaves nothing that pages one step at a time on
+a device with no touchscreen — so the page dots are tappable and the arrow keys work, alongside
+the specified swipe. Two things that bit and are worth not re-learning: the overlay is
+`position: fixed` (the setup screen's `.dm-root` is only as tall as its own content, so an
+absolute scrim left the page undimmed), and the card carries an explicit `z-index` (without one
+the absolutely-positioned scrim covered the page dots, so tapping one closed the tutorial).
+
+## The Game Finished card (addendum §D)
+
+The same slate card as the round card, with four differences: titled `Game Finished!` with no
+rules reminder under it (just space, then the table), and the avatar becomes the winner's face
+on a **green celebration disc with a crown** over it.
+
+The addendum describes a green avatar and `Red`/`Blue` row labels but flags both as possibly
+coming from a two-colour variant and recommends keeping YOU/BOT. That recommendation is taken,
+and extended to the face: the disc goes green and gains the crown, but the face stays the
+WINNER's own (your red smiley or the bot's tiered scowl), so the red-you / blue-bot identity the
+rest of the screen teaches survives to the last screen. A drawn match gets neither crown nor
+medals, which reads as level without needing a word for it.
 
 ## Settings & persistence
 
@@ -160,11 +235,15 @@ reflows.
 ## Stats
 
 `recordDominoes(difficulty, won, extras)` in `js/game-stats.js`, called **once per MATCH** (a
-race to the target, not per round), guarded by `_statsCommitted`. `dm: { played, won, lost,
+race to the target, not per round), guarded by `_statsCommitted`. `dm: { played, won, lost, tied,
 rounds, bestRound, points }` — counters additive, `bestRound` Math.max only per THE LAW rule 2.
 
-**There is no `tied` here, on purpose**, unlike `tt`/`db`/`bg`/`yz`: a match ends the instant one
-side crosses the target, so exactly one side can be over it.
+**`tied` is real here** (it was omitted in this game's first build, when only the player who went
+out scored). Under addendum A1 both players gain at every settle, so both totals can pass the
+target in the same round and land equal; `matchWinner` is null then and `recordDominoes` reads a
+null `won` as a tie, matching `recordTicTacToe`/`recordDotsBoxes`/`recordBoggle`/`recordYahtzee`.
+Rare, not impossible — which is exactly the kind of thing that must be stored before it happens
+rather than after somebody reports a loss they did not take.
 
 All three mandatory sub-counter surfaces exist (root checklist item 7): the `ensureDm`/
 `recordDominoes` pair in `js/game-stats.js`, `dominoesScreen` in `js/game-stats-ui.js`, and the
@@ -177,11 +256,19 @@ the ordinary wins metric with no extra wiring.
 ```
 node dominoes/js/test.js
 ```
-300 assertions: the set's integrity, every All Fives counting case above (including the lone
+539 assertions: the set's integrity, every All Fives counting case above (including the lone
 double and the interior spinner), branch opening, legality including a tile that fits both ends,
-chain bookkeeping, the non-destructive `countAfter` preview, the deal, going out, blocked rounds
-both ways, drawing and passing legality, the match-end trigger, a snapshot round trip, board
-geometry (crosswise doubles, branch direction, a folded run, no overlaps), the bot tiers' choices
-and legality, plus a 60-full-match sweep asserting that no tile is ever lost, every placed tile is
-laid out, no chain overlaps itself, and in-play scores are always multiples of five credited only
-to the mover. Wired into `run-all-tests.mjs`.
+chain bookkeeping, the non-destructive `countAfter` preview, the deal, drawing and passing
+legality, a snapshot round trip, board geometry (crosswise doubles, branch direction, a folded
+run, no overlaps), the bot tiers' choices and legality, plus a 60-full-match sweep asserting that
+no tile is ever lost, every placed tile is laid out, no chain overlaps itself, and in-play scores
+are always multiples of five credited only to the mover.
+
+The addendum's rule changes each have their own block, and they are the ones to keep green:
+**A1** going out (opponent's leftovers, zero back the other way) and blocked rounds both ways,
+including equal hands paying both sides; **A3** a 40-seed sweep proving every round opens on the
+highest double in play, that it is the opener's ONLY legal move, that the other seat has none,
+that it becomes the spinner the moment it lands, and that round 2 is decided by its own deal
+rather than by who won round 1; **A4** an overshoot (304 on a 300 target) still winning, and both
+totals crossing in one settle producing a real match end with the higher total winning.
+Wired into `run-all-tests.mjs`.

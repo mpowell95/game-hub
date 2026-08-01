@@ -163,7 +163,6 @@ export class DominoesGame {
     this.rng = opts.rng || Math.random;
     this.scores = [0, 0];
     this.round = 0;
-    this.leader = null;             // seat that opens the next round (null = decide by highest double)
     this.phase = 'idle';            // idle | playing | roundOver | matchOver
     this.hands = [[], []];
     this.boneyard = [];
@@ -174,6 +173,7 @@ export class DominoesGame {
     this.roundScore = [0, 0];
     this.roundWinner = null;
     this.roundEndReason = null;     // 'out' | 'blocked'
+    this.openerTileId = null;       // the forced opening lead of the current round
     this.matchWinner = null;
     // Values a seat is KNOWN to be missing, inferred from every draw and pass it makes. Read by
     // the Hard bot only; kept on the engine so it survives a save/restore like everything else.
@@ -184,7 +184,17 @@ export class DominoesGame {
   get chain() { return { line: this.line, up: this.up, down: this.down, spinnerId: this.spinnerId, originId: this.originId }; }
   openEnds() { return openEnds(this.chain); }
   countEnds() { return countEnds(this.chain); }
-  legalMoves(seat) { return legalMoves(this.chain, this.hands[seat]); }
+  /** Legal moves for a seat. On an EMPTY board only one move exists for the whole table: the
+   *  round's forced opening lead (addendum A3), so the opener has no choice and the first tile
+   *  is always the highest double in play. */
+  legalMoves(seat) {
+    if (!this.line.length) {
+      return this.hands[seat].indexOf(this.openerTileId) >= 0
+        ? [{ tileId: this.openerTileId, side: 'right' }]
+        : [];
+    }
+    return legalMoves(this.chain, this.hands[seat]);
+  }
   canPlay(seat) { return this.legalMoves(seat).length > 0; }
   branchesOpen() { return branchesOpen(this.chain); }
 
@@ -193,15 +203,17 @@ export class DominoesGame {
   startMatch() {
     this.scores = [0, 0];
     this.round = 0;
-    this.leader = null;
     this.matchWinner = null;
     this.startRound();
   }
 
-  /** Deal a fresh round. Round 1's opener is whoever holds the highest double (the highest tile
-   *  if neither does); later rounds are opened by the previous round's winner. The opener may
-   *  lead ANY tile — the traditional "and must lead it" clause is deliberately not enforced, so
-   *  every round starts with a real choice (see dominoes/CLAUDE.md). */
+  /** Deal a fresh round. EVERY round is opened by the highest double in play, led by whoever
+   *  was dealt it, and the lead is FORCED (addendum A3: "the very first tile is always a double
+   *  and always the spinner"). There is deliberately no "previous round's winner leads" rule and
+   *  no free choice of opening tile; see dominoes/CLAUDE.md for why A3 supersedes the main
+   *  spec's §7.2 on both counts. The heaviest-tile fallback below only fires when all seven
+   *  doubles sat in the boneyard, which is the one case where the round opens without a
+   *  spinner — the engine handles that unchanged, the first double played later becomes it. */
   startRound() {
     const deck = shuffled(TILES.map((_, i) => i), this.rng);
     this.hands = [deck.slice(0, this.handSize), deck.slice(this.handSize, this.handSize * 2)];
@@ -214,30 +226,32 @@ export class DominoesGame {
     this.roundEndReason = null;
     this.voids = [[], []];
     this.round += 1;
-    this.turn = this.leader == null ? this._openingSeat() : this.leader;
+    const opener = this._openingLead();
+    this.openerTileId = opener.tileId;
+    this.turn = opener.seat;
     this.phase = 'playing';
     return this;
   }
 
-  /** Highest double wins the lead; with no double dealt to either hand, the heaviest tile does.
-   *  Ties (impossible for doubles, possible for weight) fall to seat 0. */
-  _openingSeat() {
-    let best = -1, seat = HUMAN;
+  /** The forced opening lead: the highest double dealt to either hand, or (only when all seven
+   *  doubles are in the boneyard) the heaviest tile. Weight ties fall to seat 0. */
+  _openingLead() {
+    let best = -1, seat = HUMAN, tileId = null;
     for (const s of [HUMAN, BOT]) {
       for (const id of this.hands[s]) {
         if (!isDouble(id)) continue;
-        if (TILES[id][0] > best) { best = TILES[id][0]; seat = s; }
+        if (TILES[id][0] > best) { best = TILES[id][0]; seat = s; tileId = id; }
       }
     }
-    if (best >= 0) return seat;
+    if (tileId != null) return { seat, tileId };
     best = -1;
     for (const s of [HUMAN, BOT]) {
       for (const id of this.hands[s]) {
         const w = tileSum(id) * 10 + Math.max(...TILES[id]);
-        if (w > best) { best = w; seat = s; }
+        if (w > best) { best = w; seat = s; tileId = id; }
       }
     }
-    return seat;
+    return { seat, tileId };
   }
 
   // --- turns ---------------------------------------------------------------------------------
@@ -268,15 +282,11 @@ export class DominoesGame {
     const res = { ok: true, seat, tileId, side, count, scored, roundOver: false, matchOver: false, wentOut: false, bonus: 0 };
 
     if (!hand.length) {
-      // Going out: the raw pip total left in the opponent's hand, never rounded to a five —
-      // which is why a round total like 31 is legitimate while an in-play score never is.
-      const bonus = handSum(this.hands[1 - seat]);
-      if (bonus) this._award(seat, bonus);
       res.wentOut = true;
-      res.bonus = bonus;
-      this._endRound(seat, 'out');
+      res.bonus = handSum(this.hands[1 - seat]);
+      this._settleRound(seat, 'out');
     } else if (this._deadlocked()) {
-      this._endBlocked();
+      this._settleBlocked();
     } else {
       this.turn = 1 - seat;
     }
@@ -316,7 +326,7 @@ export class DominoesGame {
     if (this.canPlay(seat) || this.boneyard.length) return { ok: false };
     this._noteVoids(seat);
     this.passes += 1;
-    if (this.passes >= 2) { this._endBlocked(); return { ok: true, roundOver: true, matchOver: this.phase === 'matchOver' }; }
+    if (this.passes >= 2) { this._settleBlocked(); return { ok: true, roundOver: true, matchOver: this.phase === 'matchOver' }; }
     this.turn = 1 - seat;
     return { ok: true, roundOver: false, matchOver: false };
   }
@@ -339,20 +349,29 @@ export class DominoesGame {
     this.roundScore[seat] += points;
   }
 
-  /** Blocked round: the lower pip total takes the DIFFERENCE. Equal totals score nothing and
-   *  leave the lead where it was, rather than inventing a winner. */
-  _endBlocked() {
+  /** Blocked round: nobody went out, so the "winner" is only who is left holding less (it decides
+   *  nothing but the modal's medal). Equal hands leave it null rather than inventing a winner —
+   *  both sides still score, because under A1 scoring does not depend on who won. */
+  _settleBlocked() {
     const mine = handSum(this.hands[0]), theirs = handSum(this.hands[1]);
-    if (mine === theirs) { this._endRound(null, 'blocked'); return; }
-    const winner = mine < theirs ? 0 : 1;
-    this._award(winner, Math.abs(theirs - mine));
-    this._endRound(winner, 'blocked');
+    this._settleRound(mine === theirs ? null : (mine < theirs ? 0 : 1), 'blocked');
   }
 
-  _endRound(winner, reason) {
+  /** Settle the round. **BOTH players score the pips left in their OPPONENT's hand** (addendum
+   *  A1) — going out is simply the case where one of those two totals is zero, and a blocked
+   *  round pays each side the other's leftovers rather than paying one side the difference.
+   *  These are raw pip counts, never rounded to a five, which is why a round total like 31 is
+   *  legitimate while an in-play score never is.
+   *
+   *  Because both sides can gain at once, BOTH can cross the target in the same settle, so the
+   *  match can genuinely end level — `matchWinner` is null for a draw and every caller has to
+   *  cope with that (js/game-stats.js's `dm.tied`, the finished card's medal-less rows). */
+  _settleRound(winner, reason) {
+    this._award(0, handSum(this.hands[1]));
+    this._award(1, handSum(this.hands[0]));
     this.roundWinner = winner;
     this.roundEndReason = reason;
-    this.leader = winner == null ? this.leader : winner;
+    // "Reach OR PASS the target" (addendum A4): a final total of 304 is a normal win.
     if (Math.max(this.scores[0], this.scores[1]) >= this.target) {
       this.matchWinner = this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1);
       this.phase = 'matchOver';
@@ -366,7 +385,7 @@ export class DominoesGame {
   snapshot() {
     return {
       target: this.target, handSize: this.handSize,
-      scores: this.scores.slice(), round: this.round, leader: this.leader,
+      scores: this.scores.slice(), round: this.round, openerTileId: this.openerTileId,
       phase: this.phase, hands: this.hands.map((h) => h.slice()), boneyard: this.boneyard.slice(),
       line: this.line.map((e) => ({ ...e })), up: this.up.map((e) => ({ ...e })), down: this.down.map((e) => ({ ...e })),
       spinnerId: this.spinnerId, originId: this.originId,
@@ -379,7 +398,7 @@ export class DominoesGame {
   static fromSnapshot(snap, opts = {}) {
     const g = new DominoesGame({ target: snap.target, handSize: snap.handSize, rng: opts.rng });
     Object.assign(g, {
-      scores: snap.scores.slice(), round: snap.round, leader: snap.leader, phase: snap.phase,
+      scores: snap.scores.slice(), round: snap.round, openerTileId: snap.openerTileId, phase: snap.phase,
       hands: snap.hands.map((h) => h.slice()), boneyard: snap.boneyard.slice(),
       line: snap.line.map((e) => ({ ...e })), up: snap.up.map((e) => ({ ...e })), down: snap.down.map((e) => ({ ...e })),
       spinnerId: snap.spinnerId, originId: snap.originId, turn: snap.turn, passes: snap.passes,

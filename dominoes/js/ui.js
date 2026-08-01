@@ -12,6 +12,8 @@
 import { DominoesGame, TILES, HUMAN, BOT } from './game.js';
 import { layoutChain } from './board.js';
 import { chooseMove } from './ai.js';
+import { tileHTML } from './tiles.js';
+import { openTutorial, CROWN_SVG } from './tutorial.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordDominoes } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -45,16 +47,8 @@ const ROUND_CARD_MS = 700;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Pip positions on a 3x3 grid, [col, row]. One table, 28 tiles drawn from it — never 28 images.
-const PIPS = {
-  0: [],
-  1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [2, 0], [0, 2], [2, 2]],
-  5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]],
-  6: [[0, 0], [0, 1], [0, 2], [2, 0], [2, 1], [2, 2]],
-};
+/** tiles.js is i18n-free, so the aria label for a face-up tile is composed here. */
+const tileAria = (values) => t('aria_tile', { a: values[0], b: values[1] });
 
 function ensureStylesheet() {
   const href = new URL('../css/dominoes.css', import.meta.url).href;
@@ -67,29 +61,7 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
-const pipsHTML = (n) => (PIPS[n] || []).map(([c, r]) =>
-  `<i class="dm-pip" style="left:${22 + c * 28}%;top:${22 + r * 28}%"></i>`).join('');
-
-/** One domino. `values` reads left-to-right (horizontal) or top-to-bottom (vertical).
- *  `back` is the bot's olive face-down tile; `blank` is a cream tile with its face hidden, which
- *  is what the boneyard drawer shows. */
-function tileHTML(values, opts = {}) {
-  const cls = ['dm-tile'];
-  if (opts.vertical) cls.push('is-v');
-  if (opts.back) cls.push('is-back');
-  if (opts.cls) cls.push(opts.cls);
-  const hidden = opts.back || opts.blank;
-  const halves = hidden
-    ? '<div class="dm-half"></div><div class="dm-half"></div>'
-    : `<div class="dm-half">${pipsHTML(values[0])}</div><div class="dm-half">${pipsHTML(values[1])}</div>`;
-  const aria = hidden ? (opts.aria ? ` aria-label="${esc(opts.aria)}"` : '')
-    : ` aria-label="${esc(t('aria_tile', { a: values[0], b: values[1] }))}"`;
-  const tag = opts.button ? 'button' : 'div';
-  const type = opts.button ? ' type="button"' : '';
-  return `<${tag}${type} class="${cls.join(' ')}"${opts.attrs || ''}${aria} style="${opts.style || ''}">${halves}</${tag}>`;
-}
-
-const ICON_RESTART = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 3.5V9h-5.5"/></svg>';
+const ICON_RESTART ='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 3.5V9h-5.5"/></svg>';
 
 /** Three bot faces, one per tier: a mild grin, the reference app's smug half-lidded stare, and a
  *  hard scowl. Shape carries the tier, not colour alone (they share the accent orange). */
@@ -169,6 +141,7 @@ class DominoesUI {
     this._statsCommitted = false;
     this._confirmTimer = null;
     this._countTimer = null;
+    this._closeTutorial = null;      // tutorial.js's teardown while its carousel is open
     this.el = null;
 
     this._onClick = (e) => this.onClick(e);
@@ -192,6 +165,7 @@ class DominoesUI {
     this.timers = [];
     clearTimeout(this._confirmTimer);
     clearInterval(this._countTimer);
+    if (this._closeTutorial) { this._closeTutorial(); this._closeTutorial = null; }
     if (this._offLang) this._offLang();
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
@@ -381,7 +355,7 @@ class DominoesUI {
       if (this.dealing) cls.push('is-dealt');
       const style = this.dealing ? `animation-delay:${60 * i}ms;--dm-from-x:${(i - 3) * 26}px` : '';
       return tileHTML(TILES[id], {
-        vertical: true, button: true, cls: cls.join(' '), style,
+        vertical: true, button: true, cls: cls.join(' '), style, aria: tileAria(TILES[id]),
         attrs: ` data-action="pick" data-id="${id}"`,
       });
     }).join('');
@@ -407,7 +381,7 @@ class DominoesUI {
     const scoringNow = this._isScoringState(g.countEnds());
     const targets = this._targetSides();
     const parts = tiles.map((tl) => tileHTML(tl.values, {
-      vertical: tl.vertical,
+      vertical: tl.vertical, aria: tileAria(tl.values),
       cls: tl.id === this._freshId ? 'is-fresh' : '',
       style: `left:${tl.x * UNIT}px;top:${tl.y * UNIT}px;width:${tl.w * UNIT}px;height:${tl.h * UNIT}px`,
     }));
@@ -606,7 +580,9 @@ class DominoesUI {
     this._statsCommitted = true;
     const g = this.game;
     try {
-      recordDominoes(this.difficulty, g.matchWinner === HUMAN, {
+      // matchWinner is null on a genuine draw (both totals passed the target level), and
+      // recordDominoes reads null as a tie rather than a loss.
+      recordDominoes(this.difficulty, g.matchWinner == null ? null : g.matchWinner === HUMAN, {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
@@ -616,11 +592,18 @@ class DominoesUI {
     }
   }
 
+  /** The round card, and — on the last round — the Game Finished card (addendum §D): same slate
+   *  shell, but titled `Game Finished!` with no rules reminder under it, and the avatar becomes
+   *  the WINNER's own face on a green celebration disc with a crown over it. The face stays the
+   *  winner's rather than a generic green one, and the rows stay YOU/BOT rather than switching to
+   *  colour names, so the red-you / blue-bot identity the rest of the screen teaches survives to
+   *  the last screen — the addendum recommends exactly that. */
   showRoundCard() {
     const g = this.game;
     const over = g.phase === 'matchOver';
+    const drawn = over && g.matchWinner == null;
     const youWon = over ? g.matchWinner === HUMAN : g.roundWinner === HUMAN;
-    const title = over ? (g.matchWinner === HUMAN ? t('you_win') : t('bot_wins')) : t('round_n', { n: g.round });
+    const title = over ? t('game_over') : t('round_n', { n: g.round });
     const rows = [
       { label: t('you'), round: g.roundScore[HUMAN], total: g.scores[HUMAN] },
       { label: t('bot'), round: g.roundScore[BOT], total: g.scores[BOT] },
@@ -634,9 +617,12 @@ class DominoesUI {
       <div class="dm-scrim"></div>
       <div class="dm-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <button type="button" class="dm-x" data-action="close-card" aria-label="${esc(t('aria_close'))}">&times;</button>
-        <div class="dm-card-av ${youWon ? 'is-you' : ''}">${youWon ? YOU_FACE_SVG : botFaceSVG(this.difficulty)}</div>
+        <div class="dm-card-av ${youWon && !drawn ? 'is-you' : ''} ${over && !drawn ? 'is-champion' : ''}">
+          ${over && !drawn ? `<span class="dm-crown">${CROWN_SVG}</span>` : ''}
+          ${youWon && !drawn ? YOU_FACE_SVG : botFaceSVG(this.difficulty)}
+        </div>
         <h3>${esc(title)}</h3>
-        <p class="dm-card-note">${esc(t('round_rule', { n: g.target }))}</p>
+        ${over ? '<div class="dm-card-gap"></div>' : `<p class="dm-card-note">${esc(t('round_rule', { n: g.target }))}</p>`}
         <div class="dm-cols"><span>${esc(t('col_player'))}</span><span>${esc(t('col_round'))}</span><span>${esc(t('col_total'))}</span></div>
         ${rows.map((r, i) => `<div class="dm-scorerow">
           ${rank[i] ? `<i class="dm-medal is-${rank[i]}" style="animation-delay:${900 + i * 120}ms">${rank[i]}</i>` : ''}
@@ -671,31 +657,17 @@ class DominoesUI {
    *  play shell at all (`this.el` is null there), and an early return on that left the card
    *  stuck open over an unclickable Play button. */
   closeOverlays() {
+    if (this._closeTutorial) { this._closeTutorial(); this._closeTutorial = null; }
     this.container.querySelectorAll('.dm-overlay').forEach((el) => el.remove());
   }
 
+  /** How to play is the eight-page carousel now (addendum §B); tutorial.js owns it and hands
+   *  back its own teardown, which closeOverlays() also has to run so the keydown listener the
+   *  carousel installs on `document` never outlives the card. */
   openHelp() {
     this.closeOverlays();
-    const g = this.game;
-    const target = g ? g.target : this.target;
-    const overlay = document.createElement('div');
-    overlay.className = 'dm-overlay';
-    overlay.innerHTML = `
-      <div class="dm-scrim" data-action="close-card"></div>
-      <div class="dm-card dm-help" role="dialog" aria-modal="true" aria-label="${esc(t('howto'))}">
-        <button type="button" class="dm-x" data-action="close-card" aria-label="${esc(t('aria_close'))}">&times;</button>
-        <h3>${esc(t('howto'))}</h3>
-        <ul>
-          <li>${esc(t('help_goal', { n: target }))}</li>
-          <li>${esc(t('help_fives'))}</li>
-          <li>${esc(t('help_badges'))}</li>
-          <li>${esc(t('help_doubles'))}</li>
-          <li>${esc(t('help_draw'))}</li>
-          <li>${esc(t('help_out'))}</li>
-        </ul>
-      </div>`;
     const host = this.el ? this.el.play : this.container.querySelector('.dm-root');
-    host.appendChild(overlay);
+    this._closeTutorial = openTutorial(host, t);
   }
 
   /** Restart is destructive mid-match, so it arms first and fires on a second tap. */

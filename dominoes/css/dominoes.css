@@ -25,6 +25,12 @@
   --dm-go: #4CBB5B;
   --dm-stop: #C25F55;
   --dm-slate: #4A5C74;
+  --dm-purple: #8A5FA8;
+  --dm-off: #6C8189;
+  /* Tutorial illustration palette: the game screen redrawn in three swapped background colours,
+     cyan for the bot's side and red for yours, so even the art teaches which end is which. */
+  --dm-tut-head: #2FBBE0;
+  --dm-tut-floor: #E8443C;
   --dm-shadow: 0 4px 0 rgba(0, 0, 0, .28), 0 6px 12px rgba(0, 0, 0, .22);
   --dm-hand-w: clamp(30px, 10.5vw, 44px);
   --dm-h: 640px;
@@ -36,13 +42,14 @@
 
 .dm-root { position: relative; }   /* overlays anchor here, including on the setup screen */
 .dm-root *, .dm-root *::before, .dm-root *::after { box-sizing: border-box; }
-/* No `color: inherit` here: `.dm-root button` outranks every single-class `.dm-btn`/`.dm-segbtn`
-   rule below, so inheriting swallowed their own colours and left pale text on cream buttons.
-   Each button styles its own colour; the tile buttons need none (their pips are backgrounds). */
+/* Deliberately no `color: inherit` here: every button below states its own colour, and an
+   inherited one silently swallowed them (pale text on cream buttons) back when the rules below
+   were a specificity step lower than this one. The tile buttons need no colour at all - their
+   pips are backgrounds, not text. */
 .dm-root button { font: inherit; cursor: pointer; }
 
 /* ---------------------------------------------------------------- shared chunky button ---- */
-.dm-btn {
+.dm-root .dm-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: var(--dm-line) solid var(--dm-ink);
   border-radius: 14px;
@@ -53,23 +60,29 @@
   box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .22), var(--dm-shadow);
   transition: transform .08s ease, box-shadow .08s ease;
 }
-.dm-btn:active { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .22), 0 1px 0 rgba(0, 0, 0, .28); }
-.dm-btn.is-go { background: var(--dm-go); color: #06280C; }
-.dm-btn.is-stop { background: var(--dm-stop); color: #2C0B07; }
-.dm-btn.is-ghost { background: #EFE7D6; color: #2A2418; }
-.dm-btn.is-wide { width: 100%; }
+.dm-root .dm-btn:active { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .22), 0 1px 0 rgba(0, 0, 0, .28); }
+.dm-root .dm-btn.is-go { background: var(--dm-go); color: #06280C; }
+.dm-root .dm-btn.is-stop { background: var(--dm-stop); color: #2C0B07; }
+.dm-root .dm-btn.is-ghost { background: #EFE7D6; color: #2A2418; }
+.dm-root .dm-btn.is-purple { background: var(--dm-purple); color: #F4EFFF; }
+.dm-root .dm-btn.is-icon { flex: none; width: 56px; padding: 12px 0 15px; }
+.dm-root .dm-btn.is-icon svg { width: 22px; height: 22px; }
+.dm-root .dm-btn:disabled { background: var(--dm-off); color: #F4EFFF; cursor: default; }
+.dm-root .dm-btn:disabled svg { opacity: .4; }
+.dm-root .dm-btn:disabled:active { transform: none; box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .22), var(--dm-shadow); }
+.dm-root .dm-btn.is-wide { width: 100%; }
 
 /* --------------------------------------------------------------------------- setup screen -- */
 /* The setup screen carries its own near-black surface (the spec's menu background) rather than
    inheriting the host's: it renders on the hub's light content area AND on the standalone
    page's dark body, and a label tuned for one is illegible on the other. */
-.dm-setup {
+.dm-root .dm-setup {
   display: flex; flex-direction: column; align-items: center; gap: 14px;
   padding: 18px 16px 28px;
   max-width: 460px; margin: 0 auto;
   background: #1E1E1E; color: #F2EFE6; border-radius: 18px;
 }
-.dm-setup-panel {
+.dm-root .dm-setup-panel {
   width: 100%; border-radius: 20px;
   border: var(--dm-line) solid var(--dm-ink);
   background: #12503F;
@@ -78,49 +91,49 @@
   text-align: center; position: relative; overflow: hidden;
 }
 /* The faded oversized domino behind the title, dimmed almost into the panel. */
-.dm-setup-panel .dm-panel-art { position: absolute; inset: 0; opacity: .16; pointer-events: none; }
-.dm-setup-panel .dm-panel-art svg { width: 100%; height: 100%; display: block; }
-.dm-setup-title {
+.dm-root .dm-setup-panel .dm-panel-art { position: absolute; inset: 0; opacity: .16; pointer-events: none; }
+.dm-root .dm-setup-panel .dm-panel-art svg { width: 100%; height: 100%; display: block; }
+.dm-root .dm-setup-title {
   position: relative; margin: 0; font-size: 2.1rem; font-weight: 900;
   letter-spacing: .06em; text-transform: uppercase; color: #F6F1E2;
 }
-.dm-setup-sub { position: relative; margin: 8px 0 0; font-weight: 700; color: #D8E8DC; line-height: 1.35; }
-.dm-setup-avatar {
+.dm-root .dm-setup-sub { position: relative; margin: 8px 0 0; font-weight: 700; color: #D8E8DC; line-height: 1.35; }
+.dm-root .dm-setup-avatar {
   width: 84px; height: 84px; border-radius: 50%;
   border: var(--dm-line) solid var(--dm-ink);
   background: var(--dm-accent);
   box-shadow: var(--dm-shadow);
   display: grid; place-items: center; margin-top: 4px;
 }
-.dm-setup-avatar svg { width: 62px; height: 62px; display: block; }
-.dm-setup-diffname {
+.dm-root .dm-setup-avatar svg { width: 62px; height: 62px; display: block; }
+.dm-root .dm-setup-diffname {
   margin: 0; font-size: 1.5rem; font-weight: 900; letter-spacing: .12em;
   text-transform: uppercase; color: var(--dm-accent);
   -webkit-text-stroke: 0;
 }
-.dm-seg { display: flex; gap: 8px; width: 100%; }
-.dm-segbtn {
+.dm-root .dm-seg { display: flex; gap: 8px; width: 100%; }
+.dm-root .dm-segbtn {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
   border: var(--dm-line) solid var(--dm-ink); border-radius: 13px;
   background: #EFE7D6; color: #2A2418; padding: 10px 6px 12px;
   font-weight: 800; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .14);
 }
-.dm-segbtn.is-selected { background: var(--dm-accent); color: #2A1B04; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .22); }
-.dm-segbtn svg.lb-dshape { width: 15px; height: 15px; flex: none; }
-.dm-segbtn svg.lb-dshape-x2 { width: 25px; }
-.dm-field { width: 100%; }
-.dm-field > span {
+.dm-root .dm-segbtn.is-selected { background: var(--dm-accent); color: #2A1B04; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .22); }
+.dm-root .dm-segbtn svg.lb-dshape { width: 15px; height: 15px; flex: none; }
+.dm-root .dm-segbtn svg.lb-dshape-x2 { width: 25px; }
+.dm-root .dm-field { width: 100%; }
+.dm-root .dm-field > span {
   display: block; font-size: .74rem; font-weight: 800; letter-spacing: .14em;
   text-transform: uppercase; color: #ADA79A; margin-bottom: 6px;
 }
-.dm-setup-actions { display: flex; gap: 10px; width: 100%; align-items: stretch; }
-.dm-setup-actions .dm-btn { flex: 1; }
-.dm-setup-actions .dm-btn.is-help { flex: none; width: 54px; padding: 12px 0 15px; background: #7B62D6; color: #F4EFFF; }
+.dm-root .dm-setup-actions { display: flex; gap: 10px; width: 100%; align-items: stretch; }
+.dm-root .dm-setup-actions .dm-btn { flex: 1; }
+.dm-root .dm-setup-actions .dm-btn.is-help { flex: none; width: 54px; padding: 12px 0 15px; background: #7B62D6; color: #F4EFFF; }
 
 /* -------------------------------------------------------------------------- the play stack -- */
 /* Nothing in here ever changes the layout: the header, both hand rows and the floor keep fixed
    space, and every overlay (bot thinking, boneyard, modals) sits on top of them. */
-.dm-play {
+.dm-root .dm-play {
   display: flex; flex-direction: column;
   height: var(--dm-h);
   min-height: 420px;
@@ -130,7 +143,7 @@
   background: var(--dm-floor);
 }
 
-.dm-header {
+.dm-root .dm-header {
   position: relative; z-index: 3; flex: none;
   background: var(--dm-teal);
   border-bottom: 4px solid #06222E;
@@ -138,46 +151,46 @@
   padding: 8px 10px 10px;
   display: flex; align-items: center; justify-content: center; gap: 10px;
 }
-.dm-header::before {
+.dm-root .dm-header::before {
   content: ""; position: absolute; inset: 0 0 auto; height: 8px;
   background: rgba(255, 255, 255, .12);
   border-top-left-radius: 18px; border-top-right-radius: 18px;
 }
-.dm-hcenter { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.dm-chip {
+.dm-root .dm-hcenter { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.dm-root .dm-chip {
   display: inline-flex; align-items: center; gap: 5px;
   background: #06222E; color: #CFE6EF;
   border-radius: 999px; padding: 2px 10px 3px;
   font-size: .62rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
 }
-.dm-chip svg.lb-dshape { width: 11px; height: 11px; }
-.dm-scorebar {
+.dm-root .dm-chip svg.lb-dshape { width: 11px; height: 11px; }
+.dm-root .dm-scorebar {
   display: flex; align-items: stretch; background: #06222E;
   border-radius: 12px; height: 34px; position: relative;
 }
-.dm-scorebar b { display: grid; place-items: center; min-width: 54px; font-size: 1.15rem; font-weight: 900; }
-.dm-scorebar .dm-s-you { color: var(--dm-you); }
-.dm-scorebar .dm-s-bot { color: var(--dm-bot); }
-.dm-goal {
+.dm-root .dm-scorebar b { display: grid; place-items: center; min-width: 54px; font-size: 1.15rem; font-weight: 900; }
+.dm-root .dm-scorebar .dm-s-you { color: var(--dm-you); }
+.dm-root .dm-scorebar .dm-s-bot { color: var(--dm-bot); }
+.dm-root .dm-goal {
   display: grid; place-items: center; align-content: center;
   background: #0B3A4C; color: #EAF6FA;
   border: 2px solid #06222E; border-radius: 10px;
   padding: 0 12px; margin: -6px 0; min-width: 62px;
 }
-.dm-goal span { font-size: .52rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .8; line-height: 1; }
-.dm-goal b { font-size: .95rem; font-weight: 900; line-height: 1.15; min-width: 0; }
-.dm-iconbtn {
+.dm-root .dm-goal span { font-size: .52rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .8; line-height: 1; }
+.dm-root .dm-goal b { font-size: .95rem; font-weight: 900; line-height: 1.15; min-width: 0; }
+.dm-root .dm-iconbtn {
   flex: none; width: 36px; height: 36px; border-radius: 50%;
   background: #06222E; color: #E8F4F8; border: none;
   display: grid; place-items: center;
 }
-.dm-iconbtn svg { width: 20px; height: 20px; }
-.dm-iconbtn.is-confirm { background: var(--dm-stop); color: #fff; width: auto; border-radius: 999px; padding: 0 12px; font-size: .68rem; font-weight: 800; }
+.dm-root .dm-iconbtn svg { width: 20px; height: 20px; }
+.dm-root .dm-iconbtn.is-confirm { background: var(--dm-stop); color: #fff; width: auto; border-radius: 999px; padding: 0 12px; font-size: .68rem; font-weight: 800; }
 
 /* The mat is the felt SURFACE: it runs behind the bot's row, the chain area and your hand, so
    both hands read as resting on the table rather than on the floor. Only the chain area
    (.dm-felt) is measured for the fit, so the chain can never run under either hand. */
-.dm-mat {
+.dm-root .dm-mat {
   position: relative; flex: 1 1 auto; min-height: 0;
   display: flex; flex-direction: column;
   background: radial-gradient(circle at 50% 45%, var(--dm-felt-warm-1) 0%, var(--dm-felt-warm-2) 82%);
@@ -185,42 +198,42 @@
 }
 /* Custom properties do not interpolate, so the warm/cool cross-fade is a second felt layer
    whose opacity animates. One felt element, one colour change, per the spec. */
-.dm-mat::before {
+.dm-root .dm-mat::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(circle at 50% 45%, var(--dm-felt-cool-1) 0%, var(--dm-felt-cool-2) 82%);
   opacity: 0; transition: opacity .5s ease;
 }
-.dm-mat.is-cool::before { opacity: 1; }
+.dm-root .dm-mat.is-cool::before { opacity: 1; }
 
 /* Bot hand: backs only, tucked so their top edge disappears under the header's dark lip. */
-.dm-botrow {
+.dm-root .dm-botrow {
   position: relative; z-index: 1; flex: none;
   display: flex; justify-content: center; gap: 4px;
   height: 44px; margin-top: -14px;
 }
-.dm-botrow .dm-back {
+.dm-root .dm-botrow .dm-back {
   width: 26px; height: 52px; border-radius: 6px;
   border: var(--dm-line) solid var(--dm-ink);
   background: var(--dm-olive);
   box-shadow: 0 3px 0 rgba(0, 0, 0, .25);
 }
-.dm-botrow .dm-back::after {
+.dm-root .dm-botrow .dm-back::after {
   content: ""; display: block; width: 10px; height: 10px; border-radius: 50%;
   background: rgba(0, 0, 0, .18); margin: 19px auto 0;
 }
 
 /* ------------------------------------------------------------------- the chain's own area -- */
-.dm-felt { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dm-root .dm-felt { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
-.dm-chain, .dm-ends, .dm-fx {
+.dm-root .dm-chain, .dm-root .dm-ends, .dm-root .dm-fx {
   position: absolute; inset: 0; pointer-events: none;
   transform-origin: 0 0;
 }
-.dm-chain { transition: transform .32s cubic-bezier(.22, .61, .36, 1); }
-.dm-ends { pointer-events: none; }
+.dm-root .dm-chain { transition: transform .32s cubic-bezier(.22, .61, .36, 1); }
+.dm-root .dm-ends { pointer-events: none; }
 
 /* --------------------------------------------------------------------------------- tiles --- */
-.dm-tile {
+.dm-root .dm-tile {
   position: relative;
   background: var(--dm-cream);
   border: var(--dm-line) solid var(--dm-ink);
@@ -228,19 +241,19 @@
   box-shadow: var(--dm-shadow);
   display: flex; overflow: hidden;
 }
-.dm-tile.is-v { flex-direction: column; }
-.dm-tile .dm-half { position: relative; flex: 1 1 50%; }
-.dm-tile .dm-half + .dm-half { border-left: 2px solid var(--dm-ink); }
-.dm-tile.is-v .dm-half + .dm-half { border-left: 0; border-top: 2px solid var(--dm-ink); }
-.dm-tile .dm-pip {
+.dm-root .dm-tile.is-v { flex-direction: column; }
+.dm-root .dm-tile .dm-half { position: relative; flex: 1 1 50%; }
+.dm-root .dm-tile .dm-half + .dm-half { border-left: 2px solid var(--dm-ink); }
+.dm-root .dm-tile.is-v .dm-half + .dm-half { border-left: 0; border-top: 2px solid var(--dm-ink); }
+.dm-root .dm-tile .dm-pip {
   position: absolute; width: 21%; aspect-ratio: 1; border-radius: 50%;
   background: var(--dm-ink); transform: translate(-50%, -50%);
 }
-.dm-tile.is-back { background: var(--dm-olive); }
-.dm-tile.is-back .dm-half + .dm-half { border-color: rgba(0, 0, 0, .3); }
+.dm-root .dm-tile.is-back { background: var(--dm-olive); }
+.dm-root .dm-tile.is-back .dm-half + .dm-half { border-color: rgba(0, 0, 0, .3); }
 
-.dm-chain .dm-tile { position: absolute; }
-.dm-chain .dm-tile.is-fresh { animation: dm-land .32s cubic-bezier(.3, 1.5, .5, 1) both; }
+.dm-root .dm-chain .dm-tile { position: absolute; }
+.dm-root .dm-chain .dm-tile.is-fresh { animation: dm-land .32s cubic-bezier(.3, 1.5, .5, 1) both; }
 @keyframes dm-land {
   0% { transform: scale(.72) rotate(-14deg); opacity: .2; }
   60% { transform: scale(1.06) rotate(2deg); opacity: 1; }
@@ -250,7 +263,7 @@
 /* -------------------------------------------------------------------------- the end badges -- */
 /* Colorblind rule: the scoring state is carried by SHAPE first (a circle when the ends already
    add to a five, a rounded square when they do not); the green/amber hues only reinforce it. */
-.dm-end {
+.dm-root .dm-end {
   position: absolute; transform: translate(-50%, -50%);
   min-width: 26px; height: 26px; padding: 0 5px;
   display: grid; place-items: center;
@@ -260,30 +273,30 @@
   font-weight: 900; font-size: .85rem;
   box-shadow: 0 3px 0 rgba(0, 0, 0, .28);
 }
-.dm-end.is-scoring { background: var(--dm-score); color: #0E2205; border-radius: 50%; }
-.dm-end.is-target { pointer-events: auto; cursor: pointer; animation: dm-pulse .9s ease-in-out infinite; }
+.dm-root .dm-end.is-scoring { background: var(--dm-score); color: #0E2205; border-radius: 50%; }
+.dm-root .dm-end.is-target { pointer-events: auto; cursor: pointer; animation: dm-pulse .9s ease-in-out infinite; }
 @keyframes dm-pulse {
   0%, 100% { transform: translate(-50%, -50%) scale(1); }
   50% { transform: translate(-50%, -50%) scale(1.22); }
 }
-.dm-ends.is-picking .dm-end:not(.is-target) { opacity: .35; }
+.dm-root .dm-ends.is-picking .dm-end:not(.is-target) { opacity: .35; }
 
 /* ------------------------------------------------------------------------- score popup fx --- */
-.dm-pop {
+.dm-root .dm-pop {
   position: absolute; transform: translate(-50%, -50%);
   font-size: 2rem; font-weight: 900;
   -webkit-text-stroke: 4px #fff; paint-order: stroke fill;
   text-shadow: 0 3px 0 rgba(0, 0, 0, .35);
   animation: dm-pop 850ms ease-out forwards;
 }
-.dm-pop.is-you { color: var(--dm-you); }
-.dm-pop.is-bot { color: var(--dm-bot); }
+.dm-root .dm-pop.is-you { color: var(--dm-you); }
+.dm-root .dm-pop.is-bot { color: var(--dm-bot); }
 @keyframes dm-pop {
   0% { transform: translate(-50%, -50%) scale(.4); opacity: 0; }
   22% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
   100% { transform: translate(-50%, -170%) scale(1); opacity: 0; }
 }
-.dm-star {
+.dm-root .dm-star {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
   background: #FFD34A;
   clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
@@ -295,32 +308,32 @@
 }
 
 /* ------------------------------------------------------------------------------ your hand -- */
-.dm-hand {
+.dm-root .dm-hand {
   position: relative; z-index: 2; flex: none;
   display: flex; justify-content: center; align-items: flex-end; gap: 5px;
   padding: 6px 8px 8px;
   min-height: calc(var(--dm-hand-w) * 2 + 16px);
 }
-.dm-hand .dm-tile {
+.dm-root .dm-hand .dm-tile {
   width: var(--dm-hand-w); height: calc(var(--dm-hand-w) * 2);
   flex: none; transition: transform .16s ease, filter .25s ease, box-shadow .16s ease;
   pointer-events: auto; cursor: pointer;
 }
 /* Legality is shown by brightness alone, so there is never a "no valid moves" sentence. */
-.dm-hand .dm-tile.is-dead { filter: saturate(.32) brightness(.72); cursor: default; }
-.dm-hand .dm-tile.is-sel { transform: translateY(-12px); box-shadow: 0 0 0 3px #FFF6D8, var(--dm-shadow); }
-.dm-hand .dm-tile.is-dealt { animation: dm-deal .42s cubic-bezier(.2, .9, .3, 1) both; }
+.dm-root .dm-hand .dm-tile.is-dead { filter: saturate(.32) brightness(.72); cursor: default; }
+.dm-root .dm-hand .dm-tile.is-sel { transform: translateY(-12px); box-shadow: 0 0 0 3px #FFF6D8, var(--dm-shadow); }
+.dm-root .dm-hand .dm-tile.is-dealt { animation: dm-deal .42s cubic-bezier(.2, .9, .3, 1) both; }
 @keyframes dm-deal {
   0% { transform: translate(var(--dm-from-x, 0), -160px) rotate(-24deg) scale(.8); opacity: 0; }
   70% { opacity: 1; }
   100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
 }
 
-.dm-floor { flex: none; height: 26px; background: var(--dm-floor); border-top: 3px solid rgba(0, 0, 0, .3); }
+.dm-root .dm-floor { flex: none; height: 26px; background: var(--dm-floor); border-top: 3px solid rgba(0, 0, 0, .3); }
 
 /* --------------------------------------------------------------------------- bot thinking -- */
 /* An overlay laid ON the bot's row, so nothing moves or resizes when it appears or goes. */
-.dm-thinking {
+.dm-root .dm-thinking {
   position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
   z-index: 4; pointer-events: none;
   background: rgba(12, 18, 24, .74); color: #F2F7FA;
@@ -328,10 +341,10 @@
   font-size: .78rem; font-weight: 800;
   opacity: 0; transition: opacity .2s ease;
 }
-.dm-thinking.is-on { opacity: 1; }
+.dm-root .dm-thinking.is-on { opacity: 1; }
 
 /* A transient one-line pill for a pass or a bot draw, same overlay discipline. */
-.dm-toast {
+.dm-root .dm-toast {
   position: absolute; left: 50%; bottom: calc(var(--dm-hand-w) * 2 + 40px); transform: translateX(-50%);
   z-index: 4; pointer-events: none;
   background: rgba(12, 18, 24, .8); color: #F6F2E6;
@@ -346,7 +359,7 @@
 }
 
 /* -------------------------------------------------------------------------- boneyard drawer -- */
-.dm-bone {
+.dm-root .dm-bone {
   position: absolute; left: 0; right: 0; z-index: 5;
   bottom: calc(var(--dm-hand-w) * 2 + 42px);
   margin: 0 10px;
@@ -358,29 +371,29 @@
   animation: dm-drawer .3s cubic-bezier(.2, 1.4, .5, 1) both;
 }
 @keyframes dm-drawer { 0% { transform: translateY(120%); } 100% { transform: translateY(0); } }
-.dm-bone-title {
+.dm-root .dm-bone-title {
   display: block; text-align: center; margin: 0 auto 8px; width: fit-content;
   background: #B07C42; color: #FFF4E0;
   border: 2px solid rgba(0, 0, 0, .35); border-radius: 999px;
   padding: 3px 16px 4px;
   font-size: .7rem; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
 }
-.dm-bone-well {
+.dm-root .dm-bone-well {
   background: #5E3A1B; border-radius: 12px; padding: 8px;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
   max-height: 132px; overflow: auto;
 }
-.dm-bone-well .dm-tile {
+.dm-root .dm-bone-well .dm-tile {
   width: 30px; height: 60px; flex: none; pointer-events: auto; cursor: pointer;
   background: var(--dm-cream);
 }
-.dm-bone-well .dm-tile:active { transform: translateY(2px); }
+.dm-root .dm-bone-well .dm-tile:active { transform: translateY(2px); }
 
 /* ---------------------------------------------------------------------------- modal cards -- */
-.dm-overlay { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; }
-.dm-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .75); animation: dm-fade .22s ease both; }
+.dm-root .dm-overlay { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; }
+.dm-root .dm-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .75); animation: dm-fade .22s ease both; }
 @keyframes dm-fade { from { opacity: 0; } to { opacity: 1; } }
-.dm-card {
+.dm-root .dm-card {
   /* overflow VISIBLE, not auto: the avatar hangs half outside the card's top edge by design and
      a scroll container clips it. The one card with enough content to need scrolling is help,
      which has no avatar and opts back in below. */
@@ -392,59 +405,186 @@
   animation: dm-rise .3s cubic-bezier(.2, 1.5, .5, 1) both;
 }
 @keyframes dm-rise { 0% { transform: scale(.85); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-.dm-card-av {
+.dm-root .dm-card-av {
   position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
   width: 72px; height: 72px; border-radius: 50%;
   border: var(--dm-line) solid var(--dm-ink); background: var(--dm-accent);
   display: grid; place-items: center; box-shadow: var(--dm-shadow);
 }
-.dm-card-av svg { width: 52px; height: 52px; }
-.dm-card-av.is-you { background: var(--dm-you); }
-.dm-x {
+.dm-root .dm-card-av svg { width: 52px; height: 52px; }
+.dm-root .dm-card-av.is-you { background: var(--dm-you); }
+.dm-root .dm-x {
   position: absolute; top: 8px; right: 10px; z-index: 5;
   width: 32px; height: 32px; border-radius: 50%;
   border: 2px solid rgba(0, 0, 0, .45); background: rgba(0, 0, 0, .22); color: #F4F1E6;
   font-size: 1.2rem; line-height: 1; display: grid; place-items: center;
 }
-.dm-card h3 { margin: 6px 0 2px; font-size: 1.45rem; font-weight: 900; }
-.dm-card .dm-card-note { margin: 4px 0 14px; font-size: .84rem; font-weight: 700; color: #F1E3C7; line-height: 1.35; }
-.dm-cols {
+.dm-root .dm-card h3 { margin: 6px 0 2px; font-size: 1.45rem; font-weight: 900; }
+.dm-root .dm-card .dm-card-note { margin: 4px 0 14px; font-size: .84rem; font-weight: 700; color: #F1E3C7; line-height: 1.35; }
+.dm-root .dm-cols {
   display: grid; grid-template-columns: 1fr 68px 68px; gap: 6px;
   font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   padding: 0 10px 6px; opacity: .85;
 }
-.dm-cols span:not(:first-child) { text-align: center; }
-.dm-scorerow {
+.dm-root .dm-cols span:not(:first-child) { text-align: center; }
+.dm-root .dm-scorerow {
   display: grid; grid-template-columns: 1fr 68px 68px; gap: 6px; align-items: center;
   background: var(--dm-cream); color: #4A1E12;
   border: var(--dm-line) solid var(--dm-ink); border-radius: 999px;
   padding: 8px 10px; margin-bottom: 8px; font-weight: 900;
   position: relative;
 }
-.dm-scorerow > span:first-child { text-align: left; padding-left: 26px; }
-.dm-scorerow > span:not(:first-child) { text-align: center; }
-.dm-medal {
+.dm-root .dm-scorerow > span:first-child { text-align: left; padding-left: 26px; }
+.dm-root .dm-scorerow > span:not(:first-child) { text-align: center; }
+.dm-root .dm-medal {
   position: absolute; left: 8px; top: 50%; transform: translateY(-50%) scale(0);
   width: 22px; height: 22px; border-radius: 50%;
   border: 2px solid rgba(0, 0, 0, .55);
   display: grid; place-items: center; font-size: .72rem; color: #3A2A05;
   animation: dm-medal .3s cubic-bezier(.2, 1.6, .5, 1) forwards;
 }
-.dm-medal.is-1 { background: #F2C33C; }
-.dm-medal.is-2 { background: #C9CDD2; }
+.dm-root .dm-medal.is-1 { background: #F2C33C; }
+.dm-root .dm-medal.is-2 { background: #C9CDD2; }
 @keyframes dm-medal { to { transform: translateY(-50%) scale(1); } }
-.dm-card-actions { display: flex; gap: 10px; margin-top: 6px; }
-.dm-card-actions .dm-btn { flex: 1; }
-.dm-card-actions .dm-btn.is-icon { flex: none; width: 54px; padding: 12px 0 15px; }
-.dm-card-actions .dm-btn.is-icon svg { width: 20px; height: 20px; }
+.dm-root .dm-card-actions { display: flex; gap: 10px; margin-top: 6px; }
+.dm-root .dm-card-actions .dm-btn { flex: 1; }
+.dm-root .dm-card-actions .dm-btn.is-icon { flex: none; width: 54px; padding: 12px 0 15px; }
+.dm-root .dm-card-actions .dm-btn.is-icon svg { width: 20px; height: 20px; }
 
- /* Keeps the card's standard 46px top inset so the close X is never overlapped by the heading
-   or the first bullet (the X must always be reachable, per the repo's dismiss-without-rematch
-   rule). */
-.dm-help { text-align: left; overflow: auto; }
-.dm-help h3 { text-align: center; }
-.dm-help ul { margin: 0; padding-left: 20px; }
-.dm-help li { margin: 0 0 9px; font-size: .88rem; font-weight: 700; line-height: 1.4; }
+
+
+/* -------------------------------------------------------------- how to play (the carousel) -- */
+/* Eight pages of one illustration plus one sentence. The near-black card holding a WHITE block
+   is the whole visual hook: nothing else in this game is white like that. */
+/* FIXED, not absolute like the in-game cards: the tutorial opens from the SETUP screen, whose
+   .dm-root is only as tall as its own content, so an absolute scrim left the rest of the page
+   undimmed. The addendum wants the screen behind it dimmed to near-black. */
+.dm-root .dm-tut-overlay { position: fixed; }
+.dm-root .dm-tut {
+  /* z-index, not just source order: the scrim is absolutely positioned and this card is a grid
+     item, and without an explicit stacking order the scrim covered the page dots, so tapping one
+     hit its close handler instead. */
+  position: relative; z-index: 1;
+  width: min(360px, 100%); max-height: 100%;
+  display: flex; flex-direction: column; gap: 11px;
+  background: #1C1B20;
+  border: var(--dm-line) solid var(--dm-ink); border-radius: 26px;
+  box-shadow: var(--dm-shadow);
+  padding: 16px 16px 18px;
+  animation: dm-rise .3s cubic-bezier(.2, 1.5, .5, 1) both;
+  touch-action: pan-y;
+}
+.dm-root .dm-tut-title {
+  margin: 0; text-align: center; color: #F7F4EE;
+  font-size: 1.05rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase;
+}
+.dm-root .dm-tut-white {
+  background: #fff; border-radius: 18px; padding: 12px 12px 14px;
+  display: flex; flex-direction: column; gap: 10px; align-items: center;
+  min-height: 0;
+}
+.dm-root .dm-tut-illo { flex: none; }
+.dm-root .dm-tut-cap {
+  margin: 0; text-align: center; color: #43505E;
+  font-size: .9rem; font-weight: 800; line-height: 1.3;
+}
+.dm-root .dm-tut-actions { display: flex; gap: 10px; }
+.dm-root .dm-tut-actions .dm-btn:not(.is-icon) { flex: 1; }
+
+.dm-root .dm-dots { display: flex; justify-content: center; gap: 9px; }
+.dm-root .dm-dot {
+  width: 15px; height: 15px; border-radius: 50%; padding: 0;
+  border: 2px solid rgba(0, 0, 0, .5); background: #F6DFBE;
+}
+.dm-root .dm-dot.is-on { background: #F2823C; }
+
+/* --- the illustration: the real game, small, on the tutorial palette --- */
+.dm-root .dm-illo {
+  position: relative; width: 244px; height: 176px;
+  border-radius: 12px; overflow: hidden;
+  border: 3px solid var(--dm-ink);
+  background: var(--dm-felt-warm-1);
+  display: flex; flex-direction: column;
+}
+.dm-root .dm-mini-head {
+  flex: none; height: 26px; background: var(--dm-tut-head);
+  border-bottom: 2px solid rgba(0, 0, 0, .35);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: .68rem; font-weight: 900;
+}
+.dm-root .dm-mini-s.you { color: #8E1414; }
+.dm-root .dm-mini-s.bot { color: #0C3A56; }
+.dm-root .dm-mini-goal { background: rgba(0, 0, 0, .35); color: #EAF6FA; border-radius: 6px; padding: 1px 6px; font-size: .58rem; }
+.dm-root .dm-illo-felt {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  background: radial-gradient(circle at 50% 46%, var(--dm-felt-warm-1), var(--dm-felt-warm-2));
+  display: flex; flex-direction: column;
+}
+.dm-root .dm-illo-floor { flex: none; height: 16px; background: var(--dm-tut-floor); border-top: 2px solid rgba(0, 0, 0, .3); }
+.dm-root .dm-illo-board { position: relative; flex: 1 1 auto; min-height: 0; }
+.dm-root .dm-mini-bot-row,
+.dm-root .dm-mini-hand-row { flex: none; display: flex; justify-content: center; gap: 3px; }
+.dm-root .dm-mini-bot-row { height: 15px; margin-top: -5px; }
+.dm-root .dm-mini-hand-row { height: 32px; align-items: flex-end; padding-bottom: 2px; }
+.dm-root .dm-illo .dm-tile { border-width: 2px; border-radius: 4px; box-shadow: 0 2px 0 rgba(0, 0, 0, .28); }
+.dm-root .dm-illo .dm-pip { width: 19%; }
+.dm-root .dm-mini-back { width: 11px; height: 22px; flex: none; }
+.dm-root .dm-mini-slot { position: relative; display: block; }
+.dm-root .dm-mini-hand { width: 14px; height: 28px; flex: none; }
+.dm-root .dm-mini-hand.is-dead { filter: saturate(.32) brightness(.72); }
+.dm-root .dm-illo-board .dm-mini-tile { position: absolute; }
+.dm-root .dm-mini-end {
+  position: absolute; transform: translate(-50%, -50%);
+  min-width: 13px; height: 13px; padding: 0 2px;
+  display: grid; place-items: center;
+  border: 2px solid var(--dm-ink); border-radius: 4px;
+  background: var(--dm-noscore); color: #241703;
+  font-size: .5rem; font-weight: 900; line-height: 1;
+}
+.dm-root .dm-mini-end.is-scoring { background: var(--dm-score); color: #0E2205; border-radius: 50%; }
+
+/* Teaching device 1: the amber ring drawn around whatever the caption is talking about. */
+.dm-root .dm-ring {
+  position: absolute; pointer-events: none;
+  border: 3px solid #F2B705; border-radius: 7px;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .35), inset 0 0 0 1.5px rgba(0, 0, 0, .35);
+}
+.dm-root .dm-ring.is-tile { inset: -4px; }
+.dm-root .dm-ring.is-round { width: 22px; height: 22px; border-radius: 50%; transform: translate(-50%, -50%); }
+
+/* Teaching device 2: the cartoon pointing hand. Faded red = "this tap does nothing". */
+.dm-root .dm-point { position: absolute; width: 26px; height: 33px; color: var(--dm-cream); pointer-events: none; }
+.dm-root .dm-point svg { width: 100%; height: 100%; display: block; }
+.dm-root .dm-point.is-faded { color: #E88C85; opacity: .85; }
+
+/* Page 8 draws the Game Finished card itself, in miniature. */
+.dm-root .dm-mini-modal {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 152px; background: var(--dm-slate); color: #F4F1E6;
+  border: 2px solid var(--dm-ink); border-radius: 12px;
+  padding: 15px 8px 7px; text-align: center;
+}
+.dm-root .dm-mini-modal > b { display: block; font-size: .6rem; font-weight: 900; margin-bottom: 6px; }
+.dm-root .dm-mini-crown { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); width: 26px; }
+.dm-root .dm-mini-crown svg { width: 100%; display: block; }
+.dm-root .dm-mini-row {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--dm-cream); color: #4A1E12;
+  border: 2px solid var(--dm-ink); border-radius: 999px;
+  padding: 2px 6px; margin-bottom: 4px; font-size: .55rem; font-weight: 900;
+}
+.dm-root .dm-mini-row em { margin-left: auto; font-style: normal; }
+.dm-root .dm-mini-medal { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(0, 0, 0, .55); font-size: .4rem; font-style: normal; display: grid; place-items: center; color: #3A2A05; }
+.dm-root .dm-mini-medal.is-1 { background: #F2C33C; }
+.dm-root .dm-mini-medal.is-2 { background: #C9CDD2; }
+
+/* The winner's crowned avatar on the Game Finished card (addendum section D): a green
+   celebration disc, but keeping the WINNER's own face, so the red-you / blue-bot identity the
+   rest of the screen teaches survives to the last screen. */
+.dm-root .dm-card-av.is-champion { background: #4CBB5B; overflow: visible; }
+.dm-root .dm-card-av .dm-crown { position: absolute; top: -23px; left: 50%; transform: translateX(-50%); width: 38px; }
+.dm-root .dm-card-av .dm-crown svg { width: 100%; display: block; }
+.dm-root .dm-card-gap { height: 14px; }
 
 /* No :root.gh-dark block, deliberately (see js/CLAUDE.md, "Theme support", Phase 2): every
    surface this game draws is its own saturated palette on its own near-black or felt backdrop,
