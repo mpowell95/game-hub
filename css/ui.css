@@ -1,0 +1,426 @@
+/* css/ui.css - the SHARED UI LAYER: design tokens + chrome primitives.
+ *
+ * WHY THIS FILE EXISTS (2026-08-01)
+ * ---------------------------------
+ * Measured across the 16 game stylesheets before this file was written:
+ *
+ *   game stylesheets referencing any --hub-* token .... 0 of 16
+ *   custom properties defined independently .......... 397
+ *   distinct border-radius values .................... 25+
+ *   distinct box-shadow values ....................... 220
+ *   distinct font-size values ........................ 130
+ *   distinct font-family stacks ...................... 8
+ *   games defining their own -btn/-btn-primary/
+ *     -btn-ghost/-btn-small set ...................... 9
+ *
+ * That last line is the point: Boggle, Ball Run, Chinchon, Connect Four, Dots and Boxes,
+ * Escoba, Nuts & Bolts, Pool and Tic Tac Toe each define the SAME four button variants under a
+ * different 2-3 letter prefix. One component, nine implementations, nine slightly different
+ * results. Polish spent on any one of them buys exactly one game, which is why the root
+ * CLAUDE.md has to name a different reference game per axis: divergence is the default outcome.
+ *
+ * This file is the place where a fix can compound. Tokens first, then the chrome primitives
+ * every game reimplements.
+ *
+ * NAMESPACE: `gh-` (classes) and `--gh-` (properties). Verified collision-free when written -
+ * the only pre-existing users of the namespace are `.gh-dark` (stamped on <html> by
+ * js/theme.js) and --gh-band-title/-controls/-filter in css/hub.css, all left untouched here.
+ *
+ * SCOPE - what this layer covers, and what it must NOT
+ * ----------------------------------------------------
+ * COVERS chrome: buttons, cards, chips, segmented controls, fields, accordions, modals,
+ * overlays. The furniture that should look identical in every game.
+ *
+ * DOES NOT COVER play surfaces: Escoba's felt, Mancala's pits, Uno's cards, Connect Four's
+ * grid, Ball Run's canvas, Snake's board. Each game's board is its own identity and the
+ * `immersive: true` games own their whole viewport on purpose. Flattening those would make the
+ * hub worse, not better. If a rule here would change how a board looks, it belongs in the
+ * game's own stylesheet instead.
+ *
+ * ADOPTION: opt-in, one game per commit. A game adopts by injecting this file alongside its own
+ * and swapping `.xx-btn` for `.gh-btn`, then deleting its local button block. Nothing is
+ * global until a game asks for it - this file is not linked from index.html.
+ *
+ * THEME: every token has a `.gh-dark` counterpart below. js/theme.js stamps that class on
+ * <html>, so a game that uses these tokens gets dark mode for free.
+ *
+ * THE LAW: this file touches no storage key, no stats path, no sync code. Purely presentational.
+ */
+
+:root {
+  /* --- radius: 4 steps, replacing the 25 values in circulation ------------------------- */
+  --gh-r-sm: 8px;
+  --gh-r-md: 12px;
+  --gh-r-lg: 16px;
+  --gh-r-pill: 999px;
+
+  /* --- shadow: 4 steps, replacing 220 ------------------------------------------------- */
+  --gh-sh-1: 0 1px 2px rgba(16, 30, 54, .08);
+  --gh-sh-2: 0 2px 8px rgba(16, 30, 54, .10);
+  --gh-sh-3: 0 6px 20px rgba(16, 30, 54, .14);
+  --gh-sh-4: 0 16px 44px rgba(16, 30, 54, .22);
+
+  /* --- type: 6 steps, replacing 130. One stack, matching the most common existing one. -- */
+  --gh-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gh-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --gh-fs-xs: 12px;
+  --gh-fs-sm: 14px;
+  --gh-fs-md: 16px;   /* body. 16px minimum on inputs, or iOS Safari zooms on focus. */
+  --gh-fs-lg: 20px;
+  --gh-fs-xl: 26px;
+  --gh-fs-2xl: 34px;
+
+  /* --- space: one 4px-based scale ----------------------------------------------------- */
+  --gh-sp-1: 4px;
+  --gh-sp-2: 8px;
+  --gh-sp-3: 12px;
+  --gh-sp-4: 16px;
+  --gh-sp-5: 24px;
+  --gh-sp-6: 32px;
+
+  /* --- motion ------------------------------------------------------------------------- */
+  --gh-dur-fast: 120ms;
+  --gh-dur-mid: 200ms;
+  --gh-dur-slow: 320ms;
+  --gh-ease: cubic-bezier(.2, .7, .3, 1);
+
+  /* --- color: semantic names, defaulting to the existing --hub-* values so the hub stays
+   *     the single source of the palette and a theme edit still happens in one place. ---- */
+  --gh-bg: var(--hub-bg, #f4f6fb);
+  --gh-surface: var(--hub-surface, #ffffff);
+  --gh-surface-2: var(--hub-surface-2, #eef2f8);
+  --gh-ink: var(--hub-ink, #16243a);
+  --gh-muted: var(--hub-muted, #5b6b82);
+  --gh-accent: var(--hub-accent, #1769d4);
+  --gh-accent-ink: #ffffff;
+  --gh-border: rgba(16, 36, 58, .14);
+  --gh-border-strong: rgba(16, 36, 58, .28);
+  --gh-focus: #ffb020;
+
+  /* --- colorblind-safe play palette (root CLAUDE.md, accessibility conventions).
+   *     Matt is red/green colorblind: wherever color is a CHOICE, pair each hue with a shape
+   *     marker, never hue alone. These four are the agreed set, with their shapes named. --- */
+  --gh-cb-yellow: #F2B705;    /* circle   */
+  --gh-cb-blue: #1F5FA8;      /* triangle */
+  --gh-cb-vermilion: #E0532F; /* square   */
+  --gh-cb-teal: #178A7A;      /* diamond  */
+
+  /* --- minimum comfortable tap target --------------------------------------------------- */
+  --gh-tap: 44px;
+}
+
+.gh-dark {
+  --gh-sh-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --gh-sh-2: 0 2px 8px rgba(0, 0, 0, .46);
+  --gh-sh-3: 0 6px 20px rgba(0, 0, 0, .54);
+  --gh-sh-4: 0 16px 44px rgba(0, 0, 0, .64);
+  /* --gh-accent-ink is deliberately NOT flipped to a dark ink here. `--hub-accent` is the one
+   * colour css/hub.css's dark block leaves alone, so the accent surface is the same blue in both
+   * themes and white stays its correct pairing. An earlier draft of this file did flip it, which
+   * measured 3.66:1 on .gh-btn--primary and .gh-chip--accent, under the 4.5:1 minimum; keeping
+   * white holds both at 5.24:1 in both themes. */
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+  /* The colorblind set is deliberately NOT re-tinted in dark mode: these four hues are paired
+   * with shape markers and players learn them per game. Shifting them between themes would
+   * break that association for the exact person the palette exists for. */
+}
+
+/* =====================================================================================
+ * PRIMITIVES
+ * ===================================================================================== */
+
+/* border-box on the primitives THEMSELVES, never a global `*` reset. Two reasons: a global
+ * reset in an opt-in layer would silently change the box model of whatever game adopted it
+ * (several here still rely on content-box maths), and without this `.gh-input`'s width:100%
+ * plus its padding and border overflows its container - caught in the gallery on the first
+ * render, and it would have reappeared in every game that adopted the field. */
+.gh-btn, .gh-card, .gh-chip, .gh-seg, .gh-seg__item,
+.gh-input, .gh-acc, .gh-acc__head, .gh-acc__body, .gh-modal, .gh-overlay {
+  box-sizing: border-box;
+}
+
+/* --- button ---------------------------------------------------------------------------
+ * Replaces the nine per-game -btn/-btn-primary/-btn-ghost/-btn-small sets. Variants are
+ * modifier classes, so a game only ever writes `.gh-btn gh-btn--primary`.
+ */
+.gh-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-sp-2);
+  min-height: var(--gh-tap);
+  padding: 0 var(--gh-sp-5);
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-r-pill);
+  background: var(--gh-surface);
+  color: var(--gh-ink);
+  font-family: var(--gh-font);
+  font-size: var(--gh-fs-md);
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--gh-sh-1);
+  transition:
+    transform var(--gh-dur-fast) var(--gh-ease),
+    box-shadow var(--gh-dur-fast) var(--gh-ease),
+    background-color var(--gh-dur-fast) var(--gh-ease),
+    border-color var(--gh-dur-fast) var(--gh-ease);
+}
+
+.gh-btn:hover:not(:disabled) { box-shadow: var(--gh-sh-2); }
+.gh-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--gh-sh-1); }
+.gh-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+.gh-btn--primary {
+  background: var(--gh-accent);
+  border-color: transparent;
+  color: var(--gh-accent-ink);
+  box-shadow: var(--gh-sh-2);
+}
+.gh-btn--primary:hover:not(:disabled) { box-shadow: var(--gh-sh-3); }
+
+.gh-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--gh-muted);
+  box-shadow: none;
+}
+.gh-btn--ghost:hover:not(:disabled) { background: var(--gh-surface-2); color: var(--gh-ink); box-shadow: none; }
+
+.gh-btn--danger {
+  background: var(--gh-cb-vermilion);
+  border-color: transparent;
+  color: #fff;
+}
+
+.gh-btn--sm {
+  min-height: 34px;
+  padding: 0 var(--gh-sp-3);
+  font-size: var(--gh-fs-sm);
+}
+
+.gh-btn--block { width: 100%; }
+
+/* Icon-only button: square, keeps the 44px tap target. */
+.gh-btn--icon {
+  width: var(--gh-tap);
+  min-width: var(--gh-tap);
+  padding: 0;
+  border-radius: 50%;
+  font-size: var(--gh-fs-lg);
+}
+
+/* --- card ----------------------------------------------------------------------------- */
+.gh-card {
+  background: var(--gh-surface);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-r-lg);
+  box-shadow: var(--gh-sh-1);
+  padding: var(--gh-sp-4);
+  color: var(--gh-ink);
+}
+.gh-card--flat { box-shadow: none; }
+.gh-card__title {
+  margin: 0 0 var(--gh-sp-2);
+  font-size: var(--gh-fs-lg);
+  font-weight: 700;
+  color: var(--gh-ink);
+}
+.gh-card__note {
+  margin: 0;
+  font-size: var(--gh-fs-sm);
+  color: var(--gh-muted);
+  line-height: 1.5;
+}
+
+/* --- chip ----------------------------------------------------------------------------- */
+.gh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gh-sp-1);
+  padding: var(--gh-sp-1) var(--gh-sp-3);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-r-pill);
+  background: var(--gh-surface-2);
+  color: var(--gh-muted);
+  font-size: var(--gh-fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gh-chip--accent { background: var(--gh-accent); border-color: transparent; color: var(--gh-accent-ink); }
+
+/* --- segmented control -----------------------------------------------------------------
+ * The difficulty / mode picker every setup screen grows sooner or later.
+ */
+.gh-seg {
+  display: inline-flex;
+  padding: var(--gh-sp-1);
+  gap: var(--gh-sp-1);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-r-pill);
+  background: var(--gh-surface-2);
+}
+.gh-seg__item {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gh-sp-1);
+  min-height: 36px;
+  padding: 0 var(--gh-sp-4);
+  border: 0;
+  border-radius: var(--gh-r-pill);
+  background: transparent;
+  color: var(--gh-muted);
+  font-family: var(--gh-font);
+  font-size: var(--gh-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--gh-dur-fast) var(--gh-ease), color var(--gh-dur-fast) var(--gh-ease);
+}
+.gh-seg__item[aria-pressed="true"] {
+  background: var(--gh-surface);
+  color: var(--gh-ink);
+  box-shadow: var(--gh-sh-1);
+}
+
+/* --- field ---------------------------------------------------------------------------- */
+.gh-field { display: block; }
+.gh-field__label {
+  display: block;
+  margin-bottom: var(--gh-sp-1);
+  font-size: var(--gh-fs-sm);
+  font-weight: 700;
+  color: var(--gh-muted);
+}
+.gh-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: var(--gh-tap);
+  padding: 0 var(--gh-sp-3);
+  border: 1px solid var(--gh-border-strong);
+  border-radius: var(--gh-r-md);
+  background: var(--gh-surface);
+  color: var(--gh-ink);
+  font-family: var(--gh-font);
+  font-size: var(--gh-fs-md);   /* never below 16px: iOS zooms the page on focus otherwise */
+}
+.gh-input::placeholder { color: var(--gh-muted); opacity: .8; }
+
+/* --- accordion (the Escoba-style setup row, one open at a time) ------------------------- */
+.gh-acc {
+  border: 1px solid var(--gh-border);
+  border-radius: var(--gh-r-lg);
+  background: var(--gh-surface);
+  overflow: hidden;
+}
+.gh-acc + .gh-acc { margin-top: var(--gh-sp-2); }
+.gh-acc__head {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gh-sp-3);
+  width: 100%;
+  min-height: var(--gh-tap);
+  padding: var(--gh-sp-3) var(--gh-sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--gh-ink);
+  font-family: var(--gh-font);
+  font-size: var(--gh-fs-md);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.gh-acc__value { color: var(--gh-muted); font-weight: 600; font-size: var(--gh-fs-sm); }
+.gh-acc__body { padding: 0 var(--gh-sp-4) var(--gh-sp-4); }
+.gh-acc[hidden], .gh-acc__body[hidden] { display: none; }
+
+/* --- overlay + modal -------------------------------------------------------------------
+ * Root CLAUDE.md, accessibility conventions: ANY "you win / you lose" popup gets a close (X)
+ * in its top-right corner, so it can be dismissed without forcing a rematch. `.gh-modal__close`
+ * is positioned for exactly that and is part of the primitive, not an afterthought per game.
+ */
+.gh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--gh-sp-4);
+  background: rgba(9, 16, 28, .55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.gh-modal {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  padding: var(--gh-sp-5);
+  border-radius: var(--gh-r-lg);
+  background: var(--gh-surface);
+  color: var(--gh-ink);
+  box-shadow: var(--gh-sh-4);
+}
+.gh-modal__title {
+  margin: 0 var(--gh-sp-6) var(--gh-sp-2) 0;
+  font-size: var(--gh-fs-xl);
+  font-weight: 800;
+}
+.gh-modal__close {
+  position: absolute;
+  top: var(--gh-sp-2);
+  right: var(--gh-sp-2);
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gh-surface-2);
+  color: var(--gh-muted);
+  font-size: var(--gh-fs-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+.gh-modal__close:hover { color: var(--gh-ink); }
+.gh-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-sp-2);
+  margin-top: var(--gh-sp-5);
+}
+
+/* --- shared focus ring -----------------------------------------------------------------
+ * One visible ring for every interactive primitive. :focus-visible only, so a mouse tap does
+ * not leave a ring behind but keyboard and switch-control users always get one.
+ */
+.gh-btn:focus-visible,
+.gh-seg__item:focus-visible,
+.gh-input:focus-visible,
+.gh-acc__head:focus-visible,
+.gh-modal__close:focus-visible {
+  outline: 3px solid var(--gh-focus);
+  outline-offset: 2px;
+}
+
+/* --- reduced motion ---------------------------------------------------------------------
+ * Scoped to this layer's own primitives rather than a global `*` reset, so adopting this file
+ * can never silently disable a game's own animation (Ball Run and Chinchon both rely on theirs).
+ */
+@media (prefers-reduced-motion: reduce) {
+  .gh-btn, .gh-seg__item, .gh-acc__head, .gh-input {
+    transition-duration: 1ms;
+  }
+  .gh-btn:active:not(:disabled) { transform: none; }
+}

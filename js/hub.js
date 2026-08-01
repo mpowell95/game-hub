@@ -253,6 +253,20 @@ const GAMES = [
     art: GAME_ART["poolv2"],
     devOnly: true,
   },
+  {
+    // Not a game: the review surface for the shared design layer in css/ui.css. Gated devOnly
+    // exactly like poolv2 above, so it renders only for isDevProfile() (Matt or the tester) and
+    // no player ever sees the card. Records no stats, writes no storage key, and is deliberately
+    // absent from sw.js while the layer is under review. See ui-kit/CLAUDE.md.
+    id: 'ui-kit',
+    title: { en: 'UI Kit', es: 'Kit de interfaz' },
+    blurb: { en: 'Shared design tokens and chrome primitives, for review. Not a game.',
+      es: 'Tokens de diseño y piezas de interfaz compartidas, para revisar. No es un juego.' },
+    module: '../ui-kit/js/ui.js',
+    accent: '#1769d4',
+    art: GAME_ART["ui-kit"],
+    devOnly: true,
+  },
 ];
 
 class Hub {

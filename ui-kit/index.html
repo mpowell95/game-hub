@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>UI Kit</title>
+  <link rel="stylesheet" href="../css/ui.css">
+  <link rel="stylesheet" href="css/ui-kit.css">
+  <style>body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f6fb; }</style>
+</head>
+<body>
+  <div id="ui-kit"></div>
+  <script type="module">
+    // Gated like every other standalone page (root CLAUDE.md, "The module contract"): a
+    // standalone page is a door into the hub too, and the ungated ones are where the
+    // leaderboard's permanent "Unnamed player" rows came from. This gallery records nothing,
+    // so it could not itself create one, but the convention is not worth a local exception.
+    // `requireName()` is a no-op once this device has a name.
+    import { requireName } from '../js/name-gate.js';
+    import { init } from './js/ui.js';
+    await requireName();
+    init(document.getElementById('ui-kit'));
+  </script>
+</body>
+</html>

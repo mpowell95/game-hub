@@ -1,0 +1,233 @@
+/* ui-kit/css/ui-kit.css - chrome for the UI Kit gallery itself.
+ *
+ * This file styles the GALLERY (tabs, stage, swatch grids, drift table). The things being
+ * reviewed inside the stage are styled by css/ui.css, which the gallery injects alongside this
+ * one. Keeping them apart is the point: if a primitive looks wrong, the fault is in
+ * css/ui.css, not here.
+ *
+ * SCOPING: every rule is descendant-scoped under `.uk-root`, following Mancala's discipline
+ * (root CLAUDE.md, "Adding a game" axis table). No bare top-level `.uk-` rules. A prefix alone
+ * is not isolation.
+ */
+
+.uk-root {
+  --uk-gap: 16px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--hub-ink, #16243a);
+  padding: 12px 12px 48px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.uk-root .uk-head { margin-bottom: var(--uk-gap); }
+.uk-root .uk-title { margin: 0 0 4px; font-size: 24px; font-weight: 800; }
+.uk-root .uk-tagline { margin: 0; font-size: 14px; color: var(--hub-muted, #5b6b82); line-height: 1.5; }
+
+/* --- tabs ------------------------------------------------------------------------------ */
+.uk-root .uk-tabs {
+  display: flex;
+  gap: 6px;
+  margin: var(--uk-gap) 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--hub-surface-2, #eef2f8);
+}
+.uk-root .uk-tab {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--hub-muted, #5b6b82);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.uk-root .uk-tab[aria-selected="true"] {
+  background: var(--hub-surface, #fff);
+  color: var(--hub-ink, #16243a);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .10);
+}
+.uk-root .uk-tab:focus-visible { outline: 3px solid #ffb020; outline-offset: 2px; }
+
+/* --- theme switch above the stage ------------------------------------------------------- */
+.uk-root .uk-themebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.uk-root .uk-themebar-label { font-size: 13px; font-weight: 700; color: var(--hub-muted, #5b6b82); }
+.uk-root .uk-themenote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--hub-muted, #5b6b82);
+}
+
+/* --- the stage: the sandbox the primitives are previewed inside -------------------------
+ * Everything under .uk-stage renders against the shared tokens. The dark variant re-declares
+ * the --hub-* colour values from css/hub.css's `.gh-dark` block plus css/ui.css's dark shadow
+ * and border overrides, LOCALLY, so the preview can show dark mode without touching the real
+ * theme (js/theme.js owns `.gh-dark` on <html>, and this gallery must never write it).
+ * The duplicated literals below are the one accepted copy in this layer: they exist so a
+ * reviewer can see both themes side by side on one screen.
+ */
+.uk-root .uk-stage {
+  padding: var(--uk-gap);
+  border-radius: 16px;
+  background: var(--hub-bg, #f4f6fb);
+  border: 1px solid rgba(16, 36, 58, .12);
+}
+
+.uk-root .uk-stage--dark {
+  --hub-bg: #0e1420;
+  --hub-surface: #1b2333;
+  --hub-surface-2: #2b3547;
+  --hub-ink: #e9eef6;
+  --hub-muted: #9db0c9;
+  /* The --gh-* colour tokens must be restated here, not just their --hub-* sources.
+   * css/ui.css declares them AT :root as `--gh-bg: var(--hub-bg, ...)`, and a custom property's
+   * var() is substituted where the property is DECLARED, not where it is used - so overriding
+   * --hub-bg on a DESCENDANT cannot re-resolve the --gh-bg that :root already computed, and the
+   * dark preview rendered light swatches until this block existed.
+   * The real app never hits this: js/theme.js stamps .gh-dark on <html>, so css/hub.css's
+   * `:root.gh-dark` overrides land at the same level the tokens are declared at and resolve
+   * correctly. This is a preview-only consequence of re-tinting a subtree. */
+  --gh-bg: #0e1420;
+  --gh-surface: #1b2333;
+  --gh-surface-2: #2b3547;
+  --gh-ink: #e9eef6;
+  --gh-muted: #9db0c9;
+  --gh-sh-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --gh-sh-2: 0 2px 8px rgba(0, 0, 0, .46);
+  --gh-sh-3: 0 6px 20px rgba(0, 0, 0, .54);
+  --gh-sh-4: 0 16px 44px rgba(0, 0, 0, .64);
+  /* No --gh-accent-ink flip, matching css/ui.css's .gh-dark block - see the reasoning there. */
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+  color: #e9eef6;
+  border-color: rgba(190, 214, 244, .18);
+}
+
+/* --- sections inside the stage ---------------------------------------------------------- */
+.uk-root .uk-sec + .uk-sec { margin-top: 28px; }
+.uk-root .uk-sec-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--hub-muted, #5b6b82);
+}
+.uk-root .uk-sec-note {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--hub-muted, #5b6b82);
+}
+.uk-root .uk-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* --- token swatch grids ------------------------------------------------------------------ */
+.uk-root .uk-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
+.uk-root .uk-sw { text-align: center; font-size: 11px; color: var(--hub-muted, #5b6b82); }
+.uk-root .uk-sw-box {
+  height: 54px;
+  margin-bottom: 6px;
+  background: var(--hub-surface, #fff);
+  border: 1px solid rgba(16, 36, 58, .14);
+}
+.uk-root .uk-sw-name { display: block; font-weight: 700; color: var(--hub-ink, #16243a); }
+.uk-root .uk-sw-val { display: block; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+/* colour swatches have no border so the value reads true */
+.uk-root .uk-sw-box--color { border: 1px solid rgba(16, 36, 58, .14); }
+
+/* type specimens */
+.uk-root .uk-type-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(16, 36, 58, .12);
+}
+.uk-root .uk-type-name {
+  flex: 0 0 76px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--hub-muted, #5b6b82);
+}
+.uk-root .uk-type-demo { color: var(--hub-ink, #16243a); font-weight: 600; }
+
+/* space bars */
+.uk-root .uk-space-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.uk-root .uk-space-bar { height: 12px; border-radius: 3px; background: var(--hub-accent, #1769d4); }
+.uk-root .uk-space-name {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--hub-muted, #5b6b82);
+}
+
+/* colorblind palette: hue + its shape marker, never hue alone */
+.uk-root .uk-cb {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+.uk-root .uk-cb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--hub-surface, #fff);
+  border: 1px solid rgba(16, 36, 58, .14);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--hub-ink, #16243a);
+}
+.uk-root .uk-cb-item svg { flex: 0 0 auto; }
+
+/* --- drift table -------------------------------------------------------------------------- */
+.uk-root .uk-table-wrap { overflow-x: auto; }
+.uk-root .uk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.uk-root .uk-table th,
+.uk-root .uk-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(16, 36, 58, .12);
+}
+.uk-root .uk-table th {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--hub-muted, #5b6b82);
+}
+.uk-root .uk-table td:last-child {
+  text-align: right;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.uk-root .uk-table tr.is-key td { color: var(--hub-ink, #16243a); font-weight: 800; }
+.uk-root .uk-callout {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-left: 4px solid var(--hub-accent, #1769d4);
+  background: var(--hub-surface-2, #eef2f8);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--hub-ink, #16243a);
+}
+.uk-root .uk-callout + .uk-callout { border-left-color: #178A7A; }
+
+.uk-root .uk-panel[hidden] { display: none; }
