@@ -260,6 +260,16 @@ export function aggregatePlayers(all) {
         dst.yz.lost += src.yz.lost | 0; dst.yz.tied += src.yz.tied | 0;
         dst.yz.yahtzees += src.yz.yahtzees | 0;
         dst.yz.bestScore = Math.max(dst.yz.bestScore | 0, src.yz.bestScore | 0);
+      } else if (g === 'dominoes' && src.dm) {
+        // Same THE-LAW-rule-1 hazard as every sub-counter above: `total` aggregates fine on its
+        // own, but Dominoes' Stats screen reads `dm` for rounds played, cumulative points and
+        // the best single round, so dropping it here would blank all three the moment a second
+        // device syncs. Counters add; the best round takes the max, never a sum.
+        if (!dst.dm) dst.dm = { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
+        dst.dm.played += src.dm.played | 0; dst.dm.won += src.dm.won | 0; dst.dm.lost += src.dm.lost | 0;
+        dst.dm.rounds += src.dm.rounds | 0;
+        dst.dm.points += src.dm.points | 0;
+        dst.dm.bestRound = Math.max(dst.dm.bestRound | 0, src.dm.bestRound | 0);
       }
     }
   }

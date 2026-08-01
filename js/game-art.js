@@ -447,6 +447,38 @@ export const GAME_ART = {
               </linearGradient>
             </defs>
           </svg>`,
+  // Composed for the 16:9 frame, nothing cropped: a real chain reads as a WIDE run, so the
+  // landscape tile finally shows the shape the game actually makes. A crosswise double-six
+  // spinner sits in the middle with the run passing through it and one branch growing off it,
+  // which is the one bit of dominoes geometry a still image can teach. The branch grows UPWARD
+  // on purpose - hung below, it sat under the tile's own bottom-left title label.
+  dominoes: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#E88A6B"/>
+            <ellipse cx="80" cy="44" rx="78" ry="44" fill="#F5A183"/>
+            <g fill="#F7EDD3" stroke="#141414" stroke-width="3" stroke-linejoin="round">
+              <g transform="translate(8 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(44 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 33)"><rect width="18" height="36" rx="4"/><line x1="0" y1="18" x2="18" y2="18"/></g>
+              <g transform="translate(100 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 5)"><rect width="18" height="26" rx="4"/><line x1="0" y1="13" x2="18" y2="13"/></g>
+            </g>
+            <g fill="#141414">
+              <circle cx="17" cy="51" r="2.6"/>
+              <circle cx="30" cy="46.5" r="2.4"/><circle cx="36" cy="55.5" r="2.4"/>
+              <circle cx="53" cy="46.5" r="2.4"/><circle cx="53" cy="55.5" r="2.4"/><circle cx="59" cy="51" r="2.4"/>
+              <circle cx="66" cy="46" r="2.2"/><circle cx="72" cy="46" r="2.2"/><circle cx="66" cy="51" r="2.2"/>
+              <circle cx="72" cy="51" r="2.2"/><circle cx="66" cy="56" r="2.2"/><circle cx="72" cy="56" r="2.2"/>
+              <circle cx="85" cy="37" r="2.2"/><circle cx="93" cy="37" r="2.2"/><circle cx="85" cy="42" r="2.2"/>
+              <circle cx="93" cy="42" r="2.2"/><circle cx="85" cy="47" r="2.2"/><circle cx="93" cy="47" r="2.2"/>
+              <circle cx="85" cy="55" r="2.2"/><circle cx="93" cy="55" r="2.2"/><circle cx="85" cy="60" r="2.2"/>
+              <circle cx="93" cy="60" r="2.2"/><circle cx="85" cy="65" r="2.2"/><circle cx="93" cy="65" r="2.2"/>
+              <circle cx="109" cy="46.5" r="2.4"/><circle cx="109" cy="55.5" r="2.4"/>
+              <circle cx="115" cy="51" r="2.4"/>
+              <circle cx="123" cy="46.5" r="2.4"/><circle cx="129" cy="55.5" r="2.4"/>
+              <circle cx="85" cy="11" r="2.2"/><circle cx="93" cy="11" r="2.2"/><circle cx="89" cy="15" r="2.2"/>
+              <circle cx="89" cy="24" r="2.4"/>
+            </g>
+          </svg>`,
 };
 
 export default GAME_ART;

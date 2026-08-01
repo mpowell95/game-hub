@@ -44,6 +44,7 @@ const TABS = [
   { id: 'pool', labelKey: 'game_title_pool' },
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
+  { id: 'dominoes', labelKey: 'game_title_dominoes' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -368,6 +369,25 @@ function yahtzeeScreen(rec) {
     </div>`;
 }
 
+/** Dominoes: Won/Lost/Played, with no Tied cell -- a match is a race to the target score, so
+ *  exactly one side crosses it (see ensureDm in js/game-stats.js). Plus the human's cumulative
+ *  rounds and points and their best single round, never folded away, per THE LAW rule 1. */
+function dominoesScreen(rec) {
+  const dm = (rec && rec.dm) || { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
+  if (!(dm.played | 0)) return emptyState('Dominoes');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${dm.won | 0}</b><span>${t('gs_won')}</span></div>
+      <div class="gs-tally"><b>${dm.lost | 0}</b><span>${t('gs_lost')}</span></div>
+      <div class="gs-tally"><b>${dm.played | 0}</b><span>${t('gs_played')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${dm.rounds | 0}</b><span>${t('gs_dm_rounds')}</span></div>
+      <div class="gs-tally"><b>${dm.bestRound | 0}</b><span>${t('gs_dm_best_round')}</span></div>
+      <div class="gs-tally"><b>${dm.points | 0}</b><span>${t('gs_dm_points')}</span></div>
+    </div>`;
+}
+
 // --- Snake (solo, speed-tiered, longest-snake-is-the-score) -----------------
 const SN_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard']];
 
@@ -501,6 +521,7 @@ function screenFor(id, st) {
   if (id === 'dotsboxes') return dotsBoxesScreen(rec);
   if (id === 'boggle') return boggleScreen(rec);
   if (id === 'yahtzee') return yahtzeeScreen(rec);
+  if (id === 'dominoes') return dominoesScreen(rec);
   if (id === 'snake') return snakeScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }

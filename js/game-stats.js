@@ -96,6 +96,17 @@
 //                                                   // across every game (additive); `bestScore` is the
 //                                                   // highest single-game total ever reached (Math.max
 //                                                   // only, per THE LAW rule 2); see recordYahtzee
+//       dominoes: {
+//         total, byDiff,                           // byDiff keyed by easy|medium|hard (the bot tier)
+//         dm: { played, won, lost, rounds, bestRound, points } },  // a match is a race to a target
+//                                                   // score, so exactly one side crosses it and there
+//                                                   // is no tie to store (unlike tictactoe/dotsboxes/
+//                                                   // boggle/yahtzee above); `rounds` is the human's
+//                                                   // cumulative count of rounds played and `points`
+//                                                   // their cumulative match-score total, both
+//                                                   // additive; `bestRound` is the highest single
+//                                                   // round the human has ever scored (Math.max only,
+//                                                   // per THE LAW rule 2); see recordDominoes
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -103,7 +114,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -437,6 +448,15 @@ function ensureYz(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'yahtzees', 'bestScore']) if (!Number.isFinite(g.yz[k])) g.yz[k] = 0;
 }
 
+/** Dominoes: the per-match W/L counters plus the human's cumulative rounds and points and their
+ *  best single round. A match is a RACE to a target score, so exactly one side ever crosses it
+ *  and there is no tie to store -- deliberately unlike ensureTt/ensureDb/ensureBg/ensureYz
+ *  above, whose games can genuinely end level. `bestRound` is Math.max only (THE LAW rule 2). */
+function ensureDm(g) {
+  if (!g.dm || typeof g.dm !== 'object') g.dm = { played: 0, won: 0, lost: 0, rounds: 0, bestRound: 0, points: 0 };
+  for (const k of ['played', 'won', 'lost', 'rounds', 'bestRound', 'points']) if (!Number.isFinite(g.dm[k])) g.dm[k] = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -457,6 +477,7 @@ function normalize(raw) {
   ensureDb(st.games.dotsboxes);
   ensureBg(st.games.boggle);
   ensureYz(st.games.yahtzee);
+  ensureDm(st.games.dominoes);
   ensureSn(st.games.snake);
   return st;
 }
@@ -801,6 +822,29 @@ export function recordYahtzee(difficulty, won, extras) {
   return st;
 }
 
+/** Dominoes: record one finished MATCH (a race to the target score, not a single round).
+ *  Maintains total/byDiff (as recordResult) AND the `dm` breakdown. `difficulty` is the bot tier
+ *  (easy|medium|hard). `won` is true or false -- there is no tie, since a match ends the instant
+ *  one side crosses the target, so nothing here mirrors recordTicTacToe's `tied`.
+ *  `extras` = { rounds, bestRound, points } for THIS match: `rounds` (rounds played) and
+ *  `points` (the human's final score) are added to the running totals; `bestRound` only ever
+ *  raises the stored best (Math.max), per THE LAW rule 2. Additive; never overwrites. */
+export function recordDominoes(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.dominoes;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureDm(g);
+  const e = extras || {};
+  g.dm.played += 1;
+  if (won === true) g.dm.won += 1; else g.dm.lost += 1;
+  g.dm.rounds += Math.max(0, e.rounds | 0);
+  g.dm.points += Math.max(0, e.points | 0);
+  g.dm.bestRound = Math.max(g.dm.bestRound | 0, e.bestRound | 0);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Snake: record one finished run. `length` is the snake's final length (start 3 + food eaten);
  *  `difficulty` is easy|medium|hard (speed tiers); `walls` is 'on'|'off' (defaults to 'on', the
  *  game's own classic default — an unrecognized value also reads as 'on', same tolerance as the
@@ -864,7 +908,8 @@ export function recordHeadToHead(gameId, opponent, won) {
 export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
-  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee, recordHeadToHead,
+  recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
+  recordDominoes, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

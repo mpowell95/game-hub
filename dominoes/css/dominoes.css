@@ -1,0 +1,458 @@
+/* dominoes/css/dominoes.css — every rule descendant-scoped under .dm-root (Mancala's discipline:
+   a prefix alone is not isolation). Custom properties are all --dm-.
+
+   The look is the spec's flat cartoon: thick near-black outlines, rounded corners, a soft
+   offset shadow on every object, flat fills everywhere EXCEPT the felt, whose radial glow is
+   the only gradient in the game. Buttons sit on a darker lip of their own colour. */
+
+.dm-root {
+  --dm-ink: #141414;
+  --dm-line: 3px;
+  --dm-teal: #0E5C77;
+  --dm-teal-lo: #0A4257;
+  --dm-felt-warm-1: #F5A183;
+  --dm-felt-warm-2: #E88A6B;
+  --dm-felt-cool-1: #9CC9E0;
+  --dm-felt-cool-2: #7FB0CC;
+  --dm-floor: #7A2E22;
+  --dm-cream: #F7EDD3;
+  --dm-olive: #7C7458;
+  --dm-you: #EF4B4B;
+  --dm-bot: #3FB6E8;
+  --dm-accent: #F2A125;
+  --dm-score: #7FA84A;
+  --dm-noscore: #F0A93C;
+  --dm-go: #4CBB5B;
+  --dm-stop: #C25F55;
+  --dm-slate: #4A5C74;
+  --dm-shadow: 0 4px 0 rgba(0, 0, 0, .28), 0 6px 12px rgba(0, 0, 0, .22);
+  --dm-hand-w: clamp(30px, 10.5vw, 44px);
+  --dm-h: 640px;
+
+  font-family: "Nunito", "Baloo 2", "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--dm-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dm-root { position: relative; }   /* overlays anchor here, including on the setup screen */
+.dm-root *, .dm-root *::before, .dm-root *::after { box-sizing: border-box; }
+/* No `color: inherit` here: `.dm-root button` outranks every single-class `.dm-btn`/`.dm-segbtn`
+   rule below, so inheriting swallowed their own colours and left pale text on cream buttons.
+   Each button styles its own colour; the tile buttons need none (their pips are backgrounds). */
+.dm-root button { font: inherit; cursor: pointer; }
+
+/* ---------------------------------------------------------------- shared chunky button ---- */
+.dm-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: var(--dm-line) solid var(--dm-ink);
+  border-radius: 14px;
+  padding: 12px 22px 15px;
+  font-weight: 800; font-size: 1rem; letter-spacing: .02em;
+  background: var(--dm-accent);
+  color: #2A1B04;
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .22), var(--dm-shadow);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.dm-btn:active { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .22), 0 1px 0 rgba(0, 0, 0, .28); }
+.dm-btn.is-go { background: var(--dm-go); color: #06280C; }
+.dm-btn.is-stop { background: var(--dm-stop); color: #2C0B07; }
+.dm-btn.is-ghost { background: #EFE7D6; color: #2A2418; }
+.dm-btn.is-wide { width: 100%; }
+
+/* --------------------------------------------------------------------------- setup screen -- */
+/* The setup screen carries its own near-black surface (the spec's menu background) rather than
+   inheriting the host's: it renders on the hub's light content area AND on the standalone
+   page's dark body, and a label tuned for one is illegible on the other. */
+.dm-setup {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 18px 16px 28px;
+  max-width: 460px; margin: 0 auto;
+  background: #1E1E1E; color: #F2EFE6; border-radius: 18px;
+}
+.dm-setup-panel {
+  width: 100%; border-radius: 20px;
+  border: var(--dm-line) solid var(--dm-ink);
+  background: #12503F;
+  box-shadow: var(--dm-shadow);
+  padding: 20px 18px 22px;
+  text-align: center; position: relative; overflow: hidden;
+}
+/* The faded oversized domino behind the title, dimmed almost into the panel. */
+.dm-setup-panel .dm-panel-art { position: absolute; inset: 0; opacity: .16; pointer-events: none; }
+.dm-setup-panel .dm-panel-art svg { width: 100%; height: 100%; display: block; }
+.dm-setup-title {
+  position: relative; margin: 0; font-size: 2.1rem; font-weight: 900;
+  letter-spacing: .06em; text-transform: uppercase; color: #F6F1E2;
+}
+.dm-setup-sub { position: relative; margin: 8px 0 0; font-weight: 700; color: #D8E8DC; line-height: 1.35; }
+.dm-setup-avatar {
+  width: 84px; height: 84px; border-radius: 50%;
+  border: var(--dm-line) solid var(--dm-ink);
+  background: var(--dm-accent);
+  box-shadow: var(--dm-shadow);
+  display: grid; place-items: center; margin-top: 4px;
+}
+.dm-setup-avatar svg { width: 62px; height: 62px; display: block; }
+.dm-setup-diffname {
+  margin: 0; font-size: 1.5rem; font-weight: 900; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--dm-accent);
+  -webkit-text-stroke: 0;
+}
+.dm-seg { display: flex; gap: 8px; width: 100%; }
+.dm-segbtn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  border: var(--dm-line) solid var(--dm-ink); border-radius: 13px;
+  background: #EFE7D6; color: #2A2418; padding: 10px 6px 12px;
+  font-weight: 800; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .14);
+}
+.dm-segbtn.is-selected { background: var(--dm-accent); color: #2A1B04; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .22); }
+.dm-segbtn svg.lb-dshape { width: 15px; height: 15px; flex: none; }
+.dm-segbtn svg.lb-dshape-x2 { width: 25px; }
+.dm-field { width: 100%; }
+.dm-field > span {
+  display: block; font-size: .74rem; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: #ADA79A; margin-bottom: 6px;
+}
+.dm-setup-actions { display: flex; gap: 10px; width: 100%; align-items: stretch; }
+.dm-setup-actions .dm-btn { flex: 1; }
+.dm-setup-actions .dm-btn.is-help { flex: none; width: 54px; padding: 12px 0 15px; background: #7B62D6; color: #F4EFFF; }
+
+/* -------------------------------------------------------------------------- the play stack -- */
+/* Nothing in here ever changes the layout: the header, both hand rows and the floor keep fixed
+   space, and every overlay (bot thinking, boneyard, modals) sits on top of them. */
+.dm-play {
+  display: flex; flex-direction: column;
+  height: var(--dm-h);
+  min-height: 420px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--dm-floor);
+}
+
+.dm-header {
+  position: relative; z-index: 3; flex: none;
+  background: var(--dm-teal);
+  border-bottom: 4px solid #06222E;
+  border-top-left-radius: 18px; border-top-right-radius: 18px;
+  padding: 8px 10px 10px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.dm-header::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 8px;
+  background: rgba(255, 255, 255, .12);
+  border-top-left-radius: 18px; border-top-right-radius: 18px;
+}
+.dm-hcenter { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.dm-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #06222E; color: #CFE6EF;
+  border-radius: 999px; padding: 2px 10px 3px;
+  font-size: .62rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+}
+.dm-chip svg.lb-dshape { width: 11px; height: 11px; }
+.dm-scorebar {
+  display: flex; align-items: stretch; background: #06222E;
+  border-radius: 12px; height: 34px; position: relative;
+}
+.dm-scorebar b { display: grid; place-items: center; min-width: 54px; font-size: 1.15rem; font-weight: 900; }
+.dm-scorebar .dm-s-you { color: var(--dm-you); }
+.dm-scorebar .dm-s-bot { color: var(--dm-bot); }
+.dm-goal {
+  display: grid; place-items: center; align-content: center;
+  background: #0B3A4C; color: #EAF6FA;
+  border: 2px solid #06222E; border-radius: 10px;
+  padding: 0 12px; margin: -6px 0; min-width: 62px;
+}
+.dm-goal span { font-size: .52rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .8; line-height: 1; }
+.dm-goal b { font-size: .95rem; font-weight: 900; line-height: 1.15; min-width: 0; }
+.dm-iconbtn {
+  flex: none; width: 36px; height: 36px; border-radius: 50%;
+  background: #06222E; color: #E8F4F8; border: none;
+  display: grid; place-items: center;
+}
+.dm-iconbtn svg { width: 20px; height: 20px; }
+.dm-iconbtn.is-confirm { background: var(--dm-stop); color: #fff; width: auto; border-radius: 999px; padding: 0 12px; font-size: .68rem; font-weight: 800; }
+
+/* The mat is the felt SURFACE: it runs behind the bot's row, the chain area and your hand, so
+   both hands read as resting on the table rather than on the floor. Only the chain area
+   (.dm-felt) is measured for the fit, so the chain can never run under either hand. */
+.dm-mat {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+  background: radial-gradient(circle at 50% 45%, var(--dm-felt-warm-1) 0%, var(--dm-felt-warm-2) 82%);
+  overflow: hidden;
+}
+/* Custom properties do not interpolate, so the warm/cool cross-fade is a second felt layer
+   whose opacity animates. One felt element, one colour change, per the spec. */
+.dm-mat::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, var(--dm-felt-cool-1) 0%, var(--dm-felt-cool-2) 82%);
+  opacity: 0; transition: opacity .5s ease;
+}
+.dm-mat.is-cool::before { opacity: 1; }
+
+/* Bot hand: backs only, tucked so their top edge disappears under the header's dark lip. */
+.dm-botrow {
+  position: relative; z-index: 1; flex: none;
+  display: flex; justify-content: center; gap: 4px;
+  height: 44px; margin-top: -14px;
+}
+.dm-botrow .dm-back {
+  width: 26px; height: 52px; border-radius: 6px;
+  border: var(--dm-line) solid var(--dm-ink);
+  background: var(--dm-olive);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .25);
+}
+.dm-botrow .dm-back::after {
+  content: ""; display: block; width: 10px; height: 10px; border-radius: 50%;
+  background: rgba(0, 0, 0, .18); margin: 19px auto 0;
+}
+
+/* ------------------------------------------------------------------- the chain's own area -- */
+.dm-felt { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+.dm-chain, .dm-ends, .dm-fx {
+  position: absolute; inset: 0; pointer-events: none;
+  transform-origin: 0 0;
+}
+.dm-chain { transition: transform .32s cubic-bezier(.22, .61, .36, 1); }
+.dm-ends { pointer-events: none; }
+
+/* --------------------------------------------------------------------------------- tiles --- */
+.dm-tile {
+  position: relative;
+  background: var(--dm-cream);
+  border: var(--dm-line) solid var(--dm-ink);
+  border-radius: 8px;
+  box-shadow: var(--dm-shadow);
+  display: flex; overflow: hidden;
+}
+.dm-tile.is-v { flex-direction: column; }
+.dm-tile .dm-half { position: relative; flex: 1 1 50%; }
+.dm-tile .dm-half + .dm-half { border-left: 2px solid var(--dm-ink); }
+.dm-tile.is-v .dm-half + .dm-half { border-left: 0; border-top: 2px solid var(--dm-ink); }
+.dm-tile .dm-pip {
+  position: absolute; width: 21%; aspect-ratio: 1; border-radius: 50%;
+  background: var(--dm-ink); transform: translate(-50%, -50%);
+}
+.dm-tile.is-back { background: var(--dm-olive); }
+.dm-tile.is-back .dm-half + .dm-half { border-color: rgba(0, 0, 0, .3); }
+
+.dm-chain .dm-tile { position: absolute; }
+.dm-chain .dm-tile.is-fresh { animation: dm-land .32s cubic-bezier(.3, 1.5, .5, 1) both; }
+@keyframes dm-land {
+  0% { transform: scale(.72) rotate(-14deg); opacity: .2; }
+  60% { transform: scale(1.06) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* -------------------------------------------------------------------------- the end badges -- */
+/* Colorblind rule: the scoring state is carried by SHAPE first (a circle when the ends already
+   add to a five, a rounded square when they do not); the green/amber hues only reinforce it. */
+.dm-end {
+  position: absolute; transform: translate(-50%, -50%);
+  min-width: 26px; height: 26px; padding: 0 5px;
+  display: grid; place-items: center;
+  border: var(--dm-line) solid var(--dm-ink);
+  border-radius: 7px;
+  background: var(--dm-noscore); color: #241703;
+  font-weight: 900; font-size: .85rem;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .28);
+}
+.dm-end.is-scoring { background: var(--dm-score); color: #0E2205; border-radius: 50%; }
+.dm-end.is-target { pointer-events: auto; cursor: pointer; animation: dm-pulse .9s ease-in-out infinite; }
+@keyframes dm-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.22); }
+}
+.dm-ends.is-picking .dm-end:not(.is-target) { opacity: .35; }
+
+/* ------------------------------------------------------------------------- score popup fx --- */
+.dm-pop {
+  position: absolute; transform: translate(-50%, -50%);
+  font-size: 2rem; font-weight: 900;
+  -webkit-text-stroke: 4px #fff; paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, .35);
+  animation: dm-pop 850ms ease-out forwards;
+}
+.dm-pop.is-you { color: var(--dm-you); }
+.dm-pop.is-bot { color: var(--dm-bot); }
+@keyframes dm-pop {
+  0% { transform: translate(-50%, -50%) scale(.4); opacity: 0; }
+  22% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -170%) scale(1); opacity: 0; }
+}
+.dm-star {
+  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  background: #FFD34A;
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  animation: dm-star 700ms ease-out forwards;
+}
+@keyframes dm-star {
+  0% { transform: translate(0, 0) scale(.3); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+
+/* ------------------------------------------------------------------------------ your hand -- */
+.dm-hand {
+  position: relative; z-index: 2; flex: none;
+  display: flex; justify-content: center; align-items: flex-end; gap: 5px;
+  padding: 6px 8px 8px;
+  min-height: calc(var(--dm-hand-w) * 2 + 16px);
+}
+.dm-hand .dm-tile {
+  width: var(--dm-hand-w); height: calc(var(--dm-hand-w) * 2);
+  flex: none; transition: transform .16s ease, filter .25s ease, box-shadow .16s ease;
+  pointer-events: auto; cursor: pointer;
+}
+/* Legality is shown by brightness alone, so there is never a "no valid moves" sentence. */
+.dm-hand .dm-tile.is-dead { filter: saturate(.32) brightness(.72); cursor: default; }
+.dm-hand .dm-tile.is-sel { transform: translateY(-12px); box-shadow: 0 0 0 3px #FFF6D8, var(--dm-shadow); }
+.dm-hand .dm-tile.is-dealt { animation: dm-deal .42s cubic-bezier(.2, .9, .3, 1) both; }
+@keyframes dm-deal {
+  0% { transform: translate(var(--dm-from-x, 0), -160px) rotate(-24deg) scale(.8); opacity: 0; }
+  70% { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+
+.dm-floor { flex: none; height: 26px; background: var(--dm-floor); border-top: 3px solid rgba(0, 0, 0, .3); }
+
+/* --------------------------------------------------------------------------- bot thinking -- */
+/* An overlay laid ON the bot's row, so nothing moves or resizes when it appears or goes. */
+.dm-thinking {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+  z-index: 4; pointer-events: none;
+  background: rgba(12, 18, 24, .74); color: #F2F7FA;
+  border-radius: 999px; padding: 5px 14px 6px;
+  font-size: .78rem; font-weight: 800;
+  opacity: 0; transition: opacity .2s ease;
+}
+.dm-thinking.is-on { opacity: 1; }
+
+/* A transient one-line pill for a pass or a bot draw, same overlay discipline. */
+.dm-toast {
+  position: absolute; left: 50%; bottom: calc(var(--dm-hand-w) * 2 + 40px); transform: translateX(-50%);
+  z-index: 4; pointer-events: none;
+  background: rgba(12, 18, 24, .8); color: #F6F2E6;
+  border-radius: 999px; padding: 7px 16px 8px;
+  font-size: .84rem; font-weight: 800; white-space: nowrap;
+  animation: dm-toast 1.6s ease forwards;
+}
+@keyframes dm-toast {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  14%, 74% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
+
+/* -------------------------------------------------------------------------- boneyard drawer -- */
+.dm-bone {
+  position: absolute; left: 0; right: 0; z-index: 5;
+  bottom: calc(var(--dm-hand-w) * 2 + 42px);
+  margin: 0 10px;
+  background: #8A5A2E;
+  border: var(--dm-line) solid var(--dm-ink);
+  border-radius: 18px;
+  box-shadow: var(--dm-shadow);
+  padding: 8px;
+  animation: dm-drawer .3s cubic-bezier(.2, 1.4, .5, 1) both;
+}
+@keyframes dm-drawer { 0% { transform: translateY(120%); } 100% { transform: translateY(0); } }
+.dm-bone-title {
+  display: block; text-align: center; margin: 0 auto 8px; width: fit-content;
+  background: #B07C42; color: #FFF4E0;
+  border: 2px solid rgba(0, 0, 0, .35); border-radius: 999px;
+  padding: 3px 16px 4px;
+  font-size: .7rem; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+}
+.dm-bone-well {
+  background: #5E3A1B; border-radius: 12px; padding: 8px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+  max-height: 132px; overflow: auto;
+}
+.dm-bone-well .dm-tile {
+  width: 30px; height: 60px; flex: none; pointer-events: auto; cursor: pointer;
+  background: var(--dm-cream);
+}
+.dm-bone-well .dm-tile:active { transform: translateY(2px); }
+
+/* ---------------------------------------------------------------------------- modal cards -- */
+.dm-overlay { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; }
+.dm-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .75); animation: dm-fade .22s ease both; }
+@keyframes dm-fade { from { opacity: 0; } to { opacity: 1; } }
+.dm-card {
+  /* overflow VISIBLE, not auto: the avatar hangs half outside the card's top edge by design and
+     a scroll container clips it. The one card with enough content to need scrolling is help,
+     which has no avatar and opts back in below. */
+  position: relative; width: min(360px, 100%); max-height: 100%; overflow: visible;
+  background: var(--dm-slate); color: #F4F1E6;
+  border: var(--dm-line) solid var(--dm-ink); border-radius: 22px;
+  box-shadow: var(--dm-shadow);
+  padding: 46px 18px 18px; text-align: center;
+  animation: dm-rise .3s cubic-bezier(.2, 1.5, .5, 1) both;
+}
+@keyframes dm-rise { 0% { transform: scale(.85); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.dm-card-av {
+  position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
+  width: 72px; height: 72px; border-radius: 50%;
+  border: var(--dm-line) solid var(--dm-ink); background: var(--dm-accent);
+  display: grid; place-items: center; box-shadow: var(--dm-shadow);
+}
+.dm-card-av svg { width: 52px; height: 52px; }
+.dm-card-av.is-you { background: var(--dm-you); }
+.dm-x {
+  position: absolute; top: 8px; right: 10px; z-index: 5;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, .45); background: rgba(0, 0, 0, .22); color: #F4F1E6;
+  font-size: 1.2rem; line-height: 1; display: grid; place-items: center;
+}
+.dm-card h3 { margin: 6px 0 2px; font-size: 1.45rem; font-weight: 900; }
+.dm-card .dm-card-note { margin: 4px 0 14px; font-size: .84rem; font-weight: 700; color: #F1E3C7; line-height: 1.35; }
+.dm-cols {
+  display: grid; grid-template-columns: 1fr 68px 68px; gap: 6px;
+  font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 0 10px 6px; opacity: .85;
+}
+.dm-cols span:not(:first-child) { text-align: center; }
+.dm-scorerow {
+  display: grid; grid-template-columns: 1fr 68px 68px; gap: 6px; align-items: center;
+  background: var(--dm-cream); color: #4A1E12;
+  border: var(--dm-line) solid var(--dm-ink); border-radius: 999px;
+  padding: 8px 10px; margin-bottom: 8px; font-weight: 900;
+  position: relative;
+}
+.dm-scorerow > span:first-child { text-align: left; padding-left: 26px; }
+.dm-scorerow > span:not(:first-child) { text-align: center; }
+.dm-medal {
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%) scale(0);
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, .55);
+  display: grid; place-items: center; font-size: .72rem; color: #3A2A05;
+  animation: dm-medal .3s cubic-bezier(.2, 1.6, .5, 1) forwards;
+}
+.dm-medal.is-1 { background: #F2C33C; }
+.dm-medal.is-2 { background: #C9CDD2; }
+@keyframes dm-medal { to { transform: translateY(-50%) scale(1); } }
+.dm-card-actions { display: flex; gap: 10px; margin-top: 6px; }
+.dm-card-actions .dm-btn { flex: 1; }
+.dm-card-actions .dm-btn.is-icon { flex: none; width: 54px; padding: 12px 0 15px; }
+.dm-card-actions .dm-btn.is-icon svg { width: 20px; height: 20px; }
+
+ /* Keeps the card's standard 46px top inset so the close X is never overlapped by the heading
+   or the first bullet (the X must always be reachable, per the repo's dismiss-without-rematch
+   rule). */
+.dm-help { text-align: left; overflow: auto; }
+.dm-help h3 { text-align: center; }
+.dm-help ul { margin: 0; padding-left: 20px; }
+.dm-help li { margin: 0 0 9px; font-size: .88rem; font-weight: 700; line-height: 1.4; }
+
+/* No :root.gh-dark block, deliberately (see js/CLAUDE.md, "Theme support", Phase 2): every
+   surface this game draws is its own saturated palette on its own near-black or felt backdrop,
+   so there is nothing here that reads differently under the hub's light and dark shells. */
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-root *, .dm-root *::before, .dm-root *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
