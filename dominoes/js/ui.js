@@ -61,6 +61,8 @@ function ensureStylesheet() {
   document.head.appendChild(link);
 }
 
+const ICON_SETUP = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg>';
+
 const ICON_RESTART ='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 3.5V9h-5.5"/></svg>';
 
 /** Three bot faces, one per tier: a mild grin, the reference app's smug half-lidded stare, and a
@@ -188,6 +190,10 @@ class DominoesUI {
     this.game = null;
     this.el = null;
     const diffLabel = t(DIFFS.find(([v]) => v === this.difficulty)[1]);
+    // A live save means the player came here mid-match (the header's back button keeps it), so
+    // Play is a destructive choice and must not be the only one on offer.
+    const save = loadSave();
+    const canResume = !!(save && save.snap && save.snap.phase !== 'matchOver');
     this.container.innerHTML = `
       <div class="dm-root">
         <div class="dm-setup">
@@ -210,8 +216,9 @@ class DominoesUI {
             <div class="dm-seg">${TARGETS.map((n) => `
               <button type="button" class="dm-segbtn ${n === this.target ? 'is-selected' : ''}" data-action="set-target" data-v="${n}">${n}</button>`).join('')}</div>
           </div>
+          ${canResume ? `<button type="button" class="dm-btn is-go is-wide" data-action="resume">${esc(t('resume_match'))}</button>` : ''}
           <div class="dm-setup-actions">
-            <button type="button" class="dm-btn" data-action="start">${esc(t('play'))}</button>
+            <button type="button" class="dm-btn" data-action="start">${esc(canResume ? t('new_match') : t('play'))}</button>
             <button type="button" class="dm-btn is-help" data-action="help" aria-label="${esc(t('aria_help'))}">?</button>
           </div>
         </div>
@@ -280,7 +287,7 @@ class DominoesUI {
       <div class="dm-root">
         <div class="dm-play">
           <div class="dm-header">
-            <div style="width:36px"></div>
+            <button type="button" class="dm-iconbtn" data-action="to-setup-keep" aria-label="${esc(t('aria_to_setup'))}">${ICON_SETUP}</button>
             <div class="dm-hcenter" data-region="chrome"></div>
             <button type="button" class="dm-iconbtn" data-role="restart" data-action="restart" aria-label="${esc(t('aria_restart'))}">${ICON_RESTART}</button>
           </div>
@@ -712,6 +719,16 @@ class DominoesUI {
     } else if (action === 'to-setup') {
       clearSave();
       this.renderSetup();
+    } else if (action === 'to-setup-keep') {
+      // Non-destructive: the save stays, so the setup screen can offer Resume and nothing is
+      // lost by looking. Only `start` (a fresh match) ever clears it.
+      this._persist();
+      this.closeOverlays();
+      this.renderSetup();
+    } else if (action === 'resume') {
+      const save = loadSave();
+      if (save && save.snap && save.snap.phase !== 'matchOver') this.resume(save);
+      else this.renderSetup();
     } else if (action === 'restart') {
       this.confirmDestructive(btn, () => this.startMatch());
     } else if (action === 'restart-match') {

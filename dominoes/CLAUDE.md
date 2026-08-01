@@ -227,6 +227,13 @@ medals, which reads as level without needing a word for it.
 - `gamehub.dominoes.v1` — `{ difficulty, target }`. Precedence: saved settings > the shared
   profile's first opponent skill (1/2/3 → easy/medium/hard) > medium. An unknown target falls
   back to 300, so a future removed option can never crash the setup screen.
+- **Getting back to the setup screen mid-match** is the header's LEFT icon (the 36px slot that
+  was a bare spacer until 2026-08-01). It is deliberately **non-destructive**: it persists and
+  leaves the save alone, so setup can offer **Resume match** alongside **New match** (Play is
+  relabelled whenever a live save exists) and only `start` ever clears it. Before this there was
+  no route at all — the header restart only ever restarted the match at the same settings, the
+  match-over card's red button was the sole path to setup, and backing out to the hub just
+  resumed on re-entry. Changing difficulty or target mid-match was impossible.
 - `gamehub.dominoes.save.v1` — `{ snap, difficulty, target, bestRound, statsCommitted, ts }`,
   written after every settled action and on `destroy()`. `statsCommitted` rides in the save so a
   finished match cannot be recorded twice by a restore.
