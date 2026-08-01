@@ -447,27 +447,6 @@ export const GAME_ART = {
               </linearGradient>
             </defs>
           </svg>`,
-
-  // UI Kit: the dev-only review surface for css/ui.css. Landscape, composed to fill the frame
-  // (never a square cropped with preserveAspectRatio) - a swatch row over stacked component
-  // shapes, in the four colorblind-safe hues so the tile itself follows the palette rule.
-  'ui-kit': `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#16243a"/>
-            <g>
-              <rect x="12" y="12" width="26" height="14" rx="3" fill="#F2B705"/>
-              <rect x="43" y="12" width="26" height="14" rx="7" fill="#1F5FA8"/>
-              <rect x="74" y="12" width="26" height="14" rx="7" fill="#E0532F"/>
-              <rect x="105" y="12" width="43" height="14" rx="7" fill="#178A7A"/>
-            </g>
-            <rect x="12" y="34" width="80" height="44" rx="8" fill="#2b3547"/>
-            <rect x="20" y="42" width="46" height="6" rx="3" fill="#e9eef6"/>
-            <rect x="20" y="53" width="60" height="4" rx="2" fill="#9db0c9"/>
-            <rect x="20" y="61" width="52" height="4" rx="2" fill="#9db0c9"/>
-            <rect x="99" y="34" width="49" height="20" rx="10" fill="#1769d4"/>
-            <rect x="110" y="42" width="27" height="4" rx="2" fill="#dbe8f8"/>
-            <rect x="99" y="58" width="49" height="20" rx="10" fill="none" stroke="#9db0c9" stroke-width="1.6"/>
-            <rect x="110" y="66" width="27" height="4" rx="2" fill="#9db0c9"/>
-          </svg>`,
 };
 
 export default GAME_ART;

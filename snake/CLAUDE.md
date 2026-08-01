@@ -12,8 +12,9 @@ for it.
 > (`devOnly`) preview of Snake's chrome rebuilt on the shared UI layer (`css/ui.css`), created
 > 2026-08-01. It **imports** this game's `js/game.js` and spreads its `js/strings.js` rather than
 > copying either, and it loads `css/snake.css` for the board and D-pad, so the rules, the
-> dictionary and the play surface here are its only source. It records no stats. Nothing in this
-> folder was changed for it. See `snake-v2/CLAUDE.md`; if that direction is approved, the work
+> dictionary and the play surface here are its only source. It records through this game's own
+> `recordSnake` call, into the same `snake` counters, so its runs are ordinary Snake runs. Nothing
+> in this folder was changed for it. See `snake-v2/CLAUDE.md`; if that direction is approved, the work
 > lands in THIS folder's own files and `snake-v2/` is deleted.
 
 Hub integration: in-hub `module:` (`snake/js/ui.js`), not immersive. `isInProgress()` uses the

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v247';
+const CACHE = 'game-hub-v248';
 
 const ASSETS = [
   './',
@@ -55,12 +55,6 @@ const ASSETS = [
   './js/challenge/challenge-net.js',
   './js/challenge/keepsake.js',
   './css/challenge.css',
-  // UI Kit (devOnly review gallery, 2026-08-01) - same reasoning as snake-v2 below.
-  './ui-kit/',
-  './ui-kit/index.html',
-  './ui-kit/css/ui-kit.css',
-  './ui-kit/js/ui.js',
-  './ui-kit/js/strings.js',
   // NOTE: the challenge celebration images (js/challenge/assets/*) are deliberately NOT
   // precached. They are ~9 MB of one-person gift content; forcing every PWA installer to
   // download them would violate the "inert for everyone else" guardrail. The fetch handler

@@ -18,15 +18,16 @@
 //   This is also the point being demonstrated: the shared layer covers CHROME, and a game's own
 //   play surface stays its own identity. Snake's board is deliberately pixel-identical here.
 //
+// STATS: RECORDS, exactly like the real Snake (2026-08-01, Matt's call - the first pass shipped
+// with recording off and a visible "runs are not saved" notice, and the notice was the thing he
+// wanted gone). A run that silently fails to count is THE LAW rule 1's own failure shape: to a
+// player, history no screen shows IS deleted. So with the notice removed, recording has to be on.
+// `_endRun()` calls the identical `recordSnake(length, difficulty, walls)` Snake calls, with the
+// same values from the same settings object, guarded by the same record-once `this.recorded` flag
+// - not a second write path, the same one.
+//
 // WHAT IT DELIBERATELY DOES NOT DO
 // --------------------------------
-// - RECORDS NOTHING. It imports `loadStats` (read-only, so the Best figure is your real one) but
-//   never `recordSnake`. A preview build is exactly the wrong thing to have writing into real
-//   history: THE LAW rule 2 makes writes additive and bests Math.max-only, so a run recorded
-//   under the wrong difficulty or walls bucket by a bug in THIS file could never be taken back
-//   out. The cost is that a good run here does not count, and that is stated in the UI (see
-//   `preview_note`) rather than left for the player to discover from a stats screen that did not
-//   move. Flipping it on later is a one-line change; flipping a bad write back out is not.
 // - DOES NOT WRITE SNAKE'S SETTINGS KEY. It READS `gamehub.snake.v1` so the setup screen opens on
 //   your real preferences, and writes its own `gamehub.snakev2.v1`. Changing the difficulty in a
 //   preview must not silently change the difficulty in the game you actually play.
@@ -38,7 +39,7 @@
 import { Game, COLS, ROWS, TICK_MS, DIFFS } from '../../snake/js/game.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
-import { loadStats } from '../../js/game-stats.js';
+import { recordSnake, loadStats } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -113,6 +114,7 @@ class SnakeV2UI {
     this.timer = null;
     this.started = false;
     this.paused = false;
+    this.recorded = false;
     this._ensureCss();
     this._onKey = (e) => this._handleKey(e);
     this._onVis = () => { if (document.hidden) this._pause(); };
@@ -172,11 +174,8 @@ class SnakeV2UI {
         <div class="sv-setup">
           <header class="sv-head">
             <h2 class="sv-title">${t('title')}</h2>
-            <span class="gh-chip gh-chip--accent">${t('preview_badge')}</span>
             <p class="sv-tag">${t('tagline')}</p>
           </header>
-
-          <p class="sv-notice" role="note" aria-label="${t('aria_preview')}">${t('preview_note')}</p>
 
           <div class="gh-card sv-field">
             <span class="gh-field__label">${t('difficulty')}</span>
@@ -282,7 +281,6 @@ class SnakeV2UI {
           <div class="sn-pad sn-pad--${this.settings.dpadStyle}" data-role="pad" aria-label="${t('aria_board')}">
             ${padCellsHTML('button', true)}
           </div>
-          <p class="sv-footnote">${t('preview_note_short')}</p>
         </div>
       </div>`;
     this.canvas = this.root.querySelector('[data-role="canvas"]');
@@ -425,8 +423,14 @@ class SnakeV2UI {
 
   _endRun() {
     this._stopLoop();
-    // NO recordSnake() here, and no `recorded` guard, because there is nothing to guard. See this
-    // file's header: a preview build must not write into real history, and the modal says so.
+    // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
+    // Identical call, values and guard as snake/js/ui.js: this is the same write path, not a
+    // second one.
+    if (!this.recorded) {
+      this.recorded = true;
+      try { recordSnake(this.game.length, this.settings.difficulty, this.settings.walls); }
+      catch (err) { console.error('[snake-v2] stats record failed - this run is not counted', err); }
+    }
     const newBest = this.game.length > this.best;
     const modal = document.createElement('div');
     modal.className = 'gh-overlay sv-modal';
@@ -435,7 +439,6 @@ class SnakeV2UI {
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('aria_close')}">&times;</button>
         <h3 class="gh-modal__title">${this.game.won ? t('you_won') : t('game_over')}</h3>
         <p class="sv-modal-line">${t('final_length', { len: this.game.length })}${newBest ? ` · <b>${t('new_best')}</b>` : ''}</p>
-        <p class="gh-card__note">${t('preview_note_short')}</p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary" data-role="again">${t('play_again')}</button>
           <button type="button" class="gh-btn gh-btn--ghost" data-role="setup">${t('change_setup')}</button>
@@ -480,8 +483,6 @@ class SnakeV2UI {
         chips[1].firstChild.textContent = t('length') + ' ';
         chips[2].firstChild.textContent = t('best') + ' ';
       }
-      const note = this.root.querySelector('.sv-footnote');
-      if (note) note.textContent = t('preview_note_short');
       if (this.overlay && !this.overlay.hidden && !this.started) {
         this.overlay.innerHTML = `<span>${t('tap_to_start')}</span>`;
       }

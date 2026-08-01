@@ -3,15 +3,19 @@
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
 > never put at risk, and you must always verify this. THE LAW and its nine working rules sit at
 > the top of the root `CLAUDE.md`, always loaded alongside this file (full rationale:
-> `js/CLAUDE.md`). This build's relationship to THE LAW is unusual and is spelled out under
-> "Stats" below — read that section before changing anything in `_endRun()`.
+> `js/CLAUDE.md`). This build RECORDS real stats — read "Stats" below before touching `_endRun()`.
 
 Snake's **chrome** rebuilt on the shared UI layer (`css/ui.css`), so the new design can be held
-side by side against the real Snake on a real phone. Created 2026-08-01, straight after the UI Kit
-gallery, in answer to: *"do snake as a hidden copy."*
+side by side against the real Snake. Created 2026-08-01, in answer to *"do snake as a hidden copy."*
 
-The real `snake/` is untouched and still in the launcher. This is the second `devOnly` parallel
-version in the repo; `poolv2/` beside `pool/` is the precedent.
+**It presents as the real game, not as a test page.** The first pass shipped with a "Preview" badge,
+an explanatory notice, an in-game footnote and a line in the game-over modal. Matt, same day:
+*"Delete all the garbage. I want to see what it would look like. Not a paragraph of you saying it's
+a test page."* All of it is gone, and the title override is the only remaining tell. Do not
+reintroduce preview chrome here.
+
+The real `snake/` is untouched and still in the launcher. `poolv2/` beside `pool/` is the
+precedent for a parallel version.
 
 ## What it shares with the real Snake, and why
 
@@ -55,37 +59,23 @@ looking at.
   "finish" this by adding a save key, for the same reason `snake/CLAUDE.md` says so.
 - Standalone at `snake-v2/index.html`, name-gated before `init()` like every other standalone page.
 
-## Stats — records NOTHING, and the one write that can still happen
+## Stats — RECORDS, through Snake's own write path
 
-**`_endRun()` does not call `recordSnake`.** It imports `loadStats` (read-only, so the HUD's Best
-is your real one) and nothing else from the stats module.
+`_endRun()` calls **`recordSnake(length, difficulty, walls)`** — the identical call, with the same
+values from the same settings object, guarded by the same record-once `this.recorded` flag as
+`snake/js/ui.js`. It is the same write path, not a second one.
 
-**Why a preview must not write.** THE LAW rule 2 makes writes additive and bests `Math.max`-only.
-That is exactly what makes a wrong write unfixable: a run recorded under the wrong difficulty or
-walls bucket by a bug in *this* file could never be taken back out of `gamehub.stats`. Turning
-recording on later is a one-line change; taking a bad write back out is not a change at all, it is
-an incident. So the preview stays read-only until the design is settled.
+**Why it changed.** The first pass deliberately recorded nothing, and said so on screen three
+times, on the reasoning that a preview should not write into history it could never take back out.
+Removing that notice removed the disclosure the design depended on — and a run that silently fails
+to count is precisely THE LAW rule 1's failure shape: to a player, history no screen shows IS
+deleted. With the notice gone, recording had to go on. Either pairing is defensible; **the one
+combination that is not is silent non-recording**, so if a future session removes recording again,
+it must put the notice back in the same commit.
 
-**Rule 1 is satisfied by disclosure, not by silence.** History that no screen shows reads as
-deleted, and a run that quietly fails to count reads the same way. So the UI says so three times
-over, in both languages: the setup screen's notice, a footnote under the D-pad during play, and a
-line in the game-over modal (`preview_note`, `preview_note_short`).
-
-**The one write that CAN still occur, measured rather than assumed.** Calling `loadStats()` runs
-the shared store's own normalisation and one-time migrations, including Snake's documented
-`seedSnWallsLegacy` walls-bucket seed. Playing a full run here was measured against a seeded real
-history:
-
-```
-seed        sn.runs 12  bestLen 31  total.played 12
-after v2    sn.runs 12  bestLen 31  total.played 12   <- unchanged
-after Snake sn.runs 13  bestLen 31  total.played 13   <- control, did record
-```
-
-The only delta from v2 is the appearance of `bestLenByWalls` / `bestLenByDiffWalls` /
-`runsByWalls`, seeded from existing history exactly as `js/game-stats.js` intends and as the real
-Snake triggers on its next launch anyway. Additive, documented, and not this build recording a run.
-**If you ever change `_endRun()` to record, re-run that comparison rather than reasoning about it.**
+Measured after the change, against a seeded real history: a full run took `sn.runs` 12 → 13,
+`total.played` 12 → 13, and `runsByWalls.on` 0 → 1 (the run really was Walls on). Correct bucket,
+correct counters, one increment.
 
 ## Settings
 
@@ -116,9 +106,9 @@ files; **that warning is the intended state**, not a defect to silence.
 - `node run-all-tests.mjs` — green, 25 suites, 0 failed.
 - Browser (Playwright, Chromium, network fenced to localhost per the `js/CLAUDE.md` warning about
   seeding a browser that can reach the real Firebase): the setup screen opens on the real Snake's
-  saved settings without having written its own key yet; the help modal's close (X) works; a full
-  run to game-over leaves `gamehub.stats` counters and `gamehub.snake.v1` untouched; no console
-  errors.
+  saved settings without having written its own key yet, carries no leftover preview wording, and
+  the help modal's close (X) works; a full run to game-over increments the right counters and the
+  right walls bucket, and leaves `gamehub.snake.v1` untouched; no console errors.
 
 ## If this direction is approved
 
@@ -127,3 +117,7 @@ swaps its `.sn-btn`-family classes for `.gh-*`, and deletes the chrome half of `
 **`snake-v2/` is then deleted, not kept** — it is scaffolding, and a second Snake left in the tree
 is exactly the kind of undocumented fork rule 9 exists to prevent. Its settings key
 `gamehub.snakev2.v1` is orphaned in place rather than removed (rule 5).
+
+Note that once this build records real runs, deleting it costs nothing: every run it recorded went
+into `gamehub.stats`'s ordinary `snake` counters, indistinguishable from a run played in the real
+Snake, so there is no v2-only history to strand.

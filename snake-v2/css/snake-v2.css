@@ -50,19 +50,6 @@
   color: var(--gh-muted, #5b6b82);
 }
 
-/* The preview notice. Uses the teal from the colorblind-safe set as a left rule rather than a
- * tinted background, so it reads as information rather than as a warning state. */
-.sv-root .sv-notice {
-  margin: 0;
-  padding: var(--gh-sp-3, 12px) var(--gh-sp-4, 16px);
-  border-left: 4px solid var(--gh-cb-teal, #178A7A);
-  border-radius: 0 var(--gh-r-md, 12px) var(--gh-r-md, 12px) 0;
-  background: var(--gh-surface-2, #eef2f8);
-  color: var(--gh-ink, #16243a);
-  font-size: var(--gh-fs-sm, 14px);
-  line-height: 1.55;
-}
-
 .sv-root .sv-field { display: flex; flex-direction: column; gap: var(--gh-sp-2, 8px); }
 
 /* The segmented control stretches to the card width here: three difficulty options on a phone
@@ -107,13 +94,6 @@
   font-variant-numeric: tabular-nums;
 }
 .sv-root .sv-hud .gh-chip b { color: var(--gh-ink, #16243a); }
-
-.sv-root .sv-footnote {
-  margin: 0;
-  font-size: var(--gh-fs-xs, 12px);
-  color: var(--gh-muted, #5b6b82);
-  text-align: center;
-}
 
 /* --- overlays ----------------------------------------------------------------------------
  * `.sv-modal` is appended INSIDE .sn-boardwrap (so it covers the board, matching the real
