@@ -46,15 +46,24 @@
 
 /* --- D-pad style picker (setup screen) ----------------------------------------------------- */
 .sn-root .sn-dpad-hint { margin: -2px 0 2px; font-size: 0.82rem; color: var(--sn-muted); text-align: left; }
-.sn-root .sn-dpad-options { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+/* THREE PER ROW, not six (Matt, 2026-08-01: "the Dpad options look like they've been crammed
+   together to fit in one row and made more narrow than they should be"). Six 46px cells across a
+   phone left every preview shrunken and wrapped the longest label ("Solid + arrows") onto two
+   lines. A 3-column grid gives each option roughly double the width, so the mini pads can render
+   at a size where the shapes are actually distinguishable, which is the entire job of a picker
+   whose options differ only by shape. Two rows of three costs nothing: the setup screen was
+   never height-constrained. */
+.sn-root .sn-dpad-options {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+}
 .sn-root .sn-dpad-option {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 0 auto; width: 46px;
-  font: inherit; font-size: 0.52rem; font-weight: 700; color: var(--sn-ink);
-  background: transparent; border: 2px solid transparent; border-radius: 10px;
-  padding: 5px 2px; cursor: pointer; touch-action: manipulation;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px;
+  font: inherit; font-size: 0.72rem; font-weight: 700; color: var(--sn-ink);
+  background: transparent; border: 2px solid transparent; border-radius: 12px;
+  padding: 8px 4px; cursor: pointer; touch-action: manipulation;
 }
 .sn-root .sn-dpad-option.is-on { border-color: var(--sn-accent); background: rgba(63, 125, 44, 0.1); }
-.sn-root .sn-dpad-swatch { width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; }
+.sn-root .sn-dpad-swatch { width: 100%; height: 64px; display: flex; align-items: center; justify-content: center; }
 /* Mini previews are REAL small pads (not a scaled-down full-size one cropped by an overflow
    box) — the same grid/shape rules apply at genuinely small px values, so nothing gets clipped
    or thrown off-center the way a transform: scale() + overflow: hidden crop window would.
@@ -62,17 +71,17 @@
    with the base ".sn-pad" rule above (both are .sn-root + one class), so which one wins would
    depend on source order rather than intent — adding ".sn-pad" makes these unambiguously more
    specific so the mini overrides always win regardless of how the rules get reordered later. */
-.sn-root .sn-pad.sn-pad--mini { pointer-events: none; gap: 2px; margin: 0; }
-.sn-root .sn-pad.sn-pad--mini.sn-pad--classic { width: 44px; grid-template-rows: repeat(2, 15px); }
+.sn-root .sn-pad.sn-pad--mini { pointer-events: none; gap: 3px; margin: 0; }
+.sn-root .sn-pad.sn-pad--mini.sn-pad--classic { width: 62px; grid-template-rows: repeat(2, 21px); }
 .sn-root .sn-pad.sn-pad--mini.sn-pad--compass,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--circle,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--gamepad,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--solid,
 .sn-root .sn-pad.sn-pad--mini.sn-pad--solidArrows {
-  width: 44px; height: 44px;
+  width: 62px; height: 62px;
   grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
 }
-.sn-root .sn-pad--mini .sn-padbtn { font-size: 0.42rem; border-radius: 4px; }
+.sn-root .sn-pad--mini .sn-padbtn { font-size: 0.58rem; border-radius: 5px; }
 .sn-root .sn-pad--mini.sn-pad--classic .sn-padbtn,
 .sn-root .sn-pad--mini.sn-pad--compass .sn-padbtn { border-width: 1.5px; }
 .sn-root .sn-pad--mini.sn-pad--gamepad::before, .sn-root .sn-pad--mini.sn-pad--gamepad::after,

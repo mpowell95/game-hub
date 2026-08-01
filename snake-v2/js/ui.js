@@ -234,7 +234,12 @@ class SnakeV2UI {
 
   openHelp() {
     const host = document.createElement('div');
-    host.className = 'sn-root sv-root sv-help-overlay gh-overlay';
+    // NOT `sn-root` here, deliberately. snake.css's `.sn-root { display: block }` and
+    // css/ui.css's `.gh-overlay { display: grid }` are the same specificity, and snake.css is
+    // injected AFTER ui.css, so `block` won and the dialog pinned itself to the top of the
+    // viewport with its close (X) underneath the status bar - unreachable on a phone. This
+    // overlay uses no `.sn-` class at all, so the fix is simply not to claim that scope.
+    host.className = 'sv-root sv-help-overlay gh-overlay';
     host.innerHTML = `
       <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${t('aria_help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('aria_close')}">&times;</button>

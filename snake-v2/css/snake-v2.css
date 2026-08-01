@@ -29,12 +29,16 @@
   gap: var(--gh-sp-3, 12px);
 }
 
+/* Title and tagline are CENTERED, matching the real Snake's setup screen (Matt, 2026-08-01).
+ * Only the header centers: the cards below stay left-aligned, since a form label reads worse
+ * centered than a title does. */
 .sv-root .sv-head {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  gap: var(--gh-sp-2, 8px);
-  margin-bottom: var(--gh-sp-1, 4px);
+  text-align: center;
+  gap: var(--gh-sp-1, 4px);
+  margin-bottom: var(--gh-sp-2, 8px);
 }
 .sv-root .sv-title {
   margin: 0;
@@ -44,9 +48,8 @@
   color: var(--gh-ink, #16243a);
 }
 .sv-root .sv-tag {
-  flex-basis: 100%;
   margin: 0;
-  font-size: var(--gh-fs-sm, 14px);
+  font-size: var(--gh-fs-md, 16px);
   color: var(--gh-muted, #5b6b82);
 }
 
@@ -61,9 +64,9 @@
  * the gap to the label needs restating, since the shared segment sets its own flex gap. */
 .sv-root .gh-seg__item .lb-dshape { margin-right: .35em; }
 
-/* The D-pad picker keeps snake.css's swatch rendering (real mini pads, not scaled crops) and
- * only loses its own container chrome, which the card now provides. */
-.sv-root .sn-dpad-options { justify-content: flex-start; gap: 4px; }
+/* The D-pad picker is inherited wholesale from snake.css, including its 3-per-row grid and real
+ * mini-pad swatches. Nothing to override here: the card already supplies the container chrome
+ * the picker used to draw for itself. */
 
 .sv-root .sv-actions {
   display: flex;
@@ -122,6 +125,16 @@
 
 /* The two deliberate non-descendant rules: the help overlay is appended to <body> (so it
  * survives a screen re-render, same as the real Snake's), which puts it OUTSIDE the mounted
- * container. It still carries .sv-root itself, so these stay namespaced. */
-.sv-help-overlay { position: fixed; }
+ * container. It still carries .sv-root itself, so these stay namespaced.
+ *
+ * The display/place-items restatement is belt-and-braces: the host no longer carries `.sn-root`
+ * (see openHelp's comment for the cascade collision that caused), and pinning the values here
+ * as well means a future stylesheet injected after ui.css cannot un-center this dialog again.
+ * The safe-area padding keeps the close (X) clear of a notch or status bar on a phone. */
+.sv-help-overlay {
+  position: fixed;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
 .sv-help-overlay .gh-modal { text-align: left; }
