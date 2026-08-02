@@ -6,7 +6,7 @@
 // two THE-LAW-governed fields in the save: `earned` and `best`, which must never move down).
 // Same idiom as every other game's engine test in this repo.
 
-import { makeTerrain, CHUNK } from './terrain.js';
+import { makeTerrain, CHUNK, AIR_MAX, LAUNCH_SPEED } from './terrain.js';
 import { Run, Vehicle, RunState, EndReason, DT, NITRO_START, NITRO_MAX } from './physics.js';
 import {
   VEHICLES, STAGES, PARTS, MAX_LEVEL, upgradeCost, tunedSpec, vehicleById, stageById,
@@ -98,6 +98,92 @@ const modulated = (run) => {
   let allAbove = true;
   for (const it of a.itemsIn(0, 900)) if (it.y <= a.y(it.x)) allAbove = false;
   ok('every pickup sits above the terrain', allAbove);
+}
+
+// --- REACHABILITY (2026-08-02 regression: "some coins and gas tanks are impossible to get") --
+// There is no jump button, so the only way off the ground is a crest. Every pickup must therefore
+// be either collectible while simply driving, or downrange of a real ramp. Checked across all four
+// stages and several seeds, because the terrain generator's roughness differs per stage and an
+// unreachable pickup is a run-ending bug on the fuel cans.
+{
+  const DRIVE_REACH = 2.2;   // comfortably inside Run.step()'s 2.4 m pickup radius for every car
+  let highFuel = 0, tooHigh = 0, orphanAir = 0, buried = 0, coins = 0, cans = 0, airCoins = 0;
+
+  for (const stage of STAGES) {
+    for (const seed of [1, 7, 4242, 90210]) {
+      const tr = makeTerrain(seed, stage);
+      for (const it of tr.itemsIn(0, 2500)) {
+        const above = it.y - tr.y(it.x);
+        if (above <= 0.5) buried++;
+        if (it.kind === 'fuel') {
+          cans++;
+          // A missed coin costs coins; an unreachable can ends the run. Cans are never airborne.
+          if (above > DRIVE_REACH) highFuel++;
+          continue;
+        }
+        coins++;
+        if (above > AIR_MAX + 0.01) tooHigh++;
+        if (above > DRIVE_REACH) {
+          airCoins++;
+          // an out-of-reach coin is only fair if a ramp launches you into it
+          if (tr.crestIn(it.x - 16, it.x - 0.5) == null) orphanAir++;
+        }
+      }
+    }
+  }
+
+  ok('the sweep actually found pickups to check', coins > 200 && cans > 20);
+  ok('no pickup is buried in the ground', buried === 0);
+  ok('every fuel can is reachable by driving (never airborne)', highFuel === 0);
+  ok('no coin floats above the hard ceiling', tooHigh === 0);
+  ok('every airborne coin has a ramp behind it', orphanAir === 0);
+  ok('air arcs still exist (the reward for launching is not tuned away)', airCoins > 0);
+}
+
+// --- REACHABILITY, actually driven ---------------------------------------------------------
+// The geometry check above proves the placement RULE holds. This proves the rule delivers: drive
+// real runs and count what a car that never went looking for air actually swept up. Fuel is the
+// hard requirement (a can you cannot reach ends the run), coins are the soft one (the misses
+// should be the air arcs, not ordinary line coins floating out of reach).
+{
+  let coinsPassed = 0, coinsGot = 0, fuelPassed = 0, fuelGot = 0;
+  for (const stageId of ['countryside', 'desert', 'arctic']) {
+    for (const seed of [11, 22, 33, 44, 55]) {
+      const stage = stageById(stageId);
+      const tr = makeTerrain(seed, stage);
+      const run = new Run(tunedSpec('jeep', {}, stage), tr);
+      run.start();
+      let t = 0;
+      while (run.state === RunState.RUNNING && t < 200) { run.step(modulated(run), DT); t += DT; }
+      for (const it of tr.itemsIn(0, run.car.x)) {
+        if (it.kind === 'coin') { coinsPassed++; if (it.taken) coinsGot++; }
+        else { fuelPassed++; if (it.taken) fuelGot++; }
+      }
+    }
+  }
+  ok('the driven sweep covered real ground', coinsPassed > 300 && fuelPassed > 40);
+  ok('EVERY fuel can driven past is collected', fuelGot === fuelPassed);
+  ok('most coins driven past are collected without going hunting for air', coinsGot / coinsPassed > 0.5);
+}
+
+// --- crest detection ---------------------------------------------------------------------------
+{
+  const tr = makeTerrain(4242, stageById('countryside'));
+  const c = tr.crestIn(60, 400);
+  ok('a crest is found on real terrain', c != null);
+  if (c != null) {
+    // the contract is the LAUNCH condition, not a slope: rising into it, falling out of it, and
+    // convex enough that a car at LAUNCH_SPEED cannot stay glued to the ground (|y''| >= g / v^2)
+    ok('a crest rises into it and falls out of it', tr.slope(c - 0.5) > 0 && tr.slope(c) <= 0);
+    ok('a crest is convex enough to actually launch a car',
+      -tr.curvature(c) >= COUNTRY.gravity / (LAUNCH_SPEED * LAUNCH_SPEED));
+  }
+  // the flat launch pad is not a ramp
+  ok('the flat start is never mistaken for a ramp', tr.crestIn(0, 14) == null);
+  // window-independence: the generator asks per chunk, the reachability check asks per coin, and
+  // the two must never disagree about where a ramp is
+  const off = tr.crestIn(57.3, 400);
+  ok('crestIn does not depend on where the window starts', off === c);
 }
 
 // --- physics: rest state -------------------------------------------------------------------

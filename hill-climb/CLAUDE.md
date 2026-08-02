@@ -91,6 +91,41 @@ World objects are built per 50 m chunk, lazily, cached by chunk index and hashed
 so contents never depend on visit order. `itemsIn()` returns the SAME object instances every call,
 which is what makes `it.taken` stick.
 
+### The reachability rule (2026-08-02, after Matt's first play)
+
+> "Some coins and gas tanks are impossible to get. There's no jump button... It's good to have
+> coins in the air like that IF there's a ramp or jump you have to go off to collect them."
+
+The first build placed every arc at a random 1.9-5.0 m above whatever terrain happened to be
+underneath, **including dead-flat ground**. There is no jump, so a lot of them simply could not be
+collected. The rule now is: a pickup is either reachable while driving, or it sits downrange of a
+real ramp. Nothing else is allowed.
+
+- **Ground arcs hug the terrain** at `GROUND_LIFT` (1.5 m). That number is derived, not taste:
+  `Run.step()` collects within 2.4 m of the chassis centre, which rides 0.9 m (jeep) to 1.3 m
+  (truck) up, so every vehicle sweeps these up just by driving through.
+- **Fuel cans are ALWAYS ground-hugging** (`FUEL_LIFT`, 1.4 m) and never ride an air arc. A missed
+  coin costs coins; an unreachable can ends the run, which makes it the one pickup that must never
+  be a gamble.
+- **Air arcs exist only downrange of a crest**, anchored to it, and clamped at both ends: never
+  below `GROUND_LIFT` over the ground beneath them (nothing buried in the landing slope), never
+  above `AIR_MAX` (4.2 m) over it.
+- **`crestIn()` decides what counts as a ramp, and the test is PHYSICAL.** Following convex ground
+  at speed `v` needs a downward acceleration of `v² · |y''|`, and only gravity supplies it, so the
+  wheels leave the ground exactly when `|y''| >= g / v²` (`LAUNCH_SPEED`, 14 m/s, is the reference).
+  A first attempt thresholded on SLOPE and was both wrong — a steep hill you crawl up throws you no
+  higher than a gentle one you hit fast — and so strict that the Countryside had no ramps at all.
+  The curvature form also adapts per stage for free: the Moon's low gravity turns nearly every
+  crest into a launch.
+- **`crestIn()` scans a GLOBAL grid**, snapping x to a multiple of `CREST_STEP`, so its answer never
+  depends on which window you asked about. The generator asks per chunk and the reachability test
+  asks per coin; those two disagreeing is how the first fix "passed" while still shipping orphans.
+
+Guarded by `test.js`: a geometry sweep (all four stages, four seeds, 2.5 km each) asserting no can
+is airborne, no coin is above the ceiling, and every airborne coin has a ramp behind it; plus a
+DRIVEN sweep asserting **every fuel can driven past is collected** and >50% of coins are, with the
+remainder being exactly the air arcs.
+
 ## Progression and the economy
 
 Four vehicles (Hill Climber free, Dirt Bike 2,500, Monster Truck 8,000, Moon Rover 18,000) and four
@@ -158,8 +193,33 @@ cause), upgrades and stage surfaces changing the outcome, both end conditions, d
 decreasing while reversing, pickups, nitro, flips, the head-crash probe, the whole economy, and
 the two LAW-governed save fields across a full earn/spend/earn cycle.
 
-Browser-verified 2026-08-02 (Chromium, 430x860): garage, all four tabs, help, a full run to a
-crash, pause, the result card, the stats write and the hub tile.
+Browser-verified 2026-08-02 (Chromium, 430x860 and 402x874 at dpr 3): garage, all four tabs, help,
+a full run to a crash, pause, the result card, the stats write and the hub tile. The garage preview
+is additionally verified against a deliberately DELAYED stylesheet, the exact condition that
+produced the solid-red panel below.
+
+## The garage preview measured 1x1 (2026-08-02)
+
+Matt's phone showed the preview panel as a **solid red rectangle**. `renderGarage()` draws the
+preview in the same task that sets `innerHTML`, and on a cold load the stylesheet — injected as a
+`<link>` by `ensureCSS()`, therefore asynchronous — had not applied yet, so the canvas measured
+about 1x1 CSS px. `resize()` cheerfully sized the bitmap to 3x3, drew three pixels of the middle of
+the car into it, and **nothing ever redrew**; CSS then stretched those three red pixels across the
+whole panel.
+
+Three guards, because any one of them alone leaves a hole:
+
+1. `Renderer.resize()` **refuses a degenerate box** (< 8 px either axis) and returns false without
+   touching the bitmap, so a wrong-sized backing store can never be committed in the first place.
+2. `drawPreview()` **retries on the next animation frame** while the box is still degenerate.
+3. A **ResizeObserver** redraws whenever the canvas box actually changes — which is what covers late
+   CSS, orientation changes and the hub's own mount transition, and is the piece that was missing.
+
+`Renderer.draw()` (the play canvas) honours the same guard and simply skips the frame; the rAF loop
+picks it up on the next one, so it self-heals with no extra machinery.
+
+If you ever touch the preview path, reproduce with a throttled stylesheet rather than a normal load
+— a warm cache hides this bug completely, which is why it shipped.
 
 ## Known gaps / next steps
 

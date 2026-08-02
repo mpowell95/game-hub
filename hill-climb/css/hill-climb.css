@@ -18,6 +18,10 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  /* iOS long-press otherwise opens its Copy / Translate / Look Up bubble over the canvas (Live
+     Text reads the drawn HUD numerals as selectable text), which lands right on top of the
+     distance readout while you are holding a pedal. Seen on Matt's phone, 2026-08-02. */
+  -webkit-touch-callout: none;
 
   --hc-navy: #1b2230;
   --hc-navy-2: #232c3d;
@@ -240,7 +244,13 @@
 /* ------------------------------------------------------------------ play --- */
 
 .hc-root .hc-play { position: absolute; inset: 0; overflow: hidden; }
-.hc-root .hc-canvas { display: block; width: 100%; height: 100%; }
+.hc-root .hc-canvas {
+  display: block; width: 100%; height: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;   /* the pedals own all input; nothing here is tappable */
+}
 
 .hc-root .hc-hud { position: absolute; inset: 0; pointer-events: none; }
 .hc-root .hc-hud button { pointer-events: auto; }

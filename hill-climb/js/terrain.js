@@ -15,6 +15,29 @@ const TAU = Math.PI * 2;
 export const CHUNK = 50;          // meters per world-object chunk
 export const COIN_VALUES = [5, 25, 100];
 
+// --- how high a pickup may float -----------------------------------------------------------------
+//
+// THE REACHABILITY RULE (2026-08-02, Matt: "some coins and gas tanks are impossible to get. There's
+// no jump button... It's good to have coins in the air like that IF there's a ramp or jump you have
+// to go off to collect them. But as is, it's just impossible.")
+//
+// There is no jump. The only way to leave the ground is to launch off a crest, so a pickup is only
+// fair if it is EITHER within reach of a car that is simply driving, OR sitting downrange of a real
+// ramp. The first build placed every arc at a random 1.9-5.0 m above whatever terrain happened to
+// be underneath, including dead-flat ground, which made a lot of them unreachable.
+//
+// The numbers come from the physics, not taste: Run.step() collects anything within 2.4 m of the
+// CHASSIS CENTRE, and that centre rides about 0.9 m (jeep) to 1.3 m (truck) above the ground. So a
+// pickup at ground + GROUND_LIFT is collected by every vehicle just by driving through it.
+export const GROUND_LIFT = 1.5;   // coins that hug the terrain
+export const FUEL_LIFT = 1.4;     // fuel cans, ALWAYS - see buildChunk
+export const AIR_APEX = 2.6;      // how far an air arc rises above the crest that launches it
+export const AIR_MAX = 4.2;       // hard ceiling above the LOCAL ground, so nothing is absurd
+/** Reference speed for "would a car launch off this crest" — see crestIn(). */
+export const LAUNCH_SPEED = 14;
+/** Sampling grid for crest detection. Global, so crestIn() is window-independent. */
+export const CREST_STEP = 0.5;
+
 /** Small, fast, seedable PRNG (mulberry32). Same generator the rest of the repo's games use. */
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -59,6 +82,7 @@ export function makeTerrain(seed, stage) {
   const rnd = mulberry32(seed);
   const rough = (stage && stage.rough) || 1;
   const rampM = (stage && stage.ramp) || 320;
+  const gravity = (stage && stage.gravity) || 22;
   const layers = LAYERS.map((l) => ({ amp: l.amp, freq: l.freq, phase: rnd() * TAU }));
 
   /** The amplitude envelope at x: flat pad for the first 18 m, then 55% -> 100% over `ramp` m. */
@@ -91,37 +115,93 @@ export function makeTerrain(seed, stage) {
     return { x: -s * inv, y: inv };
   }
 
+  /** Second derivative of the ground. Negative = convex (a hilltop), which is what throws a car. */
+  function curvature(x) {
+    const h = 0.5;
+    return (y(x + h) - 2 * y(x) + y(x - h)) / (h * h);
+  }
+
+  /**
+   * The first RAMP in [x0, x1], or null — a crest a car would genuinely LAUNCH off, which is the
+   * only way to get airborne in this game (there is no jump button).
+   *
+   * The test is physical, not a slope guess: following convex ground at speed v needs a downward
+   * acceleration of v^2 * |y''|, and the only thing pushing the car down is gravity. So the wheels
+   * leave the ground exactly when |y''| >= g / v^2. LAUNCH_SPEED is the "a competent player is
+   * doing about this" reference speed. An earlier version thresholded on SLOPE instead and was
+   * both wrong (a steep hill you crawl up throws you no higher than a gentle one you hit fast) and
+   * too strict for the Countryside, which found no ramps at all. This form also adapts per stage
+   * for free: the Moon's low gravity turns almost every crest into a launch, which is exactly how
+   * that stage should feel.
+   *
+   * Scans a GLOBAL grid (x snapped to a multiple of CREST_STEP) rather than stepping from x0, so
+   * the answer for a given x never depends on which window you happened to ask about — the
+   * generator asks per chunk and the tests ask per coin, and those two must agree.
+   */
+  function crestIn(x0, x1) {
+    const need = gravity / (LAUNCH_SPEED * LAUNCH_SPEED);
+    const a = Math.ceil(x0 / CREST_STEP) * CREST_STEP;
+    let prev = slope(a - CREST_STEP);
+    for (let x = a; x <= x1; x += CREST_STEP) {
+      const s = slope(x);
+      if (prev > 0 && s <= 0 && -curvature(x) >= need) return x;
+      prev = s;
+    }
+    return null;
+  }
+
   // --- world objects ---------------------------------------------------------------------------
-  // A chunk holds a coin arc (sometimes two) and, less often, a fuel can. Nothing is placed in the
-  // first chunk: the player needs a moment to get moving before the first pickup matters.
+  // A chunk holds one coin arc and, more often than not, a fuel can. Nothing is placed in the first
+  // chunk: the player needs a moment to get moving before the first pickup matters.
   const chunks = new Map();
 
   function buildChunk(ci) {
     const items = [];
     const x0 = ci * CHUNK;
-    if (ci >= 1) {
-      const arcs = hash2(seed, ci * 7 + 1) < 0.35 ? 2 : 1;
-      for (let a = 0; a < arcs; a++) {
-        const r1 = hash2(seed, ci * 31 + a * 3 + 2);
-        const r2 = hash2(seed, ci * 31 + a * 3 + 3);
-        const r3 = hash2(seed, ci * 31 + a * 3 + 4);
-        const n = 3 + Math.floor(r1 * 5);                       // 3..7 coins
-        const start = x0 + 6 + r2 * (CHUNK - 20) + a * 4;
-        const gap = 1.5 + r3 * 0.9;
-        // Value rises with distance: the 100s only start showing up deep into a run.
-        const tier = r3 > 0.93 && x0 > 600 ? 2 : (r2 > 0.62 ? 1 : 0);
-        const lift = 1.9 + r1 * 1.6;
-        for (let i = 0; i < n; i++) {
-          const cx = start + i * gap;
-          // Arc the line above the terrain so it reads as a jump reward, not a floor decal.
-          const bow = Math.sin((i + 0.5) / n * Math.PI) * 1.5;
-          items.push({ kind: 'coin', x: cx, y: y(cx) + lift + bow, value: COIN_VALUES[tier], taken: false, r: 0.42 });
-        }
+    if (ci < 1) return items;
+
+    const r1 = hash2(seed, ci * 31 + 2);
+    const r2 = hash2(seed, ci * 31 + 3);
+    const r3 = hash2(seed, ci * 31 + 4);
+    const n = 4 + Math.floor(r1 * 4);                 // 4..7 coins
+    const gap = 1.6 + r3 * 0.7;
+    // Value rises with distance: the 100s only start showing up deep into a run.
+    const value = COIN_VALUES[r3 > 0.93 && x0 > 600 ? 2 : (r2 > 0.62 ? 1 : 0)];
+    const crest = crestIn(x0 + 4, x0 + CHUNK - 16);
+
+    if (crest != null) {
+      // AIR ARC — the payoff for actually launching off this crest. Anchored to the crest so the
+      // line traces the trajectory a car leaving it would follow, and clamped at both ends: never
+      // below GROUND_LIFT over the ground beneath it (nothing buried in the landing slope), never
+      // above AIR_MAX over it (nothing needing a perfect run to touch).
+      const cy = y(crest);
+      const span = gap * (n - 1) + 1.2;
+      for (let i = 0; i < n; i++) {
+        const cx = crest + 1.2 + i * gap;
+        const tN = (cx - crest) / span;                          // 0..1 along the arc
+        const arc = AIR_APEX * (1 - Math.pow(2 * tN - 1, 2));    // parabola, zero at both ends
+        const gy = y(cx);
+        const target = cy + GROUND_LIFT + arc;
+        items.push({
+          kind: 'coin', x: cx, value, taken: false, r: 0.42,
+          y: Math.min(Math.max(target, gy + GROUND_LIFT), gy + AIR_MAX),
+        });
+      }
+    } else {
+      // GROUND ARC — no ramp here, so the line hugs the terrain at a height every vehicle
+      // collects just by driving through it.
+      const start = x0 + 6 + r2 * (CHUNK - 24);
+      for (let i = 0; i < n; i++) {
+        const cx = start + i * gap;
+        items.push({ kind: 'coin', x: cx, y: y(cx) + GROUND_LIFT, value, taken: false, r: 0.42 });
       }
     }
-    if (ci >= 1 && hash2(seed, ci * 13 + 5) < 0.62) {
+
+    // Fuel is ALWAYS ground-hugging and never rides an air arc. A missed coin costs you coins; an
+    // unreachable can ends the run, which makes it the one pickup that must never be a gamble.
+    if (hash2(seed, ci * 13 + 5) < 0.62) {
       const fx = x0 + 10 + hash2(seed, ci * 13 + 6) * (CHUNK - 20);
-      items.push({ kind: 'fuel', x: fx, y: y(fx) + 2.2, amount: 55, taken: false, r: 0.6 });
+      items.push({ kind: 'fuel', x: fx, y: y(fx) + FUEL_LIFT, amount: 55, taken: false, r: 0.6 });
     }
     return items;
   }
@@ -139,7 +219,7 @@ export function makeTerrain(seed, stage) {
     return out;
   }
 
-  return { seed, y, slope, normal, itemsIn, envelope, _chunks: chunks };
+  return { seed, y, slope, normal, curvature, itemsIn, envelope, crestIn, _chunks: chunks };
 }
 
-export default { makeTerrain, mulberry32, CHUNK, COIN_VALUES };
+export default { makeTerrain, mulberry32, CHUNK, COIN_VALUES, GROUND_LIFT, FUEL_LIFT, AIR_APEX, AIR_MAX };

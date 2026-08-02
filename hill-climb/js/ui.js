@@ -90,6 +90,9 @@ class HillClimb {
     this.pointers = new Map();     // pointerId -> 'gas' | 'brake'
     this.showHelp = false;
     this.result = null;
+    this._previewRaf = 0;
+    this._previewRO = null;
+    this._previewWatched = null;
 
     this._onKeyDown = (e) => this.onKey(e, true);
     this._onKeyUp = (e) => this.onKey(e, false);
@@ -304,7 +307,17 @@ class HillClimb {
     this.renderGarage();
   }
 
-  /** The garage's parked-car preview, drawn with the same code the live game uses. */
+  /**
+   * The garage's parked-car preview, drawn with the same code the live game uses.
+   *
+   * Draws only once the canvas has a REAL box. `renderGarage()` calls this in the same task that
+   * sets innerHTML, and on a cold load the stylesheet (a <link> injected by ensureCSS) has not
+   * applied yet, so the canvas can measure ~1x1 CSS px — which is exactly how the preview shipped
+   * as a solid red panel on 2026-08-02 (a 3x3 bitmap holding three pixels of the middle of the car,
+   * stretched to fill once CSS landed). Two belts here: retry on the next frame while the box is
+   * still degenerate, and a ResizeObserver that redraws whenever the box actually changes, which
+   * also covers late CSS, orientation changes and the hub's own mount transition.
+   */
   drawPreview() {
     if (this.screen !== 'garage') return;
     const canvas = this.root.querySelector('.hc-preview');
@@ -312,7 +325,26 @@ class HillClimb {
     const stage = stageById(this.save.stage);
     const veh = vehicleById(this.save.vehicle);
     const r = new Renderer(canvas, stage);
-    r.drawPreview(veh, tunedSpec(veh.id, this.save.upgrades[veh.id], stage));
+    const ok = r.drawPreview(veh, tunedSpec(veh.id, this.save.upgrades[veh.id], stage));
+    this._watchPreview(canvas);
+    if (!ok) {
+      cancelAnimationFrame(this._previewRaf);
+      this._previewRaf = requestAnimationFrame(() => this.drawPreview());
+    }
+  }
+
+  /** One ResizeObserver, re-pointed at whichever preview canvas is currently mounted. */
+  _watchPreview(canvas) {
+    if (typeof ResizeObserver !== 'function') return;
+    if (!this._previewRO) {
+      this._previewRO = new ResizeObserver(() => {
+        if (this.screen === 'garage') this.drawPreview();
+      });
+    }
+    if (this._previewWatched === canvas) return;
+    this._previewRO.disconnect();
+    this._previewWatched = canvas;
+    this._previewRO.observe(canvas);
   }
 
   // --- play --------------------------------------------------------------------------------
@@ -612,7 +644,11 @@ class HillClimb {
 
   destroy() {
     cancelAnimationFrame(this.raf);
+    cancelAnimationFrame(this._previewRaf);
     this.raf = 0;
+    this._previewRaf = 0;
+    if (this._previewRO) { this._previewRO.disconnect(); this._previewRO = null; }
+    this._previewWatched = null;
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
     window.removeEventListener('resize', this._onResize);

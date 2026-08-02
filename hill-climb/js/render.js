@@ -65,13 +65,25 @@ export class Renderer {
 
   setStage(stage) { this.stage = stage; }
 
-  /** Size the backing store to the element box at device pixel ratio. Call on mount and resize. */
+  /**
+   * Size the backing store to the element box at device pixel ratio. Call on mount and resize.
+   * Returns false when the canvas has NO REAL LAYOUT YET, without touching the bitmap.
+   *
+   * That guard is the fix for a real bug (2026-08-02, Matt's phone): the garage preview rendered
+   * as a solid red panel. `renderGarage()` draws the preview in the same task that sets innerHTML,
+   * and on a cold load the stylesheet (injected as a <link> by ensureCSS) had not applied yet, so
+   * the canvas measured about 1x1 CSS px. The old code happily sized the bitmap to 3x3, drew a
+   * 3-pixel crop of the middle of the car into it, and never redrew — CSS then stretched those
+   * three red pixels across the whole panel. Refusing a degenerate box (and letting the caller
+   * retry, see ui.js's rAF + ResizeObserver) means a wrong-sized bitmap can never be committed.
+   */
   resize() {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const w = Math.max(1, Math.round(rect.width));
-    const h = Math.max(1, Math.round(rect.height));
-    if (w === this.w && h === this.h && dpr === this.dpr) return;
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w < 8 || h < 8) return false;
+    if (w === this.w && h === this.h && dpr === this.dpr) return true;
     this.w = w; this.h = h; this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
@@ -80,6 +92,7 @@ export class Renderer {
     // off height there shrank the car to a speck. Clamped at both ends so it neither vanishes on
     // a desktop monitor nor fills a small window.
     this.scale = Math.max(24, Math.min(68, Math.min(w / 13.5, h / 7.5)));
+    return true;
   }
 
   worldToScreen(x, y) {
@@ -621,10 +634,11 @@ export class Renderer {
     this.popups = this.popups.filter((p) => p.life > 0);
   }
 
-  /** One frame. `dt` is real (not sim) seconds since the last frame. */
+  /** One frame. `dt` is real (not sim) seconds since the last frame. Skips entirely while the
+   *  canvas has no real layout (see resize()); the next frame picks it up. */
   draw(run, veh, throttle, dt, tNow) {
     const { ctx } = this;
-    this.resize();
+    if (!this.resize()) return;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const car = run.car;
 
@@ -653,10 +667,11 @@ export class Renderer {
     this.drawPopups(Math.min(dt, 0.05));
   }
 
-  /** Static one-off used by the garage preview: a level patch of ground and the parked car. */
+  /** Static one-off used by the garage preview: a level patch of ground and the parked car.
+   *  Returns false if the canvas is not laid out yet, so the caller can try again (ui.js). */
   drawPreview(veh, spec) {
     const { ctx } = this;
-    this.resize();
+    if (!this.resize()) return false;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.paint = veh.paint;
     this.camInit = true; this.camX = 0; this.camY = 0.4;
@@ -679,6 +694,7 @@ export class Renderer {
     };
     this.lean = 0; this.antenna = 0;
     this.drawCar(fake, veh, 0, 0);
+    return true;
   }
 }
 
