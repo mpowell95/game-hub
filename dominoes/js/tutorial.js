@@ -171,8 +171,8 @@ function illoHTML(n, t) {
   return frame(`<div class="dm-illo-board">${finishedHTML(t)}</div>`, { head: head(304, 60) });
 }
 
-const ICON_FIRST = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5 L11 12 L19 19"/><path d="M6 5 V19"/></svg>';
-const ICON_LAST = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5 L13 12 L5 19"/><path d="M18 5 V19"/></svg>';
+const ICON_PREV = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg>';
+const ICON_NEXT = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 L16 12 L9 19"/></svg>';
 
 /**
  * Open the tutorial over `host`. Returns a teardown function.
@@ -195,9 +195,9 @@ export function openTutorial(host, t) {
       </div>
       <div class="dm-dots" data-role="dots" role="tablist" aria-label="${esc(t('aria_tut_pages'))}"></div>
       <div class="dm-tut-actions">
-        <button type="button" class="dm-btn is-purple is-icon" data-role="first" data-action="tut-first" aria-label="${esc(t('aria_tut_first'))}">${ICON_FIRST}</button>
+        <button type="button" class="dm-btn is-purple is-icon" data-role="first" data-action="tut-prev" aria-label="${esc(t('aria_tut_prev'))}">${ICON_PREV}</button>
         <button type="button" class="dm-btn is-purple" data-action="close-card">${esc(t('tut_ok'))}</button>
-        <button type="button" class="dm-btn is-purple is-icon" data-role="last" data-action="tut-last" aria-label="${esc(t('aria_tut_last'))}">${ICON_LAST}</button>
+        <button type="button" class="dm-btn is-purple is-icon" data-role="last" data-action="tut-next" aria-label="${esc(t('aria_tut_next'))}">${ICON_NEXT}</button>
       </div>
     </div>`;
   host.appendChild(overlay);
@@ -233,8 +233,10 @@ export function openTutorial(host, t) {
     x0 = null;
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(page + (dx < 0 ? 1 : -1));
   };
-  // Keyboard, because the two side buttons jump to the FIRST and LAST page (per the addendum),
-  // which leaves nothing to page one step at a time on a device with no touchscreen.
+  // A cancelled gesture (iOS hands the pointer to a scroll) must clear the start point, or the
+  // next unrelated pointerup is measured against a stale one and jumps a page.
+  const onCancel = () => { x0 = null; };
+  // Keyboard as well, for a desktop with no touchscreen.
   const onKey = (e) => {
     if (e.key === 'ArrowRight') { go(page + 1); e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { go(page - 1); e.preventDefault(); }
@@ -242,19 +244,21 @@ export function openTutorial(host, t) {
   const onClick = (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn || !overlay.contains(btn)) return;
-    if (btn.dataset.action === 'tut-first') go(1);
-    else if (btn.dataset.action === 'tut-last') go(PAGE_COUNT);
+    if (btn.dataset.action === 'tut-prev') go(page - 1);
+    else if (btn.dataset.action === 'tut-next') go(page + 1);
     else if (btn.dataset.action === 'tut-go') go(Number(btn.dataset.n));
   };
 
   el.card.addEventListener('pointerdown', onDown);
   el.card.addEventListener('pointerup', onUp);
+  el.card.addEventListener('pointercancel', onCancel);
   overlay.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
   render();
 
   return function close() {
     document.removeEventListener('keydown', onKey);
+    el.card.removeEventListener('pointercancel', onCancel);
     overlay.remove();
   };
 }
