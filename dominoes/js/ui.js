@@ -151,7 +151,15 @@ class DominoesUI {
     this.el = null;
 
     this._onClick = (e) => this.onClick(e);
-    this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    this._onKey = (e) => {
+      if (e.key === 'Escape') { this.closeOverlays(); return; }
+      // The tiles are role=button divs (see tiles.js), so Enter/Space activation is ours to do.
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const el = document.activeElement;
+      if (!el || !this.container.contains(el) || el.getAttribute('role') !== 'button') return;
+      e.preventDefault();
+      el.click();
+    };
     // orientationchange and the visual viewport (a collapsing URL bar) both change the usable
     // height without necessarily firing a plain window resize.
     this._onResize = () => { this._fit(); this._layoutBoard(); };
@@ -426,7 +434,9 @@ class DominoesUI {
         aria: sc ? t('aria_tile_scores', { a: TILES[id][0], b: TILES[id][1], v: sc }) : tileAria(TILES[id]),
         attrs: ` data-action="pick" data-id="${id}"`,
       });
-      return sc ? html.replace('</button>', `<i class="dm-worth">+${sc}</i></button>`) : html;
+      // tileHTML emits a <div role="button">, never a real <button> (see CLAUDE.md,
+      // "A tile is never a `<button>`"); the +N badge goes in before that closing tag.
+      return sc ? html.replace(/<\/div>$/, `<i class="dm-worth">+${sc}</i></div>`) : html;
     }).join('');
   }
 

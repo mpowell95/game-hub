@@ -38,9 +38,15 @@ export function tileHTML(values, opts = {}) {
     ? '<div class="dm-half"></div><div class="dm-half"></div>'
     : `<div class="dm-half">${pipsHTML(values[0])}</div><div class="dm-half">${pipsHTML(values[1])}</div>`;
   const aria = opts.aria ? ` aria-label="${esc(opts.aria)}"` : ' aria-hidden="true"';
-  const tag = opts.button ? 'button' : 'div';
-  const type = opts.button ? ' type="button"' : '';
-  return `<${tag}${type} class="${cls.join(' ')}"${opts.attrs || ''}${aria} style="${opts.style || ''}">${halves}</${tag}>`;
+  // A tappable tile is a DIV with a button role, never a real <button>. WebKit before Safari
+  // 16.4 refuses to let a <button> be a flex container: it wraps the children in an anonymous
+  // block, so the two `.dm-half` divs (which carry no intrinsic size) collapsed to zero height
+  // and every tile in the hand and the boneyard rendered as an empty shell - no pips, no divider
+  // - while board tiles, being plain divs, drew correctly. Reported from a real phone
+  // 2026-08-01. ui.js delegates on [data-action], so nothing needed a real button anyway; the
+  // role and tabindex keep it a button to assistive tech and the keyboard.
+  const role = opts.button ? ' role="button" tabindex="0"' : '';
+  return `<div class="${cls.join(' ')}"${role}${opts.attrs || ''}${aria} style="${opts.style || ''}">${halves}</div>`;
 }
 
 export default { PIPS, pipsHTML, tileHTML };
