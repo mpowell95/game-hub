@@ -67,8 +67,8 @@ export const STRINGS = {
     aria_boneyard_tile: 'Draw a tile',
     aria_tut_pages: 'Tutorial pages',
     aria_tut_page: 'Page {n}',
-    aria_tut_first: 'First page',
-    aria_tut_last: 'Last page',
+    aria_tut_prev: 'Previous page',
+    aria_tut_next: 'Next page',
   },
   es: {
     title: 'Dominó',
@@ -127,8 +127,8 @@ export const STRINGS = {
     aria_boneyard_tile: 'Robar una ficha',
     aria_tut_pages: 'Páginas del tutorial',
     aria_tut_page: 'Página {n}',
-    aria_tut_first: 'Primera página',
-    aria_tut_last: 'Última página',
+    aria_tut_prev: 'Página anterior',
+    aria_tut_next: 'Página siguiente',
   },
 };
 

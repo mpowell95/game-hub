@@ -258,10 +258,14 @@ on page 2 and around both open ends on page 4) and the **cartoon pointing hand**
 drawn in a faded red on the blocked page, off to the side away from any tile, which reads as
 "this tap does nothing").
 
-Navigation deviates from the addendum in one place, on purpose: the two side buttons jump to the
-FIRST and LAST page exactly as specified, which leaves nothing that pages one step at a time on
-a device with no touchscreen — so the page dots are tappable and the arrow keys work, alongside
-the specified swipe. Two things that bit and are worth not re-learning: the overlay is
+**The two side buttons are PREVIOUS and NEXT, not first and last.** The addendum specifies
+first/last, that is what shipped, and it was wrong in practice: the only two visible controls
+jumped between page 1 and page 8, so a player tapping through the tutorial saw exactly two of
+the eight pages and reasonably concluded only two existed (reported 2026-08-01). The other six
+were reachable only by swiping. A build note in this very file had even observed that first/last
+"leaves nothing that pages one step at a time" and answered it with ARROW KEYS, on a phone game —
+if a fix for a touch UI is a keyboard, it is not a fix. Swipe, tappable dots and the arrow keys
+all still work; the buttons disable at the ends. Two things that bit and are worth not re-learning: the overlay is
 `position: fixed` (the setup screen's `.dm-root` is only as tall as its own content, so an
 absolute scrim left the page undimmed), and the card carries an explicit `z-index` (without one
 the absolutely-positioned scrim covered the page dots, so tapping one closed the tutorial).
