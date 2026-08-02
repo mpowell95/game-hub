@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v260';
+const CACHE = 'game-hub-v261';
 
 const ASSETS = [
   './',
@@ -25,6 +25,7 @@ const ASSETS = [
   './js/new-badge.js',
   './js/i18n.js',
   './js/theme.js',
+  './js/viewport.js',
   './js/strings.js',
   './js/profile-store.js',
   './js/firebase-config.js',
@@ -261,9 +262,68 @@ ASSETS.push('./chinchon/decks/anita/back.webp');
 // Anita end-of-match "Betty reaction" art (win/loss screens).
 ASSETS.push('./chinchon/decks/anita/betty-win.webp', './chinchon/decks/anita/betty-loss.webp');
 
+// --- two-tier precache -------------------------------------------------------------------------
+// `cache.addAll(ASSETS)` on the whole list was ~8.8 MB across ~272 files, downloaded ATOMICALLY on
+// every single deploy (CACHE is bumped essentially every commit). Two things went wrong with that:
+//
+//   1. Speed. The install storm competes with the foreground page for the same connection. On a
+//      weak mobile signal the hub is visibly sluggish for as long as the storm lasts, because the
+//      launcher's own module requests are queued behind ~272 precache requests, including the
+//      1.6 MB Boggle dictionary and 672 KB of three.js for games the player has not opened.
+//   2. Fragility. `addAll` is atomic, so ONE bad path aborted the whole install and the previous
+//      worker kept serving the old build forever - the "version pill stuck at vN -> vN+1" failure
+//      documented in the root CLAUDE.md. A missing card image could strand an entire deploy.
+//
+// So the list is split. SHELL is the hub itself (app shell + shared js/css + icons + profile): tiny,
+// atomic, and genuinely required for the hub to boot offline. Everything else is warmed AFTER
+// activation, best-effort, one file at a time with bounded concurrency, skipping whatever is already
+// cached. A game whose warm gets interrupted is not broken - the fetch handler caches it on demand
+// the first time it is opened online, and the next activation resumes the warm where it left off.
+//
+// validate-sw-assets.mjs still checks the full ASSETS list, so a 404'd path is still caught before
+// deploy; it just no longer strands the build if one slips through.
+function isShellAsset(p) {
+  return p === './' || p === './index.html' || p === './manifest.webmanifest'
+    || p.startsWith('./css/') || p.startsWith('./js/')
+    || p.startsWith('./icons/') || p.startsWith('./profile/');
+}
+const SHELL = ASSETS.filter(isShellAsset);
+const REST = ASSETS.filter((p) => !isShellAsset(p));
+
+// Warm the non-shell tier. Best-effort by design, but never SILENTLY best-effort (THE LAW rule 6):
+// whatever could not be cached is logged with its paths so a broken deploy is diagnosable from the
+// console instead of only showing up as a game that mysteriously fails offline.
+const WARM_CONCURRENCY = 6;
+async function warmRest() {
+  const cache = await caches.open(CACHE);
+  const queue = REST.slice();
+  const failed = [];
+  const worker = async () => {
+    for (;;) {
+      const path = queue.shift();
+      if (path === undefined) return;
+      try {
+        // Resumable: an entry already cached (by a previous warm, or on demand by the fetch
+        // handler) costs one cache lookup instead of a network round trip.
+        if (await cache.match(path, { ignoreSearch: true })) continue;
+        const res = await fetch(new Request(path, { cache: 'reload' }));
+        if (res && res.ok) await cache.put(path, res.clone());
+        else failed.push(path);
+      } catch { failed.push(path); }
+    }
+  };
+  await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
+  if (failed.length) {
+    console.warn(`[sw] ${CACHE}: ${failed.length}/${REST.length} non-shell assets could not be precached`
+      + ' (they will be cached on demand when first opened online):', failed);
+  }
+}
+
 self.addEventListener('install', (event) => {
+  // Only the shell blocks the install. The new build goes live as soon as the hub itself is safe
+  // offline, instead of waiting on every card image of every game.
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
   );
 });
 
@@ -282,6 +342,12 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      // Warm the heavy tier only once the worker is claimed and serving. Deliberately NOT awaited
+      // inside this waitUntil: functional events (every fetch the page makes) wait on the activate
+      // handler's promise, so awaiting the warm here would block the very page load the split was
+      // meant to speed up. Fire-and-forget is correct - if the worker is killed mid-warm, the next
+      // activation resumes it and the fetch handler covers anything still missing.
+      .then(() => { warmRest().catch((err) => console.warn('[sw] precache warm failed', err)); })
   );
 });
 
@@ -290,6 +356,34 @@ self.addEventListener('activate', (event) => {
 // (that latency made card boards flash blank on every re-render). These files
 // are versioned by the CACHE bump on each deploy, so cache-first is always safe.
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
+
+// How long a code/markup request waits on the network before the cached copy is served instead.
+// Long enough that a merely-average connection still wins the race (and the player keeps getting
+// the freshest build), short enough that a bad one never makes the hub feel broken.
+const NET_TIMEOUT_MS = 2500;
+const TIMED_OUT = Symbol('timed-out');
+function deadline(ms) {
+  return new Promise((resolve) => setTimeout(() => resolve(TIMED_OUT), ms));
+}
+
+// "The network is bad right now" latch.
+//
+// The deadline alone is charged PER REQUEST, and a hub cold start is a serial chain: index.html,
+// then hub.js, then the modules hub.js imports, then the modules THEY import. Every hop pays the
+// full deadline again, so on a genuinely bad link the deadline turned a 40s load into a 10s one -
+// better, but still four separate 2.5s stalls for a build already sitting complete in the cache.
+//
+// Once ONE request has proven the connection is slower than the deadline, the rest of that page
+// load should not each re-discover it. While this latch is hot, a request WITH a cached copy is
+// served from cache immediately and revalidated in the background; a request with nothing cached is
+// unaffected and still waits for the network. The latch expires on its own, so a connection that
+// recovers goes straight back to network-first without needing an event to tell it so.
+//
+// Freshness cost is bounded and small: the cache is a coherent one-deploy snapshot (`activate`
+// deletes every other cache), every latched response still revalidates in the background, and the
+// hub's version pill continues to show and force-fix a newer deploy on tap.
+const SLOW_LATCH_MS = 10000;
+let _slowUntil = 0;
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -316,8 +410,26 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith((async () => {
-    // Network-first: always try the network so a new deploy is served when
-    // online; refresh the cache as we go for offline use.
+    // Network-first WITH A DEADLINE, falling back to the cached copy.
+    //
+    // Sixth-playthrough fix (the "sluggish on bad service" report): plain network-first only fell
+    // back to cache when the fetch FAILED. A weak-but-alive mobile signal never fails - it just
+    // takes many seconds per request, and `cache: 'reload'` below deliberately bypasses the
+    // browser's own HTTP cache, so EVERY module in the graph paid that latency on every load. A
+    // hub cold start is 15 blocking module requests plus index.html and hub.css; at a couple of
+    // seconds each, serially resolved as the module graph unfolds, that is the sluggishness.
+    //
+    // Racing a NET_TIMEOUT_MS deadline fixes the bad-network case without touching the good-network
+    // one: on a healthy connection the network still wins every race and freshness is unchanged. On
+    // a slow one the player gets the cached copy immediately while the network response continues in
+    // the background and refreshes the cache for next time.
+    //
+    // Consistency is preserved: `activate` deletes every non-current cache and `install` re-adds the
+    // shell, so the cache this falls back to is a coherent snapshot of one deploy, not a mix. The
+    // hub's version pill still surfaces "a newer build is deployed" and force-updates on tap.
+    //
+    // Requests with nothing cached to fall back on skip the race entirely and just wait - a deadline
+    // would only turn a slow load into a failed one.
     //
     // Fifth-playthrough fix: `fetch(req)` alone is NOT enough - the browser's own HTTP disk
     // cache sits between this handler and the wire, and a GET whose response carried a
@@ -330,22 +442,51 @@ self.addEventListener('fetch', (event) => {
     // browser itself, invisibly to this SW. `cache: 'reload'` on the Request forces the browser
     // to bypass its HTTP cache and revalidate with the server on every fetch, while still letting
     // the response populate that HTTP cache normally for next time.
-    try {
-      const res = await fetch(new Request(req, { cache: 'reload' }));
+    // Kicked off first so the network is already in flight while the cache is consulted. The
+    // background cache refresh is attached HERE rather than at the await site, so it still happens
+    // on the slow path where the deadline fired and nobody is awaiting this promise any more.
+    const net = fetch(new Request(req, { cache: 'reload' })).then((res) => {
       if (res && res.ok && new URL(req.url).origin === self.location.origin) {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => { /* cache full/evicted */ });
       }
       return res;
-    } catch (err) {
-      // Offline (or fetch failed): fall back to cache, then the hub shell.
-      const cached = await caches.match(req, { ignoreSearch: true });
-      if (cached) return cached;
-      if (req.mode === 'navigate') {
-        const shell = await caches.match('./');
-        if (shell) return shell;
+    });
+    // A rejection is handled at both await sites below, but on the deadline path neither of them is
+    // still listening; without this the failure would surface as an unhandled rejection in the SW.
+    net.catch(() => { /* handled below, or deliberately ignored on the deadline path */ });
+
+    const cached = await caches.match(req, { ignoreSearch: true });
+
+    if (!cached) {
+      try {
+        return await net;
+      } catch (err) {
+        // Offline (or fetch failed) with nothing cached: the hub shell is the last resort, and
+        // only for a navigation.
+        if (req.mode === 'navigate') {
+          const shell = await caches.match('./');
+          if (shell) return shell;
+        }
+        throw err;
       }
-      throw err;
+    }
+
+    // A recent request already proved this connection is slower than the deadline: don't make this
+    // one re-prove it. Serve the cached copy now; `net` is already in flight and refreshes the cache.
+    if (Date.now() < _slowUntil) return cached;
+
+    try {
+      const res = await Promise.race([net, deadline(NET_TIMEOUT_MS)]);
+      if (res === TIMED_OUT) {
+        // The network lost the race: serve the cached copy now, and latch so the rest of this page
+        // load skips straight to cache instead of stalling once per module in the graph.
+        _slowUntil = Date.now() + SLOW_LATCH_MS;
+        return cached;
+      }
+      return res;
+    } catch {
+      return cached;   // offline, or the request failed outright
     }
   })());
 });

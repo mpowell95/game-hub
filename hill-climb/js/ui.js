@@ -26,6 +26,7 @@ import {
 import * as store from './store.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordHillClimb } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -103,8 +104,10 @@ class HillClimb {
 
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);
-    window.addEventListener('resize', this._onResize);
-    window.addEventListener('orientationchange', this._onResize);
+    // Coalesced to one callback per frame by js/viewport.js. A raw resize listener re-fits the
+    // canvas several times per frame while a mobile URL bar animates, which is scroll jank - see
+    // that module's header and js/CLAUDE.md's "Overlay scrolling" section.
+    this._offViewport = onViewportResize(this._onResize);
     window.addEventListener('pointerup', this._onPointerUp);
     window.addEventListener('pointercancel', this._onPointerUp);
     document.addEventListener('visibilitychange', this._onVis);
@@ -651,8 +654,7 @@ class HillClimb {
     this._previewWatched = null;
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
-    window.removeEventListener('resize', this._onResize);
-    window.removeEventListener('orientationchange', this._onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     window.removeEventListener('pointerup', this._onPointerUp);
     window.removeEventListener('pointercancel', this._onPointerUp);
     document.removeEventListener('visibilitychange', this._onVis);

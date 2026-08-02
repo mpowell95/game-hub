@@ -31,6 +31,7 @@ import { chooseShot } from './ai.js';
 import { mulberry32 } from './rng.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import * as net from '../../js/net.js';
@@ -146,7 +147,7 @@ class PoolUI {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
     if (this._offLang) { this._offLang(); this._offLang = null; }
-    window.removeEventListener('resize', this._boundResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     document.removeEventListener('visibilitychange', this._boundVis);
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
@@ -407,7 +408,7 @@ class PoolUI {
     });
     this._bindSpinPicker();
     this._bindTablePointer();
-    window.addEventListener('resize', this._boundResize);
+    this._offViewport = onViewportResize(this._boundResize);
     document.addEventListener('visibilitychange', this._boundVis);
     // ResizeObserver, not just the window 'resize' event: a flex-layout settle,
     // a font swap, or an orientation change all resize .p2-table-wrap without

@@ -11,6 +11,7 @@ import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
@@ -323,8 +324,7 @@ class ChinchonUI {
       clearTimeout(this._ccResizeTimer);
       this._ccResizeTimer = setTimeout(() => this.fitToViewport(), 120);
     };
-    window.addEventListener('resize', this._onCcResize);
-    window.addEventListener('orientationchange', this._onCcResize);
+    this._offViewport = onViewportResize(this._onCcResize);
   }
 
   /** Chinchon is not immersive (hub chrome sits above it), and its own
@@ -2598,8 +2598,7 @@ class ChinchonUI {
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
     document.removeEventListener('pointercancel', this._onPointerUp);
-    window.removeEventListener('resize', this._onCcResize);
-    window.removeEventListener('orientationchange', this._onCcResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     clearTimeout(this._ccResizeTimer);
     clearTimeout(this._beatTimer);
     clearTimeout(this._toastTimer);

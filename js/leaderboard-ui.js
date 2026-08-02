@@ -815,12 +815,35 @@ function segsHTML() {
   ).join('');
 }
 
-function rerender() {
+// Last rendered markup, so an update that changes nothing costs a string compare instead of a full
+// DOM rebuild. This matters because `watchPlayers` is a LIVE subscription to the whole `players/`
+// node: every device in the family re-mirrors its profile+stats on every hub load, tab-hide, return
+// to the launcher and reconnect, so the callback fires often and MOST of those pushes contain
+// nothing this screen renders differently. Each one used to blow away and rebuild the entire list.
+// Mid-scroll, that is exactly the reported "glitchy scrolling": the nodes under your finger are
+// destroyed and recreated, momentum scrolling breaks, and a tap in flight lands on nothing.
+let _lastSegHTML = '';
+let _lastBodyHTML = '';
+
+/** @param {{fromData?: boolean}} opts  `fromData` marks a re-render triggered by a remote update
+ *  rather than by the viewer navigating: the scroll position is theirs and must survive it.
+ *  Navigation legitimately starts the new screen at the top. */
+function rerender({ fromData = false } = {}) {
   if (!_host) return;
   const segEl = _host.querySelector('[data-role="lb-segs"]');
   const bodyEl = _host.querySelector('[data-role="lb-body"]');
-  if (segEl) segEl.innerHTML = segsHTML();
-  if (bodyEl) bodyEl.innerHTML = _connected ? currentBody() : skeletonHTML();
+  const segHTML = segsHTML();
+  const bodyHTML = _connected ? currentBody() : skeletonHTML();
+  if (segEl && segHTML !== _lastSegHTML) { segEl.innerHTML = segHTML; _lastSegHTML = segHTML; }
+  if (bodyEl && bodyHTML !== _lastBodyHTML) {
+    // `.lb-overlay` (_host) is the scroll container, not the body element, so it survives the
+    // innerHTML swap - but the browser clamps scrollTop while the replaced content has zero height,
+    // which is what silently threw the viewer back to the top of a long board.
+    const keepTop = fromData ? _host.scrollTop : 0;
+    bodyEl.innerHTML = bodyHTML;
+    _lastBodyHTML = bodyHTML;
+    _host.scrollTop = keepTop;
+  }
 }
 
 function renderOffline() {
@@ -898,6 +921,8 @@ export async function openLeaderboard() {
   _all = {};
   _connected = false;
   _meKey = '';   // resolved in currentBody() once records load (identity needs the whole graph)
+  _lastSegHTML = '';   // the skip-identical-render cache belongs to one open overlay, never across two
+  _lastBodyHTML = '';
   const host = document.createElement('div');
   host.className = 'lb-overlay';
   host.setAttribute('role', 'dialog');
@@ -923,7 +948,7 @@ export async function openLeaderboard() {
 
   // Subscribe live. Offline / unconfigured -> a friendly state; never throws.
   try {
-    _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender(); });
+    _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
     // If watchPlayers never fires (unconfigured), show offline after a short grace.
     setTimeout(() => { if (_host && !_connected) renderOffline(); }, 3500);
@@ -935,7 +960,12 @@ function ensureCss() {
   const el = document.createElement('style');
   el.id = 'lb-css';
   el.textContent = [
-    '.lb-overlay{position:fixed;inset:0;z-index:300;opacity:0;transition:opacity .2s ease;overflow-y:auto}',
+    // overscroll-behavior:contain stops SCROLL CHAINING. Without it, a flick that reaches the top or
+    // bottom of this overlay keeps going and scrolls the hub launcher underneath it - so the board
+    // rubber-bands, the page behind moves, and closing the overlay lands somewhere you never chose.
+    // The overlay is position:fixed over a scrollable body, which is exactly the case the browser
+    // chains by default.
+    '.lb-overlay{position:fixed;inset:0;z-index:300;opacity:0;transition:opacity .2s ease;overflow-y:auto;overscroll-behavior:contain}',
     '.lb-overlay.is-in{opacity:1}',
     '.lb-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.lb-panel{position:relative;width:100%;max-width:620px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',

@@ -415,7 +415,7 @@ body {
 
 /* "Leave game?" confirm — guards accidental loss of an in-progress game when
    tapping ‹ Hub. */
-.hub-confirm { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+.hub-confirm { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; overscroll-behavior: contain; }
 .hub-confirm-scrim { position: absolute; inset: 0; background: rgba(9, 24, 48, 0.55); }
 .hub-confirm-card {
   position: relative; width: 100%; max-width: 380px; margin: 0 16px;

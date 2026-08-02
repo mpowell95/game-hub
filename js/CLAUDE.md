@@ -909,6 +909,56 @@ zero-row); nothing about the per-game `screenFor` screens themselves changed.
   were needed either — every new rule follows the existing `var(--hub-surface, #fff)`-style
   fallback pattern the rest of `#gs-css` already uses.
 
+### Overlay scrolling — why the two overlays felt "glitchy" (2026-08-02)
+
+Matt: *"sluggish and glitchy (esp. with scrolling on various screens)."* The service-worker half of
+that report is in the root `CLAUDE.md`; this is the DOM half. Three separate causes, all in the
+shared overlays, all display-only (no stored field, counter or key was touched):
+
+1. **Scroll chaining.** `.lb-overlay` and `.gs-overlay` are `position:fixed; inset:0;
+   overflow-y:auto` — a full-screen scroll container sitting on top of a scrollable hub, which is
+   exactly the case a browser chains by default. A flick that reached either end kept going and
+   scrolled the launcher underneath, so the board rubber-banded, the page behind moved, and closing
+   the overlay landed somewhere the viewer never chose. **`overscroll-behavior: contain`** now sits
+   on both, plus `.gh-overlay`/`.gh-modal` in `css/ui.css` (every game's how-to-play and win/lose
+   modal), `.hub-confirm`, and `.ng-root`. The repo had exactly ONE `overscroll-behavior` before
+   this (Monopoly Deal's) — when adding a new overlay, it is not optional.
+2. **The live subscription rebuilt the whole board on every remote push.** `openLeaderboard()`
+   subscribes with `watchPlayers` to the ENTIRE `players/` node, and `stats-net.js` re-mirrors each
+   device on every hub load, tab-hide, return-to-launcher and reconnect — so in a family with
+   several devices the callback fires often, and MOST of those pushes change nothing this screen
+   renders. Each one used to `innerHTML`-replace the entire list. Mid-scroll that destroys and
+   recreates every node under the reader's finger: momentum scrolling breaks and a tap in flight
+   lands on nothing. `rerender()` now compares against the last rendered markup and does nothing at
+   all when it matches.
+3. **Scroll position was lost on the pushes that DID change something.** `rerender({ fromData:
+   true })` (the `watchPlayers` callback, and only it) preserves `_host.scrollTop` across the swap —
+   the container survives, but the browser clamps scrollTop while the replaced content momentarily
+   has zero height, which is what threw the viewer back to the top of a long board. Navigation
+   re-renders deliberately still start at the top; that is what drilling into a screen should do.
+
+**`window.addEventListener('resize', …)` is a scroll-jank bug on mobile, and `js/viewport.js` now
+exists so no game writes it again.** Eleven games each subscribed raw and re-laid-out the board
+SYNCHRONOUSLY in the handler. On a desktop that fires a handful of times while you drag a window
+edge; on a phone the browser fires `resize` continuously while the URL bar slides in and out — which
+is to say, on essentially every scroll — so each of those games ran a full board re-layout on the
+main thread several times per frame while the user was mid-scroll. Dominoes additionally subscribed
+to `visualViewport`'s own resize, which fires on every frame of that animation and on every keyboard
+show/hide. `onViewportResize(cb)` folds all three event sources into one callback, coalesces it to at
+most once per animation frame, and skips it entirely when neither dimension actually changed. It is
+semantically transparent because every one of these handlers is an idempotent "re-fit to whatever the
+size is now" — running it once with the settled size is strictly better than five times with
+intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool, poolv2,
+Nuts & Bolts, Uno. The unsubscribe it returns must be called in `destroy()`.
+
+**A non-passive `touchmove` on `document` is a page-wide tax, not a local guard.** Snake (and
+`snake-v2`) installed one to stop a D-pad drag panning the page. It works, but it tells the browser
+that any touch scroll ANYWHERE might be cancelled, so compositor-thread scrolling is off for the
+whole page, on every screen, for as long as the game is mounted. Both are now bound to the game's
+own root element instead, which loses no coverage (a `touchmove` is dispatched at the element the
+touch STARTED on and bubbles from there). See `snake/CLAUDE.md` for the full note. If a future game
+needs a scroll guard, scope it to the game root — never to `document`.
+
 ### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
 
 A player asked where their game history had gone: they were not on the leaderboard. The leaderboard

@@ -126,10 +126,16 @@ save without it just keeps classic behavior). Language is NOT stored here — it
   the board wrap is `touch-action: none` (a swipe surface must never scroll the page), and so is
   the whole `.sn-pad` container — a prior version only set `touch-action: manipulation` on the
   individual buttons, so a drag starting on the pad's backdrop or the gaps between buttons could
-  still pan the page. `ui.js` also installs a non-passive `document` `touchmove` listener
-  (`_onTouchMove`) that `preventDefault()`s while a run is genuinely live (`screen==='game' &&
-  game && !game.over && started && !paused`); it's added in the constructor alongside `_onKey`/
-  `_onVis` and removed in `destroy()`.
+  still pan the page. `ui.js` also installs a non-passive `touchmove` listener (`_onTouchMove`)
+  that `preventDefault()`s while a run is genuinely live (`screen==='game' && game && !game.over
+  && started && !paused`); it's added in the constructor alongside `_onKey`/`_onVis` and removed
+  in `destroy()`. **It is bound to `this.root`, NOT to `document`** (changed 2026-08-02; it was
+  document-level until then). A non-passive `touchmove` on `document` forces the browser to give
+  up compositor-thread scrolling for every touch scroll anywhere on the page, on every screen, for
+  as long as Snake is mounted — a hub-wide scrolling tax to guard one board. Root-scoping loses no
+  coverage, because a `touchmove` is dispatched at the element the touch STARTED on and bubbles
+  from there: every drag this guard exists for begins inside the root (the pad backdrop, the gaps
+  between buttons, sliding off a held button). Do not "simplify" it back to `document`.
 - On-screen D-pad (▲ / ◀ ▼ ▶) below the board, `pointerdown`-driven, wired through the same
   `_steer()` path as swipes and keys. `_sizeCanvas()` sizes the board in two passes: a
   width-bound guess first (COLS already fills the width before ROWS needs the height on ordinary

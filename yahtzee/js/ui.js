@@ -35,6 +35,7 @@
 // already-synced state, so both sides compute the identical result deterministically.
 
 import * as net from '../../js/net.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
 import { deviceId, recordYahtzee } from '../../js/game-stats.js';
 
@@ -120,6 +121,7 @@ let root = null;          // the .yz-root element mounted into container
 let screenHost = null;    // swaps between the setup/lobby screen and GAME_MARKUP
 let destroyed = true;     // true whenever no live instance is mounted
 let resizeHandler = null;
+let offViewport = null;   // unsubscribe from js/viewport.js's coalesced resize subscription
 let pendingTimeouts = new Set();
 let pendingFrames = new Set();
 
@@ -1304,7 +1306,7 @@ function mountGameScreen(){
   screenHost.innerHTML = GAME_MARKUP;
   buildDiceCubes();
   resizeHandler = fitStage;
-  window.addEventListener('resize', resizeHandler);
+  offViewport = onViewportResize(resizeHandler);
   fitStage();
   const leaveBtn = $('mpLeaveBtn');
   if(leaveBtn) leaveBtn.hidden = !(state && state.mp);
@@ -1447,7 +1449,7 @@ export function init(container){
 
 export function destroy(){
   destroyed = true;
-  if(resizeHandler){ window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
+  if(offViewport){ offViewport(); offViewport = null; } resizeHandler = null;
   pendingTimeouts.forEach(id => clearTimeout(id));
   pendingTimeouts.clear();
   pendingFrames.forEach(id => cancelAnimationFrame(id));

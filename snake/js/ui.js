@@ -97,6 +97,16 @@ class SnakeUI {
     // drag starting on the D-pad backdrop, the gaps between its buttons, or drifting off a held
     // button could pan the page mid-run even with the board's own touch-action:none. Non-passive
     // so preventDefault actually blocks the scroll; only acts while a run is genuinely live.
+    //
+    // Bound to THIS GAME'S ROOT, not to `document` (2026-08-02, the hub-wide sluggishness pass). A
+    // non-passive touchmove listener on `document` tells the browser that ANY touch scroll anywhere
+    // on the page might be cancelled, so it must stop compositor-thread scrolling and wait for this
+    // JS to run first - for every scroll, on every screen, for as long as Snake is mounted. That is
+    // a page-wide scrolling tax paid to guard one game's board. Scoping it to the root costs
+    // nothing in coverage: a touchmove is dispatched at the element the touch STARTED on and
+    // bubbles from there, so every drag this guard was written for (starting on the pad backdrop,
+    // in the gaps, or sliding off a held button - all inside the root) still reaches it, and a drag
+    // that starts outside the game was never meant to be blocked.
     this._onTouchMove = (e) => {
       if (this.screen === 'game' && this.game && !this.game.over && this.started && !this.paused) {
         e.preventDefault();
@@ -104,7 +114,7 @@ class SnakeUI {
     };
     document.addEventListener('keydown', this._onKey);
     document.addEventListener('visibilitychange', this._onVis);
-    document.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    this.root.addEventListener('touchmove', this._onTouchMove, { passive: false });
     this._offLang = onLangChange(() => this._rerenderForLang());
     this.renderSetup();
   }
@@ -482,7 +492,7 @@ class SnakeUI {
     this._stopLoop();
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
-    document.removeEventListener('touchmove', this._onTouchMove, { passive: false });
+    this.root.removeEventListener('touchmove', this._onTouchMove);
     if (this._offLang) this._offLang();
     document.querySelectorAll('.sn-help-overlay').forEach((n) => n.remove());
     this.root.innerHTML = '';

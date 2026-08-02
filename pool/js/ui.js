@@ -28,6 +28,7 @@ import * as rules from './rules.js';
 import { chooseShot } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import * as net from '../../js/net.js';
@@ -240,7 +241,7 @@ class PoolUI {
     this._dead = true;
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
-    window.removeEventListener('resize', this._boundResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     document.removeEventListener('visibilitychange', this._boundVis);
     document.removeEventListener('keydown', this._boundScreenshotKey);
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
@@ -459,7 +460,7 @@ class PoolUI {
     this._bindSpinPanel();
     this._bindPowerTrack();
     this._bindTablePointer();
-    window.addEventListener('resize', this._boundResize);
+    this._offViewport = onViewportResize(this._boundResize);
     document.addEventListener('visibilitychange', this._boundVis);
     // ResizeObserver, not just the window 'resize' event: a flex-layout settle,
     // a font swap, or an orientation change all resize .pl-stage-outer without

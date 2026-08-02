@@ -15,6 +15,7 @@ import { chooseMove } from './ai.js';
 import { tileHTML } from './tiles.js';
 import { openTutorial, CROWN_SVG } from './tutorial.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordDominoes } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -163,15 +164,15 @@ class DominoesUI {
     // orientationchange and the visual viewport (a collapsing URL bar) both change the usable
     // height without necessarily firing a plain window resize.
     this._onResize = () => { this._fit(); this._layoutBoard(); };
-    this._vv = window.visualViewport || null;
+    // (visualViewport is subscribed by js/viewport.js's onViewportResize now, not here.)
     this._offLang = onLangChange(() => { if (this.view === 'setup') this.renderSetup(); else this._syncChrome(); });
 
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
-    window.addEventListener('resize', this._onResize);
-    window.addEventListener('orientationchange', this._onResize);
-    if (this._vv) this._vv.addEventListener('resize', this._onResize);
+    // onViewportResize already folds window resize, orientationchange AND visualViewport into
+    // one per-frame callback, so this game's three separate subscriptions become one.
+    this._offViewport = onViewportResize(this._onResize);
 
     const save = loadSave();
     if (save && save.snap && save.snap.phase !== 'matchOver') this.resume(save);
@@ -188,9 +189,7 @@ class DominoesUI {
     if (this._offLang) this._offLang();
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
-    window.removeEventListener('resize', this._onResize);
-    window.removeEventListener('orientationchange', this._onResize);
-    if (this._vv) this._vv.removeEventListener('resize', this._onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     this.container.innerHTML = '';
     this.el = null;
     this.game = null;
