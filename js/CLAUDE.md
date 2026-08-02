@@ -80,6 +80,7 @@ entirely — keep it current when a module is added, split, or merged.
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
+| `js/new-badge.js` | (2026-08-01) the launcher's "New" pill — see "The New badge" below. Pure date maths (`NEW_DAYS`/`parseReleaseDate`/`daysSinceRelease`/`isNewGame`), no storage, no DOM, `now` injectable |
 | `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
 | `js/theme.js` | (2026-07-24) the light/dark/auto theme layer — see "Theme support" below |
 | `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes, `hc` Hill Climb) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
@@ -186,6 +187,43 @@ Reference implementation: `snake/` (born bilingual). New-game obligations: root 
 "Adding a game" item 9.
 
 ---
+
+### The New badge (2026-08-01)
+
+Matt: *"Can we add a 'new' badge to games for the first few days they're live? I want to make
+sure people see the new games."* A gold **NEW** / **NUEVO** pill on the launcher tile for
+`NEW_DAYS` (7) days after the game's release date, then gone.
+
+- **The whole feature is a read-time transform over one date literal.** `js/hub.js`'s `GAMES`
+  entry carries `released: 'YYYY-MM-DD'`; `js/new-badge.js` answers `isNewGame(g)`. **Nothing is
+  stored — no key, no per-device "seen" state, no expiry job.** That is deliberate: a badge is
+  worth exactly zero storage-layer risk, and it means THE LAW has no surface here at all. It also
+  means the pill retires itself, so nobody has to remember a follow-up commit (the failure mode
+  that would otherwise leave "NEW" on a game for a year).
+- **Dates parse as UTC midnight** and compare against the device clock, so a window edge can land
+  up to a day off a given player's local midnight. Irrelevant at a week's scale; a local-midnight
+  parse would just move the same fuzziness onto players in other timezones.
+- **A FUTURE release date counts as new**, not as "not yet live" — the card only appears in the
+  launcher once the game is registered, and a device with a slow clock must not be the one player
+  who misses the announcement. A malformed or absent date is never new (safe default).
+- **Only genuinely-new games get a date. Do NOT backfill.** The first draft of this gave every
+  entry its folder's first-commit date, which badged six tiles at once — Filler, Mancala and Dots
+  and Boxes had been live and played for a week, and announcing them drowned out Dominoes, the
+  one game that had actually just shipped. Git dates are not release dates in this repo anyway
+  (most of the early history lands on one import day, 2026-07-25). **Dominoes (2026-08-01) and
+  Hill Climb (2026-08-02) are the only entries carrying a `released` date as of this milestone** —
+  the two games that genuinely had just shipped when it landed.
+- **Tags share one flex row.** `.hub-tags` (top-LEFT, opposite the favorite heart) replaced the
+  single absolutely-positioned `.hub-soon-tag`, so a `devOnly` game that just landed shows Test
+  and NEW side by side instead of one on top of the other.
+- **The pill is `aria-hidden`; the card's `aria-label` says "New game." first.** `aria-label`
+  replaces a tile's contents for a screen reader, so a visible-only pill would be silent.
+  Colorblind rule holds by construction: the pill spells the word out, the gold (`#F2B705`, the
+  palette's yellow) is emphasis and never the signal.
+- **Not done, on purpose:** the launcher's ordering is untouched (favorites first, then
+  alphabetical) — a new game does not jump the queue. If the pill alone turns out not to be
+  enough, sorting new games to the top of "All games" is the next lever, and it changes a
+  documented convention, so it should be Matt's call rather than a session's.
 
 ### Theme support (Phase 1, 2026-07-24 — HANDOFF-FB-THEME.md, batch 10)
 

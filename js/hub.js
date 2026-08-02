@@ -17,6 +17,7 @@ import { getLang, setLang, makeT } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
+import { isNewGame } from './new-badge.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -29,6 +30,17 @@ const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) :
  *  stats tabs) and in each game's own strings.js title — keep all three in step. */
 const titleText = (g) => (g.title && typeof g.title === 'object') ? (g.title[getLang()] || g.title.en) : g.title;
 
+// `released: 'YYYY-MM-DD'` is the day the game went live, and the ONLY input to the launcher's
+// New pill (js/new-badge.js: the tile wears it for NEW_DAYS days, then stops on its own — no
+// follow-up commit, no stored state, nothing to clean up later). **Set it on every new entry**;
+// an entry without one never shows the pill, which is the safe default.
+//
+// Only Dominoes and Hill Climb carry one today, deliberately: every other game was already live
+// and being played when the badge shipped (2026-08-02), so backfilling them would announce games
+// the family has had for weeks and drown out the two that are actually new. Git's first-commit date
+// per folder is NOT a release date — most of this repo's early history lands on one import day
+// (2026-07-25) and several games' folders predate their launch. If a pre-existing game ever
+// wants the pill (a big relaunch, say), give it a real date by hand.
 const GAMES = [
   {
     id: 'connect-four',
@@ -81,6 +93,7 @@ const GAMES = [
   },
   {
     id: 'dominoes',
+    released: '2026-08-01',
     title: { en: 'Dominoes', es: 'Dominó' },
     blurb: { en: 'All Fives vs. a bot. Score whenever the open ends add up to a five, race to 300.',
       es: 'All Fives contra un bot. Anota cuando los extremos abiertos sumen un múltiplo de cinco, carrera a 300.' },
@@ -233,6 +246,7 @@ const GAMES = [
   },
   {
     id: 'hill-climb',
+    released: '2026-08-02',
     title: 'Hill Climb',
     blurb: { en: 'Gas and brake, no steering. Balance over the hills, grab fuel, and see how far you get.',
       es: 'Gas y freno, sin volante. Mantén el equilibrio en las colinas, coge combustible y llega lo más lejos posible.' },
@@ -685,13 +699,21 @@ class Hub {
   cardHTML(g, favGroup) {
     // Landscape tile: full-bleed art with the title outlined directly over it (no scrim).
     // The blurb moves to the accessible label (it is no longer shown on the tile face).
+    // Tags sit top-left in one flex row (.hub-tags) so a devOnly game that is ALSO inside its
+    // New window shows both pills side by side instead of one landing on top of the other.
+    const isNew = isNewGame(g);
+    const tags = [];
+    if (g.comingSoon) tags.push(`<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`);
+    else if (g.devOnly) tags.push(`<span class="hub-soon-tag">${t('hub_test_tag')}</span>`);
+    if (isNew) tags.push(`<span class="hub-new-tag">${t('hub_new_tag')}</span>`);
     const inner = `
         <span class="hub-card-art">${g.art}</span>
         <span class="hub-card-label">${titleText(g)}</span>
-        ${g.comingSoon ? `<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`
-          : g.devOnly ? `<span class="hub-soon-tag">${t('hub_test_tag')}</span>` : ''}`;
+        ${tags.length ? `<span class="hub-tags" aria-hidden="true">${tags.join('')}</span>` : ''}`;
     const blurb = blurbText(g.blurb);
-    const aria = blurb ? `${titleText(g)}. ${blurb}` : titleText(g);
+    // aria-label replaces the tile's contents for a screen reader, so the New pill has to be
+    // said HERE or it isn't said at all - hence aria-hidden on the visual pill above.
+    const aria = [isNew ? t('hub_new_aria') : '', titleText(g), blurb].filter(Boolean).join('. ');
     // Launch-out games are real links (new-tab / middle-click / a11y); in-hub
     // modules are buttons that mount into the content area. data-fav-group marks every tile
     // in the favorites group so the click delegate can suppress navigation during edit mode.

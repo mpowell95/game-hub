@@ -36,6 +36,7 @@ const SUITES = [
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },
   { file: 'favorites.test.mjs' },
+  { file: 'test-new-badge.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // tripwire suites (integration layer)
