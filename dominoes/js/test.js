@@ -30,8 +30,8 @@ eq(countEnds(emptyChain()), 0, 'empty board counts nothing');
 eq(countEnds(chainOf([[5, 5]])), 10, 'a lone double counts both halves ONCE (5-5 opener = 10)');
 eq(countEnds(chainOf([[3, 5]])), 8, 'a lone non-double counts both ends');
 eq(countEnds(chainOf([[5, 5], [5, 3, 'right']])), 13, 'double at an end contributes 10, other end 3');
-eq(countEnds(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 17,
-  'an open but unplayed spinner contributes its FULL value across its two free sides (4 + 3 + 5 + 5)');
+eq(countEnds(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 7,
+  'an open but UNPLAYED spinner side is playable but not an end, so it scores nothing (4 + 3)');
 ok(!branchesOpen(chainOf([[5, 5], [5, 3, 'right']])), 'branches shut while the spinner is at an end');
 ok(branchesOpen(chainOf([[5, 5], [5, 3, 'right'], [5, 4, 'left']])), 'branches open once the line passes the spinner both ways');
 eq(scoreOf(10), 10, 'a multiple of five scores');
@@ -45,9 +45,9 @@ eq(scoreOf(0), 0, 'zero never scores');
   eq(ends.length, 4, 'an open spinner exposes four ends');
   ok(ends.some((e) => e.side === 'up' && e.value === 5), 'both branch ends show the spinner value');
   placeOn(c, idOf(5, 2), 'up');
-  eq(countEnds(c), 14, 'playing a branch replaces that side\'s 5 with its own end (4 + 3 + 2 + 5)');
+  eq(countEnds(c), 9, 'playing a branch turns that side INTO an end (4 + 3 + 2)');
   placeOn(c, idOf(5, 1), 'down');
-  eq(countEnds(c), 10, 'the second branch replaces the other 5 too (4 + 3 + 2 + 1)');
+  eq(countEnds(c), 10, 'and the second branch likewise (4 + 3 + 2 + 1)');
 }
 
 {
@@ -55,6 +55,7 @@ eq(scoreOf(0), 0, 'zero never scores');
   // twice over. Kept clear of an open spinner so it tests only that.
   const c = chainOf([[4, 4], [4, 6, 'right']]);
   eq(countEnds(c), 14, 'a double at the left end counts 8 (4+4), right end 6');
+  ok(!openEnds(c).some((e) => e.pending), 'no pending sides while the spinner is still at an end');
   placeOn(c, idOf(6, 6), 'right');
   eq(countEnds(c), 20, 'and a double at the right end counts 12 (6+6)');
 }
@@ -77,8 +78,10 @@ eq(scoreOf(0), 0, 'zero never scores');
   }
   const open = chainOf([[6, 6], [6, 2, 'right'], [6, 3, 'left']]);
   const sides = openEnds(open);
-  eq(sides.filter((e) => e.side === 'up')[0].contrib, 6, 'an unplayed branch side contributes one HALF of the spinner');
-  eq(sides.filter((e) => e.side === 'up')[0].value, 6, 'and you still match a 6 to play there');
+  const up = sides.filter((e) => e.side === 'up')[0];
+  eq(up.contrib, 0, 'an unplayed branch side contributes NOTHING to the count');
+  ok(up.pending, 'and is flagged pending so the UI can mark it as not-an-end');
+  eq(up.value, 6, 'while still matching a 6 to play there');
   const lone = openEnds(chainOf([[6, 6]]));
   eq(lone[0].contrib + lone[1].contrib, 12, 'the lone opening double is 12 across its two ends, not 24');
   const runEnd = openEnds(chainOf([[6, 6], [6, 2, 'right']]));

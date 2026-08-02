@@ -72,7 +72,8 @@ export function branchesOpen(c) {
 /** Every side a tile could legally be added to. Each entry carries BOTH numbers, and the
  *  distinction is the whole reason this bug existed:
  *    `value`   the pip you must MATCH to play there
- *    `contrib` what that end adds to the All Fives count
+ *    `contrib` what that end adds to the All Fives count (0 for a `pending` side)
+ *    `pending` true for an open-but-unplayed spinner side: playable, but not an end yet
  *  They differ for a double at the end of a run, which lies crosswise and so exposes both of its
  *  halves (a 6-6 at an end contributes 12, but you still play a 6 on it). `countEnds` is now
  *  literally the sum of `contrib`, so what the board shows and what it scores cannot drift apart.
@@ -95,13 +96,20 @@ export function openEnds(c) {
       const T = arm[arm.length - 1];
       ends.push({ side, value: T.b, contrib: dbl(T) ? T.b * 2 : T.b });
     } else if (branchesOpen(c)) {
-      // An OPEN but unplayed branch side. It exposes one half of the spinner, so the two of them
-      // together contribute the spinner's full value - which is the main spec's "while the
-      // spinner has no arms yet, it counts as a single end of its full value", arrived at from
-      // the other direction. Leaving these out of the count (while still drawing a badge for
-      // each and accepting plays on them) is the scoring bug this replaced.
+      // An OPEN but unplayed branch side: somewhere you may PLAY, but not yet an end, so it
+      // contributes NOTHING to the count. `pending` says so, and the UI must mark these
+      // differently from a scoring end - drawing them as ordinary badges is what made the
+      // numbers on screen stop adding up.
+      //
+      // Counting them (briefly, 2026-08-01) was a bad misreading of the main spec's "while the
+      // spinner has no arms yet, it counts as a single end of its full value". It made an open
+      // 6-6 add a permanent +12 to every count, which the score-seeking bot exploited far more
+      // than a person could: bot scoring jumped from 24.6% of plays to 36.6% while a casual
+      // human's stayed at ~19%, and matches went 35-167. It is also arithmetically impossible:
+      // the reference screenshots show amber totals of 4, 6 and 7, which an open 6-6 spinner
+      // could never allow if it contributed 12 of its own.
       const v = TILES[c.spinnerId][0];
-      ends.push({ side, value: v, contrib: v });
+      ends.push({ side, value: v, contrib: 0, pending: true });
     }
   }
   return ends;
