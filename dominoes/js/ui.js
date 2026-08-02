@@ -9,7 +9,7 @@
 // `.dm-chain` container survives every update and its centre-and-fit transform can animate
 // instead of snapping.
 
-import { DominoesGame, TILES, HUMAN, BOT } from './game.js';
+import { DominoesGame, TILES, HUMAN, BOT, countAfter, scoreOf } from './game.js';
 import { layoutChain } from './board.js';
 import { chooseMove } from './ai.js';
 import { tileHTML } from './tiles.js';
@@ -404,18 +404,29 @@ class DominoesUI {
     if (!this.el || !this.game) return;
     const g = this.game;
     this.el.bot.innerHTML = g.hands[BOT].map(() => '<div class="dm-back"></div>').join('');
-    const playable = new Set(g.turn === HUMAN && g.phase === 'playing'
-      ? g.legalMoves(HUMAN).map((m) => m.tileId) : []);
+    const myMoves = (g.turn === HUMAN && g.phase === 'playing') ? g.legalMoves(HUMAN) : [];
+    const playable = new Set(myMoves.map((m) => m.tileId));
+    // What each tile is WORTH, best case. Without this the player has no way to see which of
+    // their legal moves scores, while the bot picks the best one every single turn - which is
+    // not a difficulty gap, it is an information gap, and it read as the bot scoring at will.
+    const worth = new Map();
+    for (const m of myMoves) {
+      const sc = scoreOf(countAfter(g.chain, m));
+      if (sc > (worth.get(m.tileId) || 0)) worth.set(m.tileId, sc);
+    }
     this.el.hand.innerHTML = g.hands[HUMAN].map((id, i) => {
       const cls = [];
       if (!playable.has(id)) cls.push('is-dead');
       if (id === this.selected) cls.push('is-sel');
       if (this.dealing) cls.push('is-dealt');
       const style = this.dealing ? `animation-delay:${60 * i}ms;--dm-from-x:${(i - 3) * 26}px` : '';
-      return tileHTML(TILES[id], {
-        vertical: true, button: true, cls: cls.join(' '), style, aria: tileAria(TILES[id]),
+      const sc = worth.get(id) || 0;
+      const html = tileHTML(TILES[id], {
+        vertical: true, button: true, cls: cls.join(' '), style,
+        aria: sc ? t('aria_tile_scores', { a: TILES[id][0], b: TILES[id][1], v: sc }) : tileAria(TILES[id]),
         attrs: ` data-action="pick" data-id="${id}"`,
       });
+      return sc ? html.replace('</button>', `<i class="dm-worth">+${sc}</i></button>`) : html;
     }).join('');
   }
 
@@ -445,10 +456,16 @@ class DominoesUI {
     }));
     for (const e of ends) {
       const isTarget = targets.has(e.side);
-      parts.push(`<button type="button" class="dm-end ${scoringNow ? 'is-scoring' : ''} ${isTarget ? 'is-target' : ''}"
+      // A `pending` side is a place to play, not an end: it scores nothing, so it must not look
+      // like a number to add up. Neutral marker, and it shows the pip you MATCH rather than a
+      // contribution it does not make.
+      const cls = e.pending ? 'is-pending' : (scoringNow ? 'is-scoring' : '');
+      const shown = e.pending ? e.value : e.contrib;
+      const label = e.pending ? t('aria_end_open', { m: e.value }) : t('aria_end', { v: e.contrib, m: e.value });
+      parts.push(`<button type="button" class="dm-end ${cls} ${isTarget ? 'is-target' : ''}"
         ${isTarget ? `data-action="drop" data-side="${e.side}"` : 'tabindex="-1" aria-hidden="true"'}
-        aria-label="${esc(t('aria_end', { v: e.contrib, m: e.value }))}"
-        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${e.contrib}</button>`);
+        aria-label="${esc(label)}"
+        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${shown}</button>`);
     }
     this.el.chain.innerHTML = parts.join('');
     this.el.chain.classList.toggle('is-picking', targets.size > 0);

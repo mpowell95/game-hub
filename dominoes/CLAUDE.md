@@ -104,42 +104,76 @@ matches: **one** overlapping board, on a 27-tile chain. The fit-to-felt scale ab
 reserving corridors for the branches would need a two-pass layout to buy back two boards in a
 hundred thousand.
 
-## The badges and the count are one number
+## The badges, the count, and what the player can see
 
-`openEnds()` returns, for every open end, **two** numbers, and confusing them is what broke
-scoring for the first two days this game was live:
+`openEnds()` returns three things per open end, and they are not the same number:
 
 - **`value`** — the pip you must MATCH to play there.
 - **`contrib`** — what that end adds to the All Fives count.
+- **`pending`** — true for an open-but-unplayed spinner side: playable, but **not an end yet**, so
+  `contrib` is 0 and the UI draws it as a hollow dashed marker rather than a coloured badge.
 
-They differ for a double at the end of a run: it lies crosswise, so both of its halves are
-exposed and it contributes twice over (a 6-6 at an end contributes 12) while you still play a 6
-on it. `countEnds()` is now literally `sum(contrib)`, and the end badge renders `contrib`, so
-**what the player adds up on screen is exactly what the board scores**. `dominoes/js/test.js`
-pins that as an invariant over every board a full simulated match can reach, not just a handful
-of hand-written ones.
+`countEnds()` is literally `sum(contrib)`, the end badge renders `contrib`, and a pending side
+never shows a number to add up — so what the player totals on screen is exactly what the board
+scores. `dominoes/js/test.js` pins that as an invariant over every board a full simulated match
+can reach.
 
-Three cases worth having in your head, all pinned by tests:
+`value` and `contrib` differ for a double at the end of a run: it lies crosswise, both halves are
+exposed, so it contributes twice over (a 6-6 at an end contributes 12) while you still play a 6
+on it. Three cases, all pinned:
 
 | Board | Ends | Count |
 |---|---|---|
 | lone 5-5 opener | it is BOTH ends at once, 5 each | 10, not 20 |
 | 6-6 at the end of a run | one end, crosswise, both halves exposed | 12 |
-| open spinner, no arms yet | its two free sides, one half each | 6 + 6 = its full value |
+| open spinner, no arms yet | two PENDING sides | 0 - they are places to play, not ends |
 
-**The bug (fixed 2026-08-01, reported from real play as "only some tiles are counting as
-points").** `openEnds` reported an open spinner's two unplayed branch sides — the UI drew a badge
-for each and accepted plays on them — while `countEnds` computed the ends separately and left
-them out. An interior 6-6 therefore contributed **0** instead of 12, so a board whose badges read
-3 + 2 + 6 + 6 = 17 scored on 5. Over 21,203 simulated placements that suppressed scoring from
-**33.5% of plays to 23.7%**, and it made the badges lie about the thing they exist to show. It
-also directly contradicted the main spec's §7.5 ("while the spinner has no arms yet, it counts as
-a single end of its full value").
+**Two bugs live here, in opposite directions. Both are worth knowing about.**
 
-The root cause was duplication: `countEnds` re-derived the ends instead of using `openEnds`, and
-`board.js` re-derived them a third time for the badge anchors. All three are one function now —
-`board.js` imports `openEnds` and only decides where each end SITS. If you ever find yourself
-computing "what are the ends" anywhere but `openEnds`, that is the bug coming back.
+1. **Pending sides drawn as scoring badges (fixed, first attempt).** They showed a number and
+   accepted plays, but counted nothing, so a board whose badges read 3 + 2 + 6 + 6 = 17 scored on
+   5. Real inconsistency.
+2. **Then counting them (fixed, second attempt - the over-correction).** Reading the main spec's
+   "while the spinner has no arms yet, it counts as a single end of its full value" as *count the
+   free sides* gave an open 6-6 a permanent **+12** on every count. A score-seeking bot exploits a
+   constant far better than a person does: bot scoring went 24.6% -> 36.6% of plays while a casual
+   human's stayed at ~19%, and matches ran 35-167. It is also arithmetically impossible - the
+   reference screenshots show amber totals of 4, 6 and 7, which an open 6-6 could never allow.
+
+The lesson for the next person: the fix for "the badges do not match the count" was to change how
+pending sides are DRAWN, not what they are worth.
+
+## The bot is not cheating, and the tiers contain no dice
+
+Checked, because it does not feel that way when you lose 35-167 (reported 2026-08-01). Identical
+strategy on both seats, 400 matches:
+
+```
+both MEDIUM: seat0 wins 51.3% | avg 288-287 | scoring plays 33.8% vs 33.8%
+both EASY  : seat0 wins 45.8% | avg 278-281 | scoring plays 19.4% vs 19.9%
+deal, 4000 rounds: avg pips 42.07 vs 42.09 | opens 2057 vs 1943
+```
+
+Same rules, same deal, one scoring function. `ai.js`'s `unseen()` is the full set minus the bot's
+own hand minus the board, so it never reads `hands[1 - seat]`.
+
+What the gap actually was: Medium evaluates every legal move and takes the highest-scoring one,
+every turn — 33.8% of plays score. A player who cannot see which of their moves scores plays at
+the blind rate, ~19%. Over a race to 300 that compounds to 2% human win rate. **An information
+gap, not a difficulty one.**
+
+So the hand shows **what each tile is worth**: a `+N` badge on any tile with a scoring placement
+(`worth` in `_syncHands`, the max over that tile's legal moves). It is the same number the bot
+optimises on, offered to the player.
+
+**Do not "fix" bot strength by making it choose randomly.** It was measured (best move 85/70/55/40%
+of the time -> human win rate 6/10/10/14%) and rejected: it buys a few points of win rate by making
+the opponent erratic instead of beatable, which is coding luck into a game whose whole point is
+counting. Tiers differ by what the bot KNOWS and how far it looks - random legal move, greedy
+score, greedy plus one-ply lookahead and void tracking - never by a die roll on top of a better
+move.
+
+## Rules (All Fives)
 
 ## Rules (All Fives)
 
@@ -166,8 +200,8 @@ computing "what are the ends" anywhere but `openEnds`, that is the bug coming ba
    open only once the main line has a tile on both of its in-line sides (the standard rule), and
    an unplayed branch side is **not** an end and counts nothing.
 5. **Counting**: sum the open ends after each placement; a multiple of five scores itself. See
-   "The badges and the count are one number" below — that section is the whole rule, and it is
-   where the one real scoring bug this game has had is written up.
+   "The badges, the count, and what the player can see" above — that section is the whole rule,
+   and it carries both scoring bugs this game has had, in opposite directions.
 6. **At a round end BOTH players score the pips left in their OPPONENT's hand** (addendum A1,
    which corrected the main spec). Going out is simply the case where one of those two totals is
    zero; a blocked round pays each side the other's leftovers rather than paying one side the
