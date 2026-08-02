@@ -23,17 +23,29 @@ would put the hub's floating back button in exactly that corner, so the game kee
 hub header for going back and its teal band carries the back-to-setup chevron, the difficulty
 chip, the scoreboard and restart.
 
-**`_fit()` is two passes, and both are needed** (fixed 2026-08-01 after a report of having to
-scroll to see the whole board). Pass 1 fills the viewport from wherever the game starts; pass 2
-asks the document how tall it actually ended up and gives back the overflow, because whatever
-sits BELOW the game in the host page — the hub's content padding, for one — still counts toward
-the scroll height, and the only honest way to know how much is to measure it rather than
-hard-code an allowance for one host. It reads `visualViewport.height` (a phone's collapsing URL
-bar changes the usable height without changing `innerHeight`) and adds `scrollY` to the client
-rect (measuring an already-scrolled page gave a too-tall answer). Re-runs on `resize`,
-`orientationchange` and `visualViewport` resize. **A game screen that scrolls at all is a bug**;
-`.dm-play`'s `min-height` is deliberately low (340px) so the felt, not the page, absorbs a short
-viewport.
+**`_fit()` measures the host with a PROBE, and re-fits after layout.** Two separate defects put a
+collapsed, unplayable board on screen for anyone who left a match and came back (2026-08-01,
+reported with a screenshot), and both are worth not repeating:
+
+1. **It ran before the host had laid the container out.** The resume path mounts from the
+   constructor, so `getBoundingClientRect().top` read **0** and the stack was sized for the whole
+   viewport. `_refitSoon()` now re-fits on the next animation frame and again 150ms later; `_fit`
+   is idempotent, so the extra calls cost nothing and the settled layout wins.
+2. **It corrected by subtracting the document's total overflow.** That blames this element for
+   overflow it may not have caused and can only ever SHRINK, so it could not undo defect 1 - it
+   compounded it, landing on `.dm-play`'s 340px floor.
+
+How it measures now: the page below the game (the hub's content padding) cannot be read off
+`scrollHeight` directly, because **that value never drops below the viewport height**, so an
+element shorter than the screen makes plain empty space look like host chrome (an intermediate
+attempt did exactly that and under-sized every board). So it sets `--dm-h` to a 2000px PROBE,
+where `scrollHeight` is pure content, reads `below = scrollHeight - ourTop - PROBE`, and then sets
+the real height. Both writes are in one frame, so nothing paints at the probe size.
+
+`innerHeight`, not `visualViewport.height`: it has to share a basis with `scrollHeight`, and
+mixing the two over-shrank by the height of a phone's URL bar. **A game screen that scrolls at all
+is a bug**, and so is one that does not fill what it was given; `.dm-play`'s `min-height` (340px)
+is a last-resort floor, and if you ever see it actually binding, `_fit` is wrong again.
 
 ## Layout & responsibilities
 
