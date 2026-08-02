@@ -188,6 +188,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates |
 | `test-stats-identity.mjs` | (2026-07-23) the per-player store split (see "Whose stats are these" in `js/CLAUDE.md`): proves an existing device is completely undisturbed, that a second player on the same phone cannot blend into the first, that the device-wide legacy stores never fold into a forked store, and that the ES-module and global recorders resolve the same key. Rule 7 fixture is the real store from the device the Ana/Natalia incident happened on |
 | `test-mp-lockstep.mjs` | headless two-engine MP lockstep for Chinchón + Escoba + Tic Tac Toe + Mancala over a fake room; mirrors the ui.js MP glue with per-method citations — update the mirror when the glue changes. Its [KNOWN-BUG PROBE] assertions are regression tripwires for the five fixed MP defects (see "Multiplayer lockstep — invariants" in `js/CLAUDE.md`); Tic Tac Toe's T1-T7 and Mancala's M1-M6 blocks each port all five into a game that shares none of Chinchón's vocabulary |
+| `test-game-conventions.mjs` | (2026-08-02) the "Adding a game" checklist and the "USE WHAT EXISTS" table, made machine-checkable: no raw resize/`visualViewport` listeners, no `document`-level `touchmove`, every fixed scrolling overlay contains its scroll, every standalone page name-gated, the three module-contract exports present, listeners balanced, a `CLAUDE.md` and an `{en,es}` dictionary per game. Discovers game folders from disk so a NEW game is covered the day it appears. `KNOWN_GAPS` carries pre-existing debt (currently: Yahtzee has no i18n) — printed on every run, never silent, and the suite fails if an entry goes stale. **Written because prose alone did not work**: Hill Climb shipped the raw-resize bug the same day it was removed everywhere else, because the convention lived in `js/CLAUDE.md`, which a new-game session never auto-loads. |
 | `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. All green expected. Run before every deploy. |
 | `read-device-reports.mjs` | (2026-07-22) Matt-only: fetches "Device details" reports (see `js/device-report.js`) from `deviceReports/` via the plain RTDB REST API (anonymous sign-in via the Identity Toolkit REST endpoint, no SDK/dependency) - `node read-device-reports.mjs [deviceId] [--raw]` |
 | `backups/rtdb-backup.mjs` | (2026-07-23) **Run this before ANY script that writes to Firebase, any rules change, any schema change.** Timestamped full-DB snapshot to `backups/rtdb-<ISO>.json` via the same no-dependency REST pattern; `node backups/rtdb-backup.mjs [path]`. Also exports `signInAnonymously`/`readPath`/`totalPlays` for other tools. Restoring is deliberately NOT automated - a restore is a destructive write and must be hand-driven. **The snapshots are gitignored** (`backups/*.json`): this is a public repo and they hold every player's real name, code and stats. |
@@ -251,6 +252,52 @@ export default { init, destroy, isInProgress };
   collapses the hub's header to a floating back button for games with their own full-bleed
   chrome. It's a de facto fourth registry flag, same status as `module`/`href`/`devOnly` —
   set it when a game wants to own the whole viewport.
+
+### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
+
+**This section is here, in the always-loaded root file, on purpose.** A session creating
+`newgame/` auto-loads THIS file and `newgame/CLAUDE.md` (which doesn't exist yet) — it does **not**
+auto-load `js/CLAUDE.md`, where most of the reasoning below is written up in full. So a convention
+documented only there is invisible to exactly the session that needs it. That is not hypothetical:
+Hill Climb shipped with a raw `window.addEventListener('resize', …)` on the same day that pattern
+was removed from every other game as a mobile scroll-jank bug, purely because the session that
+wrote it never loaded the file explaining why.
+
+**`node test-game-conventions.mjs` enforces most of the table below.** Run it before you commit a
+new game; it discovers game folders from disk, so a new one is covered the day it appears. A rule
+that only lives in prose is advice, and advice loses to a session that never read it.
+
+| Need | Use | Never |
+|---|---|---|
+| Re-fit on resize/rotate | `onViewportResize(cb)` — `js/viewport.js` | `window.addEventListener('resize'…)` or `orientationchange` or `visualViewport` directly. Mobile browsers fire `resize` continuously while the URL bar animates, so a raw listener re-lays-out the board several times per FRAME during every scroll |
+| User-visible text | `makeT(STRINGS)` + `<game>/js/strings.js` `{en, es}` — `js/i18n.js` | hardcoded English. Call `t()` at RENDER time, never at module scope |
+| Light/dark | `js/theme.js` (`.gh-dark` on `<html>`) | a `prefers-color-scheme` media query in game CSS — `'auto'` is resolved once in JS so the toggle always wins |
+| Player name/emoji/opponents | `loadProfile()` — `js/profile-store.js` | your own prompt. Defaults-only: your saved settings beat it, and games never write it back |
+| Recording a result | `recordX()` / `recordResult()` — `js/game-stats.js` | touching `localStorage['gamehub.stats']` yourself. See checklist item 7 for sub-counters |
+| Difficulty markers | `diffShapeSVG()` / `tierOf()` — `js/difficulty-tiers.js` | hand-drawn shapes or hue-only tiers (Matt is red/green colorblind) |
+| The name gate | `await requireName()` in `index.html` **before** `init()` — `js/name-gate.js` | mounting ungated. This is where the leaderboard's ~20 permanent "Unnamed player" rows came from |
+| Multiplayer | `js/net.js` (`rooms/<CODE>`) | a second Firebase app or your own room layer. Read `js/CLAUDE.md`'s lockstep invariants first — five of them each encode a real, fixed bug |
+| Hub tile art | `GAME_ART[id]` — `js/game-art.js` | inlining SVG in the `GAMES` entry; the leaderboard reads the same map |
+| Buttons, cards, fields, modals | `css/ui.css`'s `.gh-*` primitives + `--gh-*` tokens | rebuilding chrome from scratch. **Currently used by no shipped game** — `snake-v2/` is the proof it works (140 lines of CSS against the real Snake's 279 for the same screens). A new game is the cheapest possible place to adopt it, because there is nothing to migrate |
+
+**Scroll and touch rules, which are the ones most often missed:**
+
+- **Any `position: fixed` overlay that scrolls needs `overscroll-behavior: contain`.** Without it a
+  flick that reaches either end keeps going and pans the launcher underneath, so closing the overlay
+  lands the player somewhere they never chose.
+- **Never put a `touchmove` listener on `document` or `window`.** Bind it to the game's own root. A
+  non-passive `touchmove` on `document` tells the browser any touch scroll anywhere might be
+  cancelled, so compositor-thread scrolling is off for the WHOLE PAGE for as long as your game is
+  mounted. A `touchmove` is dispatched at the element the touch started on and bubbles, so
+  root-scoping loses no coverage.
+- **A swipe surface gets `touch-action: none`; a tappable control gets `touch-action: manipulation`.**
+
+**When you bump `CACHE` in `sw.js`, bump it past what is on `main` RIGHT NOW, not past what is in
+your working copy.** Two branches open at once will both compute the same next number — that
+happened on 2026-08-02 and produced two different builds both calling themselves `game-hub-v260`.
+It is not cosmetic: `activate` only deletes caches whose name DIFFERS, and `warmRest` skips entries
+already present so the warm can resume, so a device holding the other build's cache keeps it, takes
+your shell over the top, and never refreshes the game files underneath — a permanently mixed build.
 
 ### Adding a game — checklist
 
@@ -344,6 +391,13 @@ When restructuring an old game, migrate it toward the reference for each axis in
    apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
    `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
    full mechanism doc is in `js/CLAUDE.md` ("Language support").
+10. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** The first is the
+    machine-checkable half of the "USE WHAT EXISTS" table above and of this checklist — it will tell
+    you, by name and with the fix, if the game hand-rolls something shared, leaks a listener, leaves
+    an overlay uncontained, ships an ungated standalone page, misses an export, or has no
+    `CLAUDE.md`. It discovers game folders from disk, so your new game is checked automatically.
+    **If it fails, fix the game — do not add the game to its `KNOWN_GAPS` list.** That list is for
+    pre-existing debt only, and a brand-new entry there is a shortcut, not an exception.
 
 ## The games
 
