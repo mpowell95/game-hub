@@ -42,6 +42,8 @@ const SUITES = [
   // validate-sw-assets checks WHICH files sw.js precaches; this one checks HOW it serves them
   // (the two-tier install and the fetch deadline). See its header for why both are needed.
   { file: 'test-sw-strategy.mjs' },
+  // The "Adding a game" checklist, enforced rather than merely written down.
+  { file: 'test-game-conventions.mjs' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },

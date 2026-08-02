@@ -511,6 +511,10 @@
   position: fixed; inset: 0; z-index: 220;
   display: flex; align-items: center; justify-content: center; padding: 18px;
   overflow-y: auto;
+  /* Contain the scroll: this is a fixed, scrolling overlay sitting over the scrollable hub, so
+     without this a flick that reaches either end keeps going and pans the launcher underneath.
+     Found by test-game-conventions.mjs, which is the whole reason that check exists. */
+  overscroll-behavior: contain;
 }
 .eb-scrim { position: fixed; inset: 0; background: rgba(9, 24, 48, 0.55); }
 .eb-sheet {

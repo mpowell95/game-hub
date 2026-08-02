@@ -949,7 +949,16 @@ most once per animation frame, and skips it entirely when neither dimension actu
 semantically transparent because every one of these handlers is an idempotent "re-fit to whatever the
 size is now" — running it once with the settled size is strictly better than five times with
 intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool, poolv2,
-Nuts & Bolts, Uno. The unsubscribe it returns must be called in `destroy()`.
+Nuts & Bolts, Uno, and Hill Climb. The unsubscribe it returns must be called in `destroy()`.
+
+**This rule, and the two below it, are now ENFORCED by `test-game-conventions.mjs`, and the reason
+is worth knowing.** Hill Climb was written in a parallel session and shipped the raw-resize pattern
+on the same day it was removed from every other game — not through carelessness, but because this
+file only auto-loads for a session working inside `js/`. A session creating `newgame/` loads the
+root `CLAUDE.md` and its own (nonexistent) game file, and nothing else. So the rule now lives in
+BOTH places: a "USE WHAT EXISTS" table in the always-loaded root file, and a test that fails.
+**When you change a convention here, update that table too** — it is the copy a new-game session
+will actually read.
 
 **A non-passive `touchmove` on `document` is a page-wide tax, not a local guard.** Snake (and
 `snake-v2`) installed one to stop a D-pad drag panning the page. It works, but it tells the browser
