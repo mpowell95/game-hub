@@ -329,6 +329,7 @@ class DominoesUI {
     };
     this.dealing = !!opts.deal;
     this._fit();
+    this._refitSoon();
     this._syncChrome();
     this._syncHands();
     this._layoutBoard();
@@ -336,27 +337,52 @@ class DominoesUI {
   }
 
   /** The play stack owns a fixed height so nothing in it can ever reflow, and a game screen that
-   *  SCROLLS at all is a bug — you should never have to move the page to see the whole board.
+   *  SCROLLS at all is a bug.
    *
-   *  Two passes, because one is not enough and the first version proved it. Pass 1 measures where
-   *  the game starts and fills the viewport from there. Pass 2 then asks the document how tall it
-   *  actually ended up: whatever sits BELOW the game in the host page (the hub's content padding,
-   *  for one) still counts toward the scroll height, and the only way to know how much is to
-   *  measure it rather than to hard-code an allowance for one particular host.
+   *  Measure the host directly, and only the host: `topInDoc` is where the game starts and
+   *  `belowUs` is the page that exists AFTER the game's bottom edge (the hub's content padding,
+   *  for one). Both are independent of our own height — when `--dm-h` changes, our bottom and the
+   *  document's height move together — which makes this a stable fixed point that repeated calls
+   *  converge on rather than drift from.
    *
-   *  `visualViewport` over `innerHeight` because a phone's collapsing URL bar changes the usable
-   *  height without changing innerHeight; `+ scrollY` because getBoundingClientRect is relative
-   *  to the viewport, so measuring an already-scrolled page gave a too-tall answer. */
+   *  It replaced a version that set a height and then subtracted the whole document's overflow.
+   *  That blamed this element for overflow it might not have caused, and it could not undo a bad
+   *  first guess — it could only ever shrink. Combined with the timing bug below it collapsed the
+   *  board to its minimum height on every resume.
+   *
+   *  `innerHeight`, not `visualViewport.height`: it has to share a basis with `scrollHeight`, and
+   *  mixing the two made the correction over-shrink by the height of a phone's URL bar. */
   _fit() {
     if (!this.el) return;
     const root = this.el.root;
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-    const top = root.getBoundingClientRect().top + window.scrollY;
-    const clamp = (n) => Math.max(340, Math.min(880, Math.round(n)));
-    const set = (n) => root.style.setProperty('--dm-h', clamp(n) + 'px');
-    set(vh - top - GAP);
-    const over = document.documentElement.scrollHeight - vh;
-    if (over > 0) set(vh - top - GAP - over);
+    const doc = document.documentElement;
+    const vh = window.innerHeight;
+
+    // How much page exists BELOW the game (the hub's content padding, for one) cannot be read
+    // off `scrollHeight` directly: that value never drops below the viewport height, so an
+    // element shorter than the screen makes plain empty space look like host chrome. So measure
+    // it while the stack is deliberately TALLER than the viewport, where scrollHeight is pure
+    // content: below = scrollHeight - ourTop - probeHeight. Both writes happen inside one frame,
+    // so nothing is painted at the probe size.
+    const PROBE = 2000;
+    root.style.setProperty('--dm-h', PROBE + 'px');
+    const rect = root.getBoundingClientRect();
+    const topInDoc = rect.top + window.scrollY;
+    const below = Math.max(0, doc.scrollHeight - topInDoc - PROBE);
+
+    const h = Math.max(340, Math.min(880, Math.round(vh - topInDoc - below - GAP)));
+    root.style.setProperty('--dm-h', h + 'px');
+  }
+
+  /** Fit again once the host has actually laid us out. The resume path mounts from the
+   *  constructor, before the hub has positioned the container, so the first measurement can see a
+   *  top of 0 and size the stack for the whole viewport. Re-fitting on the next frame (and again
+   *  shortly after, for hosts that animate the mount) costs nothing — `_fit` is idempotent — and
+   *  is what stops "go back to the hub and come back" from returning a collapsed board. */
+  _refitSoon() {
+    const again = () => { if (this.el && this.view === 'game') { this._fit(); this._layoutBoard(); } };
+    requestAnimationFrame(again);
+    this.later(again, 150);
   }
 
   _syncChrome() {
