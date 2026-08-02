@@ -20,10 +20,32 @@ next mount, so leaving mid-match is lossless and the hub's "leave game?" confirm
 
 **Not immersive on purpose.** The spec's own header band carries a back chevron; immersive mode
 would put the hub's floating back button in exactly that corner, so the game keeps the ordinary
-hub header for going back and its teal band carries only the difficulty chip, the scoreboard and
-restart. The play stack measures its own height from `getBoundingClientRect().top` (`_fit()`),
-which is why the same markup works under the hub's padded content area and on the bare
-standalone page.
+hub header for going back and its teal band carries the back-to-setup chevron, the difficulty
+chip, the scoreboard and restart.
+
+**`_fit()` measures the host with a PROBE, and re-fits after layout.** Two separate defects put a
+collapsed, unplayable board on screen for anyone who left a match and came back (2026-08-01,
+reported with a screenshot), and both are worth not repeating:
+
+1. **It ran before the host had laid the container out.** The resume path mounts from the
+   constructor, so `getBoundingClientRect().top` read **0** and the stack was sized for the whole
+   viewport. `_refitSoon()` now re-fits on the next animation frame and again 150ms later; `_fit`
+   is idempotent, so the extra calls cost nothing and the settled layout wins.
+2. **It corrected by subtracting the document's total overflow.** That blames this element for
+   overflow it may not have caused and can only ever SHRINK, so it could not undo defect 1 - it
+   compounded it, landing on `.dm-play`'s 340px floor.
+
+How it measures now: the page below the game (the hub's content padding) cannot be read off
+`scrollHeight` directly, because **that value never drops below the viewport height**, so an
+element shorter than the screen makes plain empty space look like host chrome (an intermediate
+attempt did exactly that and under-sized every board). So it sets `--dm-h` to a 2000px PROBE,
+where `scrollHeight` is pure content, reads `below = scrollHeight - ourTop - PROBE`, and then sets
+the real height. Both writes are in one frame, so nothing paints at the probe size.
+
+`innerHeight`, not `visualViewport.height`: it has to share a basis with `scrollHeight`, and
+mixing the two over-shrank by the height of a phone's URL bar. **A game screen that scrolls at all
+is a bug**, and so is one that does not fill what it was given; `.dm-play`'s `min-height` (340px)
+is a last-resort floor, and if you ever see it actually binding, `_fit` is wrong again.
 
 ## Layout & responsibilities
 
@@ -77,11 +99,81 @@ regardless. An earlier version folded on the first free corner and produced zig-
 one still folded only on the limit and let long runs walk straight through a branch.
 
 **The last-resort branch can overlap, and that is accepted.** A double with nowhere legal to go
-is placed anyway rather than dropped. Measured over 119,195 boards from 800 full simulated
-matches: **two** overlapping boards, both on 27-tile chains (a 21-tile line with a 6-tile
-branch). The fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and
+is placed anyway rather than dropped. Measured over 86,258 boards from 800 full simulated
+matches: **one** overlapping board, on a 27-tile chain. The fit-to-felt scale absorbs it; dropping a tile would be a correctness bug, and
 reserving corridors for the branches would need a two-pass layout to buy back two boards in a
 hundred thousand.
+
+## The badges, the count, and what the player can see
+
+`openEnds()` returns three things per open end, and they are not the same number:
+
+- **`value`** — the pip you must MATCH to play there.
+- **`contrib`** — what that end adds to the All Fives count.
+- **`pending`** — true for an open-but-unplayed spinner side: playable, but **not an end yet**, so
+  `contrib` is 0 and the UI draws it as a hollow dashed marker rather than a coloured badge.
+
+`countEnds()` is literally `sum(contrib)`, the end badge renders `contrib`, and a pending side
+never shows a number to add up — so what the player totals on screen is exactly what the board
+scores. `dominoes/js/test.js` pins that as an invariant over every board a full simulated match
+can reach.
+
+`value` and `contrib` differ for a double at the end of a run: it lies crosswise, both halves are
+exposed, so it contributes twice over (a 6-6 at an end contributes 12) while you still play a 6
+on it. Three cases, all pinned:
+
+| Board | Ends | Count |
+|---|---|---|
+| lone 5-5 opener | it is BOTH ends at once, 5 each | 10, not 20 |
+| 6-6 at the end of a run | one end, crosswise, both halves exposed | 12 |
+| open spinner, no arms yet | two PENDING sides | 0 - they are places to play, not ends |
+
+**Two bugs live here, in opposite directions. Both are worth knowing about.**
+
+1. **Pending sides drawn as scoring badges (fixed, first attempt).** They showed a number and
+   accepted plays, but counted nothing, so a board whose badges read 3 + 2 + 6 + 6 = 17 scored on
+   5. Real inconsistency.
+2. **Then counting them (fixed, second attempt - the over-correction).** Reading the main spec's
+   "while the spinner has no arms yet, it counts as a single end of its full value" as *count the
+   free sides* gave an open 6-6 a permanent **+12** on every count. A score-seeking bot exploits a
+   constant far better than a person does: bot scoring went 24.6% -> 36.6% of plays while a casual
+   human's stayed at ~19%, and matches ran 35-167. It is also arithmetically impossible - the
+   reference screenshots show amber totals of 4, 6 and 7, which an open 6-6 could never allow.
+
+The lesson for the next person: the fix for "the badges do not match the count" was to change how
+pending sides are DRAWN, not what they are worth.
+
+## The bot is not cheating, and the tiers contain no dice
+
+Checked, because it does not feel that way when you lose 35-167 (reported 2026-08-01). Identical
+strategy on both seats, 400 matches:
+
+```
+both MEDIUM: seat0 wins 51.3% | avg 288-287 | scoring plays 33.8% vs 33.8%
+both EASY  : seat0 wins 45.8% | avg 278-281 | scoring plays 19.4% vs 19.9%
+deal, 4000 rounds: avg pips 42.07 vs 42.09 | opens 2057 vs 1943
+```
+
+Same rules, same deal, one scoring function. `ai.js`'s `unseen()` is the full set minus the bot's
+own hand minus the board, so it never reads `hands[1 - seat]`.
+
+What the gap actually was: Medium evaluates every legal move and takes the highest-scoring one,
+every turn — 33.8% of plays score. A player who cannot see which of their moves scores plays at
+the blind rate, ~19%. Over a race to 300 that compounds to 2% human win rate. **An information
+gap, not a difficulty one.**
+
+So the hand shows **what each tile is worth**: a `+N` badge on any tile with a scoring placement
+(`worth` in `_syncHands`, the max over that tile's legal moves). It is the same number the bot
+optimises on, offered to the player.
+
+**Do not "fix" bot strength by making it choose randomly.** It was measured (best move 85/70/55/40%
+of the time -> human win rate 6/10/10/14%) and rejected: it buys a few points of win rate by making
+the opponent erratic instead of beatable, which is coding luck into a game whose whole point is
+counting. Tiers differ by what the bot KNOWS and how far it looks - random legal move, greedy
+score, greedy plus one-ply lookahead and void tracking - never by a die roll on top of a better
+move.
+
+## Rules (All Fives)
 
 ## Rules (All Fives)
 
@@ -107,10 +199,9 @@ hundred thousand.
 4. Doubles lie crosswise. The **first double played** is the spinner; its two perpendicular sides
    open only once the main line has a tile on both of its in-line sides (the standard rule), and
    an unplayed branch side is **not** an end and counts nothing.
-5. **Counting**: sum the open ends after each placement; a multiple of five scores itself. A
-   double at an end contributes **both** halves. Two cases that trip people up and are both
-   pinned by tests: a lone first tile counts **once** (a 5-5 opener is 10, not 20), and an
-   interior spinner contributes nothing of its own.
+5. **Counting**: sum the open ends after each placement; a multiple of five scores itself. See
+   "The badges, the count, and what the player can see" above — that section is the whole rule,
+   and it carries both scoring bugs this game has had, in opposite directions.
 6. **At a round end BOTH players score the pips left in their OPPONENT's hand** (addendum A1,
    which corrected the main spec). Going out is simply the case where one of those two totals is
    zero; a blocked round pays each side the other's leftovers rather than paying one side the
@@ -146,8 +237,8 @@ snapshot restore like everything else.
 
 Measured over 600 matches per pairing, re-run after the A1/A3 rule changes (`node
 dominoes/js/test.js` covers legality and termination; the strength numbers came from a throwaway
-sweep): medium beats easy 97.5%, hard beats easy 97.8%, hard beats medium 69.0%, and easy against
-itself is 49.8%, which is the honest size of the first-mover edge.
+sweep, re-run after the scoring fix): medium beats easy 96.8%, hard beats easy 98.7%, hard beats
+medium 67.3%, and easy against itself is 50.3%, which is the honest size of the first-mover edge.
 
 ## Reading the game state without words
 
@@ -164,15 +255,15 @@ There is not one instructional sentence in the play screen. Four channels carry 
   ends already add to a five, a rounded square when they do not — with the green/amber hues only
   reinforcing it.
 
-  **Addendum A2 needed no change here, and that is a decision, not an oversight.** A2 is titled
-  "Green badge confirmed" and confirms exactly what is implemented: green when the open ends add
-  to a multiple of five, amber when they do not. Its trailing "green shows the number you would
-  gain" was read as restating what green MEANS at the level of the board, not as redefining the
-  badge's number, for two reasons. A per-end "gain" is undefined until a tile is chosen (the same
-  end scores differently depending on what you play there), and a badge on a 5-5 end would have
-  to read 10 while you still have to match a **5** to play there — which breaks the one job the
-  number does, telling you what fits. The main spec's own wording ("showing that end's pip
-  value") stands.
+  **The badge number is the end's CONTRIBUTION, not the pip you match** (changed 2026-08-01
+  alongside the scoring fix above; an earlier build showed the match value and argued for it
+  here). A 6-6 at a run end reads 12 even though you play a 6 on it. That is the trade: the badge
+  gives up being a placement hint so that the badges always sum to the score, which is the one
+  thing a player has to be able to do in All Fives. It also matches addendum A2's "green shows
+  the number you would gain" and the reference screenshots' badge value of 10, which is only
+  reachable as a doubled 5-5. Placement is not hurt: illegal tiles are already dimmed, and
+  lifting a tile lights only the ends it can legally go on, so the badge number was never how you
+  found a legal move.
 - **What just happened** — a `+5` and a star burst at the tile that caused it, plus the header
   score counting up. Never a log, never a banner.
 
@@ -201,10 +292,14 @@ on page 2 and around both open ends on page 4) and the **cartoon pointing hand**
 drawn in a faded red on the blocked page, off to the side away from any tile, which reads as
 "this tap does nothing").
 
-Navigation deviates from the addendum in one place, on purpose: the two side buttons jump to the
-FIRST and LAST page exactly as specified, which leaves nothing that pages one step at a time on
-a device with no touchscreen — so the page dots are tappable and the arrow keys work, alongside
-the specified swipe. Two things that bit and are worth not re-learning: the overlay is
+**The two side buttons are PREVIOUS and NEXT, not first and last.** The addendum specifies
+first/last, that is what shipped, and it was wrong in practice: the only two visible controls
+jumped between page 1 and page 8, so a player tapping through the tutorial saw exactly two of
+the eight pages and reasonably concluded only two existed (reported 2026-08-01). The other six
+were reachable only by swiping. A build note in this very file had even observed that first/last
+"leaves nothing that pages one step at a time" and answered it with ARROW KEYS, on a phone game —
+if a fix for a touch UI is a keyboard, it is not a fix. Swipe, tappable dots and the arrow keys
+all still work; the buttons disable at the ends. Two things that bit and are worth not re-learning: the overlay is
 `position: fixed` (the setup screen's `.dm-root` is only as tall as its own content, so an
 absolute scrim left the page undimmed), and the card carries an explicit `z-index` (without one
 the absolutely-positioned scrim covered the page dots, so tapping one closed the tutorial).
@@ -263,13 +358,15 @@ the ordinary wins metric with no extra wiring.
 ```
 node dominoes/js/test.js
 ```
-539 assertions: the set's integrity, every All Fives counting case above (including the lone
+553 assertions: the set's integrity, every All Fives counting case above (including the lone
 double and the interior spinner), branch opening, legality including a tile that fits both ends,
 chain bookkeeping, the non-destructive `countAfter` preview, the deal, drawing and passing
 legality, a snapshot round trip, board geometry (crosswise doubles, branch direction, a folded
 run, no overlaps), the bot tiers' choices and legality, plus a 60-full-match sweep asserting that
-no tile is ever lost, every placed tile is laid out, no chain overlaps itself, and in-play scores
-are always multiples of five credited only to the mover.
+no tile is ever lost, every placed tile is laid out, no chain overlaps itself, **the end badges
+always sum to the score the board is showing**, and in-play scores are always multiples of five
+credited only to the mover (round-ending plays are excluded there — the A1 settle pays both
+sides raw pip counts, and its own blocks cover it).
 
 The addendum's rule changes each have their own block, and they are the ones to keep green:
 **A1** going out (opponent's leftovers, zero back the other way) and blocked rounds both ways,

@@ -161,9 +161,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 ### The module contract
 
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
-object bundling them. All fourteen in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
-Filler, Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool)
-export all three; grep-verify before assuming otherwise:
+object bundling them. All fifteen in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
+Filler, Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool,
+Hill Climb) export all three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
@@ -190,7 +190,7 @@ export default { init, destroy, isInProgress };
 - `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
   navigating back to the launcher) and has **two legitimate meanings** depending on whether
   the game can resume:
-  - **No mid-game resume** (Ball Run, Snake): returns `true` while a game/run is actually
+  - **No mid-game resume** (Ball Run, Snake, Hill Climb): returns `true` while a game/run is actually
     in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
@@ -211,7 +211,8 @@ export default { init, destroy, isInProgress };
     answers two different questions depending on solo-vs-MP context.
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
-- An `immersive: true` entry in `hub.js`'s `GAMES` array (currently Escoba, Mancala, Ball Run)
+- An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee, Pool,
+  Hill Climb)
   collapses the hub's header to a floating back button for games with their own full-bleed
   chrome. It's a de facto fourth registry flag, same status as `module`/`href`/`devOnly` —
   set it when a game wants to own the whole viewport.
@@ -260,7 +261,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
      `NEW_DAYS` (7) days and then stops on its own — no follow-up commit, nothing stored, no
      cleanup. Omitting it is not a crash, it just means the game ships unannounced, which is
      why `test-new-badge.mjs` exists. Pre-existing games deliberately carry NO date (they were
-     already live when the badge shipped, 2026-08-01) — do not backfill git commit dates, they
+     already live when the badge shipped, 2026-08-02) — do not backfill git commit dates, they
      are not release dates.
    - Array position is irrelevant: the launcher grid renders **favorites first, then
      alphabetically by display `title` within each group** (`localeCompare`), computed at
@@ -278,7 +279,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -324,6 +325,7 @@ working in that folder).
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
+| Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |

@@ -9,7 +9,7 @@
 // `.dm-chain` container survives every update and its centre-and-fit transform can animate
 // instead of snapping.
 
-import { DominoesGame, TILES, HUMAN, BOT } from './game.js';
+import { DominoesGame, TILES, HUMAN, BOT, countAfter, scoreOf } from './game.js';
 import { layoutChain } from './board.js';
 import { chooseMove } from './ai.js';
 import { tileHTML } from './tiles.js';
@@ -44,6 +44,10 @@ const THINK_MIN = 950, THINK_VAR = 550;
 const BOT_DRAW_MS = 420;
 const AFTER_PLAY_MS = 420;
 const ROUND_CARD_MS = 700;
+
+// Breathing room under the play stack, in px. Small on purpose: every pixel spent here is a
+// pixel the felt does not get.
+const GAP = 6;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -148,13 +152,18 @@ class DominoesUI {
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    // orientationchange and the visual viewport (a collapsing URL bar) both change the usable
+    // height without necessarily firing a plain window resize.
     this._onResize = () => { this._fit(); this._layoutBoard(); };
+    this._vv = window.visualViewport || null;
     this._offLang = onLangChange(() => { if (this.view === 'setup') this.renderSetup(); else this._syncChrome(); });
 
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('orientationchange', this._onResize);
+    if (this._vv) this._vv.addEventListener('resize', this._onResize);
 
     const save = loadSave();
     if (save && save.snap && save.snap.phase !== 'matchOver') this.resume(save);
@@ -172,6 +181,8 @@ class DominoesUI {
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('orientationchange', this._onResize);
+    if (this._vv) this._vv.removeEventListener('resize', this._onResize);
     this.container.innerHTML = '';
     this.el = null;
     this.game = null;
@@ -318,20 +329,60 @@ class DominoesUI {
     };
     this.dealing = !!opts.deal;
     this._fit();
+    this._refitSoon();
     this._syncChrome();
     this._syncHands();
     this._layoutBoard();
     if (this.dealing) this.later(() => { this.dealing = false; }, 900);
   }
 
-  /** The play stack owns a fixed height so nothing in it can ever reflow. Measured rather than
-   *  assumed, because the same markup runs inside the hub's padded content area and on the
-   *  standalone page with no chrome above it at all. */
+  /** The play stack owns a fixed height so nothing in it can ever reflow, and a game screen that
+   *  SCROLLS at all is a bug.
+   *
+   *  Measure the host directly, and only the host: `topInDoc` is where the game starts and
+   *  `belowUs` is the page that exists AFTER the game's bottom edge (the hub's content padding,
+   *  for one). Both are independent of our own height — when `--dm-h` changes, our bottom and the
+   *  document's height move together — which makes this a stable fixed point that repeated calls
+   *  converge on rather than drift from.
+   *
+   *  It replaced a version that set a height and then subtracted the whole document's overflow.
+   *  That blamed this element for overflow it might not have caused, and it could not undo a bad
+   *  first guess — it could only ever shrink. Combined with the timing bug below it collapsed the
+   *  board to its minimum height on every resume.
+   *
+   *  `innerHeight`, not `visualViewport.height`: it has to share a basis with `scrollHeight`, and
+   *  mixing the two made the correction over-shrink by the height of a phone's URL bar. */
   _fit() {
     if (!this.el) return;
-    const top = this.el.root.getBoundingClientRect().top;
-    const h = Math.max(420, Math.min(880, Math.round(window.innerHeight - top - 10)));
-    this.el.root.style.setProperty('--dm-h', h + 'px');
+    const root = this.el.root;
+    const doc = document.documentElement;
+    const vh = window.innerHeight;
+
+    // How much page exists BELOW the game (the hub's content padding, for one) cannot be read
+    // off `scrollHeight` directly: that value never drops below the viewport height, so an
+    // element shorter than the screen makes plain empty space look like host chrome. So measure
+    // it while the stack is deliberately TALLER than the viewport, where scrollHeight is pure
+    // content: below = scrollHeight - ourTop - probeHeight. Both writes happen inside one frame,
+    // so nothing is painted at the probe size.
+    const PROBE = 2000;
+    root.style.setProperty('--dm-h', PROBE + 'px');
+    const rect = root.getBoundingClientRect();
+    const topInDoc = rect.top + window.scrollY;
+    const below = Math.max(0, doc.scrollHeight - topInDoc - PROBE);
+
+    const h = Math.max(340, Math.min(880, Math.round(vh - topInDoc - below - GAP)));
+    root.style.setProperty('--dm-h', h + 'px');
+  }
+
+  /** Fit again once the host has actually laid us out. The resume path mounts from the
+   *  constructor, before the hub has positioned the container, so the first measurement can see a
+   *  top of 0 and size the stack for the whole viewport. Re-fitting on the next frame (and again
+   *  shortly after, for hosts that animate the mount) costs nothing — `_fit` is idempotent — and
+   *  is what stops "go back to the hub and come back" from returning a collapsed board. */
+  _refitSoon() {
+    const again = () => { if (this.el && this.view === 'game') { this._fit(); this._layoutBoard(); } };
+    requestAnimationFrame(again);
+    this.later(again, 150);
   }
 
   _syncChrome() {
@@ -353,18 +404,29 @@ class DominoesUI {
     if (!this.el || !this.game) return;
     const g = this.game;
     this.el.bot.innerHTML = g.hands[BOT].map(() => '<div class="dm-back"></div>').join('');
-    const playable = new Set(g.turn === HUMAN && g.phase === 'playing'
-      ? g.legalMoves(HUMAN).map((m) => m.tileId) : []);
+    const myMoves = (g.turn === HUMAN && g.phase === 'playing') ? g.legalMoves(HUMAN) : [];
+    const playable = new Set(myMoves.map((m) => m.tileId));
+    // What each tile is WORTH, best case. Without this the player has no way to see which of
+    // their legal moves scores, while the bot picks the best one every single turn - which is
+    // not a difficulty gap, it is an information gap, and it read as the bot scoring at will.
+    const worth = new Map();
+    for (const m of myMoves) {
+      const sc = scoreOf(countAfter(g.chain, m));
+      if (sc > (worth.get(m.tileId) || 0)) worth.set(m.tileId, sc);
+    }
     this.el.hand.innerHTML = g.hands[HUMAN].map((id, i) => {
       const cls = [];
       if (!playable.has(id)) cls.push('is-dead');
       if (id === this.selected) cls.push('is-sel');
       if (this.dealing) cls.push('is-dealt');
       const style = this.dealing ? `animation-delay:${60 * i}ms;--dm-from-x:${(i - 3) * 26}px` : '';
-      return tileHTML(TILES[id], {
-        vertical: true, button: true, cls: cls.join(' '), style, aria: tileAria(TILES[id]),
+      const sc = worth.get(id) || 0;
+      const html = tileHTML(TILES[id], {
+        vertical: true, button: true, cls: cls.join(' '), style,
+        aria: sc ? t('aria_tile_scores', { a: TILES[id][0], b: TILES[id][1], v: sc }) : tileAria(TILES[id]),
         attrs: ` data-action="pick" data-id="${id}"`,
       });
+      return sc ? html.replace('</button>', `<i class="dm-worth">+${sc}</i></button>`) : html;
     }).join('');
   }
 
@@ -394,10 +456,16 @@ class DominoesUI {
     }));
     for (const e of ends) {
       const isTarget = targets.has(e.side);
-      parts.push(`<button type="button" class="dm-end ${scoringNow ? 'is-scoring' : ''} ${isTarget ? 'is-target' : ''}"
+      // A `pending` side is a place to play, not an end: it scores nothing, so it must not look
+      // like a number to add up. Neutral marker, and it shows the pip you MATCH rather than a
+      // contribution it does not make.
+      const cls = e.pending ? 'is-pending' : (scoringNow ? 'is-scoring' : '');
+      const shown = e.pending ? e.value : e.contrib;
+      const label = e.pending ? t('aria_end_open', { m: e.value }) : t('aria_end', { v: e.contrib, m: e.value });
+      parts.push(`<button type="button" class="dm-end ${cls} ${isTarget ? 'is-target' : ''}"
         ${isTarget ? `data-action="drop" data-side="${e.side}"` : 'tabindex="-1" aria-hidden="true"'}
-        aria-label="${esc(t('aria_end', { v: e.value }))}"
-        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${e.value}</button>`);
+        aria-label="${esc(label)}"
+        style="left:${e.x * UNIT}px;top:${e.y * UNIT}px;transform:translate(-50%,-50%) scale(var(--dm-cs,1))">${shown}</button>`);
     }
     this.el.chain.innerHTML = parts.join('');
     this.el.chain.classList.toggle('is-picking', targets.size > 0);

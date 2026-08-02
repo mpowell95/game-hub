@@ -35,9 +35,9 @@ const titleText = (g) => (g.title && typeof g.title === 'object') ? (g.title[get
 // follow-up commit, no stored state, nothing to clean up later). **Set it on every new entry**;
 // an entry without one never shows the pill, which is the safe default.
 //
-// Only Dominoes carries one today, deliberately: every other game was already live and being
-// played when the badge shipped (2026-08-01), so backfilling them would announce games the
-// family has had for weeks and drown out the one that is actually new. Git's first-commit date
+// Only Dominoes and Hill Climb carry one today, deliberately: every other game was already live
+// and being played when the badge shipped (2026-08-02), so backfilling them would announce games
+// the family has had for weeks and drown out the two that are actually new. Git's first-commit date
 // per folder is NOT a release date — most of this repo's early history lands on one import day
 // (2026-07-25) and several games' folders predate their launch. If a pre-existing game ever
 // wants the pill (a big relaunch, say), give it a real date by hand.
@@ -243,6 +243,19 @@ const GAMES = [
     module: '../uno/js/ui.js',
     accent: '#E0532F',
     art: GAME_ART["uno"],
+  },
+  {
+    id: 'hill-climb',
+    released: '2026-08-02',
+    title: 'Hill Climb',
+    blurb: { en: 'Gas and brake, no steering. Balance over the hills, grab fuel, and see how far you get.',
+      es: 'Gas y freno, sin volante. Mantén el equilibrio en las colinas, coge combustible y llega lo más lejos posible.' },
+    module: '../hill-climb/js/ui.js',
+    // Its own full-bleed chrome (a fixed, edge-to-edge canvas plus a pedal HUD), so the hub's
+    // header collapses to the floating back button — same as Ball Run and Pool.
+    immersive: true,
+    accent: '#d8382b',
+    art: GAME_ART["hill-climb"],
   },
   {
     id: 'yahtzee',

@@ -136,7 +136,9 @@
 .dm-root .dm-play {
   display: flex; flex-direction: column;
   height: var(--dm-h);
-  min-height: 420px;
+  /* Low on purpose: the header, both hand rows and the floor are fixed, so the felt is what
+     absorbs a short viewport. A high min-height here just pushed the stack past the fold. */
+  min-height: 340px;
   position: relative;
   overflow: hidden;
   border-radius: 18px;
@@ -274,6 +276,14 @@
   box-shadow: 0 3px 0 rgba(0, 0, 0, .28);
 }
 .dm-root .dm-end.is-scoring { background: var(--dm-score); color: #0E2205; border-radius: 50%; }
+/* An open-but-unplayed spinner side. Playable, but NOT an end yet and worth nothing, so it is
+   deliberately not a coloured scoring badge: hollow cream with a dashed rim, which reads as
+   "you may play here" and never as a number to add into the count. */
+.dm-root .dm-end.is-pending {
+  background: var(--dm-cream); color: #5C5342;
+  border-style: dashed; border-color: #6B6250;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
+}
 .dm-root .dm-end.is-target { pointer-events: auto; cursor: pointer; animation: dm-pulse .9s ease-in-out infinite; }
 @keyframes dm-pulse {
   0%, 100% { transform: translate(-50%, -50%) scale(1); }
@@ -321,6 +331,20 @@
 }
 /* Legality is shown by brightness alone, so there is never a "no valid moves" sentence. */
 .dm-root .dm-hand .dm-tile.is-dead { filter: saturate(.32) brightness(.72); cursor: default; }
+/* What this tile is worth if you play it well. The bot picks its best-scoring move every turn;
+   without this the player cannot even see which of their moves score, which is an information
+   gap, not a difficulty one. Same green as a scoring end badge, so the two read as one idea. */
+.dm-root .dm-hand .dm-tile .dm-worth {
+  position: absolute; top: -9px; right: -7px; z-index: 2;
+  min-width: 22px; height: 20px; padding: 0 4px;
+  display: grid; place-items: center;
+  background: var(--dm-score); color: #0E2205;
+  border: 2px solid var(--dm-ink); border-radius: 999px;
+  font-size: .68rem; font-weight: 900; font-style: normal; line-height: 1;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .3);
+  pointer-events: none;
+}
+.dm-root .dm-hand .dm-tile { overflow: visible; }
 .dm-root .dm-hand .dm-tile.is-sel { transform: translateY(-12px); box-shadow: 0 0 0 3px #FFF6D8, var(--dm-shadow); }
 .dm-root .dm-hand .dm-tile.is-dealt { animation: dm-deal .42s cubic-bezier(.2, .9, .3, 1) both; }
 @keyframes dm-deal {

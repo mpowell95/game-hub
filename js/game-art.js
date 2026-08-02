@@ -479,6 +479,43 @@ export const GAME_ART = {
               <circle cx="89" cy="24" r="2.4"/>
             </g>
           </svg>`,
+
+  // Hill Climb: the game's own scene, composed for the 16:9 frame (never a square crop). Flat
+  // sky, a dirt cross-section with its bright grass cap, and the red jeep sitting ON the ramp
+  // rather than near it - the car's transform is derived from the ramp segment it stands on
+  // (46,70)->(110,38), i.e. rotate(-26.6) about a point one wheel-radius up the surface normal -
+  // so the wheels touch the grass exactly. Same flat-cartoon ink (#231f1c) the live game draws
+  // with, so the tile and the gameplay read as one thing.
+  'hill-climb': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#8fd3f0"/>
+            <path d="M0 58 L34 44 L66 54 L104 34 L136 44 L160 36 L160 90 L0 90 Z" fill="#6fa8c9" opacity="0.55"/>
+            <path d="M0 90 L0 70 L46 70 L110 38 L160 44 L160 90 Z" fill="#8d5a34"/>
+            <g fill="#754828" opacity="0.5">
+              <ellipse cx="16" cy="80" rx="6.5" ry="4.2"/><ellipse cx="44" cy="84" rx="5.5" ry="3.6"/>
+              <ellipse cx="74" cy="76" rx="6" ry="4"/><ellipse cx="104" cy="66" rx="6.5" ry="4.2"/>
+              <ellipse cx="134" cy="76" rx="6" ry="4"/>
+            </g>
+            <path d="M0 70 L46 70 L110 38 L160 44" fill="none" stroke="#4caf3d"
+                  stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+            <g fill="#e0a007" stroke="#231f1c" stroke-width="1.8">
+              <circle cx="118" cy="17" r="5.6"/><circle cx="133" cy="12" r="5.6"/><circle cx="148" cy="16" r="5.6"/>
+            </g>
+            <g transform="translate(73 44) rotate(-26.6)">
+              <path d="M-18 4 L-19 -4 L-7 -4 L-6 -12 L5 -12 L7 -4 L18 -5 L19 3 Z"
+                    fill="#d8382b" stroke="#231f1c" stroke-width="2.6" stroke-linejoin="round"/>
+              <path d="M8 -4 L18 -5 L18.6 0 L8.6 0 Z" fill="#9a1f16" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-10" y="-15" width="3.4" height="11" fill="#7b1a12" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-6.5" y="-18" width="7" height="10" rx="2.4" fill="#E0532F" stroke="#231f1c" stroke-width="1.8"/>
+              <circle cx="-3" cy="-21" r="4.2" fill="#f0c08a" stroke="#231f1c" stroke-width="1.8"/>
+              <path d="M-7.4 -23 Q-3 -29 1.4 -23 Z" fill="#c1301f" stroke="#231f1c" stroke-width="1.6"/>
+              <path d="M-16 -4 Q-21 -14 -19 -24" fill="none" stroke="#231f1c" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="-19" cy="-25" r="2.2" fill="#E0532F"/>
+              <circle cx="-12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="-12" cy="4" r="3" fill="#e8e2d6"/>
+              <circle cx="12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="12" cy="4" r="3" fill="#e8e2d6"/>
+            </g>
+          </svg>`,
 };
 
 export default GAME_ART;
