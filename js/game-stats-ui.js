@@ -617,7 +617,9 @@ function ensureCss() {
   const el = document.createElement('style');
   el.id = 'gs-css';
   el.textContent = [
-    '.gs-overlay{position:fixed;inset:0;z-index:300;opacity:0;transition:opacity .2s ease;overflow-y:auto}',
+    // overscroll-behavior:contain - see the same rule on `.lb-overlay` in leaderboard-ui.js. Both
+    // overlays are position:fixed scroll containers over a scrollable hub, so both chain without it.
+    '.gs-overlay{position:fixed;inset:0;z-index:300;opacity:0;transition:opacity .2s ease;overflow-y:auto;overscroll-behavior:contain}',
     '.gs-overlay.is-in{opacity:1}',
     '.gs-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.gs-panel{position:relative;width:100%;max-width:560px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',

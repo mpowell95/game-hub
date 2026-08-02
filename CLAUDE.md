@@ -80,12 +80,45 @@ The hub's top-bar version pill compares the ACTIVE service worker's cache versio
 (`GET_VERSION` message to `navigator.serviceWorker.controller`) against the version parsed
 from a fresh, no-store fetch of the deployed `sw.js`. If they differ it renders
 `vN → vN+1` and marks itself stale. **If that arrow never resolves after a reload (or two),
-the new service worker's install failed** — almost always because `cache.addAll()` hit one
-`ASSETS` entry that 404s (see `validate-sw-assets.mjs`), which is atomic: the whole install
-aborts silently and the previous worker just keeps serving the old build offline, with no
-other visible symptom. This is the tell to look for before suspecting anything else when a
-deploy "didn't take." `RESTORE.md` and `validate-sw-assets.mjs` are the prevention/detection
-pair for this failure mode.
+the new service worker's install failed.** This is the tell to look for before suspecting
+anything else when a deploy "didn't take." `RESTORE.md` and `validate-sw-assets.mjs` are the
+prevention/detection pair.
+
+**Much narrower since 2026-08-02** (see "The service worker's caching strategy" below): the
+install used to `cache.addAll()` the ENTIRE ~8.8 MB list atomically, so one 404'd `ASSETS`
+entry — a single missing card image — aborted the whole install and the previous worker kept
+serving the old build offline forever. Only the ~600 KB app shell is atomic now, so a bad path
+in a game folder no longer strands a deploy; it warms best-effort, logs loudly, and caches on
+demand instead. A stuck pill now means the SHELL failed to install, which is a much shorter
+list of suspects. `test-sw-strategy.mjs` pins this as a regression probe.
+
+### The service worker's caching strategy (rewritten 2026-08-02)
+
+Matt: *"the gamehub is sluggish and glitchy."* Both halves of `sw.js`'s strategy were tuned for
+a fast desktop connection and misbehaved on a phone with poor service. The full rationale is in
+`sw.js`'s own comments; the shape, so a future session doesn't "simplify" it back:
+
+- **Two-tier precache.** `SHELL` (the hub itself — `index.html`, `css/`, `js/`, `icons/`,
+  `profile/`; ~43 entries, ~600 KB) is atomic and blocks the install. `REST` (every game's own
+  files, ~242 entries, ~8.4 MB) is warmed AFTER activation by `warmRest()`, best-effort, with
+  bounded concurrency, skipping anything already cached so it is resumable. The warm is
+  deliberately **not** inside `activate`'s `waitUntil` — functional events wait on that promise,
+  so awaiting the warm there would block the very page load the split exists to speed up.
+- **Network-first with a DEADLINE, not network-first forever.** The old handler only fell back to
+  cache when a fetch *failed*; a weak-but-alive signal never fails, it just takes seconds per
+  request. `NET_TIMEOUT_MS` (2.5s) races the network against the cached copy; the network still
+  wins every race on a healthy connection, so freshness online is unchanged.
+- **Plus a `SLOW_LATCH_MS` (10s) "the network is bad right now" latch.** The deadline alone is
+  charged per request, and a cold start is a serial chain (index.html → hub.js → its imports →
+  theirs), so each hop re-paid it. Once one request proves the link is slower than the deadline,
+  the rest of that page load goes straight to cache and revalidates in the background. The latch
+  expires on its own — a recovered connection needs no event to go back to network-first.
+- **A request with nothing cached is never short-circuited** by either mechanism: it waits for the
+  network, because a deadline with no fallback would only turn a slow load into a broken one.
+
+Measured on a warm cache against a server injecting 8s per request (the regime the report was
+about): **40.6s → 2.6s** to a rendered launcher. `cache: 'reload'` is untouched — the
+fifth-playthrough HTTP-disk-cache fix it exists for is orthogonal and still needed.
 
 ## Architecture
 
@@ -93,7 +126,7 @@ pair for this failure mode.
 index.html              hub shell host
 js/hub.js               launcher grid + module mount/unmount  (the GAMES registry)
 css/hub.css             shell chrome only
-sw.js                   shared service worker (network-first, precaches every game)
+sw.js                   shared service worker (deadline-bounded network-first; two-tier precache)
 manifest.webmanifest    one manifest for the whole hub
 profile/index.html      the shared profile page (name, emoji, color, opponents)
 <game>/                 one folder per game (connect-four/, chinchon/, parchis/)
@@ -145,6 +178,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 |---|---|
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
+| `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
 | `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |

@@ -37,6 +37,9 @@ const SUITES = [
   { file: 'favorites.test.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'validate-sw-assets.mjs' },
+  // validate-sw-assets checks WHICH files sw.js precaches; this one checks HOW it serves them
+  // (the two-tier install and the fetch deadline). See its header for why both are needed.
+  { file: 'test-sw-strategy.mjs' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },

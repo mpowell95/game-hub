@@ -125,7 +125,10 @@ class SnakeV2UI {
     };
     document.addEventListener('keydown', this._onKey);
     document.addEventListener('visibilitychange', this._onVis);
-    document.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    // Root-scoped, not document-scoped - see the long note on the same guard in snake/js/ui.js. A
+    // non-passive touchmove on `document` costs the WHOLE PAGE its compositor-thread scrolling for
+    // as long as this game is mounted; the root catches every drag the guard was written for.
+    this.root.addEventListener('touchmove', this._onTouchMove, { passive: false });
     this._offLang = onLangChange(() => this._rerenderForLang());
     this.renderSetup();
   }
@@ -505,7 +508,7 @@ class SnakeV2UI {
     this._stopLoop();
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
-    document.removeEventListener('touchmove', this._onTouchMove, { passive: false });
+    this.root.removeEventListener('touchmove', this._onTouchMove);
     if (this._offLang) { this._offLang(); this._offLang = null; }
     document.querySelectorAll('.sv-help-overlay').forEach((n) => n.remove());
     this.root.innerHTML = '';
