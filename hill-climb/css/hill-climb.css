@@ -1,0 +1,495 @@
+/* hill-climb.css — every rule descendant-scoped under .hc-root (root CLAUDE.md, "Adding a game"
+   item 3, Mancala's discipline: a prefix alone is not isolation). Custom properties are --hc-*.
+
+   The chrome is a flat-cartoon garage: dark navy panel, chunky rounded buttons with thick dark
+   outlines, bold outlined numerals. It is intentionally the SAME dark look in light and dark
+   theme (like Ball Run's), so there is no .gh-dark branch to keep in step. */
+
+.hc-root {
+  /* Fixed to the viewport rather than flowing inside the hub's padded, max-width .hub-main —
+     the only way to get true edge-to-edge full bleed both standalone and mounted (this game is
+     `immersive: true` in the hub registry). z-index sits below the hub's floating back button. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  /* iOS long-press otherwise opens its Copy / Translate / Look Up bubble over the canvas (Live
+     Text reads the drawn HUD numerals as selectable text), which lands right on top of the
+     distance readout while you are holding a pedal. Seen on Matt's phone, 2026-08-02. */
+  -webkit-touch-callout: none;
+
+  --hc-navy: #1b2230;
+  --hc-navy-2: #232c3d;
+  --hc-navy-3: #2e394e;
+  --hc-ink: #f4f7fb;
+  --hc-dim: #a9b6c9;
+  --hc-line: #10151f;
+  --hc-gold: #F2B705;
+  --hc-green: #2e9e44;
+  --hc-blue: #1F5FA8;
+  --hc-red: #E0532F;
+
+  background: var(--hc-navy);
+  color: var(--hc-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.hc-root button { font-family: inherit; cursor: pointer; }
+.hc-root .hc-ico { width: 1.15em; height: 1.15em; vertical-align: -0.22em; flex: none; }
+
+/* ---------------------------------------------------------------- garage --- */
+
+.hc-root .hc-garage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  /* the brief's subtle diagonal tile pattern over the navy */
+  background-color: var(--hc-navy);
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 12px, transparent 12px 24px);
+  padding: max(env(safe-area-inset-top, 0px), 52px) 10px max(env(safe-area-inset-bottom, 0px), 6px);
+  gap: 8px;
+}
+
+.hc-root .hc-gtop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 0 78px; /* clear the hub's floating back button */
+  min-height: 34px;
+}
+
+.hc-root .hc-wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--hc-navy-2);
+  border: 2px solid var(--hc-line);
+  border-radius: 999px;
+  padding: 4px 12px 4px 8px;
+  font-weight: 800;
+  font-size: 0.98rem;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hc-root .hc-gtitle {
+  margin: 0;
+  flex: 1;
+  text-align: center;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hc-ink);
+  text-shadow: 0 2px 0 var(--hc-line);
+}
+
+.hc-root .hc-help-btn {
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-line);
+  background: var(--hc-navy-2);
+  color: var(--hc-ink);
+  font-weight: 800;
+  font-size: 1rem;
+  flex: none;
+}
+
+.hc-root .hc-panel {
+  position: relative;
+  border: 3px solid var(--hc-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #8fd3f0;
+  flex: 0 0 auto;
+  height: clamp(112px, 24vh, 200px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hc-root .hc-preview { display: block; width: 100%; height: 100%; }
+
+.hc-root .hc-panel-cap {
+  position: absolute;
+  top: 6px; left: 8px; right: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #fff;
+  text-shadow: 0 2px 0 var(--hc-line), 0 0 3px var(--hc-line);
+  pointer-events: none;
+}
+
+.hc-root .hc-panel-best {
+  position: absolute;
+  bottom: 6px; right: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 0 var(--hc-line), 0 0 3px var(--hc-line);
+  pointer-events: none;
+}
+
+.hc-root .hc-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 2px 2px 6px;
+}
+
+.hc-root .hc-intro { margin: 4px 2px 10px; color: var(--hc-dim); font-size: 0.86rem; line-height: 1.4; }
+
+.hc-root .hc-cards { display: grid; gap: 8px; grid-template-columns: 1fr; }
+@media (min-width: 620px) { .hc-root .hc-cards { grid-template-columns: 1fr 1fr; } }
+
+.hc-root .hc-card {
+  border: 2px solid var(--hc-line);
+  border-radius: 14px;
+  background: var(--hc-navy-2);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+.hc-root .hc-card.is-on { background: var(--hc-navy-3); border-color: var(--hc-blue); }
+.hc-root .hc-card.is-locked { opacity: 0.86; }
+.hc-root .hc-card-h { font-weight: 800; font-size: 0.98rem; display: flex; align-items: center; gap: 6px; }
+.hc-root .hc-card-note { color: var(--hc-dim); font-size: 0.82rem; line-height: 1.35; }
+.hc-root .hc-card-sub { color: var(--hc-dim); font-size: 0.8rem; }
+.hc-root .hc-card-foot { margin-top: 4px; display: flex; justify-content: flex-end; }
+
+.hc-root .hc-btn {
+  appearance: none;
+  border: 2px solid var(--hc-line);
+  border-radius: 11px;
+  background: var(--hc-navy-3);
+  color: var(--hc-ink);
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+.hc-root .hc-btn:active { transform: translateY(2px); box-shadow: none; }
+.hc-root .hc-btn:disabled { opacity: 0.45; box-shadow: none; cursor: default; }
+.hc-root .hc-btn.is-on { background: var(--hc-blue); opacity: 1; }
+.hc-root .hc-btn.hc-primary { background: var(--hc-green); }
+.hc-root .hc-btn.hc-buy { background: var(--hc-navy-2); }
+
+.hc-root .hc-shoph { margin: 12px 2px 6px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--hc-dim); }
+.hc-root .hc-shoprow {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 2px solid var(--hc-line); border-radius: 12px; background: var(--hc-navy-2);
+  padding: 7px 9px 7px 12px; margin-bottom: 7px;
+}
+.hc-root .hc-shopname { font-weight: 700; font-size: 0.94rem; }
+
+.hc-root .hc-tunes { display: grid; gap: 8px; }
+.hc-root .hc-tune {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 2px solid var(--hc-line); border-radius: 14px; background: var(--hc-navy-2);
+  padding: 9px 11px;
+}
+.hc-root .hc-tune-h { font-weight: 800; font-size: 0.95rem; }
+.hc-root .hc-tune-note { color: var(--hc-dim); font-size: 0.8rem; margin: 1px 0 5px; }
+.hc-root .hc-pips { display: flex; gap: 4px; }
+.hc-root .hc-pip {
+  width: 20px; height: 9px; border-radius: 3px;
+  border: 2px solid var(--hc-line); background: var(--hc-navy-3);
+}
+.hc-root .hc-pip.is-on { background: var(--hc-gold); }
+.hc-root .hc-maxed { font-weight: 800; color: var(--hc-gold); font-size: 0.85rem; }
+
+.hc-root .hc-tabs {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding-top: 2px;
+}
+.hc-root .hc-tab {
+  appearance: none;
+  border: 2px solid var(--hc-line);
+  border-radius: 13px;
+  background: #3a4459;
+  color: var(--hc-ink);
+  padding: 7px 2px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+.hc-root .hc-tab:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
+.hc-root .hc-tab.is-on { background: #3f7fd4; border-color: #8fc0ff; }
+.hc-root .hc-tab-start { background: var(--hc-green); }
+.hc-root .hc-tab-ico { line-height: 0; }
+.hc-root .hc-tab-ico svg { width: 22px; height: 22px; display: block; }
+.hc-root .hc-tab-label {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ play --- */
+
+.hc-root .hc-play { position: absolute; inset: 0; overflow: hidden; }
+.hc-root .hc-canvas {
+  display: block; width: 100%; height: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;   /* the pedals own all input; nothing here is tappable */
+}
+
+.hc-root .hc-hud { position: absolute; inset: 0; pointer-events: none; }
+.hc-root .hc-hud button { pointer-events: auto; }
+
+.hc-root .hc-hud-tl {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 8px);
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  /* Clear the hub's floating immersive back button, which sits top-left and is NOT part of this
+     game's DOM: css/hub.css pads it to max(safe-area, 54px) from the top and it is ~34px tall, so
+     anything above ~92px collides with it (the fuel bar and coin chip both did). Applied
+     unconditionally rather than only in-hub: the standalone page has nothing but sky up there, so
+     the reserved strip costs nothing and there is only one number to keep in step. */
+  margin-top: 86px;
+}
+
+.hc-root .hc-fuel { display: flex; align-items: center; gap: 6px; }
+.hc-root .hc-fuelbar {
+  width: 108px; height: 15px;
+  border: 2.5px solid var(--hc-line);
+  border-radius: 999px;
+  background: #f3f5f8;
+  overflow: hidden;
+}
+.hc-root .hc-fuelbar i { display: block; height: 100%; width: 100%; background: var(--hc-green); transition: background 0.2s linear; }
+
+.hc-root .hc-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-weight: 800; font-size: 1rem; color: #fff;
+  text-shadow: 0 2px 0 var(--hc-line), 0 0 3px var(--hc-line);
+}
+
+.hc-root .hc-hud-tc {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(46vw, 240px);
+  text-align: center;
+}
+.hc-root .hc-dist {
+  font-weight: 900; font-size: 1.5rem; color: #fff; line-height: 1;
+  text-shadow: 0 3px 0 var(--hc-line), 0 0 4px var(--hc-line);
+}
+.hc-root .hc-dist span { font-size: 0.8rem; margin-left: 3px; }
+.hc-root .hc-ruler {
+  position: relative;
+  margin-top: 5px;
+  height: 22px;
+  border-top: 3px solid rgba(35, 31, 28, 0.75);
+}
+.hc-root .hc-rtick {
+  position: absolute; top: 0; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 6px solid rgba(35, 31, 28, 0.75);
+}
+.hc-root .hc-rtick:nth-child(1) { left: 6%; }
+.hc-root .hc-rtick:nth-child(2) { left: 33%; }
+.hc-root .hc-rtick:nth-child(3) { left: 60%; }
+.hc-root .hc-rtick:nth-child(4) { left: 87%; }
+.hc-root .hc-flag {
+  position: absolute; top: -14px; left: 94%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 2px;
+}
+.hc-root .hc-flag svg { width: 13px; height: 17px; display: block; }
+.hc-root .hc-flag em {
+  font-style: normal; font-weight: 800; font-size: 0.68rem; color: #fff;
+  text-shadow: 0 1px 0 var(--hc-line), 0 0 3px var(--hc-line);
+}
+
+.hc-root .hc-pausebtn {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 8px);
+  right: 12px;
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  border: 2.5px solid var(--hc-line);
+  background: rgba(255, 255, 255, 0.85);
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.hc-root .hc-pausebtn i { display: block; width: 5px; height: 17px; border-radius: 3px; background: var(--hc-line); }
+
+.hc-root .hc-dials {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: flex-end; gap: 8px;
+}
+.hc-root .hc-dial { text-align: center; }
+.hc-root .hc-dial svg { width: 46px; height: 46px; display: block; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.3)); }
+.hc-root .hc-dial span {
+  display: block; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; color: #fff;
+  text-shadow: 0 1px 0 var(--hc-line), 0 0 3px var(--hc-line);
+}
+.hc-root .hc-nitrobtn {
+  appearance: none;
+  border: 2.5px solid var(--hc-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--hc-line);
+  font-weight: 900;
+  font-size: 0.95rem;
+  padding: 5px 8px 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  margin-bottom: 14px;
+}
+.hc-root .hc-nitrobtn:active { transform: translateY(2px); }
+
+.hc-root .hc-pedal {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 14px);
+  width: clamp(84px, 21vw, 122px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 4px solid var(--hc-line);
+  background: linear-gradient(#b9c0ca, #7d8794);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  box-shadow: 0 5px 0 var(--hc-line), 0 8px 12px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: clamp(0.7rem, 2.6vw, 0.86rem);
+  text-shadow: 0 2px 0 var(--hc-line);
+  touch-action: none;
+}
+.hc-root .hc-pedal.is-down { transform: translateY(4px); box-shadow: 0 1px 0 var(--hc-line); background: linear-gradient(#98a1ad, #67707d); }
+.hc-root .hc-pedal-brake { left: max(env(safe-area-inset-left, 0px), 12px); }
+.hc-root .hc-pedal-gas { right: max(env(safe-area-inset-right, 0px), 12px); background: linear-gradient(#c6cdd6, #86909e); }
+.hc-root .hc-pedal-face {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.hc-root .hc-pedal-face i {
+  width: 9px; height: 9px; border-radius: 999px;
+  background: #5c646f;
+  box-shadow: inset 0 1.5px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* ------------------------------------------------------------- overlays --- */
+
+.hc-root .hc-modal,
+.hc-root .hc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(12, 16, 24, 0.66);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: auto;
+}
+.hc-root .hc-overlay[hidden] { display: none; }
+
+.hc-root .hc-modal-card {
+  position: relative;
+  width: min(380px, 100%);
+  max-height: 86dvh;
+  overflow-y: auto;
+  background: var(--hc-navy-2);
+  border: 3px solid var(--hc-line);
+  border-radius: 18px;
+  padding: 16px 16px 14px;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.4);
+}
+.hc-root .hc-modal-card h3 {
+  margin: 0 30px 8px 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.hc-root .hc-x {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-line);
+  background: var(--hc-navy-3);
+  color: var(--hc-ink);
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 800;
+}
+.hc-root .hc-modal-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.hc-root .hc-modal-btns .hc-btn { flex: 1 1 auto; justify-content: center; }
+
+.hc-root .hc-reason { margin: 0 0 8px; color: var(--hc-dim); font-size: 0.9rem; }
+.hc-root .hc-newbest {
+  margin: 0 0 8px;
+  display: inline-block;
+  background: var(--hc-gold);
+  color: var(--hc-line);
+  font-weight: 900;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 2px solid var(--hc-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.hc-root .hc-rgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hc-root .hc-rgrid > div {
+  background: var(--hc-navy);
+  border: 2px solid var(--hc-line);
+  border-radius: 12px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.hc-root .hc-rgrid b { display: block; font-size: 1.32rem; font-weight: 900; line-height: 1.1; }
+.hc-root .hc-rgrid span { display: block; font-size: 0.72rem; color: var(--hc-dim); margin-top: 2px; }
+
+.hc-root .hc-how { margin: 0; padding-left: 20px; display: grid; gap: 7px; font-size: 0.9rem; line-height: 1.45; color: var(--hc-ink); }
+
+/* The shared ski-slope difficulty shapes (js/difficulty-tiers.js) sit inline in stage names.
+   Same special case as Ball Run's: this chrome is always dark, so tiers 3/4 (which ship a dark
+   ink fill for light backgrounds) need lightening here regardless of the hub's theme. */
+.hc-root .lb-dshape { width: 1em; height: 1em; vertical-align: -0.14em; flex: none; }
+.hc-root .lb-dshape-x2 { width: 1.7em; }
+.hc-root .lb-dshape-t3 rect,
+.hc-root .lb-dshape-t4 rect { fill: #dfe6f2; }
+/* ...except in the preview panel's caption, which sits on whatever sky the SELECTED stage has:
+   pale blue for the Arctic, near-black for the Moon. Neither a light nor a dark fill works on
+   both, so the shape keeps the dark ink and gets a white halo, exactly like the caption text's
+   own outline. The shapes are how difficulty is read without relying on hue (the colorblind
+   rule), so an invisible one is a real regression, not a cosmetic one. */
+.hc-root .hc-panel-cap .lb-dshape-t3 rect,
+.hc-root .hc-panel-cap .lb-dshape-t4 rect { fill: #231f1c; }
+.hc-root .hc-panel-cap .lb-dshape {
+  filter: drop-shadow(0 0 1.4px #fff) drop-shadow(0 0 1.4px #fff) drop-shadow(0 0 1.4px #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-root .hc-btn:active,
+  .hc-root .hc-tab:active,
+  .hc-root .hc-pedal.is-down { transform: none; }
+}

@@ -80,9 +80,10 @@ entirely — keep it current when a module is added, split, or merged.
 |---|---|
 | `js/profile-store.js` | validated read/write of `gamehub.profile`; player-code helpers (`loadProfile`/`saveProfile`/`clearProfile`) |
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
+| `js/new-badge.js` | (2026-08-01) the launcher's "New" pill — see "The New badge" below. Pure date maths (`NEW_DAYS`/`parseReleaseDate`/`daysSinceRelease`/`isNewGame`), no storage, no DOM, `now` injectable |
 | `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
 | `js/theme.js` | (2026-07-24) the light/dark/auto theme layer — see "Theme support" below |
-| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes, `hc` Hill Climb) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
@@ -186,6 +187,43 @@ Reference implementation: `snake/` (born bilingual). New-game obligations: root 
 "Adding a game" item 9.
 
 ---
+
+### The New badge (2026-08-01)
+
+Matt: *"Can we add a 'new' badge to games for the first few days they're live? I want to make
+sure people see the new games."* A gold **NEW** / **NUEVO** pill on the launcher tile for
+`NEW_DAYS` (7) days after the game's release date, then gone.
+
+- **The whole feature is a read-time transform over one date literal.** `js/hub.js`'s `GAMES`
+  entry carries `released: 'YYYY-MM-DD'`; `js/new-badge.js` answers `isNewGame(g)`. **Nothing is
+  stored — no key, no per-device "seen" state, no expiry job.** That is deliberate: a badge is
+  worth exactly zero storage-layer risk, and it means THE LAW has no surface here at all. It also
+  means the pill retires itself, so nobody has to remember a follow-up commit (the failure mode
+  that would otherwise leave "NEW" on a game for a year).
+- **Dates parse as UTC midnight** and compare against the device clock, so a window edge can land
+  up to a day off a given player's local midnight. Irrelevant at a week's scale; a local-midnight
+  parse would just move the same fuzziness onto players in other timezones.
+- **A FUTURE release date counts as new**, not as "not yet live" — the card only appears in the
+  launcher once the game is registered, and a device with a slow clock must not be the one player
+  who misses the announcement. A malformed or absent date is never new (safe default).
+- **Only genuinely-new games get a date. Do NOT backfill.** The first draft of this gave every
+  entry its folder's first-commit date, which badged six tiles at once — Filler, Mancala and Dots
+  and Boxes had been live and played for a week, and announcing them drowned out Dominoes, the
+  one game that had actually just shipped. Git dates are not release dates in this repo anyway
+  (most of the early history lands on one import day, 2026-07-25). **Dominoes (2026-08-01) and
+  Hill Climb (2026-08-02) are the only entries carrying a `released` date as of this milestone** —
+  the two games that genuinely had just shipped when it landed.
+- **Tags share one flex row.** `.hub-tags` (top-LEFT, opposite the favorite heart) replaced the
+  single absolutely-positioned `.hub-soon-tag`, so a `devOnly` game that just landed shows Test
+  and NEW side by side instead of one on top of the other.
+- **The pill is `aria-hidden`; the card's `aria-label` says "New game." first.** `aria-label`
+  replaces a tile's contents for a screen reader, so a visible-only pill would be silent.
+  Colorblind rule holds by construction: the pill spells the word out, the gold (`#F2B705`, the
+  palette's yellow) is emphasis and never the signal.
+- **Not done, on purpose:** the launcher's ordering is untouched (favorites first, then
+  alphabetical) — a new game does not jump the queue. If the pill alone turns out not to be
+  enough, sorting new games to the top of "All games" is the next lever, and it changes a
+  documented convention, so it should be Matt's call rather than a session's.
 
 ### Theme support (Phase 1, 2026-07-24 — HANDOFF-FB-THEME.md, batch 10)
 
@@ -729,7 +767,7 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   to competitive ones, `lost` just never touched); what changed is which game ids the CALLERS feed
   it. `js/leaderboard-ui.js` derives two lists from `ALL_IDS`: `COMP_IDS` (competitive games,
   drives the cross-game wins number, the By Player sort, and the win tiles) and `SOLO_IDS`
-  (Ball Run/Snake/Nuts & Bolts, summed via `runsAtTier()` into a separate "N runs" line on the
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb, summed via `runsAtTier()` into a separate "N runs" line on the
   same card, via `playsAtTier`). `SOLO` in `js/players-agg.js` is the single source of that game
   membership — both id lists are derived from it, never hardcoded a second time. The By Player
   list FILTER still stays on `ALL_IDS` (a solo-only player is still listed, showing 0 wins plus
@@ -753,9 +791,12 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   (`tierOf()` returns null) count in All ONLY** and appear under no tier item — dropping them from
   All would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
   `difficulty-tiers.js` itself is untouched.
-- **Ball Run and Snake are the one place "wins at a tier" and "the game's own metric" diverge** —
-  their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`), not a play count, so
-  `leaderboard-ui.js` special-cases `brBestAt()`/`snBestAt()` for them; every other game (including
+- **Ball Run, Snake and Hill Climb are the places "wins at a tier" and "the game's own metric"
+  diverge** — their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`/
+  `bestDistanceByStage`), not a play count, so `leaderboard-ui.js` special-cases
+  `brBestAt()`/`snBestAt()`/`hcBestAt()` for them. Hill Climb's per-tier bucket is keyed by STAGE
+  id rather than a difficulty word, because its four stages ARE its difficulty axis (1:1, in unlock
+  order — `HC_STAGES` in `js/game-stats.js`); every other game (including
   Nuts & Bolts — a solve always increments both `played` and `won` by exactly 1) uses the generic
   `winsAtTier()`/`gameMetricAt()` path.
 - **Everyone with any recorded play at the selected filter is listed** (`plays > 0` at that tier;
@@ -849,7 +890,7 @@ zero-row); nothing about the per-game `screenFor` screens themselves changed.
   name, then two headline tallies — total games played and total wins — summed across every
   visible game via `record()` (imported from `js/leaderboard-rank.js`, the same maths the
   leaderboard uses: `wins` is the stored `won` counter, and a draw is NOT a win). Solo games
-  (Ball Run/Snake/Nuts & Bolts) count toward `plays` the same as competitive games, but their
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb) count toward `plays` the same as competitive games, but their
   wins are shown as a separate third "Runs" tally rather than folded in (see "The leaderboard's
   rating model" above).
 - **A game's presence in the list uses its OWN empty-state gate**, not a generic `total.played`

@@ -434,7 +434,9 @@ class DominoesUI {
         aria: sc ? t('aria_tile_scores', { a: TILES[id][0], b: TILES[id][1], v: sc }) : tileAria(TILES[id]),
         attrs: ` data-action="pick" data-id="${id}"`,
       });
-      return sc ? html.replace('</button>', `<i class="dm-worth">+${sc}</i></button>`) : html;
+      // tileHTML emits a <div role="button">, never a real <button> (see CLAUDE.md,
+      // "A tile is never a `<button>`"); the +N badge goes in before that closing tag.
+      return sc ? html.replace(/<\/div>$/, `<i class="dm-worth">+${sc}</i></div>`) : html;
     }).join('');
   }
 
