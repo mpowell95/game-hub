@@ -68,6 +68,12 @@ Two independent changes, because one of them being right is not worth betting a 
 2. The two halves are **absolutely positioned**, not flex children. A tile now draws identically
    inside any parent, because it asks nothing of that parent except a size.
 
+One thing that quietly rode on the old markup: `_syncHands` injects the `+N` worth badge by
+string-replacing the tile's closing tag, so it had to change from `</button>` to `</div>` in the
+same edit or the badge would have silently stopped rendering — no error, just the hand's one
+piece of teaching gone. If `tiles.js` ever changes its outer element again, that replace is the
+other half of the change.
+
 Also gone from the tile: `aspect-ratio` on `.dm-pip` (iOS 15+), replaced with the
 `width: 21%; height: 0; padding-top: 21%` square, which is the same square off the parent's width
 and works everywhere. A pip with no height is an invisible pip.
