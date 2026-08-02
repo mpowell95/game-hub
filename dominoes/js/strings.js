@@ -36,7 +36,7 @@ export const STRINGS = {
     // Round / match end
     round_over: 'Round over',
     game_over: 'Game Finished!',
-    round_rule: 'When any player reaches {n} the game ends.',
+    round_rule: 'First to {n} wins.',
     col_player: 'Player',
     col_round: 'Round',
     col_total: 'Total',
@@ -98,7 +98,7 @@ export const STRINGS = {
     pick_an_end: 'Elige un extremo',
     round_over: 'Fin de la ronda',
     game_over: '¡Partida terminada!',
-    round_rule: 'Cuando alguien llega a {n}, la partida termina.',
+    round_rule: 'Gana quien llegue a {n}.',
     col_player: 'Jugador',
     col_round: 'Ronda',
     col_total: 'Total',
