@@ -241,14 +241,23 @@
   border: var(--dm-line) solid var(--dm-ink);
   border-radius: 8px;
   box-shadow: var(--dm-shadow);
-  display: flex; overflow: hidden;
+  position: relative; overflow: hidden;
 }
-.dm-root .dm-tile.is-v { flex-direction: column; }
-.dm-root .dm-tile .dm-half { position: relative; flex: 1 1 50%; }
-.dm-root .dm-tile .dm-half + .dm-half { border-left: 2px solid var(--dm-ink); }
-.dm-root .dm-tile.is-v .dm-half + .dm-half { border-left: 0; border-top: 2px solid var(--dm-ink); }
+/* The two halves are POSITIONED, not flex children. A tile has to draw identically wherever it
+   is put, and depending on the parent being a working flex container made that untrue on older
+   WebKit (see tiles.js) - the halves collapsed and the whole face vanished. Absolute halves need
+   nothing from the parent but a size. */
+.dm-root .dm-tile .dm-half { position: absolute; left: 0; top: 0; width: 50%; height: 100%; }
+.dm-root .dm-tile .dm-half + .dm-half { left: auto; right: 0; border-left: 2px solid var(--dm-ink); }
+.dm-root .dm-tile.is-v .dm-half { width: 100%; height: 50%; }
+.dm-root .dm-tile.is-v .dm-half + .dm-half {
+  left: 0; right: auto; top: auto; bottom: 0;
+  border-left: 0; border-top: 2px solid var(--dm-ink);
+}
+/* `padding-top`, not `aspect-ratio`: both make a square off the parent's width, but aspect-ratio
+   needs iOS 15 and a pip with no height is an invisible pip. */
 .dm-root .dm-tile .dm-pip {
-  position: absolute; width: 21%; aspect-ratio: 1; border-radius: 50%;
+  position: absolute; width: 21%; height: 0; padding-top: 21%; border-radius: 50%;
   background: var(--dm-ink); transform: translate(-50%, -50%);
 }
 .dm-root .dm-tile.is-back { background: var(--dm-olive); }

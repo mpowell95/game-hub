@@ -151,7 +151,15 @@ class DominoesUI {
     this.el = null;
 
     this._onClick = (e) => this.onClick(e);
-    this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
+    this._onKey = (e) => {
+      if (e.key === 'Escape') { this.closeOverlays(); return; }
+      // The tiles are role=button divs (see tiles.js), so Enter/Space activation is ours to do.
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const el = document.activeElement;
+      if (!el || !this.container.contains(el) || el.getAttribute('role') !== 'button') return;
+      e.preventDefault();
+      el.click();
+    };
     // orientationchange and the visual viewport (a collapsing URL bar) both change the usable
     // height without necessarily firing a plain window resize.
     this._onResize = () => { this._fit(); this._layoutBoard(); };
