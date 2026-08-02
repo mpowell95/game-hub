@@ -1,6 +1,7 @@
 import { NutsBoltsGame, getTopRun } from './game.js';
 import { CAP, PALETTE, isBoltComplete, TIER_ORDER } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordNutsBolts } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -198,8 +199,7 @@ class NutsBoltsUI {
     this._sizeOverride = null;
     this._resizeTimer = null;
     this.onResize = this.onResize.bind(this);
-    window.addEventListener('resize', this.onResize);
-    window.addEventListener('orientationchange', this.onResize);
+    this._offViewport = onViewportResize(this.onResize);
 
     // The difficulty menu is the entry point when there is nothing to resume.
     // A persisted in-progress board (if any) is kept aside and, per batch-9's
@@ -918,8 +918,7 @@ class NutsBoltsUI {
     clearTimeout(this._resizeTimer);
     document.removeEventListener('pointerup', this.onDocPointerUp);
     document.removeEventListener('pointermove', this.onDocPointerMove);
-    window.removeEventListener('resize', this.onResize);
-    window.removeEventListener('orientationchange', this.onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     this.container.innerHTML = '';
   }
 

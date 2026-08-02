@@ -8,6 +8,7 @@ import { Renderer } from './render.js';
 import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, DEFAULT_MAP, MAPS } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordBallRun, loadStats } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { makeT } from '../../js/i18n.js';
@@ -315,8 +316,7 @@ class BallRunUI {
 
     this.mount();
     document.addEventListener('visibilitychange', this._onVisibilityChange);
-    window.addEventListener('resize', this._onResize);
-    window.addEventListener('orientationchange', this._onResize);
+    this._offViewport = onViewportResize(this._onResize);
   }
 
   /** Map picker (BALLRUNMAP2ORBITALSPEC.md section 4: "two cards, name plus a small visual
@@ -807,8 +807,7 @@ class BallRunUI {
     this.teardownRun(true);
     if (this._lifeUsedTimer) { clearTimeout(this._lifeUsedTimer); this._lifeUsedTimer = 0; }
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
-    window.removeEventListener('resize', this._onResize);
-    window.removeEventListener('orientationchange', this._onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     document.body.style.overflow = this._prevBodyOverflow;
     this.container.innerHTML = '';
   }

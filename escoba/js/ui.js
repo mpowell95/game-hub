@@ -17,6 +17,7 @@ import { captureOptions, sumValues, cardLabel, captureValue } from './deck.js';
 import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
 import { makeT } from '../../js/i18n.js';
@@ -258,7 +259,7 @@ class EscobaUI {
       this._matResizeObserver.observe(this.el.mat);
     } else {
       this._onWinResize = () => this._relayoutTable();
-      window.addEventListener('resize', this._onWinResize);
+      this._offViewport = onViewportResize(this._onWinResize);
     }
     this.showSetup();
   }
@@ -2085,7 +2086,7 @@ class EscobaUI {
     this.mp = null;
     if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
     if (this._matResizeObserver) this._matResizeObserver.disconnect();
-    if (this._onWinResize) window.removeEventListener('resize', this._onWinResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     clearTimeout(this._beatTimer);
     clearTimeout(this._announceTimer);
     clearTimeout(this._bannerTimer);

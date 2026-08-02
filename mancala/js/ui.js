@@ -19,6 +19,7 @@ import {
 import { chooseMove } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -275,7 +276,7 @@ class MancalaUI {
     this.container.addEventListener('click', this._onClick);
     this.container.addEventListener('input', this._onInput);
     document.addEventListener('keydown', this._onKey);
-    window.addEventListener('resize', this._onResize);
+    this._offViewport = onViewportResize(this._onResize);
 
     // Come back to exactly where you left off. A live MULTIPLAYER room takes precedence over a
     // solo save (starting an MP match clears the solo slot, so in practice only one of the two
@@ -318,7 +319,7 @@ class MancalaUI {
     this.container.removeEventListener('click', this._onClick);
     this.container.removeEventListener('input', this._onInput);
     document.removeEventListener('keydown', this._onKey);
-    window.removeEventListener('resize', this._onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     clearTimeout(this._resizeSettle);
     this.container.innerHTML = '';
     this.state = null;

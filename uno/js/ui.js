@@ -8,6 +8,7 @@
 import { UnoGame, COLORS } from './game.js';
 import { chooseAction } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { onViewportResize } from '../../js/viewport.js';
 import { recordResult } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -282,7 +283,7 @@ class UnoUI {
     ensureStylesheet();
     this.container.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
-    window.addEventListener('resize', this._onResize);
+    this._offViewport = onViewportResize(this._onResize);
 
     const inProgress = loadGame();
     if (inProgress) this.resumeGame(inProgress); else this.renderSetup();
@@ -297,7 +298,7 @@ class UnoUI {
     clearTimeout(this._pulseTimer);
     this.container.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
-    window.removeEventListener('resize', this._onResize);
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     this.container.innerHTML = ''; // also removes any in-flight clones - they never outlive destroy()
     this._regions = null;
     this._fanEl = null;
