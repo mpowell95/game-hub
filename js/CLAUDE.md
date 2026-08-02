@@ -82,7 +82,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/favorites.js` | hub-only launcher favorites; `gamehub.favorites.v1`; ids are hub registry ids (`GAMES[].id`), never stats keys. Pure/DOM-free (`loadFavorites`/`isFavorite`/`toggleFavorite`); see "THE LAW does not govern favorites" below |
 | `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
 | `js/theme.js` | (2026-07-24) the light/dark/auto theme layer — see "Theme support" below |
-| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes, `hc` Hill Climb) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
@@ -729,7 +729,7 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   to competitive ones, `lost` just never touched); what changed is which game ids the CALLERS feed
   it. `js/leaderboard-ui.js` derives two lists from `ALL_IDS`: `COMP_IDS` (competitive games,
   drives the cross-game wins number, the By Player sort, and the win tiles) and `SOLO_IDS`
-  (Ball Run/Snake/Nuts & Bolts, summed via `runsAtTier()` into a separate "N runs" line on the
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb, summed via `runsAtTier()` into a separate "N runs" line on the
   same card, via `playsAtTier`). `SOLO` in `js/players-agg.js` is the single source of that game
   membership — both id lists are derived from it, never hardcoded a second time. The By Player
   list FILTER still stays on `ALL_IDS` (a solo-only player is still listed, showing 0 wins plus
@@ -753,9 +753,12 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   (`tierOf()` returns null) count in All ONLY** and appear under no tier item — dropping them from
   All would be a rule 1 regression on exactly the data `foldLegacy` exists to preserve.
   `difficulty-tiers.js` itself is untouched.
-- **Ball Run and Snake are the one place "wins at a tier" and "the game's own metric" diverge** —
-  their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`), not a play count, so
-  `leaderboard-ui.js` special-cases `brBestAt()`/`snBestAt()` for them; every other game (including
+- **Ball Run, Snake and Hill Climb are the places "wins at a tier" and "the game's own metric"
+  diverge** — their leaderboard number is a BEST (`bestObstaclesByDiff`/`bestLenByDiff`/
+  `bestDistanceByStage`), not a play count, so `leaderboard-ui.js` special-cases
+  `brBestAt()`/`snBestAt()`/`hcBestAt()` for them. Hill Climb's per-tier bucket is keyed by STAGE
+  id rather than a difficulty word, because its four stages ARE its difficulty axis (1:1, in unlock
+  order — `HC_STAGES` in `js/game-stats.js`); every other game (including
   Nuts & Bolts — a solve always increments both `played` and `won` by exactly 1) uses the generic
   `winsAtTier()`/`gameMetricAt()` path.
 - **Everyone with any recorded play at the selected filter is listed** (`plays > 0` at that tier;
@@ -849,7 +852,7 @@ zero-row); nothing about the per-game `screenFor` screens themselves changed.
   name, then two headline tallies — total games played and total wins — summed across every
   visible game via `record()` (imported from `js/leaderboard-rank.js`, the same maths the
   leaderboard uses: `wins` is the stored `won` counter, and a draw is NOT a win). Solo games
-  (Ball Run/Snake/Nuts & Bolts) count toward `plays` the same as competitive games, but their
+  (Ball Run/Snake/Nuts & Bolts/Hill Climb) count toward `plays` the same as competitive games, but their
   wins are shown as a separate third "Runs" tally rather than folded in (see "The leaderboard's
   rating model" above).
 - **A game's presence in the list uses its OWN empty-state gate**, not a generic `total.played`

@@ -110,6 +110,22 @@
 //                                                   // additive; `bestRound` is the highest single
 //                                                   // round the human has ever scored (Math.max only,
 //                                                   // per THE LAW rule 2); see recordDominoes
+//       hillclimb: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard|expert -- Hill Climb's
+//                                                   // four STAGES are its difficulty axis, mapped 1:1 and
+//                                                   // in unlock order (HC_STAGES), so there is no separate
+//                                                   // difficulty picker to reconcile
+//         hc: { runs, bestDistance, bestDistanceByStage: { countryside, desert, arctic, moon },
+//               coins, bestCoins, flips } },        // a solo endless driving run: no opponent, no loss
+//                                                   // state (it ends in a crash or an empty tank), so
+//                                                   // every finished run counts as played+won, same as
+//                                                   // ballrun/snake/nutsbolts. Distance in whole meters,
+//                                                   // bests Math.max only; `coins`/`flips` are LIFETIME
+//                                                   // counters and only ever add. The game's spendable
+//                                                   // coin WALLET is deliberately not here -- it lives in
+//                                                   // hill-climb's own save (gamehub.hillclimb.v1), so
+//                                                   // nothing that can go down is ever written into the
+//                                                   // shared store; see recordHillClimb
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -117,7 +133,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -165,6 +181,10 @@ export const SN_DIFFS = ['easy', 'medium', 'hard'];
 // — a rule variant, not a difficulty tier, so it stays a separate constant, never folded into
 // SN_DIFFS (see snake/CLAUDE.md: wrap games record under the same easy/medium/hard ids).
 export const SN_WALLS = ['on', 'off'];
+// Hill Climb's stages, in unlock order. They ARE this game's difficulty axis (there is no
+// separate picker), and hill-climb/js/catalog.js maps them 1:1 onto easy|medium|hard|expert for
+// byDiff, so the leaderboard's per-tier breakdown reads as the per-stage breakdown.
+export const HC_STAGES = ['countryside', 'desert', 'arctic', 'moon'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function bucket() { return { played: 0, won: 0, lost: 0 }; }
@@ -461,6 +481,26 @@ function ensureDm(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'rounds', 'bestRound', 'points']) if (!Number.isFinite(g.dm[k])) g.dm[k] = 0;
 }
 
+/** Hill Climb: a solo, distance-scored driving run. Same shape family as Ball Run's `br` and
+ *  Snake's `sn` — a run has no opponent and no loss axis (it ends in a crash or an empty tank),
+ *  so `hc.runs` is the true play count and the distance bests are the scoreboard.
+ *    bestDistance / bestDistanceByStage   furthest meters, overall and per stage. Math.max ONLY
+ *                                         (THE LAW rule 2), same discipline as every other best.
+ *    coins / flips                        lifetime totals, pure counters, additive forever. These
+ *                                         are the EARNED history; the spendable wallet balance
+ *                                         lives only in hill-climb's own save (see its store.js),
+ *                                         never here, precisely so nothing that can go DOWN is
+ *                                         ever written into the shared store.
+ *    bestCoins                            best single-run coin haul, Math.max. */
+function ensureHc(g) {
+  if (!g.hc || typeof g.hc !== 'object') g.hc = { runs: 0, bestDistance: 0, bestDistanceByStage: {}, coins: 0, bestCoins: 0, flips: 0 };
+  for (const k of ['runs', 'bestDistance', 'coins', 'bestCoins', 'flips']) {
+    if (!Number.isFinite(g.hc[k])) g.hc[k] = 0;
+  }
+  if (!g.hc.bestDistanceByStage || typeof g.hc.bestDistanceByStage !== 'object') g.hc.bestDistanceByStage = {};
+  for (const s of HC_STAGES) if (!Number.isFinite(g.hc.bestDistanceByStage[s])) g.hc.bestDistanceByStage[s] = 0;
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -483,6 +523,7 @@ function normalize(raw) {
   ensureYz(st.games.yahtzee);
   ensureDm(st.games.dominoes);
   ensureSn(st.games.snake);
+  ensureHc(st.games.hillclimb);
   return st;
 }
 
@@ -879,6 +920,34 @@ export function recordSnake(length, difficulty, walls) {
   return st;
 }
 
+/** Hill Climb: record one finished run. `distance` is whole meters reached; `stage` is one of
+ *  HC_STAGES; `extras` is { coins, flips } from the run. A run has no opponent and no loss state,
+ *  so it counts as played+won and `lost` is never touched (mirrors Ball Run / Snake / Nuts &
+ *  Bolts). The stage maps onto the shared easy|medium|hard|expert difficulty axis for byDiff (see
+ *  HC_STAGES), so an unrecognized stage still records its play in `total`, just not per-tier.
+ *  Additive; the bests only ever go up, the lifetime coin/flip counters only ever add. */
+export function recordHillClimb(distance, stage, extras) {
+  const st = loadStats();
+  const g = st.games.hillclimb;
+  ensureHc(g);
+  const s = HC_STAGES.indexOf(String(stage || '').trim()) >= 0 ? String(stage).trim() : null;
+  const d = s ? ['easy', 'medium', 'hard', 'expert'][HC_STAGES.indexOf(s)] : null;
+  const dist = Number.isFinite(distance) ? Math.max(0, Math.floor(distance)) : 0;
+  const x = extras || {};
+  const coins = Number.isFinite(x.coins) ? Math.max(0, Math.floor(x.coins)) : 0;
+  const flips = Number.isFinite(x.flips) ? Math.max(0, Math.floor(x.flips)) : 0;
+  if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
+  g.hc.runs += 1;
+  g.hc.bestDistance = Math.max(g.hc.bestDistance | 0, dist);
+  if (s) g.hc.bestDistanceByStage[s] = Math.max(g.hc.bestDistanceByStage[s] | 0, dist);
+  g.hc.coins += coins;
+  g.hc.bestCoins = Math.max(g.hc.bestCoins | 0, coins);
+  g.hc.flips += flips;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
  *
  *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
@@ -917,7 +986,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

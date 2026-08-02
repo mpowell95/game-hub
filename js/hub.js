@@ -232,6 +232,18 @@ const GAMES = [
     art: GAME_ART["uno"],
   },
   {
+    id: 'hill-climb',
+    title: 'Hill Climb',
+    blurb: { en: 'Gas and brake, no steering. Balance over the hills, grab fuel, and see how far you get.',
+      es: 'Gas y freno, sin volante. Mantén el equilibrio en las colinas, coge combustible y llega lo más lejos posible.' },
+    module: '../hill-climb/js/ui.js',
+    // Its own full-bleed chrome (a fixed, edge-to-edge canvas plus a pedal HUD), so the hub's
+    // header collapses to the floating back button — same as Ball Run and Pool.
+    immersive: true,
+    accent: '#d8382b',
+    art: GAME_ART["hill-climb"],
+  },
+  {
     id: 'yahtzee',
     title: 'Yahtzee',
     blurb: { en: 'Roll, hold, and fill the card. 13 categories, upper bonus, and the joker rule.',
