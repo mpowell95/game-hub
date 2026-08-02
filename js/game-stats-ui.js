@@ -45,6 +45,7 @@ const TABS = [
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
+  { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -55,9 +56,10 @@ const TABS = [
 const HUB_ID = {
   connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
+  hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -425,6 +427,39 @@ function snakeScreen(rec) {
     ${wallsTable('on', 'gs_sn_walls_on')}`;
 }
 
+// --- Hill Climb (solo, stage-tiered, furthest-distance-is-the-score) --------
+const HC_STAGES = [
+  ['countryside', 'gs_hc_countryside'], ['desert', 'gs_hc_desert'],
+  ['arctic', 'gs_hc_arctic'], ['moon', 'gs_hc_moon'],
+];
+
+/** Hill Climb: no wins or losses (a run ends in a crash or an empty tank), so the honest numbers
+ *  are runs driven and the furthest distance, overall and per stage — Ball Run's and Snake's screen
+ *  shape. Lifetime coins and flips get their own tallies because they are the other two things the
+ *  game actually accumulates, and neither is derivable from distance. The spendable coin wallet is
+ *  deliberately NOT shown here: it lives in the game's own save and can go down, so it is not
+ *  history (see game-stats.js's `hc` block). */
+function hillClimbScreen(rec) {
+  const hc = (rec && rec.hc) || {};
+  const runs = hc.runs | 0;
+  if (!runs) return emptyState('Hill Climb');
+  const bs = hc.bestDistanceByStage || {};
+  const rows = HC_STAGES.map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${bs[k] | 0}</td></tr>`).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${runs}</b><span>${t('gs_runs')}</span></div>
+      <div class="gs-tally"><b>${hc.bestDistance | 0}</b><span>${t('gs_hc_furthest')}</span></div>
+      <div class="gs-tally"><b>${hc.coins | 0}</b><span>${t('gs_hc_coins')}</span></div>
+      <div class="gs-tally"><b>${hc.flips | 0}</b><span>${t('gs_hc_flips')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_hc_by_stage')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
  *  the same visibility bar the game list must honor (THE LAW rule 1: nothing shown today may
  *  become unreachable). */
@@ -432,6 +467,7 @@ function hasPlays(id, rec) {
   if (id === 'connect4') return c4Totals(rec.grid).plays > 0;
   if (id === 'ballrun') return !!((rec.br && rec.br.runs) || (rec.brOrbital && rec.brOrbital.runs) || rec.brLegacyMeters);
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
+  if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   return ((rec.total || {}).played | 0) > 0;
 }
@@ -442,6 +478,7 @@ function hasPlays(id, rec) {
 function headlineOf(id, rec) {
   if (id === 'ballrun') return { n: Math.max((rec.br && rec.br.bestObstacles) | 0, (rec.brOrbital && rec.brOrbital.bestObstacles) | 0), unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
 }
@@ -525,6 +562,7 @@ function screenFor(id, st) {
   if (id === 'yahtzee') return yahtzeeScreen(rec);
   if (id === 'dominoes') return dominoesScreen(rec);
   if (id === 'snake') return snakeScreen(rec);
+  if (id === 'hillclimb') return hillClimbScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

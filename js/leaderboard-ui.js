@@ -123,6 +123,7 @@ const GAME_META = [
   { id: 'pool', labelKey: 'game_title_pool' },
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
+  { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
@@ -219,6 +220,10 @@ function fieldTiersPresent(list, gameIds) {
 // things (see js/leaderboard-rank.js's soloRating comment for the same distinction).
 const BR_TIER_KEYS = ['easy', 'medium', 'hard'];
 const SN_TIER_KEYS = ['easy', 'medium', 'hard'];
+// Hill Climb is the third such game: its metric is the furthest DISTANCE, and its per-tier bucket
+// is keyed by STAGE id (not by a difficulty word) because its four stages ARE its difficulty axis,
+// 1:1 and in unlock order - see js/game-stats.js's HC_STAGES.
+const HC_TIER_KEYS = ['countryside', 'desert', 'arctic', 'moon'];
 /** BALLRUNMAP2ORBITALSPEC.md Phase 1: combines Classic's `br` and Orbital's `brOrbital` buckets
  *  (Math.max, same as the players-agg.js combine) so a player who has only played the new map is
  *  not shown as 0 here - THE LAW rule 1, the same gap game-stats-ui.js's headlineOf closes. */
@@ -257,12 +262,20 @@ function snBestAtWalls(g, tier, walls) {
   if (bdw && bdw[walls]) return bdw[walls][key] | 0;
   return walls === 'off' ? (sn.bestLenByDiff || {})[key] | 0 : 0;
 }
+function hcBestAt(g, tier) {
+  const hc = (g.games.hillclimb || {}).hc;
+  if (!hc) return 0;
+  if (tier == null) return hc.bestDistance | 0;
+  const key = HC_TIER_KEYS[tier - 1];
+  return key ? (hc.bestDistanceByStage || {})[key] | 0 : 0;
+}
 /** The number a game's leaderboard is ranked by, at `tier`. Nuts & Bolts needs no special case:
  *  every solve increments both `played` and `won` by exactly 1 (recordNutsBolts), so winsAtTier
  *  already equals "levels solved at this tier". */
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
+  if (id === 'hillclimb') return hcBestAt(g, tier);
   return winsAtTier(g, [id], tier);
 }
 
@@ -294,6 +307,7 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_obstacles: 'lb_sort_obstacles',
   lb_unit_longest: 'lb_sort_longest',
   lb_unit_solved: 'lb_sort_solved',
+  lb_unit_meters: 'lb_sort_meters',
 };
 function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[unitKeyOf(id)] || 'lb_sort_wins';
@@ -507,6 +521,11 @@ const TEXTURE = {
   snake: [
     { labelKey: 'lb_tex_longest_snake', get: (g) => (((g.games.snake || {}).sn || {}).bestLen) | 0 },
     { labelKey: 'lb_tex_total_runs', get: (g) => (((g.games.snake || {}).sn || {}).runs) | 0 },
+  ],
+  hillclimb: [
+    { labelKey: 'lb_tex_furthest_drive', get: (g) => (((g.games.hillclimb || {}).hc || {}).bestDistance) | 0 },
+    { labelKey: 'lb_tex_hc_coins', get: (g) => (((g.games.hillclimb || {}).hc || {}).coins) | 0 },
+    { labelKey: 'lb_tex_hc_flips', get: (g) => (((g.games.hillclimb || {}).hc || {}).flips) | 0 },
   ],
   tictactoe: [
     { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },

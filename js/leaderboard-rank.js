@@ -157,16 +157,19 @@ export function competitiveRating(group) {
 /** Best Ball Run obstacle count and best Nuts & Bolts solved count across the whole visible field.
  *  Computed once per render and passed to soloRating, which scores relative to these maxima. */
 export function fieldMaxOf(list) {
-  let brBest = 0, nbSolved = 0, snBest = 0;
+  let brBest = 0, nbSolved = 0, snBest = 0, hcBest = 0;
   for (const g of list || []) {
     const br = g.games.ballrun.br;
     if (br) brBest = Math.max(brBest, br.bestObstacles | 0);
     // Guarded: hand-built fixtures (and pre-Snake remote records) may have no snake key at all.
     const sn = (g.games.snake || {}).sn;
     if (sn) snBest = Math.max(snBest, sn.bestLen | 0);
+    // Guarded the same way: a record synced before Hill Climb existed has no hillclimb key.
+    const hc = (g.games.hillclimb || {}).hc;
+    if (hc) hcBest = Math.max(hcBest, hc.bestDistance | 0);
     nbSolved = Math.max(nbSolved, g.solo.solved | 0);
   }
-  return { brBest, nbSolved, snBest };
+  return { brBest, nbSolved, snBest, hcBest };
 }
 
 /**
@@ -180,7 +183,7 @@ export function fieldMaxOf(list) {
  * the field max makes it saturate at 1.0 rather than run away.
  */
 export function soloRating(group, fieldMax) {
-  const fm = fieldMax || { brBest: 0, nbSolved: 0, snBest: 0 };
+  const fm = fieldMax || { brBest: 0, nbSolved: 0, snBest: 0, hcBest: 0 };
   const parts = [];
   const br = group.games.ballrun.br;
   if (br && (br.runs | 0) > 0 && fm.brBest > 0) {
@@ -191,6 +194,12 @@ export function soloRating(group, fieldMax) {
   const sn = (group.games.snake || {}).sn;
   if (sn && (sn.runs | 0) > 0 && (fm.snBest | 0) > 0) {
     parts.push({ score: Math.min(1, (sn.bestLen | 0) / fm.snBest), plays: sn.runs | 0 });
+  }
+  // Hill Climb: same best-relative-to-field shape as Ball Run and Snake (a distance best is a
+  // Math.max, so extra runs cannot inflate it past genuine skill). Guarded like fieldMaxOf above.
+  const hc = (group.games.hillclimb || {}).hc;
+  if (hc && (hc.runs | 0) > 0 && (fm.hcBest | 0) > 0) {
+    parts.push({ score: Math.min(1, (hc.bestDistance | 0) / fm.hcBest), plays: hc.runs | 0 });
   }
   const solved = group.solo.solved | 0;
   if (solved > 0 && fm.nbSolved > 0) {

@@ -47,6 +47,42 @@ mixing the two over-shrank by the height of a phone's URL bar. **A game screen t
 is a bug**, and so is one that does not fill what it was given; `.dm-play`'s `min-height` (340px)
 is a last-resort floor, and if you ever see it actually binding, `_fit` is wrong again.
 
+## A tile is never a `<button>`
+
+Reported 2026-08-01 from a family member's phone: her HAND was seven blank shells - no pips, no
+divider - while the board beside it drew perfectly. That asymmetry is the whole diagnosis. Board
+tiles are plain `<div>`s; hand and boneyard tiles were `<button>`s.
+
+**WebKit before Safari 16.4 will not let a `<button>` be a flex container.** It wraps the button's
+children in an anonymous block, so `display: flex` on the tile and `flex: 1 1 50%` on its two
+`.dm-half` children were both ignored. The halves carry no intrinsic size, so they collapsed to
+zero height, taking the pips (absolutely positioned inside them) and the divider border with
+them. Her header icons still showed because an `<svg>` has intrinsic dimensions and survives the
+anonymous block.
+
+Two independent changes, because one of them being right is not worth betting a player's screen on:
+
+1. `tiles.js` emits a `<div role="button" tabindex="0">`, never a `<button>`. `ui.js` delegates on
+   `[data-action]`, so nothing ever needed real button semantics; the role keeps it a button to
+   assistive tech and `_onKey` handles Enter/Space.
+2. The two halves are **absolutely positioned**, not flex children. A tile now draws identically
+   inside any parent, because it asks nothing of that parent except a size.
+
+One thing that quietly rode on the old markup: `_syncHands` injects the `+N` worth badge by
+string-replacing the tile's closing tag, so it had to change from `</button>` to `</div>` in the
+same edit or the badge would have silently stopped rendering — no error, just the hand's one
+piece of teaching gone. If `tiles.js` ever changes its outer element again, that replace is the
+other half of the change.
+
+Also gone from the tile: `aspect-ratio` on `.dm-pip` (iOS 15+), replaced with the
+`width: 21%; height: 0; padding-top: 21%` square, which is the same square off the parent's width
+and works everywhere. A pip with no height is an invisible pip.
+
+**The general lesson, worth more than the specific bug**: this game is played on family phones,
+some of them old. Nothing in the tile - the one component drawn hundreds of times per screen -
+should depend on a layout feature the parent has to cooperate with, or on a CSS property from the
+last three years.
+
 ## Layout & responsibilities
 
 ```

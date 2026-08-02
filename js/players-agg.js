@@ -11,7 +11,7 @@
 
 import { GAMES } from './game-stats.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -271,6 +271,20 @@ export function aggregatePlayers(all) {
         dst.dm.rounds += src.dm.rounds | 0;
         dst.dm.points += src.dm.points | 0;
         dst.dm.bestRound = Math.max(dst.dm.bestRound | 0, src.dm.bestRound | 0);
+      } else if (g === 'hillclimb' && src.hc) {
+        // Root CLAUDE.md "Adding a game" item 7's third edit, present from Hill Climb's first day
+        // rather than after a bug report: without this branch the game's own Stats screen reads
+        // zeroes the moment a person's second device syncs, even though total/byDiff stay right
+        // and every device's local store is intact. Counters (runs, lifetime coins, flips) ADD;
+        // every distance best and the best coin haul take Math.max, never a sum.
+        if (!dst.hc) dst.hc = { runs: 0, bestDistance: 0, bestDistanceByStage: {}, coins: 0, bestCoins: 0, flips: 0 };
+        dst.hc.runs += src.hc.runs | 0;
+        dst.hc.coins += src.hc.coins | 0;
+        dst.hc.flips += src.hc.flips | 0;
+        dst.hc.bestDistance = Math.max(dst.hc.bestDistance | 0, src.hc.bestDistance | 0);
+        dst.hc.bestCoins = Math.max(dst.hc.bestCoins | 0, src.hc.bestCoins | 0);
+        const sbs = src.hc.bestDistanceByStage || {};
+        for (const k of Object.keys(sbs)) dst.hc.bestDistanceByStage[k] = Math.max(dst.hc.bestDistanceByStage[k] | 0, sbs[k] | 0);
       }
     }
   }

@@ -285,6 +285,49 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('snake walls: combined bestLen still aggregates regardless of the split', sn.bestLen, 30);
 }
 
+// ---- Hill Climb's hc sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped
+// rather than after a report. Counters (runs, lifetime coins, flips) ADD; every distance best and
+// the best single-run coin haul take Math.max, never a sum, overall and per STAGE (Hill Climb's
+// per-tier bucket is keyed by stage id, since its four stages ARE its difficulty axis). A device
+// with no hillclimb key at all (synced before this game existed) must combine cleanly too.
+{
+  const all = {
+    d1: rec({ playerId: 'HC111', name: 'Climber' }, {
+      hillclimb: {
+        total: { played: 5, won: 5, lost: 0 },
+        byDiff: { easy: { played: 5, won: 5, lost: 0 } },
+        hc: {
+          runs: 5, bestDistance: 940, coins: 3100, bestCoins: 900, flips: 6,
+          bestDistanceByStage: { countryside: 940, desert: 0, arctic: 0, moon: 0 },
+        },
+      },
+    }, 100),
+    d2: rec({ playerId: 'hc111', name: 'Climber' }, {
+      hillclimb: {
+        total: { played: 3, won: 3, lost: 0 },
+        byDiff: { hard: { played: 3, won: 3, lost: 0 } },
+        hc: {
+          runs: 3, bestDistance: 610, coins: 800, bestCoins: 410, flips: 2,
+          bestDistanceByStage: { countryside: 210, desert: 0, arctic: 610, moon: 0 },
+        },
+      },
+    }, 200),
+    d3: rec({ playerId: 'HC111', name: 'Climber' }, {}, 300),   // pre-Hill-Climb device: no key
+  };
+  const grp = aggregatePlayers(all)[0];
+  const hc = grp.games.hillclimb.hc;
+  eq('hillclimb: one person, three devices, one row', aggregatePlayers(all).length, 1);
+  eq('hillclimb: runs summed across devices', hc.runs, 8);
+  eq('hillclimb: lifetime coins and flips sum', [hc.coins, hc.flips], [3900, 8]);
+  eq('hillclimb: bestDistance is the max, not the sum or the last one', hc.bestDistance, 940);
+  eq('hillclimb: best single-run coins takes the max', hc.bestCoins, 900);
+  eq('hillclimb: per-stage bests take the max per stage', [
+    hc.bestDistanceByStage.countryside, hc.bestDistanceByStage.arctic, hc.bestDistanceByStage.moon,
+  ], [940, 610, 0]);
+  eq('hillclimb: totals still aggregate alongside', grp.games.hillclimb.total.played, 8);
+}
+
 // ---- Snake walls split: a solo pre-split device (never resynced since this shipped) must NOT
 // read 0-0 on the leaderboard -- this is the exact bug report ("0-0 for everyone"): a fresh
 // aggregate over ONLY legacy-shaped records had no bestLenByWalls anywhere to fall back on. ----

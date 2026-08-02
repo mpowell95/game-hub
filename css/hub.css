@@ -265,20 +265,38 @@ body {
      0 2px 6px rgba(0, 0, 0, 0.7);
 }
 
-.hub-soon-tag {
+/* Tile tags, top-LEFT: the top-right corner belongs to the favorite heart (.hub-fav). A flex
+   row rather than one absolutely-positioned pill, because the New badge (js/new-badge.js) can
+   legitimately coexist with Test on a devOnly game that just landed. */
+.hub-tags {
   position: absolute;
   top: 12px;
-  /* Left, not right: the top-right corner is the favorite heart's (.hub-fav). Soon/Test only
-     ever appear on comingSoon/devOnly cards, so the two never actually need to coexist, but
-     keeping them on opposite corners avoids relying on that. */
   left: 12px;
-  background: var(--hub-surface-2);
-  color: var(--hub-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hub-soon-tag,
+.hub-new-tag {
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   padding: 3px 8px;
   border-radius: 999px;
+  white-space: nowrap;
+}
+.hub-soon-tag {
+  background: var(--hub-surface-2);
+  color: var(--hub-muted);
+}
+/* The colorblind palette's yellow (#F2B705) with near-black ink, so it reads on both the light
+   and dark shell and over any tile art. The pill spells out "New"/"Nuevo" - the color is
+   emphasis, never the signal itself (project accessibility rule: no meaning by hue alone). */
+.hub-new-tag {
+  background: #f2b705;
+  color: #1a1400;
+  text-transform: uppercase;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
 }
 
 /* Each grid item is now a .hub-cell wrapping the launch .hub-card/<a> plus a sibling
