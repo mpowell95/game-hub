@@ -3,7 +3,10 @@
 // Tiers (see game-hub-and-connect-four-spec.md, "Difficulty tiers"):
 //   Easy   — random legal move, but always takes an immediate win and always
 //            blocks an immediate opponent win.
-//   Medium — alpha-beta minimax, depth 5, heuristic eval.
+//   Medium — alpha-beta minimax, depth 3, heuristic eval, plus a deliberate
+//            slip rate: it always takes a win and always blocks one, but often
+//            enough plays a merely-safe move rather than the best one. See the
+//            "Medium" section below for why an unweakened Medium was a wall.
 //   Hard   — alpha-beta minimax, depth 9, same heuristic, center-out ordering.
 //   Expert — full alpha-beta solve to the end of the game (no depth cap) with a
 //            transposition table and center-out ordering. No weakening: it plays
@@ -26,7 +29,7 @@ export const Difficulty = {
 };
 
 // Search depths for the heuristic tiers (within the spec's suggested ranges).
-const MEDIUM_DEPTH = 5;
+const MEDIUM_DEPTH = 3;
 const HARD_DEPTH = 9;
 
 // Center-out column order — better alpha-beta pruning and stronger play, since
@@ -764,6 +767,91 @@ function chooseEasy(board, player, rng) {
 }
 
 // ---------------------------------------------------------------------------
+// Medium.
+// ---------------------------------------------------------------------------
+// Medium searched at depth 5 and always played the best move it found, which
+// made it effectively unbeatable rather than merely middling: a depth-5
+// alpha-beta on this heuristic sees every double threat a casual player can
+// build, several plies before it matures, and it never errs. Measured against
+// the Easy agent as a casual-player stand-in it won 100 out of 100 games, and
+// the hub's own recorded history said the same thing louder - real players were
+// 85-14 on Easy and 3-107 on Medium, with Hard and Expert almost untouched
+// because nobody was getting past this rung to reach them.
+//
+// So the fix is not only a shallower search. A perfect depth-3 player is still
+// a perfect player, just a shorter-sighted one; what a middle tier needs is to
+// sometimes NOT play its best move. That is the same shape Easy already uses
+// (EASY_BLOCK_RATE), applied one tier up and more gently: Medium stays
+// tactically honest - it always takes an immediate win, always blocks an
+// immediate loss, and a slip never hands over a win on the spot - but it plays
+// a merely-safe move often enough to leave an opening to build into.
+// Chosen by sweeping slip rate x depth against a calibrated stand-in for the
+// hub's real players (an agent that always takes a win, always blocks one, and
+// is otherwise random with a mild center bias - it scores 77% against Easy,
+// against the 86% the hub's actual Connect Four history shows, so it is a
+// slightly pessimistic stand-in rather than an optimistic one). Measured human
+// win rate against Medium across that sweep:
+//
+//     slip \ depth      1        2        3
+//     0.35            12.5%     5.0%     8.5%
+//     0.55            26.5%    18.0%    17.0%
+//     0.70            34.5%    25.5%    24.0%
+//     0.85            34.0%    32.0%    36.0%
+//
+// 0.80/depth-3 lands at 31% for the stand-in (n=300), so a real player - who is
+// stronger than it - should sit near 40%: a middle rung you lose more often than
+// you win, which is what Medium should have been. It stays non-degenerate at
+// that setting (a purely random opponent still only takes 1% off it). Tuning
+// this later is a one-constant change; re-run the sweep rather than guessing.
+const MEDIUM_DEPTH_SLIP_RATE = 0.8;
+
+/** True if playing `col` lets the opponent win immediately on their reply.
+ *  Used to keep Medium's deliberate slips from being outright blunders. */
+function handsOpponentAWin(board, player, col) {
+  const opp = player ^ 1;
+  board.play(col, player);
+  let loses = false;
+  if (!board.isWin(player)) {
+    for (const r of board.legalMoves()) {
+      board.play(r, opp);
+      const oppWins = board.isWin(opp);
+      board.undo(r, opp);
+      if (oppWins) { loses = true; break; }
+    }
+  }
+  board.undo(col, player);
+  return loses;
+}
+
+function chooseMedium(board, player, rng, slipRate = MEDIUM_DEPTH_SLIP_RATE, depth = MEDIUM_DEPTH) {
+  const moves = board.legalMoves();
+  const opp = player ^ 1;
+
+  // Always take an immediate win.
+  for (const c of moves) {
+    board.play(c, player);
+    const won = board.isWin(player);
+    board.undo(c, player);
+    if (won) return c;
+  }
+  // Always block an immediate opponent win. Missing these is Easy's job, not
+  // Medium's - a tier that overlooks a three-in-a-row reads as broken, not fair.
+  for (const c of moves) {
+    board.play(c, opp);
+    const lost = board.isWin(opp);
+    board.undo(c, opp);
+    if (lost) return c;
+  }
+  // The deliberate slip: any move that does not lose on the spot, chosen at
+  // random instead of by search. This is what makes the tier winnable.
+  if (rng() < slipRate) {
+    const safe = moves.filter((c) => !handsOpponentAWin(board, player, c));
+    if (safe.length) return safe[Math.floor(rng() * safe.length)];
+  }
+  return chooseSearch(board, player, depth, rng);
+}
+
+// ---------------------------------------------------------------------------
 // Public AI.
 // ---------------------------------------------------------------------------
 export class AI {
@@ -771,7 +859,9 @@ export class AI {
    * @param {string} difficulty  One of Difficulty.*
    * @param {object} [options]
    * @param {() => number} [options.rng]  RNG in [0,1) (inject for deterministic
-   *   tests). Only affects Easy and tie-breaking, never strength.
+   *   tests). Drives Easy's block rate, Medium's slip rate, and tie-breaking at
+   *   every tier; Hard and Expert use it for tie-breaking only, so their
+   *   strength is unaffected by it.
    * @param {number} [options.expertBudgetMs]  Per-move time budget for the
    *   Expert exact solver before it falls back to a heuristic search (default
    *   2000). Larger = more positions solved perfectly, but slower opening moves.
@@ -780,6 +870,10 @@ export class AI {
     this.difficulty = difficulty;
     this.rng = options.rng || Math.random;
     this.expertBudgetMs = options.expertBudgetMs ?? DEFAULT_EXPERT_BUDGET_MS;
+    // Medium's two strength knobs, overridable so a bench can sweep them without
+    // editing this file (that sweep is how the shipped defaults were chosen).
+    this.mediumSlipRate = options.mediumSlipRate ?? MEDIUM_DEPTH_SLIP_RATE;
+    this.mediumDepth = options.mediumDepth ?? MEDIUM_DEPTH;
   }
 
   /** Choose a column to play for the side to move in `game`. */
@@ -788,7 +882,7 @@ export class AI {
     const { board, currentPlayer } = game;
     switch (this.difficulty) {
       case Difficulty.EASY:   return chooseEasy(board, currentPlayer, this.rng);
-      case Difficulty.MEDIUM: return chooseSearch(board, currentPlayer, MEDIUM_DEPTH, this.rng);
+      case Difficulty.MEDIUM: return chooseMedium(board, currentPlayer, this.rng, this.mediumSlipRate, this.mediumDepth);
       case Difficulty.HARD:   return chooseSearch(board, currentPlayer, HARD_DEPTH, this.rng);
       case Difficulty.EXPERT: return chooseExpert(board, currentPlayer, this.expertBudgetMs);
       default: throw new Error(`Unknown difficulty: ${this.difficulty}`);

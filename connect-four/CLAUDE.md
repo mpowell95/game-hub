@@ -7,6 +7,31 @@
 
 Hub integration: in-hub `module:`.
 
+## Medium was unbeatable until 2026-08-03 (difficulty ladder retune)
+
+Medium searched alpha-beta at depth 5 and always played the best move it found, so it was not a
+middle rung at all. The hub's own recorded history is unambiguous: across every player, Connect
+Four was **85-14 on Easy (86%) and 3-107 on Medium (2.7%)**, with Hard at 3 plays and Expert at 12
+because effectively nobody got past Medium to reach them. Reproduced headlessly before changing
+anything: the shipped Medium beat the Easy agent 100 games out of 100.
+
+The fix is deliberately **not** just a shallower search - a perfect depth-3 player is still a
+perfect player. It is the same shape Easy already used (`EASY_BLOCK_RATE`), applied one tier up:
+`MEDIUM_DEPTH` 5 -> 3, plus `MEDIUM_DEPTH_SLIP_RATE` (0.8), the rate at which Medium plays a
+merely-safe move instead of its best one. Medium stays tactically honest at every slip - it always
+takes an immediate win, always blocks an immediate loss, and a slip is filtered so it never hands
+over a win on the spot (`handsOpponentAWin`) - because a tier that overlooks a three-in-a-row reads
+as broken rather than fair. `test.js`'s `medium takes immediate win` / `medium blocks immediate
+threat` cases pin exactly those two invariants and still pass.
+
+Both knobs are constructor options (`mediumSlipRate`, `mediumDepth`, mirroring `expertBudgetMs`)
+so a bench can sweep them without editing the file; that sweep, against a stand-in calibrated to
+the hub's real players, is how 0.8/depth-3 was chosen and the full grid is tabulated in `ai.js`
+above the constant. Measured result: the stand-in goes from 0% to 31% against Medium, Easy is
+untouched at ~77%, and Medium still takes 99% off a purely random opponent, so it is weaker
+without being degenerate. **If this needs tuning again, re-run the sweep - do not guess a number**,
+and re-measure Easy at the same time so the rungs stay ordered.
+
 ## Notes
 
 AI in a Web Worker (`new Worker(new URL('./worker.js', import.meta.url), {type:'module'})`) with a main-thread fallback; needs the worker for its multi-second Expert solver. `ui.js`'s `_statsDisqualified` flag (2026-07-22): set by a confirmed undo or by confirming "Show best moves" (one shared flag, reset per game in `startGame()` - a rematch that starts with hints still on from before is pre-disqualified, silently, no re-prompt); `recordConnect4` is skipped entirely for a disqualified game and the result banner says so. The exact solver (`expertSolve`/`chooseExpert`, bitboard negamax + transposition table) has always been correct on its own (`test.js`'s "expert value matches reference" suite); what WAS a real bug (2026-07-22, batch 10) was `evaluateColumns`' "Estimate" fallback for the hint panel - it burned half its budget on a Pass 1 exact-solve attempt that's hopeless below `MIN_STONES_FOR_EXACT_ATTEMPT` (12 stones, measured empirically), starving the heuristic fallback of the depth it needed, so the empty board read as losing on every column. Fixed by skipping that doomed attempt early and replacing the fallback with a bitboard depth-limited negamax (`evaluateColumnsBounded`/`negamaxBounded`, reusing the exact solver's own move-ordering/win-detection primitives plus a bitboard port of the window-scoring heuristic) - reaches roughly 3-6x the depth in the same wall-clock time, so the empty board now reads center-highest and positive within the existing 3s hint budget. Also backs Expert's opening-fallback move choice (`chooseSearchTimed`), replacing a separate, weaker Board-object search there too. Still labeled "Estimate (depth N)", never "Solved", unless the value is actually exact. Discs also carry a shape token per THE LAW rule 9 (`.cf-piece.p1`/`.p2::after`, batch 10): P1 a ring, P2 a diamond, tonal (a darker shade of the disc's own color) rather than a second competing hue.

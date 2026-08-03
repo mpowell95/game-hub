@@ -198,6 +198,18 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
 - **`recordEscoba(difficulty, won, { escobas })`** in `js/game-stats.js` feeds the shared
   per-device stats (`gamehub.stats`), tab `escoba` in the Stats overlay
   (`js/game-stats-ui.js`).
+- **Multiplayer matches record under difficulty `'mp'` (fixed 2026-08-03).** They did not
+  before, and it was silent. `_commitStats` derives the tier from
+  `players.find((x) => !x.isHuman).difficulty`, but the remote seat built by
+  `_mpHostStart`/`_mpGuestStartMatch` is a remote *agent* with `isHuman` defaulted false and no
+  `difficulty` at all, so the `|| 'normal'` fallback filed **every online match under the AI's
+  normal tier**. Escoba was the only multiplayer game in the hub doing this (Filler, Tic Tac Toe,
+  Dots and Boxes and Boggle all pass `'mp'`), which made online play invisible in this game's
+  stats and inflated `normal` with games no computer ever played. Found by cross-checking the
+  live database: 42 of the hub's 57 multiplayer rooms were Escoba and `h2h` held finished Escoba
+  matches, yet `escoba.byDiff` had no `mp` bucket at all. The pre-fix plays are **not**
+  retroactively separable from the `normal` bucket they landed in - nothing recorded which was
+  which - so only `h2h` (capture began 2026-07-22) bounds how many there were.
 - i18n: `escoba/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
   (`easy`/`normal`/`hard`), `deckMode` (`spanish`/`american`), and setup `mode`
   (`solo`/`host`/`join`) stay canonical; only their display labels translate. Card-suit terms

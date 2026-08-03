@@ -847,8 +847,14 @@ class EscobaUI {
     this._statsCommitted = true;
     const human = this._human();
     const won = !!(this.game.winner && this.game.winner.id === human.id);
+    // A multiplayer match has no AI difficulty at all: the remote seat is built by
+    // _mpHostStart/_mpGuestStartMatch with a remote agent and no `difficulty`, so
+    // until 2026-08-03 the `|| 'normal'` fallback below quietly filed EVERY online
+    // match under the AI's normal tier. Escoba was the only multiplayer game doing
+    // this - Filler, Tic Tac Toe, Dots and Boxes and Boggle all record 'mp' - which
+    // made online play invisible in this game's stats and inflated `normal`.
     const opp0 = this.game.players.find((x) => !x.isHuman);
-    const difficulty = (opp0 && opp0.difficulty) || 'normal';
+    const difficulty = this.mp ? 'mp' : ((opp0 && opp0.difficulty) || 'normal');
     recordEscoba(difficulty, won, { escobas: this._matchEscobas | 0 });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
     // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
