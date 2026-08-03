@@ -490,5 +490,71 @@ function firstOverlap(tiles) {
   eq(bad, 0, 'in-play scores are always multiples of five, and only the mover ever scores');
 }
 
+// --- the +N badge's coupling to the tile's closing tag ------------------------------------------
+//
+// [KNOWN-BUG PROBE] This is a REGRESSION TRIPWIRE for a bug that actually shipped.
+//
+// `_syncHands` injects the "+N worth" badge by STRING-REPLACING the tile's closing tag on the
+// markup `tiles.js` returns. That couples two files through a string literal, with no import and
+// no type between them. In commit ee28ed2 (shipped as game-hub-v258) `tiles.js` changed from
+// emitting `<button>` to `<div role="button">` for the older-iOS blank-tile fix, and the replace
+// in `_syncHands` was left looking for `</button>`. It matched nothing, the replace silently
+// no-opped, and EVERY +N badge disappeared from the hand - no error, no console warning, nothing
+// visibly wrong with the tiles themselves. It was reported by a player, not caught by a test.
+//
+// That badge is not decoration: dominoes/CLAUDE.md's "The bot is not cheating" section shows the
+// bot plays its best-scoring move every turn (33.8% of plays score) while a player who cannot see
+// which of their moves scores plays at the blind rate (~19%). The badge is the fix for that
+// information gap, so losing it silently makes the game feel rigged.
+//
+// dominoes/CLAUDE.md warned about this coupling in prose and it broke anyway, which is the whole
+// argument for asserting it here instead. This deliberately reads ui.js's SOURCE rather than
+// importing it (ui.js pulls in DOM/localStorage-touching modules that will not load in node), so
+// it checks the real shipped pattern against the real shipped markup.
+{
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const { tileHTML } = await import('./tiles.js');
+
+  const uiSrc = readFileSync(join(HERE, 'ui.js'), 'utf8');
+
+  // Pull the badge-injection call straight out of ui.js: `html.replace(<pattern>, <replacement>)`.
+  // Only the FIRST argument matters here - it is the thing that has to agree with tiles.js. The
+  // regex-literal branch tolerates escaped slashes, because the shipped pattern is `/<\/div>$/`.
+  const badgeLine = uiSrc.split('\n').find((l) => l.includes('dm-worth') && l.includes('.replace('));
+  const m = badgeLine && /\.replace\(\s*(\/(?:\\.|[^/\\])+\/[a-z]*|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")\s*,/.exec(badgeLine);
+  ok(!!m, 'ui.js still injects the +N badge by replacing on the tile markup');
+
+  if (m) {
+    // Rebuild the pattern ui.js actually uses, then run it against the markup tiles.js actually
+    // emits - the same options _syncHands passes, including the dealing-animation style, since a
+    // non-empty style attribute is a real code path.
+    const raw = m[1];
+    const pattern = raw.startsWith('/')
+      ? new RegExp(raw.slice(1, raw.lastIndexOf('/')), raw.slice(raw.lastIndexOf('/') + 1))
+      : raw.slice(1, -1);
+
+    for (const style of ['', 'animation-delay:60ms;--dm-from-x:26px']) {
+      const html = tileHTML(TILES[0], {
+        vertical: true, button: true, cls: 'is-sel', style,
+        aria: 'a tile', attrs: ' data-action="pick" data-id="0"',
+      });
+      const out = html.replace(pattern, `<i class="dm-worth">+5</i></div>`);
+      ok(out.includes('dm-worth'),
+        `the +N badge survives injection into real tileHTML output (style=${style ? 'set' : 'empty'})`);
+      ok(out !== html,
+        `the replace actually MATCHED - a no-op here is the exact v258 bug (style=${style ? 'set' : 'empty'})`);
+    }
+  }
+
+  // The badge must also be reachable: it is positioned outside the tile's own box (top:-9px), so a
+  // hand tile clipping its overflow hides the badge while the tile itself still looks perfect.
+  const css = readFileSync(join(HERE, '..', 'css', 'dominoes.css'), 'utf8');
+  ok(/\.dm-root\s+\.dm-hand\s+\.dm-tile\s*\{[^}]*overflow:\s*visible/.test(css),
+    'hand tiles keep overflow:visible, or the badge is clipped away by the tile itself');
+}
+
 console.log(`\ndominoes: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
