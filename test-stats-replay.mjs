@@ -194,11 +194,41 @@ const FIXTURE_ESCOBA_MP = {
   const sumByDiff = Object.values(es.byDiff).reduce((n, b) => n + (b.played | 0), 0);
   eq('D: byDiff still sums to total, so leaderboard Games Played cannot inflate', sumByDiff, 54);
 
-  // Idempotency: the latch must survive a reload plus a newly recorded game.
+  // Idempotency: a reload plus a newly recorded game must not move anything twice.
   gs.recordEscoba('mp', true, { escobas: 1 });
   const again = gs.loadStats().games.escoba;
-  eq('D: reclassify-once holds across a reload and a new mp game', again.byDiff.mp, { played: 8, won: 5, lost: 3 });
+  eq('D: no double-move across a reload and a new mp game', again.byDiff.mp, { played: 8, won: 5, lost: 3 });
   eq('D: normal did not shrink a second time', again.byDiff.normal, { played: 19, won: 6, lost: 13 });
+  eq('D: what was moved is recorded, so a better count can top up later', again._esMpMoved, { played: 7, won: 4, lost: 3 });
+}
+
+// --- scenario G: a better count later TOPS UP a device that already migrated -------
+// h2h is a floor, not the true count: Escoba multiplayer shipped 2026-07-19 but h2h capture
+// began 2026-07-22, so matches in that window leave no row. When the rooms/ audit supplies the
+// real figure, a device that already ran with the lower one must correct itself - which a
+// one-shot latch would have made impossible. This pins that it does.
+{
+  const ALREADY_MIGRATED = {
+    version: 1,
+    games: {
+      escoba: {
+        total: { played: 54, won: 22, lost: 32 },
+        byDiff: { normal: { played: 19, won: 6, lost: 13 }, mp: { played: 7, won: 4, lost: 3 }, hard: { played: 21, won: 9, lost: 12 }, easy: { played: 7, won: 3, lost: 4 } },
+        es: { escobas: 382 },
+        _esMpMoved: { played: 7, won: 4, lost: 3 },
+      },
+    },
+    h2h: { escoba: { '1f75ff86': { name: 'Natalia', w: 6, l: 4 } } },   // stands in for a raised count
+    updatedAt: '2026-08-03T14:56:02.515Z',
+  };
+  freshStore({ 'gamehub.stats': ALREADY_MIGRATED });
+  const es = gs.loadStats().games.escoba;
+  eq('G: only the SHORTFALL moves (2W/1L more), not the whole new figure', es.byDiff.mp, { played: 10, won: 6, lost: 4 });
+  eq('G: normal gives up exactly the shortfall', es.byDiff.normal, { played: 16, won: 4, lost: 12 });
+  eq('G: the running moved-total is updated', es._esMpMoved, { played: 10, won: 6, lost: 4 });
+  eq('G: total still untouched', es.total, { played: 54, won: 22, lost: 32 });
+  const sum = Object.values(es.byDiff).reduce((n, b) => n + (b.played | 0), 0);
+  eq('G: byDiff still sums to total', sum, 54);
 }
 
 // --- scenario E: a solo-only device must be completely untouched -------------------

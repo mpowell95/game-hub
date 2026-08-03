@@ -207,9 +207,12 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   Dots and Boxes and Boggle all pass `'mp'`), which made online play invisible in this game's
   stats and inflated `normal` with games no computer ever played. Found by cross-checking the
   live database: 42 of the hub's 57 multiplayer rooms were Escoba and `h2h` held finished Escoba
-  matches, yet `escoba.byDiff` had no `mp` bucket at all. The pre-fix plays are **not**
-  retroactively separable from the `normal` bucket they landed in - nothing recorded which was
-  which - so only `h2h` (capture began 2026-07-22) bounds how many there were.
+  matches, yet `escoba.byDiff` had no `mp` bucket at all. Historical plays are reclassified out of
+  `normal` by `reclassifyEscobaMp` in `js/game-stats.js` (see `js/CLAUDE.md`). **Its h2h-derived
+  figure is a floor, not the count:** MP shipped here on 2026-07-19 (`c5955a9`) but h2h capture
+  began 2026-07-22 (`37275f8`), so matches in that window left no trace on the device at all. The
+  exact figure lives only in the server-side `rooms/` node; `escoba-mp-audit.mjs` reads it and
+  emits the correction entries, and the migration tops devices up rather than latching.
 - i18n: `escoba/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
   (`easy`/`normal`/`hard`), `deckMode` (`spanish`/`american`), and setup `mode`
   (`solo`/`host`/`join`) stay canonical; only their display labels translate. Card-suit terms

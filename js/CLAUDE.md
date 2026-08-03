@@ -1193,13 +1193,29 @@ Two things about it generalize to any future bucket repair:
   would have credited those players with phantom plays on the shared board, not merely
   double-counted inside the store. **If you ever add a bucket to an existing game, check whether
   its plays are already counted somewhere else in `byDiff` first.**
-- **It is a floor, and says so.** `h2h` capture only began 2026-07-22, so online matches before
-  that are unprovable and deliberately stay in `normal` — honestly under-counted rather than
-  estimated (rule 4). `total` is never touched, so nothing can move a device's play count.
+- **h2h is a FLOOR, not the count, and the migration is a top-up rather than a latch.** Escoba
+  multiplayer shipped **2026-07-19** (`c5955a9`, the M1 lockstep pilot); `recordHeadToHead` only
+  began capturing on **2026-07-22** (`37275f8`). Matches in that three-day window left no h2h row
+  at all, and the restore/rejoin path can still commit with no `mp.opp` even after it. So the
+  migration records what it has already moved in `_esMpMoved` and each load moves only the
+  SHORTFALL against `escobaMpTarget()` — the higher, per component, of the h2h sum and any
+  hand-verified `ESCOBA_MP_KNOWN` entry. **A one-shot guard here would have been a trap:** it would
+  have frozen every device at the h2h-only figure and made the true count unshippable. `total` is
+  never touched either way, so nothing can move a device's play count.
+
+**Closing the gap: `escoba-mp-audit.mjs`** (repo root, read-only). The true count for the
+uncaptured window survives only in the server-side `rooms/` node, which a device cannot read. The
+audit pairs each finished Escoba room with the two device ids that played it, prints the exact
+per-device total beside what h2h proves, and emits a paste-ready `ESCOBA_MP_KNOWN` block. Adding an
+entry tops up that device on its next load automatically, including devices that already migrated.
+**It needs outbound access to the RTDB host, which not every session has** — run it where
+`backups/rtdb-backup.mjs` works. Until it is run, `ESCOBA_MP_KNOWN` is empty and the shipped
+numbers are the h2h floor.
 
 Regression cases: `test-stats-replay.mjs` scenarios D (real h2h rows from the 2026-08-03 snapshot),
-E (a device with no h2h must be untouched — the common case), and F (h2h claiming more than the
-bucket holds must clamp, never go negative).
+E (a device with no h2h must be untouched — the common case), F (h2h claiming more than the bucket
+holds must clamp, never go negative), and G (a raised count tops up a device that already migrated,
+moving only the shortfall).
 
 ---
 

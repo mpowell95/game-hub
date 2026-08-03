@@ -31,10 +31,10 @@
 //                                                   // the fallback swallowed it); the online plays
 //                                                   // this device can still prove from its own h2h
 //                                                   // rows are moved into 'mp' ONCE, guarded by
-//                                                   // _esMpReclassified - a relabel, never a change
+//                                                   // _esMpMoved - a relabel, never a change
 //                                                   // to `total`. See reclassifyEscobaMpFromH2H.
 //         es: { escobas },                        // escobas the human made
-//         _esMpReclassified },
+//         _esMpMoved },
 //       ballrun: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
 //         br: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } },  // a solo,
@@ -554,39 +554,84 @@ function normalize(raw) {
  *
  * THE LAW: `total` is never touched, so this device's play count cannot move; the plays are
  * relabelled, not removed, and stay just as visible. It is bounded by what `normal` actually holds
- * (it can never drive a bucket negative), latched by `_esMpReclassified` so it can only ever run
- * once, and the emptied `normal` bucket is left in place rather than deleted (rule 5). It is a
- * floor, not an exact split: `h2h` capture only began 2026-07-22, so any online match before that
- * is unprovable and stays in `normal` - honestly under-counted rather than guessed at (rule 4).
+ * (it can never drive a bucket negative), and the emptied `normal` bucket is left in place rather
+ * than deleted (rule 5).
+ *
+ * WHERE THE COUNT IS STILL SHORT, AND WHY THIS IS A TOP-UP AND NOT A LATCH:
+ * Escoba multiplayer shipped 2026-07-19 (`c5955a9`, the M1 lockstep pilot) but `recordHeadToHead`
+ * only began capturing on 2026-07-22 (`37275f8`), so matches played in that three-day window left
+ * no h2h row at all - and the restore/rejoin path can still commit with no `mp.opp` even after it.
+ * h2h is therefore a FLOOR, not the true count, and the true count for that window survives only
+ * in the server-side `rooms/` node, which a device cannot read.
+ *
+ * So this deliberately does NOT latch. It records what it has already moved in `_esMpMoved` and
+ * each load moves only the SHORTFALL against the best-known figure (`escobaMpTarget`: the higher
+ * of the h2h sum and any hand-verified `ESCOBA_MP_KNOWN` entry, per component). A device that ran
+ * an earlier, lower count corrects itself the moment a better one ships, which a one-shot guard
+ * would have made impossible. Raising the count is a data-only change to `ESCOBA_MP_KNOWN`.
  */
-function reclassifyEscobaMpFromH2H(st) {
-  const g = st.games.escoba;
-  if (g._esMpReclassified) return false;
-  g._esMpReclassified = true;             // latch even when there is nothing to move
+const ESCOBA_MP_KNOWN = {
+  // statsId -> { won, lost }: hand-verified exact multiplayer Escoba counts, for the window
+  // h2h cannot see (see below). Empty until the rooms/ audit is run; adding an entry here
+  // automatically tops up that device on its next load, including devices that already ran an
+  // earlier, lower count.
+};
 
-  const rows = st.h2h && st.h2h.escoba;
-  if (!rows || typeof rows !== 'object') return true;
+/** Best-known multiplayer Escoba W/L for THIS store, taking the highest figure any source can
+ *  justify per component, so a better source can only ever raise the count, never lower it. */
+function escobaMpTarget(st) {
   let w = 0, l = 0;
-  for (const id of Object.keys(rows)) {
-    const r = rows[id] || {};
-    w += Math.max(0, r.w | 0);
-    l += Math.max(0, r.l | 0);
+  const rows = st.h2h && st.h2h.escoba;
+  if (rows && typeof rows === 'object') {
+    for (const id of Object.keys(rows)) {
+      const r = rows[id] || {};
+      w += Math.max(0, r.w | 0);
+      l += Math.max(0, r.l | 0);
+    }
   }
-  if (w + l === 0) return true;
+  let known = null;
+  try { known = ESCOBA_MP_KNOWN[statsId()] || null; } catch { /* statsId needs localStorage */ }
+  if (known) { w = Math.max(w, known.won | 0); l = Math.max(l, known.lost | 0); }
+  return { won: w, lost: l };
+}
+
+function reclassifyEscobaMp(st) {
+  const g = st.games.escoba;
+  const prev = (g._esMpMoved && typeof g._esMpMoved === 'object') ? g._esMpMoved : { played: 0, won: 0, lost: 0 };
+  const target = escobaMpTarget(st);
+
+  // Only ever move the SHORTFALL against the best-known count. This is what makes the migration a
+  // top-up rather than a one-shot: a device that ran an earlier, lower estimate corrects itself the
+  // next time a better number lands, instead of being locked out by a latch.
+  let dw = Math.max(0, (target.won | 0) - (prev.won | 0));
+  let dl = Math.max(0, (target.lost | 0) - (prev.lost | 0));
+  if (dw + dl === 0) {
+    if (g._esMpMoved) return false;
+    g._esMpMoved = { played: prev.played | 0, won: prev.won | 0, lost: prev.lost | 0 };
+    return true;                          // record the (zero) baseline once
+  }
 
   const from = g.byDiff.normal;
-  if (!from) return true;
-  let mw = Math.min(w, Math.max(0, from.won | 0));
-  let ml = Math.min(l, Math.max(0, from.lost | 0));
-  const capacity = Math.max(0, from.played | 0);
-  if (mw + ml > capacity) { ml = Math.min(ml, capacity); mw = Math.min(mw, capacity - ml); }
-  const moved = mw + ml;
-  if (moved <= 0) return true;
+  if (from) {
+    // Never take more than `normal` actually holds, in any component.
+    dw = Math.min(dw, Math.max(0, from.won | 0));
+    dl = Math.min(dl, Math.max(0, from.lost | 0));
+    const capacity = Math.max(0, from.played | 0);
+    if (dw + dl > capacity) { dl = Math.min(dl, capacity); dw = Math.min(dw, capacity - dl); }
+  } else { dw = 0; dl = 0; }
 
-  if (!g.byDiff.mp) g.byDiff.mp = bucket();
-  from.played -= moved; from.won -= mw; from.lost -= ml;
-  g.byDiff.mp.played += moved; g.byDiff.mp.won += mw; g.byDiff.mp.lost += ml;
-  console.info(`[game-stats] Escoba: reclassified ${moved} multiplayer play(s) (${mw}W/${ml}L) from 'normal' to 'mp'. Total plays unchanged at ${g.total.played | 0}.`);
+  const moved = dw + dl;
+  if (moved > 0) {
+    if (!g.byDiff.mp) g.byDiff.mp = bucket();
+    from.played -= moved; from.won -= dw; from.lost -= dl;
+    g.byDiff.mp.played += moved; g.byDiff.mp.won += dw; g.byDiff.mp.lost += dl;
+  }
+  // Record what was ACTUALLY moved, not what was targeted, so a run that clamped can still
+  // finish later if the source bucket grows or a correction entry raises the target.
+  g._esMpMoved = { played: (prev.played | 0) + moved, won: (prev.won | 0) + dw, lost: (prev.lost | 0) + dl };
+  if (moved > 0) {
+    console.info(`[game-stats] Escoba: reclassified ${moved} multiplayer play(s) (${dw}W/${dl}L) from 'normal' to 'mp'. Total plays unchanged at ${g.total.played | 0}.`);
+  }
   return true;
 }
 
@@ -707,7 +752,7 @@ export function loadStats() {
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   changed = refoldBallRunLegacyRuns(st) || changed;
   changed = seedSnWallsLegacy(st.games.snake) || changed;
-  changed = reclassifyEscobaMpFromH2H(st) || changed;
+  changed = reclassifyEscobaMp(st) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   ensureBrOrbital(st.games.ballrun);
