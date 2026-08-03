@@ -181,7 +181,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
-| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js` |
+| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. |
 | `test-new-badge.mjs` | (2026-08-01) headless unit tests for `js/new-badge.js` (window edges, malformed/absent dates, future dates), plus a scrape of the real `GAMES` registry asserting every `released` date that IS present parses — a typo'd date is the silent failure here (the game ships, the pill never appears) |
 | `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
@@ -374,7 +374,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
      `longestWord: {word,len}`) must move as a UNIT so the text always matches its own length.
    This was missed twice in a row (Dots and Boxes, then Boggle), both caught only by opening
    My Stats in a browser. `players-agg.test.mjs` now has a per-game regression case for each;
-   add one for any new sub-counter.
+   add one for any new sub-counter. **The same file now also enforces this structurally** (it reads the sub-counter keys straight out of `game-stats.js`), so a forgotten surface fails `node run-all-tests.mjs` instead of waiting to be noticed in a browser.
 
 8. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
    works inside that folder. Open it with the THE-LAW pointer block (copy it from any existing
