@@ -74,6 +74,21 @@ same edit or the badge would have silently stopped rendering — no error, just 
 piece of teaching gone. If `tiles.js` ever changes its outer element again, that replace is the
 other half of the change.
 
+**That is not hypothetical: it happened, and this paragraph did not prevent it.** Commit `ee28ed2`
+(shipped as `game-hub-v258`) made the `<button>` → `<div>` change in `tiles.js` and left the
+replace looking for `</button>`. It matched nothing, the replace silently no-opped, and **every
+`+N` badge disappeared from the hand for two builds** — tiles still drew perfectly, so nothing
+looked wrong. It was caught by a player asking why the numbers were gone, not by any test, and
+fixed in `6a1bff1` (`v260`) by switching the pattern to `/<\/div>$/`.
+
+So the coupling is now **asserted in `dominoes/js/test.js`** (the `[KNOWN-BUG PROBE]` block at the
+end): it reads the replace pattern out of `ui.js`'s own source and runs it against the markup
+`tiles.js` actually emits, for both the plain and the dealing-animation code paths, and fails if
+the replace no-ops. It also pins `overflow: visible` on hand tiles, since the badge is positioned
+outside the tile's box (`top: -9px`) and a clipping tile would hide the badge while looking
+perfectly fine itself. **A prose warning in this file was already here when the bug shipped — if
+you change this coupling again, the test is what will actually stop you.**
+
 Also gone from the tile: `aspect-ratio` on `.dm-pip` (iOS 15+), replaced with the
 `width: 21%; height: 0; padding-top: 21%` square, which is the same square off the parent's width
 and works everywhere. A pip with no height is an invisible pip.
@@ -394,7 +409,7 @@ the ordinary wins metric with no extra wiring.
 ```
 node dominoes/js/test.js
 ```
-553 assertions: the set's integrity, every All Fives counting case above (including the lone
+559 assertions: the set's integrity, every All Fives counting case above (including the lone
 double and the interior spinner), branch opening, legality including a tile that fits both ends,
 chain bookkeeping, the non-destructive `countAfter` preview, the deal, drawing and passing
 legality, a snapshot round trip, board geometry (crosswise doubles, branch direction, a folded
@@ -411,4 +426,8 @@ highest double in play, that it is the opener's ONLY legal move, that the other 
 that it becomes the spinner the moment it lands, and that round 2 is decided by its own deal
 rather than by who won round 1; **A4** an overshoot (304 on a 300 target) still winning, and both
 totals crossing in one settle producing a real match end with the higher total winning.
+
+The final block is the **`+N` badge coupling probe** (see "A tile is never a `<button>`" above) —
+a regression tripwire for the one bug in this game that reached a player silently. Reintroducing
+the v258 mistake trips it four ways.
 Wired into `run-all-tests.mjs`.
