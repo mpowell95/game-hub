@@ -427,5 +427,54 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
 }
 
+// ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
+//
+// Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/
+// `db`/`bg`/`yz`/`dm`/`hc`) needs THREE edits, and missing the third is a THE LAW rule 1 bug that
+// is INVISIBLE ON A SINGLE DEVICE:
+//
+//   1. js/game-stats.js    - an ensureXx() + the recordXx() writer
+//   2. js/game-stats-ui.js - a screen that actually RENDERS it (stored is not enough)
+//   3. js/players-agg.js   - an explicit branch in aggregatePlayers()
+//
+// Without (3) the cross-device combine silently drops the counter, so the game's own Stats screen
+// reads ZEROES the moment a person's second device syncs - even though total/byDiff stay correct
+// and every device's local store is perfectly intact. That is the worst shape a data bug can take
+// here: nothing is lost, but the player is told it is.
+//
+// The root file says this "was missed twice in a row (Dots and Boxes, then Boggle), both caught
+// only by opening My Stats in a browser". The per-game regression cases above are the fix for
+// those two - but they are HAND-WRITTEN, so a brand-new game's sub-counter has no case and nobody
+// is reminded to add one. This block is structural instead: it discovers the sub-counters from
+// game-stats.js itself, so a new one is covered the day it is written.
+{
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const read = (p) => readFileSync(join(HERE, p), 'utf8');
+
+  const statsSrc = read('js/game-stats.js');
+  const aggSrc = read('js/players-agg.js');
+  const uiSrc = read('js/game-stats-ui.js');
+
+  // Every `function ensureXx(g) { if (!g.<key>` in game-stats.js declares one sub-counter key.
+  const keys = [...new Set(
+    [...statsSrc.matchAll(/function ensure[A-Z]\w*\s*\(\s*(\w+)\s*\)\s*\{\s*if\s*\(\s*!\1\.(\w+)/g)]
+      .map((m) => m[2])
+  )].sort();
+
+  ok('found the sub-counter keys in game-stats.js', keys.length >= 10);
+
+  for (const k of keys) {
+    // players-agg reads each record's games entry as `src`; a branch it does not name is dropped.
+    ok(`sub-counter "${k}" has a players-agg branch (else it zeroes on a 2nd device)`,
+      new RegExp(`src\\.${k}\\b`).test(aggSrc));
+    // My Stats renders from `rec`; stored-but-never-shown is rule 1 all over again.
+    ok(`sub-counter "${k}" is rendered by My Stats (stored is not enough)`,
+      new RegExp(`rec\\.${k}\\b`).test(uiSrc));
+  }
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
