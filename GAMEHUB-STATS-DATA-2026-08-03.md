@@ -221,11 +221,17 @@ share a player code OR a canonical profile name, transitively, including the rep
 `NAME_ALIAS` map for `matt`→`mattyice` and `lill`→`lili`). This produced **98 person-groups** from
 the 111 raw device records.
 
-**Person keys are synthetic (`P1`, `P2`, ...), not the app's real internal identity key.** The
-app's real internal key for a code-linked person is literally `code:<the 5-character player
-code>` — printing that would put a player code in this document, which is a hard constraint this
-pass must not violate. The synthetic ids below are stable only within this document, ordered by
-total plays descending; they carry no meaning outside it.
+**Device ids are real** (truncated to the first 8 characters, as requested), so a row here can be
+matched directly against the raw `players/<deviceId>` node in the snapshot or against a specific
+device's own `localStorage`. **Player codes are not shown, on purpose** — the app's internal
+identity-graph key for a code-linked person is literally `code:` followed by that person's real
+5-character player code (the same code format found under `profile.playerId` and in the
+`usernames/` registry); printing that, or a code by itself, would put a real player code in a file
+committed to a public repo, which the task's explicit hard constraint forbids. The "Has player
+code" column answers the only question a code actually needs to answer here (yes/no); if the
+document's owner needs the codes themselves for follow-up (e.g. to look someone up in the
+`usernames/` registry), that requires reading the ungitignored snapshot file directly, not this
+document.
 
 "Hidden from leaderboard" mirrors `js/leaderboard-ui.js`'s own two-stage hiding logic exactly (see
 Section 9 for the full explanation of each reason code): a person is hidden if their device id(s)
@@ -236,106 +242,106 @@ overlay omits them.
 
 ### Generated: Roster (ALL aggregated persons)
 
-| Person key | Display name | Devices | Has player code | First activity (UTC) | Last activity (UTC) | Total plays (all 19 games) | Hidden from leaderboard |
+| Display name | Device ids (truncated to 8 chars) | Devices | Has player code | First activity (UTC) | Last activity (UTC) | Total plays (all 19 games) | Hidden from leaderboard |
 |---|---|---|---|---|---|---|---|
-| P1 | *TP* | 1 | yes | 2026-08-01T18:09:17.128Z | 2026-08-01T18:09:17.128Z | 466 | no |
-| P2 | Jojopow | 1 | yes | 2026-08-02T22:02:49.924Z | 2026-08-02T22:02:49.924Z | 321 | no |
-| P3 | MattyIce | 5 | yes | 2026-07-17T16:49:00.631Z | 2026-08-03T15:02:27.619Z | 313 | no |
-| P4 | King of Games | 2 | yes | 2026-07-20T16:03:10.490Z | 2026-08-03T00:25:36.937Z | 252 | no |
-| P5 | Lili | 2 | yes | 2026-08-03T14:16:46.164Z | 2026-08-03T14:56:02.515Z | 126 | no |
-| P6 | Brian Spalding | 1 | yes | 2026-07-31T21:00:26.403Z | 2026-07-31T21:00:26.403Z | 110 | no |
-| P7 | Andrew P | 1 | yes | 2026-08-01T01:26:49.298Z | 2026-08-01T01:26:49.298Z | 78 | no |
-| P8 | Sam | 1 | yes | 2026-07-28T14:35:49.927Z | 2026-07-28T14:35:49.927Z | 69 | no |
-| P9 | Bego | 1 | yes | 2026-08-01T17:24:05.562Z | 2026-08-01T17:24:05.562Z | 62 | no |
-| P10 | Liz | 1 | yes | 2026-07-29T02:47:09.216Z | 2026-07-29T02:47:09.216Z | 53 | no |
-| P11 | Allie | 1 | yes | 2026-07-31T04:14:49.659Z | 2026-07-31T04:14:49.659Z | 51 | no |
-| P12 | Anita Bonita | 3 | yes | 2026-07-15T20:58:01.086Z | 2026-08-03T09:18:20.496Z | 36 | no |
-| P13 | (blank) | 1 | no | 2026-07-25T13:54:17.967Z | 2026-07-25T13:54:17.967Z | 16 | YES (nameless-or-placeholder) |
-| P14 | Unai | 1 | yes | 2026-08-03T14:56:23.370Z | 2026-08-03T14:56:23.370Z | 15 | no |
-| P15 | Rick | 1 | yes | 2026-07-31T01:34:10.482Z | 2026-07-31T01:34:10.482Z | 8 | no |
-| P16 | Natalia | 1 | yes | 2026-07-23T01:24:28.850Z | 2026-07-23T01:24:28.850Z | 8 | no |
-| P17 | Tester | 1 | yes | 2026-07-29T04:53:57.101Z | 2026-07-29T04:53:57.101Z | 6 | YES (hidden-name-prefix) |
-| P18 | test | 2 | yes | 2026-07-18T19:35:27.295Z | 2026-07-28T23:47:07.661Z | 4 | YES (hidden-name-prefix) |
-| P19 | Andrew Powell | 1 | yes | 2026-07-31T01:04:08.294Z | 2026-07-31T01:04:08.294Z | 4 | no |
-| P20 | (blank) | 1 | no | 2026-07-22T03:49:03.785Z | 2026-07-22T03:49:03.785Z | 3 | YES (nameless-or-placeholder) |
-| P21 | TestPlayer | 4 | no | 2026-07-29T02:57:56.006Z | 2026-07-29T04:11:34.286Z | 3 | YES (hidden-name-prefix) |
-| P22 | (blank) | 1 | no | 2026-07-22T05:07:54.614Z | 2026-07-22T05:07:54.614Z | 3 | YES (nameless-or-placeholder) |
-| P23 | (blank) | 1 | no | 2026-07-16T13:32:41.708Z | 2026-07-16T13:32:41.708Z | 2 | YES (nameless-or-placeholder) |
-| P24 | hdj | 1 | yes | 2026-07-30T16:50:31.651Z | 2026-07-30T16:50:31.651Z | 2 | no |
-| P25 | (blank) | 1 | no | 2026-07-25T02:49:05.495Z | 2026-07-25T02:49:05.495Z | 2 | YES (nameless-or-placeholder) |
-| P26 | (blank) | 1 | no | 2026-07-22T06:19:47.764Z | 2026-07-22T06:19:47.764Z | 2 | YES (nameless-or-placeholder) |
-| P27 | (blank) | 1 | no | 2026-07-17T07:14:45.828Z | 2026-07-17T07:14:45.828Z | 2 | YES (nameless-or-placeholder) |
-| P28 | (blank) | 1 | no | 2026-07-18T01:15:16.527Z | 2026-07-18T01:15:16.527Z | 1 | YES (nameless-or-placeholder) |
-| P29 | Zed99 | 1 | no | 2026-07-29T03:04:46.303Z | 2026-07-29T03:04:46.303Z | 1 | no |
-| P30 | (blank) | 1 | no | 2026-07-22T07:30:44.769Z | 2026-07-22T07:30:44.769Z | 1 | YES (nameless-or-placeholder) |
-| P31 | (blank) | 1 | no | 2026-07-18T02:40:13.422Z | 2026-07-18T02:40:13.422Z | 1 | YES (nameless-or-placeholder) |
-| P32 | (blank) | 1 | no | 2026-07-17T07:21:04.832Z | 2026-07-17T07:21:04.832Z | 1 | YES (nameless-or-placeholder) |
-| P33 | (blank) | 1 | no | 2026-07-23T07:27:36.454Z | 2026-07-23T07:27:36.454Z | 0 | YES (nameless-or-placeholder) |
-| P34 | (blank) | 1 | no | 2026-07-19T13:55:26.283Z | 2026-07-19T13:55:26.283Z | 0 | YES (nameless-or-placeholder) |
-| P35 | (blank) | 1 | no | 2026-07-28T23:07:33.348Z | 2026-07-28T23:07:33.348Z | 0 | YES (nameless-or-placeholder) |
-| P36 | (blank) | 1 | no | 2026-07-25T19:57:32.645Z | 2026-07-25T19:57:32.645Z | 0 | YES (nameless-or-placeholder) |
-| P37 | (blank) | 1 | no | 2026-07-22T06:02:22.887Z | 2026-07-22T06:02:22.887Z | 0 | YES (nameless-or-placeholder) |
-| P38 | (blank) | 1 | no | 2026-07-18T02:40:59.518Z | 2026-07-18T02:40:59.518Z | 0 | YES (nameless-or-placeholder) |
-| P39 | (blank) | 1 | no | 2026-07-22T05:34:02.826Z | 2026-07-22T05:34:02.826Z | 0 | YES (nameless-or-placeholder) |
-| P40 | (blank) | 1 | no | 2026-07-18T18:03:17.463Z | 2026-07-18T18:03:17.463Z | 0 | YES (nameless-or-placeholder) |
-| P41 | (blank) | 1 | no | 2026-07-21T23:34:08.399Z | 2026-07-21T23:34:08.399Z | 0 | YES (nameless-or-placeholder) |
-| P42 | (blank) | 1 | no | 2026-07-18T02:23:12.381Z | 2026-07-18T02:23:12.381Z | 0 | YES (nameless-or-placeholder) |
-| P43 | You | 2 | yes | 2026-07-22T19:07:18.931Z | 2026-07-29T04:56:22.386Z | 0 | YES (nameless-or-placeholder) |
-| P44 | (blank) | 1 | no | 2026-07-25T00:41:05.516Z | 2026-07-25T00:41:05.516Z | 0 | YES (nameless-or-placeholder) |
-| P45 | (blank) | 1 | no | 2026-07-25T01:12:36.285Z | 2026-07-25T01:12:36.285Z | 0 | YES (nameless-or-placeholder) |
-| P46 | (blank) | 1 | no | 2026-07-18T02:17:12.500Z | 2026-07-18T02:17:12.500Z | 0 | YES (nameless-or-placeholder) |
-| P47 | (blank) | 1 | no | 2026-07-29T02:59:24.407Z | 2026-07-29T02:59:24.407Z | 0 | YES (nameless-or-placeholder) |
-| P48 | (blank) | 1 | no | 2026-07-22T07:30:39.908Z | 2026-07-22T07:30:39.908Z | 0 | YES (nameless-or-placeholder) |
-| P49 | (blank) | 1 | no | 2026-07-22T08:42:36.869Z | 2026-07-22T08:42:36.869Z | 0 | YES (nameless-or-placeholder) |
-| P50 | (blank) | 1 | no | 2026-07-18T19:51:18.016Z | 2026-07-18T19:51:18.016Z | 0 | YES (nameless-or-placeholder) |
-| P51 | (blank) | 1 | no | 2026-07-22T05:18:59.849Z | 2026-07-22T05:18:59.849Z | 0 | YES (nameless-or-placeholder) |
-| P52 | (blank) | 1 | no | 2026-07-20T02:26:37.193Z | 2026-07-20T02:26:37.193Z | 0 | YES (nameless-or-placeholder) |
-| P53 | (blank) | 1 | no | 2026-07-22T08:14:37.036Z | 2026-07-22T08:14:37.036Z | 0 | YES (nameless-or-placeholder) |
-| P54 | (blank) | 1 | no | 2026-07-22T17:17:48.727Z | 2026-07-22T17:17:48.727Z | 0 | YES (nameless-or-placeholder) |
-| P55 | (blank) | 1 | no | 2026-07-18T19:25:57.103Z | 2026-07-18T19:25:57.103Z | 0 | YES (nameless-or-placeholder) |
-| P56 | (blank) | 1 | no | 2026-07-19T02:31:42.314Z | 2026-07-19T02:31:42.314Z | 0 | YES (nameless-or-placeholder) |
-| P57 | (blank) | 1 | no | 2026-07-19T07:06:30.755Z | 2026-07-19T07:06:30.755Z | 0 | YES (nameless-or-placeholder) |
-| P58 | (blank) | 1 | no | 2026-07-18T19:48:41.120Z | 2026-07-18T19:48:41.120Z | 0 | YES (nameless-or-placeholder) |
-| P59 | (blank) | 1 | no | 2026-07-22T19:43:04.477Z | 2026-07-22T19:43:04.477Z | 0 | YES (nameless-or-placeholder) |
-| P60 | (blank) | 1 | no | 2026-07-18T17:48:02.679Z | 2026-07-18T17:48:02.679Z | 0 | YES (nameless-or-placeholder) |
-| P61 | Ooo | 1 | yes | 2026-07-31T13:03:38.526Z | 2026-07-31T13:03:38.526Z | 0 | no |
-| P62 | (blank) | 1 | no | 2026-07-18T06:03:21.603Z | 2026-07-18T06:03:21.603Z | 0 | YES (nameless-or-placeholder) |
-| P63 | (blank) | 1 | no | 2026-07-22T08:20:59.957Z | 2026-07-22T08:20:59.957Z | 0 | YES (nameless-or-placeholder) |
-| P64 | (blank) | 1 | no | 2026-07-17T16:12:42.958Z | 2026-07-17T16:12:42.958Z | 0 | YES (nameless-or-placeholder) |
-| P65 | (blank) | 1 | no | 2026-07-29T15:43:36.568Z | 2026-07-29T15:43:36.568Z | 0 | YES (nameless-or-placeholder) |
-| P66 | (blank) | 1 | no | 2026-07-17T07:14:55.052Z | 2026-07-17T07:14:55.052Z | 0 | YES (nameless-or-placeholder) |
-| P67 | (blank) | 1 | no | 2026-07-17T17:01:55.210Z | 2026-07-17T17:01:55.210Z | 0 | YES (nameless-or-placeholder) |
-| P68 | (blank) | 1 | no | 2026-07-19T06:03:33.982Z | 2026-07-19T06:03:33.982Z | 0 | YES (nameless-or-placeholder) |
-| P69 | (blank) | 1 | no | 2026-07-22T06:17:28.834Z | 2026-07-22T06:17:28.834Z | 0 | YES (nameless-or-placeholder) |
-| P70 | (blank) | 1 | no | 2026-07-18T03:33:48.220Z | 2026-07-18T03:33:48.220Z | 0 | YES (nameless-or-placeholder) |
-| P71 | Joe5 | 1 | yes | 2026-07-28T22:37:04.643Z | 2026-07-28T22:37:04.643Z | 0 | no |
-| P72 | (blank) | 1 | no | 2026-07-18T02:23:58.372Z | 2026-07-18T02:23:58.372Z | 0 | YES (nameless-or-placeholder) |
-| P73 | (blank) | 1 | no | 2026-07-18T19:51:24.141Z | 2026-07-18T19:51:24.141Z | 0 | YES (nameless-or-placeholder) |
-| P74 | (blank) | 1 | no | 2026-07-17T16:44:05.196Z | 2026-07-17T16:44:05.196Z | 0 | YES (nameless-or-placeholder) |
-| P75 | (blank) | 1 | no | 2026-07-19T18:49:58.837Z | 2026-07-19T18:49:58.837Z | 0 | YES (nameless-or-placeholder) |
-| P76 | (blank) | 1 | no | 2026-07-18T02:18:09.375Z | 2026-07-18T02:18:09.375Z | 0 | YES (nameless-or-placeholder) |
-| P77 | (blank) | 1 | no | 2026-07-18T01:20:19.898Z | 2026-07-18T01:20:19.898Z | 0 | YES (nameless-or-placeholder) |
-| P78 | (blank) | 1 | no | 2026-07-22T19:44:00.680Z | 2026-07-22T19:44:00.680Z | 0 | YES (nameless-or-placeholder) |
-| P79 | (blank) | 1 | no | 2026-07-22T07:20:33.899Z | 2026-07-22T07:20:33.899Z | 0 | YES (nameless-or-placeholder) |
-| P80 | (blank) | 1 | no | 2026-07-19T06:07:49.373Z | 2026-07-19T06:07:49.373Z | 0 | YES (nameless-or-placeholder) |
-| P81 | (blank) | 1 | no | 2026-07-22T05:01:01.828Z | 2026-07-22T05:01:01.828Z | 0 | YES (nameless-or-placeholder) |
-| P82 | (blank) | 1 | no | 2026-07-19T07:29:19.538Z | 2026-07-19T07:29:19.538Z | 0 | YES (nameless-or-placeholder) |
-| P83 | (blank) | 1 | no | 2026-07-22T09:05:58.930Z | 2026-07-22T09:05:58.930Z | 0 | YES (nameless-or-placeholder) |
-| P84 | (blank) | 1 | no | 2026-07-29T21:03:06.690Z | 2026-07-29T21:03:06.690Z | 0 | YES (nameless-or-placeholder) |
-| P85 | Joe | 1 | yes | 2026-07-29T00:34:22.975Z | 2026-07-29T00:34:22.975Z | 0 | no |
-| P86 | (blank) | 1 | no | 2026-07-22T06:01:13.649Z | 2026-07-22T06:01:13.649Z | 0 | YES (nameless-or-placeholder) |
-| P87 | (blank) | 1 | no | 2026-07-19T07:15:52.021Z | 2026-07-19T07:15:52.021Z | 0 | YES (nameless-or-placeholder) |
-| P88 | (blank) | 1 | no | 2026-07-28T14:00:20.029Z | 2026-07-28T14:00:20.029Z | 0 | YES (nameless-or-placeholder) |
-| P89 | (blank) | 1 | no | 2026-07-19T02:49:31.374Z | 2026-07-19T02:49:31.374Z | 0 | YES (nameless-or-placeholder) |
-| P90 | (blank) | 1 | no | 2026-07-18T02:20:49.380Z | 2026-07-18T02:20:49.380Z | 0 | YES (nameless-or-placeholder) |
-| P91 | (blank) | 1 | no | 2026-07-29T01:13:50.832Z | 2026-07-29T01:13:50.832Z | 0 | YES (nameless-or-placeholder) |
-| P92 | (blank) | 1 | no | 2026-07-17T23:36:55.393Z | 2026-07-17T23:36:55.393Z | 0 | YES (nameless-or-placeholder) |
-| P93 | (blank) | 1 | no | 2026-07-29T00:02:25.569Z | 2026-07-29T00:02:25.569Z | 0 | YES (nameless-or-placeholder) |
-| P94 | (blank) | 1 | no | 2026-07-15T20:34:15.364Z | 2026-07-15T20:34:15.364Z | 0 | YES (nameless-or-placeholder) |
-| P95 | (blank) | 1 | no | 2026-07-19T18:54:29.709Z | 2026-07-19T18:54:29.709Z | 0 | YES (nameless-or-placeholder) |
-| P96 | (blank) | 1 | no | 2026-07-18T02:22:13.418Z | 2026-07-18T02:22:13.418Z | 0 | YES (nameless-or-placeholder) |
-| P97 | (blank) | 1 | no | 2026-07-18T01:00:23.235Z | 2026-07-18T01:00:23.235Z | 0 | YES (nameless-or-placeholder) |
-| P98 | (blank) | 1 | no | 2026-07-29T02:57:19.101Z | 2026-07-29T02:57:19.101Z | 0 | YES (nameless-or-placeholder) |
+| *TP* | 01d14279 | 1 | yes | 2026-08-01T18:09:17.128Z | 2026-08-01T18:09:17.128Z | 466 | no |
+| Jojopow | 3c595124 | 1 | yes | 2026-08-02T22:02:49.924Z | 2026-08-02T22:02:49.924Z | 321 | no |
+| MattyIce | 2b0d7c05, 50bf8077, d2, dc1745bc, e0e63fde | 5 | yes | 2026-07-17T16:49:00.631Z | 2026-08-03T15:02:27.619Z | 313 | no |
+| King of Games | 090215fa, 8829ec63 | 2 | yes | 2026-07-20T16:03:10.490Z | 2026-08-03T00:25:36.937Z | 252 | no |
+| Lili | 288dc3cd, 85335c5a | 2 | yes | 2026-08-03T14:16:46.164Z | 2026-08-03T14:56:02.515Z | 126 | no |
+| Brian Spalding | f46d2144 | 1 | yes | 2026-07-31T21:00:26.403Z | 2026-07-31T21:00:26.403Z | 110 | no |
+| Andrew P | 8da7f9a7 | 1 | yes | 2026-08-01T01:26:49.298Z | 2026-08-01T01:26:49.298Z | 78 | no |
+| Sam | 6fd441d8 | 1 | yes | 2026-07-28T14:35:49.927Z | 2026-07-28T14:35:49.927Z | 69 | no |
+| Bego | 9217aeeb | 1 | yes | 2026-08-01T17:24:05.562Z | 2026-08-01T17:24:05.562Z | 62 | no |
+| Liz | b033506a | 1 | yes | 2026-07-29T02:47:09.216Z | 2026-07-29T02:47:09.216Z | 53 | no |
+| Allie | 4f452e7b | 1 | yes | 2026-07-31T04:14:49.659Z | 2026-07-31T04:14:49.659Z | 51 | no |
+| Anita Bonita | 0b0473a8, 0feee28f, 1f75ff86 | 3 | yes | 2026-07-15T20:58:01.086Z | 2026-08-03T09:18:20.496Z | 36 | no |
+| (blank) | 37c84737 | 1 | no | 2026-07-25T13:54:17.967Z | 2026-07-25T13:54:17.967Z | 16 | YES (nameless-or-placeholder) |
+| Unai | a6a1f72b | 1 | yes | 2026-08-03T14:56:23.370Z | 2026-08-03T14:56:23.370Z | 15 | no |
+| Rick | 65f8dfa9 | 1 | yes | 2026-07-31T01:34:10.482Z | 2026-07-31T01:34:10.482Z | 8 | no |
+| Natalia | 660e7098 | 1 | yes | 2026-07-23T01:24:28.850Z | 2026-07-23T01:24:28.850Z | 8 | no |
+| Tester | 86efbadc | 1 | yes | 2026-07-29T04:53:57.101Z | 2026-07-29T04:53:57.101Z | 6 | YES (hidden-name-prefix) |
+| test | 081a6b45, f8ad1b82 | 2 | yes | 2026-07-18T19:35:27.295Z | 2026-07-28T23:47:07.661Z | 4 | YES (hidden-name-prefix) |
+| Andrew Powell | ba27ea93 | 1 | yes | 2026-07-31T01:04:08.294Z | 2026-07-31T01:04:08.294Z | 4 | no |
+| (blank) | 10278299 | 1 | no | 2026-07-22T03:49:03.785Z | 2026-07-22T03:49:03.785Z | 3 | YES (nameless-or-placeholder) |
+| TestPlayer | 4919b72c, 4f7f8cd7, 71fc7c3e, 7f643c13 | 4 | no | 2026-07-29T02:57:56.006Z | 2026-07-29T04:11:34.286Z | 3 | YES (hidden-name-prefix) |
+| (blank) | 51e9517a | 1 | no | 2026-07-22T05:07:54.614Z | 2026-07-22T05:07:54.614Z | 3 | YES (nameless-or-placeholder) |
+| (blank) | 19bb8f1c | 1 | no | 2026-07-16T13:32:41.708Z | 2026-07-16T13:32:41.708Z | 2 | YES (nameless-or-placeholder) |
+| hdj | 5ab40560 | 1 | yes | 2026-07-30T16:50:31.651Z | 2026-07-30T16:50:31.651Z | 2 | no |
+| (blank) | 89721e62 | 1 | no | 2026-07-25T02:49:05.495Z | 2026-07-25T02:49:05.495Z | 2 | YES (nameless-or-placeholder) |
+| (blank) | a525ed8c | 1 | no | 2026-07-22T06:19:47.764Z | 2026-07-22T06:19:47.764Z | 2 | YES (nameless-or-placeholder) |
+| (blank) | df6d92dc | 1 | no | 2026-07-17T07:14:45.828Z | 2026-07-17T07:14:45.828Z | 2 | YES (nameless-or-placeholder) |
+| (blank) | 1b3c162d | 1 | no | 2026-07-18T01:15:16.527Z | 2026-07-18T01:15:16.527Z | 1 | YES (nameless-or-placeholder) |
+| Zed99 | b4f7e488 | 1 | no | 2026-07-29T03:04:46.303Z | 2026-07-29T03:04:46.303Z | 1 | no |
+| (blank) | c0b6df4d | 1 | no | 2026-07-22T07:30:44.769Z | 2026-07-22T07:30:44.769Z | 1 | YES (nameless-or-placeholder) |
+| (blank) | d9c472eb | 1 | no | 2026-07-18T02:40:13.422Z | 2026-07-18T02:40:13.422Z | 1 | YES (nameless-or-placeholder) |
+| (blank) | f024b853 | 1 | no | 2026-07-17T07:21:04.832Z | 2026-07-17T07:21:04.832Z | 1 | YES (nameless-or-placeholder) |
+| (blank) | 00939e56 | 1 | no | 2026-07-23T07:27:36.454Z | 2026-07-23T07:27:36.454Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 04df7b9b | 1 | no | 2026-07-19T13:55:26.283Z | 2026-07-19T13:55:26.283Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 074d6e7b | 1 | no | 2026-07-28T23:07:33.348Z | 2026-07-28T23:07:33.348Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 0b45be84 | 1 | no | 2026-07-25T19:57:32.645Z | 2026-07-25T19:57:32.645Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 12878682 | 1 | no | 2026-07-22T06:02:22.887Z | 2026-07-22T06:02:22.887Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 1692bfb8 | 1 | no | 2026-07-18T02:40:59.518Z | 2026-07-18T02:40:59.518Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 1a89d4de | 1 | no | 2026-07-22T05:34:02.826Z | 2026-07-22T05:34:02.826Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 1ac12a95 | 1 | no | 2026-07-18T18:03:17.463Z | 2026-07-18T18:03:17.463Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 1bfc0eea | 1 | no | 2026-07-21T23:34:08.399Z | 2026-07-21T23:34:08.399Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 212787a4 | 1 | no | 2026-07-18T02:23:12.381Z | 2026-07-18T02:23:12.381Z | 0 | YES (nameless-or-placeholder) |
+| You | 224808a1, a8820abd | 2 | yes | 2026-07-22T19:07:18.931Z | 2026-07-29T04:56:22.386Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 22759ab3 | 1 | no | 2026-07-25T00:41:05.516Z | 2026-07-25T00:41:05.516Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 24227fb6 | 1 | no | 2026-07-25T01:12:36.285Z | 2026-07-25T01:12:36.285Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 263e23eb | 1 | no | 2026-07-18T02:17:12.500Z | 2026-07-18T02:17:12.500Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 29925583 | 1 | no | 2026-07-29T02:59:24.407Z | 2026-07-29T02:59:24.407Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 2ac83fb5 | 1 | no | 2026-07-22T07:30:39.908Z | 2026-07-22T07:30:39.908Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 355fadc1 | 1 | no | 2026-07-22T08:42:36.869Z | 2026-07-22T08:42:36.869Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 36cd7348 | 1 | no | 2026-07-18T19:51:18.016Z | 2026-07-18T19:51:18.016Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 393a3d10 | 1 | no | 2026-07-22T05:18:59.849Z | 2026-07-22T05:18:59.849Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 4e05656f | 1 | no | 2026-07-20T02:26:37.193Z | 2026-07-20T02:26:37.193Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 530597a1 | 1 | no | 2026-07-22T08:14:37.036Z | 2026-07-22T08:14:37.036Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 57bf1036 | 1 | no | 2026-07-22T17:17:48.727Z | 2026-07-22T17:17:48.727Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 57e7ce39 | 1 | no | 2026-07-18T19:25:57.103Z | 2026-07-18T19:25:57.103Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 5a78a05e | 1 | no | 2026-07-19T02:31:42.314Z | 2026-07-19T02:31:42.314Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 63c8e009 | 1 | no | 2026-07-19T07:06:30.755Z | 2026-07-19T07:06:30.755Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 726061a5 | 1 | no | 2026-07-18T19:48:41.120Z | 2026-07-18T19:48:41.120Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 744ee838 | 1 | no | 2026-07-22T19:43:04.477Z | 2026-07-22T19:43:04.477Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 7a391710 | 1 | no | 2026-07-18T17:48:02.679Z | 2026-07-18T17:48:02.679Z | 0 | YES (nameless-or-placeholder) |
+| Ooo | 7c37ffa0 | 1 | yes | 2026-07-31T13:03:38.526Z | 2026-07-31T13:03:38.526Z | 0 | no |
+| (blank) | 7ceceeac | 1 | no | 2026-07-18T06:03:21.603Z | 2026-07-18T06:03:21.603Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 7d5402cc | 1 | no | 2026-07-22T08:20:59.957Z | 2026-07-22T08:20:59.957Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 87bc2982 | 1 | no | 2026-07-17T16:12:42.958Z | 2026-07-17T16:12:42.958Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 87de6668 | 1 | no | 2026-07-29T15:43:36.568Z | 2026-07-29T15:43:36.568Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 8941017c | 1 | no | 2026-07-17T07:14:55.052Z | 2026-07-17T07:14:55.052Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 90cb441e | 1 | no | 2026-07-17T17:01:55.210Z | 2026-07-17T17:01:55.210Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 9bb69ca7 | 1 | no | 2026-07-19T06:03:33.982Z | 2026-07-19T06:03:33.982Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 9bdb922d | 1 | no | 2026-07-22T06:17:28.834Z | 2026-07-22T06:17:28.834Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | 9cf5610a | 1 | no | 2026-07-18T03:33:48.220Z | 2026-07-18T03:33:48.220Z | 0 | YES (nameless-or-placeholder) |
+| Joe5 | a7944bd0 | 1 | yes | 2026-07-28T22:37:04.643Z | 2026-07-28T22:37:04.643Z | 0 | no |
+| (blank) | aa2b5524 | 1 | no | 2026-07-18T02:23:58.372Z | 2026-07-18T02:23:58.372Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | acc42bee | 1 | no | 2026-07-18T19:51:24.141Z | 2026-07-18T19:51:24.141Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | b370fcf3 | 1 | no | 2026-07-17T16:44:05.196Z | 2026-07-17T16:44:05.196Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | b4507493 | 1 | no | 2026-07-19T18:49:58.837Z | 2026-07-19T18:49:58.837Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | b6aa2734 | 1 | no | 2026-07-18T02:18:09.375Z | 2026-07-18T02:18:09.375Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | bde5fb76 | 1 | no | 2026-07-18T01:20:19.898Z | 2026-07-18T01:20:19.898Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | beb378cf | 1 | no | 2026-07-22T19:44:00.680Z | 2026-07-22T19:44:00.680Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | c485bbb5 | 1 | no | 2026-07-22T07:20:33.899Z | 2026-07-22T07:20:33.899Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | c51221a9 | 1 | no | 2026-07-19T06:07:49.373Z | 2026-07-19T06:07:49.373Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | cdf49899 | 1 | no | 2026-07-22T05:01:01.828Z | 2026-07-22T05:01:01.828Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | d1967e15 | 1 | no | 2026-07-19T07:29:19.538Z | 2026-07-19T07:29:19.538Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | dbd49530 | 1 | no | 2026-07-22T09:05:58.930Z | 2026-07-22T09:05:58.930Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | dd2fd74d | 1 | no | 2026-07-29T21:03:06.690Z | 2026-07-29T21:03:06.690Z | 0 | YES (nameless-or-placeholder) |
+| Joe | df18091c | 1 | yes | 2026-07-29T00:34:22.975Z | 2026-07-29T00:34:22.975Z | 0 | no |
+| (blank) | dfcdc89e | 1 | no | 2026-07-22T06:01:13.649Z | 2026-07-22T06:01:13.649Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | e4c1f598 | 1 | no | 2026-07-19T07:15:52.021Z | 2026-07-19T07:15:52.021Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | e608877f | 1 | no | 2026-07-28T14:00:20.029Z | 2026-07-28T14:00:20.029Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | e6b670af | 1 | no | 2026-07-19T02:49:31.374Z | 2026-07-19T02:49:31.374Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | e92980cb | 1 | no | 2026-07-18T02:20:49.380Z | 2026-07-18T02:20:49.380Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | e9419a26 | 1 | no | 2026-07-29T01:13:50.832Z | 2026-07-29T01:13:50.832Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | ea838639 | 1 | no | 2026-07-17T23:36:55.393Z | 2026-07-17T23:36:55.393Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | edbe4b5f | 1 | no | 2026-07-29T00:02:25.569Z | 2026-07-29T00:02:25.569Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | f04fcc0f | 1 | no | 2026-07-15T20:34:15.364Z | 2026-07-15T20:34:15.364Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | f29d9f98 | 1 | no | 2026-07-19T18:54:29.709Z | 2026-07-19T18:54:29.709Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | f4dc1b50 | 1 | no | 2026-07-18T02:22:13.418Z | 2026-07-18T02:22:13.418Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | ff079dbe | 1 | no | 2026-07-18T01:00:23.235Z | 2026-07-18T01:00:23.235Z | 0 | YES (nameless-or-placeholder) |
+| (blank) | ffa8db32 | 1 | no | 2026-07-29T02:57:19.101Z | 2026-07-29T02:57:19.101Z | 0 | YES (nameless-or-placeholder) |
 
 ## 4. Person x game matrix
 
@@ -815,6 +821,17 @@ None of these four contribute to any total elsewhere in this document — they a
 
 ### 9.5 Other anomalies observed (flagged, not corrected)
 
+- **A hand-crafted-looking device id: `d2`.** Every other device id in this snapshot is either a
+  `crypto.randomUUID()` string or the app's own fallback shape (`'d-' + random`) — see
+  `js/game-stats.js`'s `deviceId()`. One record's id is the literal two characters `d2`, which
+  matches neither pattern. It carries `profile: {name: "Mattyice", emoji: "🎯", playerId: ""}`
+  (no player code) and **0 total plays**, and is folded into the "MattyIce" roster row (Section 3)
+  purely by NAME match (the identity graph's name-based union, since it has no code to match on).
+  It contributes nothing to any total in this document, but its id shape strongly suggests it was
+  created outside the app's normal client flow (e.g. written directly into Firebase by hand, for
+  testing) rather than by a real device. Flagged for awareness; not excluded by any existing rule,
+  since `HIDDEN_PREFIX`/`HIDDEN_NAMES`/`HIDDEN_NAME_PREFIX` all key off name or a specific id
+  prefix, neither of which this record matches.
 - **A device-name-registry oddity: `*tp*`.** `usernames/` (the app's name-reservation registry)
   holds an entry for the literal string `*tp*` (asterisks included), reserved for a player code
   linked to a person displayed in this document as "*TP*" — the single highest-volume visible
