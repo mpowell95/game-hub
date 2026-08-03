@@ -37,11 +37,15 @@ function isPlayedMatch(room) {
 
 function deviceIdsOf(room) {
   const out = [];
-  for (const seat of ['host', 'guest']) {
-    const p = room[seat];
-    const id = p && (p.deviceId || p.id);
-    if (typeof id === 'string' && id.trim()) out.push(id.trim());
-  }
+  const add = (p) => {
+    const id = p && p.deviceId;
+    if (typeof id === 'string' && id.trim() && !out.includes(id.trim())) out.push(id.trim());
+  };
+  // 2-seat rooms carry host/guest (js/net.js createRoom/joinRoom); the N-player extension
+  // (Chinchon at 3-4 seats) uses a `seats` array instead. Escoba is 2-seat today, but a room
+  // written by a future N-seat build must not silently count as zero players.
+  add(room.host); add(room.guest);
+  if (Array.isArray(room.seats)) for (const s of room.seats) add(s);
   return out;
 }
 
