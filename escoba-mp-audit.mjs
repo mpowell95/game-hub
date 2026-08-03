@@ -8,11 +8,12 @@
 // shipped 2026-07-19 (`c5955a9`). Matches played in that three-day window, plus any committed via
 // the restore/rejoin path with no `mp.opp`, leave no h2h trace. h2h is a floor, not the count.
 //
-// The `rooms/` node is the only surviving record of those matches. This reads it, pairs each
-// finished Escoba room with the two device ids that played it, and prints the exact per-device
-// total. Paste the emitted block into `ESCOBA_MP_KNOWN` in `js/game-stats.js`: every device tops
-// up to it on its next load, including devices that already ran with the lower h2h-only figure
-// (reclassifyEscobaMp moves the shortfall, it does not latch).
+// The `rooms/` node is the only surviving record of those matches. EACH DEVICE NOW AUDITS ITSELF
+// against it on hub load - `stats-net.js`'s reconcileEscobaMp() - so this script is a CROSS-CHECK
+// and a diagnostic, not the mechanism: it shows the whole family's numbers in one table instead of
+// one device's. Use it to confirm the on-device audit landed, or to fill `ESCOBA_MP_KNOWN` in
+// `js/game-stats.js` by hand for a device that somehow never runs its own (both paths only ever
+// raise a count; reclassifyEscobaMp moves the shortfall and does not latch).
 //
 // Read-only, no dependency, same REST pattern as backups/rtdb-backup.mjs and
 // read-device-reports.mjs. Run it where outbound access to the RTDB host is permitted:

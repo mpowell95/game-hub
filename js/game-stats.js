@@ -592,7 +592,34 @@ function escobaMpTarget(st) {
   let known = null;
   try { known = ESCOBA_MP_KNOWN[statsId()] || null; } catch { /* statsId needs localStorage */ }
   if (known) { w = Math.max(w, known.won | 0); l = Math.max(l, known.lost | 0); }
+  const audit = (st.games.escoba || {})._esMpAudit;
+  if (audit && typeof audit === 'object') { w = Math.max(w, audit.won | 0); l = Math.max(l, audit.lost | 0); }
   return { won: w, lost: l };
+}
+
+/**
+ * Record what the server-side `rooms/` node says about this device's finished multiplayer Escoba
+ * matches, then top the reclassification up to it. This is the ONLY source that covers the window
+ * h2h cannot see (multiplayer shipped 2026-07-19, h2h capture began 2026-07-22), and a device can
+ * read it perfectly well itself - `stats-net.js`'s reconcileEscobaMp does exactly that on hub load,
+ * which is why this needs no offline audit run by a human.
+ *
+ * Only ever RAISES the figure (`Math.max` on both components). `rooms/` is live-session state that
+ * ages out, so a later, emptier reading must never walk a count backwards - the same one-way rule
+ * every best-value in this file follows.
+ */
+export function applyEscobaMpAudit(won, lost) {
+  const st = loadStats();
+  const g = st.games.escoba;
+  const prev = (g._esMpAudit && typeof g._esMpAudit === 'object') ? g._esMpAudit : { won: 0, lost: 0 };
+  g._esMpAudit = {
+    won: Math.max(prev.won | 0, won | 0),
+    lost: Math.max(prev.lost | 0, lost | 0),
+    at: new Date().toISOString(),
+  };
+  reclassifyEscobaMp(st);
+  persist(st);
+  return st;
 }
 
 function reclassifyEscobaMp(st) {
@@ -1095,7 +1122,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordHeadToHead, applyEscobaMpAudit,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

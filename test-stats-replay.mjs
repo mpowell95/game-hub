@@ -231,6 +231,28 @@ const FIXTURE_ESCOBA_MP = {
   eq('G: byDiff still sums to total', sum, 54);
 }
 
+// --- scenario H: the rooms/ audit raises the count, and can never lower it ---------
+// The device itself cannot prove a match was multiplayer once h2h missed it, so stats-net.js's
+// reconcileEscobaMp reads the server's rooms/ node on hub load and feeds the real figure in
+// through applyEscobaMpAudit. Rooms are live-session state that ages out, so a later, emptier
+// read must never walk a player's count backwards.
+{
+  freshStore({ 'gamehub.stats': FIXTURE_ESCOBA_MP });
+  gs.loadStats();                                     // h2h floor lands first: 4W/3L
+  gs.applyEscobaMpAudit(6, 4);                        // rooms/ knows about matches h2h never saw
+  let es = gs.loadStats().games.escoba;
+  eq('H: the audit tops the count up to what rooms/ proves', es.byDiff.mp, { played: 10, won: 6, lost: 4 });
+  eq('H: those plays come out of normal, nowhere else', es.byDiff.normal, { played: 16, won: 4, lost: 12 });
+  eq('H: total STILL untouched', es.total, { played: 54, won: 22, lost: 32 });
+
+  gs.applyEscobaMpAudit(1, 1);                        // a later read after rooms/ has been pruned
+  es = gs.loadStats().games.escoba;
+  eq('H: a smaller later reading cannot lower the count', es.byDiff.mp, { played: 10, won: 6, lost: 4 });
+  eq('H: nor hand plays back to normal', es.byDiff.normal, { played: 16, won: 4, lost: 12 });
+  const sum = Object.values(es.byDiff).reduce((n, b) => n + (b.played | 0), 0);
+  eq('H: byDiff still sums to total', sum, 54);
+}
+
 // --- scenario E: a solo-only device must be completely untouched -------------------
 // The overwhelming majority of devices never played Escoba online at all; the migration
 // must be a no-op for them rather than something that reshapes a store it cannot prove

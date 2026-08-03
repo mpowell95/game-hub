@@ -1203,14 +1203,26 @@ Two things about it generalize to any future bucket repair:
   have frozen every device at the h2h-only figure and made the true count unshippable. `total` is
   never touched either way, so nothing can move a device's play count.
 
-**Closing the gap: `escoba-mp-audit.mjs`** (repo root, read-only). The true count for the
-uncaptured window survives only in the server-side `rooms/` node, which a device cannot read. The
-audit pairs each finished Escoba room with the two device ids that played it, prints the exact
-per-device total beside what h2h proves, and emits a paste-ready `ESCOBA_MP_KNOWN` block. Adding an
-entry tops up that device on its next load automatically, including devices that already migrated.
-**It needs outbound access to the RTDB host, which not every session has** — run it where
-`backups/rtdb-backup.mjs` works. Until it is run, `ESCOBA_MP_KNOWN` is empty and the shipped
-numbers are the h2h floor.
+**Closing the gap: the app audits itself.** The true count for the uncaptured window survives only
+in the server-side `rooms/` node — which the DEVICE can read perfectly well, even though a headless
+session may not (the RTDB host is not on every environment's egress allowlist; that is what makes a
+"just run this script" answer the wrong design here). `stats-net.js`'s **`reconcileEscobaMp()`**
+runs on hub load, counts the finished Escoba rooms this device played, and feeds the figure through
+`applyEscobaMpAudit()`, which tops the reclassification up. It is guarded to run once per device
+(`_esMpAudit`), skipped entirely for anyone who never played Escoba, and only ever RAISES — rooms
+age out, so a later, emptier read must not walk a count backwards. Nothing has to be run by hand
+and no device is left behind: one that has been offline since those matches repairs itself the
+first time it opens the hub.
+
+Two deliberate conservatisms in that count: only rooms carrying a `result` are counted (a room with
+moves but no result never reached `_commitStats` on either side, so no play was recorded for it, and
+counting it would steal a play out of `normal` that really was solo), and the seat mapping reads
+`result.winnerId` as a SEAT index (0 = host, 1 = guest), not a device id.
+
+`escoba-mp-audit.mjs` (repo root, read-only) does the same sum across ALL devices at once and prints
+it as a table. It is now a **diagnostic and cross-check**, not the mechanism — useful for seeing the
+whole family's numbers in one place, and for filling `ESCOBA_MP_KNOWN` by hand if a device somehow
+never runs its own audit. It needs RTDB egress; the on-device path does not.
 
 Regression cases: `test-stats-replay.mjs` scenarios D (real h2h rows from the 2026-08-03 snapshot),
 E (a device with no h2h must be untouched — the common case), F (h2h claiming more than the bucket

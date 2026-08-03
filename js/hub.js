@@ -8,7 +8,7 @@
 
 import { loadProfile } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
-import { syncMyStats } from './stats-net.js';
+import { syncMyStats, reconcileEscobaMp } from './stats-net.js';
 // The first-run "choose a name" gate lives in name-gate.js now (2026-07-31) so the hub and every
 // standalone game page run the same one; the profile/code/username plumbing it used to do inline
 // here moved with it.
@@ -328,7 +328,14 @@ class Hub {
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
    *  syncMyStats never throws and reports its own failures loudly (see stats-net.js's syncHealth) -
    *  this guard is only for a synchronous import-time fault, and must not re-swallow the result. */
-  _syncStats() { try { syncMyStats(); } catch (err) { console.error('[hub] stats sync could not start', err); } }
+  _syncStats() {
+    try { syncMyStats(); } catch (err) { console.error('[hub] stats sync could not start', err); }
+    // One-time, self-healing repair of Escoba's multiplayer play counts (see stats-net.js's
+    // reconcileEscobaMp). Fire-and-forget and independent of the sync above: it must still run on a
+    // device whose mirror is failing, because it only ever writes LOCALLY - the next successful
+    // sync carries the corrected numbers up on its own.
+    try { reconcileEscobaMp(); } catch (err) { console.error('[hub] Escoba MP audit could not start', err); }
+  }
 
   render() {
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).

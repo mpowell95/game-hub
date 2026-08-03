@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { statsId, loadStats } from './game-stats.js';
+import { statsId, loadStats, deviceId, applyEscobaMpAudit } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 
@@ -110,6 +110,65 @@ export async function syncMyStats() {
   }
 }
 
+/**
+ * Establish, from the server, how many multiplayer Escoba matches THIS device actually finished -
+ * the one number the device cannot work out on its own.
+ *
+ * Escoba filed every online match under the AI's `normal` tier until 2026-08-03. `game-stats.js`'s
+ * reclassifyEscobaMp moves them into `mp`, but the only on-device proof a match was multiplayer is
+ * an `h2h.escoba` row, and h2h capture began 2026-07-22 while Escoba multiplayer shipped
+ * 2026-07-19 (`c5955a9`). Matches in that window - and any committed through the restore/rejoin
+ * path with no `mp.opp` - left no local trace at all, so h2h alone permanently under-counts.
+ *
+ * `rooms/` is the surviving record, and every device already has read access to it. So the audit
+ * runs HERE, on the device, on hub load: no human has to run a script, and a device that has never
+ * been online since those matches fixes itself the first time it syncs.
+ *
+ * Deliberately conservative in both directions:
+ *   - Only rooms carrying a `result` count. A room with moves but no result never reached
+ *     `_commitStats` on either side, so no play was ever recorded for it; counting those would
+ *     steal plays out of `normal` that really were solo games.
+ *   - The figure only ever RAISES (`applyEscobaMpAudit` takes Math.max). Rooms are live-session
+ *     state that ages out, so a later, emptier read must not walk anyone's count backwards.
+ *   - It runs once per device (guarded by the stored `_esMpAudit`) and is skipped entirely for a
+ *     device that has never played Escoba, so it costs one small read, once, for a handful of
+ *     people, and nothing at all for everyone else.
+ * Never throws and never blocks a sync; a failure just leaves the h2h floor in place and retries
+ * on the next load.
+ */
+export async function reconcileEscobaMp() {
+  try {
+    const st = loadStats();
+    const esc = (st.games || {}).escoba || {};
+    if (esc._esMpAudit) return false;                       // already audited this device
+    if (((esc.total || {}).played | 0) === 0) return false;  // never played Escoba at all
+    if (!(await init())) return false;
+
+    const snap = await _api.get(_api.ref(_db, 'rooms'));
+    const rooms = snap.val() || {};
+    const me = deviceId();
+    let won = 0, lost = 0, seen = 0;
+    for (const code of Object.keys(rooms)) {
+      const r = rooms[code] || {};
+      if (r.game !== 'escoba') continue;
+      const res = r.result;
+      if (!res || typeof res !== 'object' || res.winnerId == null) continue;
+      // Seat 0 is always the host and seat 1 the guest (escoba/js/ui.js _mpHostStart /
+      // _mpGuestStartMatch), and `result.winnerId` is that seat index, not a device id.
+      const mySeat = (r.host && r.host.deviceId === me) ? 0 : (r.guest && r.guest.deviceId === me) ? 1 : null;
+      if (mySeat == null) continue;
+      seen++;
+      if ((res.winnerId | 0) === mySeat) won++; else lost++;
+    }
+    applyEscobaMpAudit(won, lost);
+    console.info(`[stats-net] Escoba multiplayer audit: ${seen} finished match(es) found in rooms/ for this device (${won}W/${lost}L).`);
+    return true;
+  } catch (err) {
+    console.error('[stats-net] Escoba multiplayer audit failed; the h2h-derived floor stands and this will retry on the next load.', err);
+    return false;
+  }
+}
+
 /** Live-watch every device's record (Admin Insights + Leaderboard). cb({deviceId: record}). Returns unsubscribe. */
 export async function watchPlayers(cb) {
   if (!(await init())) return () => {};
@@ -188,4 +247,4 @@ export async function adminReleaseUsername(name) {
   catch { return false; }
 }
 
-export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername };
+export default { init, syncMyStats, syncHealth, watchPlayers, readPlayersOnce, usernameStatus, claimUsername, adminReleaseUsername, reconcileEscobaMp };

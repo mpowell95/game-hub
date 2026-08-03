@@ -211,8 +211,10 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   `normal` by `reclassifyEscobaMp` in `js/game-stats.js` (see `js/CLAUDE.md`). **Its h2h-derived
   figure is a floor, not the count:** MP shipped here on 2026-07-19 (`c5955a9`) but h2h capture
   began 2026-07-22 (`37275f8`), so matches in that window left no trace on the device at all. The
-  exact figure lives only in the server-side `rooms/` node; `escoba-mp-audit.mjs` reads it and
-  emits the correction entries, and the migration tops devices up rather than latching.
+  exact figure lives only in the server-side `rooms/` node, so `stats-net.js`'s
+  `reconcileEscobaMp()` reads it ON THE DEVICE at hub load and tops the count up (once per device,
+  raise-only). Nothing needs running by hand; `escoba-mp-audit.mjs` is a cross-check that prints
+  the same sum for every device at once.
 - i18n: `escoba/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
   (`easy`/`normal`/`hard`), `deckMode` (`spanish`/`american`), and setup `mode`
   (`solo`/`host`/`join`) stay canonical; only their display labels translate. Card-suit terms
