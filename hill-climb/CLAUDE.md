@@ -221,6 +221,39 @@ picks it up on the next one, so it self-heals with no extra machinery.
 If you ever touch the preview path, reproduce with a throttled stylesheet rather than a normal load
 — a warm cache hides this bug completely, which is why it shipped.
 
+## iOS selected the HUD when you tapped a pedal (2026-08-02)
+
+Matt: *"If you quickly tap the gas or brake a few times, the copy/paste screen pops up. Sometimes
+the pedal is selected. It interferes with the game."*
+
+Rapid taps read as a **double tap**, which is iOS's select-a-word gesture. Safari then hunts for the
+nearest selectable text and latched onto the HUD's distance readout — which is why the
+Copy/Translate bar appeared at the TOP of the screen while the finger was on a pedal at the bottom.
+`-webkit-user-select: none` on `.hc-root` did not stop it: Safari does not reliably inherit that
+into buttons, and the double-tap gesture bypasses it anyway.
+
+Four layers, because no single one of them holds on its own:
+
+1. **`-webkit-user-select` / `-webkit-touch-callout` / `-webkit-tap-highlight-color` on
+   `.hc-root *`**, not just the root — the non-inheritance bug is the whole reason for the
+   descendant selector.
+2. **`.hc-pedal > * { pointer-events: none }`** so a touch can never land on the label text node;
+   the button itself is always the target.
+3. **A non-passive `touchstart` that calls `preventDefault()`** on each pedal. This is what stops
+   the gesture ever starting. Because preventing the touch default makes the synthesised pointer
+   events unreliable, **touch now drives the pedals directly** (keyed by `Touch.identifier`,
+   prefixed `t` so it cannot collide with a `pointerId`) and the pointer path early-returns on
+   `pointerType === 'touch'`. One authoritative path per input device; multi-touch still works
+   because both paths key the same `this.pointers` map.
+4. **A `selectstart` block plus a `selectionchange` backstop** that drops any selection anchored
+   inside `.hc-root`. This is the layer that holds *regardless of which gesture path Safari used*,
+   and it is the one worth keeping if the others are ever refactored.
+
+Browser-verified (Chromium, touch emulation, 402x874 dpr 3): 12 rapid taps produce no selection and
+no stuck pedal; a held touch drives; `touchend` releases; both pedals held at once release
+independently; and a **deliberately forced** selection over the distance readout is removed
+immediately. Mouse and keyboard paths re-smoke-tested for regression.
+
 ## Known gaps / next steps
 
 - **No multiplayer.** There is no shared state to lockstep here (see `js/CLAUDE.md`'s Boggle
@@ -233,3 +266,6 @@ If you ever touch the preview path, reproduce with a throttled stylesheet rather
   does not shrink the car to a speck; a wide short window gets the 68 px/m clamp and has not been
   play-tested.
 - **No sound.** Neither has any other game in this repo.
+- **The touch-input fixes cannot be regression-tested headlessly.** `js/test.js` is node-only and
+  the behaviour is a browser gesture, so it is covered by the scripted Chromium pass described
+  above rather than by the suite. Re-run that pass by hand if `bindPlay()` is touched.

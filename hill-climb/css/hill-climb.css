@@ -39,6 +39,20 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Applied to EVERY descendant, not just the root, because Safari does not reliably inherit
+   -webkit-user-select into buttons and their text nodes — which is how a double-tap on a pedal
+   ended up selecting the HUD's distance readout and summoning the Copy/Translate bar (2026-08-02).
+   The JS half of that fix is in ui.js's bindPlay(); this is the half that stops the labels being
+   selectable targets in the first place. */
+.hc-root,
+.hc-root * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .hc-root button { font-family: inherit; cursor: pointer; }
 .hc-root .hc-ico { width: 1.15em; height: 1.15em; vertical-align: -0.22em; flex: none; }
 
@@ -385,6 +399,9 @@
 .hc-root .hc-pedal.is-down { transform: translateY(4px); box-shadow: 0 1px 0 var(--hc-line); background: linear-gradient(#98a1ad, #67707d); }
 .hc-root .hc-pedal-brake { left: max(env(safe-area-inset-left, 0px), 12px); }
 .hc-root .hc-pedal-gas { right: max(env(safe-area-inset-right, 0px), 12px); background: linear-gradient(#c6cdd6, #86909e); }
+/* The label and the grille are decoration: the touch target is always the button itself, so a tap
+   can never land on a text node. */
+.hc-root .hc-pedal > * { pointer-events: none; }
 .hc-root .hc-pedal-face {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -99,7 +99,17 @@ class HillClimb {
     this._onKeyUp = (e) => this.onKey(e, false);
     this._onResize = () => { if (this.renderer) this.renderer.resize(); this.drawPreview(); };
     this._onVis = () => { if (document.visibilityState === 'hidden' && this.screen === 'play') this.setPaused(true); };
-    this._onPointerUp = (e) => this.releasePointer(e.pointerId);
+    this._onPointerUp = (e) => { if (e.pointerType !== 'touch') this.releasePointer(e.pointerId); };
+    this._onTouchEnd = (e) => { for (const t of e.changedTouches) this.releasePointer(`t${t.identifier}`); };
+    // Nothing in this game is text you would ever want to select, and on iOS a stray selection is
+    // what summons the Copy/Translate bar over the HUD (see bindPlay). Block it starting, and drop
+    // any selection that still appears — that second half is the backstop that holds regardless of
+    // which gesture path Safari took to create it.
+    this._onSelectStart = (e) => e.preventDefault();
+    this._onSelectionChange = () => {
+      const sel = document.getSelection && document.getSelection();
+      if (sel && !sel.isCollapsed && this.root.contains(sel.anchorNode)) sel.removeAllRanges();
+    };
     this._offLang = onLangChange(() => this.rerender());
 
     window.addEventListener('keydown', this._onKeyDown);
@@ -110,6 +120,10 @@ class HillClimb {
     this._offViewport = onViewportResize(this._onResize);
     window.addEventListener('pointerup', this._onPointerUp);
     window.addEventListener('pointercancel', this._onPointerUp);
+    window.addEventListener('touchend', this._onTouchEnd);
+    window.addEventListener('touchcancel', this._onTouchEnd);
+    document.addEventListener('selectstart', this._onSelectStart);
+    document.addEventListener('selectionchange', this._onSelectionChange);
     document.addEventListener('visibilitychange', this._onVis);
 
     this.root.classList.add('hc-root');
@@ -453,14 +467,45 @@ class HillClimb {
     </div>`;
   }
 
+  /**
+   * Pedal input. TOUCH and POINTER are handled as two separate paths on purpose (2026-08-02).
+   *
+   * The bug: tapping a pedal quickly a few times on iOS popped up the Copy/Translate bar and
+   * sometimes left the pedal looking selected. Rapid taps read as a DOUBLE TAP, which is iOS's
+   * select-a-word gesture; Safari then hunts for the nearest selectable text and latches onto the
+   * HUD's distance readout, so the callout appeared over the top of the screen even though the
+   * finger was on a pedal at the bottom. `-webkit-user-select: none` on the root did not stop it —
+   * Safari does not reliably inherit it into buttons, and the double-tap gesture bypasses it.
+   *
+   * The cure that actually works is to stop the gesture ever starting: a NON-PASSIVE touchstart
+   * whose default is prevented. But preventing the touch default makes it unwise to keep relying on
+   * the pointer events that touch synthesises, so touch now drives the pedals directly (keyed by
+   * `Touch.identifier`, prefixed `t` so it cannot collide with a pointerId) and the pointer path
+   * ignores `pointerType === 'touch'` entirely. One authoritative path per input device, no
+   * double-counting, and multi-touch (both pedals at once) still works because both paths key the
+   * same `this.pointers` map.
+   *
+   * ui.js's constructor adds the belt-and-braces half: selectstart is blocked and any selection
+   * that still sneaks through is dropped on selectionchange.
+   */
   bindPlay() {
     const pedals = this.root.querySelectorAll('[data-pedal]');
     pedals.forEach((el) => {
+      const which = el.dataset.pedal;
       el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return;   // the touch path below owns this
         e.preventDefault();
-        this.pointers.set(e.pointerId, el.dataset.pedal);
+        this.pointers.set(e.pointerId, which);
         el.classList.add('is-down');
       });
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();                       // kills the double-tap select gesture at source
+        for (const t of e.changedTouches) this.pointers.set(`t${t.identifier}`, which);
+        el.classList.add('is-down');
+      }, { passive: false });
+      // A finger that slides off the pedal keeps it held (touch events stay targeted at the element
+      // the touch began on), which is the forgiving behaviour for a game pedal.
+      el.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     });
     this.root.querySelector('[data-act="pause"]').addEventListener('click', () => this.setPaused(!this.paused));
@@ -657,6 +702,10 @@ class HillClimb {
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     window.removeEventListener('pointerup', this._onPointerUp);
     window.removeEventListener('pointercancel', this._onPointerUp);
+    window.removeEventListener('touchend', this._onTouchEnd);
+    window.removeEventListener('touchcancel', this._onTouchEnd);
+    document.removeEventListener('selectstart', this._onSelectStart);
+    document.removeEventListener('selectionchange', this._onSelectionChange);
     document.removeEventListener('visibilitychange', this._onVis);
     if (this._offLang) this._offLang();
     this.run = null;
