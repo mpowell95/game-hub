@@ -1177,6 +1177,30 @@ refresh it from the live room in `_mpOnRoomUpdate` (the restore/rejoin path star
 record it in `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by
 construction, and `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
 
+**It has one read consumer as of 2026-08-03: `reclassifyEscobaMpFromH2H` in `game-stats.js`.**
+Escoba filed every online match under the AI's `normal` tier (its remote seat carries no
+`difficulty`, so `_commitStats`' `|| 'normal'` fallback swallowed it — full mechanism in
+`escoba/CLAUDE.md`), making it the only multiplayer game in the hub not recording `'mp'`. Because
+`recordHeadToHead` is only ever called on the multiplayer path, a device's own `h2h.escoba` w/l sum
+is *proof* of how many online Escoba matches it played, and the migration moves exactly that many
+plays from `normal` into `mp`, once, latched by `_esMpReclassified`.
+
+Two things about it generalize to any future bucket repair:
+
+- **It is a MOVE, not an addition, and that is forced by the leaderboard.** Games Played — the
+  board's default sort — is `playsAtTier` → `bucketsOf` (`leaderboard-ui.js:181`), which SUMS the
+  `byDiff` buckets rather than reading `total.played`. Adding a bucket without draining its source
+  would have credited those players with phantom plays on the shared board, not merely
+  double-counted inside the store. **If you ever add a bucket to an existing game, check whether
+  its plays are already counted somewhere else in `byDiff` first.**
+- **It is a floor, and says so.** `h2h` capture only began 2026-07-22, so online matches before
+  that are unprovable and deliberately stay in `normal` — honestly under-counted rather than
+  estimated (rule 4). `total` is never touched, so nothing can move a device's play count.
+
+Regression cases: `test-stats-replay.mjs` scenarios D (real h2h rows from the 2026-08-03 snapshot),
+E (a device with no h2h must be untouched — the common case), and F (h2h claiming more than the
+bucket holds must clamp, never go negative).
+
 ---
 
 ---

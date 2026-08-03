@@ -24,8 +24,17 @@
 //         total, byDiff,
 //         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
 //       escoba: {
-//         total, byDiff,
-//         es: { escobas } },                      // escobas the human made
+//         total, byDiff,                           // byDiff keyed easy|normal|hard (the AI tier) or
+//                                                   // 'mp' for an online match. Escoba filed EVERY
+//                                                   // online match under 'normal' until 2026-08-03
+//                                                   // (a multiplayer seat has no AI difficulty and
+//                                                   // the fallback swallowed it); the online plays
+//                                                   // this device can still prove from its own h2h
+//                                                   // rows are moved into 'mp' ONCE, guarded by
+//                                                   // _esMpReclassified - a relabel, never a change
+//                                                   // to `total`. See reclassifyEscobaMpFromH2H.
+//         es: { escobas },                        // escobas the human made
+//         _esMpReclassified },
 //       ballrun: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
 //         br: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } },  // a solo,
@@ -527,6 +536,60 @@ function normalize(raw) {
   return st;
 }
 
+/**
+ * Escoba multiplayer was filed under the AI's `normal` tier until 2026-08-03. `_commitStats`
+ * derived the tier from the first non-human seat's `difficulty`, but a multiplayer match's remote
+ * seat has none, so the `|| 'normal'` fallback swallowed every online match (escoba/CLAUDE.md has
+ * the full mechanism). Escoba was the only multiplayer game in the hub not recording `'mp'`.
+ *
+ * This RECLASSIFIES the plays this device can still prove were multiplayer, moving them out of
+ * `normal` and into `mp`. The proof is the device's OWN `h2h.escoba` rows, which are only ever
+ * written on the multiplayer path (`recordHeadToHead` is called from `_commitStats` under
+ * `this.mp`), so their w/l sum is a lower bound on this device's online matches.
+ *
+ * Why a move and not an addition: the leaderboard's Games Played column - its default sort - is
+ * `playsAtTier` -> `bucketsOf`, which SUMS the byDiff buckets rather than reading `total.played`.
+ * Adding `mp` while leaving `normal` intact would therefore have credited these players with
+ * phantom extra plays on the board itself, not merely double-counted inside the store.
+ *
+ * THE LAW: `total` is never touched, so this device's play count cannot move; the plays are
+ * relabelled, not removed, and stay just as visible. It is bounded by what `normal` actually holds
+ * (it can never drive a bucket negative), latched by `_esMpReclassified` so it can only ever run
+ * once, and the emptied `normal` bucket is left in place rather than deleted (rule 5). It is a
+ * floor, not an exact split: `h2h` capture only began 2026-07-22, so any online match before that
+ * is unprovable and stays in `normal` - honestly under-counted rather than guessed at (rule 4).
+ */
+function reclassifyEscobaMpFromH2H(st) {
+  const g = st.games.escoba;
+  if (g._esMpReclassified) return false;
+  g._esMpReclassified = true;             // latch even when there is nothing to move
+
+  const rows = st.h2h && st.h2h.escoba;
+  if (!rows || typeof rows !== 'object') return true;
+  let w = 0, l = 0;
+  for (const id of Object.keys(rows)) {
+    const r = rows[id] || {};
+    w += Math.max(0, r.w | 0);
+    l += Math.max(0, r.l | 0);
+  }
+  if (w + l === 0) return true;
+
+  const from = g.byDiff.normal;
+  if (!from) return true;
+  let mw = Math.min(w, Math.max(0, from.won | 0));
+  let ml = Math.min(l, Math.max(0, from.lost | 0));
+  const capacity = Math.max(0, from.played | 0);
+  if (mw + ml > capacity) { ml = Math.min(ml, capacity); mw = Math.min(mw, capacity - ml); }
+  const moved = mw + ml;
+  if (moved <= 0) return true;
+
+  if (!g.byDiff.mp) g.byDiff.mp = bucket();
+  from.played -= moved; from.won -= mw; from.lost -= ml;
+  g.byDiff.mp.played += moved; g.byDiff.mp.won += mw; g.byDiff.mp.lost += ml;
+  console.info(`[game-stats] Escoba: reclassified ${moved} multiplayer play(s) (${mw}W/${ml}L) from 'normal' to 'mp'. Total plays unchanged at ${g.total.played | 0}.`);
+  return true;
+}
+
 /** Additively bump a game's total + per-difficulty bucket for one finished game. */
 function bumpTotals(g, d, won) {
   if (!g.byDiff[d]) g.byDiff[d] = bucket();
@@ -644,6 +707,7 @@ export function loadStats() {
   changed = migrateBallRunMetric(st, preNormalizeBr) || changed;
   changed = refoldBallRunLegacyRuns(st) || changed;
   changed = seedSnWallsLegacy(st.games.snake) || changed;
+  changed = reclassifyEscobaMpFromH2H(st) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   ensureBrOrbital(st.games.ballrun);
