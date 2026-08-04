@@ -17,11 +17,140 @@
 <body>
   <div id="hub-root"></div>
 
+  <!-- BOOT GUARD (2026-08-04) - a white screen must never again be the whole error message.
+       Matt hit a hub that rendered nothing at all, in Chrome AND from the home-screen icon, with
+       no way to see why: iOS has no devtools, the page was blank, so there was literally nothing
+       to report but "white screen". Every check that could be run from a laptop came back green
+       (every module 200s, the shell code was byte-identical to the build that had worked an hour
+       earlier, and it all loaded fine in a desktop browser), which is exactly the situation this
+       guard exists for - a failure only reproducible on the real device.
+
+       Three parts, all classic script so they run even if the module graph below never parses:
+         1. error/unhandledrejection listeners registered BEFORE the module tag, so a syntax
+            error or a failed import is captured rather than lost to the console.
+         2. a watchdog: if #hub-root is still empty after BOOT_TIMEOUT_MS, show what was caught.
+         3. `?reset=sw` - unregister the service worker + delete its caches, then reload.
+
+       THE LAW: the reset path clears the SW registration and the CACHE STORAGE ONLY. It never
+       touches localStorage, so the profile, gamehub.stats and every game's save survive it. That
+       distinction is the whole reason this exists instead of telling a player to clear site data,
+       which on a phone wipes unsynced history that is nowhere else. Do not "simplify" it into a
+       clear-everything button. -->
+  <script>
+    (function () {
+      var BOOT_TIMEOUT_MS = 6000;
+      var errs = [];
+      var shown = false;
+      // Collected up front so the panel can report the ACTUAL cache/worker state, which is the
+      // thing most likely to be wrong when the page renders nothing.
+      var env = { caches: 'pending', sw: 'pending' };
+      try {
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (k) { env.caches = k.join(', ') || '(none)'; },
+            function (e) { env.caches = 'error: ' + e; });
+        } else { env.caches = '(unsupported)'; }
+        if (navigator.serviceWorker) {
+          env.sw = navigator.serviceWorker.controller ? 'controlled' : 'not controlled';
+        } else { env.sw = '(unsupported)'; }
+      } catch (e) { env.caches = 'error: ' + e; }
+
+      function note(what) { errs.push(what); if (document.getElementById('gh-boot-err')) render(); }
+      // The module tag below reports its own import failure through this, because a failed
+      // static import never fires a window error event anywhere useful.
+      window.__ghBootNote = note;
+
+      window.addEventListener('error', function (e) {
+        // A failed <script>/module fetch fires an error event on the ELEMENT (no e.message).
+        if (e && e.target && e.target !== window && (e.target.src || e.target.href)) {
+          note('Failed to load: ' + (e.target.src || e.target.href));
+        } else if (e && e.message) {
+          note(e.message + (e.filename ? '\n  at ' + e.filename + ':' + (e.lineno || 0) : ''));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason;
+        note('Unhandled: ' + ((r && (r.stack || r.message)) || String(r)));
+      });
+
+      function resetSW() {
+        var done = function () { location.replace(location.pathname); };
+        var jobs = [];
+        try {
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister(); }));
+            }));
+          }
+          if (window.caches && caches.keys) {
+            jobs.push(caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            }));
+          }
+        } catch (e) { /* fall through to the reload regardless */ }
+        Promise.all(jobs).then(done, done);
+        setTimeout(done, 4000);
+      }
+
+      // Escape hatch that works even when nothing else on the page does: load .../?reset=sw
+      if (/[?&]reset=sw\b/.test(location.search)) { resetSW(); return; }
+
+      function render() {
+        var root = document.getElementById('hub-root');
+        if (!root) return;
+        var box = document.getElementById('gh-boot-err');
+        if (!box) {
+          box = document.createElement('div');
+          box.id = 'gh-boot-err';
+          box.setAttribute('style', 'font:14px/1.5 system-ui,-apple-system,sans-serif;padding:18px;'
+            + 'max-width:640px;margin:0 auto;color:#1c2430;');
+          box.innerHTML = '<h1 style="font-size:1.05rem;margin:0 0 6px">The hub did not start</h1>'
+            + '<p style="margin:0 0 12px;color:#5b6675">Most often a stuck offline cache. Resetting it '
+            + 'is safe: it clears the cached app files only, never your profile, stats or saved games.</p>'
+            + '<button id="gh-boot-reset" style="appearance:none;border:0;border-radius:10px;padding:12px 16px;'
+            + 'background:#1769d4;color:#fff;font:inherit;font-weight:700;width:100%;margin-bottom:14px">'
+            + 'Reset the app cache and reload</button>'
+            + '<pre id="gh-boot-log" style="white-space:pre-wrap;word-break:break-word;background:#f1f4f9;'
+            + 'padding:12px;border-radius:8px;font-size:12px;margin:0;color:#40331f"></pre>';
+          root.appendChild(box);
+          document.getElementById('gh-boot-reset').addEventListener('click', resetSW);
+        }
+        document.getElementById('gh-boot-log').textContent =
+          (errs.length ? errs.join('\n\n') : 'No JavaScript error was reported. The page loaded but '
+            + 'rendered nothing, which usually means a cached file is stale or truncated.')
+          + '\n\n---\ncaches: ' + env.caches
+          + '\nservice worker: ' + env.sw
+          + '\nurl: ' + location.href
+          + '\nua: ' + navigator.userAgent;
+      }
+
+      setTimeout(function () {
+        var root = document.getElementById('hub-root');
+        if (shown || !root) return;
+        if (root.children.length > 0) return;   // hub mounted fine, stand down
+        shown = true;
+        render();
+      }, BOOT_TIMEOUT_MS);
+    }());
+  </script>
+
   <script type="module">
-    import { initHub } from './js/hub.js';
-    import { initA2HSPrompt } from './js/a2hs.js';
-    initHub(document.getElementById('hub-root'));
-    initA2HSPrompt();
+    // Dynamic import, not a static one, ON PURPOSE (2026-08-04). A static `import` that fails --
+    // a 404, a truncated cached file, a parse error anywhere in the graph -- aborts this script
+    // before its first line runs, and in a browser without devtools that is indistinguishable
+    // from a white screen with no cause. Awaiting the import instead makes that failure a
+    // catchable rejection, so the boot guard above can name the file that actually broke.
+    // The behaviour on a healthy load is identical; do not "tidy" this back to a static import.
+    try {
+      const [{ initHub }, { initA2HSPrompt }] = await Promise.all([
+        import('./js/hub.js'),
+        import('./js/a2hs.js'),
+      ]);
+      initHub(document.getElementById('hub-root'));
+      initA2HSPrompt();
+    } catch (e) {
+      if (window.__ghBootNote) window.__ghBootNote('Hub failed to start:\n' + ((e && (e.stack || e.message)) || String(e)));
+      throw e;
+    }
 
     // Register the service worker (offline + installable). Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
