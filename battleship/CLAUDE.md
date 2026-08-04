@@ -113,19 +113,58 @@ and on "New game" mid-battle. `isInProgress()` reflects this: solo always return
 ## Visual design
 
 Two boards, deliberately unequal, per `HANDOFF-BATTLESHIP.md` section 4.3 — "the single best
-interface idea in this document." The enemy grid is primary (large) on your turn; your own fleet
-grows to primary the instant it's the opponent's turn (`.bs-boardpanel.is-primary`/`is-secondary`,
-CSS `transition: max-width`), so attention follows the action instead of the player hunting for
-what just happened. Placement is drag-to-place (pointer capture on the ship chip, so drag events
-keep bubbling to the root-scoped listener) with tap-to-rotate and a full keyboard path (arrow keys
-move a cursor, `R` rotates, Enter/Space places) once a ship is selected — legality shown by shape
-AND color (a solid outline + ship silhouette when valid, a dashed outline + ✕ badges on the
-offending cells when not), never hue alone. Animations (miss splash + hollow peg, hit flash +
-shockwave + filled peg + board shake, sunk cell darkening + banner, a radar sweep while waiting on
-the opponent) are all `transform`/`opacity`, collapse to instant state changes under
-`prefers-reduced-motion`, and the whole game is fully playable and legible with them off. Dark
-mode is a `:root.gh-dark .bs-root` variable override, never a `prefers-color-scheme` query in the
-game's own CSS. The win/lose popup has a top-right close (X), per the repo-wide rule.
+interface idea in this document." **Revised 2026-08-04** (`HANDOFF-BATTLESHIP-POLISH.md`, a fix
+pass over the shipped build): the original per-turn size swap (`.bs-boardpanel.is-primary`/
+`is-secondary`, CSS `transition: max-width`) read as the game glitching on a real phone — a
+layout property animating on every turn flip. Boards now **never resize**: enemy waters is always
+the large panel (`.bs-boardpanel-enemy`), your own fleet always the small one
+(`.bs-boardpanel-own`), fixed classes with no per-turn swap. Whose turn it is is shown only by
+`.bs-board.is-active-turn` (`box-shadow` + `opacity`, both compositor-safe) and the status line —
+never a resize. A single CSS custom property, `--bs-cell`, is computed once per real viewport
+change (`js/viewport.js`'s `onViewportResize`, coalesced to one callback per frame — see
+`hill-climb/js/ui.js`'s usage for the pattern; unsubscribed in `destroy()`) from the actual
+rendered board width, and everything derived from it (ship sprites, the roster) stays in step
+with the board without recomputing anything independently.
+
+Placement is drag-to-place (pointer capture on the ship chip, so drag events keep bubbling to the
+root-scoped listener) with tap-to-rotate and a full keyboard path (arrow keys move a cursor, `R`
+rotates, Enter/Space places) once a ship is selected — legality shown by shape AND color (a solid
+outline + ship silhouette when valid, a dashed outline + ✕ badges on the offending cells when
+not), never hue alone.
+
+**Ships render as boat sprites, not flat cell backgrounds** (`battleship/js/ship-art.js`, added in
+the same polish pass): one inline SVG per ship class (Carrier/Battleship/Cruiser/Submarine/
+Destroyer), each with a distinct silhouette (a submarine has no turrets — deliberately the one
+shape cue that must never be confused with a surface combatant), two-tone via `--bs-ship` (hull)
+and `--bs-ship-deck` (lighter deck-detail tint, both dark-mode-aware). Drawn once, horizontally,
+bow-to-the-right; vertical placement rotates only the SVG's own wrapper `<div>` in place (`ui.js`'s
+`_shipSpriteHtml`) — the markup itself is never redrawn. The same builder is reused in all three
+places the handoff called for: placement drag chips, the fleet roster (now a fixed single row,
+`overflow-x: auto` and `overscroll-behavior: contain` if it ever needs to scroll), and the board
+itself, where a ship is one absolutely-positioned element spanning `len × --bs-cell` (cells
+underneath stay plain water — there is no more `.bs-has-ship` background rule). The enemy board
+never shows a ship until it's sunk; `ui.js`'s `_recordSunkShipGeometry` reconstructs a sunk ship's
+board position purely from its own already-public revealed cells (`answer.cells` — every one of
+which this device already knew as a hit before the ship could be confirmed sunk, same reasoning as
+the answer shape itself), so this works in MP too without ever knowing the enemy's un-sunk layout.
+That helper is intentionally a **shared, non-`_mp*` method** so it stays reachable from the MP
+path without touching any `_mp*` method or `game.js`/`hash.js` — see the note on that boundary in
+the multiplayer section below.
+
+**Firing is a 5-beat sequence, not a single circle popping in**: launch (reticle snap, unchanged),
+travel (a small shell arcs in over a growing/darkening water-shadow, `transform`/`opacity` only),
+then impact — a **miss settles to a hollow ring** (plume + expanding rings + specks on the way in)
+and a **hit settles to a filled peg with a rotated-square burst OUTLINE** (fireball + flash +
+shockwave + smoke puff on the way in) — deliberately different SHAPES, not just different colors,
+per the repo's colorblind rule. A sunk ship's own sprite lists ~13° and slides under the waterline
+with a spreading oil-slick darkening beneath it (`.bs-ship-sprite.is-sinking`), instead of a
+separate `.bs-sunk-ship` overlay element. The old `.bs-radar` "teal wedge" (read as a rendering
+artifact in review) is now a much thinner, lower-opacity leading-edge sweep. Every one of these is
+`transform`/`opacity`/`filter`/`box-shadow` only — never `width`/`height`/`inset`/`background-size`
+— and `prefers-reduced-motion: reduce` strips the entire travel/impact-decoration layer down to the
+settled peg or sprite state appearing instantly; the whole game stays fully legible with animation
+off. Dark mode is a `:root.gh-dark .bs-root` variable override, never a `prefers-color-scheme`
+query in the game's own CSS. The win/lose popup has a top-right close (X), per the repo-wide rule.
 
 ## Multiplayer — the repo's first hidden-information protocol
 

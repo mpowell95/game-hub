@@ -12,6 +12,7 @@
   --bs-water: #bfe0f2;
   --bs-water-2: #a9d2ea;
   --bs-ship: #2c3e50;
+  --bs-ship-deck: #7688a0;
   --bs-miss: #ffffff;
   --bs-hit: #E0532F;
   --bs-hit-2: #b83c1c;
@@ -19,6 +20,8 @@
   --bs-valid: #178A7A;
   --bs-invalid: #E0532F;
   --bs-gold: #F2B705;
+  --bs-smoke: #3a4553;
+  --bs-cell: 40px;
   color: var(--bs-ink);
   min-height: 100%;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -41,6 +44,8 @@
   --bs-sunk: #060606;
   --bs-valid: #33c4ae;
   --bs-invalid: #ff7a52;
+  --bs-ship-deck: #aab8c9;
+  --bs-smoke: #c3ccd8;
 }
 
 .bs-root * { box-sizing: border-box; }
@@ -113,9 +118,11 @@
 }
 .bs-shipchip.is-placed { opacity: .45; border-style: dashed; cursor: default; }
 .bs-shipchip.is-selected { border-color: var(--bs-accent); box-shadow: 0 0 0 2px var(--bs-accent) inset; }
-.bs-shipchip-cells { display: flex; gap: 2px; }
-.bs-shipchip-cell { width: 9px; height: 9px; border-radius: 2px; background: var(--bs-ship); }
-.bs-shipchip.is-placed .bs-shipchip-cell { background: var(--bs-muted); }
+.bs-shipchip-cells { display: flex; align-items: center; }
+.bs-shipchip-cells.is-vertical { transform: rotate(90deg); width: 26px; }
+.bs-shipchip-cells .bs-ship-svg { width: 34px; height: 8px; }
+.bs-shipchip.is-placed .bs-ship-hull, .bs-shipchip.is-placed .bs-ship-deck, .bs-shipchip.is-placed .bs-ship-turret { fill: var(--bs-muted); }
+.bs-shipchip.is-placed .bs-ship-line { stroke: var(--bs-muted); }
 
 .bs-board-wrap { order: 1; }
 @media (min-width: 480px) { .bs-board-wrap { order: 2; } }
@@ -140,8 +147,23 @@
 .bs-cell.bs-ghost-invalid { outline: 2px dashed var(--bs-invalid); background: color-mix(in srgb, var(--bs-invalid) 22%, var(--bs-water)); }
 .bs-ghost-x { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--bs-invalid); font-weight: 900; font-size: 70%; pointer-events: none; }
 
-.bs-cell.bs-has-ship { background: var(--bs-ship); }
 .bs-cell.bs-placed-cursor { outline: 2px solid var(--bs-gold); }
+
+/* --- ship art: one absolutely-positioned sprite per ship, reused for chips/roster/board -------- */
+
+.bs-ship-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.bs-ship-hull { fill: var(--bs-ship); }
+.bs-ship-deck, .bs-ship-turret { fill: var(--bs-ship-deck); }
+.bs-ship-line { stroke: var(--bs-ship-deck); stroke-width: .5; }
+
+/* One wrapper per ship, positioned/sized to its final len x --bs-cell footprint on the grid (cells
+   underneath stay water). The inner element is always drawn at its natural horizontal size and
+   rotated 90deg in place for vertical ships -- the SVG markup itself is never redrawn. */
+.bs-ship-sprite {
+  position: absolute; z-index: 2; pointer-events: none;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .35));
+}
+.bs-ship-sprite.is-ghost { opacity: .55; }
 
 .bs-placement-status { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; font-weight: 700; color: var(--bs-muted); }
 
@@ -154,56 +176,103 @@
 
 .bs-boards { display: grid; gap: 14px; justify-items: center; }
 
-.bs-boardpanel { width: 100%; display: grid; gap: 6px; justify-items: center; transition: max-width .35s ease; }
+/* Boards NEVER swap size on a turn flip (HANDOFF-BATTLESHIP-POLISH.md section 2) -- enemy waters
+   is always the big board, your own fleet always the small one. Whose turn it is is conveyed only
+   by .is-active-turn (box-shadow/opacity, compositor-safe) and the status line, never by resizing
+   either panel. */
+.bs-boardpanel { width: 100%; display: grid; gap: 6px; justify-items: center; }
 .bs-boardpanel-h { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 800; color: var(--bs-muted); }
-.bs-boardpanel.is-primary .bs-boardpanel-h { color: var(--bs-ink); font-size: .86rem; }
-.bs-boardpanel.is-primary { max-width: 460px; }
-.bs-boardpanel.is-secondary { max-width: 220px; }
-.bs-boardpanel.is-secondary .bs-board { width: min(58vw, 220px); }
-.bs-boardpanel.is-primary .bs-board { width: min(92vw, 460px); }
+.bs-boardpanel-enemy { max-width: 460px; }
+.bs-boardpanel-enemy .bs-boardpanel-h { color: var(--bs-ink); font-size: .86rem; }
+.bs-boardpanel-own { max-width: 220px; }
+.bs-boardpanel-enemy .bs-board { width: min(92vw, 460px); }
+.bs-boardpanel-own .bs-board { width: min(58vw, 220px); }
 
 .bs-board.bs-target { cursor: crosshair; }
 .bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); }
+.bs-board.is-active-turn { box-shadow: 0 0 0 3px var(--bs-gold); transition: box-shadow .2s ease, opacity .2s ease; }
+.bs-board:not(.is-active-turn) { opacity: .92; transition: box-shadow .2s ease, opacity .2s ease; }
 
-/* reticle + arc on a pending shot */
+/* --- firing: a 5-beat ordnance sequence, transform/opacity/filter/box-shadow only ------------- */
+/* launch (0-90ms): reticle snap. travel (90-450ms): a shell arcs in over a growing shadow. impact
+   (450ms+): miss settles to a hollow RING, hit settles to a filled peg with a burst/star OUTLINE --
+   different SHAPES, color only reinforces the difference (HANDOFF-BATTLESHIP-POLISH.md section 4). */
+
 .bs-cell.bs-reticle::after {
   content: ''; position: absolute; inset: 12%; border: 2px solid var(--bs-gold); border-radius: 50%;
   animation: bs-reticle-snap .28s ease-out;
 }
 @keyframes bs-reticle-snap { from { transform: scale(2.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* miss: expanding rings + a hollow peg dropping in with a bounce */
 .bs-peg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-.bs-peg-miss {
-  width: 46%; height: 46%; border-radius: 50%; background: var(--bs-miss); border: 2px solid var(--bs-accent-deep);
-  animation: bs-peg-drop .38s cubic-bezier(.34,1.56,.64,1) both;
-}
-@keyframes bs-peg-drop { 0% { transform: translateY(-140%) scale(.6); opacity: 0; } 70% { transform: translateY(4%) scale(1.08); opacity: 1; } 100% { transform: translateY(0) scale(1); } }
-.bs-splash-ring { position: absolute; inset: 8%; border: 2px solid var(--bs-accent); border-radius: 50%; opacity: 0; animation: bs-splash .55s ease-out; }
-.bs-splash-ring.r2 { animation-delay: .08s; }
-.bs-splash-ring.r3 { animation-delay: .16s; }
-@keyframes bs-splash { 0% { transform: scale(.3); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
 
-/* hit: scaled flash + shockwave + filled peg, plus a board shake */
+/* travel: a small shell + growing/darkening water-shadow beneath it, both transform-only */
+.bs-shell {
+  position: absolute; width: 18%; height: 18%; border-radius: 50%; background: var(--bs-ink);
+  animation: bs-shell-travel .36s cubic-bezier(.3,.1,.4,1) both;
+}
+@keyframes bs-shell-travel { 0% { transform: translate(10%, -220%) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(0, 0) scale(1); opacity: 0; } }
+.bs-shell-shadow {
+  position: absolute; width: 40%; height: 16%; border-radius: 50%; background: rgba(0,0,0,.35);
+  animation: bs-shell-shadow .36s ease-in both;
+}
+@keyframes bs-shell-shadow { 0% { transform: scale(.2); opacity: 0; } 100% { transform: scale(1); opacity: .5; } }
+
+/* miss: settles to a hollow ring (never filled -- the shape distinguishes it from a hit) */
+.bs-peg-miss {
+  width: 46%; height: 46%; border-radius: 50%; background: transparent; border: 2.5px solid var(--bs-miss);
+  box-shadow: 0 0 0 1px var(--bs-accent-deep) inset;
+  animation: bs-peg-drop .38s .36s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes bs-peg-drop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+.bs-plume { position: absolute; bottom: 30%; width: 14%; height: 30%; border-radius: 40% 40% 10% 10%; background: var(--bs-miss); opacity: 0; animation: bs-plume .5s .36s ease-out both; }
+@keyframes bs-plume { 0% { transform: translateY(0) scaleY(.2); opacity: .9; } 60% { transform: translateY(-70%) scaleY(1); opacity: .7; } 100% { transform: translateY(-100%) scaleY(1.1); opacity: 0; } }
+.bs-splash-ring { position: absolute; inset: 8%; border: 2px solid var(--bs-accent); border-radius: 50%; opacity: 0; animation: bs-splash .55s .36s ease-out both; }
+.bs-splash-ring.r2 { animation-delay: .44s; }
+.bs-splash-ring.r3 { animation-delay: .52s; }
+@keyframes bs-splash { 0% { transform: scale(.3); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
+.bs-speck { position: absolute; width: 6%; height: 6%; border-radius: 50%; background: var(--bs-accent); opacity: 0; animation: bs-speck .5s .36s ease-out both; }
+@keyframes bs-speck { 0% { transform: translate(0,0) scale(1); opacity: .9; } 100% { transform: translate(var(--bs-dx,10px), var(--bs-dy,-14px)) scale(.3); opacity: 0; } }
+
+/* hit: filled peg + a rotated-square burst OUTLINE (a visibly different silhouette from the ring) */
 .bs-peg-hit {
-  width: 50%; height: 50%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
-  animation: bs-hit-pop .3s cubic-bezier(.34,1.56,.64,1) both;
+  width: 46%; height: 46%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
+  animation: bs-hit-pop .3s .36s cubic-bezier(.34,1.56,.64,1) both;
 }
 @keyframes bs-hit-pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
-.bs-flash { position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,.9), transparent 60%); animation: bs-flash .28s ease-out forwards; }
+.bs-peg-hit::after {
+  content: ''; position: absolute; inset: -18%; border: 2px solid var(--bs-hit); transform: rotate(45deg);
+  animation: bs-burst-outline .5s .4s ease-out both;
+}
+@keyframes bs-burst-outline { 0% { transform: rotate(45deg) scale(.4); opacity: 1; } 100% { transform: rotate(45deg) scale(1.5); opacity: 0; } }
+.bs-fireball {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--bs-gold) 30%, var(--bs-hit) 62%, transparent 78%);
+  animation: bs-fireball .4s .36s ease-out both;
+}
+@keyframes bs-fireball { 0% { transform: scale(.2); opacity: 0; } 35% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+.bs-flash { position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,.9), transparent 60%); animation: bs-flash .28s .36s ease-out forwards; }
 @keyframes bs-flash { from { opacity: 1; transform: scale(1.6); } to { opacity: 0; transform: scale(1); } }
-.bs-shockwave { position: absolute; inset: 6%; border: 2px solid var(--bs-hit); border-radius: 50%; animation: bs-shock .4s ease-out forwards; }
+.bs-shockwave { position: absolute; inset: 6%; border: 2px solid var(--bs-hit); border-radius: 50%; animation: bs-shock .4s .38s ease-out forwards; }
 @keyframes bs-shock { from { transform: scale(.2); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
-.bs-board.bs-shake { animation: bs-shake .32s ease-in-out; }
+.bs-smoke { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--bs-smoke); opacity: 0; animation: bs-smoke .9s .5s ease-out both; }
+@keyframes bs-smoke { 0% { transform: translateY(0) scale(.5); opacity: .55; } 100% { transform: translateY(-140%) scale(1.4); opacity: 0; } }
+.bs-board.bs-shake { animation: bs-shake .32s .36s ease-in-out; }
 @keyframes bs-shake { 10% { transform: translateX(-3px); } 30% { transform: translateX(3px); } 50% { transform: translateX(-2px); } 70% { transform: translateX(2px); } 100% { transform: translateX(0); } }
 
-/* sunk: cell darkens, whole-ship reveal handled by .bs-sunk-ship overlay below */
+/* sunk: the ship sprite itself lists and slides under the waterline, plus a spreading oil slick */
 .bs-cell.bs-cell-sunk { background: var(--bs-sunk); }
-.bs-sunk-ship {
-  position: absolute; background: var(--bs-sunk); border: 2px solid var(--bs-hit); border-radius: 4px;
-  animation: bs-sink-reveal .5s ease-out both; z-index: 2; pointer-events: none;
+.bs-ship-sprite.is-sinking { animation: bs-sink-reveal .9s ease-in both; }
+@keyframes bs-sink-reveal {
+  0% { transform: rotate(0deg) translateY(0); opacity: 1; }
+  40% { transform: rotate(9deg) translateY(6%); opacity: 1; }
+  100% { transform: rotate(13deg) translateY(60%); opacity: .25; }
 }
-@keyframes bs-sink-reveal { 0% { transform: rotate(0deg) scale(1); opacity: .4; } 60% { transform: rotate(-4deg) scale(1.04); opacity: 1; } 100% { transform: rotate(0deg) scale(1); opacity: 1; } }
+.bs-oilslick {
+  position: absolute; border-radius: 50%; background: radial-gradient(circle, var(--bs-sunk) 0%, transparent 72%);
+  opacity: 0; animation: bs-oilslick 1s ease-out both; z-index: 1; pointer-events: none;
+}
+@keyframes bs-oilslick { 0% { transform: scale(.3); opacity: 0; } 40% { opacity: .55; } 100% { transform: scale(1.6); opacity: .3; } }
 .bs-sunk-banner {
   position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px); z-index: 60;
   background: var(--bs-sunk); color: #fff; padding: 8px 16px; border-radius: 999px; font-weight: 900;
@@ -211,20 +280,23 @@
 }
 @keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -18px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-/* radar sweep -- opponent thinking / waiting on the network */
+/* radar sweep -- opponent thinking / waiting on the network. Softened (low opacity, thin leading
+   edge) after the polish pass -- the old wide teal wedge read as a rendering artifact. */
 .bs-radar { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 3; }
 .bs-radar::before {
-  content: ''; position: absolute; inset: -20%; background: conic-gradient(from 0deg, transparent 0deg, rgba(50,220,180,.28) 24deg, transparent 60deg);
-  animation: bs-radar-spin 1.8s linear infinite;
+  content: ''; position: absolute; inset: -20%; background: conic-gradient(from 0deg, transparent 0deg, rgba(50,220,180,.16) 8deg, rgba(50,220,180,.32) 10deg, transparent 34deg);
+  animation: bs-radar-spin 2.2s linear infinite;
 }
 @keyframes bs-radar-spin { to { transform: rotate(360deg); } }
 
-.bs-fleetroster { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; font-size: .72rem; }
-.bs-roster-item { display: flex; align-items: center; gap: 4px; font-weight: 700; color: var(--bs-ink); }
-.bs-roster-item.is-sunk { color: var(--bs-muted); text-decoration: line-through; }
-.bs-roster-silhouette { display: flex; gap: 1px; }
-.bs-roster-cell { width: 6px; height: 6px; border-radius: 1px; background: var(--bs-ship); }
-.bs-roster-item.is-sunk .bs-roster-cell { background: var(--bs-muted); }
+.bs-fleetroster { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; font-size: .68rem; overflow-x: auto; overscroll-behavior: contain; padding: 2px 0; }
+.bs-roster-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 700; color: var(--bs-ink); flex: 0 0 auto; }
+.bs-roster-item.is-sunk { color: var(--bs-muted); }
+.bs-roster-item.is-sunk .bs-roster-name { text-decoration: line-through; }
+.bs-roster-silhouette { width: 30px; height: 8px; }
+.bs-roster-item.is-sunk .bs-ship-hull, .bs-roster-item.is-sunk .bs-ship-deck, .bs-roster-item.is-sunk .bs-ship-turret { fill: var(--bs-muted); }
+.bs-roster-item.is-sunk .bs-ship-line { stroke: var(--bs-muted); }
+.bs-roster-name { font-size: .64rem; white-space: nowrap; }
 
 .bs-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
@@ -275,9 +347,15 @@
 /* --- reduced motion: instant state changes, no travel/shake/shimmer/spin ----------------------- */
 @media (prefers-reduced-motion: reduce) {
   .bs-cell.bs-water-cell::before { animation: none; }
-  .bs-peg-miss, .bs-peg-hit, .bs-splash-ring, .bs-flash, .bs-shockwave, .bs-sunk-ship, .bs-sunk-banner, .bs-cell.bs-reticle::after {
+  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cell.bs-reticle::after {
     animation: none !important; opacity: 1 !important; transform: none !important;
   }
+  /* travel + impact decoration is pure flourish on top of already-settled state -- strip it entirely */
+  .bs-shell, .bs-shell-shadow, .bs-splash-ring, .bs-speck, .bs-plume, .bs-flash, .bs-shockwave,
+  .bs-fireball, .bs-smoke, .bs-oilslick {
+    display: none !important;
+  }
+  .bs-ship-sprite.is-sinking { animation: none !important; opacity: .25 !important; transform: rotate(12deg) translateY(55%) !important; }
   .bs-board.bs-shake { animation: none; }
   .bs-radar::before { animation-duration: 6s; }
 }
