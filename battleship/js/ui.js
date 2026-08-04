@@ -28,6 +28,8 @@ import { loadProfile } from '../../js/profile-store.js';
 import { recordBattleship, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import { onViewportResize } from '../../js/viewport.js';
+import { shipArtHtml } from './ship-art.js';
 import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
@@ -123,6 +125,7 @@ class BattleshipUI {
     this._statsCommitted = false;
     this._lastShot = null;     // { seat, r, c, result, sunk, cells } -- the one cell that gets an entrance animation
     this._sunkBanner = '';
+    this._sunkShips = {};      // seat -> shipId -> {id,len,r,c,dir}, reconstructed from revealed cells (see _recordSunkShipGeometry)
 
     // Placement-screen working state.
     this._placeSizeKey = null;
@@ -142,6 +145,7 @@ class BattleshipUI {
     this._onPointerMove = (e) => this.onPointerMove(e);
     this._onPointerUp = (e) => this.onPointerUp(e);
     this._onKeyDown = (e) => this.onKeyDown(e);
+    this._offViewport = null;
 
     ensureStylesheet();
     this.mount();
@@ -149,6 +153,7 @@ class BattleshipUI {
 
   destroy() {
     this._dead = true;
+    if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
     if (this._confirmTimer) { clearTimeout(this._confirmTimer); this._confirmTimer = null; }
     if (this._mpDelayTimer) { clearTimeout(this._mpDelayTimer); this._mpDelayTimer = null; }
@@ -248,6 +253,11 @@ class BattleshipUI {
     this.root.addEventListener('pointerup', this._onPointerUp);
     this.root.addEventListener('pointercancel', this._onPointerUp);
     this.root.addEventListener('keydown', this._onKeyDown);
+    // Coalesced to one callback per frame by js/viewport.js -- a raw resize listener would re-fit
+    // the boards several times per frame while a mobile URL bar animates (js/CLAUDE.md, "Overlay
+    // scrolling" / hill-climb/js/ui.js's usage). --bs-cell is the one value ship sprites, the
+    // roster, and both boards all derive from, computed once per real viewport change.
+    this._offViewport = onViewportResize(() => this._updateCellSize());
     const mpSave = this._mpLoadSave();
     if (mpSave) {
       this.renderSetup();
@@ -264,6 +274,20 @@ class BattleshipUI {
     this.state = saved.state;
     this.view = 'battle';
     this._lastShot = null;
+    this._sunkShips = {};
+    // Solo only (this branch never runs in MP): both fleets are held locally, so any ship already
+    // sunk before this resume can be reconstructed outright rather than waiting to see it sink
+    // again -- otherwise a resumed match would show sunk cells with no boat sprite until the next kill.
+    for (let seat = 0; seat < 2; seat++) {
+      const fleet = this.state.fleets[seat];
+      if (!fleet) continue;
+      for (const ship of fleet.ships) {
+        if (ship.hits.every(Boolean)) {
+          this._sunkShips[seat] = this._sunkShips[seat] || {};
+          this._sunkShips[seat][ship.id] = { id: ship.id, len: ship.len, r: ship.r, c: ship.c, dir: ship.dir };
+        }
+      }
+    }
     this._afterStateChange();
   }
 
@@ -310,7 +334,7 @@ class BattleshipUI {
 
   _bonusContent() {
     const s = this._setup;
-    return this._seg('set-bonus', s.bonusShotOnHit ? 'on' : 'off', [['off', t('close')], ['on', t('ready')]])
+    return this._seg('set-bonus', s.bonusShotOnHit ? 'on' : 'off', [['off', t('bonus_off')], ['on', t('bonus_on')]])
       + `<p class="bs-hint">${t('hint_bonus')}</p>`;
   }
 
@@ -346,7 +370,7 @@ class BattleshipUI {
         ${this._row('first', t('row_first'),
           s.firstMode === 'you' ? t('you') : s.firstMode === 'opponent' ? (hosting ? t('mp_opponent_label') : id.oppName) : t('first_alternate'),
           this._firstContent())}
-        ${this._row('bonus', t('row_bonus'), s.bonusShotOnHit ? t('ready') : t('close'), this._bonusContent())}
+        ${this._row('bonus', t('row_bonus'), s.bonusShotOnHit ? t('bonus_on') : t('bonus_off'), this._bonusContent())}
       </div>
       ${hosting
         ? `<p class="bs-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
@@ -530,31 +554,35 @@ class BattleshipUI {
     this.view = 'battle';
     this._statsCommitted = false;
     this._lastShot = null;
+    this._sunkShips = {};
     this._afterStateChange();
   }
 
-  _shipCellSet(fleet) {
-    const set = new Set();
-    if (!fleet) return set;
-    for (const s of fleet.ships) for (const [r, c] of s.cells) set.add(`${r},${c}`);
-    return set;
+  /** The one px value ship sprites, the fleet roster and both boards derive from. Read from the
+   *  actual rendered board width (same source of truth the CSS `min(92vw, 460px)` sizing uses)
+   *  rather than recomputed independently, so it can never drift from what's on screen. */
+  _updateCellSize() {
+    if (this._dead || !this.root) return;
+    const board = this.root.querySelector('[data-role="enemy-board"], [data-role="place-board"]');
+    if (!board) return;
+    const size = this.state ? this.state.size : boardSizeFor(this._placeSizeKey || this._setup.size);
+    const w = board.getBoundingClientRect().width;
+    if (w > 0 && size > 0) this.root.style.setProperty('--bs-cell', `${(w / size).toFixed(2)}px`);
   }
 
   renderPlacement() {
     if (this._dead) return;
     this.closeOverlays();
     const size = boardSizeFor(this._placeSizeKey);
-    const myCells = this._shipCellSet(this._placeFleet);
     const remaining = this._placeShipSet.filter((d) => !this._placeFleet.ships.some((s) => s.id === d.id)).length;
 
     const chips = this._placeShipSet.map((def) => {
       const placedShip = this._placeFleet.ships.find((s) => s.id === def.id);
       const dir = this._placeDir[def.id] || 'h';
-      const cells = Array.from({ length: def.len }, () => '');
       const vertical = placedShip ? placedShip.dir === 'v' : dir === 'v';
       return `<div class="bs-shipchip ${placedShip ? 'is-placed' : ''} ${this._placeSelected === def.id ? 'is-selected' : ''}"
           data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0" aria-label="${esc(t(SHIP_LABEL_KEY[def.id]))}">
-        <span class="bs-shipchip-cells" style="flex-direction:${vertical ? 'column' : 'row'}">${cells.map(() => '<span class="bs-shipchip-cell"></span>').join('')}</span>
+        <span class="bs-shipchip-cells ${vertical ? 'is-vertical' : ''}">${shipArtHtml(def.id, def.len)}</span>
         <span>${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
         <button type="button" class="bs-link" data-action="rotate-ship" data-ship="${def.id}" aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}">⟳</button>
       </div>`;
@@ -577,15 +605,22 @@ class BattleshipUI {
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const key = `${r},${c}`;
-        const hasShip = myCells.has(key);
         const ghost = ghostCells.get(key);
-        const cls = ['bs-cell', hasShip ? 'bs-has-ship' : 'bs-water-cell',
+        const cls = ['bs-cell', 'bs-water-cell',
           ghost === true ? 'bs-ghost-valid' : '', ghost === false ? 'bs-ghost-invalid' : ''].filter(Boolean).join(' ');
         const badge = ghost === false ? '<span class="bs-ghost-x" aria-hidden="true">&times;</span>' : '';
         cellsHtml.push(`<button type="button" class="${cls}" data-role="place-cell" data-r="${r}" data-c="${c}"
           aria-label="${esc(t('placement_cell_aria', { r: r + 1, c: c + 1 }))}">${badge}</button>`);
       }
     }
+
+    // Placed ships render as real sprites (same ship-art.js reused on the battle board); a
+    // selected-but-unplaced ship gets the same sprite, semi-transparent, following the cursor --
+    // the per-cell valid/invalid outline + X badges above are the legality signal, unchanged.
+    const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship)).join('');
+    const ghostSprite = (selDef && preview)
+      ? this._shipSpriteHtml({ id: selDef.id, len: selDef.len, r: preview.r, c: preview.c, dir: this._placeDir[selDef.id] || 'h' }, { ghost: true })
+      : '';
 
     this.shell.innerHTML = `
       <div class="bs-place">
@@ -597,7 +632,7 @@ class BattleshipUI {
         <div class="bs-place-layout">
           <div class="bs-shiplist">${chips}</div>
           <div class="bs-board-wrap">
-            <div class="bs-board" style="grid-template-columns:repeat(${size},1fr)" data-role="place-board">${cellsHtml.join('')}</div>
+            <div class="bs-board" style="grid-template-columns:repeat(${size},1fr)" data-role="place-board">${cellsHtml.join('')}${placedSprites}${ghostSprite}</div>
           </div>
         </div>
         <div class="bs-placement-status">
@@ -610,6 +645,7 @@ class BattleshipUI {
           <button type="button" class="bs-btn bs-btn-primary" data-action="placement-ready" ${remaining > 0 || (this.mp && this.mp.localReady) ? 'disabled' : ''}>${t('ready')}</button>
         </div>
       </div>`;
+    this._updateCellSize();
   }
 
   // --- battle screen -----------------------------------------------------------------------------
@@ -626,6 +662,10 @@ class BattleshipUI {
    *  records a seq that matches the move already inside its own snapshot. */
   _afterStateChange() {
     if (this._dead) return;
+    // A fresh game (no shots fired either way) can't have any sunk ships -- clears stale
+    // reconstructed geometry from a previous game in a rematch series without needing to touch the
+    // MP methods that start one (root CLAUDE.md polish pass: no `_mp*` method edited here).
+    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) this._sunkShips = {};
     if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
     if (this.state.over) {
       this.busy = false;
@@ -662,9 +702,35 @@ class BattleshipUI {
 
   _maybeShowSunkBanner(answer) {
     if (!answer || !answer.sunk || !answer.shipId) return;
+    this._recordSunkShipGeometry(answer);
     this._sunkBanner = t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) });
     if (this._bannerTimer) clearTimeout(this._bannerTimer);
     this._bannerTimer = setTimeout(() => { this._sunkBanner = ''; this._bannerTimer = null; if (!this._dead && this.view === 'battle') this.renderBattle(); }, 1600);
+  }
+
+  /** Reconstructs a just-sunk ship's board position purely from its own already-public revealed
+   *  cells (`answer.cells`), for the enemy board's visual reveal sprite -- never new hidden
+   *  information, since every one of those cells was already known to this device as a hit before
+   *  the ship could be confirmed sunk (see game.js's own comment on `resolveShot`). Finds which
+   *  seat by matching `answer.cells` against both public shot grids rather than taking a `seat`
+   *  argument, so this stays a SHARED helper reachable from both solo and the untouched MP path
+   *  (root CLAUDE.md polish pass: no `_mp*` method edited here). */
+  _recordSunkShipGeometry(answer) {
+    if (!Array.isArray(answer.cells) || !answer.cells.length) return;
+    const [r0, c0] = answer.cells[0];
+    for (let seat = 0; seat < 2; seat++) {
+      const grid = this.state.shots[seat];
+      if (!grid || !grid.sunkIds.includes(answer.shipId) || cellAt(grid, r0, c0) !== CELL_SUNK) continue;
+      const rows = answer.cells.map(([r]) => r), cols = answer.cells.map(([, c]) => c);
+      this._sunkShips = this._sunkShips || {};
+      this._sunkShips[seat] = this._sunkShips[seat] || {};
+      this._sunkShips[seat][answer.shipId] = {
+        id: answer.shipId, len: answer.cells.length,
+        r: Math.min(...rows), c: Math.min(...cols),
+        dir: rows.every((r) => r === rows[0]) ? 'h' : 'v',
+      };
+      return;
+    }
   }
 
   fireAt(r, c) {
@@ -700,32 +766,54 @@ class BattleshipUI {
     const items = shipSet.map((def) => {
       const isSunk = sunk.has(def.id);
       return `<span class="bs-roster-item ${isSunk ? 'is-sunk' : ''}">
-        <span class="bs-roster-silhouette">${Array.from({ length: def.len }, () => '<span class="bs-roster-cell"></span>').join('')}</span>
-        <span>${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
+        <span class="bs-roster-silhouette">${shipArtHtml(def.id, def.len)}</span>
+        <span class="bs-roster-name">${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
       </span>`;
     }).join('');
     return `<div class="bs-fleetroster">${items}</div>`;
   }
 
+  /** One absolutely-positioned sprite per ship, sized/positioned from --bs-cell. The inner element
+   *  is always drawn at its natural horizontal size and rotated in place for vertical ships -- the
+   *  SVG markup from ship-art.js is never redrawn for orientation (HANDOFF-BATTLESHIP-POLISH.md
+   *  section 3). `sinking` plays the one-shot list-and-slide reveal; gate it on `_lastShot` the same
+   *  way `_cellHtml` gates the peg entrance animation, so it plays once, not on every re-render. */
+  _shipSpriteHtml(ship, { ghost = false, sinking = false } = {}) {
+    const vertical = ship.dir === 'v';
+    const wrapStyle = `left:calc(var(--bs-cell) * ${ship.c}); top:calc(var(--bs-cell) * ${ship.r}); `
+      + `width:calc(var(--bs-cell) * ${vertical ? 1 : ship.len}); height:calc(var(--bs-cell) * ${vertical ? ship.len : 1});`;
+    const innerStyle = `position:absolute; top:50%; left:50%; width:calc(var(--bs-cell) * ${ship.len}); height:var(--bs-cell); `
+      + `transform:translate(-50%,-50%)${vertical ? ' rotate(90deg)' : ''};`;
+    const cls = ['bs-ship-sprite', ghost ? 'is-ghost' : '', sinking ? 'is-sinking' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" style="${wrapStyle}" aria-hidden="true"><div style="${innerStyle}">${shipArtHtml(ship.id, ship.len)}</div></div>`;
+  }
+
+  _shipSpritesHtml(fleet, opts) {
+    if (!fleet) return '';
+    return fleet.ships.map((s) => this._shipSpriteHtml(s, opts && opts(s))).join('');
+  }
+
   _cellHtml(size, r, c, opts) {
-    const { shots, interactive, myShipCells, isTarget } = opts;
+    const { shots, interactive, isTarget } = opts;
     const v = cellAt(shots, r, c);
-    const key = `${r},${c}`;
-    const hasShip = myShipCells && myShipCells.has(key);
     const isLast = this._lastShot && this._lastShot.seat === opts.seat && this._lastShot.r === r && this._lastShot.c === c;
     const classes = ['bs-cell'];
     let inner = '';
+    // The travel beat (a shell arcing in over a growing shadow) plays for ANY fresh shot, miss or
+    // hit alike -- only the impact beat that follows differs by shape (a hollow ring vs a filled
+    // peg + burst outline), never by color alone (HANDOFF-BATTLESHIP-POLISH.md section 4).
+    const travel = isLast ? '<span class="bs-shell-shadow"></span><span class="bs-shell"></span>' : '';
     if (v === 0) {
       classes.push('bs-water-cell');
-      if (hasShip) classes.push('bs-has-ship');
     } else if (v === CELL_MISS) {
-      inner = `<span class="bs-peg"><span class="bs-peg-miss"></span>${isLast ? '<span class="bs-splash-ring"></span><span class="bs-splash-ring r2"></span><span class="bs-splash-ring r3"></span>' : ''}</span>`;
-    } else if (v === CELL_HIT) {
-      classes.push(hasShip ? 'bs-has-ship' : '');
-      inner = `<span class="bs-peg">${isLast ? '<span class="bs-flash"></span><span class="bs-shockwave"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
-    } else if (v === CELL_SUNK) {
-      classes.push('bs-cell-sunk');
-      inner = `<span class="bs-peg"><span class="bs-peg-hit"></span></span>`;
+      const specks = isLast ? [...Array(4)].map((_, i) => {
+        const ang = (i / 4) * Math.PI * 2 + 0.4;
+        return `<span class="bs-speck" style="--bs-dx:${(Math.cos(ang) * 12).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 12 - 6).toFixed(1)}px"></span>`;
+      }).join('') : '';
+      inner = `<span class="bs-peg">${travel}${isLast ? '<span class="bs-plume"></span><span class="bs-splash-ring"></span><span class="bs-splash-ring r2"></span><span class="bs-splash-ring r3"></span>' + specks : ''}<span class="bs-peg-miss"></span></span>`;
+    } else if (v === CELL_HIT || v === CELL_SUNK) {
+      if (v === CELL_SUNK) classes.push('bs-cell-sunk');
+      inner = `<span class="bs-peg">${travel}${isLast ? '<span class="bs-fireball"></span><span class="bs-flash"></span><span class="bs-shockwave"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
     }
     const label = v === CELL_MISS ? t('cell_miss') : v === CELL_HIT ? t('cell_hit') : v === CELL_SUNK ? t('cell_sunk') : t('cell_unknown');
     const isFree = v === 0;
@@ -737,32 +825,59 @@ class BattleshipUI {
     return el;
   }
 
-  _boardHtml(kind) {
+  /** True if the fired-at cell of `ship` is the one just sunk on `seat`'s board -- gates the
+   *  one-shot sink-reveal animation the same way `_cellHtml`'s `isLast` gates the peg entrance.
+   *  `ship` is either a real fleet ship ({cells: [[r,c],...]}) or a reconstructed enemy-board
+   *  entry ({r,c,dir,len}, see `_recordSunkShipGeometry`) -- both shapes are checked. */
+  _shipHoldsLastShot(ship, seat) {
+    if (!this._lastShot || !this._lastShot.sunk || this._lastShot.seat !== seat) return false;
+    const { r: lr, c: lc } = this._lastShot;
+    if (Array.isArray(ship.cells)) return ship.cells.some(([r, c]) => r === lr && c === lc);
+    for (let i = 0; i < ship.len; i++) {
+      const rr = ship.dir === 'v' ? ship.r + i : ship.r;
+      const cc = ship.dir === 'h' ? ship.c + i : ship.c;
+      if (rr === lr && cc === lc) return true;
+    }
+    return false;
+  }
+
+  /** Enemy-board sunk ships this device can legitimately show a sprite for. In solo, at game end,
+   *  every remaining ship is known outright (this device always held both fleets). Otherwise
+   *  (mid-battle, or MP where the enemy fleet is never known -- see battleship/CLAUDE.md) only
+   *  ships this device has actually seen sunk are shown, from the reconstructed geometry recorded
+   *  in `_recordSunkShipGeometry`, itself built only from cells this device already knew as hits. */
+  _enemySpritesHtml(seat) {
+    const s = this.state;
+    if (!this.mp && s.over) {
+      return this._shipSpritesHtml(s.fleets[seat], () => ({}));
+    }
+    const known = (this._sunkShips && this._sunkShips[seat]) || {};
+    return Object.values(known).map((ship) => this._shipSpriteHtml(ship, { sinking: this._shipHoldsLastShot(ship, seat) })).join('');
+  }
+
+  _boardHtml(kind, active) {
     const s = this.state;
     const size = s.size;
     const localSeat = this._localSeat(), remoteSeat = this._remoteSeat();
     const isEnemy = kind === 'enemy';
     const seat = isEnemy ? remoteSeat : localSeat;
     const shots = s.shots[seat];
-    let myShipCells = null;
-    if (!isEnemy) {
-      const myFleet = this.mp ? this.mp.myFleet : s.fleets[localSeat];
-      myShipCells = this._shipCellSet(myFleet);
-    } else if (!this.mp && s.over) {
-      // Solo only, at game end: reveal the AI's remaining fleet on the enemy board (this device
-      // has always held both fleets locally, and the game is over).
-      myShipCells = this._shipCellSet(s.fleets[remoteSeat]);
-    }
     const interactive = isEnemy && this._isMyTurn() && !this.busy;
     const cells = [];
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        cells.push(this._cellHtml(size, r, c, { shots, interactive, myShipCells, isTarget: isEnemy, seat }));
+        cells.push(this._cellHtml(size, r, c, { shots, interactive, isTarget: isEnemy, seat }));
       }
     }
     const showRadar = isEnemy && !s.over && (this.busy || (this.mp && this.mp.pendingShot));
-    return `<div class="bs-board ${isEnemy ? 'bs-target' : ''}" style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
+    const sprites = isEnemy
+      ? this._enemySpritesHtml(seat)
+      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({ sinking: this._shipHoldsLastShot(ship, seat) }));
+    const shake = this._lastShot && this._lastShot.seat === seat && (this._lastShot.result === 'hit') ? 'bs-shake' : '';
+    return `<div class="bs-board ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
+        style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
       ${cells.join('')}
+      ${sprites}
       ${showRadar ? '<div class="bs-radar" aria-hidden="true"></div>' : ''}
     </div>`;
   }
@@ -772,9 +887,11 @@ class BattleshipUI {
     const id = this._identity();
     const s = this.state;
     const isMyTurn = this._isMyTurn();
-    const enemyPrimary = isMyTurn || s.over;
     const series = this.mp ? `<p class="bs-mp-series">${esc(this._seriesLine())}</p>` : '';
     const banner = this._sunkBanner ? `<div class="bs-sunk-banner">${esc(this._sunkBanner)}</div>` : '';
+    // Boards NEVER swap size on a turn flip (HANDOFF-BATTLESHIP-POLISH.md section 2) -- enemy
+    // waters is always the big panel, your own fleet always the small one. Whose turn it is is
+    // shown only via .is-active-turn (box-shadow/opacity) and the status line above.
     this.shell.innerHTML = `
       <div class="bs-battle">
         <div class="bs-turnbar">
@@ -785,14 +902,14 @@ class BattleshipUI {
         ${series}
         <p class="bs-status" aria-live="polite">${esc(this._statusText())}</p>
         <div class="bs-boards">
-          <div class="bs-boardpanel ${enemyPrimary ? 'is-primary' : 'is-secondary'}">
+          <div class="bs-boardpanel bs-boardpanel-enemy">
             <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
-            ${this._boardHtml('enemy')}
+            ${this._boardHtml('enemy', isMyTurn && !s.over)}
             ${this._fleetRosterHtml('enemy', s.shots[this._remoteSeat()].sunkIds)}
           </div>
-          <div class="bs-boardpanel ${enemyPrimary ? 'is-secondary' : 'is-primary'}">
+          <div class="bs-boardpanel bs-boardpanel-own">
             <div class="bs-boardpanel-h">${t('your_waters')}</div>
-            ${this._boardHtml('own')}
+            ${this._boardHtml('own', !isMyTurn && !s.over)}
             ${this._fleetRosterHtml('own', s.shots[this._localSeat()].sunkIds)}
           </div>
         </div>
@@ -805,6 +922,7 @@ class BattleshipUI {
                <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="change-settings">${t('new_game')}</button>`}
         </div>
       </div>`;
+    this._updateCellSize();
   }
 
   _seriesLine() {

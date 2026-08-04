@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v264';
+const CACHE = 'game-hub-v265';
 
 const ASSETS = [
   './',
@@ -247,6 +247,7 @@ const ASSETS = [
   './battleship/js/fleet.js',
   './battleship/js/ai.js',
   './battleship/js/hash.js',
+  './battleship/js/ship-art.js',
   './battleship/js/strings.js',
 ];
 
