@@ -285,6 +285,21 @@ export function aggregatePlayers(all) {
         dst.hc.bestCoins = Math.max(dst.hc.bestCoins | 0, src.hc.bestCoins | 0);
         const sbs = src.hc.bestDistanceByStage || {};
         for (const k of Object.keys(sbs)) dst.hc.bestDistanceByStage[k] = Math.max(dst.hc.bestDistanceByStage[k] | 0, sbs[k] | 0);
+      } else if (g === 'battleship' && src.bs) {
+        // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
+        // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first
+        // DOWNWARD-improving best (js/game-stats.js's ensureBs comment): 0 is an unset sentinel,
+        // never a real "won in 0 shots" - a naive Math.min(dst, src) here would latch every
+        // player at 0 the instant a device with no wins syncs (js/game-stats.js's own header
+        // names this as the exact silent, permanent, LAW-rule-1 wrong number to avoid). The fix
+        // is to only consider a source value that is itself non-zero, then take the min of
+        // whatever non-zero values exist.
+        if (!dst.bs) dst.bs = { played: 0, won: 0, lost: 0, shots: 0, hits: 0, sunk: 0, bestAccuracy: 0, fewestShotsWin: 0 };
+        dst.bs.played += src.bs.played | 0; dst.bs.won += src.bs.won | 0; dst.bs.lost += src.bs.lost | 0;
+        dst.bs.shots += src.bs.shots | 0; dst.bs.hits += src.bs.hits | 0; dst.bs.sunk += src.bs.sunk | 0;
+        dst.bs.bestAccuracy = Math.max(dst.bs.bestAccuracy | 0, src.bs.bestAccuracy | 0);
+        const srcFsw = src.bs.fewestShotsWin | 0;
+        if (srcFsw > 0) dst.bs.fewestShotsWin = dst.bs.fewestShotsWin ? Math.min(dst.bs.fewestShotsWin, srcFsw) : srcFsw;
       }
     }
   }

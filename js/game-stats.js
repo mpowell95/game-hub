@@ -133,7 +133,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -501,6 +501,25 @@ function ensureHc(g) {
   for (const s of HC_STAGES) if (!Number.isFinite(g.hc.bestDistanceByStage[s])) g.hc.bestDistanceByStage[s] = 0;
 }
 
+/** Battleship: W/L counters plus shots/hits/ships-sunk and two bests. This game has NO DRAW
+ *  (root CLAUDE.md, section 3: the first fleet fully sunk loses, and only one side's fleet can
+ *  finish being sunk on any single shot), so there is deliberately no `tied` field here -- do not
+ *  add one; a later session "fixing" its omission would be fixing a bug that isn't one.
+ *
+ *  `fewestShotsWin` is the repo's FIRST best that improves by going DOWN (every other best in
+ *  this file is Math.max). `0` is an unset sentinel meaning "no win recorded yet", never "zero
+ *  shots" -- a real win always takes at least one shot. Handled explicitly here AND at the
+ *  aggregation site (js/players-agg.js): a naive `Math.min(dst, src)` there would latch every
+ *  player at 0 the moment a device with no wins syncs. `bestAccuracy` is a percentage 0-100,
+ *  Math.max, and only updated here (recordBattleship is only ever called on a FINISHED game), so
+ *  a quit game can never mint a fake accuracy. */
+function ensureBs(g) {
+  if (!g.bs || typeof g.bs !== 'object') g.bs = { played: 0, won: 0, lost: 0, shots: 0, hits: 0, sunk: 0, bestAccuracy: 0, fewestShotsWin: 0 };
+  for (const k of ['played', 'won', 'lost', 'shots', 'hits', 'sunk', 'bestAccuracy', 'fewestShotsWin']) {
+    if (!Number.isFinite(g.bs[k])) g.bs[k] = 0;
+  }
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -524,6 +543,7 @@ function normalize(raw) {
   ensureDm(st.games.dominoes);
   ensureSn(st.games.snake);
   ensureHc(st.games.hillclimb);
+  ensureBs(st.games.battleship);
   return st;
 }
 
@@ -948,6 +968,32 @@ export function recordHillClimb(distance, stage, extras) {
   return st;
 }
 
+/** Battleship: record one finished match. Maintains total/byDiff (as recordResult) AND the `bs`
+ *  breakdown. `won` is true or false -- NEVER null (this game has no draw, see ensureBs above;
+ *  callers must not pass null). `extras` = { shots, hits, sunk, accuracy } for THIS match:
+ *  `shots`/`hits`/`sunk` are added to the running totals; `bestAccuracy` takes Math.max.
+ *  `fewestShotsWin` only updates on a WIN, and only via the sentinel-aware Math.min below (0 =
+ *  unset, never a real "won in 0 shots"). Additive; never overwrites. */
+export function recordBattleship(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.battleship;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureBs(g);
+  const e = extras || {};
+  g.bs.played += 1;
+  if (won === true) g.bs.won += 1; else if (won === false) g.bs.lost += 1;
+  g.bs.shots += Math.max(0, e.shots | 0);
+  g.bs.hits += Math.max(0, e.hits | 0);
+  g.bs.sunk += Math.max(0, e.sunk | 0);
+  g.bs.bestAccuracy = Math.max(g.bs.bestAccuracy | 0, e.accuracy | 0);
+  if (won === true && (e.shots | 0) > 0) {
+    g.bs.fewestShotsWin = g.bs.fewestShotsWin ? Math.min(g.bs.fewestShotsWin, e.shots | 0) : (e.shots | 0);
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
  *
  *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
@@ -986,7 +1032,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

@@ -134,6 +134,41 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('dotsboxes: bestChain is the max, not the sum', db.bestChain, 7);
 }
 
+// ---- Battleship's bs sub-counter survives the cross-device combine (THE LAW rule 1), INCLUDING
+// the fewestShotsWin sentinel (this repo's first DOWNWARD-improving best) ----
+// A device with no wins yet reports fewestShotsWin: 0 (the unset sentinel, js/game-stats.js's
+// ensureBs comment) -- a naive Math.min(dst, src) across devices would latch every player at 0
+// the instant such a device syncs, even though its sibling device has a real winning score.
+{
+  const all = {
+    d1: rec({ playerId: 'BS111', name: 'Sailor' }, {
+      battleship: {
+        total: { played: 5, won: 3, lost: 2 },
+        bs: { played: 5, won: 3, lost: 2, shots: 60, hits: 20, sunk: 9, bestAccuracy: 55, fewestShotsWin: 22 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'bs111', name: 'Sailor' }, {
+      battleship: {
+        // no wins recorded yet on this device -- fewestShotsWin is the unset sentinel
+        total: { played: 1, won: 0, lost: 1 },
+        bs: { played: 1, won: 0, lost: 1, shots: 12, hits: 3, sunk: 0, bestAccuracy: 25, fewestShotsWin: 0 },
+      },
+    }, 200),
+  };
+  const bs = aggregatePlayers(all)[0].games.battleship.bs;
+  eq('battleship: played/won/lost summed across devices', [bs.played, bs.won, bs.lost], [6, 3, 3]);
+  eq('battleship: shots/hits/sunk summed', [bs.shots, bs.hits, bs.sunk], [72, 23, 9]);
+  eq('battleship: bestAccuracy is the max, not the sum', bs.bestAccuracy, 55);
+  eq('battleship: fewestShotsWin ignores a 0 (unset) sibling and keeps the real value', bs.fewestShotsWin, 22);
+
+  // Both devices unset (nobody has won yet anywhere) -> stays 0, never fabricated.
+  const noWinsYet = {
+    e1: rec({ playerId: 'BS222', name: 'Rookie' }, { battleship: { total: { played: 1, won: 0, lost: 1 }, bs: { played: 1, won: 0, lost: 1, shots: 5, hits: 1, sunk: 0, bestAccuracy: 20, fewestShotsWin: 0 } } }, 1),
+    e2: rec({ playerId: 'bs222', name: 'Rookie' }, { battleship: { total: { played: 1, won: 0, lost: 1 }, bs: { played: 1, won: 0, lost: 1, shots: 6, hits: 2, sunk: 0, bestAccuracy: 33, fewestShotsWin: 0 } } }, 2),
+  };
+  eq('battleship: fewestShotsWin stays 0 when no device has ever won', aggregatePlayers(noWinsYet)[0].games.battleship.bs.fewestShotsWin, 0);
+}
+
 // ---- Boggle's bg sub-counter survives the cross-device combine (THE LAW rule 1) ----
 // `total` aggregating correctly is NOT enough: the Boggle Stats screen reads `bg` for
 // ties, best score, words found and the longest word. Before players-agg carried `bg`

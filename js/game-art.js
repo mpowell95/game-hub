@@ -516,6 +516,35 @@ export const GAME_ART = {
               <circle cx="12" cy="4" r="3" fill="#e8e2d6"/>
             </g>
           </svg>`,
+
+  // Battleship: composed for the 16:9 frame (never a square crop). A peg grid (the hunting board)
+  // fills the left third with one vermilion hit peg and a splash ring reinforcing it; a ship
+  // silhouette in profile, bow to the right, sits on the right two-thirds riding a steel-navy sea
+  // band that matches the hub tile's own accent (#34506E).
+  battleship: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#0E2438"/>
+            <rect x="0" y="58" width="160" height="32" fill="#1B3B57"/>
+            <g stroke="#3E5E7A" stroke-width="1.4" opacity="0.7">
+              <line x1="8" y1="10" x2="8" y2="70"/><line x1="24" y1="10" x2="24" y2="70"/>
+              <line x1="40" y1="10" x2="40" y2="70"/><line x1="56" y1="10" x2="56" y2="70"/>
+              <line x1="0" y1="18" x2="64" y2="18"/><line x1="0" y1="34" x2="64" y2="34"/>
+              <line x1="0" y1="50" x2="64" y2="50"/><line x1="0" y1="66" x2="64" y2="66"/>
+            </g>
+            <circle cx="40" cy="34" r="10" fill="none" stroke="#E0532F" stroke-width="2.4" opacity="0.55"/>
+            <circle cx="40" cy="34" r="5.2" fill="#E0532F"/>
+            <g fill="#B9C6D3" stroke="#0E2438" stroke-width="1.6">
+              <circle cx="8" cy="18" r="2.6"/><circle cx="24" cy="50" r="2.6"/><circle cx="56" cy="34" r="2.6"/>
+              <circle cx="8" cy="66" r="2.6"/><circle cx="40" cy="66" r="2.6"/>
+            </g>
+            <g transform="translate(84 30)">
+              <path d="M0 30 L4 42 L92 42 L96 30 L80 30 L72 14 L20 14 L12 30 Z" fill="#5C7185" stroke="#1c2733" stroke-width="2"/>
+              <rect x="34" y="0" width="20" height="16" rx="2" fill="#3E5266" stroke="#1c2733" stroke-width="2"/>
+              <rect x="40" y="-8" width="4" height="10" fill="#2b3a48"/>
+              <rect x="12" y="20" width="10" height="10" fill="#3E5266" stroke="#1c2733" stroke-width="1.6"/>
+              <rect x="66" y="20" width="10" height="10" fill="#3E5266" stroke="#1c2733" stroke-width="1.6"/>
+            </g>
+            <path d="M84 60 Q120 54 158 60" fill="none" stroke="#7C93A8" stroke-width="2" opacity="0.5"/>
+          </svg>`,
 };
 
 export default GAME_ART;

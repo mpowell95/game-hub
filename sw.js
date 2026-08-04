@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v263';
+const CACHE = 'game-hub-v264';
 
 const ASSETS = [
   './',
@@ -237,6 +237,17 @@ const ASSETS = [
   './poolv2/js/strings.js',
   './poolv2/js/rng.js',
   './poolv2/js/worker.js',
+  // Battleship (2026-08-04). Note test.js is deliberately NOT listed: it is a node-only engine
+  // suite, never loaded by the page (same convention as every other game's test file).
+  './battleship/',
+  './battleship/index.html',
+  './battleship/css/battleship.css',
+  './battleship/js/ui.js',
+  './battleship/js/game.js',
+  './battleship/js/fleet.js',
+  './battleship/js/ai.js',
+  './battleship/js/hash.js',
+  './battleship/js/strings.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,

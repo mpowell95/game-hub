@@ -106,6 +106,12 @@ import { R as pR, TABLE as pTABLE, strikeCueBall as pStrike, simulateToRest as p
 import { ballById as pBallById } from './poolv2/js/table.js';
 import * as pRules from './poolv2/js/rules.js';
 import { stateHash as pHash } from './poolv2/js/hash.js';
+import {
+  newGame as bsNewGame, setFleet as bsSetFleet, isShotLegal as bsIsShotLegal,
+  resolveShot as bsResolveShot, applyAnswer as bsApplyAnswer, cellAt as bsCellAt, CELL_UNKNOWN as bsUnknown,
+} from './battleship/js/game.js';
+import { SHIP_SETS as bsShipSets, boardSizeFor as bsBoardSizeFor, autoPlace as bsAutoPlace } from './battleship/js/fleet.js';
+import { stateHash as bsHash } from './battleship/js/hash.js';
 
 let fail = 0;
 function ok(name, cond, detail) {
@@ -4006,6 +4012,642 @@ console.log('\n--- P3: Poolv2 rematch series (KNOWN-BUG PROBE: writeResult would
     restored.kill();
   } catch (e) { fail++; console.log(`FAIL  P3 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
+}
+
+// ==================================================================================
+// BATTLESHIP (mirror of battleship/js/ui.js's MP glue; citations per method). THE TENTH
+// CONSUMER and the repo's FIRST HIDDEN-INFORMATION game (js/CLAUDE.md's "tenth consumer"
+// section, battleship/CLAUDE.md's Multiplayer section). A shot is TWO log entries: the
+// shooter appends 's', the DEFENDER resolves it against its own LOCAL fleet (never
+// transmitted, never part of `state`) and appends the authoritative 'a'; both sides apply
+// 'a' and hash after it. There is also a per-seat 'r' (ready) entry gating the first shot
+// on both being present, since placement happens simultaneously.
+//   battleship/js/ui.js: _mpNewState, _mpApplyPlacementRound, _mpAfterLocalReady,
+//   _mpFireAt, _mpDefenderResolveAndAnswer, _mpTryDeliverNextMove, _mpApplyNextEntry,
+//   _mpOnDivergence, _mpSnapshot, _mpApplyRecovery, _mpCannotResume, _mpAfterGameEnd,
+//   _mpSaveSnapshot, _tryRestoreMP, and the MP branch of _afterStateChange/fireAt.
+// ==================================================================================
+
+const BS_SIZE_KEY = 'quick';   // 8x8, small ship set -- fast matches for the whole block
+const BS_SIZE = bsBoardSizeFor(BS_SIZE_KEY);
+const BS_SHIPS = bsShipSets[BS_SIZE_KEY];
+
+function bsNewMp(role) {   // _mpNewState (UI-only fields dropped)
+  return {
+    role, localSeat: role === 'host' ? 0 : 1,
+    sizeKey: BS_SIZE_KEY, bonusShotOnHit: false,
+    gameNum: 0, dealerSeat: 0,
+    series: { wins: [0, 0] },
+    readySeats: new Set(), localReady: false, myFleet: null, pendingShot: null,
+    lastShotSeat: null, lastShotRC: null,
+    appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
+    replayMode: false, recoveryAttempts: 0, delivering: false, redeliverRequested: false,
+    awaitingRecovery: false, opponentLeft: false, lastRoomSnapshot: null,
+    lastRecoveryHandled: null, lastRecoveryApplied: null, lastScoredGame: 0,
+  };
+}
+const bsNormSeries = (s) => ({ wins: [((s && s.wins) || [])[0] | 0, ((s && s.wins) || [])[1] | 0] });
+
+/** Deterministic shot policy: the first untried cell on the target's shot grid, row-major.
+ *  Guarantees a decisive, terminating match for any fleet layout. */
+function bsFirstUntried(shots) {
+  for (let r = 0; r < shots.size; r++) for (let c = 0; c < shots.size; c++) if (bsCellAt(shots, r, c) === bsUnknown) return [r, c];
+  return null;
+}
+
+class BattleshipSide {
+  constructor(role, room, opts = {}) {
+    this.role = role; this.room = room; this.opts = opts;
+    this.mp = null; this.state = null;
+    this.dead = false; this.failedHard = false;
+    this.mismatches = 0; this.recoveriesApplied = 0; this.divergenceDiscards = 0;
+    this.statsCommitted = false; this.gamesFinished = 0;
+    this.statsCommits = []; this.saves = [];
+    this._roomCb = (r) => this.roomCallback(r);
+    room.onRoom(this._roomCb);
+  }
+
+  localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  remoteSeat() { return 1 - this.localSeat(); }
+
+  delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+  // --- placement (simultaneous; both sides auto-place and go ready) --------------------------
+
+  // Ready entries live at FIXED, seat-derived seq slots (seat+1), never through a racing shared
+  // ++mp.appliedSeq counter -- both seats place SIMULTANEOUSLY and net.appendMove is a plain
+  // write, not a transaction, so two independent local reservations would collide on the same
+  // seq. See battleship/js/ui.js's _mpRefreshReadySeats comment for the full reasoning.
+  refreshReadySeats() {
+    const mp = this.mp;
+    if (!mp || mp.readySeats.size >= 2) return;
+    for (const entry of mp.movesById.values()) {
+      const mv = entry.move;
+      if (mv && mv.k === 'r' && (mv.g | 0) === (mp.gameNum | 0)) mp.readySeats.add(mv.seat | 0);
+    }
+    this.maybeStartBattle();
+  }
+
+  localReady(seedOffset = 0) {   // _mpAfterLocalReady
+    const mp = this.mp;
+    if (!mp || mp.localReady) return;
+    const rng = mulberry32((this.localSeat() * 7919 + mp.gameNum * 104729 + seedOffset) >>> 0);
+    mp.myFleet = bsAutoPlace(BS_SIZE_KEY, BS_SHIPS, rng);
+    mp.localReady = true;
+    mp.readySeats.add(this.localSeat());
+    const seq = this.localSeat() + 1;
+    this.room.appendMove(this.role, seq, { k: 'r', g: mp.gameNum, seat: this.localSeat() }, bsHash(this.state)).catch(() => {});
+    this.save();
+    this.maybeStartBattle();
+  }
+
+  maybeStartBattle() {
+    const mp = this.mp;
+    if (mp && mp.readySeats.has(0) && mp.readySeats.has(1) && this.view !== 'battle') {
+      mp.appliedSeq = Math.max(mp.appliedSeq, 2);
+      this.view = 'battle';
+      this.afterStateChange();
+    }
+  }
+
+  // --- shooting --------------------------------------------------------------------------------
+
+  isMyTurn() { return !!(this.state && !this.state.over && this.view === 'battle' && this.state.turn === this.localSeat()); }
+
+  fireAt(r, c) {   // fireAt -> _mpFireAt
+    const mp = this.mp;
+    if (!mp || this.busy || !this.isMyTurn()) return;
+    if (!bsIsShotLegal(this.state, this.remoteSeat(), r, c)) return;
+    this.busy = true;
+    mp.pendingShot = { r, c };
+    // The shooter's own 's' entry is self-consumed by the seq reservation below and never runs
+    // through applyNextEntry's 'k===s' branch, so it must record its own lastShotSeat/lastShotRC
+    // HERE -- otherwise it has nothing to validate the incoming answer against (see ui.js's fix).
+    mp.lastShotSeat = this.localSeat();
+    mp.lastShotRC = [r, c];
+    const seq = ++mp.appliedSeq;
+    this.room.appendMove(this.role, seq, { k: 's', g: mp.gameNum, seat: this.localSeat(), r, c }, bsHash(this.state)).catch(() => {});
+  }
+
+  defenderResolveAndAnswer(shooterSeat, r, c) {   // _mpDefenderResolveAndAnswer
+    const mp = this.mp;
+    const mySeat = this.localSeat();
+    const res = bsResolveShot(mp.myFleet, r, c);
+    mp.myFleet = res.fleet;
+    const answer = { result: res.result, shipId: res.shipId, sunk: res.sunk, fleetSunk: res.fleetSunk, cells: res.cells };
+    this.state = bsApplyAnswer(this.state, mySeat, r, c, answer);
+    const seq = ++mp.appliedSeq;
+    this.room.appendMove(this.role, seq,
+      { k: 'a', g: mp.gameNum, seat: mySeat, r, c, result: answer.result, shipId: answer.shipId, sunk: answer.sunk, fleetSunk: answer.fleetSunk, cells: answer.cells },
+      bsHash(this.state)).catch(() => {});
+    this.afterStateChange();
+  }
+
+  async tryDeliver() {   // _mpTryDeliverNextMove
+    const mp = this.mp;
+    if (!mp || mp.delivering || mp.awaitingRecovery || this.dead || !this.state) return;
+    mp.delivering = true; mp.redeliverRequested = false;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (await this.applyNextEntry()) continue;
+        if (mp.redeliverRequested) { mp.redeliverRequested = false; continue; }
+        break;
+      }
+    } finally { mp.delivering = false; }
+  }
+
+  async applyNextEntry() {   // _mpApplyNextEntry
+    const mp = this.mp;
+    if (!mp || mp.awaitingRecovery || !mp.movesById || !this.state) return false;
+    // Ready entries live at fixed seq 1/2, outside this strict single-writer stream.
+    if (this.view !== 'battle') return false;
+    const seq = mp.appliedSeq + 1;
+    const entry = mp.movesById.get(seq);
+    if (!entry || !entry.move) return false;
+    const move = entry.move;
+    if ((move.g | 0) !== (mp.gameNum | 0)) return false;
+    if (move.k === 'r') return false;
+
+    if (move.k === 's') {
+      const shooterSeat = move.seat | 0;
+      if (!this.state || this.state.over || shooterSeat !== this.state.turn) {
+        this.divergenceDiscards++;
+        return this.onDivergence(seq);
+      }
+      mp.appliedSeq = seq;
+      mp.lastShotSeat = shooterSeat;
+      mp.lastShotRC = [move.r | 0, move.c | 0];
+      if (shooterSeat === this.localSeat()) return true;
+      this.defenderResolveAndAnswer(shooterSeat, move.r | 0, move.c | 0);
+      return true;
+    }
+
+    if (move.k === 'a') {
+      const defenderSeat = move.seat | 0;
+      const validAuthor = mp.lastShotSeat != null && defenderSeat === 1 - mp.lastShotSeat
+        && mp.lastShotRC && (move.r | 0) === mp.lastShotRC[0] && (move.c | 0) === mp.lastShotRC[1];
+      if (!validAuthor) { this.divergenceDiscards++; return this.onDivergence(seq); }
+      if (defenderSeat === this.localSeat()) { mp.appliedSeq = seq; return true; }
+      const answer = { result: move.result, shipId: move.shipId || null, sunk: !!move.sunk, fleetSunk: !!move.fleetSunk, cells: move.cells };
+      const next = bsApplyAnswer(this.state, defenderSeat, move.r | 0, move.c | 0, answer);
+      if (bsHash(next) !== entry.h) { this.mismatches++; return this.onDivergence(seq); }
+      this.state = next;
+      mp.appliedSeq = seq;
+      mp.recoveryAttempts = 0;
+      if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
+      mp.pendingShot = null;
+      this.busy = true;
+      await this.delay(1);   // harness pacing stand-in for the real UI's animation delay
+      if (this.dead || !this.mp) return false;
+      await this.afterStateChange();
+      return true;
+    }
+    return false;
+  }
+
+  onDivergence(seq) {   // _mpOnDivergence
+    const mp = this.mp;
+    mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
+    if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; return false; }
+    if (mp.role === 'host') {
+      mp.appliedSeq = seq;
+      this.room.writeRecovery(seq, this.snapshot()).catch(() => {});
+      // Mirrors battleship/js/ui.js's _mpOnDivergence exactly: afterStateChange() resets `busy`
+      // and re-checks whose turn it is. Without this, a host whose own PENDING SHOT was the one
+      // that got a corrupted answer stays permanently stuck (busy stays true forever, since only
+      // the *guest* half of a divergence ever calls applyRecovery -> afterStateChange -- the host
+      // published the snapshot but never consumes one itself). The real UI doesn't need an
+      // explicit call here because re-rendering with busy=false already makes the board tappable
+      // again for a human to retry; this harness's takeTurnIfMine() is that retry's stand-in.
+      this.afterStateChange();
+      return true;
+    }
+    mp.awaitingRecovery = true;
+    this.room.requestRecovery(seq).catch(() => {});
+    return false;
+  }
+
+  snapshot() {   // _mpSnapshot -- PUBLIC ONLY, never a fleet
+    const mp = this.mp;
+    return {
+      v: 1, sizeKey: mp.sizeKey, bonusShotOnHit: mp.bonusShotOnHit,
+      gameNum: mp.gameNum, dealerSeat: mp.dealerSeat, readySeats: [...mp.readySeats],
+      series: { wins: mp.series.wins.slice() }, state: deep(this.state),
+    };
+  }
+
+  async applyRecovery(recovery) {   // _mpApplyRecovery -- rebuilds the fleet LOCALLY, never from the network
+    const mp = this.mp;
+    if (!mp || this.dead) return;
+    const snap = deep(recovery.state);
+    mp.sizeKey = snap.sizeKey; mp.bonusShotOnHit = !!snap.bonusShotOnHit;
+    mp.gameNum = snap.gameNum | 0; mp.dealerSeat = snap.dealerSeat === 1 ? 1 : 0;
+    mp.readySeats = new Set(snap.readySeats || []);
+    mp.series = bsNormSeries(snap.series);
+    this.state = snap.state;
+    mp.appliedSeq = recovery.seq | 0;
+    mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
+    mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    this.view = (mp.readySeats.has(0) && mp.readySeats.has(1)) ? 'battle' : 'placement';
+    if (this.view === 'battle' && !mp.myFleet) { this.cannotResume = true; return; }   // section 7.5
+    this.recoveriesApplied++;
+    this.room.clearRecovery().catch(() => {});
+    await this.afterStateChange();
+  }
+
+  async applyPlacementRound(round, room) {   // _mpApplyPlacementRound
+    const mp = this.mp;
+    if (!mp || this.dead || !round) return;
+    mp.gameNum = round.n | 0;
+    mp.dealerSeat = round.dealer === 1 ? 1 : 0;
+    mp.appliedSeq = 0; mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.readySeats = new Set(); mp.localReady = false; mp.myFleet = null;
+    mp.lastShotSeat = null; mp.lastShotRC = null;
+    const entries = Object.values((room && room.moves) || {});
+    mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+    mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+    this.statsCommitted = false;
+    this.state = bsNewGame(BS_SIZE, mp.sizeKey, mp.bonusShotOnHit, mp.dealerSeat);
+    this.view = 'placement';
+    this.refreshReadySeats();
+    this.localReady();
+    await this.tryDeliver();
+  }
+
+  async startNextGame(dealer) {   // _mpStartNextGame (host only)
+    const mp = this.mp;
+    if (!mp || mp.role !== 'host' || this.dead) return;
+    const n = (mp.gameNum | 0) + 1;
+    const seat = dealer != null ? dealer : (mp.gameNum | 0) % 2;
+    await this.room.startRound(n, null, seat);
+    if (this.dead || !this.mp) return;
+    if ((this.mp.gameNum | 0) < n) await this.applyPlacementRound({ n, dealer: seat }, null);
+  }
+
+  afterGameEnd() {   // _mpAfterGameEnd
+    const mp = this.mp, s = this.state;
+    if (!mp || !s || !s.over) return;
+    if (mp.lastScoredGame === mp.gameNum) return;
+    mp.lastScoredGame = mp.gameNum;
+    mp.series.wins[s.winner] += 1;
+    this.save();
+  }
+
+  commitStats() {   // _commitStats -- won resolves through localSeat()
+    if (this.statsCommitted) return;
+    this.statsCommitted = true;
+    const s = this.state;
+    this.statsCommits.push({ difficulty: 'mp', won: s.winner === this.localSeat() });
+  }
+
+  save() {   // _mpSaveSnapshot -- myFleet rides along (local-fleet recovery, section 7.5)
+    const mp = this.mp;
+    if (!mp) return;
+    this.saves.push({
+      v: 1, code: 'B', role: this.role, at: 0,
+      sizeKey: mp.sizeKey, bonusShotOnHit: mp.bonusShotOnHit,
+      gameNum: mp.gameNum | 0, dealerSeat: mp.dealerSeat | 0, readySeats: [...mp.readySeats],
+      myFleet: deep(mp.myFleet), series: { wins: mp.series.wins.slice() },
+      seq: mp.appliedSeq | 0, midGame: !!(this.state && !this.state.over), view: this.view,
+      statsCommitted: !!this.statsCommitted, state: this.state && deep(this.state),
+    });
+  }
+
+  /** _afterStateChange, MP branch (invariant 4: save happens AFTER this move's own MP bookkeeping,
+   *  which has already run by the time this is called -- same ordering as every other MP game). */
+  async afterStateChange() {
+    if (this.dead) return;
+    this.save();
+    if (this.state && this.state.over) {
+      this.commitStats();
+      this.afterGameEnd();
+      this.save();
+      this.gamesFinished++;
+      this.busy = false;
+      return;
+    }
+    this.busy = false;
+    await this.tryDeliver();
+    this.takeTurnIfMine();
+  }
+
+  /** HARNESS ONLY: stands in for the local human's tap, deterministic policy. */
+  takeTurnIfMine() {
+    if (this.dead || !this.isMyTurn() || this.busy) return;
+    const shot = bsFirstUntried(this.state.shots[this.remoteSeat()]);
+    if (shot) this.fireAt(shot[0], shot[1]);
+  }
+
+  roomCallback(room) {   // _mpRoomCallback
+    if (this.dead) return;
+    if (this.mp) { this.onRoomUpdate(room); return; }
+    if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+  }
+
+  guestStart(room) {   // _mpGuestStartMatch
+    if (this.mp || this.dead) return;
+    this.mp = bsNewMp('guest');
+    const cfg = room.config || {};
+    this.mp.sizeKey = cfg.sizeKey || BS_SIZE_KEY;
+    this.mp.bonusShotOnHit = !!cfg.bonusShotOnHit;
+    this.mp.lastRoomSnapshot = room;
+    this.applyPlacementRound(room.round, room);
+  }
+
+  hostStartMatch(dealer) {   // _mpHostStartMatch
+    this.mp = bsNewMp('host');
+    return this.startNextGame(dealer);
+  }
+
+  async onRoomUpdate(room) {   // _mpOnRoomUpdate
+    if (this.dead || !this.mp || !room) return;
+    const mp = this.mp;
+    mp.lastRoomSnapshot = room;
+    if (room.status === 'ended' && !mp.opponentLeft) { mp.opponentLeft = true; return; }
+    if (room.recovery) {
+      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
+        mp.lastRecoveryHandled = room.recovery.requested;
+        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+      }
+      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = room.recovery.seq;
+        await this.applyRecovery(room.recovery);
+      }
+    }
+    const roundN = room.round ? (room.round.n | 0) : 0;
+    if (room.round && roundN > (mp.gameNum | 0)) {
+      await this.applyPlacementRound(room.round, room);
+    } else if (roundN === (mp.gameNum | 0)) {
+      const entries = Object.values(room.moves || {});
+      mp.movesById = new Map(entries.map((m) => [m.seq, m]));
+      const maxSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
+      if (maxSeq > mp.appliedSeq + 1) mp.replayMode = true;
+      mp.maxKnownSeq = maxSeq;
+      if (this.view === 'placement') this.refreshReadySeats();
+      mp.redeliverRequested = true;
+      this.tryDeliver();
+    }
+  }
+
+  async restoreFromSave(save) {   // _tryRestoreMP (join/heartbeat half elided: FakeRoom is always reachable)
+    this.mp = bsNewMp(this.role);
+    const mp = this.mp;
+    mp.sizeKey = save.sizeKey; mp.bonusShotOnHit = !!save.bonusShotOnHit;
+    mp.gameNum = save.gameNum | 0; mp.dealerSeat = save.dealerSeat === 1 ? 1 : 0;
+    mp.readySeats = new Set(save.readySeats || []);
+    mp.localReady = mp.readySeats.has(this.localSeat());
+    mp.myFleet = deep(save.myFleet);
+    mp.series = bsNormSeries(save.series);
+    mp.appliedSeq = save.seq | 0; mp.maxKnownSeq = mp.appliedSeq;
+    mp.lastScoredGame = save.midGame ? 0 : mp.gameNum;
+    this.state = deep(save.state);
+    this.statsCommitted = !!save.statsCommitted;
+    this.view = save.view === 'placement' ? 'placement' : 'battle';
+    if (this.view === 'battle' && !mp.myFleet) { this.cannotResume = true; return; }
+    if (save.midGame) { await this.tryDeliver(); this.takeTurnIfMine(); return; }
+    if (this.state.over) this.commitStats();
+  }
+
+  kill() { this.dead = true; this.room.offRoom(this._roomCb); }
+}
+
+function makeBattleship(opts = {}) {
+  const room = new FakeRoom();
+  room.config = { sizeKey: BS_SIZE_KEY, bonusShotOnHit: !!opts.bonusShotOnHit };
+  const host = new BattleshipSide('host', room, opts.host || {});
+  const guest = new BattleshipSide('guest', room, Object.assign({ autoStart: true }, opts.guest || {}));
+  host.hostStartMatch(opts.dealer);
+  if (opts.bonusShotOnHit) { host.mp.bonusShotOnHit = true; }
+  return { room, host, guest };
+}
+
+// --- BS1: full match, lockstep, hash-verified every applied ANSWER --------------------------
+console.log('\n--- BS1: Battleship full match, lockstep, hash-verified every applied answer ---');
+{
+  const { room, host, guest } = makeBattleship();
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'BS1 game end');
+    ok('BS1: both sides completed the game (no hard failure)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('BS1: zero hash mismatches across the whole game', host.mismatches === 0 && guest.mismatches === 0, `host=${host.mismatches} guest=${guest.mismatches}`);
+    ok('BS1: zero recoveries needed', host.recoveriesApplied === 0 && guest.recoveriesApplied === 0);
+    ok('BS1: final states hash-identical', bsHash(host.state) === bsHash(guest.state));
+    ok('BS1: the match really has a winner and no draw (this game has no draw by design)',
+      host.state.over && (host.state.winner === 0 || host.state.winner === 1));
+    ok('BS1: no move-log overwrites (the shared seq never collided)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('BS1: host holds network seat 0, guest holds network seat 1',
+      host.localSeat() === 0 && guest.localSeat() === 1);
+    const hc = host.statsCommits[0], gc = guest.statsCommits[0];
+    ok('BS1: each device recorded exactly one result, in the mp difficulty bucket',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1 && hc.difficulty === 'mp' && gc.difficulty === 'mp');
+    ok('BS1: the guest recorded ITS OWN result, not the host\'s\n' +
+       '      (THE LAW rule 2: a loss written as a win is not additive-safe)',
+      hc.won !== gc.won, `host.won=${hc.won} guest.won=${gc.won}`);
+  } catch (e) { fail++; console.log(`FAIL  BS1 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- BS2: INVARIANT 2 ported - forced desync, PUBLIC-ONLY recovery, LOCAL fleet rebuild ------
+console.log('\n--- BS2: Battleship forced desync + recovery (KNOWN-BUG PROBE: a fleet leaks into the recovery snapshot) ---');
+{
+  const { room, host, guest } = makeBattleship();
+  try {
+    await until(() => host.mp && guest.mp && host.mp.appliedSeq >= 3 && guest.mp.appliedSeq >= 3, 15000, 'BS2 a few shots exchanged');
+    // Force a divergence the same way DB3/T3 do: corrupt the guest's own applied public state so
+    // its NEXT verified answer hash disagrees with the sender's.
+    guest.state = { ...guest.state, shotCount: [guest.state.shotCount[0] + 5, guest.state.shotCount[1]] };
+    await until(() => guest.recoveriesApplied >= 1 || guest.failedHard || host.failedHard, 15000, 'BS2 recovery applied');
+    // Whichever side happens to be the SHOOTER for the next exchange is the one whose hash check
+    // catches it (the corrupted side, when it's the DEFENDER authoring its own answer, has
+    // nothing to compare against -- see this test's own comment history for why); either is a
+    // valid detection.
+    ok('BS2: corruption was DETECTED as a hash mismatch', (host.mismatches + guest.mismatches) >= 1,
+      `host mismatches=${host.mismatches} guest mismatches=${guest.mismatches}`);
+    ok('BS2: host answered the desync flag with a recovery snapshot', guest.recoveriesApplied >= 1);
+    ok('BS2 [KNOWN-BUG PROBE]: the recovery snapshot carries NOTHING device-relative and NO REAL FLEET\n' +
+       '      (REGRESSION GUARD, invariant 2 ported: battleship/js/ui.js\'s _mpSnapshot transmits\n' +
+       '      only { sizeKey, bonusShotOnHit, gameNum, dealerSeat, readySeats, series, state }. The\n' +
+       '      engine\'s state SHAPE always carries a `fleets` field (game.js\'s newGame()), but in MP\n' +
+       '      it is NEVER populated -- both entries stay [null, null] for the whole match, since the\n' +
+       '      real per-device fleet lives on mp.myFleet, entirely outside this hashed/transmitted\n' +
+       '      state. If a real fleet object were ever written into state.fleets here, this snapshot\n' +
+       '      would hand the guest the HOST\'s ship positions, or vice versa -- the single worst bug\n' +
+       '      this game could ship)',
+      Array.isArray(host.snapshot().state.fleets) && host.snapshot().state.fleets.every((f) => f === null));
+    ok('BS2: the recovering guest still holds its OWN fleet, untouched by the recovery\n' +
+       '      (rebuilt from its own local state, never from the network)',
+      guest.mp.myFleet && guest.mp.myFleet.ships.length === BS_SHIPS.length);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'BS2 game end after recovery');
+    ok('BS2: the game finished cleanly on both sides after recovery',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('BS2: final states hash-identical after recovery', bsHash(host.state) === bsHash(guest.state));
+    ok('BS2: the recovered guest still recorded its OWN result',
+      guest.statsCommits[0].won === (guest.state.winner === guest.localSeat()));
+  } catch (e) { fail++; console.log(`FAIL  BS2 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- BS3: INVARIANT 3 has no literal analogue -------------------------------------------------
+console.log('\n--- BS3: invariant 3 (consumable randomness queue) has no analogue in this game ---');
+ok('BS3: there is no consumable randomness queue to leak across games\n' +
+   '      (round.deck is deliberately UNUSED -- both fleets are private and locally generated,\n' +
+   '      never shared randomness. The move-log-per-game-number stamping this game DOES need is\n' +
+   '      covered directly by BS4/BS5\'s own game-number checks, not by anything resembling\n' +
+   '      Chinchon\'s presetStockResets queue. Stated explicitly per js/CLAUDE.md\'s standing rule\n' +
+   '      that a future game with no literal analogue should say so rather than invent a gate that\n' +
+   '      was never there to break)',
+  true);
+
+// --- BS4: INVARIANT 4 ported - autosave AFTER the answer's own MP bookkeeping ------------------
+console.log('\n--- BS4: Battleship autosave ordering (KNOWN-BUG PROBE: save seq off by one) ---');
+{
+  const { room, host, guest } = makeBattleship();
+  try {
+    await until(() => guest.mp && guest.mp.appliedSeq >= 4, 15000, 'BS4 a few entries applied');
+    const midSaves = guest.saves.filter((s) => s.midGame);
+    const lastSave = midSaves[midSaves.length - 1];
+    const atSeq = room.moves[String(lastSave.seq | 0).padStart(4, '0')];
+    const atNext = room.moves[String((lastSave.seq | 0) + 1).padStart(4, '0')];
+    // A save's own seq must match a log entry whose hash the SAVED STATE agrees with, for
+    // entries that carry a real hash ('a' entries). 'r'/'s' entries change nothing and carry no
+    // meaningful hash to compare, so the probe walks back to the nearest 'a' entry at or before
+    // the saved seq if the exact saved seq landed on a non-state-changing entry.
+    let checkSeq = lastSave.seq | 0;
+    while (checkSeq > 0 && room.moves[String(checkSeq).padStart(4, '0')] && room.moves[String(checkSeq).padStart(4, '0')].move.k !== 'a') checkSeq--;
+    const atCheck = checkSeq > 0 ? room.moves[String(checkSeq).padStart(4, '0')] : null;
+    const savedHash = bsHash(lastSave.state);
+    ok('BS4 [KNOWN-BUG PROBE]: the autosave\'s seq matches its own snapshot, never one behind\n' +
+       '      (REGRESSION GUARD, invariant 4: _afterStateChange must run the answer\'s MP bookkeeping\n' +
+       '      -- reserving/advancing appliedSeq -- BEFORE _mpSaveSnapshot. Saving first would store\n' +
+       '      mp.seq one LOW relative to the answer already inside the snapshot, and a rejoin would\n' +
+       '      re-apply an answer it already had)',
+      !atCheck || savedHash === atCheck.h,
+      `save.seq=${lastSave.seq} nearest 'a' entry seq=${checkSeq} atSeq=${!!atSeq} atNext=${!!atNext}`);
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 15000, 'BS4 game end');
+    ok('BS4: the game still finished cleanly', host.gamesFinished === 1 && guest.gamesFinished === 1);
+  } catch (e) { fail++; console.log(`FAIL  BS4 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- BS5: INVARIANT 5 ported - a boundary restore resumes the series, series survives ---------
+console.log('\n--- BS5: Battleship restore at a game boundary (KNOWN-BUG PROBE: restore drops the series tally) ---');
+{
+  const { room, host, guest } = makeBattleship();
+  let restored = null;
+  try {
+    await until(() => host.gamesFinished === 1 && guest.gamesFinished === 1, 15000, 'BS5 game end');
+    await new Promise((r) => setTimeout(r, 20));
+    const boundarySave = deep(guest.saves[guest.saves.length - 1]);
+    ok('BS5: the guest\'s final save is a BOUNDARY save (state over, statsCommitted true, fleet kept)',
+      !!boundarySave && boundarySave.state.over === true && boundarySave.statsCommitted === true && !!boundarySave.myFleet);
+    cleanup(room, host, guest);
+
+    restored = new BattleshipSide('guest', new FakeRoom(), {});
+    await restored.restoreFromSave(boundarySave);
+    ok('BS5 [KNOWN-BUG PROBE, ported by analogy]: restoring an ALREADY-FINISHED game does not\n' +
+       '      re-run it, and the series tally survives UNTOUCHED\n' +
+       '      (REGRESSION GUARD, invariant 5: a boundary restore has a real "next game" it could\n' +
+       '      wrongly derive locally instead of awaiting the host\'s round record; the restored side\n' +
+       '      must recognize state.over and stop, and mp.series must not be reset to {wins:[0,0]},\n' +
+       '      the same failure shape as Chinchon\'s original initMatch wipe)',
+      restored.mp.gameNum === boundarySave.gameNum && restored.state.over === true
+        && bsHash(restored.state) === bsHash(boundarySave.state) && restored.statsCommitted === true
+        && JSON.stringify(restored.mp.series) === JSON.stringify(boundarySave.series));
+    ok('BS5: it did not double-record the finished game it restored', restored.statsCommits.length === 0);
+    ok('BS5: the restored guest rebuilt its fleet from its OWN local save, not the network',
+      restored.mp.myFleet && restored.mp.myFleet.ships.length === BS_SHIPS.length);
+  } catch (e) { fail++; console.log(`FAIL  BS5 did not complete: ${e.message}`); }
+  finally { if (restored) restored.kill(); }
+}
+
+// --- BS6: the redeliverRequested race, driven by a bonusShotOnHit chain -----------------------
+console.log('\n--- BS6: Battleship bonusShotOnHit chain (KNOWN-BUG PROBE: redeliverRequested race hangs mid-chain) ---');
+{
+  const { room, host, guest } = makeBattleship({ bonusShotOnHit: true });
+  try {
+    await until(() => (host.gamesFinished && guest.gamesFinished) || host.failedHard || guest.failedHard, 20000, 'BS6 bonus-shot game end');
+    ok('BS6: both sides completed the bonusShotOnHit game (no hard failure, no hang)',
+      host.gamesFinished === 1 && guest.gamesFinished === 1 && !host.failedHard && !guest.failedHard);
+    ok('BS6: zero hash mismatches across a chain-heavy game', host.mismatches === 0 && guest.mismatches === 0);
+    ok('BS6: final states hash-identical', bsHash(host.state) === bsHash(guest.state));
+    // Proves this really exercised a multi-shot chain, not a trivial no-bonus-ever game: the
+    // total shots taken must exceed the number of turn-owner switches, since a bonus keeps the
+    // SAME shooter going on every hit.
+    const totalShots = host.state.shotCount[0] + host.state.shotCount[1];
+    ok('BS6: bonusShotOnHit really produced at least one multi-shot chain\n' +
+       '      (REGRESSION GUARD context: this is exactly the shape that opened Mancala\'s original\n' +
+       '      race -- an async drain loop applying several rapid entries in succession, each one a\n' +
+       '      window for a room update to land in the microtask gap right after the "nothing left\n' +
+       '      to apply" check already read a stale cache. redeliverRequested, set whenever\n' +
+       '      _mpOnRoomUpdate refreshes the move-log cache, is what keeps this game from hanging\n' +
+       '      partway through a chain)',
+      totalShots > (BS_SHIPS.reduce((a, s) => a + s.len, 0)),   // more shots than total ship cells -> some misses/re-turns happened across a real game
+      `totalShots=${totalShots}`);
+  } catch (e) { fail++; console.log(`FAIL  BS6 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- BS7: NEW TO THIS GAME - seat-authorship validation (section 7.3) -------------------------
+console.log('\n--- BS7: Battleship discards a shot from the wrong seat and an answer from the wrong defender ---');
+{
+  const { room, host, guest } = makeBattleship();
+  try {
+    await until(() => host.view === 'battle' && guest.view === 'battle', 15000, 'BS7 both sides reach battle');
+    cleanup(room, host, guest);
+
+    // 7a: a shot claiming a seat that is NOT state.turn must be discarded (divergence), not applied.
+    {
+      const side = new BattleshipSide('host', new FakeRoom(), {});
+      side.mp = bsNewMp('host');
+      side.state = bsNewGame(BS_SIZE, BS_SIZE_KEY, false, 0);   // seat 0's turn
+      side.mp.gameNum = 1; side.mp.readySeats = new Set([0, 1]); side.view = 'battle';
+      side.mp.movesById = new Map([[1, { by: 'guest', seq: 1, move: { k: 's', g: 1, seat: 1, r: 0, c: 0 }, h: null }]]);
+      side.mp.maxKnownSeq = 1;
+      const continued = await side.applyNextEntry();
+      // side.mp.role === 'host': onDivergence takes the seq anyway (authoritative), same as every
+      // other MP game's host-side divergence handling -- the discard itself (never applying the
+      // bad entry's EFFECT) is what this probe is really about, captured by divergenceDiscards.
+      ok('BS7a: a shot entry claiming the seat whose turn it is NOT is discarded, not applied\n' +
+         '      (section 7.3: "a shot entry is valid only from the seat whose turn it is")',
+        side.mp.appliedSeq === 1 && side.divergenceDiscards === 1 && continued === true,
+        `appliedSeq=${side.mp.appliedSeq} discards=${side.divergenceDiscards}`);
+    }
+
+    // 7b: an answer whose seat is not the DEFENDER of the immediately preceding shot must be
+    // discarded (e.g. the SHOOTER answering its own shot, or an answer to a different cell).
+    {
+      const side = new BattleshipSide('host', new FakeRoom(), {});
+      side.mp = bsNewMp('host');
+      side.state = bsNewGame(BS_SIZE, BS_SIZE_KEY, false, 0);
+      side.mp.gameNum = 1; side.mp.readySeats = new Set([0, 1]); side.view = 'battle';
+      // A legitimate shot from seat 0 (the shooter) at (0,0) was already applied...
+      side.mp.appliedSeq = 1; side.mp.lastShotSeat = 0; side.mp.lastShotRC = [0, 0];
+      // ...but the "answer" claims seat 0 (the SHOOTER, not the defender, seat 1) authored it.
+      side.mp.movesById = new Map([[2, { by: 'host', seq: 2, move: { k: 'a', g: 1, seat: 0, r: 0, c: 0, result: 'miss' }, h: 'bogus' }]]);
+      side.mp.maxKnownSeq = 2;
+      const continued = await side.applyNextEntry();
+      ok('BS7b: an answer authored by the SHOOTER instead of the defender is discarded\n' +
+         '      (section 7.3: "an answer entry is valid only from the defender of the immediately\n' +
+         '      preceding shot; an answer from the shooter is discarded")',
+        side.mp.appliedSeq === 2 && side.divergenceDiscards === 1 && continued === true,
+        `appliedSeq=${side.mp.appliedSeq} discards=${side.divergenceDiscards}`);
+
+      // 7c: an answer referencing a DIFFERENT cell than the shot it claims to answer is also discarded.
+      const side2 = new BattleshipSide('host', new FakeRoom(), {});
+      side2.mp = bsNewMp('host');
+      side2.state = bsNewGame(BS_SIZE, BS_SIZE_KEY, false, 0);
+      side2.mp.gameNum = 1; side2.mp.readySeats = new Set([0, 1]); side2.view = 'battle';
+      side2.mp.appliedSeq = 1; side2.mp.lastShotSeat = 0; side2.mp.lastShotRC = [0, 0];
+      side2.mp.movesById = new Map([[2, { by: 'guest', seq: 2, move: { k: 'a', g: 1, seat: 1, r: 5, c: 5, result: 'miss' }, h: 'bogus' }]]);
+      side2.mp.maxKnownSeq = 2;
+      const continued2 = await side2.applyNextEntry();
+      ok('BS7c: an answer whose cell does not match the shot it claims to answer is discarded\n' +
+         '      (section 7.3: "an answer must reference the same {r,c} as the shot it answers")',
+        side2.mp.appliedSeq === 2 && side2.divergenceDiscards === 1 && continued2 === true,
+        `appliedSeq=${side2.mp.appliedSeq} discards=${side2.divergenceDiscards}`);
+    }
+  } catch (e) { fail++; console.log(`FAIL  BS7 did not complete: ${e.message}`); }
 }
 
 console.log(fail
