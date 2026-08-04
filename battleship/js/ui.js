@@ -563,11 +563,23 @@ class BattleshipUI {
    *  rather than recomputed independently, so it can never drift from what's on screen. */
   _updateCellSize() {
     if (this._dead || !this.root) return;
-    const board = this.root.querySelector('[data-role="enemy-board"], [data-role="place-board"]');
-    if (!board) return;
     const size = this.state ? this.state.size : boardSizeFor(this._placeSizeKey || this._setup.size);
-    const w = board.getBoundingClientRect().width;
-    if (w > 0 && size > 0) this.root.style.setProperty('--bs-cell', `${(w / size).toFixed(2)}px`);
+    if (!(size > 0)) return;
+    // PER BOARD, not once on the root. The battle screen shows TWO boards at DIFFERENT widths
+    // (enemy waters large, your own fleet small), and a single --bs-cell on .bs-root meant the
+    // small board drew its ship sprites at the large board's scale - boats overhanging the grid
+    // and each other. Each board owns its own value, and `var(--bs-cell)` inside a sprite resolves
+    // against its nearest board ancestor, so both are right by construction.
+    const boards = this.root.querySelectorAll('.bs-board');
+    for (const board of boards) {
+      const w = board.getBoundingClientRect().width;
+      if (w > 0) board.style.setProperty('--bs-cell', `${(w / size).toFixed(2)}px`);
+    }
+    // Kept on the root as well: the fleet roster's silhouettes sit OUTSIDE both boards and still
+    // need a sensible unit. The primary board is the right reference for them.
+    const primary = this.root.querySelector('[data-role="enemy-board"], [data-role="place-board"]');
+    const pw = primary ? primary.getBoundingClientRect().width : 0;
+    if (pw > 0) this.root.style.setProperty('--bs-cell', `${(pw / size).toFixed(2)}px`);
   }
 
   renderPlacement() {
@@ -802,7 +814,7 @@ class BattleshipUI {
     // The travel beat (a shell arcing in over a growing shadow) plays for ANY fresh shot, miss or
     // hit alike -- only the impact beat that follows differs by shape (a hollow ring vs a filled
     // peg + burst outline), never by color alone (HANDOFF-BATTLESHIP-POLISH.md section 4).
-    const travel = isLast ? '<span class="bs-shell-shadow"></span><span class="bs-shell"></span>' : '';
+    const travel = isLast ? '<span class="bs-ordnance-shadow"></span><span class="bs-ordnance"></span>' : '';
     if (v === 0) {
       classes.push('bs-water-cell');
     } else if (v === CELL_MISS) {

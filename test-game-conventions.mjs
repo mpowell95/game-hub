@@ -230,6 +230,83 @@ check(
   + 't() at RENDER time, never at module scope. snake/js/strings.js is the reference.'
 );
 
+// --- a decoration class must never share a name with a structural one ---------------------------
+//
+// Battleship shipped a `.bs-shell` that was the game's ROOT LAYOUT CONTAINER (max-width, display:
+// grid - every screen renders into it) and, 150 lines later, a SECOND `.bs-shell` meaning the
+// flying artillery shell, with a travel animation whose last keyframe is `opacity: 0` and a
+// `@media (prefers-reduced-motion: reduce)` rule setting `display: none !important`.
+//
+// Both rules applied to the layout container. The game faded its entire UI to nothing on the first
+// shot, and for anyone with Reduce Motion turned on it was `display: none` from the very first
+// paint: a blank screen with no error, no failing test, and a DOM full of perfectly correct HTML.
+// It reached the live site twice. Every existing check here passed the whole time, because nothing
+// in this suite - or in any node suite - looks at whether a game is VISIBLE.
+//
+// This is the cheap, headless half of that lesson: a class that decoration hides or fades must not
+// also be a class that lays the game out. It would have caught the bug at the moment it was typed.
+
+// `margin` alone is too weak - a toast that fades in from opacity 0 has margins and is meant to
+// be hidden. A LAYOUT CONTAINER is the combination: a width constraint AND a layout display.
+const LAYOUT_PROPS = /max-width\s*:/;
+const LAYOUT_DISPLAY = /display\s*:\s*(?:grid|flex)/;
+const HIDDEN_PROPS = /(?:display\s*:\s*none|opacity\s*:\s*0(?:\.0+)?\s*(?:!important)?\s*[;}])/;
+
+/** Classes on the rule's SUBJECT - the last compound in each comma-separated selector - not on its
+ *  ancestors. `.cc-root [hidden]` hides the [hidden] element, and saying it hides `.cc-root` would
+ *  flag every game in the repo; `.dm-root .dm-mat::before` is about `.dm-mat`, not `.dm-root`. */
+function classesIn(selectorText) {
+  const out = [];
+  for (const part of selectorText.split(',')) {
+    const compound = part.trim().split(/[\s>+~]+/).pop() || '';
+    for (const m of compound.matchAll(/\.([a-zA-Z][\w-]*)/g)) out.push(m[1]);
+  }
+  return out;
+}
+/** Every rule in `css` as { sel, body }, flat (nested @media bodies included). */
+function rules(css) {
+  const out = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(css))) {
+    const sel = m[1].trim();
+    if (sel.startsWith('@') || /^\d/.test(sel) || /^(from|to)$/.test(sel)) continue;  // at-rules, keyframe stops
+    out.push({ sel, body: m[2] });
+  }
+  return out;
+}
+
+const collisions = [];
+for (const game of GAMES) {
+  const dir = join(ROOT, game, 'css');
+  if (!existsSync(dir)) continue;
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.css'))) {
+    const css = readFileSync(join(dir, file), 'utf8');
+    const structural = new Set();
+    const hidden = new Map();
+    for (const { sel, body } of rules(css)) {
+      const cls = classesIn(sel);
+      // An absolutely/fixed positioned element is out of flow by definition, so it is never the
+      // thing screens render INTO. That is what separates a toast (max-width, display:flex,
+      // opacity:0 by design, position:absolute) from a real layout container.
+      const inFlow = !/position\s*:\s*(?:absolute|fixed)/.test(body);
+      if (inFlow && LAYOUT_PROPS.test(body) && LAYOUT_DISPLAY.test(body)) for (const c of cls) structural.add(c);
+      if (HIDDEN_PROPS.test(body)) for (const c of cls) if (!hidden.has(c)) hidden.set(c, sel);
+    }
+    for (const [c, sel] of hidden) {
+      if (structural.has(c)) collisions.push(`${game}/css/${file}: .${c} is a layout class AND is hidden by "${sel}"`);
+    }
+  }
+}
+check(
+  'no class is both a layout container and something decoration hides',
+  collisions,
+  'a decoration rule (display:none, opacity:0, a fade-out animation) landing on the element every '
+  + 'screen renders into makes the whole game invisible with no error and no failing test - exactly '
+  + 'how Battleship shipped a blank screen twice. Give the ornament its own name (.xx-ordnance, not '
+  + '.xx-shell) and keep decoration and layout in separate namespaces.'
+);
+
 // --- summary ------------------------------------------------------------------------------------
 
 console.log(`\nGame convention checks: ${passed} passed, ${failures.length} failed.`);

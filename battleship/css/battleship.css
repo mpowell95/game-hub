@@ -207,16 +207,23 @@
 .bs-peg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 
 /* travel: a small shell + growing/darkening water-shadow beneath it, both transform-only */
-.bs-shell {
+/* The flying projectile. NAMED .bs-ordnance, never .bs-shell: `.bs-shell` is already this
+   game's ROOT LAYOUT CONTAINER (line 52, the element every screen renders into). When this
+   rule was called .bs-shell it applied its travel animation to the whole UI, whose last
+   keyframe is opacity: 0 -- the game faded itself out -- and the reduced-motion block below
+   display:none'd the entire game for anyone with Reduce Motion on: a blank screen from the
+   first paint, with correct HTML and no error. That shipped twice. Keep ornament and layout
+   in separate namespaces; test-game-conventions.mjs now fails the build for this. */
+.bs-ordnance {
   position: absolute; width: 18%; height: 18%; border-radius: 50%; background: var(--bs-ink);
-  animation: bs-shell-travel .36s cubic-bezier(.3,.1,.4,1) both;
+  animation: bs-ordnance-travel .36s cubic-bezier(.3,.1,.4,1) both;
 }
-@keyframes bs-shell-travel { 0% { transform: translate(10%, -220%) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(0, 0) scale(1); opacity: 0; } }
-.bs-shell-shadow {
+@keyframes bs-ordnance-travel { 0% { transform: translate(10%, -220%) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(0, 0) scale(1); opacity: 0; } }
+.bs-ordnance-shadow {
   position: absolute; width: 40%; height: 16%; border-radius: 50%; background: rgba(0,0,0,.35);
-  animation: bs-shell-shadow .36s ease-in both;
+  animation: bs-ordnance-shadow .36s ease-in both;
 }
-@keyframes bs-shell-shadow { 0% { transform: scale(.2); opacity: 0; } 100% { transform: scale(1); opacity: .5; } }
+@keyframes bs-ordnance-shadow { 0% { transform: scale(.2); opacity: 0; } 100% { transform: scale(1); opacity: .5; } }
 
 /* miss: settles to a hollow ring (never filled -- the shape distinguishes it from a hit) */
 .bs-peg-miss {
@@ -351,7 +358,7 @@
     animation: none !important; opacity: 1 !important; transform: none !important;
   }
   /* travel + impact decoration is pure flourish on top of already-settled state -- strip it entirely */
-  .bs-shell, .bs-shell-shadow, .bs-splash-ring, .bs-speck, .bs-plume, .bs-flash, .bs-shockwave,
+  .bs-ordnance, .bs-ordnance-shadow, .bs-splash-ring, .bs-speck, .bs-plume, .bs-flash, .bs-shockwave,
   .bs-fireball, .bs-smoke, .bs-oilslick {
     display: none !important;
   }
