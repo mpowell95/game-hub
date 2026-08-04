@@ -62,6 +62,31 @@ on the stats/sync code they mostly govern):
    caches or user error.
 9. **A milestone is not done until CLAUDE.md reflects it** — undocumented conventions get
    silently re-derived (and re-diverged) by the next session.
+
+## "Commit," "push," or "deploy" means LIVE on the deployed Game Hub — not just committed to a branch
+
+Matt (2026-08-04), after a session pushed a finished game to its feature branch and stopped
+there, leaving it invisible on the real site: *"Anytime I say, commit, push, or deploy, it means
+make it live on the gamehub app... Do not respond until it's fucking live."*
+
+A commit on a feature branch, or even a pushed branch with an open PR, is **not done** under this
+instruction. Pages deploys from `main` only. When Matt asks for a commit/push/deploy, the session
+must, without waiting for further confirmation at each step:
+
+1. Commit and push the work (to the branch it's already on, per that session's own instructions).
+2. Open a PR into `main` if one doesn't already exist for that branch.
+3. **Merge the PR into `main`.**
+4. **Verify the `pages build and deployment` workflow run for that merge commit actually
+   completes with `status: completed` / `conclusion: success`** — merging alone starts the
+   deploy, it does not finish it, and a session that stops at "merged" without checking the run
+   has not actually confirmed anything is live.
+5. Only then tell Matt it's live — and say so plainly, not "pushed" or "merged," since those words
+   are exactly what caused the confusion this rule exists to prevent.
+
+This whole sequence is pre-authorized by this instruction; it does not need to be re-confirmed
+per session. The one thing worth pausing for is a genuinely destructive step this doesn't cover
+(e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
+
 ## Run it
 
 ```
