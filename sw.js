@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v266';
+const CACHE = 'game-hub-v267';
 
 const ASSETS = [
   './',
@@ -331,11 +331,39 @@ async function warmRest() {
   }
 }
 
+// ONE-TIME FULL PURGE (2026-08-04). Normally `activate` deletes only caches whose name DIFFERS
+// from CACHE, which is right: it makes a deploy cheap and lets an interrupted warm resume. But it
+// also means a cache entry that is stale, truncated or half-written under its CURRENT name is
+// never re-fetched -- the worker keeps serving the bad copy forever, and a player whose hub renders
+// nothing has no way to clear it from inside an app that will not start.
+//
+// That is the state Matt's phone reached: a blank hub in Chrome AND from the home-screen icon,
+// while every file on the server returned 200 and the identical build ran fine everywhere it could
+// be tested. So this build purges EVERY cache on activate, current name included, and rebuilds the
+// shell from the network.
+//
+// Set back to false once a purge has shipped and the device is confirmed healthy. Leaving it on
+// permanently would re-download ~8.8 MB on every single deploy, which is exactly the storm the
+// two-tier precache exists to avoid. It is a recovery lever, not the steady state.
+const PURGE_ALL_CACHES = true;
+
 self.addEventListener('install', (event) => {
   // Only the shell blocks the install. The new build goes live as soon as the hub itself is safe
   // offline, instead of waiting on every card image of every game.
+  //
+  // With the purge on, the shell is fetched with `cache: 'reload'` so the HTTP disk cache cannot
+  // hand back the same stale bytes the SW cache is being purged FOR. A purge that re-imports the
+  // corruption it just deleted is not a recovery.
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    (async () => {
+      if (PURGE_ALL_CACHES) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      const cache = await caches.open(CACHE);
+      await cache.addAll(PURGE_ALL_CACHES ? SHELL.map((u) => new Request(u, { cache: 'reload' })) : SHELL);
+      await self.skipWaiting();
+    })()
   );
 });
 
