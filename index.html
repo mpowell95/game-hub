@@ -128,6 +128,22 @@
         if (shown || !root) return;
         if (root.children.length > 0) return;   // hub mounted fine, stand down
         shown = true;
+
+        // AUTO-RECOVER, once per tab, BEFORE showing anyone an error panel. The overwhelmingly
+        // common cause of a hub that renders nothing is a stuck offline cache, and the fix for it
+        // is mechanical -- there is no reason to make a player read an error and tap a button to
+        // apply a repair the page can just perform. `sessionStorage` (not localStorage: it dies
+        // with the tab, so it can never wedge a device permanently) makes this strictly one
+        // attempt; if the reload still comes up empty, the panel is shown instead and the player
+        // gets the actual error rather than a reload loop.
+        var TRIED = 'gh.bootRecovered.v1';
+        var tried = false;
+        try { tried = sessionStorage.getItem(TRIED) === '1'; } catch (e) { tried = true; }
+        if (!tried) {
+          try { sessionStorage.setItem(TRIED, '1'); } catch (e) { /* fall through to the panel */ }
+          resetSW();
+          return;
+        }
         render();
       }, BOOT_TIMEOUT_MS);
     }());
