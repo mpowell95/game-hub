@@ -258,6 +258,19 @@ const GAMES = [
     art: GAME_ART["hill-climb"],
   },
   {
+    id: 'battleship',
+    released: '2026-08-04',
+    title: { en: 'Battleship', es: 'Hundir la Flota' },
+    blurb: { en: 'Place your fleet, then hunt the enemy\'s. Three AI tiers, or play a friend.',
+      es: 'Coloca tu flota y luego caza la del rival. Tres niveles de IA, o juega con un amigo.' },
+    module: '../battleship/js/ui.js',
+    // Its own full-bleed chrome (two boards plus the fleet roster and back affordance), same call
+    // as Escoba, Mancala, Ball Run, Yahtzee, Pool and Hill Climb.
+    immersive: true,
+    accent: '#34506E',
+    art: GAME_ART["battleship"],
+  },
+  {
     id: 'yahtzee',
     title: 'Yahtzee',
     blurb: { en: 'Roll, hold, and fill the card. 13 categories, upper bonus, and the joker rule.',

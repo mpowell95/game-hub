@@ -107,6 +107,7 @@ function saveSort(sort) {
 // whichever language happened to be active at first import.
 const GAME_META = [
   { id: 'ballrun', labelKey: 'game_title_ballrun' },
+  { id: 'battleship', labelKey: 'game_title_battleship' },
   { id: 'boggle', labelKey: 'game_title_boggle' },
   { id: 'chinchon', labelKey: 'game_title_chinchon' },
   { id: 'connect4', labelKey: 'game_title_connect4' },

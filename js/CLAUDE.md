@@ -639,6 +639,75 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
 - **Status: headless only.** C5-C7 pass against a `FakeRoom`; nothing has been played by three
   or four real devices. Same honest caveat as Pool and Boggle.
 
+### The tenth consumer: Battleship (2026-08-04) — the first hidden-information game
+
+Full write-up: `battleship/CLAUDE.md`'s Multiplayer section; executable form:
+`test-mp-lockstep.mjs`'s BS1-BS7 block. `js/net.js` was NOT touched. Read this section before
+assuming Battleship's MP should look like any of the nine consumers above; it can't, for a reason
+none of them share:
+
+- **Every reference game above transmits moves from a finite vocabulary because one player's
+  action changes a board the OTHER player's next action depends on, and both devices hold the
+  SAME state.** Battleship is neither: there IS shared mutable state both sides must agree on
+  (the two public shot grids, the turn, who's won), **and** there is state one side must never
+  learn (the other side's fleet). That combination decides the whole protocol.
+- **A shot is TWO log entries, not one.** The shooter appends `{k:'s', seat, r, c}`. The
+  **defender** resolves it against its own LOCAL fleet (never transmitted, never part of the
+  hashed `state` — it lives on `mp.myFleet`, a field outside the engine state entirely) and
+  appends the authoritative `{k:'a', seat, r, c, result, shipId, sunk, fleetSunk, cells}`. Both
+  devices apply the `'a'` entry and hash after it; the `'s'` entry itself never changes public
+  state; its only role is to trigger the defender's resolution. **The mover does not apply its
+  own move immediately** — uniquely among this repo's games — it shows a pending reticle and
+  waits for the answer.
+- **The hash excludes both fleets, structurally, not by discipline.** `battleship/js/hash.js`
+  hashes only the two shot grids, shot counts, turn, `over`/`winner`. Each device holds one real
+  fleet and one `null` in solo's `state.fleets`; in MP, `state.fleets` is never populated at all
+  (always `[null, null]`), so there is nothing fleet-shaped in the hashed state to accidentally
+  include in the first place.
+- **Recovery deviates from invariant 2, on purpose.** The host's recovery snapshot is
+  public-state-only (same shape as the MP autosave minus `myFleet`). The recovering device
+  rebuilds its own secret fleet from **its own local MP save**
+  (`gamehub.battleship.mp.v1`'s `myFleet` field), never from the network — there is nothing
+  device-relative to remap in the snapshot at all (seats are fixed for the room, never swapped
+  per game, unlike Tic Tac Toe's marks), so this is invariant 2 solved by construction, one step
+  further than Tic Tac Toe's own "nothing device-relative" snapshot. **The honest failure case**:
+  a device that lost its local save mid-match cannot recover its own fleet, and the match cannot
+  continue there — shown plainly, the room left, never papered over with an invented fleet or a
+  silent forfeit.
+- **A THIRD kind of entry, `{k:'r', seat}`, exists for the one genuinely concurrent beat in the
+  protocol.** Placement happens SIMULTANEOUSLY — both devices place privately and each announces
+  readiness — unlike every other exchange here, which is strictly turn-based. This produces a new
+  hazard none of the other nine consumers have: **two devices can legitimately write to the
+  shared move log at the same time**, and `net.js`'s `appendMove` is a plain write, not a
+  transaction, so two independent `++mp.appliedSeq` reservations WOULD collide on the same seq
+  slot (found by this game's own lockstep test while it was being written). The fix: ready
+  entries are exempted from the strict, single-writer-at-a-time seq stream entirely and live at
+  FIXED, seat-derived slots (`seat + 1` — host always 1, guest always 2) that can never collide by
+  construction; they're discovered by scanning the log for `k:'r'` entries, not by walking
+  `appliedSeq + 1`. Once both are seen, `appliedSeq` is bumped past both reserved slots so the
+  strict shot/answer stream — which genuinely is single-writer-per-turn, like every other MP game
+  here — starts clean. **A future game with any other simultaneous (non-turn-based) action should
+  expect the same hazard and the same fix**, not assume the existing single-counter pattern is
+  safe by default.
+- **Entry authorship validation is new to this game** (no previous consumer had an entry only one
+  specific seat may write): a `'s'` entry is valid only from the seat whose turn it is; an `'a'`
+  entry is valid only from the defender of the immediately preceding shot, referencing the same
+  cell. A failed check is logged loudly and routed through the SAME divergence-recovery path as a
+  hash mismatch, not silently dropped.
+- **A divergence on the SHOOTER's own pending answer needs the shooter to un-stick itself, not
+  just the recovering guest.** Every other game's divergence handling assumes the device that
+  detects a mismatch is either the authoritative host (which just re-publishes and moves on) or a
+  guest that will shortly consume a recovery snapshot and resume via the ordinary
+  apply-recovery-then-continue path. Here, if the HOST is the one who detects the mismatch WHILE
+  it was itself the shooter waiting on an answer, publishing the recovery snapshot alone leaves
+  its own `busy` flag (and stale `lastShotSeat`/`lastShotRC` bookkeeping) permanently stuck,
+  since the host never consumes its own recovery. The fix already lives in the general shape of
+  `_mpOnDivergence`'s host branch: it must still route through the same `_afterStateChange` funnel
+  that resets `busy` and re-renders an interactive board — exactly the ordinary post-move funnel,
+  called on the divergence path too, not skipped because "nothing really happened."
+- **Status: proven headlessly against `FakeRoom`; no real room has ever been created.** A cloud
+  session cannot reach Firebase — same honest caveat every other consumer above carries.
+
 ---
 
 ## Hiding test/debug accounts from the leaderboard (2026-07-29, widened 2026-07-31)

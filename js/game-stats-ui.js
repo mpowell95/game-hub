@@ -46,6 +46,7 @@ const TABS = [
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
+  { id: 'battleship', labelKey: 'game_title_battleship' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -460,6 +461,33 @@ function hillClimbScreen(rec) {
     </table>`;
 }
 
+// --- Battleship (W/L, shots/hit-rate/ships sunk, fewest-shots win) ----------
+
+/** Battleship: the standard record-vs-AI screen (Won/Lost/Played/Win rate + by-difficulty table)
+ *  plus shots fired, hit rate, ships sunk, and fewest shots to win — never folded away, per THE
+ *  LAW rule 1. No Tied tile: this game cannot draw (js/game-stats.js's ensureBs comment).
+ *  `fewestShotsWin` is 0 until the first win is recorded (an unset sentinel, not a real "won in
+ *  zero shots" — js/game-stats.js), shown as an em dash rather than a misleading 0. */
+function battleshipScreen(rec) {
+  const bs = (rec && rec.bs) || { played: 0, won: 0, lost: 0, shots: 0, hits: 0, sunk: 0, bestAccuracy: 0, fewestShotsWin: 0 };
+  if (!(bs.played | 0)) return emptyState('Battleship');
+  const hitRate = bs.shots > 0 ? Math.round((bs.hits / bs.shots) * 100) : 0;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${bs.won | 0}</b><span>${t('gs_bs_wins')}</span></div>
+      <div class="gs-tally"><b>${bs.lost | 0}</b><span>${t('gs_bs_losses')}</span></div>
+      <div class="gs-tally"><b>${bs.played | 0}</b><span>${t('gs_played')}</span></div>
+      <div class="gs-tally"><b>${pct(bs.won | 0, bs.played | 0)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${bs.shots | 0}</b><span>${t('gs_bs_shots')}</span></div>
+      <div class="gs-tally"><b>${hitRate}%</b><span>${t('gs_bs_hit_rate')}</span></div>
+      <div class="gs-tally"><b>${bs.sunk | 0}</b><span>${t('gs_bs_ships_sunk')}</span></div>
+      <div class="gs-tally"><b>${bs.fewestShotsWin ? (bs.fewestShotsWin | 0) : t('gs_bs_no_wins_yet')}</b><span>${t('gs_bs_fewest_shots')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
  *  the same visibility bar the game list must honor (THE LAW rule 1: nothing shown today may
  *  become unreachable). */
@@ -563,6 +591,7 @@ function screenFor(id, st) {
   if (id === 'dominoes') return dominoesScreen(rec);
   if (id === 'snake') return snakeScreen(rec);
   if (id === 'hillclimb') return hillClimbScreen(rec);
+  if (id === 'battleship') return battleshipScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

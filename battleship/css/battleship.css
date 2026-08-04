@@ -1,0 +1,283 @@
+/* battleship.css — every rule descendant-scoped under .bs-root (Mancala's CSS-scoping discipline,
+   root CLAUDE.md "Adding a game" item 3). Prefix: bs. */
+
+.bs-root {
+  --bs-bg: #eef3f8;
+  --bs-surface: #ffffff;
+  --bs-surface-2: #e4ecf4;
+  --bs-ink: #16243a;
+  --bs-muted: #5b6b82;
+  --bs-accent: #34506e;
+  --bs-accent-deep: #223c56;
+  --bs-water: #bfe0f2;
+  --bs-water-2: #a9d2ea;
+  --bs-ship: #2c3e50;
+  --bs-miss: #ffffff;
+  --bs-hit: #E0532F;
+  --bs-hit-2: #b83c1c;
+  --bs-sunk: #1c1c1c;
+  --bs-valid: #178A7A;
+  --bs-invalid: #E0532F;
+  --bs-gold: #F2B705;
+  color: var(--bs-ink);
+  min-height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root.gh-dark .bs-root {
+  --bs-bg: #0d1420;
+  --bs-surface: #17212f;
+  --bs-surface-2: #202c3d;
+  --bs-ink: #eef3f8;
+  --bs-muted: #94a6bf;
+  --bs-accent: #6f97bd;
+  --bs-accent-deep: #a8c4de;
+  --bs-water: #16344a;
+  --bs-water-2: #1c3e58;
+  --bs-ship: #7c8ea3;
+  --bs-miss: #cfd9e6;
+  --bs-hit: #ff7a52;
+  --bs-hit-2: #ff9d7f;
+  --bs-sunk: #060606;
+  --bs-valid: #33c4ae;
+  --bs-invalid: #ff7a52;
+}
+
+.bs-root * { box-sizing: border-box; }
+.bs-shell { max-width: 620px; margin: 0 auto; padding: 12px 14px 40px; display: grid; gap: 12px; }
+
+/* --- shared: buttons, links, segments, rows (Escoba's accordion / Tic Tac Toe's setup pattern) */
+
+.bs-title { margin: 4px 0 0; font-size: 1.35rem; font-weight: 900; }
+.bs-sub { margin: 0; color: var(--bs-muted); font-size: .88rem; font-weight: 600; }
+.bs-stats { margin: 0; color: var(--bs-muted); font-size: .8rem; font-weight: 700; }
+
+.bs-btn {
+  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 12px;
+  background: var(--bs-surface); color: var(--bs-ink); font: inherit; font-weight: 800;
+  padding: 12px 16px; font-size: .92rem; touch-action: manipulation;
+}
+.bs-btn-primary { background: var(--bs-accent); color: #fff; border-color: var(--bs-accent-deep); }
+.bs-btn-ghost { background: transparent; }
+.bs-btn-small { padding: 8px 12px; font-size: .82rem; }
+.bs-btn.is-confirm { background: var(--bs-invalid); color: #fff; border-color: var(--bs-invalid); }
+.bs-link { appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--bs-accent); font: inherit; font-weight: 800; padding: 8px 4px; touch-action: manipulation; }
+
+.bs-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.bs-segbtn {
+  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 10px;
+  background: var(--bs-surface); color: var(--bs-ink); font: inherit; font-weight: 700; font-size: .85rem;
+  padding: 9px 12px; display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
+}
+.bs-segbtn.is-selected { background: var(--bs-accent); color: #fff; border-color: var(--bs-accent-deep); }
+
+.bs-row { border-bottom: 1px solid var(--bs-surface-2); }
+.bs-row:last-child { border-bottom: 0; }
+.bs-row-head {
+  appearance: none; cursor: pointer; width: 100%; display: flex; justify-content: space-between;
+  align-items: center; background: transparent; border: 0; padding: 13px 4px; font: inherit; color: inherit;
+  touch-action: manipulation;
+}
+.bs-row-label { font-size: .88rem; font-weight: 800; }
+.bs-row-value { font-size: .84rem; font-weight: 700; color: var(--bs-muted); }
+.bs-row.is-open .bs-row-value { color: var(--bs-accent-deep); }
+.bs-row-expand { padding: 0 4px 14px; display: grid; gap: 8px; }
+.bs-hint { margin: 4px 0 0; font-size: .78rem; color: var(--bs-muted); font-weight: 600; }
+
+.bs-summary { background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 14px; padding: 2px 12px; }
+
+.bs-vscard { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 14px; }
+.bs-vsside { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: .9rem; }
+.bs-vslabel { color: var(--bs-muted); font-weight: 800; font-size: .78rem; }
+
+/* difficulty ski-slope shape sizing (js/difficulty-tiers.js's diffShapeSVG) */
+.bs-root .lb-dshape { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+.bs-root .lb-dshape-x2 { width: 26px; height: 16px; }
+
+/* --- placement screen ------------------------------------------------------------------------- */
+
+.bs-place { display: grid; gap: 12px; }
+.bs-place-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bs-place-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.bs-place-layout { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 480px) { .bs-place-layout { grid-template-columns: 1fr auto; align-items: start; } }
+
+.bs-shiplist { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; order: 2; }
+@media (min-width: 480px) { .bs-shiplist { flex-direction: column; order: 1; } }
+
+.bs-shipchip {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px;
+  background: var(--bs-surface); border: 2px solid var(--bs-surface-2); cursor: grab;
+  font-size: .78rem; font-weight: 800; touch-action: none; user-select: none;
+}
+.bs-shipchip.is-placed { opacity: .45; border-style: dashed; cursor: default; }
+.bs-shipchip.is-selected { border-color: var(--bs-accent); box-shadow: 0 0 0 2px var(--bs-accent) inset; }
+.bs-shipchip-cells { display: flex; gap: 2px; }
+.bs-shipchip-cell { width: 9px; height: 9px; border-radius: 2px; background: var(--bs-ship); }
+.bs-shipchip.is-placed .bs-shipchip-cell { background: var(--bs-muted); }
+
+.bs-board-wrap { order: 1; }
+@media (min-width: 480px) { .bs-board-wrap { order: 2; } }
+
+.bs-board {
+  display: grid; gap: 2px; background: var(--bs-water-2); border: 2px solid var(--bs-accent-deep);
+  border-radius: 10px; padding: 3px; touch-action: none; width: min(92vw, 460px); aspect-ratio: 1 / 1;
+  position: relative;
+}
+.bs-cell {
+  position: relative; background: var(--bs-water); border-radius: 2px; overflow: hidden;
+  appearance: none; border: 0; padding: 0; touch-action: manipulation;
+}
+/* subtle water shimmer -- one cheap CSS animation on a pseudo-element, not per-cell JS */
+.bs-cell.bs-water-cell::before {
+  content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,.22) 50%, transparent 60%);
+  background-size: 220% 220%; animation: bs-shimmer 7s ease-in-out infinite;
+}
+@keyframes bs-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -20% 100%; } }
+
+.bs-cell.bs-ghost-valid { outline: 2px solid var(--bs-valid); background: color-mix(in srgb, var(--bs-valid) 30%, var(--bs-water)); }
+.bs-cell.bs-ghost-invalid { outline: 2px dashed var(--bs-invalid); background: color-mix(in srgb, var(--bs-invalid) 22%, var(--bs-water)); }
+.bs-ghost-x { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--bs-invalid); font-weight: 900; font-size: 70%; pointer-events: none; }
+
+.bs-cell.bs-has-ship { background: var(--bs-ship); }
+.bs-cell.bs-placed-cursor { outline: 2px solid var(--bs-gold); }
+
+.bs-placement-status { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; font-weight: 700; color: var(--bs-muted); }
+
+/* --- battle screen: two boards, deliberately unequal ------------------------------------------ */
+
+.bs-battle { display: grid; gap: 10px; }
+.bs-turnbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bs-status { margin: 0; font-weight: 800; font-size: .95rem; text-align: center; }
+.bs-shotcount { font-size: .78rem; color: var(--bs-muted); font-weight: 700; }
+
+.bs-boards { display: grid; gap: 14px; justify-items: center; }
+
+.bs-boardpanel { width: 100%; display: grid; gap: 6px; justify-items: center; transition: max-width .35s ease; }
+.bs-boardpanel-h { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 800; color: var(--bs-muted); }
+.bs-boardpanel.is-primary .bs-boardpanel-h { color: var(--bs-ink); font-size: .86rem; }
+.bs-boardpanel.is-primary { max-width: 460px; }
+.bs-boardpanel.is-secondary { max-width: 220px; }
+.bs-boardpanel.is-secondary .bs-board { width: min(58vw, 220px); }
+.bs-boardpanel.is-primary .bs-board { width: min(92vw, 460px); }
+
+.bs-board.bs-target { cursor: crosshair; }
+.bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); }
+
+/* reticle + arc on a pending shot */
+.bs-cell.bs-reticle::after {
+  content: ''; position: absolute; inset: 12%; border: 2px solid var(--bs-gold); border-radius: 50%;
+  animation: bs-reticle-snap .28s ease-out;
+}
+@keyframes bs-reticle-snap { from { transform: scale(2.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* miss: expanding rings + a hollow peg dropping in with a bounce */
+.bs-peg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.bs-peg-miss {
+  width: 46%; height: 46%; border-radius: 50%; background: var(--bs-miss); border: 2px solid var(--bs-accent-deep);
+  animation: bs-peg-drop .38s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes bs-peg-drop { 0% { transform: translateY(-140%) scale(.6); opacity: 0; } 70% { transform: translateY(4%) scale(1.08); opacity: 1; } 100% { transform: translateY(0) scale(1); } }
+.bs-splash-ring { position: absolute; inset: 8%; border: 2px solid var(--bs-accent); border-radius: 50%; opacity: 0; animation: bs-splash .55s ease-out; }
+.bs-splash-ring.r2 { animation-delay: .08s; }
+.bs-splash-ring.r3 { animation-delay: .16s; }
+@keyframes bs-splash { 0% { transform: scale(.3); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
+
+/* hit: scaled flash + shockwave + filled peg, plus a board shake */
+.bs-peg-hit {
+  width: 50%; height: 50%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
+  animation: bs-hit-pop .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes bs-hit-pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
+.bs-flash { position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,.9), transparent 60%); animation: bs-flash .28s ease-out forwards; }
+@keyframes bs-flash { from { opacity: 1; transform: scale(1.6); } to { opacity: 0; transform: scale(1); } }
+.bs-shockwave { position: absolute; inset: 6%; border: 2px solid var(--bs-hit); border-radius: 50%; animation: bs-shock .4s ease-out forwards; }
+@keyframes bs-shock { from { transform: scale(.2); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+.bs-board.bs-shake { animation: bs-shake .32s ease-in-out; }
+@keyframes bs-shake { 10% { transform: translateX(-3px); } 30% { transform: translateX(3px); } 50% { transform: translateX(-2px); } 70% { transform: translateX(2px); } 100% { transform: translateX(0); } }
+
+/* sunk: cell darkens, whole-ship reveal handled by .bs-sunk-ship overlay below */
+.bs-cell.bs-cell-sunk { background: var(--bs-sunk); }
+.bs-sunk-ship {
+  position: absolute; background: var(--bs-sunk); border: 2px solid var(--bs-hit); border-radius: 4px;
+  animation: bs-sink-reveal .5s ease-out both; z-index: 2; pointer-events: none;
+}
+@keyframes bs-sink-reveal { 0% { transform: rotate(0deg) scale(1); opacity: .4; } 60% { transform: rotate(-4deg) scale(1.04); opacity: 1; } 100% { transform: rotate(0deg) scale(1); opacity: 1; } }
+.bs-sunk-banner {
+  position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px); z-index: 60;
+  background: var(--bs-sunk); color: #fff; padding: 8px 16px; border-radius: 999px; font-weight: 900;
+  font-size: .85rem; opacity: 0; animation: bs-banner .3s ease-out forwards;
+}
+@keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -18px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* radar sweep -- opponent thinking / waiting on the network */
+.bs-radar { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 3; }
+.bs-radar::before {
+  content: ''; position: absolute; inset: -20%; background: conic-gradient(from 0deg, transparent 0deg, rgba(50,220,180,.28) 24deg, transparent 60deg);
+  animation: bs-radar-spin 1.8s linear infinite;
+}
+@keyframes bs-radar-spin { to { transform: rotate(360deg); } }
+
+.bs-fleetroster { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; font-size: .72rem; }
+.bs-roster-item { display: flex; align-items: center; gap: 4px; font-weight: 700; color: var(--bs-ink); }
+.bs-roster-item.is-sunk { color: var(--bs-muted); text-decoration: line-through; }
+.bs-roster-silhouette { display: flex; gap: 1px; }
+.bs-roster-cell { width: 6px; height: 6px; border-radius: 1px; background: var(--bs-ship); }
+.bs-roster-item.is-sunk .bs-roster-cell { background: var(--bs-muted); }
+
+.bs-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* --- overlays (end-of-game / how-to-play / mp) ------------------------------------------------ */
+
+.bs-overlay {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  padding: 16px; overflow-y: auto; overscroll-behavior: contain;
+}
+.bs-scrim { position: fixed; inset: 0; background: rgba(10, 18, 30, .55); }
+.bs-card {
+  position: relative; z-index: 1; width: 100%; max-width: 420px; background: var(--bs-surface);
+  border-radius: 18px; padding: 22px 20px; display: grid; gap: 10px; justify-items: center; text-align: center;
+  box-shadow: 0 18px 50px rgba(10, 18, 30, .3);
+}
+.bs-x {
+  position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 10px;
+  border: 1px solid var(--bs-surface-2); background: var(--bs-surface); color: var(--bs-ink);
+  font-size: 1.3rem; line-height: 1; cursor: pointer; touch-action: manipulation;
+}
+.bs-card-emoji { font-size: 2.4rem; }
+.bs-card-title { margin: 0; font-size: 1.2rem; font-weight: 900; }
+.bs-card-sub { margin: 0; color: var(--bs-muted); font-size: .85rem; font-weight: 700; }
+.bs-card-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+.bs-card-wait { margin: 0; color: var(--bs-muted); font-size: .85rem; font-weight: 700; }
+
+.bs-help-lines { display: grid; gap: 6px; text-align: left; width: 100%; }
+.bs-help-lead { font-weight: 800; margin: 0; }
+.bs-help-caption, .bs-help-example, .bs-help-rule { margin: 0; font-size: .84rem; color: var(--bs-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-diagram-wrap { width: 100%; display: flex; justify-content: center; }
+.bs-diagram { width: 140px; height: 140px; }
+
+/* --- multiplayer lobby (Tic Tac Toe's shape) --------------------------------------------------- */
+
+.bs-mp-lobby { display: grid; gap: 8px; justify-items: center; padding: 10px 4px; }
+.bs-mp-label { font-size: .74rem; font-weight: 800; color: var(--bs-muted); text-transform: uppercase; letter-spacing: .04em; }
+.bs-mp-code { font-size: 1.8rem; font-weight: 900; letter-spacing: .18em; color: var(--bs-accent-deep); }
+.bs-mp-code-input {
+  font-size: 1.6rem; letter-spacing: .3em; text-align: center; text-transform: uppercase; width: 100%;
+  padding: 10px; border-radius: 10px; border: 1px solid var(--bs-surface-2); background: var(--bs-surface); color: var(--bs-ink);
+}
+.bs-mp-oppslot { display: flex; align-items: center; gap: 6px; font-weight: 800; }
+.bs-mp-oppempty { color: var(--bs-muted); font-weight: 700; }
+.bs-mp-msg { margin: 0; font-size: .82rem; color: var(--bs-muted); font-weight: 700; text-align: center; }
+.bs-mp-msg-action { appearance: none; border: 0; background: transparent; cursor: pointer; text-decoration: underline; }
+.bs-mp-series { text-align: center; font-size: .8rem; font-weight: 700; color: var(--bs-muted); margin: 0; }
+
+/* --- reduced motion: instant state changes, no travel/shake/shimmer/spin ----------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .bs-cell.bs-water-cell::before { animation: none; }
+  .bs-peg-miss, .bs-peg-hit, .bs-splash-ring, .bs-flash, .bs-shockwave, .bs-sunk-ship, .bs-sunk-banner, .bs-cell.bs-reticle::after {
+    animation: none !important; opacity: 1 !important; transform: none !important;
+  }
+  .bs-board.bs-shake { animation: none; }
+  .bs-radar::before { animation-duration: 6s; }
+}

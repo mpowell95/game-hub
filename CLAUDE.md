@@ -160,7 +160,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle and Yahtzee |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the profile page's "Device details" diagnostic |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -361,7 +361,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -407,6 +407,7 @@ working in that folder).
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |
+| Battleship | in-hub `module:`, immersive, **multiplayer** (`gamehub.battleship.mp.v1`, the repo's first hidden-information game) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
