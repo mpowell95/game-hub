@@ -119,6 +119,7 @@ class BattleshipUI {
     this.state = null;
     this.busy = false;
     this.aiTimer = null;
+    this._settleTimer = null;
     this._confirmTimer = null;
     this._mpDelayTimer = null;
     this._bannerTimer = null;
@@ -126,6 +127,7 @@ class BattleshipUI {
     this._lastShot = null;     // { seat, r, c, result, sunk, cells } -- the one cell that gets an entrance animation
     this._sunkBanner = '';
     this._sunkShips = {};      // seat -> shipId -> {id,len,r,c,dir}, reconstructed from revealed cells (see _recordSunkShipGeometry)
+    this._sinkPlayed = new Set(); // "seat:shipId" already played its one-shot sink animation (see _shouldPlaySink)
 
     // Placement-screen working state.
     this._placeSizeKey = null;
@@ -135,6 +137,7 @@ class BattleshipUI {
     this._placeSelected = null;
     this._placePreview = null; // { r, c } hover/cursor position
     this._dragging = null;
+    this._justRotatedShip = null; // consumed once by the next renderPlacement() (see _rotateShip)
     this._soloStarterSeat = 0;
 
     this.mp = null;
@@ -155,6 +158,7 @@ class BattleshipUI {
     this._dead = true;
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
     if (this._confirmTimer) { clearTimeout(this._confirmTimer); this._confirmTimer = null; }
     if (this._mpDelayTimer) { clearTimeout(this._mpDelayTimer); this._mpDelayTimer = null; }
     if (this._bannerTimer) { clearTimeout(this._bannerTimer); this._bannerTimer = null; }
@@ -275,6 +279,7 @@ class BattleshipUI {
     this.view = 'battle';
     this._lastShot = null;
     this._sunkShips = {};
+    this._sinkPlayed = new Set();
     // Solo only (this branch never runs in MP): both fleets are held locally, so any ship already
     // sunk before this resume can be reconstructed outright rather than waiting to see it sink
     // again -- otherwise a resumed match would show sunk cells with no boat sprite until the next kill.
@@ -345,6 +350,7 @@ class BattleshipUI {
     this.view = 'setup';
     this.state = null;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
     const id = this._identity();
     const s = this._setup;
     const stats = this._statsLine();
@@ -510,6 +516,10 @@ class BattleshipUI {
     if (!shipId) return;
     this._placeDir[shipId] = (this._placeDir[shipId] || 'h') === 'h' ? 'v' : 'h';
     this._placeInvalid = null;
+    // Consumed by the very next renderPlacement() only (see there) -- the rotate icon's spin
+    // animation must fire for THIS render alone, not replay on every later render the way an
+    // unconditional CSS `animation:` on the icon would (the same class of bug as the sink reveal).
+    this._justRotatedShip = shipId;
     this.renderPlacement();
   }
 
@@ -555,31 +565,43 @@ class BattleshipUI {
     this._statsCommitted = false;
     this._lastShot = null;
     this._sunkShips = {};
+    this._sinkPlayed = new Set();
     this._afterStateChange();
   }
 
-  /** The one px value ship sprites, the fleet roster and both boards derive from. Read from the
-   *  actual rendered board width (same source of truth the CSS `min(92vw, 460px)` sizing uses)
-   *  rather than recomputed independently, so it can never drift from what's on screen. */
+  /** The one px value ship sprites, the fleet roster and both boards derive from. Measured from an
+   *  actual rendered `.bs-cell`, not derived from the board's own width/size (that math has to
+   *  duplicate the board's `padding`/`gap` CSS by hand and drifts the moment either changes --
+   *  exactly how ships ended up rendering 1-2 squares oversized: the old `boardWidth / gridSize`
+   *  calculation ignored the board's padding and inter-cell gap, so --bs-cell came out larger than
+   *  a real cell. Reading the cell's own box is immune to that by construction. */
   _updateCellSize() {
     if (this._dead || !this.root) return;
-    const size = this.state ? this.state.size : boardSizeFor(this._placeSizeKey || this._setup.size);
-    if (!(size > 0)) return;
     // PER BOARD, not once on the root. The battle screen shows TWO boards at DIFFERENT widths
     // (enemy waters large, your own fleet small), and a single --bs-cell on .bs-root meant the
     // small board drew its ship sprites at the large board's scale - boats overhanging the grid
     // and each other. Each board owns its own value, and `var(--bs-cell)` inside a sprite resolves
     // against its nearest board ancestor, so both are right by construction.
+    //
+    // Measured from an actual rendered `.bs-cell` inside that board, not `boardWidth / gridSize`
+    // arithmetic - that math has to duplicate the board's own `padding`/`gap` CSS by hand and
+    // drifts the moment either changes, which is exactly how ships ended up rendering 1-2 squares
+    // oversized: the old calculation ignored the board's padding and inter-cell gap, so --bs-cell
+    // came out larger than a real cell. Reading the cell's own box is immune to that by
+    // construction.
+    let primaryW = 0;
     const boards = this.root.querySelectorAll('.bs-board');
     for (const board of boards) {
-      const w = board.getBoundingClientRect().width;
-      if (w > 0) board.style.setProperty('--bs-cell', `${(w / size).toFixed(2)}px`);
+      const cell = board.querySelector('.bs-cell');
+      const w = cell ? cell.getBoundingClientRect().width : 0;
+      if (w > 0) {
+        board.style.setProperty('--bs-cell', `${w.toFixed(2)}px`);
+        if (board.dataset.role === 'enemy-board' || board.dataset.role === 'place-board') primaryW = w;
+      }
     }
     // Kept on the root as well: the fleet roster's silhouettes sit OUTSIDE both boards and still
-    // need a sensible unit. The primary board is the right reference for them.
-    const primary = this.root.querySelector('[data-role="enemy-board"], [data-role="place-board"]');
-    const pw = primary ? primary.getBoundingClientRect().width : 0;
-    if (pw > 0) this.root.style.setProperty('--bs-cell', `${(pw / size).toFixed(2)}px`);
+    // need a sensible unit. The primary (enemy/placement) board is the right reference for them.
+    if (primaryW > 0) this.root.style.setProperty('--bs-cell', `${primaryW.toFixed(2)}px`);
   }
 
   renderPlacement() {
@@ -587,6 +609,8 @@ class BattleshipUI {
     this.closeOverlays();
     const size = boardSizeFor(this._placeSizeKey);
     const remaining = this._placeShipSet.filter((d) => !this._placeFleet.ships.some((s) => s.id === d.id)).length;
+    const justRotated = this._justRotatedShip;
+    this._justRotatedShip = null;
 
     const chips = this._placeShipSet.map((def) => {
       const placedShip = this._placeFleet.ships.find((s) => s.id === def.id);
@@ -596,7 +620,7 @@ class BattleshipUI {
           data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0" aria-label="${esc(t(SHIP_LABEL_KEY[def.id]))}">
         <span class="bs-shipchip-cells ${vertical ? 'is-vertical' : ''}">${shipArtHtml(def.id, def.len)}</span>
         <span>${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
-        <button type="button" class="bs-link" data-action="rotate-ship" data-ship="${def.id}" aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}">⟳</button>
+        <button type="button" class="bs-rotate-btn" data-action="rotate-ship" data-ship="${def.id}" aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}"><span class="bs-rotate-icon ${justRotated === def.id ? 'is-spinning' : ''}" aria-hidden="true">⟳</span></button>
       </div>`;
     }).join('');
 
@@ -668,6 +692,38 @@ class BattleshipUI {
 
   _aiThinkMs() { return reducedMotion() ? 120 : 300 + Math.random() * 300; }
 
+  /** How long a just-rendered shot's own ordnance animation needs before it's safe to wipe the
+   *  board with the NEXT re-render -- battleship-redesign-spec bug 3: `_aiThinkMs()` alone
+   *  (300-600ms) is far shorter than the ~1.15-2.05s travel/impact/sink sequence in
+   *  battleship.css, so the bot's re-render was cutting the player's own shot off mid-flight.
+   *  Numbers track (not duplicate exactly, just bound) the CSS keyframe delays/durations: travel
+   *  ends .36s in, impact settle by ~.7-1.1s, the sink reveal (`bs-sink-reveal`) adds another .9s
+   *  on top. Reduced motion strips the animation to an instant state change, so it only needs
+   *  enough time to be legible, not to let anything play out. */
+  _shotSettleMs(shot) {
+    if (!shot) return 0;
+    if (reducedMotion()) return 150;
+    return (shot.result === 'hit' ? 1150 : 1100) + (shot.sunk ? 900 : 0);
+  }
+
+  /** Renders the just-applied shot, then holds `busy` (which gates `fireAt`/the fire buttons)
+   *  until that shot's own animation has actually had time to play, instead of flipping back to
+   *  "your turn" the instant state updates. Shared by both solo branches below so a shot's
+   *  animation is respected whether it was the player's own bonus-chain continuation or the bot's
+   *  reply passing the turn back. */
+  _settleThenIdle() {
+    this.busy = true;
+    this.renderBattle();
+    const ms = this._shotSettleMs(this._lastShot);
+    if (ms <= 0) { this.busy = false; this.renderBattle(); return; }
+    this._settleTimer = setTimeout(() => {
+      this._settleTimer = null;
+      if (this._dead) return;
+      this.busy = false;
+      this.renderBattle();
+    }, ms);
+  }
+
   /** Single funnel after every settled state change (placement done, local shot answered, remote
    *  answer applied, resume). MP ORDERING IS LOAD-BEARING, same reasoning as every other MP game
    *  here: the seq bookkeeping for whatever got us here has ALREADY run, so the autosave below
@@ -677,7 +733,7 @@ class BattleshipUI {
     // A fresh game (no shots fired either way) can't have any sunk ships -- clears stale
     // reconstructed geometry from a previous game in a rematch series without needing to touch the
     // MP methods that start one (root CLAUDE.md polish pass: no `_mp*` method edited here).
-    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) this._sunkShips = {};
+    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) { this._sunkShips = {}; this._sinkPlayed = new Set(); }
     if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
     if (this.state.over) {
       this.busy = false;
@@ -694,6 +750,9 @@ class BattleshipUI {
     if (this.state.turn === this._remoteSeat()) {
       this.busy = true;
       this.renderBattle();
+      // Wait out the shot that JUST rendered (the player's own, or the bot's previous bonus-chain
+      // shot) before the bot's reply lands and re-renders over it.
+      const wait = this._shotSettleMs(this._lastShot) + this._aiThinkMs();
       this.aiTimer = setTimeout(() => {
         this.aiTimer = null;
         if (this._dead || !this.state || this.state.over) return;
@@ -705,10 +764,9 @@ class BattleshipUI {
         this._lastShot = { seat: this._localSeat(), r: shot[0], c: shot[1], result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
         this._maybeShowSunkBanner(res.answer);
         this._afterStateChange();
-      }, this._aiThinkMs());
+      }, wait);
     } else {
-      this.busy = false;
-      this.renderBattle();
+      this._settleThenIdle();
     }
   }
 
@@ -837,10 +895,9 @@ class BattleshipUI {
     return el;
   }
 
-  /** True if the fired-at cell of `ship` is the one just sunk on `seat`'s board -- gates the
-   *  one-shot sink-reveal animation the same way `_cellHtml`'s `isLast` gates the peg entrance.
-   *  `ship` is either a real fleet ship ({cells: [[r,c],...]}) or a reconstructed enemy-board
-   *  entry ({r,c,dir,len}, see `_recordSunkShipGeometry`) -- both shapes are checked. */
+  /** True if the fired-at cell of `ship` is the one just sunk on `seat`'s board. `ship` is either
+   *  a real fleet ship ({cells: [[r,c],...]}) or a reconstructed enemy-board entry
+   *  ({r,c,dir,len}, see `_recordSunkShipGeometry`) -- both shapes are checked. */
   _shipHoldsLastShot(ship, seat) {
     if (!this._lastShot || !this._lastShot.sunk || this._lastShot.seat !== seat) return false;
     const { r: lr, c: lc } = this._lastShot;
@@ -851,6 +908,21 @@ class BattleshipUI {
       if (rr === lr && cc === lc) return true;
     }
     return false;
+  }
+
+  /** Gates the one-shot sink-reveal animation. `_shipHoldsLastShot` alone isn't enough: `_lastShot`
+   *  stays pointed at the same sunk shot across every re-render until the NEXT shot (the sunk-
+   *  banner's own 1600ms auto-clear re-renders the board while it's still current, for one), so a
+   *  naive "is this the last shot" gate replayed the reveal on a freshly-built DOM element every
+   *  time -- the redesign spec's "sink animation plays twice" bug. `_sinkPlayed` marks a
+   *  {seat,shipId} pair the first time it's rendered as sinking and never again, so every
+   *  subsequent render shows the settled sunk pose instead of replaying the animation. */
+  _shouldPlaySink(ship, seat) {
+    if (!this._shipHoldsLastShot(ship, seat)) return false;
+    const key = `${seat}:${ship.id}`;
+    if (this._sinkPlayed.has(key)) return false;
+    this._sinkPlayed.add(key);
+    return true;
   }
 
   /** Enemy-board sunk ships this device can legitimately show a sprite for. In solo, at game end,
@@ -864,7 +936,7 @@ class BattleshipUI {
       return this._shipSpritesHtml(s.fleets[seat], () => ({}));
     }
     const known = (this._sunkShips && this._sunkShips[seat]) || {};
-    return Object.values(known).map((ship) => this._shipSpriteHtml(ship, { sinking: this._shipHoldsLastShot(ship, seat) })).join('');
+    return Object.values(known).map((ship) => this._shipSpriteHtml(ship, { sinking: this._shouldPlaySink(ship, seat) })).join('');
   }
 
   _boardHtml(kind, active) {
@@ -884,7 +956,7 @@ class BattleshipUI {
     const showRadar = isEnemy && !s.over && (this.busy || (this.mp && this.mp.pendingShot));
     const sprites = isEnemy
       ? this._enemySpritesHtml(seat)
-      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({ sinking: this._shipHoldsLastShot(ship, seat) }));
+      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({ sinking: this._shouldPlaySink(ship, seat) }));
     const shake = this._lastShot && this._lastShot.seat === seat && (this._lastShot.result === 'hit') ? 'bs-shake' : '';
     return `<div class="bs-board ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
         style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
@@ -1726,15 +1798,32 @@ class BattleshipUI {
     }
   }
 
+  /** Redesign spec bug 1: `document.elementFromPoint` under an active `setPointerCapture` is
+   *  unreliable on several mobile browsers (it can keep resolving to the CAPTURING element -- the
+   *  ship chip -- for every pointer position, so a real drag never finds a target cell and every
+   *  placement fell back to the separate tap-a-cell path, which read as "click to place" even
+   *  though the drag code was there). Computing the target cell directly from the pointer's own
+   *  coordinates against the board's own geometry sidesteps hit-testing (and its capture quirks)
+   *  entirely, so it works the same everywhere. */
+  _cellAtPoint(clientX, clientY) {
+    const board = this.root && this.root.querySelector('[data-role="place-board"]');
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    if (clientX < rect.left || clientX >= rect.right || clientY < rect.top || clientY >= rect.bottom) return null;
+    const size = boardSizeFor(this._placeSizeKey);
+    const cell = rect.width / size;
+    if (cell <= 0) return null;
+    const c = Math.min(size - 1, Math.max(0, Math.floor((clientX - rect.left) / cell)));
+    const r = Math.min(size - 1, Math.max(0, Math.floor((clientY - rect.top) / cell)));
+    return { r, c };
+  }
+
   onPointerMove(e) {
     if (this.view !== 'placement' || !this._dragging) return;
-    let el = null;
-    try { el = document.elementFromPoint(e.clientX, e.clientY); } catch { el = null; }
-    const cellEl = el && el.closest && el.closest('[data-role="place-cell"]');
-    if (!cellEl) return;
-    const r = Number(cellEl.dataset.r), c = Number(cellEl.dataset.c);
-    if (this._placePreview && this._placePreview.r === r && this._placePreview.c === c) return;
-    this._placePreview = { r, c };
+    const cell = this._cellAtPoint(e.clientX, e.clientY);
+    if (!cell) { if (this._placePreview) { this._placePreview = null; this.renderPlacement(); } return; }
+    if (this._placePreview && this._placePreview.r === cell.r && this._placePreview.c === cell.c) return;
+    this._placePreview = cell;
     this.renderPlacement();
   }
 

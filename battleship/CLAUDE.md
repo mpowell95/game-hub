@@ -166,6 +166,59 @@ settled peg or sprite state appearing instantly; the whole game stays fully legi
 off. Dark mode is a `:root.gh-dark .bs-root` variable override, never a `prefers-color-scheme`
 query in the game's own CSS. The win/lose popup has a top-right close (X), per the repo-wide rule.
 
+**The whole screen went blank shortly after the polish pass above shipped** (2026-08-04, later the
+same day): `.bs-shell` was two different things — the root layout container (`display: grid`,
+present from `mount()` onward) AND the new flying-ordnance projectile, whose travel animation ends
+at `opacity: 0` with `animation-fill-mode: both`. Any element matching `.bs-shell` ran that
+animation, including the layout container itself, so the whole UI faded to invisible on first
+paint (immediately under `prefers-reduced-motion`, which set `display: none` on it outright). The
+projectile is `.bs-ordnance` now, never `.bs-shell`; `test-game-conventions.mjs` gained a
+regression check ("no class is both a layout container and something decoration hides") that
+fails on this exact shape in any game, not just this one. The lesson that check encodes: a DOM
+byte-count assertion (`innerHTML.length`) is not a visibility assertion — it was checked here and
+still missed the bug, because collapsed-to-zero-opacity HTML is still HTML.
+
+**A second fix pass** (2026-08-05, `HANDOFF-BATTLESHIP-REDESIGN.md`'s six numbered bugs) landed
+once the blank-screen fix was on `main`:
+
+- **Turn pacing.** The bot fired after only `_aiThinkMs()` (300-600ms) — far shorter than the
+  ~1.15-2.05s travel/impact/sink sequence above, so the bot's re-render was cutting the player's
+  own shot off mid-animation, and the reverse on the way back. `_shotSettleMs(shot)` bounds how
+  long a just-rendered shot needs before the NEXT re-render is safe to happen (longer if it sank a
+  ship); `_settleThenIdle()` holds `busy` (which gates `fireAt`/the fire buttons) through that
+  window on both sides of an exchange, not just before the bot's own shot.
+- **Ship sizing/scale.** `--bs-cell` was computed as `boardWidth / gridSize`, which has to
+  duplicate the board's own `padding`/`gap` CSS by hand and silently drifts the moment either
+  changes — ships rendered 1-2 squares oversized. It's now measured from an actual rendered
+  `.bs-cell`'s own box, per board (the battle screen's two boards are different widths, so a
+  single value on `.bs-root` also drew the small board's ships at the large board's scale — fixed
+  the same day as the blank-screen bug, independently of this pass; `_updateCellSize()` now sets
+  the variable on each `.bs-board` from a cell inside THAT board, plus once more on the root for
+  the roster silhouettes, which sit outside both boards).
+- **Sink animation playing twice.** `_lastShot` stays pointed at the same sunk shot across every
+  re-render until the next shot fires — including the sunk banner's own 1600ms auto-clear
+  re-render — so a plain "is this the last shot" gate replayed the reveal on a freshly-built DOM
+  element each time. `_sinkPlayed` (a `Set` of `"seat:shipId"`) marks a sink reveal played and
+  gates `_shouldPlaySink` from ever replaying it; reset alongside `_sunkShips` at every point a
+  fresh game starts.
+- **Rotation control.** The old bare "⟳" was a `bs-link` with an ~8px hit area. `.bs-rotate-btn` is
+  a dedicated 44x44 circular button; its icon plays a one-tap 180° spin — gated the same way as
+  the sink fix (`_justRotatedShip`, consumed once by the very next `renderPlacement()`) so an
+  unconditional CSS `animation:` doesn't replay on every unrelated re-render (a drag move, another
+  ship's placement) the way it would if simply attached to the icon's class.
+- **Drag-and-drop placement.** `onPointerMove` resolved the cell under the pointer via
+  `document.elementFromPoint`, which is unreliable under an active `setPointerCapture` on several
+  mobile browsers — it can keep resolving to the capturing element (the ship chip) for every
+  pointer position, so a real drag gesture never found a target cell and silently fell back to the
+  separate tap-a-cell path, which read as "click to place" even though the drag code was present
+  and exercised. `_cellAtPoint(clientX, clientY)` computes the target cell directly from the
+  pointer's own coordinates against the board's `getBoundingClientRect()`, sidestepping hit-testing
+  (and its capture quirks) entirely.
+
+None of the above touches `game.js`, `hash.js`, or any `_mp*` method — see the multiplayer
+boundary note below; every one of these is either purely local UI state or a shared, non-MP helper
+(`_shotSettleMs`/`_settleThenIdle` gate local rendering only, not the wire protocol).
+
 ## Multiplayer — the repo's first hidden-information protocol
 
 Two human devices over the shared `js/net.js` room protocol (`rooms/<CODE>`), same 2-seat surface
