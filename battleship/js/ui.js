@@ -48,6 +48,23 @@ const SIZES = [['classic', 'size_classic'], ['quick', 'size_quick']];
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 const SHIP_LABEL_KEY = { carrier: 'ship_carrier', battleship: 'ship_battleship', cruiser: 'ship_cruiser', submarine: 'ship_submarine', destroyer: 'ship_destroyer' };
 
+// Inline glyphs for the two big mode buttons and the two deploy pills. Drawn here rather than in
+// ship-art.js: that file is the SHIP silhouette builder and nothing else.
+const BOT_ICON = `<svg class="bs-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <rect x="4" y="8" width="16" height="11" rx="3"/><rect x="11" y="3" width="2" height="4"/><circle cx="12" cy="3" r="1.6"/>
+  <circle cx="9" cy="13" r="1.7" fill="#fff"/><circle cx="15" cy="13" r="1.7" fill="#fff"/><rect x="9" y="16" width="6" height="1.4" rx=".7" fill="#fff"/>
+</svg>`;
+const PERSON_ICON = `<svg class="bs-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <circle cx="12" cy="7.5" r="3.8"/><path d="M4.5 20c0-4.1 3.4-6.5 7.5-6.5S19.5 15.9 19.5 20z"/>
+</svg>`;
+const DICE_ICON = `<svg class="bs-pill-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.8" fill="#fff"/>
+  <circle cx="15.5" cy="15.5" r="1.8" fill="#fff"/><circle cx="12" cy="12" r="1.8" fill="#fff"/>
+</svg>`;
+const BOLT_ICON = `<svg class="bs-pill-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <path d="M13 2 4 14h6l-1 8 9-12h-6z"/>
+</svg>`;
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const deepCopy = (v) => JSON.parse(JSON.stringify(v));
 const reducedMotion = () => { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; } };
@@ -103,7 +120,7 @@ class BattleshipUI {
   constructor(container) {
     this.container = container;
     this._dead = false;
-    this.view = 'setup';   // 'setup' | 'placement' | 'battle'
+    this.view = 'setup';   // 'setup' | 'placement' | 'botplace' | 'battle'
     this._setupExpanded = null;
     this._setup = this._loadSetup();
     this._mode = 'solo';   // 'solo' | 'host' | 'join'
@@ -139,6 +156,9 @@ class BattleshipUI {
     this._dragging = null;
     this._justRotatedShip = null; // consumed once by the next renderPlacement() (see _rotateShip)
     this._soloStarterSeat = 0;
+    this._botFleet = null;        // screen 3: the bot's fleet, built before the battle starts
+    this._botPlaceTimer = null;
+    this._cannonPlayed = null;    // "seat:r:c" whose recoil has already played (see _cannonForBoard)
 
     this.mp = null;
 
@@ -162,6 +182,7 @@ class BattleshipUI {
     if (this._confirmTimer) { clearTimeout(this._confirmTimer); this._confirmTimer = null; }
     if (this._mpDelayTimer) { clearTimeout(this._mpDelayTimer); this._mpDelayTimer = null; }
     if (this._bannerTimer) { clearTimeout(this._bannerTimer); this._bannerTimer = null; }
+    if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
     // Same reasoning as every other MP game: destroy() runs for any hub teardown (including just
     // navigating back), so a live room is preserved for the 30-minute rejoin window. A hosted room
     // that never reached a game is released, since nobody depends on it.
@@ -280,6 +301,7 @@ class BattleshipUI {
     this._lastShot = null;
     this._sunkShips = {};
     this._sinkPlayed = new Set();
+    this._cannonPlayed = null;
     // Solo only (this branch never runs in MP): both fleets are held locally, so any ship already
     // sunk before this resume can be reconstructed outright rather than waiting to see it sink
     // again -- otherwise a resumed match would show sunk cells with no boat sprite until the next kill.
@@ -303,86 +325,96 @@ class BattleshipUI {
       `<button type="button" class="bs-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
   }
 
-  _row(key, label, value, content) {
-    const open = this._setupExpanded === key;
-    return `<div class="bs-row ${open ? 'is-open' : ''}">
-      <button type="button" class="bs-row-head" data-action="toggle-row" data-row="${key}">
-        <span class="bs-row-label">${label}</span><span class="bs-row-value">${esc(value)}</span>
-      </button>
-      ${open ? `<div class="bs-row-expand">${content}</div>` : ''}
+  /** The three Options chips: board size, first shot, bonus shot on hit. Every setting the old
+   *  accordion carried is still here (and writes the same keys) -- it is one compact line of
+   *  chips now instead of four expanding rows, per the redesign. Each chip CYCLES its value. */
+  _optionChips() {
+    const s = this._setup;
+    const id = this._identity();
+    const firstLbl = s.firstMode === 'you' ? t('you') : s.firstMode === 'opponent' ? id.oppName : t('first_alternate');
+    const chip = (action, label, value) =>
+      `<button type="button" class="bs-chip" data-action="${action}">${esc(label)}: <span class="bs-chip-value">${esc(value)}</span></button>`;
+    return `<div class="bs-options">
+      <span class="bs-options-label">${t('options_label')}</span>
+      <div class="bs-chips">
+        ${chip('cycle-size', t('chip_size'), s.size === 'quick' ? t('size_quick') : t('size_classic'))}
+        ${chip('cycle-first', t('chip_first'), firstLbl)}
+        ${chip('cycle-bonus', t('chip_bonus'), s.bonusShotOnHit ? t('bonus_on') : t('bonus_off'))}
+      </div>
     </div>`;
   }
 
-  _modeSeg() {
-    return this._seg('set-mode', this._mode, [
-      ['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')],
-    ]);
+  _diffIndex() {
+    const i = DIFFICULTIES.findIndex(([k]) => k === this._setup.difficulty);
+    return i < 0 ? 1 : i;
   }
 
-  _sizeContent() {
-    const s = this._setup;
-    return this._seg('set-size', s.size, SIZES.map(([v, k]) => [v, t(k)])) +
-      `<p class="bs-hint">${s.size === 'quick' ? t('hint_size_quick') : t('hint_size_classic')}</p>`;
+  /** The Play vs. Friend panel. This is the EXISTING host/join lobby, reached from the purple
+   *  button instead of a mode segment -- there is no second multiplayer path. */
+  _friendHTML() {
+    if (this._lobby) return this._lobbyHTML();
+    const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')]]);
+    const back = `<button type="button" class="bs-btn bs-btn-ghost" data-action="mode-solo">${t('mp_back_btn')}</button>`;
+    if (this._mode === 'join') return `${seg}${this._joinBodyHTML()}${back}`;
+    return `${seg}
+      <p class="bs-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+      <button type="button" class="bs-btn bs-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>
+      ${back}`;
   }
 
-  _diffContent() {
-    const s = this._setup;
-    return this._seg('set-diff', s.difficulty, DIFFICULTIES.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + esc(t(k))]));
-  }
-
-  _firstContent() {
-    const id = this._identity();
-    const sel = this._setup.firstMode;
-    const oppLabel = this._mode === 'host' ? t('mp_opponent_label') : id.oppName;
-    return this._seg('set-first', sel, [['you', t('you')], ['opponent', esc(oppLabel)], ['alternate', t('first_alternate')]]);
-  }
-
-  _bonusContent() {
-    const s = this._setup;
-    return this._seg('set-bonus', s.bonusShotOnHit ? 'on' : 'off', [['off', t('bonus_off')], ['on', t('bonus_on')]])
-      + `<p class="bs-hint">${t('hint_bonus')}</p>`;
-  }
-
+  /** Screen 1: the mode screen. A dark navy header with the game's own one-line explanation, and a
+   *  card riding over it with the opponent avatar, the difficulty in gold caps over a three-stop
+   *  slider, the two big play buttons, and the Options chips.
+   *
+   *  THE SLIDER IS DISPLAY ONLY: the stored values stay `beginner`/`intermediate`/`pro` (storage
+   *  vocabulary that js/difficulty-tiers.js and js/game-stats-ui.js's DIFF_META both key on) --
+   *  only the labels are Easy/Medium/Hard. The ski-slope tier shape (diffShapeSVG) stays beside
+   *  the name: it is the repo's colorblind-safe difficulty marker, never hue alone. */
   renderSetup() {
     if (this._dead) return;
     this.closeOverlays();
     if (this.view === 'battle' && this.state && !this.state.over && !this.mp) clearGame();
     this.view = 'setup';
     this.state = null;
+    this._botFleet = null;
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
     if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+    if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
     const id = this._identity();
     const s = this._setup;
     const stats = this._statsLine();
-    const head = `
+    const header = `<div class="bs-headerpanel">
       <h1 class="bs-title">${t('title')}</h1>
-      <p class="bs-sub">${t('tagline')}</p>
-      ${stats ? `<p class="bs-stats">${esc(stats)}</p>` : ''}
-      ${this._modeSeg()}`;
+      <p class="bs-sub">${t('tagline_long')}</p>
+    </div>`;
+    const statsLine = stats ? `<p class="bs-stats">${esc(stats)}</p>` : '';
 
-    if (this._lobby) { this.shell.innerHTML = head + this._lobbyHTML(); return; }
-    if (this._mode === 'join') { this.shell.innerHTML = head + this._joinBodyHTML(); return; }
+    if (this._lobby || this._mode === 'host' || this._mode === 'join') {
+      this.shell.innerHTML = `<div class="bs-mode">${header}
+        <div class="bs-modecard">${this._friendHTML()}</div>${statsLine}</div>`;
+      return;
+    }
 
-    const hosting = this._mode === 'host';
-    this.shell.innerHTML = head + `
-      ${hosting ? '' : `<div class="bs-vscard">
-        <div class="bs-vsside"><span>${esc(id.humanEmoji)}</span><span>${esc(id.humanName)}</span></div>
-        <span class="bs-vslabel">${t('vs')}</span>
-        <div class="bs-vsside"><span>${esc(id.oppEmoji)}</span><span>${esc(id.oppName)}</span></div>
-      </div>`}
-      <div class="bs-summary">
-        ${this._row('size', t('row_size'), s.size === 'quick' ? t('size_quick') : t('size_classic'), this._sizeContent())}
-        ${hosting ? '' : this._row('difficulty', t('row_difficulty'), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
-        ${this._row('first', t('row_first'),
-          s.firstMode === 'you' ? t('you') : s.firstMode === 'opponent' ? (hosting ? t('mp_opponent_label') : id.oppName) : t('first_alternate'),
-          this._firstContent())}
-        ${this._row('bonus', t('row_bonus'), s.bonusShotOnHit ? t('bonus_on') : t('bonus_off'), this._bonusContent())}
+    const di = this._diffIndex();
+    this.shell.innerHTML = `<div class="bs-mode">
+      ${header}
+      <div class="bs-modecard">
+        <div class="bs-avatar" aria-hidden="true">${esc(id.oppEmoji)}</div>
+        <div class="bs-avatar-name">${esc(id.oppName)}</div>
+        <div class="bs-diffname">${diffShapeSVG(tierOf(s.difficulty))}${esc(t(DIFF_LABEL_KEY[s.difficulty]))}</div>
+        <div class="bs-slider-wrap">
+          <input class="bs-slider" type="range" min="0" max="2" step="1" value="${di}"
+            data-role="diff-slider" aria-label="${esc(t('row_difficulty'))}">
+          <div class="bs-slider-stops">${DIFFICULTIES.map(([, k], i) =>
+            `<span class="bs-slider-stop ${i === di ? 'is-on' : ''}">${esc(t(k))}</span>`).join('')}</div>
+        </div>
+        <button type="button" class="bs-bigbtn bs-bigbtn-bot" data-action="play-bot">${BOT_ICON}${esc(t('play_vs_bot'))}</button>
+        <button type="button" class="bs-bigbtn bs-bigbtn-friend" data-action="play-friend">${PERSON_ICON}${esc(t('play_vs_friend'))}</button>
+        ${this._optionChips()}
+        <button type="button" class="bs-link" data-action="help">${t('howto')}</button>
       </div>
-      ${hosting
-        ? `<p class="bs-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
-           <button type="button" class="bs-btn bs-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`
-        : `<button type="button" class="bs-btn bs-btn-primary" data-action="start">${t('start')}</button>`}
-      <button type="button" class="bs-link" data-action="help">${t('howto')}</button>`;
+      ${statsLine}
+    </div>`;
   }
 
   // --- multiplayer lobby (Tic Tac Toe's shape) --------------------------------------------------
@@ -440,6 +472,7 @@ class BattleshipUI {
   _rerenderCurrentView() {
     if (this._dead) return;
     if (this.view === 'placement') this.renderPlacement();
+    else if (this.view === 'botplace') this.renderBotPlacing();
     else if (this.view === 'battle' && this.state) this.renderBattle();
     else this.renderSetup();
   }
@@ -523,6 +556,27 @@ class BattleshipUI {
     this.renderPlacement();
   }
 
+  /** Rotate a ship that is already ON the board, in place, keeping its top-left anchor. If the
+   *  rotated pose does not fit it stays as it was -- rotating must never silently drop a ship off
+   *  the board. Reached from the sprite's own corner arrow and from a plain tap on the sprite. */
+  _rotatePlacedShip(shipId) {
+    const ship = this._placeFleet.ships.find((s) => s.id === shipId);
+    if (!ship) { this._rotateShip(shipId); return; }
+    const origin = { r: ship.r, c: ship.c, dir: ship.dir };
+    this._placeFleet = { ...this._placeFleet, ships: this._placeFleet.ships.filter((s) => s.id !== shipId) };
+    const flipped = origin.dir === 'h' ? 'v' : 'h';
+    const dir = this._placementLegalAt(shipId, origin.r, origin.c, flipped) ? flipped : origin.dir;
+    this._placeDir[shipId] = dir;
+    const def = this._placeShipSet.find((d) => d.id === shipId);
+    const placed = def && placeShip(this._placeFleet, def, origin.r, origin.c, dir);
+    if (placed) this._placeFleet = placed;
+    this._placeSelected = null;
+    this._placePreview = null;
+    this._placeInvalid = null;
+    this._justRotatedShip = shipId;
+    this.renderPlacement();
+  }
+
   _selectShip(shipId) {
     const already = this._placeFleet.ships.find((s) => s.id === shipId);
     if (already) {
@@ -553,17 +607,39 @@ class BattleshipUI {
     else this._finishPlacementSolo();
   }
 
+  /** Screen 3, solo: the bot lays out its own fleet while you watch. Two seconds, skippable by a
+   *  tap. The bot's ships are shown as loose silhouettes on a deck, NEVER on a board -- showing
+   *  where they sit would hand the player the whole game. */
   _finishPlacementSolo() {
     const rng = mulberry32((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
-    const aiFleet = autoPlace(this._placeSizeKey, this._placeShipSet, rng) || emptyFleet(this._placeSizeKey);
+    this._botFleet = autoPlace(this._placeSizeKey, this._placeShipSet, rng) || emptyFleet(this._placeSizeKey);
+    this.view = 'botplace';
+    this.renderBotPlacing();
+    if (this._botPlaceTimer) clearTimeout(this._botPlaceTimer);
+    this._botPlaceTimer = setTimeout(() => {
+      this._botPlaceTimer = null;
+      this._startBattleSolo();
+    }, reducedMotion() ? 400 : 2000);
+  }
+
+  _skipBotPlacing() {
+    if (this.view !== 'botplace') return;
+    if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
+    this._startBattleSolo();
+  }
+
+  _startBattleSolo() {
+    if (this._dead || !this._botFleet) return;
     const size = boardSizeFor(this._placeSizeKey);
     let s = newGame(size, this._placeSizeKey, this._setup.bonusShotOnHit, this._soloStarterSeat);
     s = setFleet(s, 0, this._placeFleet);
-    s = setFleet(s, 1, aiFleet);
+    s = setFleet(s, 1, this._botFleet);
+    this._botFleet = null;
     this.state = s;
     this.view = 'battle';
     this._statsCommitted = false;
     this._lastShot = null;
+    this._cannonPlayed = null;
     this._sunkShips = {};
     this._sinkPlayed = new Set();
     this._afterStateChange();
@@ -589,100 +665,181 @@ class BattleshipUI {
     // oversized: the old calculation ignored the board's padding and inter-cell gap, so --bs-cell
     // came out larger than a real cell. Reading the cell's own box is immune to that by
     // construction.
+    //
+    // --bs-cell is the STEP from one cell's left edge to the next (cell width PLUS the grid gap),
+    // measured from two real cells, so a sprite spanning `len` cells lands exactly on the grid
+    // instead of falling short by (len-1) gaps. --bs-pad is the board's own padding offset (the
+    // absolute-positioning origin is the padding box) and --bs-gap is the leftover, so a sprite is
+    // `len * --bs-cell - --bs-gap` wide. All three are read from the DOM, never duplicated from
+    // the CSS by hand -- the arithmetic version drifts the moment padding or gap changes.
     let primaryW = 0;
     const boards = this.root.querySelectorAll('.bs-board');
     for (const board of boards) {
-      const cell = board.querySelector('.bs-cell');
-      const w = cell ? cell.getBoundingClientRect().width : 0;
-      if (w > 0) {
-        board.style.setProperty('--bs-cell', `${w.toFixed(2)}px`);
-        if (board.dataset.role === 'enemy-board' || board.dataset.role === 'place-board') primaryW = w;
-      }
+      const cells = board.querySelectorAll('.bs-cell');
+      if (cells.length < 2) continue;
+      const b0 = cells[0].getBoundingClientRect();
+      const b1 = cells[1].getBoundingClientRect();
+      const step = (b1.left - b0.left) || b0.width;
+      if (!(step > 0)) continue;
+      const brect = board.getBoundingClientRect();
+      const pad = Math.max(0, b0.left - (brect.left + board.clientLeft));
+      board.style.setProperty('--bs-cell', `${step.toFixed(2)}px`);
+      board.style.setProperty('--bs-pad', `${pad.toFixed(2)}px`);
+      board.style.setProperty('--bs-gap', `${Math.max(0, step - b0.width).toFixed(2)}px`);
+      if (board.dataset.role === 'enemy-board' || board.dataset.role === 'place-board') primaryW = step;
     }
     // Kept on the root as well: the fleet roster's silhouettes sit OUTSIDE both boards and still
     // need a sensible unit. The primary (enemy/placement) board is the right reference for them.
     if (primaryW > 0) this.root.style.setProperty('--bs-cell', `${primaryW.toFixed(2)}px`);
   }
 
+  /** Screen 2: Deploy your ships. Dark navy panel on top (title, hint, RANDOM, and SAVE once the
+   *  fleet is complete), then the salmon deck carrying the tray of not-yet-placed ships and the
+   *  wooden board. SAVE is ABSENT until every ship is down, not disabled-and-greyed. */
   renderPlacement() {
     if (this._dead) return;
     this.closeOverlays();
+    // MP: once this device has announced readiness there is nothing left to place, so it moves to
+    // the same waiting screen the solo bot-placing beat uses. Driven entirely by the EXISTING
+    // ready handshake (mp.localReady / _maybeStartBattle) -- no second handshake was invented.
+    if (this.mp && this.mp.localReady) {
+      this.renderWaiting(t('waiting_for_opponent', { opp: this._identity().oppName }), null);
+      return;
+    }
+    // The keyboard path (arrows move, R rotates, Enter places) re-renders on EVERY key, which
+    // destroys whatever was focused -- and the keydown listener is root-scoped, so once focus falls
+    // back to <body> no further key ever reaches it and the path dies after one press. Re-focus the
+    // equivalent element after the render, but only if focus was inside the game to begin with, so
+    // this never steals it from anywhere else.
+    const keepFocus = !!(this.root && this.root.contains(document.activeElement) && document.activeElement !== document.body);
     const size = boardSizeFor(this._placeSizeKey);
-    const remaining = this._placeShipSet.filter((d) => !this._placeFleet.ships.some((s) => s.id === d.id)).length;
+    const placedIds = new Set(this._placeFleet.ships.map((s) => s.id));
+    const trayDefs = this._placeShipSet.filter((d) => !placedIds.has(d.id));
+    const remaining = trayDefs.length;
     const justRotated = this._justRotatedShip;
     this._justRotatedShip = null;
 
-    const chips = this._placeShipSet.map((def) => {
-      const placedShip = this._placeFleet.ships.find((s) => s.id === def.id);
-      const dir = this._placeDir[def.id] || 'h';
-      const vertical = placedShip ? placedShip.dir === 'v' : dir === 'v';
-      return `<div class="bs-shipchip ${placedShip ? 'is-placed' : ''} ${this._placeSelected === def.id ? 'is-selected' : ''}"
-          data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0" aria-label="${esc(t(SHIP_LABEL_KEY[def.id]))}">
-        <span class="bs-shipchip-cells ${vertical ? 'is-vertical' : ''}">${shipArtHtml(def.id, def.len)}</span>
-        <span>${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
-        <button type="button" class="bs-rotate-btn" data-action="rotate-ship" data-ship="${def.id}" aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}"><span class="bs-rotate-icon ${justRotated === def.id ? 'is-spinning' : ''}" aria-hidden="true">⟳</span></button>
-      </div>`;
-    }).join('');
+    const tray = remaining
+      ? trayDefs.map((def) => {
+        const dir = this._placeDir[def.id] || 'h';
+        return `<div class="bs-trayship ${this._placeSelected === def.id ? 'is-selected' : ''}"
+            data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0" aria-label="${esc(t(SHIP_LABEL_KEY[def.id]))}">
+          <span class="bs-trayship-art" style="width:${def.len * 20}px">${shipArtHtml(def.id, def.len)}</span>
+          <span class="bs-trayship-name">${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
+          <button type="button" class="bs-rotate-btn" data-action="rotate-ship" data-ship="${def.id}"
+            aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}"><span
+            class="bs-rotate-icon ${justRotated === def.id ? 'is-spinning' : ''}" aria-hidden="true">${dir === 'v' ? '↕' : '↔'}</span></button>
+        </div>`;
+      }).join('')
+      : `<span class="bs-tray-empty">${esc(t('tray_empty'))}</span>`;
 
     const preview = this._placePreview;
     const selDef = this._placeSelected && this._placeShipSet.find((d) => d.id === this._placeSelected);
-    let ghostCells = new Map();
+    const ghostCells = new Map();
+    let ghostLegal = false;
     if (selDef && preview) {
       const dir = this._placeDir[selDef.id] || 'h';
-      const legal = this._placementLegalAt(selDef.id, preview.r, preview.c, dir);
+      ghostLegal = this._placementLegalAt(selDef.id, preview.r, preview.c, dir);
       for (let i = 0; i < selDef.len; i++) {
         const rr = dir === 'v' ? preview.r + i : preview.r;
         const cc = dir === 'h' ? preview.c + i : preview.c;
-        if (rr >= 0 && cc >= 0 && rr < size && cc < size) ghostCells.set(`${rr},${cc}`, legal);
+        if (rr >= 0 && cc >= 0 && rr < size && cc < size) ghostCells.set(`${rr},${cc}`, ghostLegal);
       }
     }
 
+    // Legality is SHAPE first: a legal ghost is a solid outline with a check badge, an illegal one
+    // a dashed outline with a cross badge. Color only reinforces it (Matt is red/green colorblind).
     const cellsHtml = [];
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        const key = `${r},${c}`;
-        const ghost = ghostCells.get(key);
-        const cls = ['bs-cell', 'bs-water-cell',
+        const ghost = ghostCells.get(`${r},${c}`);
+        const cls = ['bs-cell',
           ghost === true ? 'bs-ghost-valid' : '', ghost === false ? 'bs-ghost-invalid' : ''].filter(Boolean).join(' ');
-        const badge = ghost === false ? '<span class="bs-ghost-x" aria-hidden="true">&times;</span>' : '';
+        const badge = ghost === undefined ? ''
+          : `<span class="bs-ghost-badge" aria-hidden="true">${ghost ? '&#10003;' : '&times;'}</span>`;
         cellsHtml.push(`<button type="button" class="${cls}" data-role="place-cell" data-r="${r}" data-c="${c}"
           aria-label="${esc(t('placement_cell_aria', { r: r + 1, c: c + 1 }))}">${badge}</button>`);
       }
     }
 
-    // Placed ships render as real sprites (same ship-art.js reused on the battle board); a
-    // selected-but-unplaced ship gets the same sprite, semi-transparent, following the cursor --
-    // the per-cell valid/invalid outline + X badges above are the legality signal, unchanged.
-    const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship)).join('');
+    // A placed ship is a real sprite you can pick straight off the board (drag to move, tap to
+    // rotate in place) plus its own curved rotate arrow at the bow corner.
+    const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship, { draggable: true })).join('');
+    const rotateHandles = this._placeFleet.ships.map((ship) => {
+      const hx = ship.c + (ship.dir === 'h' ? ship.len : 1);
+      return `<button type="button" class="bs-rotate-btn bs-rotate-onboard"
+        style="left:calc(var(--bs-pad) + var(--bs-cell) * ${hx}); top:calc(var(--bs-pad) + var(--bs-cell) * ${ship.r});"
+        data-action="rotate-placed" data-ship="${ship.id}"
+        aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[ship.id]) }))}"><span
+        class="bs-rotate-icon ${justRotated === ship.id ? 'is-spinning' : ''}" aria-hidden="true">&#10227;</span></button>`;
+    }).join('');
     const ghostSprite = (selDef && preview)
       ? this._shipSpriteHtml({ id: selDef.id, len: selDef.len, r: preview.r, c: preview.c, dir: this._placeDir[selDef.id] || 'h' }, { ghost: true })
       : '';
 
     this.shell.innerHTML = `
-      <div class="bs-place">
-        <div class="bs-place-head">
-          <h1 class="bs-title">${t('placement_title')}</h1>
-          <button type="button" class="bs-link" data-action="help">${t('howto')}</button>
-        </div>
-        <p class="bs-hint">${t('placement_hint')}</p>
-        <div class="bs-place-layout">
-          <div class="bs-shiplist">${chips}</div>
-          <div class="bs-board-wrap">
-            <div class="bs-board" style="grid-template-columns:repeat(${size},1fr)" data-role="place-board">${cellsHtml.join('')}${placedSprites}${ghostSprite}</div>
+      <div class="bs-deploy">
+        <div class="bs-headerpanel">
+          <h1 class="bs-title">${t('deploy_title')}</h1>
+          <p class="bs-sub">${t('deploy_hint')}</p>
+          <div class="bs-deploy-btns">
+            <button type="button" class="bs-pill bs-pill-random" data-action="auto-place">${DICE_ICON}${esc(t('random'))}</button>
+            ${remaining === 0
+              ? `<button type="button" class="bs-pill bs-pill-save" data-action="placement-ready">${BOLT_ICON}${esc(t('save'))}</button>`
+              : ''}
           </div>
         </div>
-        <div class="bs-placement-status">
-          <span>${remaining > 0 ? t('ships_remaining', { n: remaining }) : ''}</span>
-          <span>${this.mp && this.mp.localReady ? t('waiting_for_opponent_placement', { opp: this._identity().oppName }) : ''}</span>
+        <div class="bs-deck-surface">
+          <div class="bs-tray">${tray}</div>
+          <div class="bs-board-wrap">
+            <div class="bs-board bs-board-place" tabindex="0" style="grid-template-columns:repeat(${size},1fr)" data-role="place-board">${cellsHtml.join('')}${placedSprites}${ghostSprite}${rotateHandles}</div>
+          </div>
         </div>
-        <div class="bs-place-actions">
-          <button type="button" class="bs-btn bs-btn-ghost" data-action="auto-place">${t('auto_place')}</button>
-          <button type="button" class="bs-btn bs-btn-ghost" data-action="clear-fleet">${t('clear_fleet')}</button>
-          <button type="button" class="bs-btn bs-btn-primary" data-action="placement-ready" ${remaining > 0 || (this.mp && this.mp.localReady) ? 'disabled' : ''}>${t('ready')}</button>
+        <p class="bs-placement-status">${remaining > 0 ? esc(t('ships_remaining', { n: remaining })) : esc(t('fleet_ready_hint'))}</p>
+        <div class="bs-actions">
+          <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="clear-fleet">${t('clear_fleet')}</button>
+          <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="help">${t('howto')}</button>
         </div>
+        <button type="button" class="bs-exit" data-action="exit-placement" aria-label="${esc(t('exit'))}"><span class="bs-exit-label">${esc(t('exit'))}</span></button>
+      </div>`;
+    this._updateCellSize();
+    if (keepFocus) {
+      const el = this.shell.querySelector(`[data-role="ship-chip"][data-ship="${this._placeSelected}"]`)
+        || this.shell.querySelector('[data-role="place-board"]');
+      if (el && el.focus) { try { el.focus({ preventScroll: true }); } catch { el.focus(); } }
+    }
+  }
+
+  /** Screen 3: the opponent is getting ready. Enemy waters dark and empty on top, the line, and
+   *  (solo only) the bot's fleet laid out below in THEIR blue -- as loose silhouettes, never on a
+   *  board, so nothing about where they sit is given away. Tap anywhere to skip. */
+  renderWaiting(line, botFleet) {
+    if (this._dead) return;
+    this.closeOverlays();
+    const sizeKey = this._placeSizeKey || (this.mp ? this.mp.sizeKey : this._setup.size);
+    const size = boardSizeFor(sizeKey);
+    const cells = new Array(size * size).fill('<div class="bs-cell"></div>').join('');
+    const ships = botFleet
+      ? botFleet.ships.map((s) => `<span class="bs-trayship"><span class="bs-trayship-art" style="width:${s.len * 18}px">${shipArtHtml(s.id, s.len)}</span></span>`).join('')
+      : '';
+    this.shell.innerHTML = `
+      <div class="bs-wait" ${botFleet ? 'data-action="skip-botplace"' : ''}>
+        <div class="bs-headerpanel">
+          <h1 class="bs-title">${t('title')}</h1>
+          <p class="bs-sub">${t('tagline_long')}</p>
+        </div>
+        <div class="bs-boardpanel bs-boardpanel-enemy">
+          <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
+          <div class="bs-board bs-board-enemy bs-wait-board" style="grid-template-columns:repeat(${size},1fr)" data-role="wait-board" aria-hidden="true">${cells}</div>
+        </div>
+        <p class="bs-wait-line">${esc(line)}<span class="bs-wait-dots" aria-hidden="true"> ...</span></p>
+        ${botFleet ? `<div class="bs-deck-surface bs-wait-fleet"><div class="bs-tray">${ships}</div></div>
+        <p class="bs-hint">${t('tap_to_skip')}</p>` : ''}
       </div>`;
     this._updateCellSize();
   }
+
+  renderBotPlacing() { this.renderWaiting(t('bot_placing'), this._botFleet); }
 
   // --- battle screen -----------------------------------------------------------------------------
 
@@ -733,7 +890,7 @@ class BattleshipUI {
     // A fresh game (no shots fired either way) can't have any sunk ships -- clears stale
     // reconstructed geometry from a previous game in a rematch series without needing to touch the
     // MP methods that start one (root CLAUDE.md polish pass: no `_mp*` method edited here).
-    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) { this._sunkShips = {}; this._sinkPlayed = new Set(); }
+    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) { this._sunkShips = {}; this._sinkPlayed = new Set(); this._cannonPlayed = null; }
     if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
     if (this.state.over) {
       this.busy = false;
@@ -830,17 +987,79 @@ class BattleshipUI {
     return t('opp_turn', { opp: id.oppName });
   }
 
-  _fleetRosterHtml(seat, sunkIds) {
-    const shipSet = this._shipSetForState();
+  /** One line of the roster strip: a fleet as small silhouettes, each struck through once sunk.
+   *  The row's own class supplies --bs-ship, so theirs read blue and yours coral. */
+  _rosterItems(sunkIds) {
     const sunk = new Set(sunkIds || []);
-    const items = shipSet.map((def) => {
-      const isSunk = sunk.has(def.id);
-      return `<span class="bs-roster-item ${isSunk ? 'is-sunk' : ''}">
-        <span class="bs-roster-silhouette">${shipArtHtml(def.id, def.len)}</span>
-        <span class="bs-roster-name">${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
+    return this._shipSetForState().map((def) => {
+      const name = esc(t(SHIP_LABEL_KEY[def.id]));
+      return `<span class="bs-roster-item ${sunk.has(def.id) ? 'is-sunk' : ''}" title="${name}" aria-label="${esc(t(sunk.has(def.id) ? 'fleet_status_sunk' : 'fleet_status_afloat', { ship: t(SHIP_LABEL_KEY[def.id]) }))}">
+        <span class="bs-roster-silhouette" style="width:${def.len * 11}px">${shipArtHtml(def.id, def.len)}</span>
       </span>`;
     }).join('');
-    return `<div class="bs-fleetroster">${items}</div>`;
+  }
+
+  /** The cannon: a black barrel on a dark ring base, drawn over the board being fired AT and
+   *  pointing at the target cell. Its own namespace (.bs-cannon...), never a layout class -- see
+   *  the header of battleship.css for why that rule exists. */
+  _cannonHtml(r, c, { firing = false, thinking = false } = {}) {
+    // Sat just BELOW the target cell (+1.05 cells) so the barrel's muzzle covers the cell it is
+    // aimed at and the crosshair reticle on that cell stays readable underneath.
+    const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
+      + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 1.45).toFixed(2)});`;
+    return `<div class="bs-cannon ${firing ? 'is-firing' : ''}" style="${style}" aria-hidden="true">
+      <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
+        <ellipse cx="50" cy="72" rx="30" ry="14" fill="var(--bs-cannon-ring)"/>
+        <ellipse cx="50" cy="68" rx="21" ry="9" fill="var(--bs-cannon-body)"/>
+        <rect x="41" y="18" width="18" height="50" rx="6" fill="var(--bs-cannon-body)"/>
+        <rect x="36" y="14" width="28" height="12" rx="5" fill="var(--bs-cannon-ring)"/>
+        <circle cx="50" cy="20" r="5" fill="#05070b"/>
+      </svg>
+      ${firing ? '<span class="bs-cannon-muzzle"></span>' : ''}
+      ${thinking ? `<span class="bs-cannon-pill">${esc(t('bot_thinking'))}</span>` : ''}
+    </div>`;
+  }
+
+  _reticleHtml(r, c) {
+    const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
+      + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
+    return `<div class="bs-reticle" style="${style}" aria-hidden="true">
+      <svg class="bs-reticle-svg" viewBox="0 0 40 40" focusable="false">
+        <circle class="bs-reticle-ring" cx="20" cy="20" r="12"/>
+        <line class="bs-reticle-cross" x1="20" y1="1" x2="20" y2="8"/>
+        <line class="bs-reticle-cross" x1="20" y1="32" x2="20" y2="39"/>
+        <line class="bs-reticle-cross" x1="1" y1="20" x2="8" y2="20"/>
+        <line class="bs-reticle-cross" x1="32" y1="20" x2="39" y2="20"/>
+      </svg>
+    </div>`;
+  }
+
+  /** Which cannon (if any) belongs on this board right now.
+   *  - the opponent is choosing  -> it looms over YOUR board with a "Bot thinking" pill
+   *  - a shot just landed        -> it sits on the board that was fired at, and recoils ONCE
+   *  - MP, our shot is in flight -> it sits on the enemy board at the pending cell
+   *  The recoil is gated by `_cannonPlayed` for the same reason the sink reveal is: `_lastShot`
+   *  survives several re-renders, and an ungated CSS animation replays on every one of them. */
+  _cannonForBoard(isEnemy, seat) {
+    const s = this.state;
+    if (!s || s.over) return '';
+    const mp = this.mp;
+    if (!isEnemy && this.busy && !this._isMyTurn() && s.turn === this._remoteSeat()
+        && !(this._lastShot && this._lastShot.seat === seat)) {
+      const mid = (s.size - 1) / 2;
+      return this._cannonHtml(mid, mid, { thinking: true });
+    }
+    const last = this._lastShot;
+    if (last && last.seat === seat) {
+      const key = `${seat}:${last.r}:${last.c}`;
+      const firing = this._cannonPlayed !== key;
+      this._cannonPlayed = key;
+      return this._cannonHtml(last.r, last.c, { firing }) + this._reticleHtml(last.r, last.c);
+    }
+    if (isEnemy && mp && mp.pendingShot) {
+      return this._cannonHtml(mp.pendingShot.r, mp.pendingShot.c, {}) + this._reticleHtml(mp.pendingShot.r, mp.pendingShot.c);
+    }
+    return '';
   }
 
   /** One absolutely-positioned sprite per ship, sized/positioned from --bs-cell. The inner element
@@ -848,14 +1067,17 @@ class BattleshipUI {
    *  SVG markup from ship-art.js is never redrawn for orientation (HANDOFF-BATTLESHIP-POLISH.md
    *  section 3). `sinking` plays the one-shot list-and-slide reveal; gate it on `_lastShot` the same
    *  way `_cellHtml` gates the peg entrance animation, so it plays once, not on every re-render. */
-  _shipSpriteHtml(ship, { ghost = false, sinking = false } = {}) {
+  _shipSpriteHtml(ship, { ghost = false, sinking = false, faint = false, draggable = false } = {}) {
     const vertical = ship.dir === 'v';
-    const wrapStyle = `left:calc(var(--bs-cell) * ${ship.c}); top:calc(var(--bs-cell) * ${ship.r}); `
-      + `width:calc(var(--bs-cell) * ${vertical ? 1 : ship.len}); height:calc(var(--bs-cell) * ${vertical ? ship.len : 1});`;
-    const innerStyle = `position:absolute; top:50%; left:50%; width:calc(var(--bs-cell) * ${ship.len}); height:var(--bs-cell); `
+    const span = (n) => `calc(var(--bs-cell) * ${n} - var(--bs-gap))`;
+    const wrapStyle = `left:calc(var(--bs-pad) + var(--bs-cell) * ${ship.c}); top:calc(var(--bs-pad) + var(--bs-cell) * ${ship.r}); `
+      + `width:${span(vertical ? 1 : ship.len)}; height:${span(vertical ? ship.len : 1)};`;
+    const innerStyle = `position:absolute; top:50%; left:50%; width:${span(ship.len)}; height:${span(1)}; `
       + `transform:translate(-50%,-50%)${vertical ? ' rotate(90deg)' : ''};`;
-    const cls = ['bs-ship-sprite', ghost ? 'is-ghost' : '', sinking ? 'is-sinking' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" style="${wrapStyle}" aria-hidden="true"><div style="${innerStyle}">${shipArtHtml(ship.id, ship.len)}</div></div>`;
+    const cls = ['bs-ship-sprite', ghost ? 'is-ghost' : '', faint ? 'is-faint' : '',
+      sinking ? 'is-sinking' : '', draggable ? 'is-draggable' : ''].filter(Boolean).join(' ');
+    const hook = draggable ? ` data-role="board-ship" data-ship="${ship.id}"` : '';
+    return `<div class="${cls}" style="${wrapStyle}"${hook} aria-hidden="true"><div style="${innerStyle}">${shipArtHtml(ship.id, ship.len)}</div></div>`;
   }
 
   _shipSpritesHtml(fleet, opts) {
@@ -869,21 +1091,17 @@ class BattleshipUI {
     const isLast = this._lastShot && this._lastShot.seat === opts.seat && this._lastShot.r === r && this._lastShot.c === c;
     const classes = ['bs-cell'];
     let inner = '';
-    // The travel beat (a shell arcing in over a growing shadow) plays for ANY fresh shot, miss or
-    // hit alike -- only the impact beat that follows differs by shape (a hollow ring vs a filled
-    // peg + burst outline), never by color alone (HANDOFF-BATTLESHIP-POLISH.md section 4).
-    const travel = isLast ? '<span class="bs-ordnance-shadow"></span><span class="bs-ordnance"></span>' : '';
-    if (v === 0) {
-      classes.push('bs-water-cell');
-    } else if (v === CELL_MISS) {
-      const specks = isLast ? [...Array(4)].map((_, i) => {
-        const ang = (i / 4) * Math.PI * 2 + 0.4;
-        return `<span class="bs-speck" style="--bs-dx:${(Math.cos(ang) * 12).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 12 - 6).toFixed(1)}px"></span>`;
+    // Miss = a burst of white bubbles spreading and fading on the water, settling to a hollow ring.
+    // Hit  = an impact flash and a filled marker. The two SHAPES differ, never just the color.
+    if (v === CELL_MISS) {
+      const bubbles = isLast ? [...Array(5)].map((_, i) => {
+        const ang = (i / 5) * Math.PI * 2 + 0.5;
+        return `<span class="bs-bubble" style="--bs-dx:${(Math.cos(ang) * 13).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 13 - 5).toFixed(1)}px;animation-delay:${(i * 40)}ms"></span>`;
       }).join('') : '';
-      inner = `<span class="bs-peg">${travel}${isLast ? '<span class="bs-plume"></span><span class="bs-splash-ring"></span><span class="bs-splash-ring r2"></span><span class="bs-splash-ring r3"></span>' + specks : ''}<span class="bs-peg-miss"></span></span>`;
+      inner = `<span class="bs-peg">${isLast ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
     } else if (v === CELL_HIT || v === CELL_SUNK) {
       if (v === CELL_SUNK) classes.push('bs-cell-sunk');
-      inner = `<span class="bs-peg">${travel}${isLast ? '<span class="bs-fireball"></span><span class="bs-flash"></span><span class="bs-shockwave"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
+      inner = `<span class="bs-peg">${isLast ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
     }
     const label = v === CELL_MISS ? t('cell_miss') : v === CELL_HIT ? t('cell_hit') : v === CELL_SUNK ? t('cell_sunk') : t('cell_unknown');
     const isFree = v === 0;
@@ -953,16 +1171,20 @@ class BattleshipUI {
         cells.push(this._cellHtml(size, r, c, { shots, interactive, isTarget: isEnemy, seat }));
       }
     }
-    const showRadar = isEnemy && !s.over && (this.busy || (this.mp && this.mp.pendingShot));
+    // YOUR OWN ships stay visible on your board as faint ghosted silhouettes, so incoming fire can
+    // be seen landing on them. The enemy board only ever shows a ship once it is sunk.
     const sprites = isEnemy
       ? this._enemySpritesHtml(seat)
-      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({ sinking: this._shouldPlaySink(ship, seat) }));
+      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({
+        sinking: this._shouldPlaySink(ship, seat),
+        faint: !(s.shots[seat] && s.shots[seat].sunkIds.includes(ship.id)),
+      }));
     const shake = this._lastShot && this._lastShot.seat === seat && (this._lastShot.result === 'hit') ? 'bs-shake' : '';
-    return `<div class="bs-board ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
+    return `<div class="bs-board bs-board-${isEnemy ? 'enemy' : 'own'} ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
         style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
       ${cells.join('')}
       ${sprites}
-      ${showRadar ? '<div class="bs-radar" aria-hidden="true"></div>' : ''}
+      ${this._cannonForBoard(isEnemy, seat)}
     </div>`;
   }
 
@@ -973,29 +1195,35 @@ class BattleshipUI {
     const isMyTurn = this._isMyTurn();
     const series = this.mp ? `<p class="bs-mp-series">${esc(this._seriesLine())}</p>` : '';
     const banner = this._sunkBanner ? `<div class="bs-sunk-banner">${esc(this._sunkBanner)}</div>` : '';
-    // Boards NEVER swap size on a turn flip (HANDOFF-BATTLESHIP-POLISH.md section 2) -- enemy
-    // waters is always the big panel, your own fleet always the small one. Whose turn it is is
-    // shown only via .is-active-turn (box-shadow/opacity) and the status line above.
+    // THE VERTICAL SANDWICH, and the whole visual identity of the game: enemy waters (navy) on
+    // top, the roster strip in the middle, your own board (wood on a salmon deck) below. Both are
+    // always visible and NEITHER ever resizes -- whose turn it is shows only via .is-active-turn
+    // (box-shadow/opacity, compositor-safe) and the status line.
+    const theirSunk = s.shots[this._remoteSeat()].sunkIds.length;
+    const mySunk = s.shots[this._localSeat()].sunkIds.length;
     this.shell.innerHTML = `
       <div class="bs-battle">
-        <div class="bs-turnbar">
+        <div class="bs-topbar">
           <div class="bs-vsside"><span>${esc(id.humanEmoji)}</span><span>${esc(id.humanName)}</span></div>
           <span class="bs-shotcount">${t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 })}</span>
           <div class="bs-vsside"><span>${esc(id.oppEmoji)}</span><span>${esc(id.oppName)}</span></div>
         </div>
         ${series}
         <p class="bs-status" aria-live="polite">${esc(this._statusText())}</p>
-        <div class="bs-boards">
-          <div class="bs-boardpanel bs-boardpanel-enemy">
-            <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
-            ${this._boardHtml('enemy', isMyTurn && !s.over)}
-            ${this._fleetRosterHtml('enemy', s.shots[this._remoteSeat()].sunkIds)}
+        <div class="bs-boardpanel bs-boardpanel-enemy">
+          <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
+          <div class="bs-board-wrap">${this._boardHtml('enemy', isMyTurn && !s.over)}</div>
+        </div>
+        <div class="bs-rosterstrip">
+          <span class="bs-score" aria-label="${esc(t('score_aria', { them: theirSunk, me: mySunk }))}">${theirSunk} - ${mySunk}</span>
+          <div class="bs-rosterrows">
+            <div class="bs-rosterrow bs-rosterrow-theirs">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
+            <div class="bs-rosterrow bs-rosterrow-mine">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
           </div>
-          <div class="bs-boardpanel bs-boardpanel-own">
-            <div class="bs-boardpanel-h">${t('your_waters')}</div>
-            ${this._boardHtml('own', !isMyTurn && !s.over)}
-            ${this._fleetRosterHtml('own', s.shots[this._localSeat()].sunkIds)}
-          </div>
+        </div>
+        <div class="bs-boardpanel bs-boardpanel-own">
+          <div class="bs-boardpanel-h">${t('your_waters')}</div>
+          <div class="bs-board-wrap">${this._boardHtml('own', !isMyTurn && !s.over)}</div>
         </div>
         ${banner}
         <div class="bs-actions">
@@ -1778,6 +2006,16 @@ class BattleshipUI {
   // --- events --------------------------------------------------------------------------------
 
   onInput(e) {
+    // The difficulty slider is DISPLAY ONLY: it picks one of the three canonical stored values
+    // (beginner/intermediate/pro), which js/difficulty-tiers.js and js/game-stats-ui.js's
+    // DIFF_META both key on. Only the labels are Easy/Medium/Hard.
+    const slider = e.target.closest('[data-role="diff-slider"]');
+    if (slider) {
+      const i = Math.max(0, Math.min(DIFFICULTIES.length - 1, Number(slider.value) | 0));
+      const next = DIFFICULTIES[i][0];
+      if (next !== this._setup.difficulty) { this._setup.difficulty = next; this._saveSetup(); this.renderSetup(); }
+      return;
+    }
     const el = e.target.closest('[data-role="mp-code-input"]');
     if (!el) return;
     const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
@@ -1789,11 +2027,24 @@ class BattleshipUI {
 
   onPointerDown(e) {
     if (this.view !== 'placement') return;
+    if (e.target.closest('[data-action="rotate-ship"], [data-action="rotate-placed"]')) return;
+    // A ship already ON the board is picked straight off it: drag to move, or release without
+    // moving to rotate it in place (see onPointerUp). `origin` is what a no-move release goes
+    // back to, so a tap can never lose the ship.
+    const sprite = e.target.closest('[data-role="board-ship"]');
+    if (sprite) {
+      const shipId = sprite.dataset.ship;
+      const ship = this._placeFleet.ships.find((s) => s.id === shipId);
+      const origin = ship ? { r: ship.r, c: ship.c, dir: ship.dir } : null;
+      this._selectShip(shipId);
+      this._dragging = { shipId, pointerId: e.pointerId, origin, x: e.clientX, y: e.clientY, moved: false };
+      return;
+    }
     const chip = e.target.closest('[data-role="ship-chip"]');
-    if (chip && !e.target.closest('[data-action="rotate-ship"]')) {
+    if (chip) {
       const shipId = chip.dataset.ship;
       this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId };
+      this._dragging = { shipId, pointerId: e.pointerId, origin: null, x: e.clientX, y: e.clientY, moved: false };
       try { chip.setPointerCapture(e.pointerId); } catch { /* not all browsers need this */ }
     }
   }
@@ -1820,6 +2071,8 @@ class BattleshipUI {
 
   onPointerMove(e) {
     if (this.view !== 'placement' || !this._dragging) return;
+    const d = this._dragging;
+    if (!d.moved && (Math.abs(e.clientX - d.x) > 6 || Math.abs(e.clientY - d.y) > 6)) d.moved = true;
     const cell = this._cellAtPoint(e.clientX, e.clientY);
     if (!cell) { if (this._placePreview) { this._placePreview = null; this.renderPlacement(); } return; }
     if (this._placePreview && this._placePreview.r === cell.r && this._placePreview.c === cell.c) return;
@@ -1827,12 +2080,28 @@ class BattleshipUI {
     this.renderPlacement();
   }
 
-  onPointerUp(e) {
+  onPointerUp() {
     if (this.view !== 'placement' || !this._dragging) return;
-    const { shipId } = this._dragging;
+    const { shipId, origin, moved } = this._dragging;
     this._dragging = null;
-    if (this._placePreview) this._tryPlaceAt(shipId, this._placePreview.r, this._placePreview.c);
+    if (this._placePreview && (moved || !origin)) {
+      const { r, c } = this._placePreview;
+      this._placePreview = null;
+      this._tryPlaceAt(shipId, r, c);
+      return;
+    }
     this._placePreview = null;
+    if (origin) {
+      // A tap (no drag) on a placed ship rotates it in place. It was lifted off the board by
+      // onPointerDown's _selectShip, so put it back either way -- rotated if that fits, exactly
+      // as it was if it does not.
+      const flipped = origin.dir === 'h' ? 'v' : 'h';
+      this._placeDir[shipId] = this._placementLegalAt(shipId, origin.r, origin.c, flipped) ? flipped : origin.dir;
+      this._justRotatedShip = shipId;
+      this._tryPlaceAt(shipId, origin.r, origin.c);
+      return;
+    }
+    this.renderPlacement();
   }
 
   onKeyDown(e) {
@@ -1856,25 +2125,37 @@ class BattleshipUI {
     const btn = e.target.closest('[data-action]');
     if (!btn || !this.root.contains(btn)) return;
     const action = btn.dataset.action;
-    if (action === 'toggle-row') {
-      this._setupExpanded = this._setupExpanded === btn.dataset.row ? null : btn.dataset.row;
-      this.renderSetup();
-    } else if (action === 'set-size') {
-      this._setup.size = btn.dataset.v; this._saveSetup(); this.renderSetup();
-    } else if (action === 'set-diff') {
-      this._setup.difficulty = btn.dataset.v; this._saveSetup(); this.renderSetup();
-    } else if (action === 'set-first') {
-      this._setup.firstMode = btn.dataset.v; this._saveSetup(); this.renderSetup();
-    } else if (action === 'set-bonus') {
-      this._setup.bonusShotOnHit = btn.dataset.v === 'on'; this._saveSetup(); this.renderSetup();
+    if (action === 'cycle-size') {
+      // Every Options chip CYCLES through the same values the old accordion offered, and writes
+      // the same settings key -- the vocabulary in storage is untouched (THE LAW rule 5).
+      const i = SIZES.findIndex(([v]) => v === this._setup.size);
+      this._setup.size = SIZES[(i + 1) % SIZES.length][0]; this._saveSetup(); this.renderSetup();
+    } else if (action === 'cycle-first') {
+      const order = ['you', 'opponent', 'alternate'];
+      this._setup.firstMode = order[(order.indexOf(this._setup.firstMode) + 1) % order.length];
+      this._saveSetup(); this.renderSetup();
+    } else if (action === 'cycle-bonus') {
+      this._setup.bonusShotOnHit = !this._setup.bonusShotOnHit; this._saveSetup(); this.renderSetup();
     } else if (action === 'set-mode') {
       this._mode = btn.dataset.v; this._setupExpanded = null; this._mpError = ''; this.renderSetup();
+    } else if (action === 'play-bot') {
+      this._mode = 'solo'; this.startGame();
+    } else if (action === 'play-friend') {
+      this._mode = 'host'; this._mpError = ''; this.renderSetup();
+    } else if (action === 'mode-solo') {
+      this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this.renderSetup();
     } else if (action === 'start') {
       this.startGame();
     } else if (action === 'select-ship') {
       this._selectShip(btn.dataset.ship);
     } else if (action === 'rotate-ship') {
       this._rotateShip(btn.dataset.ship);
+    } else if (action === 'rotate-placed') {
+      this._rotatePlacedShip(btn.dataset.ship);
+    } else if (action === 'exit-placement') {
+      this.renderSetup();
+    } else if (action === 'skip-botplace') {
+      this._skipBotPlacing();
     } else if (action === 'auto-place') {
       this._autoPlaceAll();
     } else if (action === 'clear-fleet') {
