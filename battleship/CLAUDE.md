@@ -110,7 +110,102 @@ earned is ever at risk there (no shots have been fired, no result could exist ye
 from the single post-shot funnel (`_afterStateChange`), cleared on game end, on Restart/rematch,
 and on "New game" mid-battle. `isInProgress()` reflects this: solo always returns `false`.
 
-## Visual design
+## The four screens (visual rebuild, 2026-08-05, `HANDOFF-BATTLESHIP-REDESIGN.md`)
+
+The game was rebuilt visually and interactively against a reference mobile Battleship. The engine,
+the MP protocol, the stats recorder and every storage key were untouched by that pass; everything
+below is `ui.js` rendering, `battleship.css`, `ship-art.js` and `strings.js` only.
+
+**The one idea the whole layout hangs on: the vertical sandwich.** Enemy waters on top as a dark
+navy grid, the fleet roster strip in the middle, your own board below as a brown wooden grid on a
+salmon deck. Both boards are always visible, neither ever resizes, there is no swap or mode
+switch. Get that wrong and nothing else matters.
+
+1. **Mode screen** (`renderSetup`) — a dark navy header panel with the game's own one-line
+   explanation, and a card riding over it: the opponent's avatar (from `loadProfile()`, read-only
+   as always), the difficulty name in gold caps with the ski-slope `diffShapeSVG` tier marker
+   beside it, a three-stop **slider**, then **PLAY VS. BOT** (amber) and **PLAY VS. FRIEND**
+   (purple, which opens the EXISTING host/join lobby, `_friendHTML()` — there is no second MP
+   path), then an **Options** row of chips (board size, first shot, bonus shot) and the How to
+   play link. The old four-row accordion is gone; every setting it carried is on a chip that
+   cycles, and every one still writes the same `gamehub.battleship.v1` fields.
+   **The slider is display only**: the stored values stay `beginner`/`intermediate`/`pro` (storage
+   vocabulary `js/difficulty-tiers.js` and `js/game-stats-ui.js`'s `DIFF_META` both key on). Only
+   the labels are Easy/Medium/Hard.
+2. **Deploy screen** (`renderPlacement`) — navy panel with the title, the hint, a blue **RANDOM**
+   pill and a green **SAVE** pill that is **absent, not disabled**, until every ship is placed.
+   Below it the salmon deck carries the tray of unplaced ships and the wooden board. A placed ship
+   is a real sprite you can pick straight off the board: drag to move, release without moving to
+   rotate in place (`onPointerUp`'s `origin` branch), or use its own corner arrow
+   (`_rotatePlacedShip`, which reverts if the rotated pose does not fit — rotating must never drop
+   a ship). Legality is SHAPE first: solid outline + a check badge when legal, **dashed** outline +
+   a cross badge when not. The keyboard path (arrows/`R`/Enter) is unchanged. A white circular
+   **EXIT** with a vertical label is pinned to the right edge, deliberately clear of the hub's own
+   floating back button (which is top LEFT, `css/hub.css`'s `.hub-top-immersive`); the deck carries
+   a `padding-right` so EXIT never covers the grid.
+3. **Opponent-getting-ready screen** (`renderWaiting` / `renderBotPlacing`, view `'botplace'`) —
+   enemy waters empty and dark on top, the line "Bot is placing ships", and the bot's fleet below
+   in THEIR blue as loose silhouettes **on a deck, never on a board** (showing where they sit would
+   hand the player the game). Two seconds, skippable by a tap. In MP the same screen renders
+   "Waiting for {opponent}", driven by the **existing** ready handshake (`mp.localReady` /
+   `_maybeStartBattle`) — no second handshake was invented, and no `_mp*` method was touched.
+4. **Battle screen** (`renderBattle`) — the sandwich above. The roster strip carries both fleets as
+   small silhouettes (theirs blue, yours coral, via a per-row `--bs-ship`), each struck through when
+   sunk, with the sunk score `n - n` in red at the left. Your own ships show on your board as faint
+   ghosts so incoming fire can be seen landing on them; the enemy board still shows a ship only
+   once it is sunk.
+
+### The cannon
+
+A **black barrel on a dark ring base**, inline SVG, sitting on the board being fired AT and aimed
+at the target cell, with a crosshair reticle on that cell. `_cannonForBoard` decides which board
+gets one: the opponent choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot
+that just landed puts it on the board that was fired at and it recoils **once**; in MP a pending
+shot puts it on the enemy board at the pending cell. It is drawn 1.45 cells BELOW the target so the
+muzzle covers the cell and the reticle stays readable underneath. The recoil is gated by
+`_cannonPlayed` for exactly the reason the sink reveal is gated by `_sinkPlayed`: `_lastShot`
+survives several re-renders and an ungated CSS `animation:` replays on every one of them.
+
+Miss = a burst of white bubbles spreading and fading, settling to a hollow ring. Hit = an impact
+flash and a filled marker with a rotated-square burst outline (a different SHAPE, not just a
+different color). Sunk = the ship reveals in its owner's colour and settles under the waterline.
+**The old arcing-projectile model is gone**: `.bs-ordnance`, `.bs-ordnance-shadow`, `.bs-plume`,
+`.bs-speck`, `.bs-fireball`, `.bs-shockwave`, `.bs-radar` and their keyframes were deleted outright
+rather than left alongside the cannon.
+
+### THE CLASS-NAMESPACE RULE (do not relax this)
+
+**A decorative/animated class must never share a name with a structural/layout one.** `.bs-shell`
+was once both the root layout container AND a flying shell whose animation ends at `opacity: 0`
+(and `display: none` under reduced motion): the entire game rendered invisible, twice, with
+perfect HTML and no failing test. Ornaments live in their own namespace (`.bs-cannon`,
+`.bs-cannon-pill`, `.bs-bubble`, `.bs-splash-ring`, `.bs-flash`, `.bs-smoke`) and never take a
+layout name. `node test-game-conventions.mjs` fails the build on this exact shape.
+
+Two related rules the same incident bought:
+
+- **Every animation needs a `prefers-reduced-motion: reduce` branch that is an instant state
+  change, and it must NEVER `display: none` anything structural.** The reduced-motion block settles
+  each element to its final pose instead.
+- **A passing test suite is not a rendered screen.** This redesign's definition of done was
+  screenshots of all six screens (mode, deploy mid-drag with a valid AND an invalid ghost,
+  bot-placing, battle, miss/hit/sink, win overlay) at 390x844, looked at, in three conditions:
+  normal, `reducedMotion: 'reduce'` (headless Chromium's default, and the setting that hid the
+  whole game last time), and dark. A painted-element count over `.bs-root *` guards the "it is in
+  the DOM but invisible" failure that a `innerHTML.length` assertion cannot see. That pass caught a
+  real regression while it ran: `.bs-board-place { width: min(100%, ...) }` inside a shrink-to-fit
+  wrap resolved to ZERO and collapsed the whole placement board, with every node still in the DOM.
+
+### Sizing: `--bs-cell`, `--bs-pad`, `--bs-gap`, per board
+
+`_updateCellSize()` sets all three **on each `.bs-board`**, measured from two real rendered cells
+(and the board's own padding box), never computed from the board's width and grid size — that
+arithmetic duplicates the CSS by hand and drifts. `--bs-cell` is the cell-to-cell STEP, so a sprite
+spanning `len` cells (`len * --bs-cell - --bs-gap`) lands exactly on the grid instead of falling
+short by (len-1) gaps. They stay per-board because the battle screen's two boards are different
+widths; a single root-level value drew the small board's ships at the large board's scale.
+
+## Visual design (pre-redesign history, kept for the reasoning)
 
 Two boards, deliberately unequal, per `HANDOFF-BATTLESHIP.md` section 4.3 — "the single best
 interface idea in this document." **Revised 2026-08-04** (`HANDOFF-BATTLESHIP-POLISH.md`, a fix

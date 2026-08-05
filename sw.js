@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v269';
+const CACHE = 'game-hub-v270';
 
 const ASSETS = [
   './',
@@ -345,7 +345,7 @@ async function warmRest() {
 // Set back to false once a purge has shipped and the device is confirmed healthy. Leaving it on
 // permanently would re-download ~8.8 MB on every single deploy, which is exactly the storm the
 // two-tier precache exists to avoid. It is a recovery lever, not the steady state.
-const PURGE_ALL_CACHES = true;
+const PURGE_ALL_CACHES = false;
 
 self.addEventListener('install', (event) => {
   // Only the shell blocks the install. The new build goes live as soon as the hub itself is safe

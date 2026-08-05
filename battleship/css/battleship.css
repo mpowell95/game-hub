@@ -1,338 +1,496 @@
 /* battleship.css — every rule descendant-scoped under .bs-root (Mancala's CSS-scoping discipline,
-   root CLAUDE.md "Adding a game" item 3). Prefix: bs. */
+   root CLAUDE.md "Adding a game" item 3). Prefix: bs.
+
+   THE CLASS-NAMESPACE RULE (HANDOFF-BATTLESHIP-REDESIGN.md section 6.1, and the reason this game
+   shipped a blank screen twice): a decorative/animated class must NEVER share a name with a
+   structural/layout one. `.bs-shell` was once both the root layout container and a flying
+   projectile whose animation ends at opacity 0 (display:none under reduced motion), so the whole
+   UI faded out with correct HTML and no error. Ornaments live in their own namespace here
+   (.bs-cannon, .bs-bubble, .bs-flash, .bs-splash-ring ...) and never carry a layout name.
+   `node test-game-conventions.mjs` fails the build on this exact shape.
+
+   Layout identity (redesign, 2026-08-05): a vertical sandwich. Enemy waters on top as a dark navy
+   grid, the fleet roster strip in the middle, your own board below as a brown wooden grid on a
+   salmon deck. Both boards are always visible; neither ever resizes. */
 
 .bs-root {
-  --bs-bg: #eef3f8;
+  /* --- the redesign palette (handoff section 1) --- */
+  --bs-header: #2C3E5D;
+  --bs-enemy-water: #1E3A5F;
+  --bs-enemy-line: #2F5480;
+  --bs-deck: #F5A98B;
+  --bs-deck-ink: #5a2f1e;
+  --bs-wood: #8B5A3C;
+  --bs-wood-line: #A56B48;
+  --bs-mine: #E85D4A;
+  --bs-theirs: #5BA3D0;
+  --bs-btn-random: #2196F3;
+  --bs-btn-save: #3FB562;
+  --bs-btn-bot: #F5B800;
+  --bs-btn-friend: #9C5FD0;
+  --bs-valid: #3FB562;
+  --bs-invalid: #E0532F;
+
+  /* --- supporting chrome --- */
+  --bs-bg: #eaeff7;
   --bs-surface: #ffffff;
-  --bs-surface-2: #e4ecf4;
+  --bs-surface-2: #dde5ef;
   --bs-ink: #16243a;
+  --bs-on-header: #ffffff;
   --bs-muted: #5b6b82;
-  --bs-accent: #34506e;
-  --bs-accent-deep: #223c56;
-  --bs-water: #bfe0f2;
-  --bs-water-2: #a9d2ea;
-  --bs-ship: #2c3e50;
-  --bs-ship-deck: #7688a0;
+  --bs-gold: #F2B705;
   --bs-miss: #ffffff;
   --bs-hit: #E0532F;
   --bs-hit-2: #b83c1c;
-  --bs-sunk: #1c1c1c;
-  --bs-valid: #178A7A;
-  --bs-invalid: #E0532F;
-  --bs-gold: #F2B705;
+  --bs-sunk: #101a2c;
   --bs-smoke: #3a4553;
-  --bs-cell: 40px;
+  --bs-cannon-body: #14181f;
+  --bs-cannon-ring: #2b3441;
+
+  /* ship sprite tints; overridden per board/roster row so YOUR fleet is coral and THEIRS is blue */
+  --bs-ship: var(--bs-mine);
+  --bs-ship-deck: rgba(255, 255, 255, .8);
+
+  /* set per board by ui.js's _updateCellSize(): --bs-cell is the cell-to-cell STEP, --bs-pad the
+     board's own padding offset, --bs-gap the grid gap. Ship sprites, the cannon and the reticle
+     all position from these three, so both boards stay in step at their different widths. */
+  --bs-cell: 32px;
+  --bs-pad: 3px;
+  --bs-gap: 2px;
   color: var(--bs-ink);
+  background: var(--bs-bg);
   min-height: 100%;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Dark theme: deeper navy and wood, the deck lifted to a muted terracotta. Ship colors are already
+   high-contrast on both, so they stay. Never a prefers-color-scheme query here (root CLAUDE.md) --
+   'auto' is resolved once in js/theme.js so the toggle always wins. */
 :root.gh-dark .bs-root {
+  --bs-header: #1B2740;
+  --bs-enemy-water: #12253D;
+  --bs-enemy-line: #23425F;
+  --bs-deck: #A9614A;
+  --bs-deck-ink: #ffe9df;
+  --bs-wood: #5E3A26;
+  --bs-wood-line: #7A4C31;
   --bs-bg: #0d1420;
   --bs-surface: #17212f;
-  --bs-surface-2: #202c3d;
+  --bs-surface-2: #2a3849;
   --bs-ink: #eef3f8;
-  --bs-muted: #94a6bf;
-  --bs-accent: #6f97bd;
-  --bs-accent-deep: #a8c4de;
-  --bs-water: #16344a;
-  --bs-water-2: #1c3e58;
-  --bs-ship: #7c8ea3;
-  --bs-miss: #cfd9e6;
+  --bs-muted: #a2b3c9;
+  --bs-miss: #e8f1fb;
   --bs-hit: #ff7a52;
-  --bs-hit-2: #ff9d7f;
-  --bs-sunk: #060606;
-  --bs-valid: #33c4ae;
-  --bs-invalid: #ff7a52;
-  --bs-ship-deck: #aab8c9;
+  --bs-hit-2: #ffa385;
+  --bs-sunk: #05080f;
   --bs-smoke: #c3ccd8;
+  --bs-cannon-body: #05070b;
+  --bs-cannon-ring: #1b2330;
+  --bs-ship-deck: rgba(255, 255, 255, .68);
 }
 
 .bs-root * { box-sizing: border-box; }
-.bs-shell { max-width: 620px; margin: 0 auto; padding: 12px 14px 40px; display: grid; gap: 12px; }
 
-/* --- shared: buttons, links, segments, rows (Escoba's accordion / Tic Tac Toe's setup pattern) */
+/* The root layout container. Structural, and nothing decorative may ever share this name. */
+.bs-shell { max-width: 620px; margin: 0 auto; padding: 8px 10px 24px; display: grid; gap: 10px; }
 
-.bs-title { margin: 4px 0 0; font-size: 1.35rem; font-weight: 900; }
-.bs-sub { margin: 0; color: var(--bs-muted); font-size: .88rem; font-weight: 600; }
-.bs-stats { margin: 0; color: var(--bs-muted); font-size: .8rem; font-weight: 700; }
+/* --- shared chrome ---------------------------------------------------------------------------- */
+
+.bs-title { margin: 0; font-size: 1.35rem; font-weight: 900; letter-spacing: .01em; }
+.bs-sub { margin: 0; font-size: .84rem; font-weight: 600; opacity: .88; }
+.bs-stats { margin: 0; color: var(--bs-muted); font-size: .78rem; font-weight: 700; text-align: center; }
+.bs-hint { margin: 0; font-size: .76rem; color: var(--bs-muted); font-weight: 600; }
+
+/* the dark navy panel behind every screen's title */
+.bs-headerpanel {
+  background: var(--bs-header); color: var(--bs-on-header); border-radius: 16px;
+  padding: 14px 16px; display: grid; gap: 6px; justify-items: center; text-align: center;
+}
+.bs-headerpanel .bs-sub { color: rgba(255, 255, 255, .82); }
 
 .bs-btn {
   appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 12px;
   background: var(--bs-surface); color: var(--bs-ink); font: inherit; font-weight: 800;
-  padding: 12px 16px; font-size: .92rem; touch-action: manipulation;
+  padding: 11px 15px; font-size: .9rem; touch-action: manipulation;
 }
-.bs-btn-primary { background: var(--bs-accent); color: #fff; border-color: var(--bs-accent-deep); }
+.bs-btn-primary { background: var(--bs-header); color: #fff; border-color: var(--bs-header); }
 .bs-btn-ghost { background: transparent; }
-.bs-btn-small { padding: 8px 12px; font-size: .82rem; }
+.bs-btn-small { padding: 7px 11px; font-size: .78rem; }
 .bs-btn.is-confirm { background: var(--bs-invalid); color: #fff; border-color: var(--bs-invalid); }
-.bs-link { appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--bs-accent); font: inherit; font-weight: 800; padding: 8px 4px; touch-action: manipulation; }
+.bs-link {
+  appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--bs-header);
+  font: inherit; font-weight: 800; padding: 8px 4px; touch-action: manipulation; text-decoration: underline;
+}
+:root.gh-dark .bs-root .bs-link { color: var(--bs-theirs); }
 
-.bs-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.bs-seg { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .bs-segbtn {
   appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 10px;
   background: var(--bs-surface); color: var(--bs-ink); font: inherit; font-weight: 700; font-size: .85rem;
   padding: 9px 12px; display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
 }
-.bs-segbtn.is-selected { background: var(--bs-accent); color: #fff; border-color: var(--bs-accent-deep); }
+.bs-segbtn.is-selected { background: var(--bs-header); color: #fff; border-color: var(--bs-header); }
 
-.bs-row { border-bottom: 1px solid var(--bs-surface-2); }
-.bs-row:last-child { border-bottom: 0; }
-.bs-row-head {
-  appearance: none; cursor: pointer; width: 100%; display: flex; justify-content: space-between;
-  align-items: center; background: transparent; border: 0; padding: 13px 4px; font: inherit; color: inherit;
-  touch-action: manipulation;
+/* difficulty ski-slope shape sizing (js/difficulty-tiers.js's diffShapeSVG) -- the colorblind-safe
+   difficulty marker, a repo-wide rule: the tier is never conveyed by hue alone. */
+.bs-root .lb-dshape { width: 18px; height: 18px; vertical-align: -4px; margin-right: 4px; }
+.bs-root .lb-dshape-x2 { width: 30px; height: 18px; }
+
+/* --- screen 1: the mode screen ---------------------------------------------------------------- */
+
+.bs-mode { display: grid; gap: 10px; }
+.bs-modecard {
+  background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 18px;
+  padding: 16px 16px 12px; display: grid; gap: 10px; justify-items: center;
+  box-shadow: 0 8px 26px rgba(20, 35, 60, .12); margin-top: -26px; width: calc(100% - 24px);
+  justify-self: center; position: relative; z-index: 1;
 }
-.bs-row-label { font-size: .88rem; font-weight: 800; }
-.bs-row-value { font-size: .84rem; font-weight: 700; color: var(--bs-muted); }
-.bs-row.is-open .bs-row-value { color: var(--bs-accent-deep); }
-.bs-row-expand { padding: 0 4px 14px; display: grid; gap: 8px; }
-.bs-hint { margin: 4px 0 0; font-size: .78rem; color: var(--bs-muted); font-weight: 600; }
-
-.bs-summary { background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 14px; padding: 2px 12px; }
-
-.bs-vscard { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 14px; }
-.bs-vsside { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: .9rem; }
-.bs-vslabel { color: var(--bs-muted); font-weight: 800; font-size: .78rem; }
-
-/* difficulty ski-slope shape sizing (js/difficulty-tiers.js's diffShapeSVG) */
-.bs-root .lb-dshape { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
-.bs-root .lb-dshape-x2 { width: 26px; height: 16px; }
-
-/* --- placement screen ------------------------------------------------------------------------- */
-
-.bs-place { display: grid; gap: 12px; }
-.bs-place-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.bs-place-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.bs-place-layout { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 480px) { .bs-place-layout { grid-template-columns: 1fr auto; align-items: start; } }
-
-.bs-shiplist { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; order: 2; }
-@media (min-width: 480px) { .bs-shiplist { flex-direction: column; order: 1; } }
-
-.bs-shipchip {
-  display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px;
-  background: var(--bs-surface); border: 2px solid var(--bs-surface-2); cursor: grab;
-  font-size: .78rem; font-weight: 800; touch-action: none; user-select: none;
+.bs-avatar {
+  width: 78px; height: 78px; border-radius: 50%; background: var(--bs-surface-2);
+  display: flex; align-items: center; justify-content: center; font-size: 2.4rem;
+  border: 3px solid var(--bs-header);
 }
-.bs-shipchip.is-placed { opacity: .45; border-style: dashed; cursor: default; }
-.bs-shipchip.is-selected { border-color: var(--bs-accent); box-shadow: 0 0 0 2px var(--bs-accent) inset; }
-.bs-shipchip-cells { display: flex; align-items: center; transition: transform .18s ease; }
-.bs-shipchip-cells.is-vertical { transform: rotate(90deg); width: 26px; }
-.bs-shipchip-cells .bs-ship-svg { width: 34px; height: 8px; }
-.bs-shipchip.is-placed .bs-ship-hull, .bs-shipchip.is-placed .bs-ship-deck, .bs-shipchip.is-placed .bs-ship-turret { fill: var(--bs-muted); }
-.bs-shipchip.is-placed .bs-ship-line { stroke: var(--bs-muted); }
-
-/* Rotation control (redesign spec bug 2): the old bare "⟳" bs-link read as a stray character with
-   a tiny tap target. A dedicated 44x44 button with its own filled circle background is both a
-   bigger hit target and an unambiguous "this is a control" affordance; the icon itself spins a
-   full turn on every tap so the rotation reads as something that just happened, not just a label
-   that changed. */
-.bs-rotate-btn {
-  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 50%;
-  background: var(--bs-surface-2); color: var(--bs-accent-deep); width: 44px; height: 44px;
-  min-width: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
-  touch-action: manipulation; flex-shrink: 0;
+.bs-avatar-name { font-weight: 800; font-size: .9rem; }
+.bs-diffname {
+  font-size: 1.45rem; font-weight: 900; letter-spacing: .08em; color: var(--bs-gold);
+  text-transform: uppercase; display: flex; align-items: center; gap: 4px;
 }
-.bs-rotate-icon { display: block; }
-.bs-rotate-icon.is-spinning { animation: bs-rotate-tap .32s ease-out; }
-@keyframes bs-rotate-tap { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
+.bs-slider-wrap { width: 100%; display: grid; gap: 2px; }
+.bs-slider {
+  appearance: none; -webkit-appearance: none; width: 100%; height: 26px; background: transparent;
+  touch-action: manipulation; cursor: pointer; margin: 0;
+}
+.bs-slider::-webkit-slider-runnable-track {
+  height: 10px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--bs-gold), var(--bs-btn-friend));
+}
+.bs-slider::-moz-range-track {
+  height: 10px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--bs-gold), var(--bs-btn-friend));
+}
+.bs-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff;
+  border: 3px solid var(--bs-header); margin-top: -7px;
+}
+.bs-slider::-moz-range-thumb {
+  width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid var(--bs-header);
+}
+.bs-slider-stops { display: flex; justify-content: space-between; font-size: .68rem; font-weight: 800; color: var(--bs-muted); }
+.bs-slider-stop.is-on { color: var(--bs-ink); }
 
-.bs-board-wrap { order: 1; }
-@media (min-width: 480px) { .bs-board-wrap { order: 2; } }
+.bs-bigbtn {
+  appearance: none; cursor: pointer; width: 100%; border: 0; border-radius: 14px; color: #14181f;
+  font: inherit; font-weight: 900; font-size: 1rem; letter-spacing: .05em; padding: 14px 12px;
+  display: flex; align-items: center; justify-content: center; gap: 10px; touch-action: manipulation;
+  text-transform: uppercase; box-shadow: 0 4px 0 rgba(0, 0, 0, .18);
+}
+.bs-bigbtn-bot { background: var(--bs-btn-bot); }
+.bs-bigbtn-friend { background: var(--bs-btn-friend); color: #fff; }
+.bs-bigbtn-icon { width: 24px; height: 24px; flex: none; }
+
+.bs-options { width: 100%; display: grid; gap: 6px; justify-items: center; margin-top: 2px; }
+.bs-options-label { font-size: .68rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--bs-muted); }
+.bs-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.bs-chip {
+  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 999px;
+  background: var(--bs-bg); color: var(--bs-ink); font: inherit; font-weight: 700; font-size: .72rem;
+  padding: 7px 11px; touch-action: manipulation;
+}
+.bs-chip-value { font-weight: 900; }
+
+/* --- screen 2: deploy your ships --------------------------------------------------------------- */
+
+.bs-deploy { display: grid; gap: 10px; position: relative; }
+.bs-deploy-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+.bs-pill {
+  appearance: none; cursor: pointer; border: 0; border-radius: 999px; color: #fff; font: inherit;
+  font-weight: 900; letter-spacing: .06em; font-size: .82rem; padding: 10px 22px; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 7px; touch-action: manipulation;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .22);
+}
+.bs-pill-random { background: var(--bs-btn-random); }
+.bs-pill-save { background: var(--bs-btn-save); }
+.bs-pill-icon { width: 16px; height: 16px; }
+
+/* the salmon deck the tray and the wooden board sit on */
+.bs-deck-surface {
+  background: var(--bs-deck); border-radius: 16px; padding: 10px; display: grid; gap: 10px;
+  justify-items: center;
+}
+.bs-tray {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center;
+  min-height: 26px; width: 100%;
+}
+.bs-trayship {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: grab;
+  touch-action: none; user-select: none; padding: 2px; border-radius: 8px;
+}
+.bs-trayship.is-selected { background: rgba(255, 255, 255, .45); outline: 2px solid var(--bs-header); }
+.bs-trayship-art { height: 16px; }
+.bs-trayship-name { font-size: .58rem; font-weight: 900; color: var(--bs-deck-ink); text-transform: uppercase; letter-spacing: .04em; }
+.bs-tray-empty { font-size: .72rem; font-weight: 800; color: var(--bs-deck-ink); }
+
+.bs-board-wrap { position: relative; }
+/* The wrap must resolve a real width of its own: `.bs-board-place`'s `min(100%, ...)` is a
+   percentage OF THIS ELEMENT, and a shrink-to-fit parent resolves it to zero -- which collapsed
+   the whole placement board to nothing the first time this was written. */
+.bs-deploy .bs-board-wrap { width: 100%; display: flex; justify-content: center; }
+.bs-board-place { width: min(100%, 44vh, 400px); }
+/* room down the right-hand side for the EXIT button, so it never covers the grid */
+.bs-deploy .bs-deck-surface { padding-right: 54px; }
 
 .bs-board {
-  display: grid; gap: 2px; background: var(--bs-water-2); border: 2px solid var(--bs-accent-deep);
-  border-radius: 10px; padding: 3px; touch-action: none; width: min(92vw, 460px); aspect-ratio: 1 / 1;
-  position: relative;
+  display: grid; gap: 2px; border-radius: 10px; padding: 3px; touch-action: none;
+  position: relative; aspect-ratio: 1 / 1; background: var(--bs-enemy-line);
+  border: 2px solid var(--bs-header);
+}
+.bs-board-own, .bs-board-place {
+  background: var(--bs-wood-line); border-color: #6d442c;
 }
 .bs-cell {
-  position: relative; background: var(--bs-water); border-radius: 2px; overflow: hidden;
+  position: relative; background: var(--bs-enemy-water); border-radius: 1px; overflow: hidden;
   appearance: none; border: 0; padding: 0; touch-action: manipulation;
 }
+.bs-board-own .bs-cell, .bs-board-place .bs-cell { background: var(--bs-wood); }
+
 /* subtle water shimmer -- one cheap CSS animation on a pseudo-element, not per-cell JS */
-.bs-cell.bs-water-cell::before {
-  content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,.22) 50%, transparent 60%);
+.bs-board-enemy .bs-cell::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 40%, rgba(255, 255, 255, .13) 50%, transparent 60%);
   background-size: 220% 220%; animation: bs-shimmer 7s ease-in-out infinite;
 }
 @keyframes bs-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -20% 100%; } }
 
-.bs-cell.bs-ghost-valid { outline: 2px solid var(--bs-valid); background: color-mix(in srgb, var(--bs-valid) 30%, var(--bs-water)); }
-.bs-cell.bs-ghost-invalid { outline: 2px dashed var(--bs-invalid); background: color-mix(in srgb, var(--bs-invalid) 22%, var(--bs-water)); }
-.bs-ghost-x { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--bs-invalid); font-weight: 900; font-size: 70%; pointer-events: none; }
+/* Placement legality: SHAPE first, color second (Matt is red/green colorblind). Valid = solid
+   outline + a check badge. Invalid = dashed outline + a cross badge. */
+.bs-cell.bs-ghost-valid { outline: 2px solid var(--bs-valid); outline-offset: -2px; background: color-mix(in srgb, var(--bs-valid) 42%, var(--bs-wood)); }
+.bs-cell.bs-ghost-invalid { outline: 2px dashed var(--bs-invalid); outline-offset: -2px; background: color-mix(in srgb, var(--bs-invalid) 34%, var(--bs-wood)); }
+.bs-ghost-badge {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 80%; pointer-events: none; color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+}
 
-.bs-cell.bs-placed-cursor { outline: 2px solid var(--bs-gold); }
+/* the placed ship's own rotate affordance, one per ship, at its corner */
+.bs-rotate-btn {
+  appearance: none; cursor: pointer; border: 0; border-radius: 50%;
+  background: var(--bs-header); color: #fff; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center; font-size: .9rem; line-height: 1;
+  touch-action: manipulation; flex: none; box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
+.bs-rotate-onboard { position: absolute; z-index: 5; transform: translate(-40%, -40%); }
+.bs-rotate-icon { display: block; }
+.bs-rotate-icon.is-spinning { animation: bs-rotate-tap .32s ease-out; }
+@keyframes bs-rotate-tap { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 
-/* --- ship art: one absolutely-positioned sprite per ship, reused for chips/roster/board -------- */
+/* EXIT: a white circular button pinned to the right edge, deliberately away from the hub's own
+   floating back button (top LEFT, css/hub.css .hub-top-immersive) so the two never overlap. */
+.bs-exit {
+  position: absolute; right: 2px; top: 46%; z-index: 6;
+  appearance: none; cursor: pointer; width: 54px; height: 54px; border-radius: 50%;
+  background: #fff; color: var(--bs-header); border: 2px solid var(--bs-header);
+  font: inherit; font-weight: 900; font-size: .62rem; letter-spacing: .12em;
+  display: flex; align-items: center; justify-content: center; touch-action: manipulation;
+  box-shadow: 0 3px 10px rgba(10, 20, 40, .28);
+}
+.bs-exit-label { writing-mode: vertical-rl; text-orientation: upright; }
+
+.bs-placement-status { font-size: .78rem; font-weight: 800; color: var(--bs-muted); text-align: center; }
+
+/* --- ship art: one absolutely-positioned sprite per ship, reused for tray/roster/board ---------- */
 
 .bs-ship-svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .bs-ship-hull { fill: var(--bs-ship); }
 .bs-ship-deck, .bs-ship-turret { fill: var(--bs-ship-deck); }
 .bs-ship-line { stroke: var(--bs-ship-deck); stroke-width: .5; }
 
-/* One wrapper per ship, positioned/sized to its final len x --bs-cell footprint on the grid (cells
-   underneath stay water). The inner element is always drawn at its natural horizontal size and
-   rotated 90deg in place for vertical ships -- the SVG markup itself is never redrawn. */
+/* One wrapper per ship, sized to its len x --bs-cell footprint on the grid (cells underneath stay
+   water). The inner element is always drawn at its natural horizontal size and rotated 90deg in
+   place for vertical ships -- the SVG markup itself is never redrawn for orientation. */
 .bs-ship-sprite {
   position: absolute; z-index: 2; pointer-events: none;
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .35));
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .4));
 }
-.bs-ship-sprite.is-ghost { opacity: .55; }
+.bs-ship-sprite.is-draggable { pointer-events: auto; cursor: grab; touch-action: none; }
+.bs-ship-sprite.is-ghost { opacity: .6; }
+.bs-ship-sprite.is-faint { opacity: .55; }
 
-.bs-placement-status { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; font-weight: 700; color: var(--bs-muted); }
+/* --- screen 3: the opponent placing ------------------------------------------------------------ */
 
-/* --- battle screen: two boards, deliberately unequal ------------------------------------------ */
+.bs-wait { display: grid; gap: 10px; justify-items: center; }
+.bs-wait-line { font-size: .95rem; font-weight: 900; text-align: center; margin: 0; }
+.bs-wait-dots { display: inline-block; animation: bs-wait-dots 1.2s steps(4, end) infinite; }
+@keyframes bs-wait-dots { 0% { opacity: .3; } 50% { opacity: 1; } 100% { opacity: .3; } }
+.bs-wait-fleet { --bs-ship: var(--bs-theirs); }
+.bs-wait-board { width: min(74vw, 34vh, 300px); }
 
-.bs-battle { display: grid; gap: 10px; }
-.bs-turnbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.bs-status { margin: 0; font-weight: 800; font-size: .95rem; text-align: center; }
-.bs-shotcount { font-size: .78rem; color: var(--bs-muted); font-weight: 700; }
+/* --- screen 4: the battle ---------------------------------------------------------------------- */
 
-.bs-boards { display: grid; gap: 14px; justify-items: center; }
+.bs-battle { display: grid; gap: 6px; justify-items: center; }
+.bs-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  background: var(--bs-header); color: var(--bs-on-header); border-radius: 12px; padding: 7px 12px;
+}
+.bs-vsside { display: flex; align-items: center; gap: 5px; font-weight: 800; font-size: .82rem; }
+.bs-shotcount { font-size: .72rem; font-weight: 700; opacity: .85; }
+.bs-status { margin: 0; font-weight: 800; font-size: .84rem; text-align: center; }
 
-/* Boards NEVER swap size on a turn flip (HANDOFF-BATTLESHIP-POLISH.md section 2) -- enemy waters
-   is always the big board, your own fleet always the small one. Whose turn it is is conveyed only
-   by .is-active-turn (box-shadow/opacity, compositor-safe) and the status line, never by resizing
-   either panel. */
-.bs-boardpanel { width: 100%; display: grid; gap: 6px; justify-items: center; }
-.bs-boardpanel-h { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 800; color: var(--bs-muted); }
-.bs-boardpanel-enemy { max-width: 460px; }
-.bs-boardpanel-enemy .bs-boardpanel-h { color: var(--bs-ink); font-size: .86rem; }
-.bs-boardpanel-own { max-width: 220px; }
-.bs-boardpanel-enemy .bs-board { width: min(92vw, 460px); }
-.bs-boardpanel-own .bs-board { width: min(58vw, 220px); }
+.bs-boardpanel { width: 100%; display: grid; gap: 3px; justify-items: center; }
+.bs-boardpanel-h { font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--bs-muted); }
+.bs-boardpanel-enemy { --bs-ship: var(--bs-theirs); }
+.bs-boardpanel-own { --bs-ship: var(--bs-mine); }
+.bs-boardpanel-enemy .bs-board { width: min(90vw, 42vh, 420px); }
+.bs-boardpanel-own .bs-board { width: min(64vw, 30vh, 300px); }
+/* your board sits on the salmon deck; the enemy's is bare navy water */
+.bs-boardpanel-own .bs-board-wrap {
+  background: var(--bs-deck); border-radius: 14px; padding: 7px; display: flex; justify-content: center;
+}
 
 .bs-board.bs-target { cursor: crosshair; }
-.bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); }
+.bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); outline-offset: -1px; }
 .bs-board.is-active-turn { box-shadow: 0 0 0 3px var(--bs-gold); transition: box-shadow .2s ease, opacity .2s ease; }
-.bs-board:not(.is-active-turn) { opacity: .92; transition: box-shadow .2s ease, opacity .2s ease; }
+.bs-board:not(.is-active-turn) { opacity: .94; transition: box-shadow .2s ease, opacity .2s ease; }
 
-/* --- firing: a 5-beat ordnance sequence, transform/opacity/filter/box-shadow only ------------- */
-/* launch (0-90ms): reticle snap. travel (90-450ms): a shell arcs in over a growing shadow. impact
-   (450ms+): miss settles to a hollow RING, hit settles to a filled peg with a burst/star OUTLINE --
-   different SHAPES, color only reinforces the difference (HANDOFF-BATTLESHIP-POLISH.md section 4). */
-
-.bs-cell.bs-reticle::after {
-  content: ''; position: absolute; inset: 12%; border: 2px solid var(--bs-gold); border-radius: 50%;
-  animation: bs-reticle-snap .28s ease-out;
+/* the roster strip: both fleets as silhouettes, sunk ones struck through, sunk score at the left */
+.bs-rosterstrip {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px;
+  background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 12px;
 }
-@keyframes bs-reticle-snap { from { transform: scale(2.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.bs-score { font-size: 1.1rem; font-weight: 900; color: var(--bs-hit); letter-spacing: .06em; flex: none; }
+.bs-rosterrows { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.bs-rosterrow {
+  display: flex; align-items: center; gap: 7px; overflow-x: auto; overscroll-behavior: contain;
+}
+.bs-rosterrow-theirs { --bs-ship: var(--bs-theirs); }
+.bs-rosterrow-mine { --bs-ship: var(--bs-mine); }
+.bs-roster-item { position: relative; flex: 0 0 auto; height: 12px; display: flex; align-items: center; }
+.bs-roster-item.is-sunk { opacity: .45; }
+.bs-roster-item.is-sunk::after {
+  content: ''; position: absolute; left: -1px; right: -1px; top: 50%; height: 2px;
+  background: var(--bs-hit); border-radius: 2px;
+}
+.bs-roster-silhouette { display: block; height: 11px; }
+
+.bs-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+
+/* --- the cannon: the centrepiece ornament (its own namespace, never a layout name) -------------- */
+/* A black barrel on a dark ring base, sitting on the board being fired AT and pointing at the
+   target cell. It recoils on the shot. Under reduced motion it simply appears, already aimed. */
+
+.bs-cannon {
+  position: absolute; z-index: 6; pointer-events: none;
+  width: calc(var(--bs-cell) * 2.1); height: calc(var(--bs-cell) * 2.1);
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+}
+.bs-cannon-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .55)); }
+.bs-cannon.is-firing .bs-cannon-svg { animation: bs-cannon-recoil .42s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes bs-cannon-recoil {
+  0% { transform: translateY(0) scale(1); }
+  18% { transform: translateY(10%) scale(.96); }
+  55% { transform: translateY(-3%) scale(1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
+.bs-cannon-pill {
+  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  background: rgba(10, 16, 26, .92); color: #fff; font-size: .62rem; font-weight: 900;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em;
+}
+.bs-cannon-muzzle {
+  position: absolute; top: 4%; left: 50%; width: 34%; height: 34%; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #fff 0%, var(--bs-gold) 45%, rgba(224, 83, 47, 0) 72%);
+  animation: bs-muzzle-flash .3s ease-out both;
+}
+@keyframes bs-muzzle-flash { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } }
+
+/* the crosshair reticle on the cell currently being aimed at */
+.bs-reticle {
+  position: absolute; z-index: 5; pointer-events: none;
+  width: calc(var(--bs-cell) * 1.6); height: calc(var(--bs-cell) * 1.6);
+  transform: translate(-50%, -50%);
+}
+.bs-reticle-svg { width: 100%; height: 100%; display: block; }
+.bs-reticle-ring { fill: none; stroke: var(--bs-gold); stroke-width: 3; }
+.bs-reticle-cross { stroke: var(--bs-gold); stroke-width: 3; stroke-linecap: round; }
+.bs-reticle { animation: bs-reticle-snap .28s ease-out both; }
+@keyframes bs-reticle-snap { from { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+/* --- shot results: miss = bubble burst, hit = flash + marker, sunk = reveal + settle ------------ */
 
 .bs-peg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 
-/* travel: a small shell + growing/darkening water-shadow beneath it, both transform-only */
-/* The flying projectile. NAMED .bs-ordnance, never .bs-shell: `.bs-shell` is already this
-   game's ROOT LAYOUT CONTAINER (line 52, the element every screen renders into). When this
-   rule was called .bs-shell it applied its travel animation to the whole UI, whose last
-   keyframe is opacity: 0 -- the game faded itself out -- and the reduced-motion block below
-   display:none'd the entire game for anyone with Reduce Motion on: a blank screen from the
-   first paint, with correct HTML and no error. That shipped twice. Keep ornament and layout
-   in separate namespaces; test-game-conventions.mjs now fails the build for this. */
-.bs-ordnance {
-  position: absolute; width: 18%; height: 18%; border-radius: 50%; background: var(--bs-ink);
-  animation: bs-ordnance-travel .36s cubic-bezier(.3,.1,.4,1) both;
-}
-@keyframes bs-ordnance-travel { 0% { transform: translate(10%, -220%) scale(.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(0, 0) scale(1); opacity: 0; } }
-.bs-ordnance-shadow {
-  position: absolute; width: 40%; height: 16%; border-radius: 50%; background: rgba(0,0,0,.35);
-  animation: bs-ordnance-shadow .36s ease-in both;
-}
-@keyframes bs-ordnance-shadow { 0% { transform: scale(.2); opacity: 0; } 100% { transform: scale(1); opacity: .5; } }
-
-/* miss: settles to a hollow ring (never filled -- the shape distinguishes it from a hit) */
+/* miss settles to a hollow ring -- never filled, so the SHAPE tells it apart from a hit */
 .bs-peg-miss {
   width: 46%; height: 46%; border-radius: 50%; background: transparent; border: 2.5px solid var(--bs-miss);
-  box-shadow: 0 0 0 1px var(--bs-accent-deep) inset;
-  animation: bs-peg-drop .38s .36s cubic-bezier(.34,1.56,.64,1) both;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset;
+  animation: bs-peg-drop .34s cubic-bezier(.34, 1.56, .64, 1) both;
 }
 @keyframes bs-peg-drop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
-.bs-plume { position: absolute; bottom: 30%; width: 14%; height: 30%; border-radius: 40% 40% 10% 10%; background: var(--bs-miss); opacity: 0; animation: bs-plume .5s .36s ease-out both; }
-@keyframes bs-plume { 0% { transform: translateY(0) scaleY(.2); opacity: .9; } 60% { transform: translateY(-70%) scaleY(1); opacity: .7; } 100% { transform: translateY(-100%) scaleY(1.1); opacity: 0; } }
-.bs-splash-ring { position: absolute; inset: 8%; border: 2px solid var(--bs-accent); border-radius: 50%; opacity: 0; animation: bs-splash .55s .36s ease-out both; }
-.bs-splash-ring.r2 { animation-delay: .44s; }
-.bs-splash-ring.r3 { animation-delay: .52s; }
-@keyframes bs-splash { 0% { transform: scale(.3); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
-.bs-speck { position: absolute; width: 6%; height: 6%; border-radius: 50%; background: var(--bs-accent); opacity: 0; animation: bs-speck .5s .36s ease-out both; }
-@keyframes bs-speck { 0% { transform: translate(0,0) scale(1); opacity: .9; } 100% { transform: translate(var(--bs-dx,10px), var(--bs-dy,-14px)) scale(.3); opacity: 0; } }
 
-/* hit: filled peg + a rotated-square burst OUTLINE (a visibly different silhouette from the ring) */
+/* a burst of white bubbles spreading and fading on the water */
+.bs-bubble {
+  position: absolute; width: 16%; height: 16%; border-radius: 50%;
+  background: rgba(255, 255, 255, .95); border: 1px solid rgba(255, 255, 255, .6);
+  animation: bs-bubble .62s ease-out both;
+}
+@keyframes bs-bubble {
+  0% { transform: translate(0, 0) scale(.3); opacity: .95; }
+  60% { opacity: .8; }
+  100% { transform: translate(var(--bs-dx, 0), var(--bs-dy, -10px)) scale(1.1); opacity: 0; }
+}
+.bs-splash-ring { position: absolute; inset: 12%; border: 2px solid rgba(255, 255, 255, .8); border-radius: 50%; animation: bs-splash .5s ease-out both; }
+@keyframes bs-splash { 0% { transform: scale(.3); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
+
+/* hit: an impact flash and a filled marker with a rotated-square burst OUTLINE (a visibly
+   different silhouette from the miss ring, not just a different color) */
 .bs-peg-hit {
-  width: 46%; height: 46%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
-  animation: bs-hit-pop .3s .36s cubic-bezier(.34,1.56,.64,1) both;
+  width: 48%; height: 48%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
+  animation: bs-hit-pop .3s cubic-bezier(.34, 1.56, .64, 1) both;
 }
 @keyframes bs-hit-pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
 .bs-peg-hit::after {
   content: ''; position: absolute; inset: -18%; border: 2px solid var(--bs-hit); transform: rotate(45deg);
-  animation: bs-burst-outline .5s .4s ease-out both;
+  animation: bs-burst-outline .5s .04s ease-out both;
 }
 @keyframes bs-burst-outline { 0% { transform: rotate(45deg) scale(.4); opacity: 1; } 100% { transform: rotate(45deg) scale(1.5); opacity: 0; } }
-.bs-fireball {
-  position: absolute; inset: 0; border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, var(--bs-gold) 30%, var(--bs-hit) 62%, transparent 78%);
-  animation: bs-fireball .4s .36s ease-out both;
+.bs-flash {
+  position: absolute; inset: -10%; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--bs-gold) 34%, rgba(224, 83, 47, 0) 72%);
+  animation: bs-flash .38s ease-out both;
 }
-@keyframes bs-fireball { 0% { transform: scale(.2); opacity: 0; } 35% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
-.bs-flash { position: absolute; inset: 0; background: radial-gradient(circle, rgba(255,255,255,.9), transparent 60%); animation: bs-flash .28s .36s ease-out forwards; }
-@keyframes bs-flash { from { opacity: 1; transform: scale(1.6); } to { opacity: 0; transform: scale(1); } }
-.bs-shockwave { position: absolute; inset: 6%; border: 2px solid var(--bs-hit); border-radius: 50%; animation: bs-shock .4s .38s ease-out forwards; }
-@keyframes bs-shock { from { transform: scale(.2); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
-.bs-smoke { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--bs-smoke); opacity: 0; animation: bs-smoke .9s .5s ease-out both; }
-@keyframes bs-smoke { 0% { transform: translateY(0) scale(.5); opacity: .55; } 100% { transform: translateY(-140%) scale(1.4); opacity: 0; } }
-.bs-board.bs-shake { animation: bs-shake .32s .36s ease-in-out; }
+@keyframes bs-flash { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+.bs-smoke { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--bs-smoke); animation: bs-smoke .9s .14s ease-out both; }
+@keyframes bs-smoke { 0% { transform: translateY(0) scale(.5); opacity: .5; } 100% { transform: translateY(-140%) scale(1.4); opacity: 0; } }
+.bs-board.bs-shake { animation: bs-shake .32s ease-in-out; }
 @keyframes bs-shake { 10% { transform: translateX(-3px); } 30% { transform: translateX(3px); } 50% { transform: translateX(-2px); } 70% { transform: translateX(2px); } 100% { transform: translateX(0); } }
 
-/* sunk: the ship sprite itself lists and slides under the waterline, plus a spreading oil slick */
+/* sunk: the ship reveals in its owner's color and settles under the waterline */
 .bs-cell.bs-cell-sunk { background: var(--bs-sunk); }
 .bs-ship-sprite.is-sinking { animation: bs-sink-reveal .9s ease-in both; }
 @keyframes bs-sink-reveal {
-  0% { transform: rotate(0deg) translateY(0); opacity: 1; }
-  40% { transform: rotate(9deg) translateY(6%); opacity: 1; }
-  100% { transform: rotate(13deg) translateY(60%); opacity: .25; }
+  0% { transform: rotate(0deg) translateY(-8%); opacity: 1; }
+  40% { transform: rotate(8deg) translateY(2%); opacity: 1; }
+  100% { transform: rotate(12deg) translateY(14%); opacity: .78; }
 }
-.bs-oilslick {
-  position: absolute; border-radius: 50%; background: radial-gradient(circle, var(--bs-sunk) 0%, transparent 72%);
-  opacity: 0; animation: bs-oilslick 1s ease-out both; z-index: 1; pointer-events: none;
-}
-@keyframes bs-oilslick { 0% { transform: scale(.3); opacity: 0; } 40% { opacity: .55; } 100% { transform: scale(1.6); opacity: .3; } }
 .bs-sunk-banner {
-  position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px); z-index: 60;
+  position: fixed; left: 50%; top: 16%; transform: translate(-50%, 0); z-index: 60;
   background: var(--bs-sunk); color: #fff; padding: 8px 16px; border-radius: 999px; font-weight: 900;
-  font-size: .85rem; opacity: 0; animation: bs-banner .3s ease-out forwards;
+  font-size: .85rem; animation: bs-banner .3s ease-out both;
 }
 @keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -18px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-/* radar sweep -- opponent thinking / waiting on the network. Softened (low opacity, thin leading
-   edge) after the polish pass -- the old wide teal wedge read as a rendering artifact. */
-.bs-radar { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 3; }
-.bs-radar::before {
-  content: ''; position: absolute; inset: -20%; background: conic-gradient(from 0deg, transparent 0deg, rgba(50,220,180,.16) 8deg, rgba(50,220,180,.32) 10deg, transparent 34deg);
-  animation: bs-radar-spin 2.2s linear infinite;
-}
-@keyframes bs-radar-spin { to { transform: rotate(360deg); } }
-
-.bs-fleetroster { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; font-size: .68rem; overflow-x: auto; overscroll-behavior: contain; padding: 2px 0; }
-.bs-roster-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 700; color: var(--bs-ink); flex: 0 0 auto; }
-.bs-roster-item.is-sunk { color: var(--bs-muted); }
-.bs-roster-item.is-sunk .bs-roster-name { text-decoration: line-through; }
-.bs-roster-silhouette { width: 30px; height: 8px; }
-.bs-roster-item.is-sunk .bs-ship-hull, .bs-roster-item.is-sunk .bs-ship-deck, .bs-roster-item.is-sunk .bs-ship-turret { fill: var(--bs-muted); }
-.bs-roster-item.is-sunk .bs-ship-line { stroke: var(--bs-muted); }
-.bs-roster-name { font-size: .64rem; white-space: nowrap; }
-
-.bs-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-
-/* --- overlays (end-of-game / how-to-play / mp) ------------------------------------------------ */
+/* --- overlays (end-of-game / how-to-play / mp) ------------------------------------------------- */
 
 .bs-overlay {
   position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
   padding: 16px; overflow-y: auto; overscroll-behavior: contain;
 }
-.bs-scrim { position: fixed; inset: 0; background: rgba(10, 18, 30, .55); }
+.bs-scrim { position: fixed; inset: 0; background: rgba(10, 18, 30, .6); }
 .bs-card {
   position: relative; z-index: 1; width: 100%; max-width: 420px; background: var(--bs-surface);
   border-radius: 18px; padding: 22px 20px; display: grid; gap: 10px; justify-items: center; text-align: center;
-  box-shadow: 0 18px 50px rgba(10, 18, 30, .3);
+  box-shadow: 0 18px 50px rgba(10, 18, 30, .35);
 }
 .bs-x {
   position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 10px;
@@ -347,39 +505,52 @@
 
 .bs-help-lines { display: grid; gap: 6px; text-align: left; width: 100%; }
 .bs-help-lead { font-weight: 800; margin: 0; }
-.bs-help-caption, .bs-help-example, .bs-help-rule { margin: 0; font-size: .84rem; color: var(--bs-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-help-caption, .bs-help-example, .bs-help-rule { margin: 0; font-size: .84rem; color: var(--bs-muted); font-weight: 600; }
 .bs-diagram-wrap { width: 100%; display: flex; justify-content: center; }
-.bs-diagram { width: 140px; height: 140px; }
+.bs-diagram { width: 150px; height: 90px; }
 
 /* --- multiplayer lobby (Tic Tac Toe's shape) --------------------------------------------------- */
 
-.bs-mp-lobby { display: grid; gap: 8px; justify-items: center; padding: 10px 4px; }
-.bs-mp-label { font-size: .74rem; font-weight: 800; color: var(--bs-muted); text-transform: uppercase; letter-spacing: .04em; }
-.bs-mp-code { font-size: 1.8rem; font-weight: 900; letter-spacing: .18em; color: var(--bs-accent-deep); }
+.bs-mp-lobby { display: grid; gap: 8px; justify-items: center; padding: 6px 4px; width: 100%; }
+.bs-mp-label { font-size: .72rem; font-weight: 800; color: var(--bs-muted); text-transform: uppercase; letter-spacing: .04em; }
+.bs-mp-code { font-size: 1.8rem; font-weight: 900; letter-spacing: .18em; color: var(--bs-header); }
+:root.gh-dark .bs-root .bs-mp-code { color: var(--bs-theirs); }
 .bs-mp-code-input {
   font-size: 1.6rem; letter-spacing: .3em; text-align: center; text-transform: uppercase; width: 100%;
   padding: 10px; border-radius: 10px; border: 1px solid var(--bs-surface-2); background: var(--bs-surface); color: var(--bs-ink);
 }
 .bs-mp-oppslot { display: flex; align-items: center; gap: 6px; font-weight: 800; }
 .bs-mp-oppempty { color: var(--bs-muted); font-weight: 700; }
-.bs-mp-msg { margin: 0; font-size: .82rem; color: var(--bs-muted); font-weight: 700; text-align: center; }
+.bs-mp-msg { margin: 0; font-size: .8rem; color: var(--bs-muted); font-weight: 700; text-align: center; }
 .bs-mp-msg-action { appearance: none; border: 0; background: transparent; cursor: pointer; text-decoration: underline; }
-.bs-mp-series { text-align: center; font-size: .8rem; font-weight: 700; color: var(--bs-muted); margin: 0; }
+.bs-mp-series { text-align: center; font-size: .76rem; font-weight: 700; color: var(--bs-muted); margin: 0; }
 
-/* --- reduced motion: instant state changes, no travel/shake/shimmer/spin ----------------------- */
+/* --- reduced motion: every animation becomes an instant state change --------------------------- */
+/* NEVER `display: none` here. That is exactly how this game shipped a blank screen: a decoration
+   rule landing on a structural class, hidden outright for anyone with Reduce Motion on. Everything
+   below settles to its FINAL pose instantly; the game stays fully playable and fully legible with
+   every animation off. */
 @media (prefers-reduced-motion: reduce) {
-  .bs-cell.bs-water-cell::before { animation: none; }
-  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cell.bs-reticle::after,
-  .bs-rotate-icon.is-spinning, .bs-shipchip-cells {
-    animation: none !important; opacity: 1 !important; transform: none !important; transition: none !important;
+  .bs-board-enemy .bs-cell::before,
+  .bs-rotate-icon.is-spinning,
+  .bs-board.bs-shake,
+  .bs-wait-dots {
+    animation: none !important;
   }
-  .bs-shipchip-cells.is-vertical { transform: rotate(90deg) !important; }
-  /* travel + impact decoration is pure flourish on top of already-settled state -- strip it entirely */
-  .bs-ordnance, .bs-ordnance-shadow, .bs-splash-ring, .bs-speck, .bs-plume, .bs-flash, .bs-shockwave,
-  .bs-fireball, .bs-smoke, .bs-oilslick {
-    display: none !important;
+  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cannon-svg {
+    animation: none !important; opacity: 1 !important; transform: none !important;
   }
-  .bs-ship-sprite.is-sinking { animation: none !important; opacity: .25 !important; transform: rotate(12deg) translateY(55%) !important; }
-  .bs-board.bs-shake { animation: none; }
-  .bs-radar::before { animation-duration: 6s; }
+  .bs-reticle {
+    animation: none !important; opacity: 1 !important; transform: translate(-50%, -50%) !important;
+  }
+  .bs-cannon { transform: translate(-50%, -50%) !important; }
+  /* the transient flourishes have no settled state at all: they end invisible either way, so they
+     simply skip straight to it. None of these is ever a layout element (see the header note). */
+  .bs-bubble, .bs-splash-ring, .bs-flash, .bs-smoke, .bs-cannon-muzzle {
+    animation: none !important; opacity: 0 !important;
+  }
+  .bs-peg-hit::after { opacity: 0 !important; }
+  .bs-ship-sprite.is-sinking {
+    animation: none !important; opacity: .78 !important; transform: rotate(12deg) translateY(14%) !important;
+  }
 }
