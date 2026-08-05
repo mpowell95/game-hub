@@ -118,11 +118,26 @@
 }
 .bs-shipchip.is-placed { opacity: .45; border-style: dashed; cursor: default; }
 .bs-shipchip.is-selected { border-color: var(--bs-accent); box-shadow: 0 0 0 2px var(--bs-accent) inset; }
-.bs-shipchip-cells { display: flex; align-items: center; }
+.bs-shipchip-cells { display: flex; align-items: center; transition: transform .18s ease; }
 .bs-shipchip-cells.is-vertical { transform: rotate(90deg); width: 26px; }
 .bs-shipchip-cells .bs-ship-svg { width: 34px; height: 8px; }
 .bs-shipchip.is-placed .bs-ship-hull, .bs-shipchip.is-placed .bs-ship-deck, .bs-shipchip.is-placed .bs-ship-turret { fill: var(--bs-muted); }
 .bs-shipchip.is-placed .bs-ship-line { stroke: var(--bs-muted); }
+
+/* Rotation control (redesign spec bug 2): the old bare "⟳" bs-link read as a stray character with
+   a tiny tap target. A dedicated 44x44 button with its own filled circle background is both a
+   bigger hit target and an unambiguous "this is a control" affordance; the icon itself spins a
+   full turn on every tap so the rotation reads as something that just happened, not just a label
+   that changed. */
+.bs-rotate-btn {
+  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 50%;
+  background: var(--bs-surface-2); color: var(--bs-accent-deep); width: 44px; height: 44px;
+  min-width: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  touch-action: manipulation; flex-shrink: 0;
+}
+.bs-rotate-icon { display: block; }
+.bs-rotate-icon.is-spinning { animation: bs-rotate-tap .32s ease-out; }
+@keyframes bs-rotate-tap { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 
 .bs-board-wrap { order: 1; }
 @media (min-width: 480px) { .bs-board-wrap { order: 2; } }
@@ -354,9 +369,11 @@
 /* --- reduced motion: instant state changes, no travel/shake/shimmer/spin ----------------------- */
 @media (prefers-reduced-motion: reduce) {
   .bs-cell.bs-water-cell::before { animation: none; }
-  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cell.bs-reticle::after {
-    animation: none !important; opacity: 1 !important; transform: none !important;
+  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cell.bs-reticle::after,
+  .bs-rotate-icon.is-spinning, .bs-shipchip-cells {
+    animation: none !important; opacity: 1 !important; transform: none !important; transition: none !important;
   }
+  .bs-shipchip-cells.is-vertical { transform: rotate(90deg) !important; }
   /* travel + impact decoration is pure flourish on top of already-settled state -- strip it entirely */
   .bs-ordnance, .bs-ordnance-shadow, .bs-splash-ring, .bs-speck, .bs-plume, .bs-flash, .bs-shockwave,
   .bs-fireball, .bs-smoke, .bs-oilslick {
