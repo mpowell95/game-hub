@@ -105,6 +105,7 @@
 .bs-headerpanel {
   background: var(--bs-header); color: var(--bs-on-header); border-radius: 16px;
   padding: 14px 16px; display: grid; gap: 6px; justify-items: center; text-align: center;
+  position: relative;
 }
 .bs-headerpanel .bs-sub { color: rgba(255, 255, 255, .82); }
 
@@ -235,9 +236,16 @@
    percentage OF THIS ELEMENT, and a shrink-to-fit parent resolves it to zero -- which collapsed
    the whole placement board to nothing the first time this was written. */
 .bs-deploy .bs-board-wrap { width: 100%; display: flex; justify-content: center; }
+/* `vh` on mobile Safari tracks the LARGE viewport (toolbar hidden), and the address bar/toolbar
+   can hide or show mid-gesture -- including while dragging a ship, which is exactly the touch
+   interaction most likely to trigger it. That resizes this board (everything below/around it
+   shifts with it) for no reason the player did anything to cause. `svh` is the SMALL viewport --
+   pinned to toolbar-visible size, so it never moves out from under a drag. Plain `vh` stays as the
+   fallback for browsers without `svh` support. */
 .bs-board-place { width: min(100%, 44vh, 400px); }
-/* room down the right-hand side for the EXIT button, so it never covers the grid */
-.bs-deploy .bs-deck-surface { padding-right: 54px; }
+@supports (height: 1svh) {
+  .bs-board-place { width: min(100%, 44svh, 400px); }
+}
 
 .bs-board {
   display: grid; gap: 2px; border-radius: 10px; padding: 3px; touch-action: none;
@@ -283,26 +291,34 @@
 .bs-rotate-icon.is-spinning { animation: bs-rotate-tap .32s ease-out; }
 @keyframes bs-rotate-tap { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 
-/* EXIT: a white circular button pinned to the right edge, deliberately away from the hub's own
-   floating back button (top LEFT, css/hub.css .hub-top-immersive) so the two never overlap. */
+/* EXIT: a plain horizontal-text pill in the header panel's own top-right corner, mirroring the
+   hub's own "< Hub" back pill (css/hub.css) but deliberately on the RIGHT so the two never
+   overlap -- the hub's floating back button stays top-LEFT the whole time this screen is open.
+   Used to be a lone circle pinned to the board's right edge with its label spelled out top-to-
+   bottom (`writing-mode: vertical-rl`), which read as decoration rather than a button and sat in
+   a spot no other screen in this game puts a control. A normal top-right pill, readable left to
+   right, is the unsurprising place to look for "leave this screen." */
 .bs-exit {
-  position: absolute; right: 2px; top: 46%; z-index: 6;
-  appearance: none; cursor: pointer; width: 54px; height: 54px; border-radius: 50%;
-  background: #fff; color: var(--bs-header); border: 2px solid var(--bs-header);
-  font: inherit; font-weight: 900; font-size: .62rem; letter-spacing: .12em;
-  display: flex; align-items: center; justify-content: center; touch-action: manipulation;
-  box-shadow: 0 3px 10px rgba(10, 20, 40, .28);
+  position: absolute; right: 10px; top: 10px; z-index: 6;
+  appearance: none; cursor: pointer; border: 0; border-radius: 999px;
+  background: rgba(255, 255, 255, .94); color: var(--bs-header);
+  font: inherit; font-weight: 800; font-size: .74rem; padding: 6px 12px 6px 10px;
+  display: flex; align-items: center; gap: 2px; touch-action: manipulation;
+  box-shadow: 0 2px 6px rgba(10, 20, 40, .28);
 }
-.bs-exit-label { writing-mode: vertical-rl; text-orientation: upright; }
 
 .bs-placement-status { font-size: .78rem; font-weight: 800; color: var(--bs-muted); text-align: center; }
 
 /* --- ship art: one absolutely-positioned sprite per ship, reused for tray/roster/board ---------- */
 
 .bs-ship-svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.bs-ship-hull { fill: var(--bs-ship); }
+/* A dark outline is what makes a hull read as a BOAT instead of a flat color patch, especially
+   when the ship's own fill is close in hue to the board underneath it (own ships in coral on a
+   salmon deck, most of all). */
+.bs-ship-hull { fill: var(--bs-ship); stroke: rgba(0, 0, 0, .38); stroke-width: .5; stroke-linejoin: round; }
 .bs-ship-deck, .bs-ship-turret { fill: var(--bs-ship-deck); }
-.bs-ship-line { stroke: var(--bs-ship-deck); stroke-width: .5; }
+.bs-ship-line { stroke: var(--bs-ship-deck); stroke-width: .5; fill: none; }
+.bs-ship-waterline { fill: none; stroke: rgba(0, 0, 0, .22); stroke-width: .45; }
 
 /* One wrapper per ship, sized to its len x --bs-cell footprint on the grid (cells underneath stay
    water). The inner element is always drawn at its natural horizontal size and rotated 90deg in
@@ -323,6 +339,9 @@
 @keyframes bs-wait-dots { 0% { opacity: .3; } 50% { opacity: 1; } 100% { opacity: .3; } }
 .bs-wait-fleet { --bs-ship: var(--bs-theirs); }
 .bs-wait-board { width: min(74vw, 34vh, 300px); }
+@supports (height: 1svh) {
+  .bs-wait-board { width: min(74vw, 34svh, 300px); }
+}
 
 /* --- screen 4: the battle ---------------------------------------------------------------------- */
 
@@ -341,6 +360,10 @@
 .bs-boardpanel-own { --bs-ship: var(--bs-mine); }
 .bs-boardpanel-enemy .bs-board { width: min(90vw, 42vh, 420px); }
 .bs-boardpanel-own .bs-board { width: min(64vw, 30vh, 300px); }
+@supports (height: 1svh) {
+  .bs-boardpanel-enemy .bs-board { width: min(90vw, 42svh, 420px); }
+  .bs-boardpanel-own .bs-board { width: min(64vw, 30svh, 300px); }
+}
 /* your board sits on the salmon deck; the enemy's is bare navy water */
 .bs-boardpanel-own .bs-board-wrap {
   background: var(--bs-deck); border-radius: 14px; padding: 7px; display: flex; justify-content: center;
@@ -379,10 +402,13 @@
 
 .bs-cannon {
   position: absolute; z-index: 6; pointer-events: none;
-  /* A cannon-sized ornament, not a two-row blob -- it used to be 2.1 cells and sat offset a
-     whole extra row below its target, which is what made it look like an oversized golden mess
-     parked across two cells instead of a barrel sitting on the one cell it's aimed at. */
-  width: calc(var(--bs-cell) * 1.25); height: calc(var(--bs-cell) * 1.25);
+  /* Big enough to actually read as a cannon sitting on the cell, not a tiny marker: it used to be
+     2.1 cells sitting offset a whole extra row below its target (an oversized blob fused with a
+     separate gold-ring crosshair), then overcorrected down to 1.25 cells and gated to vanish the
+     instant a shot settled, which made it read as a tap-and-disappear icon instead of a cannon
+     sitting on the water. It's centered directly on its cell now, wide enough for the carriage
+     wheels either side of the barrel to actually be visible. */
+  width: calc(var(--bs-cell) * 1.7); height: calc(var(--bs-cell) * 1.7);
   transform: translate(-50%, -50%);
   display: flex; align-items: center; justify-content: center;
 }
