@@ -39,13 +39,22 @@
   --bs-on-header: #ffffff;
   --bs-muted: #5b6b82;
   --bs-gold: #F2B705;
-  --bs-miss: #ffffff;
+  --bs-miss: rgba(6, 16, 30, .62);
   --bs-hit: #E0532F;
   --bs-hit-2: #b83c1c;
   --bs-sunk: #101a2c;
   --bs-smoke: #3a4553;
-  --bs-cannon-body: #14181f;
-  --bs-cannon-ring: #2b3441;
+  /* the cannon's own colours: the ring banded inside its black base is the OWNER's, so a gun is
+     read as yours or theirs at a glance, the way the reference does it */
+  --bs-cannon-mine: #C4463C;
+  --bs-cannon-theirs: #27ACD8;
+  /* the open water the enemy grid is framed in, and the wash that dims whichever board is idle */
+  --bs-enemy-frame: #4A86B8;
+  --bs-enemy-veil: #7FB4DA;
+  /* a fleet in the roster strip that is not currently under fire, drawn back into the deck */
+  --bs-roster-dim: rgba(90, 47, 30, .28);
+  /* how long a cannonball is in the air; every impact animation is held back by exactly this */
+  --bs-fly: 340ms;
 
   /* ship sprite tints; overridden per board/roster row so YOUR fleet is coral and THEIRS is blue */
   --bs-ship: var(--bs-mine);
@@ -79,13 +88,16 @@
   --bs-surface-2: #2a3849;
   --bs-ink: #eef3f8;
   --bs-muted: #a2b3c9;
-  --bs-miss: #e8f1fb;
+  --bs-miss: rgba(0, 0, 0, .6);
   --bs-hit: #ff7a52;
   --bs-hit-2: #ffa385;
   --bs-sunk: #05080f;
   --bs-smoke: #c3ccd8;
-  --bs-cannon-body: #05070b;
-  --bs-cannon-ring: #1b2330;
+  --bs-cannon-mine: #B33B33;
+  --bs-cannon-theirs: #1F93BC;
+  --bs-enemy-frame: #2B5A80;
+  --bs-enemy-veil: #4D7EA3;
+  --bs-roster-dim: rgba(255, 233, 223, .28);
   --bs-ship-deck: rgba(255, 255, 255, .68);
 }
 
@@ -108,6 +120,9 @@
   position: relative;
 }
 .bs-headerpanel .bs-sub { color: rgba(255, 255, 255, .82); }
+/* the EXIT pill is absolutely positioned in this panel's top-right corner, so the title needs a
+   gutter on both sides (centred text, so both) or a long one runs underneath it */
+.bs-headerpanel .bs-title { padding: 0 62px; }
 
 .bs-btn {
   appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 12px;
@@ -344,119 +359,200 @@
 }
 
 /* --- screen 4: the battle ---------------------------------------------------------------------- */
+/* Full-bleed, and that is the whole identity: enemy waters edge to edge on top, the fleet strip
+   across the middle, your own deck edge to edge below. The shell drops its gutter and takes the
+   deck colour for the page so the strip and the deck read as one continuous surface. */
 
-.bs-battle { display: grid; gap: 6px; justify-items: center; }
-.bs-topbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
-  background: var(--bs-header); color: var(--bs-on-header); border-radius: 12px; padding: 7px 12px;
+.bs-shell-battle { max-width: none; margin: 0; padding: 0 0 6px; gap: 4px; background: var(--bs-deck); }
+.bs-root.bs-battling { background: var(--bs-deck); }
+
+.bs-battle { display: grid; gap: 4px; justify-items: center; position: relative; }
+.bs-status {
+  margin: 0; font-weight: 900; font-size: .8rem; text-align: center; color: var(--bs-deck-ink);
+  padding: 3px 10px 1px;
 }
-.bs-vsside { display: flex; align-items: center; gap: 5px; font-weight: 800; font-size: .82rem; }
-.bs-shotcount { font-size: .72rem; font-weight: 700; opacity: .85; }
-.bs-status { margin: 0; font-weight: 800; font-size: .84rem; text-align: center; }
+.bs-shotcount { font-size: .68rem; font-weight: 800; color: var(--bs-deck-ink); opacity: .8; }
 
 .bs-boardpanel { width: 100%; display: grid; gap: 3px; justify-items: center; }
 .bs-boardpanel-h { font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--bs-muted); }
-.bs-boardpanel-enemy { --bs-ship: var(--bs-theirs); }
-.bs-boardpanel-own { --bs-ship: var(--bs-mine); }
-.bs-boardpanel-enemy .bs-board { width: min(90vw, 42vh, 420px); }
-.bs-boardpanel-own .bs-board { width: min(64vw, 30vh, 300px); }
-@supports (height: 1svh) {
-  .bs-boardpanel-enemy .bs-board { width: min(90vw, 42svh, 420px); }
-  .bs-boardpanel-own .bs-board { width: min(64vw, 30svh, 300px); }
-}
-/* your board sits on the salmon deck; the enemy's is bare navy water */
-.bs-boardpanel-own .bs-board-wrap {
-  background: var(--bs-deck); border-radius: 14px; padding: 7px; display: flex; justify-content: center;
-}
+.bs-boardpanel-enemy { --bs-ship: var(--bs-theirs); --bs-veil: var(--bs-enemy-veil); }
+.bs-boardpanel-own { --bs-ship: var(--bs-mine); --bs-veil: var(--bs-deck); }
+/* the frame each board sits in: the enemy's is open water, yours is the salmon deck */
+.bs-boardpanel-enemy .bs-board-wrap { background: var(--bs-enemy-frame); }
+.bs-boardpanel-own .bs-board-wrap { background: var(--bs-deck); }
+.bs-battle .bs-board-wrap { width: 100%; padding: 5px 0; display: flex; justify-content: center; }
 
 .bs-board.bs-target { cursor: crosshair; }
 .bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); outline-offset: -1px; }
-.bs-board.is-active-turn { box-shadow: 0 0 0 3px var(--bs-gold); transition: box-shadow .2s ease, opacity .2s ease; }
-.bs-board:not(.is-active-turn) { opacity: .94; transition: box-shadow .2s ease, opacity .2s ease; }
-
-/* the roster strip: both fleets as silhouettes, sunk ones struck through, sunk score at the left */
-.bs-rosterstrip {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px;
-  background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 12px;
+/* Whose turn it is: the OTHER board is washed out in the colour of the water/deck around it, the
+   way the reference dims the half of the screen that isn't being fought over. A wash, not a gold
+   ring -- and it sits UNDER the cannon (z-index 4 vs 7), so the gun on a quiet board still reads
+   as a solid object rather than fading with the grid it is standing on. */
+.bs-battle .bs-board { border: 0; border-radius: 4px; padding: 4px; z-index: 1; }
+.bs-battle .bs-board::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 6px; z-index: 4; pointer-events: none;
+  background: var(--bs-veil); opacity: .6; transition: opacity .25s ease;
 }
-.bs-score { font-size: 1.1rem; font-weight: 900; color: var(--bs-hit); letter-spacing: .06em; flex: none; }
-.bs-rosterrows { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.bs-battle .bs-board.is-active-turn::after { opacity: 0; }
+/* The frame AROUND the grid takes the same wash, or the idle board reads as two different blues:
+   a dimmed grid sitting in undimmed water. Kept under the board (z-index 0 vs the board's 1) so
+   the board's own wash -- and the cannon standing clear above it -- are unaffected. */
+.bs-battle .bs-board-wrap::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: var(--bs-veil); opacity: .6; transition: opacity .25s ease;
+}
+.bs-battle .bs-boardpanel.is-live .bs-board-wrap::after { opacity: 0; }
+.bs-battle .bs-board-enemy { background: var(--bs-enemy-frame); }
+
+/* the fleet strip: both fleets between the two boards, the sunk score in a disc at one end and
+   EXIT in a disc at the other, exactly where the reference puts them */
+.bs-strip {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 5px 58px; background: var(--bs-deck); min-height: 54px;
+}
+.bs-scoredisc, .bs-exitdisc {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 56px; height: 56px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 8px rgba(10, 20, 40, .3);
+  display: flex; align-items: center; justify-content: center;
+}
+.bs-scoredisc { left: -8px; flex-direction: column; gap: 1px; padding-left: 6px; }
+.bs-scoredisc-n { font-size: .92rem; font-weight: 900; line-height: 1; }
+.bs-scoredisc-them { color: var(--bs-theirs); }
+.bs-scoredisc-me { color: var(--bs-mine); }
+.bs-scoredisc-dot { width: 5px; height: 5px; border-radius: 50%; background: #1b2330; }
+.bs-exitdisc {
+  right: -8px; appearance: none; border: 0; cursor: pointer; padding: 0 6px 0 0;
+  color: var(--bs-header); font: inherit; touch-action: manipulation;
+}
+.bs-exitdisc > span {
+  font-size: .74rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+  transform: rotate(90deg);
+}
+
+.bs-rosterrows { display: grid; gap: 3px; flex: 1 1 auto; min-width: 0; }
 .bs-rosterrow {
-  display: flex; align-items: center; gap: 7px; overflow-x: auto; overscroll-behavior: contain;
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  overflow-x: auto; overscroll-behavior: contain;
 }
 .bs-rosterrow-theirs { --bs-ship: var(--bs-theirs); }
 .bs-rosterrow-mine { --bs-ship: var(--bs-mine); }
-.bs-roster-item { position: relative; flex: 0 0 auto; height: 12px; display: flex; align-items: center; }
+/* the fleet NOT currently under fire sinks back into the deck it is drawn on */
+.bs-rosterrow.is-dim { --bs-ship: var(--bs-roster-dim); --bs-ship-deck: transparent; }
+.bs-roster-item { position: relative; flex: 0 0 auto; height: 17px; display: flex; align-items: center; }
 .bs-roster-item.is-sunk { opacity: .45; }
 .bs-roster-item.is-sunk::after {
   content: ''; position: absolute; left: -1px; right: -1px; top: 50%; height: 2px;
   background: var(--bs-hit); border-radius: 2px;
 }
-.bs-roster-silhouette { display: block; height: 11px; }
+.bs-roster-silhouette { display: block; height: 16px; }
 
-.bs-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.bs-actions { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.bs-shell-battle .bs-btn-small { padding: 4px 10px; font-size: .72rem; }
 
-/* --- the cannon: the centrepiece ornament (its own namespace, never a layout name) -------------- */
-/* A black barrel on a dark ring base, sitting on the board being fired AT and pointing at the
-   target cell. It recoils on the shot. Under reduced motion it simply appears, already aimed. */
+/* The overlay the cannonball flies across. It spans BOTH boards -- the whole point of the shot is
+   that it crosses from one to the other -- and is absolutely positioned so it costs the grid no
+   height (`_fitBattleBoards` skips out-of-flow children for exactly this reason). */
+.bs-fx { position: absolute; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+
+/* --- THE CANNON: the centrepiece ornament (its own namespace, never a layout name) -------------- */
+/* Seen from straight above, the way the reference draws it: a fat black ring base with the owner's
+   colour banded inside, a stubby grey barrel across the middle, a black muzzle collar at the tip.
+   No wheels, no carriage, no side view. Each side's gun stands on its OWN board and fires across:
+   yours red-ringed on the deck pointing north, theirs blue-ringed on the water pointing south.
+   Three nested elements, and the nesting is load-bearing (see _cannonHtml in ui.js):
+   .bs-cannon translates and casts the shadow, .bs-cannon-aim rotates, .bs-cannon-rig recoils. */
 
 .bs-cannon {
-  position: absolute; z-index: 6; pointer-events: none;
-  /* Big enough to actually read as a cannon sitting on the cell, not a tiny marker: it used to be
-     2.1 cells sitting offset a whole extra row below its target (an oversized blob fused with a
-     separate gold-ring crosshair), then overcorrected down to 1.25 cells and gated to vanish the
-     instant a shot settled, which made it read as a tap-and-disappear icon instead of a cannon
-     sitting on the water. It's centered directly on its cell now, wide enough for the carriage
-     wheels either side of the barrel to actually be visible. */
-  width: calc(var(--bs-cell) * 1.7); height: calc(var(--bs-cell) * 1.7);
+  position: absolute; z-index: 7; pointer-events: none; left: 50%;
+  width: 37%; aspect-ratio: 1 / 1;
   transform: translate(-50%, -50%);
-  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(4px 7px 6px rgba(0, 0, 0, .42));
 }
-.bs-cannon-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .55)); }
-.bs-cannon.is-firing .bs-cannon-svg { animation: bs-cannon-recoil .42s cubic-bezier(.2, .8, .3, 1) both; }
+.bs-cannon-mine { top: 60%; --bs-cannon-ring: var(--bs-cannon-mine); }
+.bs-cannon-theirs { top: 40%; --bs-cannon-ring: var(--bs-cannon-theirs); }
+.bs-cannon-aim {
+  width: 100%; height: 100%;
+  transform: rotate(var(--bs-aim, 0deg)); transform-origin: 50% 50%;
+  transition: transform .3s cubic-bezier(.25, .9, .3, 1);
+}
+.bs-cannon-rig { width: 100%; height: 100%; }
+.bs-cannon-svg { width: 100%; height: 100%; display: block; }
+/* the recoil is a shove straight back along the barrel -- which is what a plain translateY means
+   once it is inside the rotation */
+.bs-cannon.is-firing .bs-cannon-rig { animation: bs-cannon-recoil .4s cubic-bezier(.2, .8, .3, 1) both; }
 @keyframes bs-cannon-recoil {
-  0% { transform: translateY(0) scale(1); }
-  18% { transform: translateY(10%) scale(.96); }
-  55% { transform: translateY(-3%) scale(1.02); }
-  100% { transform: translateY(0) scale(1); }
+  0% { transform: translateY(0); }
+  14% { transform: translateY(11%); }
+  55% { transform: translateY(-2.5%); }
+  100% { transform: translateY(0); }
 }
 .bs-cannon-pill {
-  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
   background: rgba(10, 16, 26, .92); color: #fff; font-size: .62rem; font-weight: 900;
   padding: 4px 10px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em;
 }
-.bs-cannon-muzzle {
-  position: absolute; top: 4%; left: 50%; width: 34%; height: 34%; border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #fff 0%, #fff 45%, rgba(255, 255, 255, 0) 72%);
-  animation: bs-muzzle-flash .3s ease-out both;
-}
-@keyframes bs-muzzle-flash { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } }
 
-/* the crosshair reticle on the cell currently being aimed at -- a plain, thin white cross, never
-   the gold accent color (that's reserved for difficulty/confirm chrome elsewhere), and small
-   enough to read as a marker on one cell, not another cannon-sized ornament stacked on top of it. */
+/* the cannonball: an iron sphere with a hard black rim and a single bright highlight, the exact
+   read the reference gives it. Sized and flown from ui.js's _playShotFx. */
+.bs-ball {
+  position: absolute; border-radius: 50%; will-change: transform;
+  background: radial-gradient(circle at 33% 30%, #7A8085 0 24%, rgba(0, 0, 0, 0) 25%),
+              radial-gradient(circle at 50% 50%, #3F444A 0 99%, #3F444A 100%);
+}
+/* the black iron rim is a real px box-shadow spread set from ui.js -- a percentage is not a valid
+   box-shadow length, and writing one there dropped the whole declaration silently */
+/* the white smoke left at the muzzle */
+.bs-puff {
+  position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .62);
+  transform: translate(-50%, -50%); animation: bs-puff .72s ease-out both;
+}
+@keyframes bs-puff {
+  0% { transform: translate(-50%, -50%) scale(.25); opacity: .8; }
+  100% { transform: translate(calc(-50% + var(--bs-px, 0px)), calc(-50% + var(--bs-py, -8px))) scale(1.5); opacity: 0; }
+}
+
+/* the crosshair on the cell being fired at: a ring with a full cross straight through it,
+   overhanging on all four sides. It marks the target while the ball is in the air. */
 .bs-reticle {
   position: absolute; z-index: 5; pointer-events: none;
-  width: calc(var(--bs-cell) * 0.85); height: calc(var(--bs-cell) * 0.85);
+  width: calc(var(--bs-cell) * 1.5); height: calc(var(--bs-cell) * 1.5);
   transform: translate(-50%, -50%);
+  animation: bs-reticle-snap .28s ease-out both;
 }
+.bs-reticle.is-fading { animation: bs-reticle-snap .28s ease-out both, bs-reticle-off .5s var(--bs-fly) ease-in both; }
 .bs-reticle-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
-.bs-reticle-ring { fill: none; stroke: #fff; stroke-width: 2.5; }
-.bs-reticle-cross { stroke: #fff; stroke-width: 2.5; stroke-linecap: round; }
-.bs-reticle { animation: bs-reticle-snap .28s ease-out both; }
+.bs-reticle-ring { fill: none; stroke: #fff; stroke-width: 3; }
+.bs-reticle-cross { stroke: #fff; stroke-width: 3; stroke-linecap: round; }
 @keyframes bs-reticle-snap { from { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes bs-reticle-off { from { opacity: 1; } to { opacity: 0; } }
 
 /* --- shot results: miss = bubble burst, hit = flash + marker, sunk = reveal + settle ------------ */
 
 .bs-peg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+/* `is-late` = the cell the ball is currently flying at. Its whole impact is held back by --bs-fly
+   so the splash happens when the shot ARRIVES, not before it has left the barrel. Every other peg
+   on the board is settled history and must not re-animate: a cell outlives many re-renders, and an
+   ungated entrance animation replayed on each one, which read as the board twitching. */
+.bs-peg:not(.is-late) .bs-peg-miss, .bs-peg:not(.is-late) .bs-peg-hit { animation: none; }
+.bs-peg.is-late .bs-peg-miss, .bs-peg.is-late .bs-peg-hit,
+.bs-peg.is-late .bs-flash, .bs-peg.is-late .bs-splash-ring { animation-delay: var(--bs-fly); }
+.bs-peg.is-late .bs-peg-hit::after { animation-delay: calc(var(--bs-fly) + .04s); }
+.bs-peg.is-late .bs-smoke { animation-delay: calc(var(--bs-fly) + .14s); }
 
-/* miss settles to a hollow ring -- never filled, so the SHAPE tells it apart from a hit */
+/* A miss settles to a CROSS scored into the water, the reference's own mark -- never a filled
+   shape, so the SILHOUETTE tells it apart from a hit at a glance and not by hue (Matt is
+   red/green colorblind; a hollow ring next to a filled dot was the weaker of the two reads). */
 .bs-peg-miss {
-  width: 46%; height: 46%; border-radius: 50%; background: transparent; border: 2.5px solid var(--bs-miss);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset;
+  width: 50%; height: 50%; position: relative;
   animation: bs-peg-drop .34s cubic-bezier(.34, 1.56, .64, 1) both;
 }
+.bs-peg-miss::before, .bs-peg-miss::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 100%; height: 24%;
+  border-radius: 2px; background: var(--bs-miss);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.bs-peg-miss::after { transform: translate(-50%, -50%) rotate(-45deg); }
 @keyframes bs-peg-drop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 
 /* a burst of white bubbles spreading and fading on the water */
@@ -568,16 +664,26 @@
   .bs-wait-dots {
     animation: none !important;
   }
-  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cannon-svg {
+  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cannon-svg, .bs-cannon-rig {
     animation: none !important; opacity: 1 !important; transform: none !important;
   }
+  /* No flight, so no delay to hold anything back by: every impact is instant. ui.js reads the same
+     media query and skips throwing a ball at all. */
+  .bs-root { --bs-fly: 0ms; }
   .bs-reticle {
     animation: none !important; opacity: 1 !important; transform: translate(-50%, -50%) !important;
   }
-  .bs-cannon { transform: translate(-50%, -50%) !important; }
+  /* With no flight there is nothing to mark the target THROUGH, so the fading crosshair simply
+     isn't there -- otherwise it never fades and sits on top of the marker it was pointing at. The
+     genuinely-pending MP crosshair (not `is-fading`) still shows. */
+  .bs-reticle.is-fading { opacity: 0 !important; }
+  /* The cannon still AIMS -- rotating to point at the cell being fired at is a state, not a
+     flourish, and it is the only thing on screen saying which cell that is. Only the movement
+     between poses is dropped. */
+  .bs-cannon-aim { transition: none !important; }
   /* the transient flourishes have no settled state at all: they end invisible either way, so they
      simply skip straight to it. None of these is ever a layout element (see the header note). */
-  .bs-bubble, .bs-splash-ring, .bs-flash, .bs-smoke, .bs-cannon-muzzle {
+  .bs-bubble, .bs-splash-ring, .bs-flash, .bs-smoke, .bs-puff, .bs-ball {
     animation: none !important; opacity: 0 !important;
   }
   .bs-peg-hit::after { opacity: 0 !important; }
