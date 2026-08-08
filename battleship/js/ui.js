@@ -34,6 +34,10 @@ import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+// How long a cannonball spends in the air, in ms. The peg/splash at the target is held back by
+// exactly this long (CSS `--bs-fly`) so the shot LANDS instead of appearing before the ball
+// arrives, and `_shotSettleMs` adds it to the window a shot owns before the next re-render.
+const FLY_MS = 340;
 const SETTINGS_KEY = 'gamehub.battleship.v1';
 const SAVE_KEY = 'gamehub.battleship.save.v1';
 const MP_SAVE_KEY = 'gamehub.battleship.mp.v1';
@@ -158,7 +162,12 @@ class BattleshipUI {
     this._soloStarterSeat = 0;
     this._botFleet = null;        // screen 3: the bot's fleet, built before the battle starts
     this._botPlaceTimer = null;
-    this._cannonPlayed = null;    // "seat:r:c" whose recoil has already played (see _cannonForBoard)
+    this._cannonPlayed = null;    // "seat:r:c" whose recoil has already played (see _resolveCannons)
+    this._aimBySide = { mine: null, theirs: null }; // where each cannon is left pointing
+    this._botAiming = false;      // the bot has the gun up and is choosing a cell
+    this._fxPending = null;       // a shot whose cannonball still has to be thrown this render
+    this._cannons = { mine: null, theirs: null };
+    this._aimTimer = null;
 
     this.mp = null;
 
@@ -302,6 +311,9 @@ class BattleshipUI {
     this._sunkShips = {};
     this._sinkPlayed = new Set();
     this._cannonPlayed = null;
+    this._aimBySide = { mine: null, theirs: null };
+    this._botAiming = false;
+    this._fxPending = null;
     // Solo only (this branch never runs in MP): both fleets are held locally, so any ship already
     // sunk before this resume can be reconstructed outright rather than waiting to see it sink
     // again -- otherwise a resumed match would show sunk cells with no boat sprite until the next kill.
@@ -371,6 +383,7 @@ class BattleshipUI {
    *  only the labels are Easy/Medium/Hard. The ski-slope tier shape (diffShapeSVG) stays beside
    *  the name: it is the repo's colorblind-safe difficulty marker, never hue alone. */
   renderSetup() {
+    this._shellMode('');
     if (this._dead) return;
     this.closeOverlays();
     if (this.view === 'battle' && this.state && !this.state.over && !this.mp) clearGame();
@@ -640,6 +653,9 @@ class BattleshipUI {
     this._statsCommitted = false;
     this._lastShot = null;
     this._cannonPlayed = null;
+    this._aimBySide = { mine: null, theirs: null };
+    this._botAiming = false;
+    this._fxPending = null;
     this._sunkShips = {};
     this._sinkPlayed = new Set();
     this._afterStateChange();
@@ -717,32 +733,91 @@ class BattleshipUI {
     if (!enemyBoard || !ownBoard) return;
     const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
     const top = battle.getBoundingClientRect().top;
+    let inFlow = 0;
     let consumed = 0;
     for (const child of battle.children) {
       if (child === enemyPanel || child === ownPanel) {
-        const heading = child.querySelector('.bs-boardpanel-h');
-        if (heading) consumed += heading.getBoundingClientRect().height;
+        // whatever the panel wraps its board in (the water/deck frame's own padding) is fixed px
+        // and does not scale with the board, so measuring it once here is safe
+        const board = child === enemyPanel ? enemyBoard : ownBoard;
+        consumed += Math.max(0, child.getBoundingClientRect().height - board.getBoundingClientRect().height);
+        inFlow++;
         continue;
       }
+      // The FX overlay and the sunk banner are absolute/fixed: they take no room in the grid, and
+      // counting their boxes (the overlay's is the FULL height of the screen) would shrink the
+      // boards to nothing the moment either appeared.
+      const pos = getComputedStyle(child).position;
+      if (pos === 'absolute' || pos === 'fixed') continue;
+      inFlow++;
       consumed += child.getBoundingClientRect().height;
     }
     const gapPx = parseFloat(getComputedStyle(battle).rowGap) || 0;
-    // one gap between every child in the grid, plus each panel's own internal header<->board gap
-    consumed += gapPx * Math.max(0, battle.children.length - 1 + 2);
-    const bottomSafe = 8;
+    consumed += gapPx * Math.max(0, inFlow - 1);
+    const bottomSafe = 6;
     const available = Math.max(160, vh - top - consumed - bottomSafe);
-    const enemyMax = Math.min(window.innerWidth * 0.9, 420);
-    const ownMax = Math.min(window.innerWidth * 0.64, 300);
-    const enemySize = Math.max(130, Math.min(available * 4 / 7, enemyMax));
-    const ownSize = Math.max(95, Math.min(available * 3 / 7, ownMax));
-    enemyBoard.style.width = `${enemySize.toFixed(1)}px`;
-    ownBoard.style.width = `${ownSize.toFixed(1)}px`;
+    // Both boards are the SAME size and as close to edge-to-edge as the viewport allows -- the
+    // reference's two boards are equals filling the width, not a big one and a little one.
+    const wide = Math.min(document.documentElement.clientWidth - 4, 460);
+    const apply = (px) => {
+      enemyBoard.style.width = `${px.toFixed(1)}px`;
+      ownBoard.style.width = `${px.toFixed(1)}px`;
+    };
+    let size = Math.max(120, Math.min(available / 2, wide));
+    apply(size);
+    // Whatever chrome sits BELOW this game is invisible from inside its own DOM -- in the hub it is
+    // `.hub-main`'s 40px bottom padding, which is why the battle screen fitted exactly in the
+    // standalone page and hung 40px off the bottom once mounted in the hub. Rather than hard-code
+    // a guess at the host's padding, measure the overflow it actually produced and take it off
+    // both boards, once. Idempotent: re-running measures no overflow and changes nothing.
+    const over = document.documentElement.scrollHeight - vh;
+    if (over > 1) apply(Math.max(120, size - over / 2));
+    this._bleedToEdges();
+  }
+
+  /** Full-bleed the battle screen out of whatever gutter the host page wraps the game in. In the
+   *  hub that is `.hub-main`'s 16px sides, its 40px bottom, and the ~98px of top clearance the
+   *  floating back button needs; the standalone page has none of it. All four are MEASURED rather
+   *  than assumed, so neither host is hard-coded here and neither ends up with a band of hub grey
+   *  where the reference has continuous deck.
+   *
+   *  Sideways it is plain negative margins, capped so a desktop-width window doesn't stretch the
+   *  game across the whole screen. Vertically it is negative margin PLUS matching padding: the
+   *  root's background reaches the screen edge while its content stays exactly where it was, so
+   *  the page's total height is unchanged and nothing starts scrolling. The measurement is taken
+   *  from the SHELL, which those margins do not move -- measuring the root instead would read
+   *  its own correction back as zero on the next pass and undo itself. Cleared by
+   *  `_shellMode('')` on every other screen. */
+  _bleedToEdges() {
+    // Measured off the HOST's content box, not the root's own: the root's width already carries
+    // whatever correction the last pass applied, so reading it back would compute zero and undo
+    // itself on every second render. The host box is unaffected by anything done here.
+    const host = this.root.parentElement;
+    if (!host) return;
+    const hr = host.getBoundingClientRect();
+    const hcs = getComputedStyle(host);
+    const avail = hr.width - (parseFloat(hcs.paddingLeft) || 0) - (parseFloat(hcs.paddingRight) || 0);
+    if (!avail) return;
+    const target = Math.min(document.documentElement.clientWidth, 560);
+    const extra = Math.max(0, Math.round((target - avail) / 2));
+    const st = this.shell.getBoundingClientRect();
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const up = Math.max(0, Math.round(st.top));
+    const down = Math.max(0, Math.round(vh - st.bottom));
+    const px = (n) => (n ? `${n}px` : '');
+    this.root.style.marginLeft = px(-extra);
+    this.root.style.marginRight = px(-extra);
+    this.root.style.marginTop = px(-up);
+    this.root.style.paddingTop = px(up);
+    this.root.style.marginBottom = px(-down);
+    this.root.style.paddingBottom = px(down);
   }
 
   /** Screen 2: Deploy your ships. Dark navy panel on top (title, hint, RANDOM, and SAVE once the
    *  fleet is complete), then the salmon deck carrying the tray of not-yet-placed ships and the
    *  wooden board. SAVE is ABSENT until every ship is down, not disabled-and-greyed. */
   renderPlacement() {
+    this._shellMode('');
     if (this._dead) return;
     this.closeOverlays();
     // MP: once this device has announced readiness there is nothing left to place, so it moves to
@@ -860,6 +935,7 @@ class BattleshipUI {
    *  (solo only) the bot's fleet laid out below in THEIR blue -- as loose silhouettes, never on a
    *  board, so nothing about where they sit is given away. Tap anywhere to skip. */
   renderWaiting(line, botFleet) {
+    this._shellMode('');
     if (this._dead) return;
     this.closeOverlays();
     const sizeKey = this._placeSizeKey || (this.mp ? this.mp.sizeKey : this._setup.size);
@@ -906,7 +982,10 @@ class BattleshipUI {
   _shotSettleMs(shot) {
     if (!shot) return 0;
     if (reducedMotion()) return 150;
-    return (shot.result === 'hit' ? 1150 : 1100) + (shot.sunk ? 900 : 0);
+    // + FLY_MS: the ball's time in the air happens BEFORE the impact, and the impact's own
+    // animations are held back by the same amount (`--bs-fly`), so the whole sequence is that
+    // much longer than the impact alone.
+    return FLY_MS + (shot.result === 'hit' ? 1150 : 1100) + (shot.sunk ? 900 : 0);
   }
 
   /** Renders the just-applied shot, then holds `busy` (which gates `fireAt`/the fire buttons)
@@ -933,10 +1012,14 @@ class BattleshipUI {
    *  records a seq that matches the move already inside its own snapshot. */
   _afterStateChange() {
     if (this._dead) return;
+    this._botAiming = false;
     // A fresh game (no shots fired either way) can't have any sunk ships -- clears stale
     // reconstructed geometry from a previous game in a rematch series without needing to touch the
     // MP methods that start one (root CLAUDE.md polish pass: no `_mp*` method edited here).
-    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) { this._sunkShips = {}; this._sinkPlayed = new Set(); this._cannonPlayed = null; }
+    if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) {
+      this._sunkShips = {}; this._sinkPlayed = new Set(); this._cannonPlayed = null;
+      this._aimBySide = { mine: null, theirs: null };
+    }
     if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
     if (this.state.over) {
       this.busy = false;
@@ -953,10 +1036,13 @@ class BattleshipUI {
     if (this.state.turn === this._remoteSeat()) {
       this.busy = true;
       this.renderBattle();
-      // Wait out the shot that JUST rendered (the player's own, or the bot's previous bonus-chain
-      // shot) before the bot's reply lands and re-renders over it.
-      const wait = this._shotSettleMs(this._lastShot) + this._aiThinkMs();
-      this.aiTimer = setTimeout(() => {
+      // Two beats, not one. First wait out the shot that JUST rendered (the player's own, or the
+      // bot's previous bonus-chain shot) -- during which the shooter's own cannon stays on screen
+      // finishing its shot. Only THEN does the bot's cannon come up on its own water wearing the
+      // "Bot thinking" pill, and it fires a think-beat later. Firing straight out of one timer
+      // meant the bot's gun never appeared before the shot it fired.
+      const settle = this._shotSettleMs(this._lastShot);
+      const fire = () => {
         this.aiTimer = null;
         if (this._dead || !this.state || this.state.over) return;
         const shipSet = this._shipSetForState();
@@ -967,7 +1053,14 @@ class BattleshipUI {
         this._lastShot = { seat: this._localSeat(), r: shot[0], c: shot[1], result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
         this._maybeShowSunkBanner(res.answer);
         this._afterStateChange();
-      }, wait);
+      };
+      this.aiTimer = setTimeout(() => {
+        this.aiTimer = null;
+        if (this._dead || !this.state || this.state.over) return;
+        this._botAiming = true;
+        this.renderBattle();
+        this.aiTimer = setTimeout(fire, this._aiThinkMs());
+      }, Math.max(0, settle));
     } else {
       this._settleThenIdle();
     }
@@ -1023,7 +1116,12 @@ class BattleshipUI {
     const s = this.state, id = this._identity();
     if (this.mp && this._mpStatusMsg) return t(this._mpStatusMsg);
     if (s.over) return s.winner === this._localSeat() ? t('you_win') : t('opp_wins', { opp: id.oppName });
-    if (this.busy && !this.mp) return t('opp_thinking', { opp: id.oppName });
+    if (this.busy && !this.mp) {
+      if (this._botAiming) return t('opp_thinking', { opp: id.oppName });
+      // A shot is in the air. Say whose, rather than announcing the bot's turn over the top of
+      // the player's own shell while it is still flying.
+      return this._lastShot && this._lastShot.seat === this._remoteSeat() ? t('shot_away') : t('shot_incoming');
+    }
     if (s.turn === this._localSeat()) {
       if (s.bonusShotOnHit && this._lastShot && this._lastShot.seat === this._remoteSeat() && this._lastShot.result === 'hit') {
         return t('bonus_turn_continues');
@@ -1045,77 +1143,194 @@ class BattleshipUI {
     }).join('');
   }
 
-  /** The cannon: a black barrel on a dark ring base, drawn over the board being fired AT and
-   *  pointing at the target cell. Its own namespace (.bs-cannon...), never a layout class -- see
-   *  the header of battleship.css for why that rule exists. */
-  _cannonHtml(r, c, { firing = false, thinking = false } = {}) {
-    // Centered ON the cell it's aimed at, same anchor as the reticle -- it used to sit offset a
-    // full extra row below, which is why it visually sprawled across two rows of the grid.
-    const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
-      + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
-    return `<div class="bs-cannon ${firing ? 'is-firing' : ''}" style="${style}" aria-hidden="true">
-      <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
-        <ellipse cx="50" cy="76" rx="36" ry="15" fill="var(--bs-cannon-ring)"/>
-        <circle cx="21" cy="77" r="10" fill="var(--bs-cannon-ring)" stroke="#05070b" stroke-width="1.5"/>
-        <circle cx="21" cy="77" r="4" fill="var(--bs-cannon-body)"/>
-        <circle cx="79" cy="77" r="10" fill="var(--bs-cannon-ring)" stroke="#05070b" stroke-width="1.5"/>
-        <circle cx="79" cy="77" r="4" fill="var(--bs-cannon-body)"/>
-        <ellipse cx="50" cy="72" rx="23" ry="11" fill="var(--bs-cannon-body)"/>
-        <polygon points="40,72 60,72 55,9 45,9" fill="var(--bs-cannon-body)"/>
-        <rect x="46.5" y="12" width="3" height="58" rx="1.5" fill="rgba(255,255,255,.22)"/>
-        <ellipse cx="50" cy="10" rx="8.5" ry="4.5" fill="#05070b"/>
-        <ellipse cx="50" cy="10" rx="5" ry="2.4" fill="var(--bs-cannon-ring)"/>
-      </svg>
-      ${firing ? '<span class="bs-cannon-muzzle"></span>' : ''}
+  /** THE CANNON. Seen from directly above, the way the reference draws it: a fat black ring base
+   *  with the owner's colour banded inside it, a stubby grey barrel lying across the middle with a
+   *  bright highlight down one side, and a black muzzle collar around a dark bore at the tip.
+   *  Nothing about it is a side view -- no wheels, no carriage, no silhouette. It is a gun turret
+   *  seen from a helicopter.
+   *
+   *  Each side's cannon sits on ITS OWN board and fires across at the other one: yours red-ringed
+   *  on your deck pointing north, theirs blue-ringed on their water pointing south. The barrel is
+   *  drawn pointing straight up here and the whole thing is ROTATED to aim (`_aimCannons`, which
+   *  needs real layout, so it runs after the HTML is in the document).
+   *
+   *  Three nested elements, and the nesting is load-bearing:
+   *    .bs-cannon      positioned + drop-shadow. Only ever TRANSLATED, so the shadow keeps
+   *                    falling the same way however the barrel is pointing.
+   *    .bs-cannon-aim  the rotation, about the base centre (`transform-origin: 50% 60%`).
+   *    .bs-cannon-rig  the recoil, a shove backwards ALONG the barrel -- which is what a plain
+   *                    translateY means once it is inside the rotation.
+   *  Its own namespace (.bs-cannon...), never a layout class -- see the header of battleship.css. */
+  _cannonHtml(side, { firing = false, thinking = false } = {}) {
+    return `<div class="bs-cannon bs-cannon-${side} ${firing ? 'is-firing' : ''}" data-role="cannon-${side}" aria-hidden="true">
+      <div class="bs-cannon-aim">
+        <div class="bs-cannon-rig">
+          <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
+            <circle cx="50" cy="50" r="46" fill="#0A0B0D"/>
+            <circle cx="50" cy="50" r="39" fill="var(--bs-cannon-ring)"/>
+            <circle cx="50" cy="50" r="37.4" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+            <circle cx="50" cy="50" r="29" fill="#111318"/>
+            <rect x="32" y="6.5" width="36" height="69" rx="18" fill="#50565C" stroke="#0A0B0D" stroke-width="4.6" stroke-linejoin="round"/>
+            <rect x="36.5" y="32" width="11" height="30" rx="5.5" fill="#9EA5AB"/>
+            <ellipse cx="50" cy="16" rx="22" ry="11" fill="#0A0B0D"/>
+            <ellipse cx="50" cy="16.5" rx="14.5" ry="7" fill="#282C31"/>
+          </svg>
+        </div>
+      </div>
       ${thinking ? `<span class="bs-cannon-pill">${esc(t('bot_thinking'))}</span>` : ''}
     </div>`;
   }
 
-  _reticleHtml(r, c) {
+  /** The crosshair on the cell being fired at: a ring with a full cross straight through it,
+   *  overhanging on all four sides. It marks the target while the ball is in the air and fades as
+   *  the shot lands. */
+  _reticleHtml(r, c, { fading = false } = {}) {
     const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
       + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
-    return `<div class="bs-reticle" style="${style}" aria-hidden="true">
-      <svg class="bs-reticle-svg" viewBox="0 0 40 40" focusable="false">
-        <circle class="bs-reticle-ring" cx="20" cy="20" r="12"/>
-        <line class="bs-reticle-cross" x1="20" y1="1" x2="20" y2="8"/>
-        <line class="bs-reticle-cross" x1="20" y1="32" x2="20" y2="39"/>
-        <line class="bs-reticle-cross" x1="1" y1="20" x2="8" y2="20"/>
-        <line class="bs-reticle-cross" x1="32" y1="20" x2="39" y2="20"/>
+    return `<div class="bs-reticle ${fading ? 'is-fading' : ''}" style="${style}" aria-hidden="true">
+      <svg class="bs-reticle-svg" viewBox="0 0 44 44" focusable="false">
+        <circle class="bs-reticle-ring" cx="22" cy="22" r="11"/>
+        <line class="bs-reticle-cross" x1="22" y1="2" x2="22" y2="42"/>
+        <line class="bs-reticle-cross" x1="2" y1="22" x2="42" y2="22"/>
       </svg>
     </div>`;
   }
 
-  /** Which cannon (if any) belongs on this board right now. The cannon MARKS the last cell fired
-   *  at on this board and stays there (matching the reference: it's a piece of the scenery sitting
-   *  on the water, not a one-frame muzzle flash) until a NEW shot lands on this same board and
-   *  moves it. It only RECOILS once, gated by `_cannonPlayed` for the same reason the sink reveal
-   *  is gated by `_sinkPlayed`: `_lastShot` survives many re-renders and an ungated CSS
-   *  `animation:` would replay on every one of them.
-   *  - the opponent is choosing  -> it looms over YOUR board with a "Bot thinking" pill
-   *  - a shot just landed        -> it sits on the board that was fired at, recoiling ONCE, and
-   *    stays there as the marker for that cell until this board's next shot supersedes it
-   *  - MP, our shot is in flight -> a plain reticle (no cannon yet) marks the pending cell; the
-   *    cannon itself belongs to the DEFENDER'S device, which is the one actually firing it */
-  _cannonForBoard(isEnemy, seat) {
+  /** Decides, ONCE per render, which cannon is on screen and what it is doing -- rather than
+   *  letting each board work it out for itself, which is how you end up with both of them on
+   *  screen at once. Returns `{ mine, theirs }`, at most one non-null.
+   *
+   *  Exactly one cannon is up at any moment, belonging to whichever side is doing the shooting:
+   *   - a shot just resolved and its recoil has NOT played  -> the SHOOTER's cannon, firing, and
+   *     `_fxPending` is armed so `_playShotFx` throws the ball once layout exists. Gated on
+   *     `_cannonPlayed` for the same reason the sink reveal is gated on `_sinkPlayed`:
+   *     `_lastShot` outlives many re-renders and an ungated CSS `animation:` replays on each one.
+   *   - the bot is choosing a cell -> theirs, on their water, wearing the "Bot thinking" pill.
+   *   - still settling a shot      -> the shooter's cannon stays put while its shot plays out.
+   *   - otherwise                  -> the cannon of whoever's turn it is, idle, still pointing
+   *     where that side last fired (`_aimBySide`), because a gun does not snap back to north. */
+  _resolveCannons() {
+    const out = { mine: null, theirs: null };
     const s = this.state;
-    if (!s || s.over) return '';
-    const mp = this.mp;
-    if (!isEnemy && this.busy && !this._isMyTurn() && s.turn === this._remoteSeat()
-        && !(this._lastShot && this._lastShot.seat === seat)) {
-      const mid = (s.size - 1) / 2;
-      return this._cannonHtml(mid, mid, { thinking: true });
-    }
+    if (!s || s.over) return out;
+    const local = this._localSeat();
     const last = this._lastShot;
-    if (last && last.seat === seat) {
-      const key = `${seat}:${last.r}:${last.c}`;
-      const firing = this._cannonPlayed !== key;
+    // `_lastShot.seat` is the DEFENDER, so the shooter is the other seat.
+    const shooterSide = last ? (last.seat === local ? 'theirs' : 'mine') : null;
+    if (shooterSide) this._aimBySide[shooterSide] = { r: last.r, c: last.c };
+    if (this.mp && this.mp.pendingShot) this._aimBySide.mine = { r: this.mp.pendingShot.r, c: this.mp.pendingShot.c };
+    const key = last ? `${last.seat}:${last.r}:${last.c}` : null;
+
+    let side = null, firing = false, thinking = false;
+    if (key && this._cannonPlayed !== key) {
       this._cannonPlayed = key;
-      return this._cannonHtml(last.r, last.c, { firing });
+      side = shooterSide;
+      firing = true;
+      this._fxPending = last;
+    } else if (this.mp && this.mp.pendingShot) {
+      // MP: our shot is out but the defender has not answered yet. We are the one shooting, so our
+      // gun is the one up, aimed at the pending cell -- it just has not gone off. (The recoil and
+      // the ball wait for the answer, which is when `_lastShot` finally exists.)
+      side = 'mine';
+    } else if (this._botAiming) {
+      side = 'theirs';
+      thinking = true;
+    } else if (this.busy && shooterSide) {
+      side = shooterSide;
+    } else {
+      side = s.turn === local ? 'mine' : 'theirs';
     }
-    if (isEnemy && mp && mp.pendingShot) {
-      return this._reticleHtml(mp.pendingShot.r, mp.pendingShot.c);
+    if (side) out[side] = { firing, thinking };
+    return out;
+  }
+
+  /** Points every on-screen cannon at the cell it is shooting at. Has to run after the markup is
+   *  in the document: the angle is the real geometry between the cannon's pivot and the target
+   *  cell, both measured from the DOM, because the two boards are separate elements and nothing
+   *  in CSS knows how far apart they ended up. */
+  _aimCannons() {
+    if (this._dead || !this.shell) return;
+    for (const cannon of this.shell.querySelectorAll('.bs-cannon')) {
+      const aim = cannon.querySelector('.bs-cannon-aim');
+      if (!aim) continue;
+      const side = cannon.classList.contains('bs-cannon-mine') ? 'mine' : 'theirs';
+      const at = this._aimBySide[side];
+      // Yours shoots at their board; theirs shoots at yours.
+      const role = side === 'mine' ? 'enemy-board' : 'own-board';
+      const cell = at && this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${at.r}"][data-c="${at.c}"]`);
+      if (!cell) { aim.style.setProperty('--bs-aim', '0deg'); continue; }
+      const cr = cannon.getBoundingClientRect();
+      const b = cell.getBoundingClientRect();
+      if (!cr.width || !b.width) { aim.style.setProperty('--bs-aim', '0deg'); continue; }
+      // the pivot matches .bs-cannon-aim's transform-origin (the base centre of the SVG)
+      const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
+      const dx = (b.left + b.width / 2) - px, dy = (b.top + b.height / 2) - py;
+      const deg = Math.atan2(dx, -dy) * 180 / Math.PI;
+      aim.style.setProperty('--bs-aim', `${Math.max(-64, Math.min(64, deg)).toFixed(1)}deg`);
     }
-    return '';
+  }
+
+  /** Throws the cannonball. A black-rimmed iron sphere with a hard grey highlight, launched from
+   *  the muzzle (wherever the barrel is currently pointing) and landing dead centre on the target
+   *  cell, with a puff of white smoke left behind at the muzzle. Lives in `.bs-fx`, an overlay
+   *  spanning BOTH boards, because the whole point is that the shot crosses between them.
+   *
+   *  Purely decorative and entirely skippable: under reduced motion, or if anything it needs is
+   *  missing, it does nothing and the shot still resolves normally. */
+  _playShotFx(shot) {
+    if (!shot || this._dead || reducedMotion()) return;
+    const fx = this.shell && this.shell.querySelector('[data-role="fx"]');
+    if (!fx) return;
+    const iShot = shot.seat === this._remoteSeat();
+    const cannon = this.shell.querySelector(iShot ? '.bs-cannon-mine' : '.bs-cannon-theirs');
+    const cell = this.shell.querySelector(`[data-role="${iShot ? 'enemy-board' : 'own-board'}"] .bs-cell[data-r="${shot.r}"][data-c="${shot.c}"]`);
+    if (!cannon || !cell) return;
+    const host = fx.getBoundingClientRect();
+    const cr = cannon.getBoundingClientRect();
+    const b = cell.getBoundingClientRect();
+    if (!cr.width || !b.width) return;
+    const aim = cannon.querySelector('.bs-cannon-aim');
+    const deg = parseFloat((aim && aim.style.getPropertyValue('--bs-aim')) || '0') || 0;
+    const rad = deg * Math.PI / 180;
+    const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
+    const reach = cr.height * 0.36;   // pivot -> muzzle, matching the SVG's own geometry
+    const mx = px + Math.sin(rad) * reach, my = py - Math.cos(rad) * reach;
+    const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
+    const size = Math.max(14, cr.width * 0.55);
+
+    const puff = (n) => {
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement('span');
+        s.className = 'bs-puff';
+        const d = size * (0.4 + Math.random() * 0.55);
+        s.style.width = s.style.height = `${d.toFixed(1)}px`;
+        s.style.left = `${(mx - host.left + Math.sin(rad) * size * 0.35).toFixed(1)}px`;
+        s.style.top = `${(my - host.top - Math.cos(rad) * size * 0.35).toFixed(1)}px`;
+        s.style.setProperty('--bs-px', `${((Math.random() - 0.5) * size * 1.9 + Math.sin(rad) * size).toFixed(1)}px`);
+        s.style.setProperty('--bs-py', `${((Math.random() - 0.5) * size * 1.9 - Math.cos(rad) * size).toFixed(1)}px`);
+        s.style.animationDelay = `${(i * 28)}ms`;
+        fx.appendChild(s);
+        s.addEventListener('animationend', () => s.remove());
+      }
+    };
+
+    const ball = document.createElement('span');
+    ball.className = 'bs-ball';
+    ball.style.width = ball.style.height = `${size.toFixed(1)}px`;
+    ball.style.boxShadow = `0 0 0 ${(size * 0.1).toFixed(1)}px #0A0B0D, 0 ${(size * 0.14).toFixed(1)}px ${(size * 0.2).toFixed(1)}px rgba(0, 0, 0, .4)`;
+    ball.style.left = `${(mx - host.left).toFixed(1)}px`;
+    ball.style.top = `${(my - host.top).toFixed(1)}px`;
+    fx.appendChild(ball);
+    puff(7);
+    const dx = tx - mx, dy = ty - my;
+    if (typeof ball.animate !== 'function') { ball.remove(); return; }
+    const at = (f, s) => ({ transform: `translate(calc(-50% + ${(dx * f).toFixed(1)}px), calc(-50% + ${(dy * f).toFixed(1)}px)) scale(${s})` });
+    const anim = ball.animate(
+      [{ ...at(0, 0.5), opacity: 0.2 }, { ...at(0.16, 1.14), opacity: 1, offset: 0.18 }, { ...at(0.65, 1.06), offset: 0.7 }, { ...at(1, 0.72), opacity: 1 }],
+      { duration: FLY_MS, easing: 'cubic-bezier(.3,.05,.55,1)', fill: 'forwards' },
+    );
+    anim.onfinish = () => ball.remove();
+    anim.oncancel = () => ball.remove();
   }
 
   /** One absolutely-positioned sprite per ship, sized/positioned from --bs-cell. The inner element
@@ -1149,23 +1364,31 @@ class BattleshipUI {
     let inner = '';
     // Miss = a burst of white bubbles spreading and fading on the water, settling to a hollow ring.
     // Hit  = an impact flash and a filled marker. The two SHAPES differ, never just the color.
+    // `is-late` holds the whole impact back by --bs-fly, the cannonball's time in the air, so the
+    // splash happens when the ball ARRIVES. It also switches the settled marker's entrance
+    // animation on: without it the marker re-drops on every one of the many re-renders a cell
+    // outlives, which read as the board twitching.
+    const peg = `bs-peg${isLast ? ' is-late' : ''}`;
     if (v === CELL_MISS) {
-      const bubbles = isLast ? [...Array(5)].map((_, i) => {
-        const ang = (i / 5) * Math.PI * 2 + 0.5;
-        return `<span class="bs-bubble" style="--bs-dx:${(Math.cos(ang) * 13).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 13 - 5).toFixed(1)}px;animation-delay:${(i * 40)}ms"></span>`;
+      const bubbles = isLast ? [...Array(7)].map((_, i) => {
+        const ang = (i / 7) * Math.PI * 2 + 0.5;
+        return `<span class="bs-bubble" style="--bs-dx:${(Math.cos(ang) * 15).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 15 - 4).toFixed(1)}px;animation-delay:calc(var(--bs-fly) + ${(i * 34)}ms)"></span>`;
       }).join('') : '';
-      inner = `<span class="bs-peg">${isLast ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
+      inner = `<span class="${peg}">${isLast ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
     } else if (v === CELL_HIT || v === CELL_SUNK) {
       if (v === CELL_SUNK) classes.push('bs-cell-sunk');
-      inner = `<span class="bs-peg">${isLast ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
+      inner = `<span class="${peg}">${isLast ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
     }
     const label = v === CELL_MISS ? t('cell_miss') : v === CELL_HIT ? t('cell_hit') : v === CELL_SUNK ? t('cell_sunk') : t('cell_unknown');
     const isFree = v === 0;
     const canFire = isTarget && interactive && isFree;
+    // data-r/data-c on BOTH boards' cells, not just the clickable ones: the cannon-aim maths and
+    // the cannonball's landing point both look a cell up by coordinate, and the bot shoots at
+    // cells on your board, which are plain divs.
     const el = isTarget
       ? `<button type="button" class="${classes.join(' ')}" data-action="fire" data-r="${r}" data-c="${c}" ${canFire ? '' : 'disabled'}
           aria-label="${esc(t('shot_cell_aria', { r: r + 1, c: c + 1, state: label }))}">${inner}</button>`
-      : `<div class="${classes.join(' ')}" aria-hidden="true">${inner}</div>`;
+      : `<div class="${classes.join(' ')}" data-r="${r}" data-c="${c}" aria-hidden="true">${inner}</div>`;
     return el;
   }
 
@@ -1236,11 +1459,25 @@ class BattleshipUI {
         faint: !(s.shots[seat] && s.shots[seat].sunkIds.includes(ship.id)),
       }));
     const shake = this._lastShot && this._lastShot.seat === seat && (this._lastShot.result === 'hit') ? 'bs-shake' : '';
+    // The cannon standing on THIS board belongs to this board's owner and shoots at the other one
+    // (`_resolveCannons`). The reticle is the opposite way round: it marks the cell being shot AT,
+    // so it belongs to the board under fire.
+    const mine = !isEnemy;
+    const c = this._cannons && this._cannons[mine ? 'mine' : 'theirs'];
+    const cannon = c ? this._cannonHtml(mine ? 'mine' : 'theirs', c) : '';
+    let reticle = '';
+    const shooter = this._cannons && (this._cannons.mine ? 'mine' : this._cannons.theirs ? 'theirs' : null);
+    const at = this._aimBySide[isEnemy ? 'mine' : 'theirs'];
+    if (at && shooter === (isEnemy ? 'mine' : 'theirs')) {
+      const pending = isEnemy && this.mp && this.mp.pendingShot;
+      reticle = this._reticleHtml(at.r, at.c, { fading: !pending });
+    }
     return `<div class="bs-board bs-board-${isEnemy ? 'enemy' : 'own'} ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
         style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
       ${cells.join('')}
       ${sprites}
-      ${this._cannonForBoard(isEnemy, seat)}
+      ${reticle}
+      ${cannon}
     </div>`;
   }
 
@@ -1257,41 +1494,78 @@ class BattleshipUI {
     // (box-shadow/opacity, compositor-safe) and the status line.
     const theirSunk = s.shots[this._remoteSeat()].sunkIds.length;
     const mySunk = s.shots[this._localSeat()].sunkIds.length;
+    // Both fleets ride in the strip between the boards, and the one currently being SHOT AT is the
+    // one drawn in full colour -- the other sinks back into the deck. Same read as the boards'
+    // own wash: at a glance, the bright half of the screen is the half being fought over.
+    this._shellMode('battle');
+    this._cannons = this._resolveCannons();
+    // The BRIGHT half of the screen is the half being shot at, and the dim half is the one doing
+    // the shooting -- which is not the same thing as "whose turn is it". While your own shell is
+    // still in the air the turn has already passed to the bot, and washing your target board out
+    // underneath your own shot was exactly backwards. The cannon that is up tells us who is
+    // shooting; the live board is the other one.
+    const shooting = this._cannons.mine ? 'mine' : this._cannons.theirs ? 'theirs' : (isMyTurn ? 'mine' : 'theirs');
+    // At game end nobody is shooting and both fleets are revealed, so both boards come up bright:
+    // dimming the losing half would hide the reveal that is the whole point of the last frame.
+    const enemyLive = s.over || shooting === 'mine';
+    const ownLive = s.over || shooting === 'theirs';
+    const theirsLive = enemyLive;
     this.shell.innerHTML = `
       <div class="bs-battle">
-        <div class="bs-topbar">
-          <div class="bs-vsside"><span>${esc(id.humanEmoji)}</span><span>${esc(id.humanName)}</span></div>
-          <span class="bs-shotcount">${t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 })}</span>
-          <div class="bs-vsside"><span>${esc(id.oppEmoji)}</span><span>${esc(id.oppName)}</span></div>
-        </div>
-        ${series}
         <p class="bs-status" aria-live="polite">${esc(this._statusText())}</p>
-        <div class="bs-boardpanel bs-boardpanel-enemy">
-          <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
-          <div class="bs-board-wrap">${this._boardHtml('enemy', isMyTurn && !s.over)}</div>
+        ${series}
+        <div class="bs-boardpanel bs-boardpanel-enemy ${enemyLive ? 'is-live' : ''}">
+          <div class="bs-board-wrap">${this._boardHtml('enemy', enemyLive)}</div>
         </div>
-        <div class="bs-rosterstrip">
-          <span class="bs-score" aria-label="${esc(t('score_aria', { them: theirSunk, me: mySunk }))}">${theirSunk} - ${mySunk}</span>
-          <div class="bs-rosterrows">
-            <div class="bs-rosterrow bs-rosterrow-theirs">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
-            <div class="bs-rosterrow bs-rosterrow-mine">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
+        <div class="bs-strip">
+          <div class="bs-scoredisc" role="img" aria-label="${esc(t('score_aria', { them: theirSunk, me: mySunk }))}">
+            <span class="bs-scoredisc-n bs-scoredisc-them">${theirSunk}</span>
+            <span class="bs-scoredisc-dot" aria-hidden="true"></span>
+            <span class="bs-scoredisc-n bs-scoredisc-me">${mySunk}</span>
           </div>
+          <div class="bs-rosterrows">
+            <div class="bs-rosterrow bs-rosterrow-theirs ${theirsLive ? '' : 'is-dim'}">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
+            <div class="bs-rosterrow bs-rosterrow-mine ${theirsLive ? 'is-dim' : ''}">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
+          </div>
+          <button type="button" class="bs-exitdisc" data-action="${this.mp ? 'mp-leave' : 'change-settings'}"
+            aria-label="${esc(t('exit'))}"><span>${esc(t('exit'))}</span></button>
         </div>
-        <div class="bs-boardpanel bs-boardpanel-own">
-          <div class="bs-boardpanel-h">${t('your_waters')}</div>
-          <div class="bs-board-wrap">${this._boardHtml('own', !isMyTurn && !s.over)}</div>
+        <div class="bs-boardpanel bs-boardpanel-own ${ownLive ? 'is-live' : ''}">
+          <div class="bs-board-wrap">${this._boardHtml('own', ownLive)}</div>
         </div>
+        <div class="bs-fx" data-role="fx" aria-hidden="true"></div>
         ${banner}
         <div class="bs-actions">
           <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="help">${t('howto')}</button>
+          <span class="bs-shotcount">${esc(id.humanEmoji)} ${t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 })} ${esc(id.oppEmoji)}</span>
           ${this.mp
-            ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="mp-leave">${t('mp_leave_btn')}</button>`
-            : `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-role="restart" data-action="restart">${t('restart_game')}</button>
-               <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="change-settings">${t('new_game')}</button>`}
+            ? ''
+            : `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-role="restart" data-action="restart">${t('restart_game')}</button>`}
         </div>
       </div>`;
     this._fitBattleBoards();
     this._updateCellSize();
+    this._aimCannons();
+    if (this._fxPending) {
+      const shot = this._fxPending;
+      this._fxPending = null;
+      this._playShotFx(shot);
+    }
+  }
+
+  /** The battle screen is full-bleed (the reference's whole identity is two edge-to-edge boards
+   *  sandwiching the roster strip), so it drops the shell's own gutter and takes the deck colour
+   *  for the page. Every other screen keeps the ordinary padded card. */
+  _shellMode(mode) {
+    if (!this.shell || !this.root) return;
+    const battling = mode === 'battle';
+    this.shell.classList.toggle('bs-shell-battle', battling);
+    this.root.classList.toggle('bs-battling', battling);
+    if (!battling) {
+      for (const k of ['marginLeft', 'marginRight', 'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom']) {
+        this.root.style[k] = '';
+      }
+    }
   }
 
   _seriesLine() {

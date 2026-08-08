@@ -149,47 +149,116 @@ switch. Get that wrong and nothing else matters.
    hand the player the game). Two seconds, skippable by a tap. In MP the same screen renders
    "Waiting for {opponent}", driven by the **existing** ready handshake (`mp.localReady` /
    `_maybeStartBattle`) — no second handshake was invented, and no `_mp*` method was touched.
-4. **Battle screen** (`renderBattle`) — the sandwich above. The roster strip carries both fleets as
-   small silhouettes (theirs blue, yours coral, via a per-row `--bs-ship`), each struck through when
-   sunk, with the sunk score `n - n` in red at the left. Your own ships show on your board as faint
-   ghosts so incoming fire can be seen landing on them; the enemy board still shows a ship only
-   once it is sunk.
+4. **Battle screen** (`renderBattle`) — the sandwich above, full-bleed, both boards the SAME size
+   (see "The battle screen is full-bleed" below). The fleet strip between them carries both fleets
+   as small silhouettes (theirs blue, yours coral, via a per-row `--bs-ship`), each struck through
+   when sunk, with the sunk score in a white disc at one end and EXIT in a white disc at the other.
+   Your own ships show on your board as faint ghosts so incoming fire can be seen landing on them;
+   the enemy board still shows a ship only once it is sunk.
 
-### The cannon
+### The cannon (rebuilt 2026-08-08 against Matt's own screenshots of the reference)
 
-A **black barrel on a wheeled dark carriage**, inline SVG, `1.7 * --bs-cell` wide, centered
-directly ON the cell it's aimed at. `_cannonForBoard` decides which board gets one: the opponent
-choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot that just landed puts
-it on the board that was fired at, it recoils **once**, and then it STAYS — the cannon marks the
-last cell fired at on that board, like a piece of scenery sitting on the water, until this board's
-next shot supersedes it; in MP a pending (not yet resolved) shot shows a plain reticle alone on the
-enemy board — no cannon yet, since the cannon belongs to whichever device is actually resolving the
-shot, not the one waiting on an answer. The recoil is gated by `_cannonPlayed` for exactly the
-reason the sink reveal is gated by `_sinkPlayed`: `_lastShot` survives several re-renders and an
-ungated CSS `animation:` replays on every one of them.
+**It is seen from directly above.** A fat black ring base with the OWNER's colour banded inside
+it, a stubby grey barrel lying across the middle with a bright highlight down one side, and a
+black muzzle collar around a dark bore at the tip. No wheels, no carriage, no side-on silhouette.
+Think gun turret photographed from a helicopter, not a field gun in a museum.
 
-**History, so a future session doesn't re-walk this exact path.** First cut: 2.1 cells, fused with
-a permanent `--bs-gold` reticle at 1.6 cells, and the whole battle screen needed scrolling to see
-past it — reported by Matt as looking nothing like the reference. First fix attempt (2026-08-08,
-wrong): read "looks wrong and clutters the board" as "shouldn't be permanent," shrank it to 1.25
-cells AND gated the last-shot branch on `this.busy` so it only showed for the ~1-2s settle window
-before vanishing. **Matt corrected this directly**: the reference cannon is NOT a one-frame muzzle
-flash, it sits on the water as a lasting marker of where the last shot landed — "a tiny thing that
-pops up on a boat then vanishes... not at all what I described." The `this.busy` gate is gone
-again; size is now `1.7 * --bs-cell`, big enough that the carriage wheels flanking the barrel are
-actually visible (the too-small 1.25 read as a "pawn," not a cannon). The reticle stays a plain
-thin white cross (`0.85 * --bs-cell`, dropped from `--bs-gold`) for the genuinely-aiming state
-(pending MP shots), never fused with the cannon itself. **The lesson, stated plainly: two separate
-complaints ("looks wrong" and "clutters/doesn't fit") do not imply the same fix** — the size and
-color were wrong, the persistence was correct all along, and conflating them cost a whole extra
-round trip.
+**Each side's cannon stands on its OWN board and fires across at the other one.** Yours is
+red-ringed (`--bs-cannon-mine`) on your deck pointing north; theirs is blue-ringed
+(`--bs-cannon-theirs`) on their water pointing south. It rotates to point at the cell being fired
+at (`_aimCannons`, which measures the real geometry between the cannon's pivot and the target cell
+from the DOM, because the two boards are separate elements and nothing in CSS knows how far apart
+they ended up), recoils, and throws a cannonball that crosses the whole screen.
 
-Miss = a burst of white bubbles spreading and fading, settling to a hollow ring. Hit = an impact
-flash and a filled marker with a rotated-square burst outline (a different SHAPE, not just a
-different color). Sunk = the ship reveals in its owner's colour and settles under the waterline.
-**The old arcing-projectile model is gone**: `.bs-ordnance`, `.bs-ordnance-shadow`, `.bs-plume`,
-`.bs-speck`, `.bs-fireball`, `.bs-shockwave`, `.bs-radar` and their keyframes were deleted outright
-rather than left alongside the cannon.
+Three nested elements, and the nesting is load-bearing (`_cannonHtml`):
+
+| Element | Does |
+|---|---|
+| `.bs-cannon` | positions, and casts the drop shadow. Only ever TRANSLATED, so the shadow keeps falling the same way whichever way the barrel points |
+| `.bs-cannon-aim` | the rotation, about the base centre (`transform-origin: 50% 50%`, matching the SVG) |
+| `.bs-cannon-rig` | the recoil -- a plain `translateY`, which INSIDE the rotation is a shove straight back along the barrel |
+
+**Exactly one cannon is on screen at a time**, decided once per render by `_resolveCannons()`
+rather than by each board working it out for itself (which is how you end up with both):
+a shot whose recoil has not played yet puts up the SHOOTER's cannon and arms `_fxPending`;
+otherwise the bot's aiming beat puts up theirs with the "Bot thinking" pill; otherwise a settling
+shot keeps the shooter's cannon up; otherwise it is the cannon of whoever's turn it is, idle and
+still pointing where that side last fired (`_aimBySide` -- a gun does not snap back to north).
+The recoil is gated by `_cannonPlayed` for exactly the reason the sink reveal is gated by
+`_sinkPlayed`: `_lastShot` survives several re-renders and an ungated CSS `animation:` replays on
+every one of them.
+
+**The bot fires on TWO timers, not one** (`_afterStateChange`). The first waits out the shot that
+just rendered, so the player's own shell finishes its flight with the player's own cannon still on
+screen; only then does `_botAiming` go true, the bot's cannon come up on its own water, and a
+think-beat later the shot go off. Firing straight out of a single timer meant the bot's gun never
+appeared before the shot it fired.
+
+### The shot: ball, smoke, splash
+
+`_playShotFx` throws the ball imperatively (Web Animations, `FLY_MS` = 340ms) into `.bs-fx`, an
+overlay spanning BOTH boards -- the whole point of a shot is that it crosses between them, so it
+cannot live inside either. It launches from the muzzle at whatever angle the barrel is currently
+at, lands dead centre on the target cell, and leaves a puff of white smoke behind it. It is purely
+decorative: under `prefers-reduced-motion`, or if anything it needs is missing, it does nothing at
+all and the shot still resolves.
+
+**The impact is held back by exactly the flight time.** `--bs-fly` delays every animation on the
+target cell's peg (`.bs-peg.is-late`), so the splash happens when the ball ARRIVES rather than
+before it has left the barrel, and `_shotSettleMs` adds `FLY_MS` to the window a shot owns before
+the next re-render. `.bs-peg:not(.is-late)` kills the entrance animation outright: a settled cell
+outlives many re-renders, and re-dropping every marker on each one read as the board twitching.
+
+Miss = a cross scored into the water (the reference's own mark, and a stronger SHAPE contrast
+against a filled hit marker than the hollow ring it replaced -- Matt is red/green colorblind, so
+the silhouette has to carry it) plus a burst of white bubbles. Hit = an impact flash and a filled
+marker with a rotated-square burst outline. Sunk = the ship reveals in its owner's colour and
+settles under the waterline. **The old arcing-projectile model is gone**: `.bs-ordnance`,
+`.bs-ordnance-shadow`, `.bs-plume`, `.bs-speck`, `.bs-fireball`, `.bs-shockwave`, `.bs-radar` and
+their keyframes were deleted outright rather than left alongside the cannon.
+
+**One implementation trap worth keeping written down**: the cannonball's black iron rim is a
+`box-shadow` spread set in px from `_playShotFx`, not in CSS. A percentage is not a valid
+box-shadow length, and writing `max(3px, 9%)` there dropped the whole declaration silently -- the
+ball rendered rimless and nothing anywhere reported a problem.
+
+### History, so a future session does not re-walk this path
+
+First cut: 2.1 cells, fused with a permanent `--bs-gold` reticle, and the battle screen needed
+scrolling to see past it. Second: shrunk to 1.25 cells and gated to vanish after the settle window
+-- Matt corrected that directly, the reference cannon is scenery sitting on the water, not a
+one-frame muzzle flash. Third (2026-08-08): 1.7 cells, a wheeled side-view field gun with a
+carriage and visible wheels, drawn on the board being fired AT. **Matt sent screenshots of the
+actual reference and the answer was that this was still nowhere near.** It never was a side view;
+it is top-down, it belongs to the shooter and stands on the shooter's own board, and the shot is a
+visible iron ball crossing from one board to the other. The lesson, stated plainly: three rounds
+were spent adjusting the SIZE and the PERSISTENCE of a drawing whose whole viewing angle was
+wrong, because nobody had looked at the reference. Look at the picture first.
+
+### The battle screen is full-bleed
+
+The reference's identity is two edge-to-edge boards sandwiching a fleet strip, so the shell drops
+its gutter (`.bs-shell-battle`) and `_bleedToEdges()` pulls the game out to all four screen edges.
+In the hub that means `.hub-main`'s 16px sides, its 40px bottom, and the ~98px of top clearance the
+floating back button needs; the standalone page has none of it. All of it is **measured, not
+assumed**, so neither host is hard-coded and neither ends up with a band of hub grey where the
+reference has continuous deck. Sideways it is negative margins, capped at 560px total so a
+desktop window does not stretch the game across the whole screen. Vertically it is negative margin
+PLUS matching padding, so the background reaches the edge while the content stays put and the page
+height is unchanged.
+
+**Both measurements are taken off something the correction does not move** -- the host's content
+box for the sides, the shell for top and bottom. Reading the root's own box back would see the
+previous pass's correction, compute zero, and undo itself on every second render. That happened
+once during this work and the symptom (the sides silently reverting while top and bottom held) is
+worth recognising.
+
+Between the boards, the fleet strip carries the sunk score in a white disc at one end and EXIT in
+a white disc at the other, both half off the screen edge, exactly where the reference puts them.
+**The bright half of the screen is the half being SHOT AT** -- board wash, frame wash and roster
+row all key off it. That is deliberately not "whose turn is it": while your own shell is still in
+the air the turn has already passed, and washing out your target board underneath your own shot
+was exactly backwards.
 
 ### THE CLASS-NAMESPACE RULE (do not relax this)
 
@@ -223,27 +292,36 @@ spanning `len` cells (`len * --bs-cell - --bs-gap`) lands exactly on the grid in
 short by (len-1) gaps. They stay per-board because the battle screen's two boards are different
 widths; a single root-level value drew the small board's ships at the large board's scale.
 
-### `_fitBattleBoards()` — the battle screen must fit ONE viewport, measured, not guessed (fixed 2026-08-08)
+### `_fitBattleBoards()` — the battle screen must fit ONE viewport, measured, not guessed
 
-Section 5 of the redesign handoff requires the battle screen to be "fixed, no page scroll." The
-first cut sized the two boards with static CSS ceilings (`min(90vw, 42vh, 420px)` for enemy,
-`min(64vw, 30vh, 300px)` for your own) as if the boards were the only thing on the page. They
-aren't: the hub's own immersive floating-back-button padding, the topbar, the status line, the
-roster strip and the actions row all eat real vertical space those formulas knew nothing about, so
-on a real device the bottom of "your fleet" (and the Restart/New game/Help row below it) scrolled
-off screen — reported by Matt directly, alongside the cannon bug above.
+The battle screen is "fixed, no page scroll." The first cut sized the two boards with static CSS
+ceilings (`min(90vw, 42vh, 420px)` for enemy, `min(64vw, 30vh, 300px)` for your own) as if the
+boards were the only thing on the page. They aren't: the hub's own immersive floating-back-button
+padding, the status line, the fleet strip and the actions row all eat real vertical space those
+formulas knew nothing about, so on a real device the bottom of your own board scrolled off screen.
 
-`_fitBattleBoards()` (called at the end of `renderBattle()`, and from the `onViewportResize`
-callback alongside `_updateCellSize()`) replaces the guess with a measurement: it reads the REAL
-rendered height of every non-board child of `.bs-battle` (topbar, status, panel headings, roster
-strip, actions row) plus the grid's own row gaps, subtracts that from the REAL viewport height
-available below `.bs-battle`'s own top, and splits what's left between the two boards at a fixed
-4:3 ratio (enemy:own), still capped by the old vw-based ceilings so a wide/short viewport (tablet,
-landscape) never grows a board absurdly. It sets `style.width` directly on each `.bs-board`, which
-wins over the stylesheet rule by construction — this only ever TIGHTENS the old ceiling, never
-fights it. Verified with Playwright at 390×844 (`document.documentElement.scrollHeight <=
-window.innerHeight`) across a full battle to game-end, in normal, `prefers-reduced-motion: reduce`,
-and dark mode — see the cannon note above, found and fixed in the same pass.
+It measures instead. Every non-board child of `.bs-battle` is read at its REAL rendered height,
+plus each panel's own frame padding, plus the grid's row gaps; that comes off the real viewport
+height available below `.bs-battle`'s own top, and what is left is **split equally between the two
+boards** (they are equals in the reference, not a big one and a little one), capped at 460px and
+at the viewport width. It sets `style.width` directly on each `.bs-board`, which wins over the
+stylesheet by construction.
+
+Three traps it has already fallen into, all of them fixed and all of them silent:
+
+- **Out-of-flow children must be skipped.** `.bs-fx` is `position: absolute; inset: 0`, so its box
+  is the FULL height of the screen; counting it as consumed space collapsed both boards to their
+  minimum the moment it appeared. Anything `absolute` or `fixed` (the sunk banner too) is skipped.
+- **Host chrome BELOW the game is invisible from inside it.** In the hub that is `.hub-main`'s 40px
+  of bottom padding, which is why the screen fitted exactly standalone and hung 40px off the bottom
+  once mounted in the hub. Rather than hard-code the host's padding, it measures the overflow that
+  actually resulted (`scrollHeight - viewport`) and takes it off both boards once. Idempotent: a
+  re-run measures no overflow and changes nothing.
+- **`window.innerWidth` includes the scrollbar**; `document.documentElement.clientWidth` does not.
+
+Verified with Playwright at 393×852 standalone AND mounted in the real hub
+(`document.documentElement.scrollHeight <= window.innerHeight`) across a full battle to game-end,
+in normal, `prefers-reduced-motion: reduce`, and dark mode.
 
 ## Visual design (pre-redesign history, kept for the reasoning)
 
