@@ -379,7 +379,10 @@
 
 .bs-cannon {
   position: absolute; z-index: 6; pointer-events: none;
-  width: calc(var(--bs-cell) * 2.1); height: calc(var(--bs-cell) * 2.1);
+  /* A cannon-sized ornament, not a two-row blob -- it used to be 2.1 cells and sat offset a
+     whole extra row below its target, which is what made it look like an oversized golden mess
+     parked across two cells instead of a barrel sitting on the one cell it's aimed at. */
+  width: calc(var(--bs-cell) * 1.25); height: calc(var(--bs-cell) * 1.25);
   transform: translate(-50%, -50%);
   display: flex; align-items: center; justify-content: center;
 }
@@ -392,27 +395,29 @@
   100% { transform: translateY(0) scale(1); }
 }
 .bs-cannon-pill {
-  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
   background: rgba(10, 16, 26, .92); color: #fff; font-size: .62rem; font-weight: 900;
   padding: 4px 10px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em;
 }
 .bs-cannon-muzzle {
   position: absolute; top: 4%; left: 50%; width: 34%; height: 34%; border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #fff 0%, var(--bs-gold) 45%, rgba(224, 83, 47, 0) 72%);
+  background: radial-gradient(circle, #fff 0%, #fff 45%, rgba(255, 255, 255, 0) 72%);
   animation: bs-muzzle-flash .3s ease-out both;
 }
 @keyframes bs-muzzle-flash { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } }
 
-/* the crosshair reticle on the cell currently being aimed at */
+/* the crosshair reticle on the cell currently being aimed at -- a plain, thin white cross, never
+   the gold accent color (that's reserved for difficulty/confirm chrome elsewhere), and small
+   enough to read as a marker on one cell, not another cannon-sized ornament stacked on top of it. */
 .bs-reticle {
   position: absolute; z-index: 5; pointer-events: none;
-  width: calc(var(--bs-cell) * 1.6); height: calc(var(--bs-cell) * 1.6);
+  width: calc(var(--bs-cell) * 0.85); height: calc(var(--bs-cell) * 0.85);
   transform: translate(-50%, -50%);
 }
-.bs-reticle-svg { width: 100%; height: 100%; display: block; }
-.bs-reticle-ring { fill: none; stroke: var(--bs-gold); stroke-width: 3; }
-.bs-reticle-cross { stroke: var(--bs-gold); stroke-width: 3; stroke-linecap: round; }
+.bs-reticle-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+.bs-reticle-ring { fill: none; stroke: #fff; stroke-width: 2.5; }
+.bs-reticle-cross { stroke: #fff; stroke-width: 2.5; stroke-linecap: round; }
 .bs-reticle { animation: bs-reticle-snap .28s ease-out both; }
 @keyframes bs-reticle-snap { from { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 

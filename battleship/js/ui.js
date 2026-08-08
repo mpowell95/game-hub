@@ -282,7 +282,7 @@ class BattleshipUI {
     // the boards several times per frame while a mobile URL bar animates (js/CLAUDE.md, "Overlay
     // scrolling" / hill-climb/js/ui.js's usage). --bs-cell is the one value ship sprites, the
     // roster, and both boards all derive from, computed once per real viewport change.
-    this._offViewport = onViewportResize(() => this._updateCellSize());
+    this._offViewport = onViewportResize(() => { this._fitBattleBoards(); this._updateCellSize(); });
     const mpSave = this._mpLoadSave();
     if (mpSave) {
       this.renderSetup();
@@ -693,6 +693,52 @@ class BattleshipUI {
     if (primaryW > 0) this.root.style.setProperty('--bs-cell', `${primaryW.toFixed(2)}px`);
   }
 
+  /** Section 5's "fixed, no page scroll" requirement, from real measurement instead of a vw/vh
+   *  guess. The static `min(90vw, 42vh, 420px)` / `min(64vw, 30vh, 300px)` CSS ceilings on the two
+   *  boards (kept below as a fallback) were sized as if the boards were the only thing on screen --
+   *  they don't know about the hub's own immersive back-button padding, the topbar, the roster
+   *  strip, or the actions row, so real devices needed to scroll to see the whole battle screen,
+   *  the exact thing section 5 rules out. This measures every non-board sibling in `.bs-battle` for
+   *  its REAL rendered height, subtracts that (plus the grid's own row gaps) from the REAL viewport
+   *  height available below the boards' own top, and splits what's left between the two boards at a
+   *  fixed 4:3 ratio (enemy:own -- the same "clearly bigger" relationship the old vw ratio drew),
+   *  still capped by the old vw-based ceilings so a wide/short viewport (tablet, landscape) never
+   *  grows a board absurdly. Inline `style.width` wins over the stylesheet rule by construction, so
+   *  this only ever tightens the ceiling, never fights it. Only meaningful in the battle view --
+   *  a no-op elsewhere since it needs the sandwich's specific children to be mounted. */
+  _fitBattleBoards() {
+    if (this._dead || !this.root || this.view !== 'battle') return;
+    const battle = this.root.querySelector('.bs-battle');
+    if (!battle) return;
+    const enemyPanel = battle.querySelector('.bs-boardpanel-enemy');
+    const ownPanel = battle.querySelector('.bs-boardpanel-own');
+    const enemyBoard = enemyPanel && enemyPanel.querySelector('.bs-board');
+    const ownBoard = ownPanel && ownPanel.querySelector('.bs-board');
+    if (!enemyBoard || !ownBoard) return;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const top = battle.getBoundingClientRect().top;
+    let consumed = 0;
+    for (const child of battle.children) {
+      if (child === enemyPanel || child === ownPanel) {
+        const heading = child.querySelector('.bs-boardpanel-h');
+        if (heading) consumed += heading.getBoundingClientRect().height;
+        continue;
+      }
+      consumed += child.getBoundingClientRect().height;
+    }
+    const gapPx = parseFloat(getComputedStyle(battle).rowGap) || 0;
+    // one gap between every child in the grid, plus each panel's own internal header<->board gap
+    consumed += gapPx * Math.max(0, battle.children.length - 1 + 2);
+    const bottomSafe = 8;
+    const available = Math.max(160, vh - top - consumed - bottomSafe);
+    const enemyMax = Math.min(window.innerWidth * 0.9, 420);
+    const ownMax = Math.min(window.innerWidth * 0.64, 300);
+    const enemySize = Math.max(130, Math.min(available * 4 / 7, enemyMax));
+    const ownSize = Math.max(95, Math.min(available * 3 / 7, ownMax));
+    enemyBoard.style.width = `${enemySize.toFixed(1)}px`;
+    ownBoard.style.width = `${ownSize.toFixed(1)}px`;
+  }
+
   /** Screen 2: Deploy your ships. Dark navy panel on top (title, hint, RANDOM, and SAVE once the
    *  fleet is complete), then the salmon deck carrying the tray of not-yet-placed ships and the
    *  wooden board. SAVE is ABSENT until every ship is down, not disabled-and-greyed. */
@@ -1003,10 +1049,10 @@ class BattleshipUI {
    *  pointing at the target cell. Its own namespace (.bs-cannon...), never a layout class -- see
    *  the header of battleship.css for why that rule exists. */
   _cannonHtml(r, c, { firing = false, thinking = false } = {}) {
-    // Sat just BELOW the target cell (+1.05 cells) so the barrel's muzzle covers the cell it is
-    // aimed at and the crosshair reticle on that cell stays readable underneath.
+    // Centered ON the cell it's aimed at, same anchor as the reticle -- it used to sit offset a
+    // full extra row below, which is why it visually sprawled across two rows of the grid.
     const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
-      + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 1.45).toFixed(2)});`;
+      + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
     return `<div class="bs-cannon ${firing ? 'is-firing' : ''}" style="${style}" aria-hidden="true">
       <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
         <ellipse cx="50" cy="72" rx="30" ry="14" fill="var(--bs-cannon-ring)"/>
@@ -1034,10 +1080,18 @@ class BattleshipUI {
     </div>`;
   }
 
-  /** Which cannon (if any) belongs on this board right now.
+  /** Which cannon (if any) belongs on this board right now. The cannon is a TRANSIENT firing
+   *  beat, never a permanent marker -- once a shot has settled (this.busy drops back to false)
+   *  the cannon goes away and only the peg/sprite underneath is left, exactly like a real gun
+   *  crew stepping back from the rail. Getting this wrong (showing it for as long as `_lastShot`
+   *  simply exists, which survives many re-renders after the shot settled) is what made it look
+   *  parked on the board forever instead of firing once -- see HANDOFF-BATTLESHIP-REDESIGN.md's
+   *  reference: a plain crosshair while aiming, the cannon only for the brief recoil beat.
    *  - the opponent is choosing  -> it looms over YOUR board with a "Bot thinking" pill
-   *  - a shot just landed        -> it sits on the board that was fired at, and recoils ONCE
-   *  - MP, our shot is in flight -> it sits on the enemy board at the pending cell
+   *  - a shot just settled       -> it sits on the board that was fired at and recoils ONCE,
+   *    for exactly the `busy` window `_settleThenIdle`/`_afterStateChange` already hold open
+   *  - MP, our shot is in flight -> a plain reticle (no cannon yet) marks the pending cell; the
+   *    cannon itself belongs to the DEFENDER'S device, which is the one actually firing it
    *  The recoil is gated by `_cannonPlayed` for the same reason the sink reveal is: `_lastShot`
    *  survives several re-renders, and an ungated CSS animation replays on every one of them. */
   _cannonForBoard(isEnemy, seat) {
@@ -1050,14 +1104,14 @@ class BattleshipUI {
       return this._cannonHtml(mid, mid, { thinking: true });
     }
     const last = this._lastShot;
-    if (last && last.seat === seat) {
+    if (last && last.seat === seat && this.busy) {
       const key = `${seat}:${last.r}:${last.c}`;
       const firing = this._cannonPlayed !== key;
       this._cannonPlayed = key;
-      return this._cannonHtml(last.r, last.c, { firing }) + this._reticleHtml(last.r, last.c);
+      return this._cannonHtml(last.r, last.c, { firing });
     }
     if (isEnemy && mp && mp.pendingShot) {
-      return this._cannonHtml(mp.pendingShot.r, mp.pendingShot.c, {}) + this._reticleHtml(mp.pendingShot.r, mp.pendingShot.c);
+      return this._reticleHtml(mp.pendingShot.r, mp.pendingShot.c);
     }
     return '';
   }
@@ -1234,6 +1288,7 @@ class BattleshipUI {
                <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="change-settings">${t('new_game')}</button>`}
         </div>
       </div>`;
+    this._fitBattleBoards();
     this._updateCellSize();
   }
 

@@ -157,14 +157,28 @@ switch. Get that wrong and nothing else matters.
 
 ### The cannon
 
-A **black barrel on a dark ring base**, inline SVG, sitting on the board being fired AT and aimed
-at the target cell, with a crosshair reticle on that cell. `_cannonForBoard` decides which board
-gets one: the opponent choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot
-that just landed puts it on the board that was fired at and it recoils **once**; in MP a pending
-shot puts it on the enemy board at the pending cell. It is drawn 1.45 cells BELOW the target so the
-muzzle covers the cell and the reticle stays readable underneath. The recoil is gated by
-`_cannonPlayed` for exactly the reason the sink reveal is gated by `_sinkPlayed`: `_lastShot`
-survives several re-renders and an ungated CSS `animation:` replays on every one of them.
+A **black barrel on a dark ring base**, inline SVG, roughly one cell wide (`1.25 * --bs-cell`),
+centered directly ON the cell it's aimed at. `_cannonForBoard` decides which board gets one: the
+opponent choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot that just
+landed puts it on the board that was fired at and it recoils **once**; in MP a pending (not yet
+resolved) shot shows a plain reticle alone on the enemy board — no cannon yet, since the cannon
+belongs to whichever device is actually resolving the shot, not the one waiting on an answer. The
+recoil is gated by `_cannonPlayed` for exactly the reason the sink reveal is gated by
+`_sinkPlayed`: `_lastShot` survives several re-renders and an ungated CSS `animation:` replays on
+every one of them.
+
+**The cannon is TRANSIENT, gated on `this.busy`, not on `_lastShot` merely existing (fixed
+2026-08-08).** The first cut showed a cannon on the "last shot" branch whenever `_lastShot`
+matched that board's seat, with no time bound — since `_lastShot` is deliberately long-lived (the
+peg-entrance and sink-reveal gating both depend on it surviving many re-renders), the cannon
+ended up parked on the board indefinitely, oversized (2.1 cells) and fused with a permanently
+visible gold-ring reticle at 1.6 cells, reported by Matt as looking nothing like the reference and
+cluttering the board. `_cannonForBoard`'s last-shot branch now also requires `this.busy` — true for
+exactly the window `_settleThenIdle`/`_afterStateChange` already hold open around a shot settling —
+so the cannon fires once and clears, leaving only the peg/sprite underneath, the same way the real
+reference only ever shows it for the recoil beat. The reticle itself dropped from `--bs-gold` to a
+plain thin white cross (`0.85 * --bs-cell`), matching the reference's aiming-only crosshair instead
+of doubling as a second, larger cannon-shaped ornament stacked on top of the real one.
 
 Miss = a burst of white bubbles spreading and fading, settling to a hollow ring. Hit = an impact
 flash and a filled marker with a rotated-square burst outline (a different SHAPE, not just a
@@ -204,6 +218,28 @@ arithmetic duplicates the CSS by hand and drifts. `--bs-cell` is the cell-to-cel
 spanning `len` cells (`len * --bs-cell - --bs-gap`) lands exactly on the grid instead of falling
 short by (len-1) gaps. They stay per-board because the battle screen's two boards are different
 widths; a single root-level value drew the small board's ships at the large board's scale.
+
+### `_fitBattleBoards()` — the battle screen must fit ONE viewport, measured, not guessed (fixed 2026-08-08)
+
+Section 5 of the redesign handoff requires the battle screen to be "fixed, no page scroll." The
+first cut sized the two boards with static CSS ceilings (`min(90vw, 42vh, 420px)` for enemy,
+`min(64vw, 30vh, 300px)` for your own) as if the boards were the only thing on the page. They
+aren't: the hub's own immersive floating-back-button padding, the topbar, the status line, the
+roster strip and the actions row all eat real vertical space those formulas knew nothing about, so
+on a real device the bottom of "your fleet" (and the Restart/New game/Help row below it) scrolled
+off screen — reported by Matt directly, alongside the cannon bug above.
+
+`_fitBattleBoards()` (called at the end of `renderBattle()`, and from the `onViewportResize`
+callback alongside `_updateCellSize()`) replaces the guess with a measurement: it reads the REAL
+rendered height of every non-board child of `.bs-battle` (topbar, status, panel headings, roster
+strip, actions row) plus the grid's own row gaps, subtracts that from the REAL viewport height
+available below `.bs-battle`'s own top, and splits what's left between the two boards at a fixed
+4:3 ratio (enemy:own), still capped by the old vw-based ceilings so a wide/short viewport (tablet,
+landscape) never grows a board absurdly. It sets `style.width` directly on each `.bs-board`, which
+wins over the stylesheet rule by construction — this only ever TIGHTENS the old ceiling, never
+fights it. Verified with Playwright at 390×844 (`document.documentElement.scrollHeight <=
+window.innerHeight`) across a full battle to game-end, in normal, `prefers-reduced-motion: reduce`,
+and dark mode — see the cannon note above, found and fixed in the same pass.
 
 ## Visual design (pre-redesign history, kept for the reasoning)
 
