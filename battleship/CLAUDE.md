@@ -157,28 +157,32 @@ switch. Get that wrong and nothing else matters.
 
 ### The cannon
 
-A **black barrel on a dark ring base**, inline SVG, roughly one cell wide (`1.25 * --bs-cell`),
-centered directly ON the cell it's aimed at. `_cannonForBoard` decides which board gets one: the
-opponent choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot that just
-landed puts it on the board that was fired at and it recoils **once**; in MP a pending (not yet
-resolved) shot shows a plain reticle alone on the enemy board — no cannon yet, since the cannon
-belongs to whichever device is actually resolving the shot, not the one waiting on an answer. The
-recoil is gated by `_cannonPlayed` for exactly the reason the sink reveal is gated by
-`_sinkPlayed`: `_lastShot` survives several re-renders and an ungated CSS `animation:` replays on
-every one of them.
+A **black barrel on a wheeled dark carriage**, inline SVG, `1.7 * --bs-cell` wide, centered
+directly ON the cell it's aimed at. `_cannonForBoard` decides which board gets one: the opponent
+choosing puts it over YOUR board with a dark **"Bot thinking"** pill; a shot that just landed puts
+it on the board that was fired at, it recoils **once**, and then it STAYS — the cannon marks the
+last cell fired at on that board, like a piece of scenery sitting on the water, until this board's
+next shot supersedes it; in MP a pending (not yet resolved) shot shows a plain reticle alone on the
+enemy board — no cannon yet, since the cannon belongs to whichever device is actually resolving the
+shot, not the one waiting on an answer. The recoil is gated by `_cannonPlayed` for exactly the
+reason the sink reveal is gated by `_sinkPlayed`: `_lastShot` survives several re-renders and an
+ungated CSS `animation:` replays on every one of them.
 
-**The cannon is TRANSIENT, gated on `this.busy`, not on `_lastShot` merely existing (fixed
-2026-08-08).** The first cut showed a cannon on the "last shot" branch whenever `_lastShot`
-matched that board's seat, with no time bound — since `_lastShot` is deliberately long-lived (the
-peg-entrance and sink-reveal gating both depend on it surviving many re-renders), the cannon
-ended up parked on the board indefinitely, oversized (2.1 cells) and fused with a permanently
-visible gold-ring reticle at 1.6 cells, reported by Matt as looking nothing like the reference and
-cluttering the board. `_cannonForBoard`'s last-shot branch now also requires `this.busy` — true for
-exactly the window `_settleThenIdle`/`_afterStateChange` already hold open around a shot settling —
-so the cannon fires once and clears, leaving only the peg/sprite underneath, the same way the real
-reference only ever shows it for the recoil beat. The reticle itself dropped from `--bs-gold` to a
-plain thin white cross (`0.85 * --bs-cell`), matching the reference's aiming-only crosshair instead
-of doubling as a second, larger cannon-shaped ornament stacked on top of the real one.
+**History, so a future session doesn't re-walk this exact path.** First cut: 2.1 cells, fused with
+a permanent `--bs-gold` reticle at 1.6 cells, and the whole battle screen needed scrolling to see
+past it — reported by Matt as looking nothing like the reference. First fix attempt (2026-08-08,
+wrong): read "looks wrong and clutters the board" as "shouldn't be permanent," shrank it to 1.25
+cells AND gated the last-shot branch on `this.busy` so it only showed for the ~1-2s settle window
+before vanishing. **Matt corrected this directly**: the reference cannon is NOT a one-frame muzzle
+flash, it sits on the water as a lasting marker of where the last shot landed — "a tiny thing that
+pops up on a boat then vanishes... not at all what I described." The `this.busy` gate is gone
+again; size is now `1.7 * --bs-cell`, big enough that the carriage wheels flanking the barrel are
+actually visible (the too-small 1.25 read as a "pawn," not a cannon). The reticle stays a plain
+thin white cross (`0.85 * --bs-cell`, dropped from `--bs-gold`) for the genuinely-aiming state
+(pending MP shots), never fused with the cannon itself. **The lesson, stated plainly: two separate
+complaints ("looks wrong" and "clutters/doesn't fit") do not imply the same fix** — the size and
+color were wrong, the persistence was correct all along, and conflating them cost a whole extra
+round trip.
 
 Miss = a burst of white bubbles spreading and fading, settling to a hollow ring. Hit = an impact
 flash and a filled marker with a rotated-square burst outline (a different SHAPE, not just a
@@ -281,6 +285,41 @@ the answer shape itself), so this works in MP too without ever knowing the enemy
 That helper is intentionally a **shared, non-`_mp*` method** so it stays reachable from the MP
 path without touching any `_mp*` method or `game.js`/`hash.js` — see the note on that boundary in
 the multiplayer section below.
+
+**The hull silhouette got a real redraw (2026-08-08)** after Matt reported the ships "don't look
+like anything at all." `hull()`'s path used a shallow taper starting at the very tip, which at tray
+scale (16px) and even at in-cell scale read as a plain rounded pill with a barely-visible dogear,
+not a boat. The bow taper now starts at 78% of the hull's length (a real triangular point, not a
+clipped corner), `.bs-ship-hull` carries a visible dark outline (`stroke: rgba(0,0,0,.38)`, absent
+before — the single biggest legibility fix, since a ship's fill color sits close in hue to its own
+board: coral-on-salmon for your own fleet, blue-on-navy for theirs), and every hull now carries a
+full-length `bs-ship-waterline` stripe (a lighter line following the hull's own taper) so the
+silhouette reads as a hull with a deck edge instead of a flat color patch. Turret/deck details were
+also enlarged and given more contrast (Battleship's forward turret gained a visible bore hole,
+Cruiser's turrets moved further apart). Submarine is intentionally still closest to a plain shape —
+per its own long-standing rule, no turrets is the one cue that must never be confused with a
+surface combatant.
+
+**EXIT moved from a floating circle to a normal top-right pill (2026-08-08).** It used to be a lone
+54px circle pinned to the board's right edge with its label spelled top-to-bottom
+(`writing-mode: vertical-rl`) — Matt called it "a strange and bad location" with a poorly-written
+label, and he was right: nothing else in this game (or the hub) puts a control there, and vertical
+text reads as decoration before it reads as a button. It now lives inside `.bs-headerpanel`'s own
+top-right corner as a plain horizontal `‹ Exit` pill, the same visual language as the hub's own
+`‹ Hub` back button (`css/hub.css`) — deliberately on the RIGHT so the two floating pills (hub's
+top-LEFT, this one top-right) never collide.
+
+**Board sizing during placement now protects against a real mobile-Safari class of bug: the
+dynamic toolbar.** Matt reported "everything shifts when I select a boat to drag around." The
+placement board's width was `min(100%, 44vh, 400px)` — plain `vh` on iOS Safari tracks the LARGE
+viewport (toolbar hidden), and the toolbar can hide or show mid-gesture, including from the touch
+interaction of picking up a ship to drag it. That would resize the board (and shift every element
+below/around it) for no reason the player did anything to directly cause. Every `vh`-based board
+formula in this file (`.bs-board-place`, `.bs-wait-board`, both `.bs-boardpanel-*` battle formulas)
+now has an `@supports (height: 1svh)` override to `svh` — the SMALL viewport, pinned to
+toolbar-visible size, immune to the toolbar animating. Plain `vh` stays as the fallback for
+browsers without `svh` support. Unverified on a real iOS device (no browser access in this cloud
+session) but a well-documented mobile Safari behavior class, and a strict improvement regardless.
 
 **Firing is a 5-beat sequence, not a single circle popping in**: launch (reticle snap, unchanged),
 travel (a small shell arcs in over a growing/darkening water-shadow, `transform`/`opacity` only),

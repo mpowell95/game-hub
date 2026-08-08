@@ -826,6 +826,7 @@ class BattleshipUI {
     this.shell.innerHTML = `
       <div class="bs-deploy">
         <div class="bs-headerpanel">
+          <button type="button" class="bs-exit" data-action="exit-placement">&lsaquo; ${esc(t('exit'))}</button>
           <h1 class="bs-title">${t('deploy_title')}</h1>
           <p class="bs-sub">${t('deploy_hint')}</p>
           <div class="bs-deploy-btns">
@@ -846,7 +847,6 @@ class BattleshipUI {
           <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="clear-fleet">${t('clear_fleet')}</button>
           <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="help">${t('howto')}</button>
         </div>
-        <button type="button" class="bs-exit" data-action="exit-placement" aria-label="${esc(t('exit'))}"><span class="bs-exit-label">${esc(t('exit'))}</span></button>
       </div>`;
     this._updateCellSize();
     if (keepFocus) {
@@ -1055,11 +1055,16 @@ class BattleshipUI {
       + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
     return `<div class="bs-cannon ${firing ? 'is-firing' : ''}" style="${style}" aria-hidden="true">
       <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
-        <ellipse cx="50" cy="72" rx="30" ry="14" fill="var(--bs-cannon-ring)"/>
-        <ellipse cx="50" cy="68" rx="21" ry="9" fill="var(--bs-cannon-body)"/>
-        <rect x="41" y="18" width="18" height="50" rx="6" fill="var(--bs-cannon-body)"/>
-        <rect x="36" y="14" width="28" height="12" rx="5" fill="var(--bs-cannon-ring)"/>
-        <circle cx="50" cy="20" r="5" fill="#05070b"/>
+        <ellipse cx="50" cy="76" rx="36" ry="15" fill="var(--bs-cannon-ring)"/>
+        <circle cx="21" cy="77" r="10" fill="var(--bs-cannon-ring)" stroke="#05070b" stroke-width="1.5"/>
+        <circle cx="21" cy="77" r="4" fill="var(--bs-cannon-body)"/>
+        <circle cx="79" cy="77" r="10" fill="var(--bs-cannon-ring)" stroke="#05070b" stroke-width="1.5"/>
+        <circle cx="79" cy="77" r="4" fill="var(--bs-cannon-body)"/>
+        <ellipse cx="50" cy="72" rx="23" ry="11" fill="var(--bs-cannon-body)"/>
+        <polygon points="40,72 60,72 55,9 45,9" fill="var(--bs-cannon-body)"/>
+        <rect x="46.5" y="12" width="3" height="58" rx="1.5" fill="rgba(255,255,255,.22)"/>
+        <ellipse cx="50" cy="10" rx="8.5" ry="4.5" fill="#05070b"/>
+        <ellipse cx="50" cy="10" rx="5" ry="2.4" fill="var(--bs-cannon-ring)"/>
       </svg>
       ${firing ? '<span class="bs-cannon-muzzle"></span>' : ''}
       ${thinking ? `<span class="bs-cannon-pill">${esc(t('bot_thinking'))}</span>` : ''}
@@ -1080,20 +1085,17 @@ class BattleshipUI {
     </div>`;
   }
 
-  /** Which cannon (if any) belongs on this board right now. The cannon is a TRANSIENT firing
-   *  beat, never a permanent marker -- once a shot has settled (this.busy drops back to false)
-   *  the cannon goes away and only the peg/sprite underneath is left, exactly like a real gun
-   *  crew stepping back from the rail. Getting this wrong (showing it for as long as `_lastShot`
-   *  simply exists, which survives many re-renders after the shot settled) is what made it look
-   *  parked on the board forever instead of firing once -- see HANDOFF-BATTLESHIP-REDESIGN.md's
-   *  reference: a plain crosshair while aiming, the cannon only for the brief recoil beat.
+  /** Which cannon (if any) belongs on this board right now. The cannon MARKS the last cell fired
+   *  at on this board and stays there (matching the reference: it's a piece of the scenery sitting
+   *  on the water, not a one-frame muzzle flash) until a NEW shot lands on this same board and
+   *  moves it. It only RECOILS once, gated by `_cannonPlayed` for the same reason the sink reveal
+   *  is gated by `_sinkPlayed`: `_lastShot` survives many re-renders and an ungated CSS
+   *  `animation:` would replay on every one of them.
    *  - the opponent is choosing  -> it looms over YOUR board with a "Bot thinking" pill
-   *  - a shot just settled       -> it sits on the board that was fired at and recoils ONCE,
-   *    for exactly the `busy` window `_settleThenIdle`/`_afterStateChange` already hold open
+   *  - a shot just landed        -> it sits on the board that was fired at, recoiling ONCE, and
+   *    stays there as the marker for that cell until this board's next shot supersedes it
    *  - MP, our shot is in flight -> a plain reticle (no cannon yet) marks the pending cell; the
-   *    cannon itself belongs to the DEFENDER'S device, which is the one actually firing it
-   *  The recoil is gated by `_cannonPlayed` for the same reason the sink reveal is: `_lastShot`
-   *  survives several re-renders, and an ungated CSS animation replays on every one of them. */
+   *    cannon itself belongs to the DEFENDER'S device, which is the one actually firing it */
   _cannonForBoard(isEnemy, seat) {
     const s = this.state;
     if (!s || s.over) return '';
@@ -1104,7 +1106,7 @@ class BattleshipUI {
       return this._cannonHtml(mid, mid, { thinking: true });
     }
     const last = this._lastShot;
-    if (last && last.seat === seat && this.busy) {
+    if (last && last.seat === seat) {
       const key = `${seat}:${last.r}:${last.c}`;
       const firing = this._cannonPlayed !== key;
       this._cannonPlayed = key;
