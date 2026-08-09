@@ -196,12 +196,26 @@ appeared before the shot it fired.
 
 ### The shot: ball, smoke, splash
 
-`_playShotFx` throws the ball imperatively (Web Animations, `FLY_MS` = 340ms) into `.bs-fx`, an
-overlay spanning BOTH boards -- the whole point of a shot is that it crosses between them, so it
-cannot live inside either. It launches from the muzzle at whatever angle the barrel is currently
-at, lands dead centre on the target cell, and leaves a puff of white smoke behind it. It is purely
-decorative: under `prefers-reduced-motion`, or if anything it needs is missing, it does nothing at
-all and the shot still resolves.
+`_playShotFx` throws the ball imperatively (Web Animations) into `.bs-fx`, an overlay spanning
+BOTH boards -- the whole point of a shot is that it crosses between them, so it cannot live inside
+either. It launches from the muzzle at whatever angle the barrel is currently at, lands dead
+centre on the target cell, and leaves a puff of white smoke behind it. It is purely decorative:
+under `prefers-reduced-motion`, or if anything it needs is missing, it does nothing at all and the
+shot still resolves.
+
+**`FLY_MS` is the one knob for the whole sequence and it is 850ms.** It started at 340ms and Matt
+could not see the ball move at all -- across a whole phone screen that is a blink. `renderBattle`
+pushes it into CSS as `--bs-fly` rather than the stylesheet keeping a second copy, so the impact
+delay, the reticle fade and `_shotSettleMs`'s pacing all follow from changing this one number.
+Two things that must move with it:
+
+- **Reduced motion needs `--bs-fly: 0ms` set INLINE**, which is what `renderBattle` does. An
+  inline custom property beats any stylesheet rule, so leaving the real value in would hold every
+  impact back by most of a second with no ball in the air to explain the wait.
+- The ball travels at **constant speed** (`easing: 'linear'`, keyframes evenly spaced along the
+  path). A ball that accelerates or brakes mid-air reads as a glitch, not as a shot. The SCALE is
+  what sells the arc: in a top-down view "up" is "bigger", so it swells out of the muzzle (0.55),
+  rides large across the middle (1.36) and shrinks as it drops onto the cell (0.78).
 
 **The impact is held back by exactly the flight time.** `--bs-fly` delays every animation on the
 target cell's peg (`.bs-peg.is-late`), so the splash happens when the ball ARRIVES rather than
