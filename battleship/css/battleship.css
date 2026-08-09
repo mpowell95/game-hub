@@ -54,7 +54,7 @@
   /* a fleet in the roster strip that is not currently under fire, drawn back into the deck */
   --bs-roster-dim: rgba(90, 47, 30, .28);
   /* how long a cannonball is in the air; every impact animation is held back by exactly this */
-  --bs-fly: 340ms;
+  --bs-fly: 850ms;   /* fallback only: ui.js sets the real value from FLY_MS */
 
   /* ship sprite tints; overridden per board/roster row so YOUR fleet is coral and THEIRS is blue */
   --bs-ship: var(--bs-mine);

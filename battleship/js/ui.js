@@ -34,10 +34,14 @@ import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
-// How long a cannonball spends in the air, in ms. The peg/splash at the target is held back by
-// exactly this long (CSS `--bs-fly`) so the shot LANDS instead of appearing before the ball
-// arrives, and `_shotSettleMs` adds it to the window a shot owns before the next re-render.
-const FLY_MS = 340;
+// How long a cannonball spends in the air, in ms, and the ONE place it is set: `renderBattle`
+// pushes it into CSS as `--bs-fly`, which is what holds the peg/splash at the target back so the
+// splash happens when the ball ARRIVES, and `_shotSettleMs` adds it to the window a shot owns
+// before the next re-render. Change it here and the whole sequence follows.
+//
+// It was 340ms and Matt could not see the ball move at all -- across a whole phone screen that is
+// a blink. At 850ms the shot is something you actually watch cross the water.
+const FLY_MS = 850;
 const SETTINGS_KEY = 'gamehub.battleship.v1';
 const SAVE_KEY = 'gamehub.battleship.save.v1';
 const MP_SAVE_KEY = 'gamehub.battleship.mp.v1';
@@ -1325,9 +1329,19 @@ class BattleshipUI {
     const dx = tx - mx, dy = ty - my;
     if (typeof ball.animate !== 'function') { ball.remove(); return; }
     const at = (f, s) => ({ transform: `translate(calc(-50% + ${(dx * f).toFixed(1)}px), calc(-50% + ${(dy * f).toFixed(1)}px)) scale(${s})` });
+    // Constant speed (linear, with the keyframes evenly spaced along the path) -- a ball that
+    // accelerates or brakes mid-air reads as a glitch rather than as a shot. The SCALE is what
+    // sells the arc: in a top-down view "up" is "bigger", so it swells out of the muzzle, rides
+    // large across the middle, and shrinks as it drops onto the cell.
     const anim = ball.animate(
-      [{ ...at(0, 0.5), opacity: 0.2 }, { ...at(0.16, 1.14), opacity: 1, offset: 0.18 }, { ...at(0.65, 1.06), offset: 0.7 }, { ...at(1, 0.72), opacity: 1 }],
-      { duration: FLY_MS, easing: 'cubic-bezier(.3,.05,.55,1)', fill: 'forwards' },
+      [
+        { ...at(0, 0.55), opacity: 0.3, offset: 0 },
+        { ...at(0.10, 1.18), opacity: 1, offset: 0.10 },
+        { ...at(0.50, 1.36), opacity: 1, offset: 0.50 },
+        { ...at(0.88, 1.06), opacity: 1, offset: 0.88 },
+        { ...at(1, 0.78), opacity: 1, offset: 1 },
+      ],
+      { duration: FLY_MS, easing: 'linear', fill: 'forwards' },
     );
     anim.onfinish = () => ball.remove();
     anim.oncancel = () => ball.remove();
@@ -1498,6 +1512,12 @@ class BattleshipUI {
     // one drawn in full colour -- the other sinks back into the deck. Same read as the boards'
     // own wash: at a glance, the bright half of the screen is the half being fought over.
     this._shellMode('battle');
+    // FLY_MS is the single source of truth for the shot's timing; the stylesheet's own --bs-fly is
+    // only a fallback, so push the real value in rather than letting the two drift apart. Under
+    // reduced motion it MUST be zero here, not just in the stylesheet's reduced-motion block: an
+    // inline custom property beats any rule, so leaving 850ms in would hold every impact back by
+    // most of a second with no ball in the air to explain the wait.
+    this.root.style.setProperty('--bs-fly', reducedMotion() ? '0ms' : `${FLY_MS}ms`);
     this._cannons = this._resolveCannons();
     // The BRIGHT half of the screen is the half being shot at, and the dim half is the one doing
     // the shooting -- which is not the same thing as "whose turn is it". While your own shell is
