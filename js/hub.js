@@ -283,19 +283,26 @@ const GAMES = [
   {
     // The from-scratch rebuild, promoted over the original 2026-08-08 and given its name. The
     // retired build is gone; this one lives in pool/ and records under the 'pool' stats id.
+    // RELEASED to everyone 2026-08-10 (Matt: "Make it visible for everyone so others can play"),
+    // after the wordless play screen and the reference-palette pass. devOnly is gone, not
+    // commented out - a game is either shipped or it is not.
     id: 'pool',
     title: { en: 'Pool', es: 'Billar' },
     blurb: { en: 'Real cue-ball physics: draw, follow, english. 8-ball vs. the computer, a friend, or practice alone.',
       es: 'Física real de la bola blanca: efecto, retroceso, seguimiento. Bola 8 contra la computadora, un amigo, o práctica libre.' },
     module: '../pool/js/ui.js',
     immersive: true,
-    accent: '#1a5f78',
+    // The wood of the rail the tile art now draws. It was #1a5f78, a teal-blue picked for the old
+    // pale-blue table; --card-accent is the tile's own backing colour, so it has to move with the
+    // art (js/game-art.js's `pool`, repainted the same day).
+    accent: '#8C5A3F',
     art: GAME_ART["pool"],
-    devOnly: true,
+    released: '2026-08-10',
   },
   {
     // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side comparison with
-    // the real Snake, which is untouched and still in the list above. Gated devOnly, same as Pool while it is still being finished.
+    // the real Snake, which is untouched and still in the list above. Still gated devOnly (Pool no
+    // longer is - it shipped 2026-08-10).
     // Shares Snake's ENGINE by import (never a copy) and its board/D-pad CSS, so only the chrome
     // differs. Records stats through the same recordSnake call the real Snake uses.
     id: 'snake-v2',
