@@ -516,12 +516,96 @@ async function checkPlay(game, probe) {
   }
 }
 
+
+/** FIT: does the whole game fit ONE screen, in every host and at real phone heights?
+ *
+ *  This exists because Pool shipped 138px too tall INSIDE THE HUB with its controls up to 98px
+ *  below the fold - Matt: "I couldn't see the full board and the controls simultaneously" - while
+ *  this very suite reported it clean. It was clean: standalone, at 393x852, which was the only
+ *  thing being looked at. The hub wraps an immersive game in ~98px of top padding for the
+ *  floating back button and 40px at the bottom, so a game that asks for 100dvh is 138px too tall
+ *  the moment it is mounted. Nothing standalone can ever show that.
+ *
+ *  So: both hosts, and a short viewport as well as a tall one, because browser toolbars eat
+ *  100-190px on a real phone and a layout can fit one height and not the other. */
+const FIT_SIZES = [
+  { w: 393, h: 852, why: 'tall (no browser chrome)' },
+  { w: 390, h: 664, why: 'short (with browser toolbars)' },
+];
+
+/** Mount a game the way the HUB does, without going through the launcher: dev-only games are
+ *  hidden there behind a name check this suite cannot satisfy, and the launcher is not the point
+ *  anyway - the hub's chrome and CSS are. */
+async function mountInHub(page, game) {
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.waitForTimeout(700);
+  return page.evaluate(async (g) => {
+    const main = document.querySelector('.hub-main');
+    const host = document.querySelector('[data-role="game"]');
+    const top = document.querySelector('.hub-top');
+    if (!main || !host) return 'hub shell not found';
+    for (const el of main.children) if (el !== host) el.hidden = true;
+    main.classList.add('hub-main-immersive');
+    if (top) top.classList.add('hub-top-immersive');
+    host.hidden = false;
+    const m = await import(`/${g}/js/ui.js`);
+    m.init(host);
+    return null;
+  }, game);
+}
+
+async function checkFit(game) {
+  for (const host of ['standalone', 'hub']) {
+    for (const size of FIT_SIZES) {
+      const ctx = await browser.newContext({
+        viewport: { width: size.w, height: size.h }, deviceScaleFactor: 1, isMobile: true, hasTouch: true,
+      });
+      const page = await ctx.newPage();
+      await page.addInitScript(() => {
+        localStorage.setItem('gamehub.profile', JSON.stringify({
+          name: 'Visual Test', emoji: '\u{1F419}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+        }));
+        for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+      });
+      const label = `${host} ${size.w}x${size.h} ${size.why}`;
+      try {
+        if (host === 'hub') {
+          const bad = await mountInHub(page, game);
+          if (bad) { fail(game, 'fit', `${label}: ${bad}`); await ctx.close(); continue; }
+        } else {
+          await page.goto(`${BASE}/${game}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        }
+        await page.waitForTimeout(900);
+        // Get INTO the game where possible - a setup screen is not the layout that overflows.
+        for (const sel of ['button:has-text("Start game")', '[data-action="play-bot"]', '[data-action="start"]']) {
+          const el = await page.$(sel);
+          if (el) { const b2 = await el.boundingBox(); if (b2) { await page.touchscreen.tap(b2.x + b2.width / 2, b2.y + b2.height / 2); break; } }
+        }
+        await page.waitForTimeout(1300);
+        const r = await page.evaluate(() => {
+          const de = document.documentElement;
+          return { over: de.scrollHeight - window.innerHeight, wide: de.scrollWidth - de.clientWidth };
+        });
+        await page.screenshot({ path: join(OUT, `${game}--fit-${host}-${size.h}.png`) });
+        if (r.over > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.over}px TALLER than the screen - you would have to scroll to see all of it`);
+        else if (r.wide > 2) failUnlessKnown(game, 'fit', 'fits one screen', `${label}: ${r.wide}px too wide`);
+        else ok(game, 'fit', `${label}: fits`);
+      } catch (e) {
+        fail(game, 'fit', `${label}: threw ${e.message.slice(0, 70)}`);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }
+}
+
 console.log(`Looking at ${GAMES.length} of ${ALL_GAMES.length} games x ${MODES.length} modes at ${VIEWPORT.width}x${VIEWPORT.height}`);
 console.log(`  ${GAMES.join(', ')}`);
 console.log(`  why these: ${WHY}\n`);
 
 for (const game of GAMES) {
   for (const mode of MODES) await checkGame(game, mode);
+  await checkFit(game);
   if (MOTION[game]) await checkMotion(game, MOTION[game]);
   if (PLAY[game]) await checkPlay(game, PLAY[game]);
 }

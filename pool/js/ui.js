@@ -104,7 +104,7 @@ class PoolUI {
     this._foulMsg = null;
     this._aiRng = null;
     this._aiSeed = null;
-    this._boundResize = () => this._resizeCanvas();
+    this._boundResize = () => { this._fitToHost(); this._resizeCanvas(); };
     this._boundVis = () => { if (document.hidden) this._syncNothingSpecial(); };
     this._setupWorker();
     this._tryAutoResume();
@@ -187,6 +187,61 @@ class PoolUI {
     this.el = div;
     if (this.view === 'setup') this._renderSetup();
     else this._renderGame();
+    this._fitToHost();
+  }
+
+  /** Fit the game to what is ACTUALLY on screen, not to what the viewport says.
+   *
+   *  `.p2-root` asks for `100dvh`. Standalone that is exactly right. Mounted in the hub it is
+   *  138px too tall, because `.hub-main` in immersive mode already reserves ~98px at the top for
+   *  the floating back button and 40px at the bottom - so a full-viewport-height game inside it
+   *  makes the page 138px longer than the screen. Measured on 2026-08-08 at five real phone
+   *  sizes: EVERY one overflowed by exactly 138px, and on the taller ones the controls sat up to
+   *  98px below the fold. Matt: "I couldn't see the full board and the controls simultaneously."
+   *  Nothing caught it because the visual suite only ever loaded the standalone page.
+   *
+   *  So: measure the gap above and below and cancel it. Negative margin pulls the root's box out
+   *  to the screen edge, matching padding puts the CONTENT back exactly where it was, so the
+   *  page's total height is unchanged and the flex chain inside gets the real remaining space.
+   *  Sideways is plain negative margins, capped so a desktop window doesn't stretch the felt.
+   *
+   *  MEASURED OFF THINGS THIS CORRECTION DOES NOT MOVE - the host's own content box, and the
+   *  inner element's position. Reading the root's own box back would see the previous pass's
+   *  correction, compute zero and undo itself on every second layout. (Battleship's
+   *  `_bleedToEdges()` is the same trick for the same reason; a shared js/ helper is the obvious
+   *  next step, deliberately not done in the same change as this fix.) */
+  _fitToHost() {
+    const el = this.el;
+    if (!el || !el.parentElement) return;
+    // Always measure from the UNCORRECTED layout, so every call computes the same answer and this
+    // can never read its own previous correction back and undo itself.
+    for (const k of ['marginLeft', 'marginRight', 'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'height']) el.style[k] = '';
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const de = document.documentElement;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    // Distances from the top and bottom of the DOCUMENT, not the viewport: a rect alone is
+    // viewport-relative, so it moves when the page is scrolled - and the page is scrolled
+    // precisely BECAUSE of the overflow this exists to remove. Reading a raw rect.top gave up=0
+    // on an already-scrolled page, applied nothing, and left the page scrollable: a loop that
+    // silently did nothing. Adding the scroll back makes both numbers stable.
+    // (Reading a specific ancestor's padding does not work either - the gap belongs to
+    // `.hub-main`, two levels up, while el.parentElement is the section inside it with none.)
+    const sy = window.scrollY || de.scrollTop || 0;
+    const up = Math.max(0, Math.round(r.top + sy));
+    const down = Math.max(0, Math.round(de.scrollHeight - (r.bottom + sy)));
+    const extra = Math.max(0, Math.round((Math.min(de.clientWidth, 720) - r.width) / 2));
+    const px = (n) => (n ? `${n}px` : '');
+    el.style.marginLeft = px(-extra);
+    el.style.marginRight = px(-extra);
+    el.style.marginTop = px(-up);
+    el.style.marginBottom = px(-down);
+    // Cancelling the gaps is not enough on its own: the root still ASKS for a full viewport
+    // height (100dvh) and is then pushed down by `up`, so its bottom lands `up` past the fold.
+    // Pin the border box to exactly one screen and hand the top gap back as padding, so the
+    // content occupies vh - up and the flex chain inside sees the real remaining space.
+    if (up || down || extra) el.style.height = `${vh}px`;
+    el.style.paddingTop = px(up);
   }
 
   _renderSetup() {
