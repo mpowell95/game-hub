@@ -15,8 +15,14 @@ last one was invisible to every test in the repo.
 
 ## 0. The reference
 
-Matt supplied a screenshot grid of a polished mobile Battleship ("Sea Battle" style). You will not
-have the image. Everything you need is described below; build to this description.
+Matt supplied a screenshot grid of a polished mobile Battleship ("Sea Battle" style).
+
+> **CORRECTION, 2026-08-08.** This paragraph used to read "You will not have the image. Everything
+> you need is described below; build to this description." That was never true, and it cost four
+> rounds: three separate passes built a wheeled side-view field gun from a prose description of a
+> top-down gun turret, because the description fits both. A session CAN read a PNG. Look in
+> `reference/battleship/` first, and read `VISUAL-PROCESS.md`. Build to the picture; this
+> document's description is a fallback, not the source of truth.
 
 **Take the layout, the palette, the interaction model and the feel. Do NOT copy its name, its logo,
 or its literal artwork.** Our game stays `Battleship` / `Hundir la Flota`. Ship sprites, cannon and
