@@ -80,6 +80,31 @@ fifteen lines and it is the only automated thing in this repo that can catch "to
 listed, printed on every run, and a stale entry fails the suite. **A game you just wrote does not
 go on that list. Fix the game.**
 
+## 3b. PLAY IT. This is the rule that was broken most recently and most expensively.
+
+**A game is not verified because it rendered.** On 2026-08-08 I promoted Pool over the old build,
+merged it, and deployed it to `main` having never played a single game of it. What I had was: it
+draws, it fits the screen, it throws no errors, in three themes. Every word true. None of it "a
+person can play this."
+
+My own screenshot, taken 1.2s after the one shot I attempted, showed fifteen balls sitting in an
+untouched triangle. I looked at it, decided my test drag was too weak, wrote *"the shot mechanic is
+fine"* to Matt as a statement of fact, and shipped. It was a guess from reading source, presented
+as a finding. (It was also wrong in the details: the shot is a SLINGSHOT, the ball travels opposite
+the drag, which I only learned by measuring.)
+
+So:
+
+- **`PLAY` probes in `test-visual.mjs` drive a game through its real UI with real touch** and
+  assert something only playing could change: the cue ball crossed the table, the shot resolved to
+  a marker, the opponent replied. Not "the button exists."
+- **Every run prints `NEVER PLAYED BY ANYTHING`** listing games with no probe. For those, this
+  suite proves only that they draw. That list is the honest state of coverage and it should shrink.
+- **Write the probe before you call a game finished.** If you are promoting, renaming or replacing
+  a game, the probe is not optional - that is exactly the moment it gets skipped.
+- **A probe that only ever passes is theatre.** Break the game on purpose, watch it go red, put it
+  back. That takes two minutes and it is the only proof the probe works.
+
 ## 4. Before you say it is done
 
 - **Open your own screenshots.** `.visual-out/` is right there. A painted-element count is not a
@@ -88,7 +113,8 @@ go on that list. Fix the game.**
   seconds, versus a round trip that costs a day.
 - **Send Matt the screenshot** rather than a paragraph describing it. He can reject a picture in
   five seconds and a paragraph never.
-- **A green suite is not a rendered screen.** That sentence has been earned twice.
+- **A green suite is not a rendered screen, and a rendered screen is not a played game.** The
+  first half was earned twice. The second half was earned promoting Pool without playing it.
 
 ## 5. What this cannot do
 
