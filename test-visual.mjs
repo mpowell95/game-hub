@@ -258,12 +258,12 @@ const PLAY = {
       const g = await page.evaluate(() => { const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; });
       const TW = 0.9906, TH = 1.9812;
       const scale = Math.min(g.w / TW, g.h / TH) * 0.9;
-      // The cue ball starts on the head spot. The shot is a SLINGSHOT - the ball travels opposite
-      // the drag - so to send it at the rack you pull AWAY from the rack.
+      // The cue ball starts on the head spot and travels TOWARD the drag, so aiming at the rack
+      // means dragging at the rack (down-screen). Distance from the ball is the power.
       const cue = { x: g.left + g.w / 2, y: g.top + g.h / 2 + (-TH * 0.25) * scale };
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cue.x, y: cue.y, id: 1 }] });
       for (let i = 1; i <= 12; i++) {
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cue.x, y: cue.y - (130 * i / 12), id: 1 }] });
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cue.x, y: cue.y + (130 * i / 12), id: 1 }] });
         await page.waitForTimeout(14);
       }
       await page.waitForTimeout(60);

@@ -745,15 +745,10 @@ class PoolUI {
     }
   }
 
-  /** The aim aid. It fires AWAY from your finger - you draw the cue back like a real cue - and
-   *  the only thing on screen saying so used to be a 1.5px dashed line at 55% white on green
-   *  felt. Matt, playing it: "so like it shoots where I pull my finger towards." He was reading
-   *  the STICK, which correctly moves with his finger, because the line that shows where the ball
-   *  actually goes was too faint to read. The mechanic was never the problem; the feedback was.
-   *
-   *  So now the forward direction is unmissable: a bright line with a dark halo behind it so it
-   *  reads on any cloth, a ghost cue ball at the exact contact point, a ring round the first ball
-   *  it will hit, and an arrowhead if it will reach a cushion untouched. */
+  /** The aim aid. The cue ball travels TOWARD your finger (see angleAndDistFromCue), and this
+   *  draws that path so there is nothing to work out: a bright line with a dark halo behind it so
+   *  it reads on any cloth, a ghost cue ball at the exact contact point, a ring round the first
+   *  ball it will hit, and an arrowhead if the path reaches a cushion untouched. */
   _drawAimLine(ctx) {
     const cue = ballById(this.game.balls, 'cue');
     if (!cue || cue.pocketed) return;
@@ -815,9 +810,8 @@ class PoolUI {
     }
     ctx.restore();
 
-    // The cue stick, BEHIND the ball and receding as power charges - it sits on your finger's
-    // side because that is what drawing a cue back looks like. The bright line above is what says
-    // where the ball goes; these two pointing opposite ways is the whole point, not a bug.
+    // The cue stick, behind the ball and receding as power charges. It sits on the FAR side from
+    // your finger, which is where a cue belongs when the ball is heading towards your finger.
     const pullPx = Math.min(1, this._power / 4.2) * px * 0.55;
     const tipGap = ballR + 5 + pullPx;
     const butt = tipGap + px * 0.7;
@@ -960,7 +954,17 @@ class PoolUI {
       const cue = ballById(this.game.balls, 'cue');
       const cc = this._toCanvas(cue.x, cue.y);
       const dx = px - cc.cx, dy = py - cc.cy;
-      return { angle: Math.atan2(-dy, -dx), dist: Math.hypot(dx, dy) };
+      // DRAG TOWARD THE TARGET. The cue ball travels the way your finger goes: drag at the pocket
+      // and it heads for the pocket. Distance from the ball is still the power.
+      //
+      // This was a slingshot (atan2(-dy,-dx), ball fired AWAY from the finger) until 2026-08-08.
+      // Matt: "That's the opposite of what I want." Do not flip it back on the reasoning that a
+      // real cue draws backwards - that argument was had and it lost.
+      //
+      // The cue STICK is drawn at -dir (see _drawAimLine), which now puts it behind the ball on
+      // the far side from your finger, receding as power builds: still a cue pointing at where
+      // the ball is going. Aim line and stick stay opposite ends of the same line.
+      return { angle: Math.atan2(dy, dx), dist: Math.hypot(dx, dy) };
     };
 
     const updateAimPower = (px, py) => {
