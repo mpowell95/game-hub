@@ -745,33 +745,85 @@ class PoolUI {
     }
   }
 
+  /** The aim aid. It fires AWAY from your finger - you draw the cue back like a real cue - and
+   *  the only thing on screen saying so used to be a 1.5px dashed line at 55% white on green
+   *  felt. Matt, playing it: "so like it shoots where I pull my finger towards." He was reading
+   *  the STICK, which correctly moves with his finger, because the line that shows where the ball
+   *  actually goes was too faint to read. The mechanic was never the problem; the feedback was.
+   *
+   *  So now the forward direction is unmissable: a bright line with a dark halo behind it so it
+   *  reads on any cloth, a ghost cue ball at the exact contact point, a ring round the first ball
+   *  it will hit, and an arrowhead if it will reach a cushion untouched. */
   _drawAimLine(ctx) {
     const cue = ballById(this.game.balls, 'cue');
     if (!cue || cue.pocketed) return;
     const c = this._toCanvas(cue.x, cue.y);
     const z = this._camZoom || 1;
+    const px = this._scale * z;                 // world metres -> canvas pixels
     const dirx = Math.cos(this._aimAngle), diry = Math.sin(this._aimAngle);
-    // Forward dashed guideline (the direction the cue ball will travel).
-    const len = Math.max(this._cw, this._ch);
+    const ballR = px * R;
+
+    // How far can the cue ball travel before it touches something? Ray vs. circle of radius 2R
+    // around every other ball on the table - the standard contact-point construction.
+    let hit = null, best = Infinity;
+    for (const b of this.game.balls) {
+      if (b.pocketed || b.id === 'cue') continue;
+      const ex = b.x - cue.x, ey = b.y - cue.y;
+      const along = ex * dirx + ey * diry;
+      if (along <= 0) continue;                 // behind the aim
+      const perp2 = (ex * ex + ey * ey) - along * along;
+      const rr = (2 * R) * (2 * R);
+      if (perp2 >= rr) continue;                // the ray misses it
+      const t = along - Math.sqrt(rr - perp2);  // distance to first contact
+      if (t > 0 && t < best) { best = t; hit = b; }
+    }
+    // Otherwise run to the cushion the ray reaches first.
+    if (!hit) {
+      const hw = TABLE.w / 2 - R, hh = TABLE.h / 2 - R;
+      const tx = dirx > 0 ? (hw - cue.x) / dirx : dirx < 0 ? (-hw - cue.x) / dirx : Infinity;
+      const ty = diry > 0 ? (hh - cue.y) / diry : diry < 0 ? (-hh - cue.y) / diry : Infinity;
+      best = Math.max(0, Math.min(tx, ty));
+    }
+    const endPx = best * px;
+    const x0 = c.cx + dirx * (ballR + 2), y0 = c.cy + diry * (ballR + 2);
+    const x1 = c.cx + dirx * endPx, y1 = c.cy + diry * endPx;
+
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.setLineDash([6, 8]);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(c.cx + dirx * (this._scale * z * R + 4), c.cy + diry * (this._scale * z * R + 4));
-    ctx.lineTo(c.cx + dirx * len, c.cy + diry * len);
-    ctx.stroke();
+    ctx.lineCap = 'round';
+    // dark halo first, so the line survives both the felt and a ball underneath it
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+
+    if (hit) {
+      // ghost cue ball where it makes contact, and a ring on what it is about to hit
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x1, y1, ballR, 0, Math.PI * 2); ctx.stroke();
+      const h = this._toCanvas(hit.x, hit.y);
+      ctx.strokeStyle = 'rgba(255,206,58,0.95)'; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(h.cx, h.cy, ballR + 3, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      // arrowhead, so "this way" is unambiguous even across open cloth
+      const a = 9, sp = 0.42;
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - Math.cos(this._aimAngle - sp) * a * 1.6, y1 - Math.sin(this._aimAngle - sp) * a * 1.6);
+      ctx.lineTo(x1 - Math.cos(this._aimAngle + sp) * a * 1.6, y1 - Math.sin(this._aimAngle + sp) * a * 1.6);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
-    // The cue stick itself, receding from the ball as power charges — the real
-    // "you are now charging a shot" visual the dashed line alone can't give.
-    const ballR = this._scale * z * R;
-    const pullPx = Math.min(1, this._power / 4.2) * this._scale * z * 0.55;
+
+    // The cue stick, BEHIND the ball and receding as power charges - it sits on your finger's
+    // side because that is what drawing a cue back looks like. The bright line above is what says
+    // where the ball goes; these two pointing opposite ways is the whole point, not a bug.
+    const pullPx = Math.min(1, this._power / 4.2) * px * 0.55;
     const tipGap = ballR + 5 + pullPx;
-    const stickLen = this._scale * z * 0.7;
-    const butt = tipGap + stickLen;
+    const butt = tipGap + px * 0.7;
     ctx.save();
     ctx.strokeStyle = this._pulling ? '#e8d3a0' : 'rgba(232,211,160,0.55)';
-    ctx.lineWidth = Math.max(2.5, this._scale * z * 0.018);
+    ctx.lineWidth = Math.max(2.5, px * 0.018);
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(c.cx - dirx * tipGap, c.cy - diry * tipGap);
