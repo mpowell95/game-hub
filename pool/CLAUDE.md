@@ -33,6 +33,32 @@ The old `'poolv2'` STATS id likewise keeps its row on both the My Stats and Lead
 hide a game with zero plays, so it costs nothing to anyone who never played it and keeps whatever
 WAS played under it visible — rule 1, stored is not enough.
 
+## Released to everyone 2026-08-10
+
+Matt: *"I think it's ready for production. Make it visible for everyone so others can play. Give it
+the 'new' badge and everything too."* `devOnly` is **gone** from the `GAMES` entry (deleted, not
+commented out — a game is either shipped or it is not), and `released: '2026-08-10'` is set, which
+is the only input to the launcher's New pill (`js/new-badge.js`; it retires itself after 7 days,
+nothing stored, no follow-up commit).
+
+Two things that had to move with it, both easy to miss:
+
+- **The tile art and the `accent`.** `GAME_ART['pool']` was a pale blue table in a dark red frame
+  with numbered yellow/blue balls — the palette this game had before 2026-08-10 and no longer has
+  anywhere. It is repainted in the same colours the game itself draws (`TABLE_ART`/`BALL_ART`), and
+  `accent` moved from the old teal `#1a5f78` to the wood brown `#8C5A3F`, because `--card-accent`
+  is the tile's own backing colour and reads directly against the art.
+- **Nothing else needed doing** — `'pool'` was already registered in `js/game-stats.js`'s `GAMES`,
+  `js/leaderboard-ui.js`'s and `js/game-stats-ui.js`'s `GAME_META`, and (by not being in
+  `players-agg.js`'s `SOLO` set) counts as competitive. It has no sub-counter, so the "Adding a
+  game" three-edit rule for `players-agg.js` does not apply. Verified by loading the hub as an
+  ordinary profile (not Matt, not the tester): the card is present, wears New and no Test tag, and
+  mounts.
+
+**The retired build's `'poolv2'` stats row stays on My Stats and the Leaderboard** labelled "Pool
+(retired build)", and both screens hide a game with zero plays — so it costs nothing to anyone who
+never played it and keeps what WAS played visible (THE LAW rule 1).
+
 ## One named rulebook: "Bar Rules 8-Ball" (`js/rules.js`)
 
 Per the build guide's item 3 ("one game mode with one named rulebook"), this is the only mode

@@ -372,28 +372,36 @@ export const GAME_ART = {
               </g>
             </g>
           </svg>`,
+  // Repainted 2026-08-10 to match the game it opens. It used to be a pale blue table in a dark red
+  // frame with numbered yellow/blue balls -- the old palette, which the game no longer has
+  // anywhere. Same colours as pool/js/ui.js's TABLE_ART and BALL_ART, off reference/pool/SPEC.md:
+  // salmon surround, brown wood, bright green cushion, deep green cloth, coral and cyan balls.
   pool: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#4a1013"/>
-            <rect x="10" y="10" width="140" height="70" rx="4" fill="#4f9dc2"/>
-            <g fill="#111">
-              <circle cx="10" cy="10" r="7"/><circle cx="150" cy="10" r="7"/>
-              <circle cx="10" cy="80" r="7"/><circle cx="150" cy="80" r="7"/>
-              <circle cx="10" cy="45" r="6.5"/><circle cx="150" cy="45" r="6.5"/>
+            <rect width="160" height="90" fill="#F2A183"/>
+            <rect x="4" y="6" width="152" height="78" rx="9" fill="#0B0B0B"/>
+            <rect x="6" y="8" width="148" height="74" rx="8" fill="#8C5A3F"/>
+            <rect x="13" y="15" width="134" height="60" rx="6" fill="#3FBE63"/>
+            <rect x="19" y="21" width="122" height="48" rx="4" fill="#0F8A3C"/>
+            <g fill="#000">
+              <circle cx="21" cy="23" r="8"/><circle cx="139" cy="23" r="8"/>
+              <circle cx="21" cy="67" r="8"/><circle cx="139" cy="67" r="8"/>
+              <circle cx="80" cy="21" r="7"/><circle cx="80" cy="69" r="7"/>
             </g>
-            <g transform="translate(58 50)">
-              <circle r="8" fill="#F5D033" stroke="rgba(0,0,0,.35)"/>
-              <circle r="3.3" fill="#f4f1e8"/>
+            <g stroke="rgba(0,0,0,.3)" stroke-width="1">
+              <circle cx="58" cy="52" r="7" fill="#F2604C"/>
+              <circle cx="74" cy="38" r="7" fill="#33C6F4"/>
+              <circle cx="92" cy="55" r="7" fill="#F2604C"/>
+              <circle cx="108" cy="36" r="7" fill="#33C6F4"/>
+              <circle cx="80" cy="47" r="7" fill="#101010"/>
+              <circle cx="40" cy="36" r="7" fill="#F7EFCB"/>
             </g>
-            <g transform="translate(78 38)">
-              <circle r="8" fill="#f4f1e8" stroke="rgba(0,0,0,.35)"/>
-              <rect x="-8" y="-4.5" width="16" height="9" fill="#1F5FA8"/>
-              <circle r="3.3" fill="#f4f1e8"/>
+            <g fill="rgba(255,255,255,.55)">
+              <circle cx="55.5" cy="49.5" r="2.1"/><circle cx="71.5" cy="35.5" r="2.1"/>
+              <circle cx="89.5" cy="52.5" r="2.1"/><circle cx="105.5" cy="33.5" r="2.1"/>
+              <circle cx="37.5" cy="33.5" r="2.1"/>
             </g>
-            <g transform="translate(96 55)">
-              <circle r="8" fill="#111" stroke="rgba(0,0,0,.35)"/>
-              <circle r="3.3" fill="#f4f1e8"/>
-            </g>
-            <circle cx="120" cy="42" r="7.5" fill="#f4f1e8" stroke="rgba(0,0,0,.25)"/>
+            <text x="80" y="47" font-size="7" font-weight="bold" fill="#fff"
+                  text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif">8</text>
           </svg>`,
   yahtzee: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0878CE"/>
