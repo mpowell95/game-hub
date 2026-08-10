@@ -26,7 +26,7 @@
 // and verifies the hash, exactly like the reference games. One room hosts a
 // REMATCH SERIES (round.n / round.dealer alternated by the host via
 // mp.nextDealer), same vocabulary as Tic Tac Toe/Mancala/Filler/Dots and Boxes.
-import { R, TABLE, strikeCueBall, tick, isMoving, pocketCenters } from './physics.js';
+import { R, TABLE, POCKET_R, strikeCueBall, tick, isMoving, pocketCenters } from './physics.js';
 import { ballById } from './table.js';
 import * as rules from './rules.js';
 import { chooseShot } from './ai.js';
@@ -80,10 +80,43 @@ const PINCH_WINDOW_MS = 90;
 const PENDING_MOVE_COMMIT_PX = 6;
 const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 2.5;
 
-const BALL_COLOR = {
-  1: '#F5D033', 2: '#1F5FA8', 3: '#D0342C', 4: '#6A3FA0', 5: '#E0752D', 6: '#1E7A46', 7: '#7B3F2E',
-  9: '#F5D033', 10: '#1F5FA8', 11: '#D0342C', 12: '#6A3FA0', 13: '#E0752D', 14: '#1E7A46', 15: '#7B3F2E',
+// THE PALETTE IS A CLONE. Every value below was sampled off the reference screenshots Matt sent
+// (reference/pool/SPEC.md), after: "these colors are so dark and are not friendly or welcoming at
+// all... Copy this style. Make ours a clone." The old palette was a #12100d page, a #3a2418
+// almost-black rail and a #0b3d2e bottle-green cloth - a dark room. This is a bright toy.
+// The wood/cushion/cloth are drawn OUTWARD from the cloth rectangle; see _drawTable.
+const TABLE_ART = {
+  outline: '#0B0B0B',
+  wood: '#8C5A3F',
+  cushion: '#3FBE63',
+  cushionLit: '#4ACB6E',
+  cloth: '#0F8A3C',
+  pocket: '#000000',
 };
+
+// FOUR BALL COLOURS, NOT FIFTEEN. The reference drops numbers and stripes entirely: one group is
+// coral, the other is cyan, the 8 is black and the cue is cream. That is most of why it reads as
+// friendly rather than as a simulator, and it loses nothing - "which ones are mine" is the only
+// question a player actually asks a ball.
+//
+// Coral vs cyan is deliberate and it is COLOURBLIND-SAFE: this repo pairs hue with shape because
+// Matt is red/green colourblind, and red-against-cyan is exactly the axis that survives that. The
+// old numbered palette had a #D0342C red and a #1E7A46 green in the same rack, which does not.
+const BALL_ART = {
+  solid: { body: '#F2604C', lit: '#FFB0A0' },
+  stripe: { body: '#33C6F4', lit: '#B0EBFF' },
+  eight: { body: '#101010', lit: '#5A5A5A' },
+  cue: { body: '#F7EFCB', lit: '#FFFFFF' },
+};
+const CUE_HALO = 'rgba(125, 194, 66, 0.45)';   // "this ball is yours to hit", said without a word
+const POT_BURST_MS = 520;                      // the ring that bursts out of a pocket on a pot
+
+/** `#RRGGBB` + alpha -> `rgba(...)`. Canvas does accept 8-digit hex, but building the string by
+ *  concatenation ('#FFF' + '00') silently produces garbage for any short form, so parse instead. */
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 
 function loadSettings() {
   try {
@@ -507,8 +540,6 @@ class PoolUI {
         </div>
         <div class="p2-table-wrap" data-role="table-wrap">
           <canvas data-role="canvas"></canvas>
-          <div class="p2-rail-glow p2-rail-near" data-role="rail-near"></div>
-          <div class="p2-rail-glow p2-rail-far" data-role="rail-far"></div>
           <div class="p2-foul-slot" data-role="foul-slot"></div>
         </div>
         <!-- The control row is wordless too. SPIN / POWER / RAISE CUE were captions over three
@@ -580,7 +611,14 @@ class PoolUI {
     this.canvas.style.height = rect.height + 'px';
     this._dpr = dpr;
     this._cw = rect.width; this._ch = rect.height;
-    this._scale = Math.min(this._cw / TABLE.w, this._ch / TABLE.h) * 0.9;
+    // 0.88, not 0.9: _drawTable now draws the wood frame and cushion band OUTWARD from the cloth
+    // (reference/pool/SPEC.md), so _scale (which sizes the CLOTH) has to leave room for the
+    // furniture around it. The reference deliberately runs its WOOD off both side edges of the
+    // screen and only guarantees the cushion is visible, so the width constraint is cloth+cushion
+    // (1.09 cloth units) while the height constraint is the whole box (2.239). Worked through,
+    // TABLE.h / 2.239 = 0.885 is the tighter of the two as a single factor, and it is exact on the
+    // axis that actually binds on a portrait phone.
+    this._scale = Math.min(this._cw / TABLE.w, this._ch / TABLE.h) * 0.88;
     this._drawFrame();
   }
 
@@ -654,29 +692,71 @@ class PoolUI {
     ctx.clearRect(0, 0, this._cw, this._ch);
     this._drawTable(ctx);
     if (this.game) this._drawBalls(ctx);
+    this._drawPotBursts(ctx);
     if (this._placingCue) this._drawBallInHand(ctx);
     if (this._aiming && !this._placingCue) this._drawAimLine(ctx);
     ctx.restore();
     this._paintPowerMeter();
   }
 
+  /** The table, cloned from the reference (reference/pool/SPEC.md). Four rounded rectangles inset
+   *  inside each other - black outline, warm brown wood, a bright green cushion band, then the
+   *  cloth - plus six flat black pockets sitting in mitred notches in the cushion. It replaced a
+   *  bottle-green rectangle in an almost-black frame; Matt: "these colors are so dark and are not
+   *  friendly or welcoming at all."
+   *
+   *  IMPORTANT: none of this changes the playing surface. The cloth rectangle is still exactly
+   *  TABLE.w x TABLE.h and the pockets are still at pocketCenters() - the wood and cushion are
+   *  drawn OUTWARD from the cloth's edge, into space physics.js knows nothing about. Draw them
+   *  inward and every cushion bounce would happen somewhere the player can see it should not. */
   _drawTable(ctx) {
     const hw = TABLE.w / 2, hh = TABLE.h / 2;
     const tl = this._toCanvas(-hw, -hh), br = this._toCanvas(hw, hh);
-    ctx.fillStyle = '#0b3d2e';
-    ctx.fillRect(tl.cx, tl.cy, br.cx - tl.cx, br.cy - tl.cy);
-    ctx.strokeStyle = '#3a2418';
-    ctx.lineWidth = 14;
-    ctx.strokeRect(tl.cx, tl.cy, br.cx - tl.cx, br.cy - tl.cy);
+    const x = tl.cx, y = tl.cy, w = br.cx - tl.cx, h = br.cy - tl.cy;
     const z = this._camZoom || 1;
+    // Drawn at exactly the CAPTURE radius, so the black circle you can see is the circle that
+    // actually swallows a ball. (The reference's pockets measure ~0.06 x table width; POCKET_R
+    // already works out to ~0.055, so cloning its generous pockets needed no change at all.)
+    const pr = this._scale * z * POCKET_R;
+    // Everything scales off the cloth's own width, so the proportions hold at any zoom.
+    const cushion = w * 0.05;
+    const wood = w * 0.06;
+    const round = w * 0.05;
+
+    const rrect = (rx, ry, rw, rh, r) => {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(rx, ry, rw, rh, r);
+      else ctx.rect(rx, ry, rw, rh);
+      ctx.closePath();
+    };
+    // 1. black outline, 2. wood, 3. cushion, 4. cloth - each inset inside the last
+    ctx.fillStyle = TABLE_ART.outline;
+    rrect(x - wood - cushion - w * 0.012, y - wood - cushion - w * 0.012,
+      w + 2 * (wood + cushion + w * 0.012), h + 2 * (wood + cushion + w * 0.012), round * 1.3);
+    ctx.fill();
+    ctx.fillStyle = TABLE_ART.wood;
+    rrect(x - wood - cushion, y - wood - cushion, w + 2 * (wood + cushion), h + 2 * (wood + cushion), round * 1.15);
+    ctx.fill();
+    ctx.fillStyle = TABLE_ART.cushion;
+    rrect(x - cushion, y - cushion, w + 2 * cushion, h + 2 * cushion, round);
+    ctx.fill();
+    ctx.fillStyle = TABLE_ART.cushionLit;   // bevel: a lighter sliver along the cushion's inner lip
+    rrect(x - cushion * 0.55, y - cushion * 0.55, w + cushion * 1.1, h + cushion * 1.1, round * 0.8);
+    ctx.fill();
+    ctx.fillStyle = TABLE_ART.cloth;
+    rrect(x, y, w, h, round * 0.5);
+    ctx.fill();
+
+    // The pockets, and the cushion's mitre around each one. The reference chamfers the cushion
+    // away from every pocket rather than running it straight in, which is what stops the rail
+    // reading as a plain green border.
     for (const p of pocketCenters()) {
       const c = this._toCanvas(p.x, p.y);
-      const pr = this._scale * z * R * 1.9;
-      const grad = ctx.createRadialGradient(c.cx, c.cy, pr * 0.15, c.cx, c.cy, pr);
-      grad.addColorStop(0, '#000');
-      grad.addColorStop(0.7, '#0a0a0a');
-      grad.addColorStop(1, '#2a2a2a');
-      ctx.fillStyle = grad;
+      ctx.fillStyle = TABLE_ART.cloth;
+      ctx.beginPath();
+      ctx.arc(c.cx, c.cy, pr * 1.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = TABLE_ART.pocket;
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, pr, 0, Math.PI * 2);
       ctx.fill();
@@ -691,80 +771,69 @@ class PoolUI {
     return legal;
   }
 
+  /** The balls, cloned from the reference (reference/pool/SPEC.md): four flat colours, one soft
+   *  highlight blob each, a thin dark outline, and NO NUMBERS. See BALL_ART for why coral/cyan is
+   *  the right pair rather than the fifteen-colour set it replaced. */
   _drawBalls(ctx) {
     const legal = this._legalNumbersForLocal();
     const z = this._camZoom || 1;
-    // A ring means "this one is yours to hit." While the table is still OPEN both groups are legal
-    // (rules.js's legalTarget returns kinds: ['solid','stripe']), so ringing them says nothing at
-    // all and just buries the whole rack in yellow - which is exactly how the break screen looked.
-    // Mark only once the marking carries information: one group is mine, or the 8 is the target.
-    const markLegal = !!legal && !this.game.openTable;
+    // The ring marks a legal target -- but since the reference's own colour coding took over
+    // (your group is coral, theirs cyan, BALL_ART), the ball's colour already answers "is this
+    // one mine" for every ball except ONE. So the ring is now reserved for exactly that case: the
+    // moment your group is cleared and the black 8 becomes the ball to shoot at. Ringing anything
+    // else repeats what the colour just said, and ringing them all (which is what happened on the
+    // break, when both groups are legal) says nothing at all.
+    const markLegal = !!legal && !this.game.openTable && !!legal.allowEight;
     for (const b of this.game.balls) {
       if (b.pocketed) continue;
       const c = this._toCanvas(b.x, b.y);
       const rad = this._scale * z * R;
-      const isLegal = markLegal && legal && legal.kinds && (legal.kinds.indexOf(b.kind) >= 0 || (b.kind === 'eight' && legal.allowEight));
+      const art = BALL_ART[b.kind] || BALL_ART.solid;
+
+      // The cue ball wears a soft green halo while it is yours to shoot -- the reference's own
+      // wordless "this one", and the thing that stops a cream ball vanishing into a bright cloth.
+      if (b.kind === 'cue' && this._canShootNow() && !this._placingCue) {
+        ctx.fillStyle = CUE_HALO;
+        ctx.beginPath();
+        ctx.arc(c.cx, c.cy, rad * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const isLegal = markLegal && b.kind === 'eight';
       if (isLegal) {
         ctx.beginPath();
-        ctx.arc(c.cx, c.cy, rad + 2.5, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffce3a';
-        ctx.lineWidth = 2.5;
+        ctx.arc(c.cx, c.cy, rad + Math.max(2, rad * 0.28), 0, Math.PI * 2);
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = Math.max(1.6, rad * 0.16);
         ctx.stroke();
       }
-      ctx.save();
+
+      ctx.fillStyle = art.body;
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, rad, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      if (b.kind === 'cue') {
-        ctx.fillStyle = '#f4f1e8';
-        ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-      } else if (b.kind === 'eight') {
-        ctx.fillStyle = '#111';
-        ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-      } else if (b.kind === 'solid') {
-        ctx.fillStyle = BALL_COLOR[b.number];
-        ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-      } else {
-        ctx.fillStyle = '#f4f1e8';
-        ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-        ctx.fillStyle = BALL_COLOR[b.number];
-        ctx.fillRect(c.cx - rad, c.cy - rad * 0.55, rad * 2, rad * 1.1);
-      }
-      // A soft highlight so balls read as spheres, not flat colored discs.
-      const hg = ctx.createRadialGradient(
-        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 0.05,
-        c.cx - rad * 0.35, c.cy - rad * 0.4, rad * 1.3,
-      );
-      hg.addColorStop(0, 'rgba(255,255,255,0.55)');
-      hg.addColorStop(0.35, 'rgba(255,255,255,0.12)');
-      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fill();
+      // ONE highlight blob up and to the left, not a full gradient sweep across the sphere.
+      const hx = c.cx - rad * 0.34, hy = c.cy - rad * 0.36;
+      const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, rad * 0.72);
+      hg.addColorStop(0, rgba(art.lit, 0.95));
+      hg.addColorStop(0.55, rgba(art.lit, 0));
+      hg.addColorStop(1, rgba(art.lit, 0));
       ctx.fillStyle = hg;
-      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-      const sg = ctx.createRadialGradient(
-        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 0.1,
-        c.cx + rad * 0.4, c.cy + rad * 0.5, rad * 1.2,
-      );
-      sg.addColorStop(0, 'rgba(0,0,0,0.22)');
-      sg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = sg;
-      ctx.fillRect(c.cx - rad, c.cy - rad, rad * 2, rad * 2);
-      ctx.restore();
       ctx.beginPath();
       ctx.arc(c.cx, c.cy, rad, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(c.cx, c.cy, rad, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+      ctx.lineWidth = Math.max(1, rad * 0.09);
       ctx.stroke();
-      if (b.kind !== 'cue') {
-        ctx.beginPath();
-        ctx.arc(c.cx, c.cy, rad * 0.42, 0, Math.PI * 2);
-        ctx.fillStyle = '#f4f1e8';
-        ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.font = `bold ${Math.max(8, rad * 0.5)}px system-ui, sans-serif`;
+      // The 8 is the one ball that still carries a mark, because it is the one ball whose IDENTITY
+      // changes what a shot means. The reference keeps it too.
+      if (b.kind === 'eight') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${Math.max(7, rad * 0.85)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(b.number), c.cx, c.cy + 0.5);
+        ctx.fillText('8', c.cx, c.cy + rad * 0.04);
       }
     }
   }
@@ -962,12 +1031,17 @@ class PoolUI {
       this._paintGroup('[data-role="grp-me"]', this.game.groups[mySeat]);
       this._paintGroup('[data-role="grp-opp"]', this.game.groups[1 - mySeat]);
     }
-    const near = this.el.querySelector('[data-role="rail-near"]');
-    const far = this.el.querySelector('[data-role="rail-far"]');
-    if (near && far) {
-      near.classList.toggle('is-lit', this._isMySeat(this.game.turnSeat));
-      far.classList.toggle('is-lit', !this._isMySeat(this.game.turnSeat));
-    }
+    // THE WHOLE SCREEN IS THE TURN INDICATOR. The reference paints the area around the table warm
+    // salmon on your shot and sky blue on theirs -- the same two hues as the players themselves.
+    // It is unmissable, it needs no caption, and it is the single strongest idea in the reference
+    // screenshots (reference/pool/SPEC.md). Practice mode has no opponent, so it stays on yours.
+    const myShot = this.mode === 'practice' || (!this.game.over && this._isMySeat(this.game.turnSeat));
+    // On .p2-root (this.el), NOT the hub's container (this.root): the hub's back-button clearance
+    // is padding on .p2-root, so its own background is what fills that band. Colouring the outer
+    // container instead would leave a strip of hub grey above the table on every turn.
+    this.el.classList.toggle('p2-turn-mine', myShot);
+    this.el.classList.toggle('p2-turn-theirs', !myShot);
+
     const slot = this.el.querySelector('[data-role="foul-slot"]');
     if (slot) {
       slot.innerHTML = this._foulMsg
@@ -1261,7 +1335,46 @@ class PoolUI {
     }
   }
 
+  /** The reference bursts a ring out of the pocket a ball just dropped into, in the colour of the
+   *  group that scored. It is the only "you did it" feedback in the whole game and it needs no
+   *  word. Recorded here, drawn by _drawPotBursts; the pocket is found from the ball's own frozen
+   *  capture position, since physics.js's event log names the ball but not the pocket. */
+  _notePots(events) {
+    if (!events || !events.pocketed || !events.pocketed.length) return;
+    const now = performance.now();
+    this._potBursts = (this._potBursts || []).filter((b) => now - b.t0 < POT_BURST_MS);
+    for (const id of events.pocketed) {
+      const ball = ballById(this.game.balls, id);
+      if (!ball) continue;
+      let best = null, bestD = Infinity;
+      for (const p of pocketCenters()) {
+        const d = (p.x - ball.x) ** 2 + (p.y - ball.y) ** 2;
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (best) this._potBursts.push({ x: best.x, y: best.y, kind: ball.kind, t0: now });
+    }
+  }
+
+  _drawPotBursts(ctx) {
+    if (!this._potBursts || !this._potBursts.length) return;
+    const now = performance.now();
+    this._potBursts = this._potBursts.filter((b) => now - b.t0 < POT_BURST_MS);
+    const z = this._camZoom || 1;
+    for (const burst of this._potBursts) {
+      const k = (now - burst.t0) / POT_BURST_MS;              // 0 -> 1
+      const c = this._toCanvas(burst.x, burst.y);
+      const art = BALL_ART[burst.kind] || BALL_ART.cue;
+      const r0 = this._scale * z * POCKET_R;
+      ctx.strokeStyle = rgba(art.body, 0.85 * (1 - k));
+      ctx.lineWidth = Math.max(2, r0 * 0.3 * (1 - k));
+      ctx.beginPath();
+      ctx.arc(c.cx, c.cy, r0 * (1 + k * 1.5), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   _settleLocal(events, seat) {
+    this._notePots(events);
     if (this.mode === 'practice') {
       this._foulMsg = null;
       // Practice never runs rules.resolveShot, so the scratch scrub that un-pockets the

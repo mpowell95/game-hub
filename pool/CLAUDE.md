@@ -153,6 +153,58 @@ to `{zoom: 1, pan: {0,0}}` at the start of every new game (solo start, practice 
 round record) so nobody starts a fresh rack still zoomed in on the last one. `_toCanvas`/`_toWorld`
 fold zoom/pan in centrally, so drawing, aiming and cue placement never special-case the camera.
 
+## THE PALETTE IS A CLONE (2026-08-10) — `reference/pool/SPEC.md` is the source, not taste
+
+Matt, with four screenshots of a friendly mobile 8-ball game attached: *"Gameplay seems good. Just
+make it friendlier. These colors are so dark and are not friendly or welcoming at all... See how
+much friendlier the attached photos are?? Copy this style. Make ours a clone."*
+
+**Read `reference/pool/SPEC.md` before changing any colour in this game.** Every value in
+`TABLE_ART` / `BALL_ART` (ui.js) and every `--p2-*` token (pool.css) was sampled off those
+screenshots. What went, and what replaced it:
+
+| Was | Is | Why |
+|---|---|---|
+| `#12100d` page, black surround | a saturated pastel behind the table | nothing on screen is near-black any more; that alone is most of "friendlier" |
+| `#3a2418` almost-black rail | `#8C5A3F` warm brown wood + a `#3FBE63` cushion band | drawn on the CANVAS now, not as a CSS background |
+| `#0b3d2e` bottle-green cloth | `#0F8A3C` | |
+| fifteen numbered balls, solids and stripes | four colours: coral, cyan, black 8, cream cue | see below |
+| a charcoal mode card | a cream one | a dark card is the one heavy object on a bright screen |
+
+**The background colour IS the turn indicator, and it is the best idea in the reference.** The
+surround is warm salmon (`--p2-mine`) on your shot and sky blue (`--p2-theirs`) on theirs, eased
+over 0.35s, toggled by `_paintHud` as `.p2-turn-mine` / `.p2-turn-theirs`. It is the same pair of
+hues as the players themselves, it cannot be missed, and it needs no caption. **It goes on
+`this.el` (`.p2-root`), never on `this.root`** — the hub's back-button clearance is padding on
+`.p2-root`, so colouring the outer container would leave a strip of hub grey above the table. The
+old yellow near/far rail glows were deleted outright rather than left saying the same thing more
+quietly in a third colour.
+
+**Four ball colours, not fifteen, and it is colourblind-SAFE.** One group is coral `#F2604C`, the
+other cyan `#33C6F4`; there are no numbers and no stripes. "Which ones are mine" is the only
+question a player asks a ball, and the colour now answers it, which is why the yellow legal-target
+ring is down to exactly one case: your group is cleared and the 8 is the target. The old palette
+put a `#D0342C` red and a `#1E7A46` green in the same rack — the red/green axis this repo's
+shape-plus-hue rule exists for (Matt is red/green colourblind). Coral against cyan is the axis that
+survives, so hue alone is safe HERE in a way it was not before. Do not "restore" numbered balls to
+tell the groups apart; that is solving a problem the colour change removed.
+
+**The wood and cushion are drawn OUTWARD from the cloth rectangle** (`_drawTable`). The cloth is
+still exactly `TABLE.w x TABLE.h` and the pockets are still at `pocketCenters()` — physics knows
+nothing about the furniture. Draw the frame inward instead and every cushion bounce happens
+somewhere the player can see it should not. This is why `_resizeCanvas`'s fit factor is 0.88 and
+not 0.9: `_scale` sizes the CLOTH, and the drawn box is 1.248 x 2.239 in cloth units. The pockets
+are drawn at exactly `POCKET_R`, the capture radius, so the black circle you can see is the circle
+that actually swallows a ball.
+
+Two wordless feedbacks were taken from the reference along with the palette: a soft green halo
+round the cue ball while it is yours to shoot, and a ring bursting out of the pocket a ball just
+dropped into, in the colour of the group that scored (`_notePots` / `_drawPotBursts`).
+
+**What the reference does NOT cover:** all four screenshots are the play screen, mid-game. Its
+setup screen, win overlay and controls have never been seen. The mode screen and the control row
+here are our own work in the reference's palette — do not call them a clone.
+
 ## NO WORDS DURING PLAY (2026-08-08 — a hard rule for this game, not a preference)
 
 Matt, looking at the game screen: *"Get rid of the words on the top of the screen. No word
@@ -292,6 +344,8 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 
 - Camera is top-down, with pinch-zoom/pan (2026-07-28); no 3D perspective at all, on purpose (see
   "no tilted camera" above) — the physics coordinate system never rotates or moves.
+- The reference's own setup screen, win overlay and controls were never supplied, so those screens
+  are our own design in its palette, not a clone (see "THE PALETTE IS A CLONE" above).
 - No shot clock, no jump shots (elevation currently only drives curve/masse, not an actual
   vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above. These
   are deliberate (BUILD-SPEC.md §6 #12): if wanted, they belong in a second named rulebook, not

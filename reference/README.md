@@ -33,6 +33,17 @@ reference/<game>/SPEC.md   measurements taken off them, in fractions, not pixels
 Name files for the state they show, not the order they arrived: `battle-shot-in-flight.png`,
 not `IMG_4821.png`. A session skimming filenames should be able to tell which screen is which.
 
+**Two `SPEC.md` files exist so far and neither has its images yet** (`battleship/`, `pool/`) —
+both sets arrived as chat attachments, which a session receives as content, not as files it can
+write to disk. Both were converted to measurements the same session they were seen, which is the
+fallback the last paragraph of this file describes. Dropping the PNGs in beside them is a
+one-command job for Matt and closes the loop permanently.
+
+**A `SPEC.md` is not a style opinion, it is a citation.** Pool's palette was rebuilt off
+`pool/SPEC.md`; a later session that dislikes salmon and quietly darkens it has not made a design
+choice, it has un-done an instruction. If a spec looks wrong, the fix is a new screenshot, not a
+new hex code.
+
 ## If you are a session about to do visual work
 
 1. **`ls reference/<game>/` and open every image, before you write a line of code.** If the folder
