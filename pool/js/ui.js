@@ -34,12 +34,27 @@ import { mulberry32 } from './rng.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+// Inline glyphs for the mode buttons. Drawn here, like Battleship's, rather than as emoji so
+// they take currentColor and sit on the text baseline at any size.
+const BOT_GLYPH = `<svg class="p2-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <rect x="4" y="8" width="16" height="11" rx="3"/><rect x="11" y="3" width="2" height="4"/><circle cx="12" cy="3" r="1.6"/>
+  <circle cx="9" cy="13" r="1.7" fill="#231c05"/><circle cx="15" cy="13" r="1.7" fill="#231c05"/><rect x="9" y="16" width="6" height="1.4" rx=".7" fill="#231c05"/>
+</svg>`;
+const PERSON_GLYPH = `<svg class="p2-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <circle cx="12" cy="7.5" r="3.8"/><path d="M4.5 20c0-4.1 3.4-6.5 7.5-6.5S19.5 15.9 19.5 20z"/>
+</svg>`;
+const CUE_GLYPH = `<svg class="p2-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <circle cx="8" cy="16" r="4.2" fill="currentColor"/><path d="M12.6 13.2 21 4.4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+</svg>`;
+const DIFFS = ['beginner', 'intermediate', 'pro'];
+
 const SETTINGS_KEY = 'gamehub.poolv2.v1';
 const SAVE_KEY = 'gamehub.poolv2.save.v1';
 const MP_SAVE_KEY = 'gamehub.poolv2.mp.v1';
@@ -185,9 +200,18 @@ class PoolUI {
     div.className = 'p2-root';
     this.root.appendChild(div);
     this.el = div;
+    // The hub's ~98px of back-button clearance becomes padding on this root (_fitToHost), so the
+    // root's own background is what shows up there. On the mode screen that must be felt, or the
+    // game starts with a black band above it and the floating "< Hub" pill sits on nothing.
+    div.classList.toggle('p2-on-felt', this.view === 'setup');
     if (this.view === 'setup') this._renderSetup();
     else this._renderGame();
+    // Twice, and the second one matters: the first pass runs before the browser has finished
+    // laying this screen out, so it can measure a gap that is about to stop existing and pull the
+    // whole game 21px off the top of the page. Same class of mistake as reading the pool autosave
+    // before the balls settled - measure after the thing you are measuring has stopped moving.
     this._fitToHost();
+    requestAnimationFrame(() => { if (!this._dead) this._fitToHost(); });
   }
 
   /** Fit the game to what is ACTUALLY on screen, not to what the viewport says.
@@ -244,51 +268,82 @@ class PoolUI {
     el.style.paddingTop = px(up);
   }
 
+  /** The mode screen, rebuilt 2026-08-08. It was three identical rows of grey pills on a black
+   *  background with the primary action the same size and the same yellow as the chips above it,
+   *  and better than half the screen empty. Matt: "I don't like how this looks."
+   *
+   *  Built to the pattern Battleship already sets, which is the best one in the hub: a coloured
+   *  header panel carrying the name and one line of what the game is, a card riding over it with
+   *  the opponent's face on it, the difficulty spelled out with its slider, and then ONE dominant
+   *  action. Pool's own identity comes from the palette - felt green and rail wood instead of
+   *  Battleship's navy - not from a different layout.
+   *
+   *  The difficulty shape marker is NOT decoration: pairing every hue with a shape is a repo-wide
+   *  rule (root CLAUDE.md, accessibility - Matt is red/green colorblind) and this screen was
+   *  breaking it, showing difficulty as words alone. */
   _renderSetup() {
     const savedMp = readJSON(MP_SAVE_KEY);
-    this.el.innerHTML = `
-      <div class="p2-setup">
-        <h1 class="p2-title">${t('title')}</h1>
-        <p class="p2-tagline">${t('tagline')}</p>
-        <div class="p2-row">
-          <div class="p2-label">${t('mode')}</div>
-          <div class="p2-seg" data-role="mode">
-            <button type="button" data-v="ai" class="${this.mode === 'ai' ? 'is-active' : ''}">${t('mode_ai')}</button>
-            <button type="button" data-v="practice" class="${this.mode === 'practice' ? 'is-active' : ''}">${t('mode_practice')}</button>
-            <button type="button" data-v="online" class="${this.mode === 'online' ? 'is-active' : ''}">${t('mode_online')}</button>
-          </div>
-        </div>
-        <div class="p2-row" data-if="ai" style="${this.mode === 'ai' ? '' : 'display:none'}">
-          <div class="p2-label">${t('difficulty')}</div>
-          <div class="p2-seg" data-role="diff">
-            ${['beginner', 'intermediate', 'pro'].map((d) => `<button type="button" data-v="${d}" class="${this.settings.difficulty === d ? 'is-active' : ''}">${t('diff_' + d)}</button>`).join('')}
-          </div>
-        </div>
-        <div class="p2-online" data-if="online" style="${this.mode === 'online' ? '' : 'display:none'}">
+    const opp = (this.profile && this.profile.opponents && this.profile.opponents[0]) || null;
+    const oppName = (opp && opp.name) || t('mode_ai');
+    const oppEmoji = (opp && opp.emoji) || '\u{1F916}';
+    const di = Math.max(0, DIFFS.indexOf(this.settings.difficulty));
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    // "Play vs. friend" swaps the card for the room lobby rather than revealing a fourth row -
+    // same call Battleship makes, and it keeps one job on screen at a time.
+    const lobby = this.mode === 'online' ? `
+      <div class="p2-modecard">
+        <div class="p2-lobby-title">${t('mode_online')}</div>
+        <div class="p2-online" data-if="online">
           ${savedMp ? `<button type="button" class="p2-btn" data-role="rejoin">${t('rejoin')}</button>` : ''}
-          <button type="button" class="p2-btn" data-role="create-room">${t('create_room')}</button>
+          <button type="button" class="p2-btn p2-btn-primary" data-role="create-room">${t('create_room')}</button>
           <div class="p2-joinrow">
             <input type="text" maxlength="4" placeholder="${t('enter_code')}" data-role="code-input" class="p2-code-input">
             <button type="button" class="p2-btn" data-role="join-room">${t('join_room')}</button>
           </div>
           <div class="p2-mp-status" data-role="mp-status"></div>
         </div>
-        <div class="p2-actions">
-          <button type="button" class="p2-btn p2-btn-primary" data-role="start" ${this.mode === 'online' ? 'disabled' : ''}>${t('start')}</button>
-          <button type="button" class="p2-btn p2-btn-ghost" data-role="howto">${t('howto')}</button>
+        <button type="button" class="p2-link" data-role="mode-back">${t('mode_ai')} \u2039</button>
+      </div>` : `
+      <div class="p2-modecard">
+        <div class="p2-avatar" aria-hidden="true">${esc(oppEmoji)}</div>
+        <div class="p2-avatar-name">${esc(oppName)}</div>
+        <div class="p2-diffname">${diffShapeSVG(tierOf(this.settings.difficulty))}${esc(t('diff_' + this.settings.difficulty))}</div>
+        <div class="p2-slider-wrap">
+          <input class="p2-slider" type="range" min="0" max="2" step="1" value="${di}"
+            data-role="diff-slider" aria-label="${esc(t('difficulty'))}">
+          <div class="p2-slider-stops">${DIFFS.map((d, i) =>
+            `<span class="p2-slider-stop ${i === di ? 'is-on' : ''}">${esc(t('diff_' + d))}</span>`).join('')}</div>
         </div>
+        <button type="button" class="p2-bigbtn p2-bigbtn-ai" data-role="start-ai">${BOT_GLYPH}${esc(t('mode_ai'))}</button>
+        <button type="button" class="p2-bigbtn p2-bigbtn-friend" data-role="go-online">${PERSON_GLYPH}${esc(t('mode_online'))}</button>
+        <button type="button" class="p2-bigbtn p2-bigbtn-practice" data-role="start-practice">${CUE_GLYPH}${esc(t('mode_practice'))}</button>
+        <button type="button" class="p2-link" data-role="howto">${t('howto')}</button>
       </div>`;
-    this.el.querySelector('[data-role="mode"]').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      this.mode = b.dataset.v; this._renderSetup();
+
+    this.el.innerHTML = `
+      <div class="p2-setup">
+        <div class="p2-headerpanel">
+          <h1 class="p2-title">${t('title')}</h1>
+          <p class="p2-sub">${t('tagline')}</p>
+        </div>
+        ${lobby}
+      </div>`;
+
+    const on = (role, fn) => { const el = this.el.querySelector(`[data-role="${role}"]`); if (el) el.addEventListener('click', fn); };
+    on('start-ai', () => { this.mode = 'ai'; this._startLocalGame(); });
+    on('start-practice', () => { this.mode = 'practice'; this._startLocalGame(); });
+    on('go-online', () => { this.mode = 'online'; this._renderSetup(); });
+    on('mode-back', () => { this.mode = 'ai'; this._renderSetup(); });
+    const slider = this.el.querySelector('[data-role="diff-slider"]');
+    if (slider) slider.addEventListener('input', () => {
+      this.settings.difficulty = DIFFS[Math.max(0, Math.min(2, +slider.value))];
+      saveSettings(this.settings);
+      this._renderSetup();
+      const again = this.el.querySelector('[data-role="diff-slider"]');
+      if (again) again.focus({ preventScroll: true });
     });
-    const diffRow = this.el.querySelector('[data-role="diff"]');
-    if (diffRow) diffRow.addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      this.settings.difficulty = b.dataset.v; saveSettings(this.settings); this._renderSetup();
-    });
-    this.el.querySelector('[data-role="start"]').addEventListener('click', () => this._startLocalGame());
-    this.el.querySelector('[data-role="howto"]').addEventListener('click', () => this._openHelp());
+    on('howto', () => this._openHelp());
     const createBtn = this.el.querySelector('[data-role="create-room"]');
     if (createBtn) createBtn.addEventListener('click', () => this._mpCreateRoom());
     const joinBtn = this.el.querySelector('[data-role="join-room"]');

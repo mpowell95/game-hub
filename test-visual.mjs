@@ -250,8 +250,8 @@ const PLAY = {
   pool: {
     what: 'break the rack, then get a shot back from the computer',
     async run(page, cdp, tap) {
-      const start = await page.$('button:has-text("Start game")');
-      if (!start) return { ok: false, why: 'no Start game button on the setup screen' };
+      const start = await page.$('[data-role="start-ai"]');
+      if (!start) return { ok: false, why: 'no "vs. computer" button on the mode screen' };
       await tap(start);
       await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
       await page.waitForTimeout(1200);
@@ -399,10 +399,23 @@ async function checkGame(game, mode) {
         const b = e.getBoundingClientRect(), c = getComputedStyle(e);
         return b.width > 2 && b.height > 2 && c.visibility !== 'hidden' && c.display !== 'none' && +c.opacity > 0.01;
       }).length;
+      // "The page doesn't scroll sideways" is NOT the same as "nothing is cut off". An ancestor
+      // with overflow:hidden absorbs the overflow, so the body stays put while the content is
+      // silently clipped - which is exactly how a mode screen with its buttons and half its
+      // tagline sliced off the right edge passed this suite. Look for the clipping too.
+      const clipped = [];
+      for (const e of document.querySelectorAll('body *')) {
+        const c = getComputedStyle(e);
+        if (!/hidden|auto|scroll|clip/.test(c.overflowX)) continue;
+        if (e.scrollWidth > e.clientWidth + 2 && e.clientWidth > 0) {
+          clipped.push(`${e.tagName.toLowerCase()}.${(e.className || '').toString().trim().split(/\s+/)[0] || '?'} (${e.scrollWidth} wide in ${e.clientWidth})`);
+        }
+      }
       return {
         painted,
         scrollW: document.documentElement.scrollWidth,
         clientW: document.documentElement.clientWidth,
+        clipped: clipped.slice(0, 3),
       };
     });
 
@@ -416,7 +429,8 @@ async function checkGame(game, mode) {
     // 2. the body must never scroll sideways (root CLAUDE.md, "Scroll and touch rules"). Wide
     //    content is allowed, but it has to scroll inside its own container.
     if (seen.scrollW > seen.clientW + 2) failUnlessKnown(game, mode.name, 'no horizontal page scroll', `body scrolls sideways (${seen.scrollW} > ${seen.clientW})`);
-    else ok(game, mode.name, 'no horizontal page scroll');
+    else if (seen.clipped.length) failUnlessKnown(game, mode.name, 'no horizontal page scroll', `content is CUT OFF sideways inside ${seen.clipped.join('; ')}`);
+    else ok(game, mode.name, 'nothing cut off or scrolling sideways');
 
     // 3. a game that throws on mount is a game nobody can play
     if (errors.length) fail(game, mode.name, `JS error on mount: ${errors[0]}`);
@@ -577,7 +591,7 @@ async function checkFit(game) {
         }
         await page.waitForTimeout(900);
         // Get INTO the game where possible - a setup screen is not the layout that overflows.
-        for (const sel of ['button:has-text("Start game")', '[data-action="play-bot"]', '[data-action="start"]']) {
+        for (const sel of ['[data-role="start-ai"]', 'button:has-text("Start game")', '[data-action="play-bot"]', '[data-action="start"]']) {
           const el = await page.$(sel);
           if (el) { const b2 = await el.boundingBox(); if (b2) { await page.touchscreen.tap(b2.x + b2.width / 2, b2.y + b2.height / 2); break; } }
         }
