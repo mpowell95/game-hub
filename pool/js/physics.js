@@ -17,21 +17,17 @@ export const R = 0.028575;          // ball radius (m) - standard 57.15mm diamet
 export const BALL_D = 2 * R;
 export const G = 9.81;
 
-// Table: a 6-ft "bar box" playing surface, 36in x 72in (0.9144m x 1.8288m) — the
-// visual rebuild's TABLE change (HANDOFF-POOL-VISUAL-REBUILD.md §5, 2026-07-29).
-// The build spec's ballRadius = feltW/64 forces a 6-ft box at regulation ball size
-// (64R = 1.8288m exactly); the table was previously modeled as a 7-ft box (78in),
-// which rendered balls ~8% small against the reference. Still exactly 2:1, still
-// SI meters, physics model untouched — only these two constants moved.
+// Table: a 7-ft "bar box" playing surface, 39in x 78in (0.9906m x 1.9812m) — the
+// common ratio-2:1 size, good for a mobile screen. Cushion (rail) face sits at the
+// playing-surface edge; pockets are capture circles at the 6 standard positions.
 export const TABLE = {
-  w: 0.9144,
-  h: 1.8288,
+  w: 0.9906,
+  h: 1.9812,
 };
-export const POCKET_R = R * 1.9;        // corner pocket capture radius (spec §8.4)
-export const POCKET_R_SIDE = R * 2.05;  // side pocket capture radius, wider (spec §8.4)
-// Corner pockets are cut on a diagonal, so their effective mouth center is pulled
-// slightly outside the true corner; jaw radius nudges the capture point inward.
-export const CORNER_JAW = R * 0.9;
+export const POCKET_R = R * 1.9;   // capture radius at each pocket center
+// Note: corner pockets use the same plain capture circle as side pockets. Real
+// corner pockets are cut on a diagonal with a narrower effective mouth (the "jaw"),
+// which is a known fidelity gap (BUILD-SPEC §6 #11) — not modeled here.
 
 // Friction coefficients (dimensionless, published-range values):
 export const MU_SLIDE = 0.2;    // cloth sliding friction
@@ -253,16 +249,13 @@ export function reflectCushion(b, nx, ny) {
   b.moving = true;
 }
 
-/** All 6 pocket centers for TABLE, in table-local coordinates, origin at center.
- *  `side: true` marks the two pockets at the midpoints of the long rails (the
- *  x=+-hw, y=0 pair) — real side pockets have a wider mouth than the four
- *  corners (spec §8.4, POCKET_R_SIDE vs POCKET_R). */
+/** All 6 pocket centers for TABLE, in table-local coordinates, origin at center. */
 export function pocketCenters() {
   const hw = TABLE.w / 2, hh = TABLE.h / 2;
   return [
-    { x: -hw, y: -hh, side: false }, { x: hw, y: -hh, side: false },
-    { x: -hw, y: 0, side: true }, { x: hw, y: 0, side: true },
-    { x: -hw, y: hh, side: false }, { x: hw, y: hh, side: false },
+    { x: -hw, y: -hh }, { x: hw, y: -hh },
+    { x: -hw, y: 0 }, { x: hw, y: 0 },
+    { x: -hw, y: hh }, { x: hw, y: hh },
   ];
 }
 
@@ -273,17 +266,25 @@ export function isMoving(balls) {
 /** One physics tick over every live ball: integrate, resolve ball-ball collisions,
  *  cushions, and pocket capture. Returns an event log fragment for this tick:
  *  { hits: [{a,b}] (ball ids that touched), rails: number (cushion contacts this
- *  tick), pocketed: [ball ids captured this tick] } — the rules engine and AI use
- *  these to score/legalize a shot without caring about rendering. */
+ *  tick), pocketed: [ball ids captured this tick], log: [...] } — `log` is the same
+ *  three kinds of event (`{t:'hit',a,b}` / `{t:'rail',id}` / `{t:'pocket',id}`) but
+ *  in a single ORDERED sequence (hits, then rails, then pockets, matching this
+ *  function's own resolution order), so callers can ask "did X happen before Y"
+ *  within a shot — e.g. whether any rail contact came after the cue ball's first
+ *  hit, which a plain count can't answer. The rules engine and AI use these to
+ *  score/legalize a shot without caring about rendering. */
 export function tick(balls, dt) {
-  const events = { hits: [], rails: 0, pocketed: [] };
+  const events = { hits: [], rails: 0, pocketed: [], log: [] };
   const hw = TABLE.w / 2, hh = TABLE.h / 2;
   const pockets = pocketCenters();
   const live = balls.filter((b) => !b.pocketed);
   for (const b of live) stepBall(b, dt);
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
-      if (resolveBallCollision(live[i], live[j])) events.hits.push({ a: live[i].id, b: live[j].id });
+      if (resolveBallCollision(live[i], live[j])) {
+        events.hits.push({ a: live[i].id, b: live[j].id });
+        events.log.push({ t: 'hit', a: live[i].id, b: live[j].id });
+      }
     }
   }
   for (const b of live) {
@@ -293,15 +294,15 @@ export function tick(balls, dt) {
     else if (b.x + R > hw) { b.x = hw - R; reflectCushion(b, -1, 0); hitRail = true; }
     if (b.y - R < -hh) { b.y = -hh + R; reflectCushion(b, 0, 1); hitRail = true; }
     else if (b.y + R > hh) { b.y = hh - R; reflectCushion(b, 0, -1); hitRail = true; }
-    if (hitRail) events.rails++;
+    if (hitRail) { events.rails++; events.log.push({ t: 'rail', id: b.id }); }
   }
   for (const b of live) {
     if (b.pocketed) continue;
     for (const p of pockets) {
-      const pr = p.side ? POCKET_R_SIDE : POCKET_R;
-      if (len(b.x - p.x, b.y - p.y) < pr) {
+      if (len(b.x - p.x, b.y - p.y) < POCKET_R) {
         b.pocketed = true; b.vx = 0; b.vy = 0; b.wx = 0; b.wy = 0; b.wz = 0; b.moving = false;
         events.pocketed.push(b.id);
+        events.log.push({ t: 'pocket', id: b.id });
         break;
       }
     }
@@ -316,13 +317,14 @@ export function tick(balls, dt) {
  *  no rendering in between — same function, same result either way. */
 export function simulateToRest(balls, dt = 1 / 240, maxSeconds = 20) {
   let t = 0;
-  const allEvents = { hits: [], rails: 0, pocketed: [] };
+  const allEvents = { hits: [], rails: 0, pocketed: [], log: [] };
   while (t < maxSeconds) {
     if (!isMoving(balls)) break;
     const ev = tick(balls, dt);
     allEvents.hits.push(...ev.hits);
     allEvents.rails += ev.rails;
     allEvents.pocketed.push(...ev.pocketed);
+    allEvents.log.push(...ev.log);
     t += dt;
   }
   return allEvents;

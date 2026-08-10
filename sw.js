@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v272';
+const CACHE = 'game-hub-v273';
 
 const ASSETS = [
   './',
@@ -212,31 +212,22 @@ const ASSETS = [
   './uno/js/ai.js',
   './uno/js/strings.js',
   // Yahtzee module
+  './pool/css/pool.css',
+  './pool/index.html',
+  './pool/js/ai.js',
+  './pool/js/hash.js',
+  './pool/js/physics.js',
+  './pool/js/rng.js',
+  './pool/js/rules.js',
+  './pool/js/strings.js',
+  './pool/js/table.js',
+  './pool/js/ui.js',
+  './pool/js/worker.js',
   './yahtzee/',
   './yahtzee/index.html',
   './yahtzee/css/yahtzee.css',
   './yahtzee/js/ui.js',
   './yahtzee/js/hash.js',
-  './pool/index.html',
-  './pool/css/pool.css',
-  './pool/js/ui.js',
-  './pool/js/physics.js',
-  './pool/js/table.js',
-  './pool/js/rules.js',
-  './pool/js/ai.js',
-  './pool/js/hash.js',
-  './pool/js/strings.js',
-  './poolv2/index.html',
-  './poolv2/css/poolv2.css',
-  './poolv2/js/ui.js',
-  './poolv2/js/physics.js',
-  './poolv2/js/table.js',
-  './poolv2/js/rules.js',
-  './poolv2/js/ai.js',
-  './poolv2/js/hash.js',
-  './poolv2/js/strings.js',
-  './poolv2/js/rng.js',
-  './poolv2/js/worker.js',
   // Battleship (2026-08-04). Note test.js is deliberately NOT listed: it is a node-only engine
   // suite, never loaded by the page (same convention as every other game's test file).
   './battleship/',

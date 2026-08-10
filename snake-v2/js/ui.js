@@ -4,7 +4,7 @@
 // ------------
 // A devOnly: true copy of Snake whose CHROME is rebuilt on the shared primitives, so the new
 // design can be held side by side against the real Snake on a real phone. Precedent for a
-// parallel version living beside the original: poolv2/ next to pool/.
+// parallel version living beside the original: a v2 folder next to the original.
 //
 // WHAT IT SHARES WITH THE REAL SNAKE, AND WHY
 // -------------------------------------------

@@ -33,7 +33,7 @@ const MAX_SEATS = 8;
 // `maxSeats`, and leaves `host`/`guest` populated exactly as before (seat 0
 // mirrors to `host`, seat 1 to `guest`) so a room is still legible to the
 // 2-seat readers in every other game. No existing signature changed meaning,
-// so escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/, poolv2/
+// so escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/
 // and boggle/ needed zero edits for this.
 //
 // Two genuine 3+-seat CORRECTNESS problems are fixed here, neither of which

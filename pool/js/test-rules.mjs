@@ -6,6 +6,15 @@
 // events.pocketed/events.rails, never physics.js's actual simulation.
 import * as rules from './rules.js';
 
+// BAR RULES. This build is deliberately "Bar Rules 8-Ball" (BUILD-SPEC.md): ball-in-hand after
+// ANY foul is anywhere on the table, never behind the head string. The retired build implemented
+// the head-string restriction on a break scratch and had five assertions for it; there is no
+// `headStringRestricted` here to assert on, so those went with it. Recorded rather than deleted
+// in silence, because "the test vanished" and "the rule changed" look identical in a diff.
+const NO_HEAD_STRING_RULE = true;
+ok(NO_HEAD_STRING_RULE && rules.newGame().headStringRestricted === undefined,
+  'Bar Rules: there is no head-string restriction to test (ball-in-hand is anywhere)');
+
 let failures = 0;
 function ok(cond, msg) {
   if (cond) console.log('ok    ' + msg);
@@ -27,13 +36,11 @@ function wrongBallFoulEvents() {
   const { state: g1, outcome } = rules.resolveShot(g0, scratchEvents());
   ok(outcome.foul && outcome.foulReason === 'scratch', 'break scratch: recognized as a foul (scratch)');
   ok(g1.ballInHand === true, 'break scratch: ball-in-hand is true');
-  ok(g1.headStringRestricted === true, 'break scratch: headStringRestricted is true (spec §13.5)');
   ok(g1.broken === true, 'break scratch: broken flips to true after the first shot');
 
   // ---- 2. A scratch on a LATER shot: NOT restricted ---------------------
   const { state: g2 } = rules.resolveShot(g1, scratchEvents());
   ok(g2.ballInHand === true, 'later scratch: ball-in-hand is true');
-  ok(g2.headStringRestricted === false, 'later scratch: headStringRestricted is false (only the break scratch restricts)');
 }
 
 // ---- 3. A non-scratch foul on the break: NOT restricted -----------------
@@ -41,7 +48,6 @@ function wrongBallFoulEvents() {
   const g0 = rules.newGame();
   const { state: g1 } = rules.resolveShot(g0, { hits: [], rails: 0, pocketed: [] }); // no contact at all, foul, no scratch
   ok(g1.ballInHand === true, 'break no-contact foul: ball-in-hand is true');
-  ok(g1.headStringRestricted === false, 'break no-contact foul: headStringRestricted is false (must be a SCRATCH specifically)');
 }
 
 // ---- 4. A wrong-ball foul later in the game: NOT restricted --------------
@@ -51,7 +57,7 @@ function wrongBallFoulEvents() {
   ok(g.openTable === false && g.groups[0] === 'solid', 'group assignment happened as expected (test setup sanity)');
   const { state: g2, outcome } = rules.resolveShot(g, wrongBallFoulEvents());
   ok(outcome.foul && outcome.foulReason === 'wrong_ball', 'later wrong-ball contact: recognized as a foul');
-  ok(g2.ballInHand === true && g2.headStringRestricted === false, 'later wrong-ball foul: ball-in-hand anywhere, not restricted');
+  ok(g2.ballInHand === true, 'later wrong-ball foul: ball-in-hand');
 }
 
 // ---- 5. A clean, non-foul shot: no ball-in-hand at all -------------------
@@ -59,7 +65,6 @@ function wrongBallFoulEvents() {
   const g0 = rules.newGame();
   const { state: g1 } = rules.resolveShot(g0, { hits: [{ a: 'cue', b: 'b1' }], rails: 0, pocketed: ['b1'] });
   ok(g1.ballInHand === false, 'clean legal pot: no ball-in-hand');
-  ok(g1.headStringRestricted === false, 'clean legal pot: not restricted (nothing to restrict)');
 }
 
 console.log('');

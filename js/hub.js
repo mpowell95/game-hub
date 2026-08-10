@@ -281,6 +281,8 @@ const GAMES = [
     art: GAME_ART["yahtzee"],
   },
   {
+    // The from-scratch rebuild, promoted over the original 2026-08-08 and given its name. The
+    // retired build is gone; this one lives in pool/ and records under the 'pool' stats id.
     id: 'pool',
     title: { en: 'Pool', es: 'Billar' },
     blurb: { en: 'Real cue-ball physics: draw, follow, english. 8-ball vs. the computer, a friend, or practice alone.',
@@ -292,18 +294,8 @@ const GAMES = [
     devOnly: true,
   },
   {
-    id: 'poolv2',
-    title: { en: 'Poolv2', es: 'Poolv2' },
-    blurb: { en: 'A from-scratch rebuild of Pool: real cue-ball physics, rematch series, pinch-zoom.',
-      es: 'Una reconstrucción de Pool desde cero: física real de la bola blanca, revancha, pellizco para acercar.' },
-    module: '../poolv2/js/ui.js',
-    accent: '#ffce3a',
-    art: GAME_ART["poolv2"],
-    devOnly: true,
-  },
-  {
     // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side comparison with
-    // the real Snake, which is untouched and still in the list above. Gated devOnly like poolv2.
+    // the real Snake, which is untouched and still in the list above. Gated devOnly, same as Pool while it is still being finished.
     // Shares Snake's ENGINE by import (never a copy) and its board/D-pad CSS, so only the chrome
     // differs. Records stats through the same recordSnake call the real Snake uses.
     id: 'snake-v2',

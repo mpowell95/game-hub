@@ -42,6 +42,8 @@ const TABS = [
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'uno', labelKey: 'game_title_uno' },
   { id: 'pool', labelKey: 'game_title_pool' },
+  // retired: the rebuild was promoted to 'pool'. Kept so anything already recorded here stays
+  // visible (THE LAW rules 1 and 5); hidden automatically for anyone with zero plays.
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },

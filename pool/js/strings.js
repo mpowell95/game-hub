@@ -1,4 +1,4 @@
-// strings.js — every user-visible string in Pool, both languages. Root CLAUDE.md
+// strings.js — every user-visible string in Poolv2, both languages. Root CLAUDE.md
 // "Adding a game" item 9: English is the source of truth, es may lag (js/i18n.js
 // falls back to English for anything missing).
 export const STRINGS = {
@@ -65,11 +65,11 @@ export const STRINGS = {
     breaking: 'Break',
     solid_shape_aria: 'Solid ball',
     stripe_shape_aria: 'Striped ball',
-    rotate_device: 'Rotate your device',
-    spin_aria: 'Spin (english)',
+    mp_series: 'You {me} · {opp} {them}',
+    mp_waiting_rematch: 'Waiting for {opp} to start another game',
   },
   es: {
-    title: 'Billar',
+    title: 'Pool',
     tagline: 'Bola 8, física real de la bola blanca. Contra la computadora, un amigo, o práctica libre.',
     mode: 'Modo',
     mode_ai: 'Contra la computadora',
@@ -131,8 +131,8 @@ export const STRINGS = {
     breaking: 'Rompiendo',
     solid_shape_aria: 'Bola lisa',
     stripe_shape_aria: 'Bola rayada',
-    rotate_device: 'Gira tu dispositivo',
-    spin_aria: 'Efecto (inglés)',
+    mp_series: 'Tú {me} · {opp} {them}',
+    mp_waiting_rematch: 'Esperando a que {opp} empiece otra partida',
   },
 };
 

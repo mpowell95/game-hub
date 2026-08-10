@@ -13,7 +13,7 @@ tells you *what to build, in what order, and why each choice is the one to make*
 ### The name, before anything else
 
 The game is **Poolv2** and every identifier in this document uses that namespace: folder
-`poolv2/`, hub id and stats id `poolv2`, keys `gamehub.poolv2.*`, room tag `'poolv2'`, CSS prefix
+`pool/`, hub id and stats id `poolv2`, keys `gamehub.poolv2.*`, room tag `'poolv2'`, CSS prefix
 `.p2-`. There is a **second, separate pool game in development**, and the plain `pool` namespace
 is reserved for it. If you are building from this spec, do not "clean up" the name and do not
 reach for `pool` anywhere — a collision in the folder, the stats bucket or the injected
@@ -77,7 +77,7 @@ rule being applied correctly. Spend the budget on the model.
 
 ## 2. The physics model
 
-Everything in this section lives in `poolv2/js/physics.js`, which is **pure and headless**: no DOM,
+Everything in this section lives in `pool/js/physics.js`, which is **pure and headless**: no DOM,
 no `import.meta`, no browser globals. That is load-bearing three times over — it lets the AI run
 lookaheads by calling the same engine, it lets a future test suite run under plain Node, and it
 makes the multiplayer design in §5 possible at all.
@@ -485,7 +485,7 @@ next.
 > replaced after a real playtest (see §3's note and `poolv2/CLAUDE.md`'s "Controls" section). The
 > GOVERNING PRINCIPLE ("phase decides, not finger count") still holds and still governs the new
 > gesture and its pinch-zoom tiebreak — only the specific phases/rows changed. Rule 6 below (the
-> pinch-zoom tiebreak requirement) is what `poolv2/js/ui.js`'s `PINCH_WINDOW_MS` pending-aim window
+> pinch-zoom tiebreak requirement) is what `pool/js/ui.js`'s `PINCH_WINDOW_MS` pending-aim window
 > implements.
 
 The guide asked for the gesture priority to be **written down as a rule**. This is that rule. It
@@ -741,13 +741,13 @@ backlog from §6.
 
 **Engine**
 
-- [ ] 1. `poolv2/js/physics.js` — pure, headless, SI units, no randomness. Ball state carries
+- [ ] 1. `pool/js/physics.js` — pure, headless, SI units, no randomness. Ball state carries
       `(vx, vy)` **and** `(wx, wy, wz)`. Implement in this order: `slip` → `naturalRollSpin` →
       `stepBall` (slide/roll split + independent `wz` decay + masse term) → `strikeCueBall`
       (squirt → `cos(elevation)` speed → spin from offset) → `resolveBallCollision` (normal
       exchange, tangential kept, throw nudge) → `reflectCushion` (speed-dependent COR) →
       `pocketCenters` → `tick` → `simulateToRest`. Use §2.8's constants verbatim.
-- [ ] 2. `poolv2/js/table.js` — fixed rack, no shuffle; `FOOT_SPOT`/`HEAD_SPOT`; 0.5-1% rack
+- [ ] 2. `pool/js/table.js` — fixed rack, no shuffle; `FOOT_SPOT`/`HEAD_SPOT`; 0.5-1% rack
       clearance so it does not self-jam.
 - [ ] 3. Verify by hand in Node before drawing anything: stop shot stops, draw comes back, follow
       follows, hard rail rebounds shorter than soft, two identical runs give identical output.
@@ -756,7 +756,7 @@ backlog from §6.
 
 **Controls**
 
-- [ ] 5. `poolv2/js/ui.js` skeleton: `init` / `destroy` / `isInProgress` + default export, a
+- [ ] 5. `pool/js/ui.js` skeleton: `init` / `destroy` / `isInProgress` + default export, a
       module-level `let instance`, idempotent CSS injection via
       `new URL('../css/pool.css', import.meta.url)`.
 - [ ] 6. **Write `_localSeat()` / `_isMySeat()` now, before any turn logic exists**, and route
@@ -768,9 +768,9 @@ backlog from §6.
 
 **Rules, opponent, practice**
 
-- [ ] 9. `poolv2/js/rules.js` — pure `newGame` / `legalTarget` / `resolveShot` / `placeCueBall`,
+- [ ] 9. `pool/js/rules.js` — pure `newGame` / `legalTarget` / `resolveShot` / `placeCueBall`,
       reading only physics' event log. One named rulebook.
-- [ ] 10. `poolv2/js/ai.js` — ghost-ball candidates × 6 pockets, `pathBlocked` at `1.95R`, score with
+- [ ] 10. `pool/js/ai.js` — ghost-ball candidates × 6 pockets, `pathBlocked` at `1.95R`, score with
       real `simulateToRest` lookahead, tiers vary error and `topN` only.
 - [ ] 11. Practice mode: same physics and controls, no rules, no stats, re-rack button — and
       handle the scratch case (§6 #3).
@@ -779,11 +779,11 @@ backlog from §6.
 
 - [ ] 12. `pool/index.html` standalone host calling `init(document.getElementById('pool'))`;
       `poolv2/css/poolv2.css` with **every rule descendant-scoped under `.p2-root`** (Mancala's
-      discipline, not a bare prefix); `poolv2/js/strings.js` with `en`/`es` and every user-visible
+      discipline, not a bare prefix); `pool/js/strings.js` with `en`/`es` and every user-visible
       string through `t()` at render time.
 - [ ] 13. Persist under `gamehub.poolv2.v1`; autosave `gamehub.poolv2.save.v1`; MP
       `gamehub.poolv2.mp.v1`. Silent resume, malformed treated as no save.
-- [ ] 14. Register in `js/hub.js` `GAMES` (`module: '../poolv2/js/ui.js'`, id/title/blurb/accent),
+- [ ] 14. Register in `js/hub.js` `GAMES` (`module: '../pool/js/ui.js'`, id/title/blurb/accent),
       add landscape `viewBox="0 0 160 90"` art to `js/game-art.js`, add `pool` to the stats/
       leaderboard game lists (`js/game-stats.js`, `js/game-stats-ui.js`, `js/leaderboard-ui.js`)
       and the title string to `js/strings.js`.
@@ -791,12 +791,12 @@ backlog from §6.
       sub-counter**, so no `js/players-agg.js` branch is needed — but if you ever add one (pot
       percentage, longest run), the three-edit rule applies and the `players-agg.js` branch is the
       one that gets forgotten.
-- [ ] 16. Add every `poolv2/` file to `ASSETS` in `sw.js`, **bump `CACHE`**, then run
+- [ ] 16. Add every `pool/` file to `ASSETS` in `sw.js`, **bump `CACHE`**, then run
       `node validate-sw-assets.mjs` and `node run-all-tests.mjs`. Both must be green before commit.
 
 **Multiplayer**
 
-- [ ] 17. `poolv2/js/hash.js` — FNV-1a over settled positions rounded to 0.5 mm plus divergent rule
+- [ ] 17. `pool/js/hash.js` — FNV-1a over settled positions rounded to 0.5 mm plus divergent rule
       state.
 - [ ] 18. MP over `js/net.js`, untouched: host seat 0 / guest seat 1, `round.dealer` = breaking
       seat, move = shot parameters **plus placement** (§6 #1), shooter applies immediately and
