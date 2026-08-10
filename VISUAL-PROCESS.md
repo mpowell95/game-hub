@@ -105,6 +105,34 @@ So:
 - **A probe that only ever passes is theatre.** Break the game on purpose, watch it go red, put it
   back. That takes two minutes and it is the only proof the probe works.
 
+## 3c. IT HAS TO FIT ONE SCREEN, IN THE HUB, ON A SHORT PHONE
+
+Pool shipped **138px too tall inside the hub**, with its controls up to 98px below the fold. Matt:
+*"I couldn't see the full board and the controls simultaneously."* This suite called it clean, and
+it WAS clean - standalone, at 393x852, which was the only thing it looked at.
+
+Two blind spots, both now covered by the `fit` check:
+
+- **The hub is a different host.** It wraps an immersive game in ~98px of top padding for the
+  floating back button and 40px at the bottom, so a game asking for `100dvh` is 138px too tall the
+  instant it is mounted. Nothing you can do standalone will ever show that. The check mounts the
+  game into the hub's real chrome directly (the launcher hides dev-only games behind a name check,
+  and the launcher was never the point - the CSS is).
+- **A real phone is shorter than the design size.** Browser toolbars eat 100-190px, so the check
+  runs a tall AND a short viewport. A layout can pass one and fail the other.
+
+Three ways this same fix went wrong before it went right, all worth knowing:
+
+1. **Cancelling the surrounding gap is not enough.** The root still ASKS for `100dvh` and is then
+   pushed down, so its bottom lands past the fold. Pin the height too.
+2. **Never measure with a raw `getBoundingClientRect().top`.** It is viewport-relative, so it
+   moves when the page is scrolled - and the page is scrolled *because* of the overflow you are
+   trying to remove. It computed `up = 0`, applied nothing, and left the page scrollable. Add the
+   scroll offset back, or measure something that cannot move.
+3. **The gap is not always on `el.parentElement`.** In the hub it belongs to `.hub-main`, two
+   levels up; the element's own parent has no padding at all. Measure the distance, not a
+   particular ancestor's style.
+
 ## 4. Before you say it is done
 
 - **Open your own screenshots.** `.visual-out/` is right there. A painted-element count is not a
