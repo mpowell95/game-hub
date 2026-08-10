@@ -66,8 +66,6 @@ const KNOWN_GAPS = {
       + 'CLAUDE.md games table) and the widest setup screen in the repo; a real fix is a layout '
       + 'pass on that screen, not a one-line clamp.',
     'dots-boxes': 'overflows ~5px at 393px wide.',
-    pool: 'overflows ~36px at 393px wide.',
-    poolv2: 'overflows ~36px at 393px wide (dev-only copy of pool; fix pool first, then this).',
   },
 };
 const gapFor = (check, game) => (KNOWN_GAPS[check] || {})[game];

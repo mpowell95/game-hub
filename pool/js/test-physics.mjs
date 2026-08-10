@@ -1,6 +1,6 @@
 // test-physics.mjs — Phase 3 regression tripwires for the visual rebuild's
 // TABLE change (HANDOFF-POOL-VISUAL-REBUILD.md §5): the table shrank to a 6-ft
-// box (0.9144 x 1.8288m) with a wider side-pocket capture radius, both real
+// box (39x78in bar box, one capture radius for all six pockets), both real
 // physics changes. Two things must still hold after that change:
 //   1. A full-power break never sends a ball outside the felt, tunnels it
 //      through a cushion, or leaves two balls overlapping.
@@ -104,25 +104,23 @@ for (let i = 0; i < 30; i++) {
 ok(settleFailures === 0, `30-shot varied batch: every shot settled to exact zero velocity (${settleFailures} failures)`);
 console.log(`      (max wall-clock time to settle one shot: ${maxSettleTime.toFixed(1)}ms)`);
 
-// ---- 3. Side-pocket radius sanity (the other real physics change) -------
-import { pocketCenters, POCKET_R, POCKET_R_SIDE } from './physics.js';
+// ---- 3. Pocket geometry -------------------------------------------------
+// This build gives all six pockets ONE capture radius. The retired build had a wider side pocket
+// (2.05R) and a narrower jawed corner; those two assertions are gone WITH the build that had
+// them, not quietly dropped. The corner "jaw" is a stated fidelity gap (BUILD-SPEC.md §6 #11).
+import { pocketCenters, POCKET_R } from './physics.js';
 const pockets = pocketCenters();
-const sidePockets = pockets.filter((p) => p.side);
-const cornerPockets = pockets.filter((p) => !p.side);
-ok(sidePockets.length === 2 && cornerPockets.length === 4, 'pocketCenters(): 2 side + 4 corner pockets');
-ok(POCKET_R_SIDE > POCKET_R, `POCKET_R_SIDE (${POCKET_R_SIDE.toFixed(4)}) > POCKET_R (${POCKET_R.toFixed(4)})`);
-ok(Math.abs(POCKET_R_SIDE / R - 2.05) < 1e-9, 'POCKET_R_SIDE is exactly 2.05R (spec §8.4)');
-ok(Math.abs(POCKET_R / R - 1.90) < 1e-9, 'POCKET_R is exactly 1.90R (spec §8.4)');
+ok(pockets.length === 6, 'pocketCenters(): six pockets');
+ok(pockets.filter((p) => p.y === 0).length === 2, 'two of them are side pockets, on the long rails at the midpoint');
+ok(pockets.filter((p) => p.y !== 0).length === 4, 'the other four are corners');
+ok(Math.abs(POCKET_R / R - 1.90) < 1e-9, 'POCKET_R is exactly 1.90R, the same for all six');
 
 // ---- 4. TABLE geometry sanity -------------------------------------------
-ok(Math.abs(TABLE.w - 0.9144) < 1e-9 && Math.abs(TABLE.h - 1.8288) < 1e-9, 'TABLE is the new 36x72in (0.9144 x 1.8288m) box');
-ok(Math.abs(TABLE.h / TABLE.w - 2) < 1e-9, 'TABLE stays exactly 2:1');
-// Spec's "feltW" is the stage's LONG (screen-horizontal) axis on a landscape
-// table — that's physics.js's TABLE.h (the long axis in its own w=short/
-// h=long labeling), not TABLE.w. Naming collision between the spec's
-// screen-space term and physics.js's own field name; TABLE.h is the correct
-// one to check against.
-ok(Math.abs(64 * R - TABLE.h) < 1e-9, 'ballRadius = feltW/64 holds exactly (spec §9, feltW = TABLE.h, the long/screen-u axis)');
+// A 7-ft "bar box": 39x78in, and exactly 2:1 so the felt fits a phone cleanly. The retired build
+// was a 36x72in box; this is a deliberately different table, not a regression.
+ok(Math.abs(TABLE.w - 0.9906) < 1e-9 && Math.abs(TABLE.h - 1.9812) < 1e-9, 'TABLE is the 39x78in (0.9906 x 1.9812m) bar box');
+ok(Math.abs(TABLE.h / TABLE.w - 2) < 1e-9, 'TABLE is exactly 2:1');
+ok(Math.abs(R - 0.028575) < 1e-9, 'R is a standard 57.15mm ball, independent of the table size');
 
 console.log('');
 console.log(failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`);

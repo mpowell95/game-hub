@@ -50,7 +50,7 @@
 //     _mpApplyRoundRecord, _mpAfterGameEnd/_seriesLine, _mpRoomCallback/_mpOnRoomUpdate,
 //     _mpSaveSnapshot/_mpLoadSave, _tryRestoreMP, and the MP branch of _afterMove/finish. Also
 //     named rather than line-numbered, same reasoning.
-//   Poolv2 (poolv2/js/ui.js) - BUILD-SPEC.md §6 #2's "the test file that does not exist":
+//   Pool (pool/js/ui.js) - BUILD-SPEC.md §6 #2's "the test file that does not exist":
 //     _localSeat/_isMySeat, _mpRoomCallback, _mpApplyRoundRecord, _mpSnapshot, _mpApplyRecovery,
 //     _mpLocalShoot, _mpDrain, _mpApplyNextEntry, _mpHandleMismatch, _mpSaveProgress, and the
 //     ball-in-hand placement queued by _commitCuePlacement and consumed by both of the last two.
@@ -58,7 +58,7 @@
 //     vocabulary like every reference game above - both sides literally re-run physics.js's
 //     deterministic simulateToRest() with identical inputs rather than applying a symbolic move,
 //     which is why this mirror drives the REAL physics/rules/hash modules directly (all four are
-//     pure/headless per poolv2/js/physics.js's own header) rather than reimplementing gameplay.
+//     pure/headless per pool/js/physics.js's own header) rather than reimplementing gameplay.
 //   Chinchón engine (chinchon/js/game.js): fromSnapshot :91, tryResetStock :270,
 //   playMatch :322 (boundary-resume branch), finishRoundAfterPlay :374 (matchOver payload).
 //   Shared room semantics mirrored from js/net.js: startRound clears the move log
@@ -102,10 +102,10 @@ import { P1 as fP1, P2 as fP2, newGame as fNewGame, cloneGame as fCloneGame, leg
 import { stateHash as fHash } from './filler/js/hash.js';
 import { newGame as dNewGame, legalMoves as dLegal, applyMove as dApply, edgeKey as dEdgeKey, isOver as dIsOver, score as dScore } from './dots-boxes/js/game.js';
 import { stateHash as dHash } from './dots-boxes/js/hash.js';
-import { R as pR, TABLE as pTABLE, strikeCueBall as pStrike, simulateToRest as pSimulateToRest } from './poolv2/js/physics.js';
-import { ballById as pBallById } from './poolv2/js/table.js';
-import * as pRules from './poolv2/js/rules.js';
-import { stateHash as pHash } from './poolv2/js/hash.js';
+import { R as pR, TABLE as pTABLE, strikeCueBall as pStrike, simulateToRest as pSimulateToRest } from './pool/js/physics.js';
+import { ballById as pBallById } from './pool/js/table.js';
+import * as pRules from './pool/js/rules.js';
+import { stateHash as pHash } from './pool/js/hash.js';
 import {
   newGame as bsNewGame, setFleet as bsSetFleet, isShotLegal as bsIsShotLegal,
   resolveShot as bsResolveShot, applyAnswer as bsApplyAnswer, cellAt as bsCellAt, CELL_UNKNOWN as bsUnknown,
@@ -3643,7 +3643,7 @@ console.log('\n--- DB6: Dots and Boxes restore at a game boundary (KNOWN-BUG PRO
 }
 
 // ==================================================================================
-// POOLV2 (mirror of poolv2/js/ui.js's MP glue; citations per method). BUILD-SPEC.md
+// POOLV2 (mirror of pool/js/ui.js's MP glue; citations per method). BUILD-SPEC.md
 // §6 #2: "there is no headless multiplayer lockstep test... add a Poolv2 block". A
 // "move" here is shot PARAMETERS over continuous physics, not a symbolic move from a
 // finite vocabulary, so this mirror drives the REAL physics.js/rules.js/hash.js
@@ -3654,7 +3654,7 @@ console.log('\n--- DB6: Dots and Boxes restore at a game boundary (KNOWN-BUG PRO
 // (placement must travel with the move that follows it) without scripting it by hand.
 // ==================================================================================
 
-const MP_RECOVERY_MAX_ATTEMPTS_P2 = 3;   // poolv2/js/ui.js:40
+const MP_RECOVERY_MAX_ATTEMPTS_P2 = 3;   // pool/js/ui.js:40
 
 /** Deterministic per-shot parameters, pure function of a move index (mulberry32-seeded
  *  so two different sides asking for the SAME index would get the SAME params - not
@@ -3673,7 +3673,7 @@ function poolScript(seed) {
   };
 }
 
-/** _aiPlacementSpot (poolv2/js/ui.js:816-823), copied verbatim as a standalone function -
+/** _aiPlacementSpot (pool/js/ui.js:816-823), copied verbatim as a standalone function -
  *  it isn't exported (ui.js isn't headless-loadable, it constructs DOM), so the harness
  *  needs its own copy to place the cue ball legally without a UI drag gesture. */
 function poolFreeSpot(balls) {
@@ -3691,12 +3691,12 @@ function poolFreeSpot(balls) {
 class PoolSide {
   constructor(role, room, script, opts = {}) {
     this.role = role; this.room = room; this.script = script; this.opts = opts;
-    this.mp = {   // mpNewState-equivalent, poolv2/js/ui.js's mp fields (74, 811-815/831-835)
+    this.mp = {   // mpNewState-equivalent, pool/js/ui.js's mp fields (74, 811-815/831-835)
       appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0, delivering: false,
       awaitingRecovery: false, recoveryAttempts: 0, opp: null, gameNum: 0,
       pendingPlacement: null, lastRecoveryHandled: null, lastRecoveryApplied: null,
       lastRoomSnapshot: null, redeliverRequested: false,
-      // Rematch series (BUILD-SPEC.md §6 #7): poolv2/js/ui.js's mp.nextDealer/series/lastScoredGame.
+      // Rematch series (BUILD-SPEC.md §6 #7): pool/js/ui.js's mp.nextDealer/series/lastScoredGame.
       nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
     };
     this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
@@ -3737,7 +3737,7 @@ class PoolSide {
     const entries = Object.values(room.moves || {}).sort((a, b) => a.seq - b.seq);
     mp.movesById = new Map(entries.map((m) => [m.seq, m]));
     mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
-    // Not a literal poolv2/js/ui.js field: the harness's own drain loop has a real await
+    // Not a literal pool/js/ui.js field: the harness's own drain loop has a real await
     // gap (applyNextEntry/localShoot/maybeAct all await), so a room update landing while a
     // PRIOR roomCallback's drain() is still in flight would otherwise be silently dropped -
     // the exact async-delivery race js/CLAUDE.md documents for Mancala/Filler/Dots and
@@ -3778,7 +3778,7 @@ class PoolSide {
     this.room.clearRecovery().catch(() => {});
   }
 
-  /** _commitCuePlacement's ball-in-hand branch (poolv2/js/ui.js:704-716), minus the drag
+  /** _commitCuePlacement's ball-in-hand branch (pool/js/ui.js:704-716), minus the drag
    *  gesture: pick a legal free spot, apply locally, queue it for the NEXT move. */
   placeCueBallLocally() {
     const spot = poolFreeSpot(this.game.balls);
@@ -3824,10 +3824,10 @@ class PoolSide {
     await this.maybeAct();
   }
 
-  /** Not a literal poolv2/js/ui.js method: the real app's next shot comes from the
+  /** Not a literal pool/js/ui.js method: the real app's next shot comes from the
    *  player's own next pointer gesture, and a post-recovery ball-in-hand is picked up by
    *  _renderGame()'s `if (game.ballInHand && _isMySeat(...)) _placingCue = true` re-arming
-   *  the drag gesture (poolv2/js/ui.js:314). The harness needs an explicit "take my turn
+   *  the drag gesture (pool/js/ui.js:314). The harness needs an explicit "take my turn
    *  now" trigger for both cases to auto-play the scripted rally; guarded by
    *  _shooting/mp.delivering so a re-entrant room notification can never double-act on the
    *  same turn, and pendingPlacement so an ALREADY-placed ball-in-hand (the ordinary

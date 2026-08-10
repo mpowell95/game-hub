@@ -395,31 +395,6 @@ export const GAME_ART = {
             </g>
             <circle cx="120" cy="42" r="7.5" fill="#f4f1e8" stroke="rgba(0,0,0,.25)"/>
           </svg>`,
-  poolv2: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#3a2418"/>
-            <rect x="10" y="10" width="140" height="70" rx="4" fill="#178A7A"/>
-            <g fill="#111">
-              <circle cx="10" cy="10" r="7"/><circle cx="150" cy="10" r="7"/>
-              <circle cx="10" cy="80" r="7"/><circle cx="150" cy="80" r="7"/>
-              <circle cx="10" cy="45" r="6.5"/><circle cx="150" cy="45" r="6.5"/>
-            </g>
-            <g transform="translate(58 50)">
-              <circle r="8" fill="#F5D033" stroke="rgba(0,0,0,.35)"/>
-              <circle r="3.3" fill="#f4f1e8"/>
-            </g>
-            <g transform="translate(78 38)">
-              <circle r="8" fill="#f4f1e8" stroke="rgba(0,0,0,.35)"/>
-              <rect x="-8" y="-4.5" width="16" height="9" fill="#1F5FA8"/>
-              <circle r="3.3" fill="#f4f1e8"/>
-            </g>
-            <g transform="translate(96 55)">
-              <circle r="8" fill="#111" stroke="rgba(0,0,0,.35)"/>
-              <circle r="3.3" fill="#f4f1e8"/>
-            </g>
-            <circle cx="120" cy="42" r="7.5" fill="#f4f1e8" stroke="rgba(0,0,0,.25)"/>
-            <circle cx="140" cy="72" r="11" fill="#ffce3a"/>
-            <text x="140" y="72" font-size="13" font-weight="700" fill="#201a08" text-anchor="middle" dominant-baseline="central">2</text>
-          </svg>`,
   yahtzee: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0878CE"/>
             <g transform="translate(38 52) rotate(-10)">

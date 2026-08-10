@@ -1,10 +1,8 @@
-// rules.js — pure 8-ball rule engine (no DOM, no physics stepping). Standard
-// 8-ball ball-in-hand (visual rebuild, 2026-07-29, spec §13.5 / handoff §6.4):
-// ball-in-hand after any ordinary foul is anywhere on the table; ONLY a
-// scratch on the very first shot (the break) restricts it to behind the head
-// string (screen u < 0.25, i.e. physics y < HEAD_SPOT.y). Every other foul,
-// including a scratch on any later shot, stays anywhere. This replaces v1's
-// "Bar Rules 8-Ball" (ball-in-hand anywhere, always) — see pool/CLAUDE.md.
+// rules.js — pure 8-ball rule engine (no DOM, no physics stepping). Named rulebook:
+// "Bar Rules 8-Ball" — the single simplified ruleset the build guide's item 3 asks
+// for (one mode, one rulebook), documented in pool/CLAUDE.md. Ball-in-hand after any
+// foul is anywhere on the table (the common simplified bar-table variant), rather
+// than the full BCA egyptian-rule head-string restriction.
 import { rackBalls, ballById } from './table.js';
 
 export function newGame() {
@@ -18,7 +16,6 @@ export function newGame() {
     winner: null,
     lastFoul: null,        // last foul reason, for UI toast; cleared each shot
     broken: false,
-    headStringRestricted: false, // true only for ball-in-hand right after a scratch on the break
   };
 }
 
@@ -41,6 +38,25 @@ function pottedKinds(state, events) {
   return events.pocketed.map((id) => ({ id, kind: id === 'cue' ? 'cue' : kindOf(state.balls, id) }));
 }
 
+/** Real 8-ball requires a rail AFTER the cue ball's first contact, not merely a rail
+ *  contact anywhere in the shot (a cue ball that clips a rail before touching
+ *  anything, then touches a ball and nothing else, must still foul). Walks the
+ *  ordered event log physics.js produces (hits/rails/pockets in resolution order,
+ *  concatenated across every tick of the shot) rather than a plain rail count. */
+function railAfterFirstCueContact(events) {
+  const log = events.log || [];
+  let contactIndex = -1;
+  for (let i = 0; i < log.length; i++) {
+    const e = log[i];
+    if (e.t === 'hit' && (e.a === 'cue' || e.b === 'cue')) { contactIndex = i; break; }
+  }
+  if (contactIndex < 0) return false;
+  for (let i = contactIndex + 1; i < log.length; i++) {
+    if (log[i].t === 'rail') return true;
+  }
+  return false;
+}
+
 function remainingOfKind(balls, kind) {
   return balls.filter((b) => b.kind === kind && !b.pocketed).length;
 }
@@ -61,7 +77,6 @@ export function legalTarget(state, seat) {
 export function resolveShot(state, events) {
   const seat = state.turnSeat;
   const opp = seat === 0 ? 1 : 0;
-  const isBreakShot = !state.broken; // state.broken reflects the shot BEFORE this one
   const st = {
     ...state,
     balls: state.balls.map((b) => ({ ...b })),
@@ -79,7 +94,7 @@ export function resolveShot(state, events) {
   else if (firstKind === null) { foul = true; foulReason = 'no_contact'; }
   else if (firstKind === 'eight' && !legal.allowEight) { foul = true; foulReason = 'wrong_ball_eight'; }
   else if (firstKind !== 'eight' && legal.kinds.indexOf(firstKind) < 0) { foul = true; foulReason = 'wrong_ball'; }
-  else if (potted.length === 0 && events.rails === 0) { foul = true; foulReason = 'no_rail'; }
+  else if (potted.length === 0 && !railAfterFirstCueContact(events)) { foul = true; foulReason = 'no_rail'; }
 
   // Group assignment: the first legal, non-foul pot of a money ball (not the 8)
   // while the table is open decides both players' groups.
@@ -115,10 +130,6 @@ export function resolveShot(state, events) {
 
   st.turnSeat = gameOver ? seat : (continues ? seat : opp);
   st.ballInHand = !gameOver && (foul || cueScratched);
-  // Spec §13.5: restricted to behind the head string ONLY for a scratch on
-  // the break; every other foul (including a scratch on a later shot) is
-  // ball-in-hand anywhere.
-  st.headStringRestricted = st.ballInHand && cueScratched && isBreakShot;
   st.over = gameOver;
   st.winner = gameOver ? winner : null;
   st.lastFoul = foulReason;
