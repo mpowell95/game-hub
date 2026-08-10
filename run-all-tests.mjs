@@ -9,6 +9,11 @@
 //
 // smoke-match.mjs / smoke-ui.mjs need jsdom (an external package this repo otherwise
 // does not depend on); they are SKIPPED, not failed, when jsdom isn't installed.
+//
+// test-visual.mjs is the same shape for a different reason: it drives a real Chromium, which
+// exists on the cloud image but not on a laptop that hasn't opted in. It is the ONLY suite here
+// that can see whether a game rendered - every other one runs in node, which has no layout
+// engine. See VISUAL-PROCESS.md.
 
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +50,9 @@ const SUITES = [
   { file: 'test-sw-strategy.mjs' },
   // The "Adding a game" checklist, enforced rather than merely written down.
   { file: 'test-game-conventions.mjs' },
+  // The first suite here that LOOKS at the game. Needs a real browser, so it SKIPs (never
+  // fails) without playwright-core/Chromium - same contract as the jsdom suites below.
+  { file: 'test-visual.mjs', optionalDep: 'playwright-core' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },
@@ -65,7 +73,7 @@ for (const suite of SUITES) {
   console.log(`\n=== ${label} ===`);
   const res = spawnSync(process.execPath, [join(ROOT, suite.file)], { cwd: ROOT, encoding: 'utf8', timeout: 300000 });
   const out = (res.stdout || '') + (res.stderr || '');
-  if (suite.optionalDep && /Cannot find (package|module) '?jsdom/.test(out)) {
+  if (suite.optionalDep && new RegExp(`Cannot find (package|module) '?${suite.optionalDep}|SKIP  ${suite.file}`).test(out)) {
     skipped++;
     console.log(`SKIP  ${suite.file}: optional dependency '${suite.optionalDep}' not installed`);
     continue;

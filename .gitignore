@@ -19,3 +19,6 @@ mancala/reference/
 # RTDB snapshots (backups/rtdb-backup.mjs). Real family data - every player's name, player code
 # and full stats - so the snapshots stay LOCAL. The script itself is tracked; its output never is.
 backups/*.json
+
+# Visual-suite output (test-visual.mjs). Regenerated on every run; look at it, do not commit it.
+.visual-out/
