@@ -53,6 +53,17 @@ const PERSON_GLYPH = `<svg class="p2-bigbtn-icon" viewBox="0 0 24 24" aria-hidde
 const CUE_GLYPH = `<svg class="p2-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
   <circle cx="8" cy="16" r="4.2" fill="currentColor"/><path d="M12.6 13.2 21 4.4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
 </svg>`;
+// The two ends of the cue-elevation slider, drawn rather than captioned: a cue lying flat on the
+// cloth, and the same cue tilted up off it. The slider between them is then self-explanatory
+// without the word "Raise cue" ever appearing on screen.
+const CUE_FLAT_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <path d="M2 18h20" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".45"/>
+  <path d="M3.5 15.5h17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+</svg>`;
+const CUE_RAISED_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <path d="M2 18h20" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".45"/>
+  <path d="M3.5 16 19 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+</svg>`;
 const DIFFS = ['beginner', 'intermediate', 'pro'];
 
 const SETTINGS_KEY = 'gamehub.poolv2.v1';
@@ -112,7 +123,6 @@ class PoolUI {
     this._pulling = false;
     this._offset = { a: 0, b: 0 };
     this._elevation = 0;
-    this._camera = 'top';
     this._camZoom = 1;
     this._camPan = { x: 0, y: 0 };
     this._placingCue = false;
@@ -167,6 +177,7 @@ class PoolUI {
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     document.removeEventListener('visibilitychange', this._boundVis);
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    clearTimeout(this._quitTimer); this._quitTimer = null;
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
     net.disconnect();
     this._disableWorker();
@@ -475,14 +486,23 @@ class PoolUI {
     this.el.innerHTML = `
       <div class="p2-game">
         <div class="p2-hud">
-          <div class="p2-hud-left">
-            <span class="p2-turn-text" data-role="turn-text"></span>
+          <!-- NO WORDS DURING PLAY (Matt, 2026-08-08: "No word instructions during the game. It
+               must be self explanatory with symbols."). Whose turn: two faces, the live one lit.
+               What you are on: a filled disc for solids, a banded one for stripes. Ball in hand is
+               shown ON THE TABLE, as a grab ring round the cue ball, not as a caption up here. -->
+          <div class="p2-players" data-role="players" ${this.mode === 'practice' ? 'hidden' : ''}>
+            <span class="p2-pl" data-role="pl-me">
+              <span class="p2-pl-face">${this._faceFor(true)}</span>
+              <span class="p2-pl-group" data-role="grp-me"></span>
+            </span>
+            <span class="p2-pl" data-role="pl-opp">
+              <span class="p2-pl-face">${this._faceFor(false)}</span>
+              <span class="p2-pl-group" data-role="grp-opp"></span>
+            </span>
           </div>
           <div class="p2-hud-right">
-            ${this.mode === 'practice' ? `<button type="button" class="p2-icon-btn" data-role="rerack" title="${t('new_game')}">↺</button>` : ''}
-            <button type="button" class="p2-icon-btn" data-role="camera" title="${t('camera')}">🎥</button>
-            <span class="p2-quit-confirm" data-role="quit-confirm" hidden>${t('quit_confirm')}</span>
-            <button type="button" class="p2-icon-btn" data-role="quit" title="${t('quit')}">✕</button>
+            ${this.mode === 'practice' ? `<button type="button" class="p2-icon-btn" data-role="rerack" aria-label="${t('new_game')}">↺</button>` : ''}
+            <button type="button" class="p2-icon-btn" data-role="quit" aria-label="${t('quit')}">✕</button>
           </div>
         </div>
         <div class="p2-table-wrap" data-role="table-wrap">
@@ -491,18 +511,21 @@ class PoolUI {
           <div class="p2-rail-glow p2-rail-far" data-role="rail-far"></div>
           <div class="p2-foul-slot" data-role="foul-slot"></div>
         </div>
+        <!-- The control row is wordless too. SPIN / POWER / RAISE CUE were captions over three
+             widgets that each already show what they are: a cue ball you poke, a bar that fills,
+             and a cue that tilts. The words are kept as aria-labels so a screen reader still
+             gets them; nothing on screen is text. -->
         <div class="p2-controls">
           <div class="p2-spin-wrap">
-            <div class="p2-spin-label">${t('spin')}</div>
-            <canvas class="p2-spin" data-role="spin" width="72" height="72"></canvas>
+            <canvas class="p2-spin" data-role="spin" width="72" height="72" aria-label="${t('spin')}"></canvas>
           </div>
-          <div class="p2-power-wrap">
-            <div class="p2-power-label">${t('power')}</div>
+          <div class="p2-power-wrap" aria-label="${t('power')}">
             <div class="p2-power-meter"><div class="p2-power-fill" data-role="power-fill"></div></div>
           </div>
           <div class="p2-elev-wrap">
-            <div class="p2-elev-label">${t('elevate_cue')}</div>
-            <input type="range" min="0" max="28" value="0" data-role="elev" class="p2-elev-slider">
+            <span class="p2-elev-icon" aria-hidden="true">${CUE_FLAT_SVG}</span>
+            <input type="range" min="0" max="28" value="0" data-role="elev" class="p2-elev-slider" aria-label="${t('elevate_cue')}">
+            <span class="p2-elev-icon" aria-hidden="true">${CUE_RAISED_SVG}</span>
           </div>
         </div>
       </div>`;
@@ -512,7 +535,6 @@ class PoolUI {
     this.spinCanvas = this.el.querySelector('[data-role="spin"]');
     this.spinCtx = this.spinCanvas.getContext('2d');
     this.el.querySelector('[data-role="quit"]').addEventListener('click', () => this._confirmQuit());
-    this.el.querySelector('[data-role="camera"]').addEventListener('click', () => this._toggleCamera());
     const rerack = this.el.querySelector('[data-role="rerack"]');
     if (rerack) rerack.addEventListener('click', () => { this.game = rules.newGame(); this._resetCamera(); this._saveProgress(); this._drawFrame(); });
     this.el.querySelector('[data-role="elev"]').addEventListener('input', (e) => {
@@ -538,10 +560,6 @@ class PoolUI {
     this._maybeDriveAiOrMp();
   }
 
-  _toggleCamera() {
-    this._camera = this._camera === 'top' ? 'behind' : 'top';
-    this.tableWrap.classList.toggle('p2-camera-behind', this._camera === 'behind');
-  }
 
   _resizeCanvas() {
     if (!this.canvas || this._dead) return;
@@ -636,6 +654,7 @@ class PoolUI {
     ctx.clearRect(0, 0, this._cw, this._ch);
     this._drawTable(ctx);
     if (this.game) this._drawBalls(ctx);
+    if (this._placingCue) this._drawBallInHand(ctx);
     if (this._aiming && !this._placingCue) this._drawAimLine(ctx);
     ctx.restore();
     this._paintPowerMeter();
@@ -675,11 +694,16 @@ class PoolUI {
   _drawBalls(ctx) {
     const legal = this._legalNumbersForLocal();
     const z = this._camZoom || 1;
+    // A ring means "this one is yours to hit." While the table is still OPEN both groups are legal
+    // (rules.js's legalTarget returns kinds: ['solid','stripe']), so ringing them says nothing at
+    // all and just buries the whole rack in yellow - which is exactly how the break screen looked.
+    // Mark only once the marking carries information: one group is mine, or the 8 is the target.
+    const markLegal = !!legal && !this.game.openTable;
     for (const b of this.game.balls) {
       if (b.pocketed) continue;
       const c = this._toCanvas(b.x, b.y);
       const rad = this._scale * z * R;
-      const isLegal = legal && legal.kinds && (legal.kinds.indexOf(b.kind) >= 0 || (b.kind === 'eight' && legal.allowEight));
+      const isLegal = markLegal && legal && legal.kinds && (legal.kinds.indexOf(b.kind) >= 0 || (b.kind === 'eight' && legal.allowEight));
       if (isLegal) {
         ctx.beginPath();
         ctx.arc(c.cx, c.cy, rad + 2.5, 0, Math.PI * 2);
@@ -743,6 +767,61 @@ class PoolUI {
         ctx.fillText(String(b.number), c.cx, c.cy + 0.5);
       }
     }
+  }
+
+  /** Ball in hand, said without a sentence. This used to be the caption "Ball in hand: drag the
+   *  cue ball, tap to place" across the top of the screen; Matt cut every word out of play
+   *  (2026-08-08), so the affordance moved onto the table where the action is. A dashed ring
+   *  breathes around the cue ball and four little arrows point inward at it: the universal
+   *  "this one is loose, move it" mark. Dashes and arrows are SHAPE, not colour. */
+  _drawBallInHand(ctx) {
+    const cue = ballById(this.game.balls, 'cue');
+    if (!cue || cue.pocketed) return;
+    const c = this._toCanvas(cue.x, cue.y);
+    const rad = this._scale * (this._camZoom || 1) * R;
+    // One slow breath every 1.6s, frozen at its midpoint under reduced motion (the loop still
+    // runs, so a fixed phase is how this animation is "turned off" rather than removed). The
+    // query object is built once and re-read: this runs on every animation frame, and
+    // matchMedia() itself is not free at 60fps.
+    if (this._reduceMQ === undefined) {
+      this._reduceMQ = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+    }
+    const phase = this._reduceMQ && this._reduceMQ.matches ? 0.5 : (performance.now() % 1600) / 1600;
+    const grow = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);   // 0 -> 1 -> 0, smooth
+    const ring = rad * (1.55 + grow * 0.35);
+
+    ctx.save();
+    ctx.setLineDash([rad * 0.42, rad * 0.34]);
+    ctx.lineDashOffset = -phase * rad * 1.52;                 // the dashes crawl round the ring
+    ctx.lineWidth = Math.max(1.5, rad * 0.17);
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.arc(c.cx, c.cy, ring, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = Math.max(1, rad * 0.11);
+    ctx.strokeStyle = '#ffce3a';
+    ctx.beginPath(); ctx.arc(c.cx, c.cy, ring, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Four inward arrowheads on the diagonals, so they never sit under the dashed ring's own
+    // stroke at the cardinal points and stay legible against any ball behind them.
+    const tip = ring + rad * 0.30, tail = ring + rad * 0.95, wing = rad * 0.30;
+    const aw = Math.max(1.4, rad * 0.15);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + i * Math.PI / 2;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      const px = -uy, py = ux;                                // unit normal, for the wings
+      const tx = c.cx + ux * tip, ty = c.cy + uy * tip;
+      for (const [style, w] of [['rgba(0,0,0,0.45)', aw * 1.9], ['#ffce3a', aw]]) {
+        ctx.strokeStyle = style; ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(c.cx + ux * tail + px * wing, c.cy + uy * tail + py * wing);
+        ctx.lineTo(tx, ty);
+        ctx.lineTo(c.cx + ux * tail - px * wing, c.cy + uy * tail - py * wing);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   /** The aim aid. The cue ball travels TOWARD your finger (see angleAndDistFromCue), and this
@@ -853,28 +932,61 @@ class PoolUI {
     if (fill) fill.style.width = Math.min(100, (this._power / 4.2) * 100) + '%';
   }
 
+  /** Which emoji stands for each side. Falls back to a cue ball and a robot so there is always a
+   *  face, never a blank or a name. */
+  _faceFor(mine) {
+    if (mine) return (this.profile && this.profile.emoji) || '\u{1F3B1}';
+    // The profile's `opponents` list is the player's CONFIGURED COMPUTER opponents, so it may only
+    // stand in for the bot. In multiplayer the other seat is a real person we have no avatar for,
+    // and borrowing a bot's emoji for them would be a small lie about who is playing.
+    if (this.mode === 'ai') {
+      const opp = this.profile && this.profile.opponents && this.profile.opponents[0];
+      return (opp && opp.emoji) || '\u{1F916}';
+    }
+    return '\u{1F464}';
+  }
+
+  /** The HUD, in symbols only. No sentence ever appears here during a game. */
   _paintHud() {
-    const el = this.el.querySelector('[data-role="turn-text"]');
-    if (!el || !this.game) return;
-    if (this.mode === 'practice') { el.textContent = ''; return; }
-    if (this.game.over) { el.textContent = ''; return; }
-    const seat = this.game.turnSeat;
-    if (this._isMySeat(seat)) el.textContent = this.game.ballInHand ? t('place_cue') : t('your_turn');
-    else el.textContent = this.mode === 'ai' && this._aiThinking ? t('opp_thinking', { opp: this._oppName() }) : t('opp_turn', { opp: this._oppName() });
+    if (!this.game) return;
+    const mine = this.el.querySelector('[data-role="pl-me"]');
+    const opp = this.el.querySelector('[data-role="pl-opp"]');
+    if (mine && opp) {
+      const myTurn = !this.game.over && this._isMySeat(this.game.turnSeat);
+      const oppTurn = !this.game.over && !this._isMySeat(this.game.turnSeat);
+      mine.classList.toggle('is-on', myTurn);
+      opp.classList.toggle('is-on', oppTurn);
+      // thinking reads as a pulse on their own face, not as a line of text
+      opp.classList.toggle('is-thinking', !!(oppTurn && this.mode === 'ai' && this._aiThinking));
+      const mySeat = this._isMySeat(0) ? 0 : 1;
+      this._paintGroup('[data-role="grp-me"]', this.game.groups[mySeat]);
+      this._paintGroup('[data-role="grp-opp"]', this.game.groups[1 - mySeat]);
+    }
     const near = this.el.querySelector('[data-role="rail-near"]');
     const far = this.el.querySelector('[data-role="rail-far"]');
     if (near && far) {
-      near.classList.toggle('is-lit', this._isMySeat(seat));
-      far.classList.toggle('is-lit', !this._isMySeat(seat));
+      near.classList.toggle('is-lit', this._isMySeat(this.game.turnSeat));
+      far.classList.toggle('is-lit', !this._isMySeat(this.game.turnSeat));
     }
     const slot = this.el.querySelector('[data-role="foul-slot"]');
     if (slot) {
       slot.innerHTML = this._foulMsg
-        ? `<button type="button" class="p2-foul-icon" data-role="foul-explain" title="${t('foul')}">⚠</button>`
+        ? `<button type="button" class="p2-foul-icon" data-role="foul-explain" aria-label="${t('foul')}">\u26A0</button>`
         : '';
       const btn = slot.querySelector('[data-role="foul-explain"]');
       if (btn) btn.addEventListener('click', () => this._showFoulToast());
     }
+  }
+
+  /** Solids vs stripes as a BALL, not a word: a filled disc, or a disc with a white band across
+   *  it. Blank while the table is still open. The class carries the shape, so it does not rely on
+   *  colour alone (root CLAUDE.md, accessibility). */
+  _paintGroup(sel, group) {
+    const el = this.el.querySelector(sel);
+    if (!el) return;
+    el.classList.toggle('is-solid', group === 'solid');
+    el.classList.toggle('is-stripe', group === 'stripe');
+    el.setAttribute('aria-label', group === 'solid' ? t('solid_shape_aria') : group === 'stripe' ? t('stripe_shape_aria') : '');
   }
 
   /** A native alert() blocks the whole page's main thread/input pipeline until
@@ -1246,17 +1358,16 @@ class PoolUI {
     }
     this._quitArmed = true;
     const btn = this.el.querySelector('[data-role="quit"]');
-    // A title= tooltip never shows on a touch device (no hover), so the
-    // original "tap again" affordance was invisible on a phone — a tap could
-    // quit silently with nothing ever shown on screen. This badge is real,
-    // visible, on-screen text instead.
-    const badge = this.el.querySelector('[data-role="quit-confirm"]');
-    if (btn) btn.classList.add('is-confirm');
-    if (badge) badge.hidden = false;
-    setTimeout(() => {
+    // "Tap again to quit" used to be a line of on-screen text beside the button. It is a WORD
+    // during play, which this game no longer has (Matt, 2026-08-08), and a title= tooltip is
+    // worse still (no hover on a phone, so it never shows at all). The armed state is carried by
+    // the button itself: it goes red and pulses. Shape AND colour, per the repo's colorblind
+    // rule -- the pulse is the cue that survives if the red does not read.
+    if (btn) { btn.classList.add('is-confirm'); btn.setAttribute('aria-label', t('quit_confirm')); }
+    clearTimeout(this._quitTimer);
+    this._quitTimer = setTimeout(() => {
       this._quitArmed = false;
-      if (btn) btn.classList.remove('is-confirm');
-      if (badge) badge.hidden = true;
+      if (btn) { btn.classList.remove('is-confirm'); btn.setAttribute('aria-label', t('quit')); }
     }, 3500);
   }
 

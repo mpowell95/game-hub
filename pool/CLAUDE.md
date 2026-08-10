@@ -123,8 +123,17 @@ Spin (a small cue-ball-face picker, drag inside sets `{a, b}` in [-1,1], double-
 center) and cue elevation (a plain slider, capped at 28° to match `strikeCueBall`'s real clamp —
 not a gesture, since raising the cue via drag would compete directly with aim/power on the same
 touch surface) are separate controls with their own hit areas, never competing with the table's
-own pointer stream. Camera (`🎥` toggle, top-down vs. a purely cosmetic `perspective()`/`rotateX()`
-CSS tilt for "behind the cue") is visual only — the physics coordinate system never changes.
+own pointer stream.
+
+**There is no tilted camera, and there must not be one again (removed 2026-08-08).** A `🎥` button
+used to swap the table between top-down and a cosmetic `perspective(900px) rotateX(28deg)` CSS tilt
+sold as "behind the cue." The physics never tilted with it, so in that view every ball was drawn
+somewhere other than where it actually was, and aiming — which converts a finger position on the
+canvas straight into a world angle — silently pointed somewhere else. Matt: *"get rid of this weird
+tilt feature."* The button, the `_camera` state, `_toggleCamera()` and the `.p2-camera-behind` rule
+are all gone. **The canvas is the table, one-to-one; do not put a view transform back on
+`.p2-table-wrap`.** Pinch-zoom/pan (below) is the exception that is safe precisely because it folds
+through `_toCanvas`/`_toWorld`, so the mapping stays invertible and aim stays true.
 
 **Pinch-zoom/pan (added 2026-07-28, BUILD-SPEC.md §6 #10).** Two fingers already meant "fine aim"
 (above), so a real tiebreak was required before this could be built — BUILD-SPEC.md §4 rule 6
@@ -143,6 +152,41 @@ required to start aiming afterward, never a fallthrough from a pinch into aim/pu
 to `{zoom: 1, pan: {0,0}}` at the start of every new game (solo start, practice re-rack, and MP
 round record) so nobody starts a fresh rack still zoomed in on the last one. `_toCanvas`/`_toWorld`
 fold zoom/pan in centrally, so drawing, aiming and cue placement never special-case the camera.
+
+## NO WORDS DURING PLAY (2026-08-08 — a hard rule for this game, not a preference)
+
+Matt, looking at the game screen: *"Get rid of the words on the top of the screen. No word
+instructions during the game. It must be self explanatory with symbols."* The game view had a
+running commentary along the top — "Your turn", "Solids", "Ball in hand: drag the cue ball, tap to
+place", "Tap again to quit" — and every one of those is now a drawn thing instead.
+
+**Nothing in the `.p2-game` view renders visible text.** The check is one line, and it is worth
+re-running after any change to `_renderGame`: walk the text nodes under `.p2-root` mid-game and the
+only strings that may come back are emoji and the `✕`/`↺` glyphs. What replaced each caption:
+
+| Was a sentence | Is now |
+|---|---|
+| "Your turn" / "{Opponent}'s turn" | two faces in the top-left, `.p2-pl.is-on` lit and full size, the other dimmed and shrunk |
+| "thinking…" | the bot's own face bobs (`p2-think`) |
+| "Solids" / "Stripes" | `.p2-pl-group` beside each face: a filled disc, or a disc with a band across it. **The band is a SHAPE** — the two must never be told apart by hue alone (Matt is red/green colorblind) |
+| "Ball in hand: drag the cue ball, tap to place" | `_drawBallInHand()` paints a breathing dashed ring and four inward arrows around the cue ball, ON the table where the action is |
+| "Tap again to quit" | the `✕` itself goes red, grows a ring and pulses (`.p2-icon-btn.is-confirm`) — three cues, only one of them colour |
+| "SPIN" / "POWER" / "RAISE CUE" captions | the widgets alone: a cue-ball face you poke, a wedge-shaped bar that fills, and a slider flanked by a flat cue and a raised one |
+
+Every one of those keeps its English/Spanish string as an `aria-label`, so `strings.js` is still
+the single source and a screen reader still hears a word. Deleting the strings would have been the
+wrong reading of the instruction: the words are off the SCREEN, not out of the app.
+
+**The one deliberate exception is the foul explanation.** A foul puts a `⚠` disc on the table
+corner; TAPPING it opens a short toast saying what the foul was. That is opt-in, it is the build
+guide's own design ("tapping the icon can explain it, nothing else appears"), and the alternative
+is a warning symbol with no way to ever learn what it meant. It is not an instruction and it never
+appears unasked.
+
+**The legal-target ring follows the same "say something or say nothing" rule.** A yellow ring round
+a ball means "this one is yours to hit." While the table is open both groups are legal, so the
+break screen had all fifteen balls ringed, which is pure noise — `_drawBalls` now suppresses the
+ring entirely while `openTable` is true and only marks once one group is actually yours.
 
 ## AI opponent (`js/ai.js`)
 
@@ -246,8 +290,8 @@ Boxes (`js/CLAUDE.md`'s "Multiplayer lockstep — invariants"). `js/net.js` itse
 
 ## Known limitations (stated honestly, not hidden)
 
-- Camera is top-down plus a cosmetic tilt toggle, now with pinch-zoom/pan (2026-07-28); still no
-  real 3D perspective — the physics coordinate system itself never rotates or moves.
+- Camera is top-down, with pinch-zoom/pan (2026-07-28); no 3D perspective at all, on purpose (see
+  "no tilted camera" above) — the physics coordinate system never rotates or moves.
 - No shot clock, no jump shots (elevation currently only drives curve/masse, not an actual
   vertical launch), no called-shot/safety-specific fouls beyond the generic rulebook above. These
   are deliberate (BUILD-SPEC.md §6 #12): if wanted, they belong in a second named rulebook, not

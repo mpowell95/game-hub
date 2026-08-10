@@ -221,22 +221,71 @@
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; min-height: 36px;
 }
-.p2-root .p2-turn-text { font-size: 14px; font-weight: 600; }
 .p2-root .p2-hud-right { display: flex; gap: 8px; }
 .p2-root .p2-icon-btn {
   width: 34px; height: 34px; border-radius: 50%; border: 1px solid #3a352e;
   background: var(--p2-surface); color: var(--p2-ink); font-size: 16px; cursor: pointer;
 }
-.p2-root .p2-icon-btn.is-confirm { background: #a83232; color: #fff; }
-.p2-root .p2-quit-confirm { font-size: 12px; color: #ffb4b4; font-weight: 600; }
+/* Quit, armed. There is no "tap again to quit" text any more (no words during play), so the
+   button has to say it by itself: it turns red AND grows a ring AND pulses. Three cues, only one
+   of which is colour -- Matt is red/green colorblind, so red alone may not read at all. */
+.p2-root .p2-icon-btn.is-confirm {
+  background: #a83232; color: #fff; border-color: #ff9a9a;
+  box-shadow: 0 0 0 3px rgba(168, 50, 50, 0.45);
+  animation: p2-quit-pulse 0.9s ease-in-out infinite;
+}
+@keyframes p2-quit-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* WHOSE TURN, WITHOUT A SENTENCE (Matt, 2026-08-08). Two faces side by side; the live one is
+   lit and lifted, the other is dimmed and small. Beside each face sits the group it is on, drawn
+   as the BALL itself: a filled disc for solids, a disc with a white band across it for stripes,
+   nothing at all while the table is still open. The band is a shape, so the distinction never
+   depends on colour. */
+.p2-root .p2-players { display: flex; align-items: center; gap: 14px; }
+.p2-root .p2-pl {
+  display: inline-flex; align-items: center; gap: 5px;
+  opacity: 0.38; transform: scale(0.86); transform-origin: left center;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.p2-root .p2-pl.is-on { opacity: 1; transform: scale(1); }
+.p2-root .p2-pl-face {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+  background: var(--p2-surface); border: 2px solid transparent;
+}
+.p2-root .p2-pl.is-on .p2-pl-face { border-color: var(--p2-accent); }
+.p2-root .p2-pl.is-thinking .p2-pl-face { animation: p2-think 1.1s ease-in-out infinite; }
+@keyframes p2-think {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+/* Empty until a group is assigned: no box, no placeholder, nothing to read as a control. */
+.p2-root .p2-pl-group { width: 0; height: 16px; border-radius: 50%; transition: width 0.15s ease; }
+.p2-root .p2-pl-group.is-solid,
+.p2-root .p2-pl-group.is-stripe {
+  width: 16px; border: 1.5px solid rgba(0, 0, 0, 0.5); position: relative; overflow: hidden;
+}
+.p2-root .p2-pl-group.is-solid { background: #d8a022; }
+.p2-root .p2-pl-group.is-stripe { background: #f4f1e8; }
+.p2-root .p2-pl-group.is-stripe::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%;
+  height: 52%; transform: translateY(-50%); background: #d8a022;
+}
 
 .p2-root .p2-table-wrap {
   position: relative; flex: 1; min-height: 0; margin: 0 8px;
   border-radius: 10px; overflow: hidden; background: var(--p2-rail-wood);
-  transition: transform 0.35s ease;
   touch-action: none;
 }
-.p2-root .p2-table-wrap.p2-camera-behind { transform: perspective(900px) rotateX(28deg) scale(1.05); }
+/* There is deliberately NO tilted "behind the cue" camera. It was a cosmetic
+   perspective()/rotateX() on this element that skewed the whole table while the physics
+   underneath stayed flat, so the balls no longer sat where they appeared to sit. Matt cut it
+   (2026-08-08: "get rid of this weird tilt feature"). Do not reintroduce a view transform here:
+   the canvas is the table, one-to-one, and aiming depends on that being true. */
 .p2-root .p2-table-wrap canvas[data-role="canvas"] { display: block; width: 100%; height: 100%; }
 
 .p2-root .p2-rail-glow {
@@ -263,14 +312,44 @@
   flex-wrap: wrap;
 }
 .p2-root .p2-spin-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.p2-root .p2-spin-label, .p2-root .p2-power-label, .p2-root .p2-elev-label {
-  font-size: 11px; color: var(--p2-muted); text-transform: uppercase; letter-spacing: 0.04em;
-}
 .p2-root .p2-power-wrap { flex: 1; min-width: 100px; }
-.p2-root .p2-power-meter { height: 10px; border-radius: 6px; background: var(--p2-surface); overflow: hidden; margin-top: 4px; }
+/* The power bar is a WEDGE, thin at the left and thick at the right, so its own outline says
+   "this end is harder" with no caption above it. */
+.p2-root .p2-power-meter {
+  height: 16px; background: rgba(255, 255, 255, 0.09); overflow: hidden;
+  /* An empty dark bar on a dark row was invisible until it filled, so there was nothing to tell
+     you a power meter existed. It now carries its own outline, drawn as a slightly larger wedge
+     showing through behind the track. */
+  clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%);
+  outline: 1px solid rgba(255, 255, 255, 0.14);
+  outline-offset: -1px;
+}
 .p2-root .p2-power-fill { height: 100%; width: 0%; background: var(--p2-accent); }
-.p2-root .p2-elev-wrap { display: flex; flex-direction: column; min-width: 110px; }
-.p2-root .p2-elev-slider { width: 100%; }
+/* A cue lying flat at one end of the slider, the same cue tilted up at the other. */
+.p2-root .p2-elev-wrap { display: flex; flex-direction: row; align-items: center; gap: 7px; min-width: 110px; }
+.p2-root .p2-elev-icon { display: inline-flex; width: 20px; height: 20px; color: var(--p2-ink); opacity: 0.8; flex: 0 0 auto; }
+.p2-root .p2-elev-icon svg { width: 100%; height: 100%; fill: none; }
+/* The browser's default range control ships a bright system blue that belongs to no part of this
+   game. Same felt/wood/brass language as everything else, on both engines. */
+.p2-root .p2-elev-slider {
+  width: 100%; min-width: 0; flex: 1 1 auto; margin: 0;
+  appearance: none; -webkit-appearance: none; background: transparent; touch-action: manipulation;
+}
+.p2-root .p2-elev-slider::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.16);
+}
+.p2-root .p2-elev-slider::-moz-range-track {
+  height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.16);
+}
+.p2-root .p2-elev-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; margin-top: -7.5px; border-radius: 50%;
+  background: #fdfbf6; border: 2px solid #0d0b09; cursor: pointer;
+}
+.p2-root .p2-elev-slider::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fdfbf6; border: 2px solid #0d0b09; cursor: pointer;
+}
 
 /* PORTRAIT IS THE DESIGN. There is no separate landscape layout and there is deliberately no
    "rotate your device" wall either - the retired build had one, and being told to turn your phone
@@ -281,7 +360,6 @@
 @media (max-height: 520px) {
   .p2-root .p2-controls { padding: 4px 10px calc(4px + env(safe-area-inset-bottom)); gap: 10px; }
   .p2-root .p2-spin { width: 46px; height: 46px; }
-  .p2-root .p2-spin-label, .p2-root .p2-power-label, .p2-root .p2-elev-label { font-size: 10px; }
   .p2-root .p2-hud { padding: 2px 10px; min-height: 28px; }
   .p2-root .p2-table-wrap { margin: 0 6px; }
 }
@@ -290,3 +368,14 @@
    light/dark/auto toggle (js/theme.js) — same precedent as Nuts & Bolts'
    workshop palette (root CLAUDE.md's theme-support section): a pool table
    looks like a pool table in every hub theme, no :root.gh-dark override needed. */
+
+/* Reduced motion: both of the HUD's animations settle to their final POSE rather than being
+   removed, per the repo-wide rule (an animation that is deleted must never take the state it was
+   carrying with it). The armed quit button keeps its red fill and ring; the thinking face keeps
+   its lit border. Nothing structural is ever hidden here. */
+@media (prefers-reduced-motion: reduce) {
+  .p2-root .p2-icon-btn.is-confirm { animation: none; transform: scale(1.12); }
+  .p2-root .p2-pl.is-thinking .p2-pl-face { animation: none; }
+  .p2-root .p2-pl { transition: none; }
+  .p2-root .p2-pl-group { transition: none; }
+}
