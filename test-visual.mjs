@@ -228,6 +228,93 @@ const MOTION = {
   },
 };
 
+// --- PLAY: can a human actually play this game? ------------------------------------------------
+//
+// THE FAILURE THIS EXISTS FOR, stated plainly so nobody repeats it. On 2026-08-08 I promoted Pool
+// over the old build, merged it, and deployed it to main WITHOUT EVER PLAYING A GAME OF IT. What I
+// had was: it draws, it fits the screen, it throws no errors, in three themes. All true, all
+// green, and none of it "a person can play this". My own screenshot showed the rack sitting
+// untouched after the one shot I attempted; I decided my test drag was too weak and shipped.
+//
+// Matt had asked, two messages earlier, "or test playing it?" - I answered that the engines play
+// themselves but the INTERFACE never does, identified the gap in a paragraph, and then did not
+// build it. This is that thing, built.
+//
+// A probe drives a game through its real UI, with real touch, and asserts something CHANGED that
+// only playing could change. Not "the button exists" - the ball moved, the shot landed, the
+// opponent replied. Anything a person would notice if the game were dead on arrival.
+//
+// A game with no probe is listed at the end of every run under "NEVER PLAYED BY ANYTHING". That
+// list is the honest state of this repo's coverage, and it should shrink.
+const PLAY = {
+  pool: {
+    what: 'break the rack, then get a shot back from the computer',
+    async run(page, cdp, tap) {
+      const start = await page.$('button:has-text("Start game")');
+      if (!start) return { ok: false, why: 'no Start game button on the setup screen' };
+      await tap(start);
+      await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
+      await page.waitForTimeout(1200);
+      const g = await page.evaluate(() => { const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; });
+      const TW = 0.9906, TH = 1.9812;
+      const scale = Math.min(g.w / TW, g.h / TH) * 0.9;
+      // The cue ball starts on the head spot. The shot is a SLINGSHOT - the ball travels opposite
+      // the drag - so to send it at the rack you pull AWAY from the rack.
+      const cue = { x: g.left + g.w / 2, y: g.top + g.h / 2 + (-TH * 0.25) * scale };
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cue.x, y: cue.y, id: 1 }] });
+      for (let i = 1; i <= 12; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cue.x, y: cue.y - (130 * i / 12), id: 1 }] });
+        await page.waitForTimeout(14);
+      }
+      await page.waitForTimeout(60);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+      const read = () => page.evaluate(() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('gamehub.poolv2.save.v1') || 'null');
+          if (!s) return null;
+          const c = s.game.balls.find((x) => x.id === 'cue');
+          return { cx: c.x, cy: c.y, turn: s.game.turnSeat, broken: !!s.game.broken, over: !!s.game.over };
+        } catch { return null; }
+      });
+      // Poll for the settle. The autosave lands AFTER the balls stop; a fixed wait read it too
+      // early once and reported a break that had actually happened as "the rack never moved".
+      let st = null;
+      for (let i = 0; i < 60 && !st; i++) { st = await read(); if (!st) await page.waitForTimeout(250); }
+      if (!st) return { ok: false, why: 'the break never resolved (no game state after 15s)' };
+      const travelled = Math.hypot(st.cx - 0, st.cy - (-TH * 0.25));
+      if (travelled < 0.4) return { ok: false, why: `the cue ball barely moved (${travelled.toFixed(2)}m) - a full-power break should cross the table` };
+      if (!st.broken) return { ok: false, why: 'the shot fired but the game never registered a break' };
+      // and the opponent has to answer, or it is a one-sided game
+      const t0 = Date.now();
+      while (Date.now() - t0 < 25000) {
+        const s = await read();
+        if (!s || s.over || s.turn === 0) return { ok: true, why: `break travelled ${travelled.toFixed(2)}m; computer replied` };
+        await page.waitForTimeout(300);
+      }
+      return { ok: false, why: 'the computer never took its turn within 25s' };
+    },
+  },
+
+  battleship: {
+    what: 'fire a shot and have it resolve on the enemy board',
+    async run(page, cdp, tap) {
+      const go = async (sel) => { const el = await page.waitForSelector(sel, { timeout: 8000 }); await tap(el); };
+      await go('[data-action="play-bot"]');
+      await go('[data-action="auto-place"]');
+      await go('[data-action="placement-ready"]');
+      await page.waitForTimeout(400);
+      const skip = await page.$('.bs-wait');
+      if (skip) await tap(skip).catch(() => {});
+      await go('[data-action="fire"]:not([disabled])');
+      // a resolved shot leaves a settled marker on the cell it hit
+      try { await page.waitForSelector('.bs-peg-miss, .bs-peg-hit', { timeout: 8000 }); }
+      catch { return { ok: false, why: 'fired at a cell and no hit/miss marker ever appeared' }; }
+      return { ok: true, why: 'shot fired and resolved to a marker' };
+    },
+  },
+};
+
 // --- harness ----------------------------------------------------------------------------------
 
 rmSync(OUT, { recursive: true, force: true });
@@ -396,6 +483,39 @@ async function checkMotion(game, probe) {
   }
 }
 
+
+/** Drive a game through its real UI with real touch and assert something only PLAYING could
+ *  change. See the PLAY table's header for the incident this exists for. */
+async function checkPlay(game, probe) {
+  const ctx = await browser.newContext({
+    viewport: VIEWPORT, deviceScaleFactor: 1, isMobile: true, hasTouch: true, reducedMotion: 'no-preference',
+  });
+  const page = await ctx.newPage();
+  const boom = [];
+  page.on('pageerror', (e) => boom.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Visual Test', emoji: '\u{1F419}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  try {
+    const cdp = await ctx.newCDPSession(page);
+    const tap = async (el) => { const b = await el.boundingBox(); await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); };
+    await page.goto(`${BASE}/${game}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(800);
+    const res = await probe.run(page, cdp, tap);
+    await page.screenshot({ path: join(OUT, `${game}--played.png`) });
+    if (boom.length) fail(game, 'play', `JS error while playing: ${boom[0]}`);
+    else if (res && res.ok) ok(game, 'play', `${probe.what} - ${res.why}`);
+    else fail(game, 'play', `CANNOT BE PLAYED: ${probe.what} - ${(res && res.why) || 'probe returned nothing'}`);
+  } catch (e) {
+    fail(game, 'play', `probe threw: ${e.message}`);
+  } finally {
+    await ctx.close();
+  }
+}
+
 console.log(`Looking at ${GAMES.length} of ${ALL_GAMES.length} games x ${MODES.length} modes at ${VIEWPORT.width}x${VIEWPORT.height}`);
 console.log(`  ${GAMES.join(', ')}`);
 console.log(`  why these: ${WHY}\n`);
@@ -403,6 +523,7 @@ console.log(`  why these: ${WHY}\n`);
 for (const game of GAMES) {
   for (const mode of MODES) await checkGame(game, mode);
   if (MOTION[game]) await checkMotion(game, MOTION[game]);
+  if (PLAY[game]) await checkPlay(game, PLAY[game]);
 }
 
 await browser.close();
@@ -410,8 +531,15 @@ stopServer();
 
 console.log(`\nContact sheet: ${OUT}  (${GAMES.length * MODES.length} screenshots)`);
 console.log('LOOK AT IT. This suite proves a game rendered, never that it looks right - see VISUAL-PROCESS.md.');
+const noPlay = GAMES.filter((g) => !PLAY[g]);
+if (noPlay.length) {
+  console.log(`\n  NEVER PLAYED BY ANYTHING (${noPlay.length}): ${noPlay.join(', ')}`);
+  console.log('  For these, this suite proves only that they DRAW. Nothing here has ever taken a turn');
+  console.log('  in them. Add a PLAY probe before calling one of them finished - see the table in');
+  console.log('  test-visual.mjs for the incident that rule came from.');
+}
 const noProbe = GAMES.filter((g) => !MOTION[g]);
-if (noProbe.length) console.log(`\nNo motion probe yet (renders-only coverage): ${noProbe.join(', ')}`);
+if (noProbe.length) console.log(`\nNo motion probe yet: ${noProbe.join(', ')}`);
 const gapEntries = Object.entries(KNOWN_GAPS).flatMap(([check, games]) => Object.entries(games).map(([g, why]) => ({ check, game: g, why })));
 if (gapEntries.length) {
   console.log(`\nKnown gaps still outstanding (${gapEntries.length}) - these do NOT fail the suite, but they are real work:`);
