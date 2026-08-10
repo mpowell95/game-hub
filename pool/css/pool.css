@@ -9,6 +9,13 @@
   --p2-muted: #a99f92;
   --p2-accent: #ffce3a;
   --p2-rail-wood: #3a2418;
+  /* the mode screen's own colours: this game's identity is felt and wood, and the screen that
+     introduces it had neither - it was a grey form on black */
+  --p2-felt: #14503a;
+  --p2-felt-deep: #0e3c2c;
+  --p2-card: #221d18;
+  --p2-card-line: #3a3229;
+  --p2-friend: #8a5fd0;
   /* .hub-game (css/hub.css) sets no explicit height on the container this module
      mounts into — a plain block child of a flex row, sized to CONTENT, not to the
      hub's available viewport. height:100% against that resolves to nothing
@@ -28,35 +35,136 @@
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* ---- setup screen ---- */
-/* The stylesheet sets no box-sizing anywhere, so `width: 100%` plus `padding: 0 18px` made the
-   setup screen 36px WIDER than the phone and pushed "Play online" and "Pro" off the right edge -
-   the whole of this game's sideways-scroll bug, in one missing line. Scoped under .p2-root like
-   every other rule here (root CLAUDE.md: a prefix alone is not isolation). */
-.p2-root, .p2-root *, .p2-root *::before, .p2-root *::after { box-sizing: border-box; }
+/* ---- setup screen ----------------------------------------------------------------------
+   Built to the pattern Battleship sets (the best mode screen in the hub): a coloured header
+   panel with the name and one line of what this is, a card riding over it carrying the
+   opponent and the difficulty, then ONE dominant action. Pool's identity comes from the
+   palette - felt green, rail wood - not from a different layout.
+   What it replaced: three identical rows of grey pills on black, the primary action the same
+   size AND the same yellow as the chips above it, and over half the screen empty. */
 
+/* box-sizing, and it is load-bearing. Without it `width: 100%` plus `padding: 0 14px` is 28px
+   WIDER than the phone and the right-hand edge of everything gets sliced off. This rule was added
+   once, then deleted by a later rewrite of this very block, and the bug came straight back -
+   silently, because .p2-root clips the overflow so the page never scrolls to reveal it. If you
+   rewrite the setup styles again, keep this line. */
+.p2-root, .p2-root *, .p2-root *::before, .p2-root *::after { box-sizing: border-box; }
+.p2-root.p2-on-felt { background: var(--p2-felt); }
+
+/* The WHOLE screen is the table, not a card floating on void. The previous cut left ~40% of the
+   phone as flat dead black under the card, which is what made it read as an unfinished form; a
+   felt background with a lit-table vignette fills it with the one thing this game is about, and
+   costs nothing. The card is the object ON the table. */
 .p2-root .p2-setup {
-  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
-  max-width: 480px;
-  margin: 0 auto;
-  width: 100%;
-}
-.p2-root .p2-title { font-size: 26px; font-weight: 700; margin: 4px 0 2px; }
-.p2-root .p2-tagline { color: var(--p2-muted); font-size: 14px; margin: 0 0 20px; }
-.p2-root .p2-row { margin-bottom: 16px; }
-.p2-root .p2-label { font-size: 13px; color: var(--p2-muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.p2-root .p2-seg { display: flex; gap: 6px; flex-wrap: wrap; }
-.p2-root .p2-seg button {
   flex: 1 1 auto;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #3a352e;
-  background: var(--p2-surface);
-  color: var(--p2-ink);
-  font-size: 14px;
-  cursor: pointer;
+  padding: 0 14px calc(18px + env(safe-area-inset-bottom));
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* a flick that reaches the end must not pan the hub behind it */
+  background:
+    radial-gradient(120% 55% at 50% 12%, rgba(255, 255, 255, .10) 0%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(180deg, var(--p2-felt) 0%, var(--p2-felt-deep) 52%, #0a2a20 100%);
 }
-.p2-root .p2-seg button.is-active { background: var(--p2-accent); color: #201a08; border-color: var(--p2-accent); font-weight: 700; }
+.p2-root .p2-headerpanel {
+  margin: 0 -14px;
+  padding: 20px 22px 26px;
+  text-align: center;
+  flex: none;
+}
+/* the rail: a wood band under the title, so the felt has an edge the way a table does */
+.p2-root .p2-headerpanel::after {
+  content: ''; display: block; height: 3px; margin: 18px -8px -6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(58, 36, 24, 0) 0%, var(--p2-rail-wood) 18%, #6b4429 50%, var(--p2-rail-wood) 82%, rgba(58, 36, 24, 0) 100%);
+}
+.p2-root .p2-title { font-size: 30px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.01em; }
+.p2-root .p2-sub { color: #d5ebdf; font-size: 13.5px; line-height: 1.35; margin: 0; }
+
+/* the card overlaps the panel above it, which is what makes the two read as one object */
+.p2-root .p2-modecard {
+  position: relative;
+  /* `margin: 0 auto` inside a flex COLUMN shrinks a block to its content width instead of
+     centring a full-width one - it came out at 61% of the phone. Stretch it, and let the auto
+     block margins centre it in whatever space is left under the header. */
+  width: 100%;
+  max-width: 452px;
+  align-self: center;
+  margin: 20px 0 auto;   /* sit just under the header; the felt fills the rest, as a table does */
+  flex: none;
+  background: var(--p2-card);
+  border: 1px solid var(--p2-card-line);
+  border-radius: 18px;
+  padding: 16px 16px 14px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .45);
+}
+.p2-root .p2-avatar {
+  width: 66px; height: 66px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fdfbf6 0 34%, #e6dfd2 36% 100%);
+  border: 3px solid #0d0b09;
+  display: flex; align-items: center; justify-content: center; font-size: 32px; line-height: 1;
+}
+.p2-root .p2-avatar-name { font-size: 15px; font-weight: 800; }
+.p2-root .p2-diffname {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 19px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--p2-accent);
+}
+.p2-root .p2-diffname svg { width: 15px; height: 15px; flex: none; }
+
+.p2-root .p2-slider-wrap { width: 100%; padding: 0 2px 2px; }
+.p2-root .p2-slider {
+  width: 100%; margin: 0; appearance: none; background: transparent; touch-action: manipulation;
+}
+.p2-root .p2-slider::-webkit-slider-runnable-track {
+  height: 7px; border-radius: 999px;
+  background: linear-gradient(90deg, #2e9e44 0%, var(--p2-accent) 50%, #d0533a 100%);
+}
+.p2-root .p2-slider::-moz-range-track {
+  height: 7px; border-radius: 999px;
+  background: linear-gradient(90deg, #2e9e44 0%, var(--p2-accent) 50%, #d0533a 100%);
+}
+.p2-root .p2-slider::-webkit-slider-thumb {
+  appearance: none; width: 24px; height: 24px; margin-top: -8.5px; border-radius: 50%;
+  background: #fdfbf6; border: 3px solid #0d0b09; cursor: pointer;
+}
+.p2-root .p2-slider::-moz-range-thumb {
+  width: 24px; height: 24px; border-radius: 50%; background: #fdfbf6; border: 3px solid #0d0b09; cursor: pointer;
+}
+.p2-root .p2-slider-stops {
+  display: flex; justify-content: space-between; margin-top: 3px;
+  font-size: 11px; font-weight: 700; color: var(--p2-muted);
+}
+.p2-root .p2-slider-stop.is-on { color: var(--p2-ink); }
+
+/* ONE dominant action, then the alternatives. The old screen made Start the same size and the
+   same colour as the chips above it, so nothing said what to press. */
+.p2-root .p2-bigbtn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px 16px; border: 0; border-radius: 13px; cursor: pointer;
+  font-size: 15.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  font-family: inherit; touch-action: manipulation;
+}
+.p2-root .p2-bigbtn-icon { width: 21px; height: 21px; flex: none; }
+.p2-root .p2-bigbtn-ai { background: var(--p2-accent); color: #231c05; box-shadow: 0 4px 0 #b8900f; }
+.p2-root .p2-bigbtn-friend { background: var(--p2-friend); color: #fff; box-shadow: 0 4px 0 #5c3d92; }
+.p2-root .p2-bigbtn-practice {
+  background: transparent; color: var(--p2-ink); border: 1px solid var(--p2-card-line);
+  text-transform: none; letter-spacing: 0; font-size: 14.5px; padding: 11px 16px;
+}
+.p2-root .p2-bigbtn:active { transform: translateY(2px); box-shadow: none; }
+.p2-root .p2-link {
+  background: none; border: 0; color: var(--p2-muted); font: inherit; font-size: 13.5px;
+  text-decoration: underline; cursor: pointer; padding: 6px 8px; touch-action: manipulation;
+}
+.p2-root .p2-lobby-title {
+  font-size: 17px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--p2-accent);
+}
+
 .p2-root .p2-actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
 .p2-root .p2-btn {
   padding: 12px 18px;
