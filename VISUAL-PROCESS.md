@@ -53,9 +53,13 @@ node test-visual.mjs escoba boggle   exactly those, whatever state they are in
 node test-visual.mjs --all           every game (a first run, or an occasional sweep)
 ```
 
-The one exception: **a change to shared code** (`js/`, `css/`, the hub's `index.html`, `sw.js`)
-puts every game back in scope, because those sit underneath all of them at once and that is
-exactly the class of change that has broken all of them before.
+**A full sweep is never automatic.** Matt's rule: *"Always ask before testing all games."* When
+shared code changes (`js/`, `css/`, the hub's `index.html`, `sw.js`) the tool says so loudly and
+recommends `--all`, because that is how every game has broken at once before. It still only checks
+what changed. Running all 19 is a decision a person makes.
+
+**If you are a session and shared code changed: tell Matt, recommend the sweep, and wait for a
+yes.** Do not just run it.
 
 It fails on the things that are wrong no matter what the design is:
 
