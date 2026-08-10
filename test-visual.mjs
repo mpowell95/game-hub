@@ -1,5 +1,9 @@
 // test-visual.mjs - the first suite in this repo that LOOKS at the game.
-// Run: node test-visual.mjs            (add --keep to leave the contact sheets on disk)
+//
+//   node test-visual.mjs                 the games that CHANGED (the default; see "WHICH games")
+//   node test-visual.mjs escoba boggle   exactly those
+//   node test-visual.mjs --all           every game
+//   ... --keep                           don't say the contact sheet gets overwritten next run
 //
 // WHY THIS EXISTS
 //
@@ -113,15 +117,75 @@ function findChromium() {
 const EXE = findChromium();
 if (!EXE) skip('no Chromium found', 'set CHROMIUM_PATH, or run this on the cloud image where it is pre-installed');
 
-const GAMES = readdirSync(ROOT)
+const ALL_GAMES = readdirSync(ROOT)
   .filter((d) => { try { return statSync(join(ROOT, d)).isDirectory(); } catch { return false; } })
   .filter((d) => existsSync(join(ROOT, d, 'index.html')) && existsSync(join(ROOT, d, 'js', 'ui.js')))
   .filter((d) => !EXCLUDED[d])
   .sort();
 
-if (GAMES.length < 10) {
-  console.log(`FAIL: only found ${GAMES.length} game folders - the discovery rule is broken`);
+if (ALL_GAMES.length < 10) {
+  console.log(`FAIL: only found ${ALL_GAMES.length} game folders - the discovery rule is broken`);
   process.exit(1);
+}
+
+// --- WHICH games to look at -------------------------------------------------------------------
+//
+// NOT all of them, every time. Matt, 2026-08-08: "If a game like Escoba works and is fully tested
+// and played, why keep testing it?" He is right - a finished game re-checked on every unrelated
+// run is 90 seconds of nothing, every time, forever. So by default this looks at what actually
+// CHANGED:
+//
+//   node test-visual.mjs                 the games whose own folder has changes (vs origin/main
+//                                        and in the working tree). Nothing changed -> nothing run.
+//   node test-visual.mjs escoba boggle   exactly those, whatever their state
+//   node test-visual.mjs --all           every game (the occasional sweep, or a first run)
+//
+// The ONE case where an untouched game still gets looked at: a change to SHARED code. js/, css/,
+// the hub's own index.html and sw.js are underneath every game at once, and that is precisely the
+// class of change that has broken all of them before (the hub blank-screen incident; Hill Climb's
+// resize listener). Touch shared code and everything gets a look; touch one game and only it does.
+const SHARED = (f) => f.startsWith('js/') || f.startsWith('css/') || f === 'index.html' || f === 'sw.js';
+
+function changedFiles() {
+  const seen = new Set();
+  const runs = [
+    ['diff', '--name-only', 'origin/main...HEAD'],   // committed on this branch
+    ['diff', '--name-only'],                          // unstaged
+    ['diff', '--name-only', '--cached'],              // staged
+    ['ls-files', '--others', '--exclude-standard'],   // brand-new, never committed
+  ];
+  for (const args of runs) {
+    const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+    if (r.status === 0) for (const f of r.stdout.split('\n')) if (f) seen.add(f);
+  }
+  return [...seen];
+}
+
+function selectGames() {
+  const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  if (process.argv.includes('--all')) return { games: ALL_GAMES, why: 'every game (--all)' };
+  if (args.length) {
+    const unknown = args.filter((a) => !ALL_GAMES.includes(a));
+    if (unknown.length) {
+      console.log(`FAIL: no such game folder: ${unknown.join(', ')}`);
+      console.log(`      known games: ${ALL_GAMES.join(', ')}`);
+      process.exit(1);
+    }
+    return { games: args.sort(), why: 'named on the command line' };
+  }
+  const files = changedFiles();
+  const shared = files.filter(SHARED);
+  if (shared.length) return { games: ALL_GAMES, why: `shared code changed (${shared.slice(0, 3).join(', ')}${shared.length > 3 ? ', ...' : ''}), which sits underneath every game` };
+  const touched = ALL_GAMES.filter((g) => files.some((f) => f.startsWith(`${g}/`)));
+  return { games: touched, why: touched.length ? 'changed since origin/main' : 'nothing changed' };
+}
+
+const { games: GAMES, why: WHY } = selectGames();
+if (!GAMES.length) {
+  console.log('No game changed, so there is nothing to look at.');
+  console.log('  node test-visual.mjs <game>   to check one anyway');
+  console.log('  node test-visual.mjs --all    to sweep every game');
+  process.exit(0);
 }
 
 // --- MOTION: per-game "is this animation actually watchable" probes --------------------------
@@ -321,8 +385,9 @@ async function checkMotion(game, probe) {
   }
 }
 
-console.log(`Looking at ${GAMES.length} games x ${MODES.length} modes at ${VIEWPORT.width}x${VIEWPORT.height}: ${GAMES.join(', ')}`);
-console.log(`(skipped: ${Object.entries(EXCLUDED).map(([k, v]) => `${k} - ${v}`).join('; ')})\n`);
+console.log(`Looking at ${GAMES.length} of ${ALL_GAMES.length} games x ${MODES.length} modes at ${VIEWPORT.width}x${VIEWPORT.height}`);
+console.log(`  ${GAMES.join(', ')}`);
+console.log(`  why these: ${WHY}\n`);
 
 for (const game of GAMES) {
   for (const mode of MODES) await checkGame(game, mode);
@@ -342,7 +407,10 @@ if (gapEntries.length) {
   for (const g of gapEntries) console.log(`  - ${g.game}: ${g.check}  (${g.why})`);
 }
 // A gap that no longer reproduces is debt somebody paid off; the list must not keep excusing it.
+// Only judgeable for games actually looked at this run - a default run checks what changed, so an
+// untouched game's entry is unproven, not stale.
 for (const g of gapEntries) {
+  if (!GAMES.includes(g.game)) continue;
   if (!gapsHit.has(`${g.check}::${g.game}`)) {
     failures.push(`STALE KNOWN_GAP: ${g.game} now PASSES "${g.check}" - delete its KNOWN_GAPS entry`);
     console.log(`FAIL  stale KNOWN_GAP: ${g.game} now passes "${g.check}". Delete the entry.`);
