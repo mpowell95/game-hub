@@ -140,10 +140,11 @@ if (ALL_GAMES.length < 10) {
 //   node test-visual.mjs escoba boggle   exactly those, whatever their state
 //   node test-visual.mjs --all           every game (the occasional sweep, or a first run)
 //
-// The ONE case where an untouched game still gets looked at: a change to SHARED code. js/, css/,
-// the hub's own index.html and sw.js are underneath every game at once, and that is precisely the
-// class of change that has broken all of them before (the hub blank-screen incident; Hill Climb's
-// resize listener). Touch shared code and everything gets a look; touch one game and only it does.
+// A full sweep is NEVER automatic. Matt, 2026-08-08: "Always ask before testing all games."
+// When shared code changes (js/, css/, the hub's index.html, sw.js) this RECOMMENDS a sweep in
+// large letters, because that is the class of change that has broken every game at once before
+// (the hub blank-screen incident; Hill Climb's resize listener) - and then it checks only what
+// changed anyway. Running all 19 is a decision a person makes, not one a script makes for them.
 const SHARED = (f) => f.startsWith('js/') || f.startsWith('css/') || f === 'index.html' || f === 'sw.js';
 
 function changedFiles() {
@@ -175,12 +176,24 @@ function selectGames() {
   }
   const files = changedFiles();
   const shared = files.filter(SHARED);
-  if (shared.length) return { games: ALL_GAMES, why: `shared code changed (${shared.slice(0, 3).join(', ')}${shared.length > 3 ? ', ...' : ''}), which sits underneath every game` };
   const touched = ALL_GAMES.filter((g) => files.some((f) => f.startsWith(`${g}/`)));
-  return { games: touched, why: touched.length ? 'changed since origin/main' : 'nothing changed' };
+  return {
+    games: touched,
+    why: touched.length ? 'changed since origin/main' : 'nothing changed',
+    // surfaced, never acted on: the sweep is the human's call
+    recommendSweep: shared.length ? shared.slice(0, 4) : null,
+  };
 }
 
-const { games: GAMES, why: WHY } = selectGames();
+const { games: GAMES, why: WHY, recommendSweep } = selectGames();
+if (recommendSweep) {
+  console.log('');
+  console.log('  !! SHARED CODE CHANGED: ' + recommendSweep.join(', '));
+  console.log('     That sits underneath every game, and is how all of them have broken at once');
+  console.log('     before. A full sweep is RECOMMENDED - but it is your call, so ask first:');
+  console.log('         node test-visual.mjs --all');
+  console.log('');
+}
 if (!GAMES.length) {
   console.log('No game changed, so there is nothing to look at.');
   console.log('  node test-visual.mjs <game>   to check one anyway');
