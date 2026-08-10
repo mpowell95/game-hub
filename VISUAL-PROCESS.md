@@ -40,9 +40,24 @@ Your session ends and your eyes go with it. Convert the picture into something d
 
 ## 3. While building
 
-`node test-visual.mjs` drives every game in a real Chromium at 393x852 in light, dark and
-reduced-motion, and writes a contact sheet to `.visual-out/`. It fails on the things that are wrong
-no matter what the design is:
+`node test-visual.mjs` drives a game in a real Chromium at 393x852 in light, dark and
+reduced-motion, and writes a contact sheet to `.visual-out/`.
+
+**It looks at what CHANGED, not at all 19 games every time.** Matt's rule, and it is the right one:
+a finished game re-checked on every unrelated run is 90 seconds of nothing, forever.
+
+```
+node test-visual.mjs                 the games whose own folder has changes. Nothing changed,
+                                     nothing run - it exits in under a second.
+node test-visual.mjs escoba boggle   exactly those, whatever state they are in
+node test-visual.mjs --all           every game (a first run, or an occasional sweep)
+```
+
+The one exception: **a change to shared code** (`js/`, `css/`, the hub's `index.html`, `sw.js`)
+puts every game back in scope, because those sit underneath all of them at once and that is
+exactly the class of change that has broken all of them before.
+
+It fails on the things that are wrong no matter what the design is:
 
 | Check | The bug it exists for |
 |---|---|
