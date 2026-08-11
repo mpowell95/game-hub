@@ -138,36 +138,23 @@
       text-align: center; color: var(--hub-muted); font-size: .84rem; line-height: 1.5;
       display: flex; flex-direction: column; align-items: center; gap: 10px;
     }
-    /* Reset is destructive - a solid red button, last on the page (own row, below
-       Device details) so it isn't the first/easiest tap target in this group. */
+    /* Reset is destructive - a solid red button, last on the page (its own row, below Report a
+       bug) so it isn't the first/easiest tap target in this group. */
     .pf-reset-btn {
       font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 16px; border-radius: 11px;
       border: 1px solid #c2402f; background: #c2402f; color: #fff;
       cursor: pointer; touch-action: manipulation;
     }
     .pf-reset-btn:hover { background: #a8341f; border-color: #a8341f; }
-    /* Device details is informational, not destructive - a neutral outline button,
-       same shape family as Reset but its own row above it. */
-    .pf-dev-btn {
+    /* The quiet outline button (Report a bug), same shape family as Reset but its own row above
+       it. Named .pf-dev-btn until 2026-08-11, when Device details was retired and this style was
+       left serving the button that replaced it. */
+    .pf-report-btn {
       font: inherit; font-weight: 700; margin-top: 0; padding: 10px 16px; border-radius: 11px;
       border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
       cursor: pointer; touch-action: manipulation;
     }
-    .pf-dev-btn:hover { background: var(--hub-surface-2); border-color: var(--hub-surface-2); }
-
-    .pf-dev-card { max-width: 560px; max-height: 82vh; overflow-y: auto; }
-    .pf-dev-status {
-      font-size: .84rem; font-weight: 700; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px;
-    }
-    .pf-dev-status.pending { background: var(--hub-surface-2); color: var(--hub-muted); }
-    .pf-dev-status.ok { background: rgba(23, 138, 122, .12); color: #178A7A; }
-    .pf-dev-status.err { background: rgba(224, 83, 47, .12); color: #c2402f; }
-    .pf-dev-summary { font-size: .86rem; color: var(--hub-ink); margin: 0 0 12px; line-height: 1.5; }
-    .pf-dev-json {
-      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre-wrap; word-break: break-word; background: var(--hub-surface-2);
-      border-radius: 10px; padding: 12px; margin: 0; color: var(--hub-ink);
-    }
+    .pf-report-btn:hover { background: var(--hub-surface-2); border-color: var(--hub-surface-2); }
 
     /* Emoji picker modal */
     .pf-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
@@ -260,8 +247,7 @@
         <!-- The same form the launcher opens (js/bug-report-ui.js). Here too because this is where
              someone already comes when something looks wrong, and directly above Device details on
              purpose: a report SENDS that whole diagnostic, so nobody need press both. -->
-        <button type="button" class="pf-dev-btn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
-        <button type="button" class="pf-dev-btn" id="pf-devdetails-btn" data-i18n="pf_devdetails_btn">Device details</button>
+        <button type="button" class="pf-report-btn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
         <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
     </main>
@@ -291,25 +277,9 @@
     </div>
   </div>
 
-  <!-- Device details: gathers every identifying/device/profile record on this device,
-       shows it, and sends it to Matt automatically - nothing to copy or screenshot. -->
-  <div class="pf-modal" id="pf-devdetails" hidden>
-    <div class="pf-modal-scrim" data-dev-close></div>
-    <div class="pf-modal-card pf-dev-card" role="dialog" aria-modal="true" aria-label="Device details" data-i18n-aria="pf_devdetails_dialog_aria">
-      <div class="pf-modal-head">
-        <strong data-i18n="pf_devdetails_btn">Device details</strong>
-        <button type="button" class="pf-x" data-dev-close aria-label="Close" data-i18n-aria="pf_close_aria">&times;</button>
-      </div>
-      <p class="pf-dev-status pending" id="pf-dev-status" data-i18n="pf_dev_gathering">Gathering...</p>
-      <p class="pf-dev-summary" id="pf-dev-summary"></p>
-      <pre class="pf-dev-json" id="pf-dev-json"></pre>
-    </div>
-  </div>
-
   <script type="module">
     import { loadProfile, saveProfile, clearProfile, newPlayerCode, canonicalizeCode } from '../js/profile-store.js';
     import * as net from '../js/stats-net.js';
-    import { gatherDeviceReport, uploadDeviceReport } from '../js/device-report.js';
     import { makeT, onLangChange } from '../js/i18n.js';
     import { getTheme, setTheme } from '../js/theme.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
@@ -586,48 +556,6 @@
         const m = await import('../js/bug-report-ui.js');
         await m.openBugReport();
       } catch (e) { console.error('Bug report form failed to load', e); }
-    });
-
-    // -- Device details ------------------------------------------------------------
-    // Gathers everything identifying stored on this device (profile, stats, every
-    // game's own settings/saves, plus two Firebase reads that catch a mixed-up
-    // profile), shows it, and sends it to Matt automatically - by design there is
-    // nothing here for the person holding the phone to copy, screenshot, or relay.
-    const elsDev = {
-      btn: $('#pf-devdetails-btn'),
-      modal: $('#pf-devdetails'),
-      status: $('#pf-dev-status'),
-      summary: $('#pf-dev-summary'),
-      json: $('#pf-dev-json'),
-    };
-    const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    function setDevStatus(kind, text) {
-      elsDev.status.className = 'pf-dev-status ' + kind;
-      elsDev.status.textContent = text;
-    }
-    elsDev.modal.querySelectorAll('[data-dev-close]').forEach((n) =>
-      n.addEventListener('click', () => { elsDev.modal.hidden = true; }));
-    elsDev.btn.addEventListener('click', async () => {
-      elsDev.modal.hidden = false;
-      elsDev.summary.textContent = '';
-      elsDev.json.textContent = '';
-      setDevStatus('pending', t('pf_dev_gathering_full'));
-      let report;
-      try {
-        report = await gatherDeviceReport();
-      } catch (e) {
-        setDevStatus('err', t('pf_dev_gather_err', { msg: (e && e.message ? e.message : e) }));
-        return;
-      }
-      const name = (report.profile && report.profile.name) || t('pf_dev_noname');
-      const code = (report.profile && report.profile.playerId) || '—';
-      elsDev.summary.innerHTML =
-        `<b>${escHtml(name)}</b> &middot; device ${escHtml(report.deviceId.slice(0, 8))} &middot; code ${escHtml(code)}`;
-      elsDev.json.textContent = JSON.stringify(report, null, 2);
-      setDevStatus('pending', t('pf_dev_sending'));
-      const result = await uploadDeviceReport(report);
-      if (result.ok) setDevStatus('ok', t('pf_dev_sent_ok'));
-      else setDevStatus('err', t('pf_dev_send_err', { reason: result.reason }));
     });
 
     // -- Initial paint -----------------------------------------------------------

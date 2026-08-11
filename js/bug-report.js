@@ -21,6 +21,7 @@ import { getStatsApp } from './firebase-boot.js';
 import { loadProfile } from './profile-store.js';
 import { deviceId, statsId } from './game-stats.js';
 import { recentErrors } from './error-log.js';
+import { installState } from './install-state.js';
 
 // --- limits -------------------------------------------------------------------------------------
 // Screenshots ride as base64 data URLs. RTDB is not a file store, so the caps stay conservative:
@@ -87,17 +88,6 @@ export function summarizeEnvironment(env) {
 
 const safe = (fn, fallback = null) => { try { const v = fn(); return v === undefined ? fallback : v; } catch { return fallback; } };
 const safeAsync = async (fn, fallback = null) => { try { const v = await fn(); return v === undefined ? fallback : v; } catch { return fallback; } };
-
-/** Which PWA display mode the page is running in - Matt's "browser tab vs added to the home
- *  screen" question. iOS Safari predates the media query, so `navigator.standalone` is checked
- *  too and reported separately rather than merged away. */
-function displayModeOf() {
-  const modes = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay', 'browser'];
-  for (const m of modes) {
-    if (safe(() => window.matchMedia(`(display-mode: ${m})`).matches, false)) return m;
-  }
-  return null;
-}
 
 /** A short human label for the phone/computer, best-effort. UA-CH gives a real model string on
  *  Android; iOS gives nothing beyond "iPhone", which is itself the useful answer. */
@@ -210,6 +200,7 @@ export async function gatherEnvironment() {
 
   const conn = safe(() => nav.connection || nav.mozConnection || nav.webkitConnection, null);
   const swCache = await serviceWorkerVersion();
+  const install = safe(() => installState(), {});
 
   const env = {
     capturedAt: new Date().toISOString(),
@@ -225,10 +216,14 @@ export async function gatherEnvironment() {
     hardwareConcurrency: safe(() => nav.hardwareConcurrency, null),
     deviceMemoryGB: safe(() => nav.deviceMemory, null),
     // --- browser vs installed app (Matt's explicit ask) ---------------------------------------
-    displayMode: displayModeOf(),
+    // Through js/install-state.js, the SAME answer players/<id> is mirrored with - a report and
+    // the sync must never be able to disagree about how somebody is playing.
+    displayMode: install.mode,
+    installed: install.installed,
+    a2hsDismissed: install.a2hsDismissed,
+    // Kept separate rather than folded into `installed`: on iOS this is the only signal, and
+    // seeing the raw flag matters when a report and the media query disagree.
     iosStandalone: safe(() => (typeof nav.standalone === 'boolean' ? nav.standalone : null), null),
-    installed: safe(() => window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true, null),
-    a2hsDismissed: safe(() => localStorage.getItem('hub-a2hs-dismissed-v1') === '1', null),
     url: safe(() => location.href, null),
     referrer: safe(() => document.referrer || null, null),
     // --- screen / layout ----------------------------------------------------------------------
