@@ -56,47 +56,74 @@ add it to the AI's hand (where it already lives), not to the resolver.
 
 Resolution order, all in `game.js`:
 
-1. `aim` drifts the ball across the lane by `LATERAL_GAIN` (1.35), **folding at the rails** — a
-   full-tilt flick banks, which is a legitimate way to line up a corner cup and costs
+1. `aim` drifts the ball across the lane by `LATERAL_GAIN` (1.35), **folding at the rails** - a
+   full-tilt flick banks, which is a legitimate way to line up a wide target and costs
    `BOUNCE_LOSS` (0.13) energy per bounce.
-2. Arrival energy below `SHORT_BELOW` (0.28) never made the ramp: it rolls back for nothing.
-3. **Corner cups are checked BEFORE the rings** — a ball far enough out to reach one was never over
-   the ring stack. Both conditions are required (`|u| >= 0.68` AND energy 0.74–0.92), which is what
-   makes a 100 a real skill shot rather than "flick harder".
-4. Otherwise the energy bands pick a ring. **The bands get narrower as they get more valuable**
-   (10 is 0.16 wide, 50 is 0.08) — that gradient IS the difficulty of the game.
-5. Above `OVER_ABOVE` (0.88) the ball flies over the back and drops into the 10. Scoring, but only
-   just: the deliberate penalty that stops "flick as hard as possible" being a strategy.
+2. Below `SHORT_BELOW` (0.28) the ball never made the ramp; above `OVER_ABOVE` (0.94) it sails over
+   the back. Both score nothing.
+3. In between, energy maps to a DEPTH in board space and the offset to an x, and **the first target
+   ellipse containing that point wins**. Targets are ordered small-and-valuable first, catch-all
+   last, so the 100 cups beat the 50's area where they overlap.
+4. Every board ends with a **catch-all** covering the whole playfield, so a ball that stays on the
+   board always scores something - short of the 20, wide of the stack, or long of the 50 all give
+   the 10. That is the classic machine's real behaviour and it is why there is no dead band.
 
-`test.js` pins every band edge, both cups, the bank shot, and that the bands are contiguous (no
-power between short and over scores nothing).
+**The drawn oval and the catch-all are deliberately different ellipses** (see `boards.js`): the
+oval is scenery, the catch-all is scoring. Do not "fix" the mismatch by equating them.
 
-## The opponent, and why the tiers are the numbers they are
+`test.js` pins the target windows, both cups, the bank shot, that power walks the stack in order,
+and that no power between short and over scores nothing.
 
-The AI is modelled as a HAND, not as a score: it picks a target and throws at it with a per-tier
-error, so it misses the way a person misses (short, long, into the wrong ring) instead of being
-handed points. Each tier also has a `greed`: how often it chases the x3 badge instead of its safe
-target.
+## Machines, unlocking and the three scores (2026-08-11 rework)
 
-**Chasing the badge is the entire skill curve of this game**, and that is what the tuning is built
-around. Measured over 600 full matches per cell, multiplier applied:
+Matt: *"I want skeeball and pinball to be similar in that they each have multiple maps that need to
+be unlocked... this should replace the computer player."* So:
 
-| | Easy | Medium | Hard |
-|---|---|---|---|
-| casual player (aims at the 40, never chases the badge) | 82% | 39% | 1% |
-| player who chases the badge | 99% | 93% | 35% |
+- **There is no computer opponent.** The old easy/medium/hard AI is gone. A game is nine balls
+  against the scoreboard. (The tuning work that went into it is not lost - the numbers and the
+  method are in git history and in this file's own history; do not re-derive them if the AI ever
+  comes back for a reason.)
+- **A board is DATA** (`js/boards.js`): a palette, a target layout, and the score that unlocks the
+  next machine. Adding one should touch nothing else. `classic` is measured off IMG_3952;
+  `stars` is a second machine with a genuinely different LAYOUT (targets scattered wide, so it
+  rewards aim where classic rewards power control) rather than a recolour - the reference's own
+  locked machines change the layout too, and a ladder of reskins is not worth climbing.
+- **Unlock rule: beat the next machine's target score on the one before it** (Matt's choice from
+  three options). `unlockScore` on the entry; `Game.unlocks()` decides; the end card announces it.
+- **Boards ARE the difficulty axis**, so `byDiff` is keyed by board id - Hill Climb's precedent
+  (`hillclimb/CLAUDE.md`, "Stages ARE the difficulty axis"). The old `easy`/`medium`/`hard` buckets
+  from the vs-computer build are untouched and still count in the leaderboard's All filter.
 
-Easy was a **57% coin flip** for that casual player in the first build - it aimed at the 30 and got
-there too often, which is not what the word Easy promises. It now aims at the 20 with more error
-and almost never chases the badge.
+### The three numbers on the cabinet head
 
-**`test.js`'s per-ball averages UNDERSTATE every tier and must not be used for tuning** - they do
-not apply the multiplier, and the AI chases it. That is why `test.js` has a second, whole-match
-block that plays 300 real matches per cell against a simulated human and asserts the tiers stay in
-order, that Easy is actually easy for someone who has not learned the badge (>65%), that Medium is
-a contest and not a wall (15-60%), and that Hard is beatable by someone who has (>20%) but not a
-pushover (<80%). Wide ranges on purpose: a tripwire for "the tiers got inverted", not a pin on the
-exact tuning. Verified non-theatre by giving Easy Hard's config and watching four assertions go red.
+The marquee shows the app-wide **RECORD** for that machine, the live **SCORE**, and your **BEST**.
+IMG_3960's own `BALL  SCORE` LED panel is the precedent for putting them in the cabinet head rather
+than in a floating HUD.
+
+**The app-wide record is DERIVED at read time from the already-synced player records**
+(`js/arcade-scores.js`'s `appWideBest`, fed by the same `watchPlayers` + `players-agg` the
+leaderboard uses). There is deliberately **no shared `highscores/` node**: no new write path, no
+rules change, no way for one device to corrupt a number everyone sees, and it cannot disagree with
+the leaderboard. The cost is that a new record appears only after that player's device next syncs,
+and offline the marquee shows a dash rather than a stale number. **Unverified against real
+Firebase** - a cloud session cannot reach it (same honest caveat as Pool's and Boggle's MP).
+
+### Why "resets every 24 hours" does not reset anything
+
+The daily best is a **date-keyed map**, `daily: { '2026-08-11': 640 }`, and "today" is a READ of
+today's key. Nothing is ever cleared, there is no expiry job to get wrong, and the player keeps a
+real per-day history for free. A `todayBest` field plus a timer would have been THE LAW rule 2
+violated with a cron attached. Local calendar day, not UTC - "today" has to mean what the player
+thinks it means. `test-arcade-scores.mjs` pins all of it.
+
+### Shared with Pinball from day one
+
+`js/arcade-scores.js` owns the score/unlock semantics for both games rather than Skeeball owning
+them and Pinball copying them later. Matt named both games in the same breath, this layer is where
+THE LAW lives, and this repo's own notes record what happens when "extract it when the second one
+arrives" meets a session with no memory of the first. Pinball needs to pass its own sub-counter key
+(`pb`) to `appWideBest` - that parameter exists precisely so the shared module has no opinion about
+whose boards it is reading.
 
 ## Deviations from the reference, and why
 

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v289';
+const CACHE = 'game-hub-v291';
 
 const ASSETS = [
   './',
@@ -30,6 +30,7 @@ const ASSETS = [
   './js/profile-store.js',
   './js/firebase-config.js',
   './js/game-stats.js',
+  './js/arcade-scores.js',
   './js/game-stats-global.js',
   './js/game-stats-ui.js',
   './js/stats-net.js',
@@ -203,6 +204,7 @@ const ASSETS = [
   './skeeball/css/skeeball.css',
   './skeeball/js/ui.js',
   './skeeball/js/game.js',
+  './skeeball/js/boards.js',
   './skeeball/js/render.js',
   './skeeball/js/strings.js',
   // Snake v2 (devOnly preview, 2026-08-01): the card renders only for isDevProfile(), but the

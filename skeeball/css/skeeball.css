@@ -15,7 +15,12 @@
   --sk-accent: #C8452F;
   --sk-accent-ink: #ffffff;
   --sk-alley: #1B1B1F;
+  /* The picker is an ordinary page, so .sk-root paints its OWN ground rather than trusting the
+     host's body colour. The standalone page used to be painted for a full-bleed alley, which left
+     the picker's dark ink on a dark background and effectively invisible. */
+  --sk-bg: #eef2f7;
 
+  background: var(--sk-bg);
   color: var(--sk-ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -26,6 +31,7 @@
   --sk-surface: #161d28;
   --sk-surface-2: #1e2734;
   --sk-line: #2c3746;
+  --sk-bg: #10151d;
 }
 
 /* --- setup ------------------------------------------------------------------------------------ */
@@ -74,6 +80,45 @@
   background: transparent; color: var(--sk-ink);
   font: inherit; font-size: 15px; font-weight: 600;
   cursor: pointer; touch-action: manipulation;
+}
+
+/* --- machine picker --------------------------------------------------------------------------- */
+
+.sk-root .sk-pick {
+  max-width: 460px; margin: 0 auto; padding: 12px 16px 28px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sk-root .sk-cards { display: flex; flex-direction: column; gap: 10px; }
+.sk-root .sk-card {
+  display: flex; align-items: stretch; gap: 12px; width: 100%;
+  padding: 10px; border: 2px solid var(--sk-line); border-radius: 14px;
+  background: var(--sk-surface); color: var(--sk-ink);
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-card.is-locked { opacity: 0.62; cursor: default; }
+.sk-root .sk-card-art {
+  flex: none; width: 74px; border-radius: 10px;
+  background: linear-gradient(150deg, var(--sk-b), var(--sk-a));
+  display: flex; align-items: center; justify-content: center;
+}
+.sk-root .sk-lock { font-size: 24px; }
+.sk-root .sk-card-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sk-root .sk-card-name { font-size: 16px; font-weight: 800; }
+.sk-root .sk-card-line { font-size: 12.5px; color: var(--sk-muted); }
+.sk-root .sk-card-line b { color: var(--sk-ink); font-variant-numeric: tabular-nums; }
+.sk-root .sk-card-line i { font-style: normal; opacity: 0.8; }
+.sk-root .sk-card-need { font-weight: 700; }
+.sk-root .sk-soon {
+  margin: 2px 0 0; text-align: center; font-size: 12.5px; color: var(--sk-muted);
+}
+.sk-root .sk-unlocked {
+  margin: 8px 0 0; font-size: 15px; font-weight: 800; color: var(--sk-accent);
+}
+.sk-root .sk-balls {
+  position: absolute; left: 0; right: 0; bottom: 34px; margin: 0;
+  text-align: center; color: rgba(255,255,255,0.8);
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8); pointer-events: none;
 }
 
 /* --- the alley ---------------------------------------------------------------------------------

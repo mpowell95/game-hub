@@ -158,6 +158,8 @@
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
+import { recordBoardGame, unlockBoard } from './arcade-scores.js';
+
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
 const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball'];
@@ -559,6 +561,11 @@ function ensureSk(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'bestGame', 'bestThrow', 'hundreds', 'fifties']) {
     if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
   }
+  // Added 2026-08-11 with the boards rework, both ADDITIVE and both still absent on any device
+  // that has not played since: `boards` is per-machine records (see js/arcade-scores.js, which
+  // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
+  if (!g.sk.boards || typeof g.sk.boards !== 'object') g.sk.boards = {};
+  if (!g.sk.unlocked || typeof g.sk.unlocked !== 'object') g.sk.unlocked = {};
 }
 
 /** Fill any missing structure so the rest of the code can assume a full shape. */
@@ -1036,27 +1043,52 @@ export function recordBattleship(difficulty, won, extras) {
   return st;
 }
 
-/** Skeeball: record one finished match against the computer. Maintains total/byDiff (as
- *  recordResult) AND the `sk` breakdown. `won` is true, false, or NULL for a tie -- both totals can
- *  land equal, so unlike Battleship this game really can draw. `extras` = { score, balls, hundreds,
- *  fifties, bestThrow } for the HUMAN's side of this match only: `score`/`balls`/`hundreds`/
- *  `fifties` add to the lifetime counters, `bestGame` and `bestThrow` take Math.max. Additive; a
- *  quit game never reaches here, so no counter can be minted by walking away. */
-export function recordSkeeball(difficulty, won, extras) {
+/** Skeeball: record one finished RACK on one machine.
+ *
+ *  Reworked 2026-08-11 (Matt): the computer opponent is gone and boards replaced difficulty, so
+ *  this is now the SOLO pattern - every finished rack counts played+won and `lost` is never
+ *  touched, exactly like Ball Run / Snake / Nuts & Bolts / Hill Climb.
+ *
+ *  THE LAW, and what is deliberately NOT touched:
+ *  - `byDiff` is now keyed by BOARD ID, following Hill Climb's stages-are-the-difficulty-axis
+ *    precedent. The old `easy`/`medium`/`hard` buckets from the vs-computer build are left exactly
+ *    where they are (rule 5) and still count in the leaderboard's All filter (rule 1).
+ *  - `sk.won` / `sk.lost` / `sk.tied` are FROZEN. They are the vs-computer win/loss record and
+ *    there is no opponent to add to them any more, so this writer never increments them again -
+ *    but it never clears them either, and My Stats still shows them when they are non-zero.
+ *  - `played`/`balls`/`points`/`bestGame`/`bestThrow`/`hundreds`/`fifties` are mode-agnostic
+ *    lifetime numbers and keep accumulating across both eras.
+ *
+ *  `extras` = { score, balls, hundreds, fifties, bestThrow, at }. `at` is the game's finish time,
+ *  used only to pick the local day bucket, and is injectable so tests are not clock-dependent.
+ */
+export function recordSkeeball(boardId, extras) {
   const st = loadStats();
   const g = st.games.skeeball;
-  bumpTotals(g, normDiff(difficulty), won);
+  const board = String(boardId || 'classic');
+  bumpTotals(g, board, true);
   ensureSk(g);
   const e = extras || {};
   const score = Math.max(0, e.score | 0);
   g.sk.played += 1;
-  if (won === true) g.sk.won += 1; else if (won === false) g.sk.lost += 1; else g.sk.tied += 1;
   g.sk.balls += Math.max(0, e.balls | 0);
   g.sk.points += score;
   g.sk.hundreds += Math.max(0, e.hundreds | 0);
   g.sk.fifties += Math.max(0, e.fifties | 0);
   g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
   g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
+  recordBoardGame(g.sk, board, { score, bestThrow: e.bestThrow | 0, at: e.at });
+  unlockBoard(g.sk, board);          // you have played it, so it is yours
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Open a machine the player has just earned. Additive and idempotent (js/arcade-scores.js). */
+export function unlockSkeeballBoard(boardId) {
+  const st = loadStats();
+  ensureSk(st.games.skeeball);
+  unlockBoard(st.games.skeeball.sk, String(boardId || ''));
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -1148,7 +1180,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, recordPinball, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, unlockSkeeballBoard, recordPinball, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };
