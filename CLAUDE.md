@@ -87,6 +87,17 @@ This whole sequence is pre-authorized by this instruction; it does not need to b
 per session. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
+## Answer about the game you were asked about
+
+Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
+then Battleship: *"Why the fuck are we talking about chinchon?"* and *"don't do something random and
+start talking about battleship again."*
+
+When a session is asked to work on one game, the report is about THAT game. A pre-existing failure
+somewhere else, a pattern another game shares, an unrelated red test — none of it belongs in the
+reply, however true it is. Put it in the relevant `CLAUDE.md` if a future session needs it, and
+leave it there.
+
 ## Run it
 
 ```

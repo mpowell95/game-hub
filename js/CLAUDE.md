@@ -1487,30 +1487,33 @@ in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and record **ev
 `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by construction, and
 `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
 
-### Multiplayer head-to-head on the leaderboard (2026-08-11)
+### Multiplayer on the leaderboard: on the GAME'S page, per game (2026-08-11)
 
-The display the section above was waiting for. Two halves:
+**Shipped wrong first, corrected same day. Read this before adding anything h2h-shaped again.**
 
-- **`players-agg.js` aggregates `h2h`** into each person's group (per game, per opponent device id,
-  counters added), and now also carries `deviceIds` — every device folded into that person. Without
-  the aggregation branch a person's whole head-to-head record reads as empty the moment their second
-  device syncs, which is the same stored-but-invisible shape the root `CLAUDE.md`'s "Adding a game"
-  item 7 exists to prevent. `headToHeadRows(group, list, gameIds?)` is the pure, headless-testable
-  fold: it resolves each opponent DEVICE id through the same identity graph the rest of the module
-  uses, so an opponent who plays on a phone and a laptop is ONE row rather than two, and it sums
-  across whichever games the caller asks for. An opponent whose own record is not in `players/`
-  (never synced, or hidden) keeps a device-keyed row labelled from the name stored at match time —
-  dropping those would lose real history from the only screen that shows it. A person is never their
-  own opponent (two devices of one person can legitimately share a room). Cases in
-  `players-agg.test.mjs`.
-- **`leaderboard-ui.js`'s player detail** renders it as "Multiplayer wins against": one row per
-  opponent, `avatar · name · N wins`, most wins first, top 8. **WINS ONLY**, like every other number
-  on that overlay (the 2026-07-23 redesign note at the top of the file) — "beat Lili 5 times" is a
-  bragging-wall fact, "5-3" is a record, and records live on My Stats. Nothing is hidden by that: the
-  same plays are in that game's by-difficulty table under **Multiplayer**, W-L and all, because MP
-  results record under the `'mp'` difficulty bucket. Test/QA opponents are dropped with the same
-  `isHiddenRow()` gate the lists use, and an opponent this player has never beaten is left off the
-  brag list while staying fully stored and fully visible on My Stats.
+The first attempt put a "Multiplayer wins against" block on the PLAYER DETAIL screen, built from
+`h2h` summed across every game. Matt: *"Why does it show the attached regardless of what game I
+look at... I don't give a fuck about generic multiplayer wins or losses. I care about game specific
+wins and losses."* He was right twice over: that screen is reached by drilling in from a game, so a
+number that ignores which game you came from reads as a bug, and a cross-game head-to-head total is
+not a fact anyone wanted. It was removed, along with `headToHeadRows()` and the `h2h`/`deviceIds`
+aggregation in `players-agg.js` that existed only to feed it.
+
+What replaced it is smaller and answers the actual question: **a fourth chip in the tier row on a
+game's own board** (`mpTileHTML` in `js/leaderboard-ui.js`), reading `byDiff.mp.won` for THAT game.
+
+- **It fixes a number that no longer added up.** `tierOf('mp')` is null, so a multiplayer win counts
+  in a card's TOTAL but appears in none of its tier chips. On Escoba that meant "31 wins" over chips
+  totalling 23, with the missing 8 explained nowhere — the documented unmapped-bucket convention,
+  reading as an error on the one screen where the numbers sit side by side.
+- **Labelled with a WORD, not a shape or a hue.** The tier chips' ski-slope shapes encode a 1-4
+  scale multiplayer is deliberately not on, so borrowing one would claim a difficulty this bucket
+  does not have. Colorblind-safe by construction for the same reason.
+- **Not rendered at all for a game nobody has played online** (`anyMpPlays`), rather than adding a
+  column of dashes to every card in every game. A player with no online plays in a game that HAS
+  them gets the same em-dash an unplayed tier gets.
+- **`h2h` is still WRITTEN** (`recordHeadToHead`) and is still the evidence the migration below
+  depends on. Only its display and its aggregation were removed. Do not remove the writer.
 
 ### Extracting multiplayer plays back out of the AI bucket (2026-08-11)
 

@@ -1,5 +1,5 @@
 // Headless unit tests for js/players-agg.js. Run: node players-agg.test.mjs
-import { aggregatePlayers, identityKey, aggregateForViewer, headToHeadRows, COMPETITIVE, SOLO } from './js/players-agg.js';
+import { aggregatePlayers, identityKey, aggregateForViewer, COMPETITIVE, SOLO } from './js/players-agg.js';
 
 let fail = 0;
 const eq = (label, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) { fail++; console.log(`FAIL ${label}\n  got:  ${JSON.stringify(got)}\n  want: ${JSON.stringify(want)}`); } else console.log(`ok   ${label}`); };
@@ -529,65 +529,6 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
     aggregatePlayers(all)[0].games.pinball.total.played, 6);
   ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
     SOLO.has('pinball'));
-}
-
-// ---- Multiplayer head-to-head: the h2h key survives the combine, and folds BY PERSON ----------
-// js/game-stats.js has been capturing gamehub.stats.h2h since 2026-07-22 with nothing displaying
-// it; js/leaderboard-ui.js's player detail is the display (2026-08-11). Two branches under test:
-// the per-device SUM in aggregatePlayers (without it the whole record reads empty the moment a
-// person's second device syncs - THE LAW rule 1, the same shape as a missing sub-counter branch),
-// and headToHeadRows' fold of an OPPONENT's several devices into one row.
-{
-  const h2hRec = (profile, h2h, updatedAt = 1000) => ({ profile, stats: { games: {}, h2h }, updatedAt });
-  const all = {
-    // Matt plays on two devices; Ana answers on two of her own, so every one of the four
-    // device-to-device pairings is a separate h2h key that must fold to a single "Ana" row.
-    mattPhone: h2hRec({ playerId: 'MATT1', name: 'Matt' }, { escoba: { anaPhone: { name: 'Ana', w: 3, l: 1 }, anaTab: { name: 'Ana', w: 2, l: 0 } } }, 100),
-    mattLap: h2hRec({ playerId: 'MATT1', name: 'Matt' }, { escoba: { anaPhone: { name: 'Ana', w: 1, l: 4 } }, chinchon: { anaPhone: { name: 'Ana', w: 5, l: 5 } } }, 200),
-    anaPhone: h2hRec({ playerId: 'ANA22', name: 'Ana', emoji: '💃' }, { escoba: { mattPhone: { name: 'Matt', w: 1, l: 3 } } }, 150),
-    anaTab: h2hRec({ playerId: 'ANA22', name: 'Ana' }, {}, 150),
-  };
-  const byName = (l, n) => l.find((g) => g.name === n);
-  const list = aggregatePlayers(all);
-  const matt = byName(list, 'Matt');
-  eq('h2h: both of a person\'s devices contribute (escoba vs anaPhone: 3+1 wins)', matt.h2h.escoba.anaPhone.w, 4);
-  eq('h2h: ...and their losses (1+4)', matt.h2h.escoba.anaPhone.l, 5);
-  eq('h2h: a second game stays in its own bucket', matt.h2h.chinchon.anaPhone.w, 5);
-  eq('h2h: deviceIds carries every device folded into the person', matt.deviceIds.slice().sort(), ['mattLap', 'mattPhone']);
-
-  const rows = headToHeadRows(matt, list);
-  eq('h2h rows: an opponent\'s several devices fold into ONE person row', rows.length, 1);
-  eq('h2h rows: ...summed across every device AND every game (4+2 escoba + 5 chinchon)', rows[0].w, 11);
-  eq('h2h rows: losses too (5+0+5)', rows[0].l, 10);
-  eq('h2h rows: labelled from the live player row, not the frozen stored name', rows[0].name, 'Ana');
-  eq('h2h rows: carries the opponent\'s emoji for the leaderboard row', rows[0].emoji, '💃');
-
-  const escobaOnly = headToHeadRows(matt, list, ['escoba']);
-  eq('h2h rows: scoping to one game drops the other game\'s wins (4+2)', escobaOnly[0].w, 6);
-
-  // An opponent whose own record is not in players/ (never synced, or hidden) keeps its own
-  // row, labelled from the name stored when the match was played. Dropping it would lose real
-  // history from the only screen that shows it.
-  const orphan = { d1: h2hRec({ playerId: 'SOLO9', name: 'Nine' }, { escoba: { ghostDevice: { name: 'Bego', w: 2, l: 1 } } }) };
-  const orphanList = aggregatePlayers(orphan);
-  const orphanRows = headToHeadRows(byName(orphanList, 'Nine'), orphanList);
-  eq('h2h rows: an unsynced opponent still gets a row', orphanRows.length, 1);
-  eq('h2h rows: ...labelled from the name stored at match time', orphanRows[0].name, 'Bego');
-
-  // Two devices of ONE person can legitimately end up in one room (a phone handed round), and
-  // the resulting self-row would read as beating yourself.
-  const selfy = {
-    a: h2hRec({ playerId: 'SELF1', name: 'Self' }, { escoba: { b: { name: 'Self', w: 4, l: 0 } } }),
-    b: h2hRec({ playerId: 'SELF1', name: 'Self' }, {}),
-  };
-  const selfList = aggregatePlayers(selfy);
-  eq('h2h rows: a person is never their own opponent', headToHeadRows(byName(selfList, 'Self'), selfList).length, 0);
-
-  // A record with no h2h at all (every device before 2026-07-22, and every solo-only player).
-  const none = { d1: rec({ playerId: 'NOH2H', name: 'NoMp' }, { escoba: comp(3, 2, 1) }) };
-  const noneList = aggregatePlayers(none);
-  eq('h2h: a record with no h2h key aggregates to an empty object, no crash', JSON.stringify(byName(noneList, 'NoMp').h2h), '{}');
-  eq('h2h rows: ...and yields no rows', headToHeadRows(byName(noneList, 'NoMp'), noneList).length, 0);
 }
 
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
