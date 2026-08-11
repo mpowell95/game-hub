@@ -117,6 +117,24 @@ in a game folder no longer strands a deploy; it warms best-effort, logs loudly, 
 demand instead. A stuck pill now means the SHELL failed to install, which is a much shorter
 list of suspects. `test-sw-strategy.mjs` pins this as a regression probe.
 
+### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
+
+Matt, minutes after a deploy, on mobile data: *"Whoa what the hell? I force closed and reopened and
+it was normal but what is this?"* - the launcher with no CSS at all, version pill reading the new
+build. Force-closing "fixed" it, which is what a transient server error always looks like.
+
+Cause: the network-first handler treated only a THROWN fetch as failure, so an error RESPONSE (a
+404 or 503) was handed straight to the page **even with a good cached copy one line away**. GitHub
+Pages serves a redeploy by swapping the published tree, and a request landing in that window can
+404 for a moment - so opening the hub DURING a deploy could get a 404 for `css/hub.css` and render
+the launcher as raw HTML. Every deploy was a window for it.
+
+Fixed in `sw.js`: `if (!res || !res.ok) return cached;` on the network-first path. Falling back is
+also right for a genuinely removed file - this is an offline-first app whose cache is a coherent
+snapshot of one deploy that rolls over when `CACHE` is bumped. A request with NOTHING cached still
+passes the error through honestly rather than inventing an answer. `test-sw-strategy.mjs` carries
+both as a [KNOWN-BUG PROBE] pair; the first was born red against the unfixed worker.
+
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
 Matt: *"the gamehub is sluggish and glitchy."* Both halves of `sw.js`'s strategy were tuned for
