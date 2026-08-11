@@ -16,11 +16,21 @@
 //    while the blue player is. Our own board already does this (`.mancala[data-turn]` in
 //    mancala.css), so the sheet is showing a real property of the game, not decoration.
 //
-// THE ONE DELIBERATE DEVIATION, as with Yahtzee: the reference draws ITS board, which is vertical
-// (two columns of pits, stores top and bottom). Ours is horizontal - your blue pits along the
-// bottom, your mancala on the right, the opponent's vermilion pits along the top, their mancala on
-// the left - so that is what the illustration draws. A tutorial pointing at a board the player is
-// about to not see teaches the wrong thing.
+// THE ILLUSTRATION IS OUR ACTUAL BOARD, AND IT IS VERTICAL. The first cut of this file drew a
+// HORIZONTAL board and justified it in a comment as a deliberate deviation, on the strength of
+// ui.js's own wording ("P1 ... always rendered bottom, P2 ... always rendered top"). That was
+// read, not looked at, and it was wrong: this game renders two COLUMNS of pits with each store as
+// a wide bar across the top and bottom - the same shape as the reference. Matt: "our actual game
+// is vertical. Why would the how to be horizontal??? That doesn't make any sense."
+//
+// The layout below is measured off the running game, not inferred:
+//   0-5   blue (you), LEFT column, top to bottom
+//   6     your mancala, the bar across the BOTTOM
+//   7-12  vermilion, RIGHT column, BOTTOM TO TOP
+//   13    their mancala, the bar across the TOP
+// which makes i+1 mod 14 one continuous counterclockwise loop - down the left, across the bottom
+// into your store, up the right, across the top into theirs. Sow direction is the whole point of
+// the diagram, so this mapping has to be right.
 //
 // Reduced motion: every page paints a still, informative pose instead of looping. Never blank.
 
@@ -43,33 +53,36 @@ const PAGES = [
   { key: 'win',     parts: ['ht_win'],              side: 'p1' },
 ];
 
-/* ---------- the little board ------------------------------------------------------------------
- * Drawn at a fixed 200x132 and scaled by CSS. Indices match game.js exactly: 0-5 are the blue
- * (bottom, "you") pits left to right, 6 is the blue mancala on the right, 7-12 are the vermilion
- * (top) pits RIGHT TO LEFT, 13 is the vermilion mancala on the left. Sowing is i+1 mod 14, which
- * on this layout traces one continuous counterclockwise loop -- the whole point of the diagram. */
-const PIT_X = [40, 62, 84, 106, 128, 150];
-const BOTTOM_Y = 96;
-const TOP_Y = 36;
+/* ---------- the little board, drawn at a fixed 150x200 and scaled by CSS ---------- */
+const COL_P1 = 48;                      // blue column, left
+const COL_P2 = 102;                     // vermilion column, right
+const ROW_Y = [46, 68, 90, 112, 134, 156];
+const STORE_P1_Y = 179;                 // your bar, bottom
+const STORE_P2_Y = 21;                  // theirs, top
+const STORE_X = 75;
 
 /** Screen position of any index, so the travelling stone and the hand share one source. */
 function posOf(i) {
-  if (i === 6) return { x: 178, y: 66 };            // your mancala, right
-  if (i === 13) return { x: 22, y: 66 };            // theirs, left
-  if (i <= 5) return { x: PIT_X[i], y: BOTTOM_Y };
-  return { x: PIT_X[12 - i], y: TOP_Y };            // 7..12 run right to left
+  if (i === 6) return { x: STORE_X, y: STORE_P1_Y };
+  if (i === 13) return { x: STORE_X, y: STORE_P2_Y };
+  if (i <= 5) return { x: COL_P1, y: ROW_Y[i] };
+  return { x: COL_P2, y: ROW_Y[12 - i] };           // 7 at the bottom, 12 at the top
 }
 
 function boardHtml() {
   let h = '<div class="mc-ht-board" data-role="board"><div class="mc-ht-wood"></div>';
   h += '<div class="mc-ht-store mc-ht-store-p2" data-idx="13"><i data-count="13">0</i></div>';
   h += '<div class="mc-ht-store mc-ht-store-p1" data-idx="6"><i data-count="6">0</i></div>';
-  for (let i = 0; i <= 5; i++) {
-    h += `<span class="mc-ht-pit mc-ht-p1" data-idx="${i}" style="left:${PIT_X[i] - 9}px;top:${BOTTOM_Y - 9}px"><i data-count="${i}">4</i></span>`;
-  }
-  for (let i = 7; i <= 12; i++) {
+  // The count sits OUTSIDE each pit, the side the real board puts it on: left of the blue
+  // column, right of the vermilion one.
+  for (let i = 0; i <= 12; i++) {
+    if (i === 6) continue;
     const p = posOf(i);
-    h += `<span class="mc-ht-pit mc-ht-p2" data-idx="${i}" style="left:${p.x - 9}px;top:${p.y - 9}px"><i data-count="${i}">4</i></span>`;
+    const mine = i <= 5;
+    h += `<span class="mc-ht-pit ${mine ? 'mc-ht-p1' : 'mc-ht-p2'}" data-idx="${i}" `
+      + `style="left:${p.x - 10}px;top:${p.y - 10}px"></span>`
+      + `<i class="mc-ht-n ${mine ? 'mc-ht-n-l' : 'mc-ht-n-r'}" data-count="${i}" `
+      + `style="left:${mine ? p.x - 26 : p.x + 12}px;top:${p.y - 6}px">4</i>`;
   }
   h += '<span class="mc-ht-stone" data-role="stone"></span>';
   h += '<span class="mc-ht-cap" data-role="cap"></span>';
@@ -133,7 +146,7 @@ export function createHowTo(root) {
 
   function fit() {
     if (!panel.clientWidth) return;
-    board.style.transform = `scale(${panel.clientWidth / 200})`;
+    board.style.transform = `scale(${panel.clientWidth / 150})`;
   }
 
   // A REAL model, not numbers derived from "everything started at 4". sow() used to compute a
@@ -236,7 +249,13 @@ export function createHowTo(root) {
       after(800, () => handTo(4, true));
       after(1000, hideHand);
       sow(4, 1, 1050, 420, () => {
-        after(150, () => { lift(5, true); lift(7, true); moveTo(capMark, 5); capMark.classList.add('mc-ht-show'); });
+        after(150, () => {
+          lift(5, true); lift(7, true);
+          // Centred BETWEEN the two columns, on the landed pit's row -- it links pit 5 to the pit
+          // opposite it (12 - 5 = 7). Placed on pit 5 itself it reached nothing.
+          capMark.style.transform = `translate(${STORE_X}px, ${posOf(5).y}px)`;
+          capMark.classList.add('mc-ht-show');
+        });
         // the landed stone (1) plus everything opposite (4) go to your mancala
         after(1200, () => { setCount(6, counts[5] + counts[7]); setCount(5, 0); setCount(7, 0); });
         after(2100, () => { clearLit(); capMark.classList.remove('mc-ht-show'); loop(); });
@@ -276,7 +295,9 @@ export function createHowTo(root) {
     again() { resetBoard(); setCount(2, 0); [3, 4, 5].forEach((i) => setCount(i, 5)); setCount(6, 1); lift(6, true); },
     capture() {
       resetBoard(); setCount(4, 0); setCount(5, 0); setCount(7, 0); setCount(6, 5);
-      lift(5, true); lift(7, true); moveTo(capMark, 5); capMark.classList.add('mc-ht-show');
+      lift(5, true); lift(7, true);
+      capMark.style.transform = `translate(${STORE_X}px, ${posOf(5).y}px)`;
+      capMark.classList.add('mc-ht-show');
     },
     end() {
       resetBoard();

@@ -53,11 +53,21 @@ Three things from the recordings that are easy to miss:
 2. **The illustration panel is turn-coloured**, salmon while vermilion acts and blue while blue
    does. Our own board already does exactly this (`.mancala[data-turn]`), so the sheet is showing
    a real property of the game rather than decoration.
-3. **The reference's board is vertical; ours is horizontal.** As with Yahtzee, the illustration
-   draws OUR board — blue pits along the bottom into your mancala on the right, vermilion along
-   the top into theirs on the left, indices matching `game.js` exactly so the sow traces one real
-   counterclockwise loop. A tutorial pointing at a board the player is about to not see teaches
-   the wrong thing.
+3. **The board is VERTICAL, in the reference and here — they match.** The illustration draws our
+   own board: blue (you) down the LEFT column with your mancala as the bar across the BOTTOM,
+   vermilion up the RIGHT column with theirs across the TOP, so `i + 1 mod 14` traces one real
+   counterclockwise loop. Counts print outside each pit, the side the real board puts them on.
+
+   **This was shipped WRONG once, and the reason is worth keeping.** The first cut drew a
+   HORIZONTAL board — pits in two rows, stores left and right — and wrote a comment justifying it
+   as a deliberate deviation from the reference. It was neither deliberate nor a deviation: it was
+   inferred from this file's own wording ("P1 ... always rendered bottom, P2 ... always rendered
+   top"), which describes the SEATS, not the geometry. Nobody looked at the game. Matt: *"our
+   actual game is vertical. Why would the how to be horizontal??? That doesn't make any sense."*
+   The layout is now measured off the running board (`[data-pit]` rects: 0-5 at x≈108 descending,
+   6 as a bar at the bottom, 7-12 at x≈285 ascending, 13 as a bar at the top), which is the only
+   way it should ever have been established. VISUAL-PROCESS.md's first rule, missed inside the
+   very feature built to honour it.
 
 **Built on demand and torn down on close**, matching this game's existing overlay idiom: Mancala
 rewrites its whole root on every render, so a persistently-mounted sheet would be destroyed
