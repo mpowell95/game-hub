@@ -834,12 +834,13 @@ they attach, into an RTDB whose rules are `auth != null` — readable by anyone 
 anonymously. **Not new** (`deviceReports/` and `players/` are the same), but it now includes
 pictures, which is worth knowing before this points at anyone outside the family.
 
-The form's one-line lead ("Your phone and app details go with it") is the whole disclosure. The
-first draft also carried a "What gets sent with this" fold listing the device, browser, mode,
-screen and connection with real values; **Matt had it removed** (2026-08-11) — it was a paragraph
-and a table restating a sentence, on a form people reach when they are already annoyed. Nothing
-about what is COLLECTED changed, only the preview. If a future session re-adds a per-field
-disclosure, that is reversing a decision, not filling a gap.
+**The form itself says nothing about this, by decision.** It shipped with a "What gets sent with
+this" fold (device, browser, mode, screen, connection, with real values) and a lead line; Matt had
+both removed the same day — the form is reached by someone who is already annoyed, and it is now
+four fields and a button. The announcement that introduces the feature still says the phone and app
+details go along, and that is where the telling happens. Nothing about what is COLLECTED changed at
+any point. **A future session re-adding a disclosure to the form is reversing a decision, not
+filling a gap** — take it to Matt first.
 
 ### What is NOT covered by a test
 

@@ -52,6 +52,9 @@ function ensureCss() {
   .bug-modal--wide { width: min(680px, 100%); max-height: 90vh; }
   .bug-lead { margin: 0 0 var(--gh-sp-4); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.5; }
   .bug-field + .bug-field { margin-top: var(--gh-sp-4); }
+  /* The title used to be followed by the lead paragraph; with that gone the first label needs its
+     own breathing room, or it reads as part of the heading. */
+  .gh-modal__title + .bug-field { margin-top: var(--gh-sp-4); }
   .bug-text { min-height: 96px; padding: var(--gh-sp-3); line-height: 1.45; resize: vertical; font-family: var(--gh-font); }
   select.bug-select { padding: 0 var(--gh-sp-3); }
   .bug-shots { display: flex; flex-wrap: wrap; gap: var(--gh-sp-2); margin-top: var(--gh-sp-2); }
@@ -155,7 +158,6 @@ export async function openBugReport(opts = {}) {
   card.innerHTML = `
     <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
     <h2 class="gh-modal__title">🐞 ${esc(t('bug_title'))}</h2>
-    <p class="bug-lead">${esc(t('bug_lead'))}</p>
     <div class="bug-field gh-field">
       <label class="gh-field__label" for="bug-where">${esc(t('bug_where_label'))}</label>
       <select class="gh-input bug-select" id="bug-where" data-role="where">
