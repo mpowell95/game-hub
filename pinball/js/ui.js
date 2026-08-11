@@ -1,16 +1,16 @@
 // pinball/js/ui.js - the DOM shell, the input, and the hub module contract.
 //
 // Three screens, all mounted into the single container the hub hands us:
-//   SETUP   table choice, sound, personal best, how to play
+//   SETUP   table choice, personal best, how to play
 //   PLAY    the canvas (render.js) under a fixed HUD: score, ball, the dot-matrix display, the
 //           mission timer, and the launch / nudge / pause controls
 //   OVER    the final score and what the game was made of, with a close X (root CLAUDE.md's rule
 //           for every win/lose panel)
 //
 // This file owns the clock and every listener. The rules live in game.js, the table in table.js,
-// the solver in physics.js, the pixels in render.js, the noise in audio.js. Nothing here computes
-// physics or scoring; it reads game.js's event stream once a frame and turns it into sound,
-// particles, popups and text.
+// the solver in physics.js, the pixels in render.js. Nothing here computes
+// physics or scoring; it reads game.js's event stream once a frame and turns it into particles,
+// popups, lamp pulses and text. There is no audio layer at all - see _drainEvents().
 //
 // isInProgress(): the LITERAL meaning (root CLAUDE.md, "The module contract") - the same class as
 // Ball Run, Snake and Hill Climb. A ball in flight cannot be meaningfully snapshotted and resumed,
@@ -19,7 +19,6 @@
 
 import { Pinball, MISSIONS } from './game.js';
 import { Renderer, PALETTE } from './render.js';
-import { Sfx } from './audio.js';
 import { loadSettings, saveSettings, bestScore } from './store.js';
 import { H as TH } from './table.js';
 import STRINGS from './strings.js';
@@ -54,7 +53,6 @@ export class PinballUI {
   constructor(container) {
     this.root = container;
     this.settings = loadSettings();
-    this.sfx = new Sfx(this.settings.sound);
     this.game = null;
     this.renderer = null;
     this.raf = 0;
@@ -108,19 +106,12 @@ export class PinballUI {
         <div class="pb-setup-inner">
           <div class="pb-brand">
             <span class="pb-brand-sub">${esc(t('title'))}</span>
-            <span class="pb-brand-main">NOVA CADET</span>
+            <span class="pb-brand-main">STARHUB</span>
           </div>
           <p class="pb-best">${best ? `${esc(t('your_best'))}: <b>${fmt(best)}</b>` : esc(t('no_best'))}</p>
 
           <h2 class="pb-h">${esc(t('setup_table'))}</h2>
           <div class="pb-diffs">${cards}</div>
-
-          <div class="pb-row">
-            <span class="pb-h pb-h-inline">${esc(t('setup_sound'))}</span>
-            <button type="button" class="pb-toggle" data-role="sound" aria-pressed="${this.settings.sound}">
-              ${esc(this.settings.sound ? t('sound_on') : t('sound_off'))}
-            </button>
-          </div>
 
           <button type="button" class="pb-play" data-role="play">${esc(t('play'))}</button>
           <button type="button" class="pb-link" data-role="howto">${esc(t('howto'))}</button>
@@ -133,27 +124,83 @@ export class PinballUI {
         this._renderSetup();
       });
     });
-    this.root.querySelector('[data-role="sound"]').addEventListener('click', () => {
-      this.settings = saveSettings({ sound: !this.settings.sound });
-      this.sfx.setEnabled(this.settings.sound);
-      this._renderSetup();
-    });
-    this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
-      this.sfx.resume();
-      this._startGame();
-    });
+    this.root.querySelector('[data-role="play"]').addEventListener('click', () => this._startGame());
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
   }
 
+  /** How to play. Follows the repo-wide pattern (tic-tac-toe/CLAUDE.md, "How-to-play screens",
+   *  which the root file names as the reference): one short bold sentence, ONE diagram carrying
+   *  the genuinely non-obvious part, a caption, a concrete "X = Y" example, then any remaining
+   *  rules as short plain sentences.
+   *
+   *  The first version of this screen was five paragraphs of prose and it was wrong on every count
+   *  of that pattern. What a player does NOT know here is not how pinball works - they know that -
+   *  it is WHERE THIS TABLE'S FOUR SHOTS ARE and what feeding them does. That is a picture. */
   _showHowTo() {
-    const secs = ['launch', 'flip', 'nudge', 'shots', 'modes'].map((k) =>
-      `<section class="pb-howto-sec"><h3>${esc(t(`howto_${k}_h`))}</h3><p>${esc(t(`howto_${k}_b`))}</p></section>`).join('');
     this._overlay('howto', `
       <div class="pb-sheet-head">
         <h2>${esc(t('howto_h'))}</h2>
         <button type="button" class="pb-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
       </div>
-      <div class="pb-sheet-body">${secs}</div>`);
+      <div class="pb-sheet-body pb-help">
+        <p class="pb-help-lead">${esc(t('help_lead'))}</p>
+        <div class="pb-diagram-wrap">${this._shotDiagram()}</div>
+        <div class="pb-help-lines">
+          <p class="pb-help-caption">${esc(t('help_caption'))}</p>
+          <p class="pb-help-example">${esc(t('help_ex1'))}</p>
+          <p class="pb-help-example">${esc(t('help_ex2'))}</p>
+          <p class="pb-help-rule">${esc(t('help_rule1'))}</p>
+          <p class="pb-help-rule">${esc(t('help_rule2'))}</p>
+        </div>
+      </div>`);
+  }
+
+  /** The shot map. Every mark is a numbered circle plus a distinct GLYPH and an arrow showing the
+   *  path from the flippers, so the diagram reads through shape and direction alone and never
+   *  through colour (the hub's colourblind rule, and the pattern's own requirement). The numbers
+   *  key the four labels underneath, which keeps the SVG free of text that would need refitting in
+   *  Spanish. Proportions follow the real table: tall, arched top, flippers at the bottom centre. */
+  _shotDiagram() {
+    const label = (n, key) => `<span class="pb-key"><i>${n}</i>${esc(t(key))}</span>`;
+    return `
+      <svg class="pb-diagram" viewBox="0 0 200 196" role="img" aria-label="${esc(t('help_diagram_aria'))}">
+        <defs>
+          <marker id="pb-dg-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#f2b705"/>
+          </marker>
+        </defs>
+
+        <path class="pb-dg-field" d="M40 188 L40 92 A60 60 0 0 1 160 92 L160 188"/>
+        <path class="pb-dg-lane" d="M53 92 A47 47 0 0 1 147 92"/>
+
+        <g class="pb-dg-flip">
+          <path d="M78 166 L96 177"/>
+          <path d="M122 166 L104 177"/>
+        </g>
+
+        <g class="pb-dg-arrow">
+          <path d="M100 160 L100 120" marker-end="url(#pb-dg-head)"/>
+          <path d="M88 162 Q120 140 138 108" marker-end="url(#pb-dg-head)"/>
+          <path d="M112 162 Q88 148 74 136" marker-end="url(#pb-dg-head)"/>
+          <path d="M52 152 Q43 100 76 62" marker-end="url(#pb-dg-head)"/>
+        </g>
+
+        <g class="pb-dg-glyph">
+          <path d="M93 112 L100 100 L107 112"/>
+          <circle cx="140" cy="98" r="8"/>
+          <path d="M58 122 L72 132 M54 130 L68 140"/>
+        </g>
+
+        <g class="pb-dg-num">
+          <circle cx="100" cy="90" r="9"/><text x="100" y="94">1</text>
+          <circle cx="140" cy="76" r="9"/><text x="140" y="80">2</text>
+          <circle cx="70" cy="108" r="9"/><text x="70" y="112">3</text>
+          <circle cx="100" cy="46" r="9"/><text x="100" y="50">4</text>
+        </g>
+      </svg>
+      <p class="pb-help-key">
+        ${label(1, 'help_s1')}${label(2, 'help_s2')}${label(3, 'help_s3')}${label(4, 'help_s4')}
+      </p>`;
   }
 
   /** One overlay helper for how-to / pause / game over. `kind` becomes a modifier class. */
@@ -230,7 +277,6 @@ export class PinballUI {
     for (const z of this.root.querySelectorAll('.pb-zone')) {
       z.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        this.sfx.resume();
         if (this.paused) return;
         this.pointerSides.set(e.pointerId, z.dataset.side);
         this.game.setFlipper(z.dataset.side, true);
@@ -245,7 +291,6 @@ export class PinballUI {
     const launch = this.root.querySelector('[data-role="launch"]');
     launch.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      this.sfx.resume();
       if (this.paused) return;
       this.game.plungerDown();
       launch.classList.add('is-on');
@@ -293,7 +338,6 @@ export class PinballUI {
     } else if (down && (k === 'Escape' || k === 'p' || k === 'P')) {
       this._setPaused(!this.paused);
     }
-    if (down) this.sfx.resume();
   }
 
   _setPaused(on) {
@@ -346,109 +390,89 @@ export class PinballUI {
     this.raf = 0;
   }
 
-  /** The one place game.js's event stream becomes sound and light. Everything here is presentation:
-   *  no branch below changes a score, a lamp state or a rule. */
+  /** The one place game.js's event stream becomes light: particles, popups, lamp pulses, screen
+   *  shake and the display. Everything here is presentation, and no branch below changes a score,
+   *  a lamp state or a rule.
+   *
+   *  There is no sound. Not muted, not defaulted off: the game has no audio layer at all (Matt,
+   *  2026-08-11, "Delete the sound option. No sound."). The synthesised solenoid/bell layer that
+   *  was here is gone with it, so nothing is dragging an AudioContext around unused. It is one
+   *  commit back in git if it is ever wanted again. */
   _drainEvents() {
     const R = this.renderer;
-    const S = this.sfx;
     for (const ev of this.game.takeEvents()) {
       switch (ev.type) {
         case 'bumper': {
           const i = Number(ev.id.slice(3)) || 0;
           R.hitBumper(i); R.spawnHit(ev.x, ev.y, 9, PALETTE.cyan, 260); R.kick(2.5);
-          S.bumper(Math.min(1, ev.speed / 900));
           break;
         }
         case 'sling':
-          R.hitSling(ev.id === 'slingL' ? 0 : 1); R.spawnHit(ev.x, ev.y, 6, PALETTE.gold, 240); S.sling();
+          R.hitSling(ev.id === 'slingL' ? 0 : 1); R.spawnHit(ev.x, ev.y, 6, PALETTE.gold, 240);
           break;
         case 'standup':
-          R.hitStand(ev.id === 'standL' ? 0 : 1); R.spawnHit(ev.x, ev.y, 6, PALETTE.red, 200); S.target();
+          R.hitStand(ev.id === 'standL' ? 0 : 1); R.spawnHit(ev.x, ev.y, 6, PALETTE.red, 200);
           break;
         case 'drop':
-          R.spawnHit(ev.x, ev.y, 10, PALETTE.gold, 240); S.target(); R.kick(2);
+          R.spawnHit(ev.x, ev.y, 10, PALETTE.gold, 240); R.kick(2);
           break;
         case 'bankdone':
-          R.flash(0.4, PALETTE.green); R.kick(6); S.bank();
-          R.spawnHit(ev.x, ev.y, 22, PALETTE.green, 340);
+          R.flash(0.4, PALETTE.green); R.kick(6); R.spawnHit(ev.x, ev.y, 22, PALETTE.green, 340);
           break;
         case 'spinner':
-          R.hitSpinner(ev.rips); S.spinner(ev.rips);
+          R.hitSpinner(ev.rips);
           break;
         case 'orbit':
-          R.spawnHit(ev.x, ev.y, 12, PALETTE.gold, 300); S.orbit(ev.combo);
+          R.spawnHit(ev.x, ev.y, 12, PALETTE.gold, 300);
           break;
         case 'lane':
-          R.hitLane(ev.id); S.lane();
+          R.hitLane(ev.id);
           break;
         case 'laneset':
-          R.flash(0.35, PALETTE.gold); S.laneSet(); R.kick(4);
+          R.flash(0.35, PALETTE.gold); R.kick(4);
           break;
         case 'ramp':
-          R.hitRamp(); S.ramp();
-          break;
-        case 'rampreject':
-          S.rampReject();
+          R.hitRamp();
           break;
         case 'rampexit':
           R.spawnHit(ev.x, ev.y, 6, PALETTE.magenta, 180);
           break;
         case 'jackpot':
-          R.flash(0.6, PALETTE.magenta); R.kick(8); S.jackpot(this.game.jackpots);
-          R.spawnHit(ev.x, ev.y, 26, PALETTE.magenta, 400);
+          R.flash(0.6, PALETTE.magenta); R.kick(8); R.spawnHit(ev.x, ev.y, 26, PALETTE.magenta, 400);
           break;
         case 'superjackpot':
-          R.flash(0.9, '#ffffff'); R.kick(14); S.superJackpot();
-          R.spawnHit(ev.x, ev.y, 44, PALETTE.gold, 520);
+          R.flash(0.9, '#ffffff'); R.kick(14); R.spawnHit(ev.x, ev.y, 44, PALETTE.gold, 520);
           break;
         case 'scoop': case 'lock':
           R.hitScoop(); R.spawnHit(ev.x, ev.y, 14, PALETTE.cyan, 260);
-          if (ev.type === 'lock') { S.lock(); R.flash(0.35, PALETTE.cyan); } else S.scoop();
+          if (ev.type === 'lock') R.flash(0.35, PALETTE.cyan);
           break;
         case 'kickout':
-          S.kickout(); R.spawnHit(ev.x, ev.y, 8, PALETTE.cyan, 300);
+          R.spawnHit(ev.x, ev.y, 8, PALETTE.cyan, 300);
           break;
         case 'missionstart':
-          S.missionStart(); R.flash(0.45, PALETTE.gold); R.kick(6);
+          R.flash(0.45, PALETTE.gold); R.kick(6);
           break;
         case 'missiondone':
-          S.missionDone(); R.flash(0.6, PALETTE.green); R.kick(9);
-          break;
-        case 'missionfail':
-          S.missionFail();
+          R.flash(0.6, PALETTE.green); R.kick(9);
           break;
         case 'multiball':
-          S.multiball(); R.flash(0.85, ev.wizard ? PALETTE.magenta : PALETTE.cyan); R.kick(16);
-          break;
-        case 'launch':
-          S.launch(ev.power);
+          R.flash(0.85, ev.wizard ? PALETTE.magenta : PALETTE.cyan); R.kick(16);
           break;
         case 'drain':
-          S.drain(); R.spawnHit(ev.x, TH - 14, 12, '#7d8aa8', 200);
+          R.spawnHit(ev.x, TH - 14, 12, '#7d8aa8', 200);
           break;
         case 'ballsave':
-          S.ballSave(); R.flash(0.4, PALETTE.green);
+          R.flash(0.4, PALETTE.green);
           break;
         case 'extraball':
-          S.extraBall(); R.flash(0.5, PALETTE.gold);
+          R.flash(0.5, PALETTE.gold);
           break;
         case 'tilt':
-          S.tilt(); R.kick(20);
+          R.kick(20);
           break;
         case 'nudge':
-          S.nudge(); R.kick(9);
-          break;
-        case 'bonustick':
-          S.bonusTick(Math.round(ev.paid / 1000));
-          break;
-        case 'thock':
-          S.thock(Math.min(1, ev.speed / 900));
-          break;
-        case 'clink': case 'clack':
-          S.clink(Math.min(1, ev.speed / 900));
-          break;
-        case 'flip':
-          S.flip();
+          R.kick(9);
           break;
         case 'score':
           if (ev.x != null && ev.value >= 2000) {
@@ -546,7 +570,6 @@ export class PinballUI {
   // --- game over -------------------------------------------------------------------------------------
 
   _gameOver() {
-    this.sfx.gameOver();
     const res = this.game.result();
     const prev = bestScore();
 
@@ -620,7 +643,6 @@ export class PinballUI {
     document.removeEventListener('visibilitychange', this._onVis);
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
-    this.sfx.close();
     this.game = null;
     this.renderer = null;
     this.root.classList.remove('pb-root');
