@@ -125,6 +125,17 @@ const GAME_META = [
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
+  // MISSING until 2026-08-11, and it took a bug report to find: Yahtzee shipped with every other
+  // surface wired up (game-stats.js's GAMES, the yz sub-counter, players-agg's branch, a My Stats
+  // screen) but never got a row here, so ALL_IDS/COMP_IDS did not contain it and its wins and plays
+  // were worth nothing on the leaderboard. The player's own Stats screen showed 14 Yahtzee wins
+  // while the board counted 0 - stored, synced, and invisible, which is THE LAW rule 1 exactly.
+  // players-agg.test.mjs's second [KNOWN-BUG PROBE] block now fails if a shipped game is absent.
+  { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
+  // Skeeball is deliberately ABSENT while it is admin-only, same as Pinball: the leaderboard is
+  // the shared bragging wall and an unreleased game has no business on it. Nothing is lost - the
+  // plays are in every device's store and in players/, and the row reappears the moment the
+  // GAMES entry drops `devOnly`.
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
@@ -368,6 +379,36 @@ function controlsHTML({ showExpert = true, sortOptions = null } = {}) {
  *  field plays but this player hasn't gets a "-" tile rather than being omitted, so every card in
  *  the list has the same tile COUNT). On By Player, `tiers` is only the tiers this player has
  *  played, so `valueFn` never returns null there and no dash ever shows on that tab. */
+// --- multiplayer, ON THE GAME'S OWN PAGE (2026-08-11) -------------------------
+// Matt: "I don't give a fuck about generic multiplayer wins or losses. I care about game specific
+// wins and losses... Add some way to tell how many multiplayer escoba wins someone has by looking
+// at the escoba page."
+//
+// A multiplayer play records under the `'mp'` difficulty bucket, and `tierOf('mp')` is null, so it
+// counts in the card's TOTAL wins but appears in none of the tier chips beside it. That is the
+// documented convention for unmapped buckets, and on this screen it reads as an error: Lili's
+// Escoba card says 31 wins over chips totalling 23, with the missing 8 explained nowhere. So the
+// tier row grows a fourth chip carrying exactly that number, on the game's own board where it is
+// about ONE game rather than summed across all of them.
+//
+// It is labelled with a WORD, not a shape or a hue: the tier chips' ski-slope shapes encode a 1-4
+// scale that multiplayer is deliberately not on, so borrowing one would claim a difficulty this
+// bucket does not have. Colorblind-safe by construction for the same reason.
+const mpBucketOf = (g, id) => (((g.games || {})[id] || {}).byDiff || {}).mp || null;
+const mpWinsOf = (g, id) => { const b = mpBucketOf(g, id); return b ? (b.won | 0) : 0; };
+const mpPlaysOf = (g, id) => { const b = mpBucketOf(g, id); return b ? (b.played | 0) : 0; };
+/** True if ANYONE on this board has multiplayer plays in this game -- the chip is not rendered at
+ *  all for a game nobody has played online, rather than adding a column of dashes to every card. */
+const anyMpPlays = (list, id) => list.some((g) => mpPlaysOf(g, id) > 0);
+
+/** The multiplayer chip, appended to a card's tier row. A player with no online plays in this game
+ *  gets the same em-dash treatment an unplayed tier gets, so the column stays readable. */
+function mpTileHTML(g, id) {
+  const played = mpPlaysOf(g, id);
+  return `<span class="lb-tile2 lb-tile-mp${played ? '' : ' is-empty'}" title="${esc(t('gs_diff_mp'))}">`
+    + `<i class="lb-mp-tag">${esc(t('lb_mp_short'))}</i><b>${played ? mpWinsOf(g, id) : '&mdash;'}</b></span>`;
+}
+
 function miniTilesHTML(tiers, valueFn) {
   if (!tiers.length) return '';
   return `<div class="lb-tiles">${tiers.map((tier) => {
@@ -528,6 +569,11 @@ const TEXTURE = {
     { labelKey: 'lb_tex_hc_coins', get: (g) => (((g.games.hillclimb || {}).hc || {}).coins) | 0 },
     { labelKey: 'lb_tex_hc_flips', get: (g) => (((g.games.hillclimb || {}).hc || {}).flips) | 0 },
   ],
+  skeeball: [
+    { labelKey: 'lb_tex_sk_best_game', get: (g) => (((g.games.skeeball || {}).sk || {}).bestGame) | 0 },
+    { labelKey: 'lb_tex_sk_best_throw', get: (g) => (((g.games.skeeball || {}).sk || {}).bestThrow) | 0 },
+    { labelKey: 'lb_tex_sk_hundreds', get: (g) => (((g.games.skeeball || {}).sk || {}).hundreds) | 0 },
+  ],
   tictactoe: [
     { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
     { labelKey: 'lb_tex_ultimate_played', get: (g) => (((g.games.tictactoe.tt || {}).ultimate) || {}).played | 0 },
@@ -685,6 +731,7 @@ function gameDetail(list, id) {
   const fieldTiers = fieldTiersPresent(list, [id]);
   const showExpert = fieldTiers.includes(4);
   const controls = controlsHTML({ showExpert, sortOptions: sortItemsFor(id) });
+  const showMp = anyMpPlays(list, id);
   const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0);
   sortRows(rows, id, _sort);
   const cardsHtml = rows.length
@@ -693,7 +740,8 @@ function gameDetail(list, id) {
         if (id === 'snake') return snCardHTML(g, i);
         const metric = gameMetricAt(g, id, _diff);
         const played = playsAtTier(g, [id], _diff);
-        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
+        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null))
+          + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(unitKeyOf(id));
         const big = _sort === 'played' ? { val: played, unit: unitWord('lb_played_count') } : { val: metric, unit: metricUnit };
         const subText = _sort === 'played' ? `${metric} ${metricUnit}` : t('lb_played_count', { n: played });
@@ -1026,6 +1074,9 @@ function ensureCss() {
     '.lb-pdetail-meta{font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
     '.lb-pmsg{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--hub-surface-2,#f4f4f5);color:var(--hub-ink,#18181b);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
     '.lb-pgame{margin-top:10px}',
+    // The multiplayer chip in a game board's tier row: same pill geometry as .lb-tile2 so the row
+    // stays even, but a text tag where the ski-slope shape goes (see mpTileHTML for why).
+    '.lb-tile-mp .lb-mp-tag{font-style:normal;font-size:.6rem;font-weight:900;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
     '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
     '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',
     '.lb-medal.is-gold{background:#f5c518;color:#5c4a00}',

@@ -35,7 +35,10 @@ const SUITES = [
   { file: 'uno/js/test.js' },
   { file: 'dominoes/js/test.js' },
   { file: 'hill-climb/js/test.js' },
+  { file: 'skeeball/js/test.js' },
+  { file: 'test-arcade-scores.mjs' },
   { file: 'battleship/js/test.js' },
+  { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
   // shared-module suites
@@ -43,6 +46,7 @@ const SUITES = [
   { file: 'test-leaderboard-rank.mjs' },
   { file: 'favorites.test.mjs' },
   { file: 'test-new-badge.mjs' },
+  { file: 'test-bug-report.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // validate-sw-assets checks WHICH files sw.js precaches; this one checks HOW it serves them

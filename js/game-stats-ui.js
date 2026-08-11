@@ -49,6 +49,16 @@ const TABS = [
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   { id: 'battleship', labelKey: 'game_title_battleship' },
+  // NOT devOnly, unlike Pinball's row above, and the difference is deliberate. Pinball has been
+  // admin-only since birth, so nobody outside the dev profiles can have plays and gating its tab
+  // costs no one anything. Skeeball was LIVE to the family for a couple of hours on 2026-08-11
+  // before being pulled back to admin-only, so someone may have real plays recorded - and hiding
+  // this row would make their own history invisible to them (THE LAW rule 1). It costs nothing to
+  // leave open: gameListHTML only renders a row for a game with plays, so anyone who never played
+  // it sees nothing here either way.
+  { id: 'skeeball', labelKey: 'game_title_skeeball' },
+  // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
+  { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -62,8 +72,22 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
+
+/** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
+ *  displayed title. Exported for js/bug-report-ui.js's "Where did it happen?" picker, which needs
+ *  the same list of games under the same names but must not import js/hub.js for it (the same
+ *  reason the Leaderboard doesn't). Derived from TABS + the shared game_title_* keys, so a new
+ *  game appears here the moment it is added there and can never be named differently. */
+export function gameChoices() {
+  return TABS
+    // The retired Pool build: it stays in TABS so already-recorded plays remain visible (THE LAW
+    // rules 1 and 5), but nobody can be playing it today, so it is not a place a bug can happen.
+    .filter((tab) => tab.id !== 'poolv2')
+    .map((tab) => ({ id: tab.id, hubId: hubIdOf(tab.id), title: t(tab.labelKey) }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
 function visibleTabs() {
@@ -217,12 +241,36 @@ function nutsBoltsScreen(rec) {
     </div>`;
 }
 
-/** Escoba: the standard record-vs-AI screen plus the escoba counter. */
+/** Escoba: the standard record-vs-AI screen, the escoba counter, and multiplayer on its own.
+ *
+ *  The MULTIPLAYER block is its own row of tallies rather than one line in the by-difficulty
+ *  table below, because online play is not a difficulty and reading it as one is exactly the
+ *  mistake that made these plays invisible in the first place: they were filed under the AI's
+ *  `'normal'` tier and could not be told apart from it. It reads `byDiff.mp`, which is the single
+ *  stored source for both new online matches and the historical ones `splitEscobaMp`
+ *  (js/game-stats.js) moved back out of the AI bucket, so this panel and that table can never
+ *  disagree. Hidden entirely when there are no online plays -- a solo-only player is not shown a
+ *  row of zeroes. */
+function escobaMpBlock(rec) {
+  const mp = ((rec && rec.byDiff) || {}).mp;
+  const played = (mp && mp.played) | 0;
+  if (!played) return '';
+  const won = (mp && mp.won) | 0, lost = (mp && mp.lost) | 0;
+  return `
+    <h4 class="gs-tbl-h">${t('gs_diff_mp')}</h4>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${lost}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>`;
+}
+
 function escobaScreen(rec) {
   const total = (rec && rec.total) || { played: 0 };
   if (!(total.played | 0)) return emptyState('Escoba');
   const es = (rec && rec.es) || {};
-  return recordScreen('escoba', rec) + `
+  return recordScreen('escoba', rec) + escobaMpBlock(rec) + `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${es.escobas | 0}</b><span>${t('gs_es_escobas')}</span></div>
     </div>`;
@@ -490,6 +538,66 @@ function battleshipScreen(rec) {
     ${diffTable(rec && rec.byDiff)}`;
 }
 
+// --- Skeeball (W/L/T, best game, best throw, 100s and 50s) ------------------
+
+/** Skeeball: the standard record-vs-computer screen (Won/Lost/Tied/Win rate + by-difficulty
+ *  table) plus the four things the game itself accumulates — best single game, best single throw,
+ *  and lifetime counts of 100 cups and 50s. `tied` is a stored counter, not derived (two totals
+ *  really can land equal — js/game-stats.js's ensureSk). Lifetime points are shown too: they are
+ *  the only number that reflects a long grinding history rather than one lucky game, and a stored
+ *  counter no screen shows reads as deleted (THE LAW rule 1). */
+function skeeballScreen(rec) {
+  const sk = (rec && rec.sk) || {};
+  if (!(sk.played | 0)) return emptyState('Skeeball');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.won | 0}</b><span>${t('gs_sk_wins')}</span></div>
+      <div class="gs-tally"><b>${sk.lost | 0}</b><span>${t('gs_sk_losses')}</span></div>
+      <div class="gs-tally"><b>${sk.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${pct(sk.won | 0, sk.played | 0)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.bestGame | 0}</b><span>${t('gs_sk_best_game')}</span></div>
+      <div class="gs-tally"><b>${sk.bestThrow | 0}</b><span>${t('gs_sk_best_throw')}</span></div>
+      <div class="gs-tally"><b>${sk.hundreds | 0}</b><span>${t('gs_sk_hundreds')}</span></div>
+      <div class="gs-tally"><b>${sk.fifties | 0}</b><span>${t('gs_sk_fifties')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.balls | 0}</b><span>${t('gs_sk_balls')}</span></div>
+      <div class="gs-tally"><b>${sk.points | 0}</b><span>${t('gs_sk_points')}</span></div>
+    </div>
+    ${skBoardsTable(sk)}
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Per-machine records (2026-08-11, the boards rework). THE LAW rule 1: `sk.boards` is real earned
+ *  history and a screen has to show it, including the date-keyed daily map - which is rendered as
+ *  "best today" plus how many days this machine has been played, so the stored days are visible as
+ *  something rather than sitting silently on disk. Absent on a device that has not played since the
+ *  rework, and simply omitted then rather than shown as a row of zeroes. */
+function skBoardsTable(sk) {
+  const boards = (sk && sk.boards) || {};
+  const ids = Object.keys(boards);
+  if (!ids.length) return '';
+  const today = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const key = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+  const rows = ids.map((id) => {
+    const b = boards[id] || {};
+    const days = Object.keys(b.daily || {}).length;
+    return `<tr><th scope="row">${t(`gs_sk_board_${id}`)}</th><td>${b.best | 0}</td>`
+      + `<td>${(b.daily || {})[key] | 0}</td><td>${b.plays | 0}</td><td>${days}</td></tr>`;
+  }).join('');
+  return `
+    <h4 class="gs-tbl-h">${t('gs_sk_by_board')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th>
+        <th scope="col">${t('gs_sk_today')}</th><th scope="col">${t('gs_played')}</th>
+        <th scope="col">${t('gs_sk_days')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
  *  the same visibility bar the game list must honor (THE LAW rule 1: nothing shown today may
  *  become unreachable). */
@@ -498,7 +606,9 @@ function hasPlays(id, rec) {
   if (id === 'ballrun') return !!((rec.br && rec.br.runs) || (rec.brOrbital && rec.brOrbital.runs) || rec.brLegacyMeters);
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
+  if (id === 'pinball') return !!(rec.pb && rec.pb.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
+  if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   return ((rec.total || {}).played | 0) > 0;
 }
 
@@ -509,6 +619,7 @@ function headlineOf(id, rec) {
   if (id === 'ballrun') return { n: Math.max((rec.br && rec.br.bestObstacles) | 0, (rec.brOrbital && rec.brOrbital.bestObstacles) | 0), unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
 }
@@ -579,6 +690,46 @@ function overviewHTML(st) {
     </div>`;
 }
 
+// --- Pinball (solo, score-attack, table-tiered) -----------------------------
+// The three TABLE settings are this game's difficulty axis, so byDiff's easy/medium/hard buckets
+// are shown under the names the game itself uses (Hill Climb's by-stage table is the precedent).
+// Deliberately NOT the shared diffTable(): that renders W-L and a win rate, and a pinball game has
+// no loss axis at all, so every row would read "2-0, 100%" - a true number that means nothing.
+const PB_TABLES = [['easy', 'gs_pb_casual'], ['medium', 'gs_pb_standard'], ['hard', 'gs_pb_tournament']];
+
+
+/** Pinball: no wins or losses (a game ends when the last ball drains), so the honest numbers are
+ *  games played and the best score, exactly like Ball Run's, Snake's and Hill Climb's screens.
+ *  Best ball gets its own tile because it is the number pinball players actually compare, and the
+ *  lifetime jackpot / multiball / mission counts are the only record of HOW a score was built.
+ *  Average is derived at render time from `points` and `games`, never stored (a stored average
+ *  would be a value that can go DOWN, which has no business in the shared store). */
+function pinballScreen(rec) {
+  const pb = (rec && rec.pb) || {};
+  const games = pb.games | 0;
+  if (!games) return emptyState('Pinball');
+  const avg = games > 0 ? Math.round((pb.points | 0) / games) : 0;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${(pb.bestScore | 0).toLocaleString()}</b><span>${t('gs_pb_best')}</span></div>
+      <div class="gs-tally"><b>${(pb.bestBall | 0).toLocaleString()}</b><span>${t('gs_pb_bestball')}</span></div>
+      <div class="gs-tally"><b>${games}</b><span>${t('gs_played')}</span></div>
+      <div class="gs-tally"><b>${avg.toLocaleString()}</b><span>${t('gs_pb_avg')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${pb.missions | 0}</b><span>${t('gs_pb_missions')}</span></div>
+      <div class="gs-tally"><b>${pb.multiballs | 0}</b><span>${t('gs_pb_multiballs')}</span></div>
+      <div class="gs-tally"><b>${pb.jackpots | 0}</b><span>${t('gs_pb_jackpots')}</span></div>
+      <div class="gs-tally"><b>${pb.ramps | 0}</b><span>${t('gs_pb_ramps')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_pb_by_table')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th></tr></thead>
+      <tbody>${PB_TABLES.map(([k, labelKey]) =>
+        `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -594,6 +745,8 @@ function screenFor(id, st) {
   if (id === 'snake') return snakeScreen(rec);
   if (id === 'hillclimb') return hillClimbScreen(rec);
   if (id === 'battleship') return battleshipScreen(rec);
+  if (id === 'skeeball') return skeeballScreen(rec);
+  if (id === 'pinball') return pinballScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

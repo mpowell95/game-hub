@@ -363,6 +363,40 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('hillclimb: totals still aggregate alongside', grp.games.hillclimb.total.played, 8);
 }
 
+// ---- Skeeball's sk sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Counters (played/won/lost/tied, balls, lifetime points, 100s, 50s) ADD; bestGame and bestThrow
+// take Math.max, NEVER a sum - a summed best would invent a score nobody ever threw, which is rule
+// 4 as well as rule 2. A device that synced before this game existed must combine cleanly too.
+{
+  const all = {
+    d1: rec({ playerId: 'SK777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 4, won: 3, lost: 1 },
+        byDiff: { medium: { played: 4, won: 3, lost: 1 } },
+        sk: { played: 4, won: 3, lost: 1, tied: 0, balls: 36, points: 1240, bestGame: 410, bestThrow: 300, hundreds: 3, fifties: 7 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'sk777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 3, won: 1, lost: 1 },
+        byDiff: { hard: { played: 3, won: 1, lost: 1 } },
+        sk: { played: 3, won: 1, lost: 1, tied: 1, balls: 27, points: 700, bestGame: 290, bestThrow: 150, hundreds: 1, fifties: 2 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'SK777', name: 'Roller' }, {}, 300),   // pre-Skeeball device: no key at all
+  };
+  const grp = aggregatePlayers(all)[0];
+  const sk = grp.games.skeeball.sk;
+  eq('skeeball: one person, three devices, one row', aggregatePlayers(all).length, 1);
+  eq('skeeball: W/L/T all sum', [sk.won, sk.lost, sk.tied], [4, 2, 1]);
+  eq('skeeball: balls and lifetime points sum', [sk.balls, sk.points], [63, 1940]);
+  eq('skeeball: 100s and 50s sum', [sk.hundreds, sk.fifties], [4, 9]);
+  eq('skeeball: bestGame is the max, not the sum', sk.bestGame, 410);
+  eq('skeeball: bestThrow is the max, not the sum', sk.bestThrow, 300);
+  eq('skeeball: totals still aggregate alongside', grp.games.skeeball.total.played, 7);
+}
+
 // ---- Snake walls split: a solo pre-split device (never resynced since this shipped) must NOT
 // read 0-0 on the leaderboard -- this is the exact bug report ("0-0 for everyone"): a fresh
 // aggregate over ONLY legacy-shaped records had no bestLenByWalls anywhere to fall back on. ----
@@ -462,6 +496,41 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
 }
 
+// ---- Pinball's pb sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Lifetime counters (games, points, jackpots, multiballs, missions, ramps) ADD; BOTH bests take
+// Math.max. Summing a best score would be the worst kind of wrong here: it invents a game nobody
+// played and it can never be undone, since the shared store only ever grows. A device that synced
+// before Pinball existed has no key at all and must combine cleanly.
+{
+  const all = {
+    d1: rec({ playerId: 'PB999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 4, won: 4, lost: 0 },
+        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
+        pb: { games: 4, bestScore: 1250000, points: 3000000, bestBall: 610000, jackpots: 9, multiballs: 2, missions: 5, ramps: 41 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'pb999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 2, won: 2, lost: 0 },
+        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+        pb: { games: 2, bestScore: 880000, points: 1400000, bestBall: 745000, jackpots: 4, multiballs: 1, missions: 2, ramps: 18 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'PB999', name: 'Wizard' }, { connect4: comp(1, 1, 0) }, 300),
+  };
+  const pb = aggregatePlayers(all)[0].games.pinball.pb;
+  eq('pinball: games and points add across devices', [pb.games, pb.points], [6, 4400000]);
+  eq('pinball: best SCORE takes the max, never a sum', pb.bestScore, 1250000);
+  eq('pinball: best BALL takes the max independently of best score', pb.bestBall, 745000);
+  eq('pinball: lifetime counters add', [pb.jackpots, pb.multiballs, pb.missions, pb.ramps], [13, 3, 7, 59]);
+  eq('pinball: total/byDiff still aggregate alongside pb',
+    aggregatePlayers(all)[0].games.pinball.total.played, 6);
+  ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
+    SOLO.has('pinball'));
+}
+
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/
@@ -509,6 +578,86 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
     ok(`sub-counter "${k}" is rendered by My Stats (stored is not enough)`,
       new RegExp(`rec\\.${k}\\b`).test(uiSrc));
   }
+}
+
+// ---- [KNOWN-BUG PROBE] every SHIPPED game has a row on the LEADERBOARD -----------------------
+//
+// The block above covers the three surfaces a per-game SUB-COUNTER needs. There is a fourth
+// surface, for the game as a whole, and it was missed for Yahtzee - found on 2026-08-11 by the
+// first real report to arrive through Report a bug:
+//
+//   "MY WINS ARE NOT COUNTING TO MY TOTAL WINS ON LEADERBOARD"   (game: Yahtzee)
+//
+// He had 14 Yahtzee wins in 15 matches. They were in his local store, they were mirrored to
+// players/ (syncHealth read ok, 266 plays local and remote), and his own My Stats screen showed
+// them. js/leaderboard-ui.js's GAME_META simply had no `yahtzee` row - and ALL_IDS, COMP_IDS,
+// winsOf(), playedOf() and the whole By Game segment are all derived from it, so every one of
+// those wins was worth exactly zero on the board. Stored, synced, and invisible: THE LAW rule 1.
+//
+// Nothing about a missing GAME_META row shows up on the game itself, in My Stats, in the sync
+// health line, or in any other test - which is why this is structural. It discovers the games from
+// game-stats.js, so a NEW game is covered the day its stats id is added.
+//
+// A game may be off the board deliberately, but only while it is `devOnly` in js/hub.js's registry
+// (the leaderboard is the shared bragging wall; an unreleased game has no business on it). That is
+// checked, not taken on trust: the day one of these drops `devOnly`, this block fails and says to
+// add the GAME_META row. An entry here that HAS been added to GAME_META fails too, so the list
+// cannot go stale.
+const OFF_THE_BOARD = {
+  skeeball: 'admin-only; the row reappears the moment the hub GAMES entry drops devOnly',
+  pinball: 'admin-only; same',
+};
+{
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const read = (p) => readFileSync(join(HERE, p), 'utf8');
+
+  /** The text of a top-level `const NAME = [` / `= {` literal, up to its close. Deliberately the
+   *  FIRST `];`/`};` after the marker, not a line-anchored one: game-stats.js's GAMES is a single
+   *  line, and a line-anchored cut ran on into the whole file (every difficulty key read as a
+   *  game id, 167 nonsense failures) the first time this was written. */
+  const literal = (src, marker) => {
+    const i = src.indexOf(marker);
+    if (i < 0) return '';
+    const j = src.indexOf(marker.endsWith('[') ? '];' : '};', i + marker.length);
+    return src.slice(i, j < 0 ? src.length : j);
+  };
+
+  const statsIds = [...literal(read('js/game-stats.js'), 'const GAMES = [').matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
+  const metaIds = [...literal(read('js/leaderboard-ui.js'), 'const GAME_META = [').matchAll(/id:\s*'([\w-]+)'/g)].map((m) => m[1]);
+  // Stats id -> hub registry id, for the devOnly lookup (they differ for connect4, ballrun, ...).
+  const uiSrc = read('js/game-stats-ui.js');
+  const hubIdMap = Object.fromEntries(
+    [...literal(uiSrc, 'const HUB_ID = {').matchAll(/(\w+):\s*'([\w-]+)'/g)].map((m) => [m[1], m[2]])
+  );
+  const hubId = (id) => hubIdMap[id] || id;
+
+  // Which hub entries are devOnly: everything between one `id:` and the next belongs to that entry.
+  const hubSrc = literal(read('js/hub.js'), 'const GAMES = [');
+  const hits = [...hubSrc.matchAll(/\bid:\s*'([\w-]+)'/g)];
+  const devOnly = new Set(hits.filter((m, i) => /devOnly:\s*true/.test(
+    hubSrc.slice(m.index, i + 1 < hits.length ? hits[i + 1].index : hubSrc.length)
+  )).map((m) => m[1]));
+
+  ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 2);
+
+  for (const id of statsIds) {
+    if (metaIds.includes(id)) continue;
+    const why = OFF_THE_BOARD[id];
+    if (!why) {
+      ok(`"${id}" has a leaderboard GAME_META row (without one its wins count as ZERO on the board)`, false);
+      continue;
+    }
+    ok(`"${id}" is off the board on purpose, and still devOnly in js/hub.js (${why})`,
+      devOnly.has(hubId(id)));
+  }
+  for (const id of Object.keys(OFF_THE_BOARD)) {
+    ok(`OFF_THE_BOARD entry "${id}" is not stale (it is still absent from GAME_META)`, !metaIds.includes(id));
+  }
+  // A typo'd id renders an untranslated label and counts nothing, silently.
+  for (const id of metaIds) ok(`GAME_META id "${id}" is a real stats id`, statsIds.includes(id));
 }
 
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');

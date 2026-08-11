@@ -24,8 +24,16 @@
 //         total, byDiff,
 //         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
 //       escoba: {
-//         total, byDiff,
-//         es: { escobas } },                      // escobas the human made
+//         total, byDiff,                           // byDiff keyed easy|normal|hard (the AI tier) or
+//                                                   // 'mp' for a multiplayer match -- 'mp' is unmapped
+//                                                   // in difficulty-tiers.js (tierOf('mp') === null),
+//                                                   // so those plays count in every total and in the
+//                                                   // leaderboard's All filter and claim no tier pill,
+//                                                   // the same convention as tictactoe/boggle/yahtzee.
+//                                                   // Escoba only started using it on 2026-08-11;
+//                                                   // online matches before that are filed under
+//                                                   // 'normal' and stay exactly where they are (rule 5)
+//         es: { escobas } },                      // escobas the human made (solo and MP alike)
 //       ballrun: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
 //         br: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } },  // a solo,
@@ -126,14 +134,43 @@
 //                                                   // hill-climb's own save (gamehub.hillclimb.v1), so
 //                                                   // nothing that can go down is ever written into the
 //                                                   // shared store; see recordHillClimb
+//       skeeball: {
+//         total, byDiff,
+//         sk: { played, won, lost, tied, balls, points,
+//               bestGame, bestThrow, hundreds, fifties } },  // vs the computer, and it CAN tie (both
+//                                                   // totals can land equal), so `tied` is stored
+//                                                   // explicitly rather than derived. balls/points/
+//                                                   // hundreds/fifties are lifetime counters (add
+//                                                   // only); bestGame/bestThrow are Math.max only.
+//                                                   // See recordSkeeball
+//       pinball: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard -- Pinball's three
+//                                                   // TABLE settings (Casual/Standard/Tournament) are
+//                                                   // its difficulty axis, mapped 1:1, so there is no
+//                                                   // second vocabulary to reconcile
+//         pb: { games, bestScore, points, bestBall,
+//               jackpots, multiballs, missions, ramps } },
+//                                                   // a solo score-attack game: no opponent and no loss
+//                                                   // state (a game ends when the last ball drains), so
+//                                                   // every finished game counts as played+won, same as
+//                                                   // ballrun/snake/nutsbolts/hillclimb. `bestScore` and
+//                                                   // `bestBall` are Math.max ONLY; `points` is the
+//                                                   // lifetime score total and `jackpots`/`multiballs`/
+//                                                   // `missions`/`ramps` are lifetime counters, all
+//                                                   // purely additive. There is deliberately no local
+//                                                   // high-score TABLE anywhere: this is the one and
+//                                                   // only record of a pinball score, so it cannot
+//                                                   // disagree with itself; see recordPinball
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
+import { recordBoardGame, unlockBoard } from './arcade-scores.js';
+
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -520,6 +557,25 @@ function ensureBs(g) {
   }
 }
 
+/** Skeeball: W/L/T counters plus the things a skeeball player actually brags about -- the best
+ *  single game, the best single throw, and how many times they have found a 100 cup or the 50.
+ *  `tied` is explicit rather than derived (two totals can genuinely land equal), matching
+ *  tt/db/bg/yz/dm. `balls` and `points` are LIFETIME counters and only ever add; `bestGame` and
+ *  `bestThrow` are Math.max only (THE LAW rule 2). `points` is the lifetime total the player has
+ *  scored across every game, which is why it is not derivable from bestGame and gets its own
+ *  counter rather than being recomputed. */
+function ensureSk(g) {
+  if (!g.sk || typeof g.sk !== 'object') g.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0 };
+  for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'bestGame', 'bestThrow', 'hundreds', 'fifties']) {
+    if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
+  }
+  // Added 2026-08-11 with the boards rework, both ADDITIVE and both still absent on any device
+  // that has not played since: `boards` is per-machine records (see js/arcade-scores.js, which
+  // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
+  if (!g.sk.boards || typeof g.sk.boards !== 'object') g.sk.boards = {};
+  if (!g.sk.unlocked || typeof g.sk.unlocked !== 'object') g.sk.unlocked = {};
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -544,6 +600,7 @@ function normalize(raw) {
   ensureSn(st.games.snake);
   ensureHc(st.games.hillclimb);
   ensureBs(st.games.battleship);
+  ensureSk(st.games.skeeball);
   return st;
 }
 
@@ -633,6 +690,189 @@ function drainPendingBusinessDeal(st) {
   return true;
 }
 
+// --- Results that could not be written, kept instead of dropped (2026-08-11) ------------------
+//
+// Matt: "Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."
+//
+// Once a finished match is recorded at the moment the engine DECIDES it (escoba/js/game.js's
+// onDecided hook), the only way left to lose a result is for the write itself to fail -- a full
+// quota, private mode, a storage exception. `persist()` has returned false and logged loudly since
+// the sixth-playthrough Ball Run incident, but a logged loss is still a loss: the play was gone.
+//
+// So a failed write now parks the result in its OWN small key and `loadStats()` drains it on the
+// next load, exactly like `drainPendingBusinessDeal` above (same shape, same reasoning, same
+// additive `bumpTotals` path). The queue is deliberately tiny and separate from the stats blob:
+// the case it exists for is "the big object would not fit", so the retry must not depend on
+// writing that same big object. If even the queue cannot be written there is nothing further this
+// module can do, and it says so at console.error rather than pretending.
+//
+// Generic by shape (`game`, `diff`, `won`, `extras`, `h2h`), wired into Escoba's two writers here.
+// Any other recorder can be moved onto it by routing its failed `persist()` through queueResult().
+const PENDING_KEY = 'gamehub.pendingResults.v1';
+const PENDING_MAX = 200;   // a bound, not a policy: this queue drains on the very next load
+
+function queueResult(entry) {
+  try {
+    const q = readJSON(PENDING_KEY);
+    const list = Array.isArray(q) ? q : [];
+    list.push(Object.assign({ at: Date.now() }, entry));
+    localStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-PENDING_MAX)));
+    console.warn('[game-stats] the stats write failed, so this result was queued and will be '
+      + 'applied on the next load', entry);
+    return true;
+  } catch (err) {
+    console.error('[game-stats] the stats write failed AND the result could not be queued; this '
+      + 'result is lost. Free some storage.', { entry, err });
+    return false;
+  }
+}
+
+/** Apply a stats write and, if it did not land, keep the result instead of dropping it. */
+function persistOrQueue(st, entry) {
+  if (persist(st)) return true;
+  queueResult(entry);
+  return false;
+}
+
+/** Replay anything a previous load could not write, into `st`. Additive, through the same paths a
+ *  live result takes.
+ *
+ *  **It does NOT clear the queue.** That is `clearPendingResults()`, which the caller runs only
+ *  after the write it triggered actually succeeded. Clearing here looked equivalent and was not:
+ *  a load whose own persist ALSO fails (the overwhelmingly likely case, since the queue exists
+ *  because writes are failing) would have dropped the queue and the results with it -- the exact
+ *  loss this whole mechanism exists to prevent, reintroduced inside the fix. Caught by scenario F
+ *  in test-stats-replay.mjs, which drains once under a still-failing write before letting one
+ *  through. Draining twice is harmless: the second drain lands on a store that never kept the
+ *  first one. */
+function drainPendingResults(st) {
+  const q = readJSON(PENDING_KEY);
+  if (!Array.isArray(q) || !q.length) return false;
+  let applied = 0;
+  for (const e of q) {
+    if (!e || GAMES.indexOf(e.game) < 0) continue;
+    if (e.h2h) { applyHeadToHead(st, e.game, e.h2h, e.won); applied++; continue; }
+    bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+    if (e.game === 'escoba') {
+      ensureEs(st.games.escoba);
+      st.games.escoba.es.escobas += ((e.extras && e.extras.escobas) | 0);
+    }
+    applied++;
+  }
+  if (applied) console.warn(`[game-stats] replaying ${applied} queued result(s) that an earlier write could not save`);
+  return applied > 0;
+}
+
+/** Retire the queue, only ever after the write that absorbed it succeeded. */
+function clearPendingResults() {
+  try { localStorage.removeItem(PENDING_KEY); }
+  catch (err) {
+    // removeItem frees space rather than needing it, so this is close to impossible -- but if it
+    // ever happens the queue would replay on the next load and double-count, which is worth
+    // saying out loud rather than discovering as drifting numbers.
+    console.error('[game-stats] queued results were applied but the queue could not be cleared; '
+      + 'they may be applied a second time on the next load', err);
+  }
+}
+
+// --- Escoba: extracting the multiplayer plays back out of the AI bucket (2026-08-11) ----------
+//
+// Matt: "Extract them and create a MP column for wins and losses." Escoba's `_commitStats` used to
+// file every ONLINE match under the opponent's AI difficulty, which for a remote seat resolved to
+// the `'normal'` default -- so a player's multiplayer record sat blended into their Intermediate
+// vs-the-AI record with nothing to tell the two apart. Leaving it there was the wrong answer: it is
+// history no screen can show for what it is, which is THE LAW rule 1's whole subject.
+//
+// **There IS independent evidence, and this migration uses only that.** `recordHeadToHead` has
+// written `h2h.escoba[<opponentDeviceId>] = {name, w, l}` from the SAME `_commitStats` call, once
+// per opponent, on every multiplayer match since the day it shipped. Escoba's multiplayer was
+// two-seat for that entire period, so exactly one h2h increment exists per match, and
+// `sum(w)`/`sum(l)` across that map IS this store's multiplayer won/lost count. Nothing is
+// inferred, estimated or apportioned: every play moved here is one this store can PROVE was
+// multiplayer. That is the line THE LAW rule 4 draws, and this stays on the right side of it.
+//
+// What it deliberately does NOT do: guess about matches played before head-to-head capture
+// existed. Those left no trace on either device, so an Intermediate play that is really an old
+// multiplayer play is indistinguishable from a genuine one, and inventing a split would be
+// fabrication. They stay in `normal`, fully visible, exactly where they have always been --
+// nothing is hidden or archived away, so rule 3's "still SHOWN" obligation is met by not moving
+// them at all.
+//
+// Safety, point by point:
+//   * `total` is NEVER touched. byDiff is a partition of it, so re-bucketing inside byDiff cannot
+//     change a single play count, and the verification below asserts exactly that by fresh re-read.
+//   * Every move is clamped to what `normal` actually holds, so no counter can go negative even on
+//     a store whose h2h and byDiff disagree (they agree on all five real devices; see the test).
+//   * Runs ONCE per store, latched on `escoba._esMpSplit` before any evidence is read, so a store
+//     with nothing to move still never reconsiders. New multiplayer plays go straight to `'mp'`
+//     from here on, so a later h2h increment can never trigger a second extraction.
+//   * The pre-migration numbers, the evidence used, and anything it could not resolve are archived
+//     on `escoba.esMpSplit` and never pruned (rule 5) -- the migration is fully reversible by hand
+//     from what it writes down.
+function splitEscobaMp(st) {
+  const g = st.games.escoba;
+  if (g._esMpSplit) return false;
+  g._esMpSplit = true;                       // latch FIRST: no evidence is also a decided outcome
+  const h2h = (st.h2h && st.h2h.escoba) || {};
+  let hw = 0, hl = 0;
+  for (const k of Object.keys(h2h)) {
+    const row = h2h[k] || {};
+    hw += row.w | 0; hl += row.l | 0;
+  }
+  if (!(hw + hl)) return true;               // no multiplayer history here; the latch is the change
+  const from = g.byDiff.normal || (g.byDiff.normal = bucket());
+  const normalBefore = { played: from.played | 0, won: from.won | 0, lost: from.lost | 0 };
+  const moveW = Math.min(hw, normalBefore.won);
+  const moveL = Math.min(hl, normalBefore.lost);
+  const moveP = Math.min(moveW + moveL, normalBefore.played);
+  from.played -= moveP; from.won -= moveW; from.lost -= moveL;
+  const mp = g.byDiff.mp || (g.byDiff.mp = bucket());
+  mp.played += moveP; mp.won += moveW; mp.lost += moveL;
+  g.esMpSplit = {
+    at: new Date().toISOString(),
+    normalBefore,
+    moved: { played: moveP, won: moveW, lost: moveL },
+    evidence: { won: hw, lost: hl },
+    // Head-to-head says these matches happened but `normal` did not have the room to release them.
+    // Zero on every device this was written against; non-zero would mean the two records disagree,
+    // which is worth knowing about rather than silently clamping away.
+    unresolved: { won: hw - moveW, lost: hl - moveL },
+  };
+  if (g.esMpSplit.unresolved.won || g.esMpSplit.unresolved.lost) {
+    console.warn('[game-stats] escoba MP split: head-to-head claims more multiplayer plays than the '
+      + 'normal bucket could release; the surplus was left alone rather than invented elsewhere',
+      g.esMpSplit);
+  }
+  console.warn(`[game-stats] escoba: moved ${moveP} proven multiplayer play(s) (${moveW}W/${moveL}L) `
+    + `out of the Intermediate bucket into 'mp'. Totals unchanged.`, g.esMpSplit);
+  return true;
+}
+
+/** THE LAW rule 6, applied to the one migration in this file that MOVES numbers rather than only
+ *  adding them: prove it landed by reading the store back FRESH, not by trusting the object we
+ *  just handed to setItem. Checks the thing that actually matters -- that no play was created or
+ *  destroyed -- plus the two buckets it rewrote. Loud on any mismatch; never throws into a caller
+ *  that is only trying to load stats. */
+function verifyEscobaMpSplit(st, persisted) {
+  const expect = st.games.escoba;
+  if (!persisted) {
+    console.error('[game-stats] escoba MP split could NOT be saved; it will be retried on the next '
+      + 'load (nothing was lost: the split only re-buckets what is already stored)', expect.esMpSplit);
+    return false;
+  }
+  const fresh = (readJSON(statsKey()) || {});
+  const got = ((fresh.games || {}).escoba) || {};
+  const same = (a, b) => (a.played | 0) === (b.played | 0) && (a.won | 0) === (b.won | 0) && (a.lost | 0) === (b.lost | 0);
+  const ok = same(got.total || {}, expect.total)
+    && same((got.byDiff || {}).mp || {}, expect.byDiff.mp)
+    && same((got.byDiff || {}).normal || {}, expect.byDiff.normal);
+  if (!ok) {
+    console.error('[game-stats] escoba MP split did not verify on re-read', { expected: expect, got });
+    return false;
+  }
+  return true;
+}
+
 // Sixth-playthrough incident (Ball Run): a storage-write failure here was completely silent, with
 // no trace anywhere a player or a future debugging session could see it. Every call site already
 // discards this function's return value, so returning a success flag (instead of nothing) and
@@ -665,9 +905,24 @@ export function loadStats() {
   changed = refoldBallRunLegacyRuns(st) || changed;
   changed = seedSnWallsLegacy(st.games.snake) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
+  // Escoba's multiplayer plays, out of the AI bucket they were misfiled into. Runs on a FORKED
+  // store too, unlike the legacy folds above: unlike chinchon-stats/bd-stats, the evidence it reads
+  // (`h2h`) lives in THIS store and describes only this player's own matches, so there is nobody
+  // else's history it could hand over.
+  const splitRan = splitEscobaMp(st);
+  changed = splitRan || changed;
+  const movedAny = splitRan && st.games.escoba.esMpSplit && st.games.escoba.esMpSplit.moved.played > 0;
+  // Queued results are folded in BEFORE the write below, so a queued result and a migration that
+  // both land on the same load are saved together rather than one overwriting the other.
+  const drained = drainPendingResults(st);
+  changed = drained || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   ensureBrOrbital(st.games.ballrun);
-  if (changed) persist(st);
+  if (changed) {
+    const persisted = persist(st);
+    if (drained && persisted) clearPendingResults();   // only once it is genuinely stored
+    if (movedAny) verifyEscobaMpSplit(st, persisted);
+  }
   return st;
 }
 
@@ -755,7 +1010,7 @@ export function recordEscoba(difficulty, won, extras) {
   ensureEs(g);
   g.es.escobas += (extras && extras.escobas) | 0;
   st.updatedAt = new Date().toISOString();
-  persist(st);
+  persistOrQueue(st, { game: 'escoba', diff: difficulty, won, extras: { escobas: (extras && extras.escobas) | 0 } });
   return st;
 }
 
@@ -994,6 +1249,105 @@ export function recordBattleship(difficulty, won, extras) {
   return st;
 }
 
+/** Skeeball: record one finished RACK on one machine.
+ *
+ *  Reworked 2026-08-11 (Matt): the computer opponent is gone and boards replaced difficulty, so
+ *  this is now the SOLO pattern - every finished rack counts played+won and `lost` is never
+ *  touched, exactly like Ball Run / Snake / Nuts & Bolts / Hill Climb.
+ *
+ *  THE LAW, and what is deliberately NOT touched:
+ *  - `byDiff` is now keyed by BOARD ID, following Hill Climb's stages-are-the-difficulty-axis
+ *    precedent. The old `easy`/`medium`/`hard` buckets from the vs-computer build are left exactly
+ *    where they are (rule 5) and still count in the leaderboard's All filter (rule 1).
+ *  - `sk.won` / `sk.lost` / `sk.tied` are FROZEN. They are the vs-computer win/loss record and
+ *    there is no opponent to add to them any more, so this writer never increments them again -
+ *    but it never clears them either, and My Stats still shows them when they are non-zero.
+ *  - `played`/`balls`/`points`/`bestGame`/`bestThrow`/`hundreds`/`fifties` are mode-agnostic
+ *    lifetime numbers and keep accumulating across both eras.
+ *
+ *  `extras` = { score, balls, hundreds, fifties, bestThrow, at }. `at` is the game's finish time,
+ *  used only to pick the local day bucket, and is injectable so tests are not clock-dependent.
+ */
+export function recordSkeeball(boardId, extras) {
+  const st = loadStats();
+  const g = st.games.skeeball;
+  const board = String(boardId || 'classic');
+  bumpTotals(g, board, true);
+  ensureSk(g);
+  const e = extras || {};
+  const score = Math.max(0, e.score | 0);
+  g.sk.played += 1;
+  g.sk.balls += Math.max(0, e.balls | 0);
+  g.sk.points += score;
+  g.sk.hundreds += Math.max(0, e.hundreds | 0);
+  g.sk.fifties += Math.max(0, e.fifties | 0);
+  g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
+  g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
+  recordBoardGame(g.sk, board, { score, bestThrow: e.bestThrow | 0, at: e.at });
+  unlockBoard(g.sk, board);          // you have played it, so it is yours
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Open a machine the player has just earned. Additive and idempotent (js/arcade-scores.js). */
+export function unlockSkeeballBoard(boardId) {
+  const st = loadStats();
+  ensureSk(st.games.skeeball);
+  unlockBoard(st.games.skeeball.sk, String(boardId || ''));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Pinball: a solo score-attack game. Same shape family as Ball Run's `br`, Snake's `sn` and Hill
+ *  Climb's `hc` - a game has no opponent and no loss axis (it ends when the last ball drains), so
+ *  `pb.games` is the true play count and the score bests are the scoreboard.
+ *    bestScore / bestBall   highest game and highest single ball. Math.max ONLY (THE LAW rule 2).
+ *    points                 lifetime score total, a pure counter, additive forever.
+ *    jackpots / multiballs / missions / ramps
+ *                           lifetime counters of the things the game is actually about, so the
+ *                           Stats screen can say something more interesting than one number.
+ *
+ *  NOTE: this is the ONLY place a pinball score is ever stored. pinball/js/store.js deliberately
+ *  keeps preferences and nothing else - no local top-ten table - precisely so there is never a
+ *  second, unsynced, silently-truncating home for a score somebody earned. */
+function ensurePb(g) {
+  if (!g.pb || typeof g.pb !== 'object') {
+    g.pb = { games: 0, bestScore: 0, points: 0, bestBall: 0, jackpots: 0, multiballs: 0, missions: 0, ramps: 0 };
+  }
+  for (const k of ['games', 'bestScore', 'points', 'bestBall', 'jackpots', 'multiballs', 'missions', 'ramps']) {
+    if (!Number.isFinite(g.pb[k])) g.pb[k] = 0;
+  }
+}
+
+/** Pinball: record one finished game. `score` is the final score, `difficulty` one of
+ *  easy|medium|hard (the three table settings, which ARE the difficulty axis), `extras` the
+ *  counters from the game. A game has no opponent and no loss state, so it counts as played+won
+ *  and `lost` is never touched (mirrors Ball Run / Snake / Hill Climb / Nuts & Bolts).
+ *  Additive: the two bests only ever go up, every counter only ever adds. */
+export function recordPinball(score, difficulty, extras) {
+  const st = loadStats();
+  const g = st.games.pinball;
+  const d = normDiff(difficulty);
+  ensurePb(g);
+  const pts = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+  const x = extras || {};
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  bumpTotals(g, d, true);
+  g.pb.games += 1;
+  g.pb.points += pts;
+  g.pb.bestScore = Math.max(g.pb.bestScore | 0, pts);
+  g.pb.bestBall = Math.max(g.pb.bestBall | 0, n(x.bestBall));
+  g.pb.jackpots += n(x.jackpots);
+  g.pb.multiballs += n(x.multiballs);
+  g.pb.missions += n(x.missions);
+  g.pb.ramps += n(x.ramps);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
  *
  *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
@@ -1014,6 +1368,19 @@ export function recordHeadToHead(gameId, opponent, won) {
   const oppId = String((opponent && opponent.deviceId) || '').trim();
   if (!oppId || oppId === deviceId()) return null;         // no self-play rows
   const st = loadStats();
+  applyHeadToHead(st, gameId, opponent, won);
+  st.updatedAt = new Date().toISOString();
+  // Escoba's own migration reads this map as its evidence for which plays were multiplayer, so a
+  // dropped h2h write is not only a lost opponent record -- it is a play that can never be
+  // identified as multiplayer again. Queue it rather than lose it.
+  persistOrQueue(st, { game: gameId, won, h2h: { deviceId: oppId, name: (opponent && opponent.name) || '' } });
+  return st;
+}
+
+/** The h2h mutation on its own, so a live call and a replayed queue entry can never drift. */
+function applyHeadToHead(st, gameId, opponent, won) {
+  const oppId = String((opponent && opponent.deviceId) || '').trim();
+  if (!oppId) return;
   if (!st.h2h || typeof st.h2h !== 'object') st.h2h = {};
   const perGame = st.h2h[gameId] || (st.h2h[gameId] = {});
   const row = perGame[oppId] || (perGame[oppId] = { name: '', w: 0, l: 0 });
@@ -1023,16 +1390,13 @@ export function recordHeadToHead(gameId, opponent, won) {
   if (name) row.name = name;                               // keep the freshest name seen
   if (won === true) row.w += 1;
   else if (won === false) row.l += 1;
-  st.updatedAt = new Date().toISOString();
-  persist(st);
-  return st;
 }
 
 export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordBattleship, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, unlockSkeeballBoard, recordPinball, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

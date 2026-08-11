@@ -83,10 +83,11 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/new-badge.js` | (2026-08-01) the launcher's "New" pill — see "The New badge" below. Pure date maths (`NEW_DAYS`/`parseReleaseDate`/`daysSinceRelease`/`isNewGame`), no storage, no DOM, `now` injectable |
 | `js/i18n.js` | (2026-07-23) the EN/ES language layer — see "Language support" below |
 | `js/theme.js` | (2026-07-24) the light/dark/auto theme layer — see "Theme support" below |
-| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes, `hc` Hill Climb) — `tt`/`db`/`bg`/`yz`/`dm` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
+| `js/game-stats.js` | unified stats, keyed per PLAYER since 2026-07-23 (`statsKey()`/`statsId()`; see "Whose stats are these" — the device owner keeps `gamehub.stats`, anyone else gets `gamehub.stats.p.<CODE>`); one bespoke `recordX()` per game plus generic `recordResult`; a game with richer needs than played/won/lost carries its own sub-counter (`grid` Connect 4, `cc` Chinchón, `es` Escoba, `nb` Nuts & Bolts, `tt` Tic Tac Toe, `db` Dots and Boxes, `bg` Boggle, `yz` Yahtzee, `dm` Dominoes, `hc` Hill Climb, `sk` Skeeball) — `tt`/`db`/`bg`/`yz`/`dm`/`sk` all track `tied` explicitly rather than deriving it (each game can genuinely draw/tie — Dominoes because both players score the opponent's leftover pips at every round end, so both totals can pass the target in one settle and land equal), and `db`/`bg` each carry Math.max-only (or longer-only) bests per THE LAW rule 2; legacy-store folds, the Ball Run metric migration, and the Monopoly Deal pending-stats drain (see "The shared profile" section) |
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
+| `js/arcade-scores.js` | (2026-08-11) the shared high-score + unlock layer for the arcade-cabinet games (Skeeball now, Pinball next). Pure. Per-board all-time and **date-keyed daily** bests, unlocks, the cross-device merges, and `appWideBest` (derived from synced records - there is deliberately no shared `highscores/` node). The daily best is a MAP keyed by local day, never a value that resets: see its header and `test-arcade-scores.mjs` |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data. Owns one preference key of its own, `gamehub.lb.sort.v1` (the sort choice, alongside `gamehub.favorites.v1`/`gamehub.theme.v1`/`gamehub.lang.v1` — THE LAW rule 2's carve-out) |
@@ -96,6 +97,12 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
+| `js/install-state.js` | (2026-08-11) installed-app vs browser tab: `installState()` -> `{installed, mode, browser, device, a2hsDismissed}`. Dependency-free on purpose - `stats-net.js` and `bug-report.js` both need it and must not import each other (device-report.js already imports stats-net, so that graph would go circular). Checks BOTH `display-mode: standalone` and `navigator.standalone`, or half the family's iPhones file as "browser" |
+| `js/bug-report.js` | (2026-08-11) the DATA half of Report a bug: `gatherEnvironment()` (device/browser/install-state/screen/network/storage/SW/GPU/recent-errors) plus the whole `gatherDeviceReport()` payload, `prepareScreenshot()`'s downscale-until-it-fits, the `bugReports/`+`bugReportShots/` write with a verifying re-read, and the offline outbox (`gamehub.bugreports.pending.v1`) the hub drains on load/reconnect/return-to-launcher. See "Report a bug" below |
+| `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
+| `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
+| `js/announce.js` | (2026-08-11) one-time launcher announcements: the entries (title/body/CTA as `{en,es}` on the entry), the seen-list (`gamehub.announce.v1`), and the pure `pendingAnnouncement()` decision. Reuses `new-badge.js`'s date parser; each entry's `until` retires it with no follow-up commit |
+| `js/announce-ui.js` | (2026-08-11) the announcement popup: DOM only, `.gh-*` primitives, dismissal recorded on close by any route |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
 
 Firebase layer: one project (`js/firebase-config.js`), anonymous auth, RTDB rules
@@ -106,7 +113,9 @@ DEFAULT (unnamed) app and is untouched by the shared bootstrap — it was never 
 init race that motivated it. Node ownership is disciplined by convention: stats-net touches
 `players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
 nodes, device-report.js touches `deviceReports/` only (read of the first two, write of
-the third). Nothing enforces this but comments.
+the third), and bug-report.js touches `bugReports/` + `bugReportShots/` only (it READS
+everything device-report.js reads, by calling it, and writes neither). Nothing enforces
+this but comments.
 
 ---
 
@@ -312,7 +321,8 @@ below; every other in-hub game keeps its current light-only look until its own P
 Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
 **All five invariants below survive the 3-4 seat extension unchanged** (2026-07-28, Chinchón
-only — see "The ninth consumer"); invariant 2 is the only one whose IMPLEMENTATION moved, from
+only — see "The ninth consumer"; **Escoba joined it 2026-08-11**, see `escoba/CLAUDE.md`'s
+"Multiplayer at 2-4 seats"); invariant 2 is the only one whose IMPLEMENTATION moved, from
 `role === 'host' ? 0 : 1` to `mp.seat`.
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
@@ -639,6 +649,31 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
 - **Status: headless only.** C5-C7 pass against a `FakeRoom`; nothing has been played by three
   or four real devices. Same honest caveat as Pool and Boggle.
 
+### The eleventh consumer of the SEAT model: Escoba at 3-4 seats (2026-08-11)
+
+Not a new consumer of `js/net.js` — Escoba has been a lockstep game since M1. This is the second
+game to adopt the **N-seat** half of it, and the point worth recording here is that the phase-3
+extension held its promise: **`js/net.js` needed zero changes**, and `joinSeat`/`vacateSeat`/the
+seat-addressed `recovery/requests/<seat>` + `recovery/answers/<seat>` records were already there,
+already tested, and simply unused by this game. The port was `mp.role` → `mp.seat`,
+`_makeRemoteAgent()` → `_makeRemoteAgent(seatId)`, a roster-driven `_mpBuildPlayers`, a seat list in
+both lobbies, and `mp.opp` → `mp.opps` for head-to-head. Escoba's engine, like Chinchón's, was
+already N-generic and this was verified rather than assumed. Full write-up: `escoba/CLAUDE.md`;
+executable form: `test-mp-lockstep.mjs`'s E5-E6.
+
+The one thing Escoba's port adds to the shared record, because it is not seat-specific and every MP
+game can hit it: **`_commitStats` must run when the ENGINE decides the match, not when the UI
+finishes announcing it.** Escoba recorded the result in its `'matchEnd'` hook, several awaits after
+`checkMatchEnd()` had already set `winner` — with a human tapping through the final round modal in
+between. If the other player tapped through first and left, `net.leaveRoom` set the room to
+`status:'ended'` with no `result`, the still-playing device read that as an abandon,
+`_mpEndDueToOpponentLeft` aborted the engine, and `'matchEnd'` never fired: the winner's own win was
+never written anywhere, on a coin flip, on every online match. THE LAW rule 1. The fix is to commit
+at the decision point (`'roundScored'`, guarded on `winner`, before any await) and to guard both MP
+end paths with a `_commitStatsIfDecided()`; `_statsCommitted` keeps it idempotent. `test-mp-lockstep`
+E8 parks the host on its final round modal and kills the room underneath it — it was born red.
+**Any MP game whose result-recording sits behind an awaited modal has this hole**; check yours.
+
 ### The tenth consumer: Battleship (2026-08-04) — the first hidden-information game
 
 Full write-up: `battleship/CLAUDE.md`'s Multiplayer section; executable form:
@@ -709,6 +744,211 @@ none of them share:
   session cannot reach Firebase — same honest caveat every other consumer above carries.
 
 ---
+
+## Report a bug (2026-08-11)
+
+Matt: *"It needs to allow for uploads of screenshots... a text field to explain the problem, and it
+must send all of the details from the phone so we know what's going on (the same as the device
+details button in the profile, but with even more information. For example, we'd need the type of
+phone they're playing on and the browser vs if it's added as a shortcut, etc.)."*
+
+Five modules, two new Firebase nodes, three new local keys, one CLI reader. **THE LAW has no
+surface here by construction**: every key and node is new, and nothing in the pipeline writes to a
+stats key, a profile field or a `players/` record.
+
+### Where a player finds it
+
+The launcher's footer row (under the games, behind the divider) and the profile page, directly
+above **Device details**. **No in-game entry point, deliberately** — the hub's chrome collapses
+in-game and immersive games own the viewport, so a button there would fight for space in exactly
+the games most likely to need one. The flow assumed is the real one: something breaks, the player
+screenshots it, comes back out, and the form preselects **the game they were last in**
+(`hub.js`'s `_lastGameId`, set before the module import so a game that fails to LOAD is still
+preselected).
+
+### What a report contains
+
+Three layers, none a subset of another:
+
+1. **What the player said** — the description and the game they picked. The picker is built from
+   `game-stats-ui.js`'s `gameChoices()` (the same `TABS` + `game_title_*` keys My Stats and the
+   leaderboard use), so it cannot drift and a new game appears in it automatically.
+2. **`deviceReport`** — the ENTIRE Device Details payload, verbatim: identity, every localStorage
+   key this app has written, the raw key dump, sync health, the two Firebase conflict reads. A bug
+   report is a superset of that diagnostic, so nobody has to be told to press both buttons.
+3. **`environment`** — what Device Details never knew, because it answers a different question
+   ("whose history is this and did it sync", not "what is this person holding"): device and browser
+   labels (UA-Client-Hints where available, UA-string patterns for iOS/Safari where not),
+   **`displayMode` + `iosStandalone` + `installed`** (Matt's "browser vs added as a shortcut" ask —
+   the media query and `navigator.standalone` are kept separate because iOS Safari only has the
+   second), screen/viewport/DPR/orientation, theme + language + reduced-motion + timezone,
+   connection (`effectiveType`/`rtt`/`downlink`/`saveData`), storage quota and usage, **which build
+   the service worker is serving** (the version pill's own `GET_VERSION` message), its
+   registrations and cache names, the **GPU renderer string** (what actually explains "the 3D games
+   are choppy" for Ball Run / Pool / Hill Climb), and **`recentErrors`** from `js/error-log.js`.
+
+**Every probe is guarded and records `null` on refusal** — Safari rejects the high-entropy UA call,
+`performance.memory` is Chromium-only, `storage.estimate` is not universal. A diagnostic that can
+fail to SEND is worse than one with a hole in it, so `buildBugReport` is wrapped at its call site
+too: if gathering fails outright, the description is sent alone with a `gatherError` field.
+
+### Screenshots
+
+`prepareScreenshot()` downscales to a 1400px long edge and **steps JPEG quality down 0.78 → 0.36
+until it fits** rather than refusing a 4 MB photo. Caps (3 shots, 900 KB each, 2.4 MB total) are
+checked by the pure `fitsShotBudget()` BEFORE a shot is attached, so the player is told at pick
+time instead of after a failed send. The canvas is painted white first: a dark-mode screenshot
+re-encoded onto a transparent canvas renders black-on-black in some viewers.
+
+They live in **`bugReportShots/<id>`, separate from `bugReports/<id>`**, so the inbox and
+`read-bug-reports.mjs` can list every report without pulling megabytes they are not showing.
+**If full-resolution images or more than three are ever needed, add Firebase Storage** rather than
+raising these caps — RTDB is not a file store.
+
+### The offline outbox — the part that matters most
+
+A bug is usually reported from the phone that was just having trouble, which is the phone most
+likely to be offline. So a failed send is **kept**: `queuePendingReport()` writes it to
+`gamehub.bugreports.pending.v1` and `hub.js` drains it on load, on `online`, and on returning to
+the launcher — the three moments stats sync already retries on. If the whole thing will not fit in
+localStorage the TEXT is kept without the screenshots, `shotsDropped` is set, and **the
+confirmation says so out loud** instead of quietly dropping the pictures.
+
+`submitBugReport()` verifies by a fresh re-read before claiming success (rule 6's habit: a resolved
+promise is not proof the data landed, and a report that silently evaporates is the one bug nobody
+can report). A screenshot upload that fails after the record landed stamps `shotError` ON the
+record rather than failing the send.
+
+### How Matt is notified
+
+**In-app plus the CLI. No email, no push — a platform limit, not an oversight.** Web Push needs a
+server to send from; email needs an SMTP credential or a third-party form service, which would mean
+a secret in a public repo or family bug reports routed through a stranger. What fits "static files,
+no build step, no dependencies":
+
+- **The hub's inbox.** For `isAdmin(profile.name)` only, the footer grows a **🐞 Bug reports** pill
+  showing how many reports are newer than this device's last inbox open (`gamehub.bugadmin.v1`).
+  It opens the list newest-first, each drilling into description, screenshots, environment summary
+  and full JSON, with **Copy full report** and a **Mark as done** toggle. Marking is additive
+  (`status`/`statusAt`); a report is never deleted, because it is still the only record of what
+  that player saw.
+- **`node read-bug-reports.mjs`** — the same records in the terminal, and the only way to get the
+  screenshots onto disk (`--shots`).
+
+**If a real notification is ever wanted**, the smallest honest route is a Cloud Function on
+`bugReports/` onCreate sending mail. That needs the Blaze plan and a deploy step this repo has
+never had, so it is Matt's call, not a session's.
+
+### The announcement layer
+
+`js/announce.js` (logic) + `js/announce-ui.js` (DOM). One entry, one id, shown once per device on
+the launcher; its call-to-action opens the report form, so the announcement teaches the feature by
+using it. The seen-list is a preference, rule 2's carve-out, same class as favorites/theme/language.
+
+- **`until` is what retires it** — the New pill's self-cleaning idea (whose date parser this
+  reuses). Without it, a phone left in a drawer opens to a stack of old news.
+- **An entry may carry `shots`: pictures of where the thing it announces actually is.** Matt asked
+  for these twice, and the second ask is the one to build to: **whole phone screens, side by side**,
+  not tight crops of the button. He mocked it up by drawing on two of his own screenshots. The
+  marks (a ring round the button, a thick arrow into it) are injected into the real page before the
+  shot, so they are baked in and re-shooting after a redesign is a script run, not an image-editing
+  session. **The recipe, since the script is not in the repo:** Playwright at 393x852, DSF 1, scroll
+  to the bottom, inject an SVG ring + arrow, screenshot the whole viewport as JPEG q82. 1x JPEG
+  because they render ~165 CSS px wide; a 2x PNG of a launcher is ~500 KB each for no visible gain.
+  **Use a neutral stand-in profile and blank the sync code and device id before the shot** — these
+  ship to everyone, and a real-looking code in a help picture is just an invitation to type it in.
+- **Four files per shot**, resolved at render time by the same `textFor()` the title and body use:
+  per THEME via `resolvedTheme()` (never a bare `matchMedia`, or an explicit light choice on a dark
+  phone gets the wrong picture) and per LANGUAGE, because a Spanish popup pointing at a button
+  labelled "Report a bug" is a picture of somebody else's app. They sit in `img/`, which
+  `isShellAsset()` does NOT treat as shell, so a bad path lands in the non-atomic REST tier and can
+  never strand an install; a figure whose image fails to load removes itself. `test-bug-report.mjs`
+  asserts all eight paths exist, because a typo here is silent — the popup still opens, just with a
+  hole in it. On a short phone the pictures are capped at `40vh` and cropped from the TOP
+  (`object-position: bottom`), so the button, the arrow and both buttons stay above the fold.
+- **A malformed date fails SAFE (shown, not hidden).** One that appears when it should not is a
+  small mistake; one that silently never appears is invisible until somebody asks why nobody knew.
+- **Adding the next one: append a NEW id.** Never re-use or renumber — devices that dismissed it
+  would see it again, devices that never saw it would never get the new one. Title, body and CTA
+  are `{en, es}` ON the entry (registry data stays co-located, i18n decision 3); everything else
+  routes through `js/strings.js`'s `bug_*` / `ann_*` keys.
+- Never shown over the name gate or a mounted game, and only once per page load.
+- **The bug-report entry went fully live on 2026-08-11**, after Matt tested it on his own phone:
+  the `adminOnly` line was deleted and nothing else changed, so every device got it fresh, exactly
+  once. **`adminOnly: true` previews an entry to Matt alone** (`isAdmin`, checked in `hub.js`'s
+  `_maybeAnnounce` before `showAnnouncement`, so a gated entry is never marked seen on anyone
+  else's device and lands fresh for everyone the day the flag is deleted). The bug-report entry
+  shipped gated on 2026-08-11 so Matt could test the real thing on his own phone first;
+  `test-bug-report.mjs` prints a NOTE on every run naming any entry still gated, because the whole
+  point of gating is that somebody has to remember to ungate it.
+
+### Privacy, stated plainly
+
+A report carries the player's name, code, device id, their whole local store and any screenshot
+they attach, into an RTDB whose rules are `auth != null` — readable by anyone who can sign in
+anonymously. **Not new** (`deviceReports/` and `players/` are the same), but it now includes
+pictures, which is worth knowing before this points at anyone outside the family.
+
+**The form itself says nothing about this, by decision.** It shipped with a "What gets sent with
+this" fold (device, browser, mode, screen, connection, with real values) and a lead line; Matt had
+both removed the same day — the form is reached by someone who is already annoyed, and it is now
+four fields and a button. The announcement that introduces the feature still says the phone and app
+details go along, and that is where the telling happens. Nothing about what is COLLECTED changed at
+any point. **A future session re-adding a disclosure to the form is reversing a decision, not
+filling a gap** — take it to Matt first.
+
+### What is NOT covered by a test
+
+`test-bug-report.mjs` covers the pure logic. The DOM halves and the Firebase write path are covered
+only by a hand-driven browser pass (real Chromium at 393x852: announcement → CTA → form → attach a
+screenshot through the real downscale path → send with Firebase blocked → the report is queued
+locally with its environment, deviceReport and screenshot intact → reload → announcement gone,
+pending note shown; repeated in dark mode and in Spanish). **No report has ever been written to the
+real Firebase from this branch** — the same caveat every MP consumer above carries.
+
+---
+
+## Who is on the installed app, and who is in a browser tab (2026-08-11)
+
+Matt: *"I found out 2 days ago that Ana never did that. She never saved it to her Home Screen...
+She just dismissed the notice early on."* Every game here is built for the installed route, and
+nothing anywhere recorded which route a person was actually on.
+
+- **`js/stats-net.js`'s `syncMyStats()` now mirrors `installState()` to `players/<id>/device`.** It
+  rides the EXISTING mirror rather than getting its own write, so every device answers on the beats
+  it already syncs on (load, tab-hide, return-to-launcher, reconnect) instead of only the ones that
+  file a bug report. Additive: a new child node, read by no gameplay or stats path, incapable of
+  moving a counter.
+- **It carries the BUILD too** (`device.build`, e.g. `v295`, from `appVersion()` - the same
+  GET_VERSION message the version pill uses, so a report and the sync can never name different
+  builds for one device). Matt asked whether the app auto-updates for people who never tap the
+  pill: it does (`skipWaiting` + `clients.claim`, and the fetch handler is network-first), so
+  nobody should be more than one launch behind. This turns "should" into a fact, and it is the
+  only thing that catches a device whose SHELL INSTALL FAILED - that one sits on an old build
+  indefinitely and looks completely normal from the outside. **This is why an auto-reload on
+  `controllerchange` was NOT added**: it would fire on first-ever load (claim gives an
+  uncontrolled page a controller), it can yank the app out from under someone mid-form, and it
+  fixes nothing for the stranded case. Measure first.
+- **`node read-install-state.mjs`** lists it, browser tabs first, and prints every build in the
+  wild on the last line.
+- **It is NOT retroactive, and the tool says so.** A device shows `(not seen yet)` until it next
+  opens the hub on a build that has this. That is missing data, not a browser tab, and the two must
+  never be reported as the same thing. There is no record of how anyone played before this shipped.
+- **`a2hsDismissed` is in the object on purpose**: it distinguishes someone who was asked to install
+  and said no (Ana's case) from someone who was never asked.
+
+## The Device details button, retired (2026-08-11)
+
+Matt: *"That was built specifically for a one time use. Now that we have the report a bug feature
+it's redundant and obsolete."* Retired, not deleted:
+
+- **`js/device-report.js` stays and is still load-bearing** - `gatherDeviceReport()` is layer 2 of
+  every bug report. Only the profile page's BUTTON, its modal and its strings are gone.
+- **`uploadDeviceReport()` is now dormant** with no caller. Left in place deliberately (same status
+  as `leaderboard-rank.js`'s rating exports): do not delete it as "unused".
+- **`deviceReports/` in Firebase is untouched**, and `read-device-reports.mjs` still reads it. The
+  archive of what was already collected stays exactly where it is.
+- The announcement's profile screenshot had to be re-shot, since it showed the button being removed.
 
 ## Hiding test/debug accounts from the leaderboard (2026-07-29, widened 2026-07-31)
 
@@ -794,6 +1034,35 @@ Two caveats worth knowing:
   fail to load offline and BD would be ungated there.
 
 ---
+
+## `GAME_META` is a registry, and a missing row zeroes a whole game (2026-08-11)
+
+`js/leaderboard-ui.js`'s `GAME_META` is the leaderboard's own list of games, **separate from
+`js/hub.js`'s `GAMES` and from `js/game-stats-ui.js`'s `TABS`**, keyed by STATS id. `ALL_IDS`,
+`COMP_IDS`, `SOLO_IDS`, `winsOf()`, `playedOf()`, `labelOf()` and the whole By Game segment are all
+derived from it. A game with no row here is not *partly* on the leaderboard — it is worth **zero
+wins and zero plays** on every screen of it, while its own My Stats page shows the real numbers.
+
+That is the worst shape a bug can take under THE LAW rule 1: nothing is lost, everything syncs, and
+the player is simply told their history does not count. **Yahtzee shipped with no row** and stayed
+that way until the first real report to arrive through Report a bug:
+
+> "MY WINS ARE NOT COUNTING TO MY TOTAL WINS ON LEADERBOARD" — 14 wins in 15 Yahtzee matches,
+> local store correct, `syncHealth` `ok` at 266 plays local and remote, My Stats showing all of it.
+
+Believing him took thirty seconds (rule 8) and the fix was one line. Finding it needed the report,
+because **no other surface shows the absence** — not the game, not My Stats, not sync health.
+`players-agg.test.mjs`'s second `[KNOWN-BUG PROBE]` block now closes that: it reads the stats ids
+out of `game-stats.js` and fails unless each one has a `GAME_META` row, or sits in `OFF_THE_BOARD`
+with a reason — and an `OFF_THE_BOARD` entry must still be `devOnly` in `js/hub.js`, so releasing a
+game that is off the board fails the suite the same day (that is the check Skeeball and Pinball
+currently rest on). It was verified born red against the missing Yahtzee row.
+
+One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
+because the game has no difficulty setting at all. `tierOf('ai')` is `null`, so those wins count in
+full under the **All** filter (the default, and where the cross-game number lives) and do not appear
+under Easy/Medium/Hard/Expert. That is the documented behaviour for unrankable buckets, and it is
+the honest one — mapping `ai` onto a tier would invent a difficulty claim the game never made.
 
 ## The leaderboard's rating model (2026-07-22)
 
@@ -1236,15 +1505,113 @@ read out of `players/1f75ff86-...` — the actual device the incident happened o
 
 ### Head-to-head capture
 
-`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a new top-level
-`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. **Capture only — nothing displays
-it yet, and that is deliberate.** The opponent's identity only exists while the multiplayer room is
-live: Chinchón and Escoba both knew exactly who they had just played (`_mpNewState` accepted the
-room participant as a parameter and then *discarded* it) and threw it away at match end, so every MP
-match played before 2026-07-22 is permanently unrecoverable. Both now store it on `this.mp.opp`,
-refresh it from the live room in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and
-record it in `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by
-construction, and `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a top-level
+`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. It was **capture only** from
+2026-07-22 to 2026-08-11, deliberately: the opponent's identity only exists while the multiplayer
+room is live, so it had to be stored long before there was a screen for it. Chinchón and Escoba both
+knew exactly who they had just played (`_mpNewState` accepted the room participant as a parameter and
+then *discarded* it) and threw it away at match end, so every MP match played before 2026-07-22 is
+permanently unrecoverable. Both now store the roster on `this.mp.opps`, refresh it from the live room
+in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and record **every** seat in
+`_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by construction, and
+`stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+
+### Multiplayer on the leaderboard: on the GAME'S page, per game (2026-08-11)
+
+**Shipped wrong first, corrected same day. Read this before adding anything h2h-shaped again.**
+
+The first attempt put a "Multiplayer wins against" block on the PLAYER DETAIL screen, built from
+`h2h` summed across every game. Matt: *"Why does it show the attached regardless of what game I
+look at... I don't give a fuck about generic multiplayer wins or losses. I care about game specific
+wins and losses."* He was right twice over: that screen is reached by drilling in from a game, so a
+number that ignores which game you came from reads as a bug, and a cross-game head-to-head total is
+not a fact anyone wanted. It was removed, along with `headToHeadRows()` and the `h2h`/`deviceIds`
+aggregation in `players-agg.js` that existed only to feed it.
+
+What replaced it is smaller and answers the actual question: **a fourth chip in the tier row on a
+game's own board** (`mpTileHTML` in `js/leaderboard-ui.js`), reading `byDiff.mp.won` for THAT game.
+
+- **It fixes a number that no longer added up.** `tierOf('mp')` is null, so a multiplayer win counts
+  in a card's TOTAL but appears in none of its tier chips. On Escoba that meant "31 wins" over chips
+  totalling 23, with the missing 8 explained nowhere — the documented unmapped-bucket convention,
+  reading as an error on the one screen where the numbers sit side by side.
+- **Labelled with a WORD, not a shape or a hue.** The tier chips' ski-slope shapes encode a 1-4
+  scale multiplayer is deliberately not on, so borrowing one would claim a difficulty this bucket
+  does not have. Colorblind-safe by construction for the same reason.
+- **Not rendered at all for a game nobody has played online** (`anyMpPlays`), rather than adding a
+  column of dashes to every card in every game. A player with no online plays in a game that HAS
+  them gets the same em-dash an unplayed tier gets.
+- **`h2h` is still WRITTEN** (`recordHeadToHead`) and is still the evidence the migration below
+  depends on. Only its display and its aggregation were removed. Do not remove the writer.
+
+### Extracting multiplayer plays back out of the AI bucket (2026-08-11)
+
+**The `'mp'` bucket is what makes head-to-head legible, and Escoba was not using it** until
+2026-08-11: `_commitStats` read `opp0.difficulty || 'normal'`, and a remote seat has no difficulty,
+so every online Escoba match was filed as an Intermediate win over the AI. Fixing the writer only
+helps future matches. Matt: *"Extract them and create a MP column for wins and losses."*
+
+`splitEscobaMp()` in `js/game-stats.js` does it, once per store, from `loadStats()`. **The whole
+question is what evidence exists**, and this is the part to understand before reusing the pattern:
+
+- **`h2h` IS the evidence, and it is exact.** `recordHeadToHead` was called from the SAME
+  `_commitStats` as the misfiled result, once per opponent, on every multiplayer match since h2h
+  shipped. Escoba's multiplayer was two-seat throughout that period, so exactly one h2h increment
+  exists per match and `sum(w)`/`sum(l)` across `h2h.escoba` IS that store's multiplayer record.
+  Nothing is inferred, apportioned or estimated — every play moved is one the store can PROVE was
+  multiplayer, which is the line rule 4 draws.
+- **Matches older than h2h capture are NOT touched, and that is the honest answer, not a gap left
+  open.** They left no trace on either device, so an Intermediate play that is really an old
+  multiplayer play is indistinguishable from a genuine one. They stay in `normal`, fully visible,
+  exactly where they have always been — nothing is archived away, so rule 3's "still SHOWN"
+  obligation is met by not moving them at all.
+- **`total` is never touched.** `byDiff` is a partition of it, so re-bucketing inside `byDiff`
+  cannot change a play count, and `verifyEscobaMpSplit()` proves it by FRESH RE-READ after the
+  write (rule 6) rather than trusting the object handed to `setItem`.
+- **Every move is clamped** to what `normal` actually holds, so no counter can go negative if the
+  two records ever disagree; the surplus is recorded as `esMpSplit.unresolved` and logged rather
+  than invented somewhere else.
+- **`escoba.esMpSplit`** archives the pre-migration numbers, the evidence used and anything
+  unresolved, and is never pruned (rule 5) — the migration is reversible by hand from what it
+  writes down.
+
+**Rule 7 was satisfied with the real thing, not a fixture.** `test-stats-replay.mjs`'s scenario D
+replays the ACTUAL escoba records of the only five devices in `players/` with any head-to-head
+history, read out of Firebase on the day this shipped and pasted in unedited. All five fit inside
+their own `normal` bucket with nothing unresolved: 32 matches recovered in total (5 + 15 + 9 + 2 + 1
+across the five devices). Scenario E covers the edges no real device happens to exercise.
+
+**Chinchón's `_commitStats` has the same `|| 'normal'` line**, so the same thing is true of its
+online matches. Out of scope for that session; the pattern above ports directly if it is ever
+wanted.
+
+### Nothing should ever be able to be lost (2026-08-11)
+
+Matt, on being told a multiplayer result could be dropped: *"Make it so that is impossible. Nothing
+should ever be able to be lost. That's the rule."* Two layers, both in this milestone:
+
+1. **Record at the moment of DECISION, from the engine.** `escoba/js/game.js`'s `checkMatchEnd()`
+   fires a synchronous `onDecided` hook in the same statement that sets `winner`; `_bindGame` points
+   it at `_commitStats`. There is no await, no `emit` and no abort check in between, so there is no
+   gap left for a result to fall into. This replaced a UI-event-hook commit that sat several awaits
+   and one human button-tap after the decision. **It required moving the escoba tally into the
+   engine** (`player.matchEscobas`, folded in `scoreRound()` — i.e. before `checkMatchEnd`), because
+   the UI's own accumulator was one round behind at exactly the moment the match was decided; a
+   result recorded there would have been correct except for its escoba count. **If you move a
+   game's recording earlier, check what else the recorder reads is ready that early.**
+2. **A write that fails is QUEUED, not dropped.** `persistOrQueue()` parks the result in
+   `gamehub.pendingResults.v1` — deliberately a tiny key separate from the stats blob, because the
+   case it exists for is "the big object would not fit" — and `loadStats()` replays it.
+   `drainPendingResults()` **does not clear the queue**; `clearPendingResults()` runs only after the
+   write that absorbed it succeeded. Clearing at drain time looked equivalent and was not: a load
+   whose own persist also fails (the likely case, since the queue exists because writes are failing)
+   would drop the queue and the results with it — the exact loss the mechanism exists to prevent,
+   reintroduced inside the fix. Caught by `test-stats-replay.mjs`'s scenario F, which drains once
+   under a still-failing write before letting one through.
+
+Wired into `recordEscoba` and `recordHeadToHead`. The queue is generic by shape
+(`game`/`diff`/`won`/`extras`/`h2h`) — **any other recorder can be moved onto it** by routing its
+failed `persist()` through `persistOrQueue()`, and should be.
 
 ---
 

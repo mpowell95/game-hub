@@ -87,6 +87,17 @@ This whole sequence is pre-authorized by this instruction; it does not need to b
 per session. The one thing worth pausing for is a genuinely destructive step this doesn't cover
 (e.g. a force-push, a history rewrite) — ordinary merge-to-main-and-deploy is not that.
 
+## Answer about the game you were asked about
+
+Matt, twice in one session (2026-08-11), on reports about Escoba that wandered into Chinchón and
+then Battleship: *"Why the fuck are we talking about chinchon?"* and *"don't do something random and
+start talking about battleship again."*
+
+When a session is asked to work on one game, the report is about THAT game. A pre-existing failure
+somewhere else, a pattern another game shares, an unrelated red test — none of it belongs in the
+reply, however true it is. Put it in the relevant `CLAUDE.md` if a future session needs it, and
+leave it there.
+
 ## Run it
 
 ```
@@ -116,6 +127,24 @@ serving the old build offline forever. Only the ~600 KB app shell is atomic now,
 in a game folder no longer strands a deploy; it warms best-effort, logs loudly, and caches on
 demand instead. A stuck pill now means the SHELL failed to install, which is a much shorter
 list of suspects. `test-sw-strategy.mjs` pins this as a regression probe.
+
+### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
+
+Matt, minutes after a deploy, on mobile data: *"Whoa what the hell? I force closed and reopened and
+it was normal but what is this?"* - the launcher with no CSS at all, version pill reading the new
+build. Force-closing "fixed" it, which is what a transient server error always looks like.
+
+Cause: the network-first handler treated only a THROWN fetch as failure, so an error RESPONSE (a
+404 or 503) was handed straight to the page **even with a good cached copy one line away**. GitHub
+Pages serves a redeploy by swapping the published tree, and a request landing in that window can
+404 for a moment - so opening the hub DURING a deploy could get a 404 for `css/hub.css` and render
+the launcher as raw HTML. Every deploy was a window for it.
+
+Fixed in `sw.js`: `if (!res || !res.ok) return cached;` on the network-first path. Falling back is
+also right for a genuinely removed file - this is an offline-first app whose cache is a coherent
+snapshot of one deploy that rolls over when `CACHE` is bumped. A request with NOTHING cached still
+passes the error through honestly rather than inventing an answer. `test-sw-strategy.mjs` carries
+both as a [KNOWN-BUG PROBE] pair; the first was born red against the unfixed worker.
 
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
@@ -175,19 +204,26 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/i18n.js` | the EN/ES language layer: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange`; Parchís's proven t() as a shared module |
 | `js/theme.js` | the light/dark/auto theme layer: `getTheme`/`setTheme`/`resolvedTheme` (`gamehub.theme.v1`), `onThemeChange`; stamps `.gh-dark` on `<html>` |
 | `js/viewport.js` | (2026-08-02) `onViewportResize(cb)` — the ONE way a game subscribes to "re-fit yourself". Folds `resize` + `orientationchange` + `visualViewport` into ONE callback, coalesced to at most once per frame and skipped entirely when neither dimension changed. **A new game must use this, never a raw `window.addEventListener('resize', …)`** — see its header for why the raw form is a scroll-jank bug on mobile |
-| `js/game-stats.js` | unified stats, keyed per PLAYER (`statsKey()`/`statsId()`); one recorder per game |
+| `js/game-stats.js` | unified stats, keyed per PLAYER (`statsKey()`/`statsId()`); one recorder per game; a result whose write fails is queued (`gamehub.pendingResults.v1`) and replayed on the next load, never dropped |
 | `js/game-stats-global.js` | non-ESM recorder port for Monopoly Deal/Parchís (`window.__ghStats`) |
 | `js/firebase-boot.js` | the ONE bootstrap for the named `'stats'` Firebase app |
 | `js/stats-net.js` | Firebase mirror to `players/<id>`; username registry; `syncHealth()` |
-| `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows |
+| `js/players-agg.js` | pure identity-graph aggregation of synced devices into per-person rows, incl. multiplayer head-to-head (`headToHeadRows`) |
 | `js/game-stats-ui.js` | "My Stats" overlay |
-| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23) |
+| `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); player detail shows multiplayer head-to-head wins (2026-08-11) |
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship |
+| `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball, Pinball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship; its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón and Escoba |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
-| `js/device-report.js` | the profile page's "Device details" diagnostic |
+| `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
+| `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
+| `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself |
+| `js/bug-report-ui.js` | the report form + Matt's inbox. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
+| `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
+| `js/announce.js` | one-time launcher announcements: the entries, the seen-list (`gamehub.announce.v1`), and the pure "does this device still owe one" decision. Each entry's `until` date retires it |
+| `js/announce-ui.js` | the announcement popup (DOM only) |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
 
 ### Where the deep docs live
@@ -195,8 +231,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 - **`js/CLAUDE.md`** — the full module map and Firebase layering, THE LAW's full working rules,
   the multiplayer lockstep invariants, the leaderboard rating model, sync health (and how to
   diagnose "my history is missing"), the per-player store split ("whose stats are these"), the
-  Ana/Natalia correction record, head-to-head capture, and the shared-profile contract with
-  Monopoly Deal's must-stay-synced duplicates.
+  Ana/Natalia correction record, head-to-head capture, the shared-profile contract with
+  Monopoly Deal's must-stay-synced duplicates, and the Report a bug pipeline (what it collects,
+  where it lands, how Matt reads it, and how to add the next announcement).
 - **`<game>/CLAUDE.md`** — each game's own docs (see the games table).
 - **`tic-tac-toe/CLAUDE.md`** — the How-to-play screen pattern (its reference implementation).
 ### Dev tooling (repo root, not deployed)
@@ -206,16 +243,19 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
-| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. |
+| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. **A second structural probe (2026-08-11) covers the whole GAME, not its sub-counters**: every stats id in `game-stats.js` must have a `GAME_META` row in `js/leaderboard-ui.js`, or be listed in `OFF_THE_BOARD` *and* still be `devOnly` in `js/hub.js` — so a game released off the board fails the day it ships. Written because Yahtzee had no row, and it took a player's bug report to notice. |
 | `test-new-badge.mjs` | (2026-08-01) headless unit tests for `js/new-badge.js` (window edges, malformed/absent dates, future dates), plus a scrape of the real `GAMES` registry asserting every `released` date that IS present parses — a typo'd date is the silent failure here (the game ships, the pill never appears) |
 | `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
-| `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates |
+| `test-stats-replay.mjs` | LAW rule 7, runnable: real historical `gamehub.stats` shapes (written by the actual old writers) loaded with current code, checked against the real UI visibility gates. Scenario D replays the REAL escoba records of the five devices that have multiplayer history, read out of Firebase unedited, against the migration that pulls those plays back out of the AI difficulty bucket they were misfiled into |
 | `test-stats-identity.mjs` | (2026-07-23) the per-player store split (see "Whose stats are these" in `js/CLAUDE.md`): proves an existing device is completely undisturbed, that a second player on the same phone cannot blend into the first, that the device-wide legacy stores never fold into a forked store, and that the ES-module and global recorders resolve the same key. Rule 7 fixture is the real store from the device the Ana/Natalia incident happened on |
 | `test-mp-lockstep.mjs` | headless two-engine MP lockstep for Chinchón + Escoba + Tic Tac Toe + Mancala over a fake room; mirrors the ui.js MP glue with per-method citations — update the mirror when the glue changes. Its [KNOWN-BUG PROBE] assertions are regression tripwires for the five fixed MP defects (see "Multiplayer lockstep — invariants" in `js/CLAUDE.md`); Tic Tac Toe's T1-T7 and Mancala's M1-M6 blocks each port all five into a game that shares none of Chinchón's vocabulary |
 | `test-game-conventions.mjs` | (2026-08-02) the "Adding a game" checklist and the "USE WHAT EXISTS" table, made machine-checkable: no raw resize/`visualViewport` listeners, no `document`-level `touchmove`, every fixed scrolling overlay contains its scroll, every standalone page name-gated, the three module-contract exports present, listeners balanced, a `CLAUDE.md` and an `{en,es}` dictionary per game. Discovers game folders from disk so a NEW game is covered the day it appears. `KNOWN_GAPS` carries pre-existing debt (currently: Yahtzee has no i18n) — printed on every run, never silent, and the suite fails if an entry goes stale. **Written because prose alone did not work**: Hill Climb shipped the raw-resize bug the same day it was removed everywhere else, because the convention lived in `js/CLAUDE.md`, which a new-game session never auto-loads. |
 | `test-visual.mjs` | (2026-08-08) the only suite that LOOKS at a game. Drives it in a real Chromium at 393x852 in light/dark/reduced-motion and fails on: nothing painted, the body scrolling sideways, a JS error on mount, an animation too brief to follow (`MOTION` probes), or **a game that cannot actually be PLAYED** (`PLAY` probes drive the real UI with real touch to a real outcome; every run prints which games no probe has ever played), or **a game that does not FIT one screen** (`fit` checks both hosts - standalone AND mounted in the hub's real chrome - at a tall and a short phone height; the hub adds ~138px of chrome an immersive game must not ignore).  Writes a contact sheet to `.visual-out/` - **open it.** **Checks only what CHANGED** (`node test-visual.mjs`), or named games (`... escoba`), or everything (`... --all`); a shared-code change (`js/`, `css/`, `index.html`, `sw.js`) RECOMMENDS a full sweep but never runs one - **always ask Matt before testing all games** (his rule, 2026-08-08). SKIPs without playwright-core/Chromium. Written after Battleship's cannon took four rounds of Matt's time: **`VISUAL-PROCESS.md` and `reference/` are the process it belongs to, and a session doing visual work must read them first.** |
 | `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. All green expected. Run before every deploy. |
+| `test-bug-report.mjs` | (2026-08-11) headless tests for the pure halves of Report a bug: the screenshot budget, the description clamp, the inbox order and unread count (with real epoch timestamps - a `\| 0` on one scrambled both in the first draft), and the announcement's show-once/expire-by-itself decision, including the shipped announcement's own dates and EN/ES completeness. The DOM and Firebase halves are NOT covered, and the suite header says so. |
+| `read-install-state.mjs` | (2026-08-11) Matt-only: who is on the installed app and who is still in a browser tab, browser tabs first, from `players/<id>/device`. Only shows a device once it has opened the hub since this shipped - "(not seen yet)" is missing data, not a browser tab, and nothing here is retroactive |
+| `read-bug-reports.mjs` | (2026-08-11) Matt-only, the terminal view of the in-app inbox: lists `bugReports/` newest first, prints one in full, and is the only way to get the screenshots onto disk - `node read-bug-reports.mjs [--open] [<id> [--shots [dir]]] [--json]` |
 | `read-device-reports.mjs` | (2026-07-22) Matt-only: fetches "Device details" reports (see `js/device-report.js`) from `deviceReports/` via the plain RTDB REST API (anonymous sign-in via the Identity Toolkit REST endpoint, no SDK/dependency) - `node read-device-reports.mjs [deviceId] [--raw]` |
 | `backups/rtdb-backup.mjs` | (2026-07-23) **Run this before ANY script that writes to Firebase, any rules change, any schema change.** Timestamped full-DB snapshot to `backups/rtdb-<ISO>.json` via the same no-dependency REST pattern; `node backups/rtdb-backup.mjs [path]`. Also exports `signInAnonymously`/`readPath`/`totalPlays` for other tools. Restoring is deliberately NOT automated - a restore is a destructive write and must be hand-driven. **The snapshots are gitignored** (`backups/*.json`): this is a public repo and they hold every player's real name, code and stats. |
 | `fix-natalia-record.mjs` | (2026-07-23) The one-off Ana/Natalia leaderboard correction, kept for audit. Dry run by default, `--write` to apply; it backs up first, simulates the post-write leaderboard with the repo's real `players-agg.js`/`leaderboard-rank.js` and aborts if any other player's row would move, then verifies by fresh re-read and diffs every pre-existing device record. **Already applied; re-running is a no-op (it refuses to create a second Natalia).** |
@@ -223,9 +263,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 ### The module contract
 
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
-object bundling them. All fifteen in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
+object bundling them. All in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
 Filler, Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool,
-Hill Climb) export all three; grep-verify before assuming otherwise:
+Hill Climb, Battleship, Skeeball, Pinball) export all three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
@@ -252,18 +292,19 @@ export default { init, destroy, isInProgress };
 - `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
   navigating back to the launcher) and has **two legitimate meanings** depending on whether
   the game can resume:
-  - **No mid-game resume** (Ball Run, Snake, Hill Climb): returns `true` while a game/run is actually
+  - **No mid-game resume** (Ball Run, Snake, Hill Climb, Pinball): returns `true` while a game/run is actually
     in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run resume
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
     Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle (solo), Nuts & Bolts, Uno, Pool
-    (solo/practice)): returns
+    (solo/practice), Skeeball): returns
     `false` for solo play even mid-game, because leaving is lossless — each game snapshots
     after every state-changing event and picks up where it left off on return. Save keys:
     `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
     `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
     `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`, `gamehub.uno.save.v1`,
-    `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`
+    `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`,
+    `gamehub.skeeball.save.v1`
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
@@ -274,7 +315,7 @@ export default { init, destroy, isInProgress };
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
 - An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee, Pool,
-  Hill Climb)
+  Hill Climb, Battleship, Skeeball, Pinball)
   collapses the hub's header to a floating back button for games with their own full-bleed
   chrome. It's a de facto fourth registry flag, same status as `module`/`href`/`devOnly` —
   set it when a game wants to own the whole viewport.
@@ -387,7 +428,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -402,22 +443,34 @@ When restructuring an old game, migrate it toward the reference for each axis in
    My Stats in a browser. `players-agg.test.mjs` now has a per-game regression case for each;
    add one for any new sub-counter. **The same file now also enforces this structurally** (it reads the sub-counter keys straight out of `game-stats.js`), so a forgotten surface fails `node run-all-tests.mjs` instead of waiting to be noticed in a browser.
 
-8. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
+8. **Add the game to `GAME_META` in `js/leaderboard-ui.js`** — `{ id: '<statsId>', labelKey:
+   'game_title_<statsId>' }`, using the STATS id, not the hub id. This is a **separate registry
+   from item 5's**, in a different file, and it is the one that gets forgotten. `ALL_IDS`,
+   `COMP_IDS`, `winsOf()`, `playedOf()` and the whole By Game segment are all derived from it, so
+   a game that is missing here has every win and every play counted as **zero on the leaderboard**
+   while its own Stats screen shows them correctly. Yahtzee shipped like that and stayed like that
+   until a player reported it through Report a bug (2026-08-11) — "MY WINS ARE NOT COUNTING TO MY
+   TOTAL WINS ON LEADERBOARD", 14 wins stored, synced and invisible, THE LAW rule 1. The only
+   legitimate reason to leave a game off is `devOnly` (an unreleased game has no business on the
+   shared bragging wall); say so in `players-agg.test.mjs`'s `OFF_THE_BOARD`, which checks the
+   claim against `js/hub.js` and fails the day the game is released.
+
+9. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
    works inside that folder. Open it with the THE-LAW pointer block (copy it from any existing
    game file), then: hub integration (module/href, immersive or not, which `isInProgress()`
    meaning it uses and why), layout/responsibilities, key design decisions, correctness-critical
    engine notes, settings/persistence keys, tests. `escoba/CLAUDE.md` is the reference for depth
    and structure. Game-specific detail goes HERE, not in the root file — the root games table gets
    one row (integration, prefix, settings key, recorder) and nothing else.
-9. **Create `<game>/js/strings.js` and route every user-visible string through `t()`** — the hub
-   is bilingual (English/Spanish, `js/i18n.js`, preference in `gamehub.lang.v1`). Export
-   `{ en: {...}, es: {...} }` (English is the source of truth; a missing Spanish key falls back
-   to English, so partial translation never breaks), build `const t = makeT(STRINGS)` in ui.js,
-   and call `t()` at RENDER time — never at module scope. Include aria-labels. Language changes
-   apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
-   `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
-   full mechanism doc is in `js/CLAUDE.md` ("Language support").
-10. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** The first is the
+10. **Create `<game>/js/strings.js` and route every user-visible string through `t()`** — the hub
+    is bilingual (English/Spanish, `js/i18n.js`, preference in `gamehub.lang.v1`). Export
+    `{ en: {...}, es: {...} }` (English is the source of truth; a missing Spanish key falls back
+    to English, so partial translation never breaks), build `const t = makeT(STRINGS)` in ui.js,
+    and call `t()` at RENDER time — never at module scope. Include aria-labels. Language changes
+    apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
+    `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
+    full mechanism doc is in `js/CLAUDE.md` ("Language support").
+11. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** The first is the
     machine-checkable half of the "USE WHAT EXISTS" table above and of this checklist — it will tell
     you, by name and with the fix, if the game hand-rolls something shared, leaks a listener, leaves
     an overlay uncontained, ships an ungated standalone page, misses an export, or has no
@@ -439,7 +492,7 @@ working in that folder).
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | none (persists nothing — see its file) | `recordConnect4` |
 | Dominoes | in-hub `module:` | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
-| Escoba | in-hub `module:`, immersive | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
+| Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
@@ -447,6 +500,8 @@ working in that folder).
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
+| Pinball | in-hub `module:`, immersive, **admin only** (`devOnly`) | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` |
+| Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines, no opponent) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |

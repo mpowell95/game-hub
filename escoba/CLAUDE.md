@@ -8,7 +8,8 @@
 Spanish fishing/capture game (the Escoba/Scopa family): capture table cards that sum to
 **15** with one card from your hand; clearing the whole table is an **escoba** ("broom").
 Built to the Fournier rules in the PDF Matt supplied (no in-repo copy; see "Rules
-implemented" below for the parts that mattered for correctness). 2-3 players vs AI,
+implemented" below for the parts that mattered for correctness). 2-3 players vs AI solo,
+**2-4 human players online** (see "Multiplayer at 2-4 seats"),
 **in-hub `module:`**, **immersive** (see "Hub integration"). Card faces are **not** its
 own asset: it reuses the shared **Anita** deck from `chinchon/decks/anita/` directly
 (no deck registry, no picker, no copied files, one fewer thing to keep in sync).
@@ -83,6 +84,141 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   (`ui.js`) autosaves to `localStorage['escoba-save']` after every state-changing event
   and offers "Resume game" from setup when a save exists. See "Rules engine notes" for
   the exact safe/unsafe checkpoints.
+
+## Multiplayer at 2-4 seats (2026-08-11)
+
+Matt: "Multiplayer needs to be expanded to up to 4 human players." The host picks the table
+size in the Host-online setup screen (2/3/4) and the lobby lists every seat until it is full.
+This is Chinchón's phase-3 seat model (`js/CLAUDE.md`, "The ninth consumer") ported to Escoba;
+`js/net.js` needed **zero** changes — `joinSeat`/`vacateSeat`/seat-addressed recovery were all
+already there and unused by this game.
+
+**Humans only.** An unfilled seat is never played by an AI, and **Start stays disabled until
+every seat is filled** (`_mpHostStart` re-checks, so the disabled button is not the only guard).
+Backing out changes the size; there is no "start early with who's here".
+
+**The engine needed ZERO changes**, verified before any code was written rather than assumed:
+`game.js` loops `this.players` for dealing (`dealHands`), turn rotation (`runTurnLoop`), the
+round-open seat, dealer rotation (`finishRoundAfterPlay`), `scoreRound`, `checkMatchEnd` and
+`snapshot`/`fromSnapshot`. 40 cards also divide evenly at 4 seats — 4 face up plus 3 each per
+deal, so a 4-seat round is exactly three deals with nothing stranded in the stock
+(`test-mp-lockstep.mjs` E5 asserts it). The two rules that read the seat count already do so
+explicitly and correctly: the under-10-cards bonus and whitewash are both `twoPlayer`-gated.
+
+- **`mp.seat` (an integer) replaced the host/guest binary.** The room's seat index IS the
+  engine's player id, on every device, for the whole match. `mp.isHost` is `seat === 0`;
+  everything that asked `mp.role === 'host'` asks `mp.isHost`, and `=== 'guest'` became
+  `!mp.isHost`, because with three guests "guest" stopped naming one device. `mp.localSeat`
+  survives as an alias of `mp.seat` — `_localSeat()`/`_human()` and the save format already
+  spoke that word.
+- **`_makeRemoteAgent(seatId)`** closes over its own seat. Without it, `_mpHandleMismatch`
+  could only address recovery at "the" remote seat, which is unambiguous at two seats and
+  wrong at four: `_mpAfterPlay` now passes `p.id` (the authoring seat) through.
+- **`_mpBuildPlayers(room, mySeat, count)`** builds the table from the room's seat roster in
+  seat order on every device, setting `isHuman` only for our own seat (invariant 2, satisfied
+  by construction). Names/avatars come from the roster so every device labels the table
+  identically; they are cosmetic to the protocol (`hash.js` hashes cards and scores, never
+  names), so a missing roster entry degrades to a placeholder instead of desyncing.
+- **`config.seats` rides the room config** so a joining or REJOINING device can size its
+  players array from the room record alone. The MP autosave gained `seat`; it still writes the
+  old `role` too, so a match live across the deploy window resumes either way, and a rejoin
+  landing on a different seat than the save claims is abandoned rather than resumed wrong.
+- **`mpSeats` is a SEPARATE setting from solo's `count`** (both in `escoba-settings`). Solo
+  tops out at 3 because it only carries two AI identities; sharing one field would let a
+  4-seat room ask solo for a third AI that does not exist, and would move the solo picker
+  every time somebody hosted.
+- **Head-to-head records EVERY opponent** (`_commitStats` loops `mp.opps`, was a single
+  `mp.opp`). At 3-4 seats the old code silently dropped one or two people's records. `won`
+  means "I finished ahead of the whole table", not a pairwise result — stated here because the
+  counters are per-opponent and could be misread as pairwise later.
+- **Leaving mid-match still ends the match for the whole table** (unchanged behaviour, now a
+  documented decision): the engine cannot drop a seat from a live match without every other
+  device diverging on the next deal. Backing out of the LOBBY is different — a non-host frees
+  only its own seat (`net.vacateSeat`), because one person changing their mind must not evict
+  the other three. Only the host leaving takes the room with it.
+- **Top bar at 3 opponents**: `renderOpponents()` has always stamped `.eb-opp-nN`; until 4
+  seats existed no CSS read it. `.eb-opp-n3` re-lays the pill (name on its own full-width
+  line, tighter type, hand-count fan dropped) — see the CSS comment for why the hand count is
+  the right thing to drop and why wrapping the foot is not an option.
+
+Tests: `test-mp-lockstep.mjs` E5 (four-seat full match, all four hashes identical, each device
+owning exactly its own seat, plus the remote-agent-knows-its-seat probe and the whole-deck
+check), E6 (four-seat desync → recovery addressed to the pleading seat only, then whole-table
+convergence). E1-E4 are unchanged in substance and still green.
+
+**Not verified on real devices.** Everything above is proven headlessly against a `FakeRoom`;
+nothing has been played by three or four actual phones. Same honest caveat Chinchón, Pool and
+Boggle carry.
+
+## Multiplayer results are recorded, and cannot be lost (2026-08-11)
+
+Matt: "I don't think multiplayer wins and losses are being recorded." Three parts.
+
+### 1. The wrong bucket, fixed for future matches
+
+`_commitStats` read `opp0.difficulty || 'normal'`, and a REMOTE seat has no `difficulty` at all —
+so every online match was filed as an Intermediate win over the AI. Recorded, but indistinguishable
+from solo play on every screen. MP now records under `MP_DIFFICULTY` (`'mp'`), the repo-wide
+convention. `tierOf('mp')` is null (`js/difficulty-tiers.js`), so those plays count in every total
+and in the leaderboard's All filter and claim no tier pill.
+
+### 2. The historical matches, extracted
+
+Fixing the writer does nothing for matches already misfiled. `splitEscobaMp()` in
+`js/game-stats.js` moves them, once per store, using `h2h.escoba` as evidence — the head-to-head
+row was written by the SAME `_commitStats` call on every online match, one increment per match at
+two seats, so its `w`/`l` totals ARE this store's multiplayer record. Totals are never touched
+(byDiff is a partition of them), every move is clamped, the result is verified by fresh re-read,
+and the pre-migration numbers are archived on `escoba.esMpSplit` and never pruned.
+
+**Matches older than head-to-head capture are deliberately left alone.** They left no trace on
+either device, so an Intermediate play that is really an old online play cannot be told from a
+genuine one, and splitting them would be fabrication (THE LAW rule 4). They stay in `normal`, fully
+visible, exactly where they have always been.
+
+Verified against the REAL records of the only five devices in `players/` with head-to-head history
+(`test-stats-replay.mjs` scenario D — rule 7 with actual data, not a fixture): 32 matches recovered,
+every one fitting inside its own `normal` bucket with nothing unresolved.
+
+### 3. The result can no longer be lost at all
+
+The original defect: `_commitStats` ran in the `'matchEnd'` hook, several awaits after the engine
+had decided the match, with a human tapping "Next round" on the final round modal in between. If
+the other player tapped through first and left, `net.leaveRoom` set the room to `status:'ended'`
+with no `result`, `_mpOnRoomUpdate` read that as an abandon, `_mpEndDueToOpponentLeft` aborted the
+engine, and `matchEnd` never fired — the winner's own win was never written anywhere. Asymmetric,
+so it bit whichever device was slower.
+
+Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."*
+So the fix is structural rather than a patched gap:
+
+- **`game.js`'s `checkMatchEnd()` fires a synchronous `onDecided` hook** in the same statement that
+  sets `winner`, before any `emit`, any await or any abort check. `_bindGame` points it at
+  `_commitStats`. There is no gap left to lose a result in.
+- **The escoba tally moved into the engine** (`player.matchEscobas`, folded in `scoreRound()`,
+  which runs before `checkMatchEnd`). The UI's own accumulator was one round behind at exactly the
+  moment the match is decided, so recording there would have been right about everything except the
+  escoba count. `_matchEscobasNow()` reads it; `_seedMatchEscobas()` carries a pre-2026-08-11
+  save's number onto a restored engine.
+- **A failed WRITE is queued, not dropped** (`js/game-stats.js`'s `persistOrQueue` →
+  `gamehub.pendingResults.v1`, replayed by `loadStats`). Wired into `recordEscoba` and
+  `recordHeadToHead`.
+
+Probes: `test-mp-lockstep.mjs` E7 (the bucket, both sides recording exactly once, neither recording
+the other's result) and E8 (the peer leaves at the decided moment — born red);
+`test-stats-replay.mjs` D/E/F (the extraction against real devices, its edges, and the queue).
+
+### Where the numbers show
+
+**My Stats** gives Escoba its own **Multiplayer** block — wins, losses, plays, win rate — separate
+from the by-difficulty table, because online play is not a difficulty and reading it as one is the
+mistake that made these plays invisible. It reads `byDiff.mp`, the same single stored source the
+migration writes to, so the two can never disagree. Hidden entirely for a solo-only player.
+**The leaderboard's Escoba board** gives every player card an **MP** chip beside its difficulty
+chips, showing that player's multiplayer Escoba wins — per game, on the game's own page. (A first
+attempt put a cross-game "Multiplayer wins against" block on the player detail instead; it rendered
+the same rows no matter which game you drilled in from, and was removed. See `js/CLAUDE.md`,
+"Multiplayer on the leaderboard".)
 
 ## Rules engine notes (correctness-critical)
 
@@ -180,10 +316,16 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
 
 ## Settings & persistence
 
-- **`escoba-settings`** (last-used setup): `count`, `humanName`, `humanAvatar`,
-  `aiNames`, `aiDifficulty`, `targetScore`, `deckMode`, `deckModeChosen`. Precedence is
-  last-used > shared hub profile > built-in default, same as every other game module.
-- **`escoba-save`** (resumable match, schema `v: 1`): `{ v, matchEscobas, snap }`, where
+- **`escoba-settings`** (last-used setup): `count`, `mpSeats`, `humanName`, `humanAvatar`,
+  `aiNames`, `aiDifficulty`, `targetScore`, `deckMode`, `deckModeChosen`, `assist`, `mode`.
+  Precedence is last-used > shared hub profile > built-in default, same as every other game
+  module. `count` is the SOLO table (2-3); `mpSeats` is the ONLINE table (2-4) and is
+  deliberately its own field (see "Multiplayer at 2-4 seats"). Both are additive-only reads:
+  an older save with no `mpSeats` simply defaults to 2.
+- **`escoba-save`** (resumable match, schema `v: 1`): `{ v, matchEscobas, assist, snap }`
+  plus an MP-only `mp: { code, seat, role, seq, at }` (absent in solo, so the solo shape is
+  unchanged; `role` is written alongside `seat` only so a save survives the 3-4-seat deploy
+  window in both directions), where
   `snap` is exactly `Game.snapshot()`'s output plus a `midRound` flag. Cleared on
   `matchEnd` and on the in-game menu's "Quit to setup"/"New game"; **never** cleared by
   `destroy()` (that's the whole point: navigating away via the hub must preserve it).
@@ -191,13 +333,16 @@ covers: if Anita's asset set ever changes, Escoba needs nothing extra.
   "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`):**
   the `'play'` hook saves AFTER `_mpAfterPlay` so the autosave's `mp.seq` matches the
   play already in its snapshot; `_mpApplyRecovery` remaps the transmitted snapshot's
-  device-relative `isHuman` flags by seat (`mp.localSeat`) before rebuilding; and a
+  device-relative `isHuman` flags by seat (`mp.seat`) before rebuilding; and a
   guest restoring or recovering from a round-BOUNDARY snapshot (`midRound:false`)
   awaits the host's published round record (`_mpAwaitNextRound`) before playing, so
   the next round's deck+dealer come from the host, never a stale `presetDeck`.
 - **`recordEscoba(difficulty, won, { escobas })`** in `js/game-stats.js` feeds the shared
   per-device stats (`gamehub.stats`), tab `escoba` in the Stats overlay
-  (`js/game-stats-ui.js`).
+  (`js/game-stats-ui.js`). `difficulty` is the opponent AI's tier in solo and the literal
+  `'mp'` in multiplayer — see "Multiplayer results are recorded" for why, and for the two
+  defects that section exists to record. `recordHeadToHead('escoba', opp, won)` runs once
+  per opponent alongside it, MP only.
 - i18n: `escoba/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
   (`easy`/`normal`/`hard`), `deckMode` (`spanish`/`american`), and setup `mode`
   (`solo`/`host`/`join`) stay canonical; only their display labels translate. Card-suit terms
@@ -286,8 +431,13 @@ their printed number. The one-line note (`howto_figures_note`) only renders when
   `startGame()`/`_resumeGame()` never aborted a previously-live `this.game`, letting a
   zombie match loop keep calling the same UI instance's `onEvent` after "New game" from
   the in-game menu.
-- **Roadmap (not built):** 4-player team play is out of scope (Escoba's team variant
-  wasn't part of what Matt asked for); no sound; the whitewash/null-winner item above.
+- **3-4 player online + MP result recording (2026-08-11):** the two sections above. The
+  online table goes to 4 humans (Chinchón's seat model, no engine change, no net.js change),
+  and multiplayer results now record under their own `'mp'` bucket and can no longer be lost
+  to a peer leaving first.
+- **Roadmap (not built):** 4-player TEAM play is still out of scope (Escoba's team variant
+  wasn't part of what Matt asked for, and is a rules change, not a seat count); no sound; the
+  whitewash/null-winner item above.
 
 ## Tests
 

@@ -469,6 +469,47 @@ export const GAME_ART = {
   // (46,70)->(110,38), i.e. rotate(-26.6) about a point one wheel-radius up the surface normal -
   // so the wheels touch the grass exactly. Same flat-cartoon ink (#231f1c) the live game draws
   // with, so the tile and the gameplay read as one thing.
+  // Pinball: the one composition a 16:9 frame suits better than the real table does. A pinball
+  // playfield is tall and narrow, so rather than squash it, this is a CLOSE-UP of the part that
+  // reads instantly at tile size: the arch, the bumper nest, the ramp, and the two flippers with a
+  // chrome ball between them. Neon on black, matching the game's own palette exactly.
+  pinball: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#0c0630"/>
+            <ellipse cx="80" cy="26" rx="74" ry="40" fill="#3d1a95" opacity="0.55"/>
+            <ellipse cx="80" cy="86" rx="60" ry="26" fill="#ff4fd8" opacity="0.12"/>
+            <g fill="#ffffff">
+              <circle cx="14" cy="12" r="0.9" opacity="0.8"/><circle cx="38" cy="7" r="0.7" opacity="0.6"/>
+              <circle cx="66" cy="14" r="0.6" opacity="0.5"/><circle cx="104" cy="9" r="0.9" opacity="0.75"/>
+              <circle cx="132" cy="18" r="0.7" opacity="0.6"/><circle cx="150" cy="8" r="0.6" opacity="0.5"/>
+              <circle cx="24" cy="36" r="0.6" opacity="0.45"/><circle cx="144" cy="44" r="0.6" opacity="0.45"/>
+            </g>
+            <path d="M6 58 A76 46 0 0 1 154 58" fill="none" stroke="#3ee8ff" stroke-width="1.6" opacity="0.35"/>
+            <path d="M2 62 A82 52 0 0 1 158 62" fill="none" stroke="#98a6c6" stroke-width="2.6"/>
+            <g stroke="#0a0718" stroke-width="1.6">
+              <circle cx="42" cy="34" r="8" fill="#1d6fa8"/><circle cx="42" cy="34" r="4" fill="#f3f7ff"/>
+              <circle cx="80" cy="24" r="8" fill="#1d6fa8"/><circle cx="80" cy="24" r="4" fill="#f3f7ff"/>
+              <circle cx="118" cy="34" r="8" fill="#1d6fa8"/><circle cx="118" cy="34" r="4" fill="#f3f7ff"/>
+            </g>
+            <g fill="#ff4fd8"><circle cx="42" cy="34" r="1.7"/><circle cx="80" cy="24" r="1.7"/><circle cx="118" cy="34" r="1.7"/></g>
+            <g transform="rotate(37 22 52)" stroke="#0a0718" stroke-width="1.4">
+              <rect x="10" y="48" width="13" height="4.6" rx="2" fill="#F2B705"/>
+              <rect x="10" y="55" width="13" height="4.6" rx="2" fill="#F2B705"/>
+              <rect x="10" y="62" width="13" height="4.6" rx="2" fill="#6b7590"/>
+            </g>
+            <path d="M96 72 C126 68 138 52 132 36" fill="none" stroke="#0a0718" stroke-width="7" stroke-linecap="round"/>
+            <path d="M96 72 C126 68 138 52 132 36" fill="none" stroke="#ff4fd8" stroke-width="3" stroke-linecap="round"/>
+            <g stroke-linecap="round">
+              <path d="M58 74 L76 84" stroke="#0a0718" stroke-width="10"/>
+              <path d="M58 74 L76 84" stroke="#3ee8ff" stroke-width="6.4"/>
+              <path d="M110 74 L92 84" stroke="#0a0718" stroke-width="10"/>
+              <path d="M110 74 L92 84" stroke="#3ee8ff" stroke-width="6.4"/>
+            </g>
+            <circle cx="84" cy="60" r="6.4" fill="#0a0718"/>
+            <circle cx="84" cy="60" r="5.4" fill="#dfe7f5"/>
+            <circle cx="82" cy="58" r="1.9" fill="#ffffff"/>
+            <path d="M79.5 63.5 A5.4 5.4 0 0 0 88 61" fill="none" stroke="#3ee8ff" stroke-width="1.2"/>
+          </svg>`,
+
   'hill-climb': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#8fd3f0"/>
             <path d="M0 58 L34 44 L66 54 L104 34 L136 44 L160 36 L160 90 L0 90 Z" fill="#6fa8c9" opacity="0.55"/>
@@ -527,6 +568,39 @@ export const GAME_ART = {
               <rect x="66" y="20" width="10" height="10" fill="#3E5266" stroke="#1c2733" stroke-width="1.6"/>
             </g>
             <path d="M84 60 Q120 54 158 60" fill="none" stroke="#7C93A8" stroke-width="2" opacity="0.5"/>
+          </svg>`,
+  skeeball: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#3B1A1B"/>
+            <rect x="0" y="0" width="160" height="46" fill="#4E2122"/>
+            <g fill="#26262B"><path d="M0 90 L0 40 L34 40 L20 90 Z"/><path d="M160 90 L160 40 L126 40 L140 90 Z"/></g>
+            <path d="M22 90 L138 90 L99 43 L61 43 Z" fill="#A55C39"/>
+            <path d="M61 43 L99 43 L106 52 L54 52 Z" fill="#BE6E45"/>
+            <g fill="#F0D95E">
+              <path d="M22 90 L10 90 L48 43 L61 43 Z"/><path d="M138 90 L150 90 L112 43 L99 43 Z"/>
+            </g>
+            <g fill="#3A2E0C">
+              <path d="M27 90 L20 90 L52 47 L57 47 Z"/><path d="M42 90 L35 90 L58 56 L63 56 Z"/><path d="M57 90 L50 90 L64 68 L69 68 Z"/>
+              <path d="M133 90 L140 90 L108 47 L103 47 Z"/><path d="M118 90 L125 90 L102 56 L97 56 Z"/><path d="M103 90 L110 90 L96 68 L91 68 Z"/>
+            </g>
+            <ellipse cx="80" cy="44" rx="48" ry="11" fill="#FFF6E2"/>
+            <ellipse cx="80" cy="42" rx="39" ry="8" fill="#8C4A22"/>
+            <g fill="#F3DFB4" stroke="#D8C48E" stroke-width="1">
+              <ellipse cx="30" cy="20" rx="10" ry="4"/><ellipse cx="130" cy="20" rx="10" ry="4"/>
+            </g>
+            <g fill="#3E1509"><ellipse cx="30" cy="20" rx="6" ry="2.2"/><ellipse cx="130" cy="20" rx="6" ry="2.2"/></g>
+            <g stroke="#D8C48E" stroke-width="1">
+              <ellipse cx="80" cy="17" rx="12" ry="4" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="25" rx="15" ry="4.6" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="33" rx="18" ry="5.2" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="41" rx="21" ry="5.8" fill="#FFF6E2"/>
+            </g>
+            <g fill="#3E1509">
+              <ellipse cx="80" cy="17" rx="7" ry="2.1"/><ellipse cx="80" cy="25" rx="9" ry="2.4"/>
+              <ellipse cx="80" cy="33" rx="11" ry="2.7"/><ellipse cx="80" cy="41" rx="13" ry="3"/>
+            </g>
+            <circle cx="80" cy="70" r="8" fill="#F3AFC6"/>
+            <circle cx="77.4" cy="67.2" r="3" fill="#FFE2EC"/>
+            <g fill="#B8517A"><circle cx="83" cy="72" r="1.3"/><circle cx="77" cy="73" r="1.2"/><circle cx="84" cy="66" r="1.2"/></g>
           </svg>`,
 };
 

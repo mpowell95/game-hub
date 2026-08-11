@@ -211,6 +211,7 @@ class FakeRoom {
 }
 
 const MP_RECOVERY_MAX_ATTEMPTS = 3;   // chinchon/js/ui.js:50 / escoba/js/ui.js:50
+const E_MP_DIFFICULTY = 'mp';         // escoba/js/ui.js MP_DIFFICULTY (tierOf('mp') === null)
 
 function mpNewState() {   // chinchon/js/ui.js _mpNewState / escoba/js/ui.js (UI-only fields dropped)
   return {
@@ -227,6 +228,13 @@ function mpNewState() {   // chinchon/js/ui.js _mpNewState / escoba/js/ui.js (UI
  *  of seat -> stamp, because the host answers each seat independently). */
 function cMpNewState(seat) {   // chinchon/js/ui.js _mpNewState
   return Object.assign(mpNewState(), { seat, isHost: seat === 0, lastRecoveryHandled: {} });
+}
+
+/** Escoba's own MP state, now the same seat-indexed shape (2026-08-11): `seat`
+ *  replaces the host/guest binary and `lastRecoveryHandled` is a per-seat map,
+ *  because the host answers each pleading seat independently. */
+function eMpNewState(seat) {   // escoba/js/ui.js _mpNewState
+  return Object.assign(mpNewState(), { seat, isHost: seat === 0, localSeat: seat, opps: [], lastRecoveryHandled: {} });
 }
 
 // ==================================================================================
@@ -502,9 +510,17 @@ class ChinchonSide {
 // ESCOBA side (mirror of escoba/js/ui.js's MP glue; citations per method)
 // ==================================================================================
 class EscobaSide {
-  constructor(role, room, script, opts = {}) {
-    this.role = role; this.room = room; this.script = script; this.opts = opts;
-    this.mp = mpNewState();
+  // SEATS (2026-08-11, 3-4 player MP): a side is identified by its integer seat
+  // (0 = host), matching escoba/js/ui.js's `mp.seat`. `role` is kept as a derived
+  // convenience for the pre-existing 2-seat assertions and for appendMove's `by`
+  // readability. Accepts a legacy 'host'/'guest' string so no scenario had to change.
+  constructor(seatOrRole, room, script, opts = {}) {
+    this.seat = typeof seatOrRole === 'number' ? seatOrRole : (seatOrRole === 'host' ? 0 : 1);
+    this.isHost = this.seat === 0;
+    this.role = this.isHost ? 'host' : 'guest';
+    this.room = room; this.script = script; this.opts = opts;
+    this.mp = eMpNewState(this.seat);
+    this.statsCommits = [];   // _commitStats's arguments, captured instead of written
     this.game = null; this.dead = false; this.matchEnded = false; this.failedHard = false;
     this.mismatches = 0; this.recoveriesApplied = 0; this.errors = [];
     this.saves = [];   // in-memory _saveSnapshot (:180-191)
@@ -513,9 +529,9 @@ class EscobaSide {
     this._roomCb = (r) => this.roomCallback(r);
     room.onRoom(this._roomCb);
   }
-  remoteAgent() {   // _makeRemoteAgent @ :1711-1722
+  remoteAgent(seatId) {   // _makeRemoteAgent(seatId) - closes over its OWN seat (C5's probe, ported)
     const side = this;
-    return { isHuman: false, chooseMove() { return new Promise((resolve) => { side.mp.pendingResolve = resolve; side.tryDeliver(); }); } };
+    return { isHuman: false, seat: seatId, chooseMove() { return new Promise((resolve) => { side.mp.pendingResolve = resolve; side.tryDeliver(); }); } };
   }
   tryDeliver() {   // _mpTryDeliverNextMove @ :1728-1739
     const mp = this.mp;
@@ -536,7 +552,7 @@ class EscobaSide {
       const seq = mp.appliedSeq + 1;
       const move = { cardId: payload.card.id, captureIds: payload.captured.map((c) => c.id) };
       const hash = eHash(this.game);
-      try { await this.room.appendMove(this.role, seq, move, hash); mp.appliedSeq = seq; }
+      try { await this.room.appendMove(mp.seat, seq, move, hash); mp.appliedSeq = seq; }
       catch { /* connection error status in real UI */ }
       return;
     }
@@ -552,26 +568,29 @@ class EscobaSide {
       return;
     }
     this.mismatches++;
-    await this.handleMismatch(expectedSeq);
+    // `p.id` IS the room seat, so the host addresses its answer to the seat that
+    // AUTHORED the diverging move rather than to "the" remote seat.
+    await this.handleMismatch(expectedSeq, p.id);
   }
-  async handleMismatch(seq) {   // _mpHandleMismatch @ :1775-1785
+  async handleMismatch(seq, bySeat) {   // _mpHandleMismatch - seat-addressed recovery
     const mp = this.mp;
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { this.failedHard = true; if (this.game) this.game.abort(); return; }
+    this.lastRecoverySeatAsked = bySeat;
     try {
-      if (this.role === 'host') await this.room.writeRecovery(mp.appliedSeq, this.game.snapshot());
-      else await this.room.requestRecovery(seq);
+      if (mp.isHost) await this.room.writeRecovery(mp.appliedSeq, this.game.snapshot(), bySeat);
+      else await this.room.requestRecovery(seq, mp.seat);
     } catch { /* retried on next room update */ }
   }
   applyRecovery(recovery) {   // _mpApplyRecovery (seat-remapped isHuman + boundary-aware start - the E3 fix)
     const mp = this.mp;
     if (!mp || this.dead) return;
     const snap = deep(recovery.state);
-    const mySeat = this.role === 'host' ? 0 : 1;   // mp.localSeat in the real glue
+    const mySeat = mp.seat;
     const agentsById = {};
     for (const sp of snap.players) {
       sp.isHuman = sp.id === mySeat;
-      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
+      agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent(sp.id);
     }
     if (this.game) this.game.abort();
     this.recoveriesApplied++;
@@ -579,8 +598,8 @@ class EscobaSide {
     mp.appliedSeq = recovery.seq;
     mp.pendingResolve = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
-    this.room.clearRecovery().catch(() => {});
-    if (!snap.midRound && this.role === 'guest') this.awaitNextRound().then(() => this.startLoop());
+    this.room.clearRecovery(mp.seat).catch(() => {});
+    if (!snap.midRound && !mp.isHost) this.awaitNextRound().then(() => this.startLoop());
     else this.startLoop();
   }
   applyRoundData(round) { this.game.config.presetDeck = round.deck; this.game.dealer = round.dealer; }   // _mpApplyRoundData @ :1809-1812
@@ -591,22 +610,39 @@ class EscobaSide {
     if (room && room.round && room.round.n === target) { this.applyRoundData(room.round); return Promise.resolve(); }
     return new Promise((resolve) => { mp.awaitingRoundN = target; mp.awaitingRoundResolve = resolve; });
   }
-  roomCallback(room) {   // _mpRoomCallback @ :1882-1890 + _mpOnRoomUpdate @ :1892-1941
+  roomCallback(room) {   // _mpRoomCallback + _mpOnRoomUpdate (seat-addressed recovery)
     if (this.dead) return;
     if (!this.game) {
-      if (this.role === 'guest' && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
+      if (!this.isHost && this.opts.autoStart && room.status === 'active' && room.round) this.guestStart(room);
       return;
     }
     const mp = this.mp;
     mp.lastRoomSnapshot = room;
-    if (room.recovery) {
-      if (this.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
-        mp.lastRecoveryHandled = room.recovery.requested;
-        this.room.writeRecovery(mp.appliedSeq, this.game.snapshot()).catch(() => {});
+    // An abandon (leaveRoom) sets status:'ended' with NO result; a natural conclusion
+    // (writeResult) sets both together. _mpEndDueToOpponentLeft commits the result first
+    // when the engine had already decided the match (the E6 probe).
+    if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this.matchEnded) {
+      mp.opponentLeft = true;
+      this.endDueToOpponentLeft();
+      return;
+    }
+    const rec = room.recovery;
+    if (mp.isHost && rec && rec.requests) {
+      for (const key of Object.keys(rec.requests)) {
+        const seat = Number(key);
+        const req = rec.requests[key];
+        if (!req || seat === mp.seat) continue;
+        if (mp.lastRecoveryHandled[seat] === req.at) continue;
+        mp.lastRecoveryHandled[seat] = req.at;
+        this.room.writeRecovery(mp.appliedSeq, this.game.snapshot(), seat).catch(() => {});
       }
-      if (this.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
-        mp.lastRecoveryApplied = room.recovery.seq;
-        this.applyRecovery(room.recovery);
+    }
+    if (!mp.isHost) {
+      const mine = rec && rec.answers && rec.answers[mp.seat];
+      if (!mine) mp.lastRecoveryApplied = null;
+      else if (mine.state && mine.at !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = mine.at;
+        this.applyRecovery(mine);
       }
     }
     const entries = Object.values(room.moves || {});
@@ -626,14 +662,14 @@ class EscobaSide {
   save(kind) {   // _saveSnapshot @ :180-191 - NOTE: seq recorded BEFORE _mpAfterPlay bumps appliedSeq
     // `kind` is a harness-only annotation (which event triggered the save) so scenarios can
     // select a specific save; the payload fields mirror the real _saveSnapshot exactly.
-    this.saves.push({ v: 1, kind, snap: deep(this.game.snapshot()), mp: { code: 'T', role: this.role, seq: this.mp.appliedSeq, at: 0 } });
+    this.saves.push({ v: 1, kind, snap: deep(this.game.snapshot()), mp: { code: 'T', seat: this.mp.seat, role: this.role, seq: this.mp.appliedSeq, at: 0 } });
   }
   async onEvent(type, payload) {   // onEvent MP hooks @ :719-804 (render/pacing/broom omitted)
     if (this.dead) return;
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart':
-        if (this.role === 'host') await this.room.startRound(this.game.round, this.game.lastDeckOrder, this.game.dealer);   // :729-732
+        if (this.mp.isHost) await this.room.startRound(this.game.round, this.game.lastDeckOrder, this.game.dealer);
         break;
       case 'deal': if (!payload.first) this.save('deal'); break;    // :739
       case 'initialEscoba': this.save('initialEscoba'); break;               // :744
@@ -645,44 +681,88 @@ class EscobaSide {
         break;
       case 'sweepLeftovers': this.save('sweep'); break;              // :777
       case 'roundScored':
-        if (!this.game.winner) this.save('roundScored');                   // :784
-        if (this.role === 'guest' && !this.game.winner) await this.awaitNextRound();   // :791
+        if (!this.game.winner) this.save('roundScored');
+        // The engine has ALREADY decided the match by the time it emits this, so the
+        // result is recorded here - BEFORE the round modal's await (the E8 fix).
+        else this.commitStats();
+        // showRoundModal(): in the real UI this awaits a human tapping "Next round", on
+        // the final round as much as any other. Modelled because that await is the whole
+        // window E8 is about - without it, matchEnd follows roundScored in the same
+        // microtask and nothing can get in between. Default: resolves immediately, so
+        // every other Escoba scenario behaves exactly as it did.
+        if (this.opts.holdModal && this.opts.holdModal(this)) {
+          await new Promise((resolve) => { this._modalResolve = resolve; });
+          this._modalResolve = null;
+        }
+        if (!this.mp.isHost && !this.game.winner) await this.awaitNextRound();
         break;
       case 'matchEnd':
         this.matchEnded = true;
-        if (this.role === 'host') await this.room.writeResult({ winnerId: this.game.winner.id });   // :798-801
+        this.commitStats();
+        if (this.mp.isHost) await this.room.writeResult({ winnerId: this.game.winner.id });
         break;
     }
   }
   startLoop() { this.game.playMatch().catch((e) => { this.errors.push(e); }); }
-  hostStart(config) {   // _mpHostStart @ :1963-1981
-    const players = [
-      eMakePlayer({ id: 0, name: 'Host', avatar: 'H', isHuman: true, agent: this.localAgent }),
-      eMakePlayer({ id: 1, name: 'Guest', avatar: 'G', agent: this.remoteAgent() }),
-    ];
-    this.bindGame(new EGame({ players, config, rng: mulberry32(99) }));
+  /** _commitStats: `won` resolves through the LOCAL seat, the difficulty bucket is
+   *  MP_DIFFICULTY ('mp', never the AI tier), and head-to-head records EVERY opponent
+   *  at the table. Idempotent via the same _statsCommitted flag as the real thing. */
+  commitStats() {   // _commitStats
+    if (this._statsCommitted || !this.game) return;
+    this._statsCommitted = true;
+    const won = !!(this.game.winner && this.game.winner.id === this.mp.seat);
+    // The branch under test, mirrored rather than asserted as a constant: a remote seat has
+    // no `difficulty`, so the old `opp0.difficulty || 'normal'` fell through to 'normal'.
+    const opp0 = this.game.players.find((x) => !x.isHuman);
+    const difficulty = this.mp ? E_MP_DIFFICULTY : ((opp0 && opp0.difficulty) || 'normal');
+    this.statsCommits.push({ difficulty, won, opps: (this.mp.opps || []).map((o) => o.seat) });
+  }
+  /** _mpEndDueToOpponentLeft: a decided match is recorded BEFORE the engine is aborted;
+   *  a genuine mid-match abandon records nothing (leaving early is not a loss). */
+  endDueToOpponentLeft() {
+    if (this.dead || this.matchEnded) return;
+    if (this.game && this.game.winner) this.commitStats();
+    if (this.game) this.game.abort();
+    this.matchEnded = true;
+    this.opponentLeftModal = true;
+  }
+  /** _mpBuildPlayers: seat order on EVERY device, isHuman only for our own seat. */
+  buildPlayers(count) {
+    const players = [];
+    for (let i = 0; i < count; i++) {
+      const mine = i === this.mp.seat;
+      players.push(eMakePlayer({
+        id: i, name: `P${i + 1}`, avatar: String(i + 1), isHuman: mine,
+        agent: mine ? this.localAgent : this.remoteAgent(i),
+      }));
+    }
+    this.mp.opps = players.filter((p) => p.id !== this.mp.seat).map((p) => ({ seat: p.id, deviceId: `dev${p.id}`, name: p.name }));
+    return players;
+  }
+  hostStart(config, seatCount = 2) {   // _mpHostStart
+    this.bindGame(new EGame({ players: this.buildPlayers(seatCount), config, rng: mulberry32(99) }));
     this.startLoop();
   }
-  guestStart(room) {   // _mpGuestStartMatch @ :2014-2033
+  guestStart(room) {   // _mpGuestStartMatch
     const cfg = room.config || {};
-    const players = [
-      eMakePlayer({ id: 0, name: 'Host', avatar: 'H', agent: this.remoteAgent() }),
-      eMakePlayer({ id: 1, name: 'Guest', avatar: 'G', isHuman: true, agent: this.localAgent }),
-    ];
-    this.bindGame(new EGame({ players, config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck } }));
-    this.game.dealer = room.round.dealer;   // :2027
+    const seatCount = (cfg.seats | 0) || room.maxSeats || 2;
+    this.bindGame(new EGame({
+      players: this.buildPlayers(seatCount),
+      config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck },
+    }));
+    this.game.dealer = room.round.dealer;
     this.startLoop();
   }
   async restoreFromSave(save) {   // _tryRestoreMP (join elided; FakeRoom always reachable)
     const agentsById = {};
-    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent();
-    this.mp = mpNewState();
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.localAgent : this.remoteAgent(sp.id);
+    this.mp = eMpNewState(save.mp.seat != null ? (save.mp.seat | 0) : (save.mp.role === 'guest' ? 1 : 0));
     this.mp.appliedSeq = save.mp.seq | 0;
     this.bindGame(EGame.fromSnapshot(deep(save.snap), agentsById));
     // Boundary saves resume with the next round: wait for the host's round record
     // (deck + dealer) first, mirroring the fixed _tryRestoreMP. Mid-round saves
     // (the common play-save) resume in place.
-    if (this.role === 'guest' && !save.snap.midRound) await this.awaitNextRound();
+    if (!this.mp.isHost && !save.snap.midRound) await this.awaitNextRound();
     if (this.dead) return;
     this.startLoop();
   }
@@ -1080,12 +1160,25 @@ function cleanup(room, ...sides) {
 }
 
 async function makeEscoba(opts = {}) {
-  const room = new FakeRoom();
-  room.config = { targetScore: 21, deckMode: 'spanish' };
-  const host = new EscobaSide('host', room, escobaScript(), opts.host || {});
-  const guest = new EscobaSide('guest', room, escobaScript(), Object.assign({ autoStart: true }, opts.guest || {}));
-  host.hostStart({ targetScore: 21, deckMode: 'spanish' });
-  return { room, host, guest };
+  const { room, sides } = await makeEscobaN(2, opts);
+  return { room, host: sides[0], guest: sides[1], sides };
+}
+
+/** N-seat Escoba table (2026-08-11). Seat 0 hosts; every other seat auto-starts when
+ *  the host publishes round 1. `opts.host` / `opts.guest` keep working for the 2-seat
+ *  scenarios; `opts.seatOpts[i]` addresses any seat by index. */
+async function makeEscobaN(seatCount, opts = {}) {
+  const room = new FakeRoom(seatCount);
+  const config = { targetScore: 21, deckMode: 'spanish', seats: seatCount };
+  room.config = config;
+  const sides = [];
+  for (let i = 0; i < seatCount; i++) {
+    const perSeat = (opts.seatOpts && opts.seatOpts[i]) || (i === 0 ? opts.host : opts.guest) || {};
+    const sideOpts = i === 0 ? Object.assign({}, perSeat) : Object.assign({ autoStart: true }, perSeat);
+    sides.push(new EscobaSide(i, room, escobaScript(), sideOpts));
+  }
+  sides[0].hostStart(config, seatCount);
+  return { room, sides };
 }
 
 function makeTicTacToe(variant, policy, opts = {}) {
@@ -1315,6 +1408,139 @@ console.log('\n--- E4: Escoba rejoin from autosave (KNOWN-BUG PROBE: play-save s
     console.log(`FAIL  E4 did not complete: ${e.message}${diag}`);
   }
   finally { cleanup(room, host, guest); if (restored) restored.kill(); }
+}
+
+// --- E5: Escoba FOUR-seat table ------------------------------------------------------
+console.log('\n--- E5: Escoba FOUR-seat full match, lockstep, hash-verified on every device ---');
+{
+  // 2026-08-11: Escoba's engine has always been N-generic (game.js loops this.players for
+  // dealing, turn rotation, scoring, dealer rotation and snapshot/fromSnapshot), so the
+  // whole 3-4 seat change is in the network layer and ui.js's MP glue. This is the proof
+  // that the glue holds at four seats, and it is the first Escoba scenario that could ever
+  // catch a "the remote seat" assumption -- with one opponent, guessing is always right.
+  const { room, sides } = await makeEscobaN(4);
+  try {
+    await until(() => sides.every((s) => s.matchEnded) || sides.some((s) => s.failedHard), 25000, 'E5 match end');
+    ok('E5: all four seats completed (no hard failure)',
+      sides.every((s) => s.matchEnded) && !sides.some((s) => s.failedHard),
+      `ended=${sides.map((s) => s.matchEnded).join(',')} failed=${sides.map((s) => s.failedHard).join(',')}`);
+    ok('E5: zero hash mismatches anywhere', sides.every((s) => s.mismatches === 0), sides.map((s) => s.mismatches).join(','));
+    ok('E5: zero recoveries needed', sides.every((s) => s.recoveriesApplied === 0));
+    const hashes = sides.map((s) => eHash(s.game));
+    ok('E5: all four final states hash-identical', hashes.every((h) => h === hashes[0]), hashes.join(' '));
+    const winners = sides.map((s) => s.game.winner && s.game.winner.id);
+    ok('E5: same winner on every device', winners.every((w) => w != null && w === winners[0]), winners.join(','));
+    ok('E5: no move-log overwrites (two seats never claimed the same seq)', room.overwrites.length === 0, JSON.stringify(room.overwrites));
+    ok('E5: every device owns exactly ITS OWN seat as the local human',
+      sides.every((s, i) => s.game.players.filter((p) => p.isHuman).length === 1 && s.game.players[i].isHuman),
+      sides.map((s, i) => `seat${i}:[${s.game.players.map((p) => (p.isHuman ? 'H' : '-')).join('')}]`).join(' '));
+    ok('E5 [KNOWN-BUG PROBE]: every remote agent knows its OWN seat\n' +
+       '      (REGRESSION GUARD: _makeRemoteAgent() took no argument while a room only ever had\n' +
+       '      two seats, so "the remote seat" was unambiguous and _mpHandleMismatch could address\n' +
+       '      recovery at it by default. At four seats an unseated agent means a mismatch caused\n' +
+       '      by seat 3 gets answered to seat 1, so the diverged device never resyncs and the\n' +
+       '      healthy one rebuilds for nothing -- see E6)',
+      sides.every((s) => s.game.players.filter((p) => !p.isHuman).every((p) => p.agent && p.agent.seat === p.id)),
+      sides.map((s) => s.game.players.filter((p) => !p.isHuman).map((p) => `id${p.id}->agent.seat=${p.agent && p.agent.seat}`).join(',')).join(' | '));
+    // Escoba deals 3 cards each plus 4 on the table, so a 4-seat round is exactly three
+    // deals out of a 40-card deck with nothing left over. If that ever stopped dividing,
+    // the round would end with cards stranded in the stock.
+    ok('E5: every card was dealt (a 4-seat round consumes the whole 40-card deck)',
+      sides.every((s) => s.game.stock.length === 0), sides.map((s) => s.game.stock.length).join(','));
+  } catch (e) { fail++; console.log(`FAIL  E5 did not complete: ${e.message}`); }
+  finally { cleanup(room, ...sides); }
+}
+
+// --- E6: four-seat desync, recovery addressed to the seat that caused it --------------
+console.log('\n--- E6: Escoba four-seat desync (KNOWN-BUG PROBE: recovery aimed at the first remote seat) ---');
+{
+  // Seat 3 corrupts its own state, so the seat that AUTHORS the diverging move (as seen by
+  // seat 3) is whichever remote seat played at that seq -- what matters is that seat 3's
+  // plea, and the host's answer to it, are addressed per seat and cannot be confused with
+  // seat 1's or seat 2's.
+  const { room, sides } = await makeEscobaN(4, { seatOpts: { 3: { corruptAtSeq: 3 } } });
+  const diverged = sides[3];
+  try {
+    await until(() => diverged.recoveriesApplied >= 1 || sides.some((s) => s.failedHard), 20000, 'E6 recovery applied');
+    ok('E6: the corruption was DETECTED as a hash mismatch on seat 3', diverged.mismatches >= 1, `mismatches=${diverged.mismatches}`);
+    ok('E6 [KNOWN-BUG PROBE]: the host answered the PLEADING seat, and only it\n' +
+       '      (REGRESSION GUARD: js/net.js used to carry recovery in ONE shared field holding two\n' +
+       '      different shapes -- the host answer {state,seq} and a guest plea {requested} -- which\n' +
+       '      simply overwrote each other. Harmless with one guest; with three, one seat\'s request\n' +
+       '      clobbers the host answer another seat has not read yet, so that seat never resyncs\n' +
+       '      and burns its three-attempt budget into "Connection error". recovery/requests/<seat>\n' +
+       '      and recovery/answers/<seat> cannot collide by construction)',
+      room.recoveryWrites.length > 0 && room.recoveryWrites.every((w) => w.seat === 3),
+      `recovery answers written to seats: ${room.recoveryWrites.map((w) => w.seat).join(',') || 'none'}`);
+    ok('E6: the healthy seats never rebuilt from an answer addressed to somebody else',
+      sides[1].recoveriesApplied === 0 && sides[2].recoveriesApplied === 0,
+      `seat1=${sides[1].recoveriesApplied} seat2=${sides[2].recoveriesApplied}`);
+    await until(() => sides.every((s) => s.matchEnded) || sides.some((s) => s.failedHard), 25000, 'E6 match end');
+    const hashes = sides.map((s) => eHash(s.game));
+    ok('E6: the whole table converged and finished after the resync',
+      sides.every((s) => s.matchEnded) && hashes.every((h) => h === hashes[0]),
+      `ended=${sides.map((s) => s.matchEnded).join(',')} hashes=${hashes.join(' ')}`);
+  } catch (e) { fail++; console.log(`FAIL  E6 did not complete: ${e.message}`); }
+  finally { cleanup(room, ...sides); }
+}
+
+// --- E7: the result is RECORDED, in the right bucket, whatever the room does after -----
+console.log('\n--- E7: Escoba MP result recording (KNOWN-BUG PROBE: the winner\'s own win went unrecorded) ---');
+{
+  const { room, host, guest } = await makeEscoba();
+  try {
+    await until(() => (host.matchEnded && guest.matchEnded) || host.failedHard || guest.failedHard, 15000, 'E7 match end');
+    ok('E7: BOTH devices recorded the match exactly once\n' +
+       '      (not double-counting: gamehub.stats is keyed per PLAYER, so two devices each\n' +
+       '      writing "I played one match" is two different people each correctly getting one)',
+      host.statsCommits.length === 1 && guest.statsCommits.length === 1,
+      `host=${host.statsCommits.length} guest=${guest.statsCommits.length}`);
+    ok('E7 [KNOWN-BUG PROBE]: an MP result records under the \'mp\' difficulty bucket\n' +
+       '      (REGRESSION GUARD: _commitStats read `opp0.difficulty || \'normal\'`, and a REMOTE seat\n' +
+       '      has no difficulty at all, so every online match was filed as an Intermediate win over\n' +
+       '      the AI. tierOf(\'mp\') is null (js/difficulty-tiers.js), so an MP play counts in every\n' +
+       '      total and in the leaderboard\'s All filter and claims no tier pill)',
+      [...host.statsCommits, ...guest.statsCommits].every((c) => c.difficulty === 'mp'),
+      JSON.stringify([...host.statsCommits, ...guest.statsCommits]));
+    ok('E7: exactly one side recorded a win and the other a loss (no seat recorded the other\'s result)',
+      host.statsCommits[0].won !== guest.statsCommits[0].won,
+      `host.won=${host.statsCommits[0].won} guest.won=${guest.statsCommits[0].won}`);
+    ok('E7: head-to-head named every opponent at the table',
+      host.statsCommits[0].opps.length === 1 && guest.statsCommits[0].opps.length === 1,
+      JSON.stringify([host.statsCommits[0].opps, guest.statsCommits[0].opps]));
+  } catch (e) { fail++; console.log(`FAIL  E7 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
+}
+
+// --- E8: a peer leaving AFTER the match is decided must not erase the result -----------
+console.log('\n--- E8: Escoba peer leaves at the decided moment (KNOWN-BUG PROBE: the win is lost) ---');
+{
+  // The real shape of the bug: the engine decides the match, emits roundScored, and the UI
+  // opens a round modal that AWAITS a human tap. If the other player taps through first and
+  // leaves ("New game" -> net.leaveRoom), the room goes to status:'ended' with no result,
+  // this device reads that as an abandon, aborts its engine, and 'matchEnd' never fires --
+  // so the win the engine had already decided was never written anywhere. Coin flip, every
+  // online match. Here the abandon is injected the instant the host's engine has a winner,
+  // which is exactly that window.
+  // holdModal: the host parks on its FINAL round modal (winner already decided) and never
+  // taps through, which is where a real player is for the second or two this takes.
+  const { room, host, guest } = await makeEscoba({ host: { holdModal: (side) => !!side.game.winner } });
+  try {
+    await until(() => (host._modalResolve && host.game.winner) || host.failedHard, 15000, 'E8 host parked on the final round modal');
+    ok('E8: the host is parked on the decided-match round modal (the real window)', !!host._modalResolve && !!host.game.winner);
+    await room.writeResult(null);   // net.leaveRoom's shape: status 'ended', result still null
+    await until(() => host.matchEnded, 5000, 'E8 host concludes');
+    ok('E8: the host took the opponent-left path, not the ordinary matchEnd path', !!host.opponentLeftModal);
+    ok('E8 [KNOWN-BUG PROBE]: the decided result was recorded even though the room died first\n' +
+       '      (REGRESSION GUARD, THE LAW rule 1: _commitStats must run when the ENGINE decides the\n' +
+       '      match -- in the roundScored hook, before the round modal\'s await -- not four awaits\n' +
+       '      later in the matchEnd hook, which _mpEndDueToOpponentLeft can pre-empt. The belt-and\n' +
+       '      -braces half is _commitStatsIfDecided() in both MP end paths)',
+      host.statsCommits.length === 1,
+      `commits=${JSON.stringify(host.statsCommits)}`);
+    ok('E8: it still recorded exactly once, not twice', host.statsCommits.length === 1);
+  } catch (e) { fail++; console.log(`FAIL  E8 did not complete: ${e.message}`); }
+  finally { cleanup(room, host, guest); }
 }
 
 // --- C4: mid-match rejoin from the round-boundary autosave -------------------------

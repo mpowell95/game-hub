@@ -80,6 +80,16 @@ export const STRINGS = {
     btn_start: 'Start',
     lbl_host: 'Host',
     mp_waiting_host: 'Waiting for host',
+    // 3-4 player online tables (2026-08-11). The lobby lists every seat, so the single
+    // "Opponent"/"Host" slot labels above are now only used by older copy paths.
+    online_word: 'online',
+    hint_mp_seats: 'Every seat is a real person: the match starts once they have all joined.',
+    lbl_players_filled: 'Players ({filled}/{total})',
+    mp_host_label: 'Host',
+    mp_seat_n: 'Player {n}',
+    mp_seat_you: 'you',
+    mp_seat_waiting: 'Waiting…',
+    mp_waiting_players: 'Waiting for {n} more',
 
     // Avatar picker
     avatar_title: 'Choose your avatar',
@@ -212,6 +222,14 @@ export const STRINGS = {
     btn_start: 'Empezar',
     lbl_host: 'Anfitrión',
     mp_waiting_host: 'Esperando al anfitrión',
+    online_word: 'en línea',
+    hint_mp_seats: 'Cada silla es una persona real: la partida empieza cuando estén todas.',
+    lbl_players_filled: 'Jugadores ({filled}/{total})',
+    mp_host_label: 'Anfitrión',
+    mp_seat_n: 'Jugador {n}',
+    mp_seat_you: 'tú',
+    mp_seat_waiting: 'Esperando…',
+    mp_waiting_players: 'Faltan {n}',
 
     avatar_title: 'Elige tu avatar',
     btn_close: 'Cerrar',
