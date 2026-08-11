@@ -32,6 +32,53 @@ the counterclockwise sow with a visible dashed hop over the opponent's mancala, 
 "X = Y" example, and two rule bullets. Matt's own words: "must be completely overhauled... same
 excess-prose issue."
 
+## HOW TO PLAY — the animated carousel (2026-08-11)
+
+**This REPLACED the static sheet described below.** Matt uploaded seven iPhone screen recordings
+to `reference/mancala/` and asked for the same treatment Yahtzee had just had: *"Clone the how to
+pages. Exactly. Animations included."* (How to actually watch a `.MOV` is in
+`reference/README.md` — it is not something a session can just open.)
+
+`js/howto.js`, six pages, the reference's own order and wording, with the same chrome as
+`yahtzee/js/howto.js` because the reference app is the same one.
+
+Three things from the recordings that are easy to miss:
+
+1. **Seven recordings, six pages.** Two pages change their caption PART-WAY through their own
+   animation — the sow page reads "…distributed counterclockwise…" while the stones travel and
+   then "Each pit receives one stone…" as they land; the end page reads "The game ends when all
+   six pits on one side are empty" and then "Any remaining stones on the other side…". The
+   trailing ellipsis is the reference's own signal that it continues. Hence `PAGES[].parts`, and
+   why `.mc-ht-caption` has a `min-height` — the card must not resize mid-story.
+2. **The illustration panel is turn-coloured**, salmon while vermilion acts and blue while blue
+   does. Our own board already does exactly this (`.mancala[data-turn]`), so the sheet is showing
+   a real property of the game rather than decoration.
+3. **The reference's board is vertical; ours is horizontal.** As with Yahtzee, the illustration
+   draws OUR board — blue pits along the bottom into your mancala on the right, vermilion along
+   the top into theirs on the left, indices matching `game.js` exactly so the sow traces one real
+   counterclockwise loop. A tutorial pointing at a board the player is about to not see teaches
+   the wrong thing.
+
+**Built on demand and torn down on close**, matching this game's existing overlay idiom: Mancala
+rewrites its whole root on every render, so a persistently-mounted sheet would be destroyed
+underneath itself. `closeOverlays()` destroys the controller as well as removing the node — the
+timelines own real timers and removing the node alone would leave them ticking against a detached
+board.
+
+**One bug worth keeping written down:** the first `sow()` computed a landed pit's new count as
+`4 + drops`, which is right on a fresh board and wrong on every page that arranges the board
+differently — the capture page starts a pit empty and rendered `5` where it should have said `1`.
+It keeps a real `counts[]` model now. Derived-from-assumption arithmetic is the trap in any
+animation that reuses one routine across differently-arranged setups.
+
+`test-visual.mjs`'s `MOTION` probe watches `.mc-ht-stone` travel (250px over ~6s). The sow IS the
+rule this sheet teaches, and a still diagram of it is precisely what the old sheet already had.
+
+i18n from the first line: all captions are `ht_*` keys in `strings.js`, both languages, verified
+in the browser (`Cada jugador tiene seis hoyos y una mancala…`).
+
+### The static sheet this replaced (kept for the reasoning)
+
 **Trimmed further (2026-07-24, batch D/FB3-HOWTO3):** QA rated this sheet "borderline" —
 a paragraph under the diagram (caption + a separate "X = Y" example line) plus a bold
 line and two bullets. The caption and example are now ONE merged sentence (`help_caption`

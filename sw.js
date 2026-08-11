@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v284';
+const CACHE = 'game-hub-v285';
 
 const ASSETS = [
   './',
@@ -113,6 +113,7 @@ const ASSETS = [
   './mancala/css/mancala.css',
   './mancala/js/game.js',
   './mancala/js/ai.js',
+  './mancala/js/howto.js',
   './mancala/js/ui.js',
   './mancala/js/hash.js',
   './mancala/js/strings.js',
