@@ -104,11 +104,21 @@ export function aggregatePlayers(all) {
     const playerId = codeOf(prof) || null;
     let grp = groups.get(key);
     if (!grp) {
-      grp = { key, playerId, name: '', emoji: '', message: '', messageAt: 0, devices: 0, updatedAt: 0, games: {} };
+      grp = {
+        key, playerId, name: '', emoji: '', message: '', messageAt: 0, devices: 0, updatedAt: 0, games: {},
+        // Every device id folded into this person (2026-08-11). The head-to-head records
+        // below are keyed by the OPPONENT'S device id, so resolving one to a player row
+        // needs the reverse map, and this is the only place that knows it.
+        deviceIds: [],
+        // Multiplayer head-to-head, `{ [gameId]: { [opponentDeviceId]: { name, w, l } } }`,
+        // summed across this person's devices. See the h2h merge below.
+        h2h: {},
+      };
       for (const g of GAMES) grp.games[g] = { total: { played: 0, won: 0, lost: 0 }, byDiff: {} };
       groups.set(key, grp);
     }
     grp.devices += 1;
+    grp.deviceIds.push(id);
     if (playerId && !grp.playerId) grp.playerId = playerId;
     const upd = +rec.updatedAt || 0;                       // NOT `| 0` (server timestamps overflow 32 bits)
     const rawName = (prof.name || '').trim();
@@ -130,6 +140,28 @@ export function aggregatePlayers(all) {
     // this is a preference, not history (THE LAW rule 2's carve-out), so clearing must work.
     const msgAt = +prof.messageAt || 0;
     if (msgAt >= grp.messageAt) { grp.messageAt = msgAt; grp.message = (prof.message || '').trim(); }
+    // Multiplayer head-to-head (2026-08-11). `recordHeadToHead` (js/game-stats.js) has been
+    // writing gamehub.stats.h2h since 2026-07-22 as CAPTURE-ONLY -- the opponent's identity
+    // only exists while the room is live, so it was stored years before anything displayed it.
+    // This is the combine half: without a branch here, a person's head-to-head reads as empty
+    // the moment their second device syncs, which is the same silently-invisible shape the
+    // root CLAUDE.md's "Adding a game" item 7 exists to prevent. Counters ADD (per opponent,
+    // per game); the freshest non-empty `name` wins, purely as a fallback label for an
+    // opponent whose own record is not in `all` (a device that never synced, or is hidden).
+    const h2h = (rec.stats && rec.stats.h2h) || {};
+    for (const g of Object.keys(h2h)) {
+      const per = h2h[g];
+      if (!per || typeof per !== 'object') continue;
+      const dstPer = grp.h2h[g] || (grp.h2h[g] = {});
+      for (const oppId of Object.keys(per)) {
+        const srcRow = per[oppId] || {};
+        const dstRow = dstPer[oppId] || (dstPer[oppId] = { name: '', w: 0, l: 0 });
+        dstRow.w += srcRow.w | 0;
+        dstRow.l += srcRow.l | 0;
+        const nm = (typeof srcRow.name === 'string' ? srcRow.name : '').trim();
+        if (nm) dstRow.name = nm;
+      }
+    }
     const games = (rec.stats && rec.stats.games) || {};
     for (const g of GAMES) {
       const src = games[g] || {};
@@ -353,6 +385,54 @@ export function aggregatePlayers(all) {
   return list;
 }
 
+/** One row per PERSON this group has played in multiplayer, from their aggregated `h2h`.
+ *
+ *  Pure and Node-safe, like everything else here, so it unit-tests headless. Two things it
+ *  does that a caller must not re-derive:
+ *
+ *  1. **It folds by PERSON, not by device.** `h2h` is keyed by the opponent's device id, so
+ *     an opponent who plays on a phone and a laptop is two keys for one human. Resolving each
+ *     key through the same identity graph the rest of this module uses and summing per group
+ *     is what makes "Ana" one row instead of two. An opponent whose record is not in `all`
+ *     (never synced, or hidden from the board) keeps its own device-keyed row, labelled from
+ *     the name stored at the time the match was played -- dropping those would lose real
+ *     history from the only screen that shows it.
+ *  2. **It sums across the games asked for**, so a caller can scope to one game or to all of
+ *     them without teaching the leaderboard the h2h shape.
+ *
+ *  `gameIds` is optional; omit it for every game in the record.
+ *  Returns `[{ key, playerId, name, emoji, w, l, plays }]`, most wins first. */
+export function headToHeadRows(group, list, gameIds) {
+  if (!group || !group.h2h) return [];
+  const byDevice = new Map();
+  for (const g of list || []) for (const id of g.deviceIds || []) byDevice.set(id, g);
+  const out = new Map();
+  const games = gameIds && gameIds.length ? gameIds : Object.keys(group.h2h);
+  for (const gid of games) {
+    const per = group.h2h[gid];
+    if (!per) continue;
+    for (const oppId of Object.keys(per)) {
+      const row = per[oppId] || {};
+      const grp = byDevice.get(oppId);
+      // Never let a person appear as their own opponent: two devices of ONE person can
+      // legitimately end up in one room (a shared phone handed round), and h2h would then
+      // hold a self-row that reads as beating yourself.
+      if (grp && grp.key === group.key) continue;
+      const key = grp ? grp.key : 'device:' + oppId;
+      const acc = out.get(key) || { key, playerId: (grp && grp.playerId) || null, name: '', emoji: (grp && grp.emoji) || '', w: 0, l: 0, plays: 0 };
+      acc.w += row.w | 0;
+      acc.l += row.l | 0;
+      acc.plays += (row.w | 0) + (row.l | 0);
+      // A live player row's own display name beats the name frozen into the record.
+      acc.name = (grp && grp.name) || acc.name || (typeof row.name === 'string' ? row.name.trim() : '');
+      out.set(key, acc);
+    }
+  }
+  return [...out.values()]
+    .filter((r) => r.plays > 0)
+    .sort((a, b) => (b.w - a.w) || (b.plays - a.plays) || String(a.name).localeCompare(String(b.name)));
+}
+
 /** The single aggregated group for a VIEWER, using their fresh LOCAL stats for their own device and
  *  remote records for their other devices (two-way sync as read-time aggregation; no copy, no
  *  double-count). Pure: caller passes profile, own deviceId, and loadStats() output. Null if no data. */
@@ -371,4 +451,4 @@ export function aggregateForViewer(all, profileLike, myDeviceId, localStats) {
   return aggregatePlayers(merged).find((g) => g.key === myKey) || null;
 }
 
-export default { aggregatePlayers, identityKey, buildIdentity, aggregateForViewer, COMPETITIVE, SOLO };
+export default { aggregatePlayers, identityKey, buildIdentity, aggregateForViewer, headToHeadRows, COMPETITIVE, SOLO };

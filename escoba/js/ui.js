@@ -57,6 +57,20 @@ const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
+// Table size an online room can be hosted at (2026-08-11). The engine has always been
+// N-generic (game.js loops this.players everywhere), and 40 cards divide evenly at 2, 3
+// and 4 seats -- 4 face up plus 3 each per deal, so a 4-seat round is exactly three deals.
+const MP_MAX_SEATS = 4;
+// Multiplayer results record under their OWN difficulty bucket rather than inheriting
+// whatever AI tier the setup screen last showed. This is the repo-wide convention
+// (MP_DIFFICULTY in tic-tac-toe/js/ui.js, boggle/js/ui.js; 'mp' in yahtzee). Escoba used
+// to write `opp0.difficulty || 'normal'`, and a remote seat has no difficulty at all, so
+// every online match was filed as an Intermediate win over the AI: recorded, but
+// indistinguishable from solo play on every screen that shows it. tierOf('mp') is null
+// (js/difficulty-tiers.js), so these plays count in every total and in the leaderboard's
+// All filter and claim no tier pill; js/game-stats-ui.js's DIFF_META already names the
+// bucket "Multiplayer" in the by-difficulty table.
+const MP_DIFFICULTY = 'mp';
 // Human labels for the room's locked config, host-lobby summary line only.
 // Unknown keys (a future config field) are skipped, not shown raw.
 const MP_CONFIG_LABELS = {
@@ -106,6 +120,10 @@ class EscobaUI {
     // behind this single field so solo play is byte-identical to before.
     this.mp = null;
     this._screen = 'setup';      // 'setup' | 'host-lobby' | 'join-lobby'
+    // The seat this device holds in the room, from createRoom/joinSeat. Set in the LOBBY
+    // (before this.mp exists) because the seat list has to mark "you" before the match
+    // starts; mp.seat is the authority once a match is live. See _mpNewState's SEATS note.
+    this._mpSeat = null;
     this._mpBusy = false;
     this._mpError = '';
     this._mpJoinCode = '';       // retained across a failed join attempt
@@ -149,6 +167,12 @@ class EscobaUI {
     const profileDiff = (i) => (opps[i] && SKILL_TO_DIFF[opps[i].skill]) || 'normal';
     return {
       count: clamp(saved.count || (opps.length ? Math.min(opps.length + 1, 3) : 2), 2, 3),
+      // Online table size, deliberately a SEPARATE field from solo's `count` (2026-08-11).
+      // Solo tops out at 3 (it only carries two AI identities); an online room goes to 4.
+      // Sharing one field would let a 4-seat room silently ask solo for a third AI that
+      // does not exist, and would move the solo picker every time somebody hosted. Additive
+      // key: absent on an older save, which simply defaults to 2 (today's only room size).
+      mpSeats: clamp(saved.mpSeats || 2, 2, MP_MAX_SEATS),
       humanName: typeof saved.humanName === 'string' ? saved.humanName
         : (profile && profile.name) || t('you'),
       humanAvatar: HUMAN_AVATARS.includes(saved.humanAvatar) ? saved.humanAvatar
@@ -174,7 +198,7 @@ class EscobaUI {
   _saveSetup() {
     const s = this._setup;
     saveJSON(STORE_SETTINGS, {
-      count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar,
+      count: s.count, mpSeats: s.mpSeats, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
       deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist, mode: s.mode,
     });
@@ -193,7 +217,17 @@ class EscobaUI {
         snap: this.game.snapshot(),
       };
       // Additive MP field: absent in solo, so the solo save shape is unchanged.
-      if (this.mp) payload.mp = { code: this.mp.code, role: this.mp.role, seq: this.mp.appliedSeq, at: Date.now() };
+      // `role` is written alongside `seat` purely so a save taken by the previous (2-seat)
+      // build and a save taken by this one are both readable by both builds during the
+      // deploy window -- the 30-minute freshness window makes the overlap short, but a
+      // restore that throws would strand a live match. Additive; never read when `seat` is
+      // present (see _tryRestoreMP).
+      if (this.mp) {
+        payload.mp = {
+          code: this.mp.code, seat: this.mp.seat, role: this.mp.isHost ? 'host' : 'guest',
+          seq: this.mp.appliedSeq, at: Date.now(),
+        };
+      }
       saveJSON(STORE_SAVE, payload);
     } catch { /* private mode / quota */ }
   }
@@ -287,6 +321,7 @@ class EscobaUI {
     this._screen = 'setup'; this._mpError = ''; this._mpBusy = false; this._mpStatusMsg = ''; this._mpJoinCode = '';
     this._setupExpanded = null;
     this.mp = null;
+    this._mpSeat = null;
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
@@ -315,27 +350,40 @@ class EscobaUI {
     </div>`;
   }
 
-  /** The settings summary card: Solo and Host-online modes share this
-   *  verbatim (same fields, same persistence, same controls -- Host online
-   *  is simply the screen where the host locks in these values before
-   *  creating the room). */
-  _renderSettingsCard() {
+  /** The settings summary card. Solo and Host-online share the target-score,
+   *  card-numbering and capture-hint rows verbatim; the Players row and the
+   *  Difficulty row are the two that differ, because an online table has no AI
+   *  in it (2026-08-11, 3-4 player MP):
+   *    - Players: Host picks the TABLE SIZE (2-4, `mpSeats`) and edits only its
+   *      own name/avatar; the other seats are filled by whoever joins, and are
+   *      named from the room roster (_mpBuildPlayers), never from local setup.
+   *    - Difficulty: hidden entirely in Host mode. There is nothing to set a
+   *      difficulty ON -- an unfilled seat is never played by an AI (see
+   *      _mpHostStart, which keeps Start disabled until the table is full). */
+  _renderSettingsCard(isHost) {
     const s = this._setup;
     const seg = this._seg.bind(this);
+    const seats = clamp(s.mpSeats || 2, 2, MP_MAX_SEATS);
 
-    const opponentNames = s.aiNames.slice(0, s.count - 1);
-    const playersValue = esc([s.humanName, ...opponentNames].join(` ${t('vs')} `));
+    const opponentNames = isHost ? [] : s.aiNames.slice(0, s.count - 1);
+    const playersValue = isHost
+      ? `${seats} · ${esc(s.humanName)} · ${esc(t('online_word'))}`
+      : esc([s.humanName, ...opponentNames].join(` ${t('vs')} `));
     const aiNameRows = opponentNames.map((name, i) => `<div class="eb-player-row eb-player-row-ai">
       <span class="eb-av">${s.aiAvatars[i]}</span>
       <input class="eb-name-input" data-ai-name="${i}" value="${esc(name)}" maxlength="14" aria-label="${esc(t('aria_opp_name', { n: i + 1 }))}">
     </div>`).join('');
+    const countSeg = isHost
+      ? seg('set-seats', seats, [[2, '2'], [3, '3'], [4, '4']])
+      : seg('set-count', s.count, [[2, '2'], [3, '3']]);
     const playersContent = `
-      ${seg('set-count', s.count, [[2, '2'], [3, '3']])}
+      ${countSeg}
       <div class="eb-player-row">
         <button class="eb-av eb-av-btn" data-action="open-avatar" title="${esc(t('title_choose_avatar'))}">${s.humanAvatar}</button>
         <input class="eb-name-input" data-field="humanName" value="${esc(s.humanName)}" maxlength="14" aria-label="${esc(t('aria_your_name'))}">
       </div>
-      ${aiNameRows}`;
+      ${aiNameRows}
+      ${isHost ? `<p class="eb-hint">${esc(t('hint_mp_seats'))}</p>` : ''}`;
 
     const diffLabel = (d) => t(DIFF_LABEL_KEY[d] || DIFF_LABEL_KEY.normal);
     const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
@@ -362,8 +410,8 @@ class EscobaUI {
         : esc(t('hint_assist_off'))}</p>`;
 
     return `<div class="eb-summary-card">
-      ${this._summaryRow('players', esc(t('lbl_players')), `${s.count} · ${playersValue}`, playersContent)}
-      ${this._summaryRow('difficulty', esc(t('lbl_difficulty')), diffValue, diffContent)}
+      ${this._summaryRow('players', esc(t('lbl_players')), isHost ? playersValue : `${s.count} · ${playersValue}`, playersContent)}
+      ${isHost ? '' : this._summaryRow('difficulty', esc(t('lbl_difficulty')), diffValue, diffContent)}
       ${this._summaryRow('target', esc(t('lbl_playto')), t('pts_value', { n: s.targetScore }), targetContent)}
       ${this._summaryRow('deckmode', esc(t('lbl_cardnumbering')), esc(deckModeValue), deckModeContent)}
       ${this._summaryRow('assist', esc(t('lbl_capturehints')), esc(assistValue), assistContent)}
@@ -413,10 +461,11 @@ class EscobaUI {
       body = `${this._renderJoinModeBody()}
         <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>`;
     } else {
-      const actionBtn = s.mode === 'host'
+      const isHost = s.mode === 'host';
+      const actionBtn = isHost
         ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">${esc(t('btn_host_game'))}</button>`
         : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? esc(t('btn_new_game')) : esc(t('btn_start_game'))}</button>`;
-      body = `${this._renderSettingsCard()}
+      body = `${this._renderSettingsCard(isHost)}
         <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
         ${actionBtn}`;
     }
@@ -446,41 +495,76 @@ class EscobaUI {
       .join(' · ');
   }
 
+  /** The whole table, one row per seat, in seat order -- the SAME list on the
+   *  host's lobby and on every joiner's, so everyone can see who has arrived
+   *  and how many chairs are still empty. Replaces the single opponent slot
+   *  that was all a 2-seat room ever needed. An empty seat is dimmed rather
+   *  than hidden, so the table's size is legible before anyone joins, and our
+   *  own row is marked so a player can find themselves without having to
+   *  recognise their own name. */
+  _renderMpSeatList(room) {
+    const count = this._mpSeatCount(room);
+    const seats = (room && room.seats) || {};
+    const mySeat = this._mpSeat;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const occ = seats[i];
+      const isMe = i === mySeat;
+      const label = i === 0 ? t('mp_host_label') : t('mp_seat_n', { n: i + 1 });
+      rows.push(`<li class="eb-mp-seat ${occ ? 'is-filled' : ''} ${isMe ? 'is-me' : ''}">
+        <span class="eb-mp-seat-label">${esc(label)}</span>
+        ${occ
+          ? `<span class="eb-av">${occ.avatar || '🙂'}</span><span class="eb-mp-oppname">${esc(occ.name || '')}</span>${isMe ? `<span class="eb-mp-seat-you">${esc(t('mp_seat_you'))}</span>` : ''}`
+          : `<span class="eb-mp-oppslot-empty">${esc(t('mp_seat_waiting'))}</span>`}
+      </li>`);
+    }
+    return `<ul class="eb-mp-seats">${rows.join('')}</ul>`;
+  }
+
+  /** How many of the room's seats are actually occupied right now. */
+  _mpFilledSeats(room) {
+    const seats = (room && room.seats) || {};
+    const count = this._mpSeatCount(room);
+    let n = 0;
+    for (let i = 0; i < count; i++) if (seats[i] && seats[i].deviceId) n++;
+    return n;
+  }
+
   _renderMpLobby() {
     const back = `<button class="eb-btn eb-btn-ghost" data-action="mp-cancel">${esc(t('btn_back'))}</button>`;
+    const room = this._mpLobbyRoom;
+    const seatCount = this._mpSeatCount(room);
+    const filled = this._mpFilledSeats(room);
     if (this._screen === 'host-lobby') {
-      const room = this._mpLobbyRoom;
-      const guest = room && room.guest;
       const code = this._mpPendingCode;
       const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
+      // Humans only: every seat must be filled before Start unlocks. The host
+      // chose the size up front, so a half-full room means somebody is still on
+      // their way, not that a seat should be handed to an AI. The counter is
+      // shown so a waiting host can see what it is waiting for rather than
+      // staring at a disabled button.
+      const ready = filled >= seatCount;
       return `<div class="eb-mp-lobby">
         <span class="eb-label">${esc(t('lbl_room_code'))}</span>
         ${code ? `<div class="eb-mp-code">${esc(code)}</div>` : `<div class="eb-mp-code eb-mp-code-empty">····</div>`}
-        <span class="eb-label">${esc(t('lbl_opponent'))}</span>
-        <div class="eb-mp-oppslot">${guest
-          ? `<span class="eb-av">${guest.avatar}</span><span class="eb-mp-oppname">${esc(guest.name)}</span>`
-          : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
+        <span class="eb-label">${esc(t('lbl_players_filled', { filled, total: seatCount }))}</span>
+        ${this._renderMpSeatList(room)}
         <p class="eb-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
-        <p class="eb-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-        <button class="eb-btn eb-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${esc(t('btn_start'))}</button>
+        <p class="eb-mp-msg ${msg ? '' : 'is-info'}" data-role="mp-msg">${esc(msg || (ready ? '' : t('mp_waiting_players', { n: seatCount - filled })))}</p>
+        <button class="eb-btn eb-btn-primary" data-action="mp-start" ${ready ? '' : 'disabled'}>${esc(t('btn_start'))}</button>
         ${back}
       </div>`;
     }
     // The only other lobby state is 'join-lobby', which (as of M1.2) is only
     // ever entered once a join has actually succeeded -- the pre-join code
     // entry now lives on the main setup screen's Join mode (_renderJoinModeBody),
-    // so _mpJoinedCode is always set here. Same shape as the host lobby's
-    // opponent slot, mirrored (the host is who we're waiting on).
-    const room = this._mpLobbyRoom;
-    const host = room && room.host;
+    // so _mpJoinedCode is always set here. Same seat list the host sees.
     return `<div class="eb-mp-lobby">
       <span class="eb-label">${esc(t('lbl_room_code'))}</span>
       <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
-      <span class="eb-label">${esc(t('lbl_host'))}</span>
-      <div class="eb-mp-oppslot">${host
-        ? `<span class="eb-av">${host.avatar}</span><span class="eb-mp-oppname">${esc(host.name)}</span>`
-        : `<span class="eb-mp-oppslot-empty">—</span>`}</div>
-      <p class="eb-mp-msg" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
+      <span class="eb-label">${esc(t('lbl_players_filled', { filled, total: seatCount }))}</span>
+      ${this._renderMpSeatList(room)}
+      <p class="eb-mp-msg is-info" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
       ${back}
     </div>`;
   }
@@ -660,7 +744,7 @@ class EscobaUI {
         // Host publishes the round it just built (deck order + dealer) before
         // dealing, so the guest can preset its own engine to match. Read right
         // here: lastDeckOrder was just set by playRound(), before any await.
-        if (this.mp && this.mp.role === 'host') {
+        if (this.mp && this.mp.isHost) {
           try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealer); }
           catch { this._setMpStatus(t('mp_conn_error_title')); }
         }
@@ -722,20 +806,31 @@ class EscobaUI {
         this._chartView = false;
         this._matchEscobas += this._human().escobas;
         if (!this.game.winner) this._saveSnapshot();   // a won boundary isn't resumable; matchEnd clears it
+        // The engine has already decided the match by the time it emits this (game.js's
+        // finishRoundAfterPlay scores, calls checkMatchEnd and only then emits), so record
+        // the result HERE, before the round modal's await -- not four awaits later in the
+        // 'matchEnd' hook. That await is a human tapping a button, and in multiplayer a lot
+        // can happen during it: if the OTHER player finished first and tapped "New game",
+        // their net.leaveRoom sets the room to status:'ended' with no result, this device's
+        // _mpOnRoomUpdate reads that as an abandon, _mpEndDueToOpponentLeft aborts the
+        // engine, and 'matchEnd' never fires -- so the winner's own win went unrecorded, on
+        // a coin flip, on every online match. THE LAW rule 1. _commitStats is idempotent
+        // (_statsCommitted), so the matchEnd hook below still calls it and it no-ops.
+        else this._commitStats();
         await this.showRoundModal();
         // Guest only: the next round's deck can't be dealt locally until the
         // host has shuffled it and published it (see the 'roundStart' hook
         // above). Wait here -- between the modal closing and the engine's
         // own playMatch() loop calling playRound() again -- so a guest who
         // taps "Next round" before the host does simply waits in place.
-        if (this.mp && this.mp.role === 'guest' && !this.game.winner) await this._mpAwaitNextRound();
+        if (this.mp && !this.mp.isHost && !this.game.winner) await this._mpAwaitNextRound();
         break;
       case 'matchEnd':
         this._matchEnded = true;
         this._clearSave();
         this._commitStats();
         this._chartView = false;
-        if (this.mp && this.mp.role === 'host') {
+        if (this.mp && this.mp.isHost) {
           try { await net.writeResult(this.mp.code, { winnerId: this.game.winner.id, standings: this.game.standings.map((p) => ({ id: p.id, totalScore: p.totalScore })) }); }
           catch { /* best-effort: the match already concluded locally either way */ }
         }
@@ -842,18 +937,46 @@ class EscobaUI {
     });
   }
 
+  /** Record the finished match exactly once on THIS device.
+   *
+   *  Both (or all four) devices in a multiplayer match run this, and that is NOT
+   *  double-counting: gamehub.stats is keyed per PLAYER (statsKey()/statsId(),
+   *  "Whose stats are these" in js/CLAUDE.md), so four devices each writing "I
+   *  played one match" is four different people each correctly getting one.
+   *  Idempotence is the local _statsCommitted flag, set BEFORE any write --
+   *  a match can reach its end by several paths (the matchEnd hook, the
+   *  match-decided commit in 'roundScored', an opponent leaving after the
+   *  result was already decided), and the flag is what stops one match
+   *  counting twice.
+   *
+   *  `won` resolves through _human(), i.e. through _localSeat(): a guest must
+   *  never record the host's result as its own (THE LAW rule 2 -- a loss
+   *  written as a win is not additive-safe). */
   _commitStats() {
-    if (this._statsCommitted) return;
+    if (this._statsCommitted || !this.game) return;
     this._statsCommitted = true;
     const human = this._human();
     const won = !!(this.game.winner && this.game.winner.id === human.id);
+    // MP records under its own bucket; solo keeps reading the opponent AI's tier. A remote
+    // seat has no `difficulty` at all, so the old `opp0.difficulty || 'normal'` filed every
+    // online match as an Intermediate win over the AI -- see MP_DIFFICULTY at the top.
     const opp0 = this.game.players.find((x) => !x.isHuman);
-    const difficulty = (opp0 && opp0.difficulty) || 'normal';
+    const difficulty = this.mp ? MP_DIFFICULTY : ((opp0 && opp0.difficulty) || 'normal');
     recordEscoba(difficulty, won, { escobas: this._matchEscobas | 0 });
-    // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
-    // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
-    const opp = this.mp && this.mp.opp;
-    if (opp) { try { recordHeadToHead('escoba', opp, won); } catch { /* never block the result */ } }
+    // Multiplayer only: capture WHO this was against while the room state is still live. Solo
+    // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
+    //
+    // EVERY opponent at the table, not just one. This read `this.mp.opp` (a single identity)
+    // while a room only ever had two seats; at three or four it would silently drop one or
+    // two people's head-to-head records entirely. `won` is whether WE won the match, so in a
+    // 3-4 way it means "I finished ahead of the whole table", not a pairwise result against
+    // each named opponent -- recordHeadToHead's counters are per-opponent and purely additive
+    // (THE LAW rule 2), so this stays honest as long as nothing reads it as pairwise-only.
+    const opps = (this.mp && this.mp.opps) || [];
+    for (const opp of opps) {
+      if (!opp || !opp.deviceId) continue;
+      try { recordHeadToHead('escoba', opp, won); } catch { /* never block the result */ }
+    }
   }
 
   // --- rendering ------------------------------------------------------------
@@ -1497,6 +1620,7 @@ class EscobaUI {
       case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
       case 'toggle-row': { this.syncSetupInputs(); const row = a.dataset.row; this._setupExpanded = this._setupExpanded === row ? null : row; this.renderSetup(); break; }
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
+      case 'set-seats': this.syncSetupInputs(); this._setup.mpSeats = clamp(+a.dataset.v, 2, MP_MAX_SEATS); this._saveSetup(); this.renderSetup(); break;
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._setup.deckModeChosen = true; this._saveSetup(); this.renderSetup(); break;
       case 'set-assist': this.syncSetupInputs(); this._setup.assist = a.dataset.v === 'on'; this._saveSetup(); this.renderSetup(); break;
@@ -1616,30 +1740,104 @@ class EscobaUI {
     return { name: this._setup.humanName || t('you'), avatar: this._setup.humanAvatar, deviceId: deviceId() };
   }
 
-  _mpNewState(role, code, opp) {
+  /** SEATS (2026-08-11, 3-4 player MP -- Chinchón's phase-3 model, ported).
+   *  The room's seat index IS the engine's player id, on every device, for the
+   *  whole match. That single identity is what lets a device derive its entire
+   *  side from one integer (`mp.seat`) instead of a host/guest binary, and it
+   *  is why _mpBuildPlayers walks seats 0..count-1 in order rather than putting
+   *  "me" first.
+   *
+   *  `mp.seat === 0` is the host. Everything that used to ask
+   *  `mp.role === 'host'` asks `mp.isHost`, and everything that asked
+   *  `=== 'guest'` asks `!mp.isHost` -- with three guests, "guest" stopped
+   *  naming one device. `localSeat` is kept as an alias of `seat` because
+   *  _localSeat()/_human() and the MP save format already spoke that word.
+   *
+   *  Nothing about the lockstep protocol itself changed: Escoba is strictly
+   *  turn-based, so the engine awaits exactly one agent at a time and only one
+   *  remote seat can ever be mid-decision -- which is why the single
+   *  `pendingResolve` slot below is correct at four seats rather than lucky
+   *  (js/CLAUDE.md, "The ninth consumer"). */
+  _mpNewState(seat, code, opps) {
     return {
-      role, code, localSeat: role === 'host' ? 0 : 1,
-      // Who we are playing, `{ name, avatar, deviceId }` from the room (js/net.js). This was
-      // accepted as a parameter and then discarded, so every multiplayer match forgot its
-      // opponent the moment it ended; _commitStats now records it. Null on the restore path,
-      // where _mpOnRoomUpdate backfills it from the live room.
-      opp: opp || null,
+      seat, isHost: seat === 0, localSeat: seat, code,
+      // Everyone at the table who isn't us, `{ seat, name, avatar, deviceId }` from the
+      // room (js/net.js). This was a single `opp` field, which silently dropped one or two
+      // people's head-to-head records in a 3-4 player match (and before that was discarded
+      // entirely, so every multiplayer match forgot its opponents the moment it ended).
+      // Empty on the restore path, where _mpOnRoomUpdate backfills it from the live room.
+      opps: opps || [],
       appliedSeq: 0, maxKnownSeq: 0, movesById: new Map(),
       pendingResolve: null, pendingSeq: null, pendingHash: null,
       replayMode: false, recoveryAttempts: 0,
       opponentLeft: false, lastRoomSnapshot: null,
-      lastRecoveryHandled: null, lastRecoveryApplied: null,
+      // Per-seat now, not scalar: the host answers each seat's recovery plea
+      // independently, so it needs one dedupe stamp per seat (see _mpOnRoomUpdate).
+      lastRecoveryHandled: {}, lastRecoveryApplied: null,
       awaitingRoundN: null, awaitingRoundResolve: null,
     };
   }
 
+  /** How many seats this match has. Read from the engine once one actually
+   *  exists (the authority), else from the room config the host locked in at
+   *  createRoom. Only trust the engine while a MATCH is running (this.mp set):
+   *  in a lobby, this.game may still hold a previous solo match's players. */
+  _mpSeatCount(room) {
+    if (this.mp && this.game && this.game.players) return this.game.players.length;
+    const n = room && room.config && room.config.seats;
+    return clamp(n || (room && room.maxSeats) || 2, 2, MP_MAX_SEATS);
+  }
+
+  /** Build the engine's players from the room's seat roster, in seat order, on
+   *  every device. `isHuman` is set ONLY for our own seat -- it is a
+   *  device-RELATIVE flag (it decides which seat prompts locally, and which
+   *  sends vs verifies in _mpAfterPlay), which is exactly the property
+   *  invariant 2 exists to protect, satisfied here by construction. Names and
+   *  avatars come from the roster rather than local setup so every device
+   *  labels the table identically; they are cosmetic to the protocol either way
+   *  (escoba/js/hash.js hashes cards and scores, never names), so a missing
+   *  roster entry degrades to a placeholder instead of desyncing. */
+  _mpBuildPlayers(room, mySeat, count) {
+    const seats = (room && room.seats) || {};
+    const s = this._setup;
+    const players = [];
+    for (let i = 0; i < count; i++) {
+      const occ = seats[i] || {};
+      const mine = i === mySeat;
+      players.push(makePlayer({
+        id: i,
+        name: (mine ? (s.humanName || occ.name) : occ.name) || t('mp_seat_n', { n: i + 1 }),
+        avatar: (mine ? (s.humanAvatar || occ.avatar) : occ.avatar) || '🙂',
+        isHuman: mine,
+        agent: mine ? this.humanAgent : this._makeRemoteAgent(i),
+      }));
+    }
+    return players;
+  }
+
+  /** Everyone at the table who isn't us, as `{seat, name, avatar, deviceId}`. */
+  _mpOpponentsFrom(room, mySeat, count) {
+    const seats = (room && room.seats) || {};
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      if (i === mySeat) continue;
+      const occ = seats[i];
+      if (occ && occ.deviceId) out.push({ seat: i, name: occ.name, avatar: occ.avatar, deviceId: occ.deviceId });
+    }
+    return out;
+  }
+
   /** Same agent interface as AIAgent/humanAgent: chooseMove() -> a promise the
    *  engine awaits. Resolved from the network instead of a tap or a heuristic;
-   *  see _mpTryDeliverNextMove/_mpAfterPlay for the send/receive halves. */
-  _makeRemoteAgent() {
+   *  see _mpTryDeliverNextMove/_mpAfterPlay for the send/receive halves.
+   *  Closes over its OWN seat so recovery can be addressed to whoever actually
+   *  authored a diverging move -- with one opponent "the remote seat" was
+   *  unambiguous, with three it is not (see _mpHandleMismatch). */
+  _makeRemoteAgent(seatId) {
     const ui = this;
     return {
       isHuman: false,
+      seat: seatId,
       chooseMove() {
         return new Promise((resolve) => {
           ui.mp.pendingResolve = resolve;
@@ -1679,7 +1877,7 @@ class EscobaUI {
       const move = { cardId: payload.card.id, captureIds: payload.captured.map((c) => c.id) };
       const hash = stateHash(this.game);
       try {
-        await net.appendMove(mp.code, mp.role, seq, move, hash);
+        await net.appendMove(mp.code, mp.seat, seq, move, hash);
         mp.appliedSeq = seq;
       } catch { this._setMpStatus(t('mp_conn_error_title')); }
       return;
@@ -1694,21 +1892,31 @@ class EscobaUI {
       if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
       return;
     }
-    await this._mpHandleMismatch(expectedSeq);
+    // `p.id` IS the room seat (see _mpNewState's SEATS note), so the host can
+    // address its answer to the seat that AUTHORED the diverging move rather
+    // than to "the" remote seat, which stops naming one device at 3-4 seats.
+    await this._mpHandleMismatch(expectedSeq, p.id);
   }
 
-  /** Desync: guest can only flag it (host is authoritative in M1); host
-   *  rebuilds a snapshot for the guest either way. Three consecutive failed
-   *  attempts end the match rather than looping forever. */
-  async _mpHandleMismatch(seq) {
+  /** Desync: a non-host can only flag it (the host is authoritative); the host
+   *  rebuilds a snapshot for the pleading seat. Three consecutive failed
+   *  attempts end the match rather than looping forever.
+   *
+   *  Records are SEAT-ADDRESSED (js/net.js's recovery/requests/<seat> +
+   *  recovery/answers/<seat>). With one guest a single shared field was
+   *  harmless; with three, one guest's request clobbers the host's answer
+   *  before another guest reads it, so that guest never resyncs and burns its
+   *  whole attempt budget straight into "Connection error" -- and recovery is
+   *  the safety net every other MP guarantee sits on top of. */
+  async _mpHandleMismatch(seq, bySeat) {
     const mp = this.mp;
     if (!mp) return;
     mp.recoveryAttempts = (mp.recoveryAttempts || 0) + 1;
     if (mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS) { await this._mpEndDueToError(); return; }
     this._setMpStatus(t('mp_status_resyncing'));
     try {
-      if (mp.role === 'host') await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot());
-      else await net.requestRecovery(mp.code, seq);
+      if (mp.isHost) await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot(), bySeat);
+      else await net.requestRecovery(mp.code, seq, mp.seat);
     } catch { /* the next room update (heartbeat-driven) retries this naturally */ }
   }
 
@@ -1719,7 +1927,7 @@ class EscobaUI {
    *  Seat mapping: the snapshot's isHuman flags are the SENDER's (host's)
    *  perspective. isHuman is device-RELATIVE - it decides which seat prompts
    *  locally and which seat sends vs verifies in _mpAfterPlay - so remap by
-   *  SEAT (mp.localSeat, fixed at match start) and normalize before
+   *  SEAT (mp.seat, fixed at match start) and normalize before
    *  rebuilding. Trusting the transmitted flags handed this device's human
    *  agent to the HOST's seat and a RemoteAgent to its own
    *  (test-mp-lockstep.mjs E3), so recovery - the safety net every other MP
@@ -1730,8 +1938,8 @@ class EscobaUI {
     const snap = recovery.state;
     const agentsById = {};
     for (const sp of snap.players) {
-      sp.isHuman = sp.id === mp.localSeat;
-      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
+      sp.isHuman = sp.id === mp.seat;
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent(sp.id);
     }
     if (this.game) this.game.abort();
     this._resolvePending(null);
@@ -1741,7 +1949,7 @@ class EscobaUI {
     mp.pendingResolve = null; mp.pendingSeq = null; mp.pendingHash = null;
     mp.replayMode = false; mp.recoveryAttempts = 0;
     this._clearMpStatus();
-    net.clearRecovery(mp.code).catch(() => {});
+    net.clearRecovery(mp.code, mp.seat).catch(() => {});
     this._enterGameScreen();
     const start = () => {
       if (this._dead) return;
@@ -1751,7 +1959,7 @@ class EscobaUI {
     // round modal was open) continues with the NEXT round, whose deck+dealer must
     // come from the host's round record first - same gate the live 'roundScored'
     // hook uses. Without it the guest would replay the snapshot's stale presetDeck.
-    if (!snap.midRound && mp.role === 'guest') this._mpAwaitNextRound().then(start);
+    if (!snap.midRound && !mp.isHost) this._mpAwaitNextRound().then(start);
     else start();
   }
 
@@ -1775,15 +1983,25 @@ class EscobaUI {
     return new Promise((resolve) => { mp.awaitingRoundN = targetRound; mp.awaitingRoundResolve = resolve; });
   }
 
+  /** Belt-and-braces for the same THE-LAW-rule-1 hazard the 'roundScored' commit
+   *  fixes: if the engine had ALREADY decided this match before the room fell
+   *  over, the result is real and must be recorded before we abort. Guarded on
+   *  `winner`, so a genuine mid-match abandon still records nothing (leaving
+   *  early is not a loss). Idempotent via _statsCommitted. */
+  _commitStatsIfDecided() {
+    if (this.game && this.game.winner) this._commitStats();
+  }
+
   async _mpEndDueToError() {
     if (this._dead || this._matchEnded) return;
+    this._commitStatsIfDecided();
     if (this.game) this.game.abort();
     this._matchEnded = true;
     this._chartView = false;
     this._clearSave();
     const mp = this.mp;
     this.mp = null;
-    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.role); } catch { /* best-effort */ } }
+    if (mp && mp.code) { try { await net.leaveRoom(mp.code, mp.seat); } catch { /* best-effort */ } }
     else net.disconnect();
     this.render();
     this._renderMpErrorModal();
@@ -1791,6 +2009,7 @@ class EscobaUI {
 
   _mpEndDueToOpponentLeft() {
     if (this._dead || this._matchEnded) return;
+    this._commitStatsIfDecided();
     if (this.game) this.game.abort();
     this._matchEnded = true;
     this._chartView = false;
@@ -1842,11 +2061,13 @@ class EscobaUI {
     if (this._dead || !this.mp || !room) return;
     const mp = this.mp;
     mp.lastRoomSnapshot = room;
-    // Keep the opponent's identity current from the live room (and fill it in at all on the
-    // restore/rejoin path, which starts with none). Only overwritten while the other side is
-    // actually present, so a mid-match departure leaves the last known identity intact.
-    const other = mp.role === 'host' ? room.guest : room.host;
-    if (other && other.deviceId) mp.opp = other;
+    const seatCount = this._mpSeatCount(room);
+    // Keep every opponent's identity current from the live room (and fill them in at all on
+    // the restore/rejoin path, which starts with none). Only overwritten while somebody is
+    // actually present, so a mid-match departure leaves the last known roster intact for
+    // _commitStats -- head-to-head is the one record that only exists while the room does.
+    const live = this._mpOpponentsFrom(room, mp.seat, seatCount);
+    if (live.length) mp.opps = live;
 
     // An abandon (leaveRoom) sets status:'ended' with no result; a natural
     // conclusion (writeResult) sets both together -- result == null is what
@@ -1859,22 +2080,52 @@ class EscobaUI {
       return;
     }
 
-    const oppKey = mp.role === 'host' ? 'guest' : 'host';
-    const opp = room[oppKey];
-    if (opp && !mp.opponentLeft) {
-      const stale = (Date.now() - (opp.lastSeen || 0)) > MP_STALE_MS;
-      if (stale && this._mpStatusMsg !== t('mp_status_opp_disconnected')) this._setMpStatus(t('mp_status_opp_disconnected'));
-      else if (!stale && this._mpStatusMsg === t('mp_status_opp_disconnected')) this._clearMpStatus();
+    // Staleness across the WHOLE table: any seat going quiet is worth showing, so this
+    // scans every occupied seat instead of watching one peer's lastSeen. The message
+    // stays agnostic ("Opponent disconnected") rather than naming whoever it noticed
+    // first. Seats 0/1 fall back to the legacy host/guest stamps, which js/net.js's
+    // heartbeat keeps mirrored for exactly this kind of reader.
+    const seats = room.seats || {};
+    if (!mp.opponentLeft) {
+      let anyStale = false;
+      for (let i = 0; i < seatCount; i++) {
+        if (i === mp.seat) continue;
+        const occ = seats[i] || (i === 0 ? room.host : i === 1 ? room.guest : null);
+        if (occ && (Date.now() - (occ.lastSeen || 0)) > MP_STALE_MS) { anyStale = true; break; }
+      }
+      if (anyStale && this._mpStatusMsg !== t('mp_status_opp_disconnected')) this._setMpStatus(t('mp_status_opp_disconnected'));
+      else if (!anyStale && this._mpStatusMsg === t('mp_status_opp_disconnected')) this._clearMpStatus();
     }
 
-    if (room.recovery) {
-      if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
-        mp.lastRecoveryHandled = room.recovery.requested;
-        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot()); } catch { /* the requester retries */ }
+    // Recovery, seat-addressed (js/net.js's recovery/requests + recovery/answers). The
+    // host answers each pleading seat independently and dedupes per seat; a non-host
+    // applies ONLY the answer addressed to itself, so a healthy device never tears down
+    // its live game to rebuild from a snapshot meant for somebody else. Dedupe is on the
+    // host's `at` stamp rather than `seq`, because the same seq can legitimately be
+    // answered twice (two separate divergences at the same point in the log).
+    const rec = room.recovery;
+    if (mp.isHost && rec && rec.requests) {
+      for (const key of Object.keys(rec.requests)) {
+        const seat = Number(key);
+        const req = rec.requests[key];
+        if (!req || seat === mp.seat) continue;
+        if (mp.lastRecoveryHandled[seat] === req.at) continue;
+        mp.lastRecoveryHandled[seat] = req.at;
+        try { await net.writeRecovery(mp.code, mp.appliedSeq, this.game.snapshot(), seat); }
+        catch { /* the requester retries */ }
       }
-      if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
-        mp.lastRecoveryApplied = room.recovery.seq;
-        this._mpApplyRecovery(room.recovery);
+    }
+    if (!mp.isHost) {
+      const mine = rec && rec.answers && rec.answers[mp.seat];
+      // Applying our answer clears it (net.clearRecovery(code, seat)), so the node going
+      // ABSENT is what proves the last one is spent -- forget the dedupe stamp then, and
+      // whatever arrives next counts as new. Without this, an answer re-issued inside the
+      // same millisecond as the one just applied would compare equal on `at` and be
+      // skipped, leaving a diverged device waiting on a snapshot it already threw away.
+      if (!mine) mp.lastRecoveryApplied = null;
+      else if (mine.state && mine.at !== mp.lastRecoveryApplied) {
+        mp.lastRecoveryApplied = mine.at;
+        this._mpApplyRecovery(mine);
       }
     }
 
@@ -1899,8 +2150,14 @@ class EscobaUI {
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
     const me = this._myIdentity();
-    const config = { targetScore: this._setup.targetScore, deckMode: this._setup.deckMode };
-    const res = await net.createRoom('escoba', config, me);
+    const seats = clamp(this._setup.mpSeats || 2, 2, MP_MAX_SEATS);
+    // `seats` rides IN the room config (not only as net.js's own maxSeats) so a joining or
+    // REJOINING device can size its players array from the room record alone, with no
+    // separate lookup and no dependence on how many seats happen to be filled when it reads.
+    // Additive: absent on a 2-seat room written by the previous build, where _mpSeatCount
+    // falls back to 2.
+    const config = { targetScore: this._setup.targetScore, deckMode: this._setup.deckMode, seats };
+    const res = await net.createRoom('escoba', config, me, { seats });
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -1909,22 +2166,26 @@ class EscobaUI {
       return;
     }
     this._mpPendingCode = res.code;
-    net.heartbeat(res.code, 'host');
+    this._mpSeat = res.seat != null ? res.seat : 0;
+    net.heartbeat(res.code, 0);
     await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
     this.renderSetup();
   }
 
   async _mpHostStart() {
     const room = this._mpLobbyRoom;
-    if (!room || !room.guest || this._mpBusy || this.mp) return;
+    if (!room || this._mpBusy || this.mp) return;
+    const seatCount = this._mpSeatCount(room);
+    // Humans only: the table has to be FULL before the match can start. The host chose the
+    // size up front, so a half-full room means somebody is still on their way, not that a
+    // seat should be filled with an AI. (The lobby's Start button is disabled to match; this
+    // is the guard behind it.)
+    if (this._mpFilledSeats(room) < seatCount) return;
     const code = this._mpPendingCode;
-    this.mp = this._mpNewState('host', code, room.guest);
+    this.mp = this._mpNewState(0, code, this._mpOpponentsFrom(room, 0, seatCount));
     if (this.game) this.game.abort();
     const s = this._setup;
-    const players = [
-      makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
-      makePlayer({ id: 1, name: room.guest.name, avatar: room.guest.avatar, agent: this._makeRemoteAgent() }),
-    ];
+    const players = this._mpBuildPlayers(room, 0, seatCount);
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
@@ -1941,7 +2202,12 @@ class EscobaUI {
     this._mpBusy = true; this._mpError = '';
     this.renderSetup();
     const me = this._myIdentity();
-    const res = await net.joinRoom(code, me);
+    // joinSeat, not joinRoom: it claims the lowest free seat through a transaction and then
+    // re-reads the committed roster to find where this device ACTUALLY landed. joinRoom's
+    // get-then-update is safe when there is exactly one slot to win and hands two
+    // simultaneous joiners the same index once there are three, and two devices holding the
+    // same engine player id diverge on the very first move with no way back (js/net.js).
+    const res = await net.joinSeat(code, me);
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -1953,10 +2219,21 @@ class EscobaUI {
       this.renderSetup();
       return;
     }
+    // Game-type check: net.js is game-agnostic, so a wrong-game code must be caught
+    // client-side. Treated as a not-found-class error; the seat we just claimed is
+    // released so we don't sit in somebody else's table holding a chair.
+    if (res.room && res.room.game && res.room.game !== 'escoba') {
+      if (res.seat != null) net.vacateSeat(code, res.seat).catch(() => {});
+      net.disconnect();
+      this._mpError = t('mp_room_not_found');
+      this.renderSetup();
+      return;
+    }
     this._mpPendingCode = code;
     this._mpJoinedCode = code;
+    this._mpSeat = res.seat;
     this._screen = 'join-lobby';   // only now: a failed attempt stays on the setup screen's Join mode (see above)
-    net.heartbeat(code, 'guest');
+    net.heartbeat(code, res.seat);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this._mpLobbyRoom = res.room;
     this.renderSetup();
@@ -1968,14 +2245,14 @@ class EscobaUI {
   _mpGuestStartMatch(room) {
     if (this.mp || this._dead) return;
     const code = this._mpJoinedCode;
-    this.mp = this._mpNewState('guest', code, room.host);
+    const mySeat = this._mpSeat;
+    if (mySeat == null) return;
+    const seatCount = this._mpSeatCount(room);
+    this.mp = this._mpNewState(mySeat, code, this._mpOpponentsFrom(room, mySeat, seatCount));
     if (this.game) this.game.abort();
     const s = this._setup;
     const cfg = room.config || {};
-    const players = [
-      makePlayer({ id: 0, name: room.host.name, avatar: room.host.avatar, agent: this._makeRemoteAgent() }),
-      makePlayer({ id: 1, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent }),
-    ];
+    const players = this._mpBuildPlayers(room, mySeat, seatCount);
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck } });
     this.game.dealer = room.round.dealer;
@@ -1986,13 +2263,20 @@ class EscobaUI {
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP match error', err); });
   }
 
+  /** Backing out of the LOBBY. The host leaving takes the room with it (there is
+   *  nobody left to start the match), but anyone else frees only their OWN seat
+   *  -- with three or four seats, one person changing their mind must not evict
+   *  the others, which is exactly what the old unconditional leaveRoom did. */
   _mpCancelLobby() {
     const code = this._mpPendingCode;
-    const role = this._screen === 'host-lobby' ? 'host' : 'guest';
+    const isHost = this._screen === 'host-lobby';
+    const seat = this._mpSeat;
     this._screen = 'setup';
     this._mpError = ''; this._mpBusy = false; this._mpJoinCode = '';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
-    if (code) net.leaveRoom(code, role).catch(() => {});
+    this._mpSeat = null;
+    if (code && isHost) net.leaveRoom(code, 0).catch(() => {});
+    else if (code && seat != null) { net.vacateSeat(code, seat).catch(() => {}); net.disconnect(); }
     else net.disconnect();
     this.renderSetup();
   }
@@ -2003,8 +2287,9 @@ class EscobaUI {
     const mp = this.mp;
     if (this.game) this.game.abort();
     this.mp = null;
+    this._mpSeat = null;
     this._clearSave();
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    if (mp && mp.code) net.leaveRoom(mp.code, mp.seat).catch(() => {});
     else net.disconnect();
     this.showSetup();
   }
@@ -2026,25 +2311,35 @@ class EscobaUI {
       saveJSON(STORE_SAVE, Object.assign({}, save, { mp: null }));
       return;
     }
-    const { code, role } = save.mp;
-    if (!code || !role || !save.snap) return;
+    const { code } = save.mp;
+    // `seat` is this build's field; `role` is what the previous 2-seat build wrote.
+    // Accepting both means a match live across the deploy window still resumes.
+    const seat = save.mp.seat != null ? (save.mp.seat | 0)
+      : (save.mp.role === 'guest' ? 1 : save.mp.role === 'host' ? 0 : null);
+    if (!code || seat == null || !save.snap) return;
     try {
-      if (role === 'guest') {
-        const res = await net.joinRoom(code, this._myIdentity());
+      if (seat !== 0) {
+        const res = await net.joinSeat(code, this._myIdentity());
         if (res.error) return;   // room gone/ended/taken: solo-shaped resume is still offered from the same save
+        // A rejoin is meant to land on the seat we already held. If the room hands us a
+        // different one, the snapshot's isHuman flags would attach to the wrong player --
+        // abandon rather than resume wrong (the save itself is left intact, so the ordinary
+        // solo-shaped "Resume game" button still offers it).
+        if (res.seat !== seat) return;
       } else if (!(await net.init())) return;
     } catch { return; }
     if (this._dead || this.mp || this.game) return;   // superseded by a faster user action meanwhile
 
     const agentsById = {};
-    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent();
-    this.mp = this._mpNewState(role, code, null);
+    for (const sp of save.snap.players) agentsById[sp.id] = sp.isHuman ? this.humanAgent : this._makeRemoteAgent(sp.id);
+    this._mpSeat = seat;
+    this.mp = this._mpNewState(seat, code, []);
     this.mp.appliedSeq = save.mp.seq | 0;
     this.game = Game.fromSnapshot(save.snap, agentsById);
     this._bindGame();
     this._matchEscobas = save.matchEscobas | 0;
     this._matchAssist = save.assist !== false;
-    net.heartbeat(code, role);
+    net.heartbeat(code, seat);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     this._enterGameScreen();
     // A round-BOUNDARY save (midRound:false, written at 'roundScored') resumes with
@@ -2053,7 +2348,7 @@ class EscobaUI {
     // 'roundScored' hook uses. Mid-round saves resume in place and need nothing.
     // Host-side restores shuffle and publish their own next round, so only the
     // guest waits; the onRoom subscription above resolves it when the record lands.
-    if (role === 'guest' && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
+    if (seat !== 0 && save.snap && !save.snap.midRound) await this._mpAwaitNextRound();
     if (this._dead) return;
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP restore error', err); });
   }
@@ -2080,7 +2375,7 @@ class EscobaUI {
     // doesn't sit occupying a code until its 24h TTL. Fire-and-forget: never
     // let an offline write block or throw during teardown.
     if (!this.mp && this._screen === 'host-lobby' && this._mpPendingCode) {
-      net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
+      net.leaveRoom(this._mpPendingCode, 0).catch(() => { /* best-effort */ });
     }
     net.disconnect();
     this.mp = null;

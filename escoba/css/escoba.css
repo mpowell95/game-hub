@@ -212,6 +212,43 @@
 .eb-opp-score span, .eb-self-score span { font-size: 0.68rem; font-weight: 800; color: var(--eb-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .eb-opp-foot { display: flex; align-items: center; gap: 6px; min-height: 21px; }
 
+/* Three opponents (a 4-seat online table, 2026-08-11). renderOpponents() has always
+   stamped .eb-opp-nN on the row; until 4 seats existed no rule read it. Three pills plus
+   the round/target block and the menu button leave each pill about 71px on a 390px phone,
+   which the 2-opponent sizing simply does not fit, so this tier re-lays the pill: tighter
+   paddings and type, the name on its own full-width line, and the hand-count fan dropped
+   (see the .eb-opp-foot note below for why that one and not the others).
+   Every number here was measured against the WORST case -- a player holding 10 captured
+   cards and 3 escobas late in a round -- not a fresh board.
+   Geometry only: .eb-opp-pill's own min-height is unchanged, so the top bar does not
+   change height and the zero-layout-shift rule holds. */
+.eb-opponents.eb-opp-n3 { gap: 4px; }
+.eb-opponents.eb-opp-n3 .eb-opp-pill { padding: 6px 5px; gap: 2px; border-radius: 11px; }
+.eb-opponents.eb-opp-n3 .eb-opp-av { font-size: 0.95rem; }
+/* The name gets the pill's FULL width at this tier: with three pills sharing the row, an
+   avatar sitting beside the name left it about three characters, so "Bego" rendered as
+   "Be...". Stacking the avatar above it costs nothing vertically (the pill already has two
+   more rows) and buys back every pixel of the row. */
+.eb-opponents.eb-opp-n3 .eb-opp-top { flex-wrap: wrap; gap: 3px; justify-content: center; }
+.eb-opponents.eb-opp-n3 .eb-opp-name { font-size: 0.7rem; flex: 1 0 100%; text-align: center; }
+.eb-opponents.eb-opp-n3 .eb-opp-score { justify-content: center; }
+.eb-opponents.eb-opp-n3 .eb-opp-score b { font-size: 1.15rem; }
+.eb-opponents.eb-opp-n3 .eb-opp-score span { font-size: 0.6rem; }
+/* The foot carries three things late in a round -- hand count, captured count, escobas --
+   and at this width all three need ~84px in a 71px pill, so they used to spill OUT of the
+   pill and sit on top of the next player's (the pills are `min-width: 0`, so overflow
+   leaves the box rather than widening it). Wrapping to a second line is not the answer:
+   that would change the top bar's HEIGHT the moment somebody's first escoba landed, and
+   this game's rule is zero layout shift once a match is on screen.
+   So the HAND COUNT is what goes at this tier, and it is the right thing to drop because
+   it is the only one that is derivable: Escoba deals 3 cards to everyone and plays in
+   strict rotation (game.js dealHands/runTurnLoop), so at any instant every hand is the
+   same size give or take one, and the stock count is already on the mat. The captured pile
+   and the escoba count are real accumulating facts and both stay. */
+.eb-opponents.eb-opp-n3 .eb-mini-cards { display: none; }
+.eb-opponents.eb-opp-n3 .eb-pile-chip { font-size: 0.64rem; padding: 3px 4px; }
+.eb-opponents.eb-opp-n3 .eb-opp-foot { gap: 3px; justify-content: center; }
+
 /* Mini card-back fan: proper card proportions (2:3-ish) so opponents' hand
    size reads as "cards" at a glance, not abstract rectangles. Capped at 3
    fanned backs; the numeral carries the exact count beyond that. */
@@ -721,6 +758,29 @@
 .eb-mp-oppslot-empty { color: var(--eb-muted); font-size: 1.1rem; }
 .eb-mp-oppname { color: var(--eb-ink); }
 
+/* --- seat list (3-4 player MP, 2026-08-11) ---------------------------------
+   One row per seat in BOTH lobbies, replacing the single .eb-mp-oppslot that
+   was all a 2-seat room ever needed. Built on the same surface/ink variables
+   so it themes with everything else; an empty seat is dimmed rather than
+   hidden, so the table's chosen size is legible before anyone has joined. */
+.eb-root .eb-mp-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.eb-root .eb-mp-seat {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px; border-radius: 12px;
+  background: var(--eb-surface-2); font-weight: 700;
+  border: 2px solid transparent;
+}
+.eb-root .eb-mp-seat.is-me { border-color: var(--eb-accent); }
+.eb-root .eb-mp-seat:not(.is-filled) { opacity: 0.6; }
+.eb-root .eb-mp-seat-label {
+  min-width: 5.5em; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--eb-muted);
+}
+.eb-root .eb-mp-seat-you { font-size: 0.72rem; font-weight: 700; color: var(--eb-muted); }
+/* An empty seat's placeholder is a row, not the old standalone slot: 1.1rem there made
+   "Waiting…" shout louder than the real names beside it. */
+.eb-root .eb-mp-seat .eb-mp-oppslot-empty { font-size: 0.9rem; }
+
 .eb-mp-code-input {
   align-self: center; width: 100%; max-width: 240px;
   font: inherit; font-size: 1.6rem; font-weight: 900; text-align: center; letter-spacing: 0.3em;
@@ -735,6 +795,10 @@
 .eb-mp-msg {
   margin: 0; min-height: 1.1em; text-align: center; font-size: 0.85rem; font-weight: 700; color: var(--eb-bad);
 }
+/* The same reserved slot also carries a plain STATUS ("Waiting for 1 more") now that a
+   4-seat lobby has something to wait for. Error red is a claim that something went wrong,
+   so a status borrows the slot's geometry and the muted ink instead. */
+.eb-mp-msg.is-info { color: var(--eb-muted); }
 
 /* Locked-config summary (host lobby only): informational, not an attention
    state, so muted text -- never --eb-attn. Reserved one-line height from

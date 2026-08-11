@@ -321,7 +321,8 @@ below; every other in-hub game keeps its current light-only look until its own P
 Chinchón, Escoba, Tic Tac Toe, Mancala, Filler and Dots and Boxes share one lockstep protocol over `js/net.js`
 (`rooms/<CODE>`: a seq-keyed move log, per-round `round` records, a `recovery` field).
 **All five invariants below survive the 3-4 seat extension unchanged** (2026-07-28, Chinchón
-only — see "The ninth consumer"); invariant 2 is the only one whose IMPLEMENTATION moved, from
+only — see "The ninth consumer"; **Escoba joined it 2026-08-11**, see `escoba/CLAUDE.md`'s
+"Multiplayer at 2-4 seats"); invariant 2 is the only one whose IMPLEMENTATION moved, from
 `role === 'host' ? 0 : 1` to `mp.seat`.
 Both engines apply
 the same decision stream and verify a FNV-1a state hash (`<game>/js/hash.js`) after
@@ -647,6 +648,31 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
   stamps and would make the per-seat dedupe untestable. `ChinchonSide` is keyed by seat.
 - **Status: headless only.** C5-C7 pass against a `FakeRoom`; nothing has been played by three
   or four real devices. Same honest caveat as Pool and Boggle.
+
+### The eleventh consumer of the SEAT model: Escoba at 3-4 seats (2026-08-11)
+
+Not a new consumer of `js/net.js` — Escoba has been a lockstep game since M1. This is the second
+game to adopt the **N-seat** half of it, and the point worth recording here is that the phase-3
+extension held its promise: **`js/net.js` needed zero changes**, and `joinSeat`/`vacateSeat`/the
+seat-addressed `recovery/requests/<seat>` + `recovery/answers/<seat>` records were already there,
+already tested, and simply unused by this game. The port was `mp.role` → `mp.seat`,
+`_makeRemoteAgent()` → `_makeRemoteAgent(seatId)`, a roster-driven `_mpBuildPlayers`, a seat list in
+both lobbies, and `mp.opp` → `mp.opps` for head-to-head. Escoba's engine, like Chinchón's, was
+already N-generic and this was verified rather than assumed. Full write-up: `escoba/CLAUDE.md`;
+executable form: `test-mp-lockstep.mjs`'s E5-E6.
+
+The one thing Escoba's port adds to the shared record, because it is not seat-specific and every MP
+game can hit it: **`_commitStats` must run when the ENGINE decides the match, not when the UI
+finishes announcing it.** Escoba recorded the result in its `'matchEnd'` hook, several awaits after
+`checkMatchEnd()` had already set `winner` — with a human tapping through the final round modal in
+between. If the other player tapped through first and left, `net.leaveRoom` set the room to
+`status:'ended'` with no `result`, the still-playing device read that as an abandon,
+`_mpEndDueToOpponentLeft` aborted the engine, and `'matchEnd'` never fired: the winner's own win was
+never written anywhere, on a coin flip, on every online match. THE LAW rule 1. The fix is to commit
+at the decision point (`'roundScored'`, guarded on `winner`, before any await) and to guard both MP
+end paths with a `_commitStatsIfDecided()`; `_statsCommitted` keeps it idempotent. `test-mp-lockstep`
+E8 parks the host on its final round modal and kills the room underneath it — it was born red.
+**Any MP game whose result-recording sits behind an awaited modal has this hole**; check yours.
 
 ### The tenth consumer: Battleship (2026-08-04) — the first hidden-information game
 
@@ -1450,15 +1476,49 @@ read out of `players/1f75ff86-...` — the actual device the incident happened o
 
 ### Head-to-head capture
 
-`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a new top-level
-`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. **Capture only — nothing displays
-it yet, and that is deliberate.** The opponent's identity only exists while the multiplayer room is
-live: Chinchón and Escoba both knew exactly who they had just played (`_mpNewState` accepted the
-room participant as a parameter and then *discarded* it) and threw it away at match end, so every MP
-match played before 2026-07-22 is permanently unrecoverable. Both now store it on `this.mp.opp`,
-refresh it from the live room in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and
-record it in `_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by
-construction, and `stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+`recordHeadToHead(gameId, opponent, won)` (`js/game-stats.js`) writes a top-level
+`h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }` key. It was **capture only** from
+2026-07-22 to 2026-08-11, deliberately: the opponent's identity only exists while the multiplayer
+room is live, so it had to be stored long before there was a screen for it. Chinchón and Escoba both
+knew exactly who they had just played (`_mpNewState` accepted the room participant as a parameter and
+then *discarded* it) and threw it away at match end, so every MP match played before 2026-07-22 is
+permanently unrecoverable. Both now store the roster on `this.mp.opps`, refresh it from the live room
+in `_mpOnRoomUpdate` (the restore/rejoin path starts with none), and record **every** seat in
+`_commitStats`. New key, additive counters, no migration — rules 2 and 5 hold by construction, and
+`stats-net.js` mirrors `gamehub.stats` wholesale so it syncs with no change.
+
+### Multiplayer head-to-head on the leaderboard (2026-08-11)
+
+The display the section above was waiting for. Two halves:
+
+- **`players-agg.js` aggregates `h2h`** into each person's group (per game, per opponent device id,
+  counters added), and now also carries `deviceIds` — every device folded into that person. Without
+  the aggregation branch a person's whole head-to-head record reads as empty the moment their second
+  device syncs, which is the same stored-but-invisible shape the root `CLAUDE.md`'s "Adding a game"
+  item 7 exists to prevent. `headToHeadRows(group, list, gameIds?)` is the pure, headless-testable
+  fold: it resolves each opponent DEVICE id through the same identity graph the rest of the module
+  uses, so an opponent who plays on a phone and a laptop is ONE row rather than two, and it sums
+  across whichever games the caller asks for. An opponent whose own record is not in `players/`
+  (never synced, or hidden) keeps a device-keyed row labelled from the name stored at match time —
+  dropping those would lose real history from the only screen that shows it. A person is never their
+  own opponent (two devices of one person can legitimately share a room). Cases in
+  `players-agg.test.mjs`.
+- **`leaderboard-ui.js`'s player detail** renders it as "Multiplayer wins against": one row per
+  opponent, `avatar · name · N wins`, most wins first, top 8. **WINS ONLY**, like every other number
+  on that overlay (the 2026-07-23 redesign note at the top of the file) — "beat Lili 5 times" is a
+  bragging-wall fact, "5-3" is a record, and records live on My Stats. Nothing is hidden by that: the
+  same plays are in that game's by-difficulty table under **Multiplayer**, W-L and all, because MP
+  results record under the `'mp'` difficulty bucket. Test/QA opponents are dropped with the same
+  `isHiddenRow()` gate the lists use, and an opponent this player has never beaten is left off the
+  brag list while staying fully stored and fully visible on My Stats.
+
+**The `'mp'` bucket is what makes any of this legible, and Escoba was not using it** until
+2026-08-11: `_commitStats` read `opp0.difficulty || 'normal'`, and a remote seat has no difficulty,
+so every online Escoba match was filed as an Intermediate win over the AI. **Chinchón still has the
+identical line** (`chinchon/js/ui.js`, `(opp0 && opp0.difficulty) || setup.aiDifficulty[0] ||
+'normal'`) and should get the same treatment; it was left alone only because that session's scope was
+Escoba. Old records stay exactly where they are either way (rule 5) — this changes the bucket for
+FUTURE plays, it never moves a stored one.
 
 ---
 
