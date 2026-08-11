@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v283';
+const CACHE = 'game-hub-v284';
 
 const ASSETS = [
   './',
@@ -227,6 +227,7 @@ const ASSETS = [
   './yahtzee/index.html',
   './yahtzee/css/yahtzee.css',
   './yahtzee/js/howto.js',
+  './yahtzee/js/strings.js',
   './yahtzee/js/ui.js',
   './yahtzee/js/hash.js',
   // Battleship (2026-08-04). Note test.js is deliberately NOT listed: it is a node-only engine
