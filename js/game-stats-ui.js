@@ -49,6 +49,13 @@ const TABS = [
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   { id: 'battleship', labelKey: 'game_title_battleship' },
+  // NOT devOnly, unlike Pinball's row above, and the difference is deliberate. Pinball has been
+  // admin-only since birth, so nobody outside the dev profiles can have plays and gating its tab
+  // costs no one anything. Skeeball was LIVE to the family for a couple of hours on 2026-08-11
+  // before being pulled back to admin-only, so someone may have real plays recorded - and hiding
+  // this row would make their own history invisible to them (THE LAW rule 1). It costs nothing to
+  // leave open: gameListHTML only renders a row for a game with plays, so anyone who never played
+  // it sees nothing here either way.
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
   // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },

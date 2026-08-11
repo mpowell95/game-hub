@@ -210,7 +210,6 @@ const ASSETS = [
   './pinball/js/physics.js',
   './pinball/js/table.js',
   './pinball/js/render.js',
-  './pinball/js/audio.js',
   './pinball/js/store.js',
   './pinball/js/strings.js',
   './hill-climb/',

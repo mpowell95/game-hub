@@ -1,7 +1,9 @@
 // pinball/js/store.js - this game's own localStorage.
 //
-// IT HOLDS PREFERENCES AND NOTHING ELSE: the table difficulty and whether sound is on. That is
-// deliberate and it is the THE LAW answer for this game (root CLAUDE.md). A pinball game's one
+// IT HOLDS ONE PREFERENCE: which table you last played. That is deliberate and it is THE LAW
+// answer for this game (root CLAUDE.md). (It used to hold a sound flag too; the game has no audio
+// layer at all now, so the flag went with it. A stale `sound` value left in an existing store is
+// simply ignored, never read and never rewritten.) A pinball game's one
 // piece of real history is the high score, and the temptation is to keep a local top-ten table
 // here - which would make this file a second, unsynced, silently-truncating home for earned data.
 // Instead the ONLY record of a score is `recordPinball()` in js/game-stats.js: it is per player,
@@ -16,7 +18,7 @@ import { loadStats } from '../../js/game-stats.js';
 
 const KEY = 'gamehub.pinball.v1';
 
-const DEFAULTS = { difficulty: 'medium', sound: true };
+const DEFAULTS = { difficulty: 'medium' };
 
 /** Read settings. Any malformed or missing value falls back to a default rather than throwing:
  *  a settings read must never be able to stop the game mounting. */
@@ -27,7 +29,6 @@ export function loadSettings() {
     const v = JSON.parse(raw) || {};
     return {
       difficulty: ['easy', 'medium', 'hard'].includes(v.difficulty) ? v.difficulty : DEFAULTS.difficulty,
-      sound: typeof v.sound === 'boolean' ? v.sound : DEFAULTS.sound,
     };
   } catch (err) {
     console.warn('[pinball] settings unreadable, using defaults', err);
@@ -36,7 +37,8 @@ export function loadSettings() {
 }
 
 /** Write settings. Logs loudly on failure (THE LAW rule 6) even though this is only a preference:
- *  a swallowed catch around any storage write is how a silent bug starts. */
+ *  a swallowed catch around any storage write is how a silent bug starts. Spreads over the CURRENT
+ *  stored object, so any field this version no longer knows about is preserved rather than dropped. */
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...(patch || {}) };
   try {

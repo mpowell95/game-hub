@@ -125,7 +125,10 @@ const GAME_META = [
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
-  { id: 'skeeball', labelKey: 'game_title_skeeball' },
+  // Skeeball is deliberately ABSENT while it is admin-only, same as Pinball: the leaderboard is
+  // the shared bragging wall and an unreleased game has no business on it. Nothing is lost - the
+  // plays are in every device's store and in players/, and the row reappears the moment the
+  // GAMES entry drops `devOnly`.
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);

@@ -242,8 +242,12 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    // ADMIN ONLY for now (Matt's ask, 2026-08-11), exactly like Pinball above: `devOnly` keeps the
+    // card off the launcher for everyone but Matt and the tester while the machines/unlock rework
+    // is still being played in. Dropping `devOnly` is the whole of "release it" - and THAT is when
+    // it gets a `released` date, so the New pill announces the day the family can actually play it
+    // rather than a day it was hidden.
     id: 'skeeball',
-    released: '2026-08-11',
     title: 'Skeeball',
     blurb: { en: 'Flick the ball up the lane. Far rings pay more, the corner cups pay 100.',
       es: 'Lanza la bola por la pista. Los aros del fondo valen más y las copas de las esquinas, 100.' },
@@ -252,6 +256,7 @@ const GAMES = [
     // the hub's header row is wasted height here - same call as Escoba and Ball Run.
     immersive: true,
     accent: '#C8452F',
+    devOnly: true,
     // The reference recording is PORTRAIT (reference/skeeball/SPEC.md), so this is composed for
     // 16:9 rather than cropped from it: the lane runs off the bottom edge at full width and the
     // ring stack sits centred at the top with a 100 cup pushed into each corner, which is exactly
