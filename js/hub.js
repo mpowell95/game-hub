@@ -365,6 +365,13 @@ class Hub {
     if (this._announced || this.current || !hasName()) return;
     const a = pendingAnnouncement();
     if (!a) return;
+    // `adminOnly` entries are Matt-only previews. Returning BEFORE showAnnouncement matters: it is
+    // showAnnouncement that marks an entry seen, so a gated announcement leaves every other device
+    // untouched and lands fresh for everyone the day the flag comes off.
+    if (a.adminOnly) {
+      const prof = loadProfile();
+      if (!(prof && isAdmin(prof.name))) return;
+    }
     this._announced = true;
     try {
       const { showAnnouncement } = await import('./announce-ui.js');

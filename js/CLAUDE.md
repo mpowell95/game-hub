@@ -845,6 +845,12 @@ using it. The seen-list is a preference, rule 2's carve-out, same class as favor
   are `{en, es}` ON the entry (registry data stays co-located, i18n decision 3); everything else
   routes through `js/strings.js`'s `bug_*` / `ann_*` keys.
 - Never shown over the name gate or a mounted game, and only once per page load.
+- **`adminOnly: true` previews an entry to Matt alone** (`isAdmin`, checked in `hub.js`'s
+  `_maybeAnnounce` before `showAnnouncement`, so a gated entry is never marked seen on anyone
+  else's device and lands fresh for everyone the day the flag is deleted). The bug-report entry
+  shipped gated on 2026-08-11 so Matt could test the real thing on his own phone first;
+  `test-bug-report.mjs` prints a NOTE on every run naming any entry still gated, because the whole
+  point of gating is that somebody has to remember to ungate it.
 
 ### Privacy, stated plainly
 

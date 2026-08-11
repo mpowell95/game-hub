@@ -170,6 +170,9 @@ for (const a of ann.ANNOUNCEMENTS) {
     (a.body.en || []).length === (a.body.es || []).length);
   // A typo'd image path is silent: the popup still opens, just with a hole where the picture was
   // (announce-ui.js removes a figure whose image fails to load, on purpose). So check the files.
+  // Not a failure - a reminder. A gated announcement is invisible to the family, and the whole
+  // point of gating it is that somebody flips it back, so it says so on every single test run.
+  if (a.adminOnly) console.log(`      NOTE  ${a.id} is adminOnly: nobody but Matt sees it. Delete that line in js/announce.js to go live.`);
   for (const s of a.shots || []) {
     for (const field of ['img', 'imgDark']) {
       for (const lg of ['en', 'es']) {
