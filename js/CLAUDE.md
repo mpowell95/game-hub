@@ -97,6 +97,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
+| `js/install-state.js` | (2026-08-11) installed-app vs browser tab: `installState()` -> `{installed, mode, browser, device, a2hsDismissed}`. Dependency-free on purpose - `stats-net.js` and `bug-report.js` both need it and must not import each other (device-report.js already imports stats-net, so that graph would go circular). Checks BOTH `display-mode: standalone` and `navigator.standalone`, or half the family's iPhones file as "browser" |
 | `js/bug-report.js` | (2026-08-11) the DATA half of Report a bug: `gatherEnvironment()` (device/browser/install-state/screen/network/storage/SW/GPU/recent-errors) plus the whole `gatherDeviceReport()` payload, `prepareScreenshot()`'s downscale-until-it-fits, the `bugReports/`+`bugReportShots/` write with a verifying re-read, and the offline outbox (`gamehub.bugreports.pending.v1`) the hub drains on load/reconnect/return-to-launcher. See "Report a bug" below |
 | `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
@@ -878,6 +879,37 @@ pending note shown; repeated in dark mode and in Spanish). **No report has ever 
 real Firebase from this branch** — the same caveat every MP consumer above carries.
 
 ---
+
+## Who is on the installed app, and who is in a browser tab (2026-08-11)
+
+Matt: *"I found out 2 days ago that Ana never did that. She never saved it to her Home Screen...
+She just dismissed the notice early on."* Every game here is built for the installed route, and
+nothing anywhere recorded which route a person was actually on.
+
+- **`js/stats-net.js`'s `syncMyStats()` now mirrors `installState()` to `players/<id>/device`.** It
+  rides the EXISTING mirror rather than getting its own write, so every device answers on the beats
+  it already syncs on (load, tab-hide, return-to-launcher, reconnect) instead of only the ones that
+  file a bug report. Additive: a new child node, read by no gameplay or stats path, incapable of
+  moving a counter.
+- **`node read-install-state.mjs`** lists it, browser tabs first.
+- **It is NOT retroactive, and the tool says so.** A device shows `(not seen yet)` until it next
+  opens the hub on a build that has this. That is missing data, not a browser tab, and the two must
+  never be reported as the same thing. There is no record of how anyone played before this shipped.
+- **`a2hsDismissed` is in the object on purpose**: it distinguishes someone who was asked to install
+  and said no (Ana's case) from someone who was never asked.
+
+## The Device details button, retired (2026-08-11)
+
+Matt: *"That was built specifically for a one time use. Now that we have the report a bug feature
+it's redundant and obsolete."* Retired, not deleted:
+
+- **`js/device-report.js` stays and is still load-bearing** - `gatherDeviceReport()` is layer 2 of
+  every bug report. Only the profile page's BUTTON, its modal and its strings are gone.
+- **`uploadDeviceReport()` is now dormant** with no caller. Left in place deliberately (same status
+  as `leaderboard-rank.js`'s rating exports): do not delete it as "unused".
+- **`deviceReports/` in Firebase is untouched**, and `read-device-reports.mjs` still reads it. The
+  archive of what was already collected stays exactly where it is.
+- The announcement's profile screenshot had to be re-shot, since it showed the button being removed.
 
 ## Hiding test/debug accounts from the leaderboard (2026-07-29, widened 2026-07-31)
 
