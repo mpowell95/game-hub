@@ -29,9 +29,10 @@ return true mid-game.
 ## Layout & responsibilities
 
 ```
-skeeball/js/game.js      pure engine: the throw model, scoring, the multiplier, the AI, save/restore
-skeeball/js/render.js    pure drawing: the alley, the board, the ball, the badge, the popups
-skeeball/js/ui.js        DOM shell: setup, the rAF loop, flick input, the opponent's turn, stats
+skeeball/js/game.js      pure engine: the throw model, scoring, the multiplier, unlocks, save/restore
+skeeball/js/boards.js    the machines as DATA: palette, target layout, unlock score
+skeeball/js/render.js    pure drawing: the cabinet, the marquee, the board, the ball, the badge, popups
+skeeball/js/ui.js        DOM shell: the machine picker, the rAF loop, flick input, stats
 skeeball/js/strings.js   every user-visible string, { en, es }
 skeeball/js/test.js      headless engine assertions (node skeeball/js/test.js), in run-all-tests.mjs
 skeeball/css/skeeball.css  all styles, .sk- prefixed, every rule descendant-scoped under .sk-root
@@ -51,8 +52,9 @@ skeeball/index.html      standalone host (same init() as in-hub), name-gated bef
 **There is no random scatter on a player's throw, deliberately.** The player is judging a flick; a
 hidden dice roll on top of that judgement would make practice pointless. It also means the
 animation can be derived from the same resolved numbers (`res.offset`, `res.energy`), so what the
-ball is drawn doing and what the scoreboard says can never disagree. If you add variance later,
-add it to the AI's hand (where it already lives), not to the resolver.
+ball is drawn doing and what the scoreboard says can never disagree. There is no opponent to hide
+variance in either (see "Machines, unlocking..." below), so if you ever add scatter, it lands
+squarely on the player and you should expect them to notice.
 
 Resolution order, all in `game.js`:
 
@@ -127,19 +129,17 @@ whose boards it is reading.
 
 ## Deviations from the reference, and why
 
-- **9 balls per rack, 1 round by default** (3 is a setup option). The reference shows `ROUND 1/3`
-  with a rack of roughly this size, i.e. ~27 throws per player — fine for an async chat game played
-  over hours, far too long for one sitting here. One rack of nine is a classic skeeball game and is
-  the default; the reference's 3-round format is one tap away.
-- **The opponent is a computer**, not a second human over the network. The reference is
-  two-player-async inside a chat app; this hub has `js/net.js` for real multiplayer and Skeeball
-  does not use it (see "Not done" below).
+- **9 balls per rack, one rack per game.** The reference shows `ROUND 1/3` with a rack of roughly
+  this size, i.e. ~27 throws per player — fine for an async chat game played over hours, far too
+  long for one sitting here. One rack of nine is a classic skeeball game.
+- **There is no second player at all.** The reference is two-player-async inside a chat app; this
+  build is one rack against the scoreboard, by Matt's instruction (see "Machines, unlocking and the
+  three scores"). This hub has `js/net.js` for real multiplayer and Skeeball does not use it (see
+  "Not done" below).
 - **The aim guide and power bar are ours.** The recording never shows its input at all
   (`SPEC.md`, "What it does NOT show"), so the flick, the dashed predicted path and the power bar
   are this build's own choices. The dashed path runs the SAME fold maths the engine will apply, so
   the guide cannot lie about where the ball is going.
-- **Turn handover is per ROUND, matching the reference** ("claycors scored 660 points" then
-  "Your Turn"), not per ball.
 
 ## Rendering
 
@@ -184,11 +184,17 @@ from `window.innerHeight - rect.top`. Both halves matter and both are lessons fr
 
 | Key | Holds |
 |---|---|
-| `gamehub.skeeball.v1` | `{ difficulty, rounds }` — the setup screen's choices |
-| `gamehub.skeeball.save.v1` | the in-progress match snapshot; removed on game over |
+| `gamehub.skeeball.v1` | `{ board }` — the machine you last picked, so the picker opens on it |
+| `gamehub.skeeball.save.v1` | the in-progress rack snapshot; removed on game over |
 
-Precedence for `difficulty`: saved setting > profile skill (1/2/3 → easy/medium/hard) > medium.
-A resumed match keeps the rules it was STARTED with, whatever the setup screen now says.
+Which machines are UNLOCKED is deliberately **not** here: it is earned history, so it lives in
+`gamehub.stats` under `sk.unlocked` where it syncs across a person's devices and is union-merged
+rather than overwritten (`js/arcade-scores.js`). A settings key is one device's preference; an
+unlock is not. A resumed rack keeps the machine it was STARTED on, whatever the picker now shows.
+
+The snapshot is **v2**. `Game.restore()` declines a `v: 1` save (the vs-computer build's shape)
+rather than misreading it as a rack — those saves are only ever an in-progress game, never a
+recorded result, so nothing earned is lost by declining one.
 
 `Game.restore()` returns `null` (never throws) on anything malformed, so a corrupt or truncated
 save can only ever mean "no game to resume", never a crash on mount. The rng is deliberately not
@@ -197,14 +203,25 @@ changes nothing a player could notice and keeps the save plain JSON.
 
 ## Stats
 
-`recordSkeeball(difficulty, won, extras)` in `js/game-stats.js`. `won` is `true`/`false`/**`null`
-for a tie** — both totals can genuinely land equal, so unlike Battleship this game really can draw
-and `sk.tied` is stored explicitly rather than derived.
+`recordSkeeball(boardId, extras)` in `js/game-stats.js`. A finished rack is always a "win" as far
+as `bumpTotals` is concerned, the same solo pattern Ball Run and Hill Climb use: there is nobody to
+lose to, so `byDiff[boardId].played` is the honest play count per machine.
 
-`sk: { played, won, lost, tied, balls, points, bestGame, bestThrow, hundreds, fifties }`.
-Counters add; `bestGame`/`bestThrow` are `Math.max` only (THE LAW rule 2). `extras` describes the
-HUMAN's side of the match only — `game.js` keeps that tally itself (`this.tally`) rather than the
-UI counting, so a restored save carries it instead of restarting at zero.
+`sk: { played, won, lost, tied, balls, points, bestGame, bestThrow, hundreds, fifties, boards,
+unlocked }`. Counters add; `bestGame`/`bestThrow` are `Math.max` only (THE LAW rule 2). `boards`
+and `unlocked` were added with the boards rework and are both ADDITIVE — `ensureSk()` fills them in
+on any device that has not played since, and their shape and merge rules belong to
+`js/arcade-scores.js`, not here.
+
+**`sk.won` / `sk.lost` / `sk.tied` are FROZEN** (THE LAW rule 5). They are the vs-computer era's
+win/loss record. There is no opponent to add to them any more, so the writer never increments them
+again — and never clears them either. My Stats still shows them when they are non-zero, because a
+number a player earned does not stop being theirs when the mode goes away (rule 1).
+
+`extras` = `{ score, balls, hundreds, fifties, bestThrow, at }`. `game.js` keeps that tally itself
+(`this.tally`) rather than the UI counting, so a restored save carries it instead of restarting at
+zero. `at` is the finish time, used only to pick the local day bucket for the daily best, and is
+injectable so the tests are not clock-dependent.
 
 All three mandatory surfaces exist from day one (root checklist item 7), and
 `players-agg.test.mjs`'s structural guard fails the build if any goes missing:
@@ -214,28 +231,41 @@ All three mandatory surfaces exist from day one (root checklist item 7), and
    person's second device syncs, with every local store intact)
 3. `skeeballScreen()` in `js/game-stats-ui.js`, plus the `game_title_skeeball` tab
 
-Also registered on the leaderboard (`GAME_META` + three "who leads what" texture chips). Skeeball
-is COMPETITIVE, not in `players-agg.js`'s `SOLO` set: it has a real opponent and a real loss axis.
+Skeeball is in `players-agg.js`'s **`SOLO`** set — with the opponent gone there is no loss axis, so
+a win-rate column would read 100% and mean nothing. It is **not** on the leaderboard
+(`js/leaderboard-ui.js`'s `GAME_META`) while it is `devOnly`: an admin-only game has exactly one
+possible player, so a board of one is noise. The texture chips are still written and the comment
+there says to put the entry back the day `devOnly` drops.
 
-Recorded ONCE per match in `_finish()`, before the modal shows, so a fast "play again" cannot skip
+Recorded ONCE per rack in `_finish()`, before the modal shows, so a fast "play again" cannot skip
 it. A quit game never reaches the recorder, so walking away can never mint a counter.
 
 ## Tests
 
 ```
-node skeeball/js/test.js
+node skeeball/js/test.js        the engine and the boards
+node test-arcade-scores.mjs     the shared score/unlock layer (bests, the daily map, merges)
+node test-visual.mjs skeeball   light/dark/reduced, both hosts at two phone heights, and a real flick
 ```
-Band edges (including that the bands are contiguous), both corner cups, the weak-and-wide miss,
-the bank shot and its energy cost, purity, the multiplier's reach and its x3, match flow at 1 and 3
-rounds, a genuine tie, the human-only tally, save/restore round trips and three malformed-save
-cases, and the opponent twice over: per-ball averages ordered easy < medium < hard, and the
-whole-match win-rate block described above.
 
-**Played end to end through the real UI** (2026-08-11, standalone at 393x852): nine flicks
-including a deliberate airball, a flat-out throw that sailed over for 10, and both corner cups;
-the handover card; the opponent's full rack; the end modal; and the recorded stats
-(`balls: 9, points: 450, bestGame: 450, bestThrow: 100, hundreds: 2, fifties: 2`). Resume was
-checked separately: three throws, reload, Resume restores the same score on the same ball.
+`test.js` covers: every board being well formed (unique ids, a catch-all last, the badge never on
+it), the short/over bands, that power walks the stack `20 → 30 → 40 → 50` in order, both corner
+cups and the weak-and-wide miss, the bank shot and its energy cost, purity, the multiplier's reach
+and its x3, a nine-ball rack refusing a tenth throw, unlocking (and the last board unlocking
+nothing), and save/restore including three malformed saves and a declined `v: 1`.
+
+**The "cups do NOT tile" block is a [KNOWN-BUG PROBE]** for Matt's *"the balls are guided in. That's
+not fun"* (2026-08-11). Three things had compounded: the catch ellipses were ~16% wider than the
+cups actually drawn, their depth (`ry`) exceeded half the pitch so the stack tiled with no gap
+between cups, and the ball animation lerped to the target's centre instead of to where it landed.
+The test asserts a real gap between consecutive cups AND the observable consequence — that sweeping
+power straight down the middle falls OUT of the stack into the 10 several times rather than sliding
+seamlessly from one cup to the next. If that goes red, the catch areas have started overlapping
+again and the game is a gimme.
+
+The `PLAY` probe in `test-visual.mjs` drives the real UI with real touch: it taps an unlocked
+machine card, flicks, and fails unless a ball lands for actual points (last run: 40 on classic).
+That is the automated floor, not a substitute for playing it — `VISUAL-PROCESS.md` applies.
 
 ## Not done, on purpose
 
@@ -243,5 +273,23 @@ checked separately: three throws, reload, Resume restores the same score on the 
   lockstep pass is its own milestone with its own invariants (`js/CLAUDE.md`) — and Skeeball has an
   unusual shape for it: like Boggle, nothing either player does changes the other's board, so it
   would be a self-report protocol rather than a move log. Read that section before starting.
-- **No how-to-play MOTION or PLAY probe tuning beyond the basics.** The `PLAY` probe added to
-  `test-visual.mjs` drives a real flick to a real score; if you add mechanics, extend it.
+  **Matt's stated end goal (2026-08-11) is a hub-wide turn-based multiplayer layer, for every
+  game, with direct challenges** — *"you could directly challenge someone"* — and he named Skeeball
+  as a good fit for it. That is a hub milestone, not a Skeeball feature; do not build a one-off
+  here that the shared layer would then have to fight.
+- **Only two machines.** Matt asked for one extra to start, with a "more machines to come" note in
+  the picker, rather than ten at once. `boards.js` is data, so a third is an entry and nothing else.
+
+## Outstanding — asked for, not yet built
+
+Not "on purpose". These are Matt's own requests from 2026-08-11 that this build has not answered:
+
+- **The machine picker should be a CAROUSEL with an image of the board**, and locked machines
+  should wear **chains and a padlock** like the reference photos (IMG_3953, IMG_3959). It is
+  currently a scrolling row of cards with a lock glyph.
+- **How to play should be the repo's animated paged carousel**, not the static sheet it ships with.
+  `yahtzee/js/howto.js` is the pattern: pages, a pointing-hand animation, dots, and a
+  `[|◀] [OK] [▶|]` footer, with reduced-motion still poses. Matt on the current one: *"You ignored
+  the How To Play instructions again. Yours is dogshit."* He is right, and an earlier code comment
+  in this game claiming it followed the repo pattern was simply false. `tic-tac-toe/CLAUDE.md`
+  documents the pattern; read it and Yahtzee's implementation before rewriting this.
