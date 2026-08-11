@@ -120,9 +120,6 @@
   position: relative;
 }
 .bs-headerpanel .bs-sub { color: rgba(255, 255, 255, .82); }
-/* the EXIT pill is absolutely positioned in this panel's top-right corner, so the title needs a
-   gutter on both sides (centred text, so both) or a long one runs underneath it */
-.bs-headerpanel .bs-title { padding: 0 62px; }
 
 .bs-btn {
   appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 12px;
@@ -217,7 +214,18 @@
 /* --- screen 2: deploy your ships --------------------------------------------------------------- */
 
 .bs-deploy { display: grid; gap: 10px; position: relative; }
-.bs-deploy-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+/* ONE ROW, FIXED HEIGHT, NEVER WRAPS -- same rule as the tray below it and for the same reason.
+   SAVE appears in this row the moment the last ship lands, and a wrapping row would push the whole
+   board down the screen at exactly that moment. */
+.bs-deploy-btns {
+  display: flex; gap: 8px; justify-content: center; align-items: center;
+  flex-wrap: nowrap; height: 40px; margin-top: 2px;
+}
+/* The dice glyph draws its pips as hardcoded white circles inside a `currentColor` body, so this
+   button has to stay light-on-dark-icon rather than the reverse -- a white icon on a blue disc
+   would be a white square with white pips, i.e. blank. */
+.bs-iconbtn-random { color: var(--bs-btn-random); box-shadow: 0 0 0 2px var(--bs-btn-random), 0 2px 6px rgba(10, 20, 40, .28); }
+.bs-iconbtn-random .bs-pill-icon { width: 20px; height: 20px; display: block; }
 .bs-pill {
   appearance: none; cursor: pointer; border: 0; border-radius: 999px; color: #fff; font: inherit;
   font-weight: 900; letter-spacing: .06em; font-size: .82rem; padding: 10px 22px; text-transform: uppercase;
@@ -233,18 +241,54 @@
   background: var(--bs-deck); border-radius: 16px; padding: 10px; display: grid; gap: 10px;
   justify-items: center;
 }
+/* FIXED HEIGHT, ONE ROW, NEVER WRAPS. The board below it must not move while a ship is being
+   dragged onto it, and a wrapping tray that loses a row the moment the first ship lands is exactly
+   how it used to (see renderPlacement's comment). The height is reserved whether the tray holds
+   five chips or none, so an emptying tray changes nothing below it. */
 .bs-tray {
-  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center;
-  min-height: 26px; width: 100%;
+  display: flex; flex-wrap: nowrap; gap: 8px; justify-content: center; align-items: center;
+  height: 34px; width: 100%; overflow: hidden;
 }
 .bs-trayship {
-  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: grab;
-  touch-action: none; user-select: none; padding: 2px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; cursor: grab;
+  touch-action: none; user-select: none; padding: 4px 5px; border-radius: 9px;
+  background: rgba(255, 255, 255, .18);
+  /* flex-grow comes from the markup (the ship's length); basis 0 so the row divides the width it
+     actually has rather than asking for a width it may not get */
+  flex: 0 1 0; min-width: 0;
 }
-.bs-trayship.is-selected { background: rgba(255, 255, 255, .45); outline: 2px solid var(--bs-header); }
-.bs-trayship-art { height: 16px; }
-.bs-trayship-name { font-size: .58rem; font-weight: 900; color: var(--bs-deck-ink); text-transform: uppercase; letter-spacing: .04em; }
-.bs-tray-empty { font-size: .72rem; font-weight: 800; color: var(--bs-deck-ink); }
+.bs-trayship.is-selected { background: rgba(255, 255, 255, .62); outline: 2px solid var(--bs-header); }
+/* A vertical ship is drawn rotated in the tray, so the chip shows the pose it will actually land
+   in -- that is the whole feedback for the tap-again-to-rotate gesture that replaced the buttons.
+   The chip's own box does NOT rotate (that would change the row's height and move the board), only
+   the art inside it. */
+.bs-trayship-art { height: 15px; width: 100%; min-width: 0; display: block; transition: transform .18s ease; }
+.bs-trayship.is-vert .bs-trayship-art { transform: rotate(90deg); }
+.bs-trayship.is-spinning .bs-trayship-art { animation: bs-tray-spin .3s ease-out; }
+@keyframes bs-tray-spin { from { transform: rotate(0deg); } }
+.bs-trayship.is-vert.is-spinning .bs-trayship-art { animation: bs-tray-spin-v .3s ease-out; }
+@keyframes bs-tray-spin-v { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+
+/* the bot's loose fleet on the "getting ready" screen borrows .bs-tray's row, but it is a display,
+   not the drag source, so it opts out of the fixed height that keeps the deploy board still */
+.bs-tray-loose { height: auto; flex-wrap: wrap; gap: 10px; overflow: visible; }
+.bs-tray-loose .bs-trayship { background: none; }
+
+/* the wordless header controls (exit / clear / help). Same thumb target as a pill, no label. */
+.bs-iconbtn {
+  appearance: none; cursor: pointer; border: 0; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: var(--bs-header);
+  width: 38px; height: 38px; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  touch-action: manipulation; box-shadow: 0 2px 6px rgba(10, 20, 40, .28);
+}
+.bs-ico { width: 19px; height: 19px; display: block; }
+/* Text that exists only for a screen reader / the aria-live region. Never `display:none` -- that
+   removes it from the accessibility tree too, which is the opposite of the point. */
+.bs-sr {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 
 .bs-board-wrap { position: relative; }
 /* The wrap must resolve a real width of its own: `.bs-board-place`'s `min(100%, ...)` is a
@@ -294,36 +338,6 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 
-/* the placed ship's own rotate affordance, one per ship, at its corner */
-.bs-rotate-btn {
-  appearance: none; cursor: pointer; border: 0; border-radius: 50%;
-  background: var(--bs-header); color: #fff; width: 26px; height: 26px;
-  display: flex; align-items: center; justify-content: center; font-size: .9rem; line-height: 1;
-  touch-action: manipulation; flex: none; box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
-}
-.bs-rotate-onboard { position: absolute; z-index: 5; transform: translate(-40%, -40%); }
-.bs-rotate-icon { display: block; }
-.bs-rotate-icon.is-spinning { animation: bs-rotate-tap .32s ease-out; }
-@keyframes bs-rotate-tap { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
-
-/* EXIT: a plain horizontal-text pill in the header panel's own top-right corner, mirroring the
-   hub's own "< Hub" back pill (css/hub.css) but deliberately on the RIGHT so the two never
-   overlap -- the hub's floating back button stays top-LEFT the whole time this screen is open.
-   Used to be a lone circle pinned to the board's right edge with its label spelled out top-to-
-   bottom (`writing-mode: vertical-rl`), which read as decoration rather than a button and sat in
-   a spot no other screen in this game puts a control. A normal top-right pill, readable left to
-   right, is the unsurprising place to look for "leave this screen." */
-.bs-exit {
-  position: absolute; right: 10px; top: 10px; z-index: 6;
-  appearance: none; cursor: pointer; border: 0; border-radius: 999px;
-  background: rgba(255, 255, 255, .94); color: var(--bs-header);
-  font: inherit; font-weight: 800; font-size: .74rem; padding: 6px 12px 6px 10px;
-  display: flex; align-items: center; gap: 2px; touch-action: manipulation;
-  box-shadow: 0 2px 6px rgba(10, 20, 40, .28);
-}
-
-.bs-placement-status { font-size: .78rem; font-weight: 800; color: var(--bs-muted); text-align: center; }
-
 /* --- ship art: one absolutely-positioned sprite per ship, reused for tray/roster/board ---------- */
 
 .bs-ship-svg { display: block; width: 100%; height: 100%; overflow: visible; }
@@ -350,6 +364,13 @@
 
 .bs-wait { display: grid; gap: 10px; justify-items: center; }
 .bs-wait-line { font-size: .95rem; font-weight: 900; text-align: center; margin: 0; }
+/* the room code, on the waiting screen, so a player stuck here can compare it with the other
+   phone instead of guessing why nothing is happening */
+.bs-wait-code {
+  font-size: 1.5rem; font-weight: 900; letter-spacing: .28em; color: var(--bs-header);
+  background: var(--bs-surface); border: 1px solid var(--bs-surface-2);
+  border-radius: 12px; padding: 6px 10px 6px 18px;
+}
 .bs-wait-dots { display: inline-block; animation: bs-wait-dots 1.2s steps(4, end) infinite; }
 @keyframes bs-wait-dots { 0% { opacity: .3; } 50% { opacity: 1; } 100% { opacity: .3; } }
 .bs-wait-fleet { --bs-ship: var(--bs-theirs); }
@@ -367,11 +388,28 @@
 .bs-root.bs-battling { background: var(--bs-deck); }
 
 .bs-battle { display: grid; gap: 4px; justify-items: center; position: relative; }
-.bs-status {
-  margin: 0; font-weight: 900; font-size: .8rem; text-align: center; color: var(--bs-deck-ink);
-  padding: 3px 10px 1px;
+/* THE TURN BAR -- wordless. The shooter's avatar and a chevron pointing at the board about to be
+   hit: up is enemy waters, down is your own deck. It replaced a sentence ("Your turn: fire!",
+   "Incoming!", "Bot thinking", "Hit! Fire again."), which is still written into the .bs-sr live
+   region inside it for anyone using a screen reader. */
+.bs-turnbar {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  height: 30px; position: relative; color: var(--bs-deck-ink);
 }
-.bs-shotcount { font-size: .68rem; font-weight: 800; color: var(--bs-deck-ink); opacity: .8; }
+.bs-turn-face { font-size: 1.15rem; line-height: 1; }
+.bs-turn-arrow { width: 19px; height: 19px; display: block; }
+.bs-turnbar[data-dir="down"] .bs-turn-arrow { transform: rotate(180deg); }
+.bs-turn-trophy { font-size: 1.1rem; line-height: 1; }
+/* a real failure, so it gets real words -- a glyph for "we lost sync" teaches nobody anything */
+.bs-turn-msg {
+  font-size: .7rem; font-weight: 800; background: var(--bs-invalid); color: #fff;
+  padding: 3px 9px; border-radius: 999px;
+}
+.bs-shotcount {
+  font-size: .78rem; font-weight: 900; color: var(--bs-deck-ink); opacity: .85;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.bs-shotcount .bs-ico { width: 15px; height: 15px; }
 
 .bs-boardpanel { width: 100%; display: grid; gap: 3px; justify-items: center; }
 .bs-boardpanel-h { font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--bs-muted); }
@@ -421,14 +459,14 @@
 .bs-scoredisc-them { color: var(--bs-theirs); }
 .bs-scoredisc-me { color: var(--bs-mine); }
 .bs-scoredisc-dot { width: 5px; height: 5px; border-radius: 50%; background: #1b2330; }
+/* A plain X. It used to spell EXIT top-to-bottom (`writing-mode`-style rotated text), which reads
+   as decoration before it reads as a button -- and it was one more piece of text on a screen that
+   had too much. The word survives as the button's accessible name. */
 .bs-exitdisc {
-  right: -8px; appearance: none; border: 0; cursor: pointer; padding: 0 6px 0 0;
+  right: -8px; appearance: none; border: 0; cursor: pointer; padding: 0 8px 0 0;
   color: var(--bs-header); font: inherit; touch-action: manipulation;
 }
-.bs-exitdisc > span {
-  font-size: .74rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
-  transform: rotate(90deg);
-}
+.bs-exitdisc .bs-ico { width: 21px; height: 21px; }
 
 .bs-rosterrows { display: grid; gap: 3px; flex: 1 1 auto; min-width: 0; }
 .bs-rosterrow {
@@ -447,7 +485,14 @@
 }
 .bs-roster-silhouette { display: block; height: 16px; }
 
-.bs-actions { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.bs-actions { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+/* the battle screen's own smaller icon discs (help / restart) */
+.bs-iconbtn-sm { width: 32px; height: 32px; }
+.bs-iconbtn-sm .bs-ico { width: 17px; height: 17px; }
+.bs-iconbtn.is-confirm {
+  background: var(--bs-invalid); color: #fff; animation: bs-confirm-pulse .9s ease-in-out infinite;
+}
+@keyframes bs-confirm-pulse { 50% { transform: scale(1.12); } }
 .bs-shell-battle .bs-btn-small { padding: 4px 10px; font-size: .72rem; }
 
 /* The overlay the cannonball flies across. It spans BOTH boards -- the whole point of the shot is
@@ -600,10 +645,27 @@
   40% { transform: rotate(8deg) translateY(2%); opacity: 1; }
   100% { transform: rotate(12deg) translateY(14%); opacity: .78; }
 }
+/* THE SHIP, STRUCK THROUGH -- no sentence. Drawn in the losing fleet's own colour, so "whose ship
+   was that" is answered by the same picture that answers "which ship". The words survive as the
+   element's aria-label; see _maybeShowSunkBanner. */
 .bs-sunk-banner {
   position: fixed; left: 50%; top: 16%; transform: translate(-50%, 0); z-index: 60;
-  background: var(--bs-sunk); color: #fff; padding: 8px 16px; border-radius: 999px; font-weight: 900;
-  font-size: .85rem; animation: bs-banner .3s ease-out both;
+  background: var(--bs-sunk); padding: 9px 18px; border-radius: 999px;
+  display: flex; align-items: center; animation: bs-banner .3s ease-out both;
+  /* IT IS A LABEL, NOT A CONTROL. Without this it sat over the middle of the screen for its whole
+     1.6s life swallowing taps aimed at the board underneath -- so the shot right after a sink,
+     the most likely moment for a fast follow-up, silently did nothing. Found by the two-instance
+     MP harness, which clicks faster than a person and hit it every game. */
+  pointer-events: none;
+}
+.bs-sunk-banner.is-mine { --bs-ship: var(--bs-mine); }
+.bs-sunk-banner.is-theirs { --bs-ship: var(--bs-theirs); }
+.bs-sunk-banner-art { height: 18px; display: block; position: relative; }
+/* the strike: one bar straight through the hull, the universal "gone" mark, and a SHAPE rather
+   than a colour change (Matt is red/green colorblind) */
+.bs-sunk-banner-art::after {
+  content: ''; position: absolute; left: -6%; right: -6%; top: 50%; height: 3px;
+  transform: translateY(-50%); background: #fff; border-radius: 2px;
 }
 @keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -18px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
@@ -632,7 +694,18 @@
 
 .bs-help-lines { display: grid; gap: 6px; text-align: left; width: 100%; }
 .bs-help-lead { font-weight: 800; margin: 0; }
-.bs-help-caption, .bs-help-example, .bs-help-rule { margin: 0; font-size: .84rem; color: var(--bs-muted); font-weight: 600; }
+.bs-help-caption, .bs-help-rule { margin: 0; font-size: .84rem; color: var(--bs-muted); font-weight: 600; }
+
+/* the marker key: the three marks as they actually appear on a board, replacing the sentence that
+   used to describe them (and had gone stale -- it still said a miss was a "ripple") */
+.bs-help-key { display: flex; gap: 12px; justify-content: center; padding: 2px 0; }
+.bs-key-cell {
+  position: relative; width: 38px; height: 38px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+}
+.bs-key-water { background: var(--bs-enemy-water); }
+.bs-key-sunk { background: var(--bs-enemy-water); --bs-ship: var(--bs-theirs); }
+.bs-key-ship { width: 34px; height: 15px; display: block; }
 .bs-diagram-wrap { width: 100%; display: flex; justify-content: center; }
 .bs-diagram { width: 150px; height: 90px; }
 
@@ -659,11 +732,14 @@
    every animation off. */
 @media (prefers-reduced-motion: reduce) {
   .bs-board-enemy .bs-cell::before,
-  .bs-rotate-icon.is-spinning,
+  .bs-trayship.is-spinning .bs-trayship-art,
+  .bs-iconbtn.is-confirm,
   .bs-board.bs-shake,
   .bs-wait-dots {
     animation: none !important;
   }
+  /* the tray chip still shows its rotated pose, it just gets there instantly */
+  .bs-trayship-art { transition: none !important; }
   .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cannon-svg, .bs-cannon-rig {
     animation: none !important; opacity: 1 !important; transform: none !important;
   }

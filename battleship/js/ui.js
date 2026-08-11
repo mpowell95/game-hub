@@ -48,6 +48,9 @@ const MP_SAVE_KEY = 'gamehub.battleship.mp.v1';
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
+// How long any lobby round trip (create room / join room / restore) may take before this game
+// gives up and shows the offline error. See _withNetTimeout for why this has to exist at all.
+const MP_NET_TIMEOUT_MS = 12 * 1000;
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 const MP_DIFFICULTY = 'mp';
 const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
@@ -72,6 +75,19 @@ const DICE_ICON = `<svg class="bs-pill-icon" viewBox="0 0 24 24" aria-hidden="tr
 const BOLT_ICON = `<svg class="bs-pill-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
   <path d="M13 2 4 14h6l-1 8 9-12h-6z"/>
 </svg>`;
+// The wordless controls. Every one of these replaced a labelled button (Matt, 2026-08-11: "There's
+// way too much text"), so each keeps its meaning in an aria-label at the call site -- a symbol
+// with no accessible name is a step backwards, not a simplification.
+const ICON_TRASH = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <path d="M9 3h6l1 2h4v2H4V5h4zM6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/></svg>`;
+const ICON_HELP = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+  <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 15.4a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6m0-11.6c2.2 0 3.9 1.5 3.9 3.5 0 1.5-.8 2.3-2 3.1-.9.6-1.1 1-1.1 1.8v.4h-2v-.7c0-1.5.6-2.3 1.7-3 .9-.6 1.3-1 1.3-1.7 0-.9-.7-1.5-1.8-1.5s-1.9.7-1.9 1.8H8C8 7.4 9.7 5.8 12 5.8"/></svg>`;
+const ICON_CLOSE = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
+  stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
+const ICON_RESTART = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
+  stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 13a8 8 0 1 0 2.3-6"/><path d="M4 4v7h7"/></svg>`;
+const ICON_TARGET = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
+  stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke-linecap="round"/></svg>`;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const deepCopy = (v) => JSON.parse(JSON.stringify(v));
@@ -148,6 +164,7 @@ class BattleshipUI {
     this._confirmTimer = null;
     this._mpDelayTimer = null;
     this._bannerTimer = null;
+    this._mpRestoreTimer = null;  // see _tryRestoreMP's watchdog
     this._statsCommitted = false;
     this._lastShot = null;     // { seat, r, c, result, sunk, cells } -- the one cell that gets an entrance animation
     this._sunkBanner = '';
@@ -196,6 +213,7 @@ class BattleshipUI {
     if (this._mpDelayTimer) { clearTimeout(this._mpDelayTimer); this._mpDelayTimer = null; }
     if (this._bannerTimer) { clearTimeout(this._bannerTimer); this._bannerTimer = null; }
     if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
+    if (this._mpRestoreTimer) { clearTimeout(this._mpRestoreTimer); this._mpRestoreTimer = null; }
     // Same reasoning as every other MP game: destroy() runs for any hub teardown (including just
     // navigating back), so a live room is preserved for the 30-minute rejoin window. A hosted room
     // that never reached a game is released, since nobody depends on it.
@@ -245,16 +263,29 @@ class BattleshipUI {
     saveJSON(SETTINGS_KEY, { v: 1, size: s.size, difficulty: s.difficulty, bonusShotOnHit: s.bonusShotOnHit, firstMode: s.firstMode, nextStarter: s.nextStarter });
   }
 
+  /** IN MULTIPLAYER THE PROFILE'S BOT OPPONENT IS NEVER A FALLBACK. It used to be, and that is what
+   *  put "Waiting for Anita Bonita..." (a computer opponent configured on the profile page) on a
+   *  screen that was waiting for a real person -- Matt's own screenshot of MP failing, 2026-08-11.
+   *  A name that belongs to nobody in the room is worse than no name: it makes a stuck screen look
+   *  like a working one. Until the room actually tells us who joined, MP says "Opponent". */
   _identity() {
     let profile = null;
     try { profile = loadProfile(); } catch { profile = null; }
-    const opp = profile && profile.opponents && profile.opponents[0];
+    const bot = profile && profile.opponents && profile.opponents[0];
     const mpOpp = this.mp && this.mp.opp;
+    if (this.mp) {
+      return {
+        humanName: (profile && profile.name) || t('you'),
+        humanEmoji: (profile && profile.emoji) || '🙂',
+        oppName: (mpOpp && mpOpp.name) || t('mp_opponent_label'),
+        oppEmoji: (mpOpp && mpOpp.avatar) || '🙂',
+      };
+    }
     return {
       humanName: (profile && profile.name) || t('you'),
       humanEmoji: (profile && profile.emoji) || '🙂',
-      oppName: (mpOpp && mpOpp.name) || (opp && opp.name) || (this.mp ? t('mp_opponent_label') : t('computer')),
-      oppEmoji: (mpOpp && mpOpp.avatar) || (opp && opp.emoji) || (this.mp ? '🙂' : '🤖'),
+      oppName: (bot && bot.name) || t('computer'),
+      oppEmoji: (bot && bot.emoji) || '🤖',
     };
   }
 
@@ -402,7 +433,7 @@ class BattleshipUI {
     const stats = this._statsLine();
     const header = `<div class="bs-headerpanel">
       <h1 class="bs-title">${t('title')}</h1>
-      <p class="bs-sub">${t('tagline_long')}</p>
+      <p class="bs-sub">${t('tagline')}</p>
     </div>`;
     const statsLine = stats ? `<p class="bs-stats">${esc(stats)}</p>` : '';
 
@@ -569,27 +600,6 @@ class BattleshipUI {
     // Consumed by the very next renderPlacement() only (see there) -- the rotate icon's spin
     // animation must fire for THIS render alone, not replay on every later render the way an
     // unconditional CSS `animation:` on the icon would (the same class of bug as the sink reveal).
-    this._justRotatedShip = shipId;
-    this.renderPlacement();
-  }
-
-  /** Rotate a ship that is already ON the board, in place, keeping its top-left anchor. If the
-   *  rotated pose does not fit it stays as it was -- rotating must never silently drop a ship off
-   *  the board. Reached from the sprite's own corner arrow and from a plain tap on the sprite. */
-  _rotatePlacedShip(shipId) {
-    const ship = this._placeFleet.ships.find((s) => s.id === shipId);
-    if (!ship) { this._rotateShip(shipId); return; }
-    const origin = { r: ship.r, c: ship.c, dir: ship.dir };
-    this._placeFleet = { ...this._placeFleet, ships: this._placeFleet.ships.filter((s) => s.id !== shipId) };
-    const flipped = origin.dir === 'h' ? 'v' : 'h';
-    const dir = this._placementLegalAt(shipId, origin.r, origin.c, flipped) ? flipped : origin.dir;
-    this._placeDir[shipId] = dir;
-    const def = this._placeShipSet.find((d) => d.id === shipId);
-    const placed = def && placeShip(this._placeFleet, def, origin.r, origin.c, dir);
-    if (placed) this._placeFleet = placed;
-    this._placeSelected = null;
-    this._placePreview = null;
-    this._placeInvalid = null;
     this._justRotatedShip = shipId;
     this.renderPlacement();
   }
@@ -844,19 +854,32 @@ class BattleshipUI {
     const justRotated = this._justRotatedShip;
     this._justRotatedShip = null;
 
-    const tray = remaining
-      ? trayDefs.map((def) => {
-        const dir = this._placeDir[def.id] || 'h';
-        return `<div class="bs-trayship ${this._placeSelected === def.id ? 'is-selected' : ''}"
-            data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0" aria-label="${esc(t(SHIP_LABEL_KEY[def.id]))}">
-          <span class="bs-trayship-art" style="width:${def.len * 20}px">${shipArtHtml(def.id, def.len)}</span>
-          <span class="bs-trayship-name">${esc(t(SHIP_LABEL_KEY[def.id]))}</span>
-          <button type="button" class="bs-rotate-btn" data-action="rotate-ship" data-ship="${def.id}"
-            aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[def.id]) }))}"><span
-            class="bs-rotate-icon ${justRotated === def.id ? 'is-spinning' : ''}" aria-hidden="true">${dir === 'v' ? '↕' : '↔'}</span></button>
-        </div>`;
-      }).join('')
-      : `<span class="bs-tray-empty">${esc(t('tray_empty'))}</span>`;
+    // THE TRAY IS ONE FIXED-HEIGHT ROW AND IT NEVER REFLOWS. Matt, 2026-08-11: "It moves around if
+    // you drag your boats while placing them." It did, and the tray was why: five named chips with
+    // their own rotate buttons wrapped onto TWO rows, so placing the first ship collapsed it to one
+    // and yanked the board 71px up the screen -- mid-drag, under the finger. The chips are bare
+    // silhouettes now (no name, no button), they always fit one row, and `.bs-tray` carries a fixed
+    // height so an emptying tray leaves the board exactly where it was. Measured, not assumed:
+    // test-visual.mjs's battleship PLAY probe asserts the board's top never moves across a full
+    // placement.
+    //
+    // The per-chip rotate BUTTON was the other half of the bug. It sat dead centre on the chip --
+    // the natural place to grab a ship -- and `onPointerDown` returns early on it, so a drag begun
+    // there did nothing at all. Rotation is now the same gesture a placed ship already used: tap
+    // the ship. Tap an unselected chip to select it, tap it again to rotate.
+    const tray = trayDefs.map((def) => {
+      const dir = this._placeDir[def.id] || 'h';
+      const label = t(SHIP_LABEL_KEY[def.id]);
+      // Sized by FLEX, proportional to the ship's length, never a pixel width: five chips at a fixed
+      // px-per-cell overflowed a 390px phone and the longest ship was silently clipped by the row's
+      // own `overflow: hidden`. Flex-basis 0 with grow = len means the row always fits exactly,
+      // whatever the board size or the screen, and the ships stay in correct relative proportion.
+      return `<div class="bs-trayship ${this._placeSelected === def.id ? 'is-selected' : ''} ${dir === 'v' ? 'is-vert' : ''} ${justRotated === def.id ? 'is-spinning' : ''}"
+          style="flex-grow:${def.len}" data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0"
+          aria-label="${esc(label)}" title="${esc(label)}">
+        <span class="bs-trayship-art">${shipArtHtml(def.id, def.len)}</span>
+      </div>`;
+    }).join('');
 
     const preview = this._placePreview;
     const selDef = this._placeSelected && this._placeShipSet.find((d) => d.id === this._placeSelected);
@@ -887,32 +910,34 @@ class BattleshipUI {
       }
     }
 
-    // A placed ship is a real sprite you can pick straight off the board (drag to move, tap to
-    // rotate in place) plus its own curved rotate arrow at the bow corner.
+    // A placed ship is a real sprite you can pick straight off the board: drag to move, tap to
+    // rotate in place.
     const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship, { draggable: true })).join('');
-    const rotateHandles = this._placeFleet.ships.map((ship) => {
-      const hx = ship.c + (ship.dir === 'h' ? ship.len : 1);
-      return `<button type="button" class="bs-rotate-btn bs-rotate-onboard"
-        style="left:calc(var(--bs-pad) + var(--bs-cell) * ${hx}); top:calc(var(--bs-pad) + var(--bs-cell) * ${ship.r});"
-        data-action="rotate-placed" data-ship="${ship.id}"
-        aria-label="${esc(t('rotate_aria', { ship: t(SHIP_LABEL_KEY[ship.id]) }))}"><span
-        class="bs-rotate-icon ${justRotated === ship.id ? 'is-spinning' : ''}" aria-hidden="true">&#10227;</span></button>`;
-    }).join('');
+    // The floating corner rotate arrows are gone with the tray's rotate buttons, for the same
+    // reason: they are one more control sitting on top of the thing you are trying to drag, and
+    // tapping the ship itself has always rotated it (onPointerUp's `origin` branch). The keyboard
+    // path (R) is unchanged.
+    const rotateHandles = '';
     const ghostSprite = (selDef && preview)
       ? this._shipSpriteHtml({ id: selDef.id, len: selDef.len, r: preview.r, c: preview.c, dir: this._placeDir[selDef.id] || 'h' }, { ghost: true })
       : '';
 
+    // Everything that used to be prose here is a symbol now: the hint line, the "N ships left to
+    // place" counter, the "Every ship is on the board" / "Fleet ready. Tap SAVE to sail." pair, and
+    // the two word-buttons at the bottom. What is left says the same things without sentences --
+    // the tray shows what is unplaced, and SAVE only exists once nothing is.
     this.shell.innerHTML = `
       <div class="bs-deploy">
         <div class="bs-headerpanel">
-          <button type="button" class="bs-exit" data-action="exit-placement">&lsaquo; ${esc(t('exit'))}</button>
           <h1 class="bs-title">${t('deploy_title')}</h1>
-          <p class="bs-sub">${t('deploy_hint')}</p>
           <div class="bs-deploy-btns">
-            <button type="button" class="bs-pill bs-pill-random" data-action="auto-place">${DICE_ICON}${esc(t('random'))}</button>
+            <button type="button" class="bs-iconbtn" data-action="exit-placement" aria-label="${esc(t('exit'))}" title="${esc(t('exit'))}">${ICON_CLOSE}</button>
+            <button type="button" class="bs-iconbtn" data-action="clear-fleet" aria-label="${esc(t('clear_fleet'))}" title="${esc(t('clear_fleet'))}">${ICON_TRASH}</button>
+            <button type="button" class="bs-iconbtn bs-iconbtn-random" data-action="auto-place" aria-label="${esc(t('random'))}" title="${esc(t('random'))}">${DICE_ICON}</button>
             ${remaining === 0
-              ? `<button type="button" class="bs-pill bs-pill-save" data-action="placement-ready">${BOLT_ICON}${esc(t('save'))}</button>`
+              ? `<button type="button" class="bs-pill bs-pill-save" data-action="placement-ready" aria-label="${esc(t('save'))}">${BOLT_ICON}${esc(t('save'))}</button>`
               : ''}
+            <button type="button" class="bs-iconbtn" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
           </div>
         </div>
         <div class="bs-deck-surface">
@@ -921,11 +946,7 @@ class BattleshipUI {
             <div class="bs-board bs-board-place" tabindex="0" style="grid-template-columns:repeat(${size},1fr)" data-role="place-board">${cellsHtml.join('')}${placedSprites}${ghostSprite}${rotateHandles}</div>
           </div>
         </div>
-        <p class="bs-placement-status">${remaining > 0 ? esc(t('ships_remaining', { n: remaining })) : esc(t('fleet_ready_hint'))}</p>
-        <div class="bs-actions">
-          <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="clear-fleet">${t('clear_fleet')}</button>
-          <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="help">${t('howto')}</button>
-        </div>
+        <p class="bs-sr" aria-live="polite">${remaining > 0 ? esc(t('ships_remaining', { n: remaining })) : esc(t('fleet_ready_hint'))}</p>
       </div>`;
     this._updateCellSize();
     if (keepFocus) {
@@ -948,19 +969,27 @@ class BattleshipUI {
     const ships = botFleet
       ? botFleet.ships.map((s) => `<span class="bs-trayship"><span class="bs-trayship-art" style="width:${s.len * 18}px">${shipArtHtml(s.id, s.len)}</span></span>`).join('')
       : '';
+    // MP WAITING IS NOT A DEAD END ANY MORE. Matt's screenshot of MP failing (2026-08-11) was this
+    // screen, stuck: no room code to check against the other phone, no way out except the hub's own
+    // back button, and a name ("Anita Bonita") belonging to a computer opponent rather than to
+    // anyone in the room. It now shows the code, the opponent as the room actually reports them,
+    // and a Leave button -- and _mpOnRoomUpdate re-renders it, so the moment the room learns who
+    // joined, the screen says so instead of staying frozen on its first guess.
+    const mpBits = this.mp
+      ? `<div class="bs-wait-code" role="img" aria-label="${esc(t('mp_code_aria'))}">${esc(this.mp.code || '')}</div>
+         <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="mp-leave">${esc(t('mp_leave_btn'))}</button>`
+      : '';
     this.shell.innerHTML = `
       <div class="bs-wait" ${botFleet ? 'data-action="skip-botplace"' : ''}>
         <div class="bs-headerpanel">
           <h1 class="bs-title">${t('title')}</h1>
-          <p class="bs-sub">${t('tagline_long')}</p>
         </div>
         <div class="bs-boardpanel bs-boardpanel-enemy">
-          <div class="bs-boardpanel-h">${t('enemy_waters')}</div>
           <div class="bs-board bs-board-enemy bs-wait-board" style="grid-template-columns:repeat(${size},1fr)" data-role="wait-board" aria-hidden="true">${cells}</div>
         </div>
         <p class="bs-wait-line">${esc(line)}<span class="bs-wait-dots" aria-hidden="true"> ...</span></p>
-        ${botFleet ? `<div class="bs-deck-surface bs-wait-fleet"><div class="bs-tray">${ships}</div></div>
-        <p class="bs-hint">${t('tap_to_skip')}</p>` : ''}
+        ${mpBits}
+        ${botFleet ? `<div class="bs-deck-surface bs-wait-fleet"><div class="bs-tray bs-tray-loose">${ships}</div></div>` : ''}
       </div>`;
     this._updateCellSize();
   }
@@ -1055,7 +1084,7 @@ class BattleshipUI {
         const res = fireAndResolve(this.state, this._localSeat(), shot[0], shot[1]);
         this.state = res.state;
         this._lastShot = { seat: this._localSeat(), r: shot[0], c: shot[1], result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
-        this._maybeShowSunkBanner(res.answer);
+        this._maybeShowSunkBanner(res.answer, this._localSeat());
         this._afterStateChange();
       };
       this.aiTimer = setTimeout(() => {
@@ -1070,10 +1099,19 @@ class BattleshipUI {
     }
   }
 
-  _maybeShowSunkBanner(answer) {
+  /** The banner is the SHIP, struck through -- not the sentence "Sunk: Carrier". It is drawn in the
+   *  colour of whoever's fleet just lost it, so it also answers "whose?" without a word. The
+   *  sentence survives as the element's accessible name. */
+  _maybeShowSunkBanner(answer, seat) {
     if (!answer || !answer.sunk || !answer.shipId) return;
     this._recordSunkShipGeometry(answer);
-    this._sunkBanner = t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) });
+    const def = (this._shipSetForState() || []).find((d) => d.id === answer.shipId);
+    this._sunkBanner = {
+      html: shipArtHtml(answer.shipId, def ? def.len : 3),
+      len: def ? def.len : 3,
+      mine: seat == null ? null : seat === this._localSeat(),
+      label: t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) }),
+    };
     if (this._bannerTimer) clearTimeout(this._bannerTimer);
     this._bannerTimer = setTimeout(() => { this._sunkBanner = ''; this._bannerTimer = null; if (!this._dead && this.view === 'battle') this.renderBattle(); }, 1600);
   }
@@ -1112,7 +1150,7 @@ class BattleshipUI {
     const res = fireAndResolve(this.state, target, r, c);
     this.state = res.state;
     this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
-    this._maybeShowSunkBanner(res.answer);
+    this._maybeShowSunkBanner(res.answer, target);
     this._afterStateChange();
   }
 
@@ -1133,6 +1171,43 @@ class BattleshipUI {
       return t('your_turn');
     }
     return t('opp_turn', { opp: id.oppName });
+  }
+
+  /** The battle screen's turn indicator, WITHOUT WORDS. Matt, 2026-08-11: "There's way too much
+   *  text." The whole sentence this replaced ("Your turn: fire!", "Incoming!", "Bot thinking",
+   *  "Hit! Fire again.") said one thing: which board is about to be shot at. So that is what it
+   *  draws -- the shooter's own avatar, and a chevron pointing at the board taking the shot. Up is
+   *  enemy waters, down is your own deck; the same geometry the whole screen is built on.
+   *
+   *  `_statusText()` is NOT deleted: it still feeds the screen-reader live region below, so nothing
+   *  was actually taken away from anyone who needs the sentence.
+   *
+   *  MP status messages (connection error, resyncing, opponent disconnected) deliberately stay as
+   *  WORDS -- they are failures, not instructions, and a symbol for "we lost sync" teaches nobody
+   *  anything. They render as a pill over the bar. */
+  _turnBarHtml() {
+    const s = this.state, id = this._identity();
+    const mine = this._cannons && this._cannons.mine;
+    const theirs = this._cannons && this._cannons.theirs;
+    // Who is SHOOTING, which is not the same as whose turn it is: while your own shell is still in
+    // the air the turn has already passed. The cannon on screen is the authority (same source the
+    // board wash uses), falling back to the turn when no gun is up.
+    const shootingMine = mine ? true : theirs ? false : s.turn === this._localSeat();
+    const face = s.over
+      ? (s.winner === this._localSeat() ? id.humanEmoji : id.oppEmoji)
+      : (shootingMine ? id.humanEmoji : id.oppEmoji);
+    const dir = s.over ? 'none' : shootingMine ? 'up' : 'down';
+    const chevron = dir === 'none'
+      ? '<span class="bs-turn-trophy" aria-hidden="true">🏆</span>'
+      : `<svg class="bs-turn-arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
+          stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>`;
+    const err = this.mp && this._mpStatusMsg
+      ? `<span class="bs-turn-msg">${esc(t(this._mpStatusMsg))}</span>` : '';
+    return `<div class="bs-turnbar" data-dir="${dir}">
+      <span class="bs-turn-face" aria-hidden="true">${esc(face)}</span>
+      ${chevron}${err}
+      <p class="bs-sr" aria-live="polite">${esc(this._statusText())}</p>
+    </div>`;
   }
 
   /** One line of the roster strip: a fleet as small silhouettes, each struck through once sunk.
@@ -1501,7 +1576,12 @@ class BattleshipUI {
     const s = this.state;
     const isMyTurn = this._isMyTurn();
     const series = this.mp ? `<p class="bs-mp-series">${esc(this._seriesLine())}</p>` : '';
-    const banner = this._sunkBanner ? `<div class="bs-sunk-banner">${esc(this._sunkBanner)}</div>` : '';
+    const sb = this._sunkBanner;
+    const banner = sb
+      ? `<div class="bs-sunk-banner ${sb.mine === false ? 'is-theirs' : 'is-mine'}" role="img" aria-label="${esc(sb.label)}">
+          <span class="bs-sunk-banner-art" style="width:${sb.len * 22}px">${sb.html}</span>
+        </div>`
+      : '';
     // THE VERTICAL SANDWICH, and the whole visual identity of the game: enemy waters (navy) on
     // top, the roster strip in the middle, your own board (wood on a salmon deck) below. Both are
     // always visible and NEITHER ever resizes -- whose turn it is shows only via .is-active-turn
@@ -1532,7 +1612,7 @@ class BattleshipUI {
     const theirsLive = enemyLive;
     this.shell.innerHTML = `
       <div class="bs-battle">
-        <p class="bs-status" aria-live="polite">${esc(this._statusText())}</p>
+        ${this._turnBarHtml()}
         ${series}
         <div class="bs-boardpanel bs-boardpanel-enemy ${enemyLive ? 'is-live' : ''}">
           <div class="bs-board-wrap">${this._boardHtml('enemy', enemyLive)}</div>
@@ -1548,7 +1628,7 @@ class BattleshipUI {
             <div class="bs-rosterrow bs-rosterrow-mine ${theirsLive ? 'is-dim' : ''}">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
           </div>
           <button type="button" class="bs-exitdisc" data-action="${this.mp ? 'mp-leave' : 'change-settings'}"
-            aria-label="${esc(t('exit'))}"><span>${esc(t('exit'))}</span></button>
+            aria-label="${esc(t('exit'))}" title="${esc(t('exit'))}">${ICON_CLOSE}</button>
         </div>
         <div class="bs-boardpanel bs-boardpanel-own ${ownLive ? 'is-live' : ''}">
           <div class="bs-board-wrap">${this._boardHtml('own', ownLive)}</div>
@@ -1556,11 +1636,11 @@ class BattleshipUI {
         <div class="bs-fx" data-role="fx" aria-hidden="true"></div>
         ${banner}
         <div class="bs-actions">
-          <button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="help">${t('howto')}</button>
-          <span class="bs-shotcount">${esc(id.humanEmoji)} ${t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 })} ${esc(id.oppEmoji)}</span>
+          <button type="button" class="bs-iconbtn bs-iconbtn-sm" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
+          <span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>
           ${this.mp
             ? ''
-            : `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-role="restart" data-action="restart">${t('restart_game')}</button>`}
+            : `<button type="button" class="bs-iconbtn bs-iconbtn-sm" data-role="restart" data-action="restart" aria-label="${esc(t('restart_game'))}" title="${esc(t('restart_game'))}">${ICON_RESTART}</button>`}
         </div>
       </div>`;
     this._fitBattleBoards();
@@ -1595,13 +1675,18 @@ class BattleshipUI {
     return t('mp_series', { me: mp.series.wins[this._localSeat()] | 0, them: mp.series.wins[this._remoteSeat()] | 0, opp: id.oppName });
   }
 
+  /** Restart is a two-tap control. It used to swap its own LABEL to "Tap again to confirm"; the
+   *  button is a bare icon now, so arming it turns the disc red and pulses it instead, and the
+   *  accessible name changes with it. Swapping textContent on an icon button would have thrown the
+   *  SVG away and never got it back. */
   confirmDestructive(btn, action) {
     if (!this.state || this.state.over) { action(); return; }
     if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
     this.resetConfirms();
     btn.dataset.armed = '1';
-    btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.dataset.label = btn.getAttribute('aria-label') || '';
+    btn.setAttribute('aria-label', t('tap_again_confirm'));
+    btn.setAttribute('title', t('tap_again_confirm'));
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -1610,7 +1695,12 @@ class BattleshipUI {
     clearTimeout(this._confirmTimer);
     if (!this.shell) return;
     const b = this.shell.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') { b.textContent = b.dataset.label; b.dataset.armed = ''; b.classList.remove('is-confirm'); }
+    if (b && b.dataset.armed === '1') {
+      b.setAttribute('aria-label', b.dataset.label);
+      b.setAttribute('title', b.dataset.label);
+      b.dataset.armed = '';
+      b.classList.remove('is-confirm');
+    }
   }
 
   // --- stats + finish ------------------------------------------------------------------------
@@ -1851,7 +1941,7 @@ class BattleshipUI {
     const answer = { result: res.result, shipId: res.shipId, sunk: res.sunk, fleetSunk: res.fleetSunk, cells: res.cells };
     this.state = applyAnswer(this.state, mySeat, r, c, answer);
     this._lastShot = { seat: mySeat, r, c, result: answer.result, sunk: answer.sunk, cells: answer.cells };
-    this._maybeShowSunkBanner(answer);
+    this._maybeShowSunkBanner(answer, mySeat);
     const seq = ++mp.appliedSeq;
     net.appendMove(mp.code, mp.role, seq,
       { t: 'a', k: 'a', g: mp.gameNum, seat: mySeat, r, c, result: answer.result, shipId: answer.shipId, sunk: answer.sunk, fleetSunk: answer.fleetSunk, cells: answer.cells },
@@ -1935,7 +2025,7 @@ class BattleshipUI {
       if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
       mp.pendingShot = null;
       this._lastShot = { seat: defenderSeat, r: move.r | 0, c: move.c | 0, result: answer.result, sunk: answer.sunk, cells: answer.cells };
-      this._maybeShowSunkBanner(answer);
+      this._maybeShowSunkBanner(answer, defenderSeat);
       this.busy = true;
       this.renderBattle();
       await this._mpDelay(reducedMotion() ? 60 : 420);
@@ -1958,6 +2048,11 @@ class BattleshipUI {
     this._setMpStatus('mp_status_resyncing');
     if (mp.role === 'host') {
       mp.appliedSeq = seq;
+      // The rejected entry is consumed, never applied, so anything this device was waiting on it
+      // for is over. Leaving `pendingShot` set left the host holding a shot whose answer it had
+      // just thrown away, i.e. waiting on something that could not arrive -- the same shape as the
+      // deadlock _mpStateSeq documents, reached from the other side.
+      mp.pendingShot = null;
       net.writeRecovery(mp.code, seq, this._mpSnapshot()).catch(() => {});
       this._afterStateChange();
       return true;
@@ -1969,6 +2064,26 @@ class BattleshipUI {
 
   /** PUBLIC STATE ONLY (section 7.4/7.5): neither fleet is ever in here. A recovering device
    *  rebuilds its own secret fleet from its OWN local MP save, never from the network. */
+  /** THE HIGHEST SEQ THIS DEVICE'S PUBLIC STATE ACTUALLY REFLECTS -- which is not `appliedSeq`.
+   *
+   *  A shooter RESERVES its seq synchronously in `_mpFireAt`, before anything about the state has
+   *  changed: only the defender's answer changes it. So a device with a shot in the air has
+   *  `appliedSeq` one AHEAD of the last entry baked into `state`.
+   *
+   *  That gap deadlocked the match. A recovery snapshot published while the host had a shot in the
+   *  air said "I am at seq N" and carried a state that did not include seq N; the guest adopted
+   *  N, skipped the host's shot entirely -- never running the `k:'s'` branch, so never resolving it
+   *  against its own fleet and never publishing an answer -- and the host waited for that answer
+   *  forever. Neither side errored, neither side was busy-looping, and both boards simply stopped.
+   *  On real phones the window is every bit as wide as the round trip, so a single resync could end
+   *  the match. Reproduced 4 runs in 6 by `test-mp-lockstep.mjs`'s BS2, which had been carrying it
+   *  as a documented "intermittent timeout" in this game's own CLAUDE.md. */
+  _mpStateSeq() {
+    const mp = this.mp;
+    if (!mp) return 0;
+    return mp.pendingShot ? Math.max(0, (mp.appliedSeq | 0) - 1) : (mp.appliedSeq | 0);
+  }
+
   _mpSnapshot() {
     const mp = this.mp;
     return {
@@ -1996,6 +2111,17 @@ class BattleshipUI {
     mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
     mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
     mp.pendingShot = null;
+    // The state just jumped, so "which shot is the next answer allowed to answer" cannot be
+    // whatever this device happened to be holding before the jump -- that stale pair would reject
+    // a perfectly good answer and bounce straight back into another recovery. Re-derive it from
+    // the log: if the last entry the recovered state reflects IS a shot, that is the one an
+    // incoming answer must match; otherwise there is no shot outstanding at all.
+    mp.lastShotSeat = null; mp.lastShotRC = null;
+    const at = mp.movesById && mp.movesById.get(mp.appliedSeq);
+    if (at && at.move && at.move.k === 's') {
+      mp.lastShotSeat = at.move.seat | 0;
+      mp.lastShotRC = [at.move.r | 0, at.move.c | 0];
+    }
     const bothReady = mp.readySeats.has(0) && mp.readySeats.has(1);
     // The honest failure case (section 7.5): if this device lost its own local fleet (storage
     // cleared, different browser) it cannot recover it from anywhere, and the match cannot
@@ -2043,9 +2169,20 @@ class BattleshipUI {
   async _mpOnRoomUpdate(room) {
     if (this._dead || !this.mp || !room) return;
     const mp = this.mp;
+    // A real room record arrived, so the restore watchdog above has nothing left to catch.
+    if (mp.restoreProbe) {
+      mp.restoreProbe = false;
+      if (this._mpRestoreTimer) { clearTimeout(this._mpRestoreTimer); this._mpRestoreTimer = null; }
+    }
     mp.lastRoomSnapshot = room;
     const other = mp.role === 'host' ? room.guest : room.host;
+    const oppWasUnknown = !mp.opp;
     if (other && other.deviceId) mp.opp = other;
+    // The "waiting for {opp}" screen is rendered ONCE, from whatever this device knew at the time.
+    // On a restore (and for a host whose guest joins a beat later) that is nothing at all, and the
+    // screen then sat there naming the wrong person for the rest of the match. Repaint it the
+    // moment the room tells us who is actually there.
+    if (oppWasUnknown && mp.opp && this.view === 'placement' && mp.localReady) this.renderPlacement();
 
     if (room.status === 'ended' && !mp.opponentLeft) {
       mp.opponentLeft = true;
@@ -2063,7 +2200,7 @@ class BattleshipUI {
     if (room.recovery) {
       if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
         mp.lastRecoveryHandled = room.recovery.requested;
-        try { await net.writeRecovery(mp.code, mp.appliedSeq, this._mpSnapshot()); } catch { /* the requester retries */ }
+        try { await net.writeRecovery(mp.code, this._mpStateSeq(), this._mpSnapshot()); } catch { /* the requester retries */ }
       }
       if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
         mp.lastRecoveryApplied = room.recovery.seq;
@@ -2093,13 +2230,27 @@ class BattleshipUI {
     }
   }
 
+  /** Firebase's RTDB reads and writes DO NOT REJECT when the device cannot reach the server -- they
+   *  simply never settle. So `await net.createRoom(...)` on a phone with no usable signal leaves
+   *  "Creating room..." spinning for as long as the player is willing to stare at it, with no
+   *  error, no retry and nothing to tap. Every one of this game's lobby round trips is bounded
+   *  here instead: after MP_NET_TIMEOUT_MS the player gets the ordinary offline error and their
+   *  buttons back. A late reply is harmless -- the room is simply abandoned to the TTL, exactly as
+   *  it would be if the app were closed at that moment. */
+  _withNetTimeout(promise) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(() => resolve({ error: 'offline' }), MP_NET_TIMEOUT_MS)),
+    ]);
+  }
+
   async _mpHostCreate() {
     if (this._mpBusy) return;
     this._mpBusy = true; this._mpError = '';
     this._lobby = 'host';
     this.renderSetup();
     const config = { sizeKey: this._setup.size, bonusShotOnHit: this._setup.bonusShotOnHit };
-    const res = await net.createRoom('battleship', config, this._myIdentity());
+    const res = await this._withNetTimeout(net.createRoom('battleship', config, this._myIdentity()));
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -2130,7 +2281,7 @@ class BattleshipUI {
     if (code.length !== MP_CODE_LEN) return;
     this._mpBusy = true; this._mpError = '';
     this._syncMpMsgSlot();
-    const res = await net.joinRoom(code, this._myIdentity());
+    const res = await this._withNetTimeout(net.joinRoom(code, this._myIdentity()));
     this._mpBusy = false;
     if (this._dead) return;
     if (res.error) {
@@ -2275,7 +2426,7 @@ class BattleshipUI {
     const { code, role } = save;
     try {
       if (role === 'guest') {
-        const res = await net.joinRoom(code, this._myIdentity());
+        const res = await this._withNetTimeout(net.joinRoom(code, this._myIdentity()));
         if (res.error || (res.room && res.room.status === 'ended')) { this._mpClearSave(); return; }
       } else if (!(await net.init())) return;
     } catch { return; }
@@ -2297,6 +2448,21 @@ class BattleshipUI {
     this.view = save.view === 'placement' ? 'placement' : 'battle';
     this.busy = false;
     net.heartbeat(code, role);
+    // A ROOM THAT NEVER ANSWERS MUST NOT STRAND THE PLAYER. The restore above proves Firebase is
+    // reachable, not that this room is still alive: a room that ended, or aged past its TTL and
+    // was reclaimed, reads back as null, and `_mpOnRoomUpdate` returns early on a null room -- so
+    // the device sat on "waiting for the opponent" forever, with no opponent and no way out. This
+    // watchdog gives the subscription one bounded chance to deliver a live room and otherwise
+    // hands the player back their setup screen with the save cleared.
+    mp.restoreProbe = true;
+    this._mpRestoreTimer = setTimeout(() => {
+      this._mpRestoreTimer = null;
+      if (this._dead || !this.mp || !this.mp.restoreProbe) return;
+      this._mpClearSave();
+      this.mp = null;
+      net.disconnect();
+      this.renderSetup();
+    }, MP_NET_TIMEOUT_MS);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));
     if (this._dead) return;
 
@@ -2328,6 +2494,21 @@ class BattleshipUI {
     </svg>`;
   }
 
+  /** The three marks a player will actually see on the board, drawn rather than described. This
+   *  replaced the line "Miss = ripple. Hit = flash. Sunk = the whole ship reveals." -- which was
+   *  also wrong by then: a miss has been a CROSS scored into the water since the 2026-08 redesign,
+   *  not a ripple. A picture of the real marker cannot drift out of date the way that sentence
+   *  did. Each mark keeps its word as an accessible name. */
+  _helpMarkerKey() {
+    const cell = (cls, key, inner) =>
+      `<span class="bs-key-cell ${cls}" role="img" aria-label="${esc(t(key))}">${inner}</span>`;
+    return `<div class="bs-help-key">
+      ${cell('bs-key-water', 'cell_miss', '<span class="bs-peg" aria-hidden="true"><span class="bs-peg-miss"></span></span>')}
+      ${cell('bs-key-water', 'cell_hit', '<span class="bs-peg" aria-hidden="true"><span class="bs-peg-hit"></span></span>')}
+      ${cell('bs-key-sunk', 'cell_sunk', `<span class="bs-key-ship" aria-hidden="true">${shipArtHtml('destroyer', 2)}</span>`)}
+    </div>`;
+  }
+
   openHelp() {
     this.closeOverlays();
     const overlay = document.createElement('div');
@@ -2342,7 +2523,7 @@ class BattleshipUI {
         <div class="bs-diagram-wrap">${this._helpDiagram()}</div>
         <div class="bs-help-lines">
           <p class="bs-help-caption">${t('help_caption')}</p>
-          <p class="bs-help-example">${t('help_example')}</p>
+          ${this._helpMarkerKey()}
           <p class="bs-help-rule">${t('help_rule')}</p>
         </div>
       </div>`;
@@ -2376,9 +2557,12 @@ class BattleshipUI {
     if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
   }
 
+  /** The WHOLE ship is the drag handle, on the board and in the tray alike. Nothing is layered on
+   *  top of it any more -- the tray's rotate buttons and the board's corner arrows both used to
+   *  sit right where a thumb naturally lands, and `onPointerDown` bailed out on them, so a drag
+   *  started there silently did nothing. */
   onPointerDown(e) {
     if (this.view !== 'placement') return;
-    if (e.target.closest('[data-action="rotate-ship"], [data-action="rotate-placed"]')) return;
     // A ship already ON the board is picked straight off it: drag to move, or release without
     // moving to rotate it in place (see onPointerUp). `origin` is what a no-move release goes
     // back to, so a tap can never lose the ship.
@@ -2394,8 +2578,11 @@ class BattleshipUI {
     const chip = e.target.closest('[data-role="ship-chip"]');
     if (chip) {
       const shipId = chip.dataset.ship;
+      // `wasSelected` is what makes a second tap on the same tray chip a ROTATE, mirroring the
+      // gesture a placed ship already answered to. Read BEFORE _selectShip, which sets it.
+      const wasSelected = this._placeSelected === shipId;
       this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId, origin: null, x: e.clientX, y: e.clientY, moved: false };
+      this._dragging = { shipId, pointerId: e.pointerId, origin: null, wasSelected, x: e.clientX, y: e.clientY, moved: false };
       try { chip.setPointerCapture(e.pointerId); } catch { /* not all browsers need this */ }
     }
   }
@@ -2433,7 +2620,7 @@ class BattleshipUI {
 
   onPointerUp() {
     if (this.view !== 'placement' || !this._dragging) return;
-    const { shipId, origin, moved } = this._dragging;
+    const { shipId, origin, moved, wasSelected } = this._dragging;
     this._dragging = null;
     if (this._placePreview && (moved || !origin)) {
       const { r, c } = this._placePreview;
@@ -2442,6 +2629,9 @@ class BattleshipUI {
       return;
     }
     this._placePreview = null;
+    // A second tap on an already-selected TRAY chip rotates it, the same gesture a placed ship
+    // answers to below. This is what replaced the per-chip rotate button.
+    if (!origin && !moved && wasSelected) { this._rotateShip(shipId); return; }
     if (origin) {
       // A tap (no drag) on a placed ship rotates it in place. It was lifted off the board by
       // onPointerDown's _selectShip, so put it back either way -- rotated if that fits, exactly
@@ -2499,10 +2689,6 @@ class BattleshipUI {
       this.startGame();
     } else if (action === 'select-ship') {
       this._selectShip(btn.dataset.ship);
-    } else if (action === 'rotate-ship') {
-      this._rotateShip(btn.dataset.ship);
-    } else if (action === 'rotate-placed') {
-      this._rotatePlacedShip(btn.dataset.ship);
     } else if (action === 'exit-placement') {
       this.renderSetup();
     } else if (action === 'skip-botplace') {

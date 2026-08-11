@@ -74,10 +74,12 @@ const KNOWN_GAPS = {
   // caused them. They are real, though: this is exactly the "I couldn't see the full board and the
   // controls simultaneously" complaint that produced the check, and each needs its own layout pass
   // (the same measure-the-host work `_fitToHost`/`_fitBattleBoards` do) rather than a shared fix.
+  // Battleship's entry is GONE (2026-08-11): it now fits both hosts at both heights. Nothing in
+  // _fitBattleBoards changed -- the text cut did it. The status sentence, the two word-buttons and
+  // the "N ships left to place" line were between 60 and 100px of vertical space that the boards
+  // were competing with, and taking the words out gave it back. Worth knowing next time a screen
+  // "needs a layout pass": sometimes it just needs fewer sentences.
   'fits one screen': {
-    battleship: 'up to 221px too tall (hub, 390x664). Its own _fitBattleBoards() measures the '
-      + 'host, but only budgets for the TALL viewport it was verified at; a short phone in the hub '
-      + 'is 138px of chrome plus ~100px less screen and it runs out of room.',
     escoba: 'up to 165px too tall (hub, 390x664). Fits fine at 393x852, both hosts.',
     mancala: 'up to 222px too tall (hub, 390x664), and 34px even on a TALL phone in the hub - the '
       + 'worst of the three, and the only one that overflows a full-size screen.',
@@ -452,11 +454,54 @@ const PLAY = {
   },
 
   battleship: {
-    what: 'fire a shot and have it resolve on the enemy board',
+    what: 'drag every ship onto the board without the board moving, then fire a shot',
     async run(page, cdp, tap) {
       const go = async (sel) => { const el = await page.waitForSelector(sel, { timeout: 8000 }); await tap(el); };
       await go('[data-action="play-bot"]');
-      await go('[data-action="auto-place"]');
+
+      // THE BOARD MUST NOT MOVE WHILE YOU ARE DRAGGING ONTO IT. Matt, 2026-08-11: "It moves around
+      // if you drag your boats while placing them." The tray used to wrap onto two rows and lose
+      // one the instant the first ship landed, yanking the board 71px up the screen mid-drag. This
+      // drags all five ships with real touch and fails if the board's box EVER changes -- a check
+      // no screenshot can make, because every individual frame of that bug looks correct.
+      await page.waitForSelector('[data-role="place-board"]', { timeout: 8000 });
+      const boxOf = () => page.evaluate(() => {
+        const el = document.querySelector('[data-role="place-board"]');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return `${r.x.toFixed(1)},${r.y.toFixed(1)},${r.width.toFixed(1)}`;
+      });
+      const boxes = new Set([await boxOf()]);
+      let dragged = 0;
+      for (let n = 0; n < 5; n++) {
+        const chip = await page.$('[data-role="ship-chip"]');
+        if (!chip) break;
+        const cb = await chip.boundingBox();
+        const bd = await (await page.$('[data-role="place-board"]')).boundingBox();
+        if (!cb || !bd) break;
+        const sx = cb.x + cb.width / 2, sy = cb.y + cb.height / 2;
+        const tx = bd.x + bd.width * 0.14 + n * (bd.width * 0.11);
+        const ty = bd.y + bd.height * 0.08 + n * (bd.height * 0.17);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy }] });
+        for (let i = 1; i <= 6; i++) {
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [{ x: sx + (tx - sx) * i / 6, y: sy + (ty - sy) * i / 6 }],
+          });
+          await page.waitForTimeout(25);
+          boxes.add(await boxOf());
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await page.waitForTimeout(140);
+        boxes.add(await boxOf());
+        dragged = await page.evaluate(() => document.querySelectorAll('[data-role="board-ship"]').length);
+      }
+      if (boxes.size !== 1) {
+        return { ok: false, why: `the placement board moved while ships were being dragged onto it (${boxes.size} different boxes: ${[...boxes].join(' | ')})` };
+      }
+      if (dragged < 5) {
+        return { ok: false, why: `only ${dragged}/5 ships could be dragged onto the board (the whole ship must be a drag handle)` };
+      }
       await go('[data-action="placement-ready"]');
       await page.waitForTimeout(400);
       const skip = await page.$('.bs-wait');
@@ -712,9 +757,28 @@ const FIT_SIZES = [
 /** Mount a game the way the HUB does, without going through the launcher: dev-only games are
  *  hidden there behind a name check this suite cannot satisfy, and the launcher is not the point
  *  anyway - the hub's chrome and CSS are. */
+/** The launcher's one-time announcement popup (js/announce.js + announce-ui.js) covers the whole
+ *  hub on a fresh profile, and several checks here MEASURE the hub. Left up, the number reported is
+ *  the POPUP's, not the game's -- which is what happened the day the announcement shipped
+ *  (battleship read "103px too tall" in the hub on a short phone; all 103 of them were the modal).
+ *  Marking every announcement seen rather than hardcoding one id means a future one is covered
+ *  without editing this. */
+async function dismissAnnouncement(page) {
+  try {
+    await page.evaluate(async () => {
+      try {
+        const m = await import('/js/announce.js');
+        for (const a of (m.ANNOUNCEMENTS || [])) m.markSeen(a.id);
+      } catch { /* module missing: the node removal below is still worth doing */ }
+      document.querySelectorAll('.ann-overlay').forEach((n) => n.remove());
+    });
+  } catch { /* never let a popup workaround fail a run */ }
+}
+
 async function mountInHub(page, game) {
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForTimeout(700);
+  await dismissAnnouncement(page);
   return page.evaluate(async (g) => {
     const main = document.querySelector('.hub-main');
     const host = document.querySelector('[data-role="game"]');
