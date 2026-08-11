@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v288';
+const CACHE = 'game-hub-v289';
 
 const ASSETS = [
   './',
@@ -197,6 +197,15 @@ const ASSETS = [
   './hill-climb/js/catalog.js',
   './hill-climb/js/store.js',
   './hill-climb/js/strings.js',
+  // Skeeball (2026-08-11). test.js is deliberately NOT listed: node-only engine suite, never
+  // loaded by the page (same convention as every other game's test file).
+  './skeeball/',
+  './skeeball/index.html',
+  './skeeball/css/skeeball.css',
+  './skeeball/js/ui.js',
+  './skeeball/js/game.js',
+  './skeeball/js/render.js',
+  './skeeball/js/strings.js',
   // Snake v2 (devOnly preview, 2026-08-01): the card renders only for isDevProfile(), but the
   // FILES must be precached like any other deployed page or the preview breaks offline. It has
   // no game.js or strings.js of its own on purpose - it imports Snake's (see snake-v2/CLAUDE.md),

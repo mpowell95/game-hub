@@ -126,6 +126,15 @@
 //                                                   // hill-climb's own save (gamehub.hillclimb.v1), so
 //                                                   // nothing that can go down is ever written into the
 //                                                   // shared store; see recordHillClimb
+//       skeeball: {
+//         total, byDiff,
+//         sk: { played, won, lost, tied, balls, points,
+//               bestGame, bestThrow, hundreds, fifties } },  // vs the computer, and it CAN tie (both
+//                                                   // totals can land equal), so `tied` is stored
+//                                                   // explicitly rather than derived. balls/points/
+//                                                   // hundreds/fifties are lifetime counters (add
+//                                                   // only); bestGame/bestThrow are Math.max only.
+//                                                   // See recordSkeeball
 //       pinball: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard -- Pinball's three
 //                                                   // TABLE settings (Casual/Standard/Tournament) are
@@ -151,7 +160,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'pinball'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -538,6 +547,20 @@ function ensureBs(g) {
   }
 }
 
+/** Skeeball: W/L/T counters plus the things a skeeball player actually brags about -- the best
+ *  single game, the best single throw, and how many times they have found a 100 cup or the 50.
+ *  `tied` is explicit rather than derived (two totals can genuinely land equal), matching
+ *  tt/db/bg/yz/dm. `balls` and `points` are LIFETIME counters and only ever add; `bestGame` and
+ *  `bestThrow` are Math.max only (THE LAW rule 2). `points` is the lifetime total the player has
+ *  scored across every game, which is why it is not derivable from bestGame and gets its own
+ *  counter rather than being recomputed. */
+function ensureSk(g) {
+  if (!g.sk || typeof g.sk !== 'object') g.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0 };
+  for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'bestGame', 'bestThrow', 'hundreds', 'fifties']) {
+    if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
+  }
+}
+
 /** Fill any missing structure so the rest of the code can assume a full shape. */
 function normalize(raw) {
   const st = (raw && typeof raw === 'object') ? raw : {};
@@ -562,6 +585,7 @@ function normalize(raw) {
   ensureSn(st.games.snake);
   ensureHc(st.games.hillclimb);
   ensureBs(st.games.battleship);
+  ensureSk(st.games.skeeball);
   return st;
 }
 
@@ -1012,6 +1036,32 @@ export function recordBattleship(difficulty, won, extras) {
   return st;
 }
 
+/** Skeeball: record one finished match against the computer. Maintains total/byDiff (as
+ *  recordResult) AND the `sk` breakdown. `won` is true, false, or NULL for a tie -- both totals can
+ *  land equal, so unlike Battleship this game really can draw. `extras` = { score, balls, hundreds,
+ *  fifties, bestThrow } for the HUMAN's side of this match only: `score`/`balls`/`hundreds`/
+ *  `fifties` add to the lifetime counters, `bestGame` and `bestThrow` take Math.max. Additive; a
+ *  quit game never reaches here, so no counter can be minted by walking away. */
+export function recordSkeeball(difficulty, won, extras) {
+  const st = loadStats();
+  const g = st.games.skeeball;
+  bumpTotals(g, normDiff(difficulty), won);
+  ensureSk(g);
+  const e = extras || {};
+  const score = Math.max(0, e.score | 0);
+  g.sk.played += 1;
+  if (won === true) g.sk.won += 1; else if (won === false) g.sk.lost += 1; else g.sk.tied += 1;
+  g.sk.balls += Math.max(0, e.balls | 0);
+  g.sk.points += score;
+  g.sk.hundreds += Math.max(0, e.hundreds | 0);
+  g.sk.fifties += Math.max(0, e.fifties | 0);
+  g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
+  g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Pinball: a solo score-attack game. Same shape family as Ball Run's `br`, Snake's `sn` and Hill
  *  Climb's `hc` - a game has no opponent and no loss axis (it ends when the last ball drains), so
  *  `pb.games` is the true play count and the score bests are the scoreboard.
@@ -1098,7 +1148,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordBattleship, recordPinball, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, recordPinball, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

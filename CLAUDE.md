@@ -225,7 +225,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 A game module's entry (`<game>/js/ui.js`) exports exactly three functions, plus a default
 object bundling them. All in-hub module games (Connect Four, Chinchón, Dominoes, Escoba,
 Filler, Mancala, Nuts & Bolts, Ball Run, Tic Tac Toe, Dots and Boxes, Boggle, Snake, Uno, Pool,
-Hill Climb, Battleship, Pinball) export all three; grep-verify before assuming otherwise:
+Hill Climb, Battleship, Skeeball, Pinball) export all three; grep-verify before assuming otherwise:
 
 ```js
 export function init(container) { /* mount the whole game UI into `container` */ }
@@ -257,13 +257,14 @@ export default { init, destroy, isInProgress };
     is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
     Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle (solo), Nuts & Bolts, Uno, Pool
-    (solo/practice)): returns
+    (solo/practice), Skeeball): returns
     `false` for solo play even mid-game, because leaving is lossless — each game snapshots
     after every state-changing event and picks up where it left off on return. Save keys:
     `escoba-save`, `gamehub.mancala.game.v1`, `gamehub.connect4.save.v1`,
     `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`, `gamehub.filler.save.v1`,
     `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`, `gamehub.uno.save.v1`,
-    `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`
+    `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`,
+    `gamehub.skeeball.save.v1`
     (Nuts & Bolts needed no new key —
     its existing `gamehub.nutsbolts.v1` kept-aside board already survived navigation; batch 9
     just made it auto-resume on mount instead of waiting for a matching-tier tap). Escoba's,
@@ -274,7 +275,7 @@ export default { init, destroy, isInProgress };
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
 - An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee, Pool,
-  Hill Climb, Battleship, Pinball)
+  Hill Climb, Battleship, Skeeball, Pinball)
   collapses the hub's header to a floating back button for games with their own full-bleed
   chrome. It's a de facto fourth registry flag, same status as `module`/`href`/`devOnly` —
   set it when a game wants to own the whole viewport.
@@ -387,7 +388,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    entry that 404s on disk and warns about deployed `.js`/`.css`/`.html` files that aren't
    in the list yet, which is exactly the mistake that left Connect Four's standalone page
    uncached for a long time.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`pb` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -448,6 +449,7 @@ working in that folder).
 | Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Pinball | in-hub `module:`, immersive, **admin only** (`devOnly`) | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` |
+| Skeeball | in-hub `module:`, immersive | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |

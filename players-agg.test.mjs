@@ -363,6 +363,40 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('hillclimb: totals still aggregate alongside', grp.games.hillclimb.total.played, 8);
 }
 
+// ---- Skeeball's sk sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Counters (played/won/lost/tied, balls, lifetime points, 100s, 50s) ADD; bestGame and bestThrow
+// take Math.max, NEVER a sum - a summed best would invent a score nobody ever threw, which is rule
+// 4 as well as rule 2. A device that synced before this game existed must combine cleanly too.
+{
+  const all = {
+    d1: rec({ playerId: 'SK777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 4, won: 3, lost: 1 },
+        byDiff: { medium: { played: 4, won: 3, lost: 1 } },
+        sk: { played: 4, won: 3, lost: 1, tied: 0, balls: 36, points: 1240, bestGame: 410, bestThrow: 300, hundreds: 3, fifties: 7 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'sk777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 3, won: 1, lost: 1 },
+        byDiff: { hard: { played: 3, won: 1, lost: 1 } },
+        sk: { played: 3, won: 1, lost: 1, tied: 1, balls: 27, points: 700, bestGame: 290, bestThrow: 150, hundreds: 1, fifties: 2 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'SK777', name: 'Roller' }, {}, 300),   // pre-Skeeball device: no key at all
+  };
+  const grp = aggregatePlayers(all)[0];
+  const sk = grp.games.skeeball.sk;
+  eq('skeeball: one person, three devices, one row', aggregatePlayers(all).length, 1);
+  eq('skeeball: W/L/T all sum', [sk.won, sk.lost, sk.tied], [4, 2, 1]);
+  eq('skeeball: balls and lifetime points sum', [sk.balls, sk.points], [63, 1940]);
+  eq('skeeball: 100s and 50s sum', [sk.hundreds, sk.fifties], [4, 9]);
+  eq('skeeball: bestGame is the max, not the sum', sk.bestGame, 410);
+  eq('skeeball: bestThrow is the max, not the sum', sk.bestThrow, 300);
+  eq('skeeball: totals still aggregate alongside', grp.games.skeeball.total.played, 7);
+}
+
 // ---- Snake walls split: a solo pre-split device (never resynced since this shipped) must NOT
 // read 0-0 on the leaderboard -- this is the exact bug report ("0-0 for everyone"): a fresh
 // aggregate over ONLY legacy-shaped records had no bestLenByWalls anywhere to fall back on. ----

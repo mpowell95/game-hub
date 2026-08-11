@@ -236,6 +236,23 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    id: 'skeeball',
+    released: '2026-08-11',
+    title: 'Skeeball',
+    blurb: { en: 'Flick the ball up the lane. Far rings pay more, the corner cups pay 100.',
+      es: 'Lanza la bola por la pista. Los aros del fondo valen más y las copas de las esquinas, 100.' },
+    module: '../skeeball/js/ui.js',
+    // Its own alley fills the screen and it draws its own back affordance space into the HUD, so
+    // the hub's header row is wasted height here - same call as Escoba and Ball Run.
+    immersive: true,
+    accent: '#C8452F',
+    // The reference recording is PORTRAIT (reference/skeeball/SPEC.md), so this is composed for
+    // 16:9 rather than cropped from it: the lane runs off the bottom edge at full width and the
+    // ring stack sits centred at the top with a 100 cup pushed into each corner, which is exactly
+    // the content the wide frame has room for and the tall one does not.
+    art: GAME_ART["skeeball"],
+  },
+  {
     id: 'uno',
     title: 'Uno',
     blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',
