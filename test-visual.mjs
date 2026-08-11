@@ -241,6 +241,19 @@ const MOTION = {
       await cell.click();
     },
   },
+  mancala: {
+    // The sow IS the rule this page teaches - stones travelling one per pit around the board.
+    // A still diagram of it is what the sheet this replaced already had, and nobody learned the
+    // game from it. Watch the travelling stone actually travel.
+    what: 'a stone travelling pit to pit as the sow plays out',
+    selector: '.mc-ht-stone',
+    minMs: 500,
+    minTravelPx: 40,
+    async drive(page) {
+      await page.click('[data-action="help"]');
+      await page.click('[data-action="ht-next"]');   // page 2 is the sow
+    },
+  },
   yahtzee: {
     // The HOW TO PLAY carousel is a clone of six screen recordings (reference/yahtzee/*.MOV) and
     // its whole job is to MOVE - the pointing hand travelling to a control and tapping it is the

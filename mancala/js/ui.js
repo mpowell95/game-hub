@@ -25,6 +25,7 @@ import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
 import STRINGS from './strings.js';
+import { howToHtml, createHowTo } from './howto.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.mancala.v1';
@@ -305,6 +306,7 @@ class MancalaUI {
     for (const a of this.anims) { try { a.cancel(); } catch { /* ignore */ } }
     this.anims.clear();
     if (this.resizeObs) { this.resizeObs.disconnect(); this.resizeObs = null; }
+    if (this._howTo) { this._howTo.destroy(); this._howTo = null; }
     // Deliberately do NOT abandon an MP room here: destroy() runs for ANY hub teardown,
     // including just navigating back to the launcher mid-match, which is exactly what the MP
     // autosave's 30-minute rejoin window exists for. Only the LOCAL listener and heartbeat
@@ -1165,28 +1167,32 @@ class MancalaUI {
     </svg>`;
   }
 
+  /** HOW TO PLAY -- the six-page animated carousel cloned from reference/mancala/*.MOV
+   *  (2026-08-11). It REPLACED a static sheet: one SVG diagram, a lead line, a caption and two
+   *  bullets. That sheet was correct and nobody could learn the game from it -- sowing, the
+   *  extra turn and the capture are all things a board DOES, and prose about motion is the
+   *  thing this repo's own VISUAL-PROCESS.md says survives the trip worst.
+   *
+   *  Built on demand and torn down on close, matching this game's existing overlay idiom
+   *  (closeOverlays() removes them wholesale) -- Mancala rewrites its whole root on every
+   *  render, so a persistently-mounted sheet would be destroyed underneath itself. */
   openHelp() {
     this.closeOverlays();
-    const overlay = document.createElement('div');
-    overlay.className = 'mc-overlay';
-    overlay.dataset.role = 'help';
-    overlay.innerHTML = `
-      <div class="mc-scrim" data-action="close-overlay"></div>
-      <div class="mc-card mc-help" role="dialog" aria-modal="true" aria-label="${t('howto')}">
-        <button type="button" class="mc-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
-        <h3 class="mc-card-title">${t('howto')}</h3>
-        <p class="mc-help-lead">${t('help_lead')}</p>
-        <div class="mc-help-diagram-wrap">${this._sowDiagram()}</div>
-        <p class="mc-help-caption">${t('help_caption')}</p>
-        <ul class="mc-help-bullets">
-          <li>${t('help_rule_capture')}</li>
-          <li>${t('help_rule_end')}</li>
-        </ul>
-      </div>`;
-    this.container.querySelector('.mancala').appendChild(overlay);
+    const host = this.container.querySelector('.mancala');
+    if (!host) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'mc-overlay mc-ht-overlay';
+    wrap.dataset.role = 'help';
+    wrap.innerHTML = howToHtml();
+    host.appendChild(wrap);
+    this._howTo = createHowTo(wrap);
+    if (this._howTo) this._howTo.open(0);
   }
 
   closeOverlays() {
+    // The carousel owns running timers; removing its node alone would leave them ticking against
+    // a detached board until the next clearTimers().
+    if (this._howTo) { this._howTo.destroy(); this._howTo = null; }
     this.container.querySelectorAll('.mc-overlay').forEach((el) => el.remove());
   }
 
@@ -1828,6 +1834,12 @@ class MancalaUI {
       this.renderSetup();
     } else if (action === 'help') {
       this.openHelp();
+    } else if (action === 'ht-close') {
+      this.closeOverlays();
+    } else if (action === 'ht-next') {
+      if (this._howTo) this._howTo.next();
+    } else if (action === 'ht-first') {
+      if (this._howTo) this._howTo.first();
     } else if (action === 'close-overlay') {
       this.closeOverlays();
     } else if (action === 'set-mode') {
