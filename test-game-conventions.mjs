@@ -161,7 +161,12 @@ for (const g of GAMES) {
   }
 }
 for (const f of ['css/hub.css', 'css/ui.css', 'css/name-gate.css', 'css/challenge.css',
-                 'js/leaderboard-ui.js', 'js/game-stats-ui.js']) {
+                 'js/leaderboard-ui.js', 'js/game-stats-ui.js',
+                 // The two overlays added with Report a bug (2026-08-11). They build on css/ui.css's
+                 // .gh-overlay/.gh-modal, which are already contained, but their own injected blocks
+                 // add scrolling regions of their own (the inbox's JSON pane) and are checked here
+                 // for the same reason the other two injected sheets are.
+                 'js/bug-report-ui.js', 'js/announce-ui.js']) {
   cssOffenders.push(...fixedScrollersMissingContainment(readFileSync(join(ROOT, f), 'utf8'), f));
 }
 

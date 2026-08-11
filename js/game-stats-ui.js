@@ -65,6 +65,20 @@ export const hubIdOf = (id) => HUB_ID[id] || id;
 const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
+/** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
+ *  displayed title. Exported for js/bug-report-ui.js's "Where did it happen?" picker, which needs
+ *  the same list of games under the same names but must not import js/hub.js for it (the same
+ *  reason the Leaderboard doesn't). Derived from TABS + the shared game_title_* keys, so a new
+ *  game appears here the moment it is added there and can never be named differently. */
+export function gameChoices() {
+  return TABS
+    // The retired Pool build: it stays in TABS so already-recorded plays remain visible (THE LAW
+    // rules 1 and 5), but nobody can be playing it today, so it is not a place a bug can happen.
+    .filter((tab) => tab.id !== 'poolv2')
+    .map((tab) => ({ id: tab.id, hubId: hubIdOf(tab.id), title: t(tab.labelKey) }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
 function visibleTabs() {
   let dev = false;

@@ -96,6 +96,11 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
+| `js/bug-report.js` | (2026-08-11) the DATA half of Report a bug: `gatherEnvironment()` (device/browser/install-state/screen/network/storage/service-worker/GPU/recent-errors) + the whole `gatherDeviceReport()` payload, `prepareScreenshot()`'s downscale-until-it-fits, the `bugReports/`+`bugReportShots/` write with a verifying re-read, and the offline outbox (`gamehub.bugreports.pending.v1`) the hub drains on load/reconnect/return-to-launcher. See "Report a bug" below |
+| `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's admin inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The repo's first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer, per the root CLAUDE.md |
+| `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors + unhandled rejections + failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
+| `js/announce.js` | (2026-08-11) one-time launcher announcements: the entries (title/body/CTA as `{en,es}` on the entry itself), the seen-list (`gamehub.announce.v1`), and the pure `pendingAnnouncement()` decision. Reuses `new-badge.js`'s date parser; every entry's `until` retires it with no follow-up commit |
+| `js/announce-ui.js` | (2026-08-11) the announcement popup; DOM only, `.gh-*` primitives, dismissal recorded on close by any route |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
 
 Firebase layer: one project (`js/firebase-config.js`), anonymous auth, RTDB rules
@@ -106,7 +111,9 @@ DEFAULT (unnamed) app and is untouched by the shared bootstrap — it was never 
 init race that motivated it. Node ownership is disciplined by convention: stats-net touches
 `players/` + `usernames/`, net.js touches `rooms/` only, challenge-net touches its own
 nodes, device-report.js touches `deviceReports/` only (read of the first two, write of
-the third). Nothing enforces this but comments.
+the third), and bug-report.js touches `bugReports/` + `bugReportShots/` only (it READS
+everything device-report.js reads, by calling it, and writes neither). Nothing enforces
+this but comments.
 
 ---
 
@@ -707,6 +714,154 @@ none of them share:
   called on the divergence path too, not skipped because "nothing really happened."
 - **Status: proven headlessly against `FakeRoom`; no real room has ever been created.** A cloud
   session cannot reach Firebase — same honest caveat every other consumer above carries.
+
+---
+
+## Report a bug (2026-08-11)
+
+Matt: *"We need a Report a Bug feature added to the gamehub. It needs to allow for uploads of
+screenshots... a text field to explain the problem, and it must send all of the details from the
+phone so we know what's going on (the same as the device details button in the profile, but with
+even more information. For example, we'd need the type of phone they're playing on and the browser
+vs if it's added as a shortcut, etc. everything that could be relevant)."*
+
+Five new modules, two new Firebase nodes, three new local keys, and one CLI reader. **THE LAW has
+no surface here by construction**: every one of those keys and nodes is NEW, nothing in the
+pipeline writes to a stats key, a profile field or a `players/` record, and the whole feature is
+read-only against everything that existed before it.
+
+### Where a player finds it
+
+Two doors, both on screens that exist when something has gone wrong: the launcher's footer row
+(`.hub-extra`, behind the divider under the games) and the profile page, directly above **Device
+details**. There is deliberately **no in-game entry point** — the hub's chrome collapses in-game
+and immersive games own the whole viewport, so a button there would have to fight for space in
+exactly the games most likely to need one. The flow assumed instead is the real one: something
+goes wrong, the player screenshots it with the phone, comes back out, and taps Report a bug, which
+preselects **the game they were last in** (`hub.js`'s `_lastGameId`, set before the module import
+so a game that fails to LOAD is still the one preselected).
+
+### What a report actually contains
+
+Three layers, and the split is the point — none of them is a subset of another:
+
+1. **What the player said**: the description, and which game they picked (the picker is built from
+   `game-stats-ui.js`'s `gameChoices()`, i.e. the same `TABS` + `game_title_*` keys My Stats and
+   the leaderboard use, so it can never drift and a new game appears in it automatically).
+2. **`deviceReport`** — the ENTIRE Device Details payload (`gatherDeviceReport()`), verbatim:
+   identity, every localStorage key this app has ever written, the raw key dump, sync health, and
+   the two Firebase conflict reads. A bug report is a superset of that diagnostic, so nobody ever
+   has to be told to press both buttons.
+3. **`environment`** — everything Device Details never knew, because it answers a different
+   question ("whose history is this and did it sync", not "what is this person holding"):
+   the device label and browser label (UA-Client-Hints high-entropy where available, UA-string
+   patterns for iOS/Safari where not), **`displayMode` + `iosStandalone` + `installed`** (Matt's
+   "browser vs added as a shortcut" ask — the media query and `navigator.standalone` are recorded
+   separately rather than merged, because iOS Safari only has the second), screen/viewport/
+   visualViewport/DPR/orientation, the theme + language + reduced-motion + timezone preferences,
+   the connection (`effectiveType`/`rtt`/`downlink`/`saveData`), storage quota and usage,
+   **which build the service worker is actually serving** (the same `GET_VERSION` message the
+   version pill uses), its registrations and cache names, the **GPU renderer string** (the thing
+   that actually explains "the 3D games are choppy" for Ball Run / Pool / Hill Climb), and
+   **`recentErrors`** — the last uncaught JS errors from `js/error-log.js`.
+
+**Every probe is individually guarded and records `null` on refusal.** Safari rejects the
+high-entropy UA call, `performance.memory` is Chromium-only, `storage.estimate` is not universal.
+A diagnostic that can fail to SEND is worse than one with a hole in it, so nothing here is allowed
+to throw, and `buildBugReport` itself is wrapped at the call site: if gathering blows up entirely,
+the description is sent alone with a `gatherError` field rather than nothing being sent at all.
+
+### Screenshots
+
+`<input type="file" accept="image/*" multiple>` (on iOS that offers the camera roll directly), then
+`prepareScreenshot()` downscales to a 1400px long edge and re-encodes as JPEG, **stepping quality
+down 0.78 → 0.36 until it fits** rather than refusing a 4 MB photo. Caps: 3 shots, 900 KB each,
+2.4 MB total, all checked by the pure `fitsShotBudget()` BEFORE a shot is attached, so the player
+is told at pick time instead of after a failed send. The canvas is painted white first — a
+dark-mode screenshot re-encoded onto a transparent canvas renders black-on-black in some viewers.
+
+RTDB is not a file store, so this is a deliberate trade: base64 in the database, kept small.
+Screenshots live in **`bugReportShots/<id>`, a separate node from `bugReports/<id>`**, so the inbox
+and `read-bug-reports.mjs` can list every report without pulling megabytes they are not showing.
+**If a report ever needs full-resolution images or more than three, that is the moment to add
+Firebase Storage**, not to raise these caps.
+
+### The offline outbox — the part that matters most
+
+A bug is most likely reported from the phone that was just having trouble, which is the phone most
+likely to be offline. So a failed send is **kept**, not apologised for: `queuePendingReport()`
+writes it to `gamehub.bugreports.pending.v1` and `hub.js` drains it on load, on `online`, and on
+returning to the launcher — the same three moments stats sync retries on, for the same reason.
+If the full report will not fit in localStorage, the TEXT is kept without the screenshots and
+`shotsDropped` is set, and **the confirmation screen says so out loud** rather than quietly
+sending a report whose pictures vanished (rule 6's habit applied to a non-LAW surface).
+
+`submitBugReport()` verifies by a fresh re-read before it reports success, again per rule 6: a
+resolved promise is not proof the data landed, and a bug report that silently evaporates is the
+one bug nobody can report. A screenshot upload that fails after the record landed stamps
+`shotError` ON the record instead of failing the whole send.
+
+### How Matt is notified
+
+**In-app, plus the CLI. There is no email or push notification, and that is a platform limit, not
+an oversight.** Web Push needs a server to send from (VAPID keys, a push service, and something
+awake to call it); email needs an SMTP credential or a third-party form service, which would mean
+putting a secret in a public repo or routing family bug reports through a stranger's server. The
+honest options within "static files, no build step, no dependencies" are:
+
+- **The hub's own inbox.** For `isAdmin(profile.name)` ONLY, the launcher footer grows a
+  **🐞 Bug reports** pill that reads `bugReports/` and shows the count of reports newer than this
+  device's last inbox open (`gamehub.bugadmin.v1`, a local preference). Tapping it opens the list
+  (newest first), each report drills into its description, screenshots, one-line environment
+  summary, and the full JSON, with **Copy full report** and a **Mark as done** toggle. Marking is
+  additive (`status`/`statusAt`) — a report is never deleted, because a report Matt has read is
+  still the only record of what that player saw.
+- **`node read-bug-reports.mjs`** — the terminal view, same records, and the only way to get the
+  screenshots onto disk (`--shots`) where a session can actually look at them.
+
+**If a real notification is ever wanted**, the smallest honest route is a Firebase Cloud Function
+on `bugReports/` onCreate sending mail through a provider — it needs the Blaze plan and a deploy
+step this repo has never had, so it is Matt's call, not a session's.
+
+### The announcement layer
+
+`js/announce.js` + `js/announce-ui.js`. One entry, one id, shown once per device on the launcher
+and then never again (`gamehub.announce.v1`'s seen-list; a preference, THE LAW rule 2's carve-out,
+same class as favorites/theme/language). The popup's call-to-action opens the bug form directly, so
+the announcement teaches the feature by using it.
+
+- **Every entry carries `from` and `until`, and `until` is what makes it retire itself** — the same
+  self-cleaning idea as the New pill (`js/new-badge.js`, whose date parser this reuses). Without
+  it, a phone left in a drawer for two months opens to a stack of old news instead of today's app.
+- **A malformed date fails SAFE (shown, not hidden).** An announcement that appears when it should
+  not is a small mistake; one that silently never appears is invisible until somebody asks why
+  nobody knew. `test-bug-report.mjs` pins both directions, plus the shipped entry's own dates and
+  EN/ES completeness.
+- **Adding the next one: append a NEW id.** Never re-use or renumber an existing one — devices that
+  dismissed it would see it again and devices that never saw it would never get the new one. Title,
+  body and CTA are `{en, es}` ON the entry (registry data stays co-located, decision 3 of the i18n
+  handoff, same as a game's card blurb); everything else routes through `js/strings.js`'s `bug_*` /
+  `ann_*` keys.
+- Never shown over the name gate (a device with no name is mid-setup) or over a mounted game, and
+  only once per page load.
+
+### Privacy, stated plainly
+
+A report carries the player's name, player code, device id, their whole local store, and any
+screenshot they attach — into an RTDB whose rules are `auth != null`, i.e. readable by anyone who
+can sign in anonymously. **That is not new** (`deviceReports/` and `players/` have always been the
+same), but it is now true of pictures too, so it is worth knowing before this is pointed at anyone
+outside the family. The form's own "What gets sent with this" disclosure lists it for the player
+in their own language; nothing is collected that they cannot see there.
+
+### What is NOT covered by a test
+
+`test-bug-report.mjs` covers the pure logic. The DOM halves and the Firebase write path are covered
+only by a hand-driven browser pass (a real Chromium at 393x852: announcement → CTA → form → attach
+a screenshot through the real downscale path → send with Firebase blocked → verify the report is
+queued locally with its environment, deviceReport and screenshot intact → reload → announcement
+gone, pending note shown; repeated in dark mode and in Spanish). **No report has ever been written
+to the real Firebase from this branch**, the same honest caveat every MP consumer above carries.
 
 ---
 

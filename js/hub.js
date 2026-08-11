@@ -18,9 +18,16 @@ import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame } from './new-badge.js';
+import { installErrorLog } from './error-log.js';
+import { pendingAnnouncement } from './announce.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+
+// Start recording uncaught errors at load, not in the Hub constructor: the point of the buffer is
+// that a bug report carries what actually threw, and the most interesting throws happen while a
+// game module is loading or mounting. Idempotent and DOM-only; see js/error-log.js.
+installErrorLog();
 /** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
  *  (Monopoly Deal, Parchís — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
 const blurbText = (b) => (b && typeof b === 'object') ? (b[getLang()] || b.en) : b;
@@ -335,6 +342,67 @@ class Hub {
     // subscribed once here (not per render(), which rebinds the button itself).
     this._themeUnsub = onThemeChange(() => this._paintThemeToggle());
     this._syncStats();
+    // A bug report filed with no signal is kept on the device (js/bug-report.js's outbox) and
+    // retried here, on the same three moments stats sync uses: load, reconnect, and returning to
+    // the launcher. A report that only exists on the phone that was having trouble is no report.
+    this._drainBugReports();
+    this._onOnlineBugs = () => this._drainBugReports();
+    window.addEventListener('online', this._onOnlineBugs);
+    this._maybeAnnounce();
+  }
+
+  /** Send anything sitting in this device's bug-report outbox. Lazy import: the module is only
+   *  worth loading at all on a device that actually has something queued. */
+  async _drainBugReports() {
+    try {
+      const m = await import('./bug-report.js');
+      if (m.pendingCount() > 0) await m.drainPendingReports();
+    } catch (err) { console.warn('[hub] could not retry queued bug reports', err); }
+  }
+
+  /** Show the one-time launcher announcement, if this device still owes one. Once per page load,
+   *  never over the name gate (a device with no name is mid-setup and has no launcher yet), and
+   *  never over a mounted game. */
+  async _maybeAnnounce() {
+    if (this._announced || this.current || !hasName()) return;
+    const a = pendingAnnouncement();
+    if (!a) return;
+    this._announced = true;
+    try {
+      const { showAnnouncement } = await import('./announce-ui.js');
+      await showAnnouncement(a, {
+        onAction: (action) => { if (action === 'bug-report') this.openBugReport(); },
+      });
+    } catch (err) { console.warn('[hub] announcement could not be shown', err); }
+  }
+
+  /** The player's bug-report form, preloaded with whichever game they were last in. */
+  async openBugReport() {
+    try {
+      const m = await import('./bug-report-ui.js');
+      const game = this.games && this.games.find((g) => g.id === this._lastGameId);
+      await m.openBugReport({ gameId: this._lastGameId || null, gameTitle: game ? titleText(game) : null });
+    } catch (err) { console.error('[hub] bug report form failed to load', err); }
+  }
+
+  /** Matt's inbox, plus the unread count on its own button. Rendered for nobody else. */
+  async openBugInbox() {
+    try {
+      const m = await import('./bug-report-ui.js');
+      await m.openBugInbox();
+      this._paintInboxCount();
+    } catch (err) { console.error('[hub] bug inbox failed to load', err); }
+  }
+
+  async _paintInboxCount() {
+    const el = this.el && this.el.bugInbox;
+    if (!el) return;
+    try {
+      const m = await import('./bug-report-ui.js');
+      const n = await m.adminUnreadCount();
+      el.textContent = n > 0 ? t('bug_inbox_btn_new', { n }) : t('bug_inbox_btn');
+      el.classList.toggle('has-new', n > 0);
+    } catch { /* offline: the plain label is already correct */ }
   }
 
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
@@ -409,7 +477,11 @@ class Hub {
           <section class="hub-grid" data-role="grid" aria-label="${t('hub_games_aria')}">
             ${gridHTML}
           </section>
-          ${showKeepsake ? `<section class="hub-extra"><button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">${t('hub_challenge_btn')}</button></section>` : ''}
+          <section class="hub-extra">
+            <button type="button" class="hub-statsbtn hub-bug-btn" data-role="bug" aria-label="${t('bug_btn_aria')}">${t('bug_btn')}</button>
+            ${admin ? `<button type="button" class="hub-statsbtn hub-bug-inbox" data-role="buginbox">${t('bug_inbox_btn')}</button>` : ''}
+            ${showKeepsake ? `<button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">${t('hub_challenge_btn')}</button>` : ''}
+          </section>
           <section class="hub-game" data-role="game" hidden></section>
         </main>
         <div class="hub-confirm" data-role="confirm" hidden>
@@ -441,6 +513,8 @@ class Hub {
       version: this.root.querySelector('[data-role="version"]'),
       topRight: this.root.querySelector('.hub-top-right'),
       keepsake: this.root.querySelector('[data-role="keepsake"]'),
+      bug: this.root.querySelector('[data-role="bug"]'),
+      bugInbox: this.root.querySelector('[data-role="buginbox"]'),
     };
 
     // The profile pill reads "My Profile" (consistent with My Stats / Leaderboards); the accent
@@ -492,6 +566,11 @@ class Hub {
     });
 
     if (this.el.keepsake) this.el.keepsake.addEventListener('click', () => this.openKeepsake());
+    if (this.el.bug) this.el.bug.addEventListener('click', () => this.openBugReport());
+    if (this.el.bugInbox) {
+      this.el.bugInbox.addEventListener('click', () => this.openBugInbox());
+      this._paintInboxCount();
+    }
 
     this.el.stats.addEventListener('click', () => {
       import('./game-stats-ui.js').then((m) => m.openStatsOverlay()).catch(() => {});
@@ -659,7 +738,7 @@ class Hub {
    *  already exists, and idempotent, so calling it from every render() is safe. */
   initFirstRun() {
     if (hasName()) return;
-    requireName().then(() => { this.render(); this._syncStats(); });
+    requireName().then(() => { this.render(); this._syncStats(); this._maybeAnnounce(); });
   }
 
   /** The language toggle's face: ONE state at a time (the active language), Matt's flag-knob
@@ -759,6 +838,10 @@ class Hub {
   async launch(id) {
     const game = this.games.find((g) => g.id === id);
     if (!game || game.comingSoon) return;
+    // Remembered for the bug-report form's "Where did it happen?" picker, which is opened from the
+    // launcher AFTER the player has come back out of the game they had trouble with. Set before the
+    // import so a game that fails to LOAD is still the one preselected.
+    this._lastGameId = id;
 
     // Tear down any previously mounted game first.
     await this.unmount();
@@ -825,6 +908,7 @@ class Hub {
     this.el.profile.hidden = false;
     if (this.el.topRight) this.el.topRight.hidden = false;
     this._syncStats();   // a game may have just updated the stats
+    this._drainBugReports();   // and the connection may have come back while they played
   }
 
   destroy() {
@@ -832,6 +916,7 @@ class Hub {
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
     if (this._themeUnsub) this._themeUnsub();
     this.root.innerHTML = '';
   }

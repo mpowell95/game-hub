@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v282';
+const CACHE = 'game-hub-v283';
 
 const ASSETS = [
   './',
@@ -35,6 +35,15 @@ const ASSETS = [
   './js/stats-net.js',
   './js/firebase-boot.js',
   './js/device-report.js',
+  // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are shell
+  // assets (they live under js/), so they install atomically with the hub itself - the report form
+  // has to work on the exact device that is having trouble, including offline, where it queues the
+  // report locally and sends it on the next connection.
+  './js/error-log.js',
+  './js/bug-report.js',
+  './js/bug-report-ui.js',
+  './js/announce.js',
+  './js/announce-ui.js',
   './js/players-agg.js',
   './js/game-art.js',
   './js/leaderboard-ui.js',
