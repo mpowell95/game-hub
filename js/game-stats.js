@@ -24,8 +24,16 @@
 //         total, byDiff,
 //         nb: { solved, moves, bestLevel } },     // a solo puzzle: no loss state, no difficulty picker
 //       escoba: {
-//         total, byDiff,
-//         es: { escobas } },                      // escobas the human made
+//         total, byDiff,                           // byDiff keyed easy|normal|hard (the AI tier) or
+//                                                   // 'mp' for a multiplayer match -- 'mp' is unmapped
+//                                                   // in difficulty-tiers.js (tierOf('mp') === null),
+//                                                   // so those plays count in every total and in the
+//                                                   // leaderboard's All filter and claim no tier pill,
+//                                                   // the same convention as tictactoe/boggle/yahtzee.
+//                                                   // Escoba only started using it on 2026-08-11;
+//                                                   // online matches before that are filed under
+//                                                   // 'normal' and stay exactly where they are (rule 5)
+//         es: { escobas } },                      // escobas the human made (solo and MP alike)
 //       ballrun: {
 //         total, byDiff,                           // byDiff keyed by easy|medium|hard: run counts per difficulty
 //         br: { runs, bestObstacles, bestObstaclesByDiff: { easy, medium, hard } },  // a solo,

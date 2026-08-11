@@ -20,7 +20,7 @@
 // SHAPE per tier (circle/square/diamond/double-diamond), never hue alone; the viewer's own row uses
 // a border highlight, never color alone.
 
-import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
+import { aggregatePlayers, buildIdentity, headToHeadRows, SOLO } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
@@ -754,7 +754,36 @@ function playerDetail(list, key) {
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${tiles}`;
-  return head + messageHTML(g) + gsGameListHTML(g.games);
+  return head + messageHTML(g) + h2hHTML(list, g) + gsGameListHTML(g.games);
+}
+
+// --- multiplayer head-to-head (2026-08-11) -----------------------------------
+// The FIRST display of `gamehub.stats.h2h`, which js/game-stats.js has been capturing since
+// 2026-07-22 ("Head-to-head capture" in js/CLAUDE.md) with an explicit note that nothing
+// showed it yet: the opponent's identity only exists while the multiplayer room is live, so it
+// had to be stored long before there was a screen for it. This is the screen.
+//
+// WINS ONLY, like every other number on this overlay (the 2026-07-23 redesign note at the top
+// of this file): "beat Lili 5 times" is a bragging-wall fact, "5-3" is a record, and records
+// live on My Stats. Losses are not hidden by this - the same plays are in that game's
+// by-difficulty table under Multiplayer, W-L and all, on the surface that exists for it.
+//
+// Rows come from players-agg.js's headToHeadRows(), which folds an opponent's devices into one
+// person; test/QA rows are dropped here with the SAME isHiddenRow() gate the lists use, and an
+// opponent who beat this player every time is dropped from the display (zero wins is not a
+// brag) while staying fully stored and fully visible on My Stats.
+function h2hHTML(list, g) {
+  const rows = headToHeadRows(g, list).filter((r) => r.w > 0 && !isHiddenRow(r));
+  if (!rows.length) return '';
+  const items = rows.slice(0, 8).map((r) => `<li class="lb-h2h-row">
+    <span class="lb-h2h-av">${esc(r.emoji || '🙂')}</span>
+    <span class="lb-h2h-name">${esc(r.name || t('lb_unnamed_player'))}</span>
+    <span class="lb-h2h-n"><b>${r.w}</b><span>${t('lb_wins_unit')}</span></span>
+  </li>`).join('');
+  return `<section class="lb-h2h">
+    <h4 class="lb-h2h-h">${t('lb_h2h_h')}</h4>
+    <ul class="lb-h2h-list">${items}</ul>
+  </section>`;
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -1035,6 +1064,17 @@ function ensureCss() {
     '.lb-pdetail-meta{font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
     '.lb-pmsg{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--hub-surface-2,#f4f4f5);color:var(--hub-ink,#18181b);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
     '.lb-pgame{margin-top:10px}',
+    // Multiplayer head-to-head block (player detail only). Same surface/ink token pattern as
+    // everything else in this sheet, so it themes with no :root.gh-dark override of its own.
+    '.lb-h2h{margin:10px 0 14px}',
+    '.lb-h2h-h{margin:0 0 6px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
+    '.lb-h2h-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}',
+    '.lb-h2h-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--hub-surface-2,#f4f4f5)}',
+    '.lb-h2h-av{flex:0 0 auto;font-size:1rem;line-height:1}',
+    '.lb-h2h-name{flex:1 1 auto;min-width:0;font-size:.9rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-h2h-n{flex:0 0 auto;display:flex;align-items:baseline;gap:4px}',
+    '.lb-h2h-n b{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
+    '.lb-h2h-n span{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
     '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
     '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',
     '.lb-medal.is-gold{background:#f5c518;color:#5c4a00}',
