@@ -10,9 +10,42 @@ look** — it is the measured record of that recording (geometry as fractions, s
 while the video was open, and it is a citation, not a style opinion (`reference/README.md`). If
 something here looks wrong, the fix is a new screenshot, not a new hex code.
 
+> **SPEC.md's FIRST colour table is the picker ICON, not the machine.** Read its "2026-08-11"
+> section before using any hex from this file's history. Those teal-and-white values came off
+> IMG_3952, which is the Collector's Edition menu screen showing a small stylised cabinet on a
+> teal background — not the board you play on, which is cream, wood-brown and deep red with no
+> green in it anywhere. Mistaking one for the other is why the first two builds of this game
+> looked nothing like the thing they clone.
+
+## The 2026-08-11 rebuild — what Matt actually saw
+
+Matt uploaded two screen recordings of this game (`reference/skeeball/Skeeball 2.MOV`,
+`reference/Skeeball 3.MOV`) with: *"SKEEBALL IS TERRIBLE. Look at how horrible the gameplay is."*
+Watch them next to `Skeeball 1.MOV`. Six balls score 40 points, "Too hard!" fires over and over,
+and the board is a flat grey donut on a green rectangle with two-thirds of the screen empty lane.
+
+Both halves were real and both are fixed, each with its own note at the site:
+
+| What was wrong | Where the fix and its reasoning live |
+|---|---|
+| Every cup was a **21px flick window**; 34% of the flick range scored zero | `game.js`'s constants block, `boards.js`'s target table |
+| Green-and-silver, from the picker icon's palette | `boards.js`'s `CLASSIC_PALETTE` |
+| A flat panel, not a dish: no concavity, no cast shadows, a rail with no thickness | `render.js`'s `drawMachine` |
+| Small cold cylinders with floating labels | `render.js`'s `drawTube` |
+| The board got 33% of the height, an empty lane got 44% | `render.js`'s `Y` anchors |
+| The aim guide used `1.35` while the engine used a different gain — it could lie | `render.js`'s `drawAimGuide` |
+
+**The lesson worth keeping** is not any one number: it is that this game's difficulty was twice
+set in board-space fractions, which say nothing about whether a person can hit anything. The
+guard is `test.js`'s `[KNOWN-BUG PROBE] a thumb can actually hit these` block, which converts the
+whole model — target sizes, band edges, POWER_SPAN, AIM_SPAN — into the pixels a thumb has to
+travel on a 393x852 phone and fails under 40px. It goes red on the exact build Matt recorded.
+`POWER_SPAN`/`AIM_SPAN` live in `game.js` for this reason: while they sat in `ui.js` no test
+could see both halves of the model at once.
+
 Matt's one instruction beyond "clone it": *"it's ok if it's a little more cartoony. Like our other
 games."* That licence was spent on **saturation and contrast only** — every hue and every position
-in the layout is still the measured one. The nudge is in `render.js`'s `C` palette and nowhere else.
+in the layout is still the measured one. The nudge lives in `boards.js`'s palettes and nowhere else.
 
 ## Hub integration
 
@@ -29,10 +62,11 @@ return true mid-game.
 ## Layout & responsibilities
 
 ```
-skeeball/js/game.js      pure engine: the throw model, scoring, the multiplier, unlocks, save/restore
+skeeball/js/game.js      pure engine: the throw model + its flick calibration, scoring, unlocks, save
 skeeball/js/boards.js    the machines as DATA: palette, target layout, unlock score
-skeeball/js/render.js    pure drawing: the cabinet, the marquee, the board, the ball, the badge, popups
-skeeball/js/ui.js        DOM shell: the machine picker, the rAF loop, flick input, stats
+skeeball/js/render.js    pure drawing: the cabinet, marquee, board, ball, badge, popups, picker art
+skeeball/js/howto.js     the HOW TO PLAY carousel (repo pattern; yahtzee/js/howto.js is the model)
+skeeball/js/ui.js        DOM shell: the machine carousel, the rAF loop, flick input, stats
 skeeball/js/strings.js   every user-visible string, { en, es }
 skeeball/js/test.js      headless engine assertions (node skeeball/js/test.js), in run-all-tests.mjs
 skeeball/css/skeeball.css  all styles, .sk- prefixed, every rule descendant-scoped under .sk-root
@@ -46,8 +80,12 @@ skeeball/index.html      standalone host (same init() as in-hub), name-gated bef
 
 | Input | Range | Meaning |
 |---|---|---|
-| `power` | 0..1 | how far the flick travelled, as a fraction of `POWER_SPAN` (42%) of the canvas height |
-| `aim` | -1..1 | how far sideways, as a fraction of `AIM_SPAN` (30%) of its width |
+| `power` | 0..1 | how far the flick travelled, as a fraction of `POWER_SPAN` (55%) of the canvas height |
+| `aim` | -1..1 | how far sideways, as a fraction of `AIM_SPAN` (42%) of its width |
+
+`POWER_SPAN` and `AIM_SPAN` are exported from **`game.js`**, not `ui.js`. They are half of the
+model: a target's size in board space is meaningless until multiplied through them, and while they
+lived in the UI file no test could check the two halves together. Both bad tunings shipped that way.
 
 **There is no random scatter on a player's throw, deliberately.** The player is judging a flick; a
 hidden dice roll on top of that judgement would make practice pointless. It also means the
@@ -58,11 +96,12 @@ squarely on the player and you should expect them to notice.
 
 Resolution order, all in `game.js`:
 
-1. `aim` drifts the ball across the lane by `LATERAL_GAIN` (1.35), **folding at the rails** - a
+1. `aim` drifts the ball across the lane by `LATERAL_GAIN` (1.15), **folding at the rails** - a
    full-tilt flick banks, which is a legitimate way to line up a wide target and costs
    `BOUNCE_LOSS` (0.13) energy per bounce.
-2. Below `SHORT_BELOW` (0.28) the ball never made the ramp; above `OVER_ABOVE` (0.94) it sails over
-   the back. Both score nothing.
+2. Below `SHORT_BELOW` (0.10) the ball never made the ramp; above `OVER_ABOVE` (0.96) it sails over
+   the back. Both score nothing. **Judge these in flick-pixels, never as fractions** - 47px and
+   450px on an 852px phone. The old pair (0.28/0.94) meant a third of every flick scored zero.
 3. In between, energy maps to a DEPTH in board space and the offset to an x, and **the first target
    ellipse containing that point wins**. Targets are ordered small-and-valuable first, catch-all
    last, so the 100 cups beat the 50's area where they overlap.
@@ -74,7 +113,8 @@ Resolution order, all in `game.js`:
 oval is scenery, the catch-all is scoring. Do not "fix" the mismatch by equating them.
 
 `test.js` pins the target windows, both cups, the bank shot, that power walks the stack in order,
-and that no power between short and over scores nothing.
+that no power between short and over scores nothing, and - the block that matters most - that
+every one of those windows is a distance a thumb can actually repeat.
 
 ## Machines, unlocking and the three scores (2026-08-11 rework)
 
@@ -280,16 +320,26 @@ That is the automated floor, not a substitute for playing it — `VISUAL-PROCESS
 - **Only two machines.** Matt asked for one extra to start, with a "more machines to come" note in
   the picker, rather than ten at once. `boards.js` is data, so a third is an entry and nothing else.
 
-## Outstanding — asked for, not yet built
+## The two carousels
 
-Not "on purpose". These are Matt's own requests from 2026-08-11 that this build has not answered:
+Both were Matt's requests, both were outstanding for a round, and both now exist.
 
-- **The machine picker should be a CAROUSEL with an image of the board**, and locked machines
-  should wear **chains and a padlock** like the reference photos (IMG_3953, IMG_3959). It is
-  currently a scrolling row of cards with a lock glyph.
-- **How to play should be the repo's animated paged carousel**, not the static sheet it ships with.
-  `yahtzee/js/howto.js` is the pattern: pages, a pointing-hand animation, dots, and a
-  `[|◀] [OK] [▶|]` footer, with reduced-motion still poses. Matt on the current one: *"You ignored
-  the How To Play instructions again. Yours is dogshit."* He is right, and an earlier code comment
-  in this game claiming it followed the repo pattern was simply false. `tic-tac-toe/CLAUDE.md`
-  documents the pattern; read it and Yahtzee's implementation before rewriting this.
+**The machine picker** (`ui.js`'s `renderPicker`) is a scroll-snap carousel, one full-width slide
+per machine. Its art is not an illustration of the board: `render.js`'s `drawThumb` paints the
+REAL machine with the real renderer, so the picture and the game cannot drift apart. A locked
+machine is dimmed, chained and padlocked, which is IMG_3959/IMG_3960's own treatment. Native
+scroll-snap rather than a pointer handler — it keeps platform momentum, is keyboard-navigable for
+free, and cannot fight the page for the gesture. Arrows and dots are conveniences on top of it.
+
+**How to play** (`skeeball/js/howto.js`) follows the repo pattern — `yahtzee/js/howto.js` is the
+reference implementation and `tic-tac-toe/CLAUDE.md` documents the shape. Five pages, a pointing
+hand, dots, `[|◀] [OK] [▶|]`, swipeable, with a still informative pose under reduced motion.
+
+The thing that makes it worth having: **every throw on every page is resolved by `game.js`**, and
+the ball is drawn from that result. The tutorial physically cannot demonstrate a shot the engine
+would score differently — the same discipline as the in-game aim guide sharing the engine's fold
+maths instead of copying it.
+
+What was there before was a static sheet of bullet points. Matt: *"You ignored the How To Play
+instructions again. Yours is dogshit."* He was right twice: the repo had a pattern and that build
+did not follow it, while a comment inside it claimed it did. Don't reintroduce a static sheet.

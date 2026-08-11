@@ -17,28 +17,36 @@
 // makes the board read as an open ring you can see into rather than a stack of bands - the video
 // this game was first built from was shot at a much shallower angle (0.30) and looked wrong.
 
-/** The classic Skee-Ball palette, sampled off IMG_3952 (SPEC.md "CLASSIC - colours"). */
+/** The classic Skee-Ball palette. **Every one of these is a sampled pixel**, not a taste call -
+ *  read out of `reference/skeeball/Skeeball 1.MOV` frame-by-frame with raw-RGB scanlines across
+ *  the bowl (y=420/330/520), the back wall (y=60) and the lane (abs y=1400/1700/2100). SPEC.md
+ *  records the method.
+ *
+ *  THE BOARD IS WARM. Cream, wood brown and a deep red back wall. The first build painted it
+ *  green-and-silver, which is the single biggest reason Matt's own recording of it
+ *  (`reference/skeeball/Skeeball 2.MOV`, 2026-08-11) looks nothing like the machine beside it.
+ *  Green appears NOWHERE in the reference cabinet. Do not reintroduce it. */
 const CLASSIC_PALETTE = {
-  fieldLit: '#7FBBA4',      // the radial light in the middle of the playfield
-  field: '#618F7F',
-  fieldShade: '#46655A',
-  fieldDeep: '#2C4039',
-  target: '#FFFFFF',
-  targetFace: '#EDEAE8',
-  targetShade: '#ACA7A6',
-  targetDeep: '#7C8381',
-  hole: '#1E2A26',
-  ink: '#0A0A0A',
-  wall: '#111111',
-  trim: '#7D2324',
-  trimDark: '#4C191A',
-  rail: '#EBD653',
-  railLit: '#F7EA9A',
-  railDark: '#2A2A26',
-  lane: '#5E9C86',
-  laneLit: '#71A995',
-  laneDeep: '#31554A',
-  marquee: '#272424',
+  fieldLit: '#C68764',      // the lit crown of the bowl floor, behind the cup stack
+  field: '#98502F',         // the bowl floor proper (#915233/#984E39/#9A5235 across the scanline)
+  fieldShade: '#6E3113',
+  fieldDeep: '#481B08',     // the bowl's rim shadow, where the floor meets the ring
+  target: '#FBF6DA',        // cream highlight on a rim (#F8F7D5/#FFFAD4/#F6F3D2)
+  targetFace: '#EED9AE',    // the lit front face of a tube (#EED1A1/#E9C79D)
+  targetShade: '#C79A6A',   // its shaded side (#BE885E/#C49466)
+  targetDeep: '#8E5A32',    // the underside shadow a tube casts on itself
+  hole: '#35150A',          // the dark opening in the top of a tube
+  ink: '#4A160F',           // the numerals. Dark RED-brown, sampled off the "10" glyph - not black
+  wall: '#592225',          // the back wall behind the playfield, dead consistent across y=60
+  trim: '#7A2A22',
+  trimDark: '#3E1512',
+  rail: '#F6E791',          // the lane rails: bright yellow, sampled at abs y=1700
+  railLit: '#FFF8C4',
+  railDark: '#412D09',
+  lane: '#7C4429',          // lane wood. Lighter toward the board (#8B5036) than at the foul line
+  laneLit: '#8B5036',
+  laneDeep: '#5C3320',
+  marquee: '#241413',
   marqueeTrim: '#F1D98F',
 };
 
@@ -88,32 +96,45 @@ export const BOARDS = [
     // the board BEFORE it (see game.js's unlock check), which is why the first one has none.
     unlockScore: 0,
     palette: CLASSIC_PALETTE,
-    // The oval as DRAWN. Measured off IMG_3952: outer 236x156 in a 365-wide playfield 360 deep,
-    // so rx 0.65 of the half-width and ry 0.22 of the depth.
-    ring: { cx: 0, cy: 0.40, rx: 0.66, ry: 0.22 },
+    // The oval as DRAWN. Measured off the reference gameplay frame: the cream ring's outer edge
+    // spans 760px across a 760-wide playfield and 420px deep, i.e. an on-screen ry/rx of 0.553.
+    // ry here is in DEPTH units, which are not square with x, so render.js's job is to land that
+    // 0.553 on screen - see its RING note.
+    ring: { cx: 0, cy: 0.40, rx: 0.95, ry: 0.314 },
     targets: [
-      // The two 100s stand above the ring's widest points - the measured position, and the reason
-      // a 100 is a bank shot rather than just a hard throw. Tested FIRST, so they win where they
-      // overlap the 50.
-      { id: '100L', kind: 'tube', x: -0.65, y: 0.78, rx: 0.10, ry: 0.045, points: 100 },
-      { id: '100R', kind: 'tube', x: 0.65, y: 0.78, rx: 0.10, ry: 0.045, points: 100 },
-      // Cups up the middle, 20 nearest, on an even 0.14 pitch.
+      // The two 100s stand outside the ring at the back - the measured position, and the reason
+      // a 100 is a deliberate diagonal rather than just a hard throw. Tested FIRST, so they win
+      // where they overlap the 50.
+      { id: '100L', kind: 'tube', x: -0.75, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
+      { id: '100R', kind: 'tube', x: 0.75, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
+      // Cups up the middle, 20 nearest, on an even 0.19 pitch, with the stack sitting back off
+      // the front lip so the bowl has a real cream APRON in front of it - that apron is where the
+      // 10 is printed on the reference machine, and with the stack any further forward the 20's
+      // base lands on top of the numeral.
       //
-      // TWO RULES HERE, both from Matt playing it (2026-08-11: "the balls jump into a hole even if
-      // I don't throw it that close to them... the balls are guided in. That's not fun"):
+      // THE SIZE OF THESE IS THE DIFFICULTY OF THE GAME, so it is set from measurement and then
+      // checked in flick-pixels. Two rules, and the second one has now been wrong in BOTH
+      // directions, so read the history before nudging it:
       //
-      // 1. `rx` IS the drawn width. render.js draws the rim at exactly this radius, so what you can
-      //    see is what you can hit. It used to draw at 0.86 of it, making every catch area 16%
-      //    wider than the cup it belonged to.
-      // 2. `ry` (0.045) is DELIBERATELY smaller than half the pitch (0.07), so there is a real GAP
-      //    between consecutive cups - about a third of the depth axis. Before, the catch areas
-      //    overlapped and tiled the whole ramp, so every straight throw sank something and the only
-      //    question was which cup. The gap is where the risk lives, and it is why a mistimed throw
-      //    now rolls into the 10 instead of being caught.
-      { id: '50', kind: 'cup', x: 0, y: 0.72, rx: 0.146, ry: 0.045, points: 50 },
-      { id: '40', kind: 'cup', x: 0, y: 0.58, rx: 0.163, ry: 0.045, points: 40 },
-      { id: '30', kind: 'cup', x: 0, y: 0.44, rx: 0.181, ry: 0.045, points: 30 },
-      { id: '20', kind: 'cup', x: 0, y: 0.30, rx: 0.206, ry: 0.045, points: 20 },
+      // 1. `rx` IS the drawn width. render.js draws the rim at exactly this radius, so what you
+      //    can see is what you can hit. It once drew at 0.86 of it, making every catch area 16%
+      //    wider than the cup it belonged to - Matt, 2026-08-11: "the balls are guided in."
+      // 2. `ry` is the mouth's half-DEPTH, and it is 69% of half the pitch. The fix for "guided
+      //    in" cut it to 0.045 against a 0.14 pitch, which left each cup owning 5.9% of the power
+      //    range: a ~21px flick window on an 852px phone. Matt's own recordings of THAT build
+      //    (`Skeeball 2.MOV` / `Skeeball 3.MOV`) are six balls for 40 points and "Too hard!" over
+      //    and over. Both mistakes are the same mistake - setting this without converting it into
+      //    the flick distance a thumb can actually repeat.
+      //
+      // The conversion, and the number to re-check if you touch this or ui.js's POWER_SPAN:
+      //     window_px = 2*ry * (OVER_ABOVE - SHORT_BELOW) * POWER_SPAN * screenHeight
+      //               = 0.132 * 0.86 * 0.55 * 852 = 53px, with a 23px gap between cups.
+      // 53px is repeatable by thumb; 21px is a lottery. `game.js`'s test block pins both the
+      // window and the gap so neither drifts again.
+      { id: '50', kind: 'cup', x: 0, y: 0.91, rx: 0.19, ry: 0.066, points: 50 },
+      { id: '40', kind: 'cup', x: 0, y: 0.72, rx: 0.217, ry: 0.066, points: 40 },
+      { id: '30', kind: 'cup', x: 0, y: 0.53, rx: 0.243, ry: 0.066, points: 30 },
+      { id: '20', kind: 'cup', x: 0, y: 0.34, rx: 0.27, ry: 0.066, points: 20 },
       // THE CATCH-ALL, and deliberately NOT the same ellipse as `ring` above. `ring` is what gets
       // drawn; this is "stayed on the playfield but found no cup" - short of the 20, wide of the
       // stack, or over the back of the 50 - and it has to cover the whole field to do that job.
@@ -130,13 +151,15 @@ export const BOARDS = [
     ring: null,                                     // no oval on this machine
     targets: [
       // Same two rules as classic: rx is the drawn width, and nothing tiles - these are scattered
-      // plates with real space between them, which is the whole character of this machine.
-      { id: 's100', kind: 'star', x: 0, y: 0.86, rx: 0.11, ry: 0.045, points: 100 },
-      { id: 's50L', kind: 'star', x: -0.60, y: 0.68, rx: 0.16, ry: 0.055, points: 50 },
-      { id: 's50R', kind: 'star', x: 0.60, y: 0.68, rx: 0.16, ry: 0.055, points: 50 },
-      { id: 's30L', kind: 'star', x: -0.36, y: 0.46, rx: 0.18, ry: 0.06, points: 30 },
-      { id: 's30R', kind: 'star', x: 0.36, y: 0.46, rx: 0.18, ry: 0.06, points: 30 },
-      { id: 's20', kind: 'star', x: 0, y: 0.58, rx: 0.17, ry: 0.055, points: 20 },
+      // plates with real space between them, which is the whole character of this machine. The
+      // depths are the SAME 0.066-and-up family as classic's cups for the same reason: a plate
+      // shallower than that is a flick window a thumb cannot hit twice.
+      { id: 's100', kind: 'star', x: 0, y: 0.90, rx: 0.15, ry: 0.062, points: 100 },
+      { id: 's50L', kind: 'star', x: -0.62, y: 0.70, rx: 0.21, ry: 0.075, points: 50 },
+      { id: 's50R', kind: 'star', x: 0.62, y: 0.70, rx: 0.21, ry: 0.075, points: 50 },
+      { id: 's30L', kind: 'star', x: -0.40, y: 0.44, rx: 0.24, ry: 0.082, points: 30 },
+      { id: 's30R', kind: 'star', x: 0.40, y: 0.44, rx: 0.24, ry: 0.082, points: 30 },
+      { id: 's20', kind: 'star', x: 0, y: 0.60, rx: 0.23, ry: 0.078, points: 20 },
       { id: 's10', kind: 'ring', x: 0, y: 0.45, rx: 1.05, ry: 0.55, points: 10 },
     ],
   },

@@ -198,3 +198,66 @@ the deep edge) - that gradient is doing a lot of the work and a flat teal looks 
 Same as the video: no in-play screen for any of these machines, no unlock UI beyond the padlock and
 chains, no score readout other than 3960's `BALL  SCORE` marquee. **How a board is unlocked is not
 visible in any of these images** - our score-target rule is our own design, not a copy.
+
+---
+
+## 2026-08-11: the colours above are the PICKER ICON, not the machine
+
+**Read this before using the "CLASSIC — colours" table.** Those hexes were sampled off IMG_3952,
+which is the Collector's Edition *picker screen*: a small stylised cabinet icon sitting on a teal
+menu background. They are the icon's palette, not the playfield's.
+
+`Skeeball 1.MOV` — the same app actually being played — shows a completely different board. Warm
+cream tubes, a wooden bowl floor, a deep red back wall. **There is no green anywhere in it.**
+The first build of our game took the icon's palette as if it were the machine's, which is the
+single biggest reason Matt's recordings of it (`Skeeball 2.MOV`, `Skeeball 3.MOV`, uploaded
+2026-08-11 with "SKEEBALL IS TERRIBLE") look nothing like the game they clone.
+
+### Method (repeat this rather than eyeballing a still)
+
+```
+FF=$(node -e "console.log(require('ffmpeg-static'))")
+"$FF" -ss 1 -i "reference/skeeball/Skeeball 1.MOV" -frames:v 1 f.png
+"$FF" -i f.png -vf "crop=1000:700:100:640" board.png            # the bowl, full res
+"$FF" -i board.png -vf "drawgrid=w=100:h=70:t=2:c=red@0.7" grid.png   # measure off this
+"$FF" -i board.png -f rawvideo -pix_fmt rgb24 board.raw          # then sample exact pixels
+```
+Then read `board.raw` as packed RGB (`i = (y*W + x)*3`) along a scanline. A scanline beats point
+samples: it shows you where each material starts and stops, so you cannot mistake a highlight for
+a base colour — which is how the first pass got `#F9ECD5` for "bowl floor".
+
+### CLASSIC in play — colours (sampled off Skeeball 1.MOV)
+
+| Element | Hex | Where |
+|---|---|---|
+| Bowl floor, lit crown | `#C68764` | behind the cup stack |
+| Bowl floor, mid | `#98502F` | `#915233`/`#984E39`/`#9A5235` across y=420 |
+| Bowl floor, shaded | `#6E3113` | toward the player |
+| Bowl floor, deep edge | `#481B08` | where the floor meets the rail |
+| Cream, lit | `#FBF6DA` | `#F8F7D5`/`#FFFAD4`/`#F6F3D2` |
+| Cream, tube face | `#EED9AE` | `#EED1A1`/`#E9C79D` |
+| Cream, shaded | `#C79A6A` | `#BE885E`/`#C49466` |
+| Tube opening | `#35150A` | |
+| Numerals | `#4A160F` | dark RED-brown. **Not black** |
+| Back wall | `#592225` | dead consistent along y=60 |
+| Lane wood | `#8B5036` near the board, `#734125` at the foul line | lighter toward the board |
+| Lane rails | `#F6E791` yellow, chevrons `#412D09` | sparse chevrons, NOT hazard tape |
+| Cabinet side pillars | `#111214` / `#8A889A` silver | |
+
+### CLASSIC in play — geometry (crop origin x=100, y=640, 1000x700)
+
+| Thing | Measured | As a fraction |
+|---|---|---|
+| Playfield half-width | 380px (x 118..880, centre 499) | — |
+| Bowl depth, front lip to 50 rim | 502px (y 627..125) | — |
+| Cream ring, outer | 760 x 420px | on-screen ry/rx **0.553** |
+| Cup pitch, front to back | 110, 92, 90px | ~20% compression → `BOARD_PERSP` |
+| Cup mouth height | ~55px | **59% of the pitch** |
+| 20 / 30 / 40 / 50 tube widths | 205 / 180 / 165 / 138px | rx 0.27 / 0.243 / 0.217 / 0.19 |
+| 20 tube rim | 205 wide x 55 tall | `RIM_RATIO` **0.27** |
+| 20 tube face height | ~50px | depth ≈ 0.5 x rx |
+| 100 tubes | 110px wide, ~85px face, centres x ±0.75 | rx 0.145, a TALL tube |
+| Frame split | back wall 11%, bowl 21%, ramp 10%, lane 34% | the bowl is wide and shallow |
+
+The last row is the one that is easiest to get wrong in the other direction: giving the bowl half
+the screen height produces a dish deeper than it is wide, which no camera on a real cabinet sees.
