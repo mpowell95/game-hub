@@ -163,6 +163,7 @@ export const STRINGS = {
     bug_inbox_new_tag: 'New',
     bug_inbox_done_tag: 'Done',
     bug_inbox_no_shots: 'No screenshots attached.',
+    bug_inbox_preview: '👀 Preview the announcement',
     ann_dialog_aria: 'Announcement',
     ann_dismiss: 'Got it',
 
@@ -507,6 +508,7 @@ export const STRINGS = {
     bug_inbox_new_tag: 'Nuevo',
     bug_inbox_done_tag: 'Resuelto',
     bug_inbox_no_shots: 'Sin capturas adjuntas.',
+    bug_inbox_preview: '👀 Ver el anuncio',
     ann_dialog_aria: 'Anuncio',
     ann_dismiss: 'Entendido',
 
