@@ -358,12 +358,33 @@ export async function openBugInbox() {
   // Opening the inbox IS reading it; the count resets from here even if a report is left open.
   writeSeenAt(Date.now());
 
+  // Replaying the announcement, for Matt only (the inbox is his). It shows the entry REGARDLESS of
+  // the seen-list and of adminOnly, and touches no storage - so testing a change to the popup does
+  // not mean clearing localStorage on a phone, and cannot alter what anyone else will be shown.
+  const previewBtn = `<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="preview-ann"
+        style="margin-top:8px">${esc(t('bug_inbox_preview'))}</button>`;
+  const wirePreview = () => {
+    const btn = card.querySelector('[data-role="preview-ann"]');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      closeOverlay();
+      try {
+        const [{ ANNOUNCEMENTS }, { showAnnouncement }] = await Promise.all([
+          import('./announce.js'), import('./announce-ui.js'),
+        ]);
+        const a = ANNOUNCEMENTS[ANNOUNCEMENTS.length - 1];
+        if (a) await showAnnouncement(a, { onAction: (action) => { if (action === 'bug-report') openBugReport(); } });
+      } catch (err) { console.error('[bug-inbox] could not preview the announcement', err); }
+    });
+  };
+
   const list = () => {
     if (!reports.length) {
-      shell(`<p class="bug-lead">${esc(navigator.onLine === false ? t('bug_inbox_offline') : t('bug_inbox_empty'))}</p>`);
+      shell(`<p class="bug-lead">${esc(navigator.onLine === false ? t('bug_inbox_offline') : t('bug_inbox_empty'))}</p>${previewBtn}`);
+      wirePreview();
       return;
     }
-    shell(`<ul class="bug-list">${reports.map((r, i) => `
+    shell(`${previewBtn}<ul class="bug-list">${reports.map((r, i) => `
       <li><button type="button" class="bug-row" data-open="${i}">
         <span class="bug-row-top">
           <span class="gh-chip${r.status === 'done' ? '' : ' gh-chip--accent'}">${esc(r.status === 'done' ? t('bug_inbox_done_tag') : t('bug_inbox_new_tag'))}</span>
@@ -374,6 +395,7 @@ export async function openBugInbox() {
         <span class="bug-row-meta">${esc([r.gameTitle || r.game, r.summary || summarizeEnvironment(r.environment),
           r.shotCount ? `${r.shotCount} 📷` : ''].filter(Boolean).join(' · '))}</span>
       </button></li>`).join('')}</ul>`);
+    wirePreview();
     card.querySelector('.bug-list').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-open]');
       if (btn) detail(reports[+btn.dataset.open]);
