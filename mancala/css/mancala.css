@@ -815,7 +815,7 @@
 }
 /* Turn-coloured, exactly like the real board's own [data-turn] backgrounds. */
 .mancala .mc-ht-panel{
-  position:relative; border-radius:10px; aspect-ratio:200/132; overflow:hidden;
+  position:relative; border-radius:10px; aspect-ratio:150/200; overflow:hidden;
   background:#e2a17f; transition:background-color .35s ease;
 }
 .mancala .mc-ht-panel[data-side='p1']{ background:#8fb9d8; }
@@ -854,33 +854,40 @@
 .mancala .mc-ht-sq.mc-ht-off svg path{ fill:#9FBAC0; stroke:#9FBAC0; }
 
 /* ---- the little board, authored at a fixed 200x132 and scaled to the panel ---- */
+/* VERTICAL, because the real board is: two columns of pits between two wide stores. Measured off
+   the running game, not inferred from a comment (see howto.js's header). */
 .mancala .mc-ht-board{
-  position:absolute; top:0; left:0; width:200px; height:132px; transform-origin:top left;
+  position:absolute; top:0; left:0; width:150px; height:200px; transform-origin:top left;
 }
 .mancala .mc-ht-wood{
-  position:absolute; left:8px; top:16px; right:8px; bottom:16px; border-radius:22px;
+  position:absolute; left:4px; top:4px; right:4px; bottom:4px; border-radius:14px;
   background:linear-gradient(180deg,var(--mc-wood-hi) 0%,var(--mc-wood) 55%,var(--mc-wood-lo) 100%);
   border:2px solid var(--mc-woodedge);
 }
 .mancala .mc-ht-pit{
-  position:absolute; width:18px; height:18px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  font-size:8px; font-weight:800; color:#fff;
-  box-shadow:inset 0 -1px 0 rgba(0,0,0,.3);
+  position:absolute; width:20px; height:20px; border-radius:50%;
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28), 0 0 0 1.5px rgba(0,0,0,.45);
   transition:transform .18s ease, box-shadow .18s ease;
 }
-.mancala .mc-ht-p1{ background:var(--mc-p1); }
-.mancala .mc-ht-p2{ background:var(--mc-p2); }
-.mancala .mc-ht-pit.mc-ht-empty{ background:#b98e5f; color:rgba(255,255,255,.55); }
+.mancala .mc-ht-p1{ background:radial-gradient(circle at 36% 30%, #6fd0f5 0 30%, var(--mc-p1) 32% 100%); }
+.mancala .mc-ht-p2{ background:radial-gradient(circle at 36% 30%, #ff8a7c 0 30%, var(--mc-p2) 32% 100%); }
+.mancala .mc-ht-pit.mc-ht-empty{ background:#b98e5f; }
+/* the count, printed beside the pit exactly as the real board does */
+.mancala .mc-ht-n{
+  position:absolute; width:14px; font-size:8px; font-weight:800; font-style:normal;
+  color:var(--mc-count); line-height:1;
+}
+.mancala .mc-ht-n-l{ text-align:right; }
+.mancala .mc-ht-n-r{ text-align:left; }
 .mancala .mc-ht-store{
-  position:absolute; top:30px; width:22px; height:72px; border-radius:11px;
+  position:absolute; left:12px; width:126px; height:20px; border-radius:10px;
   display:flex; align-items:center; justify-content:center;
   font-size:9px; font-weight:800; color:#fff;
-  box-shadow:inset 0 -1px 0 rgba(0,0,0,.3);
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28), 0 0 0 1.5px rgba(0,0,0,.45);
   transition:transform .18s ease, box-shadow .18s ease;
 }
-.mancala .mc-ht-store-p1{ right:3px; background:var(--mc-p1-deep); }
-.mancala .mc-ht-store-p2{ left:3px; background:var(--mc-p2-deep); }
+.mancala .mc-ht-store-p1{ top:169px; background:var(--mc-p1-deep); }
+.mancala .mc-ht-store-p2{ top:11px; background:var(--mc-p2-deep); }
 /* "look here" -- a ring AND a lift, so it is never colour alone */
 .mancala .mc-ht-lit{ transform:scale(1.16); box-shadow:0 0 0 2.5px #f2b705; }
 .mancala .mc-ht-store.mc-ht-lit{ transform:scale(1.06); }
@@ -893,8 +900,9 @@
 }
 .mancala .mc-ht-stone.mc-ht-show{ opacity:1; }
 /* the capture marker: a ring linking the two pits being taken */
+/* Links the landed pit to the one opposite it -- across the two COLUMNS, so it is wide, not tall. */
 .mancala .mc-ht-cap{
-  position:absolute; left:-13px; top:-43px; width:26px; height:86px; border-radius:13px;
+  position:absolute; left:-38px; top:-13px; width:76px; height:26px; border-radius:13px;
   border:2.5px dashed #f2b705; opacity:0; pointer-events:none;
   transition:opacity .2s ease;
 }
