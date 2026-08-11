@@ -44,6 +44,29 @@ one-command job for Matt and closes the loop permanently.
 choice, it has un-done an instruction. If a spec looks wrong, the fix is a new screenshot, not a
 new hex code.
 
+## Video (`.MOV`) — you cannot Read one. Here is how to see it.
+
+Matt uploads screen recordings as well as screenshots, and **a session cannot open a video**: the
+Read tool takes images and PDFs. The ffmpeg that ships with Playwright is a cut-down build that
+only opens WebM and refuses an iPhone `.MOV` outright. So:
+
+```
+npm install --no-save ffmpeg-static
+# one contact sheet per recording - 30 frames laid out as a grid, so you see the MOTION
+node_modules/ffmpeg-static/ffmpeg -i "reference/<game>/clip.MOV" \
+  -vf "fps=3,scale=200:-1,tile=6x5" -frames:v 1 -q:v 3 sheet.jpg
+# or single frames, one per second
+node_modules/ffmpeg-static/ffmpeg -i "reference/<game>/clip.MOV" \
+  -vf "fps=1,scale=430:-1" -q:v 4 frame_%02d.jpg
+```
+
+Then `Read` the jpgs. **Use the contact sheet first** — a recording exists precisely because the
+thing being shown MOVES, and a single still throws away the only information the video was carrying.
+Write the choreography into `SPEC.md` while you can still see it.
+
+This lives here, not in a game's own `CLAUDE.md`, because a session working in `mancala/` never
+loads `yahtzee/CLAUDE.md` — the same reason the root file carries the "USE WHAT EXISTS" table.
+
 ## If you are a session about to do visual work
 
 1. **`ls reference/<game>/` and open every image, before you write a line of code.** If the folder

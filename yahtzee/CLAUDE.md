@@ -84,12 +84,7 @@ one per page of a mobile Yatzy game's tutorial) and said: *"Clone the how to pag
 Animations included. If our game doesn't include anything in the how to (bonus, symbol
 explanations, etc), build that and add it to our game as well."*
 
-**A `.MOV` is not something a session can read.** The Read tool takes images and PDFs; Playwright's
-bundled ffmpeg is a cut-down build that only opens WebM and refuses QuickTime outright. Getting
-frames out needed `npm install --no-save ffmpeg-static` and
-`ffmpeg -i <file> -vf "fps=3,scale=200:-1,tile=6x5" sheet.jpg`, which lays a whole recording out as
-one contact sheet you can actually see the motion in. **Write that down rather than rediscovering
-it** — it is the only reason those six files are usable at all.
+How to actually watch a `.MOV` is in `reference/README.md`, which applies to every game.
 
 ### `js/howto.js` — the carousel
 
