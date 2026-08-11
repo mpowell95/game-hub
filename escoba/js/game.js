@@ -40,6 +40,7 @@ export function makePlayer({ id, name, avatar, isHuman = false, agent = null, di
     captured: [],        // cards won this round
     escobas: 0,          // escobas this round
     totalScore: 0,       // match points
+    matchEscobas: 0,     // escobas across the whole match (scoreRound folds each round in; see there)
     scoreHistory: [0],   // cumulative, one entry per round (for the chart)
     roundScore: 0,       // points scored in the round just ended
     roundItems: [],      // scoring line items of the round just ended
@@ -52,6 +53,10 @@ export class Game {
     this.config = Object.assign({}, DEFAULT_CONFIG, config);
     this.rng = rng;
     this.onEvent = null;      // async (type, payload) hook set by the UI
+    // SYNCHRONOUS hook, fired from checkMatchEnd() the instant a winner exists (see there).
+    // Deliberately not part of the async `onEvent` stream: this one must not be awaitable,
+    // skippable or abortable.
+    this.onDecided = null;
     this.aborted = false;
 
     this.round = 0;
@@ -81,6 +86,7 @@ export class Game {
     g.config = snap.config;
     g.rng = Math.random;
     g.onEvent = null;
+    g.onDecided = null;   // re-wired by the UI's _bindGame; never carried across a snapshot
     g.aborted = false;
     g.round = snap.round;
     g.dealer = snap.dealer;
@@ -101,7 +107,7 @@ export class Game {
       id: sp.id, name: sp.name, avatar: sp.avatar, isHuman: sp.isHuman, difficulty: sp.difficulty,
       agent: agentsById[sp.id],
       hand: sp.hand, captured: sp.captured, escobas: sp.escobas,
-      totalScore: sp.totalScore, scoreHistory: sp.scoreHistory,
+      totalScore: sp.totalScore, matchEscobas: sp.matchEscobas | 0, scoreHistory: sp.scoreHistory,
       roundScore: sp.roundScore, roundItems: sp.roundItems,
     }));
     return g;
@@ -124,6 +130,7 @@ export class Game {
       players: this.players.map((p) => ({
         id: p.id, name: p.name, avatar: p.avatar, isHuman: p.isHuman, difficulty: p.difficulty,
         hand: p.hand, captured: p.captured, escobas: p.escobas, totalScore: p.totalScore,
+        matchEscobas: p.matchEscobas | 0,
         scoreHistory: p.scoreHistory, roundScore: p.roundScore, roundItems: p.roundItems,
       })),
     };
@@ -337,7 +344,15 @@ export class Game {
 
   // --- scoring ------------------------------------------------------------------
 
-  /** Score the finished round into totals, recording per-player line items. */
+  /** Score the finished round into totals, recording per-player line items.
+   *
+   *  `matchEscobas` (2026-08-11) accumulates each player's escobas across the WHOLE match, here,
+   *  where the round's own `escobas` counter is still live and before `checkMatchEnd()` runs. The
+   *  UI used to keep this tally itself, folding each round in from its `roundScored` hook -- which
+   *  meant the final round's escobas were not counted yet at the moment the match was decided, so
+   *  the result could not be recorded there. Owning it in the engine is what lets `onDecided` fire
+   *  with a complete, correct result. Additive field; `snapshot()` carries it so a resumed match
+   *  keeps its tally. */
   scoreRound() {
     const ps = this.players;
     const twoPlayer = ps.length === 2;
@@ -381,6 +396,7 @@ export class Game {
       s.p.roundScore = items.reduce((sum, it) => sum + it.points, 0);
       s.p.totalScore += s.p.roundScore;
       s.p.scoreHistory.push(s.p.totalScore);
+      s.p.matchEscobas = (s.p.matchEscobas | 0) + (s.p.escobas | 0);
     }
 
     // A player who captured nothing all round loses the match outright (2p).
@@ -401,6 +417,24 @@ export class Game {
     }
     if (this.winner) {
       this.standings = ps.slice().sort((a, b) => b.totalScore - a.totalScore);
+      // THE LAW rule 1, made structural (2026-08-11). Matt: "Make it so that is impossible.
+      // Nothing should ever be able to be lost."
+      //
+      // The result is announced HERE, in the same synchronous statement that decides it, and the
+      // UI records it from this hook. Not from an `emit`, not from a later event, not after an
+      // await: every one of those is a place the recording can fail to happen. It used to be
+      // recorded in the UI's 'matchEnd' hook, several awaits and one human button-tap later, and
+      // in multiplayer the room could die in that gap -- `emit()` starts returning early once
+      // `aborted` is set, so the hook never ran and a real, finished, won match was never written
+      // down anywhere. Between this line and `this.winner` being set there is no await, no emit
+      // and no abort check, so there is no gap left to lose it in.
+      //
+      // Wrapped because a throwing consumer must not corrupt the engine mid-decision, and the
+      // engine must not care what the UI does with this.
+      if (this.onDecided) {
+        try { this.onDecided(this.winner); }
+        catch (err) { console.error('Escoba onDecided hook threw; the match still concluded', err); }
+      }
     }
   }
 }

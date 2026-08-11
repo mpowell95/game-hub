@@ -150,5 +150,131 @@ const FIXTURE_PRE_UNIFIED = {
   eq('C: fold-once holds across a follow-up game (7 + 1)', gs.loadStats().games.business.total, { played: 8, won: 5, lost: 3 });
 }
 
+// --- scenario D: Escoba's multiplayer plays come back out of the AI bucket -------------------
+//
+// THE LAW rule 7, literally: these five fixtures are the REAL escoba records of the only five
+// devices in players/ that have any head-to-head history, read straight out of Firebase on
+// 2026-08-11 and pasted here unedited. Not synthetic, not rounded, not "representative".
+//
+// The migration (splitEscobaMp in js/game-stats.js) moves out exactly what h2h PROVES was
+// multiplayer and nothing more. What must hold on every one of them:
+//   * total is byte-identical before and after - no play is created or destroyed
+//   * byDiff.mp gains exactly the h2h w/l, byDiff.normal loses exactly that
+//   * byDiff still sums to total
+//   * it runs ONCE: a later match, and a later load, must not extract a second time
+{
+  // deviceId, the device's real escoba record, its real h2h.escoba map
+  const REAL = [
+    ['0feee28f (Anita Bonita)',
+      { total: { played: 2, won: 2, lost: 0 }, byDiff: { normal: { played: 2, won: 2, lost: 0 } }, es: { escobas: 3 } },
+      { oppA: { name: 'MattyIce', w: 1, l: 0 } }],
+    ['1f75ff86 (Anita Bonita)',
+      { total: { played: 6, won: 5, lost: 1 }, byDiff: { easy: { played: 1, won: 1, lost: 0 }, normal: { played: 5, won: 4, lost: 1 } }, es: { escobas: 11 } },
+      { oppA: { name: 'MattyIce', w: 3, l: 1 }, oppB: { name: 'Unai', w: 1, l: 0 } }],
+    ['288dc3cd (Lili)',
+      { total: { played: 72, won: 31, lost: 41 }, byDiff: { hard: { played: 41, won: 11, lost: 30 }, normal: { played: 31, won: 20, lost: 11 } }, es: { escobas: 96 } },
+      { oppA: { name: 'MattyIce', w: 4, l: 4 }, oppB: { name: 'Unai', w: 3, l: 2 }, oppC: { name: 'Bego', w: 1, l: 1 } }],
+    ['a6a1f72b (Unai)',
+      { total: { played: 29, won: 18, lost: 11 }, byDiff: { normal: { played: 29, won: 18, lost: 11 } }, es: { escobas: 40 } },
+      { oppA: { name: 'Lili', w: 5, l: 4 } }],
+    ['dc1745bc (MattyIce)',
+      { total: { played: 8, won: 6, lost: 2 }, byDiff: { easy: { played: 4, won: 3, lost: 1 }, normal: { played: 4, won: 3, lost: 1 } }, es: { escobas: 12 } },
+      { oppA: { name: 'Anita Bonita', w: 1, l: 0 }, oppB: { name: 'Lili', w: 0, l: 1 } }],
+  ];
+  const sum = (bd) => Object.values(bd).reduce((a, b) => ({
+    played: a.played + (b.played | 0), won: a.won + (b.won | 0), lost: a.lost + (b.lost | 0),
+  }), { played: 0, won: 0, lost: 0 });
+
+  for (const [label, escoba, h2h] of REAL) {
+    const before = JSON.parse(JSON.stringify(escoba));
+    const hw = Object.values(h2h).reduce((n, r) => n + (r.w | 0), 0);
+    const hl = Object.values(h2h).reduce((n, r) => n + (r.l | 0), 0);
+    freshStore({ 'gamehub.stats': { version: 1, games: { escoba: before }, h2h: { escoba: h2h } } });
+    const g = gs.loadStats().games.escoba;
+
+    eq(`D ${label}: total is UNTOUCHED (no play created or destroyed)`, g.total, escoba.total);
+    eq(`D ${label}: byDiff.mp is exactly what head-to-head proves`, g.byDiff.mp, { played: hw + hl, won: hw, lost: hl });
+    eq(`D ${label}: the AI bucket lost exactly that much`, g.byDiff.normal,
+      { played: (escoba.byDiff.normal.played | 0) - (hw + hl), won: (escoba.byDiff.normal.won | 0) - hw, lost: (escoba.byDiff.normal.lost | 0) - hl });
+    eq(`D ${label}: byDiff still sums to total`, sum(g.byDiff), escoba.total);
+    ok(`D ${label}: the escoba counter is untouched`, (g.es.escobas | 0) === (escoba.es.escobas | 0));
+    ok(`D ${label}: the migration archived what it did (LAW rule 5, reversible by hand)`,
+      !!g.esMpSplit && g.esMpSplit.moved.won === hw && g.esMpSplit.moved.lost === hl
+      && g.esMpSplit.normalBefore.played === (escoba.byDiff.normal.played | 0));
+    ok(`D ${label}: nothing was left unresolved (h2h and byDiff agree)`,
+      g.esMpSplit.unresolved.won === 0 && g.esMpSplit.unresolved.lost === 0);
+
+    // Run-once, the way it actually gets stressed: another load, then a real new MP match.
+    gs.loadStats();
+    gs.recordEscoba('mp', true, { escobas: 2 });
+    gs.recordHeadToHead('escoba', { deviceId: 'oppA', name: 'X' }, true);
+    const after = gs.loadStats().games.escoba;
+    eq(`D ${label}: a second load + a new MP match extract nothing further`, after.byDiff.mp,
+      { played: hw + hl + 1, won: hw + 1, lost: hl });
+    eq(`D ${label}: ...and the AI bucket stays where the migration left it`, after.byDiff.normal, g.byDiff.normal);
+  }
+}
+
+// --- scenario E: the migration's edges, which no real device happens to exercise -------------
+{
+  // A device whose h2h claims MORE than `normal` can release must not drive a counter negative,
+  // must not invent the difference elsewhere, and must say so.
+  freshStore({ 'gamehub.stats': {
+    version: 1,
+    games: { escoba: { total: { played: 3, won: 2, lost: 1 }, byDiff: { normal: { played: 3, won: 2, lost: 1 } }, es: { escobas: 0 } } },
+    h2h: { escoba: { oppA: { name: 'X', w: 5, l: 4 } } },
+  } });
+  const g = gs.loadStats().games.escoba;
+  eq('E: disagreement clamps to what the bucket held, never negative', g.byDiff.normal, { played: 0, won: 0, lost: 0 });
+  eq('E: ...and moves only that much', g.byDiff.mp, { played: 3, won: 2, lost: 1 });
+  eq('E: total STILL untouched', g.total, { played: 3, won: 2, lost: 1 });
+  ok('E: the surplus is recorded as unresolved rather than invented',
+    g.esMpSplit.unresolved.won === 3 && g.esMpSplit.unresolved.lost === 3);
+
+  // A solo-only device: no h2h at all. Nothing moves, and the AI bucket is left exactly alone.
+  freshStore({ 'gamehub.stats': {
+    version: 1,
+    games: { escoba: { total: { played: 4, won: 3, lost: 1 }, byDiff: { normal: { played: 4, won: 3, lost: 1 } }, es: { escobas: 5 } } },
+  } });
+  const solo = gs.loadStats().games.escoba;
+  eq('E: a solo-only device keeps its whole AI record', solo.byDiff.normal, { played: 4, won: 3, lost: 1 });
+  ok('E: ...and grows no empty mp bucket', !solo.byDiff.mp);
+  ok('E: ...but is still latched, so it never reconsiders', solo._esMpSplit === true);
+
+  // A device with head-to-head but NO escoba plays (h2h from a game whose result write failed).
+  freshStore({ 'gamehub.stats': { version: 1, games: {}, h2h: { escoba: { oppA: { name: 'X', w: 1, l: 0 } } } } });
+  const orphan = gs.loadStats().games.escoba;
+  eq('E: h2h with an empty record moves nothing and stays non-negative', orphan.byDiff.normal, { played: 0, won: 0, lost: 0 });
+  eq('E: total is still zero', orphan.total, { played: 0, won: 0, lost: 0 });
+}
+
+// --- scenario F: a result whose write fails is QUEUED, not lost ------------------------------
+//
+// Matt, 2026-08-11: "Nothing should ever be able to be lost. That's the rule." Once the engine
+// records at the instant it decides (escoba/js/game.js's onDecided), the last way to lose a
+// result is the write itself failing. This proves it survives that.
+{
+  freshStore({});
+  gs.loadStats();
+  const realSet = globalThis.localStorage.setItem;
+  // Fail ONLY the big stats blob, exactly like a quota error does: the small queue key still fits.
+  globalThis.localStorage.setItem = (k, v) => {
+    if (k === 'gamehub.stats') throw new Error('QuotaExceededError (simulated)');
+    return realSet(k, v);
+  };
+  gs.recordEscoba('mp', true, { escobas: 4 });
+  gs.recordHeadToHead('escoba', { deviceId: 'oppZ', name: 'Bego' }, true);
+  globalThis.localStorage.setItem = realSet;
+
+  ok('F: the failed result was parked in its own key, not dropped', !!backing.get('gamehub.pendingResults.v1'));
+  const st = gs.loadStats();
+  eq('F: the next load applies it', st.games.escoba.total, { played: 1, won: 1, lost: 0 });
+  eq('F: ...into the right bucket', st.games.escoba.byDiff.mp, { played: 1, won: 1, lost: 0 });
+  ok('F: ...with its escobas', (st.games.escoba.es.escobas | 0) === 4);
+  ok('F: ...and the head-to-head row too', ((st.h2h.escoba || {}).oppZ || {}).w === 1);
+  ok('F: the queue is emptied once applied', !backing.get('gamehub.pendingResults.v1'));
+  eq('F: and it is not applied twice', gs.loadStats().games.escoba.total, { played: 1, won: 1, lost: 0 });
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
