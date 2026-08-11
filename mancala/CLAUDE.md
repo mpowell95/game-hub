@@ -32,6 +32,88 @@ the counterclockwise sow with a visible dashed hop over the opponent's mancala, 
 "X = Y" example, and two rule bullets. Matt's own words: "must be completely overhauled... same
 excess-prose issue."
 
+## The board is NEVER horizontal (2026-08-11 — settled, do not re-add)
+
+Matt: *"Mancala should NEVER be horizontal."*
+
+A `@media (min-width: 720px)` block in `mancala.css` used to flip the board to a "classic
+horizontal" layout — two ROWS of pits between stores on the left and right — on any screen 720px
+or wider. **It is deleted, not disabled.** The board is one shape at every width now: two COLUMNS
+of pits, each store a wide bar across the top and bottom. Verified at 393, 800 and 1280px wide.
+
+Two reasons it is worth keeping gone, beyond the instruction:
+
+- A second layout is a second thing every future change has to be checked against, and nothing
+  was checking it — no test ever opened this game above 720px.
+- **It is what made the how-to carousel get built upside down.** A session reading this game's CSS
+  finds the word "horizontal" with no way to tell it applied only to a width the hub (`.hub-main`,
+  `max-width: 720px`) barely reaches. That is a trap for exactly the kind of session that most
+  needs to know the board's shape.
+
+If a wide-screen layout is ever wanted again it is a deliberate design pass, with the how-to
+illustration following the same breakpoint — not a leftover media query.
+
+## HOW TO PLAY — the animated carousel (2026-08-11)
+
+**This REPLACED the static sheet described below.** Matt uploaded seven iPhone screen recordings
+to `reference/mancala/` and asked for the same treatment Yahtzee had just had: *"Clone the how to
+pages. Exactly. Animations included."* (How to actually watch a `.MOV` is in
+`reference/README.md` — it is not something a session can just open.)
+
+`js/howto.js`, six pages, the reference's own order and wording, with the same chrome as
+`yahtzee/js/howto.js` because the reference app is the same one.
+
+Three things from the recordings that are easy to miss:
+
+1. **Seven recordings, six pages.** Two pages change their caption PART-WAY through their own
+   animation — the sow page reads "…distributed counterclockwise…" while the stones travel and
+   then "Each pit receives one stone…" as they land; the end page reads "The game ends when all
+   six pits on one side are empty" and then "Any remaining stones on the other side…". The
+   trailing ellipsis is the reference's own signal that it continues. Hence `PAGES[].parts`, and
+   why `.mc-ht-caption` has a `min-height` — the card must not resize mid-story.
+2. **The illustration panel is turn-coloured**, salmon while vermilion acts and blue while blue
+   does. Our own board already does exactly this (`.mancala[data-turn]`), so the sheet is showing
+   a real property of the game rather than decoration.
+3. **The board is VERTICAL, in the reference and here — they match.** The illustration draws our
+   own board: blue (you) down the LEFT column with your mancala as the bar across the BOTTOM,
+   vermilion up the RIGHT column with theirs across the TOP, so `i + 1 mod 14` traces one real
+   counterclockwise loop. Counts print outside each pit, the side the real board puts them on.
+
+   **This was shipped WRONG once, and the reason is worth keeping.** The first cut drew a
+   HORIZONTAL board — pits in two rows, stores left and right — and wrote a comment justifying it
+   as a deliberate deviation from the reference. It was neither deliberate nor a deviation: it was
+   inferred rather than looked at. To be exact about the sources, since the first version of this
+   note blamed them unfairly: `game.js` says nothing about geometry at all; this file's own MP
+   section says "always rendered bottom / top", which is CORRECT for the vertical board (your
+   store IS the bar across the bottom); and the only occurrence of the word "horizontal" was the
+   `min-width: 720px` block described above, which no phone ever reached. Nothing was misleading.
+   The board was simply never opened. Matt: *"our actual game is vertical. Why would the how to
+   be horizontal??? That doesn't make any sense."*
+   The layout is now measured off the running board (`[data-pit]` rects: 0-5 at x≈108 descending,
+   6 as a bar at the bottom, 7-12 at x≈285 ascending, 13 as a bar at the top), which is the only
+   way it should ever have been established. VISUAL-PROCESS.md's first rule, missed inside the
+   very feature built to honour it.
+
+**Built on demand and torn down on close**, matching this game's existing overlay idiom: Mancala
+rewrites its whole root on every render, so a persistently-mounted sheet would be destroyed
+underneath itself. `closeOverlays()` destroys the controller as well as removing the node — the
+timelines own real timers and removing the node alone would leave them ticking against a detached
+board.
+
+**One bug worth keeping written down:** the first `sow()` computed a landed pit's new count as
+`4 + drops`, which is right on a fresh board and wrong on every page that arranges the board
+differently — the capture page starts a pit empty and rendered `5` where it should have said `1`.
+It keeps a real `counts[]` model now. Derived-from-assumption arithmetic is the trap in any
+animation that reuses one routine across differently-arranged setups.
+
+`test-visual.mjs`'s `MOTION` probe watches `.mc-ht-stone` travel (250px over ~6s). The sow IS the
+rule this sheet teaches, and a still diagram of it is precisely what the old sheet already had.
+
+i18n from the first line: all captions are `ht_*` keys in `strings.js`, both languages, verified
+in the browser (`Cada jugador tiene seis hoyos y una mancala…`).
+
+### The static sheet this replaced (kept for the reasoning)
+
 **Trimmed further (2026-07-24, batch D/FB3-HOWTO3):** QA rated this sheet "borderline" —
 a paragraph under the diagram (caption + a separate "X = Y" example line) plus a bold
 line and two bullets. The caption and example are now ONE merged sentence (`help_caption`

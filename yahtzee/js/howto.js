@@ -25,18 +25,19 @@
 // That is this repo's standing rule (root CLAUDE.md): an animation's reduced-motion branch is an
 // instant state change, never a removal.
 
+import { makeT } from '../../js/i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
+
 const REDUCE = () => typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** The six pages, in the recordings' own order, with their captions verbatim. */
-const PAGES = [
-  { key: 'roll',    text: 'Roll your dice at the start of each turn' },
-  { key: 'hold',    text: 'Tap on the dice you wish to save.\nEach turn you can roll the dice 3 times' },
-  { key: 'commit',  text: 'Tap the combo box you wish to submit and press <b>Play</b>' },
-  { key: 'once',    text: 'You can only use each combo once per game' },
-  { key: 'learn',   text: 'Learn about each combo by pressing its symbol on the board' },
-  { key: 'bonus',   text: 'Score 63 or higher on the left column to earn 35 bonus points!' },
-];
+/** The six pages, in the recordings' own order. Only the KEY is fixed here; the caption is read
+ *  through t() at render time, so the sheet follows the hub's language even if it changed while
+ *  this module was already loaded. */
+const PAGES = ['roll', 'hold', 'commit', 'once', 'learn', 'bonus'];
+const captionFor = (key) => t('ht_' + key);
 
 /* ---------- the little board the illustration animates ---------------------------------------
  * Drawn at a fixed 200x244 and scaled by CSS to whatever the salmon panel is. Every part an
@@ -66,10 +67,10 @@ const COMBO_TILES = [
 // What a long-press on each symbol says. Same text the real game's combo popover uses
 // (yz-combo-info in ui.js) -- one source would be better, but this module must stay loadable
 // on its own, so they are kept deliberately identical and short.
-const COMBO_INFO = [
-  { label: '4x', name: '4 of a kind', score: 'Score: sum of all dice' },
-  { label: 'LG', name: 'Sequence of 5', score: 'Score: 40' },
-  { label: '★', name: 'Yahtzee', score: 'Score: 50' },
+const COMBO_INFO = () => [
+  { label: '4x', name: t('cat_fourKind'), score: t('score_all_dice') },
+  { label: 'LG', name: t('cat_largeStraight'), score: t('score_n', { n: 40 }) },
+  { label: '★', name: t('cat_yahtzee'), score: t('score_n', { n: 50 }) },
 ];
 
 function boardHtml() {
@@ -86,7 +87,7 @@ function boardHtml() {
   // the section bonus, in the empty cell under the upper column - exactly where our own
   // scorecard now shows it, so the tutorial points at a real place on the real board
   h += `<div class="yz-ht-bonusrow" data-role="bonusrow">`
-    + `<span class="yz-ht-bonuslab">SECTION<br>BONUS</span>`
+    + `<span class="yz-ht-bonuslab">${t('section_bonus')}</span>`
     + `<span class="yz-ht-bonusval" data-role="bonusval">+35</span>`
     + `<span class="yz-ht-bonusprog" data-role="bonusprog">0/63</span>`
     + `</div>`;
@@ -124,8 +125,8 @@ function boardHtml() {
 export function howToHtml() {
   return `
   <div class="yz-ht-scrim" data-role="howto" hidden>
-    <div class="yz-ht-modal" role="dialog" aria-modal="true" aria-label="How to play">
-      <div class="yz-ht-title">HOW TO PLAY</div>
+    <div class="yz-ht-modal" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+      <div class="yz-ht-title">${t('ht_title')}</div>
       <div class="yz-ht-card">
         <div class="yz-ht-panel">${boardHtml()}</div>
         <p class="yz-ht-caption" data-role="caption"></p>
@@ -134,11 +135,11 @@ export function howToHtml() {
         ${PAGES.map((_, i) => `<i data-dot="${i}"></i>`).join('')}
       </div>
       <div class="yz-ht-nav">
-        <button type="button" class="yz-ht-sq" data-action="ht-first" aria-label="First page">
+        <button type="button" class="yz-ht-sq" data-action="ht-first" aria-label="${t('ht_first')}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M20 5l-9 7 9 7z"/></svg>
         </button>
-        <button type="button" class="yz-ht-ok" data-action="ht-close">OK</button>
-        <button type="button" class="yz-ht-sq" data-action="ht-next" aria-label="Next page">
+        <button type="button" class="yz-ht-ok" data-action="ht-close">${t('ht_ok')}</button>
+        <button type="button" class="yz-ht-sq" data-action="ht-next" aria-label="${t('ht_next')}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M4 5l9 7-9 7z"/></svg>
         </button>
       </div>
@@ -295,7 +296,8 @@ export function createHowTo(root) {
       [0, 1, 2, 3, 4].forEach((i) => setDie(i, D[i]));
       let step = 0;
       const show = () => {
-        const info = COMBO_INFO[step % COMBO_INFO.length];
+        const list = COMBO_INFO();
+        const info = list[step % list.length];
         const tile = board.querySelector(`[data-tile="${COMBO_TILES.find((c) => c.label === info.label).key}"]`);
         handTo(`[data-tile="${tile.dataset.tile}"]`);
         after(450, () => {
@@ -360,8 +362,8 @@ export function createHowTo(root) {
       const b = tile.getBoundingClientRect(), p = board.getBoundingClientRect();
       const scale = p.width / 200 || 1;
       const tip = el('[data-role="tip"]');
-      tip.querySelector('[data-role="tipname"]').textContent = 'Sequence of 5';
-      tip.querySelector('[data-role="tipscore"]').textContent = 'Score: 40';
+      tip.querySelector('[data-role="tipname"]').textContent = t('cat_largeStraight');
+      tip.querySelector('[data-role="tipscore"]').textContent = t('score_n', { n: 40 });
       tip.style.left = `${Math.min(96, (b.left - p.left) / scale - 34)}px`;
       tip.style.top = `${(b.top - p.top) / scale - 2}px`;
       tip.classList.add('yz-ht-show');
@@ -377,14 +379,14 @@ export function createHowTo(root) {
 
   function play() {
     clearTimers();
-    const key = PAGES[page].key;
+    const key = PAGES[page];
     if (REDUCE()) { STILLS[key](); return; }
     const loop = () => { if (open) play(); };
     TIMELINES[key](loop);
   }
 
   function render() {
-    caption.innerHTML = PAGES[page].text.replace(/\n/g, '<br>');
+    caption.innerHTML = captionFor(PAGES[page]).replace(/\n/g, '<br>');
     dots.forEach((d, i) => d.classList.toggle('yz-ht-dot-on', i === page));
     btnFirst.classList.toggle('yz-ht-off', page === 0);
     btnFirst.disabled = page === 0;
@@ -408,6 +410,20 @@ export function createHowTo(root) {
     /** Called from the game's own onViewportResize subscription -- never a raw resize listener
      *  here (js/viewport.js owns that; see the root CLAUDE.md's "USE WHAT EXISTS" table). */
     refit() { if (open) { fit(); play(); } },
+    /** The hub's language toggle can be used with this sheet open. The static chrome is baked
+     *  into howToHtml(), so relabel it in place rather than rebuilding (which would throw away
+     *  the running timeline and the element references createHowTo() closed over). */
+    relabel() {
+      const title = scrim.querySelector('.yz-ht-title');
+      if (title) title.textContent = t('ht_title');
+      const ok = scrim.querySelector('[data-action="ht-close"]');
+      if (ok) ok.textContent = t('ht_ok');
+      btnFirst.setAttribute('aria-label', t('ht_first'));
+      btnNext.setAttribute('aria-label', t('ht_next'));
+      const lab = scrim.querySelector('.yz-ht-bonuslab');
+      if (lab) lab.innerHTML = t('section_bonus');
+      render();
+    },
     destroy() { open = false; clearTimers(); },
   };
 }

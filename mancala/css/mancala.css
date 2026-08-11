@@ -686,29 +686,20 @@
   color: rgba(36, 22, 9, 0.6);
 }
 
-/* --- landscape / desktop: classic horizontal board --------------------- */
+/* MANCALA IS NEVER HORIZONTAL (2026-08-11, Matt: "Mancala should NEVER be horizontal").
+   A @media (min-width: 720px) block used to flip the board to a "classic horizontal" layout --
+   two rows of pits between stores on the left and right -- on any screen 720px or wider. It was
+   deleted, not disabled. The board is one shape everywhere now: two COLUMNS of pits with each
+   store as a wide bar across the top and bottom, which is what every phone was already getting
+   and what the how-to sheet draws.
 
-@media (min-width: 720px) {
-  .mancala .mc-shell { max-width: 780px; }
-  .mancala .mc-board {
-    max-width: 760px;
-    grid-template-columns: 92px repeat(6, 1fr) 92px;
-    grid-template-rows: 1fr 1fr;
-    grid-template-areas:
-      's13 p12 p11 p10 p9 p8 p7 s6'
-      's13 p0  p1  p2  p3 p4 p5 s6';
-    gap: 26px 10px;
-    padding: 22px 20px;
-  }
-  .mancala .mc-store { height: auto; margin: 0; border-radius: 40px; }
-  .mancala .mc-store--p2 { background: linear-gradient(90deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
-  .mancala .mc-store--p1 { background: linear-gradient(90deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
-  .mancala .mc-hole { width: clamp(54px, 8vw, 74px); height: clamp(54px, 8vw, 74px); }
-  /* Horizontal board: the two rows of pits are stacked, so the carved counts
-     sit above the top row (P2) and below the bottom row (P1), not left/right. */
-  .mancala .mc-pit--p1 .mc-count { right: auto; left: 50%; top: 100%; transform: translateX(-50%); margin: 1px 0 0; }
-  .mancala .mc-pit--p2 .mc-count { left: 50%; right: auto; top: auto; bottom: 100%; transform: translateX(-50%); margin: 0 0 1px; }
-}
+   Why it mattered beyond taste: a second layout is a second thing every future change has to be
+   checked against, and nobody was checking it. It is also what made the how-to carousel get
+   built upside down -- a session reading the CSS finds the word "horizontal" and has no way to
+   know it only applies to a width the hub (max-width 720px) barely reaches.
+
+   If a wide-screen layout is ever wanted again, it needs to be a deliberate design pass with the
+   how-to illustration following the same breakpoint, not a leftover media query. */
 
 /* --- animations -------------------------------------------------------- */
 
@@ -789,3 +780,145 @@
    own untouched ink) from the base `.mancala` rule - the Phase 2 pass overrode every other piece
    of setup-screen text individually but missed this one, which reads as dark-on-dark. */
 :root.gh-dark .mancala .mc-title { color: #e9eef6; }
+
+/* ============================================================================================
+   HOW TO PLAY -- cloned from reference/mancala/*.MOV. Same sheet chrome as Yahtzee's (the
+   reference app is the same one): dark modal, white card, coloured illustration panel, six dots,
+   purple footer. The BOARD inside is ours: vertical, blue you down the left column into your
+   mancala across the bottom, vermilion opponent up the right into theirs across the top -- the
+   same shape the real board has at every width (see the "NEVER HORIZONTAL" note above).
+   ============================================================================================ */
+.mancala .mc-ht-scrim{
+  position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+  padding:16px; background:rgba(0,0,0,.55); overscroll-behavior:contain;
+}
+.mancala .mc-ht-scrim[hidden]{ display:none; }
+.mancala .mc-ht-modal{
+  width:min(100%,340px); background:#2A2730; border-radius:22px; padding:16px 14px 14px;
+  box-shadow:0 18px 44px rgba(0,0,0,.5); display:flex; flex-direction:column; gap:12px;
+}
+.mancala .mc-ht-title{
+  color:#fff; font-weight:800; font-size:20px; letter-spacing:.04em; text-align:center;
+}
+.mancala .mc-ht-card{
+  background:#fff; border-radius:16px; padding:10px 10px 4px;
+  display:flex; flex-direction:column; gap:8px;
+}
+/* Turn-coloured, exactly like the real board's own [data-turn] backgrounds. */
+.mancala .mc-ht-panel{
+  position:relative; border-radius:10px; aspect-ratio:150/200; overflow:hidden;
+  background:#e2a17f; transition:background-color .35s ease;
+}
+.mancala .mc-ht-panel[data-side='p1']{ background:#8fb9d8; }
+.mancala .mc-ht-panel[data-side='p2']{ background:#e2a17f; }
+/* The <p> is the flex box (so a short caption still sits centred in a fixed-height slot); the
+   TEXT lives in a span inside it. Putting the flex on the text itself turned every run between
+   two <b> tags into its own flex ITEM, and the sentence laid out as ragged columns. */
+.mancala .mc-ht-caption{
+  margin:0; padding:2px 4px 8px; min-height:4.6em;
+  display:flex; align-items:center; justify-content:center;
+}
+.mancala .mc-ht-caption > span{
+  color:#2B3A55; font-weight:700; font-size:14px; line-height:1.3; text-align:center;
+}
+.mancala .mc-ht-caption b{ color:#E04A3A; }
+.mancala .mc-ht-dots{ display:flex; justify-content:center; gap:8px; }
+.mancala .mc-ht-dots i{
+  width:9px; height:9px; border-radius:50%; background:#F3D3B6;
+  transition:background-color .2s ease, transform .2s ease;
+}
+.mancala .mc-ht-dots i.mc-ht-dot-on{ background:#E8763C; transform:scale(1.1); }
+.mancala .mc-ht-nav{ display:flex; align-items:center; gap:10px; }
+.mancala .mc-ht-ok{
+  flex:1; height:46px; border:0; border-radius:12px; cursor:pointer; background:#8E4EC6; color:#fff;
+  font-weight:800; font-size:17px; letter-spacing:.04em; box-shadow:0 4px 0 #5F2E8C;
+  font-family:inherit; touch-action:manipulation;
+}
+.mancala .mc-ht-sq{
+  width:46px; height:46px; flex:none; border:0; border-radius:12px; cursor:pointer;
+  background:#8E4EC6; box-shadow:0 4px 0 #5F2E8C; padding:0;
+  display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation;
+}
+.mancala .mc-ht-sq svg{ width:22px; height:22px; }
+.mancala .mc-ht-sq svg path{ fill:#fff; stroke:#fff; stroke-width:2.6; stroke-linejoin:round; }
+.mancala .mc-ht-sq.mc-ht-off{ background:#4E6E75; box-shadow:0 4px 0 #355056; cursor:default; }
+.mancala .mc-ht-sq.mc-ht-off svg path{ fill:#9FBAC0; stroke:#9FBAC0; }
+
+/* ---- the little board, authored at a fixed 200x132 and scaled to the panel ---- */
+/* VERTICAL, because the real board is: two columns of pits between two wide stores. Measured off
+   the running game, not inferred from a comment (see howto.js's header). */
+.mancala .mc-ht-board{
+  position:absolute; top:0; left:0; width:150px; height:200px; transform-origin:top left;
+}
+.mancala .mc-ht-wood{
+  position:absolute; left:4px; top:4px; right:4px; bottom:4px; border-radius:14px;
+  background:linear-gradient(180deg,var(--mc-wood-hi) 0%,var(--mc-wood) 55%,var(--mc-wood-lo) 100%);
+  border:2px solid var(--mc-woodedge);
+}
+.mancala .mc-ht-pit{
+  position:absolute; width:20px; height:20px; border-radius:50%;
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28), 0 0 0 1.5px rgba(0,0,0,.45);
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.mancala .mc-ht-p1{ background:radial-gradient(circle at 36% 30%, #6fd0f5 0 30%, var(--mc-p1) 32% 100%); }
+.mancala .mc-ht-p2{ background:radial-gradient(circle at 36% 30%, #ff8a7c 0 30%, var(--mc-p2) 32% 100%); }
+.mancala .mc-ht-pit.mc-ht-empty{ background:#b98e5f; }
+/* the count, printed beside the pit exactly as the real board does */
+.mancala .mc-ht-n{
+  position:absolute; width:14px; font-size:8px; font-weight:800; font-style:normal;
+  color:var(--mc-count); line-height:1;
+}
+.mancala .mc-ht-n-l{ text-align:right; }
+.mancala .mc-ht-n-r{ text-align:left; }
+.mancala .mc-ht-store{
+  position:absolute; left:12px; width:126px; height:20px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:800; color:#fff;
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28), 0 0 0 1.5px rgba(0,0,0,.45);
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.mancala .mc-ht-store-p1{ top:169px; background:var(--mc-p1-deep); }
+.mancala .mc-ht-store-p2{ top:11px; background:var(--mc-p2-deep); }
+/* "look here" -- a ring AND a lift, so it is never colour alone */
+.mancala .mc-ht-lit{ transform:scale(1.16); box-shadow:0 0 0 2.5px #f2b705; }
+.mancala .mc-ht-store.mc-ht-lit{ transform:scale(1.06); }
+/* the travelling stone */
+.mancala .mc-ht-stone{
+  position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%;
+  background:var(--mc-stonefill); border:1px solid #8a6a3a;
+  opacity:0; pointer-events:none;
+  transition:transform .34s cubic-bezier(.4,0,.2,1), opacity .15s ease;
+}
+.mancala .mc-ht-stone.mc-ht-show{ opacity:1; }
+/* the capture marker: a ring linking the two pits being taken */
+/* Links the landed pit to the one opposite it -- across the two COLUMNS, so it is wide, not tall. */
+.mancala .mc-ht-cap{
+  position:absolute; left:-38px; top:-13px; width:76px; height:26px; border-radius:13px;
+  border:2.5px dashed #f2b705; opacity:0; pointer-events:none;
+  transition:opacity .2s ease;
+}
+.mancala .mc-ht-cap.mc-ht-show{ opacity:1; }
+.mancala .mc-ht-win{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 50% 50%, rgba(255,201,60,.95) 0%, rgba(255,201,60,0) 70%);
+  opacity:0; pointer-events:none; transition:opacity .25s ease;
+}
+.mancala .mc-ht-win span{
+  font-size:17px; font-weight:900; color:#E8291B; letter-spacing:.02em;
+  text-shadow:0 1px 0 #fff, 0 2px 4px rgba(0,0,0,.25);
+}
+.mancala .mc-ht-win.mc-ht-show{ opacity:1; }
+.mancala .mc-ht-hand{
+  position:absolute; left:0; top:0; width:24px; height:30px; margin:-2px 0 0 -5px;
+  opacity:0; pointer-events:none;
+  transition:transform .4s cubic-bezier(.4,0,.2,1), opacity .25s ease;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));
+}
+.mancala .mc-ht-hand svg{ width:100%; height:100%; }
+
+@media (prefers-reduced-motion: reduce){
+  .mancala .mc-ht-hand, .mancala .mc-ht-stone, .mancala .mc-ht-pit, .mancala .mc-ht-store,
+  .mancala .mc-ht-cap, .mancala .mc-ht-win, .mancala .mc-ht-panel, .mancala .mc-ht-dots i{
+    transition:none;
+  }
+}

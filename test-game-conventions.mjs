@@ -30,12 +30,10 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 //
 // The rule for adding to this list: only real, already-shipped debt, never a new game taking a
 // shortcut. If you are about to add a game you just wrote to this list, fix the game instead.
-const KNOWN_GAPS = {
-  'every game routes its strings through a { en, es } dictionary': {
-    yahtzee: 'Yahtzee shipped without i18n; translating it is a feature task, not a cleanup. '
-      + 'It is the last untranslated in-hub game (js/CLAUDE.md, "Language support").',
-  },
-};
+// EMPTY, and that is the point: Yahtzee was the last entry and the last untranslated in-hub game
+// (2026-08-11). Every in-hub game now routes its strings through a { en, es } dictionary. A stale
+// entry fails this suite, so leaving Yahtzee listed after translating it would have gone red.
+const KNOWN_GAPS = {};
 
 let passed = 0;
 const failures = [];

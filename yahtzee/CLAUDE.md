@@ -84,12 +84,7 @@ one per page of a mobile Yatzy game's tutorial) and said: *"Clone the how to pag
 Animations included. If our game doesn't include anything in the how to (bonus, symbol
 explanations, etc), build that and add it to our game as well."*
 
-**A `.MOV` is not something a session can read.** The Read tool takes images and PDFs; Playwright's
-bundled ffmpeg is a cut-down build that only opens WebM and refuses QuickTime outright. Getting
-frames out needed `npm install --no-save ffmpeg-static` and
-`ffmpeg -i <file> -vf "fps=3,scale=200:-1,tile=6x5" sheet.jpg`, which lays a whole recording out as
-one contact sheet you can actually see the motion in. **Write that down rather than rediscovering
-it** — it is the only reason those six files are usable at all.
+How to actually watch a `.MOV` is in `reference/README.md`, which applies to every game.
 
 ### `js/howto.js` — the carousel
 
@@ -142,10 +137,40 @@ cannot see.
 Both are wired through the game's own delegated listeners on `.yz-root` (pointerdown/up/cancel/
 leave), never `document`, and all four come off in `destroy()` alongside the hold timer.
 
-**Still no i18n**, consistent with the rest of this game — these new strings are English literals
-like every other string here, and Yahtzee remains `test-game-conventions.mjs`'s one standing
-`KNOWN_GAPS` entry. Translating this game is its own task; adding a `strings.js` for the tutorial
-alone would have made the gap messier, not smaller.
+### i18n — the whole game, finally (2026-08-11)
+
+Matt, straight after the carousel shipped: *"confirm that these instructions display in Spanish
+too. Everything must also work in Spanish."* They did not — **not one string in this game
+translated.** Yahtzee had shipped with no i18n at all and had been
+`test-game-conventions.mjs`'s one standing `KNOWN_GAPS` entry ever since.
+
+`js/strings.js` now covers **all 68 keys**: setup, lobby, every MP error and status, player names,
+game-over, the section-bonus label, the combo-info popover and all six how-to captions. **That
+entry is gone from `KNOWN_GAPS`, which is now empty — every in-hub game is translated.** (A stale
+entry fails that suite, so translating without clearing it would have gone red.)
+
+Two traps worth knowing, both hit here:
+
+- **`GAME_MARKUP` had to become `gameMarkup()`.** It was a module-scope template literal; the
+  moment it carried `t()` calls it would have frozen the board in whichever language loaded first.
+  That is exactly the "call t() at RENDER time" rule in `js/CLAUDE.md`, and a `const` template is
+  the easiest way to break it without noticing.
+- **`CAT_INFO` became `catInfo(cat)`** for the same reason, deriving name and score from the key
+  rather than a frozen table.
+
+`onLangChange` re-renders whichever screen is up, and `howTo.relabel()` updates the sheet in place
+if it is open (rebuilding it would throw away the running timeline). Both unsubscribe in
+`destroy()`.
+
+Not translated on purpose: **Yahtzee** itself (a proper noun in both languages, same rule the repo
+applies to card-suit and figure names), and the ROLL/PLAY/SMALL/LARGE faces, which are drawn
+artwork from the original pixel clone rather than text this game sets.
+
+Verified in the browser with `gamehub.lang.v1` set to `es`: setup reads *Vs Computadora / Crear
+Partida / Unirse / Jugar / Cómo se juega*, the sheet reads *CÓMO SE JUEGA* over *"Lanza los dados
+al empezar cada turno"*, the pods read *Tú* and *Computadora*, and holding the house symbol gives
+*Full — Puntos: 25*. The longer Spanish bonus label (*BONO DE SECCIÓN*) was measured rather than
+eyeballed: 52px, no overflow, no collision with the progress pill.
 
 ## Game engine notes
 
