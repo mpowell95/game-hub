@@ -13,6 +13,8 @@
 // installed on globalThis BEFORE js/announce.js is imported - it reads the store through the same
 // `localStorage` global a browser provides, so the code under test is the shipped code, unmodified.
 
+import { existsSync } from 'node:fs';
+
 let passed = 0;
 const failures = [];
 
@@ -166,6 +168,19 @@ for (const a of ann.ANNOUNCEMENTS) {
   }
   ok(`${a.id}: en and es bodies have the same number of paragraphs`,
     (a.body.en || []).length === (a.body.es || []).length);
+  // A typo'd image path is silent: the popup still opens, just with a hole where the picture was
+  // (announce-ui.js removes a figure whose image fails to load, on purpose). So check the files.
+  for (const s of a.shots || []) {
+    for (const field of ['img', 'imgDark']) {
+      for (const lg of ['en', 'es']) {
+        const path = ann.textFor(s[field], lg);
+        ok(`${a.id}: ${field}.${lg} is set`, !!path);
+        if (path) ok(`${a.id}: ${path} exists on disk`, existsSync(new URL('./' + path, import.meta.url)));
+      }
+    }
+    ok(`${a.id}: ${ann.textFor(s.img, 'en')} has a caption in both languages`,
+      !!(s.caption && s.caption.en && s.caption.es));
+  }
 }
 
 // =================================================================================================

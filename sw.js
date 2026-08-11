@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v283';
+const CACHE = 'game-hub-v284';
 
 const ASSETS = [
   './',
@@ -44,6 +44,19 @@ const ASSETS = [
   './js/bug-report-ui.js',
   './js/announce.js',
   './js/announce-ui.js',
+  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./icons/
+  // (which isShellAsset treats as shell): they are a one-time popup's illustrations, so they belong
+  // in the best-effort REST tier where a bad path cannot strand an install. announce-ui.js removes
+  // any figure whose image fails to load, so a device that has not warmed them yet still gets a
+  // working popup.
+  './img/where-hub.png',
+  './img/where-hub-dark.png',
+  './img/where-hub-es.png',
+  './img/where-hub-es-dark.png',
+  './img/where-profile.png',
+  './img/where-profile-dark.png',
+  './img/where-profile-es.png',
+  './img/where-profile-es-dark.png',
   './js/players-agg.js',
   './js/game-art.js',
   './js/leaderboard-ui.js',

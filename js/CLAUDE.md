@@ -819,6 +819,17 @@ using it. The seen-list is a preference, rule 2's carve-out, same class as favor
 
 - **`until` is what retires it** — the New pill's self-cleaning idea (whose date parser this
   reuses). Without it, a phone left in a drawer opens to a stack of old news.
+- **An entry may carry `shots`: pictures of where the thing it announces actually is** (Matt asked
+  for them, with arrows). They are real screenshots of the real hub with the arrow drawn in by the
+  capture script rather than by hand, so re-shooting after a redesign is a script run, not an
+  image-editing session — that script lives in the milestone's own history, not the repo, so the
+  practical instruction is: **capture at 393x852 @2x with Playwright, inject an SVG arrow into the
+  page, and clip to the button**. Each shot carries a `dark` twin, chosen at render time via
+  `resolvedTheme()` (never a bare `matchMedia`, or an explicit light choice on a dark phone gets the
+  wrong picture). The files sit in `img/` and therefore in the SW's non-atomic REST tier, and a
+  figure whose image fails to load removes itself — a screenshot must never be able to break the
+  popup or strand an install. `test-bug-report.mjs` asserts every referenced path exists on disk,
+  because a typo here is silent: the popup still opens, just with a hole in it.
 - **A malformed date fails SAFE (shown, not hidden).** One that appears when it should not is a
   small mistake; one that silently never appears is invisible until somebody asks why nobody knew.
 - **Adding the next one: append a NEW id.** Never re-use or renumber — devices that dismissed it

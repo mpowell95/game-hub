@@ -9,6 +9,7 @@
 // notice again after they acted on it is its own small bug.
 
 import { markSeen, textFor } from './announce.js';
+import { resolvedTheme } from './theme.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -34,7 +35,15 @@ function ensureCss() {
   .ann-icon { font-size: 42px; line-height: 1; }
   .ann-modal h2 { margin: var(--gh-sp-3) var(--gh-sp-6) var(--gh-sp-3); font-size: var(--gh-fs-lg); font-weight: 800; }
   .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: left; }
-  .ann-modal .gh-modal__actions { justify-content: center; }
+  .ann-shot { margin: 0 0 var(--gh-sp-3); }
+  .ann-shot img { display: block; width: 100%; height: auto; border-radius: var(--gh-r-md);
+                  border: 1px solid var(--gh-border); background: var(--gh-surface-2); }
+  .ann-shot figcaption { margin-top: var(--gh-sp-1); font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted); }
+  /* Two buttons, one row, always. The Spanish pair ("Entendido" + "Pruébalo ahora") wrapped onto
+     two lines at 393px and read as one stacked on the other; splitting the row equally means the
+     labels can grow without ever wrapping the row. */
+  .ann-modal .gh-modal__actions { justify-content: center; flex-wrap: nowrap; }
+  .ann-modal .gh-modal__actions .gh-btn { flex: 1 1 0; min-width: 0; padding: 0 var(--gh-sp-3); }
   `;
   document.head.appendChild(style);
 }
@@ -52,12 +61,26 @@ export function showAnnouncement(a, { onAction } = {}) {
     host.className = 'gh-overlay ann-overlay';
     const body = textFor(a.body, lang);
     const paras = (Array.isArray(body) ? body : [body]).filter(Boolean);
+    // Dark shots when the resolved theme is dark, so a light screenshot never glares out of a dark
+    // popup. Read through theme.js (never a bare matchMedia) so an explicit 'light' choice on a
+    // dark phone still gets the light picture.
+    const dark = resolvedTheme() === 'dark';
+    const shots = Array.isArray(a.shots) ? a.shots : [];
     host.innerHTML = `
       <div class="gh-modal ann-modal" role="dialog" aria-modal="true" aria-label="${esc(t('ann_dialog_aria'))}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
         <div class="ann-icon" aria-hidden="true">${esc(a.icon || '📣')}</div>
         <h2>${esc(textFor(a.title, lang))}</h2>
         ${paras.map((p) => `<p class="ann-body">${esc(p)}</p>`).join('')}
+        ${shots.map((s) => {
+          const cap = esc(textFor(s.caption, lang) || '');
+          const path = (dark && textFor(s.imgDark, lang)) || textFor(s.img, lang);
+          const src = new URL('../' + path, import.meta.url).href;
+          return `<figure class="ann-shot">
+            <img src="${esc(src)}" alt="${cap}" onerror="this.closest('.ann-shot').remove()">
+            ${cap ? `<figcaption>${cap}</figcaption>` : ''}
+          </figure>`;
+        }).join('')}
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--ghost" data-role="dismiss">${esc(t('ann_dismiss'))}</button>
           ${a.cta ? `<button type="button" class="gh-btn gh-btn--primary" data-role="cta">${esc(textFor(a.cta, lang))}</button>` : ''}

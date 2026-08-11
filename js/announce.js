@@ -32,16 +32,30 @@ export const ANNOUNCEMENTS = [
     icon: '🐞',
     title: { en: 'Found a bug? Tell me.', es: '¿Has visto un fallo? Cuéntamelo.' },
     body: {
-      en: [
-        'New Report a bug button, at the bottom of the games list and on your profile page.',
-        'Say what went wrong, add a screenshot, send. Your phone and app details go with it, so I can see what happened without asking you twenty questions.',
-      ],
-      es: [
-        'Nuevo botón Reportar un fallo, al final de la lista de juegos y en tu página de perfil.',
-        'Cuenta qué ha pasado, añade una captura y envía. Los datos de tu móvil y de la app van incluidos, así veo qué ha pasado sin hacerte veinte preguntas.',
-      ],
+      en: ['Say what happened, add a screenshot, send. Your phone details come along.'],
+      es: ['Cuenta qué ha pasado, añade una captura y envía. Los datos de tu móvil van incluidos.'],
     },
-    cta: { en: 'Try it now', es: 'Pruébalo ahora' },
+    // `shots` are the "here is where the button lives" pictures, captured from the real hub with
+    // the arrow drawn in (scripted, see the milestone note in js/CLAUDE.md). Paths are
+    // repo-relative and resolved against js/announce-ui.js's own URL, so they work from any page.
+    // Four variants each, resolved at render time by the SAME textFor() the title and body use:
+    // per LANGUAGE, because a Spanish popup pointing at a button labelled "Report a bug" is a
+    // picture of somebody else's app, and per THEME, so a light screenshot never glares out of a
+    // dark popup. A missing file removes its own figure rather than leaving a broken frame - these
+    // sit in the sw's non-atomic REST tier, so one bad path can never break the popup.
+    shots: [
+      {
+        img: { en: 'img/where-hub.png', es: 'img/where-hub-es.png' },
+        imgDark: { en: 'img/where-hub-dark.png', es: 'img/where-hub-es-dark.png' },
+        caption: { en: 'Bottom of the games list', es: 'Al final de la lista de juegos' },
+      },
+      {
+        img: { en: 'img/where-profile.png', es: 'img/where-profile-es.png' },
+        imgDark: { en: 'img/where-profile-dark.png', es: 'img/where-profile-es-dark.png' },
+        caption: { en: 'And on your profile page', es: 'Y en tu página de perfil' },
+      },
+    ],
+    cta: { en: 'Try it', es: 'Pruébalo' },
     action: 'bug-report',
   },
 ];
