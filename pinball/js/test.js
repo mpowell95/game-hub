@@ -279,6 +279,55 @@ function launched(g) {
   ok('...and only once', g.extraBalls === 1);
 }
 
+// ---- [KNOWN-BUG PROBE] a capture switch awards ONCE per shot, not once per frame ----------------
+//
+// Matt shot the scoop on ball one and banked 1.5 MILLION while the ball sat in it (2026-08-11).
+// The switch edge-detector read `!b.held && dist < r`, so a held ball counted as OUTSIDE its own
+// switch. A capture parks the ball ON the switch centre, so the moment the scoop ejected it - still
+// well inside the 10-unit radius - the detector saw a fresh rising edge and captured it again.
+// Eject, re-capture, score, eject, forever, at 2.2 awards a second.
+//
+// Nothing in this file caught it, and that is the more interesting half. The soak's two stuck
+// detectors are "the score stopped moving" and "the ball stopped moving", and this bug MAXIMISES
+// the first and is exempt from the second (a held ball is skipped by the watchdog by design). So
+// both probes below are new invariants, not a tightened threshold: one deterministic, and one in
+// the soak measuring HELD TIME, which is the thing that was actually wrong.
+
+{
+  const g = launched(fresh());
+  const sc = SWITCHES.find((x) => x.id === 'scoop');
+  const before = g.score;
+  const b = g.balls[0];
+  b.x = sc.x; b.y = sc.y + 40; b.vx = 0; b.vy = -700;   // straight up into the scoop mouth
+  let scoops = 0, maxHeld = 0, held = 0;
+  for (let i = 0; i < 600; i++) {                        // ten seconds
+    g.update(1 / 60);
+    for (const ev of g.takeEvents()) if (ev.type === 'scoop') scoops++;
+    const live = g.balls.find((x) => x.live && !x.onPlunger);
+    held = live && live.held ? held + 1 / 60 : 0;
+    maxHeld = Math.max(maxHeld, held);
+  }
+  ok('[KNOWN-BUG PROBE] the scoop awards ONCE per shot, not once per frame', scoops === 1,
+    `${scoops} awards in 10 s`);
+  ok('[KNOWN-BUG PROBE] one scoop shot cannot bank a fortune', g.score - before < 100000,
+    `banked ${g.score - before}`);
+  ok('[KNOWN-BUG PROBE] the scoop lets the ball go again', maxHeld < 2.5, `held ${maxHeld.toFixed(1)}s`);
+}
+
+// ---- ...and the ramp, which is the other switch that takes the ball away ------------------------
+{
+  const g = launched(fresh());
+  const r = SWITCHES.find((x) => x.id === 'rampIn');
+  const b = g.balls[0];
+  b.x = r.x; b.y = r.y; b.vx = 0; b.vy = -700;
+  let ramps = 0;
+  for (let i = 0; i < 360; i++) {
+    g.update(1 / 60);
+    for (const ev of g.takeEvents()) if (ev.type === 'ramp') ramps++;
+  }
+  ok('[KNOWN-BUG PROBE] one ramp entry is one ramp, not a loop', ramps === 1, `${ramps} ramps in 6 s`);
+}
+
 // --- 4. THE SOAK: play real games and assert the invariants on every step --------------------------
 //
 // This is the block that catches geometry mistakes. A seam between two walls, an arc whose angular
@@ -297,7 +346,7 @@ function launched(g) {
 
 {
   let escapes = 0, searches = 0, gamesFinished = 0, drains = 0, totalScore = 0;
-  let maxBalls = 0, longestStall = 0, worstX = 0, worstY = 0;
+  let maxBalls = 0, longestStall = 0, worstX = 0, worstY = 0, longestHold = 0;
 
   for (let gameN = 0; gameN < 6; gameN++) {
     const rand = mulberry32(1000 + gameN * 977);
@@ -329,6 +378,14 @@ function launched(g) {
         worstY = Math.max(worstY, Math.max(-b.y, b.y - H));
       }
       maxBalls = Math.max(maxBalls, g.balls.length);
+      // The invariant the scoop loop actually violated. Every legitimate hold is short and known
+      // (the ramp ride is 1.15 s, a scoop hold is under a second), so a ball held for seconds on
+      // end is a capture that is not letting go - whatever the score is doing.
+      for (const b of g.balls) {
+        if (!b.live) continue;
+        if (b.held && !b.onPlunger) { b._t = (b._t || 0) + 1 / 120; longestHold = Math.max(longestHold, b._t); }
+        else b._t = 0;
+      }
       for (const ev of g.takeEvents()) {
         if (ev.type === 'ballsearch' && !ev.soft) searches++;
         if (ev.type === 'drain') drains++;
@@ -355,6 +412,8 @@ function launched(g) {
   ok('SOAK: the ball count stays sane (multiball adds two, never more)', maxBalls >= 1 && maxBalls <= 4,
     `max ${maxBalls} balls`);
   ok('SOAK: at least some games play right through to game over', gamesFinished >= 1, `${gamesFinished}/6`);
+  ok('SOAK: no capture ever holds the ball for more than 2.5 s', longestHold < 2.5,
+    `longest hold ${longestHold.toFixed(1)}s - a capture switch is not letting go`);
 }
 
 // --- 4b. the whole ball chain, deterministically ----------------------------------------------------
