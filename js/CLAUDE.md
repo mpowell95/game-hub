@@ -1512,13 +1512,74 @@ The display the section above was waiting for. Two halves:
   `isHiddenRow()` gate the lists use, and an opponent this player has never beaten is left off the
   brag list while staying fully stored and fully visible on My Stats.
 
-**The `'mp'` bucket is what makes any of this legible, and Escoba was not using it** until
+### Extracting multiplayer plays back out of the AI bucket (2026-08-11)
+
+**The `'mp'` bucket is what makes head-to-head legible, and Escoba was not using it** until
 2026-08-11: `_commitStats` read `opp0.difficulty || 'normal'`, and a remote seat has no difficulty,
-so every online Escoba match was filed as an Intermediate win over the AI. **Chinchón still has the
-identical line** (`chinchon/js/ui.js`, `(opp0 && opp0.difficulty) || setup.aiDifficulty[0] ||
-'normal'`) and should get the same treatment; it was left alone only because that session's scope was
-Escoba. Old records stay exactly where they are either way (rule 5) — this changes the bucket for
-FUTURE plays, it never moves a stored one.
+so every online Escoba match was filed as an Intermediate win over the AI. Fixing the writer only
+helps future matches. Matt: *"Extract them and create a MP column for wins and losses."*
+
+`splitEscobaMp()` in `js/game-stats.js` does it, once per store, from `loadStats()`. **The whole
+question is what evidence exists**, and this is the part to understand before reusing the pattern:
+
+- **`h2h` IS the evidence, and it is exact.** `recordHeadToHead` was called from the SAME
+  `_commitStats` as the misfiled result, once per opponent, on every multiplayer match since h2h
+  shipped. Escoba's multiplayer was two-seat throughout that period, so exactly one h2h increment
+  exists per match and `sum(w)`/`sum(l)` across `h2h.escoba` IS that store's multiplayer record.
+  Nothing is inferred, apportioned or estimated — every play moved is one the store can PROVE was
+  multiplayer, which is the line rule 4 draws.
+- **Matches older than h2h capture are NOT touched, and that is the honest answer, not a gap left
+  open.** They left no trace on either device, so an Intermediate play that is really an old
+  multiplayer play is indistinguishable from a genuine one. They stay in `normal`, fully visible,
+  exactly where they have always been — nothing is archived away, so rule 3's "still SHOWN"
+  obligation is met by not moving them at all.
+- **`total` is never touched.** `byDiff` is a partition of it, so re-bucketing inside `byDiff`
+  cannot change a play count, and `verifyEscobaMpSplit()` proves it by FRESH RE-READ after the
+  write (rule 6) rather than trusting the object handed to `setItem`.
+- **Every move is clamped** to what `normal` actually holds, so no counter can go negative if the
+  two records ever disagree; the surplus is recorded as `esMpSplit.unresolved` and logged rather
+  than invented somewhere else.
+- **`escoba.esMpSplit`** archives the pre-migration numbers, the evidence used and anything
+  unresolved, and is never pruned (rule 5) — the migration is reversible by hand from what it
+  writes down.
+
+**Rule 7 was satisfied with the real thing, not a fixture.** `test-stats-replay.mjs`'s scenario D
+replays the ACTUAL escoba records of the only five devices in `players/` with any head-to-head
+history, read out of Firebase on the day this shipped and pasted in unedited. All five fit inside
+their own `normal` bucket with nothing unresolved: 32 matches recovered in total (5 + 15 + 9 + 2 + 1
+across the five devices). Scenario E covers the edges no real device happens to exercise.
+
+**Chinchón's `_commitStats` has the same `|| 'normal'` line**, so the same thing is true of its
+online matches. Out of scope for that session; the pattern above ports directly if it is ever
+wanted.
+
+### Nothing should ever be able to be lost (2026-08-11)
+
+Matt, on being told a multiplayer result could be dropped: *"Make it so that is impossible. Nothing
+should ever be able to be lost. That's the rule."* Two layers, both in this milestone:
+
+1. **Record at the moment of DECISION, from the engine.** `escoba/js/game.js`'s `checkMatchEnd()`
+   fires a synchronous `onDecided` hook in the same statement that sets `winner`; `_bindGame` points
+   it at `_commitStats`. There is no await, no `emit` and no abort check in between, so there is no
+   gap left for a result to fall into. This replaced a UI-event-hook commit that sat several awaits
+   and one human button-tap after the decision. **It required moving the escoba tally into the
+   engine** (`player.matchEscobas`, folded in `scoreRound()` — i.e. before `checkMatchEnd`), because
+   the UI's own accumulator was one round behind at exactly the moment the match was decided; a
+   result recorded there would have been correct except for its escoba count. **If you move a
+   game's recording earlier, check what else the recorder reads is ready that early.**
+2. **A write that fails is QUEUED, not dropped.** `persistOrQueue()` parks the result in
+   `gamehub.pendingResults.v1` — deliberately a tiny key separate from the stats blob, because the
+   case it exists for is "the big object would not fit" — and `loadStats()` replays it.
+   `drainPendingResults()` **does not clear the queue**; `clearPendingResults()` runs only after the
+   write that absorbed it succeeded. Clearing at drain time looked equivalent and was not: a load
+   whose own persist also fails (the likely case, since the queue exists because writes are failing)
+   would drop the queue and the results with it — the exact loss the mechanism exists to prevent,
+   reintroduced inside the fix. Caught by `test-stats-replay.mjs`'s scenario F, which drains once
+   under a still-failing write before letting one through.
+
+Wired into `recordEscoba` and `recordHeadToHead`. The queue is generic by shape
+(`game`/`diff`/`won`/`extras`/`h2h`) — **any other recorder can be moved onto it** by routing its
+failed `persist()` through `persistOrQueue()`, and should be.
 
 ---
 

@@ -690,6 +690,189 @@ function drainPendingBusinessDeal(st) {
   return true;
 }
 
+// --- Results that could not be written, kept instead of dropped (2026-08-11) ------------------
+//
+// Matt: "Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."
+//
+// Once a finished match is recorded at the moment the engine DECIDES it (escoba/js/game.js's
+// onDecided hook), the only way left to lose a result is for the write itself to fail -- a full
+// quota, private mode, a storage exception. `persist()` has returned false and logged loudly since
+// the sixth-playthrough Ball Run incident, but a logged loss is still a loss: the play was gone.
+//
+// So a failed write now parks the result in its OWN small key and `loadStats()` drains it on the
+// next load, exactly like `drainPendingBusinessDeal` above (same shape, same reasoning, same
+// additive `bumpTotals` path). The queue is deliberately tiny and separate from the stats blob:
+// the case it exists for is "the big object would not fit", so the retry must not depend on
+// writing that same big object. If even the queue cannot be written there is nothing further this
+// module can do, and it says so at console.error rather than pretending.
+//
+// Generic by shape (`game`, `diff`, `won`, `extras`, `h2h`), wired into Escoba's two writers here.
+// Any other recorder can be moved onto it by routing its failed `persist()` through queueResult().
+const PENDING_KEY = 'gamehub.pendingResults.v1';
+const PENDING_MAX = 200;   // a bound, not a policy: this queue drains on the very next load
+
+function queueResult(entry) {
+  try {
+    const q = readJSON(PENDING_KEY);
+    const list = Array.isArray(q) ? q : [];
+    list.push(Object.assign({ at: Date.now() }, entry));
+    localStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-PENDING_MAX)));
+    console.warn('[game-stats] the stats write failed, so this result was queued and will be '
+      + 'applied on the next load', entry);
+    return true;
+  } catch (err) {
+    console.error('[game-stats] the stats write failed AND the result could not be queued; this '
+      + 'result is lost. Free some storage.', { entry, err });
+    return false;
+  }
+}
+
+/** Apply a stats write and, if it did not land, keep the result instead of dropping it. */
+function persistOrQueue(st, entry) {
+  if (persist(st)) return true;
+  queueResult(entry);
+  return false;
+}
+
+/** Replay anything a previous load could not write, into `st`. Additive, through the same paths a
+ *  live result takes.
+ *
+ *  **It does NOT clear the queue.** That is `clearPendingResults()`, which the caller runs only
+ *  after the write it triggered actually succeeded. Clearing here looked equivalent and was not:
+ *  a load whose own persist ALSO fails (the overwhelmingly likely case, since the queue exists
+ *  because writes are failing) would have dropped the queue and the results with it -- the exact
+ *  loss this whole mechanism exists to prevent, reintroduced inside the fix. Caught by scenario F
+ *  in test-stats-replay.mjs, which drains once under a still-failing write before letting one
+ *  through. Draining twice is harmless: the second drain lands on a store that never kept the
+ *  first one. */
+function drainPendingResults(st) {
+  const q = readJSON(PENDING_KEY);
+  if (!Array.isArray(q) || !q.length) return false;
+  let applied = 0;
+  for (const e of q) {
+    if (!e || GAMES.indexOf(e.game) < 0) continue;
+    if (e.h2h) { applyHeadToHead(st, e.game, e.h2h, e.won); applied++; continue; }
+    bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+    if (e.game === 'escoba') {
+      ensureEs(st.games.escoba);
+      st.games.escoba.es.escobas += ((e.extras && e.extras.escobas) | 0);
+    }
+    applied++;
+  }
+  if (applied) console.warn(`[game-stats] replaying ${applied} queued result(s) that an earlier write could not save`);
+  return applied > 0;
+}
+
+/** Retire the queue, only ever after the write that absorbed it succeeded. */
+function clearPendingResults() {
+  try { localStorage.removeItem(PENDING_KEY); }
+  catch (err) {
+    // removeItem frees space rather than needing it, so this is close to impossible -- but if it
+    // ever happens the queue would replay on the next load and double-count, which is worth
+    // saying out loud rather than discovering as drifting numbers.
+    console.error('[game-stats] queued results were applied but the queue could not be cleared; '
+      + 'they may be applied a second time on the next load', err);
+  }
+}
+
+// --- Escoba: extracting the multiplayer plays back out of the AI bucket (2026-08-11) ----------
+//
+// Matt: "Extract them and create a MP column for wins and losses." Escoba's `_commitStats` used to
+// file every ONLINE match under the opponent's AI difficulty, which for a remote seat resolved to
+// the `'normal'` default -- so a player's multiplayer record sat blended into their Intermediate
+// vs-the-AI record with nothing to tell the two apart. Leaving it there was the wrong answer: it is
+// history no screen can show for what it is, which is THE LAW rule 1's whole subject.
+//
+// **There IS independent evidence, and this migration uses only that.** `recordHeadToHead` has
+// written `h2h.escoba[<opponentDeviceId>] = {name, w, l}` from the SAME `_commitStats` call, once
+// per opponent, on every multiplayer match since the day it shipped. Escoba's multiplayer was
+// two-seat for that entire period, so exactly one h2h increment exists per match, and
+// `sum(w)`/`sum(l)` across that map IS this store's multiplayer won/lost count. Nothing is
+// inferred, estimated or apportioned: every play moved here is one this store can PROVE was
+// multiplayer. That is the line THE LAW rule 4 draws, and this stays on the right side of it.
+//
+// What it deliberately does NOT do: guess about matches played before head-to-head capture
+// existed. Those left no trace on either device, so an Intermediate play that is really an old
+// multiplayer play is indistinguishable from a genuine one, and inventing a split would be
+// fabrication. They stay in `normal`, fully visible, exactly where they have always been --
+// nothing is hidden or archived away, so rule 3's "still SHOWN" obligation is met by not moving
+// them at all.
+//
+// Safety, point by point:
+//   * `total` is NEVER touched. byDiff is a partition of it, so re-bucketing inside byDiff cannot
+//     change a single play count, and the verification below asserts exactly that by fresh re-read.
+//   * Every move is clamped to what `normal` actually holds, so no counter can go negative even on
+//     a store whose h2h and byDiff disagree (they agree on all five real devices; see the test).
+//   * Runs ONCE per store, latched on `escoba._esMpSplit` before any evidence is read, so a store
+//     with nothing to move still never reconsiders. New multiplayer plays go straight to `'mp'`
+//     from here on, so a later h2h increment can never trigger a second extraction.
+//   * The pre-migration numbers, the evidence used, and anything it could not resolve are archived
+//     on `escoba.esMpSplit` and never pruned (rule 5) -- the migration is fully reversible by hand
+//     from what it writes down.
+function splitEscobaMp(st) {
+  const g = st.games.escoba;
+  if (g._esMpSplit) return false;
+  g._esMpSplit = true;                       // latch FIRST: no evidence is also a decided outcome
+  const h2h = (st.h2h && st.h2h.escoba) || {};
+  let hw = 0, hl = 0;
+  for (const k of Object.keys(h2h)) {
+    const row = h2h[k] || {};
+    hw += row.w | 0; hl += row.l | 0;
+  }
+  if (!(hw + hl)) return true;               // no multiplayer history here; the latch is the change
+  const from = g.byDiff.normal || (g.byDiff.normal = bucket());
+  const normalBefore = { played: from.played | 0, won: from.won | 0, lost: from.lost | 0 };
+  const moveW = Math.min(hw, normalBefore.won);
+  const moveL = Math.min(hl, normalBefore.lost);
+  const moveP = Math.min(moveW + moveL, normalBefore.played);
+  from.played -= moveP; from.won -= moveW; from.lost -= moveL;
+  const mp = g.byDiff.mp || (g.byDiff.mp = bucket());
+  mp.played += moveP; mp.won += moveW; mp.lost += moveL;
+  g.esMpSplit = {
+    at: new Date().toISOString(),
+    normalBefore,
+    moved: { played: moveP, won: moveW, lost: moveL },
+    evidence: { won: hw, lost: hl },
+    // Head-to-head says these matches happened but `normal` did not have the room to release them.
+    // Zero on every device this was written against; non-zero would mean the two records disagree,
+    // which is worth knowing about rather than silently clamping away.
+    unresolved: { won: hw - moveW, lost: hl - moveL },
+  };
+  if (g.esMpSplit.unresolved.won || g.esMpSplit.unresolved.lost) {
+    console.warn('[game-stats] escoba MP split: head-to-head claims more multiplayer plays than the '
+      + 'normal bucket could release; the surplus was left alone rather than invented elsewhere',
+      g.esMpSplit);
+  }
+  console.warn(`[game-stats] escoba: moved ${moveP} proven multiplayer play(s) (${moveW}W/${moveL}L) `
+    + `out of the Intermediate bucket into 'mp'. Totals unchanged.`, g.esMpSplit);
+  return true;
+}
+
+/** THE LAW rule 6, applied to the one migration in this file that MOVES numbers rather than only
+ *  adding them: prove it landed by reading the store back FRESH, not by trusting the object we
+ *  just handed to setItem. Checks the thing that actually matters -- that no play was created or
+ *  destroyed -- plus the two buckets it rewrote. Loud on any mismatch; never throws into a caller
+ *  that is only trying to load stats. */
+function verifyEscobaMpSplit(st, persisted) {
+  const expect = st.games.escoba;
+  if (!persisted) {
+    console.error('[game-stats] escoba MP split could NOT be saved; it will be retried on the next '
+      + 'load (nothing was lost: the split only re-buckets what is already stored)', expect.esMpSplit);
+    return false;
+  }
+  const fresh = (readJSON(statsKey()) || {});
+  const got = ((fresh.games || {}).escoba) || {};
+  const same = (a, b) => (a.played | 0) === (b.played | 0) && (a.won | 0) === (b.won | 0) && (a.lost | 0) === (b.lost | 0);
+  const ok = same(got.total || {}, expect.total)
+    && same((got.byDiff || {}).mp || {}, expect.byDiff.mp)
+    && same((got.byDiff || {}).normal || {}, expect.byDiff.normal);
+  if (!ok) {
+    console.error('[game-stats] escoba MP split did not verify on re-read', { expected: expect, got });
+    return false;
+  }
+  return true;
+}
+
 // Sixth-playthrough incident (Ball Run): a storage-write failure here was completely silent, with
 // no trace anywhere a player or a future debugging session could see it. Every call site already
 // discards this function's return value, so returning a success flag (instead of nothing) and
@@ -722,9 +905,24 @@ export function loadStats() {
   changed = refoldBallRunLegacyRuns(st) || changed;
   changed = seedSnWallsLegacy(st.games.snake) || changed;
   changed = drainPendingBusinessDeal(st) || changed;
+  // Escoba's multiplayer plays, out of the AI bucket they were misfiled into. Runs on a FORKED
+  // store too, unlike the legacy folds above: unlike chinchon-stats/bd-stats, the evidence it reads
+  // (`h2h`) lives in THIS store and describes only this player's own matches, so there is nobody
+  // else's history it could hand over.
+  const splitRan = splitEscobaMp(st);
+  changed = splitRan || changed;
+  const movedAny = splitRan && st.games.escoba.esMpSplit && st.games.escoba.esMpSplit.moved.played > 0;
+  // Queued results are folded in BEFORE the write below, so a queued result and a migration that
+  // both land on the same load are saved together rather than one overwriting the other.
+  const drained = drainPendingResults(st);
+  changed = drained || changed;
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   ensureBrOrbital(st.games.ballrun);
-  if (changed) persist(st);
+  if (changed) {
+    const persisted = persist(st);
+    if (drained && persisted) clearPendingResults();   // only once it is genuinely stored
+    if (movedAny) verifyEscobaMpSplit(st, persisted);
+  }
   return st;
 }
 
@@ -812,7 +1010,7 @@ export function recordEscoba(difficulty, won, extras) {
   ensureEs(g);
   g.es.escobas += (extras && extras.escobas) | 0;
   st.updatedAt = new Date().toISOString();
-  persist(st);
+  persistOrQueue(st, { game: 'escoba', diff: difficulty, won, extras: { escobas: (extras && extras.escobas) | 0 } });
   return st;
 }
 
@@ -1170,6 +1368,19 @@ export function recordHeadToHead(gameId, opponent, won) {
   const oppId = String((opponent && opponent.deviceId) || '').trim();
   if (!oppId || oppId === deviceId()) return null;         // no self-play rows
   const st = loadStats();
+  applyHeadToHead(st, gameId, opponent, won);
+  st.updatedAt = new Date().toISOString();
+  // Escoba's own migration reads this map as its evidence for which plays were multiplayer, so a
+  // dropped h2h write is not only a lost opponent record -- it is a play that can never be
+  // identified as multiplayer again. Queue it rather than lose it.
+  persistOrQueue(st, { game: gameId, won, h2h: { deviceId: oppId, name: (opponent && opponent.name) || '' } });
+  return st;
+}
+
+/** The h2h mutation on its own, so a live call and a replayed queue entry can never drift. */
+function applyHeadToHead(st, gameId, opponent, won) {
+  const oppId = String((opponent && opponent.deviceId) || '').trim();
+  if (!oppId) return;
   if (!st.h2h || typeof st.h2h !== 'object') st.h2h = {};
   const perGame = st.h2h[gameId] || (st.h2h[gameId] = {});
   const row = perGame[oppId] || (perGame[oppId] = { name: '', w: 0, l: 0 });
@@ -1179,9 +1390,6 @@ export function recordHeadToHead(gameId, opponent, won) {
   if (name) row.name = name;                               // keep the freshest name seen
   if (won === true) row.w += 1;
   else if (won === false) row.l += 1;
-  st.updatedAt = new Date().toISOString();
-  persist(st);
-  return st;
 }
 
 export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };

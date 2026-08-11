@@ -113,7 +113,6 @@ class EscobaUI {
     this._modalResolve = null;
     this._chartView = false;
     this._matchEnded = false;
-    this._matchEscobas = 0;
     this._setupExpanded = null;   // which settings-card row is open (M1.2 accordion), one at a time
 
     // Multiplayer (M1 pilot). null in solo -- every MP code path is gated
@@ -213,7 +212,7 @@ class EscobaUI {
     if (!this.game) return;
     try {
       const payload = {
-        v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobas, assist: this._matchAssist,
+        v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobasNow(), assist: this._matchAssist,
         snap: this.game.snapshot(),
       };
       // Additive MP field: absent in solo, so the solo save shape is unchanged.
@@ -672,7 +671,6 @@ class EscobaUI {
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
-    this._matchEscobas = 0;
     // Frozen for the life of this match (see _saveSnapshot/_resumeGame): a
     // setup-screen change to the toggle should never retroactively alter a
     // match already in progress, only future ones.
@@ -695,7 +693,7 @@ class EscobaUI {
     this._resolvePending(null);
     this.game = Game.fromSnapshot(save.snap, agentsById);
     this._bindGame();
-    this._matchEscobas = save.matchEscobas | 0;
+    this._seedMatchEscobas(save.matchEscobas);
     this._matchAssist = save.assist !== false;
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba resume error', err); });
@@ -703,6 +701,12 @@ class EscobaUI {
 
   _bindGame() {
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    // THE LAW rule 1, made structural: the engine calls this synchronously, inside the same
+    // statement that decides the match (game.js's checkMatchEnd), so there is no await, no emit
+    // and no abort check between "this match is won" and "this match is recorded". Every other
+    // path that reaches a result -- the matchEnd hook, the opponent-left handler -- still calls
+    // _commitStats, and they all no-op because it is idempotent. See _commitStats.
+    this.game.onDecided = () => this._commitStats();
     this._selHand = null; this._selTable.clear(); this.activePlayerId = null;
     this._matchEnded = false; this._statsCommitted = false; this._celebrated = false;
     this._closeMenu();
@@ -804,18 +808,11 @@ class EscobaUI {
         break;
       case 'roundScored':
         this._chartView = false;
-        this._matchEscobas += this._human().escobas;
         if (!this.game.winner) this._saveSnapshot();   // a won boundary isn't resumable; matchEnd clears it
-        // The engine has already decided the match by the time it emits this (game.js's
-        // finishRoundAfterPlay scores, calls checkMatchEnd and only then emits), so record
-        // the result HERE, before the round modal's await -- not four awaits later in the
-        // 'matchEnd' hook. That await is a human tapping a button, and in multiplayer a lot
-        // can happen during it: if the OTHER player finished first and tapped "New game",
-        // their net.leaveRoom sets the room to status:'ended' with no result, this device's
-        // _mpOnRoomUpdate reads that as an abandon, _mpEndDueToOpponentLeft aborts the
-        // engine, and 'matchEnd' never fires -- so the winner's own win went unrecorded, on
-        // a coin flip, on every online match. THE LAW rule 1. _commitStats is idempotent
-        // (_statsCommitted), so the matchEnd hook below still calls it and it no-ops.
+        // Belt to the engine's braces: by the time this hook runs the result is already
+        // recorded (game.js's onDecided fired inside checkMatchEnd, before this emit). Kept
+        // because a hook that records the result at every point it is knowable is exactly the
+        // property being defended, and _commitStats is idempotent so this costs nothing.
         else this._commitStats();
         await this.showRoundModal();
         // Guest only: the next round's deck can't be dealt locally until the
@@ -962,7 +959,7 @@ class EscobaUI {
     // online match as an Intermediate win over the AI -- see MP_DIFFICULTY at the top.
     const opp0 = this.game.players.find((x) => !x.isHuman);
     const difficulty = this.mp ? MP_DIFFICULTY : ((opp0 && opp0.difficulty) || 'normal');
-    recordEscoba(difficulty, won, { escobas: this._matchEscobas | 0 });
+    recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -986,6 +983,28 @@ class EscobaUI {
    *  than assume seat 0, since a guest's local human sits at seat 1. */
   _localSeat() { return this.mp ? this.mp.localSeat : 0; }
   _human() { return this.game.byId(this._localSeat()); }
+
+  /** This device's escoba count for the whole match, straight off the engine (game.js's
+   *  scoreRound folds each round in BEFORE checkMatchEnd runs, which is what lets the result be
+   *  recorded at the instant the match is decided). The UI used to keep this tally itself, one
+   *  round behind at exactly that moment. `_seedMatchEscobas` covers a save written by the
+   *  previous build, which carries the number but no per-player field to put it in. */
+  _matchEscobasNow() {
+    if (!this.game) return 0;
+    const h = this._human();
+    return h ? (h.matchEscobas | 0) : 0;
+  }
+
+  /** Carry a pre-2026-08-11 save's escoba tally onto the restored engine. Only ever fills a ZERO,
+   *  so a save written by this build (where the engine already holds the real number) is left
+   *  completely alone, and a genuine zero costs nothing. THE LAW rule 3: a migration carries
+   *  forward everything that CAN be carried. */
+  _seedMatchEscobas(saved) {
+    const n = saved | 0;
+    if (!n || !this.game) return;
+    const h = this._human();
+    if (h && !(h.matchEscobas | 0)) h.matchEscobas = n;
+  }
 
   render() {
     if (this._dead || !this.game || this.el.game.hidden) return;
@@ -2189,7 +2208,6 @@ class EscobaUI {
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
-    this._matchEscobas = 0;
     this._matchAssist = !!s.assist;
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP match error', err); });
@@ -2257,7 +2275,6 @@ class EscobaUI {
     this.game = new Game({ players, config: { targetScore: cfg.targetScore, deckMode: cfg.deckMode, presetDeck: room.round.deck } });
     this.game.dealer = room.round.dealer;
     this._bindGame();
-    this._matchEscobas = 0;
     this._matchAssist = !!s.assist;
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP match error', err); });
@@ -2337,7 +2354,7 @@ class EscobaUI {
     this.mp.appliedSeq = save.mp.seq | 0;
     this.game = Game.fromSnapshot(save.snap, agentsById);
     this._bindGame();
-    this._matchEscobas = save.matchEscobas | 0;
+    this._seedMatchEscobas(save.matchEscobas);
     this._matchAssist = save.assist !== false;
     net.heartbeat(code, seat);
     await net.onRoom(code, (room) => this._mpRoomCallback(room));

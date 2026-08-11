@@ -241,12 +241,36 @@ function nutsBoltsScreen(rec) {
     </div>`;
 }
 
-/** Escoba: the standard record-vs-AI screen plus the escoba counter. */
+/** Escoba: the standard record-vs-AI screen, the escoba counter, and multiplayer on its own.
+ *
+ *  The MULTIPLAYER block is its own row of tallies rather than one line in the by-difficulty
+ *  table below, because online play is not a difficulty and reading it as one is exactly the
+ *  mistake that made these plays invisible in the first place: they were filed under the AI's
+ *  `'normal'` tier and could not be told apart from it. It reads `byDiff.mp`, which is the single
+ *  stored source for both new online matches and the historical ones `splitEscobaMp`
+ *  (js/game-stats.js) moved back out of the AI bucket, so this panel and that table can never
+ *  disagree. Hidden entirely when there are no online plays -- a solo-only player is not shown a
+ *  row of zeroes. */
+function escobaMpBlock(rec) {
+  const mp = ((rec && rec.byDiff) || {}).mp;
+  const played = (mp && mp.played) | 0;
+  if (!played) return '';
+  const won = (mp && mp.won) | 0, lost = (mp && mp.lost) | 0;
+  return `
+    <h4 class="gs-tbl-h">${t('gs_diff_mp')}</h4>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${lost}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>`;
+}
+
 function escobaScreen(rec) {
   const total = (rec && rec.total) || { played: 0 };
   if (!(total.played | 0)) return emptyState('Escoba');
   const es = (rec && rec.es) || {};
-  return recordScreen('escoba', rec) + `
+  return recordScreen('escoba', rec) + escobaMpBlock(rec) + `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${es.escobas | 0}</b><span>${t('gs_es_escobas')}</span></div>
     </div>`;

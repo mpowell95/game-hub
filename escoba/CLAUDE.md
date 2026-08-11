@@ -150,40 +150,72 @@ convergence). E1-E4 are unchanged in substance and still green.
 nothing has been played by three or four actual phones. Same honest caveat Chinchón, Pool and
 Boggle carry.
 
-## Multiplayer results are recorded (2026-08-11)
+## Multiplayer results are recorded, and cannot be lost (2026-08-11)
 
-Matt: "I don't think multiplayer wins and losses are being recorded." Two separate defects,
-both fixed, both with regression probes in `test-mp-lockstep.mjs`:
+Matt: "I don't think multiplayer wins and losses are being recorded." Three parts.
 
-1. **The wrong bucket.** `_commitStats` read `opp0.difficulty || 'normal'`, and a REMOTE seat
-   has no `difficulty` at all — so every online match was filed as an Intermediate win over
-   the AI. Recorded, but indistinguishable from solo play on every screen that shows it. MP
-   now records under `MP_DIFFICULTY` (`'mp'`), the repo-wide convention (`MP_DIFFICULTY` in
-   `tic-tac-toe/js/ui.js` and `boggle/js/ui.js`, `'mp'` in Yahtzee). `tierOf('mp')` is null
-   (`js/difficulty-tiers.js`), so those plays count in every total and in the leaderboard's
-   All filter and claim no tier pill; `js/game-stats-ui.js`'s `DIFF_META` already names the
-   bucket "Multiplayer" in the by-difficulty table, so My Stats shows the MP W-L on its own
-   row with no further change. **Matches recorded before this date stay under `'normal'`
-   exactly where they are** (THE LAW rule 5); nothing was migrated or moved. Probe: E7.
-2. **The result could be lost entirely, on a coin flip, every match.** `_commitStats` only ran
-   in the `'matchEnd'` hook — several awaits after the engine had actually decided the match,
-   with a human tapping "Next round" on the final round modal in between. If the OTHER player
-   tapped through first and left ("New game" → `net.leaveRoom`), the room went to
-   `status:'ended'` with no `result`, `_mpOnRoomUpdate` read that as an abandon,
-   `_mpEndDueToOpponentLeft` aborted the engine, and `matchEnd` never fired: the winner's own
-   win was never written anywhere. Asymmetric, so it bit whichever device was slower.
-   `_commitStats` now runs in the `'roundScored'` hook the moment `this.game.winner` is set —
-   before any await — and `_commitStatsIfDecided()` guards both MP end paths as belt and
-   braces. It is idempotent (`_statsCommitted`), so `matchEnd` still calls it and it no-ops.
-   Probe: E8, which parks the host on its final round modal and kills the room underneath it;
-   it was born red against the unfixed glue (`commits=[]`).
+### 1. The wrong bucket, fixed for future matches
 
-Where the numbers surface: **My Stats** (`js/game-stats-ui.js`) gets a "Multiplayer" row in
-Escoba's by-difficulty table, W-L and win rate. **The leaderboard** counts MP wins in its All
-filter as it always did, and its player detail now shows a "Multiplayer wins against" block
-built from `gamehub.stats.h2h` — the FIRST display of a key `recordHeadToHead` has been
-capturing since 2026-07-22 (`js/CLAUDE.md`, "Head-to-head capture" and "Multiplayer
-head-to-head on the leaderboard").
+`_commitStats` read `opp0.difficulty || 'normal'`, and a REMOTE seat has no `difficulty` at all —
+so every online match was filed as an Intermediate win over the AI. Recorded, but indistinguishable
+from solo play on every screen. MP now records under `MP_DIFFICULTY` (`'mp'`), the repo-wide
+convention. `tierOf('mp')` is null (`js/difficulty-tiers.js`), so those plays count in every total
+and in the leaderboard's All filter and claim no tier pill.
+
+### 2. The historical matches, extracted
+
+Fixing the writer does nothing for matches already misfiled. `splitEscobaMp()` in
+`js/game-stats.js` moves them, once per store, using `h2h.escoba` as evidence — the head-to-head
+row was written by the SAME `_commitStats` call on every online match, one increment per match at
+two seats, so its `w`/`l` totals ARE this store's multiplayer record. Totals are never touched
+(byDiff is a partition of them), every move is clamped, the result is verified by fresh re-read,
+and the pre-migration numbers are archived on `escoba.esMpSplit` and never pruned.
+
+**Matches older than head-to-head capture are deliberately left alone.** They left no trace on
+either device, so an Intermediate play that is really an old online play cannot be told from a
+genuine one, and splitting them would be fabrication (THE LAW rule 4). They stay in `normal`, fully
+visible, exactly where they have always been.
+
+Verified against the REAL records of the only five devices in `players/` with head-to-head history
+(`test-stats-replay.mjs` scenario D — rule 7 with actual data, not a fixture): 32 matches recovered,
+every one fitting inside its own `normal` bucket with nothing unresolved.
+
+### 3. The result can no longer be lost at all
+
+The original defect: `_commitStats` ran in the `'matchEnd'` hook, several awaits after the engine
+had decided the match, with a human tapping "Next round" on the final round modal in between. If
+the other player tapped through first and left, `net.leaveRoom` set the room to `status:'ended'`
+with no `result`, `_mpOnRoomUpdate` read that as an abandon, `_mpEndDueToOpponentLeft` aborted the
+engine, and `matchEnd` never fired — the winner's own win was never written anywhere. Asymmetric,
+so it bit whichever device was slower.
+
+Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."*
+So the fix is structural rather than a patched gap:
+
+- **`game.js`'s `checkMatchEnd()` fires a synchronous `onDecided` hook** in the same statement that
+  sets `winner`, before any `emit`, any await or any abort check. `_bindGame` points it at
+  `_commitStats`. There is no gap left to lose a result in.
+- **The escoba tally moved into the engine** (`player.matchEscobas`, folded in `scoreRound()`,
+  which runs before `checkMatchEnd`). The UI's own accumulator was one round behind at exactly the
+  moment the match is decided, so recording there would have been right about everything except the
+  escoba count. `_matchEscobasNow()` reads it; `_seedMatchEscobas()` carries a pre-2026-08-11
+  save's number onto a restored engine.
+- **A failed WRITE is queued, not dropped** (`js/game-stats.js`'s `persistOrQueue` →
+  `gamehub.pendingResults.v1`, replayed by `loadStats`). Wired into `recordEscoba` and
+  `recordHeadToHead`.
+
+Probes: `test-mp-lockstep.mjs` E7 (the bucket, both sides recording exactly once, neither recording
+the other's result) and E8 (the peer leaves at the decided moment — born red);
+`test-stats-replay.mjs` D/E/F (the extraction against real devices, its edges, and the queue).
+
+### Where the numbers show
+
+**My Stats** gives Escoba its own **Multiplayer** block — wins, losses, plays, win rate — separate
+from the by-difficulty table, because online play is not a difficulty and reading it as one is the
+mistake that made these plays invisible. It reads `byDiff.mp`, the same single stored source the
+migration writes to, so the two can never disagree. Hidden entirely for a solo-only player.
+**The leaderboard** counts MP wins in its All filter, and its player detail shows "Multiplayer wins
+against" from `h2h`.
 
 ## Rules engine notes (correctness-critical)
 
