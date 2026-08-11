@@ -35,7 +35,10 @@ function ensureCss() {
   .ann-icon { font-size: 42px; line-height: 1; }
   .ann-modal h2 { margin: var(--gh-sp-3) var(--gh-sp-6) var(--gh-sp-3); font-size: var(--gh-fs-lg); font-weight: 800; }
   .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: left; }
-  .ann-shot { margin: 0 0 var(--gh-sp-3); }
+  /* Two whole phone screens, side by side. Each column is half the modal, so the pictures stay
+     tall-and-narrow (which is what they are) instead of being letterboxed. */
+  .ann-shots { display: flex; gap: var(--gh-sp-2); margin: 0 0 var(--gh-sp-3); }
+  .ann-shot { flex: 1 1 0; min-width: 0; margin: 0; }
   .ann-shot img { display: block; width: 100%; height: auto; border-radius: var(--gh-r-md);
                   border: 1px solid var(--gh-border); background: var(--gh-surface-2); }
   .ann-shot figcaption { margin-top: var(--gh-sp-1); font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted); }
@@ -72,7 +75,7 @@ export function showAnnouncement(a, { onAction } = {}) {
         <div class="ann-icon" aria-hidden="true">${esc(a.icon || '📣')}</div>
         <h2>${esc(textFor(a.title, lang))}</h2>
         ${paras.map((p) => `<p class="ann-body">${esc(p)}</p>`).join('')}
-        ${shots.map((s) => {
+        ${shots.length ? '<div class="ann-shots">' : ''}${shots.map((s) => {
           const cap = esc(textFor(s.caption, lang) || '');
           const path = (dark && textFor(s.imgDark, lang)) || textFor(s.img, lang);
           const src = new URL('../' + path, import.meta.url).href;
@@ -80,7 +83,7 @@ export function showAnnouncement(a, { onAction } = {}) {
             <img src="${esc(src)}" alt="${cap}" onerror="this.closest('.ann-shot').remove()">
             ${cap ? `<figcaption>${cap}</figcaption>` : ''}
           </figure>`;
-        }).join('')}
+        }).join('')}${shots.length ? '</div>' : ''}
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--ghost" data-role="dismiss">${esc(t('ann_dismiss'))}</button>
           ${a.cta ? `<button type="button" class="gh-btn gh-btn--primary" data-role="cta">${esc(textFor(a.cta, lang))}</button>` : ''}

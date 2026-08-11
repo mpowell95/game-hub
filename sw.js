@@ -49,14 +49,14 @@ const ASSETS = [
   // in the best-effort REST tier where a bad path cannot strand an install. announce-ui.js removes
   // any figure whose image fails to load, so a device that has not warmed them yet still gets a
   // working popup.
-  './img/where-hub.png',
-  './img/where-hub-dark.png',
-  './img/where-hub-es.png',
-  './img/where-hub-es-dark.png',
-  './img/where-profile.png',
-  './img/where-profile-dark.png',
-  './img/where-profile-es.png',
-  './img/where-profile-es-dark.png',
+  './img/where-hub.jpg',
+  './img/where-hub-dark.jpg',
+  './img/where-hub-es.jpg',
+  './img/where-hub-es-dark.jpg',
+  './img/where-profile.jpg',
+  './img/where-profile-dark.jpg',
+  './img/where-profile-es.jpg',
+  './img/where-profile-es-dark.jpg',
   './js/players-agg.js',
   './js/game-art.js',
   './js/leaderboard-ui.js',

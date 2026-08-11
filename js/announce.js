@@ -35,8 +35,9 @@ export const ANNOUNCEMENTS = [
       en: ['Say what happened, add a screenshot, send. Your phone details come along.'],
       es: ['Cuenta qué ha pasado, añade una captura y envía. Los datos de tu móvil van incluidos.'],
     },
-    // `shots` are the "here is where the button lives" pictures, captured from the real hub with
-    // the arrow drawn in (scripted, see the milestone note in js/CLAUDE.md). Paths are
+    // `shots` are the "here is where the button lives" pictures: WHOLE phone screens (Matt's own
+    // mock-up), shown side by side, each with a ring round the button and an arrow pointing at it,
+    // drawn into the page by the capture script (see the milestone note in js/CLAUDE.md). Paths are
     // repo-relative and resolved against js/announce-ui.js's own URL, so they work from any page.
     // Four variants each, resolved at render time by the SAME textFor() the title and body use:
     // per LANGUAGE, because a Spanish popup pointing at a button labelled "Report a bug" is a
@@ -45,14 +46,14 @@ export const ANNOUNCEMENTS = [
     // sit in the sw's non-atomic REST tier, so one bad path can never break the popup.
     shots: [
       {
-        img: { en: 'img/where-hub.png', es: 'img/where-hub-es.png' },
-        imgDark: { en: 'img/where-hub-dark.png', es: 'img/where-hub-es-dark.png' },
-        caption: { en: 'Bottom of the games list', es: 'Al final de la lista de juegos' },
+        img: { en: 'img/where-hub.jpg', es: 'img/where-hub-es.jpg' },
+        imgDark: { en: 'img/where-hub-dark.jpg', es: 'img/where-hub-es-dark.jpg' },
+        caption: { en: 'Games list', es: 'Lista de juegos' },
       },
       {
-        img: { en: 'img/where-profile.png', es: 'img/where-profile-es.png' },
-        imgDark: { en: 'img/where-profile-dark.png', es: 'img/where-profile-es-dark.png' },
-        caption: { en: 'And on your profile page', es: 'Y en tu página de perfil' },
+        img: { en: 'img/where-profile.jpg', es: 'img/where-profile-es.jpg' },
+        imgDark: { en: 'img/where-profile-dark.jpg', es: 'img/where-profile-es-dark.jpg' },
+        caption: { en: 'Your profile', es: 'Tu perfil' },
       },
     ],
     cta: { en: 'Try it', es: 'Pruébalo' },
