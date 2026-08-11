@@ -30,10 +30,15 @@ export const ANNOUNCEMENTS = [
     from: '2026-08-11',
     until: '2026-10-15',
     icon: '🐞',
-    title: { en: 'Found a bug? Tell me.', es: '¿Has visto un fallo? Cuéntamelo.' },
+    // `badge: true` wears the launcher's own gold NEW pill (js/strings.js's hub_new_tag, so it
+    // says New / Nuevo exactly as the tiles do). Same word, same gold, same meaning as a new
+    // game's tile - the popup is announcing something new, and a second vocabulary for that
+    // would be a small lie about how this app labels things.
+    badge: true,
+    title: { en: 'Please report bugs!', es: '¡Reporta los fallos, por favor!' },
     body: {
-      en: ['Say what happened, add a screenshot, send. Your phone details come along.'],
-      es: ['Cuenta qué ha pasado, añade una captura y envía. Los datos de tu móvil van incluidos.'],
+      en: ['Please tell me about bugs you run into, and send a screenshot! Apparently just because everything looks and works perfectly on my phone, that does not mean other phones are working too.'],
+      es: ['¡Cuéntame los fallos que encuentres y manda una captura! Por lo visto, que todo se vea y funcione perfecto en mi móvil no quiere decir que funcione en los demás.'],
     },
     // `shots` are the "here is where the button lives" pictures: WHOLE phone screens (Matt's own
     // mock-up), shown side by side, each with a ring round the button and an arrow pointing at it,

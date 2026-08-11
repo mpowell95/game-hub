@@ -33,7 +33,13 @@ function ensureCss() {
                  max(var(--gh-sp-4), env(safe-area-inset-bottom)); align-content: center; }
   .ann-modal { width: min(420px, 100%); text-align: center; }
   .ann-icon { font-size: 42px; line-height: 1; }
-  .ann-modal h2 { margin: var(--gh-sp-3) var(--gh-sp-6) var(--gh-sp-3); font-size: var(--gh-fs-lg); font-weight: 800; }
+  /* The launcher's NEW pill, same gold (#f2b705, the colorblind palette's yellow) and same
+     uppercase word. It spells the word out, so the colour is emphasis and never the signal. */
+  .ann-badge { display: inline-block; margin-bottom: var(--gh-sp-2); padding: 3px 8px;
+               border-radius: var(--gh-r-pill); background: #f2b705; color: #1a1400;
+               font-size: .66rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+               white-space: nowrap; }
+  .ann-modal h2 { margin: var(--gh-sp-2) var(--gh-sp-6) var(--gh-sp-3); font-size: var(--gh-fs-lg); font-weight: 800; }
   .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: left; }
   /* Two whole phone screens, side by side. Each column is half the modal, so the pictures stay
      tall-and-narrow (which is what they are) instead of being letterboxed. */
@@ -46,6 +52,9 @@ function ensureCss() {
                   object-fit: cover; object-position: bottom; border-radius: var(--gh-r-md);
                   border: 1px solid var(--gh-border); background: var(--gh-surface-2); }
   .ann-shot figcaption { margin-top: var(--gh-sp-1); font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted); }
+  /* Small phones (an SE is 667 tall): crop harder still, so the buttons stay above the fold even
+     with a long body. Measured against the real 375x667 layout, not guessed. */
+  @media (max-height: 740px) { .ann-shot img { max-height: 30vh; } }
   /* Two buttons, one row, always. The Spanish pair ("Entendido" + "Pruébalo ahora") wrapped onto
      two lines at 393px and read as one stacked on the other; splitting the row equally means the
      labels can grow without ever wrapping the row. */
@@ -77,6 +86,7 @@ export function showAnnouncement(a, { onAction } = {}) {
       <div class="gh-modal ann-modal" role="dialog" aria-modal="true" aria-label="${esc(t('ann_dialog_aria'))}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
         <div class="ann-icon" aria-hidden="true">${esc(a.icon || '📣')}</div>
+        ${a.badge ? `<div><span class="ann-badge">${esc(t('hub_new_tag'))}</span></div>` : ''}
         <h2>${esc(textFor(a.title, lang))}</h2>
         ${paras.map((p) => `<p class="ann-body">${esc(p)}</p>`).join('')}
         ${shots.length ? '<div class="ann-shots">' : ''}${shots.map((s) => {
