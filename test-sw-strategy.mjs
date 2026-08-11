@@ -331,6 +331,32 @@ console.log('\n--- fetch: images remain cache-first ---');
   eq('a non-GET request is not intercepted at all', res, undefined);
 }
 
+// --- 6. an error RESPONSE is not an answer ------------------------------------------------------
+// [KNOWN-BUG PROBE] Born red on 2026-08-11. Only a THROWN fetch counted as failure, so a 404 or a
+// 503 was handed straight to the page even with a good cached copy in hand. GitHub Pages serves a
+// redeploy by swapping the published tree, so a request landing in that window can 404 for a
+// moment - and opening the hub during a deploy handed the page a 404 for css/hub.css and rendered
+// the launcher as raw unstyled HTML. Matt hit exactly that, minutes after a deploy, on mobile
+// data; a force-close "fixed" it, which is what a transient server error always looks like.
+
+{
+  const w = bootWorker({ net: async () => new FakeResponse('404 not found', { ok: false, tag: 'NET-404' }) });
+  const cache = await w.cachesApi.open(CACHE_NAME);
+  await cache.put('./css/hub.css', new FakeResponse('.hub{}', { ok: true, tag: 'CACHED' }));
+  const res = await w.fire('fetch', { request: new FakeRequest('./css/hub.css') });
+  ok('[KNOWN-BUG PROBE] a 404 does not beat a good cached copy (the unstyled-launcher bug)',
+    !!(res && res.ok && res.tag === 'CACHED'),
+    `got ${res ? `${res.tag} ok=${res.ok}` : 'nothing'} - the page would render unstyled`);
+}
+
+{
+  const w = bootWorker({ net: async () => new FakeResponse('503', { ok: false, tag: 'NET-503' }) });
+  const res = await w.fire('fetch', { request: new FakeRequest('./js/hub.js') });
+  ok('...but with NOTHING cached, the error response is still passed through honestly',
+    !!(res && res.ok === false && res.tag === 'NET-503'),
+    'a request with no cached copy has nothing better to offer, and must not invent one');
+}
+
 // --- summary -----------------------------------------------------------------------------------
 
 console.log(`\nSW strategy tests: ${passed} passed, ${failures.length} failed.`);

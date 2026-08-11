@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v295';
+const CACHE = 'game-hub-v296';
 
 const ASSETS = [
   './',
@@ -564,6 +564,21 @@ self.addEventListener('fetch', (event) => {
         _slowUntil = Date.now() + SLOW_LATCH_MS;
         return cached;
       }
+      // A 404/503 IS NOT AN ANSWER when we are holding a good copy (2026-08-11).
+      //
+      // Only a THROWN fetch counted as failure here, so an error RESPONSE was handed straight to
+      // the page. GitHub Pages serves a redeploy by swapping the published tree, and a request
+      // landing in that window can 404 for a moment - so opening the hub during a deploy could
+      // hand the page a 404 for css/hub.css while a perfectly good copy sat in the cache one line
+      // away. The result is the launcher rendered as raw unstyled HTML. Matt hit it minutes after
+      // a deploy, on mobile data; a force-close fixed it, which is exactly what a transient
+      // server error looks like.
+      //
+      // Falling back to the cached copy is also the right call for a genuinely removed file: this
+      // is an offline-first app, and the cache is a coherent snapshot of one deploy that rolls
+      // over when CACHE is bumped. `net` has already refreshed the cache above if the response
+      // WAS ok, so nothing goes stale by doing this.
+      if (!res || !res.ok) return cached;
       return res;
     } catch {
       return cached;   // offline, or the request failed outright
