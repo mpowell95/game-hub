@@ -39,6 +39,10 @@ import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
 import { deviceId, recordYahtzee } from '../../js/game-stats.js';
 import { howToHtml, createHowTo } from './howto.js';
+import { makeT, onLangChange } from '../../js/i18n.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
 
 const MODE = 'ai'; // 'ai' | 'hotseat' -- solo-mode default; irrelevant once in MP
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
@@ -58,23 +62,21 @@ const RIGHT_ICON_KIND = {
 // little red pictograms (3x, 4x, a house, two card fans, a star, a question mark) with nothing
 // anywhere on the screen saying what any of them scored. A player who did not already know
 // Yahtzee could not find out from inside the game.
-const CAT_INFO = {
-  ones:   { name:'Ones',    score:'Score: sum of all 1s' },
-  twos:   { name:'Twos',    score:'Score: sum of all 2s' },
-  threes: { name:'Threes',  score:'Score: sum of all 3s' },
-  fours:  { name:'Fours',   score:'Score: sum of all 4s' },
-  fives:  { name:'Fives',   score:'Score: sum of all 5s' },
-  sixes:  { name:'Sixes',   score:'Score: sum of all 6s' },
-  threeKind:    { name:'3 of a kind',   score:'Score: sum of all dice' },
-  fourKind:     { name:'4 of a kind',   score:'Score: sum of all dice' },
-  fullHouse:    { name:'Full house',    score:'Score: 25' },
-  smallStraight:{ name:'Sequence of 4', score:'Score: 30' },
-  largeStraight:{ name:'Sequence of 5', score:'Score: 40' },
-  yahtzee:      { name:'Yahtzee',       score:'Score: 50' },
-  chance:       { name:'Chance',        score:'Score: sum of all dice' },
-};
+// Resolved at READ time, never at module scope: the language can change while the game is
+// mounted, and a frozen table would keep answering in whichever language loaded first.
+const UPPER_FACE = { ones:1, twos:2, threes:3, fours:4, fives:5, sixes:6 };
+const FIXED_SCORE = { fullHouse:25, smallStraight:30, largeStraight:40, yahtzee:50 };
+function catInfo(cat){
+  const name = t('cat_' + cat);
+  if(UPPER_FACE[cat]) return { name, score: t('score_sum_of', { n: UPPER_FACE[cat] }) };
+  if(FIXED_SCORE[cat]) return { name, score: t('score_n', { n: FIXED_SCORE[cat] }) };
+  return { name, score: t('score_all_dice') };
+}
 
-const GAME_MARKUP = `
+// A FUNCTION, not a module-scope constant. It carries t() calls now, and a template literal at
+// module scope evaluates once at import - so the board would be frozen in whichever language
+// happened to load first, exactly the trap js/CLAUDE.md's "call t() at RENDER time" rule names.
+const gameMarkup = () => `
 <div id="fit">
 <div id="shakeWrap">
 <div id="stage">
@@ -86,19 +88,19 @@ const GAME_MARKUP = `
       <div class="yz-avatar" id="p1avatar">&#128578;</div>
       <div class="yz-pod-text">
         <div class="yz-pod-total" id="p1total">0</div>
-        <div class="yz-pod-name" id="p1name">You</div>
+        <div class="yz-pod-name" id="p1name">${t('you')}</div>
       </div>
     </div>
 
     <div class="yz-pod yz-p2 yz-idle" id="pod2">
       <div class="yz-pod-text">
         <div class="yz-pod-total" id="p2total">0</div>
-        <div class="yz-pod-name" id="p2name">Computer</div>
+        <div class="yz-pod-name" id="p2name">${t('computer')}</div>
       </div>
       <div class="yz-avatar" id="p2avatar">&#129302;</div>
     </div>
 
-    <button type="button" class="yz-kebab yz-abs" data-action="howto" aria-label="How to play"><span></span><span></span><span></span></button>
+    <button type="button" class="yz-kebab yz-abs" data-action="howto" aria-label="${t('howto')}"><span></span><span></span><span></span></button>
   </div>
 
   <div class="yz-rule-gold"></div>
@@ -125,7 +127,7 @@ const GAME_MARKUP = `
   <div class="yz-roll-pip yz-dim" id="rollPip3" style="left:238px">3</div>
   <button class="yz-play-btn yz-off" id="playBtn"><span class="yz-label">PLAY</span></button>
 
-  <button type="button" class="yz-mp-leave" id="mpLeaveBtn" hidden>Leave</button>
+  <button type="button" class="yz-mp-leave" id="mpLeaveBtn" hidden>${t('leave')}</button>
 
   <div id="toast"></div>
   <div id="celebration">
@@ -142,10 +144,11 @@ const GAME_MARKUP = `
 
 let state = null;
 let root = null;          // the .yz-root element mounted into container
-let screenHost = null;    // swaps between the setup/lobby screen and GAME_MARKUP
+let screenHost = null;    // swaps between the setup/lobby screen and gameMarkup()
 let destroyed = true;     // true whenever no live instance is mounted
 let resizeHandler = null;
 let howTo = null;
+let offLang = null;
 let offViewport = null;   // unsubscribe from js/viewport.js's coalesced resize subscription
 let pendingTimeouts = new Set();
 let pendingFrames = new Set();
@@ -195,15 +198,15 @@ function readProfileName(){
   }catch(e){ return null; }
 }
 function myIdentity(){
-  return { name: readProfileName() || 'You', avatar: readProfileEmoji() || '\u{1F642}', deviceId: deviceId() };
+  return { name: readProfileName() || t('you'), avatar: readProfileEmoji() || '\u{1F642}', deviceId: deviceId() };
 }
 
 /* ---------- STATE ---------- */
 function newGame(mpInfo){
   state = {
     players: [
-      { name: mpInfo ? mpInfo.hostName : 'You', scores:{}, bonusTotal:0 },
-      { name: mpInfo ? mpInfo.guestName : (MODE==='ai' ? 'Computer' : 'Player 2'), scores:{}, bonusTotal:0 }
+      { name: mpInfo ? mpInfo.hostName : t('you'), scores:{}, bonusTotal:0 },
+      { name: mpInfo ? mpInfo.guestName : (MODE==='ai' ? t('computer') : t('player2')), scores:{}, bonusTotal:0 }
     ],
     current: mpInfo ? mpInfo.dealer : 0,
     dice: [0,0,0,0,0].map(() => ({ value:1, held:false })),
@@ -376,7 +379,7 @@ let catHoldTimer = null;
 let catHoldFired = false;
 
 function showCatInfo(cat, iconEl){
-  const info = CAT_INFO[cat];
+  const info = catInfo(cat);
   const pop = $('catPop'), dim = $('catDim');
   if(!info || !pop || !dim || !iconEl) return;
   $('catPopName').textContent = info.name;
@@ -560,7 +563,7 @@ async function mpHostCreate(){
   mpBusy = false;
   if(destroyed) return;
   if(res.error){
-    mpError = res.error==='busy' ? 'Could not create a room. Try again.' : 'Offline — check your connection.';
+    mpError = res.error==='busy' ? t('err_busy') : t('err_offline');
     lobby = null;
     renderSetupScreen();
     return;
@@ -582,15 +585,15 @@ async function mpJoinSubmit(){
   mpBusy = false;
   if(destroyed) return;
   if(res.error){
-    mpError = res.error==='not-found' ? 'Room not found.'
-      : res.error==='full' ? 'That room is full.'
-      : res.error==='version' ? 'Update the app to join — the host is on a newer version.'
-      : 'Offline — check your connection.';
+    mpError = res.error==='not-found' ? t('err_notfound')
+      : res.error==='full' ? t('err_full')
+      : res.error==='version' ? t('err_version')
+      : t('err_offline');
     renderSetupScreen();
     return;
   }
   if(res.room && res.room.game && res.room.game !== 'yahtzee'){
-    mpError = 'That code is for a different game.';
+    mpError = t('err_wrong_game');
     renderSetupScreen();
     return;
   }
@@ -610,7 +613,7 @@ async function mpHostStartMatch(){
   if(!room || !room.guest || (state && state.mp) || mpBusy) return;
   const dealer = 0; // host opens; no rematch series to alternate across
   try{ await net.startRound(mpPendingCode, 1, null, dealer); }
-  catch(e){ mpError = 'Connection error.'; renderSetupScreen(); return; }
+  catch(e){ mpError = t('err_conn'); renderSetupScreen(); return; }
   if(destroyed) return;
   beginMPGame('host', mpPendingCode, { name: room.guest.name, avatar: room.guest.avatar }, dealer);
 }
@@ -638,7 +641,7 @@ function mpAfterLocalMove(move){
   const seq = ++mp.appliedSeq;
   const hash = stateHash(state);
   net.appendMove(mp.code, mp.role, seq, move, hash).catch(()=>{
-    if(state && state.mp) state.mp.statusMsg = 'Connection error — reconnecting…';
+    if(state && state.mp) state.mp.statusMsg = t('err_reconnecting');
   });
 }
 
@@ -719,7 +722,7 @@ function mpOnDivergence(seq){
   const mp = state.mp;
   mp.recoveryAttempts = (mp.recoveryAttempts||0) + 1;
   if(mp.recoveryAttempts > MP_RECOVERY_MAX_ATTEMPTS){ mpEndDueToError(); return false; }
-  mp.statusMsg = 'Resyncing…';
+  mp.statusMsg = t('resyncing');
   if(mp.role === 'host'){
     mp.appliedSeq = seq;
     net.writeRecovery(mp.code, seq, mpSnapshot()).catch(()=>{});
@@ -813,20 +816,20 @@ function mpEndDueToOpponentLeft(){
   if(!state || !state.mp) return;
   state.mp.ended = true;
   net.disconnect();
-  renderMpEndOverlay('Your opponent left the game.');
+  renderMpEndOverlay(t('opp_left'));
 }
 function mpEndDueToError(){
   if(!state || !state.mp) return;
   state.mp.ended = true;
   net.leaveRoom(state.mp.code, state.mp.role).catch(()=>{});
-  renderMpEndOverlay('Connection lost. The match could not continue.');
+  renderMpEndOverlay(t('conn_lost'));
 }
 function renderMpEndOverlay(message){
   const overlay = $('overlay');
   if(!overlay) return;
   overlay.innerHTML = `
     <div class="yz-overlay-card">
-      <div class="yz-overlay-title">Connection ended</div>
+      <div class="yz-overlay-title">${t('conn_ended')}</div>
       <div class="yz-overlay-scores">${esc(message)}</div>
       <button class="yz-play-btn yz-on" id="mpBackToSetupBtn"><span class="yz-label">BACK</span></button>
     </div>`;
@@ -899,7 +902,7 @@ function animateCommitEffects(effects){
     }
   }
 
-  if(upperBonusFired) showToast('+35 BONUS!');
+  if(upperBonusFired) showToast(t('bonus_toast'));
   if(celebrate) celebrateYahtzee();
 }
 
@@ -1240,7 +1243,7 @@ function renderScorecard(){
     // The label STACKS. Laid out side by side it ran to ~94px and the first pill (which has to
     // sit at 63, the box column's own x, to keep the box-vs-numeral contract) covered the "+35".
     html += `<div class="yz-bonus-lab yz-abs" style="left:7px;top:${bTop + 10}px">`
-      + `<span class="yz-bonus-cap">SECTION<br>BONUS</span>`
+      + `<span class="yz-bonus-cap">${t('section_bonus')}</span>`
       + `<span class="yz-bonus-plus ${(mine >= 63 || theirs >= 63) ? 'yz-bonus-got' : ''}">+35</span></div>`;
     html += pill(mine, 63);
     html += pill(theirs, 114);
@@ -1289,8 +1292,8 @@ function renderOverlay(){
   const meIdx = localSeat(), themIdx = remoteSeat();
   const p1 = state.players[meIdx], p2 = state.players[themIdx];
   const t1 = totalScore(p1), t2 = totalScore(p2);
-  const winner = t1===t2 ? 'Tie game' : (t1>t2 ? (p1.name+' wins!') : (p2.name+' wins!'));
-  const playAgainLabel = state.mp ? 'BACK TO SETUP' : 'PLAY AGAIN';
+  const winner = t1===t2 ? t('tie_game') : t('wins', { name: (t1>t2 ? p1.name : p2.name) });
+  const playAgainLabel = state.mp ? t('back_to_setup') : t('play_again');
   overlay.innerHTML = `
     <div class="yz-overlay-card">
       <div class="yz-overlay-title">${esc(winner)}</div>
@@ -1314,41 +1317,41 @@ function fitStage(){
 /* ---------- SETUP / LOBBY SCREEN ---------- */
 function setupHeadHTML(){
   return `
-    <div class="yz-setup-title">Yahtzee</div>
+    <div class="yz-setup-title">${t('title')}</div>
     <div class="yz-seg" data-role="mode-seg">
-      <button type="button" class="yz-seg-btn ${mpMode==='solo'?'yz-seg-active':''}" data-mode="solo">Vs Computer</button>
-      <button type="button" class="yz-seg-btn ${mpMode==='host'?'yz-seg-active':''}" data-mode="host">Host Online</button>
-      <button type="button" class="yz-seg-btn ${mpMode==='join'?'yz-seg-active':''}" data-mode="join">Join Online</button>
+      <button type="button" class="yz-seg-btn ${mpMode==='solo'?'yz-seg-active':''}" data-mode="solo">${t('mode_solo')}</button>
+      <button type="button" class="yz-seg-btn ${mpMode==='host'?'yz-seg-active':''}" data-mode="host">${t('mode_host')}</button>
+      <button type="button" class="yz-seg-btn ${mpMode==='join'?'yz-seg-active':''}" data-mode="join">${t('mode_join')}</button>
     </div>`;
 }
 
 function joinBodyHTML(){
-  const msg = mpError || (mpBusy ? 'Joining…' : 'Enter the 4-character code your friend shared.');
+  const msg = mpError || (mpBusy ? t('joining') : t('enter_code'));
   return `<div class="yz-mp-lobby">
-    <span class="yz-mp-label">Room code</span>
+    <span class="yz-mp-label">${t('room_code')}</span>
     <input class="yz-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}" value="${esc(mpJoinCode)}"
-      autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Room code">
+      autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('room_code')}">
     <p class="yz-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-    <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-join-submit">Join</button>
+    <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-join-submit">${t('join')}</button>
   </div>`;
 }
 
 function lobbyHTML(){
-  const back = `<button type="button" class="yz-setup-btn yz-setup-btn-ghost" data-action="mp-cancel">Back</button>`;
+  const back = `<button type="button" class="yz-setup-btn yz-setup-btn-ghost" data-action="mp-cancel">${t('back')}</button>`;
   if(lobby === 'host'){
     const room = mpLobbyRoom;
     const guest = room && room.guest;
     const code = mpPendingCode;
-    const msg = mpError || (mpBusy ? 'Creating room…' : 'Share this code with a friend.');
+    const msg = mpError || (mpBusy ? t('creating') : t('share_code'));
     return `<div class="yz-mp-lobby">
       <span class="yz-mp-label">Room code</span>
       <div class="yz-mp-code">${code ? esc(code) : '····'}</div>
-      <span class="yz-mp-label">Opponent</span>
+      <span class="yz-mp-label">${t('opponent')}</span>
       <div class="yz-mp-oppslot">${guest
         ? `<span class="yz-mp-oppav">${esc(guest.avatar||'\u{1F642}')}</span><span class="yz-mp-oppname">${esc(guest.name||'')}</span>`
-        : `<span class="yz-mp-oppempty">Waiting for someone to join…</span>`}</div>
+        : `<span class="yz-mp-oppempty">${t('waiting_join')}</span>`}</div>
       <p class="yz-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-      <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-start" ${guest?'':'disabled'}>Start Match</button>
+      <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-start" ${guest?'':'disabled'}>${t('start_match')}</button>
       ${back}
     </div>`;
   }
@@ -1357,11 +1360,11 @@ function lobbyHTML(){
   return `<div class="yz-mp-lobby">
     <span class="yz-mp-label">Room code</span>
     <div class="yz-mp-code">${esc(mpJoinedCode||'')}</div>
-    <span class="yz-mp-label">Host</span>
+    <span class="yz-mp-label">${t('host')}</span>
     <div class="yz-mp-oppslot">${host
       ? `<span class="yz-mp-oppav">${esc(host.avatar||'\u{1F642}')}</span><span class="yz-mp-oppname">${esc(host.name||'')}</span>`
       : `<span class="yz-mp-oppempty">—</span>`}</div>
-    <p class="yz-mp-msg" data-role="mp-msg">Waiting for the host to start the match…</p>
+    <p class="yz-mp-msg" data-role="mp-msg">${t('waiting_start')}</p>
     ${back}
   </div>`;
 }
@@ -1372,15 +1375,15 @@ function setupScreenHTML(){
   const hosting = mpMode === 'host';
   return `<div class="yz-setup">${setupHeadHTML()}
     ${hosting
-      ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?'Creating room…':'Create a room and share the code with a friend.'))}</p>
-         <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>Create Room</button>`
-      : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">Play</button>`}
+      ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?t('creating'):t('create_and_share')))}</p>
+         <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>${t('create_room')}</button>`
+      : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">${t('play')}</button>`}
     <button type="button" class="yz-howto-btn" data-action="howto">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
            stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="9.4"/><path d="M9.3 9.2a2.8 2.8 0 1 1 3.6 2.7c-.6.2-.9.7-.9 1.3v.6"/>
         <circle cx="12" cy="17.4" r="1.25" fill="currentColor" stroke="none"/>
-      </svg>How to play</button>
+      </svg>${t('howto')}</button>
   </div>`;
 }
 
@@ -1394,7 +1397,7 @@ function mountSetupScreen(){
 }
 
 function mountGameScreen(){
-  screenHost.innerHTML = GAME_MARKUP;
+  screenHost.innerHTML = gameMarkup();
   buildDiceCubes();
   resizeHandler = () => { fitStage(); if(howTo) howTo.refit(); };
   offViewport = onViewportResize(resizeHandler);
@@ -1441,7 +1444,7 @@ function onRootInput(e){
   mpJoinCode = clean;
   if(mpError){ mpError = ''; }
   const msgEl = screenHost.querySelector('[data-role="mp-msg"]');
-  if(msgEl) msgEl.textContent = 'Enter the 4-character code your friend shared.';
+  if(msgEl) msgEl.textContent = t('enter_code');
   if(clean.length === MP_CODE_LEN) mpJoinSubmit();
 }
 
@@ -1554,6 +1557,15 @@ export function init(container){
   mountSetupScreen();
   wireInput();
 
+  // Live language switch. The hub's toggle can be used while this game is mounted, so re-render
+  // whichever screen is up rather than leaving it in the language that happened to load first.
+  offLang = onLangChange(() => {
+    if(destroyed || !root) return;
+    if(view === 'setup') renderSetupScreen();
+    else { mountGameScreen(); render(); }
+    if(howTo && howTo.isOpen()) howTo.relabel();
+  });
+
   // Dev/test seam only — not part of the visible game. Lets the verification
   // harness drive deterministic rounds (forced dice) without real randomness
   // or AI timing, so scoring math can be asserted headlessly. For MP tests,
@@ -1598,6 +1610,7 @@ export function destroy(){
     net.disconnect();
   }
 
+  if(offLang){ offLang(); offLang = null; }
   if(howTo){ howTo.destroy(); howTo = null; }
   clearTimeout(catHoldTimer); catHoldTimer = null; catHoldFired = false;
   if(root){
