@@ -36,9 +36,18 @@ export const ANNOUNCEMENTS = [
     // would be a small lie about how this app labels things.
     badge: true,
     title: { en: 'Please report bugs!', es: '¡Reporta los fallos, por favor!' },
+    // Matt's words. The opening clause used to restate the title ("Please tell me about bugs...")
+    // and was cut; the joke is the part that earns its space, because it explains WHY the reports
+    // are needed without sounding like a support form. Contraction kept on purpose - this is a
+    // popup from Matt to his family, not a release note.
+    // Spanish: `en el tuyo`, NOT `en los demás` - the latter reads as "everyone else" (people)
+    // rather than "the other phones". `reportar` in the title is a mild anglicism in Spain, kept
+    // deliberately so it matches the button the picture points at (`Reportar un fallo`).
+    // Both are drafted, not native-reviewed (js/strings.js's header says the same of every es
+    // string here) - worth a ten-second check with a native speaker before this goes wide.
     body: {
-      en: ['Please tell me about bugs you run into, and send a screenshot! Apparently just because everything looks and works perfectly on my phone, that does not mean other phones are working too.'],
-      es: ['¡Cuéntame los fallos que encuentres y manda una captura! Por lo visto, que todo se vea y funcione perfecto en mi móvil no quiere decir que funcione en los demás.'],
+      en: ['And send a screenshot if you can! Apparently, just because everything works perfectly on my phone, that doesn\'t mean it\'s working on yours.'],
+      es: ['¡Y manda una captura si puedes! Por lo visto, que todo funcione perfecto en mi móvil no quiere decir que funcione en el tuyo.'],
     },
     // `shots` are the "here is where the button lives" pictures: WHOLE phone screens (Matt's own
     // mock-up), shown side by side, each with a ring round the button and an arrow pointing at it,
