@@ -469,6 +469,47 @@ export const GAME_ART = {
   // (46,70)->(110,38), i.e. rotate(-26.6) about a point one wheel-radius up the surface normal -
   // so the wheels touch the grass exactly. Same flat-cartoon ink (#231f1c) the live game draws
   // with, so the tile and the gameplay read as one thing.
+  // Pinball: the one composition a 16:9 frame suits better than the real table does. A pinball
+  // playfield is tall and narrow, so rather than squash it, this is a CLOSE-UP of the part that
+  // reads instantly at tile size: the arch, the bumper nest, the ramp, and the two flippers with a
+  // chrome ball between them. Neon on black, matching the game's own palette exactly.
+  pinball: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#0c0630"/>
+            <ellipse cx="80" cy="26" rx="74" ry="40" fill="#3d1a95" opacity="0.55"/>
+            <ellipse cx="80" cy="86" rx="60" ry="26" fill="#ff4fd8" opacity="0.12"/>
+            <g fill="#ffffff">
+              <circle cx="14" cy="12" r="0.9" opacity="0.8"/><circle cx="38" cy="7" r="0.7" opacity="0.6"/>
+              <circle cx="66" cy="14" r="0.6" opacity="0.5"/><circle cx="104" cy="9" r="0.9" opacity="0.75"/>
+              <circle cx="132" cy="18" r="0.7" opacity="0.6"/><circle cx="150" cy="8" r="0.6" opacity="0.5"/>
+              <circle cx="24" cy="36" r="0.6" opacity="0.45"/><circle cx="144" cy="44" r="0.6" opacity="0.45"/>
+            </g>
+            <path d="M6 58 A76 46 0 0 1 154 58" fill="none" stroke="#3ee8ff" stroke-width="1.6" opacity="0.35"/>
+            <path d="M2 62 A82 52 0 0 1 158 62" fill="none" stroke="#98a6c6" stroke-width="2.6"/>
+            <g stroke="#0a0718" stroke-width="1.6">
+              <circle cx="42" cy="34" r="8" fill="#1d6fa8"/><circle cx="42" cy="34" r="4" fill="#f3f7ff"/>
+              <circle cx="80" cy="24" r="8" fill="#1d6fa8"/><circle cx="80" cy="24" r="4" fill="#f3f7ff"/>
+              <circle cx="118" cy="34" r="8" fill="#1d6fa8"/><circle cx="118" cy="34" r="4" fill="#f3f7ff"/>
+            </g>
+            <g fill="#ff4fd8"><circle cx="42" cy="34" r="1.7"/><circle cx="80" cy="24" r="1.7"/><circle cx="118" cy="34" r="1.7"/></g>
+            <g transform="rotate(37 22 52)" stroke="#0a0718" stroke-width="1.4">
+              <rect x="10" y="48" width="13" height="4.6" rx="2" fill="#F2B705"/>
+              <rect x="10" y="55" width="13" height="4.6" rx="2" fill="#F2B705"/>
+              <rect x="10" y="62" width="13" height="4.6" rx="2" fill="#6b7590"/>
+            </g>
+            <path d="M96 72 C126 68 138 52 132 36" fill="none" stroke="#0a0718" stroke-width="7" stroke-linecap="round"/>
+            <path d="M96 72 C126 68 138 52 132 36" fill="none" stroke="#ff4fd8" stroke-width="3" stroke-linecap="round"/>
+            <g stroke-linecap="round">
+              <path d="M58 74 L76 84" stroke="#0a0718" stroke-width="10"/>
+              <path d="M58 74 L76 84" stroke="#3ee8ff" stroke-width="6.4"/>
+              <path d="M110 74 L92 84" stroke="#0a0718" stroke-width="10"/>
+              <path d="M110 74 L92 84" stroke="#3ee8ff" stroke-width="6.4"/>
+            </g>
+            <circle cx="84" cy="60" r="6.4" fill="#0a0718"/>
+            <circle cx="84" cy="60" r="5.4" fill="#dfe7f5"/>
+            <circle cx="82" cy="58" r="1.9" fill="#ffffff"/>
+            <path d="M79.5 63.5 A5.4 5.4 0 0 0 88 61" fill="none" stroke="#3ee8ff" stroke-width="1.2"/>
+          </svg>`,
+
   'hill-climb': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#8fd3f0"/>
             <path d="M0 58 L34 44 L66 54 L104 34 L136 44 L160 36 L160 90 L0 90 Z" fill="#6fa8c9" opacity="0.55"/>

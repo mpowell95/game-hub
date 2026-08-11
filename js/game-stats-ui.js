@@ -50,6 +50,8 @@ const TABS = [
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   { id: 'battleship', labelKey: 'game_title_battleship' },
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
+  // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
+  { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -63,7 +65,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
@@ -530,6 +532,7 @@ function hasPlays(id, rec) {
   if (id === 'ballrun') return !!((rec.br && rec.br.runs) || (rec.brOrbital && rec.brOrbital.runs) || rec.brLegacyMeters);
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
+  if (id === 'pinball') return !!(rec.pb && rec.pb.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   return ((rec.total || {}).played | 0) > 0;
@@ -542,6 +545,7 @@ function headlineOf(id, rec) {
   if (id === 'ballrun') return { n: Math.max((rec.br && rec.br.bestObstacles) | 0, (rec.brOrbital && rec.brOrbital.bestObstacles) | 0), unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   return { n: record(rec.total).wins, unitKey: unitKeyOf(id) };
 }
@@ -612,6 +616,46 @@ function overviewHTML(st) {
     </div>`;
 }
 
+// --- Pinball (solo, score-attack, table-tiered) -----------------------------
+// The three TABLE settings are this game's difficulty axis, so byDiff's easy/medium/hard buckets
+// are shown under the names the game itself uses (Hill Climb's by-stage table is the precedent).
+// Deliberately NOT the shared diffTable(): that renders W-L and a win rate, and a pinball game has
+// no loss axis at all, so every row would read "2-0, 100%" - a true number that means nothing.
+const PB_TABLES = [['easy', 'gs_pb_casual'], ['medium', 'gs_pb_standard'], ['hard', 'gs_pb_tournament']];
+
+
+/** Pinball: no wins or losses (a game ends when the last ball drains), so the honest numbers are
+ *  games played and the best score, exactly like Ball Run's, Snake's and Hill Climb's screens.
+ *  Best ball gets its own tile because it is the number pinball players actually compare, and the
+ *  lifetime jackpot / multiball / mission counts are the only record of HOW a score was built.
+ *  Average is derived at render time from `points` and `games`, never stored (a stored average
+ *  would be a value that can go DOWN, which has no business in the shared store). */
+function pinballScreen(rec) {
+  const pb = (rec && rec.pb) || {};
+  const games = pb.games | 0;
+  if (!games) return emptyState('Pinball');
+  const avg = games > 0 ? Math.round((pb.points | 0) / games) : 0;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${(pb.bestScore | 0).toLocaleString()}</b><span>${t('gs_pb_best')}</span></div>
+      <div class="gs-tally"><b>${(pb.bestBall | 0).toLocaleString()}</b><span>${t('gs_pb_bestball')}</span></div>
+      <div class="gs-tally"><b>${games}</b><span>${t('gs_played')}</span></div>
+      <div class="gs-tally"><b>${avg.toLocaleString()}</b><span>${t('gs_pb_avg')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${pb.missions | 0}</b><span>${t('gs_pb_missions')}</span></div>
+      <div class="gs-tally"><b>${pb.multiballs | 0}</b><span>${t('gs_pb_multiballs')}</span></div>
+      <div class="gs-tally"><b>${pb.jackpots | 0}</b><span>${t('gs_pb_jackpots')}</span></div>
+      <div class="gs-tally"><b>${pb.ramps | 0}</b><span>${t('gs_pb_ramps')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_pb_by_table')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th></tr></thead>
+      <tbody>${PB_TABLES.map(([k, labelKey]) =>
+        `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'connect4') return connect4Screen(rec);
@@ -628,6 +672,7 @@ function screenFor(id, st) {
   if (id === 'hillclimb') return hillClimbScreen(rec);
   if (id === 'battleship') return battleshipScreen(rec);
   if (id === 'skeeball') return skeeballScreen(rec);
+  if (id === 'pinball') return pinballScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 

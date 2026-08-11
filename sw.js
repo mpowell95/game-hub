@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v288';
+const CACHE = 'game-hub-v289';
 
 const ASSETS = [
   './',
@@ -176,6 +176,17 @@ const ASSETS = [
   './snake/js/strings.js',
   // Hill Climb (2026-08-02). Note test.js is deliberately NOT listed: it is a node-only engine
   // suite, never loaded by the page (same convention as every other game's test file).
+  './pinball/',
+  './pinball/index.html',
+  './pinball/css/pinball.css',
+  './pinball/js/ui.js',
+  './pinball/js/game.js',
+  './pinball/js/physics.js',
+  './pinball/js/table.js',
+  './pinball/js/render.js',
+  './pinball/js/audio.js',
+  './pinball/js/store.js',
+  './pinball/js/strings.js',
   './hill-climb/',
   './hill-climb/index.html',
   './hill-climb/css/hill-climb.css',

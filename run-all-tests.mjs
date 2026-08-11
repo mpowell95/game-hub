@@ -37,6 +37,7 @@ const SUITES = [
   { file: 'hill-climb/js/test.js' },
   { file: 'skeeball/js/test.js' },
   { file: 'battleship/js/test.js' },
+  { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
   // shared-module suites
