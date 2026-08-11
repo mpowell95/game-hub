@@ -337,6 +337,52 @@ const PLAY = {
     },
   },
 
+  skeeball: {
+    what: 'flick a ball up the lane and have it land in a ring for real points',
+    async run(page, cdp, tap) {
+      const start = await page.$('[data-role="start-ai"]');
+      if (!start) return { ok: false, why: 'no Play button on the setup screen' };
+      await tap(start);
+      await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
+      await page.waitForTimeout(700);
+      const g = await page.evaluate(() => {
+        const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
+        return { left: r.left, top: r.top, w: r.width, h: r.height };
+      });
+      // A flick straight up, 34% of the canvas height. ui.js's POWER_SPAN is 42%, so this is ~0.8
+      // power: hard enough for the top of the ramp, not hard enough to sail over it.
+      const x = g.left + g.w / 2;
+      const y0 = g.top + g.h * 0.80;
+      const dist = g.h * 0.34;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+      for (let i = 1; i <= 12; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });
+        await page.waitForTimeout(12);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+      // The autosave lands in _landed(), i.e. AFTER the ball finishes its flight - poll for it
+      // rather than guessing a wait (the mistake Pool's probe records).
+      const read = () => page.evaluate(() => {
+        try { return JSON.parse(localStorage.getItem('gamehub.skeeball.save.v1') || 'null'); }
+        catch { return null; }
+      });
+      let st = null;
+      for (let i = 0; i < 40; i++) {
+        st = await read();
+        if (st && (st.tally?.balls | 0) > 0) break;
+        st = null;
+        await page.waitForTimeout(250);
+      }
+      if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
+      if (!st.scores || (st.scores.you | 0) <= 0) {
+        return { ok: false, why: `the ball was thrown but scored ${st.scores?.you | 0} - a 34%-of-screen flick should reach the ramp` };
+      }
+      if ((st.ball | 0) === 1 && (st.turn === 'you')) return { ok: false, why: 'the throw scored but the rack never advanced' };
+      return { ok: true, why: `flick landed for ${st.scores.you} points` };
+    },
+  },
+
   battleship: {
     what: 'fire a shot and have it resolve on the enemy board',
     async run(page, cdp, tap) {

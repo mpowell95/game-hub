@@ -49,6 +49,7 @@ const TABS = [
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   { id: 'battleship', labelKey: 'game_title_battleship' },
+  { id: 'skeeball', labelKey: 'game_title_skeeball' },
 ];
 
 // Hub registry id (for GAME_ART thumbnails) and headline-unit key, per stats id. Single source
@@ -490,6 +491,37 @@ function battleshipScreen(rec) {
     ${diffTable(rec && rec.byDiff)}`;
 }
 
+// --- Skeeball (W/L/T, best game, best throw, 100s and 50s) ------------------
+
+/** Skeeball: the standard record-vs-computer screen (Won/Lost/Tied/Win rate + by-difficulty
+ *  table) plus the four things the game itself accumulates — best single game, best single throw,
+ *  and lifetime counts of 100 cups and 50s. `tied` is a stored counter, not derived (two totals
+ *  really can land equal — js/game-stats.js's ensureSk). Lifetime points are shown too: they are
+ *  the only number that reflects a long grinding history rather than one lucky game, and a stored
+ *  counter no screen shows reads as deleted (THE LAW rule 1). */
+function skeeballScreen(rec) {
+  const sk = (rec && rec.sk) || {};
+  if (!(sk.played | 0)) return emptyState('Skeeball');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.won | 0}</b><span>${t('gs_sk_wins')}</span></div>
+      <div class="gs-tally"><b>${sk.lost | 0}</b><span>${t('gs_sk_losses')}</span></div>
+      <div class="gs-tally"><b>${sk.tied | 0}</b><span>${t('gs_tied')}</span></div>
+      <div class="gs-tally"><b>${pct(sk.won | 0, sk.played | 0)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.bestGame | 0}</b><span>${t('gs_sk_best_game')}</span></div>
+      <div class="gs-tally"><b>${sk.bestThrow | 0}</b><span>${t('gs_sk_best_throw')}</span></div>
+      <div class="gs-tally"><b>${sk.hundreds | 0}</b><span>${t('gs_sk_hundreds')}</span></div>
+      <div class="gs-tally"><b>${sk.fifties | 0}</b><span>${t('gs_sk_fifties')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${sk.balls | 0}</b><span>${t('gs_sk_balls')}</span></div>
+      <div class="gs-tally"><b>${sk.points | 0}</b><span>${t('gs_sk_points')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
  *  the same visibility bar the game list must honor (THE LAW rule 1: nothing shown today may
  *  become unreachable). */
@@ -499,6 +531,7 @@ function hasPlays(id, rec) {
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
+  if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   return ((rec.total || {}).played | 0) > 0;
 }
 
@@ -594,6 +627,7 @@ function screenFor(id, st) {
   if (id === 'snake') return snakeScreen(rec);
   if (id === 'hillclimb') return hillClimbScreen(rec);
   if (id === 'battleship') return battleshipScreen(rec);
+  if (id === 'skeeball') return skeeballScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }
 
