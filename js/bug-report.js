@@ -1,23 +1,20 @@
 // bug-report.js - the DATA half of "Report a bug" (js/bug-report-ui.js is the screen).
 //
-// THE LAW applies (root CLAUDE.md). This module is READ-ONLY against every existing storage key and
-// every existing Firebase node: it reads the same things the Device Details diagnostic reads and
-// writes only to its own two NEW nodes (`bugReports/`, `bugReportShots/`) and its own NEW local key
-// (`gamehub.bugreports.pending.v1`, the offline outbox). No stats key, no profile field, no
-// players/ record is touched, so there is no path from here to a player losing anything.
+// THE LAW (root CLAUDE.md): read-only against everything that already exists. It writes only its
+// own two NEW nodes (`bugReports/`, `bugReportShots/`) and its own NEW local key
+// (`gamehub.bugreports.pending.v1`, the offline outbox) - no stats key, no profile field, no
+// players/ record, so no path from here can lose a player anything.
 //
-// WHY IT IS SEPARATE FROM js/device-report.js. Device Details answers "whose history is this and
-// did it sync" - it is an identity/storage dump, and a bug report needs all of it. But nothing in
-// it says WHAT THE PLAYER IS HOLDING: the phone, the browser, whether the app is installed to the
-// home screen or running in a tab, the screen size, the connection, which build the service worker
-// is actually serving, or what threw a JavaScript error thirty seconds ago. Matt's ask was
-// explicitly "the same as the device details button, but with even more information" - so a report
-// carries `deviceReport` (the existing diagnostic, verbatim, via gatherDeviceReport()) PLUS
-// `environment` (everything below). Neither one is a copy of the other and neither is enough alone.
+// WHY NOT JUST js/device-report.js. That diagnostic answers "whose history is this and did it
+// sync". It says nothing about WHAT THE PLAYER IS HOLDING: the phone, the browser, installed to
+// the home screen vs a tab, screen size, connection, which build the service worker is serving,
+// what threw thirty seconds ago. Matt asked for "the same as the device details button, but with
+// even more information", so a report carries `deviceReport` (that diagnostic, verbatim) PLUS
+// `environment` (everything below). Neither is a subset of the other.
 //
-// Every probe here is individually guarded. A browser that refuses one of them (Safari and the
-// UA-Client-Hints high-entropy call are the usual suspects) records `null` for that field and the
-// report still sends - a diagnostic that can fail to send is worse than a diagnostic with a hole.
+// Every probe is individually guarded: a browser that refuses one (Safari and the UA-Client-Hints
+// high-entropy call are the usual suspects) records `null` and the report still sends. A
+// diagnostic that can fail to send is worse than one with a hole in it.
 
 import { gatherDeviceReport } from './device-report.js';
 import { getStatsApp } from './firebase-boot.js';
@@ -26,9 +23,9 @@ import { deviceId, statsId } from './game-stats.js';
 import { recentErrors } from './error-log.js';
 
 // --- limits -------------------------------------------------------------------------------------
-// Screenshots ride in the report as base64 data URLs. RTDB is not a file store, so the caps are
-// deliberately conservative: three shots is enough to show a before/after/detail, and the byte
-// budget keeps a report inside one comfortable write on a phone connection.
+// Screenshots ride as base64 data URLs. RTDB is not a file store, so the caps stay conservative:
+// three shots covers before/after/detail, and the byte budget keeps a report inside one
+// comfortable write on a phone connection.
 export const MAX_SHOTS = 3;
 export const MAX_SHOT_EDGE = 1400;        // px on the long edge after downscaling
 export const MAX_SHOT_BYTES = 900_000;    // per shot, base64 length
@@ -55,12 +52,11 @@ export function fitsShotBudget(existing, bytes) {
   return total + bytes <= MAX_TOTAL_SHOT_BYTES;
 }
 
-/** A timestamp as a number. NEVER use `x | 0` on an epoch-ms value anywhere in this feature: the
- *  bitwise operators coerce to a SIGNED 32-BIT int, and epoch milliseconds passed 2^31 in 1970,
- *  so `Date.now() | 0` is a small, wrong, sometimes-negative number. It silently scrambled the
- *  inbox's sort order and its unread count in the first draft of this file (sortReportsNewestFirst
- *  and countUnread below are tested with real epoch values for exactly that reason). `| 0` is
- *  still correct for the byte counters in this file, which are small by construction. */
+/** A timestamp as a number. NEVER `x | 0` on an epoch-ms value: bitwise ops coerce to a SIGNED
+ *  32-BIT int, and epoch ms passed 2^31 in 1970, so `Date.now() | 0` is a small, wrong, sometimes
+ *  negative number. It scrambled the inbox's order and unread count in this file's first draft -
+ *  hence the real-epoch tests on sortReportsNewestFirst/countUnread. `| 0` stays correct for the
+ *  byte counters here, which are small by construction. */
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 
 /** Newest first. Pure, so the inbox's ordering is testable without Firebase. */
@@ -92,9 +88,9 @@ export function summarizeEnvironment(env) {
 const safe = (fn, fallback = null) => { try { const v = fn(); return v === undefined ? fallback : v; } catch { return fallback; } };
 const safeAsync = async (fn, fallback = null) => { try { const v = await fn(); return v === undefined ? fallback : v; } catch { return fallback; } };
 
-/** Which of the PWA display modes the page is actually running in - the "browser tab vs added to
- *  the home screen" question Matt called out by name. iOS Safari predates the media query, so
- *  `navigator.standalone` is checked too and reported separately rather than merged away. */
+/** Which PWA display mode the page is running in - Matt's "browser tab vs added to the home
+ *  screen" question. iOS Safari predates the media query, so `navigator.standalone` is checked
+ *  too and reported separately rather than merged away. */
 function displayModeOf() {
   const modes = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay', 'browser'];
   for (const m of modes) {
@@ -134,9 +130,9 @@ function browserLabelFrom(uaData, ua) {
   return null;
 }
 
-/** Ask the ACTIVE service worker which build it is serving. Mirrors js/hub.js's version pill (same
- *  GET_VERSION message), because "which build is this phone actually running" is the first question
- *  of half the bug reports this feature will receive. */
+/** Ask the ACTIVE service worker which build it is serving (the same GET_VERSION message the
+ *  version pill uses). "Which build is this phone running" is the first question of half the bug
+ *  reports this feature will get. */
 function serviceWorkerVersion() {
   return new Promise((resolve) => {
     try {
@@ -150,8 +146,8 @@ function serviceWorkerVersion() {
   });
 }
 
-/** The GPU string, which is what actually explains a "the 3D games are choppy on my phone" report
- *  (Ball Run, Pool and Hill Climb all render live). The context is released immediately. */
+/** The GPU string - what actually explains "the 3D games are choppy on my phone" (Ball Run, Pool
+ *  and Hill Climb all render live). The context is released immediately. */
 function gpuInfo() {
   return safe(() => {
     const c = document.createElement('canvas');
@@ -170,8 +166,8 @@ function gpuInfo() {
   }, { supported: false });
 }
 
-/** Everything about the device, browser, install state, screen, connection, storage and service
- *  worker that a bug report could plausibly need. Never throws. */
+/** Device, browser, install state, screen, connection, storage and service worker: everything a
+ *  bug report could plausibly need. Never throws. */
 export async function gatherEnvironment() {
   const nav = typeof navigator !== 'undefined' ? navigator : {};
   const ua = safe(() => nav.userAgent, '') || '';
@@ -310,9 +306,9 @@ function loadImage(file) {
 }
 
 /**
- * Downscale + re-encode a picked image so a 4 MB phone screenshot becomes something a bug report
- * can actually carry, dropping quality in steps until it fits MAX_SHOT_BYTES rather than refusing
- * the file. Returns { dataUrl, width, height, bytes, name, type, originalBytes }.
+ * Downscale + re-encode a picked image so a 4 MB phone screenshot becomes something a report can
+ * carry, stepping quality down until it fits MAX_SHOT_BYTES rather than refusing the file.
+ * Returns { dataUrl, width, height, bytes, name, type, originalBytes }.
  */
 export async function prepareScreenshot(file) {
   const img = await loadImage(file);
@@ -322,8 +318,8 @@ export async function prepareScreenshot(file) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  // A screenshot of a dark-mode screen re-encoded onto a transparent canvas turns black-on-black
-  // in some viewers; painting the sheet white first keeps every shot readable.
+  // A dark-mode screenshot re-encoded onto a transparent canvas renders black-on-black in some
+  // viewers; painting the sheet white first keeps every shot readable.
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
@@ -349,9 +345,9 @@ export async function buildBugReport({ description, gameId, gameTitle, screensho
   const shots = Array.isArray(screenshots) ? screenshots.slice(0, MAX_SHOTS) : [];
   const [environment, deviceReport] = await Promise.all([
     gatherEnvironment(),
-    // The existing Device Details payload, verbatim: identity, every localStorage key this app has
-    // written, sync health, and the two Firebase conflict reads. Guarded - a failure here (offline,
-    // say) must not stop the report, so the reason is recorded in its place.
+    // The Device Details payload, verbatim: identity, every localStorage key this app has written,
+    // sync health, the two Firebase conflict reads. Guarded - a failure here (offline, say) must
+    // not stop the report, so the reason is recorded in its place.
     safeAsync(() => gatherDeviceReport(), null),
   ]);
   return {
@@ -381,16 +377,13 @@ export async function buildBugReport({ description, gameId, gameTitle, screensho
 }
 
 /**
- * Send it. The record goes to `bugReports/<pushId>`; the screenshots go to
- * `bugReportShots/<pushId>` - a SEPARATE node on purpose, so the admin inbox (and
- * read-bug-reports.mjs) can list every report without pulling megabytes of base64 it is not
- * showing yet.
+ * Send it. The record goes to `bugReports/<pushId>`, the screenshots to `bugReportShots/<pushId>` -
+ * a separate node so the inbox (and read-bug-reports.mjs) can list everything without pulling
+ * megabytes of base64 it is not showing yet.
  *
- * Verified by a fresh re-read before it reports success, the same habit as stats-net.js: a resolved
- * promise is not proof the data landed, and a bug report that silently evaporates is the one bug
- * nobody can report.
- *
- * Returns { ok:true, id } or { ok:false, reason, retryable }.
+ * Verified by a fresh re-read before claiming success, the same habit as stats-net.js: a resolved
+ * promise is not proof the data landed, and a report that silently evaporates is the one bug
+ * nobody can report. Returns { ok:true, id } or { ok:false, reason, retryable }.
  */
 export async function submitBugReport(report) {
   const shots = (report && report._shots) || [];
@@ -434,9 +427,9 @@ export async function submitBugReport(report) {
 }
 
 // --- offline outbox -------------------------------------------------------------------------------
-// A bug is most likely to be reported on the phone that was just having trouble, which is exactly
-// the phone most likely to be offline. So a failed send is KEPT and retried on the next hub load or
-// reconnect (js/hub.js), rather than being lost with an apology.
+// A bug is usually reported from the phone that was just having trouble, which is the phone most
+// likely to be offline. So a failed send is KEPT and retried on the next hub load or reconnect
+// (js/hub.js), rather than lost with an apology.
 
 function readPending() {
   try {
@@ -454,8 +447,8 @@ export function pendingCount() { return readPending().length; }
 
 /**
  * Keep a report that could not be sent. Screenshots are big and localStorage is small, so if the
- * full report will not fit, the TEXT is saved without them and `shotsDropped` is set - the UI says
- * so out loud rather than quietly sending a report whose pictures vanished.
+ * whole thing will not fit, the TEXT is saved without them and `shotsDropped` is set - the UI says
+ * so out loud rather than quietly dropping the pictures.
  * Returns { queued:true, shotsDropped } or { queued:false, reason }.
  */
 export function queuePendingReport(report) {

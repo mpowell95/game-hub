@@ -1,31 +1,29 @@
-// js/announce.js — one-time announcements on the launcher ("here's how to report a bug").
+// js/announce.js - one-time announcements on the launcher ("here's how to report a bug").
 //
-// The LOGIC half only: which announcement (if any) this device still owes, and the seen-list that
-// makes it one-time. js/announce-ui.js draws it. Split for the same reason js/new-badge.js is split
-// from js/hub.js — the decision is pure, headless-testable maths over a literal, and the drawing is
-// not (test-bug-report.mjs covers this file).
+// The LOGIC half: which announcement (if any) this device still owes, and the seen-list that makes
+// it one-time. js/announce-ui.js draws it. Split for the same reason js/new-badge.js is - the
+// decision is pure, headless-testable maths over a literal (test-bug-report.mjs covers it), the
+// drawing is not.
 //
-// THE LAW (root CLAUDE.md): the one key here, `gamehub.announce.v1`, holds a list of announcement
-// ids this device has dismissed. That is a PREFERENCE, not history — rule 2's carve-out, the same
-// class as launcher favorites, theme and language. Nothing a player earned is stored here, and the
-// worst possible failure is seeing a notice twice. The list is append-only anyway, and an id it
-// does not recognise is left alone rather than pruned (rule 5's habit: an unknown key might belong
-// to a build this device is about to update to).
+// THE LAW (root CLAUDE.md): `gamehub.announce.v1` holds the ids this device has dismissed. A
+// PREFERENCE, not history - rule 2's carve-out, same class as favorites, theme and language; the
+// worst possible failure is seeing a notice twice. The list is append-only, and an id it does not
+// recognise is left alone rather than pruned (rule 5's habit: an unknown id may belong to a build
+// this device is about to update to).
 //
-// ADDING AN ANNOUNCEMENT: append an entry below with a NEW id, a `from` date, and an `until` date.
-// Do not re-use or renumber an existing id — devices that dismissed it would be shown it again,
-// and devices that never saw it would never see the new one. `until` is what makes an announcement
-// retire itself with no follow-up commit (same self-cleaning idea as the New pill): after it
-// passes, a phone that has been in a drawer for two months opens to today's app, not to a stack of
-// old news.
+// ADDING ONE: append an entry with a NEW id, a `from` and an `until`. Never re-use or renumber an
+// existing id - devices that dismissed it would see it again, and devices that never saw it would
+// never get the new one. `until` is what retires an announcement with no follow-up commit (the New
+// pill's self-cleaning idea): a phone left in a drawer for two months opens to today's app, not to
+// a stack of old news.
 
 import { parseReleaseDate } from './new-badge.js';
 
 const KEY = 'gamehub.announce.v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The announcements, newest last. `action: 'bug-report'` is understood by js/announce-ui.js and
- *  opens the report form directly from the popup's own button. */
+/** Newest last. `action: 'bug-report'` is understood by js/announce-ui.js and opens the report
+ *  form straight from the popup's own button. */
 export const ANNOUNCEMENTS = [
   {
     id: 'bug-report-2026-08-11',
@@ -35,12 +33,12 @@ export const ANNOUNCEMENTS = [
     title: { en: 'Found a bug? Tell me.', es: '¿Has visto un fallo? Cuéntamelo.' },
     body: {
       en: [
-        'There is a new Report a bug button at the bottom of the games list, and on your profile page.',
-        'Say what went wrong, add a screenshot if you have one, and send it. Your phone and app details go with it automatically, so I can see exactly what happened without asking you twenty questions.',
+        'New Report a bug button, at the bottom of the games list and on your profile page.',
+        'Say what went wrong, add a screenshot, send. Your phone and app details go with it, so I can see what happened without asking you twenty questions.',
       ],
       es: [
-        'Hay un nuevo botón Reportar un fallo al final de la lista de juegos, y en tu página de perfil.',
-        'Cuenta qué ha pasado, añade una captura si tienes una, y envíalo. Los datos de tu móvil y de la app van incluidos automáticamente, así puedo ver qué ha pasado sin hacerte veinte preguntas.',
+        'Nuevo botón Reportar un fallo, al final de la lista de juegos y en tu página de perfil.',
+        'Cuenta qué ha pasado, añade una captura y envía. Los datos de tu móvil y de la app van incluidos, así veo qué ha pasado sin hacerte veinte preguntas.',
       ],
     },
     cta: { en: 'Try it now', es: 'Pruébalo ahora' },
@@ -68,21 +66,20 @@ export function markSeen(id) {
   return next;
 }
 
-/** Is this entry inside its live window right now? A missing/invalid `from` means "live already";
- *  a missing/invalid `until` means "no expiry" — both safe defaults, because the failure mode of a
- *  bad date should be an announcement that shows, not one that silently never does. */
+/** Inside its live window right now? A missing/invalid `from` means "live already", a bad `until`
+ *  means "no expiry" - both fail safe, because a bad date should produce an announcement that
+ *  shows, not one that silently never does. */
 export function isLive(a, now = Date.now()) {
   const from = parseReleaseDate(a && a.from);
   const until = parseReleaseDate(a && a.until);
   if (from !== null && now < from) return false;
-  // `until` is inclusive of that whole day, so an announcement set to end on the 15th is still
-  // shown all day on the 15th rather than vanishing at midnight UTC.
+  // `until` covers that whole day, so one ending on the 15th still shows all day on the 15th.
   if (until !== null && now > until + DAY_MS) return false;
   return true;
 }
 
-/** The one announcement this device should be shown now, or null. Oldest first, so a device that
- *  missed two only ever sees one per visit and in the order they were written. */
+/** The one announcement to show now, or null. Oldest first, so a device that missed two sees one
+ *  per visit, in the order they were written. */
 export function pendingAnnouncement(now = Date.now(), seen = loadSeen(), list = ANNOUNCEMENTS) {
   for (const a of list) {
     if (!a || !a.id) continue;

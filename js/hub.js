@@ -24,9 +24,8 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 
-// Start recording uncaught errors at load, not in the Hub constructor: the point of the buffer is
-// that a bug report carries what actually threw, and the most interesting throws happen while a
-// game module is loading or mounting. Idempotent and DOM-only; see js/error-log.js.
+// Record uncaught errors from load, not from the Hub constructor: the most interesting throws
+// happen while a game module is loading or mounting. Idempotent; see js/error-log.js.
 installErrorLog();
 /** Resolve a hub card blurb: {en,es} objects (in-scope games) or a plain string
  *  (Monopoly Deal, Parchís — deliberately untranslated, see HANDOFF-I18N-EXTRACTION.md). */
@@ -342,17 +341,17 @@ class Hub {
     // subscribed once here (not per render(), which rebinds the button itself).
     this._themeUnsub = onThemeChange(() => this._paintThemeToggle());
     this._syncStats();
-    // A bug report filed with no signal is kept on the device (js/bug-report.js's outbox) and
-    // retried here, on the same three moments stats sync uses: load, reconnect, and returning to
-    // the launcher. A report that only exists on the phone that was having trouble is no report.
+    // A report filed with no signal is kept on the device (js/bug-report.js's outbox) and retried
+    // here, on the same three moments stats sync uses: load, reconnect, return to the launcher. A
+    // report that only exists on the phone that was having trouble is no report.
     this._drainBugReports();
     this._onOnlineBugs = () => this._drainBugReports();
     window.addEventListener('online', this._onOnlineBugs);
     this._maybeAnnounce();
   }
 
-  /** Send anything sitting in this device's bug-report outbox. Lazy import: the module is only
-   *  worth loading at all on a device that actually has something queued. */
+  /** Send anything in this device's bug-report outbox. Lazy import: only worth loading at all on
+   *  a device that has something queued. */
   async _drainBugReports() {
     try {
       const m = await import('./bug-report.js');
@@ -360,9 +359,8 @@ class Hub {
     } catch (err) { console.warn('[hub] could not retry queued bug reports', err); }
   }
 
-  /** Show the one-time launcher announcement, if this device still owes one. Once per page load,
-   *  never over the name gate (a device with no name is mid-setup and has no launcher yet), and
-   *  never over a mounted game. */
+  /** The one-time launcher announcement, if this device still owes one. Once per page load, never
+   *  over the name gate (a nameless device is mid-setup), never over a mounted game. */
   async _maybeAnnounce() {
     if (this._announced || this.current || !hasName()) return;
     const a = pendingAnnouncement();
@@ -838,9 +836,9 @@ class Hub {
   async launch(id) {
     const game = this.games.find((g) => g.id === id);
     if (!game || game.comingSoon) return;
-    // Remembered for the bug-report form's "Where did it happen?" picker, which is opened from the
-    // launcher AFTER the player has come back out of the game they had trouble with. Set before the
-    // import so a game that fails to LOAD is still the one preselected.
+    // Remembered for the report form's "Where did it happen?" picker, opened from the launcher
+    // AFTER the player comes back out of the game they had trouble with. Set before the import so
+    // a game that fails to LOAD is still the one preselected.
     this._lastGameId = id;
 
     // Tear down any previously mounted game first.

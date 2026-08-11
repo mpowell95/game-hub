@@ -2,19 +2,18 @@
 // the admin inbox that shows Matt what has come in.
 //
 // THE LAW (root CLAUDE.md): this file renders. It writes nothing except through js/bug-report.js,
-// which only ever touches its own two new Firebase nodes and its own new local key. No stats, no
-// profile, no players/ record is reachable from here.
+// which touches only its own two new nodes and its own new local key. No stats, no profile, no
+// players/ record is reachable from here.
 //
-// BUILT ON css/ui.css, deliberately. That layer has been in the repo since 2026-08-01 with no
-// shipped consumer, and the root CLAUDE.md says a brand-new surface is the cheapest possible place
-// to adopt it because there is nothing to migrate. So the overlay, modal, buttons and fields here
-// are `.gh-*` primitives and the local `.bug-*` block only adds what genuinely doesn't exist yet
-// (the screenshot strip, the inbox list). Dark mode, the focus ring and the reduced-motion pass
-// come for free from that file.
+// BUILT ON css/ui.css, deliberately: that layer has had no shipped consumer since 2026-08-01, and
+// the root CLAUDE.md says a brand-new surface is the cheapest place to adopt it because there is
+// nothing to migrate. Overlay, modal, buttons and fields are `.gh-*` primitives; the local `.bug-*`
+// block adds only what does not exist yet (the screenshot strip, the inbox list). Dark mode, the
+// focus ring and reduced motion come free with it.
 //
-// Two entry points, both opened lazily by js/hub.js (and openBugReport also by profile/index.html):
+// Two entry points, both lazily imported by js/hub.js (openBugReport also by profile/index.html):
 //   openBugReport({ gameId, gameTitle }) - the player's form
-//   openBugInbox()                       - Matt's inbox; the hub only renders its button for him
+//   openBugInbox()                       - Matt's inbox; the hub renders its button for him only
 
 import {
   MAX_SHOTS, buildBugReport, submitBugReport, prepareScreenshot, fitsShotBudget,
@@ -26,9 +25,8 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 
-/** Local record of when Matt last opened the inbox, so the hub button can carry an unread count.
- *  A preference, not history (THE LAW rule 2's carve-out) - the reports themselves live in
- *  Firebase and nothing here can affect them. */
+/** When Matt last opened the inbox, so the hub button can carry an unread count. A preference,
+ *  not history (rule 2's carve-out) - the reports live in Firebase and nothing here touches them. */
 const SEEN_KEY = 'gamehub.bugadmin.v1';
 
 const esc = (s) => String(s == null ? '' : s)
@@ -63,7 +61,6 @@ function ensureCss() {
   .bug-shot button { position: absolute; top: 2px; right: 2px; width: 26px; height: 26px; border: 0;
               border-radius: 50%; background: rgba(9, 16, 28, .72); color: #fff; font-size: 15px;
               line-height: 1; cursor: pointer; }
-  .bug-note { margin: var(--gh-sp-2) 0 0; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.5; }
   .bug-disc { margin-top: var(--gh-sp-4); font-size: var(--gh-fs-sm); color: var(--gh-muted); }
   .bug-disc > summary { cursor: pointer; font-weight: 700; }
   .bug-disc dl { margin: var(--gh-sp-2) 0 0; display: grid; grid-template-columns: auto 1fr;
@@ -113,9 +110,9 @@ function closeOverlay() {
   if (_host) { _host.remove(); _host = null; }
 }
 
-/** Mount an overlay. `guardClose` decides whether a scrim tap / Escape may close it - the report
- *  form says no once something has been typed, so a mis-tap on the scrim can't throw away what
- *  someone just wrote about a bug (the X and Cancel always work). */
+/** Mount an overlay. `guardClose` decides whether a scrim tap or Escape may close it: the form
+ *  says no once something is typed, so a mis-tap cannot throw away what someone just wrote (the X
+ *  and Cancel always work). */
 function mountOverlay({ wide, ariaLabel, guardClose }) {
   ensureCss();
   closeOverlay();
@@ -137,18 +134,17 @@ function mountOverlay({ wide, ariaLabel, guardClose }) {
 
 /**
  * Open the report form.
- * @param {{gameId?:string, gameTitle?:string}} opts - `gameId` is a HUB id ('connect-four'), used
- *        to preselect the game the player was last in. Everything is optional; the form works
- *        opened cold from the profile page.
+ * @param {{gameId?:string, gameTitle?:string}} opts - `gameId` is a HUB id ('connect-four'), which
+ *        preselects the game the player was last in. All optional: the form works opened cold from
+ *        the profile page.
  */
 export async function openBugReport(opts = {}) {
   const shots = [];
   let sending = false;
 
-  // The game list comes from js/game-stats-ui.js's own TABS + the shared game_title_* keys (see
-  // gameChoices there), so this picker can never drift from the names used everywhere else, and a
-  // new game appears in it automatically. Loaded lazily: an offline/failed import must still leave
-  // a usable form, so the picker just falls back to "somewhere else".
+  // From js/game-stats-ui.js's TABS + the shared game_title_* keys (gameChoices there), so this
+  // picker cannot drift from the names used everywhere else and a new game appears automatically.
+  // A failed import still leaves a usable form - the picker falls back to "somewhere else".
   let choices = [];
   try { choices = (await import('./game-stats-ui.js')).gameChoices(); } catch { choices = []; }
 
@@ -183,7 +179,6 @@ export async function openBugReport(opts = {}) {
     </div>
     <details class="bug-disc">
       <summary>${esc(t('bug_details_summary'))}</summary>
-      <p class="bug-note">${esc(t('bug_details_note'))}</p>
       <dl data-role="env"></dl>
     </details>
     <p class="bug-msg" data-role="msg" role="status" aria-live="polite">${
@@ -206,8 +201,8 @@ export async function openBugReport(opts = {}) {
     msgEl.classList.toggle('is-err', !!isErr);
   };
 
-  // The disclosure is filled lazily on first open: gathering the environment is cheap but not free,
-  // and most people will never open it.
+  // Filled on first open: gathering the environment is cheap but not free, and most people will
+  // never open it.
   const disc = card.querySelector('.bug-disc');
   disc.addEventListener('toggle', async () => {
     const dl = q('[data-role="env"]');
@@ -301,8 +296,8 @@ export async function openBugReport(opts = {}) {
   setTimeout(() => { try { whatEl.focus(); } catch { /* ignore */ } }, 60);
 }
 
-/** Replace the form with a single, plain outcome. Always dismissable (the accessibility convention
- *  in the root CLAUDE.md: any popup that concludes something gets a way out that isn't "try again"). */
+/** Replace the form with one plain outcome. Always dismissable, per the root CLAUDE.md's rule that
+ *  a popup which concludes something gets a way out that is not "try again". */
 function showResult(card, icon, title, body) {
   card.innerHTML = `
     <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
@@ -331,8 +326,8 @@ function writeSeenAt(ms) {
   catch { /* a badge that forgets it was read is not worth an error */ }
 }
 
-/** How many reports have arrived since this device last opened the inbox. 0 offline (the hub's
- *  button just shows no count rather than claiming there is nothing). Admin use only. */
+/** Reports arrived since this device last opened the inbox. 0 offline, so the hub's button shows
+ *  no count rather than claiming there is nothing. Admin only. */
 export async function adminUnreadCount() {
   return countUnread(await readBugReports(), readSeenAt());
 }
@@ -346,7 +341,7 @@ const whenText = (ms, short) => {
   } catch { return new Date(ms).toISOString(); }
 };
 
-/** Matt's inbox: every report, newest first, with screenshots and the full payload on demand. */
+/** Every report, newest first; screenshots and the full payload load on demand. */
 export async function openBugInbox() {
   const card = mountOverlay({ wide: true, ariaLabel: t('bug_inbox_dialog_aria') });
   const shell = (inner) => {

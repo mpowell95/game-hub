@@ -257,10 +257,9 @@
       </details>
 
       <div class="pf-foot">
-        <!-- Report a bug: the same form the hub's launcher opens (js/bug-report-ui.js). It sits
-             here too because this page is where someone already comes when something looks wrong,
-             and it is right above Device details on purpose - a bug report SENDS that whole
-             diagnostic with it, so nobody has to know to press both. -->
+        <!-- The same form the launcher opens (js/bug-report-ui.js). Here too because this is where
+             someone already comes when something looks wrong, and directly above Device details on
+             purpose: a report SENDS that whole diagnostic, so nobody need press both. -->
         <button type="button" class="pf-dev-btn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
         <button type="button" class="pf-dev-btn" id="pf-devdetails-btn" data-i18n="pf_devdetails_btn">Device details</button>
         <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
@@ -580,8 +579,8 @@
     });
 
     // -- Report a bug --------------------------------------------------------------
-    // Lazily imported so the profile page pays nothing for it until it is pressed. Opened with no
-    // game preselected (unlike the hub's button, this page has no "last game" to offer).
+    // Lazily imported, so this page pays nothing for it until it is pressed. No game preselected:
+    // unlike the hub's button, this page has no "last game" to offer.
     $('#pf-bug-btn').addEventListener('click', async () => {
       try {
         const m = await import('../js/bug-report-ui.js');

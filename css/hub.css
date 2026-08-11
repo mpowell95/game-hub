@@ -193,9 +193,9 @@ body {
   margin: 0 auto;
 }
 
-/* The footer row below the games, behind a divider so it reads as separate from the tiles: the
-   Report a bug button (everyone, 2026-08-11), plus the bug inbox and the Challenge keepsake for
-   the profiles that get them. Wraps, because on a narrow phone three pills do not fit one line. */
+/* The footer row below the games, behind a divider so it reads as separate from the tiles: Report
+   a bug (everyone, 2026-08-11), plus the bug inbox and the Challenge keepsake for the profiles
+   that get them. Wraps, because three pills do not fit one line on a narrow phone. */
 .hub-extra {
   margin: 26px auto 0;
   padding-top: 24px;
@@ -205,12 +205,12 @@ body {
   gap: 10px;
   justify-content: center;
 }
-/* Report a bug is deliberately quiet: it must be findable when something goes wrong, and invisible
-   the rest of the time. No accent, no tint - it reads as the same family as My Stats. */
+/* Deliberately quiet: findable when something goes wrong, invisible the rest of the time. No
+   accent, no tint - the same family as My Stats. */
 .hub-bug-btn { color: var(--hub-muted); }
 .hub-bug-btn:hover { color: var(--hub-ink); }
-/* The admin inbox wears the palette's vermilion only while something is unread (shape/word carries
-   the meaning too: the label itself says how many, so the colour is emphasis, never the signal). */
+/* The inbox wears vermilion only while something is unread, and the label itself says how many,
+   so the colour is emphasis and never the signal. */
 .hub-bug-inbox.has-new { border-color: rgba(224, 83, 47, 0.55); color: #c2402f; font-weight: 800; }
 /* A soft gold tint so it still reads as a little special, not just another pill. */
 .hub-keepsake-btn {

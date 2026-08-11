@@ -1,20 +1,19 @@
 // error-log.js - a small ring buffer of the last uncaught JS errors on this device, so a bug
 // report can carry what actually broke instead of only what the player was able to describe.
 //
-// THE LAW applies (root CLAUDE.md): this file never reads, writes or migrates player history. Its
-// one storage key is NEW (`gamehub.errorlog.v1`), holds nothing a player earned, and is capped and
-// overwritten by design - it is diagnostic breadcrumbs, not a record of anything. Nothing else in
-// the app reads it except js/bug-report.js.
+// THE LAW (root CLAUDE.md): never touches player history. Its one key is NEW
+// (`gamehub.errorlog.v1`), holds nothing a player earned, and is capped and overwritten by design -
+// breadcrumbs, not a record. Only js/bug-report.js reads it.
 //
-// Why it persists at all rather than living in memory: the errors worth seeing are usually the ones
-// that broke a screen badly enough that the player reloaded the app before reporting it, which
-// would take an in-memory buffer with it. So each entry is written through to localStorage as it
-// happens (best effort - a full or disabled store is never allowed to become a second bug).
+// Why it persists rather than living in memory: the errors worth seeing are usually the ones that
+// broke a screen badly enough that the player reloaded before reporting, which would take an
+// in-memory buffer with it. So each entry writes through to localStorage as it happens (best
+// effort - a full or disabled store must never become a second bug).
 //
-// Installed once by js/hub.js on load, which covers the hub AND every in-hub module game (they run
-// on the hub's page). A standalone `<game>/index.html` opened by direct URL is NOT covered; that is
-// a known gap, not an oversight - the bug-report button lives on the hub and the profile page, so a
-// report is always filed from a page where this has been running.
+// Installed once by js/hub.js on load, covering the hub AND every in-hub module game (same page). A
+// standalone `<game>/index.html` opened by direct URL is not covered - a known gap, not an
+// oversight: the report buttons live on the hub and the profile page, so a report is always filed
+// from a page where this has been running.
 
 const KEY = 'gamehub.errorlog.v1';
 const MAX = 20;              // enough to see a cascade, small enough to never crowd the store
@@ -38,8 +37,8 @@ function write(entries) {
   try {
     localStorage.setItem(KEY, JSON.stringify({ version: 1, entries }));
   } catch (err) {
-    // Deliberately not silent (THE LAW rule 6's habit), but also never escalated: a diagnostic
-    // buffer that cannot be stored must not take a game down with it.
+    // Not silent (rule 6's habit), but never escalated: a diagnostic buffer that cannot be stored
+    // must not take a game down with it.
     try { console.warn('[error-log] could not persist error breadcrumb', err); } catch { /* ignore */ }
   }
 }
@@ -73,8 +72,8 @@ export function installErrorLog() {
   if (installed || typeof window === 'undefined') return;
   installed = true;
   window.addEventListener('error', (e) => {
-    // A failed <img>/<script>/<link> load also fires 'error' but has no `.error`; those are worth
-    // keeping too (a missing precached asset is exactly the kind of bug this feature is for).
+    // A failed <img>/<script>/<link> load fires 'error' with no `.error`. Worth keeping: a missing
+    // precached asset is exactly the kind of bug this feature is for.
     if (e && e.target && e.target !== window && e.target.tagName) {
       noteError('resource', { msg: `${e.target.tagName} failed to load`, src: e.target.src || e.target.href || '' });
       return;

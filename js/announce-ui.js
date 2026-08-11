@@ -1,12 +1,12 @@
 // announce-ui.js - draws the one-time launcher announcement js/announce.js decided to show.
 //
-// Built on css/ui.css's `.gh-overlay` / `.gh-modal` primitives, same as js/bug-report-ui.js, so it
-// inherits dark mode, the focus ring, scroll containment and the reduced-motion pass rather than
-// re-inventing a fifth modal in this repo.
+// Built on css/ui.css's `.gh-overlay`/`.gh-modal`, like js/bug-report-ui.js, so it inherits dark
+// mode, the focus ring, scroll containment and the reduced-motion pass instead of being this
+// repo's fifth hand-rolled modal.
 //
-// Dismissal is recorded (js/announce.js's markSeen) when the popup CLOSES, by any route - the
-// Got it button, the X, Escape, or the call-to-action. A player who taps "Try it now" has plainly
-// seen it, and being shown the same notice again after acting on it is its own small bug.
+// Dismissal is recorded (markSeen) when the popup CLOSES by ANY route - Got it, the X, Escape, or
+// the call-to-action. Someone who taps "Try it now" has plainly seen it, and showing them the same
+// notice again after they acted on it is its own small bug.
 
 import { markSeen, textFor } from './announce.js';
 import { makeT, getLang } from './i18n.js';
@@ -40,9 +40,8 @@ function ensureCss() {
 }
 
 /**
- * Show one announcement. `onAction(action)` is called when the player taps its call-to-action
- * (the hub passes a handler that opens the bug-report form for `action: 'bug-report'`).
- * Returns a promise that resolves once it is closed, so a caller can chain safely.
+ * Show one announcement. `onAction(action)` fires when the player taps its call-to-action (the hub
+ * passes a handler that opens the report form for `action: 'bug-report'`). Resolves once closed.
  */
 export function showAnnouncement(a, { onAction } = {}) {
   return new Promise((resolve) => {
