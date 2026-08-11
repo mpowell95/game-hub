@@ -462,6 +462,41 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
 }
 
+// ---- Pinball's pb sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Lifetime counters (games, points, jackpots, multiballs, missions, ramps) ADD; BOTH bests take
+// Math.max. Summing a best score would be the worst kind of wrong here: it invents a game nobody
+// played and it can never be undone, since the shared store only ever grows. A device that synced
+// before Pinball existed has no key at all and must combine cleanly.
+{
+  const all = {
+    d1: rec({ playerId: 'PB999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 4, won: 4, lost: 0 },
+        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
+        pb: { games: 4, bestScore: 1250000, points: 3000000, bestBall: 610000, jackpots: 9, multiballs: 2, missions: 5, ramps: 41 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'pb999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 2, won: 2, lost: 0 },
+        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+        pb: { games: 2, bestScore: 880000, points: 1400000, bestBall: 745000, jackpots: 4, multiballs: 1, missions: 2, ramps: 18 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'PB999', name: 'Wizard' }, { connect4: comp(1, 1, 0) }, 300),
+  };
+  const pb = aggregatePlayers(all)[0].games.pinball.pb;
+  eq('pinball: games and points add across devices', [pb.games, pb.points], [6, 4400000]);
+  eq('pinball: best SCORE takes the max, never a sum', pb.bestScore, 1250000);
+  eq('pinball: best BALL takes the max independently of best score', pb.bestBall, 745000);
+  eq('pinball: lifetime counters add', [pb.jackpots, pb.multiballs, pb.missions, pb.ramps], [13, 3, 7, 59]);
+  eq('pinball: total/byDiff still aggregate alongside pb',
+    aggregatePlayers(all)[0].games.pinball.total.played, 6);
+  ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
+    SOLO.has('pinball'));
+}
+
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/

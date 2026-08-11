@@ -337,6 +337,61 @@ const PLAY = {
     },
   },
 
+  pinball: {
+    what: 'plunge a ball and flip it around a live table',
+    async run(page, cdp, tap) {
+      const play = await page.$('[data-role="play"]');
+      if (!play) return { ok: false, why: 'no Play button on the setup screen' };
+      await tap(play);
+      await page.waitForSelector('.pb-canvas', { timeout: 8000 });
+      await page.waitForTimeout(500);
+
+      // Pull the plunger. A TAP will not do: the plunger charges while it is held, and a short
+      // pull deliberately dribbles back down the shooter lane, so the probe has to hold it the way
+      // a player does or it is testing the weak-plunge path by accident.
+      const lb = await (await page.$('[data-role="launch"]')).boundingBox();
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lb.x + lb.width / 2, y: lb.y + lb.height / 2, id: 1 }] });
+      await page.waitForTimeout(1200);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(900);
+
+      // Every moving thing on this table is drawn into one canvas, so there is no DOM element for
+      // the MOTION harness to follow. Sample the canvas itself instead: three crops of the lower
+      // playfield taken a fifth of a second apart. If they are identical, nothing is moving, which
+      // is the canvas-shaped version of exactly what MOTION exists to catch.
+      const shot = () => page.evaluate(() => {
+        const c = document.querySelector('.pb-canvas');
+        const t = document.createElement('canvas');
+        t.width = 64; t.height = 64;
+        t.getContext('2d').drawImage(c, 0, c.height * 0.45, c.width, c.height * 0.45, 0, 0, 64, 64);
+        return t.toDataURL();
+      });
+      const frames = [];
+      for (let i = 0; i < 3; i++) { frames.push(await shot()); await page.waitForTimeout(200); }
+      if (new Set(frames).size < 2) return { ok: false, why: 'the playfield never changed between frames: nothing is moving' };
+
+      // Now play it. Alternating flips on the two halves of the table for a few seconds is what a
+      // person does, and the only way the score can move is real contacts with real scoring parts.
+      const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+      const lo = { x: stage.x + stage.width * 0.25, y: stage.y + stage.height * 0.8 };
+      const ro = { x: stage.x + stage.width * 0.75, y: stage.y + stage.height * 0.8 };
+      const readScore = () => page.evaluate(() =>
+        Number((document.querySelector('[data-role="score"]').textContent || '0').replace(/[^0-9]/g, '')));
+      for (let i = 0; i < 60; i++) {
+        const at = i % 2 ? ro : lo;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y, id: 1 }] });
+        await page.waitForTimeout(60);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await page.waitForTimeout(90);
+        if (await readScore() > 0) break;
+      }
+      const score = await readScore();
+      if (!score) return { ok: false, why: 'the ball was launched and flipped for 9s and the score never moved: nothing on the table is scoring' };
+      const ball = await page.evaluate(() => (document.querySelector('[data-role="ball"]').textContent || '').replace(/\s+/g, ' ').trim());
+      return { ok: true, why: `scored ${score.toLocaleString()} with the playfield animating (${ball})` };
+    },
+  },
+
   battleship: {
     what: 'fire a shot and have it resolve on the enemy board',
     async run(page, cdp, tap) {

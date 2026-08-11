@@ -126,6 +126,24 @@
 //                                                   // hill-climb's own save (gamehub.hillclimb.v1), so
 //                                                   // nothing that can go down is ever written into the
 //                                                   // shared store; see recordHillClimb
+//       pinball: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard -- Pinball's three
+//                                                   // TABLE settings (Casual/Standard/Tournament) are
+//                                                   // its difficulty axis, mapped 1:1, so there is no
+//                                                   // second vocabulary to reconcile
+//         pb: { games, bestScore, points, bestBall,
+//               jackpots, multiballs, missions, ramps } },
+//                                                   // a solo score-attack game: no opponent and no loss
+//                                                   // state (a game ends when the last ball drains), so
+//                                                   // every finished game counts as played+won, same as
+//                                                   // ballrun/snake/nutsbolts/hillclimb. `bestScore` and
+//                                                   // `bestBall` are Math.max ONLY; `points` is the
+//                                                   // lifetime score total and `jackpots`/`multiballs`/
+//                                                   // `missions`/`ramps` are lifetime counters, all
+//                                                   // purely additive. There is deliberately no local
+//                                                   // high-score TABLE anywhere: this is the one and
+//                                                   // only record of a pinball score, so it cannot
+//                                                   // disagree with itself; see recordPinball
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -133,7 +151,7 @@
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'pinball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -994,6 +1012,54 @@ export function recordBattleship(difficulty, won, extras) {
   return st;
 }
 
+/** Pinball: a solo score-attack game. Same shape family as Ball Run's `br`, Snake's `sn` and Hill
+ *  Climb's `hc` - a game has no opponent and no loss axis (it ends when the last ball drains), so
+ *  `pb.games` is the true play count and the score bests are the scoreboard.
+ *    bestScore / bestBall   highest game and highest single ball. Math.max ONLY (THE LAW rule 2).
+ *    points                 lifetime score total, a pure counter, additive forever.
+ *    jackpots / multiballs / missions / ramps
+ *                           lifetime counters of the things the game is actually about, so the
+ *                           Stats screen can say something more interesting than one number.
+ *
+ *  NOTE: this is the ONLY place a pinball score is ever stored. pinball/js/store.js deliberately
+ *  keeps preferences and nothing else - no local top-ten table - precisely so there is never a
+ *  second, unsynced, silently-truncating home for a score somebody earned. */
+function ensurePb(g) {
+  if (!g.pb || typeof g.pb !== 'object') {
+    g.pb = { games: 0, bestScore: 0, points: 0, bestBall: 0, jackpots: 0, multiballs: 0, missions: 0, ramps: 0 };
+  }
+  for (const k of ['games', 'bestScore', 'points', 'bestBall', 'jackpots', 'multiballs', 'missions', 'ramps']) {
+    if (!Number.isFinite(g.pb[k])) g.pb[k] = 0;
+  }
+}
+
+/** Pinball: record one finished game. `score` is the final score, `difficulty` one of
+ *  easy|medium|hard (the three table settings, which ARE the difficulty axis), `extras` the
+ *  counters from the game. A game has no opponent and no loss state, so it counts as played+won
+ *  and `lost` is never touched (mirrors Ball Run / Snake / Hill Climb / Nuts & Bolts).
+ *  Additive: the two bests only ever go up, every counter only ever adds. */
+export function recordPinball(score, difficulty, extras) {
+  const st = loadStats();
+  const g = st.games.pinball;
+  const d = normDiff(difficulty);
+  ensurePb(g);
+  const pts = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+  const x = extras || {};
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  bumpTotals(g, d, true);
+  g.pb.games += 1;
+  g.pb.points += pts;
+  g.pb.bestScore = Math.max(g.pb.bestScore | 0, pts);
+  g.pb.bestBall = Math.max(g.pb.bestBall | 0, n(x.bestBall));
+  g.pb.jackpots += n(x.jackpots);
+  g.pb.multiballs += n(x.multiballs);
+  g.pb.missions += n(x.missions);
+  g.pb.ramps += n(x.ramps);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
  *
  *    gamehub.stats -> h2h: { [gameId]: { [opponentDeviceId]: { name, w, l } } }
@@ -1032,7 +1098,7 @@ export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordBattleship, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordPinball, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };

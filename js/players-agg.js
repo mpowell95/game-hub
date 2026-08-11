@@ -11,7 +11,7 @@
 
 import { GAMES } from './game-stats.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -285,6 +285,22 @@ export function aggregatePlayers(all) {
         dst.hc.bestCoins = Math.max(dst.hc.bestCoins | 0, src.hc.bestCoins | 0);
         const sbs = src.hc.bestDistanceByStage || {};
         for (const k of Object.keys(sbs)) dst.hc.bestDistanceByStage[k] = Math.max(dst.hc.bestDistanceByStage[k] | 0, sbs[k] | 0);
+      } else if (g === 'pinball' && src.pb) {
+        // Root CLAUDE.md "Adding a game" item 7's third edit, present from Pinball's first day
+        // rather than after a bug report: without this branch the game's own Stats screen reads
+        // zeroes the moment a person's second device syncs, even though total/byDiff stay right
+        // and every device's local store is intact. Lifetime counters (games, points, jackpots,
+        // multiballs, missions, ramps) ADD; both bests take Math.max, never a sum - a best score
+        // is one game's result, so adding two devices' bests would invent a game nobody played.
+        if (!dst.pb) dst.pb = { games: 0, bestScore: 0, points: 0, bestBall: 0, jackpots: 0, multiballs: 0, missions: 0, ramps: 0 };
+        dst.pb.games += src.pb.games | 0;
+        dst.pb.points += src.pb.points | 0;
+        dst.pb.jackpots += src.pb.jackpots | 0;
+        dst.pb.multiballs += src.pb.multiballs | 0;
+        dst.pb.missions += src.pb.missions | 0;
+        dst.pb.ramps += src.pb.ramps | 0;
+        dst.pb.bestScore = Math.max(dst.pb.bestScore | 0, src.pb.bestScore | 0);
+        dst.pb.bestBall = Math.max(dst.pb.bestBall | 0, src.pb.bestBall | 0);
       } else if (g === 'battleship' && src.bs) {
         // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
         // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first

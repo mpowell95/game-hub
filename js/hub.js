@@ -300,6 +300,25 @@ const GAMES = [
     released: '2026-08-10',
   },
   {
+    // ADMIN ONLY for now (Matt's ask): `devOnly` keeps the card off the launcher for everyone but
+    // Matt and the tester, exactly like snake-v2 above. The matching My Stats tab is gated the same
+    // way (js/game-stats-ui.js's TABS), so an unreleased game does not leave a stray empty tab
+    // sitting in everyone else's stats. Dropping `devOnly` is the whole of "release it".
+    id: 'pinball',
+    released: '2026-08-11',
+    title: 'Pinball',
+    blurb: { en: 'Real flipper physics on a neon space table. Ramps, orbits, timed missions and multiball.',
+      es: 'Física real de flippers en una mesa espacial de neón. Rampas, órbitas, misiones con tiempo y multibola.' },
+    module: '../pinball/js/ui.js',
+    // Its own full-bleed chrome (a fixed edge-to-edge canvas, a dot-matrix display and the flipper
+    // touch zones), so the hub's header collapses to the floating back button - same call as Ball
+    // Run, Pool and Hill Climb.
+    immersive: true,
+    accent: '#2a1163',
+    art: GAME_ART["pinball"],
+    devOnly: true,
+  },
+  {
     // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side comparison with
     // the real Snake, which is untouched and still in the list above. Still gated devOnly (Pool no
     // longer is - it shipped 2026-08-10).
