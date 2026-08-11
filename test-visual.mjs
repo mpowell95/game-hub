@@ -340,9 +340,11 @@ const PLAY = {
   skeeball: {
     what: 'flick a ball up the lane and have it land in a ring for real points',
     async run(page, cdp, tap) {
-      // The machine PICKER replaced the setup screen (2026-08-11): tap the first unlocked machine.
-      const start = await page.$('.sk-card:not(.is-locked)');
-      if (!start) return { ok: false, why: 'no unlocked machine on the picker' };
+      // The machine picker is a CAROUSEL (2026-08-11): one slide per machine, and the Play button
+      // lives on the slide. A locked slide's button is disabled, so [data-role="play"] is already
+      // "the first machine you are allowed to start" - no :not(.is-locked) needed.
+      const start = await page.$('[data-role="play"]:not([disabled])');
+      if (!start) return { ok: false, why: 'no playable machine on the picker carousel' };
       await tap(start);
       await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
       await page.waitForTimeout(700);
@@ -350,14 +352,21 @@ const PLAY = {
         const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
         return { left: r.left, top: r.top, w: r.width, h: r.height };
       });
-      // A flick straight up, 27.8% of the canvas height -> ~0.66 power, which is the 40 cup's own
-      // centre. The exact number matters now: since the cups stopped tiling (boards.js, 2026-08-11)
-      // there are real GAPS between them, and 30% - the value this used before - lands squarely in
-      // the gap between the 40 and the 50 for a 10. Asserting a cup (>= 20) rather than "scored
-      // something" is what makes this prove the board is being played and not just touched.
+      // A flick straight up the lane, aimed at the 40 cup's own centre. The fraction is DERIVED,
+      // not typed: idealThrow('40') gives the power and POWER_SPAN converts it to canvas-height,
+      // so a retune of either moves this probe with it instead of silently starting to test the
+      // gap between two cups. It was a hardcoded 0.278 and that is exactly what would have gone
+      // stale. Asserting a cup (>= 20) rather than "scored something" is what makes this prove
+      // the board is being played and not just touched.
+      const aimed = await page.evaluate(async () => {
+        const [{ idealThrow, POWER_SPAN }, { boardById }] = await Promise.all([
+          import('/skeeball/js/game.js'), import('/skeeball/js/boards.js'),
+        ]);
+        return idealThrow('40', boardById('classic')).power * POWER_SPAN;
+      });
       const x = g.left + g.w / 2;
       const y0 = g.top + g.h * 0.80;
-      const dist = g.h * 0.278;
+      const dist = g.h * aimed;
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
       for (let i = 1; i <= 12; i++) {
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });
@@ -549,10 +558,17 @@ async function checkGame(game, mode) {
       // with overflow:hidden absorbs the overflow, so the body stays put while the content is
       // silently clipped - which is exactly how a mode screen with its buttons and half its
       // tagline sliced off the right edge passed this suite. Look for the clipping too.
+      //
+      // Only `hidden` and `clip` count. An `auto`/`scroll` container overflowing is not content
+      // being cut off - it is a scroller doing its job, and the rule this check enforces (root
+      // CLAUDE.md, "Scroll and touch rules") explicitly ALLOWS wide content that "scrolls inside
+      // its own container". Flagging those too made the check fire on the one pattern it is
+      // supposed to bless: Skeeball's scroll-snap machine carousel, where every slide is reachable
+      // by swiping and nothing is hidden. Clipping is unreachable; scrolling is reachable.
       const clipped = [];
       for (const e of document.querySelectorAll('body *')) {
         const c = getComputedStyle(e);
-        if (!/hidden|auto|scroll|clip/.test(c.overflowX)) continue;
+        if (!/hidden|clip/.test(c.overflowX)) continue;
         if (e.scrollWidth > e.clientWidth + 2 && e.clientWidth > 0) {
           clipped.push(`${e.tagName.toLowerCase()}.${(e.className || '').toString().trim().split(/\s+/)[0] || '?'} (${e.scrollWidth} wide in ${e.clientWidth})`);
         }

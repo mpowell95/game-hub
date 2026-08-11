@@ -1,7 +1,8 @@
 // skeeball/js/test.js - headless assertions for the Skeeball engine and its boards.
 // Run: node skeeball/js/test.js  (also in run-all-tests.mjs). No DOM, no canvas.
 
-import { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER } from './game.js';
+import { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER,
+  POWER_SPAN, AIM_SPAN, SHORT_BELOW, OVER_ABOVE } from './game.js';
 import { BOARDS, boardById, nextBoard, multTargetsFor, DEFAULT_BOARD } from './boards.js';
 
 let fail = 0;
@@ -28,8 +29,11 @@ eq('and it is free', BOARDS[0].unlockScore, 0);
 ok('every later board costs something', BOARDS.slice(1).every((b) => b.unlockScore > 0));
 
 console.log('\n-- throw resolution on classic --');
-eq('a feeble flick never reaches the board', resolveThrow(0.1, 0, classic).kind, 'short');
-eq('and scores nothing', resolveThrow(0.1, 0, classic).points, 0);
+eq('a feeble flick never reaches the board', resolveThrow(0.04, 0, classic).kind, 'short');
+eq('and scores nothing', resolveThrow(0.04, 0, classic).points, 0);
+// The dead zone is DELIBERATELY tiny now. 0.1 used to be a total airball; after the 2026-08-11
+// retune it is a real (weak) throw that trickles into the 10, which is what the machine does.
+eq('but a merely weak one still reaches the 10', resolveThrow(0.11, 0, classic).target, '10');
 eq('flat out sails over the back', resolveThrow(1, 0, classic).kind, 'over');
 eq('and scores nothing either', resolveThrow(1, 0, classic).points, 0);
 // The catch-all is excluded on purpose: its centre sits under the cup stack, which is tested
@@ -39,13 +43,16 @@ ok('every ideal throw lands on the target it names',
     const { power, aim } = idealThrow(t.id, classic);
     return resolveThrow(power, aim, classic).target === t.id;
   }));
+// Swept between the ENGINE's own band edges, not literals: these used to read `0.29 + i/300*0.64`,
+// which was the old SHORT_BELOW/OVER_ABOVE pair frozen into the test, so after a retune they would
+// have gone on testing a range the engine no longer uses.
+const band = (n) => Array.from({ length: n }, (_, i) => SHORT_BELOW + ((i + 0.5) / n) * (OVER_ABOVE - SHORT_BELOW));
 ok('the whole usable power range scores SOMETHING straight down the middle - no dead band',
-  Array.from({ length: 300 }, (_, i) => 0.29 + (i / 300) * 0.64)
-    .every((p) => resolveThrow(p, 0, classic).points > 0));
+  band(400).every((p) => resolveThrow(p, 0, classic).points > 0));
 {
   // Power alone walks the stack front to back: 20 -> 30 -> 40 -> 50.
   const seen = [];
-  for (let p = 0.30; p < 0.94; p += 0.01) {
+  for (const p of band(200)) {
     const r = resolveThrow(p, 0, classic);
     if (r.target && r.target !== seen[seen.length - 1]) seen.push(r.target);
   }
@@ -65,8 +72,10 @@ console.log('\n-- the corner cups --');
   // skills and neither one alone gets you a 100.
   eq('straight, at the 50\'s power, is the 50 - never a corner cup',
     resolveThrow(idealThrow('50', classic).power, 0, classic).target, '50');
-  eq('the 100s power with NO aim overshoots the stack into the 10',
-    resolveThrow(L.power, 0, classic).target, '10');
+  // A 100 is purely an AIM shot: it sits level with the 50, so its power alone just gives you the
+  // 50. That is the design - the two skills are separated, and neither one alone pays 100.
+  eq('the 100s power with NO aim is simply the 50',
+    resolveThrow(L.power, 0, classic).target, '50');
 }
 
 console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls are guided in") --');
@@ -80,7 +89,7 @@ console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls 
   // down the middle must FALL OUT of the stack between cups, not slide seamlessly from one to the
   // next. If this goes green-to-red, the catch areas have started overlapping again.
   const seq = [];
-  for (let p = 0.29; p < 0.93; p += 0.005) {
+  for (const p of band(400)) {
     const r = resolveThrow(p, 0, classic);
     const id = r.target || 'none';
     if (id !== seq[seq.length - 1]) seq.push(id);
@@ -89,6 +98,70 @@ console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls 
   ok(`the 10 is entered and left several times while sweeping power (${tens} times)`, tens >= 3);
   ok('every cup is still reachable straight down the middle',
     ['20', '30', '40', '50'].every((id) => seq.includes(id)));
+}
+
+console.log('\n-- [KNOWN-BUG PROBE] a thumb can actually hit these (Matt: "SKEEBALL IS TERRIBLE") --');
+{
+  // THE TEST THAT WAS MISSING. Every previous tuning of this game was judged in board-space
+  // fractions, which say nothing about whether a person can hit anything. Twice in a row that
+  // produced a build nobody could play: first the cups tiled and every throw sank ("the balls are
+  // guided in"), then the fix made each cup a 21px flick window and Matt's own recordings
+  // (reference/skeeball/Skeeball 2.MOV, Skeeball 3.MOV) show six balls for 40 points with "Too
+  // hard!" over and over.
+  //
+  // So: convert the whole model into the pixels a thumb has to travel on a real phone, and assert
+  // on THAT. These four constants are the contract between game.js and ui.js; if either moves,
+  // this block is what notices.
+  const H = 852, W = 393;   // an iPhone 15. POWER_SPAN/AIM_SPAN are the REAL ones, imported.
+  const px = (share) => share * POWER_SPAN * H;
+
+  const share = {};
+  for (let p = 0; p <= 1; p += 0.0005) {
+    const r = resolveThrow(p, 0, classic);
+    const k = r.kind === 'hit' ? r.target : r.kind;
+    share[k] = (share[k] || 0) + 0.0005;
+  }
+  for (const id of ['20', '30', '40', '50']) {
+    const w = px(share[id] || 0);
+    ok(`the ${id} is a flick window a thumb can repeat: ${Math.round(w)}px (need >= 40)`, w >= 40);
+  }
+  ok(`a whiff costs you a ball only on a genuinely feeble flick: ${Math.round(px(share.short || 0))}px (need <= 70)`,
+    px(share.short || 0) <= 70);
+  ok(`"Too hard!" needs a real heave, not a normal throw: ${Math.round(px(share.over || 0))}px (need <= 40)`,
+    px(share.over || 0) <= 40);
+  const dead = px((share.short || 0) + (share.over || 0));
+  ok(`scoring ZERO is a small slice of the whole flick range: ${Math.round(dead)}px of ${Math.round(px(1))}px (need < 20%)`,
+    dead < px(1) * 0.20);
+
+  // ...and the same in the other axis. The 20 used to allow 18px of sideways wander, so "throw it
+  // straight" was not a thing a thumb could do.
+  for (const id of ['20', '30', '40', '50']) {
+    const { power } = idealThrow(id, classic);
+    let lo = null, hi = null;
+    for (let a = -1; a <= 1; a += 0.001) {
+      if (resolveThrow(power, a, classic).target === id) { if (lo === null) lo = a; hi = a; }
+    }
+    const w = (hi - lo) * AIM_SPAN * W;
+    ok(`the ${id} allows real sideways wander: ${Math.round(w)}px (need >= 35)`, w >= 35);
+  }
+
+  // A whole rack, thrown by someone with an ordinary thumb. This is the number Matt actually
+  // experiences, and the build he recorded scored about 60.
+  let s = 4242;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  let sum = 0, zeros = 0;
+  const N = 3000;
+  for (let i = 0; i < N; i++) {
+    const { power, aim } = idealThrow('40', classic);
+    const r = resolveThrow(power + gauss() * 35 / (POWER_SPAN * H), aim + gauss() * 25 / (AIM_SPAN * W), classic);
+    sum += r.points; if (!r.points) zeros++;
+  }
+  const perRack = (sum / N) * BALLS_PER_RACK;
+  ok(`a casual player (+-35px power, +-25px aim) averages a real rack: ${Math.round(perRack)} (need 150-400)`,
+    perRack >= 150 && perRack <= 400);
+  ok(`and almost never whiffs entirely: ${(100 * zeros / N).toFixed(1)}% of throws (need < 4%)`,
+    zeros / N < 0.04);
 }
 
 console.log('\n-- banking off a rail --');
@@ -160,7 +233,7 @@ console.log('\n-- unlocking --');
   const nxt = nextBoard('classic');
   ok('classic leads somewhere', !!nxt);
   const low = new Game({ rng: seeded(21) });
-  for (let i = 0; i < BALLS_PER_RACK; i++) low.throwBall(0.1, 0);   // nine airballs
+  for (let i = 0; i < BALLS_PER_RACK; i++) low.throwBall(0.03, 0);   // nine airballs
   eq('a rack of nothing scores nothing', low.score, 0);
   ok('and unlocks nothing', low.unlocks() === null);
 

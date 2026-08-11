@@ -19,6 +19,9 @@ export const STRINGS = {
     rounds_hint: 'Nine balls each per round.',
     play: 'Play',
     resume: 'Resume game',
+    locked: 'Locked',
+    prev_machine: 'Previous machine',
+    next_machine: 'Next machine',
     howto: 'How to play',
 
     // hud
@@ -45,7 +48,23 @@ export const STRINGS = {
     play_again: 'Play again',
     change_setup: 'Change setup',
 
-    // how to play
+    // how to play - the CAROUSEL's pages (skeeball/js/howto.js). One caption per page, in
+    // teaching order. Keep them to three short lines: the illustration is doing the explaining.
+    ht_title: 'How to play',
+    ht_ok: 'OK',
+    ht_first: 'First page',
+    ht_next: 'Last page',
+    ht_flick: 'Flick up the lane to throw.\nThe ball rolls up the ramp and drops into a cup.',
+    ht_power: 'How FAR you flick sets the power.\nA short one trickles into the 10, a long one reaches the 50.\nToo hard and it sails over the back.',
+    ht_aim: 'Flick on a diagonal to aim.\nThe two 100 cups sit outside the ring, so they take a deliberate angle.',
+    ht_badge: 'The blue x3 badge moves after every throw.\nLand in the cup it is sitting on and that score triples.',
+    ht_rack: 'Nine balls, one rack.\nBeat a machine\'s target score and the next machine unlocks.',
+    too_hard: 'Too hard!',
+    ball: 'BALL',
+    score: 'SCORE',
+
+    // the old static help sheet's lines. Kept because the strings themselves are still accurate
+    // and cheap, and removing a key is how a stale reference becomes a blank string.
     help_goal: 'Land the ball in the highest ring you can.',
     help_flick: 'Flick up the lane: how FAR you flick sets the power, the angle sets the aim.',
     help_rings: 'The rings run 10 at the front to 50 at the back. Too soft and it rolls back for nothing, too hard and it flies over for 10.',
@@ -87,6 +106,9 @@ export const STRINGS = {
     rounds_hint: 'Nueve bolas cada uno por ronda.',
     play: 'Jugar',
     resume: 'Continuar partida',
+    locked: 'Bloqueada',
+    prev_machine: 'Maquina anterior',
+    next_machine: 'Maquina siguiente',
     howto: 'Cómo se juega',
 
     you: 'Tú',
@@ -109,6 +131,20 @@ export const STRINGS = {
     new_best: '¡Nuevo récord!',
     play_again: 'Jugar otra vez',
     change_setup: 'Cambiar ajustes',
+
+    // how to play - la version carrusel
+    ht_title: 'Como jugar',
+    ht_ok: 'Vale',
+    ht_first: 'Primera pagina',
+    ht_next: 'Ultima pagina',
+    ht_flick: 'Desliza hacia arriba para lanzar.\nLa bola sube por la rampa y cae en un vaso.',
+    ht_power: 'Cuanto deslizas marca la fuerza.\nPoco y se queda en el 10, mucho y llega al 50.\nDemasiado y se va por detras.',
+    ht_aim: 'Desliza en diagonal para apuntar.\nLos dos vasos de 100 estan fuera del aro, asi que piden un angulo claro.',
+    ht_badge: 'La chapa azul x3 cambia de sitio en cada lanzamiento.\nAcierta el vaso donde este y ese valor se triplica.',
+    ht_rack: 'Nueve bolas, una tanda.\nSupera la puntuacion objetivo y se desbloquea la siguiente maquina.',
+    too_hard: 'Demasiado fuerte',
+    ball: 'BOLA',
+    score: 'PUNTOS',
 
     help_goal: 'Mete la bola en el aro más alto que puedas.',
     help_flick: 'Desliza hacia arriba: cuánto deslizas marca la fuerza, el ángulo marca la puntería.',

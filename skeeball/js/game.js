@@ -26,6 +26,14 @@
 import { boardById, multTargetsFor, nextBoard, DEFAULT_BOARD } from './boards.js';
 
 export const BALLS_PER_RACK = 9;          // the classic skeeball rack
+
+// FLICK CALIBRATION. These live HERE, not in ui.js, because they are half of the throw model:
+// SHORT_BELOW/OVER_ABOVE and every target's `ry` only mean something multiplied through them.
+// ui.js imports them to read the gesture, and js/test.js imports them to convert the whole model
+// back into the pixels a thumb has to travel. They were in ui.js when both bad tunings shipped,
+// which is exactly why nothing could check them together.
+export const POWER_SPAN = 0.55;   // a flick up 55% of the canvas height is full power
+export const AIM_SPAN = 0.42;     // ...and 42% across is full aim
 export const MULTIPLIER = 3;              // the reference's badge is always x3
 
 // --- the throw model ------------------------------------------------------------------------
@@ -35,8 +43,22 @@ export const MULTIPLIER = 3;              // the reference's badge is always x3
 // the game and are shared by every board, so a machine can never be "the one where the flick works
 // differently" - only where the targets are.
 
-const SHORT_BELOW = 0.28;      // never made it up the ramp: rolls back, scores nothing
-const OVER_ABOVE = 0.94;       // straight over the back of the board
+// THESE FOUR NUMBERS ARE IN FLICK-PIXELS, and that is the only way to judge them. On its own,
+// "SHORT_BELOW = 0.28" says nothing; multiplied through ui.js's POWER_SPAN and a phone's screen
+// height it says "28% of every flick you make scores exactly zero", which is what it used to mean
+// and which is what Matt's recordings of that build show happening over and over.
+//
+//     px = value * POWER_SPAN(0.55) * screenHeight(852 on an iPhone 15)
+//
+//   SHORT_BELOW 0.10 ->  47px   a flick shorter than this genuinely was not a throw
+//   OVER_ABOVE  0.96 -> 450px   a heave more than half the screen long: rare, and earned
+//   usable band          403px  which the four cups and the 10 divide up (js/boards.js)
+//
+// The old pair (0.28 / 0.94) spent 34% of the whole range on scoring NOTHING, split between a
+// dead zone at the bottom and "Too hard!" at the top. Nothing about that is skill: a throw that
+// falls short of the 20 should trickle into the 10, which is what the real machine does.
+export const SHORT_BELOW = 0.10;      // never made it up the ramp: rolls back, scores nothing
+export const OVER_ABOVE = 0.96;       // straight over the back of the board
 
 // Arrival depth in board space (0 = front lip, 1 = back wall) for a given arrival energy. The
 // usable energy window maps onto the full depth of the board.
@@ -45,7 +67,12 @@ const depthFor = (e) => (e - SHORT_BELOW) / (OVER_ABOVE - SHORT_BELOW);
 // How far off centre a given aim drifts by the time the ball reaches the board. >1 means a
 // full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
 // up a wide target.
-const LATERAL_GAIN = 1.35;
+//
+// Also flick-pixels, against ui.js's AIM_SPAN (0.42) and a 393px-wide phone: staying inside the
+// 20 cup (rx 0.27) allows 0.27/1.15 * 165 = 39px of sideways wander, and a 100 (x +-0.72,
+// rx 0.115) needs a deliberate 87-120px diagonal. At the old 1.35/0.30 pairing the 20 allowed
+// 18px, so "throw it straight" was not something a thumb could actually do.
+export const LATERAL_GAIN = 1.15;
 const BOUNCE_LOSS = 0.13;      // energy a wall bounce costs, per bounce
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);

@@ -85,29 +85,77 @@
 /* --- machine picker --------------------------------------------------------------------------- */
 
 .sk-root .sk-pick {
-  max-width: 460px; margin: 0 auto; padding: 12px 16px 28px;
-  display: flex; flex-direction: column; gap: 12px;
+  max-width: 460px; margin: 0 auto; padding: 12px 16px 20px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.sk-root .sk-cards { display: flex; flex-direction: column; gap: 10px; }
-.sk-root .sk-card {
-  display: flex; align-items: stretch; gap: 12px; width: 100%;
-  padding: 10px; border: 2px solid var(--sk-line); border-radius: 14px;
-  background: var(--sk-surface); color: var(--sk-ink);
-  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+/* THE CAROUSEL. Native scroll-snap rather than a JS drag handler: it keeps the platform's own
+   momentum and rubber-banding, it is keyboard- and screen-reader-navigable for free, and it
+   cannot fight the page for the gesture the way a hand-rolled pointer handler does.
+   `overscroll-behavior-x: contain` stops a flick past the last machine from panning whatever is
+   underneath (root CLAUDE.md's scroll rules). */
+.sk-root .sk-carousel { position: relative; margin: 0 -16px; }
+.sk-root .sk-track {
+  display: flex; margin: 0; padding: 0; list-style: none;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
-.sk-root .sk-card.is-locked { opacity: 0.62; cursor: default; }
-.sk-root .sk-card-art {
-  flex: none; width: 74px; border-radius: 10px;
-  background: linear-gradient(150deg, var(--sk-b), var(--sk-a));
-  display: flex; align-items: center; justify-content: center;
+.sk-root .sk-track::-webkit-scrollbar { display: none; }
+.sk-root .sk-slide {
+  flex: 0 0 100%; scroll-snap-align: center; scroll-snap-stop: always;
+  padding: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
-.sk-root .sk-lock { font-size: 24px; }
-.sk-root .sk-card-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sk-root .sk-card-name { font-size: 16px; font-weight: 800; }
-.sk-root .sk-card-line { font-size: 12.5px; color: var(--sk-muted); }
-.sk-root .sk-card-line b { color: var(--sk-ink); font-variant-numeric: tabular-nums; }
-.sk-root .sk-card-line i { font-style: normal; opacity: 0.8; }
-.sk-root .sk-card-need { font-weight: 700; }
+/* Square by preference, but its max-height is set in PIXELS by ui.js's _fitPicker() from a real
+   measurement of the host - aspect-ratio scales with WIDTH, which a short screen does not reduce,
+   and a viewport unit cannot see the ~138px of hub chrome sitting above us. The 46svh here is
+   only the pre-measurement value for the first frame. */
+.sk-root .sk-slide-art {
+  width: 100%; max-width: 46svh; aspect-ratio: 1 / 1; margin: 0 auto;
+  border-radius: 16px; overflow: hidden;
+  border: 2px solid var(--sk-line); background: #241413;
+}
+.sk-root .sk-thumb { width: 100%; height: 100%; }
+.sk-root .sk-thumb { display: block; width: 100%; height: 100%; }
+.sk-root .sk-slide-name {
+  margin: 2px 0 0; font-size: 19px; font-weight: 800; letter-spacing: 0.02em;
+}
+.sk-root .sk-scores {
+  display: flex; gap: 14px; margin: 0; justify-content: center; flex-wrap: wrap;
+}
+.sk-root .sk-scores div { text-align: center; }
+.sk-root .sk-scores dt {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--sk-muted);
+}
+.sk-root .sk-scores dd {
+  margin: 1px 0 0; font-size: 17px; font-weight: 800;
+  font-variant-numeric: tabular-nums; color: var(--sk-ink);
+}
+.sk-root .sk-need {
+  margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--sk-muted);
+}
+.sk-root .sk-play.is-off { opacity: 0.45; cursor: default; }
+
+/* Arrows are a convenience on top of the swipe, not the only way through - hidden from assistive
+   tech would be wrong, so they carry real labels. */
+.sk-root .sk-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,0.42); color: #fff;
+  font-size: 22px; line-height: 1; cursor: pointer; touch-action: manipulation;
+  display: grid; place-items: center;
+}
+.sk-root .sk-arrow-l { left: 20px; }
+.sk-root .sk-arrow-r { right: 20px; }
+
+.sk-root .sk-dots { display: flex; gap: 7px; justify-content: center; }
+.sk-root .sk-dot {
+  width: 8px; height: 8px; padding: 0; border-radius: 50%; border: none;
+  background: var(--sk-line); cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-dot.is-on { background: var(--sk-accent); }
+.sk-root .sk-resume { align-self: center; }
 .sk-root .sk-soon {
   margin: 2px 0 0; text-align: center; font-size: 12.5px; color: var(--sk-muted);
 }
@@ -269,3 +317,65 @@
 @media (prefers-reduced-motion: reduce) {
   .sk-root .sk-band { transition: none; }
 }
+
+/* --- HOW TO PLAY carousel (skeeball/js/howto.js) -----------------------------------------------
+   The repo's established shape for this screen: dark modal, white card holding a tinted panel
+   with the animated illustration, a caption, dots, and a [|<-] [OK] [->|] footer. Yahtzee's is
+   the reference implementation; tic-tac-toe/CLAUDE.md documents the pattern. Skeeball first
+   shipped a static bullet list here, which is what Matt was reacting to on 2026-08-11. */
+
+.sk-root.sk-ht-host { position: fixed; inset: 0; z-index: 60; background: none; }
+.sk-root .sk-ht-scrim {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: rgba(8, 6, 10, 0.62);
+  overscroll-behavior: contain;   /* root CLAUDE.md: a fixed overlay contains its own scroll */
+}
+.sk-root .sk-ht-scrim[hidden] { display: none; }
+.sk-root .sk-ht {
+  width: min(360px, 100%); max-height: 100%;
+  overflow: auto; overscroll-behavior: contain;
+  padding: 16px 16px 18px; border-radius: 22px;
+  background: #241b26; color: #fff;
+  box-shadow: 0 22px 60px rgba(0,0,0,0.55);
+  display: flex; flex-direction: column; gap: 12px; align-items: center;
+}
+.sk-root .sk-ht-title {
+  margin: 2px 0 0; font-size: 16px; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+.sk-root .sk-ht-card {
+  width: 100%; border-radius: 16px; background: #fff; color: #22262e;
+  padding: 10px; display: flex; flex-direction: column; gap: 10px;
+}
+.sk-root .sk-ht-panel {
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
+  border-radius: 12px; overflow: hidden; background: #241413;
+}
+.sk-root .sk-ht-canvas { display: block; width: 100%; height: 100%; }
+.sk-root .sk-ht-hand {
+  position: absolute; left: 0; top: 0; width: 34px; height: 44px;
+  opacity: 0; transform-origin: 30% 6%;
+  transition: transform 240ms ease, opacity 200ms ease;
+  pointer-events: none; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.45));
+}
+.sk-root .sk-ht-caption {
+  margin: 0; min-height: 3.2em; text-align: center;
+  font-size: 14.5px; line-height: 1.45; font-weight: 600; color: #2a3040;
+}
+.sk-root .sk-ht-dots { display: flex; gap: 8px; }
+.sk-root .sk-ht-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.30);
+}
+.sk-root .sk-ht-dot.is-on { background: #F2A33C; }
+.sk-root .sk-ht-foot { display: flex; gap: 10px; width: 100%; }
+.sk-root .sk-ht-btn {
+  min-height: 46px; border: 0; border-radius: 12px;
+  background: #3a2f3d; color: #fff;
+  font: inherit; font-size: 15px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-ht-end { flex: 0 0 62px; }
+.sk-root .sk-ht-ok { flex: 1; background: #F2A33C; color: #2b1c06; }
+.sk-root .sk-ht-btn.is-off { opacity: 0.35; cursor: default; }

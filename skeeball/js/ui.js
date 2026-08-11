@@ -11,7 +11,7 @@
 // turn-based with no clock, so leaving mid-rack is lossless: every landed throw snapshots and the
 // picker offers Resume. Always returns false; do not "fix" it to true mid-game.
 
-import { Game, BALLS_PER_RACK, resolveThrow } from './game.js';
+import { Game, BALLS_PER_RACK, resolveThrow, POWER_SPAN, AIM_SPAN } from './game.js';
 import { BOARDS, DEFAULT_BOARD, boardById, nextBoard } from './boards.js';
 import * as R from './render.js';
 import { STRINGS } from './strings.js';
@@ -19,16 +19,18 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { recordSkeeball, unlockSkeeballBoard, loadStats } from '../../js/game-stats.js';
 import { isUnlocked, bestOn, todayBestOn, appWideBest } from '../../js/arcade-scores.js';
 import { onViewportResize } from '../../js/viewport.js';
+import { howToHtml, createHowTo } from './howto.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.skeeball.v1';
 const SAVE_KEY = 'gamehub.skeeball.save.v1';
 
-// Flick calibration: full power is a flick up 42% of the canvas height, full aim 30% across.
-// Fractions of the canvas, never pixels, so the feel is the same on any phone.
-const POWER_SPAN = 0.42;
-const AIM_SPAN = 0.30;
-const MIN_FLICK = 0.10;
+// POWER_SPAN / AIM_SPAN are imported from game.js, NOT declared here. They are half of the throw
+// model - a cup's size in board space means nothing until it is multiplied by them - and while
+// they lived in this file no test could check the two halves together. Both bad tunings of this
+// game shipped that way. Change either and re-run `node skeeball/js/test.js`: its "a thumb can
+// actually hit these" block converts the whole model into flick-pixels and fails under 40px.
+const MIN_FLICK = 0.06;
 
 const ROLL_MS = 720;
 const BOARD_MS = 260;
@@ -70,7 +72,11 @@ class SkeeballUI {
     this._onVis = () => { if (document.hidden) this._save(); };
     document.addEventListener('visibilitychange', this._onVis);
     this._offLang = onLangChange(() => this._rerenderForLang());
-    this._offResize = onViewportResize(() => this._fit());
+    this._offResize = onViewportResize(() => {
+      this._fit();
+      if (this.screen === 'pick') { this._fitPicker(); this._paintThumbs(); }
+      if (this._help) this._help.ht.refit();
+    });
 
     this._loadAppWide();
     this.renderPicker();
@@ -114,87 +120,191 @@ class SkeeballUI {
 
   // --- machine picker -----------------------------------------------------------------------
 
+  /**
+   * THE MACHINE CAROUSEL. Matt, 2026-08-11: "I want the setup screen to be different too. A
+   * carousel with an image of the board you're selecting. Then the chains and a lock on the
+   * [locked] ones - just like in the reference photos."
+   *
+   * One full-width slide per machine, swipeable with CSS scroll-snap (no JS drag handler, so it
+   * keeps native momentum and never fights the page). Each slide's art is the ACTUAL machine
+   * painted by render.js's drawThumb, so it cannot drift from what you get when you press Play;
+   * a locked one is dimmed, chained and padlocked exactly as IMG_3959/IMG_3960 show.
+   *
+   * The Play button lives on the slide rather than under the strip on purpose: the thing you are
+   * looking at and the thing you are starting are then the same object.
+   */
   renderPicker() {
     this._stopLoop();
     this.screen = 'pick';
     this.game = null;
     const sk = sub();
     const resumable = Game.restore(readJSON(SAVE_KEY));
-    const cards = BOARDS.map((b) => {
+    const start = Math.max(0, BOARDS.findIndex((b) => b.id === this.boardId));
+
+    const slides = BOARDS.map((b, i) => {
       const open = isUnlocked(sk, b.id, DEFAULT_BOARD);
       const best = bestOn(sk, b.id);
       const today = todayBestOn(sk, b.id);
       const world = this.appWide[b.id];
-      const prev = BOARDS[BOARDS.indexOf(b) - 1];
+      const prev = BOARDS[i - 1];
       return `
-        <button type="button" class="sk-card${open ? '' : ' is-locked'}" data-board="${b.id}"
-          ${open ? '' : 'aria-disabled="true"'}>
-          <span class="sk-card-art" style="--sk-a:${b.palette.field};--sk-b:${b.palette.fieldLit}">
-            ${open ? '' : '<span class="sk-lock" aria-hidden="true">🔒</span>'}
-          </span>
-          <span class="sk-card-body">
-            <span class="sk-card-name">${t(b.nameKey)}</span>
-            ${open ? `
-              <span class="sk-card-line">${t('your_best')} <b>${best || '—'}</b></span>
-              <span class="sk-card-line">${t('today')} <b>${today || '—'}</b></span>
-              <span class="sk-card-line sk-card-world">${t('world_best')} <b>${world && world.score ? world.score : '—'}</b>${world && world.name ? ` <i>${world.name}</i>` : ''}</span>
-            ` : `
-              <span class="sk-card-line sk-card-need">${t('unlock_hint', { n: b.unlockScore, board: prev ? t(prev.nameKey) : '' })}</span>
-            `}
-          </span>
-        </button>`;
+        <li class="sk-slide${open ? '' : ' is-locked'}" data-board="${b.id}" data-i="${i}">
+          <div class="sk-slide-art">
+            <canvas class="sk-thumb" data-thumb="${b.id}" data-locked="${open ? '0' : '1'}"></canvas>
+          </div>
+          <h3 class="sk-slide-name">${t(b.nameKey)}</h3>
+          ${open ? `
+            <dl class="sk-scores">
+              <div><dt>${t('world_best')}</dt><dd>${world && world.score ? world.score : '—'}</dd></div>
+              <div><dt>${t('your_best')}</dt><dd>${best || '—'}</dd></div>
+              <div><dt>${t('today')}</dt><dd>${today || '—'}</dd></div>
+            </dl>
+            <button type="button" class="sk-play" data-role="play" data-board="${b.id}">${t('play')}</button>
+          ` : `
+            <p class="sk-need">${t('unlock_hint', { n: b.unlockScore, board: prev ? t(prev.nameKey) : '' })}</p>
+            <button type="button" class="sk-play is-off" disabled>${t('locked')}</button>
+          `}
+        </li>`;
     }).join('');
+
+    const dots = BOARDS.map((b, i) =>
+      `<button type="button" class="sk-dot${i === start ? ' is-on' : ''}" data-go="${i}"
+        aria-label="${t(b.nameKey)}"></button>`).join('');
 
     this.root.innerHTML = `
       <div class="sk-root">
         <div class="sk-pick">
           <h2 class="sk-title">${t('title')}</h2>
-          <p class="sk-tag">${t('tagline')}</p>
-          ${resumable && !resumable.over ? `<button type="button" class="sk-play" data-role="resume">${t('resume')}</button>` : ''}
-          <div class="sk-cards">${cards}</div>
+          ${resumable && !resumable.over ? `<button type="button" class="sk-resume" data-role="resume">${t('resume')}</button>` : ''}
+          <div class="sk-carousel">
+            <button type="button" class="sk-arrow sk-arrow-l" data-step="-1" aria-label="${t('prev_machine')}">‹</button>
+            <ul class="sk-track">${slides}</ul>
+            <button type="button" class="sk-arrow sk-arrow-r" data-step="1" aria-label="${t('next_machine')}">›</button>
+          </div>
+          <div class="sk-dots">${dots}</div>
           <p class="sk-soon">${t('more_maps')}</p>
           <button type="button" class="sk-howto" data-role="howto">${t('howto')}</button>
         </div>
       </div>`;
 
-    this.root.querySelector('.sk-cards').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-board]');
-      if (!b || b.classList.contains('is-locked')) return;
-      this.boardId = b.dataset.board;
-      writeJSON(SETTINGS_KEY, { board: this.boardId });
-      this.startGame();
+    const track = this.root.querySelector('.sk-track');
+
+    const goTo = (i, smooth) => {
+      const n = clamp(i, 0, BOARDS.length - 1);
+      track.scrollTo({ left: n * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    };
+    // One frame first: measuring or painting straight after innerHTML reads a track with no width
+    // and a picker with no position, which is how the art ended up pinned to its 140px floor with
+    // 84px of room going spare. Land on the machine you last played without animating there.
+    // TWO frames, and the second one is not belt-and-braces. On the first frame after innerHTML
+    // the track has no width yet, so its two `flex: 0 0 100%` slides have not laid out side by
+    // side and `pick.scrollHeight` reads 521 instead of 306 - the measurement then hands the art
+    // its 140px floor with 84px of room going spare. The settle pass re-measures a real layout.
+    // _fitPicker collapses before measuring, so running it twice is idempotent, not cumulative.
+    requestAnimationFrame(() => {
+      this._fitPicker();
+      goTo(start, false);
+      requestAnimationFrame(() => { this._fitPicker(); this._paintThumbs(); });
+    });
+
+    track.addEventListener('scroll', () => {
+      const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      const b = BOARDS[clamp(i, 0, BOARDS.length - 1)];
+      if (!b || b.id === this.boardId) return;
+      this.boardId = b.id;
+      this.root.querySelectorAll('.sk-dot').forEach((d, k) => d.classList.toggle('is-on', k === i));
+    }, { passive: true });
+
+    this.root.querySelector('.sk-carousel').addEventListener('click', (e) => {
+      const play = e.target.closest('[data-role="play"]');
+      if (play) {
+        this.boardId = play.dataset.board;
+        writeJSON(SETTINGS_KEY, { board: this.boardId });
+        this.startGame();
+        return;
+      }
+      const arrow = e.target.closest('[data-step]');
+      if (arrow) goTo(Math.round(track.scrollLeft / Math.max(1, track.clientWidth)) + Number(arrow.dataset.step), true);
+    });
+    this.root.querySelector('.sk-dots').addEventListener('click', (e) => {
+      const d = e.target.closest('[data-go]');
+      if (d) goTo(Number(d.dataset.go), true);
     });
     const res = this.root.querySelector('[data-role="resume"]');
     if (res) res.addEventListener('click', () => this.startGame(Game.restore(readJSON(SAVE_KEY))));
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this.openHelp());
   }
 
+  /**
+   * Size the machine art from a MEASUREMENT of the host, not from a viewport unit.
+   *
+   * `svh` describes the screen, and in the hub this screen already has ~138px of chrome above us,
+   * so a `46svh` square overflowed a short phone by 81px there while fitting perfectly standalone.
+   * This is the same measure-the-host job `_fit()` does for the alley (and Battleship's
+   * `_fitBattleBoards()` for its grids): take the space actually left below us, subtract what
+   * every other row in the picker needs, and give the rest to the art.
+   */
+  _fitPicker() {
+    const pick = this.root.querySelector('.sk-pick');
+    // EVERY slide, not just the visible one. The track is a flex row, so its height is the TALLEST
+    // slide's - capping only the first one left the locked machine's art at full size and the
+    // carousel stayed 149px taller than anything on screen could explain.
+    const arts = [...this.root.querySelectorAll('.sk-slide-art')];
+    if (!pick || !arts.length) return;
+    const setMax = (px) => arts.forEach((a) => { a.style.maxHeight = px; });
+    setMax('0px');                               // collapse first, so we are not measuring ourselves
+    const vh = window.innerHeight || 640;
+    const avail = vh - pick.getBoundingClientRect().top;
+    const rest = pick.scrollHeight;              // everything except the art, now that it is 0
+    const box = Math.max(140, avail - rest - 20);
+    setMax(`${box}px`);
+    // Then the same second pass `_fit()` needs, and for the same reason: measuring only the space
+    // ABOVE us misses whatever the HOST adds BELOW - the hub's .hub-main carries 40px of
+    // padding-bottom. Re-measure the real overflow and give it back.
+    const over = document.documentElement.scrollHeight - vh;
+    if (over > 0) setMax(`${Math.max(140, box - over)}px`);
+  }
+
+  /** Paint every slide's machine art at the device's real pixel density. Called on first render
+   *  and again on resize, because a canvas sized in CSS pixels goes soft otherwise. */
+  _paintThumbs() {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    for (const cv of this.root.querySelectorAll('canvas[data-thumb]')) {
+      const w = cv.clientWidth, h = cv.clientHeight;
+      if (!w || !h) continue;
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      const c = cv.getContext('2d');
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      R.drawThumb(c, boardById(cv.dataset.thumb), w, h, cv.dataset.locked === '1');
+    }
+  }
+
+  /** The HOW TO PLAY carousel (skeeball/js/howto.js). Its illustration is the real machine drawn
+   *  by render.js with real engine-resolved throws, so it teaches the board you are about to
+   *  play rather than a diagram of one. */
   openHelp() {
+    this._closeHelp();
     const host = document.createElement('div');
-    host.className = 'sk-root sk-help-overlay';
-    host.innerHTML = `
-      <div class="sk-scrim" data-role="close"></div>
-      <div class="sk-help" role="dialog" aria-modal="true" aria-label="${t('aria_help')}">
-        <button type="button" class="sk-x" data-role="close" aria-label="${t('aria_close')}">✕</button>
-        <p class="sk-help-goal"><strong>${t('help_goal')}</strong></p>
-        <svg class="sk-help-art" viewBox="0 0 200 96" aria-hidden="true">
-          <path d="M28 92 L74 26 h52 l46 66 z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-          <ellipse cx="100" cy="52" rx="46" ry="20" fill="none" stroke="currentColor" stroke-width="4"/>
-          <ellipse cx="100" cy="30" rx="13" ry="5" fill="none" stroke="currentColor" stroke-width="3"/>
-          <ellipse cx="100" cy="43" rx="16" ry="6" fill="none" stroke="currentColor" stroke-width="3"/>
-          <ellipse cx="56" cy="27" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="3"/>
-          <ellipse cx="144" cy="27" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="3"/>
-          <path d="M100 88 v-16" stroke="currentColor" stroke-width="3" stroke-dasharray="5 4"/>
-          <path d="M94 78 l6 -8 l6 8" fill="currentColor"/>
-        </svg>
-        <p class="sk-help-line">${t('help_flick')}</p>
-        <p class="sk-help-line">${t('help_rings')}</p>
-        <p class="sk-help-line">${t('help_cups')}</p>
-        <p class="sk-help-line">${t('help_mult')}</p>
-        <p class="sk-help-line">${t('help_unlock')}</p>
-      </div>`;
-    host.addEventListener('click', (e) => { if (e.target.closest('[data-role="close"]')) host.remove(); });
+    host.className = 'sk-root sk-ht-host';
+    host.innerHTML = howToHtml();
     document.body.appendChild(host);
+    const ht = createHowTo(host, this.boardId);
+    host.addEventListener('click', (e) => {
+      if (e.target.closest('[data-role="close"]') || e.target.classList.contains('sk-ht-scrim')) {
+        this._closeHelp();
+      } else if (e.target.closest('[data-role="next"]')) ht.next();
+      else if (e.target.closest('[data-role="first"]')) ht.first();
+    });
+    this._help = { host, ht };
+    ht.open(0);
+  }
+
+  _closeHelp() {
+    if (!this._help) return;
+    this._help.ht.destroy();
+    this._help.host.remove();
+    this._help = null;
   }
 
   // --- play ------------------------------------------------------------------------------------
@@ -536,7 +646,8 @@ class SkeeballUI {
     if (this._offLang) this._offLang();
     if (this._offResize) this._offResize();
     if (this._offPlayers) { try { this._offPlayers(); } catch { /* already gone */ } }
-    document.querySelectorAll('.sk-help-overlay').forEach((n) => n.remove());
+    this._closeHelp();
+    document.querySelectorAll('.sk-ht-host').forEach((n) => n.remove());
     this.root.innerHTML = '';
     this.game = null;
     this.machine = null;
