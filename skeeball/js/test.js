@@ -61,7 +61,34 @@ console.log('\n-- the corner cups --');
   eq('and right, the right cup', resolveThrow(Rr.power, Rr.aim, classic).target, '100R');
   eq('a cup pays 100', resolveThrow(L.power, L.aim, classic).points, 100);
   eq('wide but WEAK misses it', resolveThrow(0.45, L.aim, classic).target, '10');
-  eq('straight and hard is a ring, never a cup', resolveThrow(L.power, 0, classic).target, '50');
+  // Dead centre at the 50's OWN power is the 50; the cups' power and the cups' aim are separate
+  // skills and neither one alone gets you a 100.
+  eq('straight, at the 50\'s power, is the 50 - never a corner cup',
+    resolveThrow(idealThrow('50', classic).power, 0, classic).target, '50');
+  eq('the 100s power with NO aim overshoots the stack into the 10',
+    resolveThrow(L.power, 0, classic).target, '10');
+}
+
+console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls are guided in") --');
+{
+  const cups = classic.targets.filter((t) => t.kind === 'cup').sort((a, b) => a.y - b.y);
+  for (let i = 0; i < cups.length - 1; i++) {
+    const gap = (cups[i + 1].y - cups[i + 1].ry) - (cups[i].y + cups[i].ry);
+    ok(`${cups[i].id} -> ${cups[i + 1].id}: a real gap between them (${gap.toFixed(3)})`, gap > 0.01);
+  }
+  // The observable consequence, and the one that actually makes it a game: sweeping power straight
+  // down the middle must FALL OUT of the stack between cups, not slide seamlessly from one to the
+  // next. If this goes green-to-red, the catch areas have started overlapping again.
+  const seq = [];
+  for (let p = 0.29; p < 0.93; p += 0.005) {
+    const r = resolveThrow(p, 0, classic);
+    const id = r.target || 'none';
+    if (id !== seq[seq.length - 1]) seq.push(id);
+  }
+  const tens = seq.filter((x) => x === '10').length;
+  ok(`the 10 is entered and left several times while sweeping power (${tens} times)`, tens >= 3);
+  ok('every cup is still reachable straight down the middle',
+    ['20', '30', '40', '50'].every((id) => seq.includes(id)));
 }
 
 console.log('\n-- banking off a rail --');

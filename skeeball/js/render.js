@@ -28,9 +28,22 @@ const Y = {
   marqueeBot: 0.115,
   fieldTop: 0.135,      // where the playfield starts, under the cabinet head
   boardMid: 0.330,      // board space y=0.5 lands here
-  fieldBot: 0.492,      // the playfield's front lip, where the lane begins
-  laneTop: 0.492,
+  fieldBot: 0.470,      // the playfield's front lip
+  rampBot: 0.560,       // where the flat lane ends and the ramp starts to rise
+  laneTop: 0.560,
 };
+
+// THE RAMP. The lane used to stop dead at the playfield's front edge on a hard horizontal line,
+// with the playfield ALSO being wider than the lane at that point - a colour step and a width step
+// in the same pixel row. Matt: "the way the ramp meets the scoring area is abrupt and not
+// realistic. It's significantly worse than any reference photo."
+//
+// A real cabinet has one continuous surface: the flat lane curves upward and flares outward into
+// the playfield, and the ball rolls over the join without anything changing under it. So the band
+// between `rampBot` and `fieldBot` is drawn as that curve - width eased from the lane's to the
+// playfield's, colour eased from the lane's to the field's, and a lit crest where it levels off.
+const RAMP_EASE = (k) => k * k * (3 - 2 * k);      // smoothstep: flat at both ends, so neither
+                                                    // join shows a crease
 
 /** The playfield's half-width in design units (board space x = +-1). */
 const FIELD_HALF = 0.375 * DW;
@@ -188,25 +201,53 @@ export function drawMachine(c, board) {
   c.moveTo(bl.x, bl.y); c.lineTo(tl.x, tl.y); c.lineTo(tr.x, tr.y); c.lineTo(br.x, br.y);
   c.closePath(); c.fill();
 
+  drawRamp(c, P);
   drawLane(c, P);
 
-  // Side walls: black ball-return housings with a deep red inner trim, drawn OVER the lane's top
-  // so the playfield sits inside the cabinet rather than floating on it.
+  // Side walls: black ball-return housings with a deep red inner trim. Their inner edge FOLLOWS
+  // the ramp's own flare (same RAMP_EASE), so the cabinet narrows with the surface instead of
+  // cutting a straight diagonal across it and leaving a black wedge either side of the throat.
+  const rampBotY = Y.rampBot * DH;
+  const halfBot = laneHalf(1);
+  const halfTop = FIELD_HALF * boardPoint(0, 0).k;
+  const edge = [];
+  for (let i = 0; i <= 26; i++) {
+    const k = i / 26;
+    edge.push({ y: rampBotY + (fBot - rampBotY) * k, half: halfBot + (halfTop - halfBot) * RAMP_EASE(k) });
+  }
   for (const side of [-1, 1]) {
-    const inner = boardPoint(side * 1.02, 0).x;
+    const inner = (x) => DW / 2 + side * x;
     const outer = side < 0 ? -6 : DW + 6;
+    const wallPath = () => {
+      c.beginPath();
+      c.moveTo(inner(FIELD_HALF * boardPoint(0, 1).k), fTop);
+      c.lineTo(inner(halfTop), fBot);
+      for (let i = edge.length - 1; i >= 0; i--) c.lineTo(inner(edge[i].half), edge[i].y);
+      c.lineTo(inner(laneHalf(1) + RAIL_W_NEAR * DW * sc(1)), rampBotY + 2);
+      c.lineTo(outer, rampBotY + 2);
+      c.lineTo(outer, fTop);
+      c.closePath();
+    };
+    wallPath();
     c.fillStyle = P.wall;
+    c.fill();
+    // The red inner trim, a constant-width strip just inside that same contour.
+    const TRIM = 0.020 * DW;
+    c.save();
+    wallPath();
+    c.clip();
     c.beginPath();
-    c.moveTo(inner, fTop); c.lineTo(outer, fTop);
-    c.lineTo(outer, fBot + 0.03 * DH); c.lineTo(boardPoint(side * 1.15, 0).x, fBot + 0.01 * DH);
-    c.closePath(); c.fill();
+    c.moveTo(inner(FIELD_HALF * boardPoint(0, 1).k), fTop);
+    c.lineTo(inner(halfTop), fBot);
+    for (let i = edge.length - 1; i >= 0; i--) c.lineTo(inner(edge[i].half), edge[i].y);
+    c.lineTo(inner(edge[0].half + TRIM), edge[0].y);
+    for (let i = 0; i < edge.length; i++) c.lineTo(inner(edge[i].half + TRIM), edge[i].y);
+    c.lineTo(inner(halfTop + TRIM), fBot);
+    c.lineTo(inner(FIELD_HALF * boardPoint(0, 1).k + TRIM), fTop);
+    c.closePath();
     c.fillStyle = P.trim;
-    c.beginPath();
-    c.moveTo(inner, fTop);
-    c.lineTo(inner - side * 0.022 * DW, fTop);
-    c.lineTo(boardPoint(side * 1.15, 0).x - side * 0.022 * DW, fBot + 0.01 * DH);
-    c.lineTo(boardPoint(side * 1.15, 0).x, fBot + 0.01 * DH);
-    c.closePath(); c.fill();
+    c.fill();
+    c.restore();
   }
 
   drawTargets(c, board);
@@ -255,12 +296,12 @@ function drawTargets(c, board) {
   const solid = board.targets.filter((t) => t.kind !== 'ring').slice().sort((a, b) => b.y - a.y);
   for (const t of solid) {
     const p = boardPoint(t.x, t.y);
-    // WIDTH comes from the target's own rx, so a target you can see is the target you can hit.
-    // HEIGHT does NOT come from its catch ry - every cup on the machine is seen at the same camera
-    // angle, so they all share one foreshortening ratio (RIM_RATIO, measured: a 62px-wide cup has
-    // a ~22px-tall rim). Deriving the rim from the catch area instead made each cup as tall as the
-    // gap to the next one, and the stack ate its own numbers.
-    const rx = t.rx * FIELD_HALF * p.k * 0.86;
+    // WIDTH is the target's rx EXACTLY - no shrink factor. What you see is precisely what you can
+    // hit (boards.js rule 1). It used to draw at 0.86 of the catch radius, so every cup was 16%
+    // easier to hit than it looked, which is half of why the game felt magnetic.
+    // HEIGHT does NOT come from the catch ry - every cup is seen at the same camera angle, so they
+    // share one foreshortening ratio (RIM_RATIO, measured: a 62px-wide cup has a ~22px-tall rim).
+    const rx = t.rx * FIELD_HALF * p.k;
     const ry = rx * RIM_RATIO;
     if (t.kind === 'star') {
       drawStar(c, P, p.x, p.y, rx, ry * 1.7, String(t.points), rx * 0.44);
@@ -269,6 +310,56 @@ function drawTargets(c, board) {
       drawTube(c, P, p.x, p.y, rx, ry, depth, String(t.points), rx * (t.kind === 'tube' ? 0.50 : 0.62));
     }
   }
+}
+
+/** The curved throat joining the flat lane to the playfield. Drawn BEFORE the lane so the lane's
+ *  own far edge overlaps its bottom, leaving no seam. */
+function drawRamp(c, P) {
+  const STEPS = 26;
+  const yTop = Y.fieldBot * DH, yBot = Y.rampBot * DH;
+  const halfBot = laneHalf(1);                       // the lane's half-width where it ends
+  const halfTop = FIELD_HALF * boardPoint(0, 0).k;   // the playfield's half-width at its front
+  const at = (i) => {
+    const k = i / STEPS;
+    const e = RAMP_EASE(k);
+    return { y: yBot + (yTop - yBot) * k, half: halfBot + (halfTop - halfBot) * e, e };
+  };
+
+  c.beginPath();
+  for (let i = 0; i <= STEPS; i++) { const a = at(i); const x = DW / 2 - a.half; if (i) c.lineTo(x, a.y); else c.moveTo(x, a.y); }
+  for (let i = STEPS; i >= 0; i--) { const a = at(i); c.lineTo(DW / 2 + a.half, a.y); }
+  c.closePath();
+  const g = c.createLinearGradient(0, yBot, 0, yTop);
+  g.addColorStop(0, P.laneLit);        // continues the lane's own colour at the bottom...
+  g.addColorStop(0.55, P.field);       // ...and arrives at the playfield's at the top
+  g.addColorStop(1, P.fieldLit);
+  c.fillStyle = g;
+  c.fill();
+
+  // A lit crest right where the surface levels out, which is what actually sells the curve.
+  c.save();
+  c.clip();
+  const crest = c.createLinearGradient(0, yTop - (yBot - yTop) * 0.28, 0, yTop);
+  crest.addColorStop(0, 'rgba(255,255,255,0)');
+  crest.addColorStop(1, 'rgba(255,255,255,0.16)');
+  c.fillStyle = crest;
+  c.fillRect(0, yTop - (yBot - yTop) * 0.28, DW, (yBot - yTop) * 0.28);
+  c.restore();
+
+  // The white front lip of the playfield, curving across the top of the ramp - the big white band
+  // along the bottom of the board in IMG_3952.
+  const lipH = 0.011 * DH;
+  c.beginPath();
+  c.moveTo(DW / 2 - halfTop, yTop + lipH);
+  c.quadraticCurveTo(DW / 2, yTop + lipH * 2.6, DW / 2 + halfTop, yTop + lipH);
+  c.lineTo(DW / 2 + halfTop, yTop - lipH * 0.2);
+  c.quadraticCurveTo(DW / 2, yTop + lipH * 1.3, DW / 2 - halfTop, yTop - lipH * 0.2);
+  c.closePath();
+  const lip = c.createLinearGradient(0, yTop - lipH, 0, yTop + lipH * 2.6);
+  lip.addColorStop(0, P.target);
+  lip.addColorStop(1, P.targetShade);
+  c.fillStyle = lip;
+  c.fill();
 }
 
 function drawLane(c, P) {
@@ -403,8 +494,10 @@ export function drawMultiplier(c, board, targetId, pulse) {
   c.restore();
 }
 
-export function drawPopup(c, board, targetId, text, t) {
-  const p = targetId ? targetPoint(board, targetId) : boardPoint(0, 0.2);
+/** `at` is a design-space point - where the ball actually came to rest (ui.js). Deliberately NOT
+ *  a target id: the callout belongs to the throw, not to whatever the throw happened to score. */
+export function drawPopup(c, at, text, t) {
+  const p = at;
   const rise = 0.045 * DH * t;
   const alpha = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
   const pop = t < 0.22 ? t / 0.22 : 1;

@@ -350,13 +350,14 @@ const PLAY = {
         const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
         return { left: r.left, top: r.top, w: r.width, h: r.height };
       });
-      // A flick straight up, 30% of the canvas height. ui.js's POWER_SPAN is 42%, so this is ~0.71
-      // power - which lands in a CUP rather than overshooting onto the catch-all 10. Asserting a
-      // cup (>= 20) rather than merely "scored something" is what makes this prove the board is
-      // being played and not just touched.
+      // A flick straight up, 27.8% of the canvas height -> ~0.66 power, which is the 40 cup's own
+      // centre. The exact number matters now: since the cups stopped tiling (boards.js, 2026-08-11)
+      // there are real GAPS between them, and 30% - the value this used before - lands squarely in
+      // the gap between the 40 and the 50 for a 10. Asserting a cup (>= 20) rather than "scored
+      // something" is what makes this prove the board is being played and not just touched.
       const x = g.left + g.w / 2;
       const y0 = g.top + g.h * 0.80;
-      const dist = g.h * 0.30;
+      const dist = g.h * 0.278;
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
       for (let i = 1; i <= 12; i++) {
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });

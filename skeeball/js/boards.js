@@ -93,17 +93,27 @@ export const BOARDS = [
     ring: { cx: 0, cy: 0.40, rx: 0.66, ry: 0.22 },
     targets: [
       // The two 100s stand above the ring's widest points - the measured position, and the reason
-      // a 100 is a bank shot rather than just a hard throw. Tested FIRST, so they win over the
-      // 50's catch area where the two overlap.
-      { id: '100L', kind: 'tube', x: -0.65, y: 0.74, rx: 0.13, ry: 0.08, points: 100 },
-      { id: '100R', kind: 'tube', x: 0.65, y: 0.74, rx: 0.13, ry: 0.08, points: 100 },
-      // Cups up the middle, 20 nearest, on the measured 0.14 pitch. Their catch areas (ry 0.07)
-      // exactly TILE that pitch, so there is no dead gap between two cups - land between them and
-      // you get the nearer one, never nothing.
-      { id: '50', kind: 'cup', x: 0, y: 0.69, rx: 0.17, ry: 0.095, points: 50 },
-      { id: '40', kind: 'cup', x: 0, y: 0.56, rx: 0.19, ry: 0.07, points: 40 },
-      { id: '30', kind: 'cup', x: 0, y: 0.42, rx: 0.21, ry: 0.07, points: 30 },
-      { id: '20', kind: 'cup', x: 0, y: 0.32, rx: 0.24, ry: 0.07, points: 20 },
+      // a 100 is a bank shot rather than just a hard throw. Tested FIRST, so they win where they
+      // overlap the 50.
+      { id: '100L', kind: 'tube', x: -0.65, y: 0.78, rx: 0.10, ry: 0.045, points: 100 },
+      { id: '100R', kind: 'tube', x: 0.65, y: 0.78, rx: 0.10, ry: 0.045, points: 100 },
+      // Cups up the middle, 20 nearest, on an even 0.14 pitch.
+      //
+      // TWO RULES HERE, both from Matt playing it (2026-08-11: "the balls jump into a hole even if
+      // I don't throw it that close to them... the balls are guided in. That's not fun"):
+      //
+      // 1. `rx` IS the drawn width. render.js draws the rim at exactly this radius, so what you can
+      //    see is what you can hit. It used to draw at 0.86 of it, making every catch area 16%
+      //    wider than the cup it belonged to.
+      // 2. `ry` (0.045) is DELIBERATELY smaller than half the pitch (0.07), so there is a real GAP
+      //    between consecutive cups - about a third of the depth axis. Before, the catch areas
+      //    overlapped and tiled the whole ramp, so every straight throw sank something and the only
+      //    question was which cup. The gap is where the risk lives, and it is why a mistimed throw
+      //    now rolls into the 10 instead of being caught.
+      { id: '50', kind: 'cup', x: 0, y: 0.72, rx: 0.146, ry: 0.045, points: 50 },
+      { id: '40', kind: 'cup', x: 0, y: 0.58, rx: 0.163, ry: 0.045, points: 40 },
+      { id: '30', kind: 'cup', x: 0, y: 0.44, rx: 0.181, ry: 0.045, points: 30 },
+      { id: '20', kind: 'cup', x: 0, y: 0.30, rx: 0.206, ry: 0.045, points: 20 },
       // THE CATCH-ALL, and deliberately NOT the same ellipse as `ring` above. `ring` is what gets
       // drawn; this is "stayed on the playfield but found no cup" - short of the 20, wide of the
       // stack, or over the back of the 50 - and it has to cover the whole field to do that job.
@@ -119,12 +129,14 @@ export const BOARDS = [
     palette: STARS_PALETTE,
     ring: null,                                     // no oval on this machine
     targets: [
-      { id: 's100', kind: 'star', x: 0, y: 0.86, rx: 0.13, ry: 0.07, points: 100 },
-      { id: 's50L', kind: 'star', x: -0.60, y: 0.68, rx: 0.19, ry: 0.09, points: 50 },
-      { id: 's50R', kind: 'star', x: 0.60, y: 0.68, rx: 0.19, ry: 0.09, points: 50 },
-      { id: 's30L', kind: 'star', x: -0.36, y: 0.46, rx: 0.21, ry: 0.09, points: 30 },
-      { id: 's30R', kind: 'star', x: 0.36, y: 0.46, rx: 0.21, ry: 0.09, points: 30 },
-      { id: 's20', kind: 'star', x: 0, y: 0.56, rx: 0.20, ry: 0.09, points: 20 },
+      // Same two rules as classic: rx is the drawn width, and nothing tiles - these are scattered
+      // plates with real space between them, which is the whole character of this machine.
+      { id: 's100', kind: 'star', x: 0, y: 0.86, rx: 0.11, ry: 0.045, points: 100 },
+      { id: 's50L', kind: 'star', x: -0.60, y: 0.68, rx: 0.16, ry: 0.055, points: 50 },
+      { id: 's50R', kind: 'star', x: 0.60, y: 0.68, rx: 0.16, ry: 0.055, points: 50 },
+      { id: 's30L', kind: 'star', x: -0.36, y: 0.46, rx: 0.18, ry: 0.06, points: 30 },
+      { id: 's30R', kind: 'star', x: 0.36, y: 0.46, rx: 0.18, ry: 0.06, points: 30 },
+      { id: 's20', kind: 'star', x: 0, y: 0.58, rx: 0.17, ry: 0.055, points: 20 },
       { id: 's10', kind: 'ring', x: 0, y: 0.45, rx: 1.05, ry: 0.55, points: 10 },
     ],
   },

@@ -343,9 +343,11 @@ class SkeeballUI {
       return { ...R.lanePoint(Math.max(-0.12, v), foldU(Math.max(0, v))), fading: k > 0.8 ? (k - 0.8) / 0.2 : 0 };
     }
     const from = R.lanePoint(1, foldU(1));
-    const to = f.out.target
-      ? R.targetPoint(this.game.board, f.out.target)
-      : R.boardPoint(f.out.x, Math.min(0.95, f.out.y));
+    // WHERE IT ACTUALLY WENT, always - never the target's centre. Flying the ball to the middle of
+    // whatever it happened to score is precisely the "balls are guided in" Matt reported: a throw
+    // that clipped the edge of a cup curved into it on screen, so the board looked magnetic even
+    // when the maths was fair. The engine hands back the resolved landing point for this reason.
+    const to = R.boardPoint(f.out.x, Math.min(0.97, f.out.y));
     if (el < f.rollMs + f.boardMs) {
       const k = (el - f.rollMs) / f.boardMs;
       return {
@@ -354,8 +356,18 @@ class SkeeballUI {
         r: from.r * (1 - k * 0.42),
       };
     }
+    // The drop. A ball that found a CUP disappears into it; a ball that only made the playfield
+    // stays on top of it and just settles, because there is no hole under it to fall through.
     const k = clamp((el - f.rollMs - f.boardMs) / f.dropMs, 0, 1);
-    return { x: to.x, y: to.y + k * 8, r: from.r * 0.58 * (1 - k) };
+    const sank = f.out.kind === 'hit' && f.out.target && !this._isCatchAll(f.out.target);
+    if (sank) return { x: to.x, y: to.y + k * 8, r: from.r * 0.58 * (1 - k) };
+    return { x: to.x, y: to.y + k * 3, r: from.r * 0.58, fading: k > 0.55 ? (k - 0.55) / 0.45 : 0 };
+  }
+
+  /** The board's big consolation target - a ball resting on the playfield, not sunk in anything. */
+  _isCatchAll(id) {
+    const t = this.game.board.targets.find((z) => z.id === id);
+    return !!t && t.kind === 'ring';
   }
 
   _flightDone(now) {
@@ -369,7 +381,10 @@ class SkeeballUI {
     this.pending = null;
     this.popup = {
       t0: performance.now(),
-      target: out.target,
+      // At the LANDING POINT, for the same reason the ball flies there: a "+10" floating over the
+      // middle of the ring when the ball stopped near the left rail reads as the board deciding
+      // for you.
+      at: R.boardPoint(out.x, Math.min(0.97, out.y)),
       text: out.kind === 'short' ? t('short')
         : out.kind === 'over' ? t('over')
           : out.kind === 'miss' ? t('miss')
@@ -439,7 +454,7 @@ class SkeeballUI {
     if (this.popup) {
       const k = (now - this.popup.t0) / POPUP_MS;
       if (k >= 1) this._afterPopup();
-      else R.drawPopup(c, this.game.board, this.popup.target, this.popup.text, k);
+      else R.drawPopup(c, this.popup.at, this.popup.text, k);
     }
     if (this.drag && this.drag.power > 0.02) R.drawAimGuide(c, this.drag.power, this.drag.aim);
     c.restore();
