@@ -48,6 +48,8 @@ function ensureCss() {
   /* A whole phone screen is tall. On a short phone, cap the height and crop from the TOP
      (object-position: bottom) rather than shrinking the picture: the bottom is where the button
      and the arrow are, and it keeps Got it / Try it above the fold. */
+  /* width/height attributes on the <img> give the box its aspect ratio before the bytes arrive, so
+     a slow picture leaves a correctly-sized gap instead of shoving the buttons down when it lands. */
   .ann-shot img { display: block; width: 100%; height: auto; max-height: 40vh;
                   object-fit: cover; object-position: bottom; border-radius: var(--gh-r-md);
                   border: 1px solid var(--gh-border); background: var(--gh-surface-2); }
@@ -94,7 +96,8 @@ export function showAnnouncement(a, { onAction } = {}) {
           const path = (dark && textFor(s.imgDark, lang)) || textFor(s.img, lang);
           const src = new URL('../' + path, import.meta.url).href;
           return `<figure class="ann-shot">
-            <img src="${esc(src)}" alt="${cap}" onerror="this.closest('.ann-shot').remove()">
+            <img src="${esc(src)}" alt="${cap}" width="393" height="852" decoding="async"
+                 fetchpriority="high" onerror="this.closest('.ann-shot').remove()">
             ${cap ? `<figcaption>${cap}</figcaption>` : ''}
           </figure>`;
         }).join('')}${shots.length ? '</div>' : ''}

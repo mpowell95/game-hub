@@ -142,11 +142,13 @@ export async function openBugReport(opts = {}) {
   const shots = [];
   let sending = false;
 
-  // From js/game-stats-ui.js's TABS + the shared game_title_* keys (gameChoices there), so this
-  // picker cannot drift from the names used everywhere else and a new game appears automatically.
-  // A failed import still leaves a usable form - the picker falls back to "somewhere else".
+  // The game list comes from js/game-stats-ui.js's TABS + the shared game_title_* keys
+  // (gameChoices there), so this picker cannot drift from the names used everywhere else and a new
+  // game appears automatically. It is filled AFTER the form is on screen, never awaited before it:
+  // on a slow connection that import is a network round trip, and blocking on it meant tapping
+  // "Try it" showed nothing at all for seconds (Matt, on train wifi). The form now paints
+  // immediately with the hub options, and the games arrive into the same <select> a moment later.
   let choices = [];
-  try { choices = (await import('./game-stats-ui.js')).gameChoices(); } catch { choices = []; }
 
   const card = mountOverlay({
     ariaLabel: t('bug_dialog_aria'),
@@ -161,8 +163,14 @@ export async function openBugReport(opts = {}) {
     <div class="bug-field gh-field">
       <label class="gh-field__label" for="bug-where">${esc(t('bug_where_label'))}</label>
       <select class="gh-input bug-select" id="bug-where" data-role="where">
-        <option value="">${esc(t('bug_where_other'))}</option>
-        ${choices.map((c) => `<option value="${esc(c.hubId)}"${c.hubId === opts.gameId ? ' selected' : ''}>${esc(c.title)}</option>`).join('')}
+        <option value="" selected>${esc(t('bug_where_placeholder'))}</option>
+        <optgroup label="${esc(t('bug_where_hub_group'))}">
+          <option value="hub">${esc(t('bug_where_hub'))}</option>
+          <option value="leaderboards">${esc(t('hub_leaderboard_btn'))}</option>
+          <option value="stats">${esc(t('hub_stats_btn'))}</option>
+          <option value="profile">${esc(t('hub_profile_btn'))}</option>
+        </optgroup>
+        <optgroup label="${esc(t('bug_where_games'))}" data-role="games"></optgroup>
       </select>
     </div>
     <div class="bug-field gh-field">
@@ -190,6 +198,16 @@ export async function openBugReport(opts = {}) {
   const shotsEl = q('[data-role="shots"]');
   const fileEl = q('[data-role="file"]');
   const sendBtn = q('[data-role="send"]');
+
+  // Fill the games group as soon as it arrives. Preselecting the last-played game happens HERE,
+  // not in the markup, because the option does not exist until now.
+  import('./game-stats-ui.js').then((m) => {
+    choices = m.gameChoices();
+    const group = card.querySelector('[data-role="games"]');
+    if (!group) return;
+    group.innerHTML = choices.map((c) => `<option value="${esc(c.hubId)}">${esc(c.title)}</option>`).join('');
+    if (opts.gameId && choices.some((c) => c.hubId === opts.gameId) && !whereEl.value) whereEl.value = opts.gameId;
+  }).catch(() => { /* the hub options above are still a usable answer */ });
 
   const say = (text, isErr) => {
     msgEl.textContent = text || '';
@@ -244,7 +262,12 @@ export async function openBugReport(opts = {}) {
     sendBtn.disabled = true;
     say(t('bug_sending'));
     const gameId = whereEl.value || null;
-    const gameTitle = gameId ? (choices.find((c) => c.hubId === gameId) || {}).title || null : null;
+    // The hub options ('hub'/'leaderboards'/'stats'/'profile') are not games, so fall back to the
+    // <option>'s own text rather than leaving the inbox with a bare id.
+    const gameTitle = gameId
+      ? ((choices.find((c) => c.hubId === gameId) || {}).title
+         || (whereEl.selectedOptions[0] && whereEl.selectedOptions[0].textContent.trim()) || null)
+      : null;
     let report;
     try {
       report = await buildBugReport({ description, gameId, gameTitle, screenshots: shots });
