@@ -494,7 +494,16 @@ body {
   --hub-muted: #9db0c9;
   /* --hub-accent unchanged: #1769d4 reads fine on dark surfaces too. */
 }
-:root.gh-dark .hub-top { background: rgba(14, 20, 32, 0.92); }
+/* `:not(.hub-top-immersive)` is load-bearing, not tidiness (2026-08-10). In immersive mode the
+   top bar is `position: absolute` and shrink-to-fit around the floating back button, and its own
+   rule above sets `background: none` for exactly that reason. But `:root.gh-dark .hub-top` is
+   (0,3,0) to that rule's (0,2,0), so in DARK MODE the panel background won on specificity and
+   painted an opaque 86x98 navy rectangle into the top-left corner of every immersive game -
+   Escoba, Mancala, Ball Run, Yahtzee, Hill Climb, Battleship and Pool alike. Invisible for as long
+   as every immersive game was itself dark; Pool's bright green surround is what finally showed it
+   (Matt: "The top left is weird"). The back button below keeps its own dark treatment - that one
+   is a real button and is meant to read on a dark game. */
+:root.gh-dark .hub-top:not(.hub-top-immersive) { background: rgba(14, 20, 32, 0.92); }
 :root.gh-dark .hub-top.hub-top-immersive .hub-back { background: rgba(27, 35, 51, 0.92); }
 :root.gh-dark .hub-cbtn-ghost { background: var(--hub-surface-2); }
 /* The Leaderboard/My Stats overlays' own injected CSS hardcodes a couple of literal
