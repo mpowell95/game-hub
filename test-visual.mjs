@@ -241,6 +241,19 @@ const MOTION = {
       await cell.click();
     },
   },
+  yahtzee: {
+    // The HOW TO PLAY carousel is a clone of six screen recordings (reference/yahtzee/*.MOV) and
+    // its whole job is to MOVE - the pointing hand travelling to a control and tapping it is the
+    // teaching device. A frozen hand would still screenshot perfectly and teach nothing, which is
+    // exactly the class of failure a static check cannot see.
+    what: 'the pointing hand travelling across the how-to illustration',
+    selector: '.yz-ht-hand',
+    minMs: 500,
+    minTravelPx: 40,   // the illustration is small; the hand crosses a third of it, not a screen
+    async drive(page) {
+      await page.click('[data-action="howto"]');
+    },
+  },
 };
 
 // --- PLAY: can a human actually play this game? ------------------------------------------------

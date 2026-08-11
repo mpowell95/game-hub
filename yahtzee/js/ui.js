@@ -38,6 +38,7 @@ import * as net from '../../js/net.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
 import { deviceId, recordYahtzee } from '../../js/game-stats.js';
+import { howToHtml, createHowTo } from './howto.js';
 
 const MODE = 'ai'; // 'ai' | 'hotseat' -- solo-mode default; irrelevant once in MP
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
@@ -50,6 +51,27 @@ const CATEGORIES = [...LEFT_CATS, ...RIGHT_CATS];
 const RIGHT_ICON_KIND = {
   threeKind:'3x', fourKind:'4x', fullHouse:'house',
   smallStraight:'small', largeStraight:'large', yahtzee:'yahtzee', chance:'chance'
+};
+
+// What each symbol MEANS. Built 2026-08-11: the reference how-to's fifth page is "Learn about
+// each combo by pressing its symbol on the board", and this game had no such thing -- seven
+// little red pictograms (3x, 4x, a house, two card fans, a star, a question mark) with nothing
+// anywhere on the screen saying what any of them scored. A player who did not already know
+// Yahtzee could not find out from inside the game.
+const CAT_INFO = {
+  ones:   { name:'Ones',    score:'Score: sum of all 1s' },
+  twos:   { name:'Twos',    score:'Score: sum of all 2s' },
+  threes: { name:'Threes',  score:'Score: sum of all 3s' },
+  fours:  { name:'Fours',   score:'Score: sum of all 4s' },
+  fives:  { name:'Fives',   score:'Score: sum of all 5s' },
+  sixes:  { name:'Sixes',   score:'Score: sum of all 6s' },
+  threeKind:    { name:'3 of a kind',   score:'Score: sum of all dice' },
+  fourKind:     { name:'4 of a kind',   score:'Score: sum of all dice' },
+  fullHouse:    { name:'Full house',    score:'Score: 25' },
+  smallStraight:{ name:'Sequence of 4', score:'Score: 30' },
+  largeStraight:{ name:'Sequence of 5', score:'Score: 40' },
+  yahtzee:      { name:'Yahtzee',       score:'Score: 50' },
+  chance:       { name:'Chance',        score:'Score: sum of all dice' },
 };
 
 const GAME_MARKUP = `
@@ -76,7 +98,7 @@ const GAME_MARKUP = `
       <div class="yz-avatar" id="p2avatar">&#129302;</div>
     </div>
 
-    <div class="yz-kebab yz-abs"><span></span><span></span><span></span></div>
+    <button type="button" class="yz-kebab yz-abs" data-action="howto" aria-label="How to play"><span></span><span></span><span></span></button>
   </div>
 
   <div class="yz-rule-gold"></div>
@@ -86,6 +108,8 @@ const GAME_MARKUP = `
   <div class="yz-playfield">
     <div class="yz-frame"></div>
     <div class="yz-scorecard" id="scorecard"></div>
+    <div class="yz-cat-dim" id="catDim"></div>
+    <div class="yz-cat-pop" id="catPop"><b id="catPopName"></b><span id="catPopScore"></span></div>
   </div>
 
   <!-- Dice: real static 6-face CSS cubes; JS rotates each cube to show the current value -->
@@ -121,6 +145,7 @@ let root = null;          // the .yz-root element mounted into container
 let screenHost = null;    // swaps between the setup/lobby screen and GAME_MARKUP
 let destroyed = true;     // true whenever no live instance is mounted
 let resizeHandler = null;
+let howTo = null;
 let offViewport = null;   // unsubscribe from js/viewport.js's coalesced resize subscription
 let pendingTimeouts = new Set();
 let pendingFrames = new Set();
@@ -338,6 +363,41 @@ function toggleHold(i){
     { transform:`translateY(${liftY}px) rotate(-3deg)` },
     { transform:`translateY(${liftY}px) rotate(0deg)` }
   ], { duration:dur, easing:'ease-out' });
+}
+
+/* ---------- Combo info: press a symbol to learn what it is (2026-08-11) ----------
+ * The reference opens this on a PRESS and closes it on release. A pure press-and-hold is a bad
+ * fit here though: the same icons are also how you pick a category, and this game already routes
+ * every tap through one delegated click listener. So the rule is: hold for 320ms to learn,
+ * release to dismiss; a short tap still selects, exactly as before. Nothing about picking a
+ * category changed, which is why no existing test needed touching. */
+const CAT_HOLD_MS = 320;
+let catHoldTimer = null;
+let catHoldFired = false;
+
+function showCatInfo(cat, iconEl){
+  const info = CAT_INFO[cat];
+  const pop = $('catPop'), dim = $('catDim');
+  if(!info || !pop || !dim || !iconEl) return;
+  $('catPopName').textContent = info.name;
+  $('catPopScore').textContent = info.score;
+  // Positioned against the PLAYFIELD, which is the popover's own offset parent, so this stays
+  // correct at any stage scale (the whole stage is transform-scaled to fit the phone).
+  const field = root.querySelector('.yz-playfield');
+  const fr = field.getBoundingClientRect(), ir = iconEl.getBoundingClientRect();
+  const scale = fr.width / 410 || 1;
+  const left = (ir.left - fr.left) / scale + (ir.width / scale) / 2;
+  const top = (ir.top - fr.top) / scale;
+  pop.style.left = Math.max(8, Math.min(410 - 8, left)) + 'px';
+  pop.style.top = Math.max(6, top - 10) + 'px';
+  pop.classList.add('yz-show');
+  dim.classList.add('yz-show');
+}
+
+function hideCatInfo(){
+  const pop = $('catPop'), dim = $('catDim');
+  if(pop) pop.classList.remove('yz-show');
+  if(dim) dim.classList.remove('yz-show');
 }
 
 function selectCategory(cat){
@@ -1161,6 +1221,31 @@ function renderScorecard(){
     html += cell(cat, rightIcon(RIGHT_ICON_KIND[cat]), 196, true, 258, 309, i);
   });
 
+  // THE SECTION BONUS, shown at last (2026-08-11). The maths has always been here
+  // (upperBonus(): 63 in the upper column earns 35) and a "+35 BONUS!" toast fired when it
+  // landed -- but the card never showed the target or how close either player was, so the one
+  // thing worth playing for in the upper column was invisible until the moment it was already
+  // won. The reference how-to's sixth page is entirely about this rule, which is what surfaced
+  // the gap. It goes in row 7's left half, the one cell on this card that was empty (six upper
+  // categories, seven rows), and follows the card's own box-vs-numeral contract: the pill in the
+  // box column is the LOCAL viewer's progress, the one in the numeral column is the opponent's.
+  {
+    const bTop = rowTop(7);
+    const mine = upperSum(p1.scores), theirs = upperSum(p2.scores);
+    const pill = (val, left) => {
+      const got = val >= 63;
+      return `<div class="yz-bonus-pill ${got ? 'yz-bonus-got' : ''} yz-abs" style="left:${left}px;top:${bTop + 22}px">`
+        + `<span class="yz-num">${val}/63</span></div>`;
+    };
+    // The label STACKS. Laid out side by side it ran to ~94px and the first pill (which has to
+    // sit at 63, the box column's own x, to keep the box-vs-numeral contract) covered the "+35".
+    html += `<div class="yz-bonus-lab yz-abs" style="left:7px;top:${bTop + 10}px">`
+      + `<span class="yz-bonus-cap">SECTION<br>BONUS</span>`
+      + `<span class="yz-bonus-plus ${(mine >= 63 || theirs >= 63) ? 'yz-bonus-got' : ''}">+35</span></div>`;
+    html += pill(mine, 63);
+    html += pill(theirs, 114);
+  }
+
   html += sparkleSVG(363-16, 383-12);
   html += sparkleSVG(404-16, 372-12);
 
@@ -1290,6 +1375,7 @@ function setupScreenHTML(){
       ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?'Creating room…':'Create a room and share the code with a friend.'))}</p>
          <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>Create Room</button>`
       : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">Play</button>`}
+    <button type="button" class="yz-howto-link" data-action="howto">How to play</button>
   </div>`;
 }
 
@@ -1305,7 +1391,7 @@ function mountSetupScreen(){
 function mountGameScreen(){
   screenHost.innerHTML = GAME_MARKUP;
   buildDiceCubes();
-  resizeHandler = fitStage;
+  resizeHandler = () => { fitStage(); if(howTo) howTo.refit(); };
   offViewport = onViewportResize(resizeHandler);
   fitStage();
   const leaveBtn = $('mpLeaveBtn');
@@ -1316,6 +1402,30 @@ function mountGameScreen(){
 function wireInput(){
   root.addEventListener('click', onRootClick);
   root.addEventListener('input', onRootInput);
+  // Combo info. Bound to the game's OWN root, never document (root CLAUDE.md's scroll/touch
+  // rules), and pointer events rather than touch so a mouse and a finger behave the same.
+  root.addEventListener('pointerdown', onRootPointerDown);
+  root.addEventListener('pointerup', onRootPointerEnd);
+  root.addEventListener('pointercancel', onRootPointerEnd);
+  root.addEventListener('pointerleave', onRootPointerEnd);
+}
+
+function onRootPointerDown(e){
+  if(howTo && howTo.isOpen()) return;
+  const icon = e.target.closest('.yz-cat-icon[data-cat]');
+  if(!icon) return;
+  catHoldFired = false;
+  clearTimeout(catHoldTimer);
+  catHoldTimer = setTimeout(() => {
+    catHoldFired = true;
+    showCatInfo(icon.dataset.cat, icon);
+  }, CAT_HOLD_MS);
+}
+
+function onRootPointerEnd(){
+  clearTimeout(catHoldTimer);
+  catHoldTimer = null;
+  if(catHoldFired) hideCatInfo();
 }
 
 function onRootInput(e){
@@ -1331,6 +1441,16 @@ function onRootInput(e){
 }
 
 function onRootClick(e){
+  // --- how to play: checked FIRST. The sheet covers the whole screen, so a tap inside it must
+  //     never fall through to the board or the setup screen underneath. ---
+  if(howTo){
+    if(e.target.closest('[data-action="ht-close"]')){ howTo.close(); return; }
+    if(e.target.closest('[data-action="ht-next"]')){ howTo.next(); return; }
+    if(e.target.closest('[data-action="ht-first"]')){ howTo.first(); return; }
+    if(e.target.closest('[data-action="howto"]')){ howTo.open(0); return; }
+    if(howTo.isOpen()) return;
+  }
+
   // --- setup screen actions ---
   const modeBtn = e.target.closest('[data-mode]');
   if(modeBtn && view==='setup' && !lobby){
@@ -1384,8 +1504,11 @@ function onRootClick(e){
     return;
   }
   const catEl = e.target.closest('[data-cat]');
-  if(catEl && isHumanTurn()){
-    selectCategory(catEl.dataset.cat);
+  if(catEl){
+    // A hold that already opened the info popover must not ALSO commit to picking that
+    // category on the click that follows the release.
+    if(catHoldFired){ catHoldFired = false; return; }
+    if(isHumanTurn()) selectCategory(catEl.dataset.cat);
   }
 }
 
@@ -1412,9 +1535,14 @@ export function init(container){
   destroyed = false;
 
   ensureCss();
-  container.innerHTML = `<div class="yz-root"><div id="screenHost"></div></div>`;
+  // The how-to sheet lives on the PERSISTENT root, not inside #screenHost: screenHost's innerHTML
+  // is replaced wholesale every time the game swaps between the setup screen and the board, and a
+  // sheet mounted in there would be destroyed mid-read. It is position:fixed, so where it sits in
+  // the tree costs nothing.
+  container.innerHTML = `<div class="yz-root"><div id="screenHost"></div>${howToHtml()}</div>`;
   root = container.querySelector('.yz-root');
   screenHost = root.querySelector('#screenHost');
+  howTo = createHowTo(root);
 
   view = 'setup'; mpMode = 'solo'; lobby = null; mpBusy = false; mpError = '';
   mpJoinCode = ''; mpPendingCode = null; mpJoinedCode = null; mpLobbyRoom = null;
@@ -1465,9 +1593,15 @@ export function destroy(){
     net.disconnect();
   }
 
+  if(howTo){ howTo.destroy(); howTo = null; }
+  clearTimeout(catHoldTimer); catHoldTimer = null; catHoldFired = false;
   if(root){
     root.removeEventListener('click', onRootClick);
     root.removeEventListener('input', onRootInput);
+    root.removeEventListener('pointerdown', onRootPointerDown);
+    root.removeEventListener('pointerup', onRootPointerEnd);
+    root.removeEventListener('pointercancel', onRootPointerEnd);
+    root.removeEventListener('pointerleave', onRootPointerEnd);
   }
   if(root && root.parentElement) root.parentElement.innerHTML = '';
   root = null; screenHost = null;

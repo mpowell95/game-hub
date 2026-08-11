@@ -6,7 +6,7 @@
 
 A pixel-exact reproduction of a mobile Yahtzee UI, built from a standalone spec
 (`BUILD_INSTRUCTIONS.md` / `YAHTZEE_CLONE_SPEC.md` at the repo root, plus the reference images
-`yahtzee.png` / `yahtzee_ref_409x729.png`) across three phases: a diffed static reference frame,
+`yahtzee.png` / `yahtzee_ref_409x729.png`, still at the repo root) across three phases: a diffed static reference frame,
 full game logic, then the full animation spec. Originally built and verified as a fully
 self-contained `yahtzee-clone/index.html`, then wired into the hub as a proper module
 (2026-07-28, Matt: "Wire it into the hub launcher now. ALWAYS" — see the root memory file this
@@ -76,6 +76,76 @@ so a test can force a synchronous re-render after mutating `getState()` directly
 scripts that exercise it aren't checked into this repo (built ad hoc during the build phases); the
 seam itself is small and harmless enough to leave in permanently rather than strip for shipping,
 same spirit as any other in-repo dev-only hook.
+
+## HOW TO PLAY, and the two features it turned up (2026-08-11)
+
+Matt uploaded six iPhone screen recordings to `reference/yahtzee/` (`Yahtzee how to 1..6.MOV`,
+one per page of a mobile Yatzy game's tutorial) and said: *"Clone the how to pages. Exactly.
+Animations included. If our game doesn't include anything in the how to (bonus, symbol
+explanations, etc), build that and add it to our game as well."*
+
+**A `.MOV` is not something a session can read.** The Read tool takes images and PDFs; Playwright's
+bundled ffmpeg is a cut-down build that only opens WebM and refuses QuickTime outright. Getting
+frames out needed `npm install --no-save ffmpeg-static` and
+`ffmpeg -i <file> -vf "fps=3,scale=200:-1,tile=6x5" sheet.jpg`, which lays a whole recording out as
+one contact sheet you can actually see the motion in. **Write that down rather than rediscovering
+it** — it is the only reason those six files are usable at all.
+
+### `js/howto.js` — the carousel
+
+A separate module, not more `ui.js`. Six pages, the reference's own order and wording, a dark
+rounded modal over a white card over a salmon illustration panel, six dots, and a
+`[|◀] [ OK ] [▶|]` footer whose end arrows grey out at each end of the run. Mounted **on the
+persistent `.yz-root`, not inside `#screenHost`** — screenHost's `innerHTML` is replaced wholesale
+on every setup↔game swap, and a sheet mounted in there would be destroyed mid-read.
+
+Each page runs its own timeline: a pointing hand travels to a control and taps it, and the little
+board reacts. `resetBoard()` wipes every page-specific mark first, so a page always starts from the
+same board no matter what ran before it. Under `prefers-reduced-motion` each page instead paints a
+STILL, informative pose (dice rolled / held / committed / tooltip open / bonus earned) — never a
+blank panel, per the repo-wide rule that a reduced-motion branch is an instant state change and
+never a removal.
+
+**The one deliberate deviation from "exactly":** the reference's illustration shows the REFERENCE
+app's scorecard. Ours draws OUR scorecard at the same small scale. A tutorial showing a board the
+player is about to not see would teach the wrong thing. Everything else — chrome, order, captions,
+choreography — is the clone.
+
+Entry points: a **How to play** link on the setup screen, and the header **kebab** in game. The
+kebab was previously three inert dots with no handler at all; it is a real `<button>` now with a
+thumb-sized hit area around the same 8px dots.
+
+`test-visual.mjs`'s `MOTION` probe for this game watches `.yz-ht-hand` travel (339px over ~6s). A
+frozen hand would screenshot perfectly and teach nothing, which is precisely what a static check
+cannot see.
+
+### What the reference had that we did not — both now built
+
+1. **The section bonus was invisible.** `upperBonus()` (63 in the upper column earns 35) has always
+   been here and a "+35 BONUS!" toast fired when it landed, but the card never showed the target or
+   how close either player was — the one thing worth playing the upper column FOR could not be seen
+   until it was already won. It now sits in row 7's left half, the one cell on this card that was
+   empty (six upper categories, seven rows), and follows the card's own box-vs-numeral contract:
+   the pill in the box column is the local viewer's progress, the one in the numeral column is the
+   opponent's.
+   **Earned is green with a tick, not gold.** Gold was the first attempt and it was invisible — the
+   card underneath is already gold. Three cues, only one of them colour, per the colourblind rule.
+2. **Nothing said what the symbols meant.** Seven red pictograms (`3x`, `4x`, a house, two card
+   fans, a star, a question mark) with no explanation anywhere in the game; a player who did not
+   already know Yahtzee could not find out from inside it. **Hold a category symbol for 320ms** and
+   the board dims and a popover names the combo and its score (`CAT_INFO`, `showCatInfo`). The
+   reference opens this on press and closes on release; a pure press-and-hold could not work here
+   because the same icons are also how you PICK a category, so a short tap still selects exactly as
+   before and a hold that fired suppresses the click that follows it. No existing behaviour changed,
+   which is why no existing test needed touching.
+
+Both are wired through the game's own delegated listeners on `.yz-root` (pointerdown/up/cancel/
+leave), never `document`, and all four come off in `destroy()` alongside the hold timer.
+
+**Still no i18n**, consistent with the rest of this game — these new strings are English literals
+like every other string here, and Yahtzee remains `test-game-conventions.mjs`'s one standing
+`KNOWN_GAPS` entry. Translating this game is its own task; adding a `strings.js` for the tutorial
+alone would have made the gap messier, not smaller.
 
 ## Game engine notes
 
