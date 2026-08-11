@@ -32,6 +32,27 @@ the counterclockwise sow with a visible dashed hop over the opponent's mancala, 
 "X = Y" example, and two rule bullets. Matt's own words: "must be completely overhauled... same
 excess-prose issue."
 
+## The board is NEVER horizontal (2026-08-11 — settled, do not re-add)
+
+Matt: *"Mancala should NEVER be horizontal."*
+
+A `@media (min-width: 720px)` block in `mancala.css` used to flip the board to a "classic
+horizontal" layout — two ROWS of pits between stores on the left and right — on any screen 720px
+or wider. **It is deleted, not disabled.** The board is one shape at every width now: two COLUMNS
+of pits, each store a wide bar across the top and bottom. Verified at 393, 800 and 1280px wide.
+
+Two reasons it is worth keeping gone, beyond the instruction:
+
+- A second layout is a second thing every future change has to be checked against, and nothing
+  was checking it — no test ever opened this game above 720px.
+- **It is what made the how-to carousel get built upside down.** A session reading this game's CSS
+  finds the word "horizontal" with no way to tell it applied only to a width the hub (`.hub-main`,
+  `max-width: 720px`) barely reaches. That is a trap for exactly the kind of session that most
+  needs to know the board's shape.
+
+If a wide-screen layout is ever wanted again it is a deliberate design pass, with the how-to
+illustration following the same breakpoint — not a leftover media query.
+
 ## HOW TO PLAY — the animated carousel (2026-08-11)
 
 **This REPLACED the static sheet described below.** Matt uploaded seven iPhone screen recordings
@@ -61,9 +82,13 @@ Three things from the recordings that are easy to miss:
    **This was shipped WRONG once, and the reason is worth keeping.** The first cut drew a
    HORIZONTAL board — pits in two rows, stores left and right — and wrote a comment justifying it
    as a deliberate deviation from the reference. It was neither deliberate nor a deviation: it was
-   inferred from this file's own wording ("P1 ... always rendered bottom, P2 ... always rendered
-   top"), which describes the SEATS, not the geometry. Nobody looked at the game. Matt: *"our
-   actual game is vertical. Why would the how to be horizontal??? That doesn't make any sense."*
+   inferred rather than looked at. To be exact about the sources, since the first version of this
+   note blamed them unfairly: `game.js` says nothing about geometry at all; this file's own MP
+   section says "always rendered bottom / top", which is CORRECT for the vertical board (your
+   store IS the bar across the bottom); and the only occurrence of the word "horizontal" was the
+   `min-width: 720px` block described above, which no phone ever reached. Nothing was misleading.
+   The board was simply never opened. Matt: *"our actual game is vertical. Why would the how to
+   be horizontal??? That doesn't make any sense."*
    The layout is now measured off the running board (`[data-pit]` rects: 0-5 at x≈108 descending,
    6 as a bar at the bottom, 7-12 at x≈285 ascending, 13 as a bar at the top), which is the only
    way it should ever have been established. VISUAL-PROCESS.md's first rule, missed inside the

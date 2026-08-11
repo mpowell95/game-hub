@@ -686,29 +686,20 @@
   color: rgba(36, 22, 9, 0.6);
 }
 
-/* --- landscape / desktop: classic horizontal board --------------------- */
+/* MANCALA IS NEVER HORIZONTAL (2026-08-11, Matt: "Mancala should NEVER be horizontal").
+   A @media (min-width: 720px) block used to flip the board to a "classic horizontal" layout --
+   two rows of pits between stores on the left and right -- on any screen 720px or wider. It was
+   deleted, not disabled. The board is one shape everywhere now: two COLUMNS of pits with each
+   store as a wide bar across the top and bottom, which is what every phone was already getting
+   and what the how-to sheet draws.
 
-@media (min-width: 720px) {
-  .mancala .mc-shell { max-width: 780px; }
-  .mancala .mc-board {
-    max-width: 760px;
-    grid-template-columns: 92px repeat(6, 1fr) 92px;
-    grid-template-rows: 1fr 1fr;
-    grid-template-areas:
-      's13 p12 p11 p10 p9 p8 p7 s6'
-      's13 p0  p1  p2  p3 p4 p5 s6';
-    gap: 26px 10px;
-    padding: 22px 20px;
-  }
-  .mancala .mc-store { height: auto; margin: 0; border-radius: 40px; }
-  .mancala .mc-store--p2 { background: linear-gradient(90deg, #ff7364, var(--mc-p2) 55%, var(--mc-p2-deep)); }
-  .mancala .mc-store--p1 { background: linear-gradient(90deg, #4fc4ef, var(--mc-p1) 55%, var(--mc-p1-deep)); }
-  .mancala .mc-hole { width: clamp(54px, 8vw, 74px); height: clamp(54px, 8vw, 74px); }
-  /* Horizontal board: the two rows of pits are stacked, so the carved counts
-     sit above the top row (P2) and below the bottom row (P1), not left/right. */
-  .mancala .mc-pit--p1 .mc-count { right: auto; left: 50%; top: 100%; transform: translateX(-50%); margin: 1px 0 0; }
-  .mancala .mc-pit--p2 .mc-count { left: 50%; right: auto; top: auto; bottom: 100%; transform: translateX(-50%); margin: 0 0 1px; }
-}
+   Why it mattered beyond taste: a second layout is a second thing every future change has to be
+   checked against, and nobody was checking it. It is also what made the how-to carousel get
+   built upside down -- a session reading the CSS finds the word "horizontal" and has no way to
+   know it only applies to a width the hub (max-width 720px) barely reaches.
+
+   If a wide-screen layout is ever wanted again, it needs to be a deliberate design pass with the
+   how-to illustration following the same breakpoint, not a leftover media query. */
 
 /* --- animations -------------------------------------------------------- */
 
@@ -793,9 +784,9 @@
 /* ============================================================================================
    HOW TO PLAY -- cloned from reference/mancala/*.MOV. Same sheet chrome as Yahtzee's (the
    reference app is the same one): dark modal, white card, coloured illustration panel, six dots,
-   purple footer. The BOARD inside is ours -- horizontal, blue you at the bottom with your mancala
-   on the right, vermilion opponent along the top with theirs on the left (howto.js's header says
-   why we don't clone the reference's vertical one).
+   purple footer. The BOARD inside is ours: vertical, blue you down the left column into your
+   mancala across the bottom, vermilion opponent up the right into theirs across the top -- the
+   same shape the real board has at every width (see the "NEVER HORIZONTAL" note above).
    ============================================================================================ */
 .mancala .mc-ht-scrim{
   position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
