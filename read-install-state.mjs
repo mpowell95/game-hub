@@ -62,6 +62,7 @@ function main() {
         mode: d ? d.mode : null,
         browser: d ? d.browser : null,
         device: d ? d.device : null,
+        build: d ? d.build : null,
         // The tell for Ana's exact case: asked, and said no.
         dismissedTheSheet: d ? d.a2hsDismissed : null,
         lastSync: (rec && rec.updatedAt) || 0,
@@ -82,11 +83,13 @@ function main() {
       const state = r.installed === true ? 'INSTALLED APP'
         : r.installed === false ? 'browser tab  '
           : '(not seen yet)';
-      const extra = [r.device, r.browser, r.dismissedTheSheet ? 'dismissed the install prompt' : '']
-        .filter(Boolean).join(' · ');
+      const extra = [r.build || '(build unknown)', r.device, r.browser,
+        r.dismissedTheSheet ? 'dismissed the install prompt' : ''].filter(Boolean).join(' · ');
       console.log(`${state}  ${r.name.padEnd(14)} ${r.code.padEnd(6)} ${when(r.lastSync)}  ${extra}`);
     }
     console.log(`\n${app.length} on the installed app, ${tabs.length} in a browser tab, ${unknown.length} not seen since this shipped.`);
+    const builds = [...new Set(rows.map((r) => r.build).filter(Boolean))].sort();
+    if (builds.length) console.log(`Builds in the wild: ${builds.join(', ')}${builds.length > 1 ? '  <- anyone on an older one is a launch (or a failed install) behind' : ''}`);
     if (unknown.length) {
       console.log('"(not seen yet)" means that device has not opened the hub since this went live -');
       console.log('it is missing data, not a browser tab. Nothing here is retroactive.');

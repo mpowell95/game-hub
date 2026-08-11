@@ -35,11 +35,6 @@ export const ANNOUNCEMENTS = [
     // game's tile - the popup is announcing something new, and a second vocabulary for that
     // would be a small lie about how this app labels things.
     badge: true,
-    // GATED TO MATT (2026-08-11), so he can test the real thing on his own phone before the family
-    // sees it. DELETE THIS ONE LINE to go live - nothing else changes. Non-admins never see the
-    // popup AND never get it marked seen (js/hub.js returns before showAnnouncement), so the day
-    // the line goes, everyone gets it fresh, exactly once, as if it had always been there.
-    adminOnly: true,
     title: { en: 'Please report bugs!', es: '¡Reporta los fallos, por favor!' },
     // Matt's words. The opening clause used to restate the title ("Please tell me about bugs...")
     // and was cut; the joke is the part that earns its space, because it explains WHY the reports

@@ -847,7 +847,9 @@ using it. The seen-list is a preference, rule 2's carve-out, same class as favor
   are `{en, es}` ON the entry (registry data stays co-located, i18n decision 3); everything else
   routes through `js/strings.js`'s `bug_*` / `ann_*` keys.
 - Never shown over the name gate or a mounted game, and only once per page load.
-- **`adminOnly: true` previews an entry to Matt alone** (`isAdmin`, checked in `hub.js`'s
+- **The bug-report entry went fully live on 2026-08-11**, after Matt tested it on his own phone:
+  the `adminOnly` line was deleted and nothing else changed, so every device got it fresh, exactly
+  once. **`adminOnly: true` previews an entry to Matt alone** (`isAdmin`, checked in `hub.js`'s
   `_maybeAnnounce` before `showAnnouncement`, so a gated entry is never marked seen on anyone
   else's device and lands fresh for everyone the day the flag is deleted). The bug-report entry
   shipped gated on 2026-08-11 so Matt could test the real thing on his own phone first;
@@ -891,7 +893,18 @@ nothing anywhere recorded which route a person was actually on.
   it already syncs on (load, tab-hide, return-to-launcher, reconnect) instead of only the ones that
   file a bug report. Additive: a new child node, read by no gameplay or stats path, incapable of
   moving a counter.
-- **`node read-install-state.mjs`** lists it, browser tabs first.
+- **It carries the BUILD too** (`device.build`, e.g. `v295`, from `appVersion()` - the same
+  GET_VERSION message the version pill uses, so a report and the sync can never name different
+  builds for one device). Matt asked whether the app auto-updates for people who never tap the
+  pill: it does (`skipWaiting` + `clients.claim`, and the fetch handler is network-first), so
+  nobody should be more than one launch behind. This turns "should" into a fact, and it is the
+  only thing that catches a device whose SHELL INSTALL FAILED - that one sits on an old build
+  indefinitely and looks completely normal from the outside. **This is why an auto-reload on
+  `controllerchange` was NOT added**: it would fire on first-ever load (claim gives an
+  uncontrolled page a controller), it can yank the app out from under someone mid-form, and it
+  fixes nothing for the stranded case. Measure first.
+- **`node read-install-state.mjs`** lists it, browser tabs first, and prints every build in the
+  wild on the last line.
 - **It is NOT retroactive, and the tool says so.** A device shows `(not seen yet)` until it next
   opens the hub on a build that has this. That is missing data, not a browser tab, and the two must
   never be reported as the same thing. There is no record of how anyone played before this shipped.

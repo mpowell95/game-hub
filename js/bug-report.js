@@ -21,7 +21,7 @@ import { getStatsApp } from './firebase-boot.js';
 import { loadProfile } from './profile-store.js';
 import { deviceId, statsId } from './game-stats.js';
 import { recentErrors } from './error-log.js';
-import { installState } from './install-state.js';
+import { installState, swCacheName } from './install-state.js';
 
 // --- limits -------------------------------------------------------------------------------------
 // Screenshots ride as base64 data URLs. RTDB is not a file store, so the caps stay conservative:
@@ -120,22 +120,6 @@ function browserLabelFrom(uaData, ua) {
   return null;
 }
 
-/** Ask the ACTIVE service worker which build it is serving (the same GET_VERSION message the
- *  version pill uses). "Which build is this phone running" is the first question of half the bug
- *  reports this feature will get. */
-function serviceWorkerVersion() {
-  return new Promise((resolve) => {
-    try {
-      const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
-      if (!ctrl) { resolve(null); return; }
-      const ch = new MessageChannel();
-      const timer = setTimeout(() => resolve(null), 1500);
-      ch.port1.onmessage = (e) => { clearTimeout(timer); resolve((e.data && e.data.cache) || null); };
-      ctrl.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
-    } catch { resolve(null); }
-  });
-}
-
 /** The GPU string - what actually explains "the 3D games are choppy on my phone" (Ball Run, Pool
  *  and Hill Climb all render live). The context is released immediately. */
 function gpuInfo() {
@@ -199,7 +183,8 @@ export async function gatherEnvironment() {
   }, null);
 
   const conn = safe(() => nav.connection || nav.mozConnection || nav.webkitConnection, null);
-  const swCache = await serviceWorkerVersion();
+  // Through install-state.js, the same answer the sync mirrors - one build per device, never two.
+  const swCache = await swCacheName();
   const install = safe(() => installState(), {});
 
   const env = {

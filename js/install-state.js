@@ -70,6 +70,33 @@ export function deviceLabel() {
 }
 
 /**
+ * The cache name the ACTIVE service worker is serving ('game-hub-v294'), or null when there is no
+ * controller yet. Lives here rather than in js/bug-report.js (where it started) so the sync and a
+ * report cannot report different builds for the same device.
+ *
+ * Never rejects and never hangs: a worker that does not answer within 1.5s resolves null, because
+ * this rides the stats sync and a diagnostic must not be able to delay it.
+ */
+export function swCacheName() {
+  return new Promise((resolve) => {
+    try {
+      const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!ctrl) { resolve(null); return; }
+      const ch = new MessageChannel();
+      const timer = setTimeout(() => resolve(null), 1500);
+      ch.port1.onmessage = (e) => { clearTimeout(timer); resolve((e.data && e.data.cache) || null); };
+      ctrl.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
+    } catch { resolve(null); }
+  });
+}
+
+/** That cache name as the short build label the version pill shows ('v294'), or null. */
+export async function appVersion() {
+  const m = /game-hub-(v\d+)/.exec((await swCacheName()) || '');
+  return m ? m[1] : null;
+}
+
+/**
  * The whole picture in one small object, safe to mirror on every sync:
  * `{ installed, mode, browser, device, a2hsDismissed }`. Never throws; unknown fields are null.
  *
@@ -86,4 +113,4 @@ export function installState() {
   };
 }
 
-export default { installState, isInstalled, displayMode, browserLabel, deviceLabel };
+export default { installState, isInstalled, displayMode, browserLabel, deviceLabel, swCacheName, appVersion };
