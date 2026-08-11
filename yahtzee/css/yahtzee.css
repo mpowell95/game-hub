@@ -123,7 +123,14 @@
   width:42px; height:42px; border:4px solid #C610A7; margin-right:-14px; margin-left:6px; order:2;
 }
 
-.yz-root .yz-kebab{ position:absolute; left:377px; top:18px; width:8px; height:28px; }
+/* The kebab used to be three inert dots. It is a real button now (it opens HOW TO PLAY), so it
+   needs a button reset and a hit area a thumb can actually find - the dots stay 8px wide, the
+   tappable box around them does not. */
+.yz-root .yz-kebab{
+  position:absolute; left:369px; top:12px; width:24px; height:40px; padding:6px 8px;
+  appearance:none; background:none; border:0; cursor:pointer; touch-action:manipulation;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
 .yz-root .yz-kebab span{
   display:block; width:5px; height:5px; border-radius:50%; background:#fff; margin:0 auto 6px;
 }
@@ -474,4 +481,263 @@
   position:absolute; right:10px; top:20px; z-index:56;
   background:rgba(0,0,0,.5); color:#fff; border:none; border-radius:10px; padding:6px 12px;
   font:700 13px "Baloo 2",sans-serif; cursor:pointer;
+}
+
+/* ============================================================================================
+   HOW TO PLAY -- cloned from reference/yahtzee/*.MOV (six recordings, one per page).
+   Colours sampled off those frames: the dark modal, the white card, the salmon illustration
+   panel, the navy caption, the peach/orange dots and the purple footer buttons are the
+   reference's, not this game's own red/gold palette -- the sheet is a clone, the board drawn
+   inside it is ours (see yahtzee/js/howto.js's header for why).
+   ============================================================================================ */
+.yz-root .yz-ht-scrim {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  overscroll-behavior: contain;   /* a flick must never pan the hub behind this */
+}
+.yz-root .yz-ht-scrim[hidden] { display: none; }
+.yz-root .yz-ht-modal {
+  width: min(100%, 340px);
+  background: #2A2730;
+  border-radius: 22px;
+  padding: 16px 14px 14px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.yz-root .yz-ht-title {
+  color: #fff; font-weight: 800; font-size: 20px; letter-spacing: 0.04em;
+  text-align: center; font-family: system-ui, -apple-system, sans-serif;
+}
+.yz-root .yz-ht-card {
+  background: #fff; border-radius: 16px; padding: 10px 10px 4px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.yz-root .yz-ht-panel {
+  position: relative; background: #DE8C74; border-radius: 10px;
+  aspect-ratio: 200 / 244; overflow: hidden;
+}
+.yz-root .yz-ht-caption {
+  margin: 0; padding: 2px 4px 8px;
+  color: #2B3A55; font-weight: 700; font-size: 14.5px; line-height: 1.3;
+  text-align: center; font-family: system-ui, -apple-system, sans-serif;
+}
+.yz-root .yz-ht-caption b { color: #E04A3A; }   /* the reference prints "Play" in red */
+.yz-root .yz-ht-dots { display: flex; justify-content: center; gap: 8px; }
+.yz-root .yz-ht-dots i {
+  width: 9px; height: 9px; border-radius: 50%; background: #F3D3B6;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.yz-root .yz-ht-dots i.yz-ht-dot-on { background: #E8763C; transform: scale(1.1); }
+.yz-root .yz-ht-nav { display: flex; align-items: center; gap: 10px; }
+.yz-root .yz-ht-ok {
+  flex: 1; height: 46px; border: 0; border-radius: 12px; cursor: pointer;
+  background: #8E4EC6; color: #fff; font-weight: 800; font-size: 17px; letter-spacing: 0.04em;
+  box-shadow: 0 4px 0 #5F2E8C; font-family: inherit; touch-action: manipulation;
+}
+.yz-root .yz-ht-sq {
+  width: 46px; height: 46px; flex: none; border: 0; border-radius: 12px; cursor: pointer;
+  background: #8E4EC6; box-shadow: 0 4px 0 #5F2E8C; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation;
+}
+.yz-root .yz-ht-sq svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round; }
+.yz-root .yz-ht-sq svg path { fill: #fff; stroke: #fff; }
+/* Disabled at each end of the run, exactly as the recordings show it: a muted slate, not hidden.
+   The arrow stays visible so the row never changes shape. */
+.yz-root .yz-ht-sq.yz-ht-off { background: #4E6E75; box-shadow: 0 4px 0 #355056; cursor: default; }
+.yz-root .yz-ht-sq.yz-ht-off svg path { fill: #9FBAC0; stroke: #9FBAC0; }
+
+/* ---- the illustration's little board. Drawn at a fixed 200x244 and scaled to the panel, so
+   every coordinate below is in those units and holds at any phone size. ---- */
+.yz-root .yz-ht-board {
+  position: absolute; top: 0; left: 0; width: 200px; height: 244px;
+  transform-origin: top left;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.yz-root .yz-ht-card2 {
+  position: absolute; left: 18px; top: 8px; width: 164px; height: 158px;
+  background: linear-gradient(180deg, #FDCF61 0%, #F7BC4C 100%);
+  border: 2px solid #EAB74D; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px #FEFAEE;
+}
+.yz-root .yz-ht-r { position: absolute; left: 4px; display: flex; align-items: center; gap: 3px; }
+.yz-root .yz-ht-r2 { left: 86px; }
+.yz-root .yz-ht-face {
+  width: 17px; height: 17px; border-radius: 3px; background: #fff;
+  border: 1px solid #B9B2A4; display: inline-flex;
+}
+.yz-root .yz-ht-pips { width: 100%; height: 100%; fill: #15181C; }
+.yz-root .yz-ht-tile {
+  width: 17px; height: 17px; border-radius: 3px; flex: none;
+  background: linear-gradient(180deg, #FE4B4B 0%, #CB2222 100%);
+  border: 1px solid #9E1515; color: #fff; font-size: 8px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.yz-root .yz-ht-tile.yz-ht-used { filter: grayscale(0.45) brightness(0.8); }
+.yz-root .yz-ht-slot {
+  width: 24px; height: 17px; border-radius: 3px;
+  background: linear-gradient(180deg, #FFF5D3 0%, #FDD08F 100%);
+  border: 1px solid #C1894B; color: #8B4A0C;
+  font-size: 9px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.yz-root .yz-ht-slot.yz-ht-pick { outline: 2px solid #FFC93C; outline-offset: 1px; }
+.yz-root .yz-ht-slot.yz-ht-done { background: linear-gradient(180deg, #FFE9A8 0%, #F6C169 100%); }
+/* The section bonus, in the empty cell under the upper column - the same place the real
+   scorecard shows it, so the tutorial points somewhere that exists. */
+.yz-root .yz-ht-bonusrow {
+  position: absolute; left: 4px; top: 132px; width: 76px; height: 22px;
+  display: flex; align-items: center; gap: 3px;
+}
+.yz-root .yz-ht-bonuslab { font-size: 5px; font-weight: 800; color: #8B4A0C; line-height: 1.1; }
+.yz-root .yz-ht-bonusval { font-size: 9px; font-weight: 800; color: #8B4A0C; }
+.yz-root .yz-ht-bonusprog {
+  font-size: 7px; font-weight: 800; color: #8B4A0C;
+  background: #FFF5D3; border: 1px solid #C1894B; border-radius: 8px; padding: 1px 3px;
+}
+/* EARNED. Not a gold fill: the card underneath is already gold, so gold-on-gold is invisible
+   (it was, first try). Dark ink fill, cream text, and a tick - the tick is what carries it if the
+   colour does not. */
+.yz-root .yz-ht-bonusrow.yz-ht-earned .yz-ht-bonusval { color: #2E7D18; }
+.yz-root .yz-ht-bonusrow.yz-ht-earned .yz-ht-bonusprog {
+  color: #FFF3CE; background: #2E7D18; border-color: #1B4F0D;
+}
+.yz-root .yz-ht-bonusrow.yz-ht-earned .yz-ht-bonusprog::after { content: " \2713"; }
+.yz-root .yz-ht-tray {
+  position: absolute; left: 18px; top: 174px; width: 164px;
+  display: flex; justify-content: space-between;
+}
+.yz-root .yz-ht-die {
+  width: 24px; height: 24px; border-radius: 5px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E3DDD0 100%);
+  border: 1px solid #B9B2A4; display: inline-flex;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.yz-root .yz-ht-die.yz-ht-empty { background: #7E8A93; border-color: #5E6970; }
+.yz-root .yz-ht-die.yz-ht-held { box-shadow: 0 0 0 2px #FFD54A; transform: translateY(-3px); }
+.yz-root .yz-ht-roll {
+  position: absolute; left: 18px; top: 208px; width: 104px; height: 24px;
+  border-radius: 6px; background: linear-gradient(180deg, #E8483C 0%, #C22B22 100%);
+  border: 1px solid #8E1A14; color: #fff; font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.yz-root .yz-ht-pip {
+  width: 11px; height: 11px; border-radius: 2px; background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.5); font-size: 7px; font-style: normal; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.yz-root .yz-ht-pip.yz-ht-pip-on { background: #fff; color: #C22B22; }
+.yz-root .yz-ht-play {
+  position: absolute; left: 130px; top: 208px; width: 52px; height: 24px;
+  border-radius: 6px; background: linear-gradient(180deg, #4F822D 0%, #29650F 100%);
+  border: 1px solid #1F4A0A; color: #90958E; font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.yz-root .yz-ht-play.yz-ht-on {
+  background: linear-gradient(180deg, #8CD44C 0%, #3F7A1B 100%); color: #fff;
+}
+/* page 5's dim + tooltip, page 4's arrow, and the pointing hand */
+.yz-root .yz-ht-dim {
+  position: absolute; inset: 0; background: rgba(20, 8, 4, 0.55);
+  opacity: 0; transition: opacity 0.22s ease; pointer-events: none;
+}
+.yz-root .yz-ht-dim.yz-ht-show { opacity: 1; }
+/* Anchored by its BOTTOM edge, so it sits above the symbol being pressed instead of covering
+   it - the reference keeps the symbol visible under the finger, which is the whole point. */
+.yz-root .yz-ht-tip {
+  position: absolute; background: #fff; border-radius: 4px; padding: 3px 5px;
+  color: #23303F; font-size: 7px; line-height: 1.25; white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  opacity: 0; transform: translateY(-100%) translateY(3px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+.yz-root .yz-ht-tip.yz-ht-show { opacity: 1; transform: translateY(-100%); }
+.yz-root .yz-ht-tip b { display: block; font-size: 8px; }
+.yz-root .yz-ht-arrow {
+  position: absolute; color: #E8291B; font-size: 15px; font-weight: 900; line-height: 1;
+  opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+  transform: translateY(4px); pointer-events: none;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+.yz-root .yz-ht-arrow.yz-ht-show { opacity: 1; transform: translateY(0); }
+.yz-root .yz-ht-hand {
+  position: absolute; left: 0; top: 0; width: 26px; height: 32px; margin: -2px 0 0 -6px;
+  opacity: 0; pointer-events: none;
+  transition: transform 0.42s cubic-bezier(.4, 0, .2, 1), opacity 0.25s ease;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+.yz-root .yz-ht-hand svg { width: 100%; height: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .yz-root .yz-ht-hand,
+  .yz-root .yz-ht-die,
+  .yz-root .yz-ht-dots i,
+  .yz-root .yz-ht-play,
+  .yz-root .yz-ht-tip,
+  .yz-root .yz-ht-arrow,
+  .yz-root .yz-ht-dim { transition: none; }
+}
+
+/* The setup screen's How to play link, matching the plain text link every other game uses. */
+.yz-root .yz-howto-link{
+  appearance:none; background:none; border:0; cursor:pointer; touch-action:manipulation;
+  margin-top:14px; padding:6px 10px; font:inherit; font-size:15px; font-weight:700;
+  color:#FFE9B8; text-decoration:underline; text-underline-offset:3px;
+}
+
+/* ---------- Section bonus (row 7, left half -- the card's one empty cell) ---------- */
+.yz-root .yz-bonus-lab{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; width:52px; }
+.yz-root .yz-bonus-cap{
+  font-family:'Baloo 2',system-ui,sans-serif; font-weight:800; font-size:10px; line-height:1.05;
+  color:var(--yz-ink); letter-spacing:.02em;
+}
+.yz-root .yz-bonus-plus{
+  font-family:'Baloo 2',system-ui,sans-serif; font-weight:800; font-size:19px; line-height:1;
+  color:var(--yz-ink);
+}
+.yz-root .yz-bonus-pill{
+  min-width:44px; height:24px; padding:0 6px; border-radius:12px;
+  background:linear-gradient(180deg,var(--yz-box-top) 0%,var(--yz-box-bot) 100%);
+  border:1px solid var(--yz-box-border);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Baloo 2',system-ui,sans-serif; font-weight:800; font-size:12px; color:var(--yz-ink);
+}
+/* Earned. Gold fill AND a heavier border AND bolder ink -- three cues, only one of them colour
+   (the repo's colourblind rule: hue never carries a state on its own). */
+.yz-root .yz-bonus-pill.yz-bonus-got{
+  background:linear-gradient(180deg,#4CA62C 0%,#2E7D18 100%);
+  border-color:#1B4F0D; border-width:2px; color:#FFF3CE;
+}
+.yz-root .yz-bonus-pill.yz-bonus-got::after{ content:" \2713"; }
+.yz-root .yz-bonus-plus.yz-bonus-got{ color:#2E7D18; text-shadow:0 1px 0 rgba(255,255,255,.6); }
+
+/* ---------- Combo info popover (hold a symbol) ---------- */
+.yz-root .yz-cat-dim{
+  position:absolute; left:0; top:0; width:410px; height:465px; border-radius:18px;
+  background:rgba(20,8,4,.55); opacity:0; pointer-events:none;
+  transition:opacity .18s ease; z-index:5;
+}
+.yz-root .yz-cat-dim.yz-show{ opacity:1; }
+.yz-root .yz-cat-pop{
+  position:absolute; z-index:6; transform:translate(-50%,-100%) scale(.94);
+  background:#fff; border-radius:8px; padding:7px 10px; white-space:nowrap;
+  box-shadow:0 6px 18px rgba(0,0,0,.42);
+  font-family:'Baloo 2',system-ui,sans-serif; color:#23303F;
+  opacity:0; pointer-events:none; transition:opacity .16s ease, transform .16s ease;
+}
+.yz-root .yz-cat-pop.yz-show{ opacity:1; transform:translate(-50%,-100%) scale(1); }
+.yz-root .yz-cat-pop b{ display:block; font-size:15px; font-weight:800; line-height:1.15; }
+.yz-root .yz-cat-pop span{ font-size:12px; font-weight:700; color:#5B6B7C; }
+/* the little tail, pointing down at the symbol being held */
+.yz-root .yz-cat-pop::after{
+  content:""; position:absolute; left:50%; bottom:-6px; width:0; height:0;
+  transform:translateX(-50%);
+  border-left:7px solid transparent; border-right:7px solid transparent; border-top:7px solid #fff;
+}
+@media (prefers-reduced-motion: reduce){
+  .yz-root .yz-cat-dim, .yz-root .yz-cat-pop{ transition:none; }
 }
