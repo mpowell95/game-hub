@@ -15,7 +15,7 @@
 import { statsId, loadStats } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
-import { installState } from './install-state.js';
+import { installState, appVersion } from './install-state.js';
 
 let _db = null, _api = null;
 
@@ -96,7 +96,11 @@ export async function syncMyStats() {
       // existing mirror rather than getting its own write, so a device reports its route on the
       // same load/tab-hide/reconnect beats it already syncs on - no extra traffic, and every
       // device answers within one app open instead of only the ones that file a bug report.
-      device: installState(),
+      // ...plus WHICH BUILD they are on. The app auto-updates (sw.js skipWaiting + clients.claim),
+      // so nobody should be more than one launch behind - but "should" is a guess, and this makes
+      // it a fact. It also catches the one case an auto-reload could never fix: a device whose
+      // shell install FAILED sits on an old build indefinitely and looks completely normal.
+      device: Object.assign(installState(), { build: await appVersion() }),
       updatedAt: _api.serverTimestamp(),
     };
     await _api.update(_api.ref(_db, 'players/' + id), rec);
