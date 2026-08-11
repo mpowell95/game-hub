@@ -67,6 +67,21 @@ const KNOWN_GAPS = {
       + 'pass on that screen, not a one-line clamp.',
     'dots-boxes': 'overflows ~5px at 393px wide.',
   },
+  // Found 2026-08-10, the first time these three were ever put through the `fit` check - it was
+  // built for Pool, and the suite only checks games whose own folder changed, so a game nobody has
+  // touched since had simply never been measured. ALL THREE PREDATE the check and were verified
+  // byte-identical on a stashed, untouched tree before being listed here; nothing in this session
+  // caused them. They are real, though: this is exactly the "I couldn't see the full board and the
+  // controls simultaneously" complaint that produced the check, and each needs its own layout pass
+  // (the same measure-the-host work `_fitToHost`/`_fitBattleBoards` do) rather than a shared fix.
+  'fits one screen': {
+    battleship: 'up to 221px too tall (hub, 390x664). Its own _fitBattleBoards() measures the '
+      + 'host, but only budgets for the TALL viewport it was verified at; a short phone in the hub '
+      + 'is 138px of chrome plus ~100px less screen and it runs out of room.',
+    escoba: 'up to 165px too tall (hub, 390x664). Fits fine at 393x852, both hosts.',
+    mancala: 'up to 222px too tall (hub, 390x664), and 34px even on a TALL phone in the hub - the '
+      + 'worst of the three, and the only one that overflows a full-size screen.',
+  },
 };
 const gapFor = (check, game) => (KNOWN_GAPS[check] || {})[game];
 const gapsHit = new Set();
