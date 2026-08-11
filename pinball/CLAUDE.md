@@ -118,6 +118,34 @@ is painted WITH the centring transform already applied, so blitting it under tha
 shifted the whole table sideways and clipped the shooter lane off the screen. Headless tests cannot
 see it; `node test-visual.mjs pinball` and a screenshot can. Look at the contact sheet.
 
+### The scoop loop: a stuck ball that was scoring, not silent
+
+Shipped and found by Matt on his second test game (2026-08-11): he shot the scoop on ball one and
+banked **1.5 million** while the ball sat in it. The switch edge-detector read
+`!b.held && dist < r`, so a HELD ball counted as outside its own switch. A capture parks the ball on
+the switch centre, so the instant the scoop ejected it - still well inside the 10-unit radius - the
+detector saw a fresh rising edge and captured it again. Eject, re-capture, score, eject, at 2.2
+awards a second, forever. `inside` is now purely geometric, which makes a held ball read as inside
+its own switch and stops the switch re-arming until the ball has genuinely left the radius.
+
+**The interesting half is why the tests missed it.** Both stuck-detectors in `test.js` are built on
+"stuck means nothing is happening": the soak watched for the SCORE not moving, and the ball-search
+watchdog watches for the BALL not moving. This bug maximises the first and is exempt from the second,
+because a held ball is deliberately skipped by the watchdog. A stuck ball that is *scoring* fell
+straight through the gap between them.
+
+So there are now two new invariants, not a tightened threshold:
+
+- `game.js` caps how long a ball may be HELD (`MAX_HOLD`, 3 s). Every legitimate hold is short and
+  known - the ramp ride is `RAMP_TIME` (1.15 s), a scoop hold is under a second - so anything past
+  that is a bug, and it releases the ball and logs loudly rather than letting it sit.
+- `test.js` has a deterministic `[KNOWN-BUG PROBE]` firing a ball into the scoop and asserting ONE
+  award, plus the same for the ramp, plus a soak invariant on the longest held time. All four were
+  verified RED against the old code before the fix landed.
+
+**If you add another capture switch, it is the held-time invariant that will catch you, not the
+score one.**
+
 The **ball-search watchdog** in `game.js` is the safety net under all of it, and it measures
 DISPLACEMENT FROM AN ANCHOR, not speed. The first version watched for speed < 26 and never fired,
 because a wedged ball jitters: it crosses any speed threshold several times a second while going

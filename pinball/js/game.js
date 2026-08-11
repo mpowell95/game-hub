@@ -54,6 +54,7 @@ const LOCKS_FOR_MULTIBALL = 3;
 const COMBO_WINDOW = 6;          // seconds a ramp/orbit combo stays alive
 const STUCK_NUDGE_AT = 3.5;      // seconds of near-zero speed before a gentle shove
 const STUCK_RESERVE_AT = 8;      // ...and before the ball is re-served outright
+const MAX_HOLD = 3;              // seconds a ball may legitimately be HELD (ramp ride is 1.15)
 
 /** Deterministic PRNG so test.js can replay a whole game exactly. */
 export function mulberry32(seed) {
@@ -306,12 +307,24 @@ export class Pinball {
 
   // --- switches ------------------------------------------------------------------------------------
 
+  /** Edge-detect every switch against every ball.
+   *
+   *  `inside` IS PURELY GEOMETRIC, AND THAT IS THE WHOLE POINT. The first version wrote
+   *  `!b.held && dist < s.r`, which quietly turned the scoop into an infinite scoring loop: a held
+   *  ball reads as "outside", so the instant the scoop ejected it - still inside its own 10-unit
+   *  radius, because a capture parks the ball ON the switch centre - the detector saw a fresh
+   *  RISING EDGE and captured it again. Eject, re-capture, score, eject, forever. Matt hit the
+   *  scoop once and banked 1.5 million on ball one while the ball sat there (2026-08-11).
+   *
+   *  Geometrically, a held ball in the scoop is inside the switch, so the flag stays true, no new
+   *  edge is generated, and the switch only re-arms once the ball has genuinely left the radius.
+   *  A ball riding the ramp leaves `rampIn` naturally, because the habitrail carries it away. */
   _switchTick() {
     for (const b of this.balls) {
       if (!b.live) continue;
       if (!b.sw) b.sw = {};
       for (const s of SWITCHES) {
-        const inside = !b.held && Math.hypot(b.x - s.x, b.y - s.y) < s.r;
+        const inside = Math.hypot(b.x - s.x, b.y - s.y) < s.r;
         const was = !!b.sw[s.id];
         b.sw[s.id] = inside;
         if (inside && !was) this._switchHit(s, b);
@@ -572,7 +585,25 @@ export class Pinball {
     let drained = 0;
     for (const b of this.balls) {
       if (!b.live) continue;
-      if (b.held) { b.restTime = 0; continue; }
+      // A HELD ball is exempt from the stuck watchdog below (it is meant to be motionless), which
+      // is precisely why it needs its own ceiling: the scoop loop parked a ball "held" forever and
+      // the watchdog never looked at it once. Every legitimate hold is short and known - the ramp
+      // ride is RAMP_TIME (1.15 s) and a scoop hold is under a second - so anything past MAX_HOLD
+      // is a bug, and the honest response is to hand the ball back to play and say so loudly
+      // rather than let it sit there.
+      if (b.held) {
+        b.restTime = 0;
+        if (b.onPlunger) { b.heldFor = 0; continue; }
+        b.heldFor = (b.heldFor || 0) + dt;
+        if (b.heldFor > MAX_HOLD) {
+          console.error('[pinball] a ball was held for %ss; releasing it. This is a bug.', b.heldFor.toFixed(1));
+          b.heldFor = 0; b.ramp = null; b.scoop = null; b.held = false;
+          b.vx = -90; b.vy = 480;
+          this.emit({ type: 'ballsearch' });
+        }
+        continue;
+      }
+      b.heldFor = 0;
 
       // Escape hatch. Nothing in the geometry should let a ball out, and test.js's soak asserts it
       // never happens, but a physics bug that loses the ball silently is far worse than one that
