@@ -372,7 +372,8 @@ export class Renderer {
       g.stroke();
     }
 
-    // The table's name across the lower playfield, ghosted into the paint.
+    // The table's name across the lower playfield, ghosted into the paint. Split STAR / H U B
+    // on purpose: the lower half echoes the three H-U-B rollover lanes at the top of the table.
     g.save();
     g.translate(AXIS, 552);
     g.globalAlpha = 0.10;
@@ -380,9 +381,9 @@ export class Renderer {
     g.font = '700 34px "Trebuchet MS", system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('NOVA', 0, -14);
+    g.fillText('STAR', 0, -14);
     g.font = '700 17px "Trebuchet MS", system-ui, sans-serif';
-    g.fillText('C A D E T', 0, 12);
+    g.fillText('H  U  B', 0, 12);
     g.restore();
 
     g.restore();

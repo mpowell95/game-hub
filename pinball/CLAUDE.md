@@ -9,8 +9,12 @@
 A full single-table pinball machine: continuous 2D physics, two swinging flippers, a plunger with a
 power meter, pop bumpers, slingshots, a drop target bank, a spinner, an orbit, a habitrail ramp, a
 scoop, timed missions, lock-and-multiball, a wizard mode, an end-of-ball bonus count-up, and tilt.
-Built 2026-08-11. The table is called **Nova Cadet** on the playfield art; the game, the folder, the
-hub id and the stats id are all plainly `pinball`.
+Built 2026-08-11. The table is called **STARHUB** on the playfield art and the setup screen; the
+game, the folder, the hub id and the stats id are all plainly `pinball`. The name is deliberately
+short, machine-shaped and tied to the hub: the three top rollover lanes spell H-U-B, and the
+playfield wordmark is painted STAR over H U B so the two echo each other. (It was "Nova Cadet" for
+about an hour; that read as invented lore, which nothing else in this hub of plainly-named games
+has.)
 
 **Admin only for now.** The hub registry entry carries `devOnly: true`, so the card renders for Matt
 and the tester and for nobody else, and the My Stats tab is gated the same way (`TABS` in
@@ -24,7 +28,7 @@ stats. Releasing it is exactly two edits: delete `devOnly` from both.
 | Registry | `module: '../pinball/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `pinball` |
 | Stats id | `pinball` (recorder `recordPinball`, sub-counter `pb`) |
 | CSS root / prefix | `.pb-root` / `.pb-` |
-| Settings key | `gamehub.pinball.v1` (preferences only) |
+| Settings key | `gamehub.pinball.v1` (one preference: the table) |
 | Difficulty axis | the three TABLE settings, `easy` / `medium` / `hard`, straight onto the shared 1-4 tiers |
 | `isInProgress()` | the **literal** meaning: `true` while a game is live |
 
@@ -48,8 +52,7 @@ top-left corner in immersive mode.
 | `js/table.js` | the playfield as data: every wall, post, bumper, target, switch. Pure |
 | `js/game.js` | the rules: balls, scoring, missions, multiball, bonus, tilt. Pure, emits an event stream |
 | `js/render.js` | the canvas: cached static playfield art plus the whole effects layer |
-| `js/audio.js` | every sound, synthesised at runtime. No files |
-| `js/store.js` | preferences only (see "Persistence") |
+| `js/store.js` | one preference, the table (see "Persistence") |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, input, HUD, the hub module contract |
 | `js/test.js` | headless tests, including the soak (see "Testing") |
@@ -140,8 +143,7 @@ Scoring lives in one object, `PTS` in `game.js`. Retune there, nowhere else.
 
 ## Persistence
 
-**`gamehub.pinball.v1` holds the difficulty and the sound flag. That is the entire contents, and it
-is deliberate.** A pinball game's one piece of earned history is the score, and the obvious thing to
+**`gamehub.pinball.v1` holds the difficulty and nothing else, and that is deliberate.** A pinball game's one piece of earned history is the score, and the obvious thing to
 do is keep a local top-ten table — which would make `store.js` a second, unsynced, silently
 truncating home for data a player earned. Instead the ONLY record of a pinball score is
 `recordPinball()` in `js/game-stats.js`: per player, `Math.max` on both bests, mirrored to Firebase
@@ -202,7 +204,13 @@ honest state and this paragraph is the reason.
 - **Reduced motion thins the garnish, it does not freeze the game.** Shake, full-screen flashers and
   most particles go; the ball, the flippers and the lamps stay. A pinball table that does not move
   is not a pinball table, and `test-visual.mjs` drives this game in that mode.
-- **Sound is synthesised, so intensity is a parameter.** Every contact sound takes the real closing
-  speed. That is why a hard ricochet and a dribble do not sound identical, and it is free.
+- **There is no sound, and no audio layer.** Not muted, not defaulted off: `audio.js` is deleted and
+  nothing constructs an AudioContext (Matt, 2026-08-11: "Delete the sound option. No sound."). The
+  setup screen has no toggle. It is one commit back in git if it is ever wanted again.
+- **The How To Play screen follows the repo-wide pattern** in `tic-tac-toe/CLAUDE.md` and nothing
+  else: one bold sentence, ONE diagram carrying the non-obvious part, a caption, an X = Y example,
+  then short plain rules. The first version was five paragraphs of prose that re-explained pinball
+  to people who already know what a flipper is; what a player actually does not know is WHERE THIS
+  TABLE'S FOUR SHOTS ARE, and that is a picture. If you add a mode, resist adding a paragraph.
 - Spanish keeps the borrowed pinball vocabulary (flipper, bumper, jackpot, tilt, multibola) because
   that is what Spanish players say — the same standing rule that keeps Oros/Copas in English.
