@@ -340,8 +340,9 @@ const PLAY = {
   skeeball: {
     what: 'flick a ball up the lane and have it land in a ring for real points',
     async run(page, cdp, tap) {
-      const start = await page.$('[data-role="start-ai"]');
-      if (!start) return { ok: false, why: 'no Play button on the setup screen' };
+      // The machine PICKER replaced the setup screen (2026-08-11): tap the first unlocked machine.
+      const start = await page.$('.sk-card:not(.is-locked)');
+      if (!start) return { ok: false, why: 'no unlocked machine on the picker' };
       await tap(start);
       await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
       await page.waitForTimeout(700);
@@ -349,11 +350,13 @@ const PLAY = {
         const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
         return { left: r.left, top: r.top, w: r.width, h: r.height };
       });
-      // A flick straight up, 34% of the canvas height. ui.js's POWER_SPAN is 42%, so this is ~0.8
-      // power: hard enough for the top of the ramp, not hard enough to sail over it.
+      // A flick straight up, 30% of the canvas height. ui.js's POWER_SPAN is 42%, so this is ~0.71
+      // power - which lands in a CUP rather than overshooting onto the catch-all 10. Asserting a
+      // cup (>= 20) rather than merely "scored something" is what makes this prove the board is
+      // being played and not just touched.
       const x = g.left + g.w / 2;
       const y0 = g.top + g.h * 0.80;
-      const dist = g.h * 0.34;
+      const dist = g.h * 0.30;
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
       for (let i = 1; i <= 12; i++) {
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });
@@ -375,11 +378,11 @@ const PLAY = {
         await page.waitForTimeout(250);
       }
       if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
-      if (!st.scores || (st.scores.you | 0) <= 0) {
-        return { ok: false, why: `the ball was thrown but scored ${st.scores?.you | 0} - a 34%-of-screen flick should reach the ramp` };
+      if ((st.score | 0) < 20) {
+        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a 30%-of-screen flick should land in a cup, not the catch-all` };
       }
-      if ((st.ball | 0) === 1 && (st.turn === 'you')) return { ok: false, why: 'the throw scored but the rack never advanced' };
-      return { ok: true, why: `flick landed for ${st.scores.you} points` };
+      if ((st.ball | 0) < 2) return { ok: false, why: 'the throw scored but the rack never advanced' };
+      return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };
     },
   },
 

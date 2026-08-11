@@ -214,6 +214,11 @@ export const STRINGS = {
     gs_sk_fifties: '50s',
     gs_sk_balls: 'Balls thrown',
     gs_sk_points: 'Lifetime points',
+    gs_sk_by_board: 'By machine',
+    gs_sk_today: 'Today',
+    gs_sk_days: 'Days played',
+    gs_sk_board_classic: 'Classic',
+    gs_sk_board_stars: 'Star Alley',
     gs_bs_no_wins_yet: 'Not yet',
 
     lb_title: 'Leaderboard',
@@ -508,6 +513,11 @@ export const STRINGS = {
     gs_sk_fifties: 'Cincuentas',
     gs_sk_balls: 'Bolas lanzadas',
     gs_sk_points: 'Puntos totales',
+    gs_sk_by_board: 'Por máquina',
+    gs_sk_today: 'Hoy',
+    gs_sk_days: 'Días jugados',
+    gs_sk_board_classic: 'Clásica',
+    gs_sk_board_stars: 'Pista Estrella',
     gs_bs_no_wins_yet: 'Aún no',
 
     lb_title: 'Clasificación',

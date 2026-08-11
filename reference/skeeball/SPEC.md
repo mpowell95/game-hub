@@ -115,3 +115,86 @@ game itself shows no persistent score HUD in this recording — a clone needs it
 Full-width dark band across the lower half: "claycors scored 660 points", with the finishing
 player's avatar over the board and a blue "Your Turn" pill appearing on the other player's pill.
 `ROUND 1/3` sits bottom-right, small white caps, for the whole recording.
+
+---
+
+# The Collector's Edition machines (`IMG_3952`-`IMG_3960`, added 2026-08-11)
+
+Nine screenshots of a DIFFERENT app from the recording above: the machine-select carousel of
+"Skee-Ball Collector's Edition". **This is the real Skee-Ball brand look and it disagrees with the
+video on almost every colour** - teal playfield and WHITE targets, not brown wood and cream. Matt's
+instruction: make our board more like the CLASSIC one here. Where the two references conflict,
+these images win for the board; the video still owns the lane's perspective and the throw feel.
+
+## The nine machines
+
+One unlocked (CLASSIC) and eight behind padlocks. **They are not recolours** - the target layout
+itself changes, which is the strongest argument for boards being real content rather than skins:
+
+| # | Board | Target layout |
+|---|---|---|
+| 3952 | **CLASSIC** (unlocked) | the standard: open oval ring + 4 stacked cups + two 100 tubes |
+| 3953 | blue / gold stars | 30s and 50s inside star shapes, scattered across a wide field |
+| 3954 | lime + magenta | ring stack again, different palette, 100 top-left only |
+| 3955 | blue + gold cups | five cups scattered on a disc (10 / 50 20 50 / 50 / 10), no ring |
+| 3956 | rainbow tiers | horizontal stepped bands, cups mounted on the SIDES at each tier |
+| 3957 | Thanksgiving | turkeys scattered on a white field |
+| 3958 | Christmas | targets hung on a tree, 100 at the top |
+| 3959 | Easter | nests in grass (30/40/50/50), rabbit on the backboard |
+| 3960 | Halloween | ring stack in orange, **and an LED `BALL  SCORE` marquee in the cabinet head** |
+
+3960's marquee is worth calling out: it is exactly the "high score displayed at the top of the
+machine" idea, and it means a score display in the cabinet head is authentic, not an invention.
+
+## CLASSIC — measured (`IMG_3952`, 1206x2622)
+
+Measured by luminance scanline over the raw RGB, same method as the video section. Pixel values are
+in the source image; the ratios are what port.
+
+**The camera looks noticeably further DOWN than the video's.** The 10 ring is an ellipse with
+`height / width = 0.66`, where every ring in the video reads at about 0.30. That single number is
+why the classic board looks like an open ring you can see into and the video's looks like stacked
+bands, and it is the biggest single change needed.
+
+| Element | Measurement |
+|---|---|
+| **10 ring** (open oval, not a bowl) | outer 236 x 156 px, centred (600, 1657). **ry/rx = 0.66** |
+| ring tube thickness | ~38px, i.e. 0.16 x ring width |
+| `50` cup | width 62 (0.26 x ring width), centre y 1550 |
+| `40` cup | width 70 (0.30), centre y 1600 |
+| `30` cup | width 78 (0.33), centre y 1650 |
+| `20` cup | width 86 (0.36), centre y 1700 |
+| cup pitch | an even 50px, i.e. 0.21 x ring width |
+| `100` tubes | width ~36 (0.15 x ring width), height ~70, centres x 482 and 730, y ~1535 |
+| where the 100s sit | **directly above the ring's widest points**, raised clear of it |
+| white side rails | curved ramps at x ~427 and ~773 sweeping down to the lane |
+
+The cups are open-topped white TUBES stacked up the middle, 20 nearest and 50 furthest, each
+overlapping the one behind. The two 100 tubes stand free, taller and clear of the ring.
+
+## CLASSIC — colours (sampled)
+
+| Element | Hex |
+|---|---|
+| Playfield teal, lit centre | `#71A995` |
+| Playfield teal, mid | `#618F7F` |
+| Playfield teal, shaded | `#46655A` |
+| Playfield teal, deep edge | `#334941` |
+| Target white, lit | `#FFFFFF` |
+| Target white, face | `#EDEAE8` |
+| Target white, shaded | `#ACA7A6` |
+| Target white, deep shade | `#7C8381` |
+| Numbers | `#0A0A0A` (near black, not brown) |
+| Cabinet side walls | `#111111` (black, ball-return mesh texture) |
+| Cabinet inner trim | `#7D2324` deep red, darker `#4C191A` |
+| Marquee panel | `#272424` with `#F1D98F` gold trim |
+| Lane rail yellow | `#EBD653` |
+
+The playfield carries a soft radial LIGHT in the middle (brightest around the ring, falling off to
+the deep edge) - that gradient is doing a lot of the work and a flat teal looks wrong without it.
+
+## Still not shown
+
+Same as the video: no in-play screen for any of these machines, no unlock UI beyond the padlock and
+chains, no score readout other than 3960's `BALL  SCORE` marquee. **How a board is unlocked is not
+visible in any of these images** - our score-target rule is our own design, not a copy.

@@ -521,7 +521,36 @@ function skeeballScreen(rec) {
       <div class="gs-tally"><b>${sk.balls | 0}</b><span>${t('gs_sk_balls')}</span></div>
       <div class="gs-tally"><b>${sk.points | 0}</b><span>${t('gs_sk_points')}</span></div>
     </div>
+    ${skBoardsTable(sk)}
     ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Per-machine records (2026-08-11, the boards rework). THE LAW rule 1: `sk.boards` is real earned
+ *  history and a screen has to show it, including the date-keyed daily map - which is rendered as
+ *  "best today" plus how many days this machine has been played, so the stored days are visible as
+ *  something rather than sitting silently on disk. Absent on a device that has not played since the
+ *  rework, and simply omitted then rather than shown as a row of zeroes. */
+function skBoardsTable(sk) {
+  const boards = (sk && sk.boards) || {};
+  const ids = Object.keys(boards);
+  if (!ids.length) return '';
+  const today = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const key = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+  const rows = ids.map((id) => {
+    const b = boards[id] || {};
+    const days = Object.keys(b.daily || {}).length;
+    return `<tr><th scope="row">${t(`gs_sk_board_${id}`)}</th><td>${b.best | 0}</td>`
+      + `<td>${(b.daily || {})[key] | 0}</td><td>${b.plays | 0}</td><td>${days}</td></tr>`;
+  }).join('');
+  return `
+    <h4 class="gs-tbl-h">${t('gs_sk_by_board')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th>
+        <th scope="col">${t('gs_sk_today')}</th><th scope="col">${t('gs_played')}</th>
+        <th scope="col">${t('gs_sk_days')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
