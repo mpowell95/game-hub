@@ -61,12 +61,9 @@ function ensureCss() {
   .bug-shot button { position: absolute; top: 2px; right: 2px; width: 26px; height: 26px; border: 0;
               border-radius: 50%; background: rgba(9, 16, 28, .72); color: #fff; font-size: 15px;
               line-height: 1; cursor: pointer; }
+  /* .bug-disc is the inbox's "Full report (JSON)" fold; the report form has no disclosure. */
   .bug-disc { margin-top: var(--gh-sp-4); font-size: var(--gh-fs-sm); color: var(--gh-muted); }
   .bug-disc > summary { cursor: pointer; font-weight: 700; }
-  .bug-disc dl { margin: var(--gh-sp-2) 0 0; display: grid; grid-template-columns: auto 1fr;
-                 gap: var(--gh-sp-1) var(--gh-sp-3); font-size: var(--gh-fs-xs); }
-  .bug-disc dt { color: var(--gh-muted); font-weight: 700; }
-  .bug-disc dd { margin: 0; color: var(--gh-ink); word-break: break-word; }
   .bug-msg { margin: var(--gh-sp-3) 0 0; font-size: var(--gh-fs-sm); font-weight: 600; color: var(--gh-ink); min-height: 1.2em; }
   .bug-msg.is-err { color: var(--gh-cb-vermilion); }
   .bug-result { text-align: center; padding: var(--gh-sp-4) 0 0; }
@@ -177,10 +174,6 @@ export async function openBugReport(opts = {}) {
       <input type="file" accept="image/*" multiple hidden data-role="file">
       <button type="button" class="gh-btn gh-btn--sm" data-role="addshot" style="margin-top:8px">${esc(t('bug_add_shot'))}</button>
     </div>
-    <details class="bug-disc">
-      <summary>${esc(t('bug_details_summary'))}</summary>
-      <dl data-role="env"></dl>
-    </details>
     <p class="bug-msg" data-role="msg" role="status" aria-live="polite">${
       pending ? esc(pending === 1 ? t('bug_pending_one') : t('bug_pending_many', { n: pending })) : ''}</p>
     <div class="gh-modal__actions">
@@ -201,26 +194,9 @@ export async function openBugReport(opts = {}) {
     msgEl.classList.toggle('is-err', !!isErr);
   };
 
-  // Filled on first open: gathering the environment is cheap but not free, and most people will
-  // never open it.
-  const disc = card.querySelector('.bug-disc');
-  disc.addEventListener('toggle', async () => {
-    const dl = q('[data-role="env"]');
-    if (!disc.open || dl.dataset.filled) return;
-    dl.dataset.filled = '1';
-    try {
-      const { gatherEnvironment } = await import('./bug-report.js');
-      const env = await gatherEnvironment();
-      const rows = [
-        ['Device', env.deviceLabel], ['Browser', env.browserLabel],
-        ['Mode', env.installed ? 'installed app' : (env.displayMode || 'browser')],
-        ['Screen', env.screen && env.screen.viewportW ? `${env.screen.viewportW}x${env.screen.viewportH} @${env.screen.dpr || 1}x` : null],
-        ['App', env.appVersion], ['Connection', env.network && env.network.effectiveType],
-        ['Language', env.prefs && env.prefs.lang], ['Theme', env.prefs && env.prefs.theme],
-      ].filter(([, v]) => v != null && v !== '');
-      dl.innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
-    } catch { dl.dataset.filled = ''; }
-  });
+  // No per-field "what gets sent" list on this form (Matt, 2026-08-11): the lead line says the
+  // phone and app details go with it, and that is the whole disclosure. `gatherEnvironment()` is
+  // still called at send time by buildBugReport - what was dropped is the preview, not the data.
 
   function renderShots() {
     shotsEl.innerHTML = shots.map((s, i) => `

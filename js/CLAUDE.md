@@ -832,8 +832,14 @@ using it. The seen-list is a preference, rule 2's carve-out, same class as favor
 A report carries the player's name, code, device id, their whole local store and any screenshot
 they attach, into an RTDB whose rules are `auth != null` — readable by anyone who can sign in
 anonymously. **Not new** (`deviceReports/` and `players/` are the same), but it now includes
-pictures, which is worth knowing before this points at anyone outside the family. The form's "What
-gets sent with this" disclosure lists the environment for the player in their own language.
+pictures, which is worth knowing before this points at anyone outside the family.
+
+The form's one-line lead ("Your phone and app details go with it") is the whole disclosure. The
+first draft also carried a "What gets sent with this" fold listing the device, browser, mode,
+screen and connection with real values; **Matt had it removed** (2026-08-11) — it was a paragraph
+and a table restating a sentence, on a form people reach when they are already annoyed. Nothing
+about what is COLLECTED changed, only the preview. If a future session re-adds a per-field
+disclosure, that is reversing a decision, not filling a gap.
 
 ### What is NOT covered by a test
 
