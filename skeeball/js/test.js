@@ -18,6 +18,13 @@ function seeded(seed) {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
+/** Box-Muller, for the simulated human in the whole-match block below. game.js keeps its own copy
+ *  private (it is an implementation detail of the AI's hand); this one is the TEST's player. */
+function gauss(rng) {
+  const u = Math.max(1e-9, rng());
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
+}
+
 // --- resolveThrow: the bands ---------------------------------------------------------------------
 
 console.log('\n-- throw resolution --');
@@ -197,6 +204,45 @@ console.log('\n-- the opponent --');
   ok('even Hard is beatable - it does not throw a perfect 50 every time', hard < 50);
   ok('even Easy gets on the board', easy > 5);
 }
+// The per-ball averages above are measured WITHOUT the x3 badge, which understates every tier -
+// the AI chases the badge, and chasing it is worth up to 300 a ball. So the tiers are also checked
+// where it actually matters: full matches, multiplier applied, against a fixed simulated human.
+// This is the check that caught Easy being a 57% coin flip for a player who had not yet worked out
+// that the badge IS the game. Ranges are wide on purpose - this is a "the tiers are still in the
+// right order and still in the right ballpark" tripwire, not a pin on the exact tuning.
+console.log('\n-- the opponent, over whole matches (the multiplier changes everything) --');
+{
+  const winRate = (diff, human) => {
+    let won = 0;
+    for (let n = 0; n < 300; n++) {
+      const rng = seeded(4000 + n);
+      const g = new Game({ rounds: 1, difficulty: diff, rng });
+      while (!g.over) {
+        if (g.turn === 'you') {
+          const ideal = idealThrow(human.chases ? g.multTarget : '40');
+          g.throwBall(ideal.power + gauss(rng) * human.pw, ideal.aim + gauss(rng) * human.aim);
+        } else { const p = g.aiPlan(); g.throwBall(p.power, p.aim); }
+      }
+      if (g.winner === 'you') won++;
+    }
+    return Math.round((won / 300) * 100);
+  };
+  const casual = { chases: false, pw: 0.13, aim: 0.22 };
+  const decent = { chases: true, pw: 0.075, aim: 0.13 };
+  const ce = winRate('easy', casual), cm = winRate('medium', casual), ch = winRate('hard', casual);
+  const de = winRate('easy', decent), dm = winRate('medium', decent), dh = winRate('hard', decent);
+  console.log(`      casual player wins: easy ${ce}%, medium ${cm}%, hard ${ch}%`);
+  console.log(`      player who chases the badge wins: easy ${de}%, medium ${dm}%, hard ${dh}%`);
+  ok('the tiers stay in order for a casual player', ce > cm && cm > ch);
+  ok('and for a player who chases the badge', de > dm && dm > dh);
+  ok('EASY is actually easy for someone who has not learned the badge yet (>65%)', ce > 65);
+  ok('MEDIUM is a real contest for them, not a wall (15-60%)', cm > 15 && cm < 60);
+  ok('HARD is beatable by a player who HAS learned it (>20%)', dh > 20);
+  ok('but Hard is not a pushover even for them (<80%)', dh < 80);
+  ok('learning to chase the badge is worth a lot on every tier',
+    de > ce && dm > cm && dh > ch);
+}
+
 {
   const rng = seeded(5);
   ok('every AI throw is within the legal input range',

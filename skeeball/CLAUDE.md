@@ -71,6 +71,33 @@ Resolution order, all in `game.js`:
 `test.js` pins every band edge, both cups, the bank shot, and that the bands are contiguous (no
 power between short and over scores nothing).
 
+## The opponent, and why the tiers are the numbers they are
+
+The AI is modelled as a HAND, not as a score: it picks a target and throws at it with a per-tier
+error, so it misses the way a person misses (short, long, into the wrong ring) instead of being
+handed points. Each tier also has a `greed`: how often it chases the x3 badge instead of its safe
+target.
+
+**Chasing the badge is the entire skill curve of this game**, and that is what the tuning is built
+around. Measured over 600 full matches per cell, multiplier applied:
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| casual player (aims at the 40, never chases the badge) | 82% | 39% | 1% |
+| player who chases the badge | 99% | 93% | 35% |
+
+Easy was a **57% coin flip** for that casual player in the first build - it aimed at the 30 and got
+there too often, which is not what the word Easy promises. It now aims at the 20 with more error
+and almost never chases the badge.
+
+**`test.js`'s per-ball averages UNDERSTATE every tier and must not be used for tuning** - they do
+not apply the multiplier, and the AI chases it. That is why `test.js` has a second, whole-match
+block that plays 300 real matches per cell against a simulated human and asserts the tiers stay in
+order, that Easy is actually easy for someone who has not learned the badge (>65%), that Medium is
+a contest and not a wall (15-60%), and that Hard is beatable by someone who has (>20%) but not a
+pushover (<80%). Wide ranges on purpose: a tripwire for "the tiers got inverted", not a pin on the
+exact tuning. Verified non-theatre by giving Easy Hard's config and watching four assertions go red.
+
 ## Deviations from the reference, and why
 
 - **9 balls per rack, 1 round by default** (3 is a setup option). The reference shows `ROUND 1/3`
@@ -174,8 +201,14 @@ node skeeball/js/test.js
 Band edges (including that the bands are contiguous), both corner cups, the weak-and-wide miss,
 the bank shot and its energy cost, purity, the multiplier's reach and its x3, match flow at 1 and 3
 rounds, a genuine tie, the human-only tally, save/restore round trips and three malformed-save
-cases, and the opponent: that easy < medium < hard in average points per ball, that Hard is still
-beatable, and that every AI throw is inside the legal input range.
+cases, and the opponent twice over: per-ball averages ordered easy < medium < hard, and the
+whole-match win-rate block described above.
+
+**Played end to end through the real UI** (2026-08-11, standalone at 393x852): nine flicks
+including a deliberate airball, a flat-out throw that sailed over for 10, and both corner cups;
+the handover card; the opponent's full rack; the end modal; and the recorded stats
+(`balls: 9, points: 450, bestGame: 450, bestThrow: 100, hundreds: 2, fifties: 2`). Resume was
+checked separately: three throws, reload, Resume restores the same score on the same ball.
 
 ## Not done, on purpose
 

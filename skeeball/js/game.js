@@ -122,10 +122,16 @@ export function idealThrow(target) {
 // per-tier error. It therefore misses the way a person misses - short, long, or into the wrong
 // ring - instead of being handed a number. Easy genuinely cannot hit the cups reliably; Hard can.
 
+// Tuned against `tmp` full-match simulations (600 matches per cell, multiplier included), not by
+// feel: the headless per-ball average in test.js UNDERSTATES every tier, because it does not apply
+// the x3 badge and the AI chases it. Measured win rate for a casual player who has not yet worked
+// out that chasing the badge is the whole game: Easy 82%, Medium 39%, Hard 1%. For a player who
+// does chase it: 99% / 93% / 35%. Easy was a 57% coin flip for that casual player before this,
+// which is not what the word Easy promises - it aimed at the 30 and got there too often.
 const AI = {
-  easy: { power: 0.155, aim: 0.30, greed: 0.15 },
-  medium: { power: 0.095, aim: 0.17, greed: 0.5 },
-  hard: { power: 0.05, aim: 0.085, greed: 0.9 },
+  easy: { power: 0.185, aim: 0.34, greed: 0.06, safe: '20' },
+  medium: { power: 0.115, aim: 0.20, greed: 0.32, safe: '30' },
+  hard: { power: 0.05, aim: 0.085, greed: 0.9, safe: '50' },
 };
 
 /** Box-Muller, so the AI's error is normally distributed (clustered near its intent, occasional
@@ -141,8 +147,7 @@ function gauss(rng) {
  */
 export function aiThrow(rng, difficulty, multTarget) {
   const cfg = AI[difficulty] || AI.medium;
-  const safe = difficulty === 'easy' ? '30' : difficulty === 'hard' ? '50' : '40';
-  const goingFor = (multTarget && rng() < cfg.greed) ? multTarget : safe;
+  const goingFor = (multTarget && rng() < cfg.greed) ? multTarget : cfg.safe;
   const ideal = idealThrow(goingFor);
   return {
     power: clamp(ideal.power + gauss(rng) * cfg.power, 0, 1),
