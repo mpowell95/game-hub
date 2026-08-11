@@ -1375,7 +1375,12 @@ function setupScreenHTML(){
       ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?'Creating room…':'Create a room and share the code with a friend.'))}</p>
          <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>Create Room</button>`
       : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">Play</button>`}
-    <button type="button" class="yz-howto-link" data-action="howto">How to play</button>
+    <button type="button" class="yz-howto-btn" data-action="howto">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9.4"/><path d="M9.3 9.2a2.8 2.8 0 1 1 3.6 2.7c-.6.2-.9.7-.9 1.3v.6"/>
+        <circle cx="12" cy="17.4" r="1.25" fill="currentColor" stroke="none"/>
+      </svg>How to play</button>
   </div>`;
 }
 

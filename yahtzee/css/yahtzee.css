@@ -682,12 +682,19 @@
   .yz-root .yz-ht-dim { transition: none; }
 }
 
-/* The setup screen's How to play link, matching the plain text link every other game uses. */
-.yz-root .yz-howto-link{
-  appearance:none; background:none; border:0; cursor:pointer; touch-action:manipulation;
-  margin-top:14px; padding:6px 10px; font:inherit; font-size:15px; font-weight:700;
-  color:#FFE9B8; text-decoration:underline; text-underline-offset:3px;
+/* The setup screen's How to play BUTTON. It was a text link in #FFE9B8, which was a colour
+   picked for a dark background - this screen is white, so it rendered as pale cream on white and
+   was effectively invisible. A real button, in the same shape as Play above it, outlined in the
+   game's own red so it reads as secondary to the green primary rather than competing with it. */
+.yz-root .yz-howto-btn{
+  appearance:none; cursor:pointer; touch-action:manipulation;
+  padding:13px; border-radius:14px;
+  border:2px solid var(--yz-hdr-top); background:#fff; color:var(--yz-hdr-top);
+  font:800 17px "Baloo 2",sans-serif;
+  display:flex; align-items:center; justify-content:center; gap:8px;
 }
+.yz-root .yz-howto-btn:active{ background:#FDECE8; }
+.yz-root .yz-howto-btn svg{ width:19px; height:19px; flex:none; }
 
 /* ---------- Section bonus (row 7, left half -- the card's one empty cell) ---------- */
 .yz-root .yz-bonus-lab{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; width:52px; }
