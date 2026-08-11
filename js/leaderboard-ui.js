@@ -20,7 +20,7 @@
 // SHAPE per tier (circle/square/diamond/double-diamond), never hue alone; the viewer's own row uses
 // a border highlight, never color alone.
 
-import { aggregatePlayers, buildIdentity, headToHeadRows, SOLO } from './players-agg.js';
+import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
@@ -372,6 +372,36 @@ function controlsHTML({ showExpert = true, sortOptions = null } = {}) {
  *  field plays but this player hasn't gets a "-" tile rather than being omitted, so every card in
  *  the list has the same tile COUNT). On By Player, `tiers` is only the tiers this player has
  *  played, so `valueFn` never returns null there and no dash ever shows on that tab. */
+// --- multiplayer, ON THE GAME'S OWN PAGE (2026-08-11) -------------------------
+// Matt: "I don't give a fuck about generic multiplayer wins or losses. I care about game specific
+// wins and losses... Add some way to tell how many multiplayer escoba wins someone has by looking
+// at the escoba page."
+//
+// A multiplayer play records under the `'mp'` difficulty bucket, and `tierOf('mp')` is null, so it
+// counts in the card's TOTAL wins but appears in none of the tier chips beside it. That is the
+// documented convention for unmapped buckets, and on this screen it reads as an error: Lili's
+// Escoba card says 31 wins over chips totalling 23, with the missing 8 explained nowhere. So the
+// tier row grows a fourth chip carrying exactly that number, on the game's own board where it is
+// about ONE game rather than summed across all of them.
+//
+// It is labelled with a WORD, not a shape or a hue: the tier chips' ski-slope shapes encode a 1-4
+// scale that multiplayer is deliberately not on, so borrowing one would claim a difficulty this
+// bucket does not have. Colorblind-safe by construction for the same reason.
+const mpBucketOf = (g, id) => (((g.games || {})[id] || {}).byDiff || {}).mp || null;
+const mpWinsOf = (g, id) => { const b = mpBucketOf(g, id); return b ? (b.won | 0) : 0; };
+const mpPlaysOf = (g, id) => { const b = mpBucketOf(g, id); return b ? (b.played | 0) : 0; };
+/** True if ANYONE on this board has multiplayer plays in this game -- the chip is not rendered at
+ *  all for a game nobody has played online, rather than adding a column of dashes to every card. */
+const anyMpPlays = (list, id) => list.some((g) => mpPlaysOf(g, id) > 0);
+
+/** The multiplayer chip, appended to a card's tier row. A player with no online plays in this game
+ *  gets the same em-dash treatment an unplayed tier gets, so the column stays readable. */
+function mpTileHTML(g, id) {
+  const played = mpPlaysOf(g, id);
+  return `<span class="lb-tile2 lb-tile-mp${played ? '' : ' is-empty'}" title="${esc(t('gs_diff_mp'))}">`
+    + `<i class="lb-mp-tag">${esc(t('lb_mp_short'))}</i><b>${played ? mpWinsOf(g, id) : '&mdash;'}</b></span>`;
+}
+
 function miniTilesHTML(tiers, valueFn) {
   if (!tiers.length) return '';
   return `<div class="lb-tiles">${tiers.map((tier) => {
@@ -694,6 +724,7 @@ function gameDetail(list, id) {
   const fieldTiers = fieldTiersPresent(list, [id]);
   const showExpert = fieldTiers.includes(4);
   const controls = controlsHTML({ showExpert, sortOptions: sortItemsFor(id) });
+  const showMp = anyMpPlays(list, id);
   const rows = list.filter((g) => playsAtTier(g, [id], _diff) > 0);
   sortRows(rows, id, _sort);
   const cardsHtml = rows.length
@@ -702,7 +733,8 @@ function gameDetail(list, id) {
         if (id === 'snake') return snCardHTML(g, i);
         const metric = gameMetricAt(g, id, _diff);
         const played = playsAtTier(g, [id], _diff);
-        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null));
+        const tiles = miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null))
+          + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(unitKeyOf(id));
         const big = _sort === 'played' ? { val: played, unit: unitWord('lb_played_count') } : { val: metric, unit: metricUnit };
         const subText = _sort === 'played' ? `${metric} ${metricUnit}` : t('lb_played_count', { n: played });
@@ -754,36 +786,7 @@ function playerDetail(list, key) {
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
   ${tiles}`;
-  return head + messageHTML(g) + h2hHTML(list, g) + gsGameListHTML(g.games);
-}
-
-// --- multiplayer head-to-head (2026-08-11) -----------------------------------
-// The FIRST display of `gamehub.stats.h2h`, which js/game-stats.js has been capturing since
-// 2026-07-22 ("Head-to-head capture" in js/CLAUDE.md) with an explicit note that nothing
-// showed it yet: the opponent's identity only exists while the multiplayer room is live, so it
-// had to be stored long before there was a screen for it. This is the screen.
-//
-// WINS ONLY, like every other number on this overlay (the 2026-07-23 redesign note at the top
-// of this file): "beat Lili 5 times" is a bragging-wall fact, "5-3" is a record, and records
-// live on My Stats. Losses are not hidden by this - the same plays are in that game's
-// by-difficulty table under Multiplayer, W-L and all, on the surface that exists for it.
-//
-// Rows come from players-agg.js's headToHeadRows(), which folds an opponent's devices into one
-// person; test/QA rows are dropped here with the SAME isHiddenRow() gate the lists use, and an
-// opponent who beat this player every time is dropped from the display (zero wins is not a
-// brag) while staying fully stored and fully visible on My Stats.
-function h2hHTML(list, g) {
-  const rows = headToHeadRows(g, list).filter((r) => r.w > 0 && !isHiddenRow(r));
-  if (!rows.length) return '';
-  const items = rows.slice(0, 8).map((r) => `<li class="lb-h2h-row">
-    <span class="lb-h2h-av">${esc(r.emoji || '🙂')}</span>
-    <span class="lb-h2h-name">${esc(r.name || t('lb_unnamed_player'))}</span>
-    <span class="lb-h2h-n"><b>${r.w}</b><span>${t('lb_wins_unit')}</span></span>
-  </li>`).join('');
-  return `<section class="lb-h2h">
-    <h4 class="lb-h2h-h">${t('lb_h2h_h')}</h4>
-    <ul class="lb-h2h-list">${items}</ul>
-  </section>`;
+  return head + messageHTML(g) + gsGameListHTML(g.games);
 }
 
 // --- shared shell -------------------------------------------------------------
@@ -1064,17 +1067,9 @@ function ensureCss() {
     '.lb-pdetail-meta{font-size:.76rem;font-weight:600;color:var(--hub-muted,#5b6b82)}',
     '.lb-pmsg{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--hub-surface-2,#f4f4f5);color:var(--hub-ink,#18181b);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
     '.lb-pgame{margin-top:10px}',
-    // Multiplayer head-to-head block (player detail only). Same surface/ink token pattern as
-    // everything else in this sheet, so it themes with no :root.gh-dark override of its own.
-    '.lb-h2h{margin:10px 0 14px}',
-    '.lb-h2h-h{margin:0 0 6px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
-    '.lb-h2h-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}',
-    '.lb-h2h-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--hub-surface-2,#f4f4f5)}',
-    '.lb-h2h-av{flex:0 0 auto;font-size:1rem;line-height:1}',
-    '.lb-h2h-name{flex:1 1 auto;min-width:0;font-size:.9rem;font-weight:700;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-h2h-n{flex:0 0 auto;display:flex;align-items:baseline;gap:4px}',
-    '.lb-h2h-n b{font-size:1.05rem;font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
-    '.lb-h2h-n span{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--hub-muted,#5b6b82)}',
+    // The multiplayer chip in a game board's tier row: same pill geometry as .lb-tile2 so the row
+    // stays even, but a text tag where the ski-slope shape goes (see mpTileHTML for why).
+    '.lb-tile-mp .lb-mp-tag{font-style:normal;font-size:.6rem;font-weight:900;letter-spacing:.04em;color:var(--hub-muted,#5b6b82)}',
     '.lb-pcard-row{display:flex;align-items:center;gap:8px}',
     '.lb-medal{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-weight:900;background:#f1f4f9;color:var(--hub-muted,#5b6b82)}',
     '.lb-medal.is-gold{background:#f5c518;color:#5c4a00}',

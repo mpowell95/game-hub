@@ -294,8 +294,9 @@ export const STRINGS = {
     lb_played_count: '{n} played',
     lb_wins_count: '{n} wins',
     lb_wins_unit: 'wins',
-    // Multiplayer head-to-head block on a player's detail screen (2026-08-11).
-    lb_h2h_h: 'Multiplayer wins against',
+    // The multiplayer chip on a game's own leaderboard board (2026-08-11): the short tag in the
+    // chip; the full "Multiplayer" label (gs_diff_mp) is its tooltip.
+    lb_mp_short: 'MP',
     lb_games_count: '{n} games',
     lb_unit_wins: 'wins',
     lb_unit_obstacles: 'obstacles',
@@ -641,7 +642,7 @@ export const STRINGS = {
     lb_played_count: '{n} jugadas',
     lb_wins_count: '{n} victorias',
     lb_wins_unit: 'victorias',
-    lb_h2h_h: 'Victorias en línea contra',
+    lb_mp_short: 'MP',
     lb_games_count: '{n} partidas',
     lb_unit_wins: 'victorias',
     lb_unit_obstacles: 'obstáculos',

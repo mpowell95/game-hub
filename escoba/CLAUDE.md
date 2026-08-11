@@ -214,8 +214,11 @@ the other's result) and E8 (the peer leaves at the decided moment — born red);
 from the by-difficulty table, because online play is not a difficulty and reading it as one is the
 mistake that made these plays invisible. It reads `byDiff.mp`, the same single stored source the
 migration writes to, so the two can never disagree. Hidden entirely for a solo-only player.
-**The leaderboard** counts MP wins in its All filter, and its player detail shows "Multiplayer wins
-against" from `h2h`.
+**The leaderboard's Escoba board** gives every player card an **MP** chip beside its difficulty
+chips, showing that player's multiplayer Escoba wins — per game, on the game's own page. (A first
+attempt put a cross-game "Multiplayer wins against" block on the player detail instead; it rendered
+the same rows no matter which game you drilled in from, and was removed. See `js/CLAUDE.md`,
+"Multiplayer on the leaderboard".)
 
 ## Rules engine notes (correctness-critical)
 
