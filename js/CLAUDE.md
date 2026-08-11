@@ -819,17 +819,25 @@ using it. The seen-list is a preference, rule 2's carve-out, same class as favor
 
 - **`until` is what retires it** — the New pill's self-cleaning idea (whose date parser this
   reuses). Without it, a phone left in a drawer opens to a stack of old news.
-- **An entry may carry `shots`: pictures of where the thing it announces actually is** (Matt asked
-  for them, with arrows). They are real screenshots of the real hub with the arrow drawn in by the
-  capture script rather than by hand, so re-shooting after a redesign is a script run, not an
-  image-editing session — that script lives in the milestone's own history, not the repo, so the
-  practical instruction is: **capture at 393x852 @2x with Playwright, inject an SVG arrow into the
-  page, and clip to the button**. Each shot carries a `dark` twin, chosen at render time via
-  `resolvedTheme()` (never a bare `matchMedia`, or an explicit light choice on a dark phone gets the
-  wrong picture). The files sit in `img/` and therefore in the SW's non-atomic REST tier, and a
-  figure whose image fails to load removes itself — a screenshot must never be able to break the
-  popup or strand an install. `test-bug-report.mjs` asserts every referenced path exists on disk,
-  because a typo here is silent: the popup still opens, just with a hole in it.
+- **An entry may carry `shots`: pictures of where the thing it announces actually is.** Matt asked
+  for these twice, and the second ask is the one to build to: **whole phone screens, side by side**,
+  not tight crops of the button. He mocked it up by drawing on two of his own screenshots. The
+  marks (a ring round the button, a thick arrow into it) are injected into the real page before the
+  shot, so they are baked in and re-shooting after a redesign is a script run, not an image-editing
+  session. **The recipe, since the script is not in the repo:** Playwright at 393x852, DSF 1, scroll
+  to the bottom, inject an SVG ring + arrow, screenshot the whole viewport as JPEG q82. 1x JPEG
+  because they render ~165 CSS px wide; a 2x PNG of a launcher is ~500 KB each for no visible gain.
+  **Use a neutral stand-in profile and blank the sync code and device id before the shot** — these
+  ship to everyone, and a real-looking code in a help picture is just an invitation to type it in.
+- **Four files per shot**, resolved at render time by the same `textFor()` the title and body use:
+  per THEME via `resolvedTheme()` (never a bare `matchMedia`, or an explicit light choice on a dark
+  phone gets the wrong picture) and per LANGUAGE, because a Spanish popup pointing at a button
+  labelled "Report a bug" is a picture of somebody else's app. They sit in `img/`, which
+  `isShellAsset()` does NOT treat as shell, so a bad path lands in the non-atomic REST tier and can
+  never strand an install; a figure whose image fails to load removes itself. `test-bug-report.mjs`
+  asserts all eight paths exist, because a typo here is silent — the popup still opens, just with a
+  hole in it. On a short phone the pictures are capped at `40vh` and cropped from the TOP
+  (`object-position: bottom`), so the button, the arrow and both buttons stay above the fold.
 - **A malformed date fails SAFE (shown, not hidden).** One that appears when it should not is a
   small mistake; one that silently never appears is invisible until somebody asks why nobody knew.
 - **Adding the next one: append a NEW id.** Never re-use or renumber — devices that dismissed it

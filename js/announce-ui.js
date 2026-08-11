@@ -39,7 +39,11 @@ function ensureCss() {
      tall-and-narrow (which is what they are) instead of being letterboxed. */
   .ann-shots { display: flex; gap: var(--gh-sp-2); margin: 0 0 var(--gh-sp-3); }
   .ann-shot { flex: 1 1 0; min-width: 0; margin: 0; }
-  .ann-shot img { display: block; width: 100%; height: auto; border-radius: var(--gh-r-md);
+  /* A whole phone screen is tall. On a short phone, cap the height and crop from the TOP
+     (object-position: bottom) rather than shrinking the picture: the bottom is where the button
+     and the arrow are, and it keeps Got it / Try it above the fold. */
+  .ann-shot img { display: block; width: 100%; height: auto; max-height: 40vh;
+                  object-fit: cover; object-position: bottom; border-radius: var(--gh-r-md);
                   border: 1px solid var(--gh-border); background: var(--gh-surface-2); }
   .ann-shot figcaption { margin-top: var(--gh-sp-1); font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted); }
   /* Two buttons, one row, always. The Spanish pair ("Entendido" + "Pruébalo ahora") wrapped onto
