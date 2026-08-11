@@ -22,10 +22,3 @@ backups/*.json
 
 # Visual-suite output (test-visual.mjs). Regenerated on every run; look at it, do not commit it.
 .visual-out/
-
-# reference/ is DELIBERATELY tracked, images and .MOV recordings included - a session that cannot
-# see the picture builds the wrong thing (reference/README.md). mancala/reference/ above is the
-# frozen exception from an earlier, opposite decision; never extend that rule to reference/.
-# The leading slash is load-bearing: an unanchored `reference/` matches a directory of that name at
-# ANY depth, which would silently un-ignore mancala/reference/ too.
-!/reference/
