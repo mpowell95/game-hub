@@ -15,6 +15,7 @@
 import { statsId, loadStats } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
+import { installState } from './install-state.js';
 
 let _db = null, _api = null;
 
@@ -89,6 +90,13 @@ export async function syncMyStats() {
         message: prof.message || '', messageAt: +prof.messageAt || 0,
       },
       stats: loadStats(),
+      // Is this person on the installed app or a browser tab? (2026-08-11, after Ana turned out to
+      // have been in a Safari tab for two months.) ADDITIVE and diagnostic: a new child node, never
+      // read by any gameplay or stats path, and it cannot affect a single counter. It rides the
+      // existing mirror rather than getting its own write, so a device reports its route on the
+      // same load/tab-hide/reconnect beats it already syncs on - no extra traffic, and every
+      // device answers within one app open instead of only the ones that file a bug report.
+      device: installState(),
       updatedAt: _api.serverTimestamp(),
     };
     await _api.update(_api.ref(_db, 'players/' + id), rec);

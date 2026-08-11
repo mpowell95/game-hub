@@ -36,6 +36,31 @@ const ASSETS = [
   './js/stats-net.js',
   './js/firebase-boot.js',
   './js/device-report.js',
+  // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are shell
+  // assets (they live under js/), so they install atomically with the hub itself - the report form
+  // has to work on the exact device that is having trouble, including offline, where it queues the
+  // report locally and sends it on the next connection.
+  './js/error-log.js',
+  './js/bug-report.js',
+  './js/bug-report-ui.js',
+  './js/announce.js',
+  './js/announce-ui.js',
+  // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
+  // so it is genuinely app-shell: without it the hub cannot boot offline.
+  './js/install-state.js',
+  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./icons/
+  // (which isShellAsset treats as shell): they are a one-time popup's illustrations, so they belong
+  // in the best-effort REST tier where a bad path cannot strand an install. announce-ui.js removes
+  // any figure whose image fails to load, so a device that has not warmed them yet still gets a
+  // working popup.
+  './img/where-hub.jpg',
+  './img/where-hub-dark.jpg',
+  './img/where-hub-es.jpg',
+  './img/where-hub-es-dark.jpg',
+  './img/where-profile.jpg',
+  './img/where-profile-dark.jpg',
+  './img/where-profile-es.jpg',
+  './img/where-profile-es-dark.jpg',
   './js/players-agg.js',
   './js/game-art.js',
   './js/leaderboard-ui.js',
