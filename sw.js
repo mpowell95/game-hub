@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v290';
+const CACHE = 'game-hub-v296';
 
 const ASSETS = [
   './',
@@ -36,6 +36,31 @@ const ASSETS = [
   './js/stats-net.js',
   './js/firebase-boot.js',
   './js/device-report.js',
+  // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are shell
+  // assets (they live under js/), so they install atomically with the hub itself - the report form
+  // has to work on the exact device that is having trouble, including offline, where it queues the
+  // report locally and sends it on the next connection.
+  './js/error-log.js',
+  './js/bug-report.js',
+  './js/bug-report-ui.js',
+  './js/announce.js',
+  './js/announce-ui.js',
+  // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
+  // so it is genuinely app-shell: without it the hub cannot boot offline.
+  './js/install-state.js',
+  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./icons/
+  // (which isShellAsset treats as shell): they are a one-time popup's illustrations, so they belong
+  // in the best-effort REST tier where a bad path cannot strand an install. announce-ui.js removes
+  // any figure whose image fails to load, so a device that has not warmed them yet still gets a
+  // working popup.
+  './img/where-hub.jpg',
+  './img/where-hub-dark.jpg',
+  './img/where-hub-es.jpg',
+  './img/where-hub-es-dark.jpg',
+  './img/where-profile.jpg',
+  './img/where-profile-dark.jpg',
+  './img/where-profile-es.jpg',
+  './img/where-profile-es-dark.jpg',
   './js/players-agg.js',
   './js/game-art.js',
   './js/leaderboard-ui.js',
@@ -185,7 +210,6 @@ const ASSETS = [
   './pinball/js/physics.js',
   './pinball/js/table.js',
   './pinball/js/render.js',
-  './pinball/js/audio.js',
   './pinball/js/store.js',
   './pinball/js/strings.js',
   './hill-climb/',
@@ -540,6 +564,21 @@ self.addEventListener('fetch', (event) => {
         _slowUntil = Date.now() + SLOW_LATCH_MS;
         return cached;
       }
+      // A 404/503 IS NOT AN ANSWER when we are holding a good copy (2026-08-11).
+      //
+      // Only a THROWN fetch counted as failure here, so an error RESPONSE was handed straight to
+      // the page. GitHub Pages serves a redeploy by swapping the published tree, and a request
+      // landing in that window can 404 for a moment - so opening the hub during a deploy could
+      // hand the page a 404 for css/hub.css while a perfectly good copy sat in the cache one line
+      // away. The result is the launcher rendered as raw unstyled HTML. Matt hit it minutes after
+      // a deploy, on mobile data; a force-close fixed it, which is exactly what a transient
+      // server error looks like.
+      //
+      // Falling back to the cached copy is also the right call for a genuinely removed file: this
+      // is an offline-first app, and the cache is a coherent snapshot of one deploy that rolls
+      // over when CACHE is bumped. `net` has already refreshed the cache above if the response
+      // WAS ok, so nothing goes stale by doing this.
+      if (!res || !res.ok) return cached;
       return res;
     } catch {
       return cached;   // offline, or the request failed outright

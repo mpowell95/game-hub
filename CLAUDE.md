@@ -117,6 +117,24 @@ in a game folder no longer strands a deploy; it warms best-effort, logs loudly, 
 demand instead. A stuck pill now means the SHELL failed to install, which is a much shorter
 list of suspects. `test-sw-strategy.mjs` pins this as a regression probe.
 
+### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
+
+Matt, minutes after a deploy, on mobile data: *"Whoa what the hell? I force closed and reopened and
+it was normal but what is this?"* - the launcher with no CSS at all, version pill reading the new
+build. Force-closing "fixed" it, which is what a transient server error always looks like.
+
+Cause: the network-first handler treated only a THROWN fetch as failure, so an error RESPONSE (a
+404 or 503) was handed straight to the page **even with a good cached copy one line away**. GitHub
+Pages serves a redeploy by swapping the published tree, and a request landing in that window can
+404 for a moment - so opening the hub DURING a deploy could get a 404 for `css/hub.css` and render
+the launcher as raw HTML. Every deploy was a window for it.
+
+Fixed in `sw.js`: `if (!res || !res.ok) return cached;` on the network-first path. Falling back is
+also right for a genuinely removed file - this is an offline-first app whose cache is a coherent
+snapshot of one deploy that rolls over when `CACHE` is bumped. A request with NOTHING cached still
+passes the error through honestly rather than inventing an answer. `test-sw-strategy.mjs` carries
+both as a [KNOWN-BUG PROBE] pair; the first was born red against the unfixed worker.
+
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
 Matt: *"the gamehub is sluggish and glitchy."* Both halves of `sw.js`'s strategy were tuned for
@@ -188,7 +206,13 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball, Pinball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
-| `js/device-report.js` | the profile page's "Device details" diagnostic |
+| `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
+| `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
+| `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself |
+| `js/bug-report-ui.js` | the report form + Matt's inbox. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
+| `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
+| `js/announce.js` | one-time launcher announcements: the entries, the seen-list (`gamehub.announce.v1`), and the pure "does this device still owe one" decision. Each entry's `until` date retires it |
+| `js/announce-ui.js` | the announcement popup (DOM only) |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
 
 ### Where the deep docs live
@@ -196,8 +220,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 - **`js/CLAUDE.md`** — the full module map and Firebase layering, THE LAW's full working rules,
   the multiplayer lockstep invariants, the leaderboard rating model, sync health (and how to
   diagnose "my history is missing"), the per-player store split ("whose stats are these"), the
-  Ana/Natalia correction record, head-to-head capture, and the shared-profile contract with
-  Monopoly Deal's must-stay-synced duplicates.
+  Ana/Natalia correction record, head-to-head capture, the shared-profile contract with
+  Monopoly Deal's must-stay-synced duplicates, and the Report a bug pipeline (what it collects,
+  where it lands, how Matt reads it, and how to add the next announcement).
 - **`<game>/CLAUDE.md`** — each game's own docs (see the games table).
 - **`tic-tac-toe/CLAUDE.md`** — the How-to-play screen pattern (its reference implementation).
 ### Dev tooling (repo root, not deployed)
@@ -217,6 +242,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `test-game-conventions.mjs` | (2026-08-02) the "Adding a game" checklist and the "USE WHAT EXISTS" table, made machine-checkable: no raw resize/`visualViewport` listeners, no `document`-level `touchmove`, every fixed scrolling overlay contains its scroll, every standalone page name-gated, the three module-contract exports present, listeners balanced, a `CLAUDE.md` and an `{en,es}` dictionary per game. Discovers game folders from disk so a NEW game is covered the day it appears. `KNOWN_GAPS` carries pre-existing debt (currently: Yahtzee has no i18n) — printed on every run, never silent, and the suite fails if an entry goes stale. **Written because prose alone did not work**: Hill Climb shipped the raw-resize bug the same day it was removed everywhere else, because the convention lived in `js/CLAUDE.md`, which a new-game session never auto-loads. |
 | `test-visual.mjs` | (2026-08-08) the only suite that LOOKS at a game. Drives it in a real Chromium at 393x852 in light/dark/reduced-motion and fails on: nothing painted, the body scrolling sideways, a JS error on mount, an animation too brief to follow (`MOTION` probes), or **a game that cannot actually be PLAYED** (`PLAY` probes drive the real UI with real touch to a real outcome; every run prints which games no probe has ever played), or **a game that does not FIT one screen** (`fit` checks both hosts - standalone AND mounted in the hub's real chrome - at a tall and a short phone height; the hub adds ~138px of chrome an immersive game must not ignore).  Writes a contact sheet to `.visual-out/` - **open it.** **Checks only what CHANGED** (`node test-visual.mjs`), or named games (`... escoba`), or everything (`... --all`); a shared-code change (`js/`, `css/`, `index.html`, `sw.js`) RECOMMENDS a full sweep but never runs one - **always ask Matt before testing all games** (his rule, 2026-08-08). SKIPs without playwright-core/Chromium. Written after Battleship's cannon took four rounds of Matt's time: **`VISUAL-PROCESS.md` and `reference/` are the process it belongs to, and a session doing visual work must read them first.** |
 | `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. All green expected. Run before every deploy. |
+| `test-bug-report.mjs` | (2026-08-11) headless tests for the pure halves of Report a bug: the screenshot budget, the description clamp, the inbox order and unread count (with real epoch timestamps - a `\| 0` on one scrambled both in the first draft), and the announcement's show-once/expire-by-itself decision, including the shipped announcement's own dates and EN/ES completeness. The DOM and Firebase halves are NOT covered, and the suite header says so. |
+| `read-install-state.mjs` | (2026-08-11) Matt-only: who is on the installed app and who is still in a browser tab, browser tabs first, from `players/<id>/device`. Only shows a device once it has opened the hub since this shipped - "(not seen yet)" is missing data, not a browser tab, and nothing here is retroactive |
+| `read-bug-reports.mjs` | (2026-08-11) Matt-only, the terminal view of the in-app inbox: lists `bugReports/` newest first, prints one in full, and is the only way to get the screenshots onto disk - `node read-bug-reports.mjs [--open] [<id> [--shots [dir]]] [--json]` |
 | `read-device-reports.mjs` | (2026-07-22) Matt-only: fetches "Device details" reports (see `js/device-report.js`) from `deviceReports/` via the plain RTDB REST API (anonymous sign-in via the Identity Toolkit REST endpoint, no SDK/dependency) - `node read-device-reports.mjs [deviceId] [--raw]` |
 | `backups/rtdb-backup.mjs` | (2026-07-23) **Run this before ANY script that writes to Firebase, any rules change, any schema change.** Timestamped full-DB snapshot to `backups/rtdb-<ISO>.json` via the same no-dependency REST pattern; `node backups/rtdb-backup.mjs [path]`. Also exports `signInAnonymously`/`readPath`/`totalPlays` for other tools. Restoring is deliberately NOT automated - a restore is a destructive write and must be hand-driven. **The snapshots are gitignored** (`backups/*.json`): this is a public repo and they hold every player's real name, code and stats. |
 | `fix-natalia-record.mjs` | (2026-07-23) The one-off Ana/Natalia leaderboard correction, kept for audit. Dry run by default, `--write` to apply; it backs up first, simulates the post-write leaderboard with the repo's real `players-agg.js`/`leaderboard-rank.js` and aborts if any other player's row would move, then verifies by fresh re-read and diffs every pre-existing device record. **Already applied; re-running is a no-op (it refuses to create a second Natalia).** |

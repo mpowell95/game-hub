@@ -392,7 +392,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(env(safe-area-inset-top, 0px), 48px) 14px max(env(safe-area-inset-bottom, 0px), 14px);
+  /* +34px on top of the safe-area inset for the same reason .pb-brand carries it: the hub's
+     floating back button sits in the top-left corner in immersive mode, and a full-height sheet
+     otherwise renders its own title underneath it (seen on Matt's phone, 2026-08-11). */
+  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 34px) 14px max(env(safe-area-inset-bottom, 0px), 14px);
   background: rgba(3, 2, 10, 0.82);
   backdrop-filter: blur(5px);
   overflow-y: auto;
@@ -459,15 +462,75 @@
 .pb-root .pb-sheet-body { padding: 14px; }
 .pb-root .pb-sheet-actions { display: flex; flex-direction: column; gap: 4px; }
 
-.pb-root .pb-howto-sec { margin-bottom: 14px; }
-.pb-root .pb-howto-sec h3 {
-  margin: 0 0 4px;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--pb-gold);
+/* --- how to play -------------------------------------------------------------
+   The repo-wide help pattern (tic-tac-toe/CLAUDE.md): centred, one diagram, and ONE explicit flex
+   gap for the lines under it rather than each line carrying its own margin, so the rhythm is set
+   in a single place instead of two rules quietly fighting each other. */
+.pb-root .pb-help { text-align: center; }
+.pb-root .pb-help-lead {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--pb-ink);
 }
-.pb-root .pb-howto-sec p { margin: 0; font-size: 0.92rem; line-height: 1.5; color: var(--pb-dim); }
+
+.pb-root .pb-diagram-wrap { display: flex; flex-direction: column; align-items: center; margin: 14px 0 0; }
+.pb-root .pb-diagram { width: 176px; height: 172px; }
+
+.pb-root .pb-dg-field { fill: rgba(62, 232, 255, 0.05); stroke: #7f8cb4; stroke-width: 3; stroke-linejoin: round; }
+.pb-root .pb-dg-lane { fill: none; stroke: #7f8cb4; stroke-width: 1.6; stroke-dasharray: 4 4; }
+.pb-root .pb-dg-flip { stroke: var(--pb-cyan); stroke-width: 5; stroke-linecap: round; fill: none; }
+.pb-root .pb-dg-arrow { fill: none; stroke: var(--pb-gold); stroke-width: 2; stroke-linecap: round; }
+.pb-root .pb-dg-glyph { fill: none; stroke: #dfe6ff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pb-root .pb-dg-num circle { fill: #0b0726; stroke: #dfe6ff; stroke-width: 2; }
+.pb-root .pb-dg-num text {
+  fill: #ffffff;
+  font: 800 11px system-ui, sans-serif;
+  text-anchor: middle;
+}
+
+/* The key under the diagram. Wraps to two rows on a narrow phone rather than being forced onto
+   one: the Spanish labels are longer, and the reference implementation records exactly this
+   climbdown (its example line was un-nowrapped when Spanish overflowed it at any readable size). */
+.pb-root .pb-help-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 12px;
+  margin: 10px 0 0;
+}
+.pb-root .pb-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--pb-ink);
+}
+.pb-root .pb-key i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.6px solid #dfe6ff;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.pb-root .pb-help-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.pb-root .pb-help-lines p { margin: 0; overflow-wrap: break-word; }
+.pb-root .pb-help-caption { font-size: 0.84rem; font-weight: 700; color: var(--pb-dim); }
+.pb-root .pb-help-example { font-size: 0.82rem; font-weight: 700; color: var(--pb-gold); }
+.pb-root .pb-help-rule { font-size: 0.78rem; font-weight: 600; color: var(--pb-dim); line-height: 1.45; }
 
 .pb-root .pb-final-label {
   margin: 0;
