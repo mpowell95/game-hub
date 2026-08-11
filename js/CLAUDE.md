@@ -1035,6 +1035,35 @@ Two caveats worth knowing:
 
 ---
 
+## `GAME_META` is a registry, and a missing row zeroes a whole game (2026-08-11)
+
+`js/leaderboard-ui.js`'s `GAME_META` is the leaderboard's own list of games, **separate from
+`js/hub.js`'s `GAMES` and from `js/game-stats-ui.js`'s `TABS`**, keyed by STATS id. `ALL_IDS`,
+`COMP_IDS`, `SOLO_IDS`, `winsOf()`, `playedOf()`, `labelOf()` and the whole By Game segment are all
+derived from it. A game with no row here is not *partly* on the leaderboard — it is worth **zero
+wins and zero plays** on every screen of it, while its own My Stats page shows the real numbers.
+
+That is the worst shape a bug can take under THE LAW rule 1: nothing is lost, everything syncs, and
+the player is simply told their history does not count. **Yahtzee shipped with no row** and stayed
+that way until the first real report to arrive through Report a bug:
+
+> "MY WINS ARE NOT COUNTING TO MY TOTAL WINS ON LEADERBOARD" — 14 wins in 15 Yahtzee matches,
+> local store correct, `syncHealth` `ok` at 266 plays local and remote, My Stats showing all of it.
+
+Believing him took thirty seconds (rule 8) and the fix was one line. Finding it needed the report,
+because **no other surface shows the absence** — not the game, not My Stats, not sync health.
+`players-agg.test.mjs`'s second `[KNOWN-BUG PROBE]` block now closes that: it reads the stats ids
+out of `game-stats.js` and fails unless each one has a `GAME_META` row, or sits in `OFF_THE_BOARD`
+with a reason — and an `OFF_THE_BOARD` entry must still be `devOnly` in `js/hub.js`, so releasing a
+game that is off the board fails the suite the same day (that is the check Skeeball and Pinball
+currently rest on). It was verified born red against the missing Yahtzee row.
+
+One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
+because the game has no difficulty setting at all. `tierOf('ai')` is `null`, so those wins count in
+full under the **All** filter (the default, and where the cross-game number lives) and do not appear
+under Easy/Medium/Hard/Expert. That is the documented behaviour for unrankable buckets, and it is
+the honest one — mapping `ai` onto a tier would invent a difficulty claim the game never made.
+
 ## The leaderboard's rating model (2026-07-22)
 
 **2026-07-23 redesign (wins-only display, rating retired from the UI):** Matt's call, third

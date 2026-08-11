@@ -125,6 +125,13 @@ const GAME_META = [
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
+  // MISSING until 2026-08-11, and it took a bug report to find: Yahtzee shipped with every other
+  // surface wired up (game-stats.js's GAMES, the yz sub-counter, players-agg's branch, a My Stats
+  // screen) but never got a row here, so ALL_IDS/COMP_IDS did not contain it and its wins and plays
+  // were worth nothing on the leaderboard. The player's own Stats screen showed 14 Yahtzee wins
+  // while the board counted 0 - stored, synced, and invisible, which is THE LAW rule 1 exactly.
+  // players-agg.test.mjs's second [KNOWN-BUG PROBE] block now fails if a shipped game is absent.
+  { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   // Skeeball is deliberately ABSENT while it is admin-only, same as Pinball: the leaderboard is
   // the shared bragging wall and an unreleased game has no business on it. Nothing is lost - the
   // plays are in every device's store and in players/, and the row reappears the moment the

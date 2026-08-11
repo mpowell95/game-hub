@@ -243,7 +243,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
 | `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
 | `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
-| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. |
+| `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. **A second structural probe (2026-08-11) covers the whole GAME, not its sub-counters**: every stats id in `game-stats.js` must have a `GAME_META` row in `js/leaderboard-ui.js`, or be listed in `OFF_THE_BOARD` *and* still be `devOnly` in `js/hub.js` — so a game released off the board fails the day it ships. Written because Yahtzee had no row, and it took a player's bug report to notice. |
 | `test-new-badge.mjs` | (2026-08-01) headless unit tests for `js/new-badge.js` (window edges, malformed/absent dates, future dates), plus a scrape of the real `GAMES` registry asserting every `released` date that IS present parses — a typo'd date is the silent failure here (the game ships, the pill never appears) |
 | `test-leaderboard-rank.mjs` | headless unit tests for the leaderboard rating model, incl. a LAW rule 1 block replaying the OLD visibility gate against the new one (nobody may fall off the board or lose plays) |
 | `test-recorder-contract.mjs` | contract test: `js/game-stats-global.js` vs `js/game-stats.js` on their shared surface, incl. the fold-once interop and the BD in-scope copy sync |
@@ -443,22 +443,34 @@ When restructuring an old game, migrate it toward the reference for each axis in
    My Stats in a browser. `players-agg.test.mjs` now has a per-game regression case for each;
    add one for any new sub-counter. **The same file now also enforces this structurally** (it reads the sub-counter keys straight out of `game-stats.js`), so a forgotten surface fails `node run-all-tests.mjs` instead of waiting to be noticed in a browser.
 
-8. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
+8. **Add the game to `GAME_META` in `js/leaderboard-ui.js`** — `{ id: '<statsId>', labelKey:
+   'game_title_<statsId>' }`, using the STATS id, not the hub id. This is a **separate registry
+   from item 5's**, in a different file, and it is the one that gets forgotten. `ALL_IDS`,
+   `COMP_IDS`, `winsOf()`, `playedOf()` and the whole By Game segment are all derived from it, so
+   a game that is missing here has every win and every play counted as **zero on the leaderboard**
+   while its own Stats screen shows them correctly. Yahtzee shipped like that and stayed like that
+   until a player reported it through Report a bug (2026-08-11) — "MY WINS ARE NOT COUNTING TO MY
+   TOTAL WINS ON LEADERBOARD", 14 wins stored, synced and invisible, THE LAW rule 1. The only
+   legitimate reason to leave a game off is `devOnly` (an unreleased game has no business on the
+   shared bragging wall); say so in `players-agg.test.mjs`'s `OFF_THE_BOARD`, which checks the
+   claim against `js/hub.js` and fails the day the game is released.
+
+9. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
    works inside that folder. Open it with the THE-LAW pointer block (copy it from any existing
    game file), then: hub integration (module/href, immersive or not, which `isInProgress()`
    meaning it uses and why), layout/responsibilities, key design decisions, correctness-critical
    engine notes, settings/persistence keys, tests. `escoba/CLAUDE.md` is the reference for depth
    and structure. Game-specific detail goes HERE, not in the root file — the root games table gets
    one row (integration, prefix, settings key, recorder) and nothing else.
-9. **Create `<game>/js/strings.js` and route every user-visible string through `t()`** — the hub
-   is bilingual (English/Spanish, `js/i18n.js`, preference in `gamehub.lang.v1`). Export
-   `{ en: {...}, es: {...} }` (English is the source of truth; a missing Spanish key falls back
-   to English, so partial translation never breaks), build `const t = makeT(STRINGS)` in ui.js,
-   and call `t()` at RENDER time — never at module scope. Include aria-labels. Language changes
-   apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
-   `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
-   full mechanism doc is in `js/CLAUDE.md` ("Language support").
-10. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** The first is the
+10. **Create `<game>/js/strings.js` and route every user-visible string through `t()`** — the hub
+    is bilingual (English/Spanish, `js/i18n.js`, preference in `gamehub.lang.v1`). Export
+    `{ en: {...}, es: {...} }` (English is the source of truth; a missing Spanish key falls back
+    to English, so partial translation never breaks), build `const t = makeT(STRINGS)` in ui.js,
+    and call `t()` at RENDER time — never at module scope. Include aria-labels. Language changes
+    apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
+    `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
+    full mechanism doc is in `js/CLAUDE.md` ("Language support").
+11. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** The first is the
     machine-checkable half of the "USE WHAT EXISTS" table above and of this checklist — it will tell
     you, by name and with the fix, if the game hand-rolls something shared, leaks a listener, leaves
     an overlay uncontained, ships an ungated standalone page, misses an export, or has no
