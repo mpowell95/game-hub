@@ -10,8 +10,9 @@
 // exactly like today, so nothing regresses.
 
 import { GAMES } from './game-stats.js';
+import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -327,6 +328,14 @@ export function aggregatePlayers(all) {
         }
         dst.sk.bestGame = Math.max(dst.sk.bestGame | 0, src.sk.bestGame | 0);
         dst.sk.bestThrow = Math.max(dst.sk.bestThrow | 0, src.sk.bestThrow | 0);
+        // Per-machine records and unlocks (2026-08-11). js/arcade-scores.js owns both merges so
+        // Skeeball and Pinball can never disagree about them: bests take max, each DAY takes the
+        // max of that day, and unlocks are a UNION - a second device must never take away a board
+        // its owner earned on the first.
+        if (!dst.sk.boards) dst.sk.boards = {};
+        if (!dst.sk.unlocked) dst.sk.unlocked = {};
+        mergeBoards(dst.sk.boards, src.sk.boards);
+        mergeUnlocked(dst.sk.unlocked, src.sk.unlocked);
       }
     }
   }

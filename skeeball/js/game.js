@@ -1,82 +1,73 @@
 // skeeball/js/game.js - the pure Skeeball engine. No DOM, no timers, no randomness of its own
-// beyond the injected `rng`, so `js/test.js` can drive a whole match headlessly and the UI can
+// beyond the injected `rng`, so `js/test.js` can drive a whole game headlessly and the UI can
 // replay any throw for animation without asking the engine twice.
 //
-// THE ONE IDEA WORTH UNDERSTANDING HERE: a throw is resolved from two numbers and nothing else.
+// THE ONE IDEA WORTH UNDERSTANDING: a throw is resolved from two numbers and nothing else.
 //
-//   power  0..1   how hard it was flicked  -> how far up the ramp it gets -> which ring
-//   aim   -1..1   how far off straight     -> where across the lane it arrives
+//   power  0..1   how hard it was flicked  -> how far up the board it gets
+//   aim   -1..1   how far off straight     -> where across the board it arrives
 //
-// `resolveThrow(power, aim)` is a PURE function of those two, with no random scatter at all. That
-// is deliberate and it is the whole game: the player is judging a flick, and a hidden dice roll on
-// top of their judgement would make practice pointless. The same pair always scores the same, so
-// the animation the UI draws can be derived from the same numbers and can never disagree with the
-// number that gets recorded.
+// `resolveThrow(power, aim, board)` is a PURE function of those, with **no random scatter at all**.
+// That is deliberate and it is the whole game: the player is judging a flick, and a hidden dice
+// roll on top of their judgement would make practice pointless. It also means the animation the UI
+// draws is derived from the same resolved numbers, so what the ball is drawn doing and what the
+// scoreboard says can never disagree.
 //
-// Geometry vocabulary matches reference/skeeball/SPEC.md: rings 10/20/30/40/50 stacked up the ramp
-// (higher = further = worth more) plus two free-standing 100 cups in the top corners.
-
-export const BALLS_PER_ROUND = 9;          // the classic skeeball rack
-export const ROUND_OPTIONS = [1, 3];       // 3 is the reference app's format; 1 is a quick game
-export const DIFFS = ['easy', 'medium', 'hard'];
-export const MULTIPLIER = 3;               // the reference's badge is always x3
-
-/** Every place a ball can come to rest, and what it pays. */
-export const TARGET_POINTS = { 10: 10, 20: 20, 30: 30, 40: 40, 50: 50, '100L': 100, '100R': 100 };
-
-/** Which targets the roaming multiplier badge can land on. Never the 10: multiplying the
- *  consolation ring would reward the throw that missed everything. */
-export const MULT_TARGETS = ['20', '30', '40', '50', '100L', '100R'];
-
-// --- the throw model --------------------------------------------------------------------------
+// WHAT CHANGED (2026-08-11, Matt): the computer opponent is GONE and boards replaced difficulty
+// tiers. A game is now nine balls against the scoreboard - your own all-time best, your best today,
+// and the app-wide record for that machine - and the ladder is unlocking machines by hitting a
+// target score. The old easy/medium/hard AI and its whole-match tuning are deleted; the reasoning
+// they were tuned against is preserved in skeeball/CLAUDE.md, and every play recorded under those
+// difficulty buckets is untouched in the stats store (THE LAW rule 5).
 //
-// Energy bands. `e` is arrival energy: the flick's power, minus what a wall bounce cost it. The
-// bands are contiguous and their edges ARE the difficulty of the game - each one is a window the
-// player has to land a flick inside. They get NARROWER as they get more valuable (10 is 0.16 wide,
-// 50 is 0.08), which is what makes the top of the ramp feel like a real target rather than "flick
-// harder".
+// A board's difficulty IS its target layout (js/boards.js). Throws resolve against target ellipses
+// in BOARD SPACE, so a new machine is a data entry, never a new code path here.
+
+import { boardById, multTargetsFor, nextBoard, DEFAULT_BOARD } from './boards.js';
+
+export const BALLS_PER_RACK = 9;          // the classic skeeball rack
+export const MULTIPLIER = 3;              // the reference's badge is always x3
+
+// --- the throw model ------------------------------------------------------------------------
+//
+// `power` maps to how far UP the board the ball arrives, `aim` to where across. Both are then
+// tested against the board's own target ellipses. The two constants below are the whole feel of
+// the game and are shared by every board, so a machine can never be "the one where the flick works
+// differently" - only where the targets are.
+
 const SHORT_BELOW = 0.28;      // never made it up the ramp: rolls back, scores nothing
-const BANDS = [               // [minEnergy, target]
-  [0.28, '10'],
-  [0.44, '20'],
-  [0.58, '30'],
-  [0.70, '40'],
-  [0.80, '50'],
-];
-const OVER_ABOVE = 0.88;       // straight over the top of the ramp, drops back into the 10
+const OVER_ABOVE = 0.94;       // straight over the back of the board
 
-// The corner cups. Checked BEFORE the energy bands, because a ball far enough out to reach a cup
-// was never over the ring stack in the first place. Both conditions are needed: the cups sit level
-// with the 50 at the outside edges of the board, so a 100 is a hard throw AND a wide one.
-const CUP_MIN_OFFSET = 0.68;   // |u| at arrival, in half-lane-widths (1.0 = touching the rail)
-const CUP_MIN_ENERGY = 0.74;
-const CUP_MAX_ENERGY = 0.92;
+// Arrival depth in board space (0 = front lip, 1 = back wall) for a given arrival energy. The
+// usable energy window maps onto the full depth of the board.
+const depthFor = (e) => (e - SHORT_BELOW) / (OVER_ABOVE - SHORT_BELOW);
 
 // How far off centre a given aim drifts by the time the ball reaches the board. >1 means a
 // full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
-// up a corner cup.
+// up a wide target.
 const LATERAL_GAIN = 1.35;
 const BOUNCE_LOSS = 0.13;      // energy a wall bounce costs, per bounce
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 /**
- * Where a throw ends up. PURE - no rng, see the header.
+ * Where a throw ends up on a given board. PURE - no rng, see the header.
  *
  * @param {number} power 0..1
  * @param {number} aim  -1..1 (negative = left)
- * @returns {{target: string|null, kind: string, points: number, offset: number,
- *            energy: number, bounces: number}}
- *          `target` is null only when nothing was scored. `kind` is why, for the UI's callout:
- *          'ring' | 'cup' | 'short' | 'over'. `offset`/`energy`/`bounces` are the resolved flight
- *          numbers, handed back so the renderer can animate the exact throw that was scored.
+ * @param {object} board a js/boards.js descriptor
+ * @returns {{target: string|null, kind: string, points: number, x: number, y: number,
+ *            offset: number, energy: number, bounces: number}}
+ *   `target` is null only when nothing was scored; `kind` is why, for the UI's callout
+ *   ('hit' | 'short' | 'over' | 'miss'); `x`/`y` are the resolved board-space landing point, handed
+ *   back so the renderer can animate the exact throw that was scored.
  */
-export function resolveThrow(power, aim) {
+export function resolveThrow(power, aim, board) {
+  const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
   const p = clamp(Number.isFinite(power) ? power : 0, 0, 1);
   const a = clamp(Number.isFinite(aim) ? aim : 0, -1, 1);
 
-  // Drift across the lane, folding at the rails. A ball can bank more than once on a wild throw,
-  // so this is a loop rather than a single reflection.
+  // Drift across the lane, folding at the rails. A wild throw can bank more than once.
   let u = a * LATERAL_GAIN;
   let bounces = 0;
   while (Math.abs(u) > 1 && bounces < 4) {
@@ -84,194 +75,120 @@ export function resolveThrow(power, aim) {
     bounces += 1;
   }
   const energy = Math.max(0, p - bounces * BOUNCE_LOSS);
+  const miss = (kind) => ({ target: null, kind, points: 0, x: u, y: kind === 'over' ? 1 : 0, offset: u, energy, bounces });
 
-  if (energy < SHORT_BELOW) {
-    return { target: null, kind: 'short', points: 0, offset: u, energy, bounces };
+  if (energy < SHORT_BELOW) return miss('short');
+  if (energy > OVER_ABOVE) return miss('over');
+
+  const y = clamp(depthFor(energy), 0, 1);
+  // First target containing the point wins, which is why boards.js orders small-and-valuable
+  // first and the catch-all ring last.
+  for (const t of b.targets) {
+    const dx = (u - t.x) / t.rx;
+    const dy = (y - t.y) / t.ry;
+    if (dx * dx + dy * dy <= 1) {
+      return { target: t.id, kind: 'hit', points: t.points, x: u, y, offset: u, energy, bounces };
+    }
   }
-  if (Math.abs(u) >= CUP_MIN_OFFSET && energy >= CUP_MIN_ENERGY && energy <= CUP_MAX_ENERGY) {
-    const target = u < 0 ? '100L' : '100R';
-    return { target, kind: 'cup', points: TARGET_POINTS[target], offset: u, energy, bounces };
-  }
-  if (energy > OVER_ABOVE) {
-    // Over the back of the ramp and down into the outer ring. Scores, but only just - the
-    // deliberate penalty for "flick as hard as possible" being a strategy.
-    return { target: '10', kind: 'over', points: 10, offset: u, energy, bounces };
-  }
-  let target = '10';
-  for (const [min, id] of BANDS) if (energy >= min) target = id;
-  return { target, kind: 'ring', points: TARGET_POINTS[target], offset: u, energy, bounces };
+  return { target: null, kind: 'miss', points: 0, x: u, y, offset: u, energy, bounces };
 }
 
-/** The (power, aim) that lands dead centre of a target's window - the AI's intent before its own
- *  error is added, and the answer to "what does a perfect throw at this look like". */
-export function idealThrow(target) {
-  switch (String(target)) {
-    case '20': return { power: 0.51, aim: 0 };
-    case '30': return { power: 0.64, aim: 0 };
-    case '40': return { power: 0.75, aim: 0 };
-    case '50': return { power: 0.84, aim: 0 };
-    case '100L': return { power: 0.83, aim: -0.80 / LATERAL_GAIN };
-    case '100R': return { power: 0.83, aim: 0.80 / LATERAL_GAIN };
-    default: return { power: 0.36, aim: 0 };
-  }
+/** The (power, aim) that lands dead centre of a named target - used by tests and by the how-to
+ *  screen's worked example. Inverts `depthFor`. */
+export function idealThrow(targetId, board) {
+  const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
+  const t = b.targets.find((x) => x.id === targetId) || b.targets[b.targets.length - 1];
+  const energy = t.y * (OVER_ABOVE - SHORT_BELOW) + SHORT_BELOW;
+  return { power: clamp(energy, 0, 1), aim: clamp(t.x / LATERAL_GAIN, -1, 1) };
 }
 
-// --- the opponent -------------------------------------------------------------------------------
-//
-// The AI is modelled as a HAND, not as a score: it picks a target and then throws at it with a
-// per-tier error. It therefore misses the way a person misses - short, long, or into the wrong
-// ring - instead of being handed a number. Easy genuinely cannot hit the cups reliably; Hard can.
+// --- one game ----------------------------------------------------------------------------------
 
-// Tuned against `tmp` full-match simulations (600 matches per cell, multiplier included), not by
-// feel: the headless per-ball average in test.js UNDERSTATES every tier, because it does not apply
-// the x3 badge and the AI chases it. Measured win rate for a casual player who has not yet worked
-// out that chasing the badge is the whole game: Easy 82%, Medium 39%, Hard 1%. For a player who
-// does chase it: 99% / 93% / 35%. Easy was a 57% coin flip for that casual player before this,
-// which is not what the word Easy promises - it aimed at the 30 and got there too often.
-const AI = {
-  easy: { power: 0.185, aim: 0.34, greed: 0.06, safe: '20' },
-  medium: { power: 0.115, aim: 0.20, greed: 0.32, safe: '30' },
-  hard: { power: 0.05, aim: 0.085, greed: 0.9, safe: '50' },
-};
-
-/** Box-Muller, so the AI's error is normally distributed (clustered near its intent, occasional
- *  real miss) rather than uniform, which reads as random flailing. */
-function gauss(rng) {
-  const u = Math.max(1e-9, rng());
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
-}
-
-/**
- * What the opponent goes for on this throw, and how accurately.
- * `greed` is the chance it chases the multiplied target instead of its safe default.
- */
-export function aiThrow(rng, difficulty, multTarget) {
-  const cfg = AI[difficulty] || AI.medium;
-  const goingFor = (multTarget && rng() < cfg.greed) ? multTarget : cfg.safe;
-  const ideal = idealThrow(goingFor);
-  return {
-    power: clamp(ideal.power + gauss(rng) * cfg.power, 0, 1),
-    aim: clamp(ideal.aim + gauss(rng) * cfg.aim, -1, 1),
-    goingFor,
-  };
-}
-
-// --- the match ------------------------------------------------------------------------------------
-
-/** One skeeball match: `rounds` racks of BALLS_PER_ROUND balls each, you throwing a whole rack
- *  then the opponent throwing theirs (the reference app's per-round handover, not per-ball).
- *  Highest total after the last rack wins; equal totals are a genuine tie. */
+/** One rack of BALLS_PER_RACK balls on one machine. No opponent: the score IS the game. */
 export class Game {
   constructor(opts = {}) {
     const o = opts || {};
-    this.rounds = ROUND_OPTIONS.includes(o.rounds) ? o.rounds : 1;
-    this.difficulty = DIFFS.includes(o.difficulty) ? o.difficulty : 'medium';
+    this.board = boardById(o.board || DEFAULT_BOARD);
     this.rng = typeof o.rng === 'function' ? o.rng : Math.random;
 
-    this.round = 1;
-    this.ball = 1;                 // 1..BALLS_PER_ROUND within the current rack
-    this.turn = 'you';             // 'you' | 'opp'
-    this.scores = { you: 0, opp: 0 };
-    this.roundScores = [];         // [{you, opp}] one per COMPLETED round
+    this.ball = 1;                 // 1..BALLS_PER_RACK
+    this.score = 0;
     this.over = false;
-    this.winner = null;            // 'you' | 'opp' | 'tie', set once over
-    // Per-side running tallies, for the stats recorder. Counted here rather than in the UI so a
-    // restored save carries them (the UI's own counters would restart at zero on resume).
+    // Per-game tallies the stats recorder reads. Kept here rather than in the UI so a restored
+    // save carries them instead of restarting at zero.
     this.tally = { balls: 0, hundreds: 0, fifties: 0, bestThrow: 0 };
+    this.multTargets = multTargetsFor(this.board);
     this.multTarget = null;
     this.rollMultiplier();
   }
 
-  /** Move the badge before every throw, as the reference does (it is over the 40, above the 50 and
-   *  on the left cup in three different frames of one recording). */
+  /** Move the badge before every throw, as the reference does. */
   rollMultiplier() {
-    this.multTarget = MULT_TARGETS[Math.floor(this.rng() * MULT_TARGETS.length)] || '50';
+    const list = this.multTargets;
+    this.multTarget = list.length ? list[Math.floor(this.rng() * list.length)] : null;
     return this.multTarget;
   }
 
-  /** Resolve one throw for whoever's turn it is, apply it, and advance the match.
-   *  @returns the throw result plus `scored` (points AFTER the multiplier) and `multiplied`. */
+  /** Resolve one throw, apply it, advance the rack.
+   *  @returns the throw result plus `scored` (after the multiplier) and `multiplied`. */
   throwBall(power, aim) {
     if (this.over) return null;
-    const thrower = this.turn;
-    const res = resolveThrow(power, aim);
+    const res = resolveThrow(power, aim, this.board);
     const multiplied = !!(res.target && res.target === this.multTarget);
     const scored = res.points * (multiplied ? MULTIPLIER : 1);
-    this.scores[thrower] += scored;
+    this.score += scored;
 
-    if (thrower === 'you') {
-      this.tally.balls += 1;
-      if (res.kind === 'cup') this.tally.hundreds += 1;
-      if (res.target === '50') this.tally.fifties += 1;
-      this.tally.bestThrow = Math.max(this.tally.bestThrow, scored);
-    }
+    this.tally.balls += 1;
+    if (res.points >= 100) this.tally.hundreds += 1;
+    if (res.points === 50) this.tally.fifties += 1;
+    this.tally.bestThrow = Math.max(this.tally.bestThrow, scored);
 
-    const out = { ...res, scored, multiplied, thrower, round: this.round, ballNo: this.ball };
-    this._advance();
+    const out = { ...res, scored, multiplied, ballNo: this.ball };
+    if (this.ball < BALLS_PER_RACK) { this.ball += 1; this.rollMultiplier(); }
+    else { this.over = true; }
     return out;
   }
 
-  _advance() {
-    if (this.ball < BALLS_PER_ROUND) { this.ball += 1; this.rollMultiplier(); return; }
-    // Rack finished.
-    this.ball = 1;
-    if (this.turn === 'you') { this.turn = 'opp'; this.rollMultiplier(); return; }
-    // Both sides have thrown this round.
-    this.turn = 'you';
-    this.roundScores.push({ you: this.scores.you, opp: this.scores.opp });
-    if (this.round >= this.rounds) {
-      this.over = true;
-      this.winner = this.scores.you > this.scores.opp ? 'you'
-        : this.scores.opp > this.scores.you ? 'opp' : 'tie';
-      return;
-    }
-    this.round += 1;
-    this.rollMultiplier();
+  get ballsLeft() { return this.over ? 0 : BALLS_PER_RACK - this.ball + 1; }
+
+  /** The board this game's score would unlock, or null. Read AFTER the game is over. */
+  unlocks() {
+    const nxt = nextBoard(this.board.id);
+    return nxt && this.score >= nxt.unlockScore ? nxt : null;
   }
 
-  /** The opponent's next throw parameters (the UI animates them, then feeds them back in). */
-  aiPlan() { return aiThrow(this.rng, this.difficulty, this.multTarget); }
-
-  /** True while a rack is part-thrown - used by the UI to decide whether a handover card is due. */
-  get ballsLeft() { return BALLS_PER_ROUND - this.ball + 1; }
-
-  /** Everything needed to rebuild this match. The rng is deliberately NOT captured: a restored
-   *  match re-rolls its multipliers and the AI's error from a fresh stream, which changes nothing
-   *  a player could notice and keeps the save a plain JSON object. */
+  /** Everything needed to rebuild this game. The rng is deliberately NOT captured: a restored game
+   *  re-rolls its multipliers from a fresh stream, which changes nothing a player could notice and
+   *  keeps the save plain JSON. */
   snapshot() {
     return {
-      v: 1,
-      rounds: this.rounds, difficulty: this.difficulty,
-      round: this.round, ball: this.ball, turn: this.turn,
-      scores: { ...this.scores }, roundScores: this.roundScores.map((r) => ({ ...r })),
-      over: this.over, winner: this.winner, tally: { ...this.tally }, multTarget: this.multTarget,
+      v: 2, board: this.board.id, ball: this.ball, score: this.score,
+      over: this.over, tally: { ...this.tally }, multTarget: this.multTarget,
     };
   }
 
-  /** Rebuild from a snapshot. Returns null (never throws) on anything malformed, so a corrupt or
-   *  truncated save can only ever mean "no game to resume", never a crash on mount. */
+  /** Rebuild from a snapshot. Returns null (never throws) on anything malformed, so a corrupt,
+   *  truncated or OLD-SHAPE save can only ever mean "no game to resume", never a crash on mount.
+   *  A v1 save (the vs-computer build) is deliberately not resumable - it has an opponent and
+   *  difficulty this build has no concept of - but its recorded HISTORY is untouched in the stats
+   *  store either way; only the half-finished match is dropped. */
   static restore(snap, rng) {
     try {
-      if (!snap || snap.v !== 1) return null;
-      const g = new Game({ rounds: snap.rounds, difficulty: snap.difficulty, rng });
-      g.round = Math.max(1, snap.round | 0);
-      g.ball = Math.min(BALLS_PER_ROUND, Math.max(1, snap.ball | 0));
-      g.turn = snap.turn === 'opp' ? 'opp' : 'you';
-      g.scores = { you: Math.max(0, snap.scores?.you | 0), opp: Math.max(0, snap.scores?.opp | 0) };
-      g.roundScores = Array.isArray(snap.roundScores)
-        ? snap.roundScores.map((r) => ({ you: r?.you | 0, opp: r?.opp | 0 })) : [];
+      if (!snap || snap.v !== 2) return null;
+      const g = new Game({ board: snap.board, rng });
+      g.ball = Math.min(BALLS_PER_RACK, Math.max(1, snap.ball | 0));
+      g.score = Math.max(0, snap.score | 0);
       g.over = !!snap.over;
-      g.winner = ['you', 'opp', 'tie'].includes(snap.winner) ? snap.winner : null;
       g.tally = {
         balls: Math.max(0, snap.tally?.balls | 0),
         hundreds: Math.max(0, snap.tally?.hundreds | 0),
         fifties: Math.max(0, snap.tally?.fifties | 0),
         bestThrow: Math.max(0, snap.tally?.bestThrow | 0),
       };
-      if (MULT_TARGETS.includes(snap.multTarget)) g.multTarget = snap.multTarget;
+      if (g.multTargets.includes(snap.multTarget)) g.multTarget = snap.multTarget;
       return g;
     } catch { return null; }
   }
 }
 
-export default { Game, resolveThrow, idealThrow, aiThrow, BALLS_PER_ROUND, ROUND_OPTIONS, DIFFS, MULTIPLIER, TARGET_POINTS, MULT_TARGETS };
+export default { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER };
