@@ -580,5 +580,85 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   }
 }
 
+// ---- [KNOWN-BUG PROBE] every SHIPPED game has a row on the LEADERBOARD -----------------------
+//
+// The block above covers the three surfaces a per-game SUB-COUNTER needs. There is a fourth
+// surface, for the game as a whole, and it was missed for Yahtzee - found on 2026-08-11 by the
+// first real report to arrive through Report a bug:
+//
+//   "MY WINS ARE NOT COUNTING TO MY TOTAL WINS ON LEADERBOARD"   (game: Yahtzee)
+//
+// He had 14 Yahtzee wins in 15 matches. They were in his local store, they were mirrored to
+// players/ (syncHealth read ok, 266 plays local and remote), and his own My Stats screen showed
+// them. js/leaderboard-ui.js's GAME_META simply had no `yahtzee` row - and ALL_IDS, COMP_IDS,
+// winsOf(), playedOf() and the whole By Game segment are all derived from it, so every one of
+// those wins was worth exactly zero on the board. Stored, synced, and invisible: THE LAW rule 1.
+//
+// Nothing about a missing GAME_META row shows up on the game itself, in My Stats, in the sync
+// health line, or in any other test - which is why this is structural. It discovers the games from
+// game-stats.js, so a NEW game is covered the day its stats id is added.
+//
+// A game may be off the board deliberately, but only while it is `devOnly` in js/hub.js's registry
+// (the leaderboard is the shared bragging wall; an unreleased game has no business on it). That is
+// checked, not taken on trust: the day one of these drops `devOnly`, this block fails and says to
+// add the GAME_META row. An entry here that HAS been added to GAME_META fails too, so the list
+// cannot go stale.
+const OFF_THE_BOARD = {
+  skeeball: 'admin-only; the row reappears the moment the hub GAMES entry drops devOnly',
+  pinball: 'admin-only; same',
+};
+{
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const read = (p) => readFileSync(join(HERE, p), 'utf8');
+
+  /** The text of a top-level `const NAME = [` / `= {` literal, up to its close. Deliberately the
+   *  FIRST `];`/`};` after the marker, not a line-anchored one: game-stats.js's GAMES is a single
+   *  line, and a line-anchored cut ran on into the whole file (every difficulty key read as a
+   *  game id, 167 nonsense failures) the first time this was written. */
+  const literal = (src, marker) => {
+    const i = src.indexOf(marker);
+    if (i < 0) return '';
+    const j = src.indexOf(marker.endsWith('[') ? '];' : '};', i + marker.length);
+    return src.slice(i, j < 0 ? src.length : j);
+  };
+
+  const statsIds = [...literal(read('js/game-stats.js'), 'const GAMES = [').matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
+  const metaIds = [...literal(read('js/leaderboard-ui.js'), 'const GAME_META = [').matchAll(/id:\s*'([\w-]+)'/g)].map((m) => m[1]);
+  // Stats id -> hub registry id, for the devOnly lookup (they differ for connect4, ballrun, ...).
+  const uiSrc = read('js/game-stats-ui.js');
+  const hubIdMap = Object.fromEntries(
+    [...literal(uiSrc, 'const HUB_ID = {').matchAll(/(\w+):\s*'([\w-]+)'/g)].map((m) => [m[1], m[2]])
+  );
+  const hubId = (id) => hubIdMap[id] || id;
+
+  // Which hub entries are devOnly: everything between one `id:` and the next belongs to that entry.
+  const hubSrc = literal(read('js/hub.js'), 'const GAMES = [');
+  const hits = [...hubSrc.matchAll(/\bid:\s*'([\w-]+)'/g)];
+  const devOnly = new Set(hits.filter((m, i) => /devOnly:\s*true/.test(
+    hubSrc.slice(m.index, i + 1 < hits.length ? hits[i + 1].index : hubSrc.length)
+  )).map((m) => m[1]));
+
+  ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 2);
+
+  for (const id of statsIds) {
+    if (metaIds.includes(id)) continue;
+    const why = OFF_THE_BOARD[id];
+    if (!why) {
+      ok(`"${id}" has a leaderboard GAME_META row (without one its wins count as ZERO on the board)`, false);
+      continue;
+    }
+    ok(`"${id}" is off the board on purpose, and still devOnly in js/hub.js (${why})`,
+      devOnly.has(hubId(id)));
+  }
+  for (const id of Object.keys(OFF_THE_BOARD)) {
+    ok(`OFF_THE_BOARD entry "${id}" is not stale (it is still absent from GAME_META)`, !metaIds.includes(id));
+  }
+  // A typo'd id renders an untranslated label and counts nothing, silently.
+  for (const id of metaIds) ok(`GAME_META id "${id}" is a real stats id`, statsIds.includes(id));
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
