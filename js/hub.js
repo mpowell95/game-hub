@@ -414,6 +414,12 @@ class Hub {
       if (!(prof && isAdmin(prof.name))) return;
     }
     this._announced = true;
+    // Warm the report modules while the popup is being read. Someone shown "Please report bugs!"
+    // is about to tap Try it, and that button pulls a whole import chain (bug-report-ui ->
+    // bug-report -> device-report -> stats-net/firebase-boot) which on a weak connection is
+    // seconds of nothing happening. Fire-and-forget: it either arrives before the tap or the tap
+    // waits exactly as long as it used to.
+    import('./bug-report-ui.js').catch(() => { /* the button still works, just cold */ });
     try {
       const { showAnnouncement } = await import('./announce-ui.js');
       await showAnnouncement(a, {
