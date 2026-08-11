@@ -337,6 +337,110 @@ const PLAY = {
     },
   },
 
+  skeeball: {
+    what: 'flick a ball up the lane and have it land in a ring for real points',
+    async run(page, cdp, tap) {
+      // The machine PICKER replaced the setup screen (2026-08-11): tap the first unlocked machine.
+      const start = await page.$('.sk-card:not(.is-locked)');
+      if (!start) return { ok: false, why: 'no unlocked machine on the picker' };
+      await tap(start);
+      await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
+      await page.waitForTimeout(700);
+      const g = await page.evaluate(() => {
+        const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
+        return { left: r.left, top: r.top, w: r.width, h: r.height };
+      });
+      // A flick straight up, 30% of the canvas height. ui.js's POWER_SPAN is 42%, so this is ~0.71
+      // power - which lands in a CUP rather than overshooting onto the catch-all 10. Asserting a
+      // cup (>= 20) rather than merely "scored something" is what makes this prove the board is
+      // being played and not just touched.
+      const x = g.left + g.w / 2;
+      const y0 = g.top + g.h * 0.80;
+      const dist = g.h * 0.30;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+      for (let i = 1; i <= 12; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });
+        await page.waitForTimeout(12);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+      // The autosave lands in _landed(), i.e. AFTER the ball finishes its flight - poll for it
+      // rather than guessing a wait (the mistake Pool's probe records).
+      const read = () => page.evaluate(() => {
+        try { return JSON.parse(localStorage.getItem('gamehub.skeeball.save.v1') || 'null'); }
+        catch { return null; }
+      });
+      let st = null;
+      for (let i = 0; i < 40; i++) {
+        st = await read();
+        if (st && (st.tally?.balls | 0) > 0) break;
+        st = null;
+        await page.waitForTimeout(250);
+      }
+      if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
+      if ((st.score | 0) < 20) {
+        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a 30%-of-screen flick should land in a cup, not the catch-all` };
+      }
+      if ((st.ball | 0) < 2) return { ok: false, why: 'the throw scored but the rack never advanced' };
+      return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };
+    },
+  },
+
+  pinball: {
+    what: 'plunge a ball and flip it around a live table',
+    async run(page, cdp, tap) {
+      const play = await page.$('[data-role="play"]');
+      if (!play) return { ok: false, why: 'no Play button on the setup screen' };
+      await tap(play);
+      await page.waitForSelector('.pb-canvas', { timeout: 8000 });
+      await page.waitForTimeout(500);
+
+      // Pull the plunger. A TAP will not do: the plunger charges while it is held, and a short
+      // pull deliberately dribbles back down the shooter lane, so the probe has to hold it the way
+      // a player does or it is testing the weak-plunge path by accident.
+      const lb = await (await page.$('[data-role="launch"]')).boundingBox();
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lb.x + lb.width / 2, y: lb.y + lb.height / 2, id: 1 }] });
+      await page.waitForTimeout(1200);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(900);
+
+      // Every moving thing on this table is drawn into one canvas, so there is no DOM element for
+      // the MOTION harness to follow. Sample the canvas itself instead: three crops of the lower
+      // playfield taken a fifth of a second apart. If they are identical, nothing is moving, which
+      // is the canvas-shaped version of exactly what MOTION exists to catch.
+      const shot = () => page.evaluate(() => {
+        const c = document.querySelector('.pb-canvas');
+        const t = document.createElement('canvas');
+        t.width = 64; t.height = 64;
+        t.getContext('2d').drawImage(c, 0, c.height * 0.45, c.width, c.height * 0.45, 0, 0, 64, 64);
+        return t.toDataURL();
+      });
+      const frames = [];
+      for (let i = 0; i < 3; i++) { frames.push(await shot()); await page.waitForTimeout(200); }
+      if (new Set(frames).size < 2) return { ok: false, why: 'the playfield never changed between frames: nothing is moving' };
+
+      // Now play it. Alternating flips on the two halves of the table for a few seconds is what a
+      // person does, and the only way the score can move is real contacts with real scoring parts.
+      const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+      const lo = { x: stage.x + stage.width * 0.25, y: stage.y + stage.height * 0.8 };
+      const ro = { x: stage.x + stage.width * 0.75, y: stage.y + stage.height * 0.8 };
+      const readScore = () => page.evaluate(() =>
+        Number((document.querySelector('[data-role="score"]').textContent || '0').replace(/[^0-9]/g, '')));
+      for (let i = 0; i < 60; i++) {
+        const at = i % 2 ? ro : lo;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y, id: 1 }] });
+        await page.waitForTimeout(60);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await page.waitForTimeout(90);
+        if (await readScore() > 0) break;
+      }
+      const score = await readScore();
+      if (!score) return { ok: false, why: 'the ball was launched and flipped for 9s and the score never moved: nothing on the table is scoring' };
+      const ball = await page.evaluate(() => (document.querySelector('[data-role="ball"]').textContent || '').replace(/\s+/g, ' ').trim());
+      return { ok: true, why: `scored ${score.toLocaleString()} with the playfield animating (${ball})` };
+    },
+  },
+
   battleship: {
     what: 'fire a shot and have it resolve on the enemy board',
     async run(page, cdp, tap) {

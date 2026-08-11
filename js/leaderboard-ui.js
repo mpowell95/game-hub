@@ -125,6 +125,7 @@ const GAME_META = [
   { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
+  { id: 'skeeball', labelKey: 'game_title_skeeball' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
@@ -527,6 +528,11 @@ const TEXTURE = {
     { labelKey: 'lb_tex_furthest_drive', get: (g) => (((g.games.hillclimb || {}).hc || {}).bestDistance) | 0 },
     { labelKey: 'lb_tex_hc_coins', get: (g) => (((g.games.hillclimb || {}).hc || {}).coins) | 0 },
     { labelKey: 'lb_tex_hc_flips', get: (g) => (((g.games.hillclimb || {}).hc || {}).flips) | 0 },
+  ],
+  skeeball: [
+    { labelKey: 'lb_tex_sk_best_game', get: (g) => (((g.games.skeeball || {}).sk || {}).bestGame) | 0 },
+    { labelKey: 'lb_tex_sk_best_throw', get: (g) => (((g.games.skeeball || {}).sk || {}).bestThrow) | 0 },
+    { labelKey: 'lb_tex_sk_hundreds', get: (g) => (((g.games.skeeball || {}).sk || {}).hundreds) | 0 },
   ],
   tictactoe: [
     { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },

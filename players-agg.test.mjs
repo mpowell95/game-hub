@@ -363,6 +363,40 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('hillclimb: totals still aggregate alongside', grp.games.hillclimb.total.played, 8);
 }
 
+// ---- Skeeball's sk sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Counters (played/won/lost/tied, balls, lifetime points, 100s, 50s) ADD; bestGame and bestThrow
+// take Math.max, NEVER a sum - a summed best would invent a score nobody ever threw, which is rule
+// 4 as well as rule 2. A device that synced before this game existed must combine cleanly too.
+{
+  const all = {
+    d1: rec({ playerId: 'SK777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 4, won: 3, lost: 1 },
+        byDiff: { medium: { played: 4, won: 3, lost: 1 } },
+        sk: { played: 4, won: 3, lost: 1, tied: 0, balls: 36, points: 1240, bestGame: 410, bestThrow: 300, hundreds: 3, fifties: 7 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'sk777', name: 'Roller' }, {
+      skeeball: {
+        total: { played: 3, won: 1, lost: 1 },
+        byDiff: { hard: { played: 3, won: 1, lost: 1 } },
+        sk: { played: 3, won: 1, lost: 1, tied: 1, balls: 27, points: 700, bestGame: 290, bestThrow: 150, hundreds: 1, fifties: 2 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'SK777', name: 'Roller' }, {}, 300),   // pre-Skeeball device: no key at all
+  };
+  const grp = aggregatePlayers(all)[0];
+  const sk = grp.games.skeeball.sk;
+  eq('skeeball: one person, three devices, one row', aggregatePlayers(all).length, 1);
+  eq('skeeball: W/L/T all sum', [sk.won, sk.lost, sk.tied], [4, 2, 1]);
+  eq('skeeball: balls and lifetime points sum', [sk.balls, sk.points], [63, 1940]);
+  eq('skeeball: 100s and 50s sum', [sk.hundreds, sk.fifties], [4, 9]);
+  eq('skeeball: bestGame is the max, not the sum', sk.bestGame, 410);
+  eq('skeeball: bestThrow is the max, not the sum', sk.bestThrow, 300);
+  eq('skeeball: totals still aggregate alongside', grp.games.skeeball.total.played, 7);
+}
+
 // ---- Snake walls split: a solo pre-split device (never resynced since this shipped) must NOT
 // read 0-0 on the leaderboard -- this is the exact bug report ("0-0 for everyone"): a fresh
 // aggregate over ONLY legacy-shaped records had no bestLenByWalls anywhere to fall back on. ----
@@ -460,6 +494,41 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('alias: exact match only, "Lilian" stays separate', aggregatePlayers(other).length, 2);
   // A name with no DISPLAY_NAME entry is shown exactly as the device wrote it (unchanged behaviour).
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
+}
+
+// ---- Pinball's pb sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
+// Lifetime counters (games, points, jackpots, multiballs, missions, ramps) ADD; BOTH bests take
+// Math.max. Summing a best score would be the worst kind of wrong here: it invents a game nobody
+// played and it can never be undone, since the shared store only ever grows. A device that synced
+// before Pinball existed has no key at all and must combine cleanly.
+{
+  const all = {
+    d1: rec({ playerId: 'PB999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 4, won: 4, lost: 0 },
+        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
+        pb: { games: 4, bestScore: 1250000, points: 3000000, bestBall: 610000, jackpots: 9, multiballs: 2, missions: 5, ramps: 41 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'pb999', name: 'Wizard' }, {
+      pinball: {
+        total: { played: 2, won: 2, lost: 0 },
+        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+        pb: { games: 2, bestScore: 880000, points: 1400000, bestBall: 745000, jackpots: 4, multiballs: 1, missions: 2, ramps: 18 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'PB999', name: 'Wizard' }, { connect4: comp(1, 1, 0) }, 300),
+  };
+  const pb = aggregatePlayers(all)[0].games.pinball.pb;
+  eq('pinball: games and points add across devices', [pb.games, pb.points], [6, 4400000]);
+  eq('pinball: best SCORE takes the max, never a sum', pb.bestScore, 1250000);
+  eq('pinball: best BALL takes the max independently of best score', pb.bestBall, 745000);
+  eq('pinball: lifetime counters add', [pb.jackpots, pb.multiballs, pb.missions, pb.ramps], [13, 3, 7, 59]);
+  eq('pinball: total/byDiff still aggregate alongside pb',
+    aggregatePlayers(all)[0].games.pinball.total.played, 6);
+  ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
+    SOLO.has('pinball'));
 }
 
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------

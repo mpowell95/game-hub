@@ -242,6 +242,23 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    id: 'skeeball',
+    released: '2026-08-11',
+    title: 'Skeeball',
+    blurb: { en: 'Flick the ball up the lane. Far rings pay more, the corner cups pay 100.',
+      es: 'Lanza la bola por la pista. Los aros del fondo valen más y las copas de las esquinas, 100.' },
+    module: '../skeeball/js/ui.js',
+    // Its own alley fills the screen and it draws its own back affordance space into the HUD, so
+    // the hub's header row is wasted height here - same call as Escoba and Ball Run.
+    immersive: true,
+    accent: '#C8452F',
+    // The reference recording is PORTRAIT (reference/skeeball/SPEC.md), so this is composed for
+    // 16:9 rather than cropped from it: the lane runs off the bottom edge at full width and the
+    // ring stack sits centred at the top with a 100 cup pushed into each corner, which is exactly
+    // the content the wide frame has room for and the tall one does not.
+    art: GAME_ART["skeeball"],
+  },
+  {
     id: 'uno',
     title: 'Uno',
     blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',
@@ -304,6 +321,25 @@ const GAMES = [
     accent: '#8C5A3F',
     art: GAME_ART["pool"],
     released: '2026-08-10',
+  },
+  {
+    // ADMIN ONLY for now (Matt's ask): `devOnly` keeps the card off the launcher for everyone but
+    // Matt and the tester, exactly like snake-v2 above. The matching My Stats tab is gated the same
+    // way (js/game-stats-ui.js's TABS), so an unreleased game does not leave a stray empty tab
+    // sitting in everyone else's stats. Dropping `devOnly` is the whole of "release it".
+    id: 'pinball',
+    released: '2026-08-11',
+    title: 'Pinball',
+    blurb: { en: 'Real flipper physics on a neon space table. Ramps, orbits, timed missions and multiball.',
+      es: 'Física real de flippers en una mesa espacial de neón. Rampas, órbitas, misiones con tiempo y multibola.' },
+    module: '../pinball/js/ui.js',
+    // Its own full-bleed chrome (a fixed edge-to-edge canvas, a dot-matrix display and the flipper
+    // touch zones), so the hub's header collapses to the floating back button - same call as Ball
+    // Run, Pool and Hill Climb.
+    immersive: true,
+    accent: '#2a1163',
+    art: GAME_ART["pinball"],
+    devOnly: true,
   },
   {
     // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side comparison with
