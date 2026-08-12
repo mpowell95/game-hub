@@ -11,7 +11,7 @@
 // turn-based with no clock, so leaving mid-rack is lossless: every landed throw snapshots and the
 // picker offers Resume. Always returns false; do not "fix" it to true mid-game.
 
-import { Game, BALLS_PER_RACK, resolveThrow, POWER_SPAN, AIM_SPAN } from './game.js';
+import { Game, BALLS_PER_RACK, resolveThrow, flickToThrow } from './game.js';
 import { BOARDS, DEFAULT_BOARD, boardById, nextBoard } from './boards.js';
 import * as R from './render.js';
 import { STRINGS } from './strings.js';
@@ -25,12 +25,14 @@ const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.skeeball.v1';
 const SAVE_KEY = 'gamehub.skeeball.save.v1';
 
-// POWER_SPAN / AIM_SPAN are imported from game.js, NOT declared here. They are half of the throw
-// model - a cup's size in board space means nothing until it is multiplied by them - and while
-// they lived in this file no test could check the two halves together. Both bad tunings of this
-// game shipped that way. Change either and re-run `node skeeball/js/test.js`: its "a thumb can
-// actually hit these" block converts the whole model into flick-pixels and fails under 40px.
-const MIN_FLICK = 0.06;
+// The gesture -> throw mapping is game.js's `flickToThrow`, NOT anything in this file. It is half
+// of the difficulty, it is pure, and `test.js` drives real gestures through it. This file's only
+// job is to turn pointer events into the four numbers it wants.
+//
+// How long a window at the end of the swipe counts as "the release". 100ms is Android's
+// VelocityTracker default and it is a good one: long enough to average out a jittery finger,
+// short enough that a pull-back before the flick does not bleed into it.
+const VEL_WINDOW_MS = 100;
 
 const ROLL_MS = 720;
 const BOARD_MS = 260;
@@ -377,27 +379,75 @@ class SkeeballUI {
     this.machine = c;
   }
 
+  /**
+   * The gesture, as a ring of timestamped samples.
+   *
+   * `flickToThrow` (game.js) wants the whole gesture's displacement AND the velocity over the last
+   * moment before release. The second half is the reason this buffer exists: a fling is described
+   * by its last ~100ms, not by everything since touch-down. Android's VelocityTracker uses the
+   * same window for the same reason, and it is what lets you wind up - pull back, then flick -
+   * without the pull-back cancelling out the throw.
+   *
+   * Everything is normalised to CANVAS HEIGHTS, x included, so the angle `flickToThrow` takes is a
+   * real screen angle and the feel is identical on any phone.
+   */
+  _gesture() {
+    const d = this.drag;
+    const h = this.layout.h || 1;
+    if (!d || d.pts.length < 2) return null;
+    const pts = d.pts;
+    const last = pts[pts.length - 1];
+    const first = pts[0];
+
+    // The velocity window: walk back until we are older than VEL_WINDOW_MS, keeping at least one
+    // earlier sample so a very short flick still has something to measure against.
+    let i = pts.length - 1;
+    while (i > 0 && last.t - pts[i - 1].t < VEL_WINDOW_MS) i -= 1;
+    const from = pts[i];
+    const dt = Math.max(8, last.t - from.t) / 1000;
+    return {
+      dx: (last.x - first.x) / h,
+      dy: (last.y - first.y) / h,
+      vx: ((last.x - from.x) / h) / dt,
+      vy: ((last.y - from.y) / h) / dt,
+    };
+  }
+
   _bindInput() {
     const cv = this.canvas;
     const pos = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const stamp = (e, p) => {
+      const t = e.timeStamp || performance.now();
+      this.drag.pts.push({ x: p.x, y: p.y, t });
+      // Keep a little more than the velocity window; the displacement terms use pts[0], which is
+      // the touch-down sample and is never dropped.
+      while (this.drag.pts.length > 2 && t - this.drag.pts[1].t > VEL_WINDOW_MS * 2.5) {
+        this.drag.pts.splice(1, 1);
+      }
+    };
     this._onDown = (e) => {
       if (!this.game || this.game.over || this.flight || this.popup) return;
       const p = pos(e);
-      this.drag = { x0: p.x, y0: p.y, power: 0, aim: 0 };
+      this.drag = { pts: [], power: 0, aim: 0 };
+      stamp(e, p);
       cv.setPointerCapture?.(e.pointerId);
     };
     this._onMove = (e) => {
       if (!this.drag) return;
-      const p = pos(e);
-      this.drag.power = clamp((this.drag.y0 - p.y) / (POWER_SPAN * (this.layout.h || 1)), 0, 1);
-      this.drag.aim = clamp((p.x - this.drag.x0) / (AIM_SPAN * (this.layout.w || 1)), -1, 1);
+      stamp(e, pos(e));
+      // The live AIM, for the guide. Smoothed, because a raw per-frame angle estimate flickers
+      // badly and a guide that twitches is worse than no guide. Power is deliberately NOT tracked
+      // here: it is not known until release (see render.js's drawAimGuide).
+      const g = this.drag.pts.length > 1 ? flickToThrow(this._gesture()) : null;
+      if (g) this.drag.aim += (g.aim - this.drag.aim) * 0.4;
     };
     this._onUp = () => {
       if (!this.drag) return;
-      const { power, aim } = this.drag;
+      const g = this._gesture();
       this.drag = null;
-      if (power < MIN_FLICK) return;
-      this._throw(power, aim);
+      const shot = g && flickToThrow(g);
+      if (!shot) return;                       // a tap, a yank back, or a stray touch
+      this._throw(shot.power, shot.aim);
     };
     cv.addEventListener('pointerdown', this._onDown);
     cv.addEventListener('pointermove', this._onMove);
@@ -566,7 +616,7 @@ class SkeeballUI {
       if (k >= 1) this._afterPopup();
       else R.drawPopup(c, this.popup.at, this.popup.text, k);
     }
-    if (this.drag && this.drag.power > 0.02) R.drawAimGuide(c, this.drag.power, this.drag.aim);
+    if (this.drag && this.drag.pts.length > 1) R.drawAimGuide(c, this.drag.aim);
     c.restore();
   }
 

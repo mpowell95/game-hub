@@ -126,11 +126,11 @@ export const BOARDS = [
       //    and over. Both mistakes are the same mistake - setting this without converting it into
       //    the flick distance a thumb can actually repeat.
       //
-      // The conversion, and the number to re-check if you touch this or ui.js's POWER_SPAN:
-      //     window_px = 2*ry * (OVER_ABOVE - SHORT_BELOW) * POWER_SPAN * screenHeight
-      //               = 0.132 * 0.86 * 0.55 * 852 = 53px, with a 23px gap between cups.
-      // 53px is repeatable by thumb; 21px is a lottery. `game.js`'s test block pins both the
-      // window and the gap so neither drifts again.
+      // The units to check it in are the ones a HAND controls, which since the gesture rewrite
+      // means flick SPEED: `test.js`'s "a HAND can actually hit these" block reports each cup as a
+      // percentage of the flick speed needed to reach it, and fails under 12% (a person repeats a
+      // flick speed to roughly +-15%). These values give 14-24%. The 0.045 that Matt's recordings
+      // caught gave a ~5% band, which is a coin toss.
       { id: '50', kind: 'cup', x: 0, y: 0.91, rx: 0.19, ry: 0.066, points: 50 },
       { id: '40', kind: 'cup', x: 0, y: 0.72, rx: 0.217, ry: 0.066, points: 40 },
       { id: '30', kind: 'cup', x: 0, y: 0.53, rx: 0.243, ry: 0.066, points: 30 },

@@ -182,7 +182,7 @@ export function createHowTo(host, boardId) {
       } else if (u < 0.34) {
         const k = (u - 0.16) / 0.18;
         handAt = { x: start.x, y: start.y - (0.30 * R.DH) * k }; pressed = true;
-        R.drawAimGuide(c, power * k, 0);
+        R.drawAimGuide(c, 0);
       } else {
         throwAt(power, aim, (u - 0.34) / 0.5);
       }
@@ -208,7 +208,7 @@ export function createHowTo(host, boardId) {
         const k = u / 0.30;
         const s = R.lanePoint(0.06, 0);
         handAt = { x: s.x + aim * 0.20 * R.DW * k, y: s.y - 0.22 * R.DH * k }; pressed = true;
-        R.drawAimGuide(c, power * k, aim * k);
+        R.drawAimGuide(c, aim);
       } else {
         const out = throwAt(power, aim, (u - 0.30) / 0.55);
         if (u > 0.86) R.drawPopup(c, R.boardPoint(out.x, Math.min(0.97, out.y)), `+${out.points}`, 0.4);
