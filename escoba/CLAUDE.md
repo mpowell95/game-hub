@@ -317,11 +317,23 @@ the same rows no matter which game you drilled in from, and was removed. See `js
 ## Settings & persistence
 
 - **`escoba-settings`** (last-used setup): `count`, `mpSeats`, `humanName`, `humanAvatar`,
-  `aiNames`, `aiDifficulty`, `targetScore`, `deckMode`, `deckModeChosen`, `assist`, `mode`.
+  `aiNames`, `aiDifficulty`, `targetScore`, `deckMode`, `deckModeChosen`, `assist`, `showValues`,
+  `mode`.
   Precedence is last-used > shared hub profile > built-in default, same as every other game
   module. `count` is the SOLO table (2-3); `mpSeats` is the ONLINE table (2-4) and is
   deliberately its own field (see "Multiplayer at 2-4 seats"). Both are additive-only reads:
-  an older save with no `mpSeats` simply defaults to 2.
+  an older save with no `mpSeats` simply defaults to 2. `showValues` (2026-08-11) is the
+  **Value badges** row on the setup screen, and is the same kind of additive read: absent means
+  on, so nobody's screen changed on the deploy. Matt wants the badges, Ana does not, and they
+  share devices as separate profiles, so it had to be a setting rather than a call either way.
+  Unlike `assist` it is **NOT frozen into the match** (there is no `_matchShowValues`): it is
+  a pure display preference, so `renderTable`/`renderHand` read `this._setup.showValues` live
+  and a flip applies to the next render, including a resumed match. It is per device and never
+  travels over the room -- it reveals nothing an opponent could act on that the card faces do
+  not already say, so MP needs no agreement about it. The How-to-play diagram
+  (`_howtoDiagram()`) keeps its badges unconditionally: they are the annotation that makes
+  7+5+3=15 readable, and honouring the setting there would leave the one diagram that teaches
+  the capture rule showing three unexplained cards.
 - **`escoba-save`** (resumable match, schema `v: 1`): `{ v, matchEscobas, assist, snap }`
   plus an MP-only `mp: { code, seat, role, seq, at }` (absent in solo, so the solo shape is
   unchanged; `role` is written alongside `seat` only so a save survives the 3-4-seat deploy
@@ -435,6 +447,11 @@ their printed number. The one-line note (`howto_figures_note`) only renders when
   online table goes to 4 humans (Chinchón's seat model, no engine change, no net.js change),
   and multiplayer results now record under their own `'mp'` bucket and can no longer be lost
   to a peer leaving first.
+- **Value badges (2026-08-11):** the per-card capture-value badge was invisible in dark mode
+  (`.eb-card-val` drew with `--eb-ink`, which the dark theme flips to near-white, on a hardcoded
+  white pill: ~1.16:1). Fixed with `--eb-card-ink`, a token for anything drawn ON a card face,
+  fixed in both themes because the card art never darkens. The badge itself then became a setting
+  (`showValues`, above).
 - **Roadmap (not built):** 4-player TEAM play is still out of scope (Escoba's team variant
   wasn't part of what Matt asked for, and is a rules change, not a seat count); no sound; the
   whitewash/null-winner item above.
