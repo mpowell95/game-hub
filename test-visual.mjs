@@ -239,8 +239,12 @@ const MOTION = {
       await page.click('[data-action="placement-ready"]');
       await page.waitForTimeout(400);
       if (await page.$('.bs-wait')) await page.click('.bs-wait').catch(() => {});
+      // Firing is two steps now: tap a square to aim, then FIRE to confirm (battleship/CLAUDE.md,
+      // "Aim, then FIRE"). A probe that only taps the square never actually shoots.
       const cell = await page.waitForSelector('[data-action="fire"]:not([disabled])', { timeout: 8000 });
       await cell.click();
+      await page.waitForSelector('[data-action="fire-confirm"]', { timeout: 10000 });
+      await page.click('[data-action="fire-confirm"]');
     },
   },
   mancala: {
@@ -478,7 +482,17 @@ const PLAY = {
   battleship: {
     what: 'drag every ship onto the board without the board moving, then fire a shot',
     async run(page, cdp, tap) {
-      const go = async (sel) => { const el = await page.waitForSelector(sel, { timeout: 8000 }); await tap(el); };
+      // Generous timeouts on purpose: this probe drags five ships with real touch events and then
+      // waits out a bot-placing beat and a shell's flight, and it shares the machine with the rest
+      // of run-all-tests.mjs. It passed alone and timed out inside the full suite at 8s.
+      // Names the selector it gave up on. A bare `page.waitForSelector` timeout inside a probe this
+      // long says only "something never appeared", which is not enough to act on from a CI log.
+      const go = async (sel) => {
+        let el;
+        try { el = await page.waitForSelector(sel, { timeout: 20000 }); }
+        catch { throw new Error(`waited 20s and never saw ${sel}`); }
+        await tap(el);
+      };
       await go('[data-action="play-bot"]');
 
       // THE BOARD MUST NOT MOVE WHILE YOU ARE DRAGGING ONTO IT. Matt, 2026-08-11: "It moves around
@@ -486,7 +500,7 @@ const PLAY = {
       // one the instant the first ship landed, yanking the board 71px up the screen mid-drag. This
       // drags all five ships with real touch and fails if the board's box EVER changes -- a check
       // no screenshot can make, because every individual frame of that bug looks correct.
-      await page.waitForSelector('[data-role="place-board"]', { timeout: 8000 });
+      await page.waitForSelector('[data-role="place-board"]', { timeout: 20000 });
       const boxOf = () => page.evaluate(() => {
         const el = document.querySelector('[data-role="place-board"]');
         if (!el) return null;
@@ -528,11 +542,45 @@ const PLAY = {
       await page.waitForTimeout(400);
       const skip = await page.$('.bs-wait');
       if (skip) await tap(skip).catch(() => {});
+      // AIM, THEN FIRE. One tap parks the crosshair and raises the confirm button; the shot only
+      // happens on the second. Both halves are checked here because both are how the player learns
+      // a shot happened at all.
+      // The opening shot can belong to either side (the `First shot` option alternates), so wait for
+      // the battle screen first and let the bot take its turn if it has one, rather than treating a
+      // perfectly normal bot-goes-first game as "the board never became tappable".
+      //
+      // AND RE-TAP IF IT DID NOT TAKE. A tap here is `waitForSelector` then `tap(handle)`, and the
+      // game re-renders its whole screen often enough that under load (the full suite, where this
+      // is the only failure that ever appears) the handle can be detached by the time the tap
+      // lands -- a silent no-op that looked like "the game is broken". Re-tapping SAVE / the
+      // skippable waiting screen is harmless when the first one worked, since neither exists any
+      // more by then.
+      let onBattle = false;
+      for (let attempt = 0; attempt < 3 && !onBattle; attempt++) {
+        try { await page.waitForSelector('.bs-battle', { timeout: 7000 }); onBattle = true; break; }
+        catch { /* retry below */ }
+        for (const sel of ['[data-action="placement-ready"]', '.bs-wait']) {
+          const el = await page.$(sel);
+          if (el) await tap(el).catch(() => {});
+        }
+      }
+      if (!onBattle) {
+        const where = await page.evaluate(() => {
+          const r = document.querySelector('.bs-root');
+          return r ? (r.querySelector('.bs-deploy') ? 'deploy' : r.querySelector('.bs-wait') ? 'waiting' : r.querySelector('.bs-mode') ? 'setup' : 'unknown') : 'no root';
+        });
+        return { ok: false, why: `saved the fleet and the battle screen never appeared (stuck on: ${where})` };
+      }
       await go('[data-action="fire"]:not([disabled])');
-      // a resolved shot leaves a settled marker on the cell it hit
-      try { await page.waitForSelector('.bs-peg-miss, .bs-peg-hit', { timeout: 8000 }); }
+      try { await page.waitForSelector('[data-action="fire-confirm"]', { timeout: 10000 }); }
+      catch { return { ok: false, why: 'tapped a square and no FIRE button appeared to confirm the shot' }; }
+      await go('[data-action="fire-confirm"]');
+      // a resolved shot says what it did, and leaves a settled marker on the cell it hit
+      try { await page.waitForSelector('.bs-res-hit, .bs-res-miss, .bs-res-sunk', { timeout: 15000 }); }
+      catch { return { ok: false, why: 'the shot resolved without ever saying HIT or MISS' }; }
+      try { await page.waitForSelector('.bs-peg-miss, .bs-peg-hit', { timeout: 15000 }); }
       catch { return { ok: false, why: 'fired at a cell and no hit/miss marker ever appeared' }; }
-      return { ok: true, why: 'shot fired and resolved to a marker' };
+      return { ok: true, why: 'aimed, confirmed with FIRE, and the shot announced its result' };
     },
   },
 };
