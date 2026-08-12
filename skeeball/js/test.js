@@ -2,8 +2,9 @@
 // Run: node skeeball/js/test.js  (also in run-all-tests.mjs). No DOM, no canvas.
 
 import { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER,
-  flickToThrow, FLICK, SHORT_BELOW, OVER_ABOVE } from './game.js';
+  flickToThrow, FLICK, SHORT_BELOW, OVER_ABOVE, RAIL_X, laneOffsetAt } from './game.js';
 import { BOARDS, boardById, nextBoard, multTargetsFor, DEFAULT_BOARD } from './boards.js';
+import * as R from './render.js';
 
 let fail = 0;
 function ok(label, cond) {
@@ -226,6 +227,44 @@ console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBA
     perRack >= 150 && perRack <= 450);
   ok(`and almost never whiffs entirely: ${(100 * zeros / N).toFixed(1)}% of throws (need < 5%)`,
     zeros / N < 0.05);
+}
+
+console.log('\n-- [KNOWN-BUG PROBE] the rails are where the lane actually is --');
+{
+  // RAIL_X is the one number the engine and the renderer have to agree on: it says the lane's
+  // edges are at board x +-0.616 because the lane is narrower than the bowl it feeds. Derive the
+  // same ratio from the DRAWN geometry and check they match.
+  //
+  // They did not used to. The lateral model was in lane-fractions and the bowl reused those as
+  // bowl-fractions, so crossing the ramp shifted the ball 63px further out - three times the size
+  // of a bounce, and in the opposite direction, which is why Matt could not see the bounce at all:
+  // "it bounces off the wall, but then continues on the line it originally was on."
+  const laneTopHalf = R.lanePoint(1, 1).x - R.lanePoint(1, 0).x;
+  const bowlLipHalf = R.boardPoint(1, 0).x - R.boardPoint(0, 0).x;
+  const drawn = laneTopHalf / bowlLipHalf;
+  ok(`RAIL_X ${RAIL_X} matches the drawn lane/bowl ratio ${drawn.toFixed(4)}`,
+    Math.abs(drawn - RAIL_X) < 0.005);
+
+  // And the consequence, which is the thing a player sees: a throw wide enough to bank must come
+  // OFF the rail and keep coming, never turn round and head back into it.
+  const xs = Array.from({ length: 400 }, (_, i) => laneOffsetAt(1, i / 399).u);
+  const peak = Math.max(...xs.map(Math.abs));
+  const peakAt = xs.findIndex((x) => Math.abs(x) === peak);
+  ok(`a full-tilt aim reaches the rail (peaks at ${peak.toFixed(4)} against RAIL_X ${RAIL_X})`,
+    Math.abs(peak - RAIL_X) < 0.005);
+  ok('and then comes back off it', Math.abs(xs[xs.length - 1]) < peak - 1e-6);
+  ok('every step after the bounce moves INWARD - never a reversal back toward the wall',
+    xs.slice(peakAt).every((x, i, a) => i === 0 || Math.abs(x) <= Math.abs(a[i - 1]) + 1e-9));
+  ok('the ball never ends up outside the rails', xs.every((x) => Math.abs(x) <= RAIL_X + 1e-6));
+
+  // Every reachable target must actually be reachable, which is what +-0.75 stopped being.
+  for (const b of BOARDS) {
+    const maxX = Math.max(...Array.from({ length: 200 },
+      (_, i) => Math.abs(laneOffsetAt(1, i / 199).u)));
+    const unreachable = b.targets.filter((t) => t.kind !== 'ring' && Math.abs(t.x) - t.rx > maxX);
+    ok(`${b.id}: no target sits outside the widest a throw can go (${unreachable.map((t) => t.id).join(',') || 'none'})`,
+      unreachable.length === 0);
+  }
 }
 
 console.log('\n-- banking off a rail --');

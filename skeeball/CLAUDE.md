@@ -123,6 +123,26 @@ controlled push is still a real throw; aim is the swipe ANGLE, so it no longer c
 Speeds are in **canvas heights per second** and the angle in radians, so the feel is identical on
 any phone.
 
+### The rails are not at board x +-1
+
+`RAIL_X` (0.6162) is the one number `game.js` and `render.js` must agree on. The lane is measurably
+NARROWER than the bowl it feeds — 118.3px against 192.0px at the join — so the whole lateral model
+is in **board space**, with the rails sitting where the lane's edges actually are.
+
+It used to be in lane-fractions, and the bowl reused those as bowl-fractions. A ball at 85% of the
+lane's width was handed to the bowl as 85% of the *bowl's* width, which is a different, wider
+place, so crossing the ramp teleported it 63px further out. On a banked throw that outward sweep
+was three times the size of the bounce and pointed the other way, which is why the bounce was
+invisible — Matt: *"It bounces off the wall, but then continues on the line it originally was on."*
+
+Two consequences worth knowing before you move anything:
+
+- **A target beyond `RAIL_X + rx` cannot be hit.** The 100s are drawn at ±0.75 in the reference but
+  live at ±0.54 here, because no throw can arrive out at 0.75. `test.js` fails on any board with an
+  unreachable target.
+- **`test.js` derives the ratio from the drawn geometry and checks it against `RAIL_X`**, so the
+  two cannot drift apart again.
+
 **The units to judge any of this in are the ones a hand controls.** `test.js` reports each cup as a
 percentage of the flick speed needed to reach it (14-24%, against a human repeatability of about
 +-15%) and as degrees of swipe angle (+-5.1 to +-7.3). Board-space fractions say nothing about
@@ -222,6 +242,37 @@ whose boards it is reading.
   (`SPEC.md`, "What it does NOT show"), so the flick, the dashed predicted path and the power bar
   are this build's own choices. The dashed path runs the SAME fold maths the engine will apply, so
   the guide cannot lie about where the ball is going.
+
+## The flight — one roll, one speed
+
+Matt, 2026-08-11: *"You flick it, it goes some speed down the ramp, then it speeds up to go off the
+jump, then it flies through the air. None of the different speeds feel related to or based on each
+other... It goes SO slow down the ramp, then SO fast off the jump."*
+
+Two faults, and the second is why fixing the first alone was not enough:
+
+1. **Three hardcoded durations** — 720ms lane, 260ms board, 200ms drop — stapled together. Each
+   covered a completely different distance, so each ran at a different apparent speed, and none had
+   anything to do with how hard the ball was thrown. A `sin()` hop over the crest was the "flies
+   through the air".
+2. **A hole in the path.** The lane's top is at design y=660 and the bowl's lip at y=560, and the
+   ramp between them was on nobody's path — the ball went straight from `lanePoint(1)` to
+   `boardPoint(...)`, teleporting 100px in one frame. Traced, that frame ran at **6535 px/s**
+   against 406 px/s the frame before it.
+
+Now: `_buildPath` makes ONE polyline through lane → ramp → bowl (`render.js` owns each piece,
+including `rampPoint`, so the ball rolls on the surface that is actually drawn), and the ball
+advances along it by **arc length**, decelerating from a release speed set by the throw to
+`ROLL_KEEP` of it. No duration is declared anywhere; it falls out of speed and length.
+
+Arc length rather than a world coordinate is deliberate: the bowl is drawn oversized — the
+reference cabinet does the same — so world units do not convert to screen pixels at the same rate
+either side of the lip, and any model assuming they do puts a speed step back at exactly that seam.
+For the same reason no easing curve is layered on top: the polyline already carries the
+perspective.
+
+To re-measure any of this, trace the ball's position per frame and print the frame-to-frame speed.
+A discontinuity is then a number, not a feeling.
 
 ## Rendering
 
