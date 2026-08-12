@@ -229,6 +229,49 @@ console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBA
     zeros / N < 0.05);
 }
 
+console.log('\n-- [KNOWN-BUG PROBE] THE HOLES DO NOT ATTRACT THE BALL --');
+{
+  // Matt, twice: "the balls are guided in. That's not fun", and then "the balls move slightly in
+  // the air towards the holes. It's like the holes attract the ball. The ball deviates from the
+  // path it should be on and moves towards the hole. Why? This is not realistic. It's dumb and it
+  // ruins the game." Followed by: "Remove the below permanently. NEVER add them back."
+  //
+  // The ball never moved. What moved was the truth: the catch ellipse was bigger than the hole
+  // being painted, so a ball that came to rest BESIDE a cup was scored into it and then drawn
+  // sinking through the floor next to it. First `rx` was drawn at 0.86 of the catch; that was
+  // fixed and `ry` was left at nearly TWICE the depth of the drawn mouth, which nothing noticed
+  // because nobody had ever compared the two. Measured on that build: 62% of throws scored as a
+  // cup landed outside the visible hole, the worst 3.1x its radius away.
+  //
+  // THIS IS THE ASSERTION THAT MAKES IT PERMANENT. Every throw that scores a target must come to
+  // rest inside the ellipse render.js paints for that target. Not near it. Inside it.
+  // Measured in DESIGN PIXELS past the drawn edge, not as a ratio: a board-space ellipse does not
+  // project to an exact screen ellipse (bz is nonlinear in depth), so a few throws sit a fraction
+  // of a pixel proud of the painted rim. The worst is 0.21 design px - about a sixth of a CSS
+  // pixel on a phone. A threshold of 1px is therefore "the ball is in the hole" and would still
+  // catch the 3.1x-radius miss this block exists for by a factor of hundreds.
+  let checked = 0, outside = 0, worst = 0, worstId = '';
+  for (const b of BOARDS) {
+    for (let p = 0.03; p <= 1; p += 0.0015) {
+      for (const a of [-1, -0.7, -0.4, -0.15, 0, 0.15, 0.4, 0.7, 1]) {
+        const r = resolveThrow(p, a, b);
+        if (r.kind !== 'hit' || !r.target) continue;
+        const t = b.targets.find((z) => z.id === r.target);
+        if (t.kind === 'ring') continue;          // the catch-all is the floor, not a hole
+        const land = R.boardPoint(r.x, Math.min(0.97, r.y));
+        const m = R.mouthOf(t);
+        const d = Math.hypot((land.x - m.x) / m.rx, (land.y - m.y) / m.ry);
+        checked += 1;
+        const px = (d - 1) * Math.min(m.rx, m.ry);
+        if (px > 1) { outside += 1; if (px > worst) { worst = px; worstId = `${b.id}/${t.id}`; } }
+      }
+    }
+  }
+  ok(`every one of ${checked} scoring throws comes to rest INSIDE the hole it scored`
+    + (outside ? ` - ${outside} did not, worst ${worst.toFixed(1)}px out on ${worstId}` : ''),
+    outside === 0);
+}
+
 console.log('\n-- [KNOWN-BUG PROBE] the rails are where the lane actually is --');
 {
   // RAIL_X is the one number the engine and the renderer have to agree on: it says the lane's

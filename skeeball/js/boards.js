@@ -107,8 +107,8 @@ export const BOARDS = [
       // feeds), so a ball simply cannot arrive out there: +-0.75 would be a target no throw can
       // reach. They sit at the widest a hard diagonal actually gets instead. Tested FIRST, so they
       // win where they overlap the 50.
-      { id: '100L', kind: 'tube', x: -0.54, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
-      { id: '100R', kind: 'tube', x: 0.54, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
+      { id: '100L', kind: 'tube', x: -0.54, y: 0.93, rx: 0.19, ry: 0.058, points: 100 },
+      { id: '100R', kind: 'tube', x: 0.54, y: 0.93, rx: 0.19, ry: 0.058, points: 100 },
       // Cups up the middle, 20 nearest, on an even 0.19 pitch, with the stack sitting back off
       // the front lip so the bowl has a real cream APRON in front of it - that apron is where the
       // 10 is printed on the reference machine, and with the stack any further forward the 20's
@@ -118,25 +118,30 @@ export const BOARDS = [
       // checked in flick-pixels. Two rules, and the second one has now been wrong in BOTH
       // directions, so read the history before nudging it:
       //
-      // 1. `rx` IS the drawn width. render.js draws the rim at exactly this radius, so what you
-      //    can see is what you can hit. It once drew at 0.86 of it, making every catch area 16%
-      //    wider than the cup it belonged to - Matt, 2026-08-11: "the balls are guided in."
-      // 2. `ry` is the mouth's half-DEPTH, and it is 69% of half the pitch. The fix for "guided
-      //    in" cut it to 0.045 against a 0.14 pitch, which left each cup owning 5.9% of the power
-      //    range: a ~21px flick window on an 852px phone. Matt's own recordings of THAT build
-      //    (`Skeeball 2.MOV` / `Skeeball 3.MOV`) are six balls for 40 points and "Too hard!" over
-      //    and over. Both mistakes are the same mistake - setting this without converting it into
-      //    the flick distance a thumb can actually repeat.
+      // 1. **`rx` AND `ry` ARE THE HOLE.** render.js draws the dark opening at exactly this
+      //    ellipse - `mouthOf()` projects it, nothing scales it - so what you can see is precisely
+      //    what you can hit. This has been broken twice. First `rx` was drawn at 0.86 of the catch
+      //    ("the balls are guided in"). Then, unnoticed, `ry` stayed nearly TWICE the depth of the
+      //    drawn mouth: 62% of throws scored as a cup were landing outside the hole on screen, up
+      //    to 3.1x the mouth's radius away, so the ball visibly stopped BESIDE a cup and the game
+      //    said it went in. Matt: "It's like the holes attract the ball. The ball deviates from the
+      //    path it should be on and moves towards the hole." Nothing here may ever again be a
+      //    different size from what is painted.
+      // 2. `ry` is the mouth's half-DEPTH, and it is 61% of half the pitch. The fix for "guided in"
+      //    once cut it to 0.045 against a 0.14 pitch, which left each cup owning 5.9% of the power
+      //    range - a ~21px flick window on an 852px phone, and the reason Matt's recordings of that
+      //    build are six balls for 40 points. Setting it without converting it into something a
+      //    thumb can repeat is how both mistakes happened.
       //
       // The units to check it in are the ones a HAND controls, which since the gesture rewrite
       // means flick SPEED: `test.js`'s "a HAND can actually hit these" block reports each cup as a
       // percentage of the flick speed needed to reach it, and fails under 12% (a person repeats a
       // flick speed to roughly +-15%). These values give 14-24%. The 0.045 that Matt's recordings
       // caught gave a ~5% band, which is a coin toss.
-      { id: '50', kind: 'cup', x: 0, y: 0.91, rx: 0.19, ry: 0.066, points: 50 },
-      { id: '40', kind: 'cup', x: 0, y: 0.72, rx: 0.217, ry: 0.066, points: 40 },
-      { id: '30', kind: 'cup', x: 0, y: 0.53, rx: 0.243, ry: 0.066, points: 30 },
-      { id: '20', kind: 'cup', x: 0, y: 0.34, rx: 0.27, ry: 0.066, points: 20 },
+      { id: '50', kind: 'cup', x: 0, y: 0.91, rx: 0.21, ry: 0.058, points: 50 },
+      { id: '40', kind: 'cup', x: 0, y: 0.72, rx: 0.24, ry: 0.058, points: 40 },
+      { id: '30', kind: 'cup', x: 0, y: 0.53, rx: 0.27, ry: 0.058, points: 30 },
+      { id: '20', kind: 'cup', x: 0, y: 0.34, rx: 0.30, ry: 0.058, points: 20 },
       // THE CATCH-ALL, and deliberately NOT the same ellipse as `ring` above. `ring` is what gets
       // drawn; this is "stayed on the playfield but found no cup" - short of the 20, wide of the
       // stack, or over the back of the 50 - and it has to cover the whole field to do that job.

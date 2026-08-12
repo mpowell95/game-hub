@@ -512,15 +512,22 @@ class SkeeballUI {
     const v0 = ROLL_V0 + ROLL_VE * clamp(preview.energy, 0, 1);
     const len = path.len[path.len.length - 1];
 
+    // A ball that finds no cup does NOT vanish. It rolls back down the bowl into the trough at the
+    // front - which is exactly what the 10 is on a real machine, and what the catch-all has always
+    // represented. Matt: "why does the ball disappear? If it doesn't go into a hole, you just have
+    // it disappear... That's terrible. I HATE that. That is not realistic."
+    const sank = !short && out.kind === 'hit' && out.target && !this._isCatchAll(out.target);
+    const backLen = short ? len : (sank ? 0 : len - path.lipAt);
+
     this.flight = {
-      out, short, path, t0: performance.now(),
+      out, short, sank, path, t0: performance.now(),
       // Constant speed, so time is just distance over it. A short throw is the one exception: it
       // decelerates to a standstill at the apex, so its mean speed is half.
       rollMs: (len / (v0 * (short ? 0.5 : 1))) * 1000,
+      // Rolling back is gravity-fed and unhurried, but it must not hold the game up.
+      backMs: backLen > 0 ? Math.min(700, (backLen / (v0 * 0.62)) * 1000) : 0,
       dropMs: short ? 0 : DROP_MS,
-      spin0: 0,
     };
-    this.flight.backMs = short ? this.flight.rollMs * 0.95 : 0;
     // Hold the points back until the ball LANDS - the engine has them already, but revealing them
     // on release tells the player the answer while the ball is still rolling.
     this.pending = out.scored;
@@ -545,9 +552,11 @@ class SkeeballUI {
       const q = R.lanePoint(v, R.boardXToLaneU(laneOffsetAt(aim, v).u));
       pts.push({ x: q.x, y: q.y, r: q.r });
     }
+    let lipIdx = pts.length - 1;
     if (laneTo == null) {
       const u = laneOffsetAt(aim, 1).u;
       for (let i = 1; i <= 10; i++) pts.push(R.rampPoint(i / 10, u));
+      lipIdx = pts.length - 1;                    // the bowl's front lip: where the trough is
       const endY = Math.min(0.97, out.y);
       for (let i = 1; i <= 20; i++) {
         const y = (i / 20) * endY;
@@ -559,7 +568,7 @@ class SkeeballUI {
     for (let i = 1; i < pts.length; i++) {
       len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
     }
-    return { pts, len };
+    return { pts, len, lipAt: len[lipIdx] };
   }
 
   /** Interpolate the polyline at arc length `s`, and give the ball the rotation that distance
@@ -589,31 +598,38 @@ class SkeeballUI {
     const el = now - f.t0;
     const total = f.path.len[f.path.len.length - 1];
 
-    if (f.short) {
-      // Up, decelerating to a standstill at the apex, then back down. One curve, mirrored: no
-      // separate "rolls back" animation to get out of step with the way out.
-      if (el < f.rollMs) {
-        const k = el / f.rollMs;
-        return this._atLength(f.path, total * k * (2 - k));
-      }
-      const k = clamp((el - f.rollMs) / f.backMs, 0, 1);
-      const p = this._atLength(f.path, total * (1 - k * k));
-      return { ...p, fading: k > 0.75 ? (k - 0.75) / 0.25 : 0 };
-    }
-
     if (el < f.rollMs) {
       // Constant speed: the arc length travelled is simply linear in time. No easing curve, no
       // deceleration, nothing layered on top - see the ROLL_V0 note.
-      return this._atLength(f.path, total * (el / f.rollMs));
+      const k = el / f.rollMs;
+      // A SHORT throw is the one exception: it has to slow to a standstill before it can come back.
+      return this._atLength(f.path, total * (f.short ? k * (2 - k) : k));
     }
 
-    // The drop. A ball that found a CUP disappears into it; a ball that only made the playfield
-    // stays on top of it and just settles, because there is no hole under it to fall through.
+    if (f.short) {
+      // ...and then rolls back down the lane to the player, off the bottom of the screen. It is
+      // returned, not deleted: the path's own start is below the foul line.
+      const k = clamp((el - f.rollMs) / f.backMs, 0, 1);
+      return this._atLength(f.path, total * (1 - k * k));
+    }
+
+    if (!f.sank) {
+      // NO CUP: it rolls back down the bowl into the trough at the front. THE BALL IS NEVER
+      // DELETED IN MID-AIR - the only places it leaves the screen are a cup, this trough, and the
+      // return at the player's end. Do not reintroduce a fade.
+      if (el < f.rollMs + f.backMs) {
+        const k = (el - f.rollMs) / f.backMs;
+        return this._atLength(f.path, total - (total - f.path.lipAt) * k * (2 - k));
+      }
+      const lip = this._atLength(f.path, f.path.lipAt);
+      const k = clamp((el - f.rollMs - f.backMs) / f.dropMs, 0, 1);
+      return { ...lip, y: lip.y + k * lip.r * 0.55, r: lip.r * (1 - k * 0.85) };
+    }
+
+    // A cup: it drops in.
     const end = this._atLength(f.path, total);
     const k = clamp((el - f.rollMs) / f.dropMs, 0, 1);
-    const sank = f.out.kind === 'hit' && f.out.target && !this._isCatchAll(f.out.target);
-    if (sank) return { ...end, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
-    return { ...end, y: end.y + k * 2, fading: k > 0.55 ? (k - 0.55) / 0.45 : 0 };
+    return { ...end, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
   }
 
   /** The board's big consolation target - a ball resting on the playfield, not sunk in anything. */
@@ -624,19 +640,25 @@ class SkeeballUI {
 
   _flightDone(now) {
     const f = this.flight;
-    return !!f && (now - f.t0) >= f.rollMs + f.backMs + f.dropMs;
+    return !!f && (now - f.t0) >= f.rollMs + f.backMs + (f.short ? 0 : f.dropMs);
   }
 
   _landed() {
-    const out = this.flight.out;
+    const f = this.flight;
+    const out = f.out;
+    // WHERE THE BALL ACTUALLY FINISHED, not where the target is. A cup: in the cup. A miss: down
+    // at the trough it just rolled into, because that is where the player's eye is. Floating a
+    // "+10" over the middle of the board when the ball is somewhere else is the board announcing
+    // a decision it made on your behalf, which is the whole family of complaint this game has
+    // had.
+    const at = f.short ? R.lanePoint(0.06, out.x)
+      : f.sank ? R.boardPoint(out.x, Math.min(0.97, out.y))
+        : this._atLength(f.path, f.path.lipAt);
     this.flight = null;
     this.pending = null;
     this.popup = {
       t0: performance.now(),
-      // At the LANDING POINT, for the same reason the ball flies there: a "+10" floating over the
-      // middle of the ring when the ball stopped near the left rail reads as the board deciding
-      // for you.
-      at: R.boardPoint(out.x, Math.min(0.97, out.y)),
+      at,
       text: out.kind === 'short' ? t('short')
         : out.kind === 'over' ? t('over')
           : out.kind === 'miss' ? t('miss')
@@ -696,11 +718,10 @@ class SkeeballUI {
     }
     if (this.flight) {
       const b = this._ballNow(now);
-      if (b) {
-        if (b.fading) c.globalAlpha = 1 - b.fading;
-        R.drawBall(c, b.x, b.y, b.r, b.spin || 0);
-        c.globalAlpha = 1;
-      }
+      // No alpha fade anywhere. A ball leaves the screen by going into a hole or rolling out of
+      // frame at the player's end, never by dissolving in mid-air (Matt, 2026-08-11: "why does the
+      // ball disappear... I HATE that. That is not realistic.").
+      if (b) R.drawBall(c, b.x, b.y, b.r, b.spin || 0);
       if (this._flightDone(now)) this._landed();
     }
     if (this.popup) {
