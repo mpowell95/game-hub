@@ -80,7 +80,7 @@ export const FLICK = {
    *  degrees and the 100s wanted a 16-degree diagonal, which measured out as a coin toss on the
    *  back two cups. At 0.55 the cups allow +-5.2 to +-7.4 degrees and a 100 asks for a deliberate
    *  20-degree diagonal - still clearly a skill shot, but one you can aim at. */
-  MAX_ANGLE: 0.55,
+  MAX_ANGLE: 0.32,
   /** Below this the gesture is discarded rather than thrown - a tap, or a stray touch. */
   MIN_POWER: 0.05,
 };
@@ -149,10 +149,11 @@ const depthFor = (e) => (e - SHORT_BELOW) / (OVER_ABOVE - SHORT_BELOW);
 // full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
 // up a wide target.
 //
-// Judged in DEGREES of swipe angle, via FLICK.MAX_ANGLE: staying inside the 20 cup (rx 0.27)
-// allows +-7.3 degrees of wander and a 100 asks for a deliberate 20-degree diagonal. Crucially
-// those tolerances no longer change with how hard you throw - see FLICK.MAX_ANGLE's note.
-export const LATERAL_GAIN = 1.15;
+// In BOARD-SPACE x per unit of aim (see RAIL_X above for why board space). Full aim puts the ball
+// just past the rail, so the extreme swipe grazes it; everything short of that is a clean diagonal.
+// Judged in DEGREES of swipe angle via FLICK.MAX_ANGLE, and those tolerances do not change with
+// how hard you throw.
+export const LATERAL_GAIN = 0.63;
 const BOUNCE_LOSS = 0.13;      // energy a wall bounce costs, per bounce
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -169,18 +170,53 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
  *   ('hit' | 'short' | 'over' | 'miss'); `x`/`y` are the resolved board-space landing point, handed
  *   back so the renderer can animate the exact throw that was scored.
  */
+/**
+ * THE RAILS, in board-space x. The lane is NARROWER than the bowl it feeds - measurably so, and
+ * the reference cabinet is the same - so the rails do not sit at board x +-1; they sit where the
+ * lane's top edge does, which is 118.3 / 192.0 of the bowl's half-width.
+ *
+ * **The whole lateral model is in BOARD space because of this.** It used to be in lane-fractions:
+ * a ball at 85% of the lane's width was handed to the bowl as 85% of the BOWL's width, which is a
+ * different, wider place - so crossing the ramp teleported it 63px further out. On a banked throw
+ * that outward sweep was three times the size of the bounce and completely hid it. Matt: "It
+ * bounces off the wall, but then continues on the line it originally was on - as if it didn't
+ * bounce off the wall."
+ *
+ * Keep this in step with render.js's geometry; `test.js` asserts the two agree.
+ */
+export const RAIL_X = 0.6162;
+
+/**
+ * Where an aimed throw is, in BOARD-SPACE x, when it has travelled `v` of the way up the lane.
+ * `+-RAIL_X` are the rails and the path FOLDS off them - a wide throw banks.
+ *
+ * **This is the only implementation of that fold, and it must stay that way.** There have been
+ * three copies of it: this one, the aim guide's, and the ball animation's. Two of them kept a
+ * hardcoded `1.35` after LATERAL_GAIN moved to 1.15, so the dashed guide promised a bank the ball
+ * would not take, and the ball itself was drawn bending at the wrong place and then snapping
+ * sideways onto the real landing point. Matt saw the second one: "it bounces off the wall, but
+ * then continues on the line it originally was on - as if it didn't bounce off the wall."
+ *
+ * @returns {{u:number, bounces:number}} u is the offset, -1..1.
+ */
+export function laneOffsetAt(aim, v) {
+  const a = clamp(Number.isFinite(aim) ? aim : 0, -1, 1);
+  let u = a * LATERAL_GAIN * clamp(Number.isFinite(v) ? v : 0, 0, 1);
+  let bounces = 0;
+  while (Math.abs(u) > RAIL_X && bounces < 4) {
+    u = Math.sign(u) * (2 * RAIL_X - Math.abs(u));
+    bounces += 1;
+  }
+  return { u, bounces };
+}
+
 export function resolveThrow(power, aim, board) {
   const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
   const p = clamp(Number.isFinite(power) ? power : 0, 0, 1);
   const a = clamp(Number.isFinite(aim) ? aim : 0, -1, 1);
 
   // Drift across the lane, folding at the rails. A wild throw can bank more than once.
-  let u = a * LATERAL_GAIN;
-  let bounces = 0;
-  while (Math.abs(u) > 1 && bounces < 4) {
-    u = Math.sign(u) * (2 - Math.abs(u));
-    bounces += 1;
-  }
+  const { u, bounces } = laneOffsetAt(a, 1);
   const energy = Math.max(0, p - bounces * BOUNCE_LOSS);
   const miss = (kind) => ({ target: null, kind, points: 0, x: u, y: kind === 'over' ? 1 : 0, offset: u, energy, bounces });
 

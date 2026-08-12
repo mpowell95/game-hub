@@ -28,7 +28,7 @@
 // a camera looking down the lane. Widths, ball radius and rail chevron spacing all multiply by it,
 // and the screen y derives from it, so equal steps along the real lane compress toward the top.
 
-import { LATERAL_GAIN } from './game.js';
+import { laneOffsetAt, RAIL_X } from './game.js';
 
 export const DW = 480;
 export const DH = 1000;
@@ -96,6 +96,43 @@ export function laneY(v) {
   return DH - (DH - top) * k;
 }
 export function laneHalf(v) { return LANE_HALF_NEAR * DW * sc(v); }
+
+/**
+ * A point on the RAMP: the curved throat between the top of the lane and the bowl's front lip.
+ * `k` 0..1 across it, `u` the lane offset the ball is carrying.
+ *
+ * **This exists because the ball's path did not include it.** The lane ends at design y=660 and
+ * the playfield's lip is at y=560, so a path that went straight from `lanePoint(1)` to
+ * `boardPoint(...)` skipped 100px of the very surface it is supposed to be rolling on - the ball
+ * teleported the gap in one frame, at a traced 6535 px/s. Matt: "it speeds up to go off the jump,
+ * then it flies through the air."
+ *
+ * It follows the same eased flare `drawRamp` paints, which is why it lives in this file: the ball
+ * has to roll ON the surface, and only the code that draws the surface knows where it is.
+ */
+export function rampPoint(k, boardX) {
+  const yBot = Y.rampBot * DH, yTop = Y.fieldBot * DH;
+  const kk = Math.max(0, Math.min(1, k));
+  // x is CONSTANT across the ramp. The surface flares outward here, but a floor getting wider does
+  // not shove a ball sideways - and because the lateral model is in board space, the ball's x at
+  // the top of the lane and at the bowl's lip are already the same number. Holding it is what
+  // makes a banked throw keep going the way it bounced.
+  return {
+    x: DW / 2 + boardX * FIELD_HALF * boardPoint(0, 0).k,
+    y: yBot + (yTop - yBot) * kk,
+    r: BALL_R_NEAR * DW * sc(1),
+  };
+}
+
+/** Board-space x -> the lane's own -1..1 offset, for drawing a ball that is still on the lane.
+ *  The rails are at +-RAIL_X in board space, and they are the lane's edges, so this is exact. */
+export const boardXToLaneU = (boardX) => boardX / RAIL_X;
+
+/** The ball's radius once it is on the playfield, shrinking with depth at the same rate the field
+ *  narrows, and starting from exactly the radius it had at the top of the ramp. */
+export function ballROnBoard(y) {
+  return BALL_R_NEAR * DW * sc(1) * (1 - 0.32 * bz(Math.max(0, Math.min(1, y))));
+}
 export function lanePoint(v, u) {
   return { x: DW / 2 + u * laneHalf(v), y: laneY(v), r: BALL_R_NEAR * DW * sc(v) };
 }
@@ -710,8 +747,8 @@ export function drawQueue(c, n) {
  *
  * The ANGLE is different - it is stable, it is the thing you steer continuously, and it is the
  * axis a player most needs help with (the 100s are pure aim). So that is what is drawn, and it
- * runs the ENGINE'S OWN fold maths (LATERAL_GAIN, imported, never copied) so it cannot promise a
- * line the ball will not take.
+ * runs the ENGINE'S OWN fold maths (`laneOffsetAt`, called, never copied) so it cannot promise
+ * a line the ball will not take.
  */
 export function drawAimGuide(c, aim) {
   const a = Math.max(-1, Math.min(1, aim));
@@ -723,9 +760,7 @@ export function drawAimGuide(c, aim) {
   c.beginPath();
   for (let i = 0; i <= 26; i++) {
     const v = i / 26;
-    let u = a * LATERAL_GAIN * v;
-    while (Math.abs(u) > 1) u = Math.sign(u) * (2 - Math.abs(u));
-    const q = lanePoint(v, u);
+    const q = lanePoint(v, boardXToLaneU(laneOffsetAt(a, v).u));
     if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y);
   }
   c.stroke();
@@ -865,5 +900,6 @@ export function drawThumb(c, board, w, h, locked) {
 
 export default {
   DW, DH, sc, laneY, laneHalf, lanePoint, boardPoint, targetPoint, layoutFor,
+  rampPoint, ballROnBoard, boardXToLaneU,
   drawMachine, drawMarquee, drawBall, drawMultiplier, drawPopup, drawQueue, drawAimGuide, drawThumb,
 };

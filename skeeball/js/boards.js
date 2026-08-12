@@ -102,11 +102,13 @@ export const BOARDS = [
     // 0.553 on screen - see its RING note.
     ring: { cx: 0, cy: 0.40, rx: 0.95, ry: 0.314 },
     targets: [
-      // The two 100s stand outside the ring at the back - the measured position, and the reason
-      // a 100 is a deliberate diagonal rather than just a hard throw. Tested FIRST, so they win
-      // where they overlap the 50.
-      { id: '100L', kind: 'tube', x: -0.75, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
-      { id: '100R', kind: 'tube', x: 0.75, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
+      // The two 100s, in the back corners. The reference draws them at x +-0.75, but the lane's
+      // RAILS are at board x +-0.616 (game.js's RAIL_X - the lane is narrower than the bowl it
+      // feeds), so a ball simply cannot arrive out there: +-0.75 would be a target no throw can
+      // reach. They sit at the widest a hard diagonal actually gets instead. Tested FIRST, so they
+      // win where they overlap the 50.
+      { id: '100L', kind: 'tube', x: -0.54, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
+      { id: '100R', kind: 'tube', x: 0.54, y: 0.93, rx: 0.145, ry: 0.058, points: 100 },
       // Cups up the middle, 20 nearest, on an even 0.19 pitch, with the stack sitting back off
       // the front lip so the bowl has a real cream APRON in front of it - that apron is where the
       // 10 is printed on the reference machine, and with the stack any further forward the 20's
