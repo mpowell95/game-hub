@@ -359,6 +359,31 @@ class EscobaUI {
     </div>`;
   }
 
+  /** The Value badges row's control: the two OPTIONS ARE the example, one real
+   *  card face rendered both ways side by side, so the setting shows its own
+   *  difference instead of describing it in a sentence (Matt, 2026-08-11:
+   *  "instead of words describing the difference, show the difference with an
+   *  example card"). There is no separate segmented control and no hint
+   *  paragraph -- the cards are the picker, and tapping one is the choice.
+   *  The card is the Sota de oros because it is the card the badge does the
+   *  most work on: in Spanish numbering it prints 10 and captures 8, so the
+   *  two options genuinely look different from each other. It exists in both
+   *  numbering modes, and its value is computed through captureValue() rather
+   *  than hardcoded, so the American-mode picker shows the 10 that mode
+   *  actually plays. Selection is a border + a check glyph, never hue alone. */
+  _valuePicker(on) {
+    const card = { id: 'eb-valdemo', suit: 'oros', rank: 10, value: captureValue(10, this._setup.deckMode) };
+    const opt = (v, label, showValue) => `<button class="eb-valopt ${(v === 'on') === !!on ? 'is-selected' : ''}"
+        data-action="set-values" data-v="${v}" aria-pressed="${(v === 'on') === !!on}" aria-label="${esc(label)}">
+        <span class="eb-valopt-card">${cardFaceHTML(card, { value: showValue, mini: true, static: true })}</span>
+        <span class="eb-valopt-label">${(v === 'on') === !!on ? '✓ ' : ''}${esc(label)}</span>
+      </button>`;
+    return `<div class="eb-valpick">
+      ${opt('on', t('values_on'), true)}
+      ${opt('off', t('values_off'), false)}
+    </div>`;
+  }
+
   /** The settings summary card. Solo and Host-online share the target-score,
    *  card-numbering and capture-hint rows verbatim; the Players row and the
    *  Difficulty row are the two that differ, because an online table has no AI
@@ -412,11 +437,7 @@ class EscobaUI {
         : esc(t('hint_deckmode_spanish'))}</p>`;
 
     const valuesValue = s.showValues ? t('values_on') : t('values_off');
-    const valuesContent = `
-      ${seg('set-values', s.showValues ? 'on' : 'off', [['on', t('values_on')], ['off', t('values_off')]])}
-      <p class="eb-hint">${s.showValues
-        ? esc(t('hint_values_on'))
-        : esc(t('hint_values_off'))}</p>`;
+    const valuesContent = this._valuePicker(s.showValues);
 
     const assistValue = s.assist ? t('assist_on') : t('assist_off');
     const assistContent = `

@@ -334,6 +334,16 @@ the same rows no matter which game you drilled in from, and was removed. See `js
   (`_howtoDiagram()`) keeps its badges unconditionally: they are the annotation that makes
   7+5+3=15 readable, and honouring the setting there would leave the one diagram that teaches
   the capture rule showing three unexplained cards.
+  **The row's control is `_valuePicker()`, not a segmented control**, and it has no hint
+  paragraph. Matt: *"Instead of words describing the difference, show the difference with an
+  example card. I've stated many times that you should always defer to visual instructions over
+  prose."* So the two OPTIONS ARE the example: one real card face rendered both ways, side by
+  side, and tapping one is the choice. The card is the **Sota de oros**, picked because it is the
+  card the badge does the most work on (Spanish numbering prints 10 and captures 8, so the two
+  options genuinely differ); it exists in both numbering modes and its value goes through
+  `captureValue()` rather than being hardcoded, so American mode shows the 10 that mode really
+  plays. Selection is a border plus a check glyph, never hue alone. The old `hint_values_on`/
+  `hint_values_off` string keys were deleted with the prose they carried.
 - **`escoba-save`** (resumable match, schema `v: 1`): `{ v, matchEscobas, assist, snap }`
   plus an MP-only `mp: { code, seat, role, seq, at }` (absent in solo, so the solo shape is
   unchanged; `role` is written alongside `seat` only so a save survives the 3-4-seat deploy
