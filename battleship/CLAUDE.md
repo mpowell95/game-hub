@@ -159,6 +159,114 @@ failures, not instructions; a glyph for "we lost sync" teaches nobody anything.
 short phone. `_fitBattleBoards()` was not touched; the sentences it was competing with were simply
 deleted, and the entry is gone from `KNOWN_GAPS`.
 
+## The battle screen, made legible (2026-08-11, second pass)
+
+The first text-cut pass went out without anyone playing the game. Matt did, and the verdict was
+worth writing down in full because every item was real: *"it's not clear whose turn it is... It's
+not clear if you've shot or not. There's no 'fire' or confirm then there's no 'hit' or 'miss'...
+what squares are the 2 square boat even on? They visually cover 3 squares... when you drag a boat,
+it shoots somewhere else... the cannon isn't even facing the right direction."*
+
+**The lesson, again, and it is the same one this folder has recorded twice before: play it and look
+at it.** Every one of these is invisible to a passing test and obvious in ten seconds of playing.
+`test-visual.mjs battleship` was green the whole time.
+
+### AIM, THEN FIRE
+
+One tap used to shoot immediately. A mis-tap was a wasted turn, and nothing on screen ever named
+the square you were about to shoot at. Now the first tap parks a pulsing gold crosshair on the
+square and raises a large red **FIRE** button in the actions row; tapping the same square again, or
+FIRE, shoots. Tapping a different square just moves the aim. `this._aimCell` holds it and
+`_confirmFire()` clears it before firing so the button cannot double-fire.
+
+**The button's pulse is a GLOW, never a scale.** A control that keeps changing size moves its own
+edge out from under a thumb already on the way down — and Playwright refuses to click it, which is
+how this got noticed.
+
+### Every shot says what it did
+
+`_maybeShowSunkBanner` used to fire only on a SINK. A hit and a miss both left nothing but a small
+mark, on a board that was being dimmed at the same moment. It now raises **MISS**, **HIT!** or
+**SUNK!** (with the ship's silhouette struck through) on every resolved shot, held back by the
+shell's flight time so the news lands with the ball.
+
+Two colours, pointing opposite ways, which is why they are separate fields on the banner: the
+BACKGROUND is whose good news it is (`mine`, true when the defender is not you), and a sunk ship is
+drawn in its OWNER's fleet colour (`shipTheirs`). Getting these confused paints your own kill in
+the enemy's colour, which is exactly what the first cut did.
+
+**Words here are the point, not clutter.** "No word instructions during the game" was always the
+rule; a result is news, not an instruction.
+
+### Whose turn, at a glance
+
+The wordless turn bar — a 19px emoji and a 19px chevron on the deck colour — was not an
+announcement. It is a full-width coloured bar now: YOUR colour with your name when you are
+shooting, THEIRS when they are, and an arrow nudging toward the board about to be hit. The board
+being shot at also wears a 3px ring in the shooter's colour.
+
+**And the idle board is quieted, not erased.** The wash over it was `opacity: .6`, enough to take
+the hit and miss markers with it — so a shot could resolve on the board that was about to go idle
+and leave nothing you could find. It is `.26` now; the contrast between halves comes from the
+active board's ring instead.
+
+### Markers you can actually see
+
+- **The miss cross is white on the enemy's navy water** (`--bs-miss` is overridden per board) and
+  stays dark on the wooden deck. A near-black cross on dark navy was invisible, which is half of
+  "it's not clear if you've shot or not."
+- **A hit is a dark disc inside a white ring**, not an orange dot. Orange on the coral of your own
+  fleet is nearly the same lightness, and Matt is red/green colorblind, so hue was never going to
+  carry it. Shape still does the work: disc = hit, cross = miss.
+
+### Which squares is that boat on
+
+*"what squares are the 2 square boat even on? They visually cover 3 squares."* The sprite's box is
+exactly right — measured, `1.90` cells for a 2-cell destroyer. The problem is that a hull with a
+pointed bow and a rounded stern never lines up with gridlines, so you cannot count squares off it.
+**The cells underneath a ship are filled in now**, on the deploy board and on your own battle board:
+the footprint is the coloured squares and the sprite is only the picture sitting on them. That is
+what every physical Battleship set does.
+
+The tint is scoped as `.bs-board-own .bs-cell-ship` on purpose — `.bs-board-own .bs-cell` sets the
+wood background at (0,2,0) and beats a bare `.bs-cell-ship`.
+
+### The drag follows your finger
+
+*"when you drag a boat, it shoots somewhere else. It's not a natural drag."* The preview cell was
+used as the ship's ANCHOR (its stern), so a five-long carrier grabbed anywhere along its body jumped
+four cells away from the finger the moment it moved, and you had to aim at empty water to the left
+of where you wanted it.
+
+`onPointerDown` now records WHICH CELL of the ship you grabbed (`d.grab`) — measured off the
+sprite's own box for a placed ship, off the chip's width for a tray one — and `_anchorFor()` derives
+the anchor back from the cell under the finger. The ship sits where your thumb is, in both
+orientations, from the tray and from the board alike. The anchor is clamped to the board so a ship
+stops travelling when its far end reaches the edge, the way a physical piece behaves.
+
+### The cannon faces the right way
+
+*"the cannon isn't even facing the right direction."* The SVG is drawn pointing NORTH, which is
+right for YOUR gun (it stands on your deck and fires up at enemy waters) and exactly backwards for
+THEIRS (it stands on their water and fires DOWN at you). `_aimCannons` clamped every gun to
++/-64deg about north, so the enemy's — which needs to point at ~180deg — was pinned sideways and
+never once aimed at the board it was shooting at. Each side has its own forward heading now
+(`base = side === 'mine' ? 0 : 180`), the clamp applies to the DEVIATION from it, and a gun with
+nothing to aim at rests at its own forward rather than at north.
+
+It is also **25% of the board wide instead of 37%**, and sits nearer the outside edge. At the old
+size it covered nine of your own cells and the fleet under them, on the one screen where you are
+trying to read what just got hit.
+
+### One more thing the second pass turned up
+
+`.bs-sunk-banner` was in the reduced-motion block's blanket `transform: none !important` list. Its
+transform is what CENTRES it (`translate(-50%, 0)` against `left: 50%`), so with Reduce Motion on,
+MISS / HIT! / SUNK! rendered half off the right of the screen. It has its own rule now: drop the
+animation, keep the pose. **This is the same class of bug as the blank screen this game shipped
+twice** -- a decoration rule landing on something structural -- so it is worth checking that list
+against anything new that gets added to it.
+
 ## The four screens (visual rebuild, 2026-08-05, `HANDOFF-BATTLESHIP-REDESIGN.md`)
 
 The game was rebuilt visually and interactively against a reference mobile Battleship. The engine,

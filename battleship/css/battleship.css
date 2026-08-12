@@ -393,13 +393,19 @@
    "Incoming!", "Bot thinking", "Hit! Fire again."), which is still written into the .bs-sr live
    region inside it for anyone using a screen reader. */
 .bs-turnbar {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  height: 30px; position: relative; color: var(--bs-deck-ink);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; width: 100%; position: relative; color: #fff;
+  font-weight: 900; letter-spacing: .03em;
 }
-.bs-turn-face { font-size: 1.15rem; line-height: 1; }
-.bs-turn-arrow { width: 19px; height: 19px; display: block; }
-.bs-turnbar[data-dir="down"] .bs-turn-arrow { transform: rotate(180deg); }
-.bs-turn-trophy { font-size: 1.1rem; line-height: 1; }
+.bs-turn-mine { background: var(--bs-mine); }
+.bs-turn-theirs { background: var(--bs-theirs); }
+.bs-turn-face { font-size: 1.35rem; line-height: 1; }
+.bs-turn-name { font-size: .95rem; max-width: 48vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-turn-arrow { width: 22px; height: 22px; display: block; animation: bs-turn-nudge 1.5s ease-in-out infinite; }
+.bs-turnbar[data-dir="down"] .bs-turn-arrow { transform: rotate(180deg); animation-name: bs-turn-nudge-down; }
+@keyframes bs-turn-nudge { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
+@keyframes bs-turn-nudge-down { 0%, 100% { transform: rotate(180deg) translateY(1px); } 50% { transform: rotate(180deg) translateY(-3px); } }
+.bs-turn-trophy { font-size: 1.25rem; line-height: 1; }
 /* a real failure, so it gets real words -- a glyph for "we lost sync" teaches nobody anything */
 .bs-turn-msg {
   font-size: .7rem; font-weight: 800; background: var(--bs-invalid); color: #fff;
@@ -421,6 +427,43 @@
 .bs-battle .bs-board-wrap { width: 100%; padding: 5px 0; display: flex; justify-content: center; }
 
 .bs-board.bs-target { cursor: crosshair; }
+
+/* WHICH SQUARES A SHIP IS ON. A hull sprite drawn over a grid never lines up with the gridlines --
+   its pointed bow and rounded stern make a 2-cell destroyer look like it touches three squares
+   (Matt, 2026-08-11). The footprint is these filled cells; the sprite is only the picture on top. */
+/* scoped to the two wooden boards on purpose, and at their specificity: `.bs-board-own .bs-cell`
+   sets the wood background at (0,2,0) and would otherwise win against a bare `.bs-cell-ship` */
+.bs-board-own .bs-cell-ship, .bs-board-place .bs-cell-ship {
+  background: color-mix(in srgb, var(--bs-mine) 42%, var(--bs-wood));
+}
+:root.gh-dark .bs-root .bs-board-own .bs-cell-ship,
+:root.gh-dark .bs-root .bs-board-place .bs-cell-ship {
+  background: color-mix(in srgb, var(--bs-mine) 36%, var(--bs-wood));
+}
+/* the square the crosshair is parked on, waiting for FIRE */
+.bs-cell-aimed {
+  outline: 3px solid var(--bs-gold); outline-offset: -3px;
+  background: color-mix(in srgb, var(--bs-gold) 26%, var(--bs-enemy-water));
+  animation: bs-aim-pulse 1.1s ease-in-out infinite;
+}
+@keyframes bs-aim-pulse { 50% { outline-color: #fff; } }
+
+/* FIRE: the confirm step. Deliberately the largest, reddest thing in the actions row -- it only
+   exists while a square is aimed, so its presence IS the message "you have not shot yet". */
+.bs-firebtn {
+  appearance: none; cursor: pointer; border: 0; border-radius: 999px; font: inherit;
+  background: var(--bs-hit); color: #fff; font-weight: 900; letter-spacing: .1em;
+  text-transform: uppercase; font-size: .92rem; padding: 10px 26px;
+  display: inline-flex; align-items: center; gap: 8px; touch-action: manipulation;
+  /* the pulse is a GLOW, never a scale: a button that keeps changing size is a button whose edge
+     keeps moving out from under a thumb that is already on its way down */
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .28); animation: bs-fire-pulse 1.2s ease-in-out infinite;
+}
+.bs-firebtn .bs-ico { width: 18px; height: 18px; }
+@keyframes bs-fire-pulse {
+  0%, 100% { box-shadow: 0 3px 0 rgba(0, 0, 0, .28), 0 0 0 0 rgba(224, 83, 47, .55); }
+  60% { box-shadow: 0 3px 0 rgba(0, 0, 0, .28), 0 0 0 9px rgba(224, 83, 47, 0); }
+}
 .bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); outline-offset: -1px; }
 /* Whose turn it is: the OTHER board is washed out in the colour of the water/deck around it, the
    way the reference dims the half of the screen that isn't being fought over. A wash, not a gold
@@ -435,11 +478,19 @@
 /* The frame AROUND the grid takes the same wash, or the idle board reads as two different blues:
    a dimmed grid sitting in undimmed water. Kept under the board (z-index 0 vs the board's 1) so
    the board's own wash -- and the cannon standing clear above it -- are unaffected. */
+/* THE IDLE BOARD IS QUIETED, NOT ERASED. This was opacity .6, which is enough of a wash to take
+   the hit and miss markers with it: a shot resolved on the board that was about to go idle and you
+   simply could not see what had happened there. The contrast between the two halves comes from the
+   ACTIVE board's ring below now, so this only has to whisper. */
 .bs-battle .bs-board-wrap::after {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background: var(--bs-veil); opacity: .6; transition: opacity .25s ease;
+  background: var(--bs-veil); opacity: .26; transition: opacity .25s ease;
 }
 .bs-battle .bs-boardpanel.is-live .bs-board-wrap::after { opacity: 0; }
+/* the board being shot at wears a ring in the shooter's colour -- the loudest, most glanceable
+   "this half of the screen is where it is happening" cue on the page */
+.bs-battle .bs-boardpanel-enemy.is-live .bs-board-wrap { box-shadow: inset 0 0 0 3px var(--bs-mine); }
+.bs-battle .bs-boardpanel-own.is-live .bs-board-wrap { box-shadow: inset 0 0 0 3px var(--bs-theirs); }
 .bs-battle .bs-board-enemy { background: var(--bs-enemy-frame); }
 
 /* the fleet strip: both fleets between the two boards, the sunk score in a disc at one end and
@@ -508,14 +559,19 @@
    Three nested elements, and the nesting is load-bearing (see _cannonHtml in ui.js):
    .bs-cannon translates and casts the shadow, .bs-cannon-aim rotates, .bs-cannon-rig recoils. */
 
+/* 25%, not 37%. At 37% of the board it covered nine of your own cells and the fleet under them,
+   which is a real cost on the ONE screen where you are trying to read what just got hit. It is
+   still unmistakably the scenery-sized top-down gun the reference has, just no longer the largest
+   object on its own board. It also sits nearer the outside edge of each board (yours low, theirs
+   high) so it overlaps the play area as little as possible. */
 .bs-cannon {
   position: absolute; z-index: 7; pointer-events: none; left: 50%;
-  width: 37%; aspect-ratio: 1 / 1;
+  width: 25%; aspect-ratio: 1 / 1;
   transform: translate(-50%, -50%);
   filter: drop-shadow(4px 7px 6px rgba(0, 0, 0, .42));
 }
-.bs-cannon-mine { top: 60%; --bs-cannon-ring: var(--bs-cannon-mine); }
-.bs-cannon-theirs { top: 40%; --bs-cannon-ring: var(--bs-cannon-theirs); }
+.bs-cannon-mine { top: 78%; --bs-cannon-ring: var(--bs-cannon-mine); }
+.bs-cannon-theirs { top: 22%; --bs-cannon-ring: var(--bs-cannon-theirs); }
 .bs-cannon-aim {
   width: 100%; height: 100%;
   transform: rotate(var(--bs-aim, 0deg)); transform-origin: 50% 50%;
@@ -588,8 +644,13 @@
 /* A miss settles to a CROSS scored into the water, the reference's own mark -- never a filled
    shape, so the SILHOUETTE tells it apart from a hit at a glance and not by hue (Matt is
    red/green colorblind; a hollow ring next to a filled dot was the weaker of the two reads). */
+/* THE MISS CROSS HAS TO BE VISIBLE ON THE WATER IT IS SCORED INTO. --bs-miss is a near-black, which
+   is fine on the wooden board and all but invisible on the enemy's dark navy -- so a shot into
+   empty water left no trace you could actually find, which is half of "it's not clear if you've
+   shot or not". Each board sets its own ink. */
+.bs-board-enemy { --bs-miss: rgba(255, 255, 255, .88); }
 .bs-peg-miss {
-  width: 50%; height: 50%; position: relative;
+  width: 62%; height: 62%; position: relative;
   animation: bs-peg-drop .34s cubic-bezier(.34, 1.56, .64, 1) both;
 }
 .bs-peg-miss::before, .bs-peg-miss::after {
@@ -616,8 +677,14 @@
 
 /* hit: an impact flash and a filled marker with a rotated-square burst OUTLINE (a visibly
    different silhouette from the miss ring, not just a different color) */
+/* A HIT IS A DARK DISC INSIDE A WHITE RING, not an orange dot. Orange on the coral of your own
+   fleet is nearly the same lightness, so a hit landing on one of your ships read as a faint smudge
+   -- and Matt is red/green colorblind, so hue was never going to carry it. Dark-inside-white works
+   on the navy water and the wooden deck alike, and the SHAPE (a disc) is what tells it apart from
+   a miss (a cross), which is the repo's standing rule. */
 .bs-peg-hit {
-  width: 48%; height: 48%; border-radius: 50%; background: var(--bs-hit); border: 2px solid var(--bs-hit-2);
+  width: 56%; height: 56%; border-radius: 50%; background: var(--bs-sunk);
+  border: 2.5px solid #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .45);
   animation: bs-hit-pop .3s cubic-bezier(.34, 1.56, .64, 1) both;
 }
 @keyframes bs-hit-pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
@@ -658,8 +725,18 @@
      MP harness, which clicks faster than a person and hit it every game. */
   pointer-events: none;
 }
-.bs-sunk-banner.is-mine { --bs-ship: var(--bs-mine); }
-.bs-sunk-banner.is-theirs { --bs-ship: var(--bs-theirs); }
+/* the SHIP in a SUNK banner is drawn in its owner's fleet colour, which is the opposite side from
+   whoever scored -- hence a class of its own rather than reusing is-mine/is-theirs */
+.bs-sunk-banner.ship-mine { --bs-ship: var(--bs-mine); }
+.bs-sunk-banner.ship-theirs { --bs-ship: var(--bs-theirs); }
+/* MISS / HIT! / SUNK!, the answer to "did that shot do anything". Held back by the shell's flight
+   time so the news lands with the ball. Colour says whose news it is: your strike on them reads
+   in your colour, theirs on you in theirs. */
+.bs-res-word { font-size: 1.15rem; font-weight: 900; letter-spacing: .1em; color: #fff; }
+.bs-sunk-banner { gap: 10px; animation: bs-banner .3s var(--bs-fly-in, 0ms) ease-out both; }
+.bs-res-miss { background: #2b3648; }
+.bs-res-hit.is-mine, .bs-res-sunk.is-mine { background: var(--bs-hit); }
+.bs-res-hit.is-theirs, .bs-res-sunk.is-theirs { background: #1F6FA8; }
 .bs-sunk-banner-art { height: 18px; display: block; position: relative; }
 /* the strike: one bar straight through the hull, the universal "gone" mark, and a SHAPE rather
    than a colour change (Matt is red/green colorblind) */
@@ -740,8 +817,17 @@
   }
   /* the tray chip still shows its rotated pose, it just gets there instantly */
   .bs-trayship-art { transition: none !important; }
-  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-sunk-banner, .bs-cannon-svg, .bs-cannon-rig {
+  .bs-peg-miss, .bs-peg-hit, .bs-peg-hit::after, .bs-cannon-svg, .bs-cannon-rig {
     animation: none !important; opacity: 1 !important; transform: none !important;
+  }
+  /* The result banner needs its own rule, NOT the blanket `transform: none` above: its transform
+     is what CENTRES it (`translate(-50%, 0)` against `left: 50%`), so killing it outright shoved
+     MISS / HIT! / SUNK! half off the right of the screen for anyone with Reduce Motion on. Drop
+     the animation, keep the pose. Same class of bug as the blank screen this file's header is
+     about -- a decoration rule landing on something structural. */
+  .bs-sunk-banner {
+    animation: none !important; opacity: 1 !important;
+    transform: translate(-50%, 0) !important;
   }
   /* No flight, so no delay to hold anything back by: every impact is instant. ui.js reads the same
      media query and skips throwing a ball at all. */

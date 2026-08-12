@@ -80,6 +80,12 @@ export const STRINGS = {
     invalid_placement_aria: 'Cannot place {ship} here',
     // --- battle screen ---
     your_waters: 'Your fleet',
+    // --- the shot: aim, confirm, result. Words on purpose (Matt, 2026-08-11: "There's no 'fire' or
+    // confirm and then there's no 'hit' or 'miss'"). A result is news, not an instruction.
+    fire: 'Fire',
+    res_hit: 'HIT!',
+    res_miss: 'MISS',
+    res_sunk: 'SUNK!',
     your_turn: 'Your turn: fire!',
     opp_turn: "{opp}'s turn",
     opp_thinking: '{opp} is aiming...',
@@ -207,6 +213,10 @@ export const STRINGS = {
     invalid_placement_aria: 'No se puede colocar {ship} aquí',
     your_waters: 'Tu flota',
     your_turn: 'Tu turno: ¡dispara!',
+    fire: 'Fuego',
+    res_hit: '¡TOCADO!',
+    res_miss: 'AGUA',
+    res_sunk: '¡HUNDIDO!',
     opp_turn: 'Turno de {opp}',
     opp_thinking: '{opp} está apuntando...',
     bonus_turn_continues: '¡Acierto! Dispara otra vez.',

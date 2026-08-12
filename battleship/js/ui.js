@@ -168,6 +168,7 @@ class BattleshipUI {
     this._statsCommitted = false;
     this._lastShot = null;     // { seat, r, c, result, sunk, cells } -- the one cell that gets an entrance animation
     this._sunkBanner = '';
+    this._aimCell = null;   // the square the crosshair is parked on, awaiting FIRE
     this._sunkShips = {};      // seat -> shipId -> {id,len,r,c,dir}, reconstructed from revealed cells (see _recordSunkShipGeometry)
     this._sinkPlayed = new Set(); // "seat:shipId" already played its one-shot sink animation (see _shouldPlaySink)
 
@@ -897,11 +898,24 @@ class BattleshipUI {
 
     // Legality is SHAPE first: a legal ghost is a solid outline with a check badge, an illegal one
     // a dashed outline with a cross badge. Color only reinforces it (Matt is red/green colorblind).
+    // WHICH SQUARES IS THIS BOAT ON. Matt, 2026-08-11: "what squares are the 2 square boat even on?
+    // They visually cover 3 squares." The sprite is a hull with a pointed bow and a rounded stern
+    // drawn over the grid, so its silhouette never lines up with the gridlines and you cannot count
+    // squares off it -- a 2-cell destroyer genuinely looks like it is touching three. The CELLS
+    // underneath a ship are filled in now, which is the answer every physical Battleship set uses:
+    // the footprint is the coloured squares, and the sprite is just the picture sitting on them.
+    const occupied = new Set();
+    for (const ship of this._placeFleet.ships) {
+      for (let i = 0; i < ship.len; i++) {
+        occupied.add(`${ship.dir === 'v' ? ship.r + i : ship.r},${ship.dir === 'h' ? ship.c + i : ship.c}`);
+      }
+    }
     const cellsHtml = [];
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const ghost = ghostCells.get(`${r},${c}`);
         const cls = ['bs-cell',
+          occupied.has(`${r},${c}`) ? 'bs-cell-ship' : '',
           ghost === true ? 'bs-ghost-valid' : '', ghost === false ? 'bs-ghost-invalid' : ''].filter(Boolean).join(' ');
         const badge = ghost === undefined ? ''
           : `<span class="bs-ghost-badge" aria-hidden="true">${ghost ? '&#10003;' : '&times;'}</span>`;
@@ -1099,21 +1113,48 @@ class BattleshipUI {
     }
   }
 
-  /** The banner is the SHIP, struck through -- not the sentence "Sunk: Carrier". It is drawn in the
-   *  colour of whoever's fleet just lost it, so it also answers "whose?" without a word. The
-   *  sentence survives as the element's accessible name. */
+  /** EVERY SHOT SAYS WHAT IT DID. Matt, 2026-08-11: "there's no 'hit' or 'miss'."
+   *
+   *  It used to announce only a SINK, and only as a picture. That was a text cut taken too far: a
+   *  hit and a miss both left nothing but a small mark on a board that was being dimmed at the same
+   *  moment, so the single most important question in the game -- did that shot do anything? -- had
+   *  no answer on screen. Every resolved shot now raises a banner: MISS, HIT!, or SUNK with the
+   *  ship's own silhouette struck through. Words here are the point, not clutter.
+   *
+   *  `seat` is the DEFENDER, which is what decides whose news this is: your hit on them is good
+   *  news, their hit on you is not, and the banner is coloured accordingly. */
   _maybeShowSunkBanner(answer, seat) {
-    if (!answer || !answer.sunk || !answer.shipId) return;
-    this._recordSunkShipGeometry(answer);
-    const def = (this._shipSetForState() || []).find((d) => d.id === answer.shipId);
-    this._sunkBanner = {
-      html: shipArtHtml(answer.shipId, def ? def.len : 3),
-      len: def ? def.len : 3,
-      mine: seat == null ? null : seat === this._localSeat(),
-      label: t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) }),
-    };
+    if (!answer || !answer.result) return;
+    if (answer.sunk && answer.shipId) this._recordSunkShipGeometry(answer);
+    // `seat` is the DEFENDER, so a defender who is NOT me means I scored this. Two different things
+    // key off that and they point opposite ways, which is why they are separate fields: the
+    // BANNER's colour is whose good news it is (mine when I scored), while a sunk ship is drawn in
+    // its OWNER's fleet colour (theirs when I sank it).
+    const iScored = seat != null && seat !== this._localSeat();
+    const def = answer.shipId ? (this._shipSetForState() || []).find((d) => d.id === answer.shipId) : null;
+    if (answer.sunk && answer.shipId) {
+      this._sunkBanner = {
+        kind: 'sunk',
+        word: t('res_sunk'),
+        html: shipArtHtml(answer.shipId, def ? def.len : 3),
+        len: def ? def.len : 3,
+        mine: iScored,
+        shipTheirs: iScored,
+        label: t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) }),
+      };
+    } else {
+      const hit = answer.result === 'hit';
+      this._sunkBanner = {
+        kind: hit ? 'hit' : 'miss',
+        word: hit ? t('res_hit') : t('res_miss'),
+        html: '', len: 0, mine: iScored, shipTheirs: iScored,
+        label: hit ? t('res_hit') : t('res_miss'),
+      };
+    }
     if (this._bannerTimer) clearTimeout(this._bannerTimer);
-    this._bannerTimer = setTimeout(() => { this._sunkBanner = ''; this._bannerTimer = null; if (!this._dead && this.view === 'battle') this.renderBattle(); }, 1600);
+    // Held back by the shell's flight time: the news lands with the ball, not before it leaves.
+    const wait = (reducedMotion() ? 0 : FLY_MS) + (this._sunkBanner.kind === 'sunk' ? 1700 : 1150);
+    this._bannerTimer = setTimeout(() => { this._sunkBanner = ''; this._bannerTimer = null; if (!this._dead && this.view === 'battle') this.renderBattle(); }, wait);
   }
 
   /** Reconstructs a just-sunk ship's board position purely from its own already-public revealed
@@ -1152,6 +1193,15 @@ class BattleshipUI {
     this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
     this._maybeShowSunkBanner(res.answer, target);
     this._afterStateChange();
+  }
+
+  /** Shoot at whatever the crosshair is parked on. The aim is cleared FIRST so the confirm button
+   *  cannot be double-fired while the shot is resolving. */
+  _confirmFire() {
+    const aim = this._aimCell;
+    if (!aim || this.busy || !this._isMyTurn()) return;
+    this._aimCell = null;
+    this.fireAt(aim.r, aim.c);
   }
 
   _statusText() {
@@ -1203,8 +1253,18 @@ class BattleshipUI {
           stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>`;
     const err = this.mp && this._mpStatusMsg
       ? `<span class="bs-turn-msg">${esc(t(this._mpStatusMsg))}</span>` : '';
-    return `<div class="bs-turnbar" data-dir="${dir}">
+    // WHOSE TURN, AT A GLANCE. The first cut of this bar was a small emoji and a small chevron on
+    // the deck colour, and Matt's verdict was "it's not clear whose turn it is" -- correct: two
+    // 19px marks on a busy screen are not an announcement. It is a full-width coloured bar now,
+    // YOUR colour when you are shooting and THEIRS when they are, carrying the name of whoever is
+    // up. That is a deliberate step back from the wordless pass: "no word INSTRUCTIONS during the
+    // game" was the rule, and a name is not an instruction.
+    const who = s.over
+      ? (s.winner === this._localSeat() ? id.humanName : id.oppName)
+      : (shootingMine ? id.humanName : id.oppName);
+    return `<div class="bs-turnbar bs-turn-${shootingMine ? 'mine' : 'theirs'}" data-dir="${dir}">
       <span class="bs-turn-face" aria-hidden="true">${esc(face)}</span>
+      <span class="bs-turn-name">${esc(who)}</span>
       ${chevron}${err}
       <p class="bs-sr" aria-live="polite">${esc(this._statusText())}</p>
     </div>`;
@@ -1336,16 +1396,28 @@ class BattleshipUI {
       const at = this._aimBySide[side];
       // Yours shoots at their board; theirs shoots at yours.
       const role = side === 'mine' ? 'enemy-board' : 'own-board';
+      // EACH GUN HAS ITS OWN FORWARD. The SVG is drawn pointing NORTH, which is right for YOUR
+      // cannon (it stands on your deck at the bottom and fires up at enemy waters) and exactly
+      // backwards for THEIRS (it stands on their water at the top and fires DOWN at you). The
+      // clamp below used to be a flat +/-64deg about north for both, so the enemy's gun was pinned
+      // sideways and never once pointed at the board it was shooting at -- Matt, 2026-08-11: "the
+      // cannon isn't even facing the right direction." Clamp the DEVIATION from each side's own
+      // forward heading instead, and rest at that heading when there is nothing to aim at.
+      const base = side === 'mine' ? 0 : 180;
       const cell = at && this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${at.r}"][data-c="${at.c}"]`);
-      if (!cell) { aim.style.setProperty('--bs-aim', '0deg'); continue; }
+      if (!cell) { aim.style.setProperty('--bs-aim', `${base}deg`); continue; }
       const cr = cannon.getBoundingClientRect();
       const b = cell.getBoundingClientRect();
-      if (!cr.width || !b.width) { aim.style.setProperty('--bs-aim', '0deg'); continue; }
+      if (!cr.width || !b.width) { aim.style.setProperty('--bs-aim', `${base}deg`); continue; }
       // the pivot matches .bs-cannon-aim's transform-origin (the base centre of the SVG)
       const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
       const dx = (b.left + b.width / 2) - px, dy = (b.top + b.height / 2) - py;
       const deg = Math.atan2(dx, -dy) * 180 / Math.PI;
-      aim.style.setProperty('--bs-aim', `${Math.max(-64, Math.min(64, deg)).toFixed(1)}deg`);
+      let delta = deg - base;
+      while (delta > 180) delta -= 360;
+      while (delta < -180) delta += 360;
+      const aimed = base + Math.max(-64, Math.min(64, delta));
+      aim.style.setProperty('--bs-aim', `${aimed.toFixed(1)}deg`);
     }
   }
 
@@ -1446,10 +1518,13 @@ class BattleshipUI {
   }
 
   _cellHtml(size, r, c, opts) {
-    const { shots, interactive, isTarget } = opts;
+    const { shots, interactive, isTarget, occupied } = opts;
     const v = cellAt(shots, r, c);
     const isLast = this._lastShot && this._lastShot.seat === opts.seat && this._lastShot.r === r && this._lastShot.c === c;
     const classes = ['bs-cell'];
+    if (occupied && occupied.has(`${r},${c}`)) classes.push('bs-cell-ship');
+    const aimed = isTarget && this._aimCell && this._aimCell.r === r && this._aimCell.c === c;
+    if (aimed) classes.push('bs-cell-aimed');
     let inner = '';
     // Miss = a burst of white bubbles spreading and fading on the water, settling to a hollow ring.
     // Hit  = an impact flash and a filled marker. The two SHAPES differ, never just the color.
@@ -1533,10 +1608,22 @@ class BattleshipUI {
     const seat = isEnemy ? remoteSeat : localSeat;
     const shots = s.shots[seat];
     const interactive = isEnemy && this._isMyTurn() && !this.busy;
+    // Same reason as the deploy board's tint: a hull sprite drawn over a grid never lines up with
+    // the gridlines, so on your own board you cannot tell which squares your fleet is actually on.
+    // Fill the cells in. (The enemy board gets none -- that is the whole game.)
+    const occupied = new Set();
+    if (!isEnemy) {
+      const fleet = this.mp ? this.mp.myFleet : s.fleets[localSeat];
+      for (const ship of (fleet && fleet.ships) || []) {
+        for (let i = 0; i < ship.len; i++) {
+          occupied.add(`${ship.dir === 'v' ? ship.r + i : ship.r},${ship.dir === 'h' ? ship.c + i : ship.c}`);
+        }
+      }
+    }
     const cells = [];
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        cells.push(this._cellHtml(size, r, c, { shots, interactive, isTarget: isEnemy, seat }));
+        cells.push(this._cellHtml(size, r, c, { shots, interactive, isTarget: isEnemy, seat, occupied }));
       }
     }
     // YOUR OWN ships stay visible on your board as faint ghosted silhouettes, so incoming fire can
@@ -1578,8 +1665,10 @@ class BattleshipUI {
     const series = this.mp ? `<p class="bs-mp-series">${esc(this._seriesLine())}</p>` : '';
     const sb = this._sunkBanner;
     const banner = sb
-      ? `<div class="bs-sunk-banner ${sb.mine === false ? 'is-theirs' : 'is-mine'}" role="img" aria-label="${esc(sb.label)}">
-          <span class="bs-sunk-banner-art" style="width:${sb.len * 22}px">${sb.html}</span>
+      ? `<div class="bs-sunk-banner bs-res-${sb.kind} ${sb.mine ? 'is-mine' : 'is-theirs'} ${sb.shipTheirs ? 'ship-theirs' : 'ship-mine'}"
+           role="status" aria-label="${esc(sb.label)}" style="--bs-fly-in:${reducedMotion() ? 0 : FLY_MS}ms">
+          ${sb.html ? `<span class="bs-sunk-banner-art" style="width:${sb.len * 22}px">${sb.html}</span>` : ''}
+          <span class="bs-res-word">${esc(sb.word)}</span>
         </div>`
       : '';
     // THE VERTICAL SANDWICH, and the whole visual identity of the game: enemy waters (navy) on
@@ -1637,7 +1726,9 @@ class BattleshipUI {
         ${banner}
         <div class="bs-actions">
           <button type="button" class="bs-iconbtn bs-iconbtn-sm" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
-          <span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>
+          ${this._aimCell && this._isMyTurn() && !this.busy && !s.over
+            ? `<button type="button" class="bs-firebtn" data-action="fire-confirm">${ICON_TARGET}${esc(t('fire'))}</button>`
+            : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
           ${this.mp
             ? ''
             : `<button type="button" class="bs-iconbtn bs-iconbtn-sm" data-role="restart" data-action="restart" aria-label="${esc(t('restart_game'))}" title="${esc(t('restart_game'))}">${ICON_RESTART}</button>`}
@@ -2571,8 +2662,11 @@ class BattleshipUI {
       const shipId = sprite.dataset.ship;
       const ship = this._placeFleet.ships.find((s) => s.id === shipId);
       const origin = ship ? { r: ship.r, c: ship.c, dir: ship.dir } : null;
+      // WHICH CELL OF THE SHIP DID THE FINGER LAND ON. Everything about how the drag FEELS hangs
+      // on this one number -- see _cellAtPoint's caller in onPointerMove.
+      const grab = ship ? this._grabIndexOnBoard(sprite, ship, e.clientX, e.clientY) : 0;
       this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId, origin, x: e.clientX, y: e.clientY, moved: false };
+      this._dragging = { shipId, pointerId: e.pointerId, origin, grab, x: e.clientX, y: e.clientY, moved: false };
       return;
     }
     const chip = e.target.closest('[data-role="ship-chip"]');
@@ -2581,10 +2675,26 @@ class BattleshipUI {
       // `wasSelected` is what makes a second tap on the same tray chip a ROTATE, mirroring the
       // gesture a placed ship already answered to. Read BEFORE _selectShip, which sets it.
       const wasSelected = this._placeSelected === shipId;
+      const def = this._placeShipSet.find((d) => d.id === shipId);
+      // Same idea from the tray: grabbing the middle of the chip should put the MIDDLE of the ship
+      // under your finger, not its bow.
+      const cb = chip.getBoundingClientRect();
+      const frac = cb.width ? (e.clientX - cb.left) / cb.width : 0.5;
+      const grab = def ? Math.max(0, Math.min(def.len - 1, Math.floor(frac * def.len))) : 0;
       this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId, origin: null, wasSelected, x: e.clientX, y: e.clientY, moved: false };
+      this._dragging = { shipId, pointerId: e.pointerId, origin: null, grab, wasSelected, x: e.clientX, y: e.clientY, moved: false };
       try { chip.setPointerCapture(e.pointerId); } catch { /* not all browsers need this */ }
     }
+  }
+
+  /** Which cell along a PLACED ship the pointer went down on, 0 = stern. Measured off the sprite's
+   *  own rendered box so it works for either orientation without knowing the cell size. */
+  _grabIndexOnBoard(sprite, ship, clientX, clientY) {
+    const r = sprite.getBoundingClientRect();
+    const along = ship.dir === 'h'
+      ? (r.width ? (clientX - r.left) / r.width : 0)
+      : (r.height ? (clientY - r.top) / r.height : 0);
+    return Math.max(0, Math.min(ship.len - 1, Math.floor(along * ship.len)));
   }
 
   /** Redesign spec bug 1: `document.elementFromPoint` under an active `setPointerCapture` is
@@ -2607,15 +2717,38 @@ class BattleshipUI {
     return { r, c };
   }
 
+  /** THE SHIP STAYS UNDER YOUR FINGER. Matt, 2026-08-11: "when you drag a boat, it shoots somewhere
+   *  else. It's not a natural drag, it's all weird fucked up." It was: the preview cell was used as
+   *  the ship's BOW-END ANCHOR, so a five-long carrier grabbed anywhere along its body jumped four
+   *  cells away from the finger the moment it moved, and you had to aim at empty water to the left
+   *  of where you wanted it. The cell under the finger is now the cell of the ship you actually
+   *  grabbed (`d.grab`), and the anchor is derived back from it -- so the ship sits exactly where
+   *  your thumb is, in both orientations, from the tray and from the board alike. */
   onPointerMove(e) {
     if (this.view !== 'placement' || !this._dragging) return;
     const d = this._dragging;
     if (!d.moved && (Math.abs(e.clientX - d.x) > 6 || Math.abs(e.clientY - d.y) > 6)) d.moved = true;
-    const cell = this._cellAtPoint(e.clientX, e.clientY);
-    if (!cell) { if (this._placePreview) { this._placePreview = null; this.renderPlacement(); } return; }
+    const under = this._cellAtPoint(e.clientX, e.clientY);
+    if (!under) { if (this._placePreview) { this._placePreview = null; this.renderPlacement(); } return; }
+    const cell = this._anchorFor(d.shipId, under, d.grab | 0);
     if (this._placePreview && this._placePreview.r === cell.r && this._placePreview.c === cell.c) return;
     this._placePreview = cell;
     this.renderPlacement();
+  }
+
+  /** The ship's anchor (its stern cell, what _tryPlaceAt takes) given the cell the FINGER is over
+   *  and which cell of the ship that is. Kept on the board: a ship half off the edge would be
+   *  illegal for a reason the player never asked for, so the anchor slides back into range and the
+   *  ship simply stops travelling once its far end reaches the edge -- the way a physical piece
+   *  behaves against the side of a board. */
+  _anchorFor(shipId, under, grab) {
+    const def = this._placeShipSet.find((x) => x.id === shipId);
+    if (!def) return under;
+    const dir = this._placeDir[shipId] || 'h';
+    const size = boardSizeFor(this._placeSizeKey);
+    const max = Math.max(0, size - def.len);
+    if (dir === 'h') return { r: under.r, c: Math.max(0, Math.min(max, under.c - grab)) };
+    return { r: Math.max(0, Math.min(max, under.r - grab)), c: under.c };
   }
 
   onPointerUp() {
@@ -2700,7 +2833,17 @@ class BattleshipUI {
     } else if (action === 'placement-ready') {
       this._placementReady();
     } else if (action === 'fire') {
-      this.fireAt(Number(btn.dataset.r), Number(btn.dataset.c));
+      // TAP TO AIM, THEN CONFIRM. Matt, 2026-08-11: "It's not clear if you've shot or not. There's
+      // no 'fire' or confirm." One tap used to fire immediately, so a mis-tap was a wasted turn and
+      // nothing on screen ever said "this is the square you are about to shoot at." The first tap
+      // parks the crosshair and raises the FIRE button; tapping the same square again, or FIRE,
+      // shoots. Tapping a different square just moves the aim.
+      const r = Number(btn.dataset.r), c = Number(btn.dataset.c);
+      if (this._aimCell && this._aimCell.r === r && this._aimCell.c === c) { this._confirmFire(); return; }
+      this._aimCell = { r, c };
+      this.renderBattle();
+    } else if (action === 'fire-confirm') {
+      this._confirmFire();
     } else if (action === 'restart') {
       this.confirmDestructive(btn, () => this.startGame());
     } else if (action === 'rematch') {
