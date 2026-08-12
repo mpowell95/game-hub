@@ -1,270 +1,121 @@
-// skeeball/js/game.js - the pure Skeeball engine. No DOM, no timers, no randomness of its own
-// beyond the injected `rng`, so `js/test.js` can drive a whole game headlessly and the UI can
-// replay any throw for animation without asking the engine twice.
+// skeeball/js/game.js - the rules around the physics. physics.js owns what the ball DOES; this
+// file owns the flick mapping, the rack of nine, the roaming x3, unlocking and the save.
 //
-// THE ONE IDEA WORTH UNDERSTANDING: a throw is resolved from two numbers and nothing else.
+// THE 2026-08-12 REWRITE. Matt: "Opus has had MAJOR issues with every aspect of the finger
+// flick, to the speed of the ball - literally every aspect has been a disappointing failure
+// regarding realistic physics." The abstraction stack was the failure: finger speed became a
+// normalized "power", power became a table row, the table row became a canned animation. Every
+// layer could lie to the next. All of it is gone:
 //
-//   power  0..1   how hard it was flicked  -> how far up the board it gets
-//   aim   -1..1   how far off straight     -> where across the board it arrives
+//   finger release speed  ->  ball launch speed   (one multiplier, FLICK.MPS_PER_CHS)
+//   finger swipe angle    ->  ball direction      (the angle itself, clamped to the lane)
+//   everything after      ->  gravity and collisions (physics.js simulate)
 //
-// `resolveThrow(power, aim, board)` is a PURE function of those, with **no random scatter at all**.
-// That is deliberate and it is the whole game: the player is judging a flick, and a hidden dice
-// roll on top of their judgement would make practice pointless. It also means the animation the UI
-// draws is derived from the same resolved numbers, so what the ball is drawn doing and what the
-// scoreboard says can never disagree.
+// The ball on screen moves at the speed the simulation says it does at every instant, so a soft
+// flick VISIBLY rolls slower, dies on the ramp, and comes back; a hard one visibly flies. There
+// is no separate animation to keep honest.
 //
-// WHAT CHANGED (2026-08-11, Matt): the computer opponent is GONE and boards replaced difficulty
-// tiers. A game is now nine balls against the scoreboard - your own all-time best, your best today,
-// and the app-wide record for that machine - and the ladder is unlocking machines by hitting a
-// target score. The old easy/medium/hard AI and its whole-match tuning are deleted; the reasoning
-// they were tuned against is preserved in skeeball/CLAUDE.md, and every play recorded under those
-// difficulty buckets is untouched in the stats store (THE LAW rule 5).
-//
-// A board's difficulty IS its target layout (js/boards.js). Throws resolve against target ellipses
-// in BOARD SPACE, so a new machine is a data entry, never a new code path here.
+// Deterministic on purpose: same flick, same result, always - the player is judging a throw, and
+// a hidden dice roll on top of that judgement would make practice pointless. The rng below only
+// moves the x3 badge between throws.
 
 import { boardById, multTargetsFor, nextBoard, DEFAULT_BOARD } from './boards.js';
+import { buildMachine, simulate } from './physics.js';
 
 export const BALLS_PER_RACK = 9;          // the classic skeeball rack
-
 export const MULTIPLIER = 3;              // the reference's badge is always x3
 
-// --- the gesture ------------------------------------------------------------------------------
+// --- the gesture --------------------------------------------------------------------------------
 //
-// HOW A SWIPE BECOMES A THROW. Matt, 2026-08-11: "The flick is really bad... it's just really bad
-// and unnatural. Can you look into what other games do? Like game pigeon's beer pong game or other
-// darts games?"
-//
-// Those games were the answer. Cup Pong keys on how FAST you swipe ("cup 2 requires a medium speed
-// swipe, cup 4 the same direction with a slightly faster swipe"); mobile darts games map "the speed
-// and angle of your finger" to the throw. Neither uses the thing this game used, which was:
-//
-//     power = total vertical distance from the touch-down point, over the whole gesture
-//     aim   = total horizontal distance from that same point
-//
-// Four things follow from that, and together they are the "unnatural":
-//
-//   1. SPEED DID NOTHING. A slow, deliberate drag to the top threw exactly as hard as a snap
-//      flick. Throwing is an act of acceleration; a model that ignores acceleration cannot feel
-//      like throwing however well its numbers are tuned.
-//   2. YOU COULD NOT WIND UP. Pulling back before the throw REDUCED power, because power was net
-//      displacement from where you first touched. The natural motion actively hurt you.
-//   3. AIM WAS OFFSET, NOT ANGLE. Drifting 30px right is 4 degrees on a long flick and 17 on a
-//      short one, but both produced the same aim. So the same visible swipe direction sent the
-//      ball somewhere different depending on how hard you threw - the ball did not go where you
-//      pointed, which is the single most disorienting thing a throwing game can do.
-//   4. RELEASE WAS NOT A MOMENT. The value at pointerup was used even if your finger had been
-//      parked for a second. Android's VelocityTracker exists precisely because only the last
-//      ~100ms of a gesture describes a fling.
-//
-// So the gesture is now speed-and-angle, sampled over a short window at release. `flickToThrow`
-// is the whole mapping and it is PURE, so `test.js` can drive realistic gestures through it - the
-// gesture is half of the difficulty and it used to be the half no test could see.
+// The gesture READING survives from the previous build (it was the one half that worked): speed
+// and angle sampled over the last ~100ms before release, in canvas heights per second so the feel
+// is identical on any phone. What changed is the MAPPING: no blending, no "power curve" - the
+// release speed IS the launch speed, times one constant.
 export const FLICK = {
-  /** Release speeds, in CANVAS HEIGHTS PER SECOND, so the feel is identical on any phone.
-   *  Rough human calibration on an 852px screen: a gentle flick is ~1.5, an ordinary one ~2.8,
-   *  a hard one ~4.5. Below MIN it was not a throw at all. */
-  MIN_SPEED: 0.9,
-  MAX_SPEED: 5.0,
-  /** How far a full-scale swipe travels, in canvas heights. Only the distance TERM uses this. */
-  REACH: 0.55,
-  /** How much of the power comes from SPEED rather than distance. Speed dominates - that is the
-   *  whole point - but distance is deliberately not zero: a long controlled push should still be
-   *  a real throw, which is what keeps the game precise rather than twitchy. */
-  SPEED_W: 0.65,
-  /** Swipe angle off vertical, in radians, for full aim (~31 degrees). Constant regardless of how
-   *  hard you throw, which is fix 3 above.
-   *
-   *  This number IS the sideways difficulty, and the units to judge it in are degrees of wander a
-   *  hand can hold: tolerance = (cup rx / LATERAL_GAIN) x MAX_ANGLE. At 0.42 the 50 allowed +-4.0
-   *  degrees and the 100s wanted a 16-degree diagonal, which measured out as a coin toss on the
-   *  back two cups. At 0.55 the cups allow +-5.2 to +-7.4 degrees and a 100 asks for a deliberate
-   *  20-degree diagonal - still clearly a skill shot, but one you can aim at. */
-  MAX_ANGLE: 0.32,
-  /** Below this the gesture is discarded rather than thrown - a tap, or a stray touch. */
-  MIN_POWER: 0.05,
+  /** Below this it was not a throw at all - a tap or a stray touch. Canvas heights/second. */
+  MIN_SPEED: 0.55,
+  /** Launch speed per unit of flick speed: m/s of ball per canvas-height/s of finger.
+   *  Calibration (852px phone): a lazy 1.2 ch/s flick dies on the ramp and rolls back; ~1.8
+   *  trickles into the basin; ~2.6 reaches the low cups; ~3.4 the 50; a 4.5+ snap is 100s
+   *  territory and a flat-out slam hits the upper board and rains back down - all of that is
+   *  the SIMULATION's answer to these launch speeds, pinned in test.js in these same units. */
+  MPS_PER_CHS: 1.42,
+  /** Launch speed clamps, m/s. The floor keeps a barely-valid gesture from being a null throw;
+   *  the ceiling is a real arm's ceiling, and everything under it stays physical. */
+  V_MIN: 1.2,
+  V_MAX: 8.5,
+  /** The swipe angle is used AS the throw direction, clamped to what the lane can accept. */
+  MAX_DIR: 0.30,
 };
 
 /**
  * A swipe -> a throw. PURE.
  *
- * All four inputs are in CANVAS HEIGHTS (and heights/second), including the x ones: normalising
- * both axes by the same number is what makes `atan2` below a real screen angle rather than a
- * number that happens to grow when you move sideways.
- *
  * @param {{dx:number, dy:number, vx:number, vy:number}} g
- *   `d*` is the whole gesture's displacement, `v*` the velocity over the last few samples before
- *   release. Screen axes, so UP is NEGATIVE y.
- * @returns {{power:number, aim:number, speed:number, angle:number}|null} null = not a throw.
+ *   `d*` is the whole gesture's displacement, `v*` the velocity over the last ~100ms before
+ *   release, all in CANVAS HEIGHTS (per second). Screen axes: UP is NEGATIVE y.
+ * @returns {{v0:number, dir:number, speed:number}|null} null = not a throw.
  */
 export function flickToThrow(g) {
   if (!g || ![g.dx, g.dy, g.vx, g.vy].every(Number.isFinite)) return null;
   const speed = Math.hypot(g.vx, g.vy);
-  const dist = Math.hypot(g.dx, g.dy);
   const movingUp = -g.vy > 0;
   const wentUp = -g.dy > 0;
-
-  // A gesture with real speed must be travelling UP at the moment of release: yanking the finger
-  // back down at the end is a cancelled throw, not a hard one. A gesture with no speed left falls
-  // back to where it went overall, so a slow deliberate push still throws (gently).
+  // A gesture with real speed must be travelling UP at release: yanking the finger back down is
+  // a cancelled throw. A gesture that ended stationary falls back to where it went overall, so a
+  // slow deliberate push still throws (gently).
   if (speed >= FLICK.MIN_SPEED ? !movingUp : !wentUp) return null;
+  if (speed < FLICK.MIN_SPEED) return null;
 
-  const sTerm = clamp((speed - FLICK.MIN_SPEED) / (FLICK.MAX_SPEED - FLICK.MIN_SPEED), 0, 1);
-  const dTerm = clamp(dist / FLICK.REACH, 0, 1);
-  const power = clamp(FLICK.SPEED_W * sTerm + (1 - FLICK.SPEED_W) * dTerm, 0, 1);
-  if (power < FLICK.MIN_POWER) return null;
-
-  // The angle of the swipe at release (or of the whole gesture, if it ended stationary).
-  const useVel = speed >= FLICK.MIN_SPEED;
-  const ax = useVel ? g.vx : g.dx;
-  const ay = useVel ? -g.vy : -g.dy;
-  const angle = Math.atan2(ax, Math.max(1e-6, ay));
-  return { power, aim: clamp(angle / FLICK.MAX_ANGLE, -1, 1), speed, angle };
+  const v0 = Math.min(FLICK.V_MAX, Math.max(FLICK.V_MIN, speed * FLICK.MPS_PER_CHS));
+  const ang = Math.atan2(g.vx, Math.max(1e-6, -g.vy));
+  const dir = Math.max(-FLICK.MAX_DIR, Math.min(FLICK.MAX_DIR, ang));
+  return { v0, dir, speed };
 }
 
-// --- the throw model ------------------------------------------------------------------------
-//
-// `power` maps to how far UP the board the ball arrives, `aim` to where across. Both are then
-// tested against the board's own target ellipses. The two constants below are the whole feel of
-// the game and are shared by every board, so a machine can never be "the one where the flick works
-// differently" - only where the targets are.
+// --- machines, memoized -------------------------------------------------------------------------
 
-// THESE ARE NOT JUDGED AS FRACTIONS. On its own "SHORT_BELOW = 0.28" says nothing; run through
-// `flickToThrow` it says "a quarter of every flick you make scores exactly zero", which is what it
-// used to mean and what Matt's recordings of that build show happening over and over. The units
-// that matter are the ones a hand controls - flick SPEED - and `test.js`'s "a HAND can actually hit
-// these" block is where they are checked.
-//
-// "TOO HARD!" IS GONE, PERMANENTLY (2026-08-12). The old model had TWO ways to score zero: too
-// soft (fine - a limp flick rolling back is honest) and too hard, which threw the ball over the
-// back for nothing and printed "Too hard!". Matt's third set of recordings
-// (`Skeeball - terrible 1..3.MOV`) show it firing on natural snap flicks, again, after two
-// retunes - because no retune can fix it: a hard flick is the most natural gesture the game has,
-// and answering it with a zero is a punishment for playing. The real machine doesn't do it either:
-// an overthrown ball hits the back wall and comes back down the board. So that is what happens
-// now - energy past WALL_AT hits the wall and the EXCESS walks the ball back down the rings,
-// deterministically (WALL_RETURN depth units back per unit of overshoot). Slamming it flat out is
-// still the wrong play - the ball walks back past the 50 into the 30 - but it is never a zero and
-// there is no popup scolding you for throwing hard.
-export const SHORT_BELOW = 0.10;      // never made it up the ramp: rolls back, scores nothing
-export const WALL_AT = 0.78;          // the energy at which the ball reaches the back wall
-export const WALL_RETURN = 2.0;       // depth walked back down the board per unit of overshoot
-
-// Arrival depth in board space (0 = front lip, 1 = the back wall) for a given arrival energy.
-// May exceed 1: that overshoot is what the wall reflects (see resolveThrow).
-const depthFor = (e) => (e - SHORT_BELOW) / (WALL_AT - SHORT_BELOW);
-
-// How far off centre a given aim drifts by the time the ball reaches the board. >1 means a
-// full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
-// up a wide target.
-//
-// In BOARD-SPACE x per unit of aim (see RAIL_X above for why board space). Full aim puts the ball
-// just past the rail, so the extreme swipe grazes it; everything short of that is a clean diagonal.
-// Judged in DEGREES of swipe angle via FLICK.MAX_ANGLE, and those tolerances do not change with
-// how hard you throw.
-export const LATERAL_GAIN = 0.63;
-const BOUNCE_LOSS = 0.13;      // energy a wall bounce costs, per bounce
-
-const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
-
-/**
- * Where a throw ends up on a given board. PURE - no rng, see the header.
- *
- * @param {number} power 0..1
- * @param {number} aim  -1..1 (negative = left)
- * @param {object} board a js/boards.js descriptor
- * @returns {{target: string|null, kind: string, points: number, x: number, y: number,
- *            offset: number, energy: number, bounces: number}}
- *   `target` is null only when nothing was scored; `kind` is why, for the UI's callout
- *   ('hit' | 'short' | 'miss'); `x`/`y` are the resolved board-space landing point, handed
- *   back so the renderer can animate the exact throw that was scored.
- */
-/**
- * THE RAILS, in board-space x. The lane is NARROWER than the bowl it feeds - measurably so, and
- * the reference cabinet is the same - so the rails do not sit at board x +-1; they sit where the
- * lane's top edge does, which is 118.3 / 192.0 of the bowl's half-width.
- *
- * **The whole lateral model is in BOARD space because of this.** It used to be in lane-fractions:
- * a ball at 85% of the lane's width was handed to the bowl as 85% of the BOWL's width, which is a
- * different, wider place - so crossing the ramp teleported it 63px further out. On a banked throw
- * that outward sweep was three times the size of the bounce and completely hid it. Matt: "It
- * bounces off the wall, but then continues on the line it originally was on - as if it didn't
- * bounce off the wall."
- *
- * Keep this in step with render.js's geometry; `test.js` asserts the two agree.
- */
-export const RAIL_X = 0.6162;
-
-/**
- * Where an aimed throw is, in BOARD-SPACE x, when it has travelled `v` of the way up the lane.
- * `+-RAIL_X` are the rails and the path FOLDS off them - a wide throw banks.
- *
- * **This is the only implementation of that fold, and it must stay that way.** There have been
- * three copies of it: this one, the aim guide's, and the ball animation's. Two of them kept a
- * hardcoded `1.35` after LATERAL_GAIN moved to 1.15, so the dashed guide promised a bank the ball
- * would not take, and the ball itself was drawn bending at the wrong place and then snapping
- * sideways onto the real landing point. Matt saw the second one: "it bounces off the wall, but
- * then continues on the line it originally was on - as if it didn't bounce off the wall."
- *
- * @returns {{u:number, bounces:number}} u is the offset, -1..1.
- */
-export function laneOffsetAt(aim, v) {
-  const a = clamp(Number.isFinite(aim) ? aim : 0, -1, 1);
-  let u = a * LATERAL_GAIN * clamp(Number.isFinite(v) ? v : 0, 0, 1);
-  let bounces = 0;
-  while (Math.abs(u) > RAIL_X && bounces < 4) {
-    u = Math.sign(u) * (2 * RAIL_X - Math.abs(u));
-    bounces += 1;
-  }
-  return { u, bounces };
+const MACHINES = new Map();
+export function machineFor(boardId) {
+  if (!MACHINES.has(boardId)) MACHINES.set(boardId, buildMachine(boardById(boardId).geom));
+  return MACHINES.get(boardId);
 }
 
-export function resolveThrow(power, aim, board) {
-  const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
-  const p = clamp(Number.isFinite(power) ? power : 0, 0, 1);
-  const a = clamp(Number.isFinite(aim) ? aim : 0, -1, 1);
+/** One throw against one machine: the simulation, verbatim. Kept as a named export so tests and
+ *  the how-to screen drive the exact code the game plays. */
+export function throwSim(boardId, v0, dir) {
+  return simulate(v0, dir, machineFor(boardId));
+}
 
-  // Drift across the lane, folding at the rails. A wild throw can bank more than once.
-  const { u, bounces } = laneOffsetAt(a, 1);
-  const energy = Math.max(0, p - bounces * BOUNCE_LOSS);
-
-  if (energy < SHORT_BELOW) {
-    return { target: null, kind: 'short', points: 0, x: u, y: 0, offset: u, energy, bounces, wall: false };
-  }
-
-  // Past the wall, the overshoot REFLECTS: the ball hits the back and walks back down the board.
-  // Deterministic - the excess IS the distance back - so a player can learn it like any other
-  // depth, and a max-strength slam lands around the 30 rather than scoring zero.
-  const raw = depthFor(energy);
-  const wall = raw > 1;
-  const y = clamp(wall ? 1 - (raw - 1) * WALL_RETURN : raw, 0, 1);
-
-  // First target containing the point wins, which is why boards.js orders small-and-valuable
-  // first and the catch-all ring last. On classic the zones NEST, so innermost-first IS the
-  // real machine's rule: the smallest ring you are inside is the one you fell into.
-  for (const t of b.targets) {
-    const dx = (u - t.x) / t.rx;
-    const dy = (y - t.y) / t.ry;
-    if (dx * dx + dy * dy <= 1) {
-      return { target: t.id, kind: 'hit', points: t.points, x: u, y, offset: u, energy, bounces, wall };
+/**
+ * Find a (v0, dir) that lands a named ring, by searching the real simulation - there is no
+ * closed form over a physics engine, and inventing one is how aim guides start lying.
+ * Coarse grid, then refined around the first hit. Cached per board+target.
+ */
+const IDEALS = new Map();
+export function findThrow(targetId, boardId = DEFAULT_BOARD) {
+  const key = `${boardId}/${targetId}`;
+  if (IDEALS.has(key)) return IDEALS.get(key);
+  const M = machineFor(boardId);
+  const ring = M.rings.find((r) => r.id === targetId);
+  // The ball drifts laterally for the WHOLE flight, not just the lane, so the direct-line angle
+  // to the ring over the full travel is the right first guess.
+  const dir0 = ring ? Math.atan2(ring.c[0], M.B.z + 0.6) : 0;
+  let best = null;
+  outer:
+  for (let v = 2.0; v <= 7.5; v += 0.05) {
+    for (let i = 0; i <= 16; i++) {
+      const dd = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.01;
+      const dir = dir0 + dd;
+      const res = simulate(v, dir, M);
+      if (res.outcome.target === targetId) { best = { v0: v, dir }; break outer; }
     }
   }
-  return { target: null, kind: 'miss', points: 0, x: u, y, offset: u, energy, bounces, wall };
+  IDEALS.set(key, best);
+  return best;
 }
 
-/** The (power, aim) that lands a named target - used by tests and by the how-to screen's worked
- *  example. Inverts `depthFor`. Aims at the target's `aimY` when it has one: a NESTED zone's
- *  centre is inside the zones stacked in front of it, so its own exclusive territory is the front
- *  band, and that is where `aimY` points (boards.js sets it). */
-export function idealThrow(targetId, board) {
-  const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
-  const t = b.targets.find((x) => x.id === targetId) || b.targets[b.targets.length - 1];
-  const y = Number.isFinite(t.aimY) ? t.aimY : t.y;
-  const energy = y * (WALL_AT - SHORT_BELOW) + SHORT_BELOW;
-  return { power: clamp(energy, 0, 1), aim: clamp(t.x / LATERAL_GAIN, -1, 1) };
-}
-
-// --- one game ----------------------------------------------------------------------------------
+// --- one game ------------------------------------------------------------------------------------
 
 /** One rack of BALLS_PER_RACK balls on one machine. No opponent: the score IS the game. */
 export class Game {
@@ -291,24 +142,25 @@ export class Game {
     return this.multTarget;
   }
 
-  /** Resolve one throw, apply it, advance the rack.
-   *  @returns the throw result plus `scored` (after the multiplier) and `multiplied`. */
-  throwBall(power, aim) {
+  /** Resolve one throw by SIMULATION, apply it, advance the rack.
+   *  @returns the sim result plus `scored` (after the multiplier), `multiplied`, `ballNo`. */
+  throwBall(v0, dir) {
     if (this.over) return null;
-    const res = resolveThrow(power, aim, this.board);
-    const multiplied = !!(res.target && res.target === this.multTarget);
-    const scored = res.points * (multiplied ? MULTIPLIER : 1);
+    const sim = throwSim(this.board.id, v0, dir);
+    const out = sim.outcome;
+    const multiplied = !!(out.target && out.target === this.multTarget);
+    const scored = out.points * (multiplied ? MULTIPLIER : 1);
     this.score += scored;
 
     this.tally.balls += 1;
-    if (res.points >= 100) this.tally.hundreds += 1;
-    if (res.points === 50) this.tally.fifties += 1;
+    if (out.points >= 100) this.tally.hundreds += 1;
+    if (out.points === 50) this.tally.fifties += 1;
     this.tally.bestThrow = Math.max(this.tally.bestThrow, scored);
 
-    const out = { ...res, scored, multiplied, ballNo: this.ball };
+    const result = { ...out, scored, multiplied, ballNo: this.ball, sim };
     if (this.ball < BALLS_PER_RACK) { this.ball += 1; this.rollMultiplier(); }
     else { this.over = true; }
-    return out;
+    return result;
   }
 
   get ballsLeft() { return this.over ? 0 : BALLS_PER_RACK - this.ball + 1; }
@@ -319,9 +171,10 @@ export class Game {
     return nxt && this.score >= nxt.unlockScore ? nxt : null;
   }
 
-  /** Everything needed to rebuild this game. The rng is deliberately NOT captured: a restored game
-   *  re-rolls its multipliers from a fresh stream, which changes nothing a player could notice and
-   *  keeps the save plain JSON. */
+  /** Everything needed to rebuild this game. The rng is deliberately NOT captured: a restored
+   *  game re-rolls its multipliers from a fresh stream, which changes nothing a player could
+   *  notice and keeps the save plain JSON. Same v2 shape as before the physics rewrite - the
+   *  save never held throw internals, so nothing about it changes. */
   snapshot() {
     return {
       v: 2, board: this.board.id, ball: this.ball, score: this.score,
@@ -330,10 +183,7 @@ export class Game {
   }
 
   /** Rebuild from a snapshot. Returns null (never throws) on anything malformed, so a corrupt,
-   *  truncated or OLD-SHAPE save can only ever mean "no game to resume", never a crash on mount.
-   *  A v1 save (the vs-computer build) is deliberately not resumable - it has an opponent and
-   *  difficulty this build has no concept of - but its recorded HISTORY is untouched in the stats
-   *  store either way; only the half-finished match is dropped. */
+   *  truncated or OLD-SHAPE save can only ever mean "no game to resume", never a crash on mount. */
   static restore(snap, rng) {
     try {
       if (!snap || snap.v !== 2) return null;
@@ -353,4 +203,4 @@ export class Game {
   }
 }
 
-export default { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER };
+export default { Game, flickToThrow, throwSim, findThrow, machineFor, BALLS_PER_RACK, MULTIPLIER };

@@ -371,19 +371,23 @@ const PLAY = {
       // exactly the sort of constant that goes stale and starts testing the gap between two cups.
       const GEST_MS = 150;
       const speed = await page.evaluate(async (ms) => {
-        const [{ flickToThrow, resolveThrow }, { boardById }] = await Promise.all([
-          import('/skeeball/js/game.js'), import('/skeeball/js/boards.js'),
+        // The engine is a physics SIMULATION now (2026-08-12): ask it, through the real flick
+        // mapping, for the first contiguous band of flick speeds whose sim lands the 40, and
+        // aim the middle of that band - a retune or a physics change moves the probe with it.
+        const [{ flickToThrow, throwSim }] = await Promise.all([
+          import('/skeeball/js/game.js'),
         ]);
-        const b = boardById('classic');
         let lo = null, hi = null;
-        for (let sp = 0.2; sp <= 7; sp += 0.005) {
+        for (let sp = 0.8; sp <= 7; sp += 0.02) {
           const d = (sp * ms) / 1000;
           const f = flickToThrow({ dx: 0, dy: -d, vx: 0, vy: -sp });
-          if (f && resolveThrow(f.power, f.aim, b).target === '40') { if (lo === null) lo = sp; hi = sp; }
+          const target = f ? throwSim('classic', f.v0, f.dir).outcome.target : null;
+          if (target === '40') { if (lo === null) lo = sp; hi = sp; }
+          else if (lo !== null) break;
         }
         return lo === null ? null : (lo + hi) / 2;
       }, GEST_MS);
-      if (!speed) return { ok: false, why: 'no flick speed reaches the 40 cup - the tuning is broken' };
+      if (!speed) return { ok: false, why: 'no flick speed reaches the 40 ring - the physics or the flick mapping is broken' };
 
       const x = g.left + g.w / 2;
       const y0 = g.top + g.h * 0.86;
@@ -416,8 +420,8 @@ const PLAY = {
         await page.waitForTimeout(250);
       }
       if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
-      if ((st.score | 0) < 20) {
-        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a flick at the 40 cup's own speed should land in a cup, not the catch-all` };
+      if ((st.score | 0) < 10) {
+        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a real flick must land on the board and score (a rim bounce into the 10 is fine; nothing at all is not)` };
       }
       if ((st.ball | 0) < 2) return { ok: false, why: 'the throw scored but the rack never advanced' };
       return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };

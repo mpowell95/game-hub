@@ -29,8 +29,8 @@
 
 import { makeT } from '../../js/i18n.js';
 import { STRINGS } from './strings.js';
-import { resolveThrow, idealThrow, BALLS_PER_RACK } from './game.js';
-import { boardById, nextBoard, DEFAULT_BOARD } from './boards.js';
+import { throwSim, findThrow, BALLS_PER_RACK } from './game.js';
+import { boardById, nextBoard, DEFAULT_BOARD, multTargetsFor } from './boards.js';
 import * as R from './render.js';
 
 const t = makeT(STRINGS);
@@ -43,9 +43,9 @@ const PAGES = ['flick', 'power', 'aim', 'badge', 'rack'];
 
 /** How much of the design box each page frames. The throwing pages need the lane; the ones about
  *  the board itself are better off close in on the cups. */
-// 'rack' needs the WHOLE cabinet: its illustration is the ball rack beside the lane, which
-// lives at the bottom of the design box and is simply not in a 0.62 crop.
-const FRAME = { flick: 1.0, power: 1.0, aim: 1.0, badge: 0.62, rack: 1.0 };
+// 'rack' needs the WHOLE cabinet: its illustration is the ball tray at the bottom of the
+// design box, which is simply not in a cropped view.
+const FRAME = { flick: 1.0, power: 1.0, aim: 1.0, badge: 0.56, rack: 1.0 };
 
 export function howToHtml() {
   return `
@@ -138,102 +138,101 @@ export function createHowTo(host, boardId) {
    * Every throw here is resolved by the ENGINE and then drawn from the result, so a page can
    * never demonstrate a shot the game would score differently.
    */
+  // Sims for this board's demo throws, computed once per open and replayed. Every one of them
+  // is the REAL engine (game.js throwSim), so a page cannot demonstrate a flight the game would
+  // resolve differently - the tutorial and the game are the same physics.
+  const demos = {};
+  function demo(key, v0, dir) {
+    if (!demos[key]) demos[key] = throwSim(board.id, v0, dir);
+    return demos[key];
+  }
+  function throwFor(id, fallback) {
+    const f = findThrow(id, board.id);
+    return f || fallback;
+  }
+
+  /** Draw the demo ball at fraction `k` of its sim, and its popup at the end. */
+  function playSim(c, sim, k, showPopup) {
+    const fr = sim.frames;
+    const tEnd = fr[fr.length - 1].t;
+    const tt = Math.max(0, Math.min(1, k)) * tEnd;
+    let lo = 0;
+    while (lo < fr.length - 1 && fr[lo + 1].t <= tt) lo++;
+    const a = fr[lo], b = fr[Math.min(lo + 1, fr.length - 1)];
+    const kk = b.t > a.t ? (tt - a.t) / (b.t - a.t) : 1;
+    const wx = a.x + (b.x - a.x) * kk, wy = a.y + (b.y - a.y) * kk, wz = a.z + (b.z - a.z) * kk;
+    const sink = (a.sink || 0) + ((b.sink || 0) - (a.sink || 0)) * kk;
+    const p = R.proj(wx, wy, wz);
+    R.drawBallShadow(c, wx, wy, wz);
+    R.drawBall(c, p.x, p.y, R.ballR(p.zc) * (1 - sink * 0.9), a.spin + (b.spin - a.spin) * kk);
+    if (showPopup && k > 0.9) {
+      const last = fr[fr.length - 1];
+      const lp = R.proj(last.x, last.y, last.z);
+      R.drawPopup(c, { x: lp.x, y: lp.y }, sim.outcome.kind === 'short' ? t('short') : `+${sim.outcome.points}`, 0.4);
+    }
+    return sim.outcome;
+  }
+
   function paint(u) {
     const c = cv.getContext('2d');
     const tf = frame(c);
     R.drawMachine(c, board);
-    R.drawMarquee(c, board, [
-      { label: t('ball'), value: String(BALLS_PER_RACK) },
-      { label: t('score'), value: '0' },
-    ]);
+    R.drawProps(c, board, 'all', null);
+    R.drawMarquee(c, board, BALLS_PER_RACK, 0);
 
     const key = PAGES[page];
     const still = REDUCE();
     let handAt = null, pressed = false;
 
-    // A throw travelling up the lane and settling on the board, drawn from a resolved result.
-    const throwAt = (power, aim, k) => {
-      const out = resolveThrow(power, aim, board);
-      const kk = Math.max(0, Math.min(1, k));
-      // The tutorial's ball rolls too: same theta = distance / radius as the real one, so the
-      // pages do not show a skidding ball while the game shows a rolling one.
-      const spin = kk * 2.6 * Math.PI * 2;
-      if (kk < 0.72) {
-        const v = kk / 0.72;
-        const q = R.lanePoint(v, R.boardXToLaneU(out.offset) * v);
-        R.drawBall(c, q.x, q.y, q.r, spin);
-      } else if (out.wall) {
-        // An overthrown ball demonstrably hits the back wall and comes back down to where it
-        // scored - the same reflection the engine applied (game.js's WALL_RETURN), so this page
-        // teaches the real consequence of slamming it.
-        const land = R.boardPoint(out.x, Math.min(0.97, out.y));
-        const wallP = R.boardPoint(out.x, 0.99);
-        const from = R.lanePoint(1, R.boardXToLaneU(out.offset));
-        const v = (kk - 0.72) / 0.28;
-        const p = v < 0.6
-          ? { x: from.x + (wallP.x - from.x) * (v / 0.6), y: from.y + (wallP.y - from.y) * (v / 0.6) }
-          : { x: wallP.x + (land.x - wallP.x) * ((v - 0.6) / 0.4), y: wallP.y + (land.y - wallP.y) * ((v - 0.6) / 0.4) };
-        R.drawBall(c, p.x, p.y, R.lanePoint(1, 0).r * (1 - v * 0.25), spin);
-      } else {
-        const land = R.boardPoint(out.x, Math.min(0.97, out.y));
-        const from = R.lanePoint(1, R.boardXToLaneU(out.offset));
-        const v = (kk - 0.72) / 0.28;
-        R.drawBall(c, from.x + (land.x - from.x) * v, from.y + (land.y - from.y) * v,
-          R.lanePoint(1, 0).r * (1 - v * 0.25), spin);
-      }
-      return out;
-    };
-
     if (key === 'flick') {
-      // Hand at the foul line, flicks up, ball rolls into a cup.
-      const { power, aim } = idealThrow('30', board);
-      const start = R.lanePoint(0.06, 0);
+      // Hand at the foul line, flicks up, ball rolls up and drops into the 30.
+      const ideal = throwFor('30', { v0: 3.4, dir: 0 });
+      const sim = demo('flick', ideal.v0, ideal.dir);
+      const start = R.proj(0, 0, 0.2);
       if (still) {
-        throwAt(power, aim, 1);
-        handAt = null;
+        playSim(c, sim, 1, true);
       } else if (u < 0.16) {
         handAt = start; pressed = true;
-      } else if (u < 0.34) {
-        const k = (u - 0.16) / 0.18;
-        handAt = { x: start.x, y: start.y - (0.30 * R.DH) * k }; pressed = true;
+      } else if (u < 0.32) {
+        const k = (u - 0.16) / 0.16;
+        handAt = { x: start.x, y: start.y - 0.28 * R.DH * k }; pressed = true;
         R.drawAimGuide(c, 0);
       } else {
-        throwAt(power, aim, (u - 0.34) / 0.5);
+        playSim(c, sim, (u - 0.32) / 0.6, true);
       }
     } else if (key === 'power') {
-      // The same straight throw at three strengths: the 20, the 50, and a slam that bounces off
-      // the back wall and rolls back down (there is no zero up there any more - see game.js).
-      const seq = [idealThrow('20', board).power, idealThrow('50', board).power, 1];
-      const slot = Math.min(2, Math.floor(u * 3));
+      // The same straight throw at three strengths: gentle (the 20), firm (the 50), and a slam
+      // that hits the upper board and rains back down into the basin. All three are the sim.
+      const s20 = throwFor('20', { v0: 3.0, dir: 0 });
+      const s50 = throwFor('50', { v0: 4.2, dir: 0 });
+      const sims = [demo('p20', s20.v0, s20.dir), demo('p50', s50.v0, s50.dir), demo('pslam', 7.2, 0)];
+      const slot = still ? 1 : Math.min(2, Math.floor(u * 3));
       const inner = still ? 1 : (u * 3) % 1;
-      const out = throwAt(seq[still ? 1 : slot], 0, still ? 1 : inner);
-      if (inner > 0.92 || still) {
-        R.drawPopup(c, R.boardPoint(out.x, Math.min(0.97, out.y)), `+${out.points}`, 0.4);
-      }
+      playSim(c, sims[slot], inner, true);
     } else if (key === 'aim') {
-      // A deliberate diagonal into a 100.
-      const { power, aim } = idealThrow('100R', board);
+      // A deliberate diagonal into the right 100 cup.
+      const ideal = throwFor('100R', throwFor('s100', { v0: 4.6, dir: 0.09 }));
+      const sim = demo('aim', ideal.v0, ideal.dir);
       if (still) {
-        const out = throwAt(power, aim, 1);
-        R.drawPopup(c, R.boardPoint(out.x, Math.min(0.97, out.y)), `+${out.points}`, 0.4);
-      } else if (u < 0.30) {
-        const k = u / 0.30;
-        const s = R.lanePoint(0.06, 0);
-        handAt = { x: s.x + aim * 0.20 * R.DW * k, y: s.y - 0.22 * R.DH * k }; pressed = true;
-        R.drawAimGuide(c, aim);
+        playSim(c, sim, 1, true);
+      } else if (u < 0.28) {
+        const k = u / 0.28;
+        const s = R.proj(0, 0, 0.2);
+        handAt = { x: s.x + ideal.dir * 1.6 * R.DW * k, y: s.y - 0.20 * R.DH * k }; pressed = true;
+        R.drawAimGuide(c, ideal.dir);
       } else {
-        const out = throwAt(power, aim, (u - 0.30) / 0.55);
-        if (u > 0.86) R.drawPopup(c, R.boardPoint(out.x, Math.min(0.97, out.y)), `+${out.points}`, 0.4);
+        playSim(c, sim, (u - 0.28) / 0.62, u > 0.86);
       }
     } else if (key === 'badge') {
       // The roaming x3, and what it pays.
-      const ids = board.targets.filter((x) => x.kind !== 'ring').map((x) => x.id);
-      const id = still ? '40' : ids[Math.floor(u * ids.length) % ids.length];
-      const tgt = board.targets.find((x) => x.id === id);
-      // Popup FIRST, badge over it. The other order buries the badge under the burst it is
+      const ids = multTargetsFor(board);
+      const id = still ? ids[Math.min(2, ids.length - 1)] : ids[Math.floor(u * ids.length) % ids.length];
+      const ring = board.geom.rings.find((x) => x.id === id);
+      // Popup FIRST, badge over it - the other order buries the badge under the burst it is
       // supposed to be explaining, on the one page whose whole subject is the badge.
       if (still || u % (1 / ids.length) > (1 / ids.length) * 0.62) {
-        R.drawPopup(c, R.boardPoint(tgt.x, tgt.y - 0.16), `+${tgt.points * 3}`, 0.4);
+        const tp = R.targetPoint(board, id);
+        R.drawPopup(c, { x: tp.x, y: tp.y - 8 }, `+${ring.points * 3}`, 0.4);
       }
       R.drawMultiplier(c, board, id, 0.5 + 0.5 * Math.sin(u * Math.PI * 6));
     } else if (key === 'rack') {
@@ -245,8 +244,7 @@ export function createHowTo(host, boardId) {
         c.textAlign = 'center'; c.textBaseline = 'middle';
         c.font = `800 ${Math.round(0.052 * R.DW)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
         const msg = t('unlock_progress', { n: nxt.unlockScore, board: t(nxt.nameKey) });
-        const my = 0.885 * R.DH;
-        // On a plate: it sits over the lane and, at the left edge, over the ball rack.
+        const my = 0.80 * R.DH;
         const mw = c.measureText(msg).width + 0.06 * R.DW;
         c.fillStyle = 'rgba(0,0,0,0.55)';
         c.beginPath(); c.roundRect(R.DW / 2 - mw / 2, my - 0.026 * R.DH, mw, 0.052 * R.DH, 0.026 * R.DH);
@@ -261,7 +259,7 @@ export function createHowTo(host, boardId) {
     showHand(tf, handAt, pressed);
   }
 
-  const LOOP_MS = { flick: 3600, power: 5400, aim: 4200, badge: 4800, rack: 3600 };
+  const LOOP_MS = { flick: 4200, power: 7500, aim: 4600, badge: 4800, rack: 3600 };
 
   function tick(now) {
     if (!isOpen) return;

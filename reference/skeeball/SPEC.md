@@ -261,3 +261,77 @@ a base colour — which is how the first pass got `#F9ECD5` for "bowl floor".
 
 The last row is the one that is easiest to get wrong in the other direction: giving the bowl half
 the screen height produces a dish deeper than it is wide, which no camera on a real cabinet sees.
+
+---
+
+# 2026-08-12 — THE CLASSIC MACHINE (the app's standard alley). This section supersedes everything above for the `classic` board.
+
+Source: a gameplay screenshot Matt attached in chat (start of a rack, `BALL 9 SCORE 0`) plus
+`Correct bouncing.MOV` (2.25s, 1206x2622, one throw start to settle). The screenshot arrived as a
+chat attachment, so the session that saw it could not write the PNG to disk - these measurements
+were taken the same session, per `reference/README.md`'s fallback. **Matt: drop the PNG in here as
+`classic-machine-start.png` to close the loop.**
+
+Matt, attaching it: *"I wanted it to look like the attached board... this is the first of ~10
+skeeball boards... This should be the most basic, classic skeeball machine."* The warm
+cream-and-wood machine measured above (`Skeeball 1.MOV`) is a DIFFERENT machine skin in the same
+app - not the standard one. The standard one is TEAL, WHITE and YELLOW.
+
+## Vertical structure (fractions of frame, app chrome buttons ignored)
+
+| Band | y | Notes |
+|---|---|---|
+| LED marquee | 0.000 - 0.075 | black; gold trim rail under it. `BALL` in yellow caps with a RED 7-seg digit; `SCORE` in green caps with a pale 7-seg digit; a Skee-Ball roundel logo either side |
+| Teal back wall | 0.082 - 0.475 | flat teal; arched `SKEE-BALL` logo (orange, dark-outlined) centred y ~0.20, ~0.28 W wide; `THE ORIGINAL ALLEY GAME est 1909` badge under it |
+| Ring assembly | 0.28 - 0.46 | see below |
+| Lane | 0.475 - 1.00 | TEAL surface (not wood), faint centre seam, white lip line where it meets the machine |
+
+## The ring assembly (all WHITE glossy collars, numbers in near-black ink on the collar fronts)
+
+Nearly FACE-ON circles: the board is close to vertical, tilted back only slightly (the big ring
+reads as a circle ~0.48 W wide by ~0.155 H tall; on a 1080x2336 frame that is a vertical squash of
+~0.70, i.e. a plane tilted back roughly 20 degrees from vertical seen from a low camera).
+
+| Element | centre (x, y) | outer width |
+|---|---|---|
+| Big `10` ring | (0.500, ~0.375), spans x 0.26-0.74, top y ~0.30, bottom y ~0.455 | 0.48 W |
+| `20` cup | (0.500, 0.405) | 0.110 W |
+| `30` cup | (0.500, 0.375) | 0.105 W |
+| `40` cup | (0.500, 0.335) | 0.100 W |
+| `50` cup | (0.500, 0.295) - overlapping the big ring's top edge | 0.085 W |
+| `100` cups | (0.315, 0.285) and (0.685, 0.285), on the wall OUTSIDE the big ring, angled slightly outward | 0.075 W |
+| `10` label | (0.500, 0.437) on the big ring's bottom front face | - |
+| `100` labels | printed on the WALL just inboard of each 100 cup | - |
+
+Flanking the assembly: khaki/gold diamond NETTING panels (x 0.16-0.235 and 0.765-0.84), with two
+black flexible guard TUBES arcing down in front of each panel from marquee height to the lane.
+Maroon/dark-red vertical cabinet borders with thin gold pinstripes at x ~0.225 and ~0.775 separate
+this machine from its NEIGHBOURS - partial mirrored machines are visible at both edges: this is a
+row in an arcade, and that framing is part of the look.
+
+## The lane and rails
+
+Lane surface TEAL, one-point perspective, white/pale lip at the top where it meets the cabinet.
+Side rails GLOSSY YELLOW with a pale blue-white stripe along the crown, red-brown underside; they
+converge toward the machine and run off the bottom corners of the frame. (The V-shapes visible
+under the NEIGHBOUR machines are their own rail pairs seen edge-on.)
+
+## The ball, and what `Correct bouncing.MOV` shows (the physics contract)
+
+Ball: rust-brown wood, diameter ~0.45 of a small cup's outer width - i.e. the cup OPENING is only
+~1.6-1.8 ball diameters, which is why rim hits are common and expected.
+
+The clip, frame-timed at 15fps (score 50 -> 70):
+
+| t | What happens |
+|---|---|
+| ~0.27s | ball arrives in flight and CLIPS THE RIM of the 40 - a near miss |
+| 0.3-0.7s | deflects sideways-right and down off the rim, falls into the basin inside the big ring |
+| 0.7-1.5s | bounces off the basin floor, then rolls DOWN along the inside of the big ring's wall, losing speed |
+| ~1.7s | funnels back toward the centre and drops into the 20's mouth |
+| 1.87s | `20` popup; score 50 -> 70 |
+
+That is the contract: a miss is a RIM BOUNCE with a real deflection, followed by gravity doing the
+rest inside the basin, and the score is wherever the ball physically ends up. Roughly 1.6s from
+rim hit to settle; each bounce visibly lower than the last. No teleporting, no snapping, no
+predetermined outcome painted over a canned animation.
