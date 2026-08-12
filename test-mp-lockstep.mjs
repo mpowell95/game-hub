@@ -4446,12 +4446,20 @@ class BattleshipSide {
       // published the snapshot but never consumes one itself). The real UI doesn't need an
       // explicit call here because re-rendering with busy=false already makes the board tappable
       // again for a human to retry; this harness's takeTurnIfMine() is that retry's stand-in.
+      mp.pendingShot = null;   // the rejected entry is consumed; nothing is outstanding on it
       this.afterStateChange();
       return true;
     }
     mp.awaitingRecovery = true;
     this.room.requestRecovery(seq).catch(() => {});
     return false;
+  }
+
+  /** _mpStateSeq -- the highest seq this side's PUBLIC state actually reflects. */
+  stateSeq() {
+    const mp = this.mp;
+    if (!mp) return 0;
+    return mp.pendingShot ? Math.max(0, (mp.appliedSeq | 0) - 1) : (mp.appliedSeq | 0);
   }
 
   snapshot() {   // _mpSnapshot -- PUBLIC ONLY, never a fleet
@@ -4475,6 +4483,15 @@ class BattleshipSide {
     mp.appliedSeq = recovery.seq | 0;
     mp.maxKnownSeq = Math.max(mp.maxKnownSeq | 0, mp.appliedSeq);
     mp.replayMode = false; mp.recoveryAttempts = 0; mp.awaitingRecovery = false;
+    mp.pendingShot = null;
+    // Re-derived from the log, never carried across the jump (battleship/js/ui.js's
+    // _mpApplyRecovery): a stale pair would reject the very next legitimate answer.
+    mp.lastShotSeat = null; mp.lastShotRC = null;
+    const atSeq = mp.movesById && mp.movesById.get(mp.appliedSeq);
+    if (atSeq && atSeq.move && atSeq.move.k === 's') {
+      mp.lastShotSeat = atSeq.move.seat | 0;
+      mp.lastShotRC = [atSeq.move.r | 0, atSeq.move.c | 0];
+    }
     this.view = (mp.readySeats.has(0) && mp.readySeats.has(1)) ? 'battle' : 'placement';
     if (this.view === 'battle' && !mp.myFleet) { this.cannotResume = true; return; }   // section 7.5
     this.recoveriesApplied++;
@@ -4594,7 +4611,11 @@ class BattleshipSide {
     if (room.recovery) {
       if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
         mp.lastRecoveryHandled = room.recovery.requested;
-        this.room.writeRecovery(mp.appliedSeq, this.snapshot()).catch(() => {});
+        // _mpStateSeq, NOT appliedSeq: a shooter reserves its seq before the state changes, so a
+        // host with a shot in the air is one seq AHEAD of what its snapshot actually contains.
+        // Publishing appliedSeq made the guest skip that shot without ever answering it, and the
+        // match froze with neither side erroring (battleship/js/ui.js's _mpStateSeq).
+        this.room.writeRecovery(this.stateSeq(), this.snapshot()).catch(() => {});
       }
       if (mp.role === 'guest' && room.recovery.state && room.recovery.seq !== mp.lastRecoveryApplied) {
         mp.lastRecoveryApplied = room.recovery.seq;

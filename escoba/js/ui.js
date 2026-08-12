@@ -188,6 +188,15 @@ class EscobaUI {
       // Capture hints on by default (today's behavior); off = unassisted
       // (no hint highlighting, no auto-pick, no sum chip -- see _matchAssist).
       assist: saved.assist !== false,
+      // The per-card capture-value badge, on by default (today's behavior).
+      // Additive key: absent on an older save reads as on, so nobody's screen
+      // changes on the deploy. Purely a DISPLAY preference -- unlike `assist`
+      // it is deliberately NOT frozen into the match (no _matchShowValues),
+      // so flipping it takes effect on the next render, including a resumed
+      // match. It is also per device and never travels over the room: it
+      // changes nothing either player could act on that the card faces don't
+      // already say, so MP needs no agreement about it.
+      showValues: saved.showValues !== false,
       // Last-used setup-screen mode (M1.2). Additive field: absent on an
       // older save simply defaults to 'solo', same as today's only screen.
       mode: ['solo', 'host', 'join'].includes(saved.mode) ? saved.mode : 'solo',
@@ -199,7 +208,8 @@ class EscobaUI {
     saveJSON(STORE_SETTINGS, {
       count: s.count, mpSeats: s.mpSeats, humanName: s.humanName, humanAvatar: s.humanAvatar,
       aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, targetScore: s.targetScore,
-      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist, mode: s.mode,
+      deckMode: s.deckMode, deckModeChosen: s.deckModeChosen, assist: s.assist,
+      showValues: s.showValues, mode: s.mode,
     });
   }
 
@@ -349,6 +359,31 @@ class EscobaUI {
     </div>`;
   }
 
+  /** The Value badges row's control: the two OPTIONS ARE the example, one real
+   *  card face rendered both ways side by side, so the setting shows its own
+   *  difference instead of describing it in a sentence (Matt, 2026-08-11:
+   *  "instead of words describing the difference, show the difference with an
+   *  example card"). There is no separate segmented control and no hint
+   *  paragraph -- the cards are the picker, and tapping one is the choice.
+   *  The card is the Sota de oros because it is the card the badge does the
+   *  most work on: in Spanish numbering it prints 10 and captures 8, so the
+   *  two options genuinely look different from each other. It exists in both
+   *  numbering modes, and its value is computed through captureValue() rather
+   *  than hardcoded, so the American-mode picker shows the 10 that mode
+   *  actually plays. Selection is a border + a check glyph, never hue alone. */
+  _valuePicker(on) {
+    const card = { id: 'eb-valdemo', suit: 'oros', rank: 10, value: captureValue(10, this._setup.deckMode) };
+    const opt = (v, label, showValue) => `<button class="eb-valopt ${(v === 'on') === !!on ? 'is-selected' : ''}"
+        data-action="set-values" data-v="${v}" aria-pressed="${(v === 'on') === !!on}" aria-label="${esc(label)}">
+        <span class="eb-valopt-card">${cardFaceHTML(card, { value: showValue, mini: true, static: true })}</span>
+        <span class="eb-valopt-label">${(v === 'on') === !!on ? '✓ ' : ''}${esc(label)}</span>
+      </button>`;
+    return `<div class="eb-valpick">
+      ${opt('on', t('values_on'), true)}
+      ${opt('off', t('values_off'), false)}
+    </div>`;
+  }
+
   /** The settings summary card. Solo and Host-online share the target-score,
    *  card-numbering and capture-hint rows verbatim; the Players row and the
    *  Difficulty row are the two that differ, because an online table has no AI
@@ -401,6 +436,9 @@ class EscobaUI {
         ? esc(t('hint_deckmode_american'))
         : esc(t('hint_deckmode_spanish'))}</p>`;
 
+    const valuesValue = s.showValues ? t('values_on') : t('values_off');
+    const valuesContent = this._valuePicker(s.showValues);
+
     const assistValue = s.assist ? t('assist_on') : t('assist_off');
     const assistContent = `
       ${seg('set-assist', s.assist ? 'on' : 'off', [['on', t('assist_on')], ['off', t('assist_off')]])}
@@ -413,6 +451,7 @@ class EscobaUI {
       ${isHost ? '' : this._summaryRow('difficulty', esc(t('lbl_difficulty')), diffValue, diffContent)}
       ${this._summaryRow('target', esc(t('lbl_playto')), t('pts_value', { n: s.targetScore }), targetContent)}
       ${this._summaryRow('deckmode', esc(t('lbl_cardnumbering')), esc(deckModeValue), deckModeContent)}
+      ${this._summaryRow('values', esc(t('lbl_cardvalues')), esc(valuesValue), valuesContent)}
       ${this._summaryRow('assist', esc(t('lbl_capturehints')), esc(assistValue), assistContent)}
     </div>`;
   }
@@ -603,7 +642,11 @@ class EscobaUI {
   /** The one diagram: a hand card + two table cards, annotated summing to 15
    *  (mode-agnostic capture values -- 7+5+3 needs no figure card either way).
    *  Mini card size (same as the old sweep panel) keeps the whole row well
-   *  under the 360px budget. */
+   *  under the 360px budget.
+   *  The value badges here stay on regardless of the Value badges setting:
+   *  they ARE the annotation that makes 7+5+3=15 readable, so honouring the
+   *  setting would leave the one diagram that teaches the rule showing three
+   *  unexplained cards. */
   _howtoDiagram() {
     const mode = this._setup.deckMode;
     const played = { id: 'e7', suit: 'espadas', rank: 7, value: captureValue(7, mode) };
@@ -1235,7 +1278,7 @@ class EscobaUI {
         selected: isSel,
         hinted: hintIds.has(c.id) && !isSel,
         dim: remaining != null && !isSel && c.value > remaining,
-        value: true,
+        value: this._setup.showValues,
       });
       if (isNew) cell.style.transitionProperty = 'none';
       const pos = positions[i];
@@ -1268,7 +1311,7 @@ class EscobaUI {
     const h = this._human();
     return h.hand.map((c) => cardFaceHTML(c, {
       selected: c.id === this._selHand,
-      value: true,
+      value: this._setup.showValues,
     })).join('');
   }
 
@@ -1643,6 +1686,7 @@ class EscobaUI {
       case 'set-target': this.syncSetupInputs(); this._setup.targetScore = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-deckmode': this.syncSetupInputs(); this._setup.deckMode = a.dataset.v; this._setup.deckModeChosen = true; this._saveSetup(); this.renderSetup(); break;
       case 'set-assist': this.syncSetupInputs(); this._setup.assist = a.dataset.v === 'on'; this._saveSetup(); this.renderSetup(); break;
+      case 'set-values': this.syncSetupInputs(); this._setup.showValues = a.dataset.v === 'on'; this._saveSetup(); this.renderSetup(); break;
       case 'set-aidiff': {
         this.syncSetupInputs();
         const i = +a.closest('.eb-segmented').dataset.i;

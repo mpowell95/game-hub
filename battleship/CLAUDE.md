@@ -110,6 +110,55 @@ earned is ever at risk there (no shots have been fired, no result could exist ye
 from the single post-shot funnel (`_afterStateChange`), cleared on game end, on Restart/rematch,
 and on "New game" mid-battle. `isInProgress()` reflects this: solo always returns `false`.
 
+## The deploy screen moves NOTHING while you drag (2026-08-11 — settled)
+
+Matt: *"It moves around if you drag your boats while placing them."* Two separate causes, both in
+the header/tray above the board, neither of them in the drag code:
+
+1. **The tray wrapped.** Five chips carrying a NAME and a rotate BUTTON each needed two rows at
+   393px. Placing the first ship dropped it to one row and pulled the board **71px up the screen**,
+   under the finger, mid-drag. It is one row now — bare silhouettes, no labels — with a **fixed
+   height on `.bs-tray`** so an emptying tray leaves the board exactly where it was. The header's
+   button row (`.bs-deploy-btns`) has the same fixed height and `flex-wrap: nowrap` for the same
+   reason: SAVE appears in it the moment the last ship lands, which was the second jump.
+2. **The rotate button sat dead centre on the chip** — the natural place to grab a ship — and
+   `onPointerDown` returns early on `[data-action="rotate-ship"]`, so a drag started there did
+   *nothing at all*. Both the tray buttons and the placed ships' corner arrows are gone. **Rotate
+   is now the same gesture everywhere: tap the ship.** Tap an unplaced chip to select it, tap the
+   selected chip again to rotate; tap a placed ship to rotate it in place. `R` still works.
+
+`test-visual.mjs`'s battleship PLAY probe drags all five ships with real touch events and fails if
+the board's box changes even once, or if fewer than five land. **A screenshot cannot catch this** —
+every individual frame of the bug looks perfect; only the sequence is wrong.
+
+## The words are gone (2026-08-11)
+
+Matt: *"There's way too much text."* Same instruction Pool got a day earlier ("no word instructions
+during the game, it must be self explanatory with symbols"). What went, and what replaced it:
+
+| Was | Now |
+|---|---|
+| "Your turn: fire!" / "Incoming!" / "Bot thinking" / "Hit! Fire again." | `_turnBarHtml()` — the shooter's avatar and a chevron pointing at the board about to be hit (up = enemy waters, down = your deck) |
+| "Drag to move, tap to rotate, or try random placement." | nothing; the gesture IS drag and tap |
+| "5 ships left to place" / "Every ship is on the board." / "Fleet ready. Tap SAVE to sail." | the tray itself, and SAVE existing at all |
+| CARRIER / BATTLESHIP / CRUISER / SUBMARINE / DESTROYER in the tray | the silhouettes, which is what you are actually dragging |
+| "Clear" / "How to play" / "Restart" buttons, "Shots: 3" | icon discs, and `⌖ 3` |
+| EXIT spelled top-to-bottom in the fleet strip | an `✕` disc |
+| "Sunk: Carrier" | the ship, struck through, in its owner's colour |
+| "Miss = ripple. Hit = flash. Sunk = the whole ship reveals." (in How to play) | `_helpMarkerKey()` — the three real markers, drawn. That sentence had also gone stale: a miss has been a CROSS since the 2026-08 redesign |
+
+**Nothing lost its accessible name.** Every symbol carries the old wording as an `aria-label`, and
+`_statusText()` still exists — it feeds a visually-hidden `aria-live` region (`.bs-sr`) inside the
+turn bar. A symbol with no accessible name is a step backwards, not a simplification.
+
+**MP status messages stay as words** (connection error, resyncing, opponent disconnected). They are
+failures, not instructions; a glyph for "we lost sync" teaches nobody anything.
+
+**Side effect worth knowing: this is what made the battle screen FIT.** Battleship was
+`test-visual.mjs`'s longest-standing `fits one screen` gap — up to 221px too tall in the hub on a
+short phone. `_fitBattleBoards()` was not touched; the sentences it was competing with were simply
+deleted, and the entry is gone from `KNOWN_GAPS`.
+
 ## The four screens (visual rebuild, 2026-08-05, `HANDOFF-BATTLESHIP-REDESIGN.md`)
 
 The game was rebuilt visually and interactively against a reference mobile Battleship. The engine,
@@ -132,18 +181,26 @@ switch. Get that wrong and nothing else matters.
    **The slider is display only**: the stored values stay `beginner`/`intermediate`/`pro` (storage
    vocabulary `js/difficulty-tiers.js` and `js/game-stats-ui.js`'s `DIFF_META` both key on). Only
    the labels are Easy/Medium/Hard.
-2. **Deploy screen** (`renderPlacement`) — navy panel with the title, the hint, a blue **RANDOM**
-   pill and a green **SAVE** pill that is **absent, not disabled**, until every ship is placed.
+2. **Deploy screen** (`renderPlacement`) — navy panel with the title and ONE fixed-height row of
+   controls (exit, clear, random, help as icon discs) plus a green **SAVE** pill that is **absent,
+   not disabled**, until every ship is placed. The hint line is gone; see "The deploy screen moves
+   NOTHING while you drag" and "The words are gone" above, which supersede the rest of this entry
+   wherever they disagree with it.
    Below it the salmon deck carries the tray of unplaced ships and the wooden board. A placed ship
-   is a real sprite you can pick straight off the board: drag to move, release without moving to
-   rotate in place (`onPointerUp`'s `origin` branch), or use its own corner arrow
-   (`_rotatePlacedShip`, which reverts if the rotated pose does not fit — rotating must never drop
-   a ship). Legality is SHAPE first: solid outline + a check badge when legal, **dashed** outline +
-   a cross badge when not. The keyboard path (arrows/`R`/Enter) is unchanged. A white circular
-   **EXIT** with a vertical label is pinned to the right edge, deliberately clear of the hub's own
-   floating back button (which is top LEFT, `css/hub.css`'s `.hub-top-immersive`); the deck carries
-   a `padding-right` so EXIT never covers the grid.
+   is a real sprite you can pick straight off the board: drag to move, or release without moving to
+   rotate in place (`onPointerUp`'s `origin` branch; `_rotatePlacedShip` and the corner arrow it
+   served are gone). Legality is SHAPE first: solid outline + a check badge when legal, **dashed**
+   outline + a cross badge when not. The keyboard path (arrows/`R`/Enter) is unchanged.
 3. **Opponent-getting-ready screen** (`renderWaiting` / `renderBotPlacing`, view `'botplace'`) —
+   **in MP this is no longer a dead end (2026-08-11).** Matt's screenshot of multiplayer failing was
+   exactly this screen, frozen on "Waiting for Anita Bonita…" — a name belonging to a COMPUTER
+   opponent configured on the profile page, because `_identity()` fell back to `profile.opponents[0]`
+   whenever the room had not yet said who joined. It never does that in MP now; until the room
+   reports a real person it says "Opponent". The screen also carries the ROOM CODE (so a stuck
+   player can compare it against the other phone) and a **Leave** button, and `_mpOnRoomUpdate`
+   repaints it the moment `mp.opp` is first learned, instead of leaving its one initial guess up for
+   the rest of the match.
+
    enemy waters empty and dark on top, the line "Bot is placing ships", and the bot's fleet below
    in THEIR blue as loose silhouettes **on a deck, never on a board** (showing where they sit would
    hand the player the game). Two seconds, skippable by a tap. In MP the same screen renders
@@ -648,10 +705,74 @@ never block the ordinary result.
 | BS6 | the `redeliverRequested` race, driven by a `bonusShotOnHit` chain |
 | BS7 | new to this game: an answer authored by the wrong seat, and a shot out of turn, are both discarded rather than applied |
 
-**Status: proven headlessly against `FakeRoom`; no real room has ever been created.** A cloud
-session cannot reach Firebase — same honest caveat Tic Tac Toe, Pool, Boggle and Chinchón's N-seat
-work all carry. Real-room behaviour, including the `bonusShotOnHit` chain's latency under real
-network conditions, is unverified until a local-device pass runs.
+**Status: proven headlessly against `FakeRoom`, AND played end to end twice in real browsers
+against a fake RTDB; no real Firebase room has ever been created.** A cloud session cannot reach
+Firebase or even gstatic — same honest caveat Tic Tac Toe, Pool, Boggle and Chinchón's N-seat work
+all carry. Real-room behaviour, including the `bonusShotOnHit` chain's latency under real network
+conditions, is unverified until a local-device pass runs.
+
+### The harness that finally played a real match (2026-08-11)
+
+Matt: *"MP doesn't work AT ALL."* `FakeRoom` proves the protocol; it cannot prove the SCREENS, and
+every defect found that day was in the screens or in the lifecycle around them. What it took was
+**two real `battleship/` instances in two same-origin iframes, with `js/firebase-boot.js` swapped
+out by a Playwright route for a ~30-line fake RTDB** (`ref`/`get`/`set`/`update`/`onValue`/
+`runTransaction` over a plain object held in the parent frame). Everything above that line is the
+shipped code: `js/net.js`, `js/ui.js`, the whole MP glue, real DOM, real clicks.
+
+It is worth rebuilding rather than reasoning about, because it caught things nothing else could:
+the sunk banner eating taps, the waiting screen's dead end, and a full 190-shot match agreeing on
+both screens. Same-origin iframes share `localStorage`, so both sides end up with ONE profile —
+fine for protocol work, misleading if you are reading names off the screen.
+
+### The recovery deadlock (fixed 2026-08-11) — `_mpStateSeq`
+
+This file used to record BS2 as having "an intermittent timeout, ~1 in 3 to 1 in 6, that passes in
+isolation." **It was not flaky. It was a real deadlock, reproducible 4 runs in 6 once the timeout
+printed the two sides' state instead of just failing.**
+
+A shooter reserves its seq in `_mpFireAt` **before anything about the public state changes** — only
+the defender's answer changes it. So a device with a shot in the air has `appliedSeq` one AHEAD of
+the last entry its `state` actually reflects. The host answered a recovery request with
+`net.writeRecovery(code, mp.appliedSeq, snapshot)`, and if it had fired in the window between the
+guest's request and its own reply — a window as wide as the round trip on real phones — the
+snapshot said "I am at seq N" while carrying a state that did not include seq N. The guest adopted
+N, so it **skipped the host's shot without ever running the `k:'s'` branch**: never resolved it
+against its own fleet, never published an answer. The host then waited for that answer forever.
+
+No error, no busy-loop, no failed hash: both boards simply stopped. That is what "MP doesn't work"
+looks like from the sofa.
+
+Three parts to the fix, all of them mirrored into `test-mp-lockstep.mjs`'s `BattleshipSide`:
+
+- **`_mpStateSeq()`** — `pendingShot ? appliedSeq - 1 : appliedSeq`, the highest seq the public
+  state truly reflects. It is what a recovery snapshot publishes now. Any future code that answers
+  "where am I in the log" for someone ELSE to sync to must use this, not `appliedSeq`.
+- **`_mpOnDivergence`'s host branch clears `pendingShot`.** The rejected entry is consumed and never
+  applied, so a shot whose answer was just thrown away is not outstanding any more — leaving it set
+  reached the same deadlock from the other side.
+- **`_mpApplyRecovery` re-derives `lastShotSeat`/`lastShotRC` from the move log** (from the entry at
+  the recovered seq, if it is a shot) instead of carrying across whatever they were before the
+  jump. A stale pair rejects the next perfectly good answer and bounces straight into another
+  recovery.
+
+BS2 has been green for eight consecutive full runs of the suite since.
+
+### Nothing in the lobby may wait forever (`_withNetTimeout`, 2026-08-11)
+
+**Firebase RTDB reads and writes do not REJECT when the device cannot reach the server — they
+simply never settle.** So `await net.createRoom(...)` on a phone with a bad signal left "Creating
+room…" spinning indefinitely, with no error, no retry and nothing to tap but Back. Every lobby
+round trip (create, join, and the guest's restore) is raced against `MP_NET_TIMEOUT_MS` (12s) now
+and falls back to the ordinary offline error. A late reply is harmless — the room is abandoned to
+its TTL, exactly as if the app had been closed at that moment.
+
+The restore path has its own version of the same problem and its own watchdog: `net.init()`
+succeeding proves Firebase is reachable, **not** that this room still exists. A room that ended or
+aged past its TTL reads back as `null`, and `_mpOnRoomUpdate` returns early on a null room, so the
+device sat waiting on an opponent who was never coming. `_tryRestoreMP` now arms `mp.restoreProbe`
+plus a timer; the first real room snapshot disarms it, and if none arrives the save is cleared and
+the player gets their setup screen back. Cleared in `destroy()` like every other timer here.
 
 ## Settings & keys
 

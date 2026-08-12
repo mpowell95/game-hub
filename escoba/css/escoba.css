@@ -19,6 +19,12 @@
   --eb-surface: #ffffff;
   --eb-surface-2: #eef2f8;
   --eb-ink: #16243a;
+  /* Ink for things drawn ON a card face. A playing card is light in BOTH themes
+     (the Anita art never darkens), so anything sitting on top of one must NOT
+     follow --eb-ink, which flips to near-white in dark mode. The value badge did
+     follow it and went white-on-white -- readable in light mode, invisible in
+     dark. This token stays fixed on purpose; do not add a .gh-dark override. */
+  --eb-card-ink: #16243a;
   --eb-muted: #5b6b82;
   --eb-accent: #1c7a4f;          /* table green */
   --eb-gold: #d4a017;            /* oros gold */
@@ -156,6 +162,28 @@
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%;
 }
 .eb-summary-expand { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--eb-surface-2); }
+
+/* Value badges picker: the two options ARE the example (the same card face
+   rendered with and without its badge), so the row shows its own difference
+   instead of describing it. No segmented control and no hint paragraph here --
+   these buttons are the picker. The badge bleeds 5px past the card's corner
+   (--eb-badge-overhang), so each option keeps enough padding for it. Selection
+   is a border plus the check glyph in the label, never hue alone. */
+.eb-valpick { display: flex; gap: 8px; }
+.eb-valopt {
+  flex: 1; appearance: none; font: inherit; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 8px 10px; border-radius: 12px;
+  border: 2px solid transparent; background: var(--eb-surface);
+  color: var(--eb-muted); font-weight: 700; font-size: 0.8rem;
+}
+.eb-valopt:not(.is-selected) { opacity: 0.6; }
+.eb-valopt.is-selected {
+  border-color: var(--eb-accent); color: var(--eb-ink);
+  box-shadow: 0 1px 5px rgba(20, 40, 80, 0.16);
+}
+.eb-valopt .eb-card { width: 56px; }
+.eb-valopt-card { display: block; }
 
 .eb-diff-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .eb-diff-name { font-weight: 600; font-size: 0.85rem; color: var(--eb-ink); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -381,7 +409,7 @@
 .eb-card-val {
   position: absolute; right: -5px; bottom: -5px; z-index: 2;
   min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px;
-  background: #fff; color: var(--eb-ink); border: 1.5px solid var(--eb-ink);
+  background: #fff; color: var(--eb-card-ink); border: 1.5px solid var(--eb-card-ink);
   font-size: 0.68rem; font-weight: 900; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
@@ -828,7 +856,8 @@
    readable as text on the new dark surface. A few hover states hardcoded to a light gray literal
    (not on a variable) get their own overrides, plus the chart grid lines and the dealer-dot badge
    (which intentionally stays a fixed dark chip regardless of theme), plus the tier 3/4 ski-slope
-   shape fix. */
+   shape fix. Anything drawn ON a card face uses --eb-card-ink, NOT --eb-ink, and is deliberately
+   absent from this block -- see that token's comment. */
 :root.gh-dark .eb-root {
   --eb-surface: #1b2333;
   --eb-surface-2: #262f42;
