@@ -162,6 +162,18 @@ export function createHowTo(host, boardId) {
         const v = kk / 0.72;
         const q = R.lanePoint(v, R.boardXToLaneU(out.offset) * v);
         R.drawBall(c, q.x, q.y, q.r, spin);
+      } else if (out.wall) {
+        // An overthrown ball demonstrably hits the back wall and comes back down to where it
+        // scored - the same reflection the engine applied (game.js's WALL_RETURN), so this page
+        // teaches the real consequence of slamming it.
+        const land = R.boardPoint(out.x, Math.min(0.97, out.y));
+        const wallP = R.boardPoint(out.x, 0.99);
+        const from = R.lanePoint(1, R.boardXToLaneU(out.offset));
+        const v = (kk - 0.72) / 0.28;
+        const p = v < 0.6
+          ? { x: from.x + (wallP.x - from.x) * (v / 0.6), y: from.y + (wallP.y - from.y) * (v / 0.6) }
+          : { x: wallP.x + (land.x - wallP.x) * ((v - 0.6) / 0.4), y: wallP.y + (land.y - wallP.y) * ((v - 0.6) / 0.4) };
+        R.drawBall(c, p.x, p.y, R.lanePoint(1, 0).r * (1 - v * 0.25), spin);
       } else {
         const land = R.boardPoint(out.x, Math.min(0.97, out.y));
         const from = R.lanePoint(1, R.boardXToLaneU(out.offset));
@@ -189,16 +201,14 @@ export function createHowTo(host, boardId) {
         throwAt(power, aim, (u - 0.34) / 0.5);
       }
     } else if (key === 'power') {
-      // The same straight throw at three strengths: the 20, the 40, and over the back.
-      const seq = [idealThrow('20', board).power, idealThrow('40', board).power, 1];
+      // The same straight throw at three strengths: the 20, the 50, and a slam that bounces off
+      // the back wall and rolls back down (there is no zero up there any more - see game.js).
+      const seq = [idealThrow('20', board).power, idealThrow('50', board).power, 1];
       const slot = Math.min(2, Math.floor(u * 3));
       const inner = still ? 1 : (u * 3) % 1;
       const out = throwAt(seq[still ? 1 : slot], 0, still ? 1 : inner);
       if (inner > 0.92 || still) {
-        const at = out.kind === 'over'
-          ? R.boardPoint(0, 1)
-          : R.boardPoint(out.x, Math.min(0.97, out.y));
-        R.drawPopup(c, at, out.kind === 'over' ? t('too_hard') : `+${out.points}`, 0.4);
+        R.drawPopup(c, R.boardPoint(out.x, Math.min(0.97, out.y)), `+${out.points}`, 0.4);
       }
     } else if (key === 'aim') {
       // A deliberate diagonal into a 100.

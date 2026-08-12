@@ -330,6 +330,9 @@ class SkeeballUI {
     this.boardId = this.game.board.id;
     this.recorded = false;
     this.flight = null; this.popup = null; this.pending = null; this.drag = null;
+    // The 10-balls resting on the apron. Cosmetic (never saved, so a resumed rack starts with a
+    // clean apron), but load-bearing for honesty: a ball the floor kept stays in sight.
+    this.rested = []; this._restNext = null;
 
     this.root.innerHTML = `
       <div class="sk-root">
@@ -512,27 +515,63 @@ class SkeeballUI {
     const v0 = ROLL_V0 + ROLL_VE * clamp(preview.energy, 0, 1);
     const len = path.len[path.len.length - 1];
 
-    // A ball that finds no cup does NOT vanish. It rolls back down the bowl into the trough at the
-    // front - which is exactly what the 10 is on a real machine, and what the catch-all has always
-    // represented. Matt: "why does the ball disappear? If it doesn't go into a hole, you just have
-    // it disappear... That's terrible. I HATE that. That is not realistic."
+    // A ball that finds no hole does NOT vanish. It rolls back down the bowl and comes to REST on
+    // the apron at the front, in plain sight until the rack ends - which is the reference's own
+    // behaviour (SPEC.md: "balls that came to rest without scoring sit on the apron in front of
+    // the rings"). Matt: "why does the ball disappear? ... That's terrible. I HATE that."
     const sank = !short && out.kind === 'hit' && out.target && !this._isCatchAll(out.target);
-    const backLen = short ? len : (sank ? 0 : len - path.lipAt);
+    const back = (!short && !sank) ? this._buildReturn(out) : null;
 
     this.flight = {
-      out, short, sank, path, t0: performance.now(),
-      // Constant speed, so time is just distance over it. A short throw is the one exception: it
+      out, short, sank, path, back, t0: performance.now(),
+      // Constant speed, so time is just distance over it - including the wall-bounce leg, which
+      // is the throw's own momentum coming back. A short throw is the one exception: it
       // decelerates to a standstill at the apex, so its mean speed is half.
       rollMs: (len / (v0 * (short ? 0.5 : 1))) * 1000,
-      // Rolling back is gravity-fed and unhurried, but it must not hold the game up.
-      backMs: backLen > 0 ? Math.min(700, (backLen / (v0 * 0.62)) * 1000) : 0,
-      dropMs: short ? 0 : DROP_MS,
+      // Rolling back down to the apron is gravity-fed and unhurried, but must not hold the game up.
+      backMs: back ? Math.min(900, (back.len[back.len.length - 1] / (v0 * 0.55)) * 1000)
+        : short ? Math.min(700, (len / (v0 * 0.62)) * 1000) : 0,
+      dropMs: sank ? DROP_MS : 0,
     };
     // Hold the points back until the ball LANDS - the engine has them already, but revealing them
     // on release tells the player the answer while the ball is still rolling.
     this.pending = out.scored;
     this.hintEl.hidden = true;
     this._paintHud();
+  }
+
+  /** Where a 10-ball comes to rest on the apron: at its own lane offset, nudged sideways until it
+   *  is clear of the balls already resting there so the rack piles up legibly. */
+  _restSpot(out) {
+    const y = 0.035;
+    let x = clamp(out.x, -0.82, 0.82);
+    const clear = (v) => this.rested.every((b) => Math.abs(b.bx - v) > 0.105);
+    for (let i = 1; i <= 16 && !clear(x); i++) {
+      const step = 0.11 * Math.ceil(i / 2) * (i % 2 ? 1 : -1);
+      if (Math.abs(clamp(out.x, -0.82, 0.82) + step) <= 0.86) x = clamp(out.x, -0.82, 0.82) + step;
+    }
+    return { x, y };
+  }
+
+  /** The return leg for a ball the floor kept: from where it landed, back down the bowl to its
+   *  rest spot on the apron. A polyline like the main path, so _atLength works on both. */
+  _buildReturn(out) {
+    const rest = this._restSpot(out);
+    this._restNext = rest;
+    const from = { x: out.x, y: Math.min(0.97, out.y) };
+    const pts = [];
+    for (let i = 0; i <= 18; i++) {
+      const k = i / 18;
+      const y = from.y + (rest.y - from.y) * k;
+      const x = from.x + (rest.x - from.x) * k;
+      const q = R.boardPoint(x, y);
+      pts.push({ x: q.x, y: q.y, r: R.ballROnBoard(y) });
+    }
+    const len = [0];
+    for (let i = 1; i < pts.length; i++) {
+      len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    }
+    return { pts, len };
   }
 
   /**
@@ -552,23 +591,32 @@ class SkeeballUI {
       const q = R.lanePoint(v, R.boardXToLaneU(laneOffsetAt(aim, v).u));
       pts.push({ x: q.x, y: q.y, r: q.r });
     }
-    let lipIdx = pts.length - 1;
     if (laneTo == null) {
       const u = laneOffsetAt(aim, 1).u;
       for (let i = 1; i <= 10; i++) pts.push(R.rampPoint(i / 10, u));
-      lipIdx = pts.length - 1;                    // the bowl's front lip: where the trough is
       const endY = Math.min(0.97, out.y);
-      for (let i = 1; i <= 20; i++) {
-        const y = (i / 20) * endY;
-        const q = R.boardPoint(out.x, y);
-        pts.push({ x: q.x, y: q.y, r: R.ballROnBoard(y) });
+      const board = (fromY, toY, n) => {
+        for (let i = 1; i <= n; i++) {
+          const y = fromY + ((toY - fromY) * i) / n;
+          const q = R.boardPoint(out.x, y);
+          pts.push({ x: q.x, y: q.y, r: R.ballROnBoard(y) });
+        }
+      };
+      if (out.wall) {
+        // An overthrown ball visibly REACHES the back wall and comes back down the board to
+        // where it scored - the engine's own reflection (game.js's WALL_RETURN), drawn leg for
+        // leg. This is what replaced "Too hard!" and its zero.
+        board(0, 0.99, 20);
+        board(0.99, endY, 8);
+      } else {
+        board(0, endY, 20);
       }
     }
     const len = [0];
     for (let i = 1; i < pts.length; i++) {
       len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
     }
-    return { pts, len, lipAt: len[lipIdx] };
+    return { pts, len };
   }
 
   /** Interpolate the polyline at arc length `s`, and give the ball the rotation that distance
@@ -609,24 +657,23 @@ class SkeeballUI {
     if (f.short) {
       // ...and then rolls back down the lane to the player, off the bottom of the screen. It is
       // returned, not deleted: the path's own start is below the foul line.
-      const k = clamp((el - f.rollMs) / f.backMs, 0, 1);
+      const k = clamp((el - f.rollMs) / Math.max(1, f.backMs || 550), 0, 1);
       return this._atLength(f.path, total * (1 - k * k));
     }
 
     if (!f.sank) {
-      // NO CUP: it rolls back down the bowl into the trough at the front. THE BALL IS NEVER
-      // DELETED IN MID-AIR - the only places it leaves the screen are a cup, this trough, and the
-      // return at the player's end. Do not reintroduce a fade.
-      if (el < f.rollMs + f.backMs) {
-        const k = (el - f.rollMs) / f.backMs;
-        return this._atLength(f.path, total - (total - f.path.lipAt) * k * (2 - k));
-      }
-      const lip = this._atLength(f.path, f.path.lipAt);
-      const k = clamp((el - f.rollMs - f.backMs) / f.dropMs, 0, 1);
-      return { ...lip, y: lip.y + k * lip.r * 0.55, r: lip.r * (1 - k * 0.85) };
+      // NO HOLE: it rolls back down the bowl and comes to REST on the apron, where it stays for
+      // the rest of the rack (the reference's own behaviour). THE BALL IS NEVER DELETED IN
+      // MID-AIR - it leaves the screen by a hole or by the return at the player's end, or not at
+      // all. Do not reintroduce a fade.
+      const k = clamp((el - f.rollMs) / Math.max(1, f.backMs), 0, 1);
+      const backTotal = f.back.len[f.back.len.length - 1];
+      const q = this._atLength(f.back, backTotal * k * (2 - k));
+      // Rolling BACK spins the other way: reuse the outbound spin and unwind it.
+      return { ...q, spin: (total - backTotal * k * (2 - k)) * R.spinPerPx };
     }
 
-    // A cup: it drops in.
+    // A hole: it drops in.
     const end = this._atLength(f.path, total);
     const k = clamp((el - f.rollMs) / f.dropMs, 0, 1);
     return { ...end, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
@@ -646,23 +693,31 @@ class SkeeballUI {
   _landed() {
     const f = this.flight;
     const out = f.out;
-    // WHERE THE BALL ACTUALLY FINISHED, not where the target is. A cup: in the cup. A miss: down
-    // at the trough it just rolled into, because that is where the player's eye is. Floating a
+    // WHERE THE BALL ACTUALLY FINISHED, not where the target is. A hole: in the hole. A 10: on
+    // the apron it just rolled back to, because that is where the player's eye is. Floating a
     // "+10" over the middle of the board when the ball is somewhere else is the board announcing
     // a decision it made on your behalf, which is the whole family of complaint this game has
     // had.
-    const at = f.short ? R.lanePoint(0.06, out.x)
-      : f.sank ? R.boardPoint(out.x, Math.min(0.97, out.y))
-        : this._atLength(f.path, f.path.lipAt);
+    let at;
+    if (f.short) at = R.lanePoint(0.06, out.x);
+    else if (f.sank) at = R.boardPoint(out.x, Math.min(0.97, out.y));
+    else {
+      // The floor kept it: park the ball on the apron, visibly, until the rack ends.
+      const rest = this._restNext || { x: out.x, y: 0.035 };
+      const q = R.boardPoint(rest.x, rest.y);
+      const total = f.path.len[f.path.len.length - 1] + f.back.len[f.back.len.length - 1];
+      this.rested.push({ bx: rest.x, x: q.x, y: q.y, r: R.ballROnBoard(rest.y), spin: total * R.spinPerPx });
+      this._restNext = null;
+      at = q;
+    }
     this.flight = null;
     this.pending = null;
     this.popup = {
       t0: performance.now(),
       at,
       text: out.kind === 'short' ? t('short')
-        : out.kind === 'over' ? t('over')
-          : out.kind === 'miss' ? t('miss')
-            : `${out.scored}${out.multiplied ? '!' : ''}`,
+        : out.kind === 'miss' ? t('miss')
+          : `${out.scored}${out.multiplied ? '!' : ''}`,
     };
     this._paintHud();
     this._save();
@@ -713,6 +768,7 @@ class SkeeballUI {
 
     R.drawMarquee(c, this.game.board, this._marqueeRows());
     R.drawQueue(c, this.game.over ? 0 : this.game.ballsLeft - (this.flight ? 1 : 0));
+    for (const b of this.rested) R.drawBall(c, b.x, b.y, b.r, b.spin);
     if (!this.game.over && this.game.multTarget && !this.popup) {
       R.drawMultiplier(c, this.game.board, this.game.multTarget, 0.5 + 0.5 * Math.sin(now / 320));
     }

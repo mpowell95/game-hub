@@ -129,21 +129,30 @@ export function flickToThrow(g) {
 // the game and are shared by every board, so a machine can never be "the one where the flick works
 // differently" - only where the targets are.
 
-// THESE TWO ARE NOT JUDGED AS FRACTIONS. On its own "SHORT_BELOW = 0.28" says nothing; run through
+// THESE ARE NOT JUDGED AS FRACTIONS. On its own "SHORT_BELOW = 0.28" says nothing; run through
 // `flickToThrow` it says "a quarter of every flick you make scores exactly zero", which is what it
 // used to mean and what Matt's recordings of that build show happening over and over. The units
 // that matter are the ones a hand controls - flick SPEED - and `test.js`'s "a HAND can actually hit
 // these" block is where they are checked.
 //
-// The old pair (0.28 / 0.94) spent 34% of the power range scoring NOTHING, split between a dead
-// zone at the bottom and "Too hard!" at the top. Nothing about that is skill: a throw that falls
-// short of the 20 should trickle into the 10, which is what the real machine does.
+// "TOO HARD!" IS GONE, PERMANENTLY (2026-08-12). The old model had TWO ways to score zero: too
+// soft (fine - a limp flick rolling back is honest) and too hard, which threw the ball over the
+// back for nothing and printed "Too hard!". Matt's third set of recordings
+// (`Skeeball - terrible 1..3.MOV`) show it firing on natural snap flicks, again, after two
+// retunes - because no retune can fix it: a hard flick is the most natural gesture the game has,
+// and answering it with a zero is a punishment for playing. The real machine doesn't do it either:
+// an overthrown ball hits the back wall and comes back down the board. So that is what happens
+// now - energy past WALL_AT hits the wall and the EXCESS walks the ball back down the rings,
+// deterministically (WALL_RETURN depth units back per unit of overshoot). Slamming it flat out is
+// still the wrong play - the ball walks back past the 50 into the 30 - but it is never a zero and
+// there is no popup scolding you for throwing hard.
 export const SHORT_BELOW = 0.10;      // never made it up the ramp: rolls back, scores nothing
-export const OVER_ABOVE = 0.96;       // straight over the back of the board
+export const WALL_AT = 0.78;          // the energy at which the ball reaches the back wall
+export const WALL_RETURN = 2.0;       // depth walked back down the board per unit of overshoot
 
-// Arrival depth in board space (0 = front lip, 1 = back wall) for a given arrival energy. The
-// usable energy window maps onto the full depth of the board.
-const depthFor = (e) => (e - SHORT_BELOW) / (OVER_ABOVE - SHORT_BELOW);
+// Arrival depth in board space (0 = front lip, 1 = the back wall) for a given arrival energy.
+// May exceed 1: that overshoot is what the wall reflects (see resolveThrow).
+const depthFor = (e) => (e - SHORT_BELOW) / (WALL_AT - SHORT_BELOW);
 
 // How far off centre a given aim drifts by the time the ball reaches the board. >1 means a
 // full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
@@ -167,7 +176,7 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
  * @returns {{target: string|null, kind: string, points: number, x: number, y: number,
  *            offset: number, energy: number, bounces: number}}
  *   `target` is null only when nothing was scored; `kind` is why, for the UI's callout
- *   ('hit' | 'short' | 'over' | 'miss'); `x`/`y` are the resolved board-space landing point, handed
+ *   ('hit' | 'short' | 'miss'); `x`/`y` are the resolved board-space landing point, handed
  *   back so the renderer can animate the exact throw that was scored.
  */
 /**
@@ -218,30 +227,40 @@ export function resolveThrow(power, aim, board) {
   // Drift across the lane, folding at the rails. A wild throw can bank more than once.
   const { u, bounces } = laneOffsetAt(a, 1);
   const energy = Math.max(0, p - bounces * BOUNCE_LOSS);
-  const miss = (kind) => ({ target: null, kind, points: 0, x: u, y: kind === 'over' ? 1 : 0, offset: u, energy, bounces });
 
-  if (energy < SHORT_BELOW) return miss('short');
-  if (energy > OVER_ABOVE) return miss('over');
+  if (energy < SHORT_BELOW) {
+    return { target: null, kind: 'short', points: 0, x: u, y: 0, offset: u, energy, bounces, wall: false };
+  }
 
-  const y = clamp(depthFor(energy), 0, 1);
+  // Past the wall, the overshoot REFLECTS: the ball hits the back and walks back down the board.
+  // Deterministic - the excess IS the distance back - so a player can learn it like any other
+  // depth, and a max-strength slam lands around the 30 rather than scoring zero.
+  const raw = depthFor(energy);
+  const wall = raw > 1;
+  const y = clamp(wall ? 1 - (raw - 1) * WALL_RETURN : raw, 0, 1);
+
   // First target containing the point wins, which is why boards.js orders small-and-valuable
-  // first and the catch-all ring last.
+  // first and the catch-all ring last. On classic the zones NEST, so innermost-first IS the
+  // real machine's rule: the smallest ring you are inside is the one you fell into.
   for (const t of b.targets) {
     const dx = (u - t.x) / t.rx;
     const dy = (y - t.y) / t.ry;
     if (dx * dx + dy * dy <= 1) {
-      return { target: t.id, kind: 'hit', points: t.points, x: u, y, offset: u, energy, bounces };
+      return { target: t.id, kind: 'hit', points: t.points, x: u, y, offset: u, energy, bounces, wall };
     }
   }
-  return { target: null, kind: 'miss', points: 0, x: u, y, offset: u, energy, bounces };
+  return { target: null, kind: 'miss', points: 0, x: u, y, offset: u, energy, bounces, wall };
 }
 
-/** The (power, aim) that lands dead centre of a named target - used by tests and by the how-to
- *  screen's worked example. Inverts `depthFor`. */
+/** The (power, aim) that lands a named target - used by tests and by the how-to screen's worked
+ *  example. Inverts `depthFor`. Aims at the target's `aimY` when it has one: a NESTED zone's
+ *  centre is inside the zones stacked in front of it, so its own exclusive territory is the front
+ *  band, and that is where `aimY` points (boards.js sets it). */
 export function idealThrow(targetId, board) {
   const b = board && board.targets ? board : boardById(DEFAULT_BOARD);
   const t = b.targets.find((x) => x.id === targetId) || b.targets[b.targets.length - 1];
-  const energy = t.y * (OVER_ABOVE - SHORT_BELOW) + SHORT_BELOW;
+  const y = Number.isFinite(t.aimY) ? t.aimY : t.y;
+  const energy = y * (WALL_AT - SHORT_BELOW) + SHORT_BELOW;
   return { power: clamp(energy, 0, 1), aim: clamp(t.x / LATERAL_GAIN, -1, 1) };
 }
 
