@@ -262,8 +262,24 @@ Two faults, and the second is why fixing the first alone was not enough:
 
 Now: `_buildPath` makes ONE polyline through lane → ramp → bowl (`render.js` owns each piece,
 including `rampPoint`, so the ball rolls on the surface that is actually drawn), and the ball
-advances along it by **arc length**, decelerating from a release speed set by the throw to
-`ROLL_KEEP` of it. No duration is declared anywhere; it falls out of speed and length.
+advances along it by **arc length at a CONSTANT speed** set by the throw. No duration is declared
+anywhere; it is length / speed.
+
+**Constant, not decelerating.** A first pass had it slow to 55% by the end, for "realism". Matt:
+*"The ball slows down right before going off the ramp. Why are you messing with the speed so much?
+Just keep it constant."* He is right, and the reason is positional: the ramp sits about two thirds
+along the path, so any end-loaded deceleration is already visible exactly there, and a speed change
+mid-throw reads as a fault whatever the physics says. The only place the ball changes speed is a
+throw that falls SHORT, which has to slow to a stop in order to roll back. Measured after: 1099
+px/s min AND max across the whole roll.
+
+**And it rolls.** `drawBall` takes a `spin`, and the markings are points on a unit sphere rotated
+about the horizontal axis, so the surface travels up and over the top the way a ball rolling away
+from you does — a 2D pattern spun about the view axis would read as a ball spinning on the spot.
+The specular highlight deliberately does NOT rotate: it is a reflection of the room, so it stays
+where the light is while the surface turns under it. The angle is `distance / radius` — the plain
+rolling relation, taken from the same arc length the position comes from, so the ball can never
+look like it is skidding and there is no spin rate to tune. About 3.2 turns up the lane.
 
 Arc length rather than a world coordinate is deliberate: the bowl is drawn oversized — the
 reference cabinet does the same — so world units do not convert to screen pixels at the same rate

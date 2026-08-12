@@ -155,17 +155,19 @@ export function createHowTo(host, boardId) {
     const throwAt = (power, aim, k) => {
       const out = resolveThrow(power, aim, board);
       const kk = Math.max(0, Math.min(1, k));
+      // The tutorial's ball rolls too: same theta = distance / radius as the real one, so the
+      // pages do not show a skidding ball while the game shows a rolling one.
+      const spin = kk * 2.6 * Math.PI * 2;
       if (kk < 0.72) {
         const v = kk / 0.72;
-        let off = out.offset * v;
-        const q = R.lanePoint(v, off);
-        R.drawBall(c, q.x, q.y, q.r);
+        const q = R.lanePoint(v, R.boardXToLaneU(out.offset) * v);
+        R.drawBall(c, q.x, q.y, q.r, spin);
       } else {
         const land = R.boardPoint(out.x, Math.min(0.97, out.y));
-        const from = R.lanePoint(1, out.offset);
+        const from = R.lanePoint(1, R.boardXToLaneU(out.offset));
         const v = (kk - 0.72) / 0.28;
         R.drawBall(c, from.x + (land.x - from.x) * v, from.y + (land.y - from.y) * v,
-          R.lanePoint(1, 0).r * (1 - v * 0.25));
+          R.lanePoint(1, 0).r * (1 - v * 0.25), spin);
       }
       return out;
     };
