@@ -34,17 +34,21 @@ const SAVE_KEY = 'gamehub.skeeball.save.v1';
 // short enough that a pull-back before the flick does not bleed into it.
 const VEL_WINDOW_MS = 100;
 
-// THE ROLL. Release speed in DESIGN PIXELS PER SECOND along the ball's own path: `ROLL_V0` at no
-// energy, plus `ROLL_VE` per unit of it, so a hard throw is visibly quicker than a soft one.
-// `ROLL_KEEP` is the fraction of that speed the ball still has when it arrives - how much it slows
-// down rolling. The DURATION is not a constant at all: it falls out of speed and path length.
+// THE ROLL. Speed in DESIGN PIXELS PER SECOND along the ball's own path: `ROLL_V0` at no energy,
+// plus `ROLL_VE` per unit of it, so a hard throw is visibly quicker than a soft one. It is
+// CONSTANT for the whole flight, and the duration is just length / speed.
+//
+// It used to decelerate to 55% by the end, which I added for "realism" and which Matt correctly
+// called out: "The ball slows down right before going off the ramp. Why are you messing with the
+// speed so much? Just keep it constant." He is right - the ramp sits about two thirds along the
+// path, so the ball arrived there already visibly slower than it left the hand, and a speed change
+// in the middle of a throw reads as a fault whatever the physics says. The only place the ball
+// changes speed now is a throw that falls SHORT, which has to slow to a stop to roll back.
 //
 // These replaced a 720/260/200ms three-segment animation whose pieces covered wildly different
-// distances and had nothing to do with the throw. Matt: "None of the different speeds feel related
-// to or based on each other... It goes SO slow down the ramp, then SO fast off the jump."
-const ROLL_V0 = 700;
-const ROLL_VE = 900;
-const ROLL_KEEP = 0.55;
+// distances and had nothing to do with the throw at all.
+const ROLL_V0 = 560;
+const ROLL_VE = 720;
 const DROP_MS = 150;
 const POPUP_MS = 850;
 
@@ -492,8 +496,8 @@ class SkeeballUI {
    * units" do not convert to screen pixels at the same rate on both sides of the lip, and any
    * model that assumes they do reintroduces a speed step at exactly that seam.
    *
-   * Release speed comes from the THROW, and the ball decelerates to `ROLL_KEEP` of it like
-   * something rolling. The duration is not declared anywhere; it falls out of speed and length.
+   * Speed comes from the THROW and is CONSTANT along the whole path. The duration is not declared
+   * anywhere; it is length / speed.
    */
   _throw(power, aim) {
     if (!this.game || this.game.over) return;
@@ -510,10 +514,11 @@ class SkeeballUI {
 
     this.flight = {
       out, short, path, t0: performance.now(),
-      // Non-short: constant deceleration v0 -> ROLL_KEEP*v0, so the mean is v0*(1+KEEP)/2.
-      // Short: decelerate to a dead stop at the apex, so the mean is v0/2.
-      rollMs: (len / (v0 * (short ? 0.5 : (1 + ROLL_KEEP) / 2))) * 1000,
+      // Constant speed, so time is just distance over it. A short throw is the one exception: it
+      // decelerates to a standstill at the apex, so its mean speed is half.
+      rollMs: (len / (v0 * (short ? 0.5 : 1))) * 1000,
       dropMs: short ? 0 : DROP_MS,
+      spin0: 0,
     };
     this.flight.backMs = short ? this.flight.rollMs * 0.95 : 0;
     // Hold the points back until the ball LANDS - the engine has them already, but revealing them
@@ -557,7 +562,10 @@ class SkeeballUI {
     return { pts, len };
   }
 
-  /** Interpolate the polyline at arc length `s`. */
+  /** Interpolate the polyline at arc length `s`, and give the ball the rotation that distance
+   *  implies. Deriving the spin from the SAME arc length the position comes from is what stops the
+   *  ball ever looking like it is skidding: theta = distance / radius, and both sides of that come
+   *  from one number. */
   _atLength(path, s) {
     const { pts, len } = path;
     const total = len[len.length - 1];
@@ -567,7 +575,12 @@ class SkeeballUI {
     const span = Math.max(1e-6, len[i] - len[i - 1]);
     const k = (d - len[i - 1]) / span;
     const a = pts[i - 1], b = pts[i];
-    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, r: a.r + (b.r - a.r) * k };
+    return {
+      x: a.x + (b.x - a.x) * k,
+      y: a.y + (b.y - a.y) * k,
+      r: a.r + (b.r - a.r) * k,
+      spin: d * R.spinPerPx,
+    };
   }
 
   _ballNow(now) {
@@ -589,11 +602,9 @@ class SkeeballUI {
     }
 
     if (el < f.rollMs) {
-      // Constant deceleration from v0 to ROLL_KEEP*v0 across the whole path. No easing curve is
-      // layered on top: the polyline already carries the perspective, and stacking a hand-drawn
-      // ease on that is half of what made the old one read as three unrelated speeds.
-      const k = el / f.rollMs;
-      return this._atLength(f.path, (total * ((2 * k) - (1 - ROLL_KEEP) * k * k)) / (1 + ROLL_KEEP));
+      // Constant speed: the arc length travelled is simply linear in time. No easing curve, no
+      // deceleration, nothing layered on top - see the ROLL_V0 note.
+      return this._atLength(f.path, total * (el / f.rollMs));
     }
 
     // The drop. A ball that found a CUP disappears into it; a ball that only made the playfield
@@ -601,8 +612,8 @@ class SkeeballUI {
     const end = this._atLength(f.path, total);
     const k = clamp((el - f.rollMs) / f.dropMs, 0, 1);
     const sank = f.out.kind === 'hit' && f.out.target && !this._isCatchAll(f.out.target);
-    if (sank) return { x: end.x, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
-    return { x: end.x, y: end.y + k * 2, r: end.r, fading: k > 0.55 ? (k - 0.55) / 0.45 : 0 };
+    if (sank) return { ...end, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
+    return { ...end, y: end.y + k * 2, fading: k > 0.55 ? (k - 0.55) / 0.45 : 0 };
   }
 
   /** The board's big consolation target - a ball resting on the playfield, not sunk in anything. */
@@ -687,7 +698,7 @@ class SkeeballUI {
       const b = this._ballNow(now);
       if (b) {
         if (b.fading) c.globalAlpha = 1 - b.fading;
-        R.drawBall(c, b.x, b.y, b.r);
+        R.drawBall(c, b.x, b.y, b.r, b.spin || 0);
         c.globalAlpha = 1;
       }
       if (this._flightDone(now)) this._landed();

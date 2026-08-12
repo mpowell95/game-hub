@@ -646,17 +646,36 @@ export function drawMarquee(c, board, rows) {
 
 // --- the moving parts ---------------------------------------------------------------------------
 
+/** The ball's markings, as points on a UNIT SPHERE rather than a flat pattern. They have to be 3D
+ *  for the ball to ROLL: a 2D pattern spun about the view axis reads as a ball spinning on the
+ *  spot, not one rolling away from you up a lane. */
 const SPECKS = (() => {
   const out = []; let s = 1337;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-  for (let i = 0; i < 12; i++) {
-    const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * 0.70;
-    out.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, r: 0.09 + rnd() * 0.06 });
+  for (let i = 0; i < 22; i++) {
+    // Even-ish coverage of the whole sphere, so there is always something on the visible face.
+    const z = 1 - 2 * ((i + 0.5) / 22);
+    const rr = Math.sqrt(Math.max(0, 1 - z * z));
+    const a = i * 2.39996 + rnd() * 0.5;          // golden angle, jittered
+    out.push({ x: Math.cos(a) * rr, y: Math.sin(a) * rr, z, r: 0.10 + rnd() * 0.05 });
   }
   return out;
 })();
 
-export function drawBall(c, x, y, r) {
+/** How far the ball turns per design pixel it travels. This is just the rolling relation
+ *  theta = distance / radius - a ball that covers its own circumference turns once - so it needs
+ *  no tuning and cannot look "wrong speed" relative to the roll. */
+export const spinPerPx = 1 / (BALL_R_NEAR * DW);
+
+/**
+ * The ball. `spin` is its rotation in radians about the horizontal axis - i.e. rolling away from
+ * the camera, which is the only direction it ever goes.
+ *
+ * The specks rotate; the SPECULAR HIGHLIGHT does not. That is not an oversight: a highlight is a
+ * reflection of the room, so it stays where the light is while the surface turns underneath it.
+ * Rotating it too is the classic tell that a rolling ball is really a spinning sticker.
+ */
+export function drawBall(c, x, y, r, spin = 0) {
   if (r <= 0.4) return;
   c.save();
   c.fillStyle = 'rgba(0,0,0,0.30)';
@@ -667,8 +686,21 @@ export function drawBall(c, x, y, r) {
   g.addColorStop(1, '#A96A22');
   c.fillStyle = g;
   ellipse(c, x, y, r, r); c.fill();
-  c.fillStyle = 'rgba(120,60,10,0.30)';
-  for (const s of SPECKS) { ellipse(c, x + s.x * r, y + s.y * r, s.r * r, s.r * r); c.fill(); }
+
+  const cs = Math.cos(spin), sn = Math.sin(spin);
+  c.fillStyle = 'rgba(120,60,10,0.34)';
+  for (const s of SPECKS) {
+    // Rotate about X. Screen y is DOWN, so a point on the near face (z=+1) moving to -y is the
+    // surface travelling up the screen: the ball rolling away.
+    const py = s.y * cs - s.z * sn;
+    const pz = s.y * sn + s.z * cs;
+    if (pz <= 0.06) continue;                     // on the far side of the ball
+    // Foreshortened toward the rim, and faded as it goes over the horizon so specks do not pop.
+    c.globalAlpha = Math.min(1, pz * 3.2);
+    ellipse(c, x + s.x * r, y + py * r, s.r * r * pz, s.r * r * pz); c.fill();
+  }
+  c.globalAlpha = 1;
+
   c.fillStyle = 'rgba(255,255,255,0.75)';
   ellipse(c, x - r * 0.32, y - r * 0.38, r * 0.20, r * 0.15); c.fill();
   c.restore();
@@ -900,6 +932,6 @@ export function drawThumb(c, board, w, h, locked) {
 
 export default {
   DW, DH, sc, laneY, laneHalf, lanePoint, boardPoint, targetPoint, layoutFor,
-  rampPoint, ballROnBoard, boardXToLaneU,
+  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx,
   drawMachine, drawMarquee, drawBall, drawMultiplier, drawPopup, drawQueue, drawAimGuide, drawThumb,
 };
