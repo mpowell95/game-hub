@@ -352,26 +352,48 @@ const PLAY = {
         const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
         return { left: r.left, top: r.top, w: r.width, h: r.height };
       });
-      // A flick straight up the lane, aimed at the 40 cup's own centre. The fraction is DERIVED,
-      // not typed: idealThrow('40') gives the power and POWER_SPAN converts it to canvas-height,
-      // so a retune of either moves this probe with it instead of silently starting to test the
-      // gap between two cups. It was a hardcoded 0.278 and that is exactly what would have gone
-      // stale. Asserting a cup (>= 20) rather than "scored something" is what makes this prove
-      // the board is being played and not just touched.
-      const aimed = await page.evaluate(async () => {
-        const [{ idealThrow, POWER_SPAN }, { boardById }] = await Promise.all([
+      // A flick straight up the lane at the 40 cup's own release SPEED.
+      //
+      // Since the gesture rewrite (game.js's flickToThrow, 2026-08-11) a throw is speed-and-angle,
+      // not distance, so this probe has to produce a real VELOCITY - and it cannot do that by
+      // spacing touch-moves evenly and hoping the timing holds, because waitForTimeout jitter
+      // would then be what sets the throw. Instead each move's position is a function of MEASURED
+      // elapsed time, so the velocity is correct by construction however the event loop behaves.
+      //
+      // The speed is derived from the engine (the centre of the band that lands the 40), so a
+      // retune moves the probe with it. It was a hardcoded 0.278-of-screen DISTANCE, which is
+      // exactly the sort of constant that goes stale and starts testing the gap between two cups.
+      const GEST_MS = 150;
+      const speed = await page.evaluate(async (ms) => {
+        const [{ flickToThrow, resolveThrow }, { boardById }] = await Promise.all([
           import('/skeeball/js/game.js'), import('/skeeball/js/boards.js'),
         ]);
-        return idealThrow('40', boardById('classic')).power * POWER_SPAN;
-      });
+        const b = boardById('classic');
+        let lo = null, hi = null;
+        for (let sp = 0.2; sp <= 7; sp += 0.005) {
+          const d = (sp * ms) / 1000;
+          const f = flickToThrow({ dx: 0, dy: -d, vx: 0, vy: -sp });
+          if (f && resolveThrow(f.power, f.aim, b).target === '40') { if (lo === null) lo = sp; hi = sp; }
+        }
+        return lo === null ? null : (lo + hi) / 2;
+      }, GEST_MS);
+      if (!speed) return { ok: false, why: 'no flick speed reaches the 40 cup - the tuning is broken' };
+
       const x = g.left + g.w / 2;
-      const y0 = g.top + g.h * 0.80;
-      const dist = g.h * aimed;
+      const y0 = g.top + g.h * 0.86;
+      const pxPerSec = speed * g.h;
+      // Clamped inside the canvas: a fast flick over a full GEST_MS can run past its top edge, and
+      // CDP rejects a touch point outside the viewport.
+      const yAt = (el) => Math.max(g.top + 4, y0 - pxPerSec * el);
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
-      for (let i = 1; i <= 12; i++) {
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / 12, id: 1 }] });
-        await page.waitForTimeout(12);
+      const gStart = Date.now();
+      for (;;) {
+        const el = (Date.now() - gStart) / 1000;
+        if (el * 1000 >= GEST_MS) break;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: yAt(el), id: 1 }] });
+        await page.waitForTimeout(10);
       }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: yAt((Date.now() - gStart) / 1000), id: 1 }] });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 
       // The autosave lands in _landed(), i.e. AFTER the ball finishes its flight - poll for it
@@ -389,7 +411,7 @@ const PLAY = {
       }
       if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
       if ((st.score | 0) < 20) {
-        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a 30%-of-screen flick should land in a cup, not the catch-all` };
+        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a flick at the 40 cup's own speed should land in a cup, not the catch-all` };
       }
       if ((st.ball | 0) < 2) return { ok: false, why: 'the throw scored but the rack never advanced' };
       return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };

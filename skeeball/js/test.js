@@ -2,7 +2,7 @@
 // Run: node skeeball/js/test.js  (also in run-all-tests.mjs). No DOM, no canvas.
 
 import { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER,
-  POWER_SPAN, AIM_SPAN, SHORT_BELOW, OVER_ABOVE } from './game.js';
+  flickToThrow, FLICK, SHORT_BELOW, OVER_ABOVE } from './game.js';
 import { BOARDS, boardById, nextBoard, multTargetsFor, DEFAULT_BOARD } from './boards.js';
 
 let fail = 0;
@@ -100,68 +100,132 @@ console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls 
     ['20', '30', '40', '50'].every((id) => seq.includes(id)));
 }
 
-console.log('\n-- [KNOWN-BUG PROBE] a thumb can actually hit these (Matt: "SKEEBALL IS TERRIBLE") --');
+console.log('\n-- the gesture: a swipe becomes a throw (Matt: "the flick is really bad and unnatural") --');
 {
-  // THE TEST THAT WAS MISSING. Every previous tuning of this game was judged in board-space
-  // fractions, which say nothing about whether a person can hit anything. Twice in a row that
-  // produced a build nobody could play: first the cups tiled and every throw sank ("the balls are
-  // guided in"), then the fix made each cup a 21px flick window and Matt's own recordings
-  // (reference/skeeball/Skeeball 2.MOV, Skeeball 3.MOV) show six balls for 40 points with "Too
-  // hard!" over and over.
+  // A REALISTIC GESTURE, parameterised the way a hand actually makes one: you flick at some speed
+  // for some duration, so the distance you cover is speed x duration rather than a free variable.
+  // 130ms is an ordinary thumb flick.
+  const flick = (speed, deg = 0, ms = 130) => {
+    const a = (deg * Math.PI) / 180;
+    const d = speed * (ms / 1000);
+    return flickToThrow({
+      dx: d * Math.sin(a), dy: -d * Math.cos(a),
+      vx: speed * Math.sin(a), vy: -speed * Math.cos(a),
+    });
+  };
+
+  ok('a flick is a throw', !!flick(3.0));
+  ok('a HARDER flick throws harder - speed is what power means now',
+    flick(4.2).power > flick(3.0).power && flick(3.0).power > flick(1.6).power);
+  ok('a slow deliberate push still throws, but gently (this is the old model\'s ONLY input)',
+    flickToThrow({ dx: 0, dy: -0.5, vx: 0, vy: -0.2 }).power < flick(3.0).power);
+  // The four failures the rewrite is FOR. Each one is a [KNOWN-BUG PROBE] against the old
+  // distance-from-touch-down model, and each would pass trivially under it.
+  ok('[KNOWN-BUG PROBE] the same DISTANCE thrown fast beats the same distance thrown slow',
+    flickToThrow({ dx: 0, dy: -0.4, vx: 0, vy: -3.6 }).power
+      > flickToThrow({ dx: 0, dy: -0.4, vx: 0, vy: -0.9 }).power + 0.2);
+  ok('[KNOWN-BUG PROBE] you can WIND UP: pulling back first does not weaken the flick',
+    // net displacement is small because the hand went down before it went up; only the release
+    // window counts, so this must still be a strong throw.
+    flickToThrow({ dx: 0, dy: -0.12, vx: 0, vy: -3.6 }).power > 0.5);
+  ok('[KNOWN-BUG PROBE] aim is the swipe ANGLE, so it does not change with how hard you throw',
+    Math.abs(flick(1.8, 12).aim - flick(4.4, 12).aim) < 0.001);
+  ok('[KNOWN-BUG PROBE] yanking the finger back at the end is a cancelled throw, not a hard one',
+    flickToThrow({ dx: 0, dy: -0.4, vx: 0, vy: +3.0 }) === null);
+  ok('a tap is not a throw', flickToThrow({ dx: 0, dy: -0.004, vx: 0, vy: -0.02 }) === null);
+  ok('and neither is nonsense', flickToThrow(null) === null
+    && flickToThrow({ dx: NaN, dy: -1, vx: 0, vy: -1 }) === null);
+  ok('a swipe left aims left, a swipe right aims right',
+    flick(3.0, -14).aim < 0 && flick(3.0, 14).aim > 0);
+  ok('every flick in the usable speed range produces a legal throw',
+    Array.from({ length: 200 }, (_, i) => FLICK.MIN_SPEED + (i / 200) * (FLICK.MAX_SPEED - FLICK.MIN_SPEED))
+      .every((sp) => { const f = flick(sp); return f && f.power >= 0 && f.power <= 1; }));
+}
+
+console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBALL IS TERRIBLE") --');
+{
+  // THE TEST THAT WAS MISSING, now in the units the player actually controls.
   //
-  // So: convert the whole model into the pixels a thumb has to travel on a real phone, and assert
-  // on THAT. These four constants are the contract between game.js and ui.js; if either moves,
-  // this block is what notices.
-  const H = 852, W = 393;   // an iPhone 15. POWER_SPAN/AIM_SPAN are the REAL ones, imported.
-  const px = (share) => share * POWER_SPAN * H;
+  // This game has been mistuned twice, and both times because its difficulty was judged in
+  // board-space fractions - numbers that say nothing about whether a person can hit anything.
+  // First the cups tiled and every throw sank ("the balls are guided in"); then the fix made each
+  // cup a sliver and six balls scored 40 points.
+  //
+  // So: sweep the thing a hand varies - FLICK SPEED - and check each cup owns a band of it wide
+  // enough to aim for. A person can repeat a flick speed to roughly +-15%, so a cup whose band is
+  // narrower than that is a coin toss however good the numbers look in board space.
+  const MS = 130;
+  const throwAt = (speed, deg = 0) => {
+    const a = (deg * Math.PI) / 180;
+    const d = speed * (MS / 1000);
+    const f = flickToThrow({
+      dx: d * Math.sin(a), dy: -d * Math.cos(a),
+      vx: speed * Math.sin(a), vy: -speed * Math.cos(a),
+    });
+    return f ? resolveThrow(f.power, f.aim, classic) : { kind: 'none', target: null, points: 0 };
+  };
 
-  const share = {};
-  for (let p = 0; p <= 1; p += 0.0005) {
-    const r = resolveThrow(p, 0, classic);
+  const band = {};
+  const LO = 0.2, HI = 7.0, STEP = 0.002;
+  for (let sp = LO; sp <= HI; sp += STEP) {
+    const r = throwAt(sp);
     const k = r.kind === 'hit' ? r.target : r.kind;
-    share[k] = (share[k] || 0) + 0.0005;
+    band[k] = (band[k] || 0) + STEP;
   }
   for (const id of ['20', '30', '40', '50']) {
-    const w = px(share[id] || 0);
-    ok(`the ${id} is a flick window a thumb can repeat: ${Math.round(w)}px (need >= 40)`, w >= 40);
+    // As a percentage of the speed you need to reach that cup, which is the only scale a hand
+    // understands: "about 15% harder than the last one".
+    const mid = (() => {
+      for (let sp = LO; sp <= HI; sp += 0.01) if (throwAt(sp).target === id) return sp;
+      return NaN;
+    })();
+    const pct = (100 * (band[id] || 0)) / mid;
+    ok(`the ${id} owns ${pct.toFixed(0)}% of the flick speed it takes to reach it (need >= 12%)`, pct >= 12);
   }
-  ok(`a whiff costs you a ball only on a genuinely feeble flick: ${Math.round(px(share.short || 0))}px (need <= 70)`,
-    px(share.short || 0) <= 70);
-  ok(`"Too hard!" needs a real heave, not a normal throw: ${Math.round(px(share.over || 0))}px (need <= 40)`,
-    px(share.over || 0) <= 40);
-  const dead = px((share.short || 0) + (share.over || 0));
-  ok(`scoring ZERO is a small slice of the whole flick range: ${Math.round(dead)}px of ${Math.round(px(1))}px (need < 20%)`,
-    dead < px(1) * 0.20);
+  const dead = (band.short || 0) + (band.none || 0);
+  ok(`throwing too softly to score wastes a narrow slice of the speed range (${dead.toFixed(2)} of ${(HI - LO).toFixed(1)})`,
+    dead < (HI - LO) * 0.22);
+  ok(`"Too hard!" needs a genuinely hard flick (${(band.over || 0).toFixed(2)} wide, and only at the top)`,
+    (band.over || 0) > 0 && throwAt(FLICK.MAX_SPEED * 0.86).kind !== 'over');
 
-  // ...and the same in the other axis. The 20 used to allow 18px of sideways wander, so "throw it
-  // straight" was not a thing a thumb could do.
-  for (const id of ['20', '30', '40', '50']) {
-    const { power } = idealThrow(id, classic);
+  // Sideways, in DEGREES of swipe angle - also the units of the hand. Measured at the CENTRE of
+  // each cup's speed band, not at its leading edge: a target is an ellipse, so sampling just
+  // inside the near rim reports almost no sideways room and blames the aim axis for what is
+  // really the depth axis. (It did exactly that on the first run of this block.)
+  const centreSpeed = (id) => {
     let lo = null, hi = null;
-    for (let a = -1; a <= 1; a += 0.001) {
-      if (resolveThrow(power, a, classic).target === id) { if (lo === null) lo = a; hi = a; }
+    for (let sp = LO; sp <= HI; sp += 0.005) {
+      if (throwAt(sp).target === id) { if (lo === null) lo = sp; hi = sp; }
     }
-    const w = (hi - lo) * AIM_SPAN * W;
-    ok(`the ${id} allows real sideways wander: ${Math.round(w)}px (need >= 35)`, w >= 35);
+    return lo === null ? NaN : (lo + hi) / 2;
+  };
+  for (const id of ['20', '30', '40', '50']) {
+    const mid = centreSpeed(id);
+    let lo = null, hi = null;
+    for (let deg = -40; deg <= 40; deg += 0.05) {
+      if (throwAt(mid, deg).target === id) { if (lo === null) lo = deg; hi = deg; }
+    }
+    ok(`the ${id} tolerates +-${(((hi - lo) / 2) || 0).toFixed(1)} degrees of swipe angle (need >= 4)`,
+      (hi - lo) / 2 >= 4);
   }
 
-  // A whole rack, thrown by someone with an ordinary thumb. This is the number Matt actually
-  // experiences, and the build he recorded scored about 60.
+  // And the whole rack, thrown by a hand with ordinary jitter: +-12% on speed, +-4 degrees on
+  // angle. This is the number Matt experiences. The build he recorded scored about 60.
   let s = 4242;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
   const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const aimFor = centreSpeed('40');
   let sum = 0, zeros = 0;
   const N = 3000;
   for (let i = 0; i < N; i++) {
-    const { power, aim } = idealThrow('40', classic);
-    const r = resolveThrow(power + gauss() * 35 / (POWER_SPAN * H), aim + gauss() * 25 / (AIM_SPAN * W), classic);
+    const r = throwAt(aimFor * (1 + gauss() * 0.12), gauss() * 4);
     sum += r.points; if (!r.points) zeros++;
   }
   const perRack = (sum / N) * BALLS_PER_RACK;
-  ok(`a casual player (+-35px power, +-25px aim) averages a real rack: ${Math.round(perRack)} (need 150-400)`,
-    perRack >= 150 && perRack <= 400);
-  ok(`and almost never whiffs entirely: ${(100 * zeros / N).toFixed(1)}% of throws (need < 4%)`,
-    zeros / N < 0.04);
+  ok(`a casual player (+-12% speed, +-4 degrees) averages a real rack: ${Math.round(perRack)} (need 150-450)`,
+    perRack >= 150 && perRack <= 450);
+  ok(`and almost never whiffs entirely: ${(100 * zeros / N).toFixed(1)}% of throws (need < 5%)`,
+    zeros / N < 0.05);
 }
 
 console.log('\n-- banking off a rail --');

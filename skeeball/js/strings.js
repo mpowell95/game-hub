@@ -6,7 +6,7 @@
 export const STRINGS = {
   en: {
     title: 'Skeeball',
-    tagline: 'Flick the ball up the lane. The far rings pay more.',
+    tagline: 'Flick the ball up the lane. Faster goes further, and the far cups pay more.',
 
     // setup
     difficulty: 'Opponent',
@@ -55,8 +55,8 @@ export const STRINGS = {
     ht_first: 'First page',
     ht_next: 'Last page',
     ht_flick: 'Flick up the lane to throw.\nThe ball rolls up the ramp and drops into a cup.',
-    ht_power: 'How FAR you flick sets the power.\nA short one trickles into the 10, a long one reaches the 50.\nToo hard and it sails over the back.',
-    ht_aim: 'Flick on a diagonal to aim.\nThe two 100 cups sit outside the ring, so they take a deliberate angle.',
+    ht_power: 'How FAST you flick sets the power.\nA gentle one trickles into the 10, a quick one reaches the 50.\nToo hard and it sails over the back.',
+    ht_aim: 'The ANGLE of your flick is your aim.\nThe two 100 cups sit wide at the back, so they need a fast throw AND a real diagonal.',
     ht_badge: 'The blue x3 badge moves after every throw.\nLand in the cup it is sitting on and that score triples.',
     ht_rack: 'Nine balls, one rack.\nBeat a machine\'s target score and the next machine unlocks.',
     too_hard: 'Too hard!',
@@ -66,7 +66,7 @@ export const STRINGS = {
     // the old static help sheet's lines. Kept because the strings themselves are still accurate
     // and cheap, and removing a key is how a stale reference becomes a blank string.
     help_goal: 'Land the ball in the highest ring you can.',
-    help_flick: 'Flick up the lane: how FAR you flick sets the power, the angle sets the aim.',
+    help_flick: 'Flick up the lane: how FAST you flick sets the power, the angle of the flick sets the aim.',
     help_rings: 'The rings run 10 at the front to 50 at the back. Too soft and it rolls back for nothing, too hard and it flies over for 10.',
     help_cups: 'The two 100 cups sit in the far corners. Flick hard AND wide, or bank off a rail.',
     help_mult: 'The blue x3 badge moves every throw. Hit the target it is sitting on and the score triples.',
@@ -94,7 +94,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Skeeball',
-    tagline: 'Lanza la bola por la pista. Los aros del fondo valen más.',
+    tagline: 'Lanza la bola por la pista. Mas rapido llega mas lejos, y el fondo vale más.',
 
     difficulty: 'Rival',
     diff_easy: 'Fácil',
@@ -138,8 +138,8 @@ export const STRINGS = {
     ht_first: 'Primera pagina',
     ht_next: 'Ultima pagina',
     ht_flick: 'Desliza hacia arriba para lanzar.\nLa bola sube por la rampa y cae en un vaso.',
-    ht_power: 'Cuanto deslizas marca la fuerza.\nPoco y se queda en el 10, mucho y llega al 50.\nDemasiado y se va por detras.',
-    ht_aim: 'Desliza en diagonal para apuntar.\nLos dos vasos de 100 estan fuera del aro, asi que piden un angulo claro.',
+    ht_power: 'La VELOCIDAD del deslizamiento marca la fuerza.\nSuave y se queda en el 10, rapido y llega al 50.\nDemasiado y se va por detras.',
+    ht_aim: 'El ANGULO del deslizamiento es tu punteria.\nLos dos vasos de 100 estan al fondo y a los lados: piden fuerza Y una diagonal clara.',
     ht_badge: 'La chapa azul x3 cambia de sitio en cada lanzamiento.\nAcierta el vaso donde este y ese valor se triplica.',
     ht_rack: 'Nueve bolas, una tanda.\nSupera la puntuacion objetivo y se desbloquea la siguiente maquina.',
     too_hard: 'Demasiado fuerte',
@@ -147,7 +147,7 @@ export const STRINGS = {
     score: 'PUNTOS',
 
     help_goal: 'Mete la bola en el aro más alto que puedas.',
-    help_flick: 'Desliza hacia arriba: cuánto deslizas marca la fuerza, el ángulo marca la puntería.',
+    help_flick: 'Desliza hacia arriba: la velocidad marca la fuerza, el ángulo marca la puntería.',
     help_rings: 'Los aros van del 10 delante al 50 al fondo. Si te quedas corto vuelve sin puntos, y si te pasas sale por arriba y solo son 10.',
     help_cups: 'Las dos copas de 100 están en las esquinas del fondo. Lanza fuerte Y abierto, o rebota en una banda.',
     help_mult: 'La chapa azul x3 cambia de sitio en cada lanzamiento. Acierta donde esté y la puntuación se triplica.',

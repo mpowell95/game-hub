@@ -27,14 +27,100 @@ import { boardById, multTargetsFor, nextBoard, DEFAULT_BOARD } from './boards.js
 
 export const BALLS_PER_RACK = 9;          // the classic skeeball rack
 
-// FLICK CALIBRATION. These live HERE, not in ui.js, because they are half of the throw model:
-// SHORT_BELOW/OVER_ABOVE and every target's `ry` only mean something multiplied through them.
-// ui.js imports them to read the gesture, and js/test.js imports them to convert the whole model
-// back into the pixels a thumb has to travel. They were in ui.js when both bad tunings shipped,
-// which is exactly why nothing could check them together.
-export const POWER_SPAN = 0.55;   // a flick up 55% of the canvas height is full power
-export const AIM_SPAN = 0.42;     // ...and 42% across is full aim
 export const MULTIPLIER = 3;              // the reference's badge is always x3
+
+// --- the gesture ------------------------------------------------------------------------------
+//
+// HOW A SWIPE BECOMES A THROW. Matt, 2026-08-11: "The flick is really bad... it's just really bad
+// and unnatural. Can you look into what other games do? Like game pigeon's beer pong game or other
+// darts games?"
+//
+// Those games were the answer. Cup Pong keys on how FAST you swipe ("cup 2 requires a medium speed
+// swipe, cup 4 the same direction with a slightly faster swipe"); mobile darts games map "the speed
+// and angle of your finger" to the throw. Neither uses the thing this game used, which was:
+//
+//     power = total vertical distance from the touch-down point, over the whole gesture
+//     aim   = total horizontal distance from that same point
+//
+// Four things follow from that, and together they are the "unnatural":
+//
+//   1. SPEED DID NOTHING. A slow, deliberate drag to the top threw exactly as hard as a snap
+//      flick. Throwing is an act of acceleration; a model that ignores acceleration cannot feel
+//      like throwing however well its numbers are tuned.
+//   2. YOU COULD NOT WIND UP. Pulling back before the throw REDUCED power, because power was net
+//      displacement from where you first touched. The natural motion actively hurt you.
+//   3. AIM WAS OFFSET, NOT ANGLE. Drifting 30px right is 4 degrees on a long flick and 17 on a
+//      short one, but both produced the same aim. So the same visible swipe direction sent the
+//      ball somewhere different depending on how hard you threw - the ball did not go where you
+//      pointed, which is the single most disorienting thing a throwing game can do.
+//   4. RELEASE WAS NOT A MOMENT. The value at pointerup was used even if your finger had been
+//      parked for a second. Android's VelocityTracker exists precisely because only the last
+//      ~100ms of a gesture describes a fling.
+//
+// So the gesture is now speed-and-angle, sampled over a short window at release. `flickToThrow`
+// is the whole mapping and it is PURE, so `test.js` can drive realistic gestures through it - the
+// gesture is half of the difficulty and it used to be the half no test could see.
+export const FLICK = {
+  /** Release speeds, in CANVAS HEIGHTS PER SECOND, so the feel is identical on any phone.
+   *  Rough human calibration on an 852px screen: a gentle flick is ~1.5, an ordinary one ~2.8,
+   *  a hard one ~4.5. Below MIN it was not a throw at all. */
+  MIN_SPEED: 0.9,
+  MAX_SPEED: 5.0,
+  /** How far a full-scale swipe travels, in canvas heights. Only the distance TERM uses this. */
+  REACH: 0.55,
+  /** How much of the power comes from SPEED rather than distance. Speed dominates - that is the
+   *  whole point - but distance is deliberately not zero: a long controlled push should still be
+   *  a real throw, which is what keeps the game precise rather than twitchy. */
+  SPEED_W: 0.65,
+  /** Swipe angle off vertical, in radians, for full aim (~31 degrees). Constant regardless of how
+   *  hard you throw, which is fix 3 above.
+   *
+   *  This number IS the sideways difficulty, and the units to judge it in are degrees of wander a
+   *  hand can hold: tolerance = (cup rx / LATERAL_GAIN) x MAX_ANGLE. At 0.42 the 50 allowed +-4.0
+   *  degrees and the 100s wanted a 16-degree diagonal, which measured out as a coin toss on the
+   *  back two cups. At 0.55 the cups allow +-5.2 to +-7.4 degrees and a 100 asks for a deliberate
+   *  20-degree diagonal - still clearly a skill shot, but one you can aim at. */
+  MAX_ANGLE: 0.55,
+  /** Below this the gesture is discarded rather than thrown - a tap, or a stray touch. */
+  MIN_POWER: 0.05,
+};
+
+/**
+ * A swipe -> a throw. PURE.
+ *
+ * All four inputs are in CANVAS HEIGHTS (and heights/second), including the x ones: normalising
+ * both axes by the same number is what makes `atan2` below a real screen angle rather than a
+ * number that happens to grow when you move sideways.
+ *
+ * @param {{dx:number, dy:number, vx:number, vy:number}} g
+ *   `d*` is the whole gesture's displacement, `v*` the velocity over the last few samples before
+ *   release. Screen axes, so UP is NEGATIVE y.
+ * @returns {{power:number, aim:number, speed:number, angle:number}|null} null = not a throw.
+ */
+export function flickToThrow(g) {
+  if (!g || ![g.dx, g.dy, g.vx, g.vy].every(Number.isFinite)) return null;
+  const speed = Math.hypot(g.vx, g.vy);
+  const dist = Math.hypot(g.dx, g.dy);
+  const movingUp = -g.vy > 0;
+  const wentUp = -g.dy > 0;
+
+  // A gesture with real speed must be travelling UP at the moment of release: yanking the finger
+  // back down at the end is a cancelled throw, not a hard one. A gesture with no speed left falls
+  // back to where it went overall, so a slow deliberate push still throws (gently).
+  if (speed >= FLICK.MIN_SPEED ? !movingUp : !wentUp) return null;
+
+  const sTerm = clamp((speed - FLICK.MIN_SPEED) / (FLICK.MAX_SPEED - FLICK.MIN_SPEED), 0, 1);
+  const dTerm = clamp(dist / FLICK.REACH, 0, 1);
+  const power = clamp(FLICK.SPEED_W * sTerm + (1 - FLICK.SPEED_W) * dTerm, 0, 1);
+  if (power < FLICK.MIN_POWER) return null;
+
+  // The angle of the swipe at release (or of the whole gesture, if it ended stationary).
+  const useVel = speed >= FLICK.MIN_SPEED;
+  const ax = useVel ? g.vx : g.dx;
+  const ay = useVel ? -g.vy : -g.dy;
+  const angle = Math.atan2(ax, Math.max(1e-6, ay));
+  return { power, aim: clamp(angle / FLICK.MAX_ANGLE, -1, 1), speed, angle };
+}
 
 // --- the throw model ------------------------------------------------------------------------
 //
@@ -43,20 +129,15 @@ export const MULTIPLIER = 3;              // the reference's badge is always x3
 // the game and are shared by every board, so a machine can never be "the one where the flick works
 // differently" - only where the targets are.
 
-// THESE FOUR NUMBERS ARE IN FLICK-PIXELS, and that is the only way to judge them. On its own,
-// "SHORT_BELOW = 0.28" says nothing; multiplied through ui.js's POWER_SPAN and a phone's screen
-// height it says "28% of every flick you make scores exactly zero", which is what it used to mean
-// and which is what Matt's recordings of that build show happening over and over.
+// THESE TWO ARE NOT JUDGED AS FRACTIONS. On its own "SHORT_BELOW = 0.28" says nothing; run through
+// `flickToThrow` it says "a quarter of every flick you make scores exactly zero", which is what it
+// used to mean and what Matt's recordings of that build show happening over and over. The units
+// that matter are the ones a hand controls - flick SPEED - and `test.js`'s "a HAND can actually hit
+// these" block is where they are checked.
 //
-//     px = value * POWER_SPAN(0.55) * screenHeight(852 on an iPhone 15)
-//
-//   SHORT_BELOW 0.10 ->  47px   a flick shorter than this genuinely was not a throw
-//   OVER_ABOVE  0.96 -> 450px   a heave more than half the screen long: rare, and earned
-//   usable band          403px  which the four cups and the 10 divide up (js/boards.js)
-//
-// The old pair (0.28 / 0.94) spent 34% of the whole range on scoring NOTHING, split between a
-// dead zone at the bottom and "Too hard!" at the top. Nothing about that is skill: a throw that
-// falls short of the 20 should trickle into the 10, which is what the real machine does.
+// The old pair (0.28 / 0.94) spent 34% of the power range scoring NOTHING, split between a dead
+// zone at the bottom and "Too hard!" at the top. Nothing about that is skill: a throw that falls
+// short of the 20 should trickle into the 10, which is what the real machine does.
 export const SHORT_BELOW = 0.10;      // never made it up the ramp: rolls back, scores nothing
 export const OVER_ABOVE = 0.96;       // straight over the back of the board
 
@@ -68,10 +149,9 @@ const depthFor = (e) => (e - SHORT_BELOW) / (OVER_ABOVE - SHORT_BELOW);
 // full-tilt flick reaches the rail and banks off it, which is a legitimate (if lossy) way to line
 // up a wide target.
 //
-// Also flick-pixels, against ui.js's AIM_SPAN (0.42) and a 393px-wide phone: staying inside the
-// 20 cup (rx 0.27) allows 0.27/1.15 * 165 = 39px of sideways wander, and a 100 (x +-0.72,
-// rx 0.115) needs a deliberate 87-120px diagonal. At the old 1.35/0.30 pairing the 20 allowed
-// 18px, so "throw it straight" was not something a thumb could actually do.
+// Judged in DEGREES of swipe angle, via FLICK.MAX_ANGLE: staying inside the 20 cup (rx 0.27)
+// allows +-7.3 degrees of wander and a 100 asks for a deliberate 20-degree diagonal. Crucially
+// those tolerances no longer change with how hard you throw - see FLICK.MAX_ANGLE's note.
 export const LATERAL_GAIN = 1.15;
 const BOUNCE_LOSS = 0.13;      // energy a wall bounce costs, per bounce
 

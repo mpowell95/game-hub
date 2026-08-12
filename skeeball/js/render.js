@@ -698,23 +698,31 @@ export function drawQueue(c, n) {
   for (let i = 0; i < Math.min(n, 9); i++) drawBall(c, 0.034 * DW, (0.960 - i * 0.036) * DH, r);
 }
 
-/** The aim/power guide, shown while a flick is in progress. OUR OWN ADDITION - no reference shows
- *  its input (SPEC.md) - and it runs the SAME fold maths the engine will apply, so it cannot lie
- *  about where the ball is going. */
-export function drawAimGuide(c, power, aim) {
-  const p = Math.max(0, Math.min(1, power));
+/**
+ * The aim guide: a dashed line up the lane showing WHERE the throw is pointed.
+ *
+ * It shows direction and nothing else, and that is a deliberate narrowing. It used to be a
+ * predicted landing path plus a live power bar, which made sense when power was the distance you
+ * had dragged so far - the bar was reading a number you had already committed to. Since the
+ * gesture became speed-and-angle (game.js's flickToThrow) that is no longer true: your power is
+ * decided at the instant you let go, so a live bar shows a value that is not the one about to be
+ * used. A gauge that is wrong at the only moment that matters is worse than no gauge.
+ *
+ * The ANGLE is different - it is stable, it is the thing you steer continuously, and it is the
+ * axis a player most needs help with (the 100s are pure aim). So that is what is drawn, and it
+ * runs the ENGINE'S OWN fold maths (LATERAL_GAIN, imported, never copied) so it cannot promise a
+ * line the ball will not take.
+ */
+export function drawAimGuide(c, aim) {
   const a = Math.max(-1, Math.min(1, aim));
   c.save();
-  c.globalAlpha = 0.85;
-  c.strokeStyle = 'rgba(255,255,255,0.6)';
+  c.globalAlpha = 0.8;
+  c.strokeStyle = 'rgba(255,240,210,0.62)';
   c.lineWidth = 3.5;
   c.setLineDash([10, 9]);
   c.beginPath();
-  for (let i = 0; i <= 24; i++) {
-    const v = (i / 24) * Math.min(1, 0.25 + p);
-    // LATERAL_GAIN comes from the engine, never a copy of it. This line said `1.35` while the
-    // engine used 1.15, so the dashed path quietly promised a landing spot the ball would not
-    // take - exactly the thing this guide's header claims it cannot do.
+  for (let i = 0; i <= 26; i++) {
+    const v = i / 26;
     let u = a * LATERAL_GAIN * v;
     while (Math.abs(u) > 1) u = Math.sign(u) * (2 - Math.abs(u));
     const q = lanePoint(v, u);
@@ -722,18 +730,6 @@ export function drawAimGuide(c, power, aim) {
   }
   c.stroke();
   c.setLineDash([]);
-  const barH = 0.20 * DH, barW = 0.050 * DW;
-  const bx = 0.135 * DW, by = 0.955 * DH - barH;
-  c.fillStyle = 'rgba(0,0,0,0.55)';
-  c.beginPath(); c.roundRect(bx, by, barW, barH, barW / 2); c.fill();
-  c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 2;
-  c.beginPath(); c.roundRect(bx, by, barW, barH, barW / 2); c.stroke();
-  const fill = c.createLinearGradient(0, by + barH, 0, by);
-  fill.addColorStop(0, '#5FD08A'); fill.addColorStop(0.6, '#F2B705'); fill.addColorStop(1, '#FF6A2B');
-  c.fillStyle = fill;
-  c.beginPath();
-  c.roundRect(bx + 3, by + barH - (barH - 6) * p - 3, barW - 6, (barH - 6) * p, (barW - 6) / 2);
-  c.fill();
   c.restore();
 }
 

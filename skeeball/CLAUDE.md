@@ -35,13 +35,16 @@ Both halves were real and both are fixed, each with its own note at the site:
 | The board got 33% of the height, an empty lane got 44% | `render.js`'s `Y` anchors |
 | The aim guide used `1.35` while the engine used a different gain — it could lie | `render.js`'s `drawAimGuide` |
 
-**The lesson worth keeping** is not any one number: it is that this game's difficulty was twice
-set in board-space fractions, which say nothing about whether a person can hit anything. The
-guard is `test.js`'s `[KNOWN-BUG PROBE] a thumb can actually hit these` block, which converts the
-whole model — target sizes, band edges, POWER_SPAN, AIM_SPAN — into the pixels a thumb has to
-travel on a 393x852 phone and fails under 40px. It goes red on the exact build Matt recorded.
-`POWER_SPAN`/`AIM_SPAN` live in `game.js` for this reason: while they sat in `ui.js` no test
-could see both halves of the model at once.
+A third round followed, on the gesture itself — *"the flick is really bad and unnatural"* — and it
+turned out to be the deepest of the three: the swipe was read as DISTANCE when every game in the
+genre reads it as SPEED AND ANGLE. That rewrite is "Where those two numbers come from" below.
+
+**The lesson worth keeping** is not any one number: this game's difficulty was set three times in
+units nobody plays in. Board-space fractions say nothing about whether a person can hit anything,
+and neither does a distance in pixels once the gesture stopped being about distance. The guard is
+`test.js`'s two `[KNOWN-BUG PROBE]` blocks, which express the WHOLE model — target sizes, band
+edges, and the gesture mapping — in the units a hand controls: percent of flick speed, and degrees
+of swipe angle. They go red on the exact build Matt recorded.
 
 Matt's one instruction beyond "clone it": *"it's ok if it's a little more cartoony. Like our other
 games."* That licence was spent on **saturation and contrast only** — every hue and every position
@@ -80,12 +83,51 @@ skeeball/index.html      standalone host (same init() as in-hub), name-gated bef
 
 | Input | Range | Meaning |
 |---|---|---|
-| `power` | 0..1 | how far the flick travelled, as a fraction of `POWER_SPAN` (55%) of the canvas height |
-| `aim` | -1..1 | how far sideways, as a fraction of `AIM_SPAN` (42%) of its width |
+| `power` | 0..1 | how hard it was thrown |
+| `aim` | -1..1 | how far off straight it arrives |
 
-`POWER_SPAN` and `AIM_SPAN` are exported from **`game.js`**, not `ui.js`. They are half of the
-model: a target's size in board space is meaningless until multiplied through them, and while they
-lived in the UI file no test could check the two halves together. Both bad tunings shipped that way.
+### Where those two numbers come from: `flickToThrow`
+
+Matt, 2026-08-11: *"The flick is really bad... it's just really bad and unnatural. Can you look
+into what other games do? Like game pigeon's beer pong game or other darts games?"*
+
+Those games are the answer, and they agree with each other: **Cup Pong keys on how FAST you swipe**
+(guides describe cup 2 as "a medium speed swipe" and cup 4 as "the same direction with a slightly
+faster swipe"), and mobile darts games map *"the speed and angle of your finger"* to the throw.
+This game did neither. It used:
+
+```
+power = total vertical distance from the touch-down point, over the whole gesture
+aim   = total horizontal distance from that same point
+```
+
+Four consequences, and together they ARE the "unnatural":
+
+1. **Speed did nothing.** A slow deliberate drag to the top threw exactly as hard as a snap flick.
+   Throwing is an act of acceleration; a model that ignores acceleration cannot feel like throwing
+   however well its numbers are tuned.
+2. **You could not wind up.** Pulling back first REDUCED power, because power was net displacement
+   from where you first touched. The natural motion actively hurt you.
+3. **Aim was offset, not angle.** Drifting 30px right is 4 degrees on a long flick and 17 on a
+   short one, and both produced the same aim - so the same visible swipe direction sent the ball
+   somewhere different depending on how hard you threw. Of the four this is the worst: the ball did
+   not go where you pointed.
+4. **Release was not a moment.** The value at pointerup was used even if the finger had been parked
+   for a second. Android's `VelocityTracker` uses a ~100ms window precisely because only the end of
+   a gesture describes a fling.
+
+`game.js`'s **`flickToThrow(dx, dy, vx, vy)`** replaces all of it, and it is PURE - `ui.js` only
+turns pointer events into those four numbers, and `test.js` drives realistic gestures straight
+through it. Power is mostly release SPEED (`SPEED_W` 0.65) with the rest from distance, so a long
+controlled push is still a real throw; aim is the swipe ANGLE, so it no longer changes with power.
+Speeds are in **canvas heights per second** and the angle in radians, so the feel is identical on
+any phone.
+
+**The units to judge any of this in are the ones a hand controls.** `test.js` reports each cup as a
+percentage of the flick speed needed to reach it (14-24%, against a human repeatability of about
++-15%) and as degrees of swipe angle (+-5.1 to +-7.3). Board-space fractions say nothing about
+whether a person can hit anything, and this game has now been mistuned twice by people reading
+them - see the rebuild table above.
 
 **There is no random scatter on a player's throw, deliberately.** The player is judging a flick; a
 hidden dice roll on top of that judgement would make practice pointless. It also means the
@@ -302,6 +344,14 @@ The test asserts a real gap between consecutive cups AND the observable conseque
 power straight down the middle falls OUT of the stack into the 10 several times rather than sliding
 seamlessly from one cup to the next. If that goes red, the catch areas have started overlapping
 again and the game is a gimme.
+
+**The other two probe blocks are the gesture's.** "a swipe becomes a throw" pins each of the four
+failures the gesture rewrite fixed — a fast swipe must beat a slow one over the same distance, a
+wind-up must not cancel the throw, aim must not shift with power, and yanking the finger back must
+cancel rather than launch. Every one of them would pass trivially under the old distance model, so
+they are worth exactly as much as the fact that they cannot. "a HAND can actually hit these" then
+sweeps flick SPEED and swipe ANGLE across the whole board and reports the result in percent and
+degrees, with a simulated casual player (+-12% speed, +-4 degrees) who has to average a real rack.
 
 The `PLAY` probe in `test-visual.mjs` drives the real UI with real touch: it taps an unlocked
 machine card, flicks, and fails unless a ball lands for actual points (last run: 40 on classic).
