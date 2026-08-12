@@ -1,819 +1,671 @@
-// skeeball/js/render.js - every pixel of the machine. Pure drawing: hand it a context, a layout, a
-// board and a scene, it paints. It owns no state, no timers and no input.
+// skeeball/js/render.js - every pixel of the machine. Pure drawing: hand it a context, a layout,
+// a board and a scene, it paints. It owns no state, no timers and no input.
 //
-// THE LOOK IS MEASURED, NOT INVENTED. Geometry and colour come from reference/skeeball/SPEC.md,
-// read off Matt's own recordings with raw-RGB scanlines rather than picked by eye. Read it before
-// changing a number here.
+// THE LOOK IS THE CLASSIC MACHINE Matt attached on 2026-08-12 (reference/skeeball/SPEC.md, the
+// 2026-08-12 section): teal walls and lane, WHITE tube rings, glossy yellow rails, black guard
+// tubes over khaki netting, an LED BALL/SCORE marquee, and the neighbouring machines visible at
+// the frame edges - a row in an arcade. The warm cream-and-wood look this file used to draw was
+// a DIFFERENT machine skin; do not bring it back on `classic`.
 //
-// THE 2026-08-11 REBUILD. Matt, on watching this game next to the machine it clones: "SKEEBALL IS
-// TERRIBLE... look at how horrible the gameplay is." His recordings (`Skeeball 2.MOV`,
-// `Skeeball 3.MOV`) are the evidence, and four things in this file were why:
-//   1. the playfield had 33% of the height and an empty lane had 44%     -> the Y anchors
-//   2. it was painted GREEN AND SILVER; the reference cabinet is cream,
-//      wood-brown and deep red, and contains no green at all             -> boards.js's palette
-//   3. the bowl was a flat panel, so nothing read as a dish you throw
-//      into - no concavity, no cast shadows, a rail with no thickness    -> drawMachine/drawTargets
-//   4. the cups were small cold cylinders with floating labels; the
-//      reference's are big cream tubes, overlapping, numbered on the
-//      front face in dark ink                                            -> drawTube
-// Each is fixed below and each carries its own note. The gameplay half of the same complaint is
-// in game.js and boards.js.
+// ONE PROJECTION, SHARED WITH THE PHYSICS. `proj(x, y, z)` maps physics.js's world metres to the
+// design box, and every part of the machine is drawn THROUGH it from the same geometry the
+// simulation collides with (js/boards.js). The ball is drawn at the simulation's own positions
+// through the same function, so the ball and the machine cannot disagree - there is no separate
+// "animation geometry" anywhere. Camera constants were solved numerically against the reference
+// screenshot's measured fractions (the SPEC table); re-derive them if the geometry moves.
 //
-// COORDINATES. Three spaces, and keeping them straight is most of this file:
-//   design   the fixed DW x DH box everything is authored in; layoutFor() scales it to the screen
-//   lane     v 0..1 along the lane (0 = foul line), u -1..1 across it
-//   board    x -1..1 across the playfield, y 0..1 front-to-back - what boards.js targets live in
-//
-// PERSPECTIVE. One function does the lane: sc(v) = 1 / (1 + v * (NEAR_OVER_FAR - 1)), i.e. 1/z for
-// a camera looking down the lane. Widths, ball radius and rail chevron spacing all multiply by it,
-// and the screen y derives from it, so equal steps along the real lane compress toward the top.
+// The design box is DW x DH; layoutFor() scales it to the screen, "contain" and centred.
 
-import { laneOffsetAt, RAIL_X } from './game.js';
+import { BALL_R, planeCoords } from './physics.js';
+import { machineFor } from './game.js';
 
 export const DW = 480;
 export const DH = 1000;
 
-const NEAR_OVER_FAR = 1.988;       // lane half-width at the foul line / at the board (SPEC)
+// --- the camera (solved against SPEC fractions; see header) --------------------------------
+const CAM = { f: 1830, ze: -3.3, ye: 1.99, phi: 0.006, YC: -112.2 };
 
-/** Vertical anchors, fractions of DH.
- *
- *  THE BOARD GETS THE SCREEN, THE LANE GETS WHAT IS LEFT. The first build gave the playfield
- *  33% of the height and the empty lane 44%, so the part you interact with was a strip at the
- *  top and most of the screen was flat nothing - clearly visible in Matt's `Skeeball 2.MOV`.
- *
- *  The reference frame, measured, splits as: back wall 11%, bowl 21%, ramp 10%, lane 34%. The
- *  bowl is not a huge share of the HEIGHT - what makes it read as the main event is that it is
- *  WIDE and SHALLOW with a lit back wall standing behind it, not a deep well. A first pass at
- *  this gave the field 48.5% and produced a dish deeper than it was wide, which no camera on a
- *  real cabinet would ever see. These anchors keep the reference's shape on a taller phone:
- *  wall 14.5%, bowl 31.5%, ramp 10%, lane 34%. */
-const Y = {
-  marqueeTop: 0.015,
-  marqueeBot: 0.100,
-  fieldTop: 0.245,      // where the playfield starts; above it is the back wall
-  fieldBot: 0.560,      // the playfield's front lip
-  rampBot: 0.660,       // where the flat lane ends and the ramp starts to rise
-  laneTop: 0.660,
-};
-
-// THE RAMP. The lane used to stop dead at the playfield's front edge on a hard horizontal line,
-// with the playfield ALSO being wider than the lane at that point - a colour step and a width step
-// in the same pixel row. Matt: "the way the ramp meets the scoring area is abrupt and not
-// realistic. It's significantly worse than any reference photo."
-//
-// A real cabinet has one continuous surface: the flat lane curves upward and flares outward into
-// the playfield, and the ball rolls over the join without anything changing under it. So the band
-// between `rampBot` and `fieldBot` is drawn as that curve - width eased from the lane's to the
-// playfield's, colour eased from the lane's to the field's, and a lit crest where it levels off.
-const RAMP_EASE = (k) => k * k * (3 - 2 * k);      // smoothstep: flat at both ends, so neither
-                                                    // join shows a crease
-
-/** The playfield's half-width in design units (board space x = +-1). */
-const FIELD_HALF = 0.400 * DW;
-/** How much of DH board space y spans, front lip to back wall. */
-const FIELD_DEPTH = (Y.fieldBot - Y.fieldTop) * DH;
-
-/** Board-space y is NOT linear on screen: the back of the bowl is further from the camera, so
- *  equal steps back get shorter. Measured off the reference frame - the cup pitch runs 110px,
- *  92px, 90px front to back, i.e. the far end is compressed about 20%. `bz` is that curve,
- *  pinned at bz(0)=0 and bz(1)=1 so the front lip and the back wall stay exactly where the Y
- *  anchors put them. Without it the cup stack reads as a flat ladder rather than a receding one. */
-const BOARD_PERSP = 0.13;
-const bz = (y) => y * ((1 + BOARD_PERSP) - BOARD_PERSP * y);
-
-const LANE_HALF_NEAR = 0.49;
-const RAIL_W_NEAR = 0.085;
-const BALL_R_NEAR = 0.070;
-/** How far the cream lip of a tube extends BEYOND its opening. The opening itself is never scaled
- *  - it is the catch ellipse exactly (see `mouthOf`) - so this is the only fudge factor left, and
- *  it only ever makes the cup look BIGGER than its scoring area, never smaller. */
-const RIM_LIP = 1.13;
-
-export function sc(v) { return 1 / (1 + v * (NEAR_OVER_FAR - 1)); }
-
-export function laneY(v) {
-  const top = Y.laneTop * DH;
-  const k = (1 - sc(v)) / (1 - sc(1));
-  return DH - (DH - top) * k;
-}
-export function laneHalf(v) { return LANE_HALF_NEAR * DW * sc(v); }
-
-/**
- * A point on the RAMP: the curved throat between the top of the lane and the bowl's front lip.
- * `k` 0..1 across it, `u` the lane offset the ball is carrying.
- *
- * **This exists because the ball's path did not include it.** The lane ends at design y=660 and
- * the playfield's lip is at y=560, so a path that went straight from `lanePoint(1)` to
- * `boardPoint(...)` skipped 100px of the very surface it is supposed to be rolling on - the ball
- * teleported the gap in one frame, at a traced 6535 px/s. Matt: "it speeds up to go off the jump,
- * then it flies through the air."
- *
- * It follows the same eased flare `drawRamp` paints, which is why it lives in this file: the ball
- * has to roll ON the surface, and only the code that draws the surface knows where it is.
- */
-export function rampPoint(k, boardX) {
-  const yBot = Y.rampBot * DH, yTop = Y.fieldBot * DH;
-  const kk = Math.max(0, Math.min(1, k));
-  // x is CONSTANT across the ramp. The surface flares outward here, but a floor getting wider does
-  // not shove a ball sideways - and because the lateral model is in board space, the ball's x at
-  // the top of the lane and at the bowl's lip are already the same number. Holding it is what
-  // makes a banked throw keep going the way it bounced.
-  return {
-    x: DW / 2 + boardX * FIELD_HALF * boardPoint(0, 0).k,
-    y: yBot + (yTop - yBot) * kk,
-    r: BALL_R_NEAR * DW * sc(1),
-  };
+/** World metres -> design px. `zc` is camera depth, kept for sizing (ball radius etc). */
+export function proj(x, y, z) {
+  const dy = y - CAM.ye, dz = z - CAM.ze;
+  const yc = dy * Math.cos(CAM.phi) - dz * Math.sin(CAM.phi);
+  const zc = dz * Math.cos(CAM.phi) + dy * Math.sin(CAM.phi);
+  return { x: DW / 2 + (CAM.f * x) / zc, y: CAM.YC - (CAM.f * yc) / zc, zc };
 }
 
-/** Board-space x -> the lane's own -1..1 offset, for drawing a ball that is still on the lane.
- *  The rails are at +-RAIL_X in board space, and they are the lane's edges, so this is exact. */
-export const boardXToLaneU = (boardX) => boardX / RAIL_X;
-
-/** The ball's radius once it is on the playfield, shrinking with depth at the same rate the field
- *  narrows, and starting from exactly the radius it had at the top of the ramp. */
-export function ballROnBoard(y) {
-  return BALL_R_NEAR * DW * sc(1) * (1 - 0.32 * bz(Math.max(0, Math.min(1, y))));
-}
-export function lanePoint(v, u) {
-  return { x: DW / 2 + u * laneHalf(v), y: laneY(v), r: BALL_R_NEAR * DW * sc(v) };
-}
-
-/** Board space -> design space. y=0 is the front lip, y=1 the back wall; the playfield narrows
- *  slightly toward the back so it sits in the same world as the lane. */
-export function boardPoint(x, y) {
-  const z = bz(y);
-  const yy = Y.fieldBot * DH - z * FIELD_DEPTH;
-  const narrow = 1 - z * 0.155;
-  return { x: DW / 2 + x * FIELD_HALF * narrow, y: yy, k: narrow };
-}
-
-/**
- * A target's CATCH ELLIPSE, projected to design space: centre, half-width, half-height.
- *
- * **This is the one and only source of a hole's drawn size.** `drawTargets` paints the dark
- * opening at exactly this, so the hole you can see IS the area that scores. The depth half-height
- * is taken from the target's near and far edges through `boardPoint`, which is exact rather than a
- * ratio - a fixed rim ratio is precisely how the two drifted apart before: `ry` stayed nearly
- * twice the depth of the mouth being drawn, 62% of cup hits landed outside the visible hole, and
- * the board read as magnetic. Never scale what comes out of here.
- */
-export function mouthOf(t) {
-  const near = boardPoint(t.x, Math.max(0, t.y - t.ry));
-  const far = boardPoint(t.x, Math.min(1, t.y + t.ry));
-  const p = boardPoint(t.x, t.y);
-  return {
-    x: p.x,
-    y: (near.y + far.y) / 2,
-    rx: t.rx * FIELD_HALF * p.k,
-    ry: Math.max(2, (near.y - far.y) / 2),
-  };
-}
-
-/** Where a resolved target sits on screen - the point a ball animates INTO, and the anchor the
- *  x3 badge hangs over. A NESTED zone's centre is buried under the rings stacked behind it, so
- *  for zones this is the front band (`aimY`, the same point idealThrow aims at) - the part of the
- *  ring that is actually its own. */
-export function targetPoint(board, id) {
-  const t = board && board.targets ? board.targets.find((z) => z.id === id) : null;
-  if (!t) { const p = boardPoint(0, 0.2); return { x: p.x, y: p.y, r: 0.1 * DW }; }
-  const y = t.kind === 'zone' && Number.isFinite(t.aimY) ? t.aimY : t.y;
-  const p = boardPoint(t.x, y);
-  return { x: p.x, y: p.y, r: t.rx * FIELD_HALF * p.k };
-}
+/** The ball's on-screen radius at a world position. */
+export const ballR = (zc) => (CAM.f * BALL_R) / Math.max(0.5, zc);
 
 export function layoutFor(cssW, cssH) {
   const scale = Math.min(cssW / DW, cssH / DH);
   return { scale, ox: (cssW - DW * scale) / 2, oy: (cssH - DH * scale) / 2, w: cssW, h: cssH };
 }
 
-// --- helpers -------------------------------------------------------------------------------
+/** How far the ball turns per metre it travels: the plain rolling relation. */
+export const spinPerM = 1 / BALL_R;
+
+// Neighbouring machines' visual pitch. Closer than a physical cabinet, deliberately: the app
+// itself crowds the row so the neighbours' rings peek in at the frame edges, and that framing
+// is part of the look. Scenery only - the simulation's world stops at this machine's walls.
+const NEIGHBOR_PITCH = 1.15;
+
+const MARQ_H = 78;
+
+// --- small helpers ---------------------------------------------------------------------------
 
 function ellipse(c, x, y, rx, ry) {
   c.beginPath(); c.ellipse(x, y, Math.max(0.5, rx), Math.max(0.5, ry), 0, 0, Math.PI * 2); c.closePath();
 }
 
-/** An open-topped white tube standing on the playfield: the motif every classic target is made of.
- *  `depth` is how tall the visible wall is. */
-function drawTube(c, P, x, y, rx, ry, depth, label, labelPx) {
-  // The shadow it drops onto the bowl floor, first, so every other tube sits on top of it.
-  c.fillStyle = 'rgba(0,0,0,0.28)';
-  ellipse(c, x, y + depth + ry * 0.35, rx * 1.02, ry * 0.85); c.fill();
-
-  const wall = c.createLinearGradient(x - rx, 0, x + rx, 0);
-  wall.addColorStop(0, P.targetDeep);
-  wall.addColorStop(0.16, P.targetShade);
-  wall.addColorStop(0.46, P.target);
-  wall.addColorStop(0.78, P.targetFace);
-  wall.addColorStop(1, P.targetShade);
-  c.fillStyle = wall;
-  c.beginPath();
-  c.moveTo(x - rx, y);
-  c.lineTo(x - rx, y + depth);
-  c.ellipse(x, y + depth, rx, ry, 0, Math.PI, 0, true);
-  c.lineTo(x + rx, y);
-  c.closePath();
-  c.fill();
-
-  // THE OPENING IS DRAWN AT EXACTLY (rx, ry) - the catch ellipse, unscaled. The cream rim is drawn
-  // OUTSIDE it, as the lip of the tube, so nothing that scores is hidden under paint and nothing
-  // painted scores. The rim used to be the ellipse and the hole 0.86 of it, which meant part of
-  // every catch area sat under the cup's own lip.
-  c.fillStyle = P.target;
-  ellipse(c, x, y, rx * RIM_LIP, ry * RIM_LIP); c.fill();
-  c.strokeStyle = 'rgba(255,255,255,0.55)';
-  c.lineWidth = Math.max(1, rx * 0.05);
-  ellipse(c, x, y - ry * 0.10, rx * RIM_LIP * 0.99, ry * RIM_LIP * 0.94); c.stroke();
-  const mouth = c.createLinearGradient(0, y - ry, 0, y + ry);
-  mouth.addColorStop(0, '#1A0803');
-  mouth.addColorStop(1, P.hole);
-  c.fillStyle = mouth;
-  ellipse(c, x, y, rx, ry); c.fill();
-  // A lit back lip inside the hole so it reads as a hole, not a flat blob.
-  c.strokeStyle = 'rgba(255,225,180,0.30)';
-  c.lineWidth = Math.max(1, rx * 0.055);
-  c.beginPath();
-  c.ellipse(x, y, rx * 0.97, ry * 0.97, 0, Math.PI * 1.06, Math.PI * 1.94);
-  c.stroke();
-
-  // The numeral, on the FRONT FACE of the tube in dark ink - the reference's own treatment, and
-  // the reason its board is readable at a glance where a floating label is not.
-  if (label) {
-    c.save();
-    c.font = `800 ${Math.round(labelPx)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    const ly = y + ry + depth * 0.50;
-    c.fillStyle = 'rgba(255,255,255,0.30)';
-    c.fillText(label, x, ly + Math.max(1, labelPx * 0.045));
-    c.fillStyle = P.ink;
-    c.fillText(label, x, ly);
-    c.restore();
-  }
-}
-
-/** A flat star plate laid on the playfield (the stars machine). */
-function drawStar(c, P, x, y, rx, ry, label, labelPx) {
-  c.save();
-  c.translate(x, y);
-  c.scale(1, ry / rx);
-  c.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
-    const rr = (i % 2 ? 0.46 : 1) * rx;
-    const fn = i ? 'lineTo' : 'moveTo';
-    c[fn](Math.cos(a) * rr, Math.sin(a) * rr);
-  }
-  c.closePath();
-  c.restore();
-  const g = c.createLinearGradient(x - rx, y - ry, x + rx, y + ry);
-  g.addColorStop(0, P.target);
-  g.addColorStop(0.6, P.targetFace);
-  g.addColorStop(1, P.targetShade);
-  c.fillStyle = g; c.fill();
-  c.strokeStyle = P.targetDeep; c.lineWidth = Math.max(1.5, rx * 0.07); c.stroke();
-
-  c.fillStyle = P.hole;
-  ellipse(c, x, y, rx * 0.40, ry * 0.40); c.fill();
-  if (label) {
-    c.save();
-    c.fillStyle = P.target;
-    c.font = `800 ${Math.round(labelPx)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(label, x, y + labelPx * 0.04);
-    c.restore();
-  }
-}
-
-// --- the machine ------------------------------------------------------------------------------
-
-/** Everything static: cabinet, playfield, targets, lane, rails. Cached by the UI into an
- *  offscreen canvas and blitted per frame; only the ball, badge, popups and the live marquee
- *  numbers are drawn on top. */
-export function drawMachine(c, board) {
-  const P = board.palette;
-
-  // Cabinet head + marquee frame (the live numbers are drawn per frame by drawMarquee).
-  c.fillStyle = P.wall;
-  c.fillRect(0, 0, DW, Y.fieldTop * DH);
-  const mTop = Y.marqueeTop * DH, mBot = Y.marqueeBot * DH;
-  c.fillStyle = P.marqueeTrim;
-  c.beginPath(); c.roundRect(0.045 * DW, mTop - 4, 0.91 * DW, (mBot - mTop) + 8, 10); c.fill();
-  c.fillStyle = P.marquee;
-  c.beginPath(); c.roundRect(0.055 * DW, mTop + 2, 0.89 * DW, (mBot - mTop) - 4, 7); c.fill();
-
-  // THE THROAT: the space between the marquee and the back of the bowl. In the reference this is
-  // not empty wall, it is the inside of the cabinet - a lit backboard with the machine's name on
-  // it and two side panels converging toward it. Drawn flat, it is a quarter of the screen doing
-  // nothing, which is exactly how it looked on the first pass at these proportions.
-  drawThroat(c, board);
-
-  // THE BOWL. Not a flat panel: a wooden dish you are looking down into. Three layers, and all
-  // three are needed - the first build drew only the middle one and the board read as a sticker
-  // on a wall.
-  //
-  //  1. the back wall standing behind the dish (P.wall, the reference's deep red)
-  //  2. the floor, warm wood, LIT AT THE BACK where the cabinet light falls and darkening toward
-  //     the player, which is the direction the reference's own gradient runs
-  //  3. a vignette hugging the left, right and front edges, which is what actually makes it
-  //     concave - without it the floor is just a lighter rectangle
-  const fTop = Y.fieldTop * DH, fBot = Y.fieldBot * DH;
-  c.fillStyle = P.wall;
-  c.fillRect(0, fTop, DW, fBot - fTop);
-
-  const tl = boardPoint(-1, 1), tr = boardPoint(1, 1), bl = boardPoint(-1, 0), br = boardPoint(1, 0);
-  const floor = () => {
-    c.beginPath();
-    c.moveTo(bl.x, bl.y); c.lineTo(tl.x, tl.y); c.lineTo(tr.x, tr.y); c.lineTo(br.x, br.y);
-    c.closePath();
-  };
-  floor();
-  const glow = c.createLinearGradient(0, tl.y, 0, bl.y);
-  glow.addColorStop(0, P.fieldLit);
-  glow.addColorStop(0.30, P.field);
-  glow.addColorStop(1, P.fieldShade);
-  c.fillStyle = glow;
-  c.fill();
-
-  c.save();
-  floor(); c.clip();
-  // The cabinet light pooling in the middle of the dish. SPEC.md (CLASSIC): "the playfield
-  // carries a soft radial LIGHT in the middle... that gradient is doing a lot of the work and a
-  // flat teal looks wrong without it" - equally true of the wood. Matt's recordings of the build
-  // without it read as one dark maroon slab from wall to lane.
-  {
-    const lc = boardPoint(0, 0.60);
-    const light = c.createRadialGradient(lc.x, lc.y, FIELD_HALF * 0.10, lc.x, lc.y, FIELD_HALF * 1.15);
-    light.addColorStop(0, 'rgba(255,216,160,0.26)');
-    light.addColorStop(0.55, 'rgba(255,206,150,0.10)');
-    light.addColorStop(1, 'rgba(255,200,140,0)');
-    c.fillStyle = light;
-    floor(); c.fill();
-  }
-  // Side walls of the dish, curving in.
-  for (const side of [-1, 1]) {
-    const edgeX = side < 0 ? bl.x : br.x;
-    const g = c.createLinearGradient(edgeX, 0, DW / 2 + side * FIELD_HALF * 0.35, 0);
-    g.addColorStop(0, P.fieldDeep);
-    g.addColorStop(0.42, 'rgba(0,0,0,0.30)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = g;
-    floor(); c.fill();
-  }
-  // And the shadow the front lip casts back into the dish.
-  const frontShade = c.createLinearGradient(0, bl.y, 0, bl.y - FIELD_DEPTH * 0.22);
-  frontShade.addColorStop(0, 'rgba(0,0,0,0.34)');
-  frontShade.addColorStop(1, 'rgba(0,0,0,0)');
-  c.fillStyle = frontShade;
-  floor(); c.fill();
-  c.restore();
-
-  drawRamp(c, P);
-  drawLane(c, P);
-
-  // Side walls: black ball-return housings with a deep red inner trim. Their inner edge FOLLOWS
-  // the ramp's own flare (same RAMP_EASE), so the cabinet narrows with the surface instead of
-  // cutting a straight diagonal across it and leaving a black wedge either side of the throat.
-  const rampBotY = Y.rampBot * DH;
-  const halfBot = laneHalf(1);
-  const halfTop = FIELD_HALF * boardPoint(0, 0).k;
-  const edge = [];
-  for (let i = 0; i <= 26; i++) {
-    const k = i / 26;
-    edge.push({ y: rampBotY + (fBot - rampBotY) * k, half: halfBot + (halfTop - halfBot) * RAMP_EASE(k) });
-  }
-  for (const side of [-1, 1]) {
-    const inner = (x) => DW / 2 + side * x;
-    const outer = side < 0 ? -6 : DW + 6;
-    const wallPath = () => {
-      c.beginPath();
-      c.moveTo(inner(FIELD_HALF * boardPoint(0, 1).k), fTop);
-      c.lineTo(inner(halfTop), fBot);
-      for (let i = edge.length - 1; i >= 0; i--) c.lineTo(inner(edge[i].half), edge[i].y);
-      c.lineTo(inner(laneHalf(1) + RAIL_W_NEAR * DW * sc(1)), rampBotY + 2);
-      c.lineTo(outer, rampBotY + 2);
-      c.lineTo(outer, fTop);
-      c.closePath();
-    };
-    wallPath();
-    c.fillStyle = P.wall;
-    c.fill();
-    // The red inner trim, a constant-width strip just inside that same contour.
-    const TRIM = 0.020 * DW;
-    c.save();
-    wallPath();
-    c.clip();
-    c.beginPath();
-    c.moveTo(inner(FIELD_HALF * boardPoint(0, 1).k), fTop);
-    c.lineTo(inner(halfTop), fBot);
-    for (let i = edge.length - 1; i >= 0; i--) c.lineTo(inner(edge[i].half), edge[i].y);
-    c.lineTo(inner(edge[0].half + TRIM), edge[0].y);
-    for (let i = 0; i < edge.length; i++) c.lineTo(inner(edge[i].half + TRIM), edge[i].y);
-    c.lineTo(inner(halfTop + TRIM), fBot);
-    c.lineTo(inner(FIELD_HALF * boardPoint(0, 1).k + TRIM), fTop);
-    c.closePath();
-    c.fillStyle = P.trim;
-    c.fill();
-    c.restore();
-  }
-
-  drawTargets(c, board);
-}
-
-/** The inside of the cabinet above the bowl: a backboard panel carrying the machine's name, with
- *  the two side walls converging onto it. Everything here is scenery - nothing is hit-tested. */
-function drawThroat(c, board) {
-  const P = board.palette;
-  const top = Y.marqueeBot * DH + 0.012 * DH;
-  const bot = Y.fieldTop * DH;
-  const back = boardPoint(0, 1);
-  const halfBack = FIELD_HALF * back.k;
-
-  // The lit backboard the cup stack stands in front of.
-  const g = c.createLinearGradient(0, top, 0, bot);
-  g.addColorStop(0, P.trimDark);
-  g.addColorStop(0.55, P.wall);
-  g.addColorStop(1, P.trim);
-  c.fillStyle = g;
-  c.beginPath();
-  c.moveTo(DW / 2 - halfBack, bot);
-  c.lineTo(DW / 2 - halfBack * 0.86, top);
-  c.lineTo(DW / 2 + halfBack * 0.86, top);
-  c.lineTo(DW / 2 + halfBack, bot);
-  c.closePath();
-  c.fill();
-
-  // The machine's name on it, in the cream the whole cabinet is trimmed in.
-  const label = (board.nameKey === 'board_classic' ? 'SKEE-BALL' : String(board.id || '').toUpperCase());
-  c.save();
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.font = `800 ${Math.round(0.062 * DW)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-  c.fillStyle = 'rgba(0,0,0,0.35)';
-  c.fillText(label, DW / 2, (top + bot) / 2 + 2.5);
-  c.fillStyle = P.targetFace;
-  c.fillText(label, DW / 2, (top + bot) / 2);
-  c.restore();
-
-  // Side panels: darker, converging, so the throat has depth instead of being a flat band.
-  for (const side of [-1, 1]) {
-    const inner = (f) => DW / 2 + side * halfBack * f;
-    c.beginPath();
-    c.moveTo(inner(1), bot);
-    c.lineTo(inner(0.86), top);
-    c.lineTo(side < 0 ? -6 : DW + 6, top);
-    c.lineTo(side < 0 ? -6 : DW + 6, bot);
-    c.closePath();
-    const sg = c.createLinearGradient(inner(1), 0, side < 0 ? -6 : DW + 6, 0);
-    sg.addColorStop(0, P.wall);
-    sg.addColorStop(1, P.trimDark);
-    c.fillStyle = sg;
-    c.fill();
-  }
-}
-
-/**
- * A ZONE's boundary, traced through boardPoint itself. This is the load-bearing honesty of the
- * whole board: the path drawn here IS the scoring ellipse, sampled point by point through the
- * same projection the ball's landing point uses. There is no separate "drawn ring" that could
- * drift away from the catch area - the two are one curve. (bz is nonlinear in depth, so a
- * projected board-space ellipse is not a screen ellipse; tracing it parametrically is exact
- * where approximating it with c.ellipse would quietly reintroduce the gap this game has been
- * burned by twice. See "THE HOLES DO NOT ATTRACT THE BALL" in skeeball/CLAUDE.md.)
- */
-export function zonePath(c, t, inset = 0) {
-  const N = 48;
+/** A ring's circle on the board plane (optionally lifted `s` along the normal, radius scaled),
+ *  as a projected path. Parametric through proj, so the drawn curve IS the physics curve. */
+function ringPath(c, M, ring, radius, s, PJ) {
+  const N = 40;
   c.beginPath();
   for (let i = 0; i <= N; i++) {
     const a = (i / N) * Math.PI * 2;
-    const p = boardPoint(t.x + (t.rx - inset) * Math.cos(a), t.y + (t.ry - inset * (t.ry / t.rx)) * Math.sin(a));
+    const w = M.world(ring.c[0] + radius * Math.cos(a), ring.c[1] + radius * Math.sin(a), s);
+    const p = PJ(w.x, w.y, w.z);
     if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
   }
   c.closePath();
 }
 
-function drawTargets(c, board) {
+/** Projected centre of a ring's mouth. */
+function ringCentre(M, ring, PJ, s = 0) {
+  const w = M.world(ring.c[0], ring.c[1], s);
+  return PJ(w.x, w.y, w.z);
+}
+
+// --- the machine -------------------------------------------------------------------------------
+
+/**
+ * Everything static: neighbours, walls, netting, tubes, board, lane, rails, marquee frame.
+ * Cached by the UI into an offscreen canvas and blitted per frame; only the ball, badge, popup,
+ * queue and the marquee DIGITS are drawn on top.
+ */
+export function drawMachine(c, board) {
   const P = board.palette;
-
-  // THE NESTED RINGS, outermost (20) to innermost (50), each a cream rim traced exactly on its
-  // own scoring boundary. The stacked-ovals read is the reference video's own: each ring higher
-  // up the frame and smaller than the one in front, number on the front rim face, a dark slot
-  // just inside each rim that the ball visibly drops into.
-  const zones = board.targets.filter((t) => t.kind === 'zone').slice().sort((a, b) => b.rx - a.rx);
-  if (zones.length) {
-    // Rim thickness from the pitch between consecutive ring FRONTS, so the rims scale with the
-    // board rather than with a magic number. The innermost reuses the last pitch.
-    const fronts = zones.map((t) => boardPoint(t.x, Math.max(0, t.y - t.ry)).y);
-    const rimW = (i) => {
-      const pitch = i + 1 < fronts.length ? fronts[i] - fronts[i + 1]
-        : (fronts.length > 1 ? fronts[fronts.length - 2] - fronts[fronts.length - 1] : 44);
-      return Math.max(10, pitch * 0.42);
-    };
-
-    for (let i = 0; i < zones.length; i++) {
-      const t = zones[i];
-      const W = rimW(i);
-      // The slot: a dark band just inside the rim - the opening the ball falls into. Drawn as a
-      // stroke INSIDE the boundary so the boundary itself stays exactly the scoring edge.
-      c.save();
-      zonePath(c, t); c.clip();
-      c.strokeStyle = P.fieldDeep;
-      c.lineWidth = W * 1.5;
-      zonePath(c, t); c.stroke();
-      c.strokeStyle = 'rgba(0,0,0,0.35)';
-      c.lineWidth = W * 0.9;
-      zonePath(c, t); c.stroke();
-      c.restore();
-
-      // The rim itself: underside shadow, cream band, lit top edge. The stroke is CENTRED on the
-      // scoring boundary, so the line down the middle of the cream band IS the edge of the zone -
-      // the same at every size, with nothing to keep in sync.
-      c.strokeStyle = 'rgba(0,0,0,0.32)';
-      c.lineWidth = W * 1.12;
-      c.save(); c.translate(0, W * 0.30); zonePath(c, t); c.stroke(); c.restore();
-      const p = boardPoint(t.x, t.y);
-      const ryScreen = Math.abs(boardPoint(t.x, t.y - t.ry).y - boardPoint(t.x, t.y + t.ry).y) / 2;
-      const g = c.createLinearGradient(0, p.y - ryScreen - W, 0, p.y + ryScreen + W);
-      g.addColorStop(0, P.targetShade);
-      g.addColorStop(0.45, P.target);
-      g.addColorStop(1, P.targetFace);
-      c.strokeStyle = g;
-      c.lineWidth = W;
-      zonePath(c, t); c.stroke();
-      c.strokeStyle = 'rgba(255,255,255,0.40)';
-      c.lineWidth = Math.max(1.5, W * 0.16);
-      c.save(); c.translate(0, -W * 0.26); zonePath(c, t); c.stroke(); c.restore();
-    }
-
-    // Numbers AFTER every rim, front faces only, so an inner rim never paints over an outer
-    // number. Each sits on its ring's front band - the exact depth idealThrow aims at.
-    for (let i = 0; i < zones.length; i++) {
-      const t = zones[i];
-      const W = rimW(i);
-      const q = boardPoint(t.x, Math.max(0, t.y - t.ry));
-      c.save();
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.font = `800 ${Math.round(W * 0.94)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-      c.fillStyle = 'rgba(255,255,255,0.35)';
-      c.fillText(String(t.points), q.x, q.y + W * 0.05);
-      c.fillStyle = P.ink;
-      c.fillText(String(t.points), q.x, q.y);
-      c.restore();
-    }
-
-    // The 10s, on the floor at the front corners - the catch-all IS the floor, and labelling it
-    // where the floor is widest says so without a rim that would falsely promise a hole. Cream,
-    // not ink: this is the one label that sits on the DARK floor rather than on a lit rim, so the
-    // rims' ink treatment renders it invisible out here.
-    const ten = board.targets.find((t) => t.kind === 'ring');
-    if (ten) {
-      c.save();
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.font = `800 ${Math.round(FIELD_HALF * 0.115)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-      for (const sx of [-0.62, 0.62]) {
-        const q = boardPoint(sx, 0.055);
-        c.fillStyle = 'rgba(0,0,0,0.45)';
-        c.fillText(String(ten.points), q.x, q.y + 2);
-        c.fillStyle = P.targetFace;
-        c.fillText(String(ten.points), q.x, q.y);
-      }
-      c.restore();
-    }
-  }
-
-  // Then every free-standing target, BACK TO FRONT so nearer ones overlap the ones behind.
-  const solid = board.targets.filter((t) => t.kind !== 'ring' && t.kind !== 'zone')
-    .slice().sort((a, b) => b.y - a.y);
-  for (const t of solid) {
-    // WIDTH is the target's rx EXACTLY - no shrink factor. What you see is precisely what you can
-    // hit (boards.js rule 1). It used to draw at 0.86 of the catch radius, so every cup was 16%
-    // easier to hit than it looked, which is half of why the game felt magnetic.
-    // HEIGHT comes from the catch ry, projected exactly (`mouthOf`). It used to come from a fixed
-    // foreshortening ratio instead, which is how the drawn hole and the scoring hole ended up
-    // different shapes without anything noticing.
-    const m = mouthOf(t);
-    if (t.kind === 'star') {
-      drawStar(c, P, m.x, m.y, m.rx, m.ry, String(t.points), m.rx * 0.44);
-    } else {
-      const depth = m.rx * (t.kind === 'tube' ? 1.50 : 0.66);
-      drawTube(c, P, m.x, m.y, m.rx, m.ry, depth, String(t.points), m.rx * (t.kind === 'tube' ? 0.38 : 0.42));
-    }
-  }
-}
-
-/** The curved throat joining the flat lane to the playfield. Drawn BEFORE the lane so the lane's
- *  own far edge overlaps its bottom, leaving no seam. */
-function drawRamp(c, P) {
-  const STEPS = 26;
-  const yTop = Y.fieldBot * DH, yBot = Y.rampBot * DH;
-  const halfBot = laneHalf(1);                       // the lane's half-width where it ends
-  const halfTop = FIELD_HALF * boardPoint(0, 0).k;   // the playfield's half-width at its front
-  const at = (i) => {
-    const k = i / STEPS;
-    const e = RAMP_EASE(k);
-    return { y: yBot + (yTop - yBot) * k, half: halfBot + (halfTop - halfBot) * e, e };
-  };
-
-  c.beginPath();
-  for (let i = 0; i <= STEPS; i++) { const a = at(i); const x = DW / 2 - a.half; if (i) c.lineTo(x, a.y); else c.moveTo(x, a.y); }
-  for (let i = STEPS; i >= 0; i--) { const a = at(i); c.lineTo(DW / 2 + a.half, a.y); }
-  c.closePath();
-  const g = c.createLinearGradient(0, yBot, 0, yTop);
-  g.addColorStop(0, P.laneLit);        // continues the lane's own colour at the bottom...
-  g.addColorStop(0.55, P.field);       // ...and arrives at the playfield's at the top
-  g.addColorStop(1, P.fieldLit);
-  c.fillStyle = g;
-  c.fill();
-
-  // A lit crest right where the surface levels out, which is what actually sells the curve.
   c.save();
-  c.clip();
-  const crest = c.createLinearGradient(0, yTop - (yBot - yTop) * 0.28, 0, yTop);
-  crest.addColorStop(0, 'rgba(255,255,255,0)');
-  crest.addColorStop(1, 'rgba(255,255,255,0.16)');
-  c.fillStyle = crest;
-  c.fillRect(0, yTop - (yBot - yTop) * 0.28, DW, (yBot - yTop) * 0.28);
-  c.restore();
+  c.beginPath(); c.rect(0, 0, DW, DH); c.clip();
+  c.fillStyle = '#101314';
+  c.fillRect(0, 0, DW, DH);
 
-  // The white front lip of the playfield, curving across the top of the ramp - the big white band
-  // along the bottom of the board in IMG_3952.
-  const lipH = 0.011 * DH;
-  c.beginPath();
-  c.moveTo(DW / 2 - halfTop, yTop + lipH);
-  c.quadraticCurveTo(DW / 2, yTop + lipH * 2.6, DW / 2 + halfTop, yTop + lipH);
-  c.lineTo(DW / 2 + halfTop, yTop - lipH * 0.2);
-  c.quadraticCurveTo(DW / 2, yTop + lipH * 1.3, DW / 2 - halfTop, yTop - lipH * 0.2);
-  c.closePath();
-  const lip = c.createLinearGradient(0, yTop - lipH, 0, yTop + lipH * 2.6);
-  lip.addColorStop(0, P.target);
-  lip.addColorStop(1, P.targetShade);
-  c.fillStyle = lip;
-  c.fill();
+  // Neighbours first, so the centre machine overlaps them. Same drawing, offset in world x.
+  // The CENTRE machine's cups and basin band are NOT here: they are drawn per frame by
+  // drawProps, split around the ball so a rolling ball passes BEHIND the lower rings and in
+  // front of the higher ones - the z-order is what makes the basin read as a place.
+  drawAlley(c, board, -NEIGHBOR_PITCH);
+  drawAlley(c, board, NEIGHBOR_PITCH);
+  drawAlley(c, board, 0, true);
+
+  drawMarqueeFrame(c, board);
+  c.restore();
 }
 
-function drawLane(c, P) {
-  const STEPS = 40;
-  const pt = (v, s) => ({ x: DW / 2 + s * laneHalf(v), y: laneY(v) });
-  c.beginPath();
-  for (let i = 0; i <= STEPS; i++) { const p = pt(i / STEPS, -1); if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); }
-  for (let i = STEPS; i >= 0; i--) { const p = pt(i / STEPS, 1); c.lineTo(p.x, p.y); }
-  c.closePath();
-  const g = c.createLinearGradient(0, laneY(1), 0, DH);
-  g.addColorStop(0, P.laneLit);
-  g.addColorStop(0.5, P.lane);
-  g.addColorStop(1, P.laneDeep);
-  c.fillStyle = g; c.fill();
+/** One machine of the row at world-x offset `xOff`. `noProps` leaves the cups and basin band
+ *  to drawProps (the centre machine's dynamic z-ordered layer). */
+function drawAlley(c, board, xOff, noProps) {
+  const P = board.palette;
+  const M = machineFor(board.id);
+  const PJ = (x, y, z) => proj(x + xOff, y, z);
 
-  // Wood grain, then the pale centre stripe. Both run ALONG the lane in (v,s) space and are only
-  // then projected, so they converge with it. Without the grain the lane is one flat brown fill
-  // covering a third of the screen, which is a big part of why the old build read as empty.
-  c.save(); c.clip();
-  for (const [s0, alpha] of [[-0.82, 0.05], [-0.55, 0.07], [-0.30, 0.04], [0.30, 0.04], [0.55, 0.07], [0.82, 0.05]]) {
-    c.strokeStyle = `rgba(0,0,0,${alpha})`;
-    c.lineWidth = 2.5;
+  // Key projected anchors.
+  const lipY = PJ(0, M.lipH, M.rampZ1).y;                    // where the lane meets the cabinet
+  const wallL = PJ(-0.72, 0.4, 2.9).x, wallR = PJ(0.72, 0.4, 2.9).x;
+
+  // --- the teal back wall, marquee to lane lip.
+  const wg = c.createLinearGradient(0, MARQ_H, 0, lipY);
+  wg.addColorStop(0, P.wallDark);
+  wg.addColorStop(0.35, P.wall);
+  wg.addColorStop(1, P.wallDark);
+  c.fillStyle = wg;
+  c.fillRect(wallL, MARQ_H, wallR - wallL, lipY - MARQ_H);
+
+  // --- the SKEE-BALL arch + badge on the wall.
+  drawLogo(c, P, (wallL + wallR) / 2, 180, (wallR - wallL) * 0.62);
+
+  // --- netting panels + black guard tubes flanking the board.
+  const bigRing = M.rings.find((r) => r.basin) || M.rings[M.rings.length - 1];
+  const boardL = PJ(-(bigRing.R + bigRing.T) - 0.045, 0.4, 2.9).x;
+  const boardR = PJ((bigRing.R + bigRing.T) + 0.045, 0.4, 2.9).x;
+  drawNetting(c, P, wallL + 6, 96, boardL - (wallL + 6), lipY - 110);
+  drawNetting(c, P, boardR, 96, (wallR - 6) - boardR, lipY - 110);
+  drawGuardTubes(c, P, wallL, boardL, lipY, false);
+  drawGuardTubes(c, P, boardR, wallR, lipY, true);
+
+  // --- the board: basin, rings, drains.
+  drawBoard(c, board, M, PJ, noProps);
+
+  // --- the maroon borders between machines (over the netting edges).
+  for (const bx of [-0.75, 0.75]) {
+    const top = PJ(bx, 0.9, 3.4), bot = PJ(bx, 0, -0.4);
+    const w0 = 7, w1 = 26;
+    const g = c.createLinearGradient(top.x, 0, top.x + 30, 0);
+    g.addColorStop(0, P.border);
+    g.addColorStop(1, '#3A1114');
+    c.fillStyle = g;
     c.beginPath();
-    for (let i = 0; i <= STEPS; i++) { const p = pt(i / STEPS, s0); if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); }
-    c.stroke();
-  }
-  c.strokeStyle = 'rgba(255,240,210,0.10)';
-  c.lineWidth = 3;
-  c.beginPath();
-  for (let i = 0; i <= STEPS; i++) { const p = pt(i / STEPS, 0); if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); }
-  c.stroke();
-  c.restore();
-
-  for (const side of [-1, 1]) drawRail(c, P, side);
-}
-
-/** One side rail: a flat band with diagonal hazard chevrons, laid out in (v, s) lane space and
- *  only then projected, so the chevrons foreshorten with the lane. */
-function drawRail(c, P, side) {
-  const STEPS = 34;
-  const railW = (v) => RAIL_W_NEAR * DW * sc(v);
-  const pt = (v, s) => ({ x: DW / 2 + side * (laneHalf(v) + s * railW(v)), y: laneY(v) });
-  const band = (s0, s1) => {
-    c.beginPath();
-    for (let i = 0; i <= STEPS; i++) { const p = pt(i / STEPS, s0); if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); }
-    for (let i = STEPS; i >= 0; i--) { const p = pt(i / STEPS, s1); c.lineTo(p.x, p.y); }
+    c.moveTo(top.x - w0, MARQ_H);
+    c.lineTo(top.x + w0, MARQ_H);
+    c.lineTo(bot.x + w1, DH);
+    c.lineTo(bot.x - w1, DH);
     c.closePath();
-  };
-  band(0, 0.18); c.fillStyle = P.railDark; c.fill();
-  band(0.18, 1);
-  const g = c.createLinearGradient(0, laneY(1), 0, DH);
-  g.addColorStop(0, P.railLit);
-  g.addColorStop(1, P.rail);
-  c.fillStyle = g; c.fill();
+    c.fill();
+    c.strokeStyle = P.borderTrim;
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(top.x, MARQ_H); c.lineTo(bot.x, DH); c.stroke();
+  }
 
-  // Sparse, low-contrast chevrons. They used to be STRIPE 0.055 in solid railDark, which read as
-  // hazard tape stuck down the side of a bowling lane; the reference's rails are a bright yellow
-  // board with a thin dark chevron every so often, and the difference is most of why the old lane
-  // looked like a warning sign.
-  c.save(); band(0.18, 1); c.clip();
-  c.fillStyle = 'rgba(65,45,9,0.55)';
-  const STRIPE = 0.030, SLANT = 0.055;
-  for (let a = -SLANT; a < 1 + STRIPE; a += STRIPE * 3.4) {
-    const q = [pt(a, 0.18), pt(a + STRIPE, 0.18), pt(a + STRIPE + SLANT, 1), pt(a + SLANT, 1)];
-    c.beginPath(); c.moveTo(q[0].x, q[0].y);
-    for (let i = 1; i < 4; i++) c.lineTo(q[i].x, q[i].y);
+  // --- the lip/hump where the lane climbs to the cabinet.
+  const lipHalf = PJ(0.30, M.lipH, M.rampZ1).x - PJ(0, M.lipH, M.rampZ1).x;
+  const lipCx = PJ(0, M.lipH, M.rampZ1).x;
+  const lg = c.createLinearGradient(0, lipY - 10, 0, lipY + 14);
+  lg.addColorStop(0, P.lip);
+  lg.addColorStop(1, P.laneDark);
+  c.fillStyle = lg;
+  c.beginPath();
+  c.moveTo(lipCx - lipHalf, lipY + 12);
+  c.quadraticCurveTo(lipCx, lipY - 10, lipCx + lipHalf, lipY + 12);
+  c.lineTo(lipCx + lipHalf, lipY + 2);
+  c.quadraticCurveTo(lipCx, lipY - 18, lipCx - lipHalf, lipY + 2);
+  c.closePath();
+  c.fill();
+
+  // --- the cabinet DECK between the rails and the borders: dark teal, so the space beside the
+  // lane reads as machine rather than as a hole in the world.
+  const zF = M.rampZ1 - 0.02, zN = -0.35;
+  for (const side of [-1, 1]) {
+    const a = PJ(side * (M.laneHW + 0.02), 0, zF), b = PJ(side * 0.75, 0, zF);
+    const a2 = PJ(side * (M.laneHW + 0.02), 0, zN), b2 = PJ(side * 0.75, 0, zN);
+    const g = c.createLinearGradient(a.x, 0, b.x, 0);
+    g.addColorStop(0, P.laneDark);
+    g.addColorStop(1, '#15221F');
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(b2.x, b2.y); c.lineTo(a2.x, a2.y);
     c.closePath(); c.fill();
   }
+
+  // --- the lane: teal, one-point perspective, centre seam.
+  const fl = PJ(-M.laneHW, 0.0, zF), fr = PJ(M.laneHW, 0.0, zF);
+  const nl = PJ(-M.laneHW, 0.0, zN), nr = PJ(M.laneHW, 0.0, zN);
+  const laneG = c.createLinearGradient(0, fl.y, 0, DH);
+  laneG.addColorStop(0, P.lane);
+  laneG.addColorStop(1, P.laneDark);
+  c.fillStyle = laneG;
+  c.beginPath();
+  c.moveTo(fl.x, fl.y); c.lineTo(fr.x, fr.y); c.lineTo(nr.x, nr.y); c.lineTo(nl.x, nl.y);
+  c.closePath(); c.fill();
+  c.strokeStyle = P.laneSeam;
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(PJ(0, 0, zF).x, PJ(0, 0, zF).y);
+  c.lineTo(PJ(0, 0, zN).x, PJ(0, 0, zN).y);
+  c.stroke();
+
+  // --- the glossy yellow rails, crown stripe and all.
+  for (const side of [-1, 1]) drawRail(c, P, M, PJ, side, zF, zN);
+}
+
+/** One side rail: outer face, glossy top, pale crown stripe - projected quads. */
+function drawRail(c, P, M, PJ, side, zF, zN) {
+  const xIn = side * M.laneHW;
+  const xOut = side * (M.laneHW + 0.13);
+  const H = 0.06;
+  const q = (x, y, z) => PJ(x, y, z);
+  const inF = q(xIn, H, zF), inN = q(xIn, H, zN);
+  const outF = q(xOut, H * 0.7, zF), outN = q(xOut, H * 0.7, zN);
+  const baseF = q(xOut, 0, zF), baseN = q(xOut, 0, zN);
+
+  // Outer face (dark underside).
+  c.fillStyle = P.railDark;
+  c.beginPath();
+  c.moveTo(outF.x, outF.y); c.lineTo(outN.x, outN.y); c.lineTo(baseN.x, baseN.y); c.lineTo(baseF.x, baseF.y);
+  c.closePath(); c.fill();
+
+  // Top face, glossy yellow.
+  const g = c.createLinearGradient(0, inF.y, 0, inN.y);
+  g.addColorStop(0, P.rail);
+  g.addColorStop(0.5, P.railLit);
+  g.addColorStop(1, P.rail);
+  c.fillStyle = g;
+  c.beginPath();
+  c.moveTo(inF.x, inF.y); c.lineTo(inN.x, inN.y); c.lineTo(outN.x, outN.y); c.lineTo(outF.x, outF.y);
+  c.closePath(); c.fill();
+
+  // The pale stripe along the crown.
+  const sF = q(side * (M.laneHW + 0.038), H * 0.96, zF), sN = q(side * (M.laneHW + 0.038), H * 0.96, zN);
+  c.strokeStyle = P.railStripe;
+  c.lineWidth = Math.max(2, Math.abs(sN.x - sF.x) * 0.012 + 2.5);
+  c.beginPath(); c.moveTo(sF.x, sF.y); c.lineTo(sN.x, sN.y); c.stroke();
+}
+
+/** The board: basin interior, drains, the big ring band, and every cup - all from the same
+ *  geometry the simulation collides with, through the same projection. */
+function drawBoard(c, board, M, PJ, noProps) {
+  const P = board.palette;
+  const basin = M.rings.find((r) => r.basin);
+
+  // Basin interior: slightly deeper teal so the big ring reads as a dish - still clearly the
+  // machine's own colour, never a black pit.
+  if (basin) {
+    ringPath(c, M, basin, basin.R, 0, PJ);
+    const cc = ringCentre(M, basin, PJ);
+    const g = c.createRadialGradient(cc.x, cc.y + 14, 12, cc.x, cc.y, 135);
+    g.addColorStop(0, P.wall);
+    g.addColorStop(0.75, P.wallDark);
+    g.addColorStop(1, 'rgba(18,34,30,1)');
+    c.fillStyle = g;
+    c.fill();
+  }
+
+  // Drain slots: the 10's real mouths, drawn dark exactly where the floor is missing. The
+  // outer trough fades at its ends so it reads as a slot in the deck, not a black banner.
+  for (const d of M.drains) {
+    c.beginPath();
+    const corners = [[d.u0, d.w0], [d.u1, d.w0], [d.u1, d.w1], [d.u0, d.w1]];
+    let x0 = 1e9, x1 = -1e9;
+    corners.forEach(([u, w], i) => {
+      const wp = M.world(u, w, 0);
+      const p = PJ(wp.x, wp.y, wp.z);
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+      if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+    });
+    c.closePath();
+    const g = c.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, 'rgba(9,13,12,0.15)');
+    g.addColorStop(0.18, P.hole);
+    g.addColorStop(0.82, P.hole);
+    g.addColorStop(1, 'rgba(9,13,12,0.15)');
+    c.fillStyle = d.insideOf ? 'rgba(8,13,12,0.80)' : g;
+    if (d.insideOf && basin) { c.save(); ringPath(c, M, basin, basin.R, 0, PJ); c.clip(); c.fill(); c.restore(); }
+    else c.fill();
+  }
+
+  if (noProps) return;
+
+  // Neighbours bake their props straight in; the centre machine's come from drawProps.
+  if (basin) { drawBasinBand(c, P, M, basin, PJ, 'all'); }
+  const cups = M.rings.filter((r) => !r.basin).slice().sort((a, b) => b.c[1] - a.c[1]);
+  for (const r of cups) drawCup(c, P, M, r, PJ);
+}
+
+/**
+ * The centre machine's PROPS - the basin band and the cups - drawn per frame in two phases so
+ * the ball sits in the world instead of floating over it: props LOWER on the board than the
+ * ball are in front of it (drawn after), higher ones behind. `ball` is the ball's world
+ * position or null.
+ */
+export function drawProps(c, board, phase, ball) {
+  const M = machineFor(board.id);
+  const P = board.palette;
+  const basin = M.rings.find((r) => r.basin);
+
+  let ballW = -Infinity;                       // no ball: everything draws in 'behind'
+  if (ball) {
+    const pc = planeCoords(M, { x: ball.wx, y: ball.wy, z: ball.wz });
+    // Only a ball ON the board (past the ramp, near the plane) gets occluded; in flight it is
+    // above everything.
+    ballW = (ball.wz > M.rampZ0 && pc.s < 0.20) ? pc.w : -Infinity;
+  }
+
+  const items = [];
+  if (basin) {
+    items.push({ w: Infinity, draw: () => drawBasinBand(c, P, M, basin, proj, 'top') });
+    items.push({ w: 0.13, draw: () => drawBasinBand(c, P, M, basin, proj, 'bottom') });
+  }
+  for (const r of M.rings) {
+    if (!r.basin) items.push({ w: r.c[1], draw: () => drawCup(c, P, M, r, proj) });
+  }
+  items.sort((a, b) => b.w - a.w);             // farthest first, always
+  for (const it of items) {
+    const inFront = it.w < ballW - 0.03;
+    if ((phase === 'front') === inFront || phase === 'all') it.draw();
+  }
+}
+
+/** The big ring: a fat white band around the basin, "10" on its bottom face. `half` clips to
+ *  the top or bottom arc so the two can straddle the ball in z-order. */
+function drawBasinBand(c, P, M, basin, PJ, half) {
+  const cc = ringCentre(M, basin, PJ, basin.h * 0.5);
+  c.save();
+  if (half === 'top') { c.beginPath(); c.rect(0, 0, DW, cc.y); c.clip(); }
+  if (half === 'bottom') { c.beginPath(); c.rect(0, cc.y, DW, DH); c.clip(); }
+
+  c.lineWidth = 30;
+  c.strokeStyle = 'rgba(0,0,0,0.30)';
+  ringPath(c, M, basin, basin.R + basin.T * 0.5, 0, PJ);
+  c.save(); c.translate(0, 5); c.stroke(); c.restore();
+  const g = c.createLinearGradient(0, cc.y - 110, 0, cc.y + 110);
+  g.addColorStop(0, P.ringShade);
+  g.addColorStop(0.4, P.ring);
+  g.addColorStop(0.85, P.ringLit);
+  c.strokeStyle = g;
+  c.lineWidth = 27;
+  ringPath(c, M, basin, basin.R + basin.T * 0.5, basin.h * 0.5, PJ);
+  c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.18)';
+  c.lineWidth = 5;
+  ringPath(c, M, basin, basin.R - basin.T * 0.4, basin.h, PJ);
+  c.stroke();
+
+  if (half !== 'top') {
+    const b = M.world(0, basin.c[1] - basin.R - basin.T * 0.5, basin.h * 0.5);
+    const bp = PJ(b.x, b.y, b.z);
+    c.fillStyle = P.ink;
+    c.font = '800 26px ui-rounded, "Trebuchet MS", system-ui, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('10', bp.x, bp.y - 1);
+  }
   c.restore();
 }
 
-/** The cabinet-head readout: the three scores, on the marquee. IMG_3960's own `BALL SCORE` LED
- *  panel is the precedent for putting them here rather than in a floating HUD.
- *  `rows` is [{label, value, tone}] - tone 'lit' for the live score, 'dim' for records. */
-export function drawMarquee(c, board, rows) {
-  const P = board.palette;
-  const mTop = Y.marqueeTop * DH, mBot = Y.marqueeBot * DH;
-  const h = mBot - mTop;
-  const n = Math.max(1, rows.length);
-  const colW = (0.86 * DW) / n;
+/**
+ * One cup: an upright white TUBE standing on the board - the reference's own prop (its cups
+ * read as tall cylinders with thin slit mouths and the number on the front face). The tube
+ * stands exactly on the scoring hole, and the slit is the true opening radius seen edge-on, so
+ * the drawn mouth can only ever UNDER-promise the capture area, never oversell it.
+ */
+function drawCup(c, P, M, r, PJ) {
+  const HGT = r.points >= 100 ? 0.115 : 0.10;   // tube height, world-up
+  const base = M.world(r.c[0], r.c[1], 0);
+  const topY = base.y + HGT;
+  const R2 = r.R + r.T + 0.008;                 // the tube's outer radius
+
+  // A horizontal circle at height `y`, radius `radius`, centred on the tube's axis.
+  const circ = (radius, y) => {
+    c.beginPath();
+    for (let i = 0; i <= 36; i++) {
+      const a = (i / 36) * Math.PI * 2;
+      const p = PJ(base.x + radius * Math.cos(a), y, base.z + radius * Math.sin(a));
+      if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+    }
+    c.closePath();
+  };
+  const pTop = PJ(base.x, topY, base.z);
+  const rx = PJ(base.x + R2, topY, base.z).x - pTop.x;
+
+  // Soft shadow at the foot.
+  const pBase = PJ(base.x, base.y, base.z);
+  c.fillStyle = 'rgba(0,0,0,0.22)';
+  ellipse(c, pBase.x + 2, pBase.y + 3, rx * 1.1, rx * 0.30);
+  c.fill();
+
+  // The tube's side: near half of the top rim down to the base.
+  const bl = PJ(base.x - R2, base.y, base.z), br = PJ(base.x + R2, base.y, base.z);
+  c.beginPath();
+  for (let i = 0; i <= 18; i++) {
+    const a = Math.PI + (i / 18) * Math.PI;     // the near (lower-screen) half of the top rim
+    const p = PJ(base.x + R2 * Math.cos(a), topY, base.z + R2 * Math.sin(a) * -1);
+    if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+  }
+  c.lineTo(br.x, br.y);
+  c.lineTo(bl.x, bl.y);
+  c.closePath();
+  const sg = c.createLinearGradient(bl.x, 0, br.x, 0);
+  sg.addColorStop(0, P.ringShade);
+  sg.addColorStop(0.28, P.ring);
+  sg.addColorStop(0.55, P.ringLit);
+  sg.addColorStop(1, P.ringShade);
+  c.fillStyle = sg;
+  c.fill();
+
+  // The top: white rim ring, then the slit - THE EXACT OPENING RADIUS, edge-on.
+  circ(R2, topY);
+  const tg = c.createLinearGradient(0, pTop.y - rx * 0.4, 0, pTop.y + rx * 0.4);
+  tg.addColorStop(0, P.ringLit);
+  tg.addColorStop(1, P.ring);
+  c.fillStyle = tg;
+  c.fill();
+  c.strokeStyle = P.ringDeep;
+  c.lineWidth = 1.25;
+  c.stroke();
+  circ(r.R, topY);
+  const og = c.createLinearGradient(0, pTop.y - rx * 0.25, 0, pTop.y + rx * 0.25);
+  og.addColorStop(0, '#050707');
+  og.addColorStop(0.75, P.hole);
+  og.addColorStop(1, '#39423D');
+  c.fillStyle = og;
+  c.fill();
+
+  // The number, on the tube's front face.
+  const lp = PJ(base.x, base.y + HGT * 0.44, base.z - R2);
+  c.fillStyle = P.ink;
+  c.font = `800 ${Math.round(Math.max(11, rx * (r.points >= 100 ? 0.62 : 0.76)))}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(String(r.points), lp.x, lp.y);
+}
+
+/** The arched SKEE-BALL lettering with its badge - the wall's own branding. */
+function drawLogo(c, P, cx, cy, width) {
+  const text = 'SKEE-BALL';
+  const R = width * 1.15;
+  const arc = width / R;
   c.save();
   c.textAlign = 'center';
-  for (let i = 0; i < n; i++) {
-    const r = rows[i];
-    const cx = 0.07 * DW + colW * (i + 0.5);
-    c.fillStyle = 'rgba(255,255,255,0.52)';
-    c.font = `700 ${Math.round(h * 0.20)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-    c.textBaseline = 'top';
-    c.fillText(r.label, cx, mTop + h * 0.16);
-    c.fillStyle = r.tone === 'lit' ? '#FFE45C' : 'rgba(255,255,255,0.86)';
-    c.font = `800 ${Math.round(h * 0.42)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
-    c.textBaseline = 'middle';
-    c.fillText(String(r.value), cx, mTop + h * 0.64);
+  c.textBaseline = 'middle';
+  c.font = `900 ${Math.round(width * 0.16)}px "Trebuchet MS", system-ui, sans-serif`;
+  for (let i = 0; i < text.length; i++) {
+    const k = i / (text.length - 1) - 0.5;
+    const a = k * arc;
+    const x = cx + Math.sin(a) * R;
+    const y = cy + R * 0.5 - Math.cos(a) * R * 0.5 - Math.abs(k) * width * 0.01;
+    c.save();
+    c.translate(x, y);
+    c.rotate(a * 0.5);
+    c.lineWidth = Math.max(3, width * 0.028);
+    c.strokeStyle = P.logoDark;
+    c.strokeText(text[i], 0, 0);
+    c.fillStyle = P.logo;
+    c.fillText(text[i], 0, 0);
+    c.restore();
   }
+  // The badge under the arch.
+  c.font = `700 ${Math.round(width * 0.055)}px "Trebuchet MS", system-ui, sans-serif`;
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.roundRect(cx - width * 0.24, cy + width * 0.075, width * 0.48, width * 0.085, 6);
+  c.fill();
+  c.fillStyle = P.lip;
+  c.fillText('THE ORIGINAL ALLEY GAME', cx, cy + width * 0.075 + width * 0.045);
+  c.restore();
+}
+
+/** Khaki diamond netting in a panel. */
+function drawNetting(c, P, x, y, w, h) {
+  if (w < 8) return;
+  c.save();
+  c.beginPath(); c.rect(x, y, w, h); c.clip();
+  c.fillStyle = 'rgba(0,0,0,0.22)';
+  c.fillRect(x, y, w, h);
+  c.strokeStyle = P.net;
+  c.globalAlpha = 0.55;
+  c.lineWidth = 1.5;
+  const step = 13;
+  for (let d = -h; d < w + h; d += step) {
+    c.beginPath(); c.moveTo(x + d, y); c.lineTo(x + d + h, y + h); c.stroke();
+    c.beginPath(); c.moveTo(x + d, y); c.lineTo(x + d - h, y + h); c.stroke();
+  }
+  c.restore();
+}
+
+/** The two black flexible guard tubes arcing down in front of the netting. */
+function drawGuardTubes(c, P, x0, x1, bottomY, mirror) {
+  const span = x1 - x0;
+  if (span < 10) return;
+  for (const k of [0.42, 0.72]) {
+    const tx = x0 + span * (mirror ? 1 - k : k);
+    const bow = span * 0.16 * (mirror ? 1 : -1);
+    for (const [w, col] of [[11, P.tube], [3.5, P.tubeLit]]) {
+      c.strokeStyle = col;
+      c.lineWidth = w;
+      c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(tx, 92);
+      c.quadraticCurveTo(tx + bow, (92 + bottomY) / 2, tx + bow * 0.3, bottomY - 8);
+      c.stroke();
+    }
+  }
+}
+
+// --- the marquee -------------------------------------------------------------------------------
+
+/** The static marquee frame: black panel, gold trim, roundels, BALL/SCORE labels. */
+function drawMarqueeFrame(c, board) {
+  const P = board.palette;
+  c.fillStyle = '#000';
+  c.fillRect(0, 0, DW, MARQ_H + 6);
+  c.fillStyle = P.marquee;
+  c.beginPath(); c.roundRect(8, 6, DW - 16, MARQ_H - 10, 8); c.fill();
+  c.strokeStyle = P.marqueeTrim;
+  c.lineWidth = 3;
+  c.beginPath(); c.roundRect(8, 6, DW - 16, MARQ_H - 10, 8); c.stroke();
+  // Gold rail under the marquee.
+  const g = c.createLinearGradient(0, MARQ_H - 2, 0, MARQ_H + 8);
+  g.addColorStop(0, P.marqueeTrim);
+  g.addColorStop(1, '#7A5E20');
+  c.fillStyle = g;
+  c.fillRect(0, MARQ_H - 2, DW, 9);
+
+  // Roundel logos either side: white disc, double ring, a little flying ball.
+  for (const x of [96, DW - 96]) {
+    c.fillStyle = '#F4EFE2';
+    ellipse(c, x, MARQ_H / 2 - 2, 24, 24); c.fill();
+    c.strokeStyle = P.logo;
+    c.lineWidth = 3;
+    ellipse(c, x, MARQ_H / 2 - 2, 19, 19); c.stroke();
+    c.fillStyle = P.logo;
+    ellipse(c, x + 5, MARQ_H / 2 - 8, 5.5, 5.5); c.fill();
+    c.strokeStyle = P.logoDark;
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.arc(x - 2, MARQ_H / 2 + 2, 11, Math.PI * 1.15, Math.PI * 1.85);
+    c.stroke();
+  }
+
+  // Labels; the digits are dynamic (drawMarquee).
+  c.textAlign = 'center';
+  c.font = '800 15px "Trebuchet MS", system-ui, sans-serif';
+  c.fillStyle = P.ledBallLabel;
+  c.fillText('BALL', DW / 2 - 60, 28);
+  c.fillStyle = P.ledScoreLabel;
+  c.fillText('SCORE', DW / 2 + 60, 28);
+}
+
+/** Seven-segment digit, LED style, with faint off-segments. */
+function seg7(c, x, y, h, digit, color) {
+  const ON = {
+    0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc',
+    5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcfgd',
+  }[digit] || '';
+  const w = h * 0.62, t = h * 0.13;
+  const S = {
+    a: [x, y, w, t], g: [x, y + h / 2 - t / 2, w, t], d: [x, y + h - t, w, t],
+    f: [x, y + t * 0.6, t, h / 2 - t], b: [x + w - t, y + t * 0.6, t, h / 2 - t],
+    e: [x, y + h / 2 + t * 0.4, t, h / 2 - t], c: [x + w - t, y + h / 2 + t * 0.4, t, h / 2 - t],
+  };
+  for (const [k, [sx, sy, sw, sh]] of Object.entries(S)) {
+    c.fillStyle = ON.includes(k) ? color : 'rgba(255,255,255,0.06)';
+    c.beginPath(); c.roundRect(sx, sy, sw, sh, t * 0.4); c.fill();
+  }
+}
+
+/** The dynamic marquee readout: BALL and SCORE digits. */
+export function drawMarquee(c, board, ballNo, score) {
+  const P = board.palette;
+  const h = 26;
+  c.save();
+  seg7(c, DW / 2 - 60 - h * 0.31, 36, h, Math.max(0, Math.min(9, ballNo | 0)), P.ledBall);
+  const s = String(Math.max(0, score | 0));
+  const w = h * 0.62 + 6;
+  const x0 = DW / 2 + 60 - (s.length * w) / 2 + 3;
+  for (let i = 0; i < s.length; i++) seg7(c, x0 + i * w, 36, h, Number(s[i]), P.ledScore);
   c.restore();
 }
 
 // --- the moving parts ---------------------------------------------------------------------------
 
-/** The ball's markings, as points on a UNIT SPHERE rather than a flat pattern. They have to be 3D
- *  for the ball to ROLL: a 2D pattern spun about the view axis reads as a ball spinning on the
- *  spot, not one rolling away from you up a lane. */
+/** The ball's markings, as points on a UNIT SPHERE rather than a flat pattern - 3D so the ball
+ *  ROLLS instead of spinning like a sticker. */
 const SPECKS = (() => {
   const out = []; let s = 1337;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
   for (let i = 0; i < 22; i++) {
-    // Even-ish coverage of the whole sphere, so there is always something on the visible face.
     const z = 1 - 2 * ((i + 0.5) / 22);
     const rr = Math.sqrt(Math.max(0, 1 - z * z));
-    const a = i * 2.39996 + rnd() * 0.5;          // golden angle, jittered
+    const a = i * 2.39996 + rnd() * 0.5;
     out.push({ x: Math.cos(a) * rr, y: Math.sin(a) * rr, z, r: 0.10 + rnd() * 0.05 });
   }
   return out;
 })();
 
-/** How far the ball turns per design pixel it travels. This is just the rolling relation
- *  theta = distance / radius - a ball that covers its own circumference turns once - so it needs
- *  no tuning and cannot look "wrong speed" relative to the roll. */
-export const spinPerPx = 1 / (BALL_R_NEAR * DW);
-
 /**
- * The ball. `spin` is its rotation in radians about the horizontal axis - i.e. rolling away from
- * the camera, which is the only direction it ever goes.
- *
- * The specks rotate; the SPECULAR HIGHLIGHT does not. That is not an oversight: a highlight is a
- * reflection of the room, so it stays where the light is while the surface turns underneath it.
- * Rotating it too is the classic tell that a rolling ball is really a spinning sticker.
+ * The ball: rust-brown wood, the reference clip's own (SPEC.md 2026-08-12). `spin` in radians
+ * about the horizontal axis. The wood-grain flecks rotate; the specular highlight does NOT -
+ * it is a reflection of the room, so it stays where the light is while the surface turns.
  */
 export function drawBall(c, x, y, r, spin = 0) {
   if (r <= 0.4) return;
   c.save();
-  c.fillStyle = 'rgba(0,0,0,0.30)';
-  ellipse(c, x, y + r * 0.62, r * 0.92, r * 0.32); c.fill();
-  // PALE PINK WITH DARKER PINK SPECKLES - the reference ball, verbatim from SPEC.md ("reads as a
-  // sprinkled donut, deliberately cartoony even in the reference"). The old amber-brown ball was
-  // this renderer's own invention and it vanished against the wood lane; the pink one is visible
-  // on every surface the game has.
   const g = c.createRadialGradient(x - r * 0.34, y - r * 0.40, r * 0.10, x, y, r);
-  g.addColorStop(0, '#FFEDF0');
-  g.addColorStop(0.55, '#F5B9C6');
-  g.addColorStop(1, '#C97B90');
+  g.addColorStop(0, '#C98A57');
+  g.addColorStop(0.55, '#8F5330');
+  g.addColorStop(1, '#4E2612');
   c.fillStyle = g;
   ellipse(c, x, y, r, r); c.fill();
 
   const cs = Math.cos(spin), sn = Math.sin(spin);
-  c.fillStyle = 'rgba(198,64,101,0.42)';
+  c.fillStyle = 'rgba(52,24,8,0.38)';
   for (const s of SPECKS) {
-    // Rotate about X. Screen y is DOWN, so a point on the near face (z=+1) moving to -y is the
-    // surface travelling up the screen: the ball rolling away.
     const py = s.y * cs - s.z * sn;
     const pz = s.y * sn + s.z * cs;
-    if (pz <= 0.06) continue;                     // on the far side of the ball
-    // Foreshortened toward the rim, and faded as it goes over the horizon so specks do not pop.
+    if (pz <= 0.06) continue;
     c.globalAlpha = Math.min(1, pz * 3.2);
     ellipse(c, x + s.x * r, y + py * r, s.r * r * pz, s.r * r * pz); c.fill();
   }
   c.globalAlpha = 1;
-
-  c.fillStyle = 'rgba(255,255,255,0.75)';
+  c.fillStyle = 'rgba(255,240,220,0.65)';
   ellipse(c, x - r * 0.32, y - r * 0.38, r * 0.20, r * 0.15); c.fill();
   c.restore();
 }
 
+/** Ball shadow on the lane, fading with height. */
+export function drawBallShadow(c, wx, wy, wz) {
+  if (wz > 2.45 || wy > 0.5) return;
+  const p = proj(wx, 0.001, wz);
+  const r = ballR(p.zc);
+  c.save();
+  c.globalAlpha = Math.max(0, 0.34 - wy * 0.6);
+  c.fillStyle = '#000';
+  ellipse(c, p.x, p.y, r * 0.95, r * 0.32);
+  c.fill();
+  c.restore();
+}
+
+/** Where a ring sits on screen - the badge and popup anchor. */
+export function targetPoint(board, id) {
+  const M = machineFor(board.id);
+  const r = M.rings.find((z) => z.id === id);
+  if (!r) {
+    const w = M.world(0, 0.05, 0);
+    const p = proj(w.x, w.y, w.z);
+    return { x: p.x, y: p.y, r: 20 };
+  }
+  // Anchor at the TUBE TOP the renderer draws (world-up), not the board-level hole, so the x3
+  // badge hangs over the cup instead of sitting on its face.
+  const base = M.world(r.c[0], r.c[1], 0);
+  const topY = base.y + (r.points >= 100 ? 0.115 : 0.10);
+  const p = proj(base.x, topY, base.z);
+  const pe = proj(base.x + r.R + r.T, topY, base.z);
+  return { x: p.x, y: p.y, r: Math.abs(pe.x - p.x) };
+}
+
 export function drawMultiplier(c, board, targetId, pulse) {
   const p = targetPoint(board, targetId);
-  const w = 0.115 * DW * (1 + pulse * 0.07);
-  const h = 0.050 * DW * (1 + pulse * 0.07);
-  const x = p.x, y = p.y - h * 1.15;
+  const w = 0.105 * DW * (1 + pulse * 0.07);
+  const h = 0.046 * DW * (1 + pulse * 0.07);
+  const x = p.x, y = p.y - p.r - h * 0.85;
   c.save();
   c.translate(x, y);
   c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, h * 0.42);
@@ -830,77 +682,60 @@ export function drawMultiplier(c, board, targetId, pulse) {
 }
 
 /**
- * The score callout: a small number that rises off the ball and fades. Nothing else.
- *
- * It used to be a spinning twelve-point starburst almost as wide as the cup stack, and it fired
- * at the same moment the ball was deleted in mid-air, so a missed throw read as "the ball
- * evaporated and a cartoon appeared". Matt: "you just have it disappear and a huge point value
- * and star popup. That's terrible. I HATE that. That is not realistic." The ball now rolls into
- * the trough instead (ui.js) and this is deliberately quiet - the marquee is where the score
- * lives, and this is only here so a throw is legible without watching the readout.
- *
- * `at` is a design-space point - where the ball actually came to rest, never the target's centre.
+ * The score callout: a small number that rises and fades where the ball actually finished.
+ * Deliberately quiet - the marquee is where the score lives (see skeeball/CLAUDE.md; the
+ * starburst-and-vanish era is not coming back).
  */
 export function drawPopup(c, at, text, t) {
-  // Never let a callout ride up under the cabinet head.
-  const p = { x: at.x, y: Math.max(at.y, (Y.marqueeBot + 0.085) * DH) };
+  const p = { x: at.x, y: Math.max(at.y, MARQ_H + 40) };
   const rise = 0.055 * DH * t;
   const alpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
-  const size = 0.048 * DW;
+  const size = 0.05 * DW;
   c.save();
   c.globalAlpha = Math.max(0, alpha);
   c.translate(p.x, p.y - rise - 0.022 * DH);
   c.font = `800 ${Math.round(size)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.lineWidth = Math.max(2.5, size * 0.26);
-  c.strokeStyle = 'rgba(30,10,0,0.85)'; c.lineJoin = 'round';
+  c.strokeStyle = 'rgba(10,10,10,0.85)'; c.lineJoin = 'round';
   c.strokeText(text, 0, 0);
   c.fillStyle = '#FFE45C';
   c.fillText(text, 0, 0);
   c.restore();
 }
 
+/** The remaining balls, racked in the return tray at the bottom right (the left corner belongs
+ *  to the balls-left HUD text). */
 export function drawQueue(c, n) {
-  const r = 0.023 * DW;
-  for (let i = 0; i < Math.min(n, 9); i++) drawBall(c, 0.034 * DW, (0.960 - i * 0.036) * DH, r);
+  const r = 13;
+  for (let i = 0; i < Math.min(n, 9); i++) {
+    drawBall(c, DW - 26 - (i % 3) * (r * 1.9), DH - 28 - Math.floor(i / 3) * (r * 1.8), r, i * 1.7);
+  }
 }
 
 /**
- * The aim guide: a dashed line up the lane showing WHERE the throw is pointed.
- *
- * It shows direction and nothing else, and that is a deliberate narrowing. It used to be a
- * predicted landing path plus a live power bar, which made sense when power was the distance you
- * had dragged so far - the bar was reading a number you had already committed to. Since the
- * gesture became speed-and-angle (game.js's flickToThrow) that is no longer true: your power is
- * decided at the instant you let go, so a live bar shows a value that is not the one about to be
- * used. A gauge that is wrong at the only moment that matters is worse than no gauge.
- *
- * The ANGLE is different - it is stable, it is the thing you steer continuously, and it is the
- * axis a player most needs help with (the 100s are pure aim). So that is what is drawn, and it
- * runs the ENGINE'S OWN fold maths (`laneOffsetAt`, called, never copied) so it cannot promise
- * a line the ball will not take.
+ * The aim guide: a dashed line up the lane showing WHERE the throw is pointed. Direction only -
+ * power is decided at the instant of release, and a gauge that is wrong at the only moment that
+ * matters is worse than no gauge (see skeeball/CLAUDE.md history).
  */
-export function drawAimGuide(c, aim) {
-  const a = Math.max(-1, Math.min(1, aim));
+export function drawAimGuide(c, dir) {
   c.save();
   c.globalAlpha = 0.8;
-  c.strokeStyle = 'rgba(255,240,210,0.62)';
+  c.strokeStyle = 'rgba(255,250,235,0.62)';
   c.lineWidth = 3.5;
   c.setLineDash([10, 9]);
   c.beginPath();
-  for (let i = 0; i <= 26; i++) {
-    const v = i / 26;
-    const q = lanePoint(v, boardXToLaneU(laneOffsetAt(a, v).u));
-    if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y);
+  for (let i = 0; i <= 24; i++) {
+    const d = 0.15 + (i / 24) * 2.1;
+    const p = proj(Math.sin(dir) * d, 0.001, 0.02 + Math.cos(dir) * d);
+    if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
   }
   c.stroke();
-  c.setLineDash([]);
   c.restore();
 }
 
-// --- the picker's machine art --------------------------------------------------------------
+// --- the picker's machine art (chains + padlock kept from the previous build) -------------------
 
-/** One link of a chain, drawn along a segment. */
 function chainLink(c, x, y, len, thick, angle, flat) {
   c.save();
   c.translate(x, y);
@@ -919,8 +754,6 @@ function chainLink(c, x, y, len, thick, angle, flat) {
   c.restore();
 }
 
-/** A steel chain from A to B. Links alternate face-on and edge-on, which is the whole reason a
- *  chain reads as a chain rather than as a dotted line. */
 function drawChain(c, x0, y0, x1, y1, thick) {
   const dx = x1 - x0, dy = y1 - y0;
   const dist = Math.hypot(dx, dy);
@@ -939,9 +772,6 @@ function drawChain(c, x0, y0, x1, y1, thick) {
   c.restore();
 }
 
-/** The padlock hanging over a locked machine - IMG_3960's, which is the whole visual language
- *  Matt asked for: "the chains and a lock on the [locked] ones, just like in the reference
- *  photos". */
 function drawPadlock(c, cx, cy, w) {
   const h = w * 0.86;
   const shackleR = w * 0.30;
@@ -949,8 +779,6 @@ function drawPadlock(c, cx, cy, w) {
   c.shadowColor = 'rgba(0,0,0,0.55)';
   c.shadowBlur = w * 0.18;
   c.shadowOffsetY = w * 0.06;
-
-  // Shackle first, so the body overlaps its feet.
   c.strokeStyle = '#C9CED6';
   c.lineWidth = w * 0.155;
   c.lineCap = 'round';
@@ -963,7 +791,6 @@ function drawPadlock(c, cx, cy, w) {
   c.arc(cx, cy - h * 0.30, shackleR, Math.PI * 1.05, Math.PI * 1.55);
   c.stroke();
   c.shadowColor = 'transparent';
-
   const bodyW = w * 0.86, bodyH = h * 0.62;
   const g = c.createLinearGradient(cx - bodyW / 2, 0, cx + bodyW / 2, 0);
   g.addColorStop(0, '#F2A32B');
@@ -977,8 +804,6 @@ function drawPadlock(c, cx, cy, w) {
   c.strokeStyle = 'rgba(120,70,0,0.55)';
   c.lineWidth = Math.max(1, w * 0.03);
   c.stroke();
-
-  // Keyhole.
   c.fillStyle = '#5A3200';
   ellipse(c, cx, cy + bodyH * 0.16, w * 0.085, w * 0.085); c.fill();
   c.beginPath();
@@ -990,31 +815,21 @@ function drawPadlock(c, cx, cy, w) {
   c.restore();
 }
 
-/**
- * The picker's artwork for one machine, drawn into a `w` x `h` box.
- *
- * **It is the REAL machine, drawn by the real renderer**, scaled into the box - not a separate
- * illustration. Matt asked for "a carousel with an image of the board you're selecting", and the
- * only way a picture of the board cannot drift away from the board is for it to BE the board.
- * A locked machine gets the reference's own treatment: dimmed, chained, padlocked.
- */
+/** The picker's artwork: the REAL machine, drawn by the real renderer, scaled into the box.
+ *  A locked machine is dimmed, chained and padlocked (the reference's own treatment). */
 export function drawThumb(c, board, w, h, locked) {
-  const P = board.palette;
-  // The CABINET, whole: head, throat, bowl and front lip - design y 0 to CAB. Fitted "contain"
-  // rather than cropped, because a crop of a tall cabinet into a wide box shows the marquee and
-  // half a cup, which is not a picture of a machine. The margin is painted in the cabinet's own
-  // dark trim so it reads as the machine standing in a room, which is how IMG_3952 frames it.
-  const CAB = 0.62 * DH;
+  const CAB = 0.56 * DH;                       // marquee + wall + board + lip
   c.save();
   c.beginPath(); c.rect(0, 0, w, h); c.clip();
-  c.fillStyle = P.trimDark;
+  c.fillStyle = '#101314';
   c.fillRect(0, 0, w, h);
   const scale = Math.min(w / DW, h / CAB);
   c.translate((w - DW * scale) / 2, (h - CAB * scale) / 2);
   c.scale(scale, scale);
   c.beginPath(); c.rect(0, 0, DW, CAB); c.clip();
   drawMachine(c, board);
-  drawMarquee(c, board, [{ label: 'BALL', value: '9' }, { label: 'SCORE', value: '0' }]);
+  drawProps(c, board, 'all', null);
+  drawMarquee(c, board, 9, 0);
   c.restore();
 
   if (!locked) return;
@@ -1029,7 +844,7 @@ export function drawThumb(c, board, w, h, locked) {
 }
 
 export default {
-  DW, DH, sc, laneY, laneHalf, lanePoint, boardPoint, targetPoint, layoutFor,
-  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx, mouthOf, zonePath,
-  drawMachine, drawMarquee, drawBall, drawMultiplier, drawPopup, drawQueue, drawAimGuide, drawThumb,
+  DW, DH, proj, ballR, spinPerM, layoutFor, targetPoint,
+  drawMachine, drawProps, drawMarquee, drawBall, drawBallShadow, drawMultiplier, drawPopup, drawQueue,
+  drawAimGuide, drawThumb,
 };

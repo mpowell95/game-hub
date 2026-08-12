@@ -55,7 +55,7 @@ export const STRINGS = {
     ht_first: 'First page',
     ht_next: 'Last page',
     ht_flick: 'Flick up the lane to throw.\nThe ball rolls up the ramp and drops into a ring.',
-    ht_power: 'How FAST you flick sets the power.\nA gentle one drops in the 20, a quick one reaches the 50.\nToo hard and it bounces off the back wall and rolls back down.',
+    ht_power: 'How FAST you flick sets the power.\nA gentle one drops in the 20, a quick one reaches the 50.\nToo hard and it slams the top of the board and rattles back down.',
     ht_aim: 'The ANGLE of your flick is your aim.\nThe two 100 cups sit wide at the back, so they need a fast throw AND a real diagonal.',
     ht_badge: 'The blue x3 badge moves after every throw.\nLand in the ring it is sitting on and that score triples.',
     ht_rack: 'Nine balls, one rack.\nBeat a machine\'s target score and the next machine unlocks.',
@@ -66,7 +66,7 @@ export const STRINGS = {
     // and cheap, and removing a key is how a stale reference becomes a blank string.
     help_goal: 'Land the ball in the highest ring you can.',
     help_flick: 'Flick up the lane: how FAST you flick sets the power, the angle of the flick sets the aim.',
-    help_rings: 'The rings run 10 at the front to 50 at the back. Every ball on the board scores the ring it lands in; overthrow and it bounces off the back wall and rolls back down.',
+    help_rings: 'The rings run 10 at the front to 50 at the back. Clip a rim and the ball bounces, rattles around the basin and drops wherever it really lands.',
     help_cups: 'The two 100 cups sit in the far corners. Flick hard AND wide, or bank off a rail.',
     help_mult: 'The blue x3 badge moves every throw. Hit the target it is sitting on and the score triples.',
 
@@ -136,7 +136,7 @@ export const STRINGS = {
     ht_first: 'Primera pagina',
     ht_next: 'Ultima pagina',
     ht_flick: 'Desliza hacia arriba para lanzar.\nLa bola sube por la rampa y cae en un aro.',
-    ht_power: 'La VELOCIDAD del deslizamiento marca la fuerza.\nSuave y cae en el 20, rapido y llega al 50.\nDemasiado y rebota en la pared del fondo y vuelve hacia abajo.',
+    ht_power: 'La VELOCIDAD del deslizamiento marca la fuerza.\nSuave y cae en el 20, rapido y llega al 50.\nDemasiado y golpea arriba del tablero y baja rebotando.',
     ht_aim: 'El ANGULO del deslizamiento es tu punteria.\nLos dos vasos de 100 estan al fondo y a los lados: piden fuerza Y una diagonal clara.',
     ht_badge: 'La chapa azul x3 cambia de sitio en cada lanzamiento.\nAcierta el aro donde este y ese valor se triplica.',
     ht_rack: 'Nueve bolas, una tanda.\nSupera la puntuacion objetivo y se desbloquea la siguiente maquina.',
@@ -145,7 +145,7 @@ export const STRINGS = {
 
     help_goal: 'Mete la bola en el aro más alto que puedas.',
     help_flick: 'Desliza hacia arriba: la velocidad marca la fuerza, el ángulo marca la puntería.',
-    help_rings: 'Los aros van del 10 delante al 50 al fondo. Cada bola puntúa el aro donde cae; si te pasas, rebota en la pared del fondo y vuelve hacia abajo.',
+    help_rings: 'Los aros van del 10 delante al 50 al fondo. Si rozas un borde, la bola rebota, da vueltas por el plato y cae donde de verdad aterriza.',
     help_cups: 'Las dos copas de 100 están en las esquinas del fondo. Lanza fuerte Y abierto, o rebota en una banda.',
     help_mult: 'La chapa azul x3 cambia de sitio en cada lanzamiento. Acierta donde esté y la puntuación se triplica.',
 

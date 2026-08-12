@@ -11,7 +11,7 @@
 // turn-based with no clock, so leaving mid-rack is lossless: every landed throw snapshots and the
 // picker offers Resume. Always returns false; do not "fix" it to true mid-game.
 
-import { Game, BALLS_PER_RACK, resolveThrow, flickToThrow, laneOffsetAt, SHORT_BELOW } from './game.js';
+import { Game, BALLS_PER_RACK, flickToThrow } from './game.js';
 import { BOARDS, DEFAULT_BOARD, boardById, nextBoard } from './boards.js';
 import * as R from './render.js';
 import { STRINGS } from './strings.js';
@@ -25,31 +25,21 @@ const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.skeeball.v1';
 const SAVE_KEY = 'gamehub.skeeball.save.v1';
 
-// The gesture -> throw mapping is game.js's `flickToThrow`, NOT anything in this file. It is half
-// of the difficulty, it is pure, and `test.js` drives real gestures through it. This file's only
-// job is to turn pointer events into the four numbers it wants.
+// The gesture -> throw mapping is game.js's `flickToThrow`, NOT anything in this file. It is
+// pure, and `test.js` drives real gestures through it. This file's only job is to turn pointer
+// events into the four numbers it wants.
 //
 // How long a window at the end of the swipe counts as "the release". 100ms is Android's
 // VelocityTracker default and it is a good one: long enough to average out a jittery finger,
 // short enough that a pull-back before the flick does not bleed into it.
 const VEL_WINDOW_MS = 100;
 
-// THE ROLL. Speed in DESIGN PIXELS PER SECOND along the ball's own path: `ROLL_V0` at no energy,
-// plus `ROLL_VE` per unit of it, so a hard throw is visibly quicker than a soft one. It is
-// CONSTANT for the whole flight, and the duration is just length / speed.
-//
-// It used to decelerate to 55% by the end, which I added for "realism" and which Matt correctly
-// called out: "The ball slows down right before going off the ramp. Why are you messing with the
-// speed so much? Just keep it constant." He is right - the ramp sits about two thirds along the
-// path, so the ball arrived there already visibly slower than it left the hand, and a speed change
-// in the middle of a throw reads as a fault whatever the physics says. The only place the ball
-// changes speed now is a throw that falls SHORT, which has to slow to a stop to roll back.
-//
-// These replaced a 720/260/200ms three-segment animation whose pieces covered wildly different
-// distances and had nothing to do with the throw at all.
-const ROLL_V0 = 560;
-const ROLL_VE = 720;
-const DROP_MS = 150;
+// THE FLIGHT IS THE SIMULATION, PLAYED BACK 1:1. game.js's throwBall returns the physics
+// engine's own timestamped frames (physics.js), and this file just interpolates them against
+// the real clock. There is no animation model here at all - no durations, no speeds, no paths -
+// so what is drawn IS what was simulated, bounce for bounce, and the two can never disagree.
+// (The previous builds each had a hand-built animation layer, and every one of Matt's physics
+// complaints lived in the gap between that layer and the scoring underneath it.)
 const POPUP_MS = 850;
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -330,9 +320,6 @@ class SkeeballUI {
     this.boardId = this.game.board.id;
     this.recorded = false;
     this.flight = null; this.popup = null; this.pending = null; this.drag = null;
-    // The 10-balls resting on the apron. Cosmetic (never saved, so a resumed rack starts with a
-    // clean apron), but load-bearing for honesty: a ball the floor kept stays in sight.
-    this.rested = []; this._restNext = null;
 
     this.root.innerHTML = `
       <div class="sk-root">
@@ -444,18 +431,18 @@ class SkeeballUI {
     this._onDown = (e) => {
       if (!this.game || this.game.over || this.flight || this.popup) return;
       const p = pos(e);
-      this.drag = { pts: [], power: 0, aim: 0 };
+      this.drag = { pts: [], dir: 0 };
       stamp(e, p);
       cv.setPointerCapture?.(e.pointerId);
     };
     this._onMove = (e) => {
       if (!this.drag) return;
       stamp(e, pos(e));
-      // The live AIM, for the guide. Smoothed, because a raw per-frame angle estimate flickers
-      // badly and a guide that twitches is worse than no guide. Power is deliberately NOT tracked
-      // here: it is not known until release (see render.js's drawAimGuide).
+      // The live DIRECTION, for the guide. Smoothed, because a raw per-frame angle estimate
+      // flickers and a guide that twitches is worse than no guide. Power is deliberately NOT
+      // tracked here: it is not known until release (see render.js's drawAimGuide).
       const g = this.drag.pts.length > 1 ? flickToThrow(this._gesture()) : null;
-      if (g) this.drag.aim += (g.aim - this.drag.aim) * 0.4;
+      if (g) this.drag.dir += (g.dir - this.drag.dir) * 0.4;
     };
     this._onUp = () => {
       if (!this.drag) return;
@@ -463,7 +450,7 @@ class SkeeballUI {
       this.drag = null;
       const shot = g && flickToThrow(g);
       if (!shot) return;                       // a tap, a yank back, or a stray touch
-      this._throw(shot.power, shot.aim);
+      this._throw(shot.v0, shot.dir);
     };
     cv.addEventListener('pointerdown', this._onDown);
     cv.addEventListener('pointermove', this._onMove);
@@ -476,248 +463,69 @@ class SkeeballUI {
   }
 
   /**
-   * ONE ROLL, ONE SPEED. Matt, 2026-08-11: "You flick it, it goes some speed down the ramp, then
-   * it speeds up to go off the jump, then it flies through the air. None of the different speeds
-   * feel related to or based on each other... It goes SO slow down the ramp, then SO fast off the
-   * jump. Then like an ok speed in the air."
-   *
-   * Two separate faults produced that, and the second one is the reason the first was not enough:
-   *
-   *   1. THREE HARDCODED DURATIONS - 720ms for the lane, 260ms for the board, 200ms for the drop -
-   *      stapled together. Each covered a completely different distance, so each ran at a different
-   *      apparent speed, and none had anything to do with how hard the ball was thrown. There was
-   *      even a `sin()` hop over the crest, which is the "flies through the air".
-   *   2. A HOLE IN THE PATH. The lane's top is at design y=660, the bowl's lip at y=560, and the
-   *      ramp between them was on nobody's path: the ball went straight from `lanePoint(1)` to
-   *      `boardPoint(...)`, teleporting 100px in a single frame. Traced, that frame ran at
-   *      6535 px/s against 406 px/s the frame before it.
-   *
-   * So the throw is now ONE polyline through lane -> ramp -> bowl (render.js owns each piece's
-   * geometry, including `rampPoint`, so the ball rolls on the surface that is actually drawn), and
-   * the ball advances along it by ARC LENGTH. Arc length rather than a world coordinate on purpose:
-   * the bowl is deliberately drawn oversized - the reference cabinet does the same - so "world
-   * units" do not convert to screen pixels at the same rate on both sides of the lip, and any
-   * model that assumes they do reintroduces a speed step at exactly that seam.
-   *
-   * Speed comes from the THROW and is CONSTANT along the whole path. The duration is not declared
-   * anywhere; it is length / speed.
+   * THE THROW IS THE SIMULATION. game.js runs physics.js the moment the ball leaves the hand
+   * and returns the whole flight as timestamped frames; this plays them back against the real
+   * clock, 1:1. A soft flick is genuinely slower on screen, a rim clip genuinely deflects, a
+   * rattle genuinely rattles - because there is no animation layer to approximate any of it.
    */
-  _throw(power, aim) {
+  _throw(v0, dir) {
     if (!this.game || this.game.over) return;
-    const preview = resolveThrow(power, aim, this.game.board);
-    const out = this.game.throwBall(power, aim);
+    const out = this.game.throwBall(v0, dir);
     if (!out) return;
-    const short = out.kind === 'short';
-
-    // How far up the lane a throw that never made the ramp actually got.
-    const reach = clamp(preview.energy / SHORT_BELOW, 0.12, 1) * 0.9;
-    const path = this._buildPath(aim, out, short ? reach : null);
-    const v0 = ROLL_V0 + ROLL_VE * clamp(preview.energy, 0, 1);
-    const len = path.len[path.len.length - 1];
-
-    // A ball that finds no hole does NOT vanish. It rolls back down the bowl and comes to REST on
-    // the apron at the front, in plain sight until the rack ends - which is the reference's own
-    // behaviour (SPEC.md: "balls that came to rest without scoring sit on the apron in front of
-    // the rings"). Matt: "why does the ball disappear? ... That's terrible. I HATE that."
-    const sank = !short && out.kind === 'hit' && out.target && !this._isCatchAll(out.target);
-    const back = (!short && !sank) ? this._buildReturn(out) : null;
-
-    this.flight = {
-      out, short, sank, path, back, t0: performance.now(),
-      // Constant speed, so time is just distance over it - including the wall-bounce leg, which
-      // is the throw's own momentum coming back. A short throw is the one exception: it
-      // decelerates to a standstill at the apex, so its mean speed is half.
-      rollMs: (len / (v0 * (short ? 0.5 : 1))) * 1000,
-      // Rolling back down to the apron is gravity-fed and unhurried, but must not hold the game up.
-      backMs: back ? Math.min(900, (back.len[back.len.length - 1] / (v0 * 0.55)) * 1000)
-        : short ? Math.min(700, (len / (v0 * 0.62)) * 1000) : 0,
-      dropMs: sank ? DROP_MS : 0,
-    };
-    // Hold the points back until the ball LANDS - the engine has them already, but revealing them
-    // on release tells the player the answer while the ball is still rolling.
+    this.flight = { out, frames: out.sim.frames, t0: performance.now() };
+    // Hold the points back until the ball LANDS - the engine has them already, but revealing
+    // them on release tells the player the answer while the ball is still rolling.
     this.pending = out.scored;
     this.hintEl.hidden = true;
     this._paintHud();
   }
 
-  /** Where a 10-ball comes to rest on the apron: at its own lane offset, nudged sideways until it
-   *  is clear of the balls already resting there so the rack piles up legibly. */
-  _restSpot(out) {
-    const y = 0.035;
-    let x = clamp(out.x, -0.82, 0.82);
-    const clear = (v) => this.rested.every((b) => Math.abs(b.bx - v) > 0.105);
-    for (let i = 1; i <= 16 && !clear(x); i++) {
-      const step = 0.11 * Math.ceil(i / 2) * (i % 2 ? 1 : -1);
-      if (Math.abs(clamp(out.x, -0.82, 0.82) + step) <= 0.86) x = clamp(out.x, -0.82, 0.82) + step;
-    }
-    return { x, y };
-  }
-
-  /** The return leg for a ball the floor kept: from where it landed, back down the bowl to its
-   *  rest spot on the apron. A polyline like the main path, so _atLength works on both. */
-  _buildReturn(out) {
-    const rest = this._restSpot(out);
-    this._restNext = rest;
-    const from = { x: out.x, y: Math.min(0.97, out.y) };
-    const pts = [];
-    for (let i = 0; i <= 18; i++) {
-      const k = i / 18;
-      const y = from.y + (rest.y - from.y) * k;
-      const x = from.x + (rest.x - from.x) * k;
-      const q = R.boardPoint(x, y);
-      pts.push({ x: q.x, y: q.y, r: R.ballROnBoard(y) });
-    }
-    const len = [0];
-    for (let i = 1; i < pts.length; i++) {
-      len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-    }
-    return { pts, len };
-  }
-
-  /**
-   * The throw's path, as a polyline in design space plus its cumulative arc length.
-   * `laneTo` non-null means a short throw that only ever gets that far up the lane.
-   *
-   * The lane leg uses the ENGINE's `laneOffsetAt`, so a banked throw is drawn hitting the rail at
-   * exactly the point it was scored hitting it. This file used to keep its own copy of that fold
-   * with a stale `1.35` in it, which is why Matt saw a ball "bounce off the wall, but then continue
-   * on the line it originally was on".
-   */
-  _buildPath(aim, out, laneTo) {
-    const pts = [];
-    const top = laneTo == null ? 1 : laneTo;
-    for (let i = 0; i <= 28; i++) {
-      const v = (i / 28) * top;
-      const q = R.lanePoint(v, R.boardXToLaneU(laneOffsetAt(aim, v).u));
-      pts.push({ x: q.x, y: q.y, r: q.r });
-    }
-    if (laneTo == null) {
-      const u = laneOffsetAt(aim, 1).u;
-      for (let i = 1; i <= 10; i++) pts.push(R.rampPoint(i / 10, u));
-      const endY = Math.min(0.97, out.y);
-      const board = (fromY, toY, n) => {
-        for (let i = 1; i <= n; i++) {
-          const y = fromY + ((toY - fromY) * i) / n;
-          const q = R.boardPoint(out.x, y);
-          pts.push({ x: q.x, y: q.y, r: R.ballROnBoard(y) });
-        }
-      };
-      if (out.wall) {
-        // An overthrown ball visibly REACHES the back wall and comes back down the board to
-        // where it scored - the engine's own reflection (game.js's WALL_RETURN), drawn leg for
-        // leg. This is what replaced "Too hard!" and its zero.
-        board(0, 0.99, 20);
-        board(0.99, endY, 8);
-      } else {
-        board(0, endY, 20);
-      }
-    }
-    const len = [0];
-    for (let i = 1; i < pts.length; i++) {
-      len.push(len[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-    }
-    return { pts, len };
-  }
-
-  /** Interpolate the polyline at arc length `s`, and give the ball the rotation that distance
-   *  implies. Deriving the spin from the SAME arc length the position comes from is what stops the
-   *  ball ever looking like it is skidding: theta = distance / radius, and both sides of that come
-   *  from one number. */
-  _atLength(path, s) {
-    const { pts, len } = path;
-    const total = len[len.length - 1];
-    const d = clamp(s, 0, total);
-    let i = 1;
-    while (i < len.length - 1 && len[i] < d) i += 1;
-    const span = Math.max(1e-6, len[i] - len[i - 1]);
-    const k = (d - len[i - 1]) / span;
-    const a = pts[i - 1], b = pts[i];
-    return {
-      x: a.x + (b.x - a.x) * k,
-      y: a.y + (b.y - a.y) * k,
-      r: a.r + (b.r - a.r) * k,
-      spin: d * R.spinPerPx,
-    };
-  }
-
+  /** The ball right now: the sim frames interpolated at the real elapsed time, projected. */
   _ballNow(now) {
     const f = this.flight;
     if (!f) return null;
-    const el = now - f.t0;
-    const total = f.path.len[f.path.len.length - 1];
-
-    if (el < f.rollMs) {
-      // Constant speed: the arc length travelled is simply linear in time. No easing curve, no
-      // deceleration, nothing layered on top - see the ROLL_V0 note.
-      const k = el / f.rollMs;
-      // A SHORT throw is the one exception: it has to slow to a standstill before it can come back.
-      return this._atLength(f.path, total * (f.short ? k * (2 - k) : k));
+    const t = (now - f.t0) / 1000;
+    const fr = f.frames;
+    if (!fr.length) return null;
+    let lo = 0, hi = fr.length - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (fr[mid].t <= t) lo = mid; else hi = mid;
     }
-
-    if (f.short) {
-      // ...and then rolls back down the lane to the player, off the bottom of the screen. It is
-      // returned, not deleted: the path's own start is below the foul line.
-      const k = clamp((el - f.rollMs) / Math.max(1, f.backMs || 550), 0, 1);
-      return this._atLength(f.path, total * (1 - k * k));
-    }
-
-    if (!f.sank) {
-      // NO HOLE: it rolls back down the bowl and comes to REST on the apron, where it stays for
-      // the rest of the rack (the reference's own behaviour). THE BALL IS NEVER DELETED IN
-      // MID-AIR - it leaves the screen by a hole or by the return at the player's end, or not at
-      // all. Do not reintroduce a fade.
-      const k = clamp((el - f.rollMs) / Math.max(1, f.backMs), 0, 1);
-      const backTotal = f.back.len[f.back.len.length - 1];
-      const q = this._atLength(f.back, backTotal * k * (2 - k));
-      // Rolling BACK spins the other way: reuse the outbound spin and unwind it.
-      return { ...q, spin: (total - backTotal * k * (2 - k)) * R.spinPerPx };
-    }
-
-    // A hole: it drops in.
-    const end = this._atLength(f.path, total);
-    const k = clamp((el - f.rollMs) / f.dropMs, 0, 1);
-    return { ...end, y: end.y + k * end.r * 0.5, r: end.r * (1 - k * 0.85) };
-  }
-
-  /** The board's big consolation target - a ball resting on the playfield, not sunk in anything. */
-  _isCatchAll(id) {
-    const t = this.game.board.targets.find((z) => z.id === id);
-    return !!t && t.kind === 'ring';
+    const a = fr[lo], b = fr[Math.min(hi, fr.length - 1)];
+    const k = b.t > a.t ? Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t))) : 1;
+    const wx = a.x + (b.x - a.x) * k;
+    const wy = a.y + (b.y - a.y) * k;
+    const wz = a.z + (b.z - a.z) * k;
+    const sink = (a.sink || 0) + ((b.sink || 0) - (a.sink || 0)) * k;
+    const p = R.proj(wx, wy, wz);
+    return {
+      x: p.x, y: p.y,
+      r: R.ballR(p.zc) * (1 - sink * 0.9),
+      spin: a.spin + (b.spin - a.spin) * k,
+      wx, wy, wz, sink,
+    };
   }
 
   _flightDone(now) {
     const f = this.flight;
-    return !!f && (now - f.t0) >= f.rollMs + f.backMs + (f.short ? 0 : f.dropMs);
+    return !!f && (now - f.t0) / 1000 >= f.frames[f.frames.length - 1].t;
   }
 
   _landed() {
     const f = this.flight;
     const out = f.out;
-    // WHERE THE BALL ACTUALLY FINISHED, not where the target is. A hole: in the hole. A 10: on
-    // the apron it just rolled back to, because that is where the player's eye is. Floating a
-    // "+10" over the middle of the board when the ball is somewhere else is the board announcing
-    // a decision it made on your behalf, which is the whole family of complaint this game has
-    // had.
-    let at;
-    if (f.short) at = R.lanePoint(0.06, out.x);
-    else if (f.sank) at = R.boardPoint(out.x, Math.min(0.97, out.y));
-    else {
-      // The floor kept it: park the ball on the apron, visibly, until the rack ends.
-      const rest = this._restNext || { x: out.x, y: 0.035 };
-      const q = R.boardPoint(rest.x, rest.y);
-      const total = f.path.len[f.path.len.length - 1] + f.back.len[f.back.len.length - 1];
-      this.rested.push({ bx: rest.x, x: q.x, y: q.y, r: R.ballROnBoard(rest.y), spin: total * R.spinPerPx });
-      this._restNext = null;
-      at = q;
-    }
+    // The popup appears WHERE THE BALL ACTUALLY FINISHED - the last simulated position - never
+    // over a target's centre. The sim ends inside a hole (or back at the player's feet for a
+    // short roll), so this is always the honest spot.
+    const last = f.frames[f.frames.length - 1];
+    const p = R.proj(last.x, last.y, last.z);
     this.flight = null;
     this.pending = null;
     this.popup = {
       t0: performance.now(),
-      at,
-      text: out.kind === 'short' ? t('short')
-        : out.kind === 'miss' ? t('miss')
-          : `${out.scored}${out.multiplied ? '!' : ''}`,
+      at: { x: p.x, y: p.y },
+      text: out.kind === 'short' ? t('short') : `${out.scored}${out.multiplied ? '!' : ''}`,
     };
     this._paintHud();
     this._save();
@@ -736,18 +544,8 @@ class SkeeballUI {
     if (el) el.textContent = this.game.over ? '' : t('balls_left', { n: this.game.ballsLeft });
   }
 
-  /** The three numbers on the cabinet head, plus the live score. */
-  _marqueeRows() {
-    const sk = sub();
-    const id = this.game.board.id;
-    const world = this.appWide[id];
-    const shown = this.game.score - (this.pending || 0);
-    return [
-      { label: t('m_world'), value: world && world.score ? world.score : '—', tone: 'dim' },
-      { label: t('m_score'), value: shown, tone: 'lit' },
-      { label: t('m_best'), value: Math.max(bestOn(sk, id), todayBestOn(sk, id)) || '—', tone: 'dim' },
-    ];
-  }
+  // The marquee is the app's own LED readout: BALL and SCORE (the reference screenshot's
+  // `BALL 9 SCORE 0`). The record/best/today numbers live on the picker and the end card.
 
   _startLoop() {
     this._stopLoop();
@@ -766,26 +564,34 @@ class SkeeballUI {
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.save(); c.translate(ox, oy); c.scale(scale, scale);
 
-    R.drawMarquee(c, this.game.board, this._marqueeRows());
-    R.drawQueue(c, this.game.over ? 0 : this.game.ballsLeft - (this.flight ? 1 : 0));
-    for (const b of this.rested) R.drawBall(c, b.x, b.y, b.r, b.spin);
+    // ballsLeft already excludes the ball in flight (throwBall advances the count on release),
+    // so it IS the tray count and the marquee count - no adjustment.
+    const ballsShown = this.game.over ? 0 : this.game.ballsLeft;
+    const b = this.flight ? this._ballNow(now) : null;
+    // The props (cups, basin band) straddle the ball in z-order: rings BEYOND the ball first,
+    // then the ball, then the rings in FRONT of it - a rolling ball is IN the basin, not
+    // floating over a picture of one.
+    R.drawProps(c, this.game.board, 'behind', b);
+    if (b) {
+      // No alpha fade anywhere. A ball leaves the screen by dropping into a hole or rolling out
+      // of frame at the player's end, never by dissolving in mid-air (Matt, 2026-08-11: "why
+      // does the ball disappear... I HATE that. That is not realistic.").
+      R.drawBallShadow(c, b.wx, b.wy, b.wz);
+      R.drawBall(c, b.x, b.y, b.r, b.spin || 0);
+    }
+    R.drawProps(c, this.game.board, 'front', b);
+    R.drawMarquee(c, this.game.board, ballsShown, this.game.score - (this.pending || 0));
+    R.drawQueue(c, ballsShown);
     if (!this.game.over && this.game.multTarget && !this.popup) {
       R.drawMultiplier(c, this.game.board, this.game.multTarget, 0.5 + 0.5 * Math.sin(now / 320));
     }
-    if (this.flight) {
-      const b = this._ballNow(now);
-      // No alpha fade anywhere. A ball leaves the screen by going into a hole or rolling out of
-      // frame at the player's end, never by dissolving in mid-air (Matt, 2026-08-11: "why does the
-      // ball disappear... I HATE that. That is not realistic.").
-      if (b) R.drawBall(c, b.x, b.y, b.r, b.spin || 0);
-      if (this._flightDone(now)) this._landed();
-    }
+    if (this.flight && this._flightDone(now)) this._landed();
     if (this.popup) {
       const k = (now - this.popup.t0) / POPUP_MS;
       if (k >= 1) this._afterPopup();
       else R.drawPopup(c, this.popup.at, this.popup.text, k);
     }
-    if (this.drag && this.drag.pts.length > 1) R.drawAimGuide(c, this.drag.aim);
+    if (this.drag && this.drag.pts.length > 1) R.drawAimGuide(c, this.drag.dir);
     c.restore();
   }
 
