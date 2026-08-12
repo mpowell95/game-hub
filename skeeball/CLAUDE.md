@@ -290,6 +290,57 @@ perspective.
 To re-measure any of this, trace the ball's position per frame and print the frame-to-frame speed.
 A discontinuity is then a number, not a feeling.
 
+## Two things that must never come back
+
+Matt, 2026-08-11, after asking for both before: *"Remove the below permanently. NEVER add them
+back."* Both were physics dishonesty, and both are now pinned by assertions rather than by prose.
+
+### 1. The holes do not attract the ball
+
+*"The balls move slightly in the air towards the holes. It's like the holes attract the ball. The
+ball deviates from the path it should be on and moves towards the hole."*
+
+The ball never moved. What was wrong was that **the catch ellipse was bigger than the hole being
+painted**, so a ball that came to rest BESIDE a cup was scored into it and then drawn sinking
+through the floor next to it. It happened twice, in two axes:
+
+- first `rx` was drawn at 0.86 of the catch — fixed, and written up as "rx IS the drawn width";
+- then `ry` was left at nearly **twice** the depth of the drawn mouth, which nothing noticed
+  because nobody had ever compared the two numbers. Measured on that build: **62% of throws scored
+  as a cup landed outside the visible hole**, the worst 3.1× its radius away.
+
+`render.js`'s **`mouthOf(t)`** is now the single source of a hole's drawn size — it projects the
+target's own catch ellipse through `boardPoint`, exactly, and `drawTube` paints the dark opening at
+precisely that with no scale factor anywhere. The cream lip is drawn OUTSIDE the opening
+(`RIM_LIP`), so the only remaining fudge can make a cup look bigger than it scores, never smaller.
+
+`test.js`'s `[KNOWN-BUG PROBE] THE HOLES DO NOT ATTRACT THE BALL` sweeps every board and asserts
+that every scoring throw comes to rest inside the ellipse actually painted for the target it
+scored. It measures in design pixels, not ratios, because a board-space ellipse does not project to
+an exact screen ellipse and a few throws sit ~0.2px proud of the rim.
+
+**Consequence to respect:** a target's `ry` is now visible geometry, not a free tuning knob. Making
+a cup easier means drawing a bigger hole. That is the point.
+
+### 2. The ball is never deleted in mid-air
+
+*"Why does the ball disappear? If it doesn't go into a hole, you just have it disappear and a huge
+point value and star popup. That's terrible. I HATE that. That is not realistic."*
+
+A ball that finds no cup now **rolls back down the bowl into the trough at the front** — which is
+what the 10 is on a real machine, and what the catch-all has always represented. There are exactly
+three places a ball may leave the screen, and all three are holes or the edge of the world:
+
+| | |
+|---|---|
+| into a cup | it drops in where it landed |
+| into the front trough | after rolling back down the bowl |
+| off the bottom | a short throw returning to the player |
+
+**There is no alpha fade anywhere in the flight and there must never be one again.** The score
+callout is a small rising number, not a starburst, and it appears where the ball actually finished
+— at the trough for a miss, in the cup for a hit — never over the middle of the board.
+
 ## Rendering
 
 `render.js` authors everything in a fixed **design box** (`DW` 480 x `DH` 1000, the recording's own

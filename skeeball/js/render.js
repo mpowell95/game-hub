@@ -84,9 +84,10 @@ const bz = (y) => y * ((1 + BOARD_PERSP) - BOARD_PERSP * y);
 const LANE_HALF_NEAR = 0.49;
 const RAIL_W_NEAR = 0.085;
 const BALL_R_NEAR = 0.070;
-/** Rim height / rim width for every tube on the playfield - one camera, one foreshortening.
- *  Measured off the reference gameplay frame: the 20 cup is 205px wide with a 55px-tall rim. */
-const RIM_RATIO = 0.27;
+/** How far the cream lip of a tube extends BEYOND its opening. The opening itself is never scaled
+ *  - it is the catch ellipse exactly (see `mouthOf`) - so this is the only fudge factor left, and
+ *  it only ever makes the cup look BIGGER than its scoring area, never smaller. */
+const RIM_LIP = 1.13;
 
 export function sc(v) { return 1 / (1 + v * (NEAR_OVER_FAR - 1)); }
 
@@ -146,6 +147,28 @@ export function boardPoint(x, y) {
   return { x: DW / 2 + x * FIELD_HALF * narrow, y: yy, k: narrow };
 }
 
+/**
+ * A target's CATCH ELLIPSE, projected to design space: centre, half-width, half-height.
+ *
+ * **This is the one and only source of a hole's drawn size.** `drawTargets` paints the dark
+ * opening at exactly this, so the hole you can see IS the area that scores. The depth half-height
+ * is taken from the target's near and far edges through `boardPoint`, which is exact rather than a
+ * ratio - a fixed rim ratio is precisely how the two drifted apart before: `ry` stayed nearly
+ * twice the depth of the mouth being drawn, 62% of cup hits landed outside the visible hole, and
+ * the board read as magnetic. Never scale what comes out of here.
+ */
+export function mouthOf(t) {
+  const near = boardPoint(t.x, Math.max(0, t.y - t.ry));
+  const far = boardPoint(t.x, Math.min(1, t.y + t.ry));
+  const p = boardPoint(t.x, t.y);
+  return {
+    x: p.x,
+    y: (near.y + far.y) / 2,
+    rx: t.rx * FIELD_HALF * p.k,
+    ry: Math.max(2, (near.y - far.y) / 2),
+  };
+}
+
 /** Where a resolved target sits on screen - the point a ball animates INTO. */
 export function targetPoint(board, id) {
   const t = board && board.targets ? board.targets.find((z) => z.id === id) : null;
@@ -187,24 +210,25 @@ function drawTube(c, P, x, y, rx, ry, depth, label, labelPx) {
   c.closePath();
   c.fill();
 
-  // The rim: a bright ellipse, then the opening cut out of it. The opening is 0.86 of the rim -
-  // in the reference the wall of the tube is thin and the hole is most of what you see, which is
-  // what makes it read as somewhere a ball can go rather than as a bollard.
+  // THE OPENING IS DRAWN AT EXACTLY (rx, ry) - the catch ellipse, unscaled. The cream rim is drawn
+  // OUTSIDE it, as the lip of the tube, so nothing that scores is hidden under paint and nothing
+  // painted scores. The rim used to be the ellipse and the hole 0.86 of it, which meant part of
+  // every catch area sat under the cup's own lip.
   c.fillStyle = P.target;
-  ellipse(c, x, y, rx, ry); c.fill();
+  ellipse(c, x, y, rx * RIM_LIP, ry * RIM_LIP); c.fill();
   c.strokeStyle = 'rgba(255,255,255,0.55)';
   c.lineWidth = Math.max(1, rx * 0.05);
-  ellipse(c, x, y - ry * 0.07, rx * 0.985, ry * 0.94); c.stroke();
+  ellipse(c, x, y - ry * 0.10, rx * RIM_LIP * 0.99, ry * RIM_LIP * 0.94); c.stroke();
   const mouth = c.createLinearGradient(0, y - ry, 0, y + ry);
   mouth.addColorStop(0, '#1A0803');
   mouth.addColorStop(1, P.hole);
   c.fillStyle = mouth;
-  ellipse(c, x, y + ry * 0.08, rx * 0.86, ry * 0.78); c.fill();
+  ellipse(c, x, y, rx, ry); c.fill();
   // A lit back lip inside the hole so it reads as a hole, not a flat blob.
   c.strokeStyle = 'rgba(255,225,180,0.30)';
   c.lineWidth = Math.max(1, rx * 0.055);
   c.beginPath();
-  c.ellipse(x, y + ry * 0.08, rx * 0.86, ry * 0.78, 0, Math.PI * 1.06, Math.PI * 1.94);
+  c.ellipse(x, y, rx * 0.97, ry * 0.97, 0, Math.PI * 1.06, Math.PI * 1.94);
   c.stroke();
 
   // The numeral, on the FRONT FACE of the tube in dark ink - the reference's own treatment, and
@@ -213,7 +237,7 @@ function drawTube(c, P, x, y, rx, ry, depth, label, labelPx) {
     c.save();
     c.font = `800 ${Math.round(labelPx)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    const ly = y + ry * 0.30 + depth * 0.58;
+    const ly = y + ry + depth * 0.50;
     c.fillStyle = 'rgba(255,255,255,0.30)';
     c.fillText(label, x, ly + Math.max(1, labelPx * 0.045));
     c.fillStyle = P.ink;
@@ -483,18 +507,18 @@ function drawTargets(c, board) {
     // WIDTH is the target's rx EXACTLY - no shrink factor. What you see is precisely what you can
     // hit (boards.js rule 1). It used to draw at 0.86 of the catch radius, so every cup was 16%
     // easier to hit than it looked, which is half of why the game felt magnetic.
-    // HEIGHT does NOT come from the catch ry - every cup is seen at the same camera angle, so they
-    // share one foreshortening ratio (RIM_RATIO, measured: a 62px-wide cup has a ~22px-tall rim).
-    const rx = t.rx * FIELD_HALF * p.k;
-    const ry = rx * RIM_RATIO;
+    // HEIGHT comes from the catch ry, projected exactly (`mouthOf`). It used to come from a fixed
+    // foreshortening ratio instead, which is how the drawn hole and the scoring hole ended up
+    // different shapes without anything noticing.
+    const m = mouthOf(t);
     if (t.kind === 'star') {
-      drawStar(c, P, p.x, p.y, rx, ry * 1.7, String(t.points), rx * 0.44);
+      drawStar(c, P, m.x, m.y, m.rx, m.ry, String(t.points), m.rx * 0.44);
     } else {
       // Tall enough that consecutive cups OVERLAP, which is how the reference stack reads as a
       // receding pyramid rather than a row of separate buttons. It costs nothing in fairness:
-      // the catch ellipse is the mouth, and the mouth is still clear of the cup in front.
-      const depth = rx * (t.kind === 'tube' ? 1.50 : 0.66);
-      drawTube(c, P, p.x, p.y, rx, ry, depth, String(t.points), rx * (t.kind === 'tube' ? 0.42 : 0.50));
+      // the opening is the catch ellipse exactly, and it is still clear of the cup in front.
+      const depth = m.rx * (t.kind === 'tube' ? 1.50 : 0.66);
+      drawTube(c, P, m.x, m.y, m.rx, m.ry, depth, String(t.points), m.rx * (t.kind === 'tube' ? 0.38 : 0.42));
     }
   }
 }
@@ -726,42 +750,37 @@ export function drawMultiplier(c, board, targetId, pulse) {
   c.restore();
 }
 
-/** `at` is a design-space point - where the ball actually came to rest (ui.js). Deliberately NOT
- *  a target id: the callout belongs to the throw, not to whatever the throw happened to score. */
+/**
+ * The score callout: a small number that rises off the ball and fades. Nothing else.
+ *
+ * It used to be a spinning twelve-point starburst almost as wide as the cup stack, and it fired
+ * at the same moment the ball was deleted in mid-air, so a missed throw read as "the ball
+ * evaporated and a cartoon appeared". Matt: "you just have it disappear and a huge point value
+ * and star popup. That's terrible. I HATE that. That is not realistic." The ball now rolls into
+ * the trough instead (ui.js) and this is deliberately quiet - the marquee is where the score
+ * lives, and this is only here so a throw is legible without watching the readout.
+ *
+ * `at` is a design-space point - where the ball actually came to rest, never the target's centre.
+ */
 export function drawPopup(c, at, text, t) {
-  // Never let a callout ride up under the cabinet head. A throw that sails over the back lands at
-  // board y=1, which is the highest point on the playfield, and the rise then carries the burst
-  // into the marquee - where it is drawn on top but half-legible over the score readout.
+  // Never let a callout ride up under the cabinet head.
   const p = { x: at.x, y: Math.max(at.y, (Y.marqueeBot + 0.085) * DH) };
-  const rise = 0.045 * DH * t;
-  const alpha = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
-  const pop = t < 0.22 ? t / 0.22 : 1;
-  const size = 0.072 * DW * (0.5 + pop * 0.5);
+  const rise = 0.055 * DH * t;
+  const alpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+  const size = 0.048 * DW;
   c.save();
   c.globalAlpha = Math.max(0, alpha);
-  c.translate(p.x, p.y - rise - 0.018 * DH);
-  c.save(); c.rotate(t * 0.9);
-  c.fillStyle = '#F2B705';
-  c.beginPath();
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const rr = (i % 2 ? 0.44 : 1) * size * 1.85 * pop;
-    const fn = i ? 'lineTo' : 'moveTo';
-    c[fn](Math.cos(a) * rr, Math.sin(a) * rr);
-  }
-  c.closePath(); c.fill(); c.restore();
+  c.translate(p.x, p.y - rise - 0.022 * DH);
   c.font = `800 ${Math.round(size)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.lineWidth = Math.max(3, size * 0.20);
-  c.strokeStyle = '#7A2A00'; c.lineJoin = 'round';
+  c.lineWidth = Math.max(2.5, size * 0.26);
+  c.strokeStyle = 'rgba(30,10,0,0.85)'; c.lineJoin = 'round';
   c.strokeText(text, 0, 0);
-  c.fillStyle = '#FF6A2B';
+  c.fillStyle = '#FFE45C';
   c.fillText(text, 0, 0);
   c.restore();
 }
 
-/** The balls still to throw, racked beside the lane. Kept BELOW the ramp on purpose: run up the
- *  side of the cabinet and they sit on top of the board art, which is where they were. */
 export function drawQueue(c, n) {
   const r = 0.023 * DW;
   for (let i = 0; i < Math.min(n, 9); i++) drawBall(c, 0.034 * DW, (0.960 - i * 0.036) * DH, r);
@@ -932,6 +951,6 @@ export function drawThumb(c, board, w, h, locked) {
 
 export default {
   DW, DH, sc, laneY, laneHalf, lanePoint, boardPoint, targetPoint, layoutFor,
-  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx,
+  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx, mouthOf,
   drawMachine, drawMarquee, drawBall, drawMultiplier, drawPopup, drawQueue, drawAimGuide, drawThumb,
 };
