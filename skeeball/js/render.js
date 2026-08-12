@@ -169,11 +169,15 @@ export function mouthOf(t) {
   };
 }
 
-/** Where a resolved target sits on screen - the point a ball animates INTO. */
+/** Where a resolved target sits on screen - the point a ball animates INTO, and the anchor the
+ *  x3 badge hangs over. A NESTED zone's centre is buried under the rings stacked behind it, so
+ *  for zones this is the front band (`aimY`, the same point idealThrow aims at) - the part of the
+ *  ring that is actually its own. */
 export function targetPoint(board, id) {
   const t = board && board.targets ? board.targets.find((z) => z.id === id) : null;
   if (!t) { const p = boardPoint(0, 0.2); return { x: p.x, y: p.y, r: 0.1 * DW }; }
-  const p = boardPoint(t.x, t.y);
+  const y = t.kind === 'zone' && Number.isFinite(t.aimY) ? t.aimY : t.y;
+  const p = boardPoint(t.x, y);
   return { x: p.x, y: p.y, r: t.rx * FIELD_HALF * p.k };
 }
 
@@ -331,6 +335,19 @@ export function drawMachine(c, board) {
 
   c.save();
   floor(); c.clip();
+  // The cabinet light pooling in the middle of the dish. SPEC.md (CLASSIC): "the playfield
+  // carries a soft radial LIGHT in the middle... that gradient is doing a lot of the work and a
+  // flat teal looks wrong without it" - equally true of the wood. Matt's recordings of the build
+  // without it read as one dark maroon slab from wall to lane.
+  {
+    const lc = boardPoint(0, 0.60);
+    const light = c.createRadialGradient(lc.x, lc.y, FIELD_HALF * 0.10, lc.x, lc.y, FIELD_HALF * 1.15);
+    light.addColorStop(0, 'rgba(255,216,160,0.26)');
+    light.addColorStop(0.55, 'rgba(255,206,150,0.10)');
+    light.addColorStop(1, 'rgba(255,200,140,0)');
+    c.fillStyle = light;
+    floor(); c.fill();
+  }
   // Side walls of the dish, curving in.
   for (const side of [-1, 1]) {
     const edgeX = side < 0 ? bl.x : br.x;
@@ -452,58 +469,119 @@ function drawThroat(c, board) {
   }
 }
 
+/**
+ * A ZONE's boundary, traced through boardPoint itself. This is the load-bearing honesty of the
+ * whole board: the path drawn here IS the scoring ellipse, sampled point by point through the
+ * same projection the ball's landing point uses. There is no separate "drawn ring" that could
+ * drift away from the catch area - the two are one curve. (bz is nonlinear in depth, so a
+ * projected board-space ellipse is not a screen ellipse; tracing it parametrically is exact
+ * where approximating it with c.ellipse would quietly reintroduce the gap this game has been
+ * burned by twice. See "THE HOLES DO NOT ATTRACT THE BALL" in skeeball/CLAUDE.md.)
+ */
+export function zonePath(c, t, inset = 0) {
+  const N = 48;
+  c.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const p = boardPoint(t.x + (t.rx - inset) * Math.cos(a), t.y + (t.ry - inset * (t.ry / t.rx)) * Math.sin(a));
+    if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+  }
+  c.closePath();
+}
+
 function drawTargets(c, board) {
   const P = board.palette;
 
-  // The big open oval first: everything else stands inside or above it.
-  if (board.ring) {
-    const R = board.ring;
-    const p = boardPoint(R.cx, R.cy);
-    // BOTH axes come from board space, so the oval on screen is exactly the oval boards.js
-    // describes. An earlier draft derived ry from rx by a ratio constant, which meant the drawn
-    // ring and the numbers it was measured from could drift apart with nothing to catch it.
-    const rx = R.rx * FIELD_HALF * p.k;
-    const ry = R.ry * FIELD_DEPTH * p.k;
-    // Drawn as a thick STROKE, not a fill - the playfield shows through the middle, which is the
-    // whole character of the classic board. The rail has real THICKNESS: a dark underside offset
-    // downward, then the lit cream band over it, then a highlight along its top. Three strokes,
-    // because two of them is a flat donut and that is what the first build looked like.
-    const W = rx * 0.155;
-    c.lineWidth = W * 1.55;
-    c.strokeStyle = 'rgba(0,0,0,0.30)';
-    ellipse(c, p.x, p.y + W * 0.62, rx, ry); c.stroke();     // the shadow it casts on the floor
-    c.lineWidth = W * 1.18;
-    c.strokeStyle = P.targetDeep;
-    ellipse(c, p.x, p.y + W * 0.34, rx, ry); c.stroke();     // its own shaded underside
-    const g = c.createLinearGradient(0, p.y - ry, 0, p.y + ry);
-    g.addColorStop(0, P.targetShade);
-    g.addColorStop(0.38, P.target);
-    g.addColorStop(1, P.targetFace);
-    c.strokeStyle = g;
-    c.lineWidth = W;
-    ellipse(c, p.x, p.y, rx, ry); c.stroke();
-    c.strokeStyle = 'rgba(255,255,255,0.42)';
-    c.lineWidth = Math.max(1, W * 0.18);
-    ellipse(c, p.x, p.y - W * 0.34, rx, ry); c.stroke();     // the lit top edge
+  // THE NESTED RINGS, outermost (20) to innermost (50), each a cream rim traced exactly on its
+  // own scoring boundary. The stacked-ovals read is the reference video's own: each ring higher
+  // up the frame and smaller than the one in front, number on the front rim face, a dark slot
+  // just inside each rim that the ball visibly drops into.
+  const zones = board.targets.filter((t) => t.kind === 'zone').slice().sort((a, b) => b.rx - a.rx);
+  if (zones.length) {
+    // Rim thickness from the pitch between consecutive ring FRONTS, so the rims scale with the
+    // board rather than with a magic number. The innermost reuses the last pitch.
+    const fronts = zones.map((t) => boardPoint(t.x, Math.max(0, t.y - t.ry)).y);
+    const rimW = (i) => {
+      const pitch = i + 1 < fronts.length ? fronts[i] - fronts[i + 1]
+        : (fronts.length > 1 ? fronts[fronts.length - 2] - fronts[fronts.length - 1] : 44);
+      return Math.max(10, pitch * 0.42);
+    };
 
-    // The 10, on the bowl floor in front of the 20 cup - where the reference puts it. It belongs
-    // to the floor, not to the rail: the catch-all is "you stayed on the board and found no cup".
+    for (let i = 0; i < zones.length; i++) {
+      const t = zones[i];
+      const W = rimW(i);
+      // The slot: a dark band just inside the rim - the opening the ball falls into. Drawn as a
+      // stroke INSIDE the boundary so the boundary itself stays exactly the scoring edge.
+      c.save();
+      zonePath(c, t); c.clip();
+      c.strokeStyle = P.fieldDeep;
+      c.lineWidth = W * 1.5;
+      zonePath(c, t); c.stroke();
+      c.strokeStyle = 'rgba(0,0,0,0.35)';
+      c.lineWidth = W * 0.9;
+      zonePath(c, t); c.stroke();
+      c.restore();
+
+      // The rim itself: underside shadow, cream band, lit top edge. The stroke is CENTRED on the
+      // scoring boundary, so the line down the middle of the cream band IS the edge of the zone -
+      // the same at every size, with nothing to keep in sync.
+      c.strokeStyle = 'rgba(0,0,0,0.32)';
+      c.lineWidth = W * 1.12;
+      c.save(); c.translate(0, W * 0.30); zonePath(c, t); c.stroke(); c.restore();
+      const p = boardPoint(t.x, t.y);
+      const ryScreen = Math.abs(boardPoint(t.x, t.y - t.ry).y - boardPoint(t.x, t.y + t.ry).y) / 2;
+      const g = c.createLinearGradient(0, p.y - ryScreen - W, 0, p.y + ryScreen + W);
+      g.addColorStop(0, P.targetShade);
+      g.addColorStop(0.45, P.target);
+      g.addColorStop(1, P.targetFace);
+      c.strokeStyle = g;
+      c.lineWidth = W;
+      zonePath(c, t); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.40)';
+      c.lineWidth = Math.max(1.5, W * 0.16);
+      c.save(); c.translate(0, -W * 0.26); zonePath(c, t); c.stroke(); c.restore();
+    }
+
+    // Numbers AFTER every rim, front faces only, so an inner rim never paints over an outer
+    // number. Each sits on its ring's front band - the exact depth idealThrow aims at.
+    for (let i = 0; i < zones.length; i++) {
+      const t = zones[i];
+      const W = rimW(i);
+      const q = boardPoint(t.x, Math.max(0, t.y - t.ry));
+      c.save();
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `800 ${Math.round(W * 0.94)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
+      c.fillStyle = 'rgba(255,255,255,0.35)';
+      c.fillText(String(t.points), q.x, q.y + W * 0.05);
+      c.fillStyle = P.ink;
+      c.fillText(String(t.points), q.x, q.y);
+      c.restore();
+    }
+
+    // The 10s, on the floor at the front corners - the catch-all IS the floor, and labelling it
+    // where the floor is widest says so without a rim that would falsely promise a hole. Cream,
+    // not ink: this is the one label that sits on the DARK floor rather than on a lit rim, so the
+    // rims' ink treatment renders it invisible out here.
     const ten = board.targets.find((t) => t.kind === 'ring');
     if (ten) {
-      const q = boardPoint(0, 0.115);
       c.save();
-      c.fillStyle = P.ink;
-      c.font = `800 ${Math.round(FIELD_HALF * 0.135)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(String(ten.points), q.x, q.y);
+      c.font = `800 ${Math.round(FIELD_HALF * 0.115)}px ui-rounded, "Trebuchet MS", system-ui, sans-serif`;
+      for (const sx of [-0.62, 0.62]) {
+        const q = boardPoint(sx, 0.055);
+        c.fillStyle = 'rgba(0,0,0,0.45)';
+        c.fillText(String(ten.points), q.x, q.y + 2);
+        c.fillStyle = P.targetFace;
+        c.fillText(String(ten.points), q.x, q.y);
+      }
       c.restore();
     }
   }
 
-  // Then every real target, BACK TO FRONT so nearer ones overlap the ones behind.
-  const solid = board.targets.filter((t) => t.kind !== 'ring').slice().sort((a, b) => b.y - a.y);
+  // Then every free-standing target, BACK TO FRONT so nearer ones overlap the ones behind.
+  const solid = board.targets.filter((t) => t.kind !== 'ring' && t.kind !== 'zone')
+    .slice().sort((a, b) => b.y - a.y);
   for (const t of solid) {
-    const p = boardPoint(t.x, t.y);
     // WIDTH is the target's rx EXACTLY - no shrink factor. What you see is precisely what you can
     // hit (boards.js rule 1). It used to draw at 0.86 of the catch radius, so every cup was 16%
     // easier to hit than it looked, which is half of why the game felt magnetic.
@@ -514,9 +592,6 @@ function drawTargets(c, board) {
     if (t.kind === 'star') {
       drawStar(c, P, m.x, m.y, m.rx, m.ry, String(t.points), m.rx * 0.44);
     } else {
-      // Tall enough that consecutive cups OVERLAP, which is how the reference stack reads as a
-      // receding pyramid rather than a row of separate buttons. It costs nothing in fairness:
-      // the opening is the catch ellipse exactly, and it is still clear of the cup in front.
       const depth = m.rx * (t.kind === 'tube' ? 1.50 : 0.66);
       drawTube(c, P, m.x, m.y, m.rx, m.ry, depth, String(t.points), m.rx * (t.kind === 'tube' ? 0.38 : 0.42));
     }
@@ -704,15 +779,19 @@ export function drawBall(c, x, y, r, spin = 0) {
   c.save();
   c.fillStyle = 'rgba(0,0,0,0.30)';
   ellipse(c, x, y + r * 0.62, r * 0.92, r * 0.32); c.fill();
+  // PALE PINK WITH DARKER PINK SPECKLES - the reference ball, verbatim from SPEC.md ("reads as a
+  // sprinkled donut, deliberately cartoony even in the reference"). The old amber-brown ball was
+  // this renderer's own invention and it vanished against the wood lane; the pink one is visible
+  // on every surface the game has.
   const g = c.createRadialGradient(x - r * 0.34, y - r * 0.40, r * 0.10, x, y, r);
-  g.addColorStop(0, '#FFE7B0');
-  g.addColorStop(0.55, '#E9A94C');
-  g.addColorStop(1, '#A96A22');
+  g.addColorStop(0, '#FFEDF0');
+  g.addColorStop(0.55, '#F5B9C6');
+  g.addColorStop(1, '#C97B90');
   c.fillStyle = g;
   ellipse(c, x, y, r, r); c.fill();
 
   const cs = Math.cos(spin), sn = Math.sin(spin);
-  c.fillStyle = 'rgba(120,60,10,0.34)';
+  c.fillStyle = 'rgba(198,64,101,0.42)';
   for (const s of SPECKS) {
     // Rotate about X. Screen y is DOWN, so a point on the near face (z=+1) moving to -y is the
     // surface travelling up the screen: the ball rolling away.
@@ -951,6 +1030,6 @@ export function drawThumb(c, board, w, h, locked) {
 
 export default {
   DW, DH, sc, laneY, laneHalf, lanePoint, boardPoint, targetPoint, layoutFor,
-  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx, mouthOf,
+  rampPoint, ballROnBoard, boardXToLaneU, spinPerPx, mouthOf, zonePath,
   drawMachine, drawMarquee, drawBall, drawMultiplier, drawPopup, drawQueue, drawAimGuide, drawThumb,
 };

@@ -42,9 +42,47 @@ genre reads it as SPEED AND ANGLE. That rewrite is "Where those two numbers come
 **The lesson worth keeping** is not any one number: this game's difficulty was set three times in
 units nobody plays in. Board-space fractions say nothing about whether a person can hit anything,
 and neither does a distance in pixels once the gesture stopped being about distance. The guard is
-`test.js`'s two `[KNOWN-BUG PROBE]` blocks, which express the WHOLE model — target sizes, band
+`test.js`'s `[KNOWN-BUG PROBE]` blocks, which express the WHOLE model — target sizes, band
 edges, and the gesture mapping — in the units a hand controls: percent of flick speed, and degrees
-of swipe angle. They go red on the exact build Matt recorded.
+of swipe angle. They go red on the exact builds Matt recorded.
+
+## The 2026-08-12 rebuild — THE RINGS TILE
+
+Matt uploaded three more recordings of the build above — `reference/skeeball/Skeeball - terrible
+1..3.MOV` — with: *"That's our current skeeball game. It's terrible. Everything about it is
+awful."* Watch them: ~24 throws across the three, and virtually EVERY ball scores 10. The score
+crawls 10 → 90 over an entire session, "Too hard!" still fires on natural hard flicks, and the
+board reads as a thin dark donut with four small dark cups on a dark maroon screen.
+
+The cup-stack model was the root cause and no retune could save it: four cups on a 0.19 pitch each
+owned ~10% of the power range **with 10-paying dead space between, below and beside them, plus a
+zero above the top**. Swept straight down the middle, roughly half the usable range paid the
+consolation 10 — and a hand's natural ±15% speed spread landed in the dead space more often than
+in a cup. The real machine — and the game in `Skeeball 1.MOV` — does not have dead space: its
+rings are NESTED, every ball that stays on the board lands in exactly one ring, and deeper is
+better. So that is what the board is now:
+
+- **`classic`'s 20/30/40/50 are nested `zone` ellipses** (innermost first; `resolveThrow`'s
+  first-containing-target-wins rule IS "the smallest ring you are inside"). They tile: the only
+  zero left in the whole game is a flick too feeble to make the ramp. Straight-line sweep:
+  10→20→30→40→50→40→30→20→10 (the back half is the rings' own back bands — nested ovals wrap).
+- **"Too hard!" is gone, permanently.** Energy past `WALL_AT` hits the back wall and the excess
+  walks the ball back DOWN the board (`WALL_RETURN`), deterministically and visibly (the flight
+  animates the bounce). A max-strength slam lands around the 30: legal, scored, and still the
+  wrong play — `test.js` pins that slamming averages well under aiming.
+- **The catch-all now actually catches all.** Its old 1.05×0.55 ellipse missed the board's deep
+  corners, so a deep banked ball could score a zero "Missed!" while sitting on the board (found by
+  simulation, 17% of throws in one stars scenario). It is 1.45×0.80 now and `test.js` sweeps the
+  whole reachable rectangle on every board.
+- **Every zone carries `aimY`** — the middle of its own front band — because a nested ring's
+  centre is buried under the rings behind it. `idealThrow`, the badge anchor and the how-to pages
+  all use it.
+- Measured after (test.js, in hand units): each ring owns 46%+ of the flick speed needed to reach
+  it, ±8.7° or better of swipe angle, a casual hand (±12% speed, ±4°) averages ~406 a rack against
+  the ~90 in Matt's recordings, and 0.0% of on-board balls score zero.
+- **The look followed the model**: the rings are drawn AS the scoring boundaries (see "Rendering"),
+  numbers on the front rim faces, a light pooled in the middle of the field, and the ball is the
+  reference's pale pink speckled one instead of the old amber that vanished against the wood.
 
 Matt's one instruction beyond "clone it": *"it's ok if it's a little more cartoony. Like our other
 games."* That licence was spent on **saturation and contrast only** — every hue and every position
@@ -138,7 +176,7 @@ invisible — Matt: *"It bounces off the wall, but then continues on the line it
 Two consequences worth knowing before you move anything:
 
 - **A target beyond `RAIL_X + rx` cannot be hit.** The 100s are drawn at ±0.75 in the reference but
-  live at ±0.54 here, because no throw can arrive out at 0.75. `test.js` fails on any board with an
+  live at ±0.50 here, because no throw can arrive out at 0.75. `test.js` fails on any board with an
   unreachable target.
 - **`test.js` derives the ratio from the drawn geometry and checks it against `RAIL_X`**, so the
   two cannot drift apart again.
@@ -158,25 +196,23 @@ squarely on the player and you should expect them to notice.
 
 Resolution order, all in `game.js`:
 
-1. `aim` drifts the ball across the lane by `LATERAL_GAIN` (1.15), **folding at the rails** - a
+1. `aim` drifts the ball across the lane by `LATERAL_GAIN`, **folding at the rails** - a
    full-tilt flick banks, which is a legitimate way to line up a wide target and costs
    `BOUNCE_LOSS` (0.13) energy per bounce.
-2. Below `SHORT_BELOW` (0.10) the ball never made the ramp; above `OVER_ABOVE` (0.96) it sails over
-   the back. Both score nothing. **Judge these in flick-pixels, never as fractions** - 47px and
-   450px on an 852px phone. The old pair (0.28/0.94) meant a third of every flick scored zero.
-3. In between, energy maps to a DEPTH in board space and the offset to an x, and **the first target
-   ellipse containing that point wins**. Targets are ordered small-and-valuable first, catch-all
-   last, so the 100 cups beat the 50's area where they overlap.
-4. Every board ends with a **catch-all** covering the whole playfield, so a ball that stays on the
-   board always scores something - short of the 20, wide of the stack, or long of the 50 all give
-   the 10. That is the classic machine's real behaviour and it is why there is no dead band.
+2. Below `SHORT_BELOW` (0.10) the ball never made the ramp: it rolls back and scores nothing -
+   the ONLY zero in the game. Above `WALL_AT` (0.78) it reaches the back wall and the excess
+   walks it back down the board (`WALL_RETURN` x overshoot), deterministically. There is no
+   "over" and no "Too hard!" - see "The 2026-08-12 rebuild" above.
+3. In between, energy maps to a DEPTH in board space and the offset to an x, and **the first
+   target ellipse containing that point wins**. Targets are ordered small-and-valuable first,
+   catch-all last - on classic the zones NEST, so first-wins is "the smallest ring you are
+   inside", the real machine's own rule.
+4. Every board ends with a **catch-all** covering the whole REACHABLE rectangle (|x| ≤ RAIL_X,
+   y 0..1 - test.js sweeps it), so a ball that stays on the board always scores something.
 
-**The drawn oval and the catch-all are deliberately different ellipses** (see `boards.js`): the
-oval is scenery, the catch-all is scoring. Do not "fix" the mismatch by equating them.
-
-`test.js` pins the target windows, both cups, the bank shot, that power walks the stack in order,
-that no power between short and over scores nothing, and - the block that matters most - that
-every one of those windows is a distance a thumb can actually repeat.
+`test.js` pins the ring ladder up and back down, both cups, the bank shot, the wall bounce's
+monotonic walk-back, that nothing on the board scores zero, and - the block that matters most -
+that every window is a distance a thumb can actually repeat.
 
 ## Machines, unlocking and the three scores (2026-08-11 rework)
 
@@ -263,7 +299,10 @@ Two faults, and the second is why fixing the first alone was not enough:
 Now: `_buildPath` makes ONE polyline through lane → ramp → bowl (`render.js` owns each piece,
 including `rampPoint`, so the ball rolls on the surface that is actually drawn), and the ball
 advances along it by **arc length at a CONSTANT speed** set by the throw. No duration is declared
-anywhere; it is length / speed.
+anywhere; it is length / speed. A wall-bounce throw's path simply continues: up to the wall and
+back down to where it scored, same speed, because the bounce is the throw's own momentum. A
+10-ball gets a second, slower, gravity-fed leg (`_buildReturn`) back down to its rest spot on the
+apron, where it stays.
 
 **Constant, not decelerating.** A first pass had it slow to 55% by the end, for "realism". Matt:
 *"The ball slows down right before going off the ramp. Why are you messing with the speed so much?
@@ -327,19 +366,27 @@ a cup easier means drawing a bigger hole. That is the point.
 *"Why does the ball disappear? If it doesn't go into a hole, you just have it disappear and a huge
 point value and star popup. That's terrible. I HATE that. That is not realistic."*
 
-A ball that finds no cup now **rolls back down the bowl into the trough at the front** — which is
-what the 10 is on a real machine, and what the catch-all has always represented. There are exactly
-three places a ball may leave the screen, and all three are holes or the edge of the world:
+A ball the floor keeps (the 10) now **rolls back down the bowl and comes to REST on the apron, in
+plain sight, until the rack ends** — which is exactly what the reference machine's own missed
+balls do (SPEC.md: "balls that came to rest without scoring sit on the apron in front of the
+rings"; `ui.js`'s `rested` list, staggered so they pile up legibly). There are exactly two places
+a ball may leave the screen:
 
 | | |
 |---|---|
-| into a cup | it drops in where it landed |
-| into the front trough | after rolling back down the bowl |
+| into a ring or cup | it drops in where it landed |
 | off the bottom | a short throw returning to the player |
 
 **There is no alpha fade anywhere in the flight and there must never be one again.** The score
 callout is a small rising number, not a starburst, and it appears where the ball actually finished
-— at the trough for a miss, in the cup for a hit — never over the middle of the board.
+— on the apron for a 10, in the hole for a hit — never over the middle of the board.
+
+### 3. "Too hard!" and its zero (2026-08-12)
+
+The third permanent removal, same family as the other two: an overthrown ball bounces off the back
+wall and scores where it comes to rest, never zero, never a scolding popup. The `over` kind, the
+`over`/`too_hard` strings and `OVER_ABOVE` are all gone; `test.js`'s "THE RINGS TILE" probe block
+fails any build where an on-board ball scores nothing or where more overshoot lands deeper.
 
 ## Rendering
 
@@ -448,20 +495,21 @@ node test-arcade-scores.mjs     the shared score/unlock layer (bests, the daily 
 node test-visual.mjs skeeball   light/dark/reduced, both hosts at two phone heights, and a real flick
 ```
 
-`test.js` covers: every board being well formed (unique ids, a catch-all last, the badge never on
-it), the short/over bands, that power walks the stack `20 → 30 → 40 → 50` in order, both corner
-cups and the weak-and-wide miss, the bank shot and its energy cost, purity, the multiplier's reach
-and its x3, a nine-ball rack refusing a tenth throw, unlocking (and the last board unlocking
-nothing), and save/restore including three malformed saves and a declined `v: 1`.
+`test.js` covers: every board being well formed (unique ids, a catch-all last that covers the
+whole reachable board, zones ordered innermost-first with a legal `aimY`, the badge never on the
+catch-all), the ring ladder up and back down, both corner cups, the bank shot and its energy cost,
+purity, the multiplier's reach and its x3, a nine-ball rack refusing a tenth throw, unlocking (and
+the last board unlocking nothing), and save/restore including three malformed saves and a declined
+`v: 1`.
 
-**The "cups do NOT tile" block is a [KNOWN-BUG PROBE]** for Matt's *"the balls are guided in. That's
-not fun"* (2026-08-11). Three things had compounded: the catch ellipses were ~16% wider than the
-cups actually drawn, their depth (`ry`) exceeded half the pitch so the stack tiled with no gap
-between cups, and the ball animation lerped to the target's centre instead of to where it landed.
-The test asserts a real gap between consecutive cups AND the observable consequence — that sweeping
-power straight down the middle falls OUT of the stack into the 10 several times rather than sliding
-seamlessly from one cup to the next. If that goes red, the catch areas have started overlapping
-again and the game is a gimme.
+**The "THE RINGS TILE" block is a [KNOWN-BUG PROBE]** for the `Skeeball - terrible 1..3.MOV`
+recordings (2026-08-12, ~24 throws, ~all 10s). It pins the three facts that make the game a game:
+nothing that reaches the board scores zero, the straight-line ladder is strict 10→20→30→40→50 with
+no 10-paying dead space between rings, and past the wall more overshoot lands strictly shallower.
+Its predecessor ("cups do NOT tile") pinned the OPPOSITE shape for the cup-stack board and is
+retired with it — the invariant that survived is what-you-see-is-what-you-score, which for nested
+zones means the rims are drawn ON the scoring boundaries (`render.js`'s `zonePath`) and the
+holes-do-not-attract block asserts containment for every scoring throw.
 
 **The other two probe blocks are the gesture's.** "a swipe becomes a throw" pins each of the four
 failures the gesture rewrite fixed — a fast swipe must beat a slow one over the same distance, a

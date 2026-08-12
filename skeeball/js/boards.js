@@ -83,10 +83,30 @@ const STARS_PALETTE = {
  * last. Each is an ellipse in board space plus what it pays.
  *
  * `kind` tells the renderer how to DRAW it, and is presentation only - scoring never reads it:
- *   'cup'  an open-topped tube standing on the playfield (classic's 20/30/40/50)
- *   'tube' a taller free-standing tube (classic's two 100s)
+ *   'tube' a tall free-standing tube (classic's two 100s)
+ *   'zone' a NESTED scoring ring: the ellipse is the ring's own cream rim, drawn exactly on this
+ *          boundary, and scoring inside it (innermost-first) is what makes the rings TILE
  *   'star' a flat star plate laid on the playfield (the stars board)
- *   'ring' the big open oval; drawn as a ring, and its target is the area INSIDE it
+ *   'ring' the whole-field catch-all (the 10): the floor itself, not a hole
+ *
+ * THE RINGS TILE, AND THAT IS THE WHOLE 2026-08-12 REBUILD. The previous classic was four small
+ * cups on a 0.19 pitch with dead space between, below and beside them that all paid 10 - plus a
+ * zero above the top. Swept straight down the middle, roughly HALF the usable power range paid the
+ * consolation 10, and a hand's natural spread across the rest hit cups only by luck. Matt's
+ * recordings of it (`reference/skeeball/Skeeball - terrible 1..3.MOV`) are ~24 throws for a 90:
+ * virtually every ball a 10. The real machine - and the game in `Skeeball 1.MOV` this clones -
+ * has NESTED RINGS: every ball that stays on the board lands in exactly one ring, so every depth
+ * is a score and deeper is better. That is what these zones are. resolveThrow tests innermost
+ * first, so "the smallest ring containing the landing point" wins, exactly like the machine.
+ *
+ * `aimY` on a zone is the middle of its FRONT band - the depth that is inside this ring and
+ * outside the next one in. A nested zone's centre is underneath the rings stacked behind it, so
+ * "aim at the 20" has to mean the 20's own territory. idealThrow reads it; scoring never does.
+ *
+ * WHAT YOU SEE IS STILL EXACTLY WHAT YOU SCORE. That rule survives the rebuild unchanged: a
+ * zone's ellipse IS its drawn rim (render.js draws the rim parametrically along this exact
+ * boundary), so making a ring easier still means drawing it bigger. The "holes do not attract the
+ * ball" incident and its rules are in skeeball/CLAUDE.md; test.js pins containment.
  */
 export const BOARDS = [
   {
@@ -96,57 +116,37 @@ export const BOARDS = [
     // the board BEFORE it (see game.js's unlock check), which is why the first one has none.
     unlockScore: 0,
     palette: CLASSIC_PALETTE,
-    // The oval as DRAWN. Measured off the reference gameplay frame: the cream ring's outer edge
-    // spans 760px across a 760-wide playfield and 420px deep, i.e. an on-screen ry/rx of 0.553.
-    // ry here is in DEPTH units, which are not square with x, so render.js's job is to land that
-    // 0.553 on screen - see its RING note.
-    ring: { cx: 0, cy: 0.40, rx: 0.95, ry: 0.314 },
     targets: [
-      // The two 100s, in the back corners. The reference draws them at x +-0.75, but the lane's
-      // RAILS are at board x +-0.616 (game.js's RAIL_X - the lane is narrower than the bowl it
-      // feeds), so a ball simply cannot arrive out there: +-0.75 would be a target no throw can
-      // reach. They sit at the widest a hard diagonal actually gets instead. Tested FIRST, so they
-      // win where they overlap the 50.
-      { id: '100L', kind: 'tube', x: -0.54, y: 0.93, rx: 0.19, ry: 0.058, points: 100 },
-      { id: '100R', kind: 'tube', x: 0.54, y: 0.93, rx: 0.19, ry: 0.058, points: 100 },
-      // Cups up the middle, 20 nearest, on an even 0.19 pitch, with the stack sitting back off
-      // the front lip so the bowl has a real cream APRON in front of it - that apron is where the
-      // 10 is printed on the reference machine, and with the stack any further forward the 20's
-      // base lands on top of the numeral.
+      // The two 100s, in the back corners, tested FIRST so they win over the zones they stand in.
+      // The reference draws them at x +-0.75, but the lane's RAILS are at board x +-0.616
+      // (game.js's RAIL_X - the lane is narrower than the bowl it feeds), so a ball cannot arrive
+      // out there; they sit at the widest a hard diagonal actually gets. Reaching one takes a
+      // deliberate ~15-degree swipe AND deep power - the two skills together, which is what makes
+      // 100 the skill shot.
+      { id: '100L', kind: 'tube', x: -0.50, y: 0.78, rx: 0.145, ry: 0.075, points: 100 },
+      { id: '100R', kind: 'tube', x: 0.50, y: 0.78, rx: 0.145, ry: 0.075, points: 100 },
+      // The nested rings, innermost (50) first. Fronts step down the board on a near-even pitch,
+      // backs converge near the wall, the way the reference's stacked ovals do. On the centre
+      // line the ladder reads 10 20 30 40 50 going up - and past the wall the bounce walks it
+      // back DOWN (game.js), so every power is a score and control beats muscle.
       //
-      // THE SIZE OF THESE IS THE DIFFICULTY OF THE GAME, so it is set from measurement and then
-      // checked in flick-pixels. Two rules, and the second one has now been wrong in BOTH
-      // directions, so read the history before nudging it:
+      // Judged in the units a hand controls (test.js's "a HAND can actually hit these"): each
+      // ring owns a band of flick SPEED at least ~15% of the speed it takes to reach it, against
+      // a human repeatability of about +-15%. The cup-stack build these replace gave ~10% windows
+      // with 10-paying gaps between them, which is why Matt's rack was a 90.
+      { id: '50', kind: 'zone', x: 0, y: 0.705, rx: 0.30, ry: 0.130, aimY: 0.705, points: 50 },
+      { id: '40', kind: 'zone', x: 0, y: 0.640, rx: 0.50, ry: 0.255, aimY: 0.480, points: 40 },
+      { id: '30', kind: 'zone', x: 0, y: 0.580, rx: 0.66, ry: 0.355, aimY: 0.305, points: 30 },
+      { id: '20', kind: 'zone', x: 0, y: 0.520, rx: 0.82, ry: 0.450, aimY: 0.147, points: 20 },
+      // THE CATCH-ALL: the apron in front of the 20, the slivers behind the rings at the wall,
+      // and anything wide of the stack. It is the floor, not a hole - a ball here comes to rest
+      // visibly on the apron (ui.js), which is the reference's own behaviour.
       //
-      // 1. **`rx` AND `ry` ARE THE HOLE.** render.js draws the dark opening at exactly this
-      //    ellipse - `mouthOf()` projects it, nothing scales it - so what you can see is precisely
-      //    what you can hit. This has been broken twice. First `rx` was drawn at 0.86 of the catch
-      //    ("the balls are guided in"). Then, unnoticed, `ry` stayed nearly TWICE the depth of the
-      //    drawn mouth: 62% of throws scored as a cup were landing outside the hole on screen, up
-      //    to 3.1x the mouth's radius away, so the ball visibly stopped BESIDE a cup and the game
-      //    said it went in. Matt: "It's like the holes attract the ball. The ball deviates from the
-      //    path it should be on and moves towards the hole." Nothing here may ever again be a
-      //    different size from what is painted.
-      // 2. `ry` is the mouth's half-DEPTH, and it is 61% of half the pitch. The fix for "guided in"
-      //    once cut it to 0.045 against a 0.14 pitch, which left each cup owning 5.9% of the power
-      //    range - a ~21px flick window on an 852px phone, and the reason Matt's recordings of that
-      //    build are six balls for 40 points. Setting it without converting it into something a
-      //    thumb can repeat is how both mistakes happened.
-      //
-      // The units to check it in are the ones a HAND controls, which since the gesture rewrite
-      // means flick SPEED: `test.js`'s "a HAND can actually hit these" block reports each cup as a
-      // percentage of the flick speed needed to reach it, and fails under 12% (a person repeats a
-      // flick speed to roughly +-15%). These values give 14-24%. The 0.045 that Matt's recordings
-      // caught gave a ~5% band, which is a coin toss.
-      { id: '50', kind: 'cup', x: 0, y: 0.91, rx: 0.21, ry: 0.058, points: 50 },
-      { id: '40', kind: 'cup', x: 0, y: 0.72, rx: 0.24, ry: 0.058, points: 40 },
-      { id: '30', kind: 'cup', x: 0, y: 0.53, rx: 0.27, ry: 0.058, points: 30 },
-      { id: '20', kind: 'cup', x: 0, y: 0.34, rx: 0.30, ry: 0.058, points: 20 },
-      // THE CATCH-ALL, and deliberately NOT the same ellipse as `ring` above. `ring` is what gets
-      // drawn; this is "stayed on the playfield but found no cup" - short of the 20, wide of the
-      // stack, or over the back of the 50 - and it has to cover the whole field to do that job.
-      // Do not "fix" the mismatch by making them equal: the oval is scenery, this is scoring.
-      { id: '10', kind: 'ring', x: 0, y: 0.45, rx: 1.05, ry: 0.55, points: 10 },
+      // Its ellipse must contain EVERY point a ball can land on: |x| <= RAIL_X, y 0..1. The old
+      // 1.05 x 0.55 quietly did not - a deep banked ball at (0.5, 0.98) fell outside it and
+      // scored a zero "Missed!", which a 17%-of-throws simulation caught on stars. test.js now
+      // sweeps the whole reachable rectangle on every board.
+      { id: '10', kind: 'ring', x: 0, y: 0.45, rx: 1.45, ry: 0.80, aimY: 0.030, points: 10 },
     ],
   },
   {
@@ -155,19 +155,20 @@ export const BOARDS = [
     // Reachable but not free: a good classic rack is ~450, so this asks for a genuinely good one.
     unlockScore: 500,
     palette: STARS_PALETTE,
-    ring: null,                                     // no oval on this machine
     targets: [
-      // Same two rules as classic: rx is the drawn width, and nothing tiles - these are scattered
-      // plates with real space between them, which is the whole character of this machine. The
-      // depths are the SAME 0.066-and-up family as classic's cups for the same reason: a plate
-      // shallower than that is a flick window a thumb cannot hit twice.
-      { id: 's100', kind: 'star', x: 0, y: 0.90, rx: 0.15, ry: 0.062, points: 100 },
-      { id: 's50L', kind: 'star', x: -0.62, y: 0.70, rx: 0.21, ry: 0.075, points: 50 },
-      { id: 's50R', kind: 'star', x: 0.62, y: 0.70, rx: 0.21, ry: 0.075, points: 50 },
-      { id: 's30L', kind: 'star', x: -0.40, y: 0.44, rx: 0.24, ry: 0.082, points: 30 },
-      { id: 's30R', kind: 'star', x: 0.40, y: 0.44, rx: 0.24, ry: 0.082, points: 30 },
-      { id: 's20', kind: 'star', x: 0, y: 0.60, rx: 0.23, ry: 0.078, points: 20 },
-      { id: 's10', kind: 'ring', x: 0, y: 0.45, rx: 1.05, ry: 0.55, points: 10 },
+      // Scattered plates with real space between them - the character of this machine is AIM,
+      // where classic's is power control. The floor between plates pays 10, so a miss here is a
+      // consolation rather than a zero, and the wall bounce applies the same as anywhere. Sizes
+      // were widened in the 2026-08-12 rebuild for the same reason classic's rings were: the old
+      // plates gave windows a thumb could not hit twice.
+      { id: 's100', kind: 'star', x: 0, y: 0.90, rx: 0.17, ry: 0.075, points: 100 },
+      { id: 's50L', kind: 'star', x: -0.55, y: 0.68, rx: 0.24, ry: 0.105, points: 50 },
+      { id: 's50R', kind: 'star', x: 0.55, y: 0.68, rx: 0.24, ry: 0.105, points: 50 },
+      { id: 's30L', kind: 'star', x: -0.34, y: 0.42, rx: 0.26, ry: 0.115, points: 30 },
+      { id: 's30R', kind: 'star', x: 0.34, y: 0.42, rx: 0.26, ry: 0.115, points: 30 },
+      { id: 's20', kind: 'star', x: 0, y: 0.62, rx: 0.26, ry: 0.115, points: 20 },
+      // Same full-coverage rule as classic's 10: the floor catches everything the plates miss.
+      { id: 's10', kind: 'ring', x: 0, y: 0.45, rx: 1.45, ry: 0.80, aimY: 0.150, points: 10 },
     ],
   },
 ];

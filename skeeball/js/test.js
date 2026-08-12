@@ -2,7 +2,7 @@
 // Run: node skeeball/js/test.js  (also in run-all-tests.mjs). No DOM, no canvas.
 
 import { Game, resolveThrow, idealThrow, BALLS_PER_RACK, MULTIPLIER,
-  flickToThrow, FLICK, SHORT_BELOW, OVER_ABOVE, RAIL_X, laneOffsetAt } from './game.js';
+  flickToThrow, FLICK, SHORT_BELOW, WALL_AT, WALL_RETURN, RAIL_X, laneOffsetAt } from './game.js';
 import { BOARDS, boardById, nextBoard, multTargetsFor, DEFAULT_BOARD } from './boards.js';
 import * as R from './render.js';
 
@@ -24,6 +24,23 @@ for (const b of BOARDS) {
   ok(`${b.id}: ends with a catch-all ring, so a ball on the playfield always scores something`,
     b.targets[b.targets.length - 1].kind === 'ring');
   ok(`${b.id}: the badge never sits on the catch-all`, !multTargetsFor(b).includes(b.targets[b.targets.length - 1].id));
+  // The catch-all must CONTAIN every point a ball can land on - |x| up to the rails, y 0..1.
+  // The old 1.05 x 0.55 ellipse quietly did not: a deep banked ball at (0.5, 0.98) fell outside
+  // it and scored a zero "Missed!" on a ball that was sitting on the board.
+  const ten = b.targets[b.targets.length - 1];
+  let covered = true;
+  for (let x = -RAIL_X; x <= RAIL_X; x += RAIL_X / 10) {
+    for (let y = 0; y <= 1.0001; y += 0.05) {
+      if (((x - ten.x) / ten.rx) ** 2 + ((y - ten.y) / ten.ry) ** 2 > 1) covered = false;
+    }
+  }
+  ok(`${b.id}: the catch-all covers the WHOLE reachable board - no zero-scoring corner`, covered);
+  // Nested zones must be ordered innermost first, or an outer ring would swallow the inner ones.
+  const zones = b.targets.filter((t) => t.kind === 'zone');
+  ok(`${b.id}: zones are hit-tested innermost first`,
+    zones.every((t, i) => i === 0 || zones[i - 1].rx < t.rx));
+  ok(`${b.id}: every zone has an aimY in its own front band (its centre is under the inner rings)`,
+    zones.every((t) => Number.isFinite(t.aimY) && t.aimY > t.y - t.ry && t.aimY <= t.y));
 }
 eq('the first board is the default', BOARDS[0].id, DEFAULT_BOARD);
 eq('and it is free', BOARDS[0].unlockScore, 0);
@@ -32,32 +49,28 @@ ok('every later board costs something', BOARDS.slice(1).every((b) => b.unlockSco
 console.log('\n-- throw resolution on classic --');
 eq('a feeble flick never reaches the board', resolveThrow(0.04, 0, classic).kind, 'short');
 eq('and scores nothing', resolveThrow(0.04, 0, classic).points, 0);
-// The dead zone is DELIBERATELY tiny now. 0.1 used to be a total airball; after the 2026-08-11
-// retune it is a real (weak) throw that trickles into the 10, which is what the machine does.
+// The dead zone is DELIBERATELY tiny. 0.1 used to be a total airball; it is a real (weak) throw
+// that trickles into the 10, which is what the machine does.
 eq('but a merely weak one still reaches the 10', resolveThrow(0.11, 0, classic).target, '10');
-eq('flat out sails over the back', resolveThrow(1, 0, classic).kind, 'over');
-eq('and scores nothing either', resolveThrow(1, 0, classic).points, 0);
-// The catch-all is excluded on purpose: its centre sits under the cup stack, which is tested
-// FIRST, so "aim at the middle of the 10" correctly lands in a cup. That is the design, not a gap.
+// EVERY target, the nested zones and the 10 included: aimY names a point in each target's own
+// exclusive territory, so "aim at the 20" means the 20's front band, not the buried centre.
 ok('every ideal throw lands on the target it names',
-  classic.targets.filter((t) => t.kind !== 'ring').every((t) => {
+  classic.targets.every((t) => {
     const { power, aim } = idealThrow(t.id, classic);
     return resolveThrow(power, aim, classic).target === t.id;
   }));
 // Swept between the ENGINE's own band edges, not literals: these used to read `0.29 + i/300*0.64`,
-// which was the old SHORT_BELOW/OVER_ABOVE pair frozen into the test, so after a retune they would
-// have gone on testing a range the engine no longer uses.
-const band = (n) => Array.from({ length: n }, (_, i) => SHORT_BELOW + ((i + 0.5) / n) * (OVER_ABOVE - SHORT_BELOW));
-ok('the whole usable power range scores SOMETHING straight down the middle - no dead band',
-  band(400).every((p) => resolveThrow(p, 0, classic).points > 0));
+// which was an old retired pair frozen into the test, so after a retune they would have gone on
+// testing a range the engine no longer uses.
+const band = (n) => Array.from({ length: n }, (_, i) => SHORT_BELOW + ((i + 0.5) / n) * (1 - SHORT_BELOW));
 {
-  // Power alone walks the stack front to back: 20 -> 30 -> 40 -> 50.
+  // Power alone walks the ladder front to back: 20 -> 30 -> 40 -> 50.
   const seen = [];
   for (const p of band(200)) {
     const r = resolveThrow(p, 0, classic);
     if (r.target && r.target !== seen[seen.length - 1]) seen.push(r.target);
   }
-  ok(`power walks the stack in order (${seen.join(' -> ')})`,
+  ok(`power walks the rings in order (${seen.join(' -> ')})`,
     seen.indexOf('20') < seen.indexOf('30') && seen.indexOf('30') < seen.indexOf('40')
     && seen.indexOf('40') < seen.indexOf('50'));
 }
@@ -68,37 +81,62 @@ console.log('\n-- the corner cups --');
   eq('a hard, wide throw left finds the left cup', resolveThrow(L.power, L.aim, classic).target, '100L');
   eq('and right, the right cup', resolveThrow(Rr.power, Rr.aim, classic).target, '100R');
   eq('a cup pays 100', resolveThrow(L.power, L.aim, classic).points, 100);
-  eq('wide but WEAK misses it', resolveThrow(0.45, L.aim, classic).target, '10');
+  ok('wide but WEAK never reaches it - it lands in a low ring instead',
+    ['10', '20', '30'].includes(resolveThrow(0.30, L.aim, classic).target));
   // Dead centre at the 50's OWN power is the 50; the cups' power and the cups' aim are separate
   // skills and neither one alone gets you a 100.
   eq('straight, at the 50\'s power, is the 50 - never a corner cup',
     resolveThrow(idealThrow('50', classic).power, 0, classic).target, '50');
-  // A 100 is purely an AIM shot: it sits level with the 50, so its power alone just gives you the
-  // 50. That is the design - the two skills are separated, and neither one alone pays 100.
-  eq('the 100s power with NO aim is simply the 50',
-    resolveThrow(L.power, 0, classic).target, '50');
+  // A 100 is purely an AIM shot: it sits level with the ring stack, so its power alone just gives
+  // you a ring. The two skills are separated, and neither one alone pays 100.
+  ok('the 100s power with NO aim is simply a ring',
+    ['40', '50'].includes(resolveThrow(L.power, 0, classic).target));
 }
 
-console.log('\n-- the cups do NOT tile: there is room to miss (Matt: "the balls are guided in") --');
+console.log('\n-- [KNOWN-BUG PROBE] THE RINGS TILE: every ball on the board scores its ring --');
 {
-  const cups = classic.targets.filter((t) => t.kind === 'cup').sort((a, b) => a.y - b.y);
-  for (let i = 0; i < cups.length - 1; i++) {
-    const gap = (cups[i + 1].y - cups[i + 1].ry) - (cups[i].y + cups[i].ry);
-    ok(`${cups[i].id} -> ${cups[i + 1].id}: a real gap between them (${gap.toFixed(3)})`, gap > 0.01);
-  }
-  // The observable consequence, and the one that actually makes it a game: sweeping power straight
-  // down the middle must FALL OUT of the stack between cups, not slide seamlessly from one to the
-  // next. If this goes green-to-red, the catch areas have started overlapping again.
+  // Matt's third set of recordings (`Skeeball - terrible 1..3.MOV`, 2026-08-12): ~24 throws,
+  // virtually every one a 10, final rack 90. The cup-stack board those recordings caught had
+  // dead 10-paying space between, below and beside every cup - roughly half the straight-line
+  // power range - plus a zero above the top. The real machine has none of that: its rings are
+  // NESTED, so every depth is inside exactly one ring and every ball that stays on the board
+  // scores the ring it visibly lies in. This block is the permanent record of that requirement.
+  //
+  // 1. Every ball that REACHES the board scores. The only zero left in the whole game is a
+  //    flick too feeble to make the ramp (kind 'short') - including one that arrived feeble
+  //    because a full-tilt bank spent its energy on the rail.
+  ok('every throw that reaches the board scores - zero now means "rolled back", nothing else',
+    band(300).every((p) => [-1, -0.6, -0.3, 0, 0.3, 0.6, 1].every((a) => {
+      const r = resolveThrow(p, a, classic);
+      return r.points > 0 || r.kind === 'short';
+    })));
+  // 2. Straight down the middle, the ladder up to the 50 is strict - 10,20,30,40,50, never a 10
+  //    sandwiched between two rings (that sandwich IS the dead space the recordings show). Past
+  //    the 50 it walks back DOWN through the rings' back bands to the wall, in order - nested
+  //    ovals, so long of the 50 is the 40's back arc, not a punishment bucket.
   const seq = [];
   for (const p of band(400)) {
     const r = resolveThrow(p, 0, classic);
-    const id = r.target || 'none';
-    if (id !== seq[seq.length - 1]) seq.push(id);
+    if (r.wall) break;                                  // the wall's walk-back is probe 3's job
+    if (r.target !== seq[seq.length - 1]) seq.push(r.target);
   }
-  const tens = seq.filter((x) => x === '10').length;
-  ok(`the 10 is entered and left several times while sweeping power (${tens} times)`, tens >= 3);
-  ok('every cup is still reachable straight down the middle',
-    ['20', '30', '40', '50'].every((id) => seq.includes(id)));
+  const top = seq.indexOf('50');
+  ok(`going up, the ladder is strict (${seq.join(' -> ')})`,
+    top === 4 && ['10', '20', '30', '40', '50'].every((id, i) => seq.indexOf(id) === i));
+  ok('and past the 50 it steps back down the nested rings, in order, no skips',
+    seq.slice(top).every((id, i, a) => i === 0
+      || ['50', '40', '30', '20', '10'].indexOf(id) === ['50', '40', '30', '20', '10'].indexOf(a[i - 1]) + 1));
+  // 3. Past the wall the bounce WALKS BACK DOWN, strictly: more overshoot, shallower landing.
+  //    This is what replaced "Too hard!" and its zero - a max flick is a bad throw that still
+  //    scores, not a scolding.
+  const wallPowers = band(300).filter((p) => resolveThrow(p, 0, classic).wall);
+  ok(`enough of the top of the range hits the wall to matter (${wallPowers.length} samples)`, wallPowers.length > 20);
+  ok('every wall hit still scores', wallPowers.every((p) => resolveThrow(p, 0, classic).points > 0));
+  ok('and more overshoot lands strictly shallower - the reflection is monotonic',
+    wallPowers.every((p, i) => i === 0
+      || resolveThrow(p, 0, classic).y <= resolveThrow(wallPowers[i - 1], 0, classic).y + 1e-9));
+  ok('flat out does NOT pay the top ring - slamming is legal but wrong',
+    resolveThrow(1, 0, classic).points < 50);
 }
 
 console.log('\n-- the gesture: a swipe becomes a throw (Matt: "the flick is really bad and unnatural") --');
@@ -174,29 +212,30 @@ console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBA
     band[k] = (band[k] || 0) + STEP;
   }
   for (const id of ['20', '30', '40', '50']) {
-    // As a percentage of the speed you need to reach that cup, which is the only scale a hand
-    // understands: "about 15% harder than the last one".
+    // As a percentage of the speed you need to reach that ring, which is the only scale a hand
+    // understands: "about 15% harder than the last one". A person repeats a flick speed to about
+    // +-15%, so a band below that is a coin toss. The cup-stack board Matt recorded gave ~10%
+    // windows WITH dead space between them; the rings give 45%+ and tile.
     const mid = (() => {
       for (let sp = LO; sp <= HI; sp += 0.01) if (throwAt(sp).target === id) return sp;
       return NaN;
     })();
     const pct = (100 * (band[id] || 0)) / mid;
-    ok(`the ${id} owns ${pct.toFixed(0)}% of the flick speed it takes to reach it (need >= 12%)`, pct >= 12);
+    ok(`the ${id} owns ${pct.toFixed(0)}% of the flick speed it takes to reach it (need >= 15%)`, pct >= 15);
   }
-  const dead = (band.short || 0) + (band.none || 0);
-  ok(`throwing too softly to score wastes a narrow slice of the speed range (${dead.toFixed(2)} of ${(HI - LO).toFixed(1)})`,
-    dead < (HI - LO) * 0.22);
-  ok(`"Too hard!" needs a genuinely hard flick (${(band.over || 0).toFixed(2)} wide, and only at the top)`,
-    (band.over || 0) > 0 && throwAt(FLICK.MAX_SPEED * 0.86).kind !== 'over');
+  const dead = (band.short || 0) + (band.none || 0) + (band.miss || 0);
+  ok(`only a genuinely feeble flick scores nothing (${dead.toFixed(2)} of ${(HI - LO).toFixed(1)} ch/s, all at the bottom)`,
+    dead < (HI - LO) * 0.22 && (band.miss || 0) === 0 && throwAt(FLICK.MAX_SPEED).points > 0);
 
   // Sideways, in DEGREES of swipe angle - also the units of the hand. Measured at the CENTRE of
-  // each cup's speed band, not at its leading edge: a target is an ellipse, so sampling just
-  // inside the near rim reports almost no sideways room and blames the aim axis for what is
-  // really the depth axis. (It did exactly that on the first run of this block.)
+  // each ring's FIRST speed band (the front band - rings also own a sliver at the back and a
+  // second slice off the wall bounce, which are bonuses, not the aiming surface).
   const centreSpeed = (id) => {
     let lo = null, hi = null;
     for (let sp = LO; sp <= HI; sp += 0.005) {
-      if (throwAt(sp).target === id) { if (lo === null) lo = sp; hi = sp; }
+      const k = throwAt(sp).target;
+      if (k === id && lo === null) lo = sp;
+      if (lo !== null) { if (k === id) hi = sp; else break; }
     }
     return lo === null ? NaN : (lo + hi) / 2;
   };
@@ -211,11 +250,13 @@ console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBA
   }
 
   // And the whole rack, thrown by a hand with ordinary jitter: +-12% on speed, +-4 degrees on
-  // angle. This is the number Matt experiences. The build he recorded scored about 60.
+  // angle, aiming where a player actually aims - the 50. This is the number Matt experiences.
+  // The build his recordings caught scored ~90 A RACK; the machine this clones plays at several
+  // hundred, and so does this one now.
   let s = 4242;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
   const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  const aimFor = centreSpeed('40');
+  const aimFor = centreSpeed('50');
   let sum = 0, zeros = 0;
   const N = 3000;
   for (let i = 0; i < N; i++) {
@@ -223,10 +264,16 @@ console.log('\n-- [KNOWN-BUG PROBE] a HAND can actually hit these (Matt: "SKEEBA
     sum += r.points; if (!r.points) zeros++;
   }
   const perRack = (sum / N) * BALLS_PER_RACK;
-  ok(`a casual player (+-12% speed, +-4 degrees) averages a real rack: ${Math.round(perRack)} (need 150-450)`,
-    perRack >= 150 && perRack <= 450);
-  ok(`and almost never whiffs entirely: ${(100 * zeros / N).toFixed(1)}% of throws (need < 5%)`,
-    zeros / N < 0.05);
+  ok(`a casual player (+-12% speed, +-4 degrees, aiming the 50) averages a real rack: ${Math.round(perRack)} (need 280-470)`,
+    perRack >= 280 && perRack <= 470);
+  ok(`and essentially never whiffs: ${(100 * zeros / N).toFixed(1)}% of throws (need < 2%)`,
+    zeros / N < 0.02);
+  // Control must still beat muscle: the same jittery hand slamming every ball flat out must
+  // score meaningfully less than the one aiming the 50.
+  let slam = 0;
+  for (let i = 0; i < N; i++) slam += throwAt(FLICK.MAX_SPEED * (1 + Math.abs(gauss() * 0.12)), gauss() * 4).points;
+  ok(`slamming every ball scores less than aiming (${Math.round((slam / N) * BALLS_PER_RACK)} vs ${Math.round(perRack)})`,
+    slam / N < 0.8 * (sum / N));
 }
 
 console.log('\n-- [KNOWN-BUG PROBE] THE HOLES DO NOT ATTRACT THE BALL --');
@@ -258,10 +305,22 @@ console.log('\n-- [KNOWN-BUG PROBE] THE HOLES DO NOT ATTRACT THE BALL --');
         if (r.kind !== 'hit' || !r.target) continue;
         const t = b.targets.find((z) => z.id === r.target);
         if (t.kind === 'ring') continue;          // the catch-all is the floor, not a hole
+        checked += 1;
+        if (t.kind === 'zone') {
+          // A zone's drawn rim IS its scoring ellipse - render.js's zonePath traces the same
+          // board-space boundary through the same projection, point for point - so the check is
+          // containment in board space, where both live. And the innermost-first rule: the ball
+          // must not also be inside a zone tested EARLIER (that would mean the order lies).
+          const inside = ((r.x - t.x) / t.rx) ** 2 + ((r.y - t.y) / t.ry) ** 2 <= 1 + 1e-9;
+          const zs = b.targets.filter((z) => z.kind === 'zone');
+          const earlier = zs.slice(0, zs.indexOf(t));
+          const inEarlier = earlier.some((z) => ((r.x - z.x) / z.rx) ** 2 + ((r.y - z.y) / z.ry) ** 2 <= 1 - 1e-9);
+          if (!inside || inEarlier) { outside += 1; worstId = `${b.id}/${t.id}`; }
+          continue;
+        }
         const land = R.boardPoint(r.x, Math.min(0.97, r.y));
         const m = R.mouthOf(t);
         const d = Math.hypot((land.x - m.x) / m.rx, (land.y - m.y) / m.ry);
-        checked += 1;
         const px = (d - 1) * Math.min(m.rx, m.ry);
         if (px > 1) { outside += 1; if (px > worst) { worst = px; worstId = `${b.id}/${t.id}`; } }
       }
