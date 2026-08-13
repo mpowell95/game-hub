@@ -829,15 +829,72 @@ no build step, no dependencies":
 - **The hub's inbox.** For `isAdmin(profile.name)` only, the footer grows a **🐞 Bug reports** pill
   showing how many reports are newer than this device's last inbox open (`gamehub.bugadmin.v1`).
   It opens the list newest-first, each drilling into description, screenshots, environment summary
-  and full JSON, with **Copy full report** and a **Mark as done** toggle. Marking is additive
-  (`status`/`statusAt`); a report is never deleted, because it is still the only record of what
-  that player saw.
+  and full JSON, with **Copy full report**, a **Reply** box, **Mark as done**, and **Delete**.
 - **`node read-bug-reports.mjs`** — the same records in the terminal, and the only way to get the
-  screenshots onto disk (`--shots`).
+  screenshots onto disk (`--shots`). `--deleted` includes ones cleared from the in-app inbox.
 
 **If a real notification is ever wanted**, the smallest honest route is a Cloud Function on
 `bugReports/` onCreate sending mail. That needs the Blaze plan and a deploy step this repo has
 never had, so it is Matt's call, not a session's.
+
+### Replying, and clearing the inbox (2026-08-13)
+
+Matt, holding a report he had just fixed: *"how do I reply to the bug report to tell him it's fixed
+and that all his wins counted, they didn't vanish? I must be able to delete the reports in my inbox
+once addressed as well. There's a mark as done button, but it doesn't do anything, just unbolds it
+and removes the new badge. He should have an inbox of sorts somewhere in his profile. and when I
+reply, his profile should have a notification badge so he knows to click into it."*
+
+**A reply is written TWICE, and the second write is the one that matters:**
+
+| Path | What it is |
+|---|---|
+| `bugReports/<id>/reply` | the canonical answer, sitting on the report it answers (`{text, atMs, at}`) |
+| `bugReplies/<reporterDeviceId>/<id>` | **the reporter's own inbox** — what their device actually reads |
+
+The index is keyed by the deviceId **already stored on the report** (`reporter.deviceId`), which is
+the whole reason this shape was chosen: the first reply Matt needed to send was to a report filed
+two days before any of this existed, so anything depending on the reporting device having recorded
+something locally would not have reached him. It also means a player's device reads one small node
+of its own rather than downloading every report in the system to find the ones that are theirs —
+the RTDB rules are `auth != null`, so the privacy here is the UI's shape, not an ACL.
+
+`replyToBugReport` returns `{ ok, delivered }`. **`delivered:false` is not a failure** — it means
+the reply saved on the report but that report carries no deviceId to index it under, so the player
+will never see it. The UI says exactly that instead of a green tick over a message nobody will read.
+The reply write also stamps `status:'done'`: answering a report IS handling it, and a second
+required tap is how an inbox fills with things already dealt with.
+
+**"Mark as done" now does something.** It always wrote `status`/`statusAt` — nothing read them, so
+a handled report stayed exactly where it was, just un-bolded. Done reports now fold into a
+`Show done (N)` disclosure below the open ones.
+
+**Delete is a SOFT delete** (`deleted:true` + `deletedAtMs`), and deliberately so:
+- Matt's inbox stops showing it (`visibleInInbox`), which is the whole of what he asked for.
+- `read-bug-reports.mjs --deleted` still finds it.
+- **The reporter's copy of any reply is untouched**, because it lives under `bugReplies/`, not here.
+  Tidying the inbox can never take back something already said to a player.
+- It is two taps (the button arms, then confirms) with an **Undo** afterwards. A hard delete would
+  be the one irreversible button in this app, on a phone, sitting next to "Mark as done".
+
+**The player's side** is `openMyReplies()` (js/bug-report-ui.js), reached from a **📬 Replies to
+your reports** button in the profile page's footer — rendered always, not only when something is
+waiting, so it is a place that exists rather than a control that appears and vanishes. It shows
+their own words with Matt's answer under them. Opening it stamps `gamehub.bugreplies.seen.v1` from
+**the newest reply's own timestamp, not from `Date.now()`** — a reply landing while the screen is
+open is still unread next time rather than being silently skipped.
+
+**The badge** is on the launcher's profile pill (`.hub-profile-mail`, painted by `_paintReplyBadge`
+on load and on `online`). The pill has `overflow: hidden`, which would clip a corner dot, so the
+badge rides inside it as a count and the accent border does the attention-getting: shape and number,
+never hue alone.
+
+Covered by `test-bug-report.mjs` (the pure halves: the reply clamp, reply-time ordering at real
+epoch precision, the unread count, the seen stamp's round trip, and that `visibleInInbox` filters a
+VIEW rather than the records). The Firebase and DOM halves are still not in a committed suite —
+they were driven end to end in a real browser against a fake RTDB during the build (23 checks,
+including that the reply indexes under the reporter's device id and that Delete needs two taps),
+but that harness lives in a scratch directory, same gap the section below already admits.
 
 ### The announcement layer
 

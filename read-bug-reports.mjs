@@ -15,6 +15,7 @@
 // Usage:
 //   node read-bug-reports.mjs                  # summary of every report, newest first
 //   node read-bug-reports.mjs --open           # only reports not yet marked done
+//   node read-bug-reports.mjs --deleted        # include ones cleared from the in-app inbox
 //   node read-bug-reports.mjs <reportId>       # one report, in full
 //   node read-bug-reports.mjs <reportId> --shots [dir]   # also write its screenshots to disk
 //   node read-bug-reports.mjs --json           # raw JSON (everything, no screenshots)
@@ -46,10 +47,11 @@ const when = (ms) => (ms ? new Date(ms).toISOString().replace('T', ' ').slice(0,
 function summaryLine(r) {
   const who = (r.reporter && r.reporter.name) || '(unnamed)';
   const where = r.gameTitle || r.game || 'hub';
-  const status = r.status === 'done' ? 'done' : 'NEW ';
+  const status = r.deleted ? 'DEL ' : r.status === 'done' ? 'done' : 'NEW ';
   const shots = r.shotCount ? ` [${r.shotCount} shot${r.shotCount > 1 ? 's' : ''}]` : '';
+  const replied = r.reply ? ' [replied]' : '';
   const first = String(r.description || '').split('\n')[0].slice(0, 70);
-  return `${status} ${when(r.createdAtMs)}  ${who} · ${where}${shots}\n       ${first}`;
+  return `${status} ${when(r.createdAtMs)}  ${who} · ${where}${shots}${replied}\n       ${first}`;
 }
 
 /** The fields worth reading before opening the full JSON: who, what, and what they were holding. */
@@ -66,6 +68,10 @@ function printReport(r) {
   console.log(`Prefs    : lang ${(env.prefs && env.prefs.lang) || '-'} · theme ${(env.prefs && env.prefs.theme) || '-'}${env.prefs && env.prefs.prefersReducedMotion ? ' · reduced motion' : ''}`);
   if (env.gpu && env.gpu.renderer) console.log(`GPU      : ${env.gpu.renderer}`);
   console.log(`\n"${r.description || ''}"\n`);
+  // The reply lives here AND under bugReplies/<deviceId>/<id>, which is the copy the reporter
+  // actually reads. This one is the record of what was said.
+  if (r.reply) console.log(`Replied ${when(r.reply.atMs)}:\n  "${r.reply.text || ''}"\n`);
+  if (r.deleted) console.log(`(cleared from the in-app inbox ${when(r.deletedAtMs)} - the record is still here, and so is their copy of any reply)\n`);
   const errs = (env.recentErrors || []);
   if (errs.length) {
     console.log(`Recent JS errors on that device (${errs.length}):`);
@@ -118,6 +124,9 @@ async function main() {
   // Number(), never `| 0`: epoch ms overflows a signed 32-bit int (see js/bug-report.js's ms()).
   let reports = Object.entries(all).map(([k, v]) => Object.assign({ id: k }, v))
     .sort((a, b) => (Number(b.createdAtMs) || 0) - (Number(a.createdAtMs) || 0));
+  // Deleted reports are hidden from the in-app inbox but never removed, so this tool hides them
+  // by default too and `--deleted` is how you get them back. See deleteBugReport in js/bug-report.js.
+  if (!has('--deleted')) reports = reports.filter((r) => !r.deleted);
   if (has('--open')) reports = reports.filter((r) => r.status !== 'done');
 
   if (has('--json')) { console.log(JSON.stringify(reports, null, 2)); return; }
