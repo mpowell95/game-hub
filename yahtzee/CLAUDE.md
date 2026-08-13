@@ -185,11 +185,62 @@ eyeballed: 52px, no overflow, no collision with the progress pill.
   that upper box is still open; once it's filled, joker opens the remaining lower categories at
   full value. `previewScore()` mirrors the same branching so the ghost preview a player sees always
   matches what committing would actually score.
-- **AI** (`aiChooseHolds`/`pickCategoryForAI`) is a simple greedy heuristic: hold the largest
-  matching group, or a 4-run toward a straight if one exists; after up to 3 rolls, pick the
-  highest-scoring open category, breaking ties toward the lower section. `MODE` is a single
-  top-of-file constant (`'ai'` | `'hotseat'`), same pattern as the spec called for — no UI toggle
-  exists for it yet.
+- **AI** (`aiChooseHolds`/`aiCategoryValue`/`pickCategoryForAI`) — see "The AI rewrite" below.
+  `MODE` is a single top-of-file constant (`'ai'` | `'hotseat'`), same pattern as the spec called
+  for — no UI toggle exists for it yet.
+
+## The AI rewrite (2026-08-13) — and the dice accusation that prompted it
+
+Matt, on a player's leaderboard record of 18 wins in 20 games:
+
+> *"That's too many to be random chance. You've put a foot on the scale by either making the dice
+> rolls not actually random, or you've dumbed down the ai too much so they're making decisions
+> that doesn't make any sense"*
+
+**The dice were never touched.** `doRoll()` holds the game's only roller — `1+Math.floor(Math.
+random()*6)`, per die, respecting held flags. It takes no player argument and has no branch on
+`state.current`; `aiTakeTurn()` calls that same `doRoll()` the player's ROLL button does (the
+comment above it explains why it deliberately isn't re-gated per seat). 6,000,000 sampled rolls
+came out within **0.013 percentage points** of uniform. `test-yahtzee-ai.mjs` now asserts the
+distribution permanently, so the question never has to be re-litigated from memory.
+
+**The opponent was the problem, and it was never good rather than dumbed down.** Profiled over
+50,000 simulated games, the original greedy heuristic averaged **154**. Against that, a player who
+reliably scores ~200 wins **88%** of the time — 18 of 20 is unremarkable, not evidence of a thumb
+on the scale. Three measured causes:
+
+| Hole | Symptom |
+|---|---|
+| No concept of the +35 upper bonus — `pickCategoryForAI` took raw max points | earned it in **1.9%** of games |
+| On a turn where nothing scored, the tie-break preferred the LOWER section | scratched Large Straight in **89.7%** of games, Yahtzee in 57.8% |
+| The hold rule compared only counts with a strict `>`, and `for (const v in c)` walks integer-like keys ASCENDING, so a tie kept the LOWEST face | on `[2,2,6,6,3]` it held the **twos** and rerolled the sixes |
+
+What replaced them:
+
+- **`aiChooseHolds` is now a short Monte Carlo**, not a fixed recipe. It tries every way of keeping
+  dice (at most 32 — one per subset of the distinct faces showing, which is also how a person holds
+  dice: "keep the sixes", never "keep the third die", and it matches the function's existing
+  return contract of a Set of VALUES), rolls each candidate out `AI_ROLLOUTS` times against the
+  categories still OPEN, and keeps whichever averaged best. This is what finally let it CHASE:
+  the old rule only held a straight it already had, which is most of why Large Straight died.
+- **`aiCategoryValue`** prices an upper box against the 63-point bonus line (`AI_BONUS_PACE`, three
+  of a face — 3×1+3×2+…+3×6 = 63 exactly), so being ahead of pace is worth more than the raw score
+  and behind is worth less. Collapses back to raw score once the bonus is banked.
+- **`AI_SACRIFICE_ORDER`** handles the turn where nothing scores: burn Ones, not Yahtzee.
+
+Result, same 13-round profile: **mean 206.6, median 205**, upper bonus in 13.7%, Large Straight
+scratched 36.7% (from 89.7%). A 200-scoring player now wins ~43% instead of ~88%; at 220, ~68%.
+
+**Deliberate limits.** Still a heuristic, not a solver — one reroll of lookahead even when two
+remain, no expectimax, no endgame planning. The goal is an opponent worth beating, not one that
+cannot be beaten, and `test-yahtzee-ai.mjs` asserts a BAND (185–235) so a future change that makes
+it hopeless again fails just as loudly as one that makes it unbeatable. Yahtzee gets scratched
+*more* now (72% vs 58%) — that is correct, not a regression: it is the right box to give up when
+the alternative is burning Large Straight.
+
+**Cost**: ~16.6ms per hold decision at worst (all 13 categories open), twice a turn, inside the
+400ms the AI already pauses between rolls. `AI_ROLLOUTS` is the tuning knob; raising it makes a
+steadier opponent, not a better one, because the ceiling is the one-reroll horizon.
 
 ## Settings / persistence
 
@@ -334,7 +385,28 @@ path regardless of who made it.
 
 ## Tests
 
-No automated test files are checked into this repo for this game yet, WITH ONE EXCEPTION —
+**`test-yahtzee-ai.mjs`** (2026-08-13) is this game's first real suite, and the only one in the
+repo that PLAYS a game rather than looking at one. It drives a full 13-round match against the
+live AI in a real Chromium through `window.__yzTest` — the actual `endTurn()` →
+`scheduleTimeout(aiTakeTurn, 700)` chain, animations and awaits included — then profiles the
+opponent over N games and pins the die's distribution. Four things it exists to catch:
+
+1. **A throw inside the AI's turn**, which leaves the opponent frozen with the board painted
+   perfectly. `test-visual.mjs` prints "NEVER PLAYED BY ANYTHING: yahtzee" precisely because a
+   screenshot cannot see that.
+2. **An opponent that got weak again** (the 185 floor) — the incident above, permanently.
+3. **An opponent that got unbeatable** (the 235 ceiling), which is the same mistake pointing the
+   other way.
+4. **A die that stopped being uniform**, so the "are the rolls rigged" question is answered by a
+   test rather than by re-reading the code.
+
+Its live-game half uses a wall-clock deadline, NOT a spin count, as its hang detector — a real
+13-turn AI game is ~40 seconds of deliberate pacing, and the first draft's 400-iteration guard
+tripped on an honest game and read as a stall.
+
+Everything else for this game (scoring coverage, animation timing, `prefers-reduced-motion`,
+module lifecycle/leak checks, the real two-device MP test, the stats-recording check) was still
+run ad hoc from a scratch directory during development and is not committed —
 `players-agg.test.mjs`'s Yahtzee case above IS committed and wired into `run-all-tests.mjs`.
 Everything else (scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
 motion`, module lifecycle/leak checks, the real two-device MP test, and the stats-recording
