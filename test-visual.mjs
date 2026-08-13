@@ -344,90 +344,92 @@ const PLAY = {
   },
 
   skeeball: {
-    what: 'flick a ball up the lane and have it land in a ring for real points',
+    what: 'swipe real racks up the lane: score, records, and the stats write all have to move',
     async run(page, cdp, tap) {
-      // The machine picker is a CAROUSEL (2026-08-11): one slide per machine, and the Play button
-      // lives on the slide. A locked slide's button is disabled, so [data-role="play"] is already
-      // "the first machine you are allowed to start" - no :not(.is-locked) needed.
-      const start = await page.$('[data-role="play"]:not([disabled])');
-      if (!start) return { ok: false, why: 'no playable machine on the picker carousel' };
-      await tap(start);
-      await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
-      await page.waitForTimeout(700);
-      const g = await page.evaluate(() => {
-        const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect();
-        return { left: r.left, top: r.top, w: r.width, h: r.height };
+      // The gallery: one machine card with the four records slots and a Play button.
+      const play = await page.$('[data-board="classic"]');
+      if (!play) return { ok: false, why: 'no Play button on the machine gallery' };
+      const recSlots = await page.$$eval('.sk-rec', (els) => els.length);
+      if (recSlots < 4) return { ok: false, why: `machine card shows ${recSlots} record slots, spec says 4 (top-any / mine / today / last)` };
+      const readSk = () => page.evaluate(() => {
+        try { return ((JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).skeeball || {}).sk || {}; }
+        catch { return {}; }
       });
-      // A flick straight up the lane at the 40 cup's own release SPEED.
-      //
-      // Since the gesture rewrite (game.js's flickToThrow, 2026-08-11) a throw is speed-and-angle,
-      // not distance, so this probe has to produce a real VELOCITY - and it cannot do that by
-      // spacing touch-moves evenly and hoping the timing holds, because waitForTimeout jitter
-      // would then be what sets the throw. Instead each move's position is a function of MEASURED
-      // elapsed time, so the velocity is correct by construction however the event loop behaves.
-      //
-      // The speed is derived from the engine (the centre of the band that lands the 40), so a
-      // retune moves the probe with it. It was a hardcoded 0.278-of-screen DISTANCE, which is
-      // exactly the sort of constant that goes stale and starts testing the gap between two cups.
-      const GEST_MS = 150;
-      const speed = await page.evaluate(async (ms) => {
-        // The engine is a physics SIMULATION now (2026-08-12): ask it, through the real flick
-        // mapping, for the first contiguous band of flick speeds whose sim lands the 40, and
-        // aim the middle of that band - a retune or a physics change moves the probe with it.
-        const [{ flickToThrow, throwSim }] = await Promise.all([
-          import('/skeeball/js/game.js'),
-        ]);
-        let lo = null, hi = null;
-        for (let sp = 0.8; sp <= 7; sp += 0.02) {
-          const d = (sp * ms) / 1000;
-          const f = flickToThrow({ dx: 0, dy: -d, vx: 0, vy: -sp });
-          const target = f ? throwSim('classic', f.v0, f.dir).outcome.target : null;
-          if (target === '40') { if (lo === null) lo = sp; hi = sp; }
-          else if (lo !== null) break;
+      const before = await readSk();
+      await tap(play);
+      await page.waitForSelector('.sk-canvas', { timeout: 8000 });
+      await page.waitForTimeout(400);
+
+      const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+      // A thumb flick up the lane. ui.js reads the release speed (last ~130ms) against the
+      // stage height, so the DURATION of the move run is the throw's power: ~160ms for a hard
+      // fling down to ~420ms for a soft roll.
+      const swipe = async (ms) => {
+        const x = stage.x + stage.width / 2;
+        const y0 = stage.y + stage.height * 0.94;
+        const dist = stage.height * 0.55;
+        const steps = 6;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+        for (let i = 1; i <= steps; i++) {
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / steps, id: 1 }] });
+          await page.waitForTimeout(ms / steps);
         }
-        return lo === null ? null : (lo + hi) / 2;
-      }, GEST_MS);
-      if (!speed) return { ok: false, why: 'no flick speed reaches the 40 ring - the physics or the flick mapping is broken' };
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      };
+      const settled = () => page.evaluate(() => {
+        const el = document.querySelector('[data-role="pips"]');
+        return el ? el.querySelectorAll('i.is-used').length : -1;
+      });
 
-      const x = g.left + g.w / 2;
-      const y0 = g.top + g.h * 0.86;
-      const pxPerSec = speed * g.h;
-      // Clamped inside the canvas: a fast flick over a full GEST_MS can run past its top edge, and
-      // CDP rejects a touch point outside the viewport.
-      const yAt = (el) => Math.max(g.top + 4, y0 - pxPerSec * el);
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
-      const gStart = Date.now();
-      for (;;) {
-        const el = (Date.now() - gStart) / 1000;
-        if (el * 1000 >= GEST_MS) break;
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: yAt(el), id: 1 }] });
-        await page.waitForTimeout(10);
+      // Everything that moves is drawn into one canvas (no DOM element for the MOTION harness
+      // to follow), so sample the canvas mid-throw: three crops that must not all be identical.
+      const shot = () => page.evaluate(() => {
+        const c = document.querySelector('.sk-canvas');
+        const t2 = document.createElement('canvas');
+        t2.width = 64; t2.height = 64;
+        t2.getContext('2d').drawImage(c, 0, 0, c.width, c.height, 0, 0, 64, 64);
+        return t2.toDataURL();
+      });
+      await swipe(220);
+      const frames = [];
+      for (let i = 0; i < 3; i++) { frames.push(await shot()); await page.waitForTimeout(180); }
+      if (new Set(frames).size < 2) return { ok: false, why: 'the machine never changed between frames after a throw: nothing is animating' };
+
+      // Play the rack out: after each swipe, wait for the ball counter to advance (settled), a
+      // rolled-back ball (counter unchanged - swipe again), or the rack-over sheet.
+      const durations = [220, 300, 180, 260, 340, 200, 240, 160, 280, 230, 210, 250];
+      let over = false;
+      for (let i = 0; i < 30 && !over; i++) {
+        const usedBefore = await settled();
+        if (usedBefore === -1) { over = !!(await page.$('.sk-veil-over')); break; }
+        await swipe(durations[i % durations.length]);
+        const t0 = Date.now();
+        while (Date.now() - t0 < 9000) {
+          if (await page.$('.sk-veil-over')) { over = true; break; }
+          const used = await settled();
+          if (used > usedBefore || used === -1) break;
+          await page.waitForTimeout(200);
+        }
       }
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: yAt((Date.now() - gStart) / 1000), id: 1 }] });
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      if (!over) {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 5000 && !over) { over = !!(await page.$('.sk-veil-over')); await page.waitForTimeout(250); }
+      }
+      if (!over) return { ok: false, why: 'threw a full rack and the rack-over sheet never appeared' };
 
-      // The autosave lands in _landed(), i.e. AFTER the ball finishes its flight - poll for it
-      // rather than guessing a wait (the mistake Pool's probe records).
-      const read = () => page.evaluate(() => {
+      const finalTxt = await page.$eval('.sk-final', (el) => el.textContent.trim()).catch(() => null);
+      const after = await readSk();
+      if (((after.played | 0) - (before.played | 0)) < 1) {
+        return { ok: false, why: 'the rack finished but recordSkeeball never wrote it (sk.played did not move)' };
+      }
+      const save = await page.evaluate(() => {
         try { return JSON.parse(localStorage.getItem('gamehub.skeeball.save.v1') || 'null'); }
         catch { return null; }
       });
-      let st = null;
-      for (let i = 0; i < 40; i++) {
-        st = await read();
-        if (st && (st.tally?.balls | 0) > 0) break;
-        st = null;
-        await page.waitForTimeout(250);
-      }
-      if (!st) return { ok: false, why: 'flicked up the lane and no throw was ever recorded (10s)' };
-      if ((st.score | 0) < 10) {
-        return { ok: false, why: `the ball was thrown but scored ${st.score | 0} - a real flick must land on the board and score (a rim bounce into the 10 is fine; nothing at all is not)` };
-      }
-      if ((st.ball | 0) < 2) return { ok: false, why: 'the throw scored but the rack never advanced' };
-      return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };
+      if (save) return { ok: false, why: 'the rack recorded but its autosave was left banked - the next mount would resume a finished rack' };
+      return { ok: true, why: `played a rack to the sheet (final ${finalTxt}); sk.played ${before.played | 0} -> ${after.played | 0}` };
     },
   },
-
   pinball: {
     what: 'plunge a ball and flip it around a live table',
     async run(page, cdp, tap) {
