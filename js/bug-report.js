@@ -34,6 +34,10 @@ export const MAX_TOTAL_SHOT_BYTES = 2_400_000;
 export const MAX_DESCRIPTION = 1200;
 export const PENDING_KEY = 'gamehub.bugreports.pending.v1';
 export const MAX_PENDING = 5;
+export const MAX_REPLY = 1000;
+/** When this device last opened its own replies. A PREFERENCE (THE LAW rule 2's carve-out, same
+ *  class as the announcement seen-list): the worst failure is a badge that reappears once. */
+export const REPLIES_SEEN_KEY = 'gamehub.bugreplies.seen.v1';
 
 // --- small pure helpers (headless-testable: test-bug-report.mjs) ---------------------------------
 
@@ -70,6 +74,31 @@ export function countUnread(reports, sinceMs) {
   const since = ms(sinceMs);
   return (Array.isArray(reports) ? reports : [])
     .filter((r) => r && ms(r.createdAtMs) > since && r.status !== 'done').length;
+}
+
+/** Trim + clamp Matt's reply. Same shape as normalizeDescription, its own cap. */
+export function normalizeReply(text) {
+  const s = (typeof text === 'string' ? text : '').trim();
+  return s.length > MAX_REPLY ? s.slice(0, MAX_REPLY) : s;
+}
+
+/** Newest first, by when the reply was written (not when the report was filed). */
+export function sortRepliesNewestFirst(list) {
+  return (Array.isArray(list) ? list.slice() : []).sort((a, b) => ms(b && b.atMs) - ms(a && a.atMs));
+}
+
+/** Replies this device has not opened yet. Drives the profile pill's badge, so it is pure and
+ *  tested rather than counted inline in the DOM. */
+export function countUnreadReplies(replies, sinceMs) {
+  const since = ms(sinceMs);
+  return (Array.isArray(replies) ? replies : []).filter((r) => r && ms(r.atMs) > since).length;
+}
+
+/** Which reports belong in Matt's inbox list. Deleted ones are hidden here and ONLY here - the
+ *  record itself is never removed (see deleteBugReport), and the reporter's own copy is read from
+ *  bugReplies/, so clearing the inbox can never take a reply away from the person who got it. */
+export function visibleInInbox(reports) {
+  return (Array.isArray(reports) ? reports : []).filter((r) => r && !r.deleted);
 }
 
 /** One-line "what was sent" summary, used by the confirmation screen and the admin inbox list. */
@@ -509,10 +538,128 @@ export async function setBugStatus(id, status) {
   } catch (err) { console.error('[bug-report] could not update status', err); return false; }
 }
 
+/**
+ * Clear a report out of the inbox. A SOFT delete: it stamps `deleted` and the record stays where
+ * it is. Matt's inbox stops showing it (visibleInInbox), `read-bug-reports.mjs --deleted` still
+ * finds it, and the reporter's own copy of any reply - which lives under bugReplies/, not here -
+ * is untouched, so tidying the inbox can never take back something already said to a player.
+ *
+ * A hard delete would also be the one irreversible button in this app, on a phone, next to
+ * "Mark as done". THE LAW's habit (rule 5: old keys are never deleted or repurposed) is the same
+ * habit that says a support ticket does not need destroying to be out of the way.
+ */
+export async function deleteBugReport(id) {
+  try {
+    const boot = await getStatsApp();
+    if (!boot || !id) return false;
+    const { db, api } = boot;
+    await api.update(api.ref(db, 'bugReports/' + id), { deleted: true, deletedAtMs: Date.now() });
+    return true;
+  } catch (err) { console.error('[bug-report] could not delete', err); return false; }
+}
+
+/** Undo a soft delete. Exists because the delete is reversible and a button that cannot be undone
+ *  is a different, worse button. */
+export async function undeleteBugReport(id) {
+  try {
+    const boot = await getStatsApp();
+    if (!boot || !id) return false;
+    const { db, api } = boot;
+    await api.update(api.ref(db, 'bugReports/' + id), { deleted: null, deletedAtMs: null });
+    return true;
+  } catch (err) { console.error('[bug-report] could not restore', err); return false; }
+}
+
+// --- replies ---------------------------------------------------------------------------------
+// Matt answers a report; the reporter reads it in their profile.
+//
+// The reply is written TWICE, on purpose, and the second write is the one that matters:
+//
+//   bugReports/<id>/reply          the canonical answer, sitting on the report it answers
+//   bugReplies/<reporterDeviceId>/<id>   the reporter's own inbox
+//
+// The index is keyed by the deviceId ALREADY STORED ON THE REPORT, so this works for reports filed
+// before any of this existed - which was the whole point, since the first reply Matt needs to send
+// is to a report from two days ago. It also means a player's device reads one small node of its
+// own instead of downloading every report in the system to find the ones that are theirs.
+
+/**
+ * Reply to a report. Returns { ok, delivered } - `delivered:false` means the reply was saved on
+ * the report but the reporter will NOT see it, because that report carries no deviceId to index
+ * it under. The UI says so rather than showing a green tick over a message nobody will read.
+ */
+export async function replyToBugReport(report, text) {
+  const body = normalizeReply(text);
+  if (!report || !report.id || !body) return { ok: false, reason: 'nothing to send', delivered: false };
+  const atMs = Date.now();
+  const reply = { text: body, atMs, at: new Date(atMs).toISOString() };
+  try {
+    const boot = await getStatsApp();
+    if (!boot) return { ok: false, reason: 'offline', delivered: false, retryable: true };
+    const { db, api } = boot;
+    await api.update(api.ref(db, 'bugReports/' + report.id), { reply, status: 'done', statusAt: atMs });
+
+    const to = (report.reporter && report.reporter.deviceId) || null;
+    if (!to) return { ok: true, delivered: false };
+    await api.set(api.ref(db, 'bugReplies/' + to + '/' + report.id), Object.assign({
+      reportId: report.id,
+      reportDescription: report.description || '',
+      reportCreatedAtMs: ms(report.createdAtMs),
+      game: report.gameTitle || report.game || null,
+    }, reply));
+    // Same habit as submitBugReport: a resolved promise is not proof it landed, and a reply the
+    // player never receives is indistinguishable from never having answered.
+    const snap = await api.get(api.ref(db, 'bugReplies/' + to + '/' + report.id + '/atMs'));
+    if (!snap || !snap.exists()) {
+      console.error('[bug-report] reply VERIFY FAILED for bugReplies/' + to + '/' + report.id);
+      return { ok: true, delivered: false, reason: 'saved on the report, but not delivered' };
+    }
+    return { ok: true, delivered: true };
+  } catch (err) {
+    console.error('[bug-report] reply failed', err);
+    return { ok: false, reason: String((err && err.message) || err), delivered: false, retryable: true };
+  }
+}
+
+/** Every reply addressed to THIS device, newest first. `[]` offline - never throws. */
+export async function readMyReplies() {
+  try {
+    const boot = await getStatsApp();
+    if (!boot) return [];
+    const me = safe(() => deviceId(), null);
+    if (!me) return [];
+    const { db, api } = boot;
+    const snap = await api.get(api.ref(db, 'bugReplies/' + me));
+    const val = (snap && snap.exists()) ? snap.val() : null;
+    if (!val) return [];
+    return sortRepliesNewestFirst(Object.keys(val).map((k) => Object.assign({ reportId: k }, val[k])));
+  } catch (err) {
+    console.error('[bug-report] could not read replies', err);
+    return [];
+  }
+}
+
+/** When this device last opened its replies. Number(), never `| 0` - see ms() above. */
+export function repliesSeenAt() {
+  try { return Number((JSON.parse(localStorage.getItem(REPLIES_SEEN_KEY) || 'null') || {}).lastSeenMs) || 0; }
+  catch { return 0; }
+}
+export function markRepliesSeen(atMs) {
+  try { localStorage.setItem(REPLIES_SEEN_KEY, JSON.stringify({ version: 1, lastSeenMs: ms(atMs) || Date.now() })); }
+  catch { /* a badge that forgets it was read is not worth an error */ }
+}
+
+/** Unread replies for this device. 0 offline, so the profile pill shows no badge rather than
+ *  claiming there is nothing waiting. */
+export async function unreadReplyCount() {
+  return countUnreadReplies(await readMyReplies(), repliesSeenAt());
+}
+
 export default {
   gatherEnvironment, prepareScreenshot, buildBugReport, submitBugReport,
   queuePendingReport, drainPendingReports, pendingCount,
-  readBugReports, readBugShots, setBugStatus,
-  normalizeDescription, fitsShotBudget, summarizeEnvironment,
-  sortReportsNewestFirst, countUnread,
+  readBugReports, readBugShots, setBugStatus, deleteBugReport, undeleteBugReport,
+  replyToBugReport, readMyReplies, unreadReplyCount, repliesSeenAt, markRepliesSeen,
+  normalizeDescription, normalizeReply, fitsShotBudget, summarizeEnvironment,
+  sortReportsNewestFirst, sortRepliesNewestFirst, countUnread, countUnreadReplies, visibleInInbox,
 };

@@ -114,6 +114,27 @@ body {
 }
 .hub-profile:hover { background: var(--hub-surface-2); }
 .hub-profile-empty { color: var(--hub-accent); border-color: var(--hub-accent); }
+/* Unread replies to a bug report (js/bug-report.js's bugReplies/<deviceId>). The pill is the
+   player's only route to them, so it has to say so from the launcher without being told.
+   `overflow: hidden` above would clip a corner dot, so the badge rides INSIDE the pill as a
+   count, and the accent border does the attention-getting. Shape + number, never hue alone. */
+.hub-profile-mail {
+  color: var(--hub-accent);
+  border-color: var(--hub-accent);
+}
+.hub-profile-mail::after {
+  content: " " attr(data-mail);
+  display: inline-block;
+  min-width: 1.15em;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--hub-accent);
+  color: #fff;
+  font-size: 0.75em;
+  line-height: 1.5;
+  text-align: center;
+}
 
 /* Header is two rows: an info row (back + title + version) and, below it, the interactive
    controls row (My Stats / Leaderboards / My Profile). */

@@ -187,5 +187,63 @@ for (const a of ann.ANNOUNCEMENTS) {
 }
 
 // =================================================================================================
+console.log('\n=== js/bug-report.js: replying, and clearing the inbox (2026-08-13) ===');
+// Matt: "how do I reply to the bug report to tell him it's fixed and that all his wins counted,
+// they didn't vanish? I must be able to delete the reports in my inbox once addressed as well."
+// The Firebase halves are not covered here (see the header); these are the pure decisions the two
+// inboxes are built on.
+
+eq('a reply is trimmed like a description', bug.normalizeReply('  fixed it  '), 'fixed it');
+eq('an empty reply is empty (the UI refuses to send it)', bug.normalizeReply('  \n  '), '');
+ok('a very long reply is clamped, not rejected', bug.normalizeReply('x'.repeat(5000)).length === bug.MAX_REPLY);
+
+// Ordering is by when the REPLY was written, not when the report was filed - an old report Matt
+// answers today belongs at the top of the player's list, above a newer one he has not answered.
+{
+  const sorted = bug.sortRepliesNewestFirst([
+    { reportId: 'old-report-new-reply', reportCreatedAtMs: 1_600_000_000_000, atMs: 1_755_000_000_000 },
+    { reportId: 'new-report-old-reply', reportCreatedAtMs: 1_754_000_000_000, atMs: 1_754_100_000_000 },
+  ]);
+  eq('replies sort by reply time, not report time', sorted[0].reportId, 'old-report-new-reply');
+  // Real epoch values on purpose: the `| 0` bug this file's header records truncated exactly these.
+  ok('epoch-ms timestamps survive the sort (no 32-bit truncation)',
+    sorted[0].atMs === 1_755_000_000_000);
+}
+
+{
+  const replies = [{ atMs: 1_755_000_000_000 }, { atMs: 1_754_000_000_000 }, { atMs: 1_700_000_000_000 }];
+  eq('a device that has never looked has every reply unread', bug.countUnreadReplies(replies, 0), 3);
+  eq('only replies newer than the last look count', bug.countUnreadReplies(replies, 1_754_000_000_000), 1);
+  eq('caught up means no badge', bug.countUnreadReplies(replies, 1_755_000_000_000), 0);
+  eq('nothing to read is not an error', bug.countUnreadReplies(null, 0), 0);
+}
+
+// The seen stamp round-trips through the same localStorage stand-in the app uses.
+{
+  bug.markRepliesSeen(1_755_000_000_000);
+  eq('the seen stamp round-trips at full epoch precision', bug.repliesSeenAt(), 1_755_000_000_000);
+  store.set(bug.REPLIES_SEEN_KEY, 'not json at all');
+  eq('a corrupt seen stamp reads as "never looked", not as a crash', bug.repliesSeenAt(), 0);
+  store.delete(bug.REPLIES_SEEN_KEY);
+}
+
+// Deleting is a soft delete: hidden from Matt's inbox, still in the record. THE LAW's habit - and
+// the reporter's copy of a reply lives under bugReplies/, so it is not reachable from here at all.
+{
+  const all = [
+    { id: 'a', description: 'still open' },
+    { id: 'b', description: 'cleared', deleted: true, deletedAtMs: 1_755_000_000_000 },
+    { id: 'c', description: 'handled', status: 'done' },
+  ];
+  const shown = bug.visibleInInbox(all);
+  eq('a deleted report is out of the inbox', shown.length, 2);
+  ok('a DONE report is still in the inbox (it folds away, it does not vanish)',
+    shown.some((r) => r.id === 'c'));
+  ok('the deleted record itself is untouched - visibleInInbox only filters a view',
+    all.length === 3 && all[1].deleted === true);
+  eq('nothing to show is not an error', bug.visibleInInbox(null).length, 0);
+}
+
+// =================================================================================================
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log(`  - ${f}`); process.exit(1); }

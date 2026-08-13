@@ -11,14 +11,17 @@
 // block adds only what does not exist yet (the screenshot strip, the inbox list). Dark mode, the
 // focus ring and reduced motion come free with it.
 //
-// Two entry points, both lazily imported by js/hub.js (openBugReport also by profile/index.html):
+// Three entry points, all lazily imported by js/hub.js (openBugReport and openMyReplies also by
+// profile/index.html):
 //   openBugReport({ gameId, gameTitle }) - the player's form
 //   openBugInbox()                       - Matt's inbox; the hub renders its button for him only
+//   openMyReplies()                      - the player's own side: what Matt wrote back
 
 import {
-  MAX_SHOTS, buildBugReport, submitBugReport, prepareScreenshot, fitsShotBudget,
+  MAX_SHOTS, MAX_REPLY, buildBugReport, submitBugReport, prepareScreenshot, fitsShotBudget,
   queuePendingReport, pendingCount, readBugReports, readBugShots, setBugStatus, summarizeEnvironment,
-  countUnread,
+  countUnread, visibleInInbox, deleteBugReport, undeleteBugReport, replyToBugReport,
+  readMyReplies, markRepliesSeen, repliesSeenAt, countUnreadReplies,
 } from './bug-report.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -96,6 +99,23 @@ function ensureCss() {
   .bug-quote { margin: var(--gh-sp-2) 0 0; padding: var(--gh-sp-3); border-radius: var(--gh-r-md);
                background: var(--gh-surface-2); white-space: pre-wrap; word-break: break-word;
                font-size: var(--gh-fs-sm); line-height: 1.5; }
+  /* --- replies -------------------------------------------------------------------------- */
+  /* Matt's answer, on both sides of the conversation. The left rule is the only decoration:
+     it reads as a quoted answer at a glance without needing a colour to carry the meaning. */
+  .bug-reply { margin: var(--gh-sp-2) 0 0; padding: var(--gh-sp-3); border-radius: var(--gh-r-md);
+               background: var(--gh-surface-2); border-left: 3px solid var(--gh-accent);
+               white-space: pre-wrap; word-break: break-word; font-size: var(--gh-fs-sm); line-height: 1.5; }
+  .bug-reply-who { display: block; font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted);
+                   margin-bottom: var(--gh-sp-1); }
+  .bug-thread { list-style: none; margin: var(--gh-sp-3) 0 0; padding: 0; }
+  .bug-thread li + li { margin-top: var(--gh-sp-3); padding-top: var(--gh-sp-3); border-top: 1px solid var(--gh-border); }
+  /* The player's own words above Matt's answer, dimmer - the reply is what they came to read. */
+  .bug-thread-mine { font-size: var(--gh-fs-xs); color: var(--gh-muted); margin: 0; }
+  /* css/ui.css has no danger token, and a hard-coded dark red is unreadable on a dark surface, so
+     both halves are spelled out. The WORD on the button carries the meaning either way - colour is
+     secondary here, per the repo's colourblind rule. */
+  .bug-danger { color: #b3261e; }
+  :root.gh-dark .bug-danger { color: #ff9a90; }
   `;
   document.head.appendChild(style);
 }
@@ -354,9 +374,15 @@ export async function openBugInbox() {
   };
   shell(`<p class="bug-lead">${esc(t('bug_inbox_loading'))}</p>`);
 
-  const reports = await readBugReports();
+  // Deleted reports are filtered here, not in the query: the record stays in Firebase and
+  // read-bug-reports.mjs can still print it. See deleteBugReport's note.
+  let reports = visibleInInbox(await readBugReports());
   // Opening the inbox IS reading it; the count resets from here even if a report is left open.
   writeSeenAt(Date.now());
+  // Done reports fold away instead of sitting on top of the ones still needing an answer. This is
+  // what "Mark as done" was missing: it stamped a status nothing acted on, so a handled report
+  // stayed exactly where it was, just un-bolded.
+  let showDone = false;
 
   // Replaying the announcement, for Matt only (the inbox is his). It shows the entry REGARDLESS of
   // the seen-list and of adminOnly, and touches no storage - so testing a change to the popup does
@@ -378,13 +404,7 @@ export async function openBugInbox() {
     });
   };
 
-  const list = () => {
-    if (!reports.length) {
-      shell(`<p class="bug-lead">${esc(navigator.onLine === false ? t('bug_inbox_offline') : t('bug_inbox_empty'))}</p>${previewBtn}`);
-      wirePreview();
-      return;
-    }
-    shell(`${previewBtn}<ul class="bug-list">${reports.map((r, i) => `
+  const rowHTML = (r, i) => `
       <li><button type="button" class="bug-row" data-open="${i}">
         <span class="bug-row-top">
           <span class="gh-chip${r.status === 'done' ? '' : ' gh-chip--accent'}">${esc(r.status === 'done' ? t('bug_inbox_done_tag') : t('bug_inbox_new_tag'))}</span>
@@ -393,13 +413,34 @@ export async function openBugInbox() {
         </span>
         <span class="bug-row-desc">${esc(r.description || '')}</span>
         <span class="bug-row-meta">${esc([r.gameTitle || r.game, r.summary || summarizeEnvironment(r.environment),
-          r.shotCount ? `${r.shotCount} 📷` : ''].filter(Boolean).join(' · '))}</span>
-      </button></li>`).join('')}</ul>`);
+          r.shotCount ? `${r.shotCount} 📷` : '', r.reply ? t('bug_inbox_replied_tag') : ''].filter(Boolean).join(' · '))}</span>
+      </button></li>`;
+
+  const list = () => {
+    if (!reports.length) {
+      shell(`<p class="bug-lead">${esc(navigator.onLine === false ? t('bug_inbox_offline') : t('bug_inbox_empty'))}</p>${previewBtn}`);
+      wirePreview();
+      return;
+    }
+    // Index against the SHARED array, so a row's data-open still resolves after the done fold is
+    // toggled and the two groups are rendered in a different order than `reports` holds them.
+    const open = reports.map((r, i) => [r, i]).filter(([r]) => r.status !== 'done');
+    const done = reports.map((r, i) => [r, i]).filter(([r]) => r.status === 'done');
+    shell(`${previewBtn}
+      ${open.length ? `<ul class="bug-list">${open.map(([r, i]) => rowHTML(r, i)).join('')}</ul>`
+    : `<p class="bug-lead">${esc(t('bug_inbox_all_done'))}</p>`}
+      ${done.length ? `
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="toggle-done" style="margin-top:12px">
+          ${esc(showDone ? t('bug_inbox_hide_done', { n: done.length }) : t('bug_inbox_show_done', { n: done.length }))}
+        </button>
+        ${showDone ? `<ul class="bug-list">${done.map(([r, i]) => rowHTML(r, i)).join('')}</ul>` : ''}` : ''}`);
     wirePreview();
-    card.querySelector('.bug-list').addEventListener('click', (e) => {
+    const toggle = card.querySelector('[data-role="toggle-done"]');
+    if (toggle) toggle.addEventListener('click', () => { showDone = !showDone; list(); });
+    card.querySelectorAll('.bug-list').forEach((ul) => ul.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-open]');
       if (btn) detail(reports[+btn.dataset.open]);
-    });
+    }));
   };
 
   const detail = async (r) => {
@@ -412,14 +453,22 @@ export async function openBugInbox() {
       <p class="bug-row-meta" style="margin-top:12px">${esc(r.summary || summarizeEnvironment(r.environment))}</p>
       <h3 style="margin:16px 0 0;font-size:15px">${esc(t('bug_inbox_shots'))}</h3>
       <div class="bug-detail-shots" data-role="shots"><span class="bug-row-meta">${esc(t('bug_inbox_loading'))}</span></div>
+      ${r.reply ? `<div class="bug-reply">
+        <span class="bug-reply-who">${esc(t('bug_reply_sent_at', { when: whenText(r.reply.atMs) }))}</span>${esc(r.reply.text || '')}
+      </div>` : ''}
+      <h3 style="margin:16px 0 0;font-size:15px">${esc(r.reply ? t('bug_reply_again') : t('bug_reply_title'))}</h3>
+      <textarea class="gh-input bug-text" data-role="reply" rows="3" maxlength="${MAX_REPLY}"
+        placeholder="${esc(t('bug_reply_placeholder'))}"></textarea>
       <details class="bug-disc"><summary>${esc(t('bug_inbox_details'))}</summary>
         <pre class="bug-json">${esc(JSON.stringify(r, null, 2))}</pre>
       </details>
       <p class="bug-msg" data-role="msg" role="status" aria-live="polite"></p>
       <div class="gh-modal__actions">
         <button type="button" class="gh-btn gh-btn--sm" data-role="copy">${esc(t('bug_inbox_copy'))}</button>
+        <button type="button" class="gh-btn gh-btn--sm bug-danger" data-role="del">${esc(t('bug_inbox_delete'))}</button>
         <button type="button" class="gh-btn gh-btn--sm" data-role="status">${
           esc(r.status === 'done' ? t('bug_inbox_reopen') : t('bug_inbox_mark_done'))}</button>
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-role="send-reply">${esc(t('bug_reply_send'))}</button>
       </div>`);
     card.querySelector('[data-role="bug-back"]').addEventListener('click', list);
     const msg = card.querySelector('[data-role="msg"]');
@@ -434,6 +483,45 @@ export async function openBugInbox() {
       if (ok) { r.status = next; detail(r); }
       else { e.currentTarget.disabled = false; msg.textContent = t('bug_inbox_offline'); }
     });
+
+    // Replying marks the report done in the same write - answering it IS handling it, and having
+    // to remember a second tap is how an inbox fills up with things already dealt with.
+    card.querySelector('[data-role="send-reply"]').addEventListener('click', async (e) => {
+      const box = card.querySelector('[data-role="reply"]');
+      const text = (box.value || '').trim();
+      if (!text) { msg.textContent = t('bug_reply_empty'); box.focus(); return; }
+      e.currentTarget.disabled = true;
+      msg.textContent = t('bug_reply_sending');
+      const res = await replyToBugReport(r, text);
+      if (!res.ok) { e.currentTarget.disabled = false; msg.textContent = t('bug_reply_failed'); return; }
+      r.reply = { text, atMs: Date.now() };
+      r.status = 'done';
+      detail(r);
+      // `delivered:false` means it saved on the report but the reporter cannot be reached, because
+      // that report carries no deviceId to index it under. Saying so beats a green tick over a
+      // message nobody will ever read.
+      card.querySelector('[data-role="msg"]').textContent = res.delivered ? t('bug_reply_ok') : t('bug_reply_undeliverable');
+    });
+
+    // Two taps, deliberately: the confirm is the safety, not the soft delete underneath it.
+    let armed = false;
+    card.querySelector('[data-role="del"]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      if (!armed) { armed = true; btn.textContent = t('bug_inbox_delete_confirm'); msg.textContent = t('bug_inbox_delete_note'); return; }
+      btn.disabled = true;
+      const ok = await deleteBugReport(r.id);
+      if (!ok) { btn.disabled = false; msg.textContent = t('bug_inbox_offline'); return; }
+      reports = reports.filter((x) => x.id !== r.id);
+      list();
+      card.insertAdjacentHTML('beforeend',
+        `<p class="bug-msg" data-role="undo-wrap">${esc(t('bug_inbox_deleted'))}
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="undo">${esc(t('bug_inbox_undo'))}</button></p>`);
+      card.querySelector('[data-role="undo"]').addEventListener('click', async (ev) => {
+        ev.currentTarget.disabled = true;
+        if (await undeleteBugReport(r.id)) { reports = visibleInInbox(await readBugReports()); list(); }
+        else ev.currentTarget.disabled = false;
+      });
+    });
     const shotsHost = card.querySelector('[data-role="shots"]');
     const shots = await readBugShots(r.id);
     shotsHost.innerHTML = shots.length
@@ -444,4 +532,56 @@ export async function openBugInbox() {
   list();
 }
 
-export default { openBugReport, openBugInbox, adminUnreadCount };
+// --- the player's own side ------------------------------------------------------------------------
+// The other half of a report: what Matt wrote back. Reads bugReplies/<thisDeviceId> - one small
+// node of the player's own, never the whole bugReports table - so a player can no more browse
+// everyone else's reports from here than they could before.
+
+/** Replies waiting for THIS device. Drives the profile pill's badge in js/hub.js. 0 offline. */
+export async function myUnreadReplies() {
+  return countUnreadReplies(await readMyReplies(), repliesSeenAt());
+}
+
+/** The player's thread: their report, and Matt's answer under it. Opening it clears the badge. */
+export async function openMyReplies() {
+  const card = mountOverlay({ ariaLabel: t('bug_mine_dialog_aria') });
+  const shell = (inner) => {
+    card.innerHTML = `
+      <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
+      <h2 class="gh-modal__title">📬 ${esc(t('bug_mine_title'))}</h2>
+      ${inner}`;
+    card.querySelector('[data-role="close"]').addEventListener('click', closeOverlay);
+  };
+  shell(`<p class="bug-lead">${esc(t('bug_inbox_loading'))}</p>`);
+
+  const replies = await readMyReplies();
+  // Opening IS reading. Stamped from the newest reply's own timestamp, not from now: a reply that
+  // lands while this screen is open is still unread next time, rather than being silently skipped.
+  markRepliesSeen(replies.length ? replies[0].atMs : Date.now());
+
+  if (!replies.length) {
+    shell(`<p class="bug-lead">${esc(navigator.onLine === false ? t('bug_mine_offline') : t('bug_mine_empty'))}</p>
+      <div class="gh-modal__actions">
+        <button type="button" class="gh-btn gh-btn--primary" data-role="report">${esc(t('bug_btn'))}</button>
+      </div>`);
+    card.querySelector('[data-role="report"]').addEventListener('click', () => { closeOverlay(); openBugReport(); });
+    return;
+  }
+
+  shell(`<ul class="bug-thread">${replies.map((r) => `
+    <li>
+      <p class="bug-thread-mine">${esc([whenText(r.reportCreatedAtMs, true), r.game].filter(Boolean).join(' · '))}</p>
+      <p class="bug-quote">${esc(r.reportDescription || '')}</p>
+      <div class="bug-reply">
+        <span class="bug-reply-who">${esc(t('bug_mine_from', { when: whenText(r.atMs) }))}</span>${esc(r.text || '')}
+      </div>
+    </li>`).join('')}</ul>
+    <div class="gh-modal__actions">
+      <button type="button" class="gh-btn gh-btn--ghost" data-role="report">${esc(t('bug_btn'))}</button>
+      <button type="button" class="gh-btn gh-btn--primary" data-role="done">${esc(t('bug_done'))}</button>
+    </div>`);
+  card.querySelector('[data-role="report"]').addEventListener('click', () => { closeOverlay(); openBugReport(); });
+  card.querySelector('[data-role="done"]').addEventListener('click', closeOverlay);
+}
+
+export default { openBugReport, openBugInbox, openMyReplies, adminUnreadCount, myUnreadReplies };

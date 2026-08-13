@@ -248,6 +248,11 @@
              someone already comes when something looks wrong, and directly above Device details on
              purpose: a report SENDS that whole diagnostic, so nobody need press both. -->
         <button type="button" class="pf-report-btn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
+        <!-- The other half of that conversation: what Matt wrote back. Rendered ALWAYS, not only
+             when something is waiting, so it is a place the player learns exists rather than a
+             control that appears and vanishes. The launcher's profile pill carries the unread
+             badge; this is where the badge sends them. -->
+        <button type="button" class="pf-report-btn" id="pf-replies-btn" data-i18n="bug_mine_btn">📬 Replies to your reports</button>
         <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
     </main>
@@ -294,7 +299,9 @@
       document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
     }
     applyI18n();
-    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); });
+    // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
+    // "(2 new)" off the replies button on a language switch.
+    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); paintReplyCount(); });
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -557,6 +564,25 @@
         await m.openBugReport();
       } catch (e) { console.error('Bug report form failed to load', e); }
     });
+
+    // -- Replies to your reports ---------------------------------------------------
+    // Same lazy import. The label picks up an unread count once we can see one; the button is
+    // there either way, so nobody has to already know it exists to find it.
+    $('#pf-replies-btn').addEventListener('click', async () => {
+      try {
+        const m = await import('../js/bug-report-ui.js');
+        await m.openMyReplies();
+        paintReplyCount();
+      } catch (e) { console.error('Replies failed to load', e); }
+    });
+    async function paintReplyCount() {
+      try {
+        const m = await import('../js/bug-report-ui.js');
+        const n = await m.myUnreadReplies();
+        $('#pf-replies-btn').textContent = n > 0 ? t('bug_mine_btn_new', { n }) : t('bug_mine_btn');
+      } catch { /* offline: the plain label is already correct */ }
+    }
+    paintReplyCount();
 
     // -- Initial paint -----------------------------------------------------------
     function hydrate() {

@@ -399,7 +399,8 @@ class Hub {
     // here, on the same three moments stats sync uses: load, reconnect, return to the launcher. A
     // report that only exists on the phone that was having trouble is no report.
     this._drainBugReports();
-    this._onOnlineBugs = () => this._drainBugReports();
+    this._paintReplyBadge();
+    this._onOnlineBugs = () => { this._drainBugReports(); this._paintReplyBadge(); };
     window.addEventListener('online', this._onOnlineBugs);
     this._maybeAnnounce();
   }
@@ -468,6 +469,20 @@ class Hub {
       el.textContent = n > 0 ? t('bug_inbox_btn_new', { n }) : t('bug_inbox_btn');
       el.classList.toggle('has-new', n > 0);
     } catch { /* offline: the plain label is already correct */ }
+  }
+
+  /** A badge on the profile pill when Matt has answered one of this player's bug reports. The pill
+   *  is the only route to them, so it has to advertise itself - a reply nobody notices is the same
+   *  as never having replied. Silent on failure: no badge is the honest state when we cannot look. */
+  async _paintReplyBadge() {
+    const el = this.el && this.el.profile;
+    if (!el) return;
+    try {
+      const m = await import('./bug-report-ui.js');
+      const n = await m.myUnreadReplies();
+      el.classList.toggle('hub-profile-mail', n > 0);
+      if (n > 0) el.dataset.mail = String(n); else delete el.dataset.mail;
+    } catch { /* offline, or Firebase unconfigured: leave the pill plain */ }
   }
 
   /** Best-effort family-wide stats sync (guarded; no-op offline or if Firebase is unconfigured).
