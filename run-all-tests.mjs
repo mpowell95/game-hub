@@ -58,6 +58,10 @@ const SUITES = [
   // The first suite here that LOOKS at the game. Needs a real browser, so it SKIPs (never
   // fails) without playwright-core/Chromium - same contract as the jsdom suites below.
   { file: 'test-visual.mjs', optionalDep: 'playwright-core' },
+  // The only suite that PLAYS a game rather than looking at one: it drives a full 13-round
+  // Yahtzee against the live AI, then profiles the opponent's strength on both edges. Same
+  // browser contract as test-visual.mjs, so it SKIPs without playwright-core/Chromium.
+  { file: 'test-yahtzee-ai.mjs', optionalDep: 'playwright-core' },
   // tripwire suites (integration layer)
   { file: 'test-recorder-contract.mjs' },
   { file: 'test-stats-replay.mjs' },

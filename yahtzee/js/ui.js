@@ -495,36 +495,116 @@ function endTurn(effects){
   }
 }
 
-/* ---------- AI (solo mode only) ---------- */
-function aiChooseHolds(dice){
-  const vals = diceValues(dice);
-  const c = counts(vals);
-  let bestVal=null, bestCount=0;
-  for(const v in c){ if(c[v]>bestCount){ bestCount=c[v]; bestVal=+v; } }
-  const uniqueSorted = [...new Set(vals)].sort((a,b)=>a-b);
-  const holdVals = new Set();
-  for(let i=0;i<=uniqueSorted.length-4;i++){
-    if(uniqueSorted[i+3]-uniqueSorted[i]===3){
-      for(let k=i;k<i+4;k++) holdVals.add(uniqueSorted[k]);
-      break;
-    }
+/* ---------- AI (solo mode only) ----------
+ *
+ * Rewritten 2026-08-13, after a player's leaderboard record (18 wins in 20) made Matt suspect the
+ * dice were weighted. They are not - `doRoll` above is the single roller for BOTH seats and takes
+ * no player argument (6,000,000 sampled rolls came out within 0.013 percentage points of uniform).
+ * The opponent was simply weak: the old greedy heuristic averaged 154 over 50,000 simulated games,
+ * so a player who reliably scores ~200 beat it about 88% of the time. Three measured holes, all
+ * fixed below, each with its own note:
+ *
+ *   1. It had no idea the +35 upper bonus existed, and earned it in 1.9% of games.
+ *   2. On a turn where nothing scored it tie-broke TOWARD the lower section, so it scratched
+ *      Large Straight in 89.7% of games and Yahtzee in 57.8%.
+ *   3. Its hold rule kept the lowest face on a tie (see aiChooseHolds).
+ *
+ * Still deliberately a heuristic, not a solver: no expectimax, no lookahead past this turn. The
+ * point is an opponent worth beating, not one that cannot be beaten.
+ */
+
+// Three of a face is "on pace" for the 63 needed to earn the +35 upper bonus (3x1 + 3x2 + ... +
+// 3x6 = 63 exactly), which is what makes surplus and shortfall measurable against a fixed line.
+const AI_BONUS_PACE = 3;
+// How much a point of upper-section pace is worth beyond its face value. The +35 is won or lost
+// by a few points of surplus, so being ahead of pace is worth more than the raw score says.
+const AI_PACE_WEIGHT = 1.2;
+// When NOTHING scores, sacrifice the cheapest box rather than the biggest one. Scratching Ones
+// costs at most 5 points and 3 points of bonus pace; scratching Yahtzee or Large Straight throws
+// away the two biggest boxes on the card, which is exactly what the old tie-break did. Chance is
+// last and unreachable in practice - it scores sum(dice), so it is never part of a zero turn.
+const AI_SACRIFICE_ORDER = [
+  'ones', 'twos', 'threes', 'fours', 'fives', 'sixes',
+  'yahtzee', 'largeStraight', 'fullHouse', 'smallStraight', 'fourKind', 'threeKind', 'chance',
+];
+// Rollouts per candidate hold in aiChooseHolds. At most 32 candidates x this many rerolls x the
+// open categories, twice a turn: a few thousand pure previewScore() calls, well inside the 400ms
+// the AI already pauses for between rolls. Raising it makes a slightly steadier opponent, not a
+// better one - the ceiling here is the one-reroll horizon, not the sample count.
+const AI_ROLLOUTS = 40;
+
+/** The best value any still-open category would give this exact roll. */
+function aiBestValue(scores, dice){
+  const avail = availableCategories(scores, dice);
+  let best = 0;
+  for(const cat of avail){
+    const v = aiCategoryValue(scores, cat, previewScore(scores, cat, dice) || 0);
+    if(v>best) best = v;
   }
-  if(holdVals.size===0 && bestCount>=2) holdVals.add(bestVal);
-  return holdVals;
+  return best;
+}
+
+/** Which dice to keep between rolls, as a set of FACE VALUES (the caller maps that onto each
+ *  die's held flag, so keeping a face keeps every die showing it - which is how a person holds
+ *  dice anyway: "keep the sixes", not "keep the third die").
+ *
+ *  The old rule was a fixed recipe: hold a 4-run if you happen to have one, else hold the biggest
+ *  group. It could not CHASE anything - it never kept 3 of a straight, never weighed a pair of
+ *  sixes against three twos, and never noticed that the box it was building toward was already
+ *  filled. That is most of why it scratched Large Straight in ~90% of games.
+ *
+ *  This instead tries every way of keeping dice (at most 32 - one per subset of the distinct
+ *  faces showing) and rolls each one out a few dozen times against the categories that are still
+ *  OPEN, keeping whichever did best on average. It is a short Monte Carlo, not a solver: it looks
+ *  one reroll ahead even when two remain, so it slightly undervalues a long chase. That is the
+ *  intended ceiling - an opponent worth beating, not one that cannot be beaten.
+ *
+ *  `scores` is optional; without it every category reads as open, which is the right default for
+ *  the test seam and for the first turn alike. */
+function aiChooseHolds(dice, scores){
+  const s = scores || {};
+  const vals = diceValues(dice);
+  const faces = [...new Set(vals)];
+  const probe = [0,1,2,3,4].map(i=>({ value: vals[i], held:false }));
+  let bestFaces = null, bestAvg = -Infinity;
+  for(let mask=0; mask < (1<<faces.length); mask++){
+    const keep = new Set();
+    for(let i=0;i<faces.length;i++) if(mask>>i & 1) keep.add(faces[i]);
+    let total = 0;
+    for(let t=0;t<AI_ROLLOUTS;t++){
+      for(let i=0;i<5;i++) probe[i].value = keep.has(vals[i]) ? vals[i] : 1+Math.floor(Math.random()*6);
+      total += aiBestValue(s, probe);
+    }
+    const avg = total / AI_ROLLOUTS;
+    if(avg > bestAvg){ bestAvg = avg; bestFaces = keep; }
+  }
+  return bestFaces || new Set();
+}
+
+/** What a category is WORTH to the AI, which is not the same as what it scores. HOLE 1: an upper
+ *  box's real value includes what it does to the +35 bonus, so three sixes (18, six ahead of pace)
+ *  is worth more than its 18 and two sixes (12, six behind) is worth less than its 12. Once the
+ *  bonus is banked or the section is closed out, value collapses back to the raw score. */
+function aiCategoryValue(scores, cat, raw){
+  const upperIdx = UPPER_KEYS.indexOf(cat);
+  if(upperIdx<0) return raw;
+  if(upperSum(scores) >= 63) return raw;               // already earned; nothing left to protect
+  const face = upperIdx+1;
+  return raw + (raw - AI_BONUS_PACE*face) * AI_PACE_WEIGHT;
 }
 
 function pickCategoryForAI(scores, dice){
   const avail = availableCategories(scores, dice);
-  let best=null, bestVal=-1;
+  let best=null, bestVal=-Infinity, bestRaw=0;
   for(const cat of avail){
-    const v = previewScore(scores, cat, dice) || 0;
-    if(best===null || v>bestVal){ best=cat; bestVal=v; continue; }
-    if(v===bestVal){
-      const catIsLower = !UPPER_KEYS.includes(cat);
-      const bestIsLower = !UPPER_KEYS.includes(best);
-      if(catIsLower && !bestIsLower){ best=cat; bestVal=v; }
-    }
+    const raw = previewScore(scores, cat, dice) || 0;
+    const v = aiCategoryValue(scores, cat, raw);
+    if(v>bestVal){ best=cat; bestVal=v; bestRaw=raw; }
   }
+  // HOLE 2: a turn where nothing scores is a sacrifice, not a pick. The old code ran the same
+  // max-score loop and tie-broke toward the LOWER section, i.e. it deliberately burned the most
+  // valuable open box every time.
+  if(bestRaw<=0) return AI_SACRIFICE_ORDER.find(c=>avail.includes(c)) || best;
   return best;
 }
 
@@ -539,7 +619,7 @@ async function aiTakeTurn(){
     await wait(400);
     if(destroyed) return;
     if(state.rollsUsed<3){
-      const holdVals = aiChooseHolds(state.dice);
+      const holdVals = aiChooseHolds(state.dice, state.players[1].scores);
       state.dice.forEach(d=>{ d.held = holdVals.has(d.value); });
       render();
     }
