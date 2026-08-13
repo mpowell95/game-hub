@@ -59,18 +59,35 @@ gallery `padding-top: 84px` to clear it.
 
 | File | Role |
 |---|---|
-| `js/boards.js` | the machine registry: identity, look tokens, physics tune, scoring geometry, unlock chain. Pure |
-| `js/physics.js` | the deterministic ball simulation: lane roll, the hump, flight, face capture, sink. Pure, no rng at all |
+| `js/vendor/` | **vendored battle-tested libraries** (2026-08-13, Matt's explicit instruction - see below): `cannon-es.js` (rigid-body physics, ESM), `three.module.min.js` + `three.core.min.js` (renderer). Committed files, no build step, no network fetch. Never hand-edit them |
+| `js/machine.js` | the machine's GEOMETRY, once, in metres: every floor, wall, band segment and collar as data. physics.js builds cannon bodies from it and render.js builds three meshes from it, so the wall you see IS the wall the ball hits |
+| `js/boards.js` | the machine registry: identity, look tokens, the `geom` block (sizes, angles, launch speeds, hole layout), unlock chain. Pure |
+| `js/physics.js` | the ball, simulated by cannon-es: materials/contact tuning, hole capture, trough scoring, the dish, the watchdog. Deterministic, no rng |
 | `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
-| `js/render.js` | the canvas: one perspective camera, cached static machine art, live ball/flash/popup layer |
+| `js/render.js` | the machine on screen, drawn by three.js: scene from machine.js + cosmetic dressing, lights/shadows, painted textures, ball mesh synced from the physics body |
 | `js/howto.js` | the How To Play sheet content (repo pattern, `tic-tac-toe/CLAUDE.md`) |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, the swipe, storage, records panel, the hub module contract |
 | `js/test.js` | headless engine tests incl. the reachability sweep and the soak (wired into `run-all-tests.mjs`) |
 
-The first three are DOM-free and that is load-bearing: `node skeeball/js/test.js` plays hundreds
-of throws without constructing an element, and the same determinism is why the tuning is testable
-at all.
+`machine.js`, `boards.js`, `physics.js` and `game.js` are DOM-free and that is load-bearing:
+`node skeeball/js/test.js` plays hundreds of throws in node (cannon-es runs fine there), and the
+same determinism is why the tuning is testable at all.
+
+## The vendored engines (the one "no dependencies" exception, and why)
+
+Matt, 2026-08-13, after three rounds of hand-rolled physics kept failing his eye test and he was
+told the good apps are built on general-purpose physics engines: *"Why didn't we use that from
+the start??? Use ALL AVAILABLE resources like this. 'battle-tested' codes and scripts... are way
+better and preferred by a TON over anything you build directly. Go - vendor cannon-es and
+rebuild it on that... If any other things like this cannon-es thing exist - FIND AND USE IT."*
+
+So `skeeball/js/vendor/` holds cannon-es 0.20.0 and three.js r185 as committed ES-module files.
+This honors the repo's real constraints (static files, no build step, works offline - the three
+files are in `sw.js`'s ASSETS) while bending the letter of "no dependencies" on Matt's explicit
+instruction. The lesson generalizes: for solved hard problems (physics, 3D rendering), vendor
+the proven library instead of imitating its output by hand. Do NOT hand-patch vendor files; to
+upgrade, `npm pack <name>` and copy the dist build over.
 
 ## The setup screen and How To Play (rebuilt 2026-08-13 to the repo patterns)
 
@@ -93,58 +110,52 @@ redesign starts from those documents, not from taste:
   measured and shrunk to fit ONE row before nowrap locks it (`_fitHelpLines` in `ui.js`); the
   arcs are told apart by dash pattern AND numbered markers, never colour alone.
 
-## The machine and its physics
+## The machine and its physics (cannon-es since 2026-08-13)
 
-**Rebuilt again on 2026-08-13, same day, to the reference-footage contract.** Matt supplied six
-stock clips of real machines (`reference/Skeeball/*.mp4`); studied frame by frame they showed the
-board rebuild's remaining lie: the score was decided at the ball's first touch and a canned slide
-played it out. On a real machine, touching the board is where the drama STARTS. The approved gap
-list (rims are real, outcomes emerge, misses roll downhill, two flight regimes, the ring is
-geometry, rattle takes seconds) is implemented in `physics.js`'s board phase:
+The hand-rolled collision model went through two full rebuilds (decided-at-contact → emergent
+face simulation) and still failed Matt's eye test: *"you can clearly tell it's being told to
+react a certain way."* It was replaced wholesale by cannon-es (see "The vendored engines"), and
+nothing scripts a reaction any more:
 
-- **Lane / hump / rollback / flight** as before: swipe rolls the ball up the shortened lane, the
-  hump launches it (~52 degrees), a ball too weak for the climb comes back unspent, a total flub
-  dies in the gutter void for the honest zero.
-- **The board is a live simulation in face coordinates** (u lateral, v up-slope, w height off
-  the plane). Gravity pulls down-slope and into the plane, always. The cups' collars and the big
-  ring's band are REAL WALLS (bounce, graze, slide); the board bounces until the hops stop
-  mattering, then the ball rolls - decelerating uphill, accelerating back down, steering around
-  the furniture. Nothing caps the bounce count. **The outcome is wherever the ball physically
-  drains**: a cup mouth it genuinely arrives over, the 20 hole inside the ring, the 10 hole on
-  the outer field, a corner gutter for a low wide fluke.
-- **Two flight regimes fall out of one launch angle**: soft balls land low and roll up (the
-  footage's skim); hard balls arc onto the upper board from the air. Max power straight
-  overshoots the 50 and rattles down for scraps - asserted, so power is never a strategy.
-- **Feel rules encoded from the clips**: a climbing ball HOPS the ring's band (entry over the
-  front lip); a descending rattler is caught by the dished basin and circulates inside; a slow
-  ball teetering on a cup rim tips in; a fast one rims out with a pop.
-- **Termination is engineered**: energy only decays; a stalled ball (displacement-anchored
-  detection - speed thresholds are jitter-blind, pinball's watchdog lesson) picks up a gentle
-  funnel toward its drain and visibly rolls there. A 10s emergency cap exists and the tests
-  assert it never fires.
-- **Wedge lesson, twice**: where a cup stands on or beside the band, the CUP owns the contact -
-  two nearly-touching convex walls otherwise pin a slow ball forever (pinball/CLAUDE.md's
-  parking-space failure, met at the 50/band junction and the 100L/band gap).
+- **The machine is real geometry** (`machine.js`): lane, hump quarter-pipe (launch angle IS the
+  last segment's angle), trough, tilted board slab (~32 degrees), ring band and cup collars as
+  flush box-segment polygons, rails, tall backboard, the wire cage over the board, the front
+  glass, a kick panel under the lip. The ball is a rigid sphere with mass and spin; rolling,
+  hops, rim rattles and backboard reactions all come out of the contact solver.
+- **The feel lives in exactly two places**: `boards.js`'s `geom` block (shapes, sizes, angles,
+  launch speed range) and the four ContactMaterials at the top of `physics.js` (friction and
+  restitution per surface pair - wood, board, slick steel walls, dead backboard/cage).
+- **Hole capture is the one non-engine rule**, and it is what a hole IS: when the ball's centre
+  is over an opening at face level, its collision mask drops the board slab and GRAVITY takes it
+  through the mouth, still guided by the collar. No teleport, no canned sink.
+- **The trough scores like the real bottom slot**: centre band = 10, corners = 0. A dead lob
+  rolls into the 10, exactly like the real machine; the honest zero is the corner.
+- **The dish**: the real board's lower bowl is dished so a slow ball inside the ring always
+  finds the 20. Our slab is flat, so the dish is applied as the force it exerts (gentle pull
+  toward the 20 for slow balls inside the ring only - fast rattles are never steered).
+- **The 100s are the real tilted tubes** (`lipLow`): low front lip a rolling corner ball can
+  hop in over, tall back lip that catches overshoot. Reachable only with a genuine sideways
+  fling (~p0.78/a0.65-0.75 is the sweet spot the sweep finds); never with a straight ball.
+- **The spacing rule** (in `boards.js`, learned twice): every gap between two pieces of
+  furniture is either MERGED or wider than a ball plus margin. An in-between gap is a pocket,
+  and a three-contact pocket LOCKS the cannon solver completely - velocity writes get solved
+  back to zero. Check every neighbour pair before moving any cup.
+- **The watchdog** (displacement-anchored, never speed): a parked ball gets popped off the face
+  like real chatter; a ball two pops cannot move is jammed and gets walked out slowly toward
+  the nearest mouth. The 12s cap should be unreachable; the tests keep the whole emergency
+  path under 2% of the sweep.
 
-**Slope, not wall (same day, Matt's eye test):** the first emergent build kept the real
-machine's steep face and read as "a vertical wall... the ball only falls." The fix is three
-coordinated pieces, and they only work together: `faceTilt: 0.6` rad (~34 degrees — a BOWL; the
-comment in `boards.js` marks it), a camera raised and pulled back to look DOWN into it
-(`render.js`: `eyeY -0.9`, `eyeZ 0.95`, `F = w*2.2`), and the cups drawn as real 3D cylinders
-(collar wall + rim annulus + dark mouth) so depth is visible. Retilting without moving the
-camera just makes the board look shorter; moving the camera without the 3D collars makes the
-cups read as flat stickers again.
+Deterministic: fixed 1/240 step, fixed solver iterations, naive broadphase (stable pair order),
+no rng anywhere. One fresh world per throw, so nothing leaks between balls. Retune freely, but
+run `node skeeball/js/test.js` first - the sweep pins reachability of every hole, the rollback,
+the straight-power ladder (30 → 40 → 50), overshoot paying on average, the >2s rattle, real
+bounce events, and the emergency path staying rare.
 
-Still deterministic: no rng anywhere; rim deflections are purely geometric. Retune in
-`boards.js` freely, but run `node skeeball/js/test.js` first: the sweep pins reachability of
-every hole (100s never straight), the void, the rollback, the overshoot price, the >1.5s rattle,
-real bounce events, and that nothing ever rides the settle cap. The rules test plays throws the
-sweep itself found, so it can never drift from the engine's real behavior.
-
-The renderer projects everything through one pinhole camera (`P()` in `render.js`); the
-board-phase shadow reads the hop height (`st.fw`), which is what makes a bounce readable. Static
-machine art is cached per size (`paintStatic`); art that changes during play does NOT belong
-there. Reduced motion drops particles and the flight trail, never the ball.
+The renderer (`render.js`, three.js) builds its scene from the SAME `machine.js` description,
+plus paint: the burnt-orange field texture with the zone stencils, value plates on every tube's
+front wall (the field stencils hide behind the tubes from the player's eye line), the cage drawn
+as the sparse wire it stands in for, real directional shadows (the depth cue that makes a hop
+readable). Reduced motion drops popup rise and particles, never the ball.
 
 ## The records panel (the four numbers every machine shows)
 
@@ -194,8 +205,9 @@ invisible (rule 1; the comment on the `TABS` row records this).
 ## Adding the next machine
 
 1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,
-   untranslated), `taglineKey` (+ its `{en,es}` strings), `look`, `physics`, `scoring`, and
-   `unlock: { board: '<previous id>', score: N }`.
+   untranslated), `taglineKey` (+ its `{en,es}` strings), `look`, `geom`, and
+   `unlock: { board: '<previous id>', score: N }`. Obey `geom`'s spacing rule for every
+   neighbour pair, and re-run the sweep - reachability is a property of the whole layout.
 2. Run `node skeeball/js/test.js` — the sweep and soak run against every board in the list, and
    the unlock chain tests are already written (they currently exercise a synthetic future list).
 3. `ui.js` needs nothing: the gallery, unlock checks (`unlocksEarned` → `unlockSkeeballBoard`),
@@ -206,10 +218,13 @@ invisible (rule 1; the comment on the `TABS` row records this).
 
 ## Testing
 
-- `node skeeball/js/test.js` — 42 assertions: determinism, the reachability sweep (every hole,
-  gutter, rollback), the power-curve shape, left/right symmetry, a 600-throw soak (settles, in
-  bounds, legal values only), the nine-ball rules through the real API, the recorder payload
-  shape, snapshot/restore, and the unlock chain.
+- `node skeeball/js/test.js` — 41 assertions (~1 min; cannon runs every throw for real):
+  determinism, the reachability sweep (every hole, the rollback, emergencies rare), the
+  straight-power ladder (30 → 40 → 50) and overshoot-pays-on-average, the >2s rattle with real
+  bounce events, statistical left/right symmetry (knife-edge throws may split - the solver
+  iterates contacts in list order), a 250-throw soak (settles, in bounds, legal values only),
+  the nine-ball rules through the real API, the recorder payload shape, snapshot/restore, and
+  the unlock chain.
 - `node test-game-conventions.mjs` — the shared checklist (viewport, touch, overlays, name gate,
   module contract, listener balance, dictionary, the layout-class collision rule).
 - `node test-visual.mjs skeeball` — the only suite that LOOKS at it. Its PLAY probe swipes the
@@ -227,7 +242,19 @@ invisible (rule 1; the comment on the `TABS` row records this).
   keeps the warm dark arcade look in both themes (Ball Run/Hill Climb/Pinball's class). The
   header comment in the CSS marks where one skin ends and the other begins. Do not "unify" them.
 - The swipe measures the RELEASE flick (the last ~130ms), not the whole gesture — the wind-up is
-  grip, not power. Power normalises against the stage height so a phone and a desktop feel alike.
+  grip, not power. Power normalises against the stage height so a phone and a desktop feel
+  alike. **Samples are clocked with `e.timeStamp`, never `performance.now()`** — under load the
+  handlers run late and bunched, and handler-time clocking collapses a strong swipe into a
+  dribble. That bug only shows on a busy main thread, which is exactly a cheap phone.
 - `physics.js` has no randomness at all. If a future machine wants scatter, thread a seeded rng
   through `startThrow` and keep `simulateThrow` deterministic — the test suite depends on it.
+- **Three WebGL lessons paid for in debugging time** (all in `render.js`, commented in place):
+  a `position:absolute` canvas is a REPLACED element, so `inset:0` does not stretch it —
+  `setSize(w, h, true)` must set the style or the frame is an unscaled top-left crop; software
+  GL (SwiftShader — headless tests, GPU-less desktops) is detected up front and sheds shadows,
+  antialiasing and resolution, or the main thread starves and even input dies; and
+  `preserveDrawingBuffer: true` stays on because test-visual's play probe and Report a bug's
+  screenshot both read the canvas, which is blank without it.
+- `window.__skTest` (set in `init()`) is the read-only hook the headless drivers use to
+  sequence real-touch play; the `__yzTest` precedent. Never used by the game itself.
 - Machine names (`THE CLASSIC`) are proper nouns and stay untranslated, like STARHUB.
