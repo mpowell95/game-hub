@@ -14,8 +14,15 @@ folder's CLAUDE.md for exactly what its rename changed. Both builds record into 
 `skeeball` stats id, and both use the board id `classic`, so that machine's records (bests, the
 daily map, the top-score panel) are one continuous bucket across the two builds — deliberate,
 so no play is ever orphaned. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
-lane, a cream ring face, twin corner 100 pockets, and a marquee. The player swipes up the lane;
-the swipe's speed is the roll's power and its angle is the aim. Nine balls to a rack.
+lane, the burnt-orange board with the white cup ladder, twin corner 100 cups, and a marquee. The
+player swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine
+balls to a rack.
+
+**The board was rebuilt to the REAL classic layout on 2026-08-13** against reference photos Matt
+provided, after the first version shipped a wrong "bullseye" board invented from memory — the
+exact failure `VISUAL-PROCESS.md` exists to prevent (look at the picture before you write code;
+if there is no picture, ask for one). That rule was read and skipped anyway; do not repeat this.
+The photos and researched behavior now live in this file and in `boards.js`'s `scoring` comment.
 
 **Admin only for now**, exactly like Pinball: the hub entry carries `devOnly: true`. Unlike
 Pinball, the stats id already has REAL family history (the game was live for a couple of hours
@@ -67,21 +74,28 @@ World coords: x lateral, y down the alley, z up; the lane bed is z = 0. The mode
 the ball experiences it (all constants live in `boards.js`'s per-machine `physics`/`scoring`,
 nothing is hardcoded in `physics.js`):
 
-- **Lane** — rolls with friction, banks off the side rails.
+- **Lane** — rolls with friction, banks off the side rails. Deliberately shorter than a real
+  alley (Matt: the board is the main aspect of the game and must dominate the frame).
 - **The hump** — climbing costs `g·lipHeight` of speed²/2; a ball that cannot pay **rolls back
   to the player and is not spent** (`'returned'`), exactly like a real alley.
-- **Flight** — off the lip at `launchAngle` (~47°), under gravity.
-- **The face** — an inclined plane (~65°). Land softly (`|vn| <= captureVn`) and the zone under
-  the ball takes it: the twin 100 pockets first, then the concentric rings by distance from the
-  ring centre (50 innermost, 10 outermost), then the gutter. Land hot and it bounces once; the
-  second contact always settles. Short balls die in the pit for zero; past the net is zero.
+- **Flight** — off the lip at `launchAngle` (~54°), under gravity.
+- **The board** — an inclined plane (~68°) carrying the REAL classic zones: the big ring low on
+  the board with the 30 and 40 cups stacked inside it, the 50 at its top arc, the 100s in the
+  top corners. Land softly (`|vn| <= captureVn`) and the zone under the ball takes it, cups
+  first; land hot and it bounces once, the second contact always settles. Zone outcomes:
+  **in a cup** = its value; **inside the big ring, no cup** = 20 (rolls to the 20 hole);
+  **anywhere else on the board** = 10 (rolls down the outer field to the 10 hole);
+  **the bottom corners** = 0 (a low, wide fluke); **the gutter void behind the hump** = 0 (a
+  weak lob); **the backstop** = the ball drops and rolls away for 10, never a wipeout.
 
-**The power curve is the game**, and `test.js`'s reachability sweep pins its shape: rings come up
-in order (10 → 30 → 50) as power climbs, an overshoot descends the far side (40 → 30 → 20, never
-more), the 100s need near-full power AND committed sideways aim (a straight ball can never score
-100 — asserted), and a feeble roll comes back. Retune in `boards.js` freely, but run
-`node skeeball/js/test.js` before anything else: it is the only thing that will tell you a tweak
-quietly killed the 100 pockets or the rollback.
+**Nearly every ball scores something — that is what makes it skeeball** (asserted: a straight
+ball past the void always scores). **The power curve is the game**, and `test.js`'s reachability
+sweep pins its shape: the ladder climbs in order (10 → 20 → 30 → 40 → 50, with 20s in the gaps
+between cups), an overshoot sails past the 50 into the outer field for 10 — never more — the
+100s need near-full power AND committed sideways aim (a straight ball can never score 100 —
+asserted), the corner 0s take low power plus full sideways, and a feeble roll comes back. Retune
+in `boards.js` freely, but run `node skeeball/js/test.js` before anything else: it is the only
+thing that will tell you a tweak quietly killed the 100 cups or the rollback.
 
 The renderer projects everything through one pinhole camera (`P()` in `render.js`), so the lane's
 convergence, the ellipses the rings become, and the arc of a lob are the same geometry the

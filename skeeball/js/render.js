@@ -39,8 +39,10 @@ export class Renderer {
     } catch { /* headless */ }
 
     // Camera: eye above the player's end, looking down the alley. F set in resize().
-    this.eyeY = -0.92;
-    this.eyeZ = 1.06;
+    // Tuned (with the shortened lane in boards.js) so the BOARD dominates the frame - Matt,
+    // 2026-08-13: the board is the main aspect of the game, it must not be tiny.
+    this.eyeY = -0.85;
+    this.eyeZ = 1.04;
     this.F = 0;
     this.cy = 0;
     this.cx = 0;
@@ -54,11 +56,11 @@ export class Renderer {
     this.canvas.height = Math.round(h * dpr);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
-    // Focal length: the lane's near end should nearly fill the width; the horizon sits high so
-    // the face gets the top of the frame and the lane sweeps the rest.
-    this.F = w * 1.62;
+    // Focal length: long, and the horizon high, so the face fills the upper half of the frame
+    // and the (shortened) lane sweeps the lower half.
+    this.F = w * 1.78;
     this.cx = w / 2;
-    this.cy = h * 0.245;
+    this.cy = h * 0.215;
     this.paintStatic();
   }
 
@@ -234,64 +236,85 @@ export class Renderer {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Concentric ring bands, outermost first: painted band, pale lip, value stencil.
-    const rings = [...S.rings].reverse();     // big to small
-    for (let i = 0; i < rings.length; i++) {
-      const ring = rings[i];
-      ctx.fillStyle = i % 2 === 0 ? shade(L.ring, 1) : shade(L.face, 0.93);
-      this.faceCircle(ctx, 0, S.ringCenterV, ring.r);
-      ctx.fill();
-      ctx.strokeStyle = L.ringLip;
-      ctx.lineWidth = 2.4;
-      this.faceCircle(ctx, 0, S.ringCenterV, ring.r);
-      ctx.stroke();
-    }
-    // The 50's mouth: an open hole at the centre - small, so the stencil under it stays legible
-    // through the perspective foreshortening.
-    const mouth = S.rings[0].r * 0.45;
-    ctx.fillStyle = L.pocket;
-    this.faceCircle(ctx, 0, S.ringCenterV, mouth);
-    ctx.fill();
-
-    // Values, stencilled low in each band where a player standing at the lane reads them. The 50
-    // gets a pale outline so it reads even where the hole's dark edge crowds it.
+    // The playfield paint, per the reference photos: black zone stencils first (they sit flat
+    // on the orange field), then the raised white rings over them.
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    for (let i = 0; i < S.rings.length; i++) {
-      const ring = S.rings[i];
-      const vLabel = i === 0
-        ? S.ringCenterV - (mouth + ring.r) / 2
-        : S.ringCenterV - (ring.r + S.rings[i - 1].r) / 2;
-      const p = this.facePt(0, vLabel);
-      const px = Math.max(9, p.s * 0.052);
-      ctx.font = `700 ${px}px system-ui, sans-serif`;
-      const onRed = i % 2 === 0;
-      if (i === 0) {
-        ctx.lineWidth = Math.max(2, px * 0.22);
-        ctx.strokeStyle = shade(L.ring, 0.55);
-        ctx.strokeText(String(ring.value), p.sx, p.sy);
-      }
-      ctx.fillStyle = onRed ? L.ringLip : shade(L.ring, 0.9);
-      ctx.fillText(String(ring.value), p.sx, p.sy);
+    const stencil = (text, u, v, size) => {
+      const p = this.facePt(u, v);
+      const px = Math.max(9, p.s * size);
+      ctx.font = `800 ${px}px system-ui, sans-serif`;
+      ctx.fillStyle = L.value;
+      ctx.fillText(text, p.sx, p.sy);
+    };
+    // The outer field is all 10; the flanks inside the big ring are the 20; the corners are 0.
+    stencil('10', 0, Ph.faceLen - 0.07, 0.055);
+    stencil('10', -0.415, 0.60, 0.05);
+    stencil('10', 0.415, 0.60, 0.05);
+    stencil('20', -0.235, 0.44, 0.05);
+    stencil('20', 0.235, 0.44, 0.05);
+    stencil('0', -0.43, 0.055, 0.05);
+    stencil('0', 0.43, 0.055, 0.05);
+
+    // The two drain holes every non-cup ball rolls to (both visible on the real board).
+    for (const hole of [S.hole20, S.hole10]) {
+      ctx.fillStyle = L.pocket;
+      this.faceCircle(ctx, hole.u, hole.v, 0.052);
+      ctx.fill();
+      ctx.strokeStyle = shade(L.face, 0.6);
+      ctx.lineWidth = 1.5;
+      this.faceCircle(ctx, hole.u, hole.v, 0.052);
+      ctx.stroke();
     }
 
-    // The twin 100 pockets: dark mouths with a painted rim and their promise stencilled above.
-    for (const pk of S.pockets) {
-      ctx.fillStyle = shade(L.ring, 0.75);
-      this.faceCircle(ctx, pk.u, pk.v, pk.r * 1.32);
+    // The BIG RING: a raised white band with the navy trim line, 20 inside it.
+    this.faceAnnulus(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R, S.bigRing.R + 0.05);
+    ctx.fillStyle = L.ring;
+    ctx.fill('evenodd');
+    ctx.strokeStyle = L.ringLip;
+    ctx.lineWidth = 2;
+    this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R);
+    ctx.stroke();
+    this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R + 0.05);
+    ctx.stroke();
+
+    // The cups, upper first so each lower one overlaps the one behind it the way the real
+    // stack reads: 100s in the corners, then 50 / 40 / 30 down the centre line.
+    const cups = [...S.cups];   // already ordered 100L, 100R, c50, c40, c30
+    for (const cup of cups) {
+      // Front wall: a lower partial collar, where the real cup's stencilled value sits.
+      const wallR = cup.r + Math.min(0.075, cup.r * 0.9);
+      ctx.beginPath();
+      this.faceArcPath(ctx, cup.u, cup.v, wallR, Math.PI * 1.12, Math.PI * 1.88);
+      this.faceArcPath(ctx, cup.u, cup.v, cup.r * 0.9, Math.PI * 1.88, Math.PI * 1.12, true);
+      ctx.closePath();
+      ctx.fillStyle = shade(L.ring, 0.94);
       ctx.fill();
+      // Rim band and mouth.
+      this.faceAnnulus(ctx, cup.u, cup.v, cup.r * 0.86, cup.r + 0.026);
+      ctx.fillStyle = L.ring;
+      ctx.fill('evenodd');
       ctx.fillStyle = L.pocket;
-      this.faceCircle(ctx, pk.u, pk.v, pk.r * 0.92);
+      this.faceCircle(ctx, cup.u, cup.v, cup.r * 0.86);
       ctx.fill();
-      ctx.strokeStyle = L.ringLip;
+      // A hint of the real cups' blue-tinted throat.
+      ctx.strokeStyle = withAlpha(L.ringLip, 0.65);
       ctx.lineWidth = 2;
-      this.faceCircle(ctx, pk.u, pk.v, pk.r * 1.32);
+      this.faceCircle(ctx, cup.u, cup.v, cup.r * 0.72);
       ctx.stroke();
-      const p = this.facePt(pk.u, pk.v + pk.r * 2.1);
-      const px = Math.max(8, p.s * 0.045);
+      ctx.strokeStyle = L.ringLip;
+      ctx.lineWidth = 1.8;
+      this.faceCircle(ctx, cup.u, cup.v, cup.r + 0.026);
+      ctx.stroke();
+    }
+    // The values, LAST, so no cup rim ever covers a number: each one stencilled at its cup's
+    // labelV - on the front collar, in the sliver the next cup down leaves visible.
+    for (const cup of cups) {
+      const p = this.facePt(cup.u, cup.labelV);
+      const px = Math.max(10, p.s * (cup.value >= 100 ? 0.052 : 0.06));
       ctx.font = `800 ${px}px system-ui, sans-serif`;
-      ctx.fillStyle = shade(L.ring, 0.9);
-      ctx.fillText('100', p.sx, p.sy);
+      ctx.fillStyle = L.value;
+      ctx.fillText(String(cup.value), p.sx, p.sy);
     }
   }
 
@@ -365,6 +388,35 @@ export class Renderer {
     }
   }
 
+  /** Two concentric face circles as one path, for an evenodd band fill. */
+  faceAnnulus(ctx, cu, cv, rInner, rOuter) {
+    ctx.beginPath();
+    const N = 40;
+    for (let i = 0; i <= N; i++) {
+      const th = (i / N) * TAU;
+      const p = this.facePt(cu + rOuter * Math.cos(th), cv + rOuter * Math.sin(th));
+      if (i === 0) ctx.moveTo(p.sx, p.sy); else ctx.lineTo(p.sx, p.sy);
+    }
+    for (let i = 0; i <= N; i++) {
+      const th = (i / N) * TAU;
+      const p = this.facePt(cu + rInner * Math.cos(th), cv + rInner * Math.sin(th));
+      if (i === 0) ctx.moveTo(p.sx, p.sy); else ctx.lineTo(p.sx, p.sy);
+    }
+  }
+
+  /** An arc segment on the face plane, appended to the current path. Angles in face space
+   *  (0 = +u, PI/2 = up-slope); `rev` walks it backwards for closing a band. */
+  faceArcPath(ctx, cu, cv, r, a0, a1, rev = false) {
+    const N = 24;
+    for (let i = 0; i <= N; i++) {
+      const k = rev ? 1 - i / N : i / N;
+      const th = a0 + (a1 - a0) * k;
+      const p = this.facePt(cu + r * Math.cos(th), cv + r * Math.sin(th));
+      // lineTo on an empty path acts as moveTo, so the first arc opens the path correctly.
+      ctx.lineTo(p.sx, p.sy);
+    }
+  }
+
   /** Path of a circle drawn ON the face plane (it projects to an ellipse-ish shape). */
   faceCircle(ctx, cu, cv, r) {
     ctx.beginPath();
@@ -426,17 +478,21 @@ export class Renderer {
       ctx.globalAlpha = 0.55 * k;
       ctx.lineWidth = 4;
       ctx.strokeStyle = this.board.look.glow;
-      if (hole === 'gutter') {
-        // The whole face sighs, dimly.
-        ctx.globalAlpha = 0.15 * k;
-        this.faceCircle(ctx, 0, S.ringCenterV, S.rings[S.rings.length - 1].r);
+      const cup = S.cups.find((c) => c.id === hole);
+      if (cup) {
+        this.faceCircle(ctx, cup.u, cup.v, cup.r + 0.04);
         ctx.stroke();
-      } else if (hole === '100L' || hole === '100R') {
-        const pk = S.pockets.find((p) => p.id === hole);
-        if (pk) { this.faceCircle(ctx, pk.u, pk.v, pk.r * 1.5); ctx.stroke(); }
+      } else if (hole === '20') {
+        this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R + 0.025);
+        ctx.stroke();
+      } else if (hole === '10') {
+        this.faceCircle(ctx, S.hole10.u, S.hole10.v, 0.09);
+        ctx.stroke();
       } else {
-        const ring = S.rings.find((r) => `r${r.value}` === hole);
-        if (ring) { this.faceCircle(ctx, 0, S.ringCenterV, ring.r); ctx.stroke(); }
+        // corner0 / the gutter void: the whole field sighs, dimly.
+        ctx.globalAlpha = 0.15 * k;
+        this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R + 0.1);
+        ctx.stroke();
       }
       ctx.restore();
     }

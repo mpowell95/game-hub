@@ -41,13 +41,15 @@ const outcomeOf = (power, aim) => {
 {
   const found = new Map();          // hole -> first {power, aim} that scores it
   for (let p = 0; p <= 60; p++) {
-    for (const aim of [0, 0.15, 0.3, 0.45, -0.45, 0.55, -0.55, 0.4, -0.4, 0.5, -0.5]) {
+    for (const aim of [0, 0.2, 0.4, -0.4, 0.6, -0.6, 0.75, -0.75, 0.9, -0.9, 1, -1]) {
       const st = simulateThrow(board, { power: p / 60, aim });
       const hole = st.outcome ? st.outcome.hole : 'returned';
       if (!found.has(hole)) found.set(hole, { power: p / 60, aim });
     }
   }
-  for (const hole of ['r10', 'r20', 'r30', 'r40', 'r50', '100L', '100R', 'gutter', 'returned']) {
+  // The real classic's outcomes: the stacked cups, the big ring's 20, the outer field's 10,
+  // the twin 100s, the corner-gutter 0, the void 0, and the rolled-back ball.
+  for (const hole of ['10', '20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0', 'gutter', 'returned']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
   }
@@ -56,7 +58,7 @@ const outcomeOf = (power, aim) => {
   for (let p = 0; p <= 60; p++) {
     if (String(outcomeOf(p / 60, 0)).startsWith('100')) straight100 = true;
   }
-  ok('the 100 pockets need real aim, never a straight ball', !straight100);
+  ok('the 100 cups need real aim, never a straight ball', !straight100);
 }
 
 // --- 3. the power curve keeps its shape (aim 0) ------------------------------------------------
@@ -64,19 +66,29 @@ const outcomeOf = (power, aim) => {
 {
   const at = (p) => outcomeOf(p, 0);
   ok('a feeble roll comes back to the player (not spent)', at(0.02) === 'returned');
-  ok('an undershoot dies in the pit for zero', at(0.25) === 'gutter');
+  ok('a weak lob dies in the gutter void for zero', at(0.13) === 'gutter');
   const seq = [];
   for (let p = 0; p <= 100; p += 2) {
     const h = at(p / 100);
     if (seq[seq.length - 1] !== h) seq.push(h);
   }
   const upRamp = seq.join(' ');
-  ok('rings come up in order on the way to the 50', upRamp.indexOf('r10') < upRamp.indexOf('r30')
-    && upRamp.indexOf('r30') < upRamp.indexOf('r50'),
+  ok('the ladder climbs in order: 10, 20, 30, 40, 50', upRamp.indexOf('10') < upRamp.indexOf('20')
+    && upRamp.indexOf('20') < upRamp.indexOf('c30')
+    && upRamp.indexOf('c30') < upRamp.indexOf('c40') && upRamp.indexOf('c40') < upRamp.indexOf('c50'),
     `sequence was: ${upRamp}`);
-  ok('an overshoot climbs past the 50 and scores less, not more',
-    upRamp.indexOf('r50') !== -1 && upRamp.lastIndexOf('r20') > upRamp.indexOf('r50'),
+  ok('an overshoot sails past the 50 and lands in the outer field for 10, never more',
+    upRamp.indexOf('c50') !== -1 && seq[seq.length - 1] === '10',
     `sequence was: ${upRamp}`);
+  // The classic's defining feel: once a straight ball clears the void, it always scores.
+  let zeroAfterVoid = '';
+  let seenScore = false;
+  for (let p = 0; p <= 100; p += 1) {
+    const h = at(p / 100);
+    if (h !== 'returned' && h !== 'gutter') seenScore = true;
+    else if (seenScore && h === 'gutter') zeroAfterVoid = `power ${p / 100} scored 0 after the ladder began`;
+  }
+  ok('every straight ball past the void scores something', !zeroAfterVoid, zeroAfterVoid);
 }
 
 // --- 4. aim symmetry ---------------------------------------------------------------------------
@@ -84,7 +96,7 @@ const outcomeOf = (power, aim) => {
 {
   const mirror = (h) => (h === '100L' ? '100R' : h === '100R' ? '100L' : h);
   let sym = true; let broke = '';
-  for (const [p, a] of [[0.5, 0.3], [0.7, 0.45], [0.93, 0.5], [0.6, 0.2]]) {
+  for (const [p, a] of [[0.5, 0.3], [0.7, 0.45], [0.95, 0.75], [0.24, 1], [0.6, 0.2]]) {
     const l = outcomeOf(p, -a), r = outcomeOf(p, a);
     if (mirror(l) !== r) { sym = false; broke = `power ${p} aim ${a}: left ${l} vs right ${r}`; break; }
   }
@@ -140,8 +152,8 @@ const outcomeOf = (power, aim) => {
 
   // Score a known ladder: the sweep above proved these mappings.
   const holes = [];
-  const powers = [0.62, 0.62, 0.62, 0.44, 0.25, 0.93, 0.93, 0.62, 0.62];
-  const aims = [0, 0, 0, 0, 0, 0.5, 0.5, 0, 0];
+  const powers = [0.65, 0.65, 0.65, 0.45, 0.13, 0.95, 0.95, 0.32, 0.24];
+  const aims = [0, 0, 0, 0, 0, 0.75, 0.75, 0, 0];
   let overEv = null;
   for (let i = 0; i < 9; i++) {
     const evs = play(powers[i], aims[i]);
@@ -176,7 +188,7 @@ const outcomeOf = (power, aim) => {
     for (let i = 0; i < 240 * 14 && g.ball; i++) { g.update(STEP); }
     g.takeEvents();
   };
-  play(0.62, 0); play(0.44, 0); play(0.93, 0.5);
+  play(0.65, 0); play(0.45, 0); play(0.95, 0.75);
   const snap = JSON.parse(JSON.stringify(g.snapshot()));
   const r = SkeeballGame.restore(snap);
   eq('restore: score, balls, counters, log all survive',
@@ -184,7 +196,7 @@ const outcomeOf = (power, aim) => {
     [g.score, g.ballsUsed, g.hundreds, g.fifties, g.bestThrow, g.throws]);
   ok('restored rack continues to completion', (() => {
     for (let i = r.ballsUsed; i < BALLS_PER_GAME; i++) {
-      r.throwBall({ power: 0.62, aim: 0 });
+      r.throwBall({ power: 0.65, aim: 0 });
       for (let s = 0; s < 240 * 14 && r.ball; s++) r.update(STEP);
     }
     return r.over && r.ballsUsed === 9;
