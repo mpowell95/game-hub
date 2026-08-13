@@ -1,10 +1,10 @@
 /* skeeball.css - every rule descendant-scoped under .sk-root (root CLAUDE.md, "Adding a game"
    item 3, Mancala's discipline: a prefix alone is not isolation). Custom properties are --sk-*.
 
-   The look is a boardwalk arcade at night: deep walnut and warm lamplight around the canvas,
-   cream and painted-red on the machine itself, marquee gold for everything that celebrates.
-   Like Ball Run, Hill Climb and Pinball it is deliberately the SAME warm dark look in both hub
-   themes, so there is no :root.gh-dark branch here to keep in step with anything.
+   Two skins on purpose (Matt, 2026-08-13): the PLAY screen is the warm dark alley in both hub
+   themes (in-game art, Ball Run/Hill Climb/Pinball's class), while the SETUP screen and the
+   how-to sheet are hub pages - hub-matching light tokens with a :root.gh-dark override (the
+   --sks-* block below, skeeball_old's pattern), controls from css/ui.css's .gh-* primitives.
 
    NAMING (test-game-conventions.mjs enforces this): no class is both a layout container and
    something decoration hides. Layout classes are .sk-play-wrap / .sk-stage / .sk-setup-inner /
@@ -55,12 +55,37 @@
 .sk-root button { font-family: inherit; cursor: pointer; }
 
 /* ------------------------------------------------------------ the machine gallery --- */
+/* The setup screen BELONGS TO THE HUB, not to the alley: hub-matching light values with a
+   :root.gh-dark override (the skeeball_old pattern, and Matt's 2026-08-13 instruction after the
+   dark arcade-styled version: "the set up screen as a whole is really bad"). The PLAY screen
+   below keeps the warm dark alley - that is in-game art; this is a hub page. The controls are
+   css/ui.css's .gh-* primitives; only the skeeball-specific rows are styled here. */
+
+.sk-root {
+  --sks-ink: #1d2430;
+  --sks-muted: #5b6675;
+  --sks-surface: #ffffff;
+  --sks-surface-2: #f2f5f9;
+  --sks-line: #d9e0ea;
+  --sks-bg: #eef2f7;
+}
+
+:root.gh-dark .sk-root {
+  --sks-ink: #e8edf5;
+  --sks-muted: #9aa7b8;
+  --sks-surface: #161d28;
+  --sks-surface-2: #1e2734;
+  --sks-line: #2c3746;
+  --sks-bg: #10151d;
+}
 
 .sk-root .sk-setup {
   position: absolute;
   inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  background: var(--sks-bg);
+  color: var(--sks-ink);
   /* Clear the hub's floating back button (top-left, immersive mode). */
   padding: max(84px, env(safe-area-inset-top, 0px) + 64px) 16px 32px;
 }
@@ -75,143 +100,82 @@
 
 .sk-root .sk-title {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 34px;
-  letter-spacing: 0.08em;
+  font-size: 26px;
+  font-weight: 800;
   text-align: center;
-  color: var(--sk-gold);
-  text-shadow: 0 0 18px rgba(255, 157, 61, 0.35);
+  color: var(--sks-ink);
 }
 
-.sk-root .sk-sub {
+.sk-root .sk-statline {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
   text-align: center;
-  color: var(--sk-dim);
-}
-
-.sk-root .sk-cards { display: flex; flex-direction: column; gap: 16px; }
-
-.sk-root .sk-card {
-  background: linear-gradient(180deg, var(--sk-panel) 0%, #1b100b 100%);
-  border: 1px solid var(--sk-line);
-  border-radius: 14px;
-  padding: 14px 14px 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-}
-
-.sk-root .sk-card.is-locked { opacity: 0.66; }
-
-.sk-root .sk-card-marquee {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: linear-gradient(180deg, #3d2413 0%, #28150b 100%);
-  border: 1px solid #6b4526;
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.sk-root .sk-card-marquee b {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 20px;
-  letter-spacing: 0.12em;
-  color: var(--sk-gold);
-  text-shadow: 0 0 10px rgba(255, 157, 61, 0.45);
-  white-space: nowrap;
-}
-
-/* Marquee bulb strips: pure ornament. */
-.sk-root .sk-bulbs {
-  flex: 1;
-  height: 4px;
-  background-image: radial-gradient(circle 2px at 50% 50%, var(--sk-gold) 0 2px, transparent 2px);
-  background-size: 12px 4px;
-  background-repeat: repeat-x;
-  opacity: 0.7;
-}
-
-.sk-root .sk-card-tag {
-  margin: 10px 2px 12px;
   font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--sk-dim);
+  color: var(--sks-muted);
 }
 
-/* The records panel: the four numbers every machine keeps. */
-.sk-root .sk-records {
-  margin: 0 0 14px;
+.sk-root .sk-statline b { color: var(--sks-ink); font-variant-numeric: tabular-nums; }
+
+/* Machine rows inside the accordion body: tappable cards, selected one marked. */
+.sk-root .sk-mrow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid var(--sks-line);
+  border-radius: 12px;
+  background: var(--sks-surface);
+  color: var(--sks-ink);
+  padding: 12px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.sk-root .sk-mrow + .sk-mrow { margin-top: 8px; }
+
+.sk-root .sk-mrow.is-selected { border-color: var(--gh-accent, #1769d4); box-shadow: 0 0 0 1px var(--gh-accent, #1769d4) inset; }
+
+.sk-root .sk-mrow.is-locked { opacity: 0.6; cursor: default; }
+
+.sk-root .sk-mrow > b { display: block; font-size: 16px; letter-spacing: 0.04em; }
+
+.sk-root .sk-mrow-tag { display: block; margin-top: 3px; font-size: 12.5px; color: var(--sks-muted); }
+
+.sk-root .sk-mrow-recs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px 12px;
+  margin-top: 10px;
 }
 
-.sk-root .sk-rec {
-  background: var(--sk-panel-2);
-  border: 1px solid var(--sk-line);
-  border-radius: 9px;
-  padding: 8px 10px;
-  min-width: 0;
-}
+.sk-root .sk-mrow-recs > span { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 
-.sk-root .sk-rec-top { grid-column: 1 / -1; }
-
-.sk-root .sk-rec dt {
-  margin: 0;
-  font-size: 10.5px;
+.sk-root .sk-mrow-recs em {
+  font-style: normal;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--sk-dim);
+  color: var(--sks-muted);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.sk-root .sk-rec dt span { opacity: 0.7; text-transform: none; letter-spacing: 0.02em; }
-
-.sk-root .sk-rec dd {
-  margin: 3px 0 0;
-  font-size: 19px;
-  font-weight: 800;
+.sk-root .sk-mrow-recs b {
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
-  color: var(--sk-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sk-root .sk-rec-top dd { color: var(--sk-gold); }
-
-.sk-root .sk-play {
-  width: 100%;
-  border: 0;
-  border-radius: 11px;
-  padding: 13px 16px;
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #2a1608;
-  background: linear-gradient(180deg, var(--sk-gold) 0%, var(--sk-amber) 100%);
-  box-shadow: 0 4px 14px rgba(255, 157, 61, 0.3);
-  touch-action: manipulation;
-}
-
-.sk-root .sk-play:active { transform: translateY(1px); }
-
-.sk-root .sk-link {
+/* The plain text how-to link, escoba's shape. */
+.sk-root .sk-howto-link {
   border: 0;
   background: none;
-  padding: 10px;
-  font-size: 14px;
+  padding: 6px;
+  font: inherit;
+  font-size: 14.5px;
   font-weight: 600;
-  color: var(--sk-dim);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--sks-muted);
+  cursor: pointer;
   touch-action: manipulation;
 }
 
@@ -491,71 +455,94 @@
 .sk-root .sk-sheet-actions { display: flex; flex-direction: column; gap: 6px; }
 
 /* ------------------------------------------------------------- how to play --- */
+/* tic-tac-toe/CLAUDE.md's pattern: one flex column with a FIXED gap (spacing never left to
+   collapse), every line a single row (ui.js measures and locks nowrap), the diagram carried by
+   shape, numbers and dashes, never colour alone. Hub-belonging skin, same tokens as the setup. */
 
-.sk-root .sk-help-lead { margin: 6px 0 10px; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.sk-root .sk-veil-howto .sk-sheet {
+  background: var(--sks-surface);
+  border-color: var(--sks-line);
+}
 
-.sk-root .sk-help-diagram-wrap { margin: 0 0 10px; }
+.sk-root .sk-veil-howto .sk-sheet-head h2 { color: var(--sks-ink); font-family: inherit; }
 
-.sk-root .sk-help-diagram { display: block; width: 100%; height: auto; }
+.sk-root .sk-veil-howto .sk-x { color: var(--sks-muted); }
+
+.sk-root .sk-veil-howto .sk-help {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sks-ink);
+}
+
+.sk-root .sk-ht-line { margin: 0; }
+
+.sk-root .sk-ht-goal { font-size: 16px; font-weight: 800; }
+
+.sk-root .sk-ht-diagram-wrap { margin: 0; }
+
+.sk-root .sk-ht-diagram { display: block; width: 100%; height: auto; }
+
+.sk-root .sk-ht-caption { font-size: 14px; color: var(--sks-muted); }
+
+.sk-root .sk-ht-ex { font-size: 14.5px; font-weight: 800; }
+
+.sk-root .sk-ht-rule { font-size: 13.5px; }
 
 .sk-root .sk-dg-lane,
-.sk-root .sk-dg-pit,
-.sk-root .sk-dg-face {
+.sk-root .sk-dg-board {
   fill: none;
-  stroke: var(--sk-cream);
+  stroke: var(--sks-ink);
   stroke-width: 2.5;
   stroke-linecap: round;
 }
 
-.sk-root .sk-dg-holes circle { fill: none; stroke: var(--sk-red); stroke-width: 2; }
+.sk-root .sk-dg-mouths ellipse { fill: var(--sks-ink); opacity: 0.85; }
 
-.sk-root .sk-dg-ball { fill: var(--sk-cream); }
-
-.sk-root .sk-dg-arc { fill: none; stroke-width: 2; stroke-linecap: round; }
-
-/* Three arcs, told apart by dash pattern AND numbered circles - never colour alone. */
-.sk-root .sk-dg-arc-1 { stroke: var(--sk-dim); stroke-dasharray: 2 5; }
-.sk-root .sk-dg-arc-2 { stroke: var(--sk-gold); }
-.sk-root .sk-dg-arc-3 { stroke: var(--sk-amber); stroke-dasharray: 8 5; }
-
-.sk-root .sk-dg-num circle { fill: var(--sk-panel); stroke: var(--sk-gold); stroke-width: 1.5; }
-
-.sk-root .sk-dg-num text {
-  fill: var(--sk-gold);
+.sk-root .sk-dg-vals text {
+  fill: var(--sks-muted);
   font-size: 10px;
   font-weight: 800;
   text-anchor: middle;
   font-family: system-ui, sans-serif;
 }
 
-.sk-root .sk-help-key { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 12px; }
+.sk-root .sk-dg-ball { fill: none; stroke: var(--sks-ink); stroke-width: 2; }
 
-.sk-root .sk-help-key-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sk-dim); }
+.sk-root .sk-dg-arc { fill: none; stroke-width: 2; stroke-linecap: round; }
 
-.sk-root .sk-help-key-item i {
+/* Three swipes, told apart by dash pattern AND numbered circles - never colour alone. */
+.sk-root .sk-dg-arc-1 { stroke: var(--sks-muted); stroke-dasharray: 2 5; }
+.sk-root .sk-dg-arc-2 { stroke: var(--gh-accent, #1769d4); }
+.sk-root .sk-dg-arc-3 { stroke: var(--sks-ink); stroke-dasharray: 8 5; }
+
+.sk-root .sk-dg-num circle { fill: var(--sks-surface); stroke: var(--sks-ink); stroke-width: 1.5; }
+
+.sk-root .sk-dg-num text {
+  fill: var(--sks-ink);
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+  font-family: system-ui, sans-serif;
+}
+
+.sk-root .sk-ht-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; }
+
+.sk-root .sk-ht-key-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sks-muted); }
+
+.sk-root .sk-ht-key-item i {
   font-style: normal;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 1.5px solid var(--sk-gold);
-  color: var(--sk-gold);
+  border: 1.5px solid var(--sks-ink);
+  color: var(--sks-ink);
   font-size: 11px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-
-.sk-root .sk-help-caption { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: var(--sk-dim); }
-
-.sk-root .sk-help-example {
-  margin: 0 0 10px;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--sk-gold);
-}
-
-.sk-root .sk-help-rule { margin: 0 0 7px; font-size: 13.5px; line-height: 1.45; }
 
 /* --------------------------------------------------------------- reduced motion --- */
 

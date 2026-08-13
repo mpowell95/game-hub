@@ -38,11 +38,11 @@ export class Renderer {
       this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     } catch { /* headless */ }
 
-    // Camera: eye above the player's end, looking down the alley. F set in resize().
-    // Tuned (with the shortened lane in boards.js) so the BOARD dominates the frame - Matt,
-    // 2026-08-13: the board is the main aspect of the game, it must not be tiny.
-    this.eyeY = -0.85;
-    this.eyeZ = 1.04;
+    // Camera: eye above the player's end, looking down INTO the bowl. Tuned against Matt's
+    // reference recording of the Skee-Ball app (2026-08-13): the ring must read as a wide
+    // squashed ellipse (a dished board seen from above), never a circle on a wall.
+    this.eyeY = -0.9;
+    this.eyeZ = 0.95;
     this.F = 0;
     this.cy = 0;
     this.cx = 0;
@@ -56,11 +56,11 @@ export class Renderer {
     this.canvas.height = Math.round(h * dpr);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
-    // Focal length: long, and the horizon high, so the face fills the upper half of the frame
-    // and the (shortened) lane sweeps the lower half.
-    this.F = w * 1.78;
+    // Focal length: long, and the horizon high, so the bowl fills the upper part of the frame
+    // and the (shortened) lane sweeps the lower half down to the swipe zone.
+    this.F = w * 2.2;
     this.cx = w / 2;
-    this.cy = h * 0.215;
+    this.cy = h * 0.14;
     this.paintStatic();
   }
 
@@ -78,6 +78,47 @@ export class Renderer {
   }
 
   facePt(u, v) { const f = this.face(u, v); return this.P(f.x, f.y, f.z); }
+
+  /** A face-plane point raised w off the plane (along the board's normal). */
+  facePtW(u, v, w) {
+    const Ph = this.board.physics;
+    const f = this.face(u, v);
+    return this.P(f.x, f.y - w * Math.sin(Ph.faceTilt), f.z + w * Math.cos(Ph.faceTilt));
+  }
+
+  /** Path of a circle at height w over the face plane. */
+  faceCircleW(ctx, cu, cv, r, wOff) {
+    ctx.beginPath();
+    const N = 40;
+    for (let i = 0; i <= N; i++) {
+      const th = (i / N) * TAU;
+      const p = this.facePtW(cu + r * Math.cos(th), cv + r * Math.sin(th), wOff);
+      if (i === 0) ctx.moveTo(p.sx, p.sy); else ctx.lineTo(p.sx, p.sy);
+    }
+    ctx.closePath();
+  }
+
+  /** The visible side wall of a raised collar: the NEAR half (down-slope side, angles PI..2PI in
+   *  face space) filled between the base circle and the rim circle. This is what makes a cup a
+   *  CYLINDER standing in a bowl instead of a flat donut - the depth cue Matt's reference app
+   *  has everywhere. */
+  collarWall(ctx, cu, cv, r, h, fill) {
+    ctx.beginPath();
+    const N = 26;
+    for (let i = 0; i <= N; i++) {
+      const th = Math.PI + (i / N) * Math.PI;
+      const p = this.facePtW(cu + r * Math.cos(th), cv + r * Math.sin(th), h);
+      if (i === 0) ctx.moveTo(p.sx, p.sy); else ctx.lineTo(p.sx, p.sy);
+    }
+    for (let i = N; i >= 0; i--) {
+      const th = Math.PI + (i / N) * Math.PI;
+      const p = this.facePt(cu + r * Math.cos(th), cv + r * Math.sin(th));
+      ctx.lineTo(p.sx, p.sy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
 
   // --- the machine (static, cached) -----------------------------------------------------------
 
@@ -133,7 +174,6 @@ export class Renderer {
     }
 
     this.paintFace(ctx);
-    this.paintCage(ctx);       // behind the marquee, so the wires never cross its lettering
     this.paintMarquee(ctx);
 
     // Lane apron: the cabinet flanks outside the rails, so the lane reads as a channel.
@@ -236,8 +276,10 @@ export class Renderer {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // The playfield paint, per the reference photos: black zone stencils first (they sit flat
-    // on the orange field), then the raised white rings over them.
+    // The playfield paint, per the reference photos and Matt's app recording: black zone
+    // stencils flat on the orange field, then the raised furniture drawn as REAL cylinders -
+    // base shadow, side wall, rim band, dark mouth - so the board reads as a dished bowl with
+    // standing cups, never a flat dartboard.
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const stencil = (text, u, v, size) => {
@@ -248,70 +290,102 @@ export class Renderer {
       ctx.fillText(text, p.sx, p.sy);
     };
     // The outer field is all 10; the flanks inside the big ring are the 20; the corners are 0.
-    stencil('10', 0, Ph.faceLen - 0.07, 0.055);
-    stencil('10', -0.415, 0.60, 0.05);
-    stencil('10', 0.415, 0.60, 0.05);
-    stencil('20', -0.235, 0.44, 0.05);
-    stencil('20', 0.235, 0.44, 0.05);
-    stencil('0', -0.43, 0.055, 0.05);
-    stencil('0', 0.43, 0.055, 0.05);
+    stencil('10', 0, Ph.faceLen - 0.08, 0.05);
+    stencil('10', -0.42, 0.6, 0.045);
+    stencil('10', 0.42, 0.6, 0.045);
+    stencil('20', -0.24, 0.44, 0.045);
+    stencil('20', 0.24, 0.44, 0.045);
+    stencil('0', -0.44, 0.06, 0.045);
+    stencil('0', 0.44, 0.06, 0.045);
 
     // The two drain holes every non-cup ball rolls to (both visible on the real board).
     for (const hole of [S.hole20, S.hole10]) {
       ctx.fillStyle = L.pocket;
-      this.faceCircle(ctx, hole.u, hole.v, 0.052);
+      this.faceCircle(ctx, hole.u, hole.v, 0.055);
       ctx.fill();
       ctx.strokeStyle = shade(L.face, 0.6);
       ctx.lineWidth = 1.5;
-      this.faceCircle(ctx, hole.u, hole.v, 0.052);
+      this.faceCircle(ctx, hole.u, hole.v, 0.055);
       ctx.stroke();
     }
 
-    // The BIG RING: a raised white band with the navy trim line, 20 inside it.
-    this.faceAnnulus(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R, S.bigRing.R + 0.05);
-    ctx.fillStyle = L.ring;
-    ctx.fill('evenodd');
-    ctx.strokeStyle = L.ringLip;
-    ctx.lineWidth = 2;
-    this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R);
-    ctx.stroke();
-    this.faceCircle(ctx, S.bigRing.u, S.bigRing.v, S.bigRing.R + 0.05);
-    ctx.stroke();
-
-    // The cups, upper first so each lower one overlaps the one behind it the way the real
-    // stack reads: 100s in the corners, then 50 / 40 / 30 down the centre line.
-    const cups = [...S.cups];   // already ordered 100L, 100R, c50, c40, c30
-    for (const cup of cups) {
-      // Front wall: a lower partial collar, where the real cup's stencilled value sits.
-      const wallR = cup.r + Math.min(0.075, cup.r * 0.9);
-      ctx.beginPath();
-      this.faceArcPath(ctx, cup.u, cup.v, wallR, Math.PI * 1.12, Math.PI * 1.88);
-      this.faceArcPath(ctx, cup.u, cup.v, cup.r * 0.9, Math.PI * 1.88, Math.PI * 1.12, true);
-      ctx.closePath();
-      ctx.fillStyle = shade(L.ring, 0.94);
+    // THE BIG RING: a standing band. Contact shadow, outer wall (near half), then the top of
+    // the band as a raised annulus with the navy trim line.
+    {
+      const rg = S.bigRing;
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#000';
+      this.faceCircle(ctx, rg.u, rg.v + 0.012, rg.R + Ph.ringThick + 0.012);
       ctx.fill();
-      // Rim band and mouth.
-      this.faceAnnulus(ctx, cup.u, cup.v, cup.r * 0.86, cup.r + 0.026);
+      ctx.restore();
+      this.collarWall(ctx, rg.u, rg.v, rg.R + Ph.ringThick, Ph.ringH, shade(L.ring, 0.78));
+      // Band top: annulus between inner and outer radii, both raised to ringH.
+      this.faceCircleW(ctx, rg.u, rg.v, rg.R + Ph.ringThick, Ph.ringH);
       ctx.fillStyle = L.ring;
-      ctx.fill('evenodd');
-      ctx.fillStyle = L.pocket;
-      this.faceCircle(ctx, cup.u, cup.v, cup.r * 0.86);
       ctx.fill();
-      // A hint of the real cups' blue-tinted throat.
-      ctx.strokeStyle = withAlpha(L.ringLip, 0.65);
+      // Punch the inner opening: draw the inner disc back in as the field beneath... cheaper:
+      // draw inner circle at ringH filled with the face color scaled slightly darker to read as
+      // the basin floor seen past the band's top.
+      this.faceCircleW(ctx, rg.u, rg.v, rg.R, Ph.ringH);
+      ctx.fillStyle = shade(L.face, 0.94);
+      ctx.fill();
+      // And the basin floor itself (the board through the opening) - repaint the interior at
+      // plane level so cups sit ON the board, not on the band top.
+      this.faceCircle(ctx, rg.u, rg.v, rg.R);
+      ctx.fillStyle = shade(L.face, 0.97);
+      ctx.fill();
+      // Inner wall hint along the top of the opening (far side).
+      ctx.strokeStyle = shade(L.ring, 0.65);
       ctx.lineWidth = 2;
-      this.faceCircle(ctx, cup.u, cup.v, cup.r * 0.72);
+      this.faceCircle(ctx, rg.u, rg.v, rg.R);
       ctx.stroke();
       ctx.strokeStyle = L.ringLip;
-      ctx.lineWidth = 1.8;
-      this.faceCircle(ctx, cup.u, cup.v, cup.r + 0.026);
+      ctx.lineWidth = 1.6;
+      this.faceCircleW(ctx, rg.u, rg.v, rg.R + Ph.ringThick, Ph.ringH);
       ctx.stroke();
+      // Re-stencil the interior labels the repaint just covered.
+      stencil('20', -0.24, 0.44, 0.045);
+      stencil('20', 0.24, 0.44, 0.045);
+      ctx.save();
+      this.faceCircle(ctx, rg.u, rg.v, rg.R - 0.01);
+      ctx.clip();
+      ctx.fillStyle = L.pocket;
+      this.faceCircle(ctx, S.hole20.u, S.hole20.v + 0.02, 0.05);
+      ctx.fill();
+      ctx.restore();
     }
-    // The values, LAST, so no cup rim ever covers a number: each one stencilled at its cup's
-    // labelV - on the front collar, in the sliver the next cup down leaves visible.
+
+    // The cups, upper first so each nearer one overlaps the one behind: contact shadow, side
+    // wall, rim band at collar height, dark mouth, navy trim - a cylinder, not a donut.
+    const cups = [...S.cups];   // already ordered 100L, 100R, c50, c40, c30
     for (const cup of cups) {
-      const p = this.facePt(cup.u, cup.labelV);
-      const px = Math.max(10, p.s * (cup.value >= 100 ? 0.052 : 0.06));
+      const h = cup.value >= 100 ? Ph.collar100H : Ph.collarH;
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#000';
+      this.faceCircle(ctx, cup.u, cup.v + 0.014, cup.r + 0.036);
+      ctx.fill();
+      ctx.restore();
+      this.collarWall(ctx, cup.u, cup.v, cup.r + 0.024, h, shade(L.ring, 0.8));
+      // Rim: annulus at height h.
+      this.faceCircleW(ctx, cup.u, cup.v, cup.r + 0.024, h);
+      ctx.fillStyle = L.ring;
+      ctx.fill();
+      this.faceCircleW(ctx, cup.u, cup.v, cup.r * 0.88, h);
+      ctx.fillStyle = L.pocket;
+      ctx.fill();
+      ctx.strokeStyle = withAlpha(L.ringLip, 0.7);
+      ctx.lineWidth = 1.6;
+      this.faceCircleW(ctx, cup.u, cup.v, cup.r * 0.7, h);
+      ctx.stroke();
+      ctx.strokeStyle = L.ringLip;
+      ctx.lineWidth = 1.6;
+      this.faceCircleW(ctx, cup.u, cup.v, cup.r + 0.024, h);
+      ctx.stroke();
+      // The value, stencilled on the FRONT WALL of the collar, like the real machines.
+      const p = this.facePtW(cup.u, cup.v - (cup.r + 0.012), h * 0.45);
+      const px = Math.max(10, p.s * (cup.value >= 100 ? 0.046 : 0.052));
       ctx.font = `800 ${px}px system-ui, sans-serif`;
       ctx.fillStyle = L.value;
       ctx.fillText(String(cup.value), p.sx, p.sy);

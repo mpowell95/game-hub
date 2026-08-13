@@ -25,6 +25,7 @@ import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 import { howToMarkup } from './howto.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
+import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard } from '../../js/game-stats.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
@@ -40,6 +41,15 @@ const SAVE_KEY = 'gamehub.skeeball.save.v1';  // the mid-rack snapshot (game.js'
 let instance = null;
 
 function ensureCSS() {
+  // The shared primitives first (the setup screen is BUILT on css/ui.css - the same injection
+  // marker bug-report-ui.js uses, so the two never double-load it), then the game's own sheet.
+  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
+    const ui = document.createElement('link');
+    ui.rel = 'stylesheet';
+    ui.href = new URL('../../css/ui.css', import.meta.url).href;
+    ui.setAttribute('data-gh-ui-css', '1');
+    document.head.appendChild(ui);
+  }
   if (document.querySelector('link[data-sk-css]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
@@ -140,6 +150,10 @@ export class SkeeballUI {
       if (slot && this.top[b.id].score) {
         slot.textContent = this._topText(b.id);
       }
+      const line = this.root.querySelector(`[data-rec-top-line="${b.id}"]`);
+      if (line && this.top[b.id].score) {
+        line.textContent = String(this.top[b.id].score);
+      }
     }
   }
 
@@ -161,63 +175,109 @@ export class SkeeballUI {
     let sk = {};
     try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
     const save = loadSave();
+    const board = boardById(this.settings.board);
+    const rec = myRecords(board.id);
+    const last = this.lastScore && this.lastScore.board === board.id ? this.lastScore.score : null;
+    const val = (n) => (n ? String(n) : '-');
 
-    const cards = BOARDS.map((b) => {
+    // Escoba's page order (the repo's setup-screen reference): resume if a save exists, one
+    // stats line, the settings card (here: the machine accordion), the how-to text link, ONE
+    // primary action. Collapsed rows show label + current value; open one to change it.
+    const machinesBody = BOARDS.map((b) => {
       const open = isUnlocked(sk, b.id, DEFAULT_BOARD);
-      const rec = myRecords(b.id);
-      const last = this.lastScore && this.lastScore.board === b.id ? this.lastScore.score : null;
-      const resume = save && save.board === b.id;
-      const val = (n) => (n ? String(n) : '-');
       if (!open) {
         const from = boardById(b.unlock.board);
-        return `<section class="sk-card is-locked" aria-label="${esc(b.name)} - ${esc(t('locked'))}">
-          <div class="sk-card-marquee"><b>${esc(b.name)}</b></div>
-          <p class="sk-card-tag">${esc(t('unlock_hint', { score: b.unlock.score, name: from.name }))}</p>
-        </section>`;
+        return `<div class="sk-mrow is-locked"><b>${esc(b.name)}</b>
+          <span>${esc(t('unlock_hint', { score: b.unlock.score, name: from.name }))}</span></div>`;
       }
-      return `<section class="sk-card" aria-label="${esc(b.name)}">
-        <div class="sk-card-marquee"><i class="sk-bulbs" aria-hidden="true"></i><b>${esc(b.name)}</b><i class="sk-bulbs" aria-hidden="true"></i></div>
-        <p class="sk-card-tag">${esc(t(b.taglineKey))}</p>
-        <dl class="sk-records">
-          <div class="sk-rec sk-rec-top"><dt>${esc(t('rec_top'))} <span>(${esc(t('rec_top_any'))})</span></dt>
-            <dd data-rec-top="${b.id}">${this._topText(b.id)}</dd></div>
-          <div class="sk-rec"><dt>${esc(t('rec_mine'))}</dt><dd>${val(rec.mine)}</dd></div>
-          <div class="sk-rec"><dt>${esc(t('rec_today'))}</dt><dd>${val(rec.today)}</dd></div>
-          <div class="sk-rec"><dt>${esc(t('rec_last'))}</dt><dd>${last == null ? '-' : last}</dd></div>
-        </dl>
-        <button type="button" class="sk-play" data-board="${b.id}">
-          ${resume ? `${esc(t('resume'))} · ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}` : esc(t('play'))}
-        </button>
-      </section>`;
+      const r = myRecords(b.id);
+      const sel = b.id === board.id;
+      return `<button type="button" class="sk-mrow${sel ? ' is-selected' : ''}" data-pick="${b.id}">
+        <b>${esc(b.name)}</b>
+        <span class="sk-mrow-tag">${esc(t(b.taglineKey))}</span>
+        <span class="sk-mrow-recs">
+          <span><em>${esc(t('rec_top'))}</em><b data-rec-top="${b.id}">${this._topText(b.id)}</b></span>
+          <span><em>${esc(t('rec_mine'))}</em><b>${val(r.mine)}</b></span>
+          <span><em>${esc(t('rec_today'))}</em><b>${val(r.today)}</b></span>
+          <span><em>${esc(t('rec_last'))}</em><b>${this.lastScore && this.lastScore.board === b.id ? this.lastScore.score : '-'}</b></span>
+        </span>
+      </button>`;
     }).join('');
 
     this.root.innerHTML = `
       <div class="sk-setup">
         <div class="sk-setup-inner">
           <h1 class="sk-title">${esc(t('title'))}</h1>
-          <h2 class="sk-sub">${esc(t('setup_machines'))}</h2>
-          <div class="sk-cards">${cards}</div>
-          <button type="button" class="sk-link" data-role="howto">${esc(t('howto'))}</button>
+          ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
+            ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
+          <p class="sk-statline">
+            ${esc(t('stat_best'))} <b>${val(rec.mine)}</b> &middot;
+            ${esc(t('stat_today'))} <b>${val(rec.today)}</b> &middot;
+            ${esc(t('stat_top'))} <b data-rec-top-line="${board.id}">${val(this.top[board.id] && this.top[board.id].score)}</b> &middot;
+            ${esc(t('stat_last'))} <b>${last == null ? '-' : last}</b>
+          </p>
+          <div class="gh-acc">
+            <button type="button" class="gh-acc__head" data-role="acc" aria-expanded="${this._accOpen ? 'true' : 'false'}">
+              <span>${esc(t('machine'))}</span>
+              <span class="gh-acc__value">${esc(board.name)}</span>
+            </button>
+            <div class="gh-acc__body" ${this._accOpen ? '' : 'hidden'}>${machinesBody}</div>
+          </div>
+          <button type="button" class="sk-howto-link" data-role="howto">&#128214; ${esc(t('howto'))}</button>
+          <button type="button" class="gh-btn ${save ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-role="play">
+            ${esc(save ? t('new_game') : t('play'))}</button>
         </div>
       </div>`;
 
-    this.root.querySelectorAll('[data-board]').forEach((el) => {
+    if (save) {
+      this.root.querySelector('[data-role="resume"]').addEventListener('click', () => {
+        this._startGame(loadSave());
+      });
+    }
+    this.root.querySelector('[data-role="acc"]').addEventListener('click', () => {
+      this._accOpen = !this._accOpen;
+      this._renderSetup();
+    });
+    this.root.querySelectorAll('[data-pick]').forEach((el) => {
       el.addEventListener('click', () => {
-        this.settings = saveSettings({ board: el.dataset.board });
-        const banked = loadSave();
-        this._startGame(banked && banked.board === el.dataset.board ? banked : null);
+        this.settings = saveSettings({ board: el.dataset.pick });
+        this._accOpen = false;
+        this._renderSetup();
       });
     });
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
+    // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
+    // is a resume convenience, not earned history; the Resume button sits directly above).
+    this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
+      clearSave();
+      this._startGame(null);
+    });
   }
 
   _showHowTo() {
-    this._openOverlay('howto', `
+    const el = this._openOverlay('howto', `
       <div class="sk-sheet-head">
         <h2>${esc(t('howto_h'))}</h2>
         <button type="button" class="sk-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
       </div>
       <div class="sk-sheet-body sk-help">${howToMarkup(t)}</div>`);
+    this._fitHelpLines(el);
+  }
+
+  /** The pattern's single-row rule (tic-tac-toe/CLAUDE.md): measure each line's rendered width
+   *  against the container's real width, size down until it fits, then lock it with nowrap. */
+  _fitHelpLines(el) {
+    for (const line of el.querySelectorAll('.sk-ht-line')) {
+      line.style.whiteSpace = 'nowrap';
+      let size = parseFloat(getComputedStyle(line).fontSize) || 15;
+      let guard = 14;
+      while (line.scrollWidth > line.clientWidth && size > 10 && guard-- > 0) {
+        size -= 0.5;
+        line.style.fontSize = `${size}px`;
+      }
+      // If it still cannot fit at the floor, let it wrap rather than clip.
+      if (line.scrollWidth > line.clientWidth) line.style.whiteSpace = 'normal';
+    }
   }
 
   // --- play ------------------------------------------------------------------------------------
@@ -242,9 +302,9 @@ export class SkeeballUI {
             <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
           </div>
           <div class="sk-hud-recs">
-            <span class="sk-hud-rec"><em>${esc(t('rec_top'))}</em><b data-role="hud-top">${this._topText(this.game.board.id)}</b></span>
-            <span class="sk-hud-rec"><em>${esc(t('rec_mine'))}</em><b data-role="hud-mine">${myRecords(this.game.board.id).mine || '-'}</b></span>
-            <span class="sk-hud-rec"><em>${esc(t('rec_today'))}</em><b data-role="hud-today">${myRecords(this.game.board.id).today || '-'}</b></span>
+            <span class="sk-hud-rec"><em>${esc(t('stat_top'))}</em><b data-role="hud-top">${(this.top[this.game.board.id] && this.top[this.game.board.id].score) || '-'}</b></span>
+            <span class="sk-hud-rec"><em>${esc(t('stat_best'))}</em><b data-role="hud-mine">${myRecords(this.game.board.id).mine || '-'}</b></span>
+            <span class="sk-hud-rec"><em>${esc(t('stat_today'))}</em><b data-role="hud-today">${myRecords(this.game.board.id).today || '-'}</b></span>
           </div>
         </div>
         <div class="sk-stage" data-role="stage">

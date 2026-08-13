@@ -42,10 +42,14 @@ on 2026-08-11 under the previous build), which drives every storage decision bel
 
 `isInProgress()` returns `false` even mid-rack (Escoba's class of the contract, not Ball Run's):
 the between-throws state is the stable state of skeeball, `ui.js` snapshots it to
-`gamehub.skeeball.save.v1` after **every settled ball**, and the gallery's Play button becomes
-"Resume rack · N/9" while a snapshot is banked. A ball actually in flight resolves in under two
-seconds and is deliberately not part of the saved state — the throw a player abandons mid-air was
-theirs to abandon, and the ball is only spent when it settles, so resuming re-serves it.
+`gamehub.skeeball.save.v1` after **every settled ball**. While a snapshot is banked the setup
+screen offers BOTH actions: "Resume rack · N/9" (primary) AND "New game" (ghost) — never only
+one. New game discards the snapshot (`clearSave()` before `_startGame(null)`): the snapshot is a
+resume convenience, not earned history, and the player pressed the button that says so with
+Resume sitting directly above it (Matt, 2026-08-13: a save must never trap the player into
+resuming). A ball actually in flight resolves in under two seconds and is deliberately not part
+of the saved state — the throw a player abandons mid-air was theirs to abandon, and the ball is
+only spent when it settles, so resuming re-serves it.
 
 `immersive: true`: `.sk-root` is `position: fixed; inset: 0` at `z-index: 1` (Pinball's shape),
 so the hub's floating back button rides on top; `.sk-hud` carries `padding-left: 76px` and the
@@ -67,6 +71,27 @@ gallery `padding-top: 84px` to clear it.
 The first three are DOM-free and that is load-bearing: `node skeeball/js/test.js` plays hundreds
 of throws without constructing an element, and the same determinism is why the tuning is testable
 at all.
+
+## The setup screen and How To Play (rebuilt 2026-08-13 to the repo patterns)
+
+The first versions of both were designed from scratch and Matt threw them out ("start the design
+over" / "throw out 100% of it"). The rebuilds follow the documented references EXACTLY; a future
+redesign starts from those documents, not from taste:
+
+- **Setup** follows Escoba's page order (`escoba/js/ui.js`, the repo's setup reference): title →
+  Resume button if a save exists → one stats line (Best · Today · Top · Last) → the settings card
+  as a collapsed `.gh-acc` accordion row ("Machine / THE CLASSIC"; open it to pick a machine,
+  each unlocked machine a card with its four records) → the How-to-play text link → ONE primary
+  action (Play, or New game as a ghost when Resume is the primary). Built on `css/ui.css`'s
+  `.gh-*` primitives (`ui.js` injects `css/ui.css` idempotently before its own sheet, the same
+  marker `bug-report-ui.js` uses) — the accordion is `.gh-acc`, the buttons are `.gh-btn`; only
+  the skeeball-specific bits (`.sk-statline`, `.sk-mrow`, `.sk-howto-link`) are local CSS.
+- **How To Play** follows `tic-tac-toe/CLAUDE.md`'s five-part pattern, restated in `howto.js`'s
+  header: one bold goal line, ONE diagram of the one non-obvious mechanic (swipe strength =
+  landing height, drawn as a side view with three numbered arcs), a caption, an X = Y example
+  ("Half strength = the 50 cup"), then the edge cases one sentence each. Every text line is
+  measured and shrunk to fit ONE row before nowrap locks it (`_fitHelpLines` in `ui.js`); the
+  arcs are told apart by dash pattern AND numbered markers, never colour alone.
 
 ## The machine and its physics
 
@@ -100,6 +125,15 @@ geometry, rattle takes seconds) is implemented in `physics.js`'s board phase:
 - **Wedge lesson, twice**: where a cup stands on or beside the band, the CUP owns the contact -
   two nearly-touching convex walls otherwise pin a slow ball forever (pinball/CLAUDE.md's
   parking-space failure, met at the 50/band junction and the 100L/band gap).
+
+**Slope, not wall (same day, Matt's eye test):** the first emergent build kept the real
+machine's steep face and read as "a vertical wall... the ball only falls." The fix is three
+coordinated pieces, and they only work together: `faceTilt: 0.6` rad (~34 degrees — a BOWL; the
+comment in `boards.js` marks it), a camera raised and pulled back to look DOWN into it
+(`render.js`: `eyeY -0.9`, `eyeZ 0.95`, `F = w*2.2`), and the cups drawn as real 3D cylinders
+(collar wall + rim annulus + dark mouth) so depth is visible. Retilting without moving the
+camera just makes the board look shorter; moving the camera without the 3D collars makes the
+cups read as flat stickers again.
 
 Still deterministic: no rng anywhere; rim deflections are purely geometric. Retune in
 `boards.js` freely, but run `node skeeball/js/test.js` first: the sweep pins reachability of
@@ -172,7 +206,7 @@ invisible (rule 1; the comment on the `TABS` row records this).
 
 ## Testing
 
-- `node skeeball/js/test.js` — 36 assertions: determinism, the reachability sweep (every hole,
+- `node skeeball/js/test.js` — 42 assertions: determinism, the reachability sweep (every hole,
   gutter, rollback), the power-curve shape, left/right symmetry, a 600-throw soak (settles, in
   bounds, legal values only), the nine-ball rules through the real API, the recorder payload
   shape, snapshot/restore, and the unlock chain.
@@ -187,8 +221,11 @@ invisible (rule 1; the comment on the `TABS` row records this).
 
 - **No sound, no audio layer** — the arcade-cabinet precedent (Matt on Pinball, 2026-08-11:
   "Delete the sound option. No sound."). Nothing here constructs an AudioContext.
-- The warm dark look is the same in both hub themes on purpose (Ball Run/Hill Climb/Pinball's
-  class); there is no `:root.gh-dark` branch in `skeeball.css`.
+- **`skeeball.css` is two skins and the split is deliberate** (2026-08-13, the setup overhaul):
+  the SETUP and HOW-TO screens belong to the hub — light `--sks-*` tokens on `.sk-root` with a
+  `:root.gh-dark .sk-root` override, skeeball_old's lines 9-35 pattern — while the PLAY screen
+  keeps the warm dark arcade look in both themes (Ball Run/Hill Climb/Pinball's class). The
+  header comment in the CSS marks where one skin ends and the other begins. Do not "unify" them.
 - The swipe measures the RELEASE flick (the last ~130ms), not the whole gesture — the wind-up is
   grip, not power. Power normalises against the stage height so a phone and a desktop feel alike.
 - `physics.js` has no randomness at all. If a future machine wants scatter, thread a seeded rng

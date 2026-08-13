@@ -347,10 +347,10 @@ const PLAY = {
     what: 'swipe real racks up the lane: score, records, and the stats write all have to move',
     async run(page, cdp, tap) {
       // The gallery: one machine card with the four records slots and a Play button.
-      const play = await page.$('[data-board="classic"]');
-      if (!play) return { ok: false, why: 'no Play button on the machine gallery' };
-      const recSlots = await page.$$eval('.sk-rec', (els) => els.length);
-      if (recSlots < 4) return { ok: false, why: `machine card shows ${recSlots} record slots, spec says 4 (top-any / mine / today / last)` };
+      const play = await page.$('[data-role="play"]');
+      if (!play) return { ok: false, why: 'no Play button on the setup screen' };
+      const recSlots = await page.$$eval('.sk-statline b', (els) => els.length);
+      if (recSlots < 4) return { ok: false, why: `stat line shows ${recSlots} record slots, spec says 4 (best / today / top / last)` };
       const readSk = () => page.evaluate(() => {
         try { return ((JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).skeeball || {}).sk || {}; }
         catch { return {}; }

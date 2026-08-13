@@ -71,7 +71,9 @@ export const BOARDS = [
       aimMax: 0.2,            // radians of lateral aim the swipe can put on the ball (~11 deg)
 
       faceY0: 2.12,           // where the scoring face meets the gutter void's floor
-      faceTilt: 1.19,         // radians (~68 degrees) from horizontal - steep, nearly facing you
+      faceTilt: 0.6,          // radians (~34 degrees) from horizontal: a BOWL, not a wall. Matt's
+                              // recording of the 68-degree version: 'it feels like it's on a
+                              // vertical wall... your ball doesn't roll anywhere, it only falls.'
       faceLen: 1.2,           // metres up the slope
       faceW: 1.0,
       pitZ: -0.24,            // floor of the gutter void behind the hump (a weak lob dies here)
@@ -122,7 +124,7 @@ export const BOARDS = [
         { id: 'c30', u: 0, v: 0.27, r: 0.082, value: 30, labelV: 0.163 },
       ],
       // The corner gutters: landing this low AND this wide is the fluke zero.
-      corner0: { vMax: 0.16, uMin: 0.46 },
+      corner0: { vMax: 0.16, uMin: 0.44 },
       // The drain holes: where a 20 / a 10 physically rolls to (the sink animation's targets,
       // painted by the renderer - both are visible on the real board).
       hole20: { u: 0, v: 0.145 },
