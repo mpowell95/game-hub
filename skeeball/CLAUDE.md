@@ -70,38 +70,47 @@ at all.
 
 ## The machine and its physics
 
-World coords: x lateral, y down the alley, z up; the lane bed is z = 0. The model, in the order
-the ball experiences it (all constants live in `boards.js`'s per-machine `physics`/`scoring`,
-nothing is hardcoded in `physics.js`):
+**Rebuilt again on 2026-08-13, same day, to the reference-footage contract.** Matt supplied six
+stock clips of real machines (`reference/Skeeball/*.mp4`); studied frame by frame they showed the
+board rebuild's remaining lie: the score was decided at the ball's first touch and a canned slide
+played it out. On a real machine, touching the board is where the drama STARTS. The approved gap
+list (rims are real, outcomes emerge, misses roll downhill, two flight regimes, the ring is
+geometry, rattle takes seconds) is implemented in `physics.js`'s board phase:
 
-- **Lane** — rolls with friction, banks off the side rails. Deliberately shorter than a real
-  alley (Matt: the board is the main aspect of the game and must dominate the frame).
-- **The hump** — climbing costs `g·lipHeight` of speed²/2; a ball that cannot pay **rolls back
-  to the player and is not spent** (`'returned'`), exactly like a real alley.
-- **Flight** — off the lip at `launchAngle` (~54°), under gravity.
-- **The board** — an inclined plane (~68°) carrying the REAL classic zones: the big ring low on
-  the board with the 30 and 40 cups stacked inside it, the 50 at its top arc, the 100s in the
-  top corners. Land softly (`|vn| <= captureVn`) and the zone under the ball takes it, cups
-  first; land hot and it bounces once, the second contact always settles. Zone outcomes:
-  **in a cup** = its value; **inside the big ring, no cup** = 20 (rolls to the 20 hole);
-  **anywhere else on the board** = 10 (rolls down the outer field to the 10 hole);
-  **the bottom corners** = 0 (a low, wide fluke); **the gutter void behind the hump** = 0 (a
-  weak lob); **the backstop** = the ball drops and rolls away for 10, never a wipeout.
+- **Lane / hump / rollback / flight** as before: swipe rolls the ball up the shortened lane, the
+  hump launches it (~52 degrees), a ball too weak for the climb comes back unspent, a total flub
+  dies in the gutter void for the honest zero.
+- **The board is a live simulation in face coordinates** (u lateral, v up-slope, w height off
+  the plane). Gravity pulls down-slope and into the plane, always. The cups' collars and the big
+  ring's band are REAL WALLS (bounce, graze, slide); the board bounces until the hops stop
+  mattering, then the ball rolls - decelerating uphill, accelerating back down, steering around
+  the furniture. Nothing caps the bounce count. **The outcome is wherever the ball physically
+  drains**: a cup mouth it genuinely arrives over, the 20 hole inside the ring, the 10 hole on
+  the outer field, a corner gutter for a low wide fluke.
+- **Two flight regimes fall out of one launch angle**: soft balls land low and roll up (the
+  footage's skim); hard balls arc onto the upper board from the air. Max power straight
+  overshoots the 50 and rattles down for scraps - asserted, so power is never a strategy.
+- **Feel rules encoded from the clips**: a climbing ball HOPS the ring's band (entry over the
+  front lip); a descending rattler is caught by the dished basin and circulates inside; a slow
+  ball teetering on a cup rim tips in; a fast one rims out with a pop.
+- **Termination is engineered**: energy only decays; a stalled ball (displacement-anchored
+  detection - speed thresholds are jitter-blind, pinball's watchdog lesson) picks up a gentle
+  funnel toward its drain and visibly rolls there. A 10s emergency cap exists and the tests
+  assert it never fires.
+- **Wedge lesson, twice**: where a cup stands on or beside the band, the CUP owns the contact -
+  two nearly-touching convex walls otherwise pin a slow ball forever (pinball/CLAUDE.md's
+  parking-space failure, met at the 50/band junction and the 100L/band gap).
 
-**Nearly every ball scores something — that is what makes it skeeball** (asserted: a straight
-ball past the void always scores). **The power curve is the game**, and `test.js`'s reachability
-sweep pins its shape: the ladder climbs in order (10 → 20 → 30 → 40 → 50, with 20s in the gaps
-between cups), an overshoot sails past the 50 into the outer field for 10 — never more — the
-100s need near-full power AND committed sideways aim (a straight ball can never score 100 —
-asserted), the corner 0s take low power plus full sideways, and a feeble roll comes back. Retune
-in `boards.js` freely, but run `node skeeball/js/test.js` before anything else: it is the only
-thing that will tell you a tweak quietly killed the 100 cups or the rollback.
+Still deterministic: no rng anywhere; rim deflections are purely geometric. Retune in
+`boards.js` freely, but run `node skeeball/js/test.js` first: the sweep pins reachability of
+every hole (100s never straight), the void, the rollback, the overshoot price, the >1.5s rattle,
+real bounce events, and that nothing ever rides the settle cap. The rules test plays throws the
+sweep itself found, so it can never drift from the engine's real behavior.
 
-The renderer projects everything through one pinhole camera (`P()` in `render.js`), so the lane's
-convergence, the ellipses the rings become, and the arc of a lob are the same geometry the
-physics computed. Static machine art is cached per size (`paintStatic`); if you add art that
-changes during play it does NOT belong there. Reduced motion drops particles and the flight
-trail, never the ball.
+The renderer projects everything through one pinhole camera (`P()` in `render.js`); the
+board-phase shadow reads the hop height (`st.fw`), which is what makes a bounce readable. Static
+machine art is cached per size (`paintStatic`); art that changes during play does NOT belong
+there. Reduced motion drops particles and the flight trail, never the ball.
 
 ## The records panel (the four numbers every machine shows)
 

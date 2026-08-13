@@ -515,28 +515,36 @@ export class Renderer {
     const p = this.P(bx, by, bz);
     const rp = Math.max(3, R * p.s * 1.12);
 
-    // Shadow: on the lane while rolling, on the face plane once it is settling there.
-    const inSink = st && st.phase === 'sink' && st.sink && st.sink.kind !== 'drop';
-    if (!inSink) {
-      const sh = this.P(bx, by, Math.min(bz - R, 0) * 0 + 0.001);
-      if (st && (st.phase === 'flight')) {
-        const k = Math.max(0.25, 1 - (bz / 1.2));
-        ctx.save();
-        ctx.globalAlpha = 0.28 * k;
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.ellipse(p.sx, sh.sy, rp * (0.8 + bz * 0.3), rp * 0.32, 0, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.ellipse(p.sx, p.sy + rp * 0.78, rp * 0.92, rp * 0.34, 0, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-      }
+    // Shadow: under the ball on the lane, under the arc in flight, and ON THE BOARD PLANE while
+    // the ball lives there - the hop height (st.fw) is what makes a board bounce readable.
+    if (st && st.phase === 'board') {
+      const sh = this.facePt(st.fu, st.fv);
+      const hop = Math.max(0, st.fw - R);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.12, 0.35 - hop * 1.1);
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(sh.sx, sh.sy, rp * (0.9 + hop * 1.4), rp * 0.4, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    } else if (st && st.phase === 'flight') {
+      const sh = this.P(bx, by, 0.001);
+      const k = Math.max(0.25, 1 - (bz / 1.2));
+      ctx.save();
+      ctx.globalAlpha = 0.28 * k;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(p.sx, sh.sy, rp * (0.8 + bz * 0.3), rp * 0.32, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    } else if (!st || st.phase !== 'drop') {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(p.sx, p.sy + rp * 0.78, rp * 0.92, rp * 0.34, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
 
     // The ball: warm off-white composite with a window highlight and a rolling seam.
