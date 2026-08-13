@@ -51,84 +51,73 @@ export const BOARDS = [
       net: '#d9c9a8',
     },
 
-    // The physics tune. All SI-ish units (metres, seconds); physics.js documents the model.
-    // The lane is deliberately SHORTER than a real alley (Matt, 2026-08-13: the board is the
-    // main aspect of the game and must dominate the frame) - a real 10 ft alley shows the board
-    // at the size it appears from 10 ft away, which is exactly what a game must not do.
-    physics: {
-      laneLen: 1.5,           // player's end of the lane to the foot of the hump
-      laneW: 0.62,
-      rampLen: 0.32,          // the hump
-      lipHeight: 0.16,        // lane bed to the launch lip
-      launchAngle: 0.9,       // radians (~52 degrees): high enough that a max-power ball sails
-                              // PAST the 50 onto the upper board (overshoot has a price), low
-                              // enough that soft balls land low and roll up (the skim regime).
-      minSpeed: 1.2,          // slowest roll the swipe can produce - too weak to clear the hump
-      maxSpeed: 7.7,          // hardest fling - hard enough to overshoot the 50 and pay for it
-      rollFriction: 0.42,     // m/s^2 decel on the lane bed
-      rampLoss: 0.88,         // multiplier on speed surviving the hump (scrub + rattle)
-      wallRestitution: 0.42,  // side-rail bounce during the roll
-      aimMax: 0.2,            // radians of lateral aim the swipe can put on the ball (~11 deg)
+    // The machine's GEOMETRY, in metres (world y up, z toward the player; machine.js maps this
+    // into the solids both engines share). Since 2026-08-13 the ball is simulated by cannon-es
+    // (skeeball/js/vendor/, a real rigid-body engine) - there is no hand-rolled collision model
+    // left to tune. Feel adjustments happen in exactly two places: this block (shapes, sizes,
+    // angles, launch speeds) and the contact materials at the top of physics.js (friction /
+    // restitution per surface pair). The lane is deliberately SHORTER than a real alley (Matt,
+    // 2026-08-13: the board is the main aspect of the game and must dominate the frame).
+    geom: {
+      ballR: 0.05,
+      ballMass: 0.18,
+      laneLen: 1.15,          // player's end of the lane to the foot of the hump
+      laneW: 0.66,
+      bedThick: 0.06,         // slab thickness for every floor/wall box
+      humpLen: 0.30,          // the rising quarter-pipe...
+      humpAngles: [0.14, 0.30, 0.46, 0.62], // ...as segment angles; the last is the launch angle
+      troughLen: 0.24,        // the catch pit between the hump's crest and the board - wide
+                              // enough that a ball flying back off the board's lip drops in and
+                              // meets the hump's back side as a wall, instead of skipping the
+                              // gap and rolling home down the lane
+      troughDepth: 0.17,
+      boardLipY: 0.07,        // the board's bottom edge height
+      boardTilt: 0.56,        // ~32 degrees: a bowl to roll around, not a wall to fall down
+      boardW: 0.78,           // wider than the lane, like the real cabinet's flared board - and
+                              // wide enough that the channel between the ring and the rails
+                              // passes a ball freely (the spacing rule below)
+      boardLen: 0.95,         // metres up the slope
+      railH: 0.11,
+      laneRailH: 0.05,
+      backboardH: 0.8,        // tall, like the real cabinet's upper case: a max-power ball must
+                              // hit its FACE and die there, never clip its top edge (a corner
+                              // contact there once redirected the ball all the way home; the
+                              // max-power arc tops out around y=1.25 and the top edge must clear it)
+      ringSegments: 24,
+      cupSegments: 12,
+      collarThick: 0.014,
+      ringH: 0.06,            // the big ring band's height off the board
+      ringThick: 0.015,
+      ring: { u: 0, v: 0.42, R: 0.27 },   // the big ring, low on the board
 
-      faceY0: 2.12,           // where the scoring face meets the gutter void's floor
-      faceTilt: 0.6,          // radians (~34 degrees) from horizontal: a BOWL, not a wall. Matt's
-                              // recording of the 68-degree version: 'it feels like it's on a
-                              // vertical wall... your ball doesn't roll anywhere, it only falls.'
-      faceLen: 1.2,           // metres up the slope
-      faceW: 1.0,
-      pitZ: -0.24,            // floor of the gutter void behind the hump (a weak lob dies here)
-      cageY: 3.15,            // (legacy safety wall in flight; the board's own backstop is below)
+      // THE REAL CLASSIC LAYOUT (2026-08-13, from Matt's reference photos): the 30/40 cups
+      // stacked inside the big ring, the 50 merged into its top arc, the twin 100s tucked into
+      // the top corners AGAINST the rails, the 20 a flush hole low inside the ring. The 10 is
+      // the full-width slot the board's bottom edge feeds (physics.js scores the trough), 0s are
+      // its corners. Every hole is a REAL opening: capture drops the ball through the board.
+      //
+      // Spacing rule (learned from a parked ball, then re-learned from a solver-locked one):
+      // every gap between two pieces of furniture is either MERGED (touching, like the 100s
+      // into the top corners and the 50 into the band) or wider than a ball's diameter plus
+      // margin (>= 0.105) - anything in between is a pocket that can jam a ball on the slope,
+      // and a three-contact jam locks the solver completely. Every neighbour pair below has
+      // been checked against this rule; re-check ALL of them before moving anything.
+      holes: {
+        '100L': { u: -0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.085, lipLow: true },
+        '100R': { u: 0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.085, lipLow: true },
+        c50: { u: 0, v: 0.64, r: 0.064, value: 50, collarH: 0.06 },
+        c40: { u: 0, v: 0.49, r: 0.068, value: 40, collarH: 0.05 },
+        c30: { u: 0, v: 0.37, r: 0.074, value: 30, collarH: 0.045 },
+        h20: { u: 0, v: 0.22, r: 0.07, value: 20, collarH: 0 },
+      },
+      troughTenHalfW: 0.28,   // |x| under this in the trough scores 10; wider is a corner 0
 
-      // The BOARD simulation (rebuilt 2026-08-13 to the reference-footage contract: the outcome
-      // EMERGES from bounces and rolls, it is never decided at first contact).
-      boardRestitution: 0.55, // board-plane bounce
-      rimRestitution: 0.5,    // collar/ring wall bounce (radial component)
-      rimTangentKeep: 0.88,   // tangential speed surviving a wall graze
-      bounceKeep: 0.93,       // tangential speed surviving a board bounce
-      boardRollFriction: 0.7, // m/s^2 rolling decel on the board itself
-      bounceMin: 0.55,        // below this normal speed a bounce becomes rolling contact
-      collarH: 0.052,         // how far the 30/40/50 collars stand off the board
-      collar100H: 0.075,      // the 100 tubes are taller, free-standing
-      ringH: 0.095,           // the big ring band's height off the board - tall enough to keep a
-                              // bouncing rattler in the basin, like the real dished bowl does
-      ringThick: 0.02,        // the band's wall thickness
-      bandHopSpeed: 1.05,     // a ball climbing at least this fast HOPS the band (the footage's
-                              // entry over the ring's front lip) instead of bouncing off it
-      backstopV: 1.28,        // the net above the board's top edge (face coords, up-slope)
-      drainR: 0.085,          // the 20 / 10 drain mouths' capture radius
-      drainSpeedMax: 3.6,     // faster than this and the ball rolls straight over a drain
-      stallSpeed: 0.22,       // slower than this counts as stalled...
-      stallTime: 0.5,         // ...for this long, and the funnel bias walks it to a drain
-      funnelAccel: 2.2,       // the gentle dish that steers a spent ball to its drain
-    },
-
-    // The scoring geometry, in FACE coordinates: u lateral (0 = centre), v metres up the slope.
-    // THE REAL CLASSIC LAYOUT (rebuilt 2026-08-13 against Matt's reference photos, replacing a
-    // wrong bullseye design): one BIG RING low on the board with the 30 and 40 cups stacked
-    // inside it, the 50 cup at its top arc, the twin 100 cups in the top corners. Zones:
-    //   in a cup                        -> that cup's value (30 / 40 / 50 / 100)
-    //   inside the big ring, no cup     -> 20 (rolls to the 20 hole at the ring's inner bottom)
-    //   anywhere else on the board      -> 10 (rolls down the outer field to the 10 hole)
-    //   the bottom corners              -> 0 (the corner gutters; a low, wide fluke)
-    //   the gutter void / the backstop  -> physics.js: void = 0, backstop drops the ball = 10
-    scoring: {
-      bigRing: { u: 0, v: 0.44, R: 0.335 },
-      cups: [
-        // Checked in this order, so the 50 (overlapping the ring's top arc) wins over the ring.
-        // labelV is where the renderer stencils each value: on the cup's front collar, in the
-        // sliver the next cup down leaves visible - the same place the real cups are painted.
-        { id: '100L', u: -0.335, v: 0.73, r: 0.062, value: 100, labelV: 0.636 },
-        { id: '100R', u: 0.335, v: 0.73, r: 0.062, value: 100, labelV: 0.636 },
-        { id: 'c50', u: 0, v: 0.75, r: 0.068, value: 50, labelV: 0.652 },
-        { id: 'c40', u: 0, v: 0.50, r: 0.075, value: 40, labelV: 0.399 },
-        { id: 'c30', u: 0, v: 0.27, r: 0.082, value: 30, labelV: 0.163 },
-      ],
-      // The corner gutters: landing this low AND this wide is the fluke zero.
-      corner0: { vMax: 0.16, uMin: 0.44 },
-      // The drain holes: where a 20 / a 10 physically rolls to (the sink animation's targets,
-      // painted by the renderer - both are visible on the real board).
-      hole20: { u: 0, v: 0.145 },
-      hole10: { u: 0, v: 0.03 },
+      // The swipe's speed range (m/s at the serve). Slower than minSpeed cannot climb the hump
+      // and rolls back unspent; maxSpeed deliberately overshoots the 50 so power costs points.
+      minSpeed: 1.0,
+      maxSpeed: 6.2,
+      aimMax: 0.32,           // radians of lateral aim (~18 degrees) - the corner 100s need a
+                              // genuine sideways fling that rides the rail into the corner
     },
   },
 

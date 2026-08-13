@@ -170,6 +170,7 @@ export class SkeeballUI {
     this._stopLoop();
     this._closeOverlay();
     this.game = null;
+    if (this.renderer) this.renderer.dispose();
     this.renderer = null;
 
     let sk = {};
@@ -329,6 +330,7 @@ export class SkeeballUI {
       hudTop: this.root.querySelector('[data-role="hud-top"]'),
     };
 
+    if (this.renderer) this.renderer.dispose();
     this.renderer = new Renderer(this.el.canvas, this.game.board);
     this._bindPlay();
     this._fit();
@@ -347,7 +349,10 @@ export class SkeeballUI {
     zone.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (!this.game || !this.game.canThrow()) return;
-      this.swipe = { id: e.pointerId, samples: [{ x: e.clientX, y: e.clientY, t: performance.now() }] };
+      // e.timeStamp, never performance.now(): the sample must carry the EVENT's time. Under
+      // load the handler runs late and bunched, and clocking samples at handler time collapses
+      // the measured flick speed - a strong swipe reads as a dribble on a busy frame.
+      this.swipe = { id: e.pointerId, samples: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }] };
     });
     // Bound to the ZONE, never to document: a non-passive document-level touchmove kills
     // compositor scrolling for the whole page while the game is mounted (root CLAUDE.md's
@@ -358,7 +363,7 @@ export class SkeeballUI {
   _swipeMove(e) {
     if (!this.swipe || e.pointerId !== this.swipe.id) return;
     const s = this.swipe.samples;
-    s.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    s.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });   // event time, not handler time
     if (s.length > 48) s.shift();
   }
 
@@ -417,11 +422,10 @@ export class SkeeballUI {
     for (const ev of this.game.takeEvents()) {
       switch (ev.type) {
         case 'capture': {
-          const f = Rr.face(ev.u, ev.v);
           const gold = ev.value >= 100, big = ev.value >= 50;
           Rr.flashHole(ev.hole);
-          Rr.popupAt(f.x, f.y, f.z + 0.05, `+${ev.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
-          if (big) Rr.burstAt(f.x, f.y, f.z + 0.03, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
+          Rr.popupAt(ev.pos, `+${ev.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+          if (big) Rr.burstAt(ev.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
           if (gold) Rr.celebrate();
           break;
         }
@@ -566,6 +570,7 @@ export class SkeeballUI {
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
     this.game = null;
+    if (this.renderer) this.renderer.dispose();   // WebGL contexts leak if not released
     this.renderer = null;
     this.root.classList.remove('sk-root');
     this.root.innerHTML = '';
@@ -577,6 +582,9 @@ export class SkeeballUI {
 export function init(container) {
   if (instance) instance.destroy();
   instance = new SkeeballUI(container);
+  // Test hook (the __yzTest precedent): read-only access for the drivers that PLAY this game
+  // headlessly - test-visual.mjs's probe and the session play scripts. Never used by the game.
+  if (typeof window !== 'undefined') window.__skTest = { get ui() { return instance; } };
   return instance;
 }
 
