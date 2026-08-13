@@ -60,9 +60,11 @@ export const BOARDS = [
       laneW: 0.62,
       rampLen: 0.32,          // the hump
       lipHeight: 0.16,        // lane bed to the launch lip
-      launchAngle: 0.95,      // radians (~54 degrees) - a real skeeball lob, not a line drive
+      launchAngle: 0.9,       // radians (~52 degrees): high enough that a max-power ball sails
+                              // PAST the 50 onto the upper board (overshoot has a price), low
+                              // enough that soft balls land low and roll up (the skim regime).
       minSpeed: 1.2,          // slowest roll the swipe can produce - too weak to clear the hump
-      maxSpeed: 6.6,          // hardest fling
+      maxSpeed: 7.7,          // hardest fling - hard enough to overshoot the 50 and pay for it
       rollFriction: 0.42,     // m/s^2 decel on the lane bed
       rampLoss: 0.88,         // multiplier on speed surviving the hump (scrub + rattle)
       wallRestitution: 0.42,  // side-rail bounce during the roll
@@ -73,10 +75,29 @@ export const BOARDS = [
       faceLen: 1.2,           // metres up the slope
       faceW: 1.0,
       pitZ: -0.24,            // floor of the gutter void behind the hump (a weak lob dies here)
-      cageY: 3.15,            // the backstop - see physics.js: hitting it DROPS the ball, for 10
-      captureVn: 3.6,         // hit the face softer than this (normal speed) and it settles
-      restitution: 0.42,      // face bounce when it comes in too hot
-      tangentKeep: 0.72,      // tangential speed surviving a face bounce
+      cageY: 3.15,            // (legacy safety wall in flight; the board's own backstop is below)
+
+      // The BOARD simulation (rebuilt 2026-08-13 to the reference-footage contract: the outcome
+      // EMERGES from bounces and rolls, it is never decided at first contact).
+      boardRestitution: 0.55, // board-plane bounce
+      rimRestitution: 0.5,    // collar/ring wall bounce (radial component)
+      rimTangentKeep: 0.88,   // tangential speed surviving a wall graze
+      bounceKeep: 0.93,       // tangential speed surviving a board bounce
+      boardRollFriction: 0.7, // m/s^2 rolling decel on the board itself
+      bounceMin: 0.55,        // below this normal speed a bounce becomes rolling contact
+      collarH: 0.052,         // how far the 30/40/50 collars stand off the board
+      collar100H: 0.075,      // the 100 tubes are taller, free-standing
+      ringH: 0.095,           // the big ring band's height off the board - tall enough to keep a
+                              // bouncing rattler in the basin, like the real dished bowl does
+      ringThick: 0.02,        // the band's wall thickness
+      bandHopSpeed: 1.05,     // a ball climbing at least this fast HOPS the band (the footage's
+                              // entry over the ring's front lip) instead of bouncing off it
+      backstopV: 1.28,        // the net above the board's top edge (face coords, up-slope)
+      drainR: 0.085,          // the 20 / 10 drain mouths' capture radius
+      drainSpeedMax: 3.6,     // faster than this and the ball rolls straight over a drain
+      stallSpeed: 0.22,       // slower than this counts as stalled...
+      stallTime: 0.5,         // ...for this long, and the funnel bias walks it to a drain
+      funnelAccel: 2.2,       // the gentle dish that steers a spent ball to its drain
     },
 
     // The scoring geometry, in FACE coordinates: u lateral (0 = centre), v metres up the slope.
@@ -94,14 +115,14 @@ export const BOARDS = [
         // Checked in this order, so the 50 (overlapping the ring's top arc) wins over the ring.
         // labelV is where the renderer stencils each value: on the cup's front collar, in the
         // sliver the next cup down leaves visible - the same place the real cups are painted.
-        { id: '100L', u: -0.335, v: 0.90, r: 0.062, value: 100, labelV: 0.806 },
-        { id: '100R', u: 0.335, v: 0.90, r: 0.062, value: 100, labelV: 0.806 },
+        { id: '100L', u: -0.335, v: 0.73, r: 0.062, value: 100, labelV: 0.636 },
+        { id: '100R', u: 0.335, v: 0.73, r: 0.062, value: 100, labelV: 0.636 },
         { id: 'c50', u: 0, v: 0.75, r: 0.068, value: 50, labelV: 0.652 },
         { id: 'c40', u: 0, v: 0.50, r: 0.075, value: 40, labelV: 0.399 },
         { id: 'c30', u: 0, v: 0.27, r: 0.082, value: 30, labelV: 0.163 },
       ],
       // The corner gutters: landing this low AND this wide is the fluke zero.
-      corner0: { vMax: 0.16, uMin: 0.34 },
+      corner0: { vMax: 0.16, uMin: 0.46 },
       // The drain holes: where a 20 / a 10 physically rolls to (the sink animation's targets,
       // painted by the renderer - both are visible on the real board).
       hole20: { u: 0, v: 0.145 },

@@ -37,50 +37,39 @@ const outcomeOf = (power, aim) => {
 }
 
 // --- 2. reachability: every hole on the machine can be scored ---------------------------------
+// The engine is EMERGENT now (the outcome is wherever the ball drains), so this sweep is the
+// source of truth for what a throw can do - and `found` feeds block 6, so the rules test always
+// plays throws this same engine just proved out.
 
+const found = new Map();          // hole -> first {power, aim} that produced it
 {
-  const found = new Map();          // hole -> first {power, aim} that scores it
-  for (let p = 0; p <= 60; p++) {
-    for (const aim of [0, 0.2, 0.4, -0.4, 0.6, -0.6, 0.75, -0.75, 0.9, -0.9, 1, -1]) {
-      const st = simulateThrow(board, { power: p / 60, aim });
-      const hole = st.outcome ? st.outcome.hole : 'returned';
-      if (!found.has(hole)) found.set(hole, { power: p / 60, aim });
+  for (let p = 0; p <= 80; p++) {
+    for (const aim of [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6, 0.75, -0.75, 0.9, -0.9, 1, -1]) {
+      const st = simulateThrow(board, { power: p / 80, aim });
+      const hole = st.phase !== 'done' ? 'STUCK' : (st.outcome ? st.outcome.hole : 'returned');
+      if (!found.has(hole)) found.set(hole, { power: p / 80, aim });
     }
   }
-  // The real classic's outcomes: the stacked cups, the big ring's 20, the outer field's 10,
-  // the twin 100s, the corner-gutter 0, the void 0, and the rolled-back ball.
   for (const hole of ['10', '20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0', 'gutter', 'returned']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
   }
+  ok('no throw in the sweep ever failed to settle', !found.has('STUCK'));
   // The 100 is a skill shot: it must NOT be scorable with a straight ball.
   let straight100 = false;
-  for (let p = 0; p <= 60; p++) {
-    if (String(outcomeOf(p / 60, 0)).startsWith('100')) straight100 = true;
+  for (let p = 0; p <= 80; p++) {
+    if (String(outcomeOf(p / 80, 0)).startsWith('100')) straight100 = true;
   }
   ok('the 100 cups need real aim, never a straight ball', !straight100);
 }
 
-// --- 3. the power curve keeps its shape (aim 0) ------------------------------------------------
+// --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
 
 {
   const at = (p) => outcomeOf(p, 0);
   ok('a feeble roll comes back to the player (not spent)', at(0.02) === 'returned');
-  ok('a weak lob dies in the gutter void for zero', at(0.13) === 'gutter');
-  const seq = [];
-  for (let p = 0; p <= 100; p += 2) {
-    const h = at(p / 100);
-    if (seq[seq.length - 1] !== h) seq.push(h);
-  }
-  const upRamp = seq.join(' ');
-  ok('the ladder climbs in order: 10, 20, 30, 40, 50', upRamp.indexOf('10') < upRamp.indexOf('20')
-    && upRamp.indexOf('20') < upRamp.indexOf('c30')
-    && upRamp.indexOf('c30') < upRamp.indexOf('c40') && upRamp.indexOf('c40') < upRamp.indexOf('c50'),
-    `sequence was: ${upRamp}`);
-  ok('an overshoot sails past the 50 and lands in the outer field for 10, never more',
-    upRamp.indexOf('c50') !== -1 && seq[seq.length - 1] === '10',
-    `sequence was: ${upRamp}`);
-  // The classic's defining feel: once a straight ball clears the void, it always scores.
+  ok('a weak lob dies in the gutter void for zero', at(0.11) === 'gutter');
+  // Once a straight ball clears the void it always scores something - the classic's floor.
   let zeroAfterVoid = '';
   let seenScore = false;
   for (let p = 0; p <= 100; p += 1) {
@@ -89,6 +78,48 @@ const outcomeOf = (power, aim) => {
     else if (seenScore && h === 'gutter') zeroAfterVoid = `power ${p / 100} scored 0 after the ladder began`;
   }
   ok('every straight ball past the void scores something', !zeroAfterVoid, zeroAfterVoid);
+  // The cups come within reach in ladder order as power climbs (first power that lands each).
+  const firstAt = (want) => {
+    for (let p = 0; p <= 200; p++) if (at(p / 200) === want) return p / 200;
+    return null;
+  };
+  const p30 = firstAt('c30'), p40 = firstAt('c40'), p50 = firstAt('c50');
+  ok('straight power finds the 30, then the 40, then the 50, in that order',
+    p30 !== null && p40 !== null && p50 !== null && p30 < p40 && p40 < p50,
+    `first powers: c30=${p30} c40=${p40} c50=${p50}`);
+  // Overshoot has a price: max power straight must NOT be a clean 50.
+  const hard = [at(0.95), at(0.97), at(1.0)];
+  ok('max power straight overshoots the 50 (rattles down for scraps, never a clean 50)',
+    hard.every((h) => h !== 'c50' && h !== '100L' && h !== '100R'),
+    `p 0.95..1.0 straight gave: ${hard.join(', ')}`);
+}
+
+// --- 3b. the footage contract: rattle is real, settle always ends ------------------------------
+
+{
+  // Somewhere in the sweep a rim-clipped ball must genuinely rattle (the reference clips'
+  // 1.5s-3s settles), and NOTHING may ride the emergency settle cap.
+  let longest = 0; let longestParams = null; let capRides = 0;
+  for (let p = 0; p <= 60; p++) {
+    for (const aim of [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45]) {
+      const st = simulateThrow(board, { power: p / 60, aim });
+      if (st.boardTime > longest) { longest = st.boardTime; longestParams = { power: p / 60, aim }; }
+      if (st.boardTime >= 9.9) capRides++;
+    }
+  }
+  ok('at least one throw rattles on the board for over 1.5s, like the footage', longest > 1.5,
+    `longest board time in the probe sweep: ${longest.toFixed(2)}s`);
+  ok('no throw rides the emergency settle cap', capRides === 0, `${capRides} throws hit the cap`);
+  // And that longest rattler produces a stream of real bounce events - the thing the old model
+  // faked with a canned slide.
+  const st = startThrow(board, longestParams || { power: 0.3, aim: 0 });
+  let bounces = 0;
+  for (let i = 0; i < 240 * 16 && st.phase !== 'done'; i++) {
+    step(board, st, STEP);
+    for (const ev of st.events.splice(0)) if (ev.type === 'bounce') bounces++;
+  }
+  ok('the rattler emits real bounce events along the way', bounces >= 2,
+    `saw ${bounces} bounces over ${longest.toFixed(2)}s`);
 }
 
 // --- 4. aim symmetry ---------------------------------------------------------------------------
@@ -96,7 +127,7 @@ const outcomeOf = (power, aim) => {
 {
   const mirror = (h) => (h === '100L' ? '100R' : h === '100R' ? '100L' : h);
   let sym = true; let broke = '';
-  for (const [p, a] of [[0.5, 0.3], [0.7, 0.45], [0.95, 0.75], [0.24, 1], [0.6, 0.2]]) {
+  for (const [p, a] of [[0.5, 0.3], [0.7, 0.45], [0.9, 0.8], [0.22, 1], [0.6, 0.2]]) {
     const l = outcomeOf(p, -a), r = outcomeOf(p, a);
     if (mirror(l) !== r) { sym = false; broke = `power ${p} aim ${a}: left ${l} vs right ${r}`; break; }
   }
@@ -150,13 +181,16 @@ const outcomeOf = (power, aim) => {
   ok('rolled-back ball: not spent, no score', g.ballsUsed === 0 && g.score === 0
     && back.some((e) => e.type === 'ballBack'));
 
-  // Score a known ladder: the sweep above proved these mappings.
+  // Score a ladder sourced from the reachability sweep itself, so this block can never drift
+  // from the engine's real behavior: one of each outcome the sweep found, padded with repeats.
+  const throwsPlan = [
+    found.get('c50'), found.get('c40'), found.get('c30'), found.get('20'), found.get('10'),
+    found.get('100R') || found.get('100L'), found.get('gutter'), found.get('20'), found.get('10'),
+  ].map((f) => f || { power: 0.3, aim: 0 });
   const holes = [];
-  const powers = [0.65, 0.65, 0.65, 0.45, 0.13, 0.95, 0.95, 0.32, 0.24];
-  const aims = [0, 0, 0, 0, 0, 0.75, 0.75, 0, 0];
   let overEv = null;
   for (let i = 0; i < 9; i++) {
-    const evs = play(powers[i], aims[i]);
+    const evs = play(throwsPlan[i].power, throwsPlan[i].aim);
     const doneEv = evs.find((e) => e.type === 'ballDone');
     holes.push(doneEv ? doneEv.hole : '??');
     const ro = evs.find((e) => e.type === 'rackOver');
@@ -188,7 +222,7 @@ const outcomeOf = (power, aim) => {
     for (let i = 0; i < 240 * 14 && g.ball; i++) { g.update(STEP); }
     g.takeEvents();
   };
-  play(0.65, 0); play(0.45, 0); play(0.95, 0.75);
+  play(0.65, 0); play(0.45, 0); play(0.9, 0.8);
   const snap = JSON.parse(JSON.stringify(g.snapshot()));
   const r = SkeeballGame.restore(snap);
   eq('restore: score, balls, counters, log all survive',
