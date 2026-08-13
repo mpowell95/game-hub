@@ -6,9 +6,14 @@
 > overrides them. This game's specific obligations are under "Persistence and THE LAW" — read
 > that before touching anything that stores or records.
 
-A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (Matt: the previous
-build is thrown away; nothing of it — layout, art, physics, structure — was carried over or
-consulted). One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
+A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
+previous build — layout, art, physics, structure — was carried over or consulted). The previous
+build was then kept in the hub as **Skeeball_old** (`skeeball_old/`, hub id `skeeball-old`;
+Matt's ask, same day) for side-by-side comparison while this machine is tuned — see that
+folder's CLAUDE.md for exactly what its rename changed. Both builds record into the SHARED
+`skeeball` stats id, and both use the board id `classic`, so that machine's records (bests, the
+daily map, the top-score panel) are one continuous bucket across the two builds — deliberate,
+so no play is ever orphaned. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
 lane, a cream ring face, twin corner 100 pockets, and a marquee. The player swipes up the lane;
 the swipe's speed is the roll's power and its angle is the aim. Nine balls to a rack.
 

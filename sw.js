@@ -234,6 +234,16 @@ const ASSETS = [
   './skeeball/js/boards.js',
   './skeeball/js/render.js',
   './skeeball/js/strings.js',
+  './skeeball_old/',
+  './skeeball_old/index.html',
+  './skeeball_old/css/skeeball_old.css',
+  './skeeball_old/js/ui.js',
+  './skeeball_old/js/game.js',
+  './skeeball_old/js/physics.js',
+  './skeeball_old/js/howto.js',
+  './skeeball_old/js/boards.js',
+  './skeeball_old/js/render.js',
+  './skeeball_old/js/strings.js',
   // Snake v2 (devOnly preview, 2026-08-01): the card renders only for isDevProfile(), but the
   // FILES must be precached like any other deployed page or the preview breaks offline. It has
   // no game.js or strings.js of its own on purpose - it imports Snake's (see snake-v2/CLAUDE.md),

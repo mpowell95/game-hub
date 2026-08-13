@@ -261,6 +261,22 @@ const GAMES = [
     devOnly: true,
   },
   {
+    // The RETIRED original Skeeball build (pre-2026-08-13 rewrite), kept in the hub for
+    // side-by-side comparison while the new machine is tuned - Matt's ask: renamed, not deleted.
+    // Folder skeeball_old/, CSS prefix .sko-, its own settings/save keys
+    // (gamehub.skeeball_old.v1 / .save.v1). It still records to the SHARED 'skeeball' stats id,
+    // exactly as it always did, so nothing it ever wrote is orphaned. Admin only, like the new one.
+    id: 'skeeball-old',
+    title: 'Skeeball_old',
+    blurb: { en: 'The retired original Skeeball build, kept for comparison. Flick the ball up the lane; the corner cups pay 100.',
+      es: 'La versión original retirada de Skeeball, conservada para comparar. Lanza la bola por la pista; las copas de las esquinas valen 100.' },
+    module: '../skeeball_old/js/ui.js',
+    immersive: true,
+    accent: '#C8452F',
+    devOnly: true,
+    art: GAME_ART["skeeball_old"],
+  },
+  {
     id: 'uno',
     title: 'Uno',
     blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',

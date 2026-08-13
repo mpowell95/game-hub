@@ -600,6 +600,40 @@ export const GAME_ART = {
              <circle cx="77.6" cy="71.6" r="2.2" fill="#fffdf5"/>
              <path d="M80 84 L80 88" stroke="#f6ecda" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
            </svg>`,
+  // The retired original build's tile, kept verbatim under its new key (hub id skeeball-old).
+  skeeball_old: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#3B1A1B"/>
+            <rect x="0" y="0" width="160" height="46" fill="#4E2122"/>
+            <g fill="#26262B"><path d="M0 90 L0 40 L34 40 L20 90 Z"/><path d="M160 90 L160 40 L126 40 L140 90 Z"/></g>
+            <path d="M22 90 L138 90 L99 43 L61 43 Z" fill="#A55C39"/>
+            <path d="M61 43 L99 43 L106 52 L54 52 Z" fill="#BE6E45"/>
+            <g fill="#F0D95E">
+              <path d="M22 90 L10 90 L48 43 L61 43 Z"/><path d="M138 90 L150 90 L112 43 L99 43 Z"/>
+            </g>
+            <g fill="#3A2E0C">
+              <path d="M27 90 L20 90 L52 47 L57 47 Z"/><path d="M42 90 L35 90 L58 56 L63 56 Z"/><path d="M57 90 L50 90 L64 68 L69 68 Z"/>
+              <path d="M133 90 L140 90 L108 47 L103 47 Z"/><path d="M118 90 L125 90 L102 56 L97 56 Z"/><path d="M103 90 L110 90 L96 68 L91 68 Z"/>
+            </g>
+            <ellipse cx="80" cy="44" rx="48" ry="11" fill="#FFF6E2"/>
+            <ellipse cx="80" cy="42" rx="39" ry="8" fill="#8C4A22"/>
+            <g fill="#F3DFB4" stroke="#D8C48E" stroke-width="1">
+              <ellipse cx="30" cy="20" rx="10" ry="4"/><ellipse cx="130" cy="20" rx="10" ry="4"/>
+            </g>
+            <g fill="#3E1509"><ellipse cx="30" cy="20" rx="6" ry="2.2"/><ellipse cx="130" cy="20" rx="6" ry="2.2"/></g>
+            <g stroke="#D8C48E" stroke-width="1">
+              <ellipse cx="80" cy="17" rx="12" ry="4" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="25" rx="15" ry="4.6" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="33" rx="18" ry="5.2" fill="#FFF6E2"/>
+              <ellipse cx="80" cy="41" rx="21" ry="5.8" fill="#FFF6E2"/>
+            </g>
+            <g fill="#3E1509">
+              <ellipse cx="80" cy="17" rx="7" ry="2.1"/><ellipse cx="80" cy="25" rx="9" ry="2.4"/>
+              <ellipse cx="80" cy="33" rx="11" ry="2.7"/><ellipse cx="80" cy="41" rx="13" ry="3"/>
+            </g>
+            <circle cx="80" cy="70" r="8" fill="#F3AFC6"/>
+            <circle cx="77.4" cy="67.2" r="3" fill="#FFE2EC"/>
+            <g fill="#B8517A"><circle cx="83" cy="72" r="1.3"/><circle cx="77" cy="73" r="1.2"/><circle cx="84" cy="66" r="1.2"/></g>
+          </svg>`,
 };
 
 export default GAME_ART;
