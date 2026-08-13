@@ -569,7 +569,39 @@ export const GAME_ART = {
             </g>
             <path d="M84 60 Q120 54 158 60" fill="none" stroke="#7C93A8" stroke-width="2" opacity="0.5"/>
           </svg>`,
+  // Skeeball: the player's-eye view - the lane converging up to the tilted ring face, the twin
+  // 100 pockets in the corners, a lit marquee, a ball mid-lane. Composed for the 160x90 frame
+  // with a full-bleed background, nothing cropped.
   skeeball: `<svg viewBox="0 0 160 90" aria-hidden="true">
+             <rect width="160" height="90" fill="#140d0a"/>
+             <rect x="30" y="4" width="100" height="12" rx="3" fill="#28150b" stroke="#6b4526" stroke-width="1"/>
+             <g fill="#ffd977">
+               <circle cx="40" cy="10" r="1.4"/><circle cx="52" cy="10" r="1.4"/><circle cx="64" cy="10" r="1.4"/>
+               <circle cx="76" cy="10" r="1.4"/><circle cx="88" cy="10" r="1.4"/><circle cx="100" cy="10" r="1.4"/>
+               <circle cx="112" cy="10" r="1.4"/><circle cx="120" cy="10" r="1.4"/>
+             </g>
+             <path d="M38 18 L122 18 L130 52 L30 52 Z" fill="#f3e4c2"/>
+             <g fill="none" stroke-width="2.6">
+               <circle cx="80" cy="37" r="13.2" stroke="#c73a2e"/>
+               <circle cx="80" cy="37" r="9.2" stroke="#e8d3a4"/>
+               <circle cx="80" cy="37" r="5.4" stroke="#c73a2e"/>
+             </g>
+             <circle cx="80" cy="37" r="2.6" fill="#1d1712"/>
+             <g>
+               <circle cx="47" cy="25" r="4.6" fill="#1d1712" stroke="#c73a2e" stroke-width="2"/>
+               <circle cx="113" cy="25" r="4.6" fill="#1d1712" stroke="#c73a2e" stroke-width="2"/>
+             </g>
+             <path d="M30 52 L130 52 L152 90 L8 90 Z" fill="#a86f38"/>
+             <path d="M30 52 L8 90 L2 90 L26 52 Z" fill="#54301a"/>
+             <path d="M130 52 L152 90 L158 90 L134 52 Z" fill="#54301a"/>
+             <path d="M64 90 L72 52 M96 90 L88 52" stroke="#7c4d22" stroke-width="1.2" fill="none"/>
+             <path d="M33 53 L127 53 L129 57 L31 57 Z" fill="#c98a49"/>
+             <circle cx="80" cy="74" r="7" fill="#f6ecda"/>
+             <circle cx="77.6" cy="71.6" r="2.2" fill="#fffdf5"/>
+             <path d="M80 84 L80 88" stroke="#f6ecda" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+           </svg>`,
+  // The retired original build's tile, kept verbatim under its new key (hub id skeeball-old).
+  skeeball_old: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#3B1A1B"/>
             <rect x="0" y="0" width="160" height="46" fill="#4E2122"/>
             <g fill="#26262B"><path d="M0 90 L0 40 L34 40 L20 90 Z"/><path d="M160 90 L160 40 L126 40 L140 90 Z"/></g>

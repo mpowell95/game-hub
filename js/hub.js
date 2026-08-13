@@ -242,26 +242,39 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
-    // ADMIN ONLY for now (Matt's ask, 2026-08-11), exactly like Pinball above: `devOnly` keeps the
-    // card off the launcher for everyone but Matt and the tester while the machines/unlock rework
-    // is still being played in. Dropping `devOnly` is the whole of "release it" - and THAT is when
-    // it gets a `released` date, so the New pill announces the day the family can actually play it
-    // rather than a day it was hidden.
+    // ADMIN ONLY for now (Matt's ask, 2026-08-11), exactly like Pinball below: `devOnly` keeps
+    // the card off the launcher for everyone but Matt and the tester while the machines/unlock
+    // rework is played in. Dropping `devOnly` is the whole of "release it" - and THAT is when it
+    // gets a `released` date, so the New pill announces the day the family can actually play it.
+    // Rebuilt from scratch 2026-08-13 (see skeeball/CLAUDE.md); the stats id and its history
+    // predate the rebuild and are untouched.
     id: 'skeeball',
     title: 'Skeeball',
-    blurb: { en: 'Flick the ball up the lane. Far rings pay more, the corner cups pay 100.',
-      es: 'Lanza la bola por la pista. Los aros del fondo valen más y las copas de las esquinas, 100.' },
+    blurb: { en: 'Roll it up the lane and lob it into the rings. Nine balls, five rings, two corner pockets worth 100.',
+      es: 'Lanza la bola por la pista y encéstala en los anillos. Nueve bolas, cinco anillos y dos huecos de 100 en las esquinas.' },
     module: '../skeeball/js/ui.js',
-    // Its own alley fills the screen and it draws its own back affordance space into the HUD, so
-    // the hub's header row is wasted height here - same call as Escoba and Ball Run.
+    // Owns the whole viewport (fixed edge-to-edge canvas under a marquee HUD), so the hub's
+    // header collapses to the floating back button - same call as Pinball and Hill Climb.
+    immersive: true,
+    accent: '#54301a',
+    art: GAME_ART["skeeball"],
+    devOnly: true,
+  },
+  {
+    // The RETIRED original Skeeball build (pre-2026-08-13 rewrite), kept in the hub for
+    // side-by-side comparison while the new machine is tuned - Matt's ask: renamed, not deleted.
+    // Folder skeeball_old/, CSS prefix .sko-, its own settings/save keys
+    // (gamehub.skeeball_old.v1 / .save.v1). It still records to the SHARED 'skeeball' stats id,
+    // exactly as it always did, so nothing it ever wrote is orphaned. Admin only, like the new one.
+    id: 'skeeball-old',
+    title: 'Skeeball_old',
+    blurb: { en: 'The retired original Skeeball build, kept for comparison. Flick the ball up the lane; the corner cups pay 100.',
+      es: 'La versión original retirada de Skeeball, conservada para comparar. Lanza la bola por la pista; las copas de las esquinas valen 100.' },
+    module: '../skeeball_old/js/ui.js',
     immersive: true,
     accent: '#C8452F',
     devOnly: true,
-    // The reference recording is PORTRAIT (reference/skeeball/SPEC.md), so this is composed for
-    // 16:9 rather than cropped from it: the lane runs off the bottom edge at full width and the
-    // ring stack sits centred at the top with a 100 cup pushed into each corner, which is exactly
-    // the content the wide frame has room for and the tall one does not.
-    art: GAME_ART["skeeball"],
+    art: GAME_ART["skeeball_old"],
   },
   {
     id: 'uno',

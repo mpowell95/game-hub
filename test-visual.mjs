@@ -344,6 +344,95 @@ const PLAY = {
   },
 
   skeeball: {
+    what: 'swipe real racks up the lane: score, records, and the stats write all have to move',
+    async run(page, cdp, tap) {
+      // The gallery: one machine card with the four records slots and a Play button.
+      const play = await page.$('[data-board="classic"]');
+      if (!play) return { ok: false, why: 'no Play button on the machine gallery' };
+      const recSlots = await page.$$eval('.sk-rec', (els) => els.length);
+      if (recSlots < 4) return { ok: false, why: `machine card shows ${recSlots} record slots, spec says 4 (top-any / mine / today / last)` };
+      const readSk = () => page.evaluate(() => {
+        try { return ((JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).skeeball || {}).sk || {}; }
+        catch { return {}; }
+      });
+      const before = await readSk();
+      await tap(play);
+      await page.waitForSelector('.sk-canvas', { timeout: 8000 });
+      await page.waitForTimeout(400);
+
+      const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+      // A thumb flick up the lane. ui.js reads the release speed (last ~130ms) against the
+      // stage height, so the DURATION of the move run is the throw's power: ~160ms for a hard
+      // fling down to ~420ms for a soft roll.
+      const swipe = async (ms) => {
+        const x = stage.x + stage.width / 2;
+        const y0 = stage.y + stage.height * 0.94;
+        const dist = stage.height * 0.55;
+        const steps = 6;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+        for (let i = 1; i <= steps; i++) {
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - (dist * i) / steps, id: 1 }] });
+          await page.waitForTimeout(ms / steps);
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      };
+      const settled = () => page.evaluate(() => {
+        const el = document.querySelector('[data-role="pips"]');
+        return el ? el.querySelectorAll('i.is-used').length : -1;
+      });
+
+      // Everything that moves is drawn into one canvas (no DOM element for the MOTION harness
+      // to follow), so sample the canvas mid-throw: three crops that must not all be identical.
+      const shot = () => page.evaluate(() => {
+        const c = document.querySelector('.sk-canvas');
+        const t2 = document.createElement('canvas');
+        t2.width = 64; t2.height = 64;
+        t2.getContext('2d').drawImage(c, 0, 0, c.width, c.height, 0, 0, 64, 64);
+        return t2.toDataURL();
+      });
+      await swipe(220);
+      const frames = [];
+      for (let i = 0; i < 3; i++) { frames.push(await shot()); await page.waitForTimeout(180); }
+      if (new Set(frames).size < 2) return { ok: false, why: 'the machine never changed between frames after a throw: nothing is animating' };
+
+      // Play the rack out: after each swipe, wait for the ball counter to advance (settled), a
+      // rolled-back ball (counter unchanged - swipe again), or the rack-over sheet.
+      const durations = [220, 300, 180, 260, 340, 200, 240, 160, 280, 230, 210, 250];
+      let over = false;
+      for (let i = 0; i < 30 && !over; i++) {
+        const usedBefore = await settled();
+        if (usedBefore === -1) { over = !!(await page.$('.sk-veil-over')); break; }
+        await swipe(durations[i % durations.length]);
+        const t0 = Date.now();
+        while (Date.now() - t0 < 9000) {
+          if (await page.$('.sk-veil-over')) { over = true; break; }
+          const used = await settled();
+          if (used > usedBefore || used === -1) break;
+          await page.waitForTimeout(200);
+        }
+      }
+      if (!over) {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 5000 && !over) { over = !!(await page.$('.sk-veil-over')); await page.waitForTimeout(250); }
+      }
+      if (!over) return { ok: false, why: 'threw a full rack and the rack-over sheet never appeared' };
+
+      const finalTxt = await page.$eval('.sk-final', (el) => el.textContent.trim()).catch(() => null);
+      const after = await readSk();
+      if (((after.played | 0) - (before.played | 0)) < 1) {
+        return { ok: false, why: 'the rack finished but recordSkeeball never wrote it (sk.played did not move)' };
+      }
+      const save = await page.evaluate(() => {
+        try { return JSON.parse(localStorage.getItem('gamehub.skeeball.save.v1') || 'null'); }
+        catch { return null; }
+      });
+      if (save) return { ok: false, why: 'the rack recorded but its autosave was left banked - the next mount would resume a finished rack' };
+      return { ok: true, why: `played a rack to the sheet (final ${finalTxt}); sk.played ${before.played | 0} -> ${after.played | 0}` };
+    },
+  },
+  // The retired original build, kept in the hub as Skeeball_old: its probe rides along,
+  // retargeted at the renamed folder, save key and .sko- prefix. Otherwise verbatim.
+  skeeball_old: {
     what: 'flick a ball up the lane and have it land in a ring for real points',
     async run(page, cdp, tap) {
       // The machine picker is a CAROUSEL (2026-08-11): one slide per machine, and the Play button
@@ -375,7 +464,7 @@ const PLAY = {
         // mapping, for the first contiguous band of flick speeds whose sim lands the 40, and
         // aim the middle of that band - a retune or a physics change moves the probe with it.
         const [{ flickToThrow, throwSim }] = await Promise.all([
-          import('/skeeball/js/game.js'),
+          import('/skeeball_old/js/game.js'),
         ]);
         let lo = null, hi = null;
         for (let sp = 0.8; sp <= 7; sp += 0.02) {
@@ -409,7 +498,7 @@ const PLAY = {
       // The autosave lands in _landed(), i.e. AFTER the ball finishes its flight - poll for it
       // rather than guessing a wait (the mistake Pool's probe records).
       const read = () => page.evaluate(() => {
-        try { return JSON.parse(localStorage.getItem('gamehub.skeeball.save.v1') || 'null'); }
+        try { return JSON.parse(localStorage.getItem('gamehub.skeeball_old.save.v1') || 'null'); }
         catch { return null; }
       });
       let st = null;
@@ -427,6 +516,7 @@ const PLAY = {
       return { ok: true, why: `flick landed for ${st.score} points on ${st.board}` };
     },
   },
+
 
   pinball: {
     what: 'plunge a ball and flip it around a live table',

@@ -1,194 +1,173 @@
-# Skeeball (`skeeball/`)
+# Skeeball — game documentation
 
-> **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
-> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`,
-> which is always loaded alongside this file (full rule rationale: `js/CLAUDE.md`).
+> **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
+> and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
+> alongside this file; the full rules with rationale are in `js/CLAUDE.md`. Nothing below
+> overrides them. This game's specific obligations are under "Persistence and THE LAW" — read
+> that before touching anything that stores or records.
 
-## What this game IS (2026-08-12, the physics rebuild)
+A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
+previous build — layout, art, physics, structure — was carried over or consulted). The previous
+build was then kept in the hub as **Skeeball_old** (`skeeball_old/`, hub id `skeeball-old`;
+Matt's ask, same day) for side-by-side comparison while this machine is tuned — see that
+folder's CLAUDE.md for exactly what its rename changed. Both builds record into the SHARED
+`skeeball` stats id, and both use the board id `classic`, so that machine's records (bests, the
+daily map, the top-score panel) are one continuous bucket across the two builds — deliberate,
+so no play is ever orphaned. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
+lane, a cream ring face, twin corner 100 pockets, and a marquee. The player swipes up the lane;
+the swipe's speed is the roll's power and its angle is the aim. Nine balls to a rack.
 
-Matt: *"This should be the most basic, classic skeeball machine... this is the first of ~10
-skeeball boards."* And, after three table-driven builds in a row failed him: *"I wanted it to be
-able to miss a hole and bounce like in real life. And like in 'correct bouncing.mov'... The
-physics is what I'm expecting you to be able to handle."*
+**Admin only for now**, exactly like Pinball: the hub entry carries `devOnly: true`. Unlike
+Pinball, the stats id already has REAL family history (the game was live for a couple of hours
+on 2026-08-11 under the previous build), which drives every storage decision below.
 
-So the engine is a real **physics simulation** (`js/physics.js`): a ball in metres and seconds,
-under real gravity, against analytic colliders built from the machine's geometry. **Scoring is
-EMERGENT — the score is whichever hole finally swallows the ball.** There is no scoring table,
-no target windows, no `resolveThrow`. A near-miss clips a collar's lip and deflects; the basin
-catches it; the big ring's curved wall funnels it down across the 20's mouth; it drops wherever
-it really lands. That is the whole game, and it is the contract in
-`reference/skeeball/SPEC.md`'s 2026-08-12 section (frame-timed from `Correct bouncing.MOV`).
+## Hub integration
 
-The LOOK is the reference screenshot in that same SPEC section: TEAL walls and lane, WHITE tube
-rings, glossy YELLOW rails, black guard tubes over khaki netting, an LED `BALL / SCORE` marquee,
-and the neighbouring machines visible at the frame edges. The warm cream-and-wood machine this
-folder used to draw is a DIFFERENT skin in the source app (`Skeeball 1.MOV`) — a later board in
-the ladder, maybe, but not `classic`.
-
-## Why the previous engines are gone (read before "simplifying" anything back)
-
-Three builds in a row resolved throws with a lookup — power/aim in, table row out, canned
-animation on top — and every one of Matt's complaints lived in the gap between those layers:
-"Too hard!" zeros, balls guided in, balls deleted mid-air, speeds unrelated to the flick, and
-finally *"Opus has had MAJOR issues with every aspect of the finger flick, to the speed of the
-ball - literally every aspect has been a disappointing failure regarding realistic physics."*
-A table cannot produce consequences; only simulation can. The old builds' tuning history is in
-git and in this file's history; none of it applies to the physics engine.
-
-## Layout & responsibilities
-
-```
-skeeball/js/physics.js   the simulation: colliders, gravity, restitution; simulate() -> frames + outcome
-skeeball/js/boards.js    the machines as DATA: palette + 3D geometry (rings, drains) + unlock score
-skeeball/js/game.js      the rules around the physics: flick mapping, the rack, x3, unlocks, save
-skeeball/js/render.js    every pixel, through ONE projection shared with the physics geometry
-skeeball/js/howto.js     the HOW TO PLAY carousel; every page's throw is a real simulate() run
-skeeball/js/ui.js        DOM shell: picker, rAF loop, flick input, 1:1 playback of sim frames
-skeeball/js/strings.js   every user-visible string, { en, es }
-skeeball/js/test.js      headless physics + rules assertions (node skeeball/js/test.js)
-skeeball/css/skeeball.css  all styles, .sk- prefixed, descendant-scoped under .sk-root
-skeeball/index.html      standalone host (same init() as in-hub), name-gated before mount
-```
-
-## The physics, and the invariants that keep it honest
-
-- **The world is metres**: x across, y up, z from the foul line toward the machine. Ball radius
-  `BALL_R` 0.042 (a real skeeball ball), `G` 9.81. The lane runs 2.10m to a ramp that trades
-  speed for its lip height and launches at `launchDeg`; the board is a plane tilted `tiltDeg`
-  (60 from vertical = the real machine's ~30 degree incline).
-- **Rings are HOLES with collars.** Inside an opening there is no floor — a ball whose centre
-  drops through has been swallowed, and that ring's points are the score. The collar's lip is a
-  torus that deflects grazing hits (the rim bounce). Cup collars are LOWER than the ball's
-  centre on purpose: a slow ball rolling across a cup tips over the collar and falls in, which
-  is exactly how the reference clip's throw ends in the 20.
-- **The big ring is the basin's wall** (`wallHigh`), not a hole. Its curved inner wall funnels
-  rattling balls down toward the bottom centre — across the 20's mouth first (the 20 sits flush
-  with the basin bottom BY DESIGN); only what squeezes around drops through the narrow drain
-  slot for the 10. The outer board's bottom trough is the other 10-mouth. Everything that
-  reaches the board eventually drains somewhere: **the only zero in the game is a flick too
-  feeble to climb the ramp, which visibly rolls back to the player.**
-- **Deterministic.** Fixed timestep, no rng in the sim: the same flick always does the same
-  thing, so practice is real. The one deliberate "imperfection" is `TILT_X`, a constant 0.2%
-  lateral lean that breaks knife-edge equilibria (a ball balanced EXACTLY on a collar top would
-  otherwise sit forever — the sweep caught it). Constant = still a pure function.
-- **Rolling is not impacts.** Two hard-won rules inside the integrator: (1) resting contact
-  keeps tangential velocity (impact damping applied 480x/sec to a resting ball freezes it on a
-  rim); (2) a ball ROLLING on the board skips lip/wall impulses entirely — collars become
-  smooth in-plane guides it rolls around — because alternating micro-impulses parked balls in
-  chattering limit cycles. Both failure modes are pinned by the "zero timeouts" sweep in test.js.
-- **Rolling resistance on the board is PROPORTIONAL damping, never a constant decel** — a
-  constant decel is static friction, and static friction let a ball freeze mid-slope forever.
-
-## The flick — nothing between the finger and the ball
-
-`flickToThrow` (game.js): release speed (canvas-heights/second, sampled over the last ~100ms —
-Android's VelocityTracker window) times ONE constant (`FLICK.MPS_PER_CHS`) IS the launch speed;
-the swipe angle IS the direction, clamped to the lane. No power curves, no distance blending,
-no normalisation. A soft flick VISIBLY rolls slower and dies on the ramp; a hard one visibly
-flies; the ball goes where you pointed. The cancel rules survive from the gesture work that DID
-land (a tap is not a throw; yanking back down cancels).
-
-## The playback — the sim IS the animation
-
-`simulate()` returns timestamped frames; `ui.js` interpolates them against the real clock, 1:1,
-projected through `render.js`'s `proj`. There is no animation model, no durations, no paths -
-what is drawn is what was simulated, bounce for bounce. The props (cups, basin band) draw in
-two phases split around the ball's board position (`drawProps` 'behind'/'front'), so a rattling
-ball passes behind the higher rings and in front of the lower ones instead of floating over a
-picture. The ball is never deleted in mid-air and never fades (standing rule; see history).
-
-## Rendering — one projection, solved against the reference
-
-`render.js` authors in a DW x DH design box through a pinhole camera whose constants were solved
-NUMERICALLY against the SPEC's measured fractions (big ring 0.48 W, 20-cup 0.11 W, the ~0.72
-vertical squash). Everything on the board — rings, drains, ball — is drawn from the SAME
-`boards.js` geometry the simulation collides with, through the same `proj`.
-
-The cups are drawn as upright TUBES standing on their holes (the reference app's own prop):
-slit mouths, tall white faces carrying the numbers. **The drawn slit is the true opening radius
-seen edge-on, so the visible mouth can only ever UNDER-promise the capture area** — a cup can
-surprise you by catching a ball, never rob you. That is the surviving form of the old
-"what you see is what you score" law; test.js's containment block asserts every scoring throw's
-final position is inside its own hole in board coordinates, which is the form that cannot drift.
-
-The marquee is the app's LED readout — `BALL` (red 7-seg) and `SCORE` (pale green) — not a
-RECORD/BEST panel; those live on the picker and the end card. Neighbouring machines are drawn
-at a visual pitch of 1.15m (closer than physical, like the app's own crowded row); they are
-scenery — the sim's world ends at this machine's walls.
-
-## Machines, unlocking, the ladder of ~10
-
-A machine is a `boards.js` entry: palette + geometry + `unlockScore`. `classic` is machine one.
-`stars` is the placeholder second machine (same basin physics, values placed for AIM instead of
-power) so the unlock path stays exercised; expect it to be replaced as Matt sends references
-for the real ladder. Unlock rule unchanged: beat the NEXT machine's `unlockScore` on the one
-before it; `js/arcade-scores.js` owns unlock storage/merge (union, additive, synced - THE LAW).
-
-Measured expectations (test.js pins the casual number): casual hand ~200 a rack, skilled ~290,
-expert ~330 before multipliers; a deliberate hard diagonal lands a 100 roughly 9-13% of
-attempts. `stars` unlocks at 400. Matt's recordings of the old build averaged ~90 a rack with
-~all 10s; if the casual number drifts out of 140-340 the game has been detuned.
-
-## Settings & persistence
-
-| Key | Holds |
+| Thing | Value |
 |---|---|
-| `gamehub.skeeball.v1` | `{ board }` - the machine you last picked |
-| `gamehub.skeeball.save.v1` | the in-progress rack snapshot (v2 shape, UNCHANGED by the physics rebuild); removed on game over |
+| Registry | `module: '../skeeball/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `skeeball` |
+| Stats id | `skeeball` (recorder `recordSkeeball`, sub-counter `sk`) — **pre-existing, frozen** |
+| CSS root / prefix | `.sk-root` / `.sk-` |
+| Settings key | `gamehub.skeeball.v1` (one preference: the selected machine) |
+| Save key | `gamehub.skeeball.save.v1` (the mid-rack snapshot) |
+| Difficulty axis | none — `byDiff` is keyed by BOARD ID (Hill Climb's stages-as-the-axis precedent) |
+| `isInProgress()` | the **autosave/resume** meaning: always `false`; see below |
 
-Unlocks live in `gamehub.stats` under `sk.unlocked` (earned history, synced, union-merged),
-never in settings. `Game.restore()` returns null on anything malformed; a v1 (vs-computer) save
-is declined, not misread.
+`isInProgress()` returns `false` even mid-rack (Escoba's class of the contract, not Ball Run's):
+the between-throws state is the stable state of skeeball, `ui.js` snapshots it to
+`gamehub.skeeball.save.v1` after **every settled ball**, and the gallery's Play button becomes
+"Resume rack · N/9" while a snapshot is banked. A ball actually in flight resolves in under two
+seconds and is deliberately not part of the saved state — the throw a player abandons mid-air was
+theirs to abandon, and the ball is only spent when it settles, so resuming re-serves it.
 
-## Stats
+`immersive: true`: `.sk-root` is `position: fixed; inset: 0` at `z-index: 1` (Pinball's shape),
+so the hub's floating back button rides on top; `.sk-hud` carries `padding-left: 76px` and the
+gallery `padding-top: 84px` to clear it.
 
-Unchanged surface: `recordSkeeball(boardId, extras)` once per finished rack in `_finish()`;
-`sk` sub-counters (`played/won/lost/tied/balls/points/bestGame/bestThrow/hundreds/fifties/
-boards/unlocked`) with `won/lost/tied` FROZEN from the vs-computer era (THE LAW rule 5). All
-three mandatory surfaces exist (`game-stats.js`, `players-agg.js` `src.sk` branch,
-`game-stats-ui.js`); `players-agg.test.mjs`'s structural guard fails the build if any goes
-missing. Skeeball is in the `SOLO` set and off the leaderboard while `devOnly`.
+## Files
 
-## Tests
+| File | Role |
+|---|---|
+| `js/boards.js` | the machine registry: identity, look tokens, physics tune, scoring geometry, unlock chain. Pure |
+| `js/physics.js` | the deterministic ball simulation: lane roll, the hump, flight, face capture, sink. Pure, no rng at all |
+| `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
+| `js/render.js` | the canvas: one perspective camera, cached static machine art, live ball/flash/popup layer |
+| `js/howto.js` | the How To Play sheet content (repo pattern, `tic-tac-toe/CLAUDE.md`) |
+| `js/strings.js` | the EN/ES dictionary |
+| `js/ui.js` | DOM shell, the swipe, storage, records panel, the hub module contract |
+| `js/test.js` | headless engine tests incl. the reachability sweep and the soak (wired into `run-all-tests.mjs`) |
 
-```
-node skeeball/js/test.js        the physics and the rules (81 assertions)
-node test-arcade-scores.mjs     the shared score/unlock layer
-node test-visual.mjs skeeball   light/dark/reduced, both hosts, and a real touch flick that must score
-```
+The first three are DOM-free and that is load-bearing: `node skeeball/js/test.js` plays hundreds
+of throws without constructing an element, and the same determinism is why the tuning is testable
+at all.
 
-`test.js`'s heart is the **[KNOWN-BUG PROBE] CORRECT BOUNCING** block, the reference clip as
-assertions: rim hits on 25%+ of a throw grid, every rimmed ball still ends in a hole, deflections
-that change the outcome exist (the clip's 40-rim into the 20), a high-ring clip that rattles
-0.8s+ and settles low exists, and no bounce ever adds energy. Around it: determinism
-frame-for-frame, ZERO timeouts across dense (v, dir) sweeps of every machine, every scoring
-throw ending inside its own hole, the hand-units ladder (order, step sizes, casual rack
-140-340, zeros < 4%, slam < aim), every ring winnable via `findThrow`, and the rack/multiplier/
-unlock/save rules.
+## The machine and its physics
 
-`test-visual.mjs`'s skeeball PLAY probe asks the ENGINE (through the real flick mapping) for the
-40's speed band and flicks with real touch; it must land real points.
+World coords: x lateral, y down the alley, z up; the lane bed is z = 0. The model, in the order
+the ball experiences it (all constants live in `boards.js`'s per-machine `physics`/`scoring`,
+nothing is hardcoded in `physics.js`):
 
-## History that still binds (kept from the pre-physics builds)
+- **Lane** — rolls with friction, banks off the side rails.
+- **The hump** — climbing costs `g·lipHeight` of speed²/2; a ball that cannot pay **rolls back
+  to the player and is not spent** (`'returned'`), exactly like a real alley.
+- **Flight** — off the lip at `launchAngle` (~47°), under gravity.
+- **The face** — an inclined plane (~65°). Land softly (`|vn| <= captureVn`) and the zone under
+  the ball takes it: the twin 100 pockets first, then the concentric rings by distance from the
+  ring centre (50 innermost, 10 outermost), then the gutter. Land hot and it bounces once; the
+  second contact always settles. Short balls die in the pit for zero; past the net is zero.
 
-- **The ball is never deleted in mid-air, never fades** (Matt, 2026-08-11: *"you just have it
-  disappear... I HATE that"*). The sim ends every flight in a hole or back at the player's feet.
-- **The score callout is a small rising number at the ball's actual final position**, never a
-  starburst, never over a target's centre.
-- **The how-to is the animated carousel pattern** (`yahtzee/js/howto.js` is the model), and its
-  demo throws are real `simulate()` runs — the tutorial physically cannot demonstrate a flight
-  the game would resolve differently. Don't reintroduce a static sheet (*"Yours is dogshit"*).
-- **The aim guide shows direction only.** Power is decided at the instant of release; a live
-  power gauge is wrong at the only moment that matters.
-- **No random scatter on the player's throw.** Determinism is what makes practice real. The
-  sim's variety comes from real dynamics, not dice.
-- **isInProgress() is the AUTOSAVE/RESUME meaning and always returns false** (root CLAUDE.md,
-  "The module contract"): leaving mid-rack is lossless.
+**The power curve is the game**, and `test.js`'s reachability sweep pins its shape: rings come up
+in order (10 → 30 → 50) as power climbs, an overshoot descends the far side (40 → 30 → 20, never
+more), the 100s need near-full power AND committed sideways aim (a straight ball can never score
+100 — asserted), and a feeble roll comes back. Retune in `boards.js` freely, but run
+`node skeeball/js/test.js` before anything else: it is the only thing that will tell you a tweak
+quietly killed the 100 pockets or the rollback.
 
-## Not done, on purpose
+The renderer projects everything through one pinhole camera (`P()` in `render.js`), so the lane's
+convergence, the ellipses the rings become, and the arc of a lob are the same geometry the
+physics computed. Static machine art is cached per size (`paintStatic`); if you add art that
+changes during play it does NOT belong there. Reduced motion drops particles and the flight
+trail, never the ball.
 
-- **No multiplayer** — same standing note as before: Matt's stated end goal is a hub-wide
-  turn-based multiplayer layer with direct challenges; do not build a one-off here.
-- **`stars` is a placeholder** for machine two until the real ladder's references arrive.
-  Machines three through ten are boards.js entries waiting on references.
-- **No sound.** Nothing in this repo ships audio yet; the rim clack wants a hub-wide decision.
+## The records panel (the four numbers every machine shows)
+
+Per Matt's spec, each machine displays: the **top score by ANY player**, the current player's
+**all-time best**, their **best today**, and **the score they just rolled**. Where each one lives:
+
+- **Top score (anyone)**: derived at read time — `readPlayersOnce()` → `aggregatePlayers()` →
+  `appWideBest(rows, 'skeeball', 'sk', boardId)` (`js/arcade-scores.js`; there is deliberately no
+  shared `highscores/` node — see that file's header). Local history is merged over it so an
+  unsynced device still shows its own truth. Async; the panel renders local-first and fills in.
+- **Your best / today**: `bestOn` / `todayBestOn` over the player's own `sk.boards[boardId]`
+  (the daily best is a date-keyed map that never resets — arcade-scores' header explains why).
+- **Just rolled**: the rack-over sheet, plus a session-only "Last game" slot on the machine card
+  (deliberately not persisted: the durable copies already live in the daily map and bests).
+
+"NEW BEST" pills on the rack-over sheet compare against what stood BEFORE the rack was recorded.
+
+## Persistence and THE LAW
+
+**The stats id `skeeball` and sub-counter `sk` predate this rewrite and carry real plays.**
+Everything this build writes goes through the SAME shared plumbing the old one used, so that
+history keeps accumulating rather than being orphaned:
+
+- `recordSkeeball(boardId, { score, balls, hundreds, fifties, bestThrow, at })` in
+  `js/game-stats.js` — called exactly once per finished rack (`recorded` guard; every write in
+  the store is additive, so a double call would silently inflate). `byDiff` buckets by board id;
+  the first machine's id is **`classic`**, which is also `recordSkeeball`'s own fallback id —
+  frozen forever (rule 5). Rename a machine's display name freely; never its id.
+- Per-machine records and unlocks ride `sk.boards` / `sk.unlocked` via `js/arcade-scores.js`
+  (counters add, bests `Math.max`, each DAY takes the max, unlocks union across devices).
+- The frozen vs-computer fields (`sk.won`/`lost`/`tied`, from the pre-2026-08-11 build) are
+  untouched: never incremented, never cleared, still shown by My Stats when non-zero.
+- This game's own keys hold nothing earned: `gamehub.skeeball.v1` is one preference and
+  `gamehub.skeeball.save.v1` is a mid-rack snapshot that is cleared only AFTER the rack it
+  describes has been recorded to the shared store. Nothing in this folder's storage can lose
+  anything, because nothing earned lives in it (Pinball's model).
+- Item 7's three edits (`ensureSk`/`recordSkeeball`, the My Stats screen, the `players-agg.js`
+  branch) all predate this rewrite and were left as they are; `players-agg.test.mjs` carries the
+  regression case.
+
+The leaderboard row is deliberately absent while the game is admin-only (`GAME_META` in
+`js/leaderboard-ui.js` says so in place; `players-agg.test.mjs`'s `OFF_THE_BOARD` checks the
+claim). The My Stats tab is deliberately PRESENT and not devOnly — family members may have real
+plays from the hours the old build was live, and hiding the tab would make their own history
+invisible (rule 1; the comment on the `TABS` row records this).
+
+## Adding the next machine
+
+1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,
+   untranslated), `taglineKey` (+ its `{en,es}` strings), `look`, `physics`, `scoring`, and
+   `unlock: { board: '<previous id>', score: N }`.
+2. Run `node skeeball/js/test.js` — the sweep and soak run against every board in the list, and
+   the unlock chain tests are already written (they currently exercise a synthetic future list).
+3. `ui.js` needs nothing: the gallery, unlock checks (`unlocksEarned` → `unlockSkeeballBoard`),
+   records panel and renderer are all board-generic. The unlock write is additive and merged as
+   a union across devices, so a machine earned anywhere is earned everywhere.
+4. Nothing in `sw.js` changes (no per-board assets). Update THIS file's header, which currently
+   says one machine exists.
+
+## Testing
+
+- `node skeeball/js/test.js` — 36 assertions: determinism, the reachability sweep (every hole,
+  gutter, rollback), the power-curve shape, left/right symmetry, a 600-throw soak (settles, in
+  bounds, legal values only), the nine-ball rules through the real API, the recorder payload
+  shape, snapshot/restore, and the unlock chain.
+- `node test-game-conventions.mjs` — the shared checklist (viewport, touch, overlays, name gate,
+  module contract, listener balance, dictionary, the layout-class collision rule).
+- `node test-visual.mjs skeeball` — the only suite that LOOKS at it. Its PLAY probe swipes the
+  real lane with real touch through full racks and asserts the score moved and the rack recorded.
+  There is no separate MOTION probe for the same reason as Pinball: everything that moves is
+  drawn into one canvas, so the canvas-sampling check lives inside the PLAY probe.
+
+## Things a future session will want to know
+
+- **No sound, no audio layer** — the arcade-cabinet precedent (Matt on Pinball, 2026-08-11:
+  "Delete the sound option. No sound."). Nothing here constructs an AudioContext.
+- The warm dark look is the same in both hub themes on purpose (Ball Run/Hill Climb/Pinball's
+  class); there is no `:root.gh-dark` branch in `skeeball.css`.
+- The swipe measures the RELEASE flick (the last ~130ms), not the whole gesture — the wind-up is
+  grip, not power. Power normalises against the stage height so a phone and a desktop feel alike.
+- `physics.js` has no randomness at all. If a future machine wants scatter, thread a seeded rng
+  through `startThrow` and keep `simulateThrow` deterministic — the test suite depends on it.
+- Machine names (`THE CLASSIC`) are proper nouns and stay untranslated, like STARHUB.
