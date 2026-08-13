@@ -181,10 +181,13 @@ function stepFlight(board, st) {
     st.events.push({ type: 'impact', vn: Math.abs(st.vz) });
     return startSinkGutterPit(st);
   }
-  // The back net.
+  // The backstop. A ball thrown hard enough to smack it drops down onto the top of the
+  // field and rolls away down the outer board - which is a 10, not a zero: on the real
+  // machine power past the sweet spot stops paying, but it does not wipe you out.
   if (st.y >= P.cageY - R) {
     st.events.push({ type: 'cage' });
-    return startSinkGutterPit(st);
+    return settleTo(board, st, { hole: '10', value: 10,
+      cu: board.scoring.hole10.u, cv: board.scoring.hole10.v }, 0.95);
   }
 
   // The scoring face: plane through (0, faceY0, 0), tilted faceTilt from horizontal, normal
@@ -209,61 +212,53 @@ function stepFlight(board, st) {
   }
 }
 
-/** Where on the face did it land, and what does that score? */
+/** Where on the face did it land, and what does that score? The real classic layout: cups
+ *  first (100s, 50, 40, 30 - the 50 overlaps the big ring's top arc, so cups win), then the big
+ *  ring's 20, then the corner gutters' 0, and everything else on the board rolls down the outer
+ *  field for the 10. Every ball that reaches the board scores SOMETHING unless it lands in a
+ *  bottom corner - that is what makes it skeeball. */
 function zoneAt(board, u, v) {
   const S = board.scoring;
-  for (const p of S.pockets) {
-    if (Math.hypot(u - p.u, v - p.v) <= p.r) return { hole: p.id, value: p.value, cu: p.u, cv: p.v };
+  for (const c of S.cups) {
+    if (Math.hypot(u - c.u, v - c.v) <= c.r) return { hole: c.id, value: c.value, cu: c.u, cv: c.v };
   }
-  const d = Math.hypot(u, v - S.ringCenterV);
-  for (const ring of S.rings) {
-    if (d <= ring.r) {
-      // Settle point: straight down-slope from the landing spot to the ring channel's depth,
-      // so the sink animation rolls the way a real ball rolls.
-      const ang = Math.atan2(v - S.ringCenterV, u);
-      const mid = Math.max(0.02, ring.r - 0.03);
-      return { hole: `r${ring.value}`, value: ring.value, cu: Math.cos(ang) * mid, cv: S.ringCenterV + Math.sin(ang) * mid };
-    }
+  if (Math.hypot(u - S.bigRing.u, v - S.bigRing.v) <= S.bigRing.R) {
+    return { hole: '20', value: 20, cu: S.hole20.u, cv: S.hole20.v };
   }
-  return null;                                             // off the rings - the gutter
+  if (v <= S.corner0.vMax && Math.abs(u) >= S.corner0.uMin) {
+    return { hole: 'corner0', value: 0, cu: Math.sign(u) * (board.physics.faceW / 2 - 0.06), cv: 0.02 };
+  }
+  return { hole: '10', value: 10, cu: S.hole10.u, cv: S.hole10.v };
 }
 
 function capture(board, st, u, v) {
   const zone = zoneAt(board, u, v);
-  if (!zone) return startSinkGutterRoll(board, st, u, v);
+  // A cup swallows the ball on the spot; a 20 / 10 / corner ball visibly rolls down the board
+  // to its drain hole, so the roll gets a longer settle than a plunk.
+  const isCup = zone.hole !== '10' && zone.hole !== '20' && zone.hole !== 'corner0';
+  settleTo(board, st, zone, isCup ? 0.42 : 0.8);
+  if (zone.value > 0) st.events.push({ type: 'capture', hole: zone.hole, value: zone.value, u, v });
+  else st.events.push({ type: 'gutter' });
+}
+
+/** Begin the scripted settle: ease from where the ball is to its zone's hole, just below the
+ *  face plane, and score on arrival. */
+function settleTo(board, st, zone, dur) {
   const P = board.physics;
   const sinT = Math.sin(P.faceTilt), cosT = Math.cos(P.faceTilt);
   st.phase = 'sink';
   st.sink = {
     kind: 'hole',
-    t: 0, dur: 0.42,
+    t: 0, dur,
     fx: st.x, fy: st.y, fz: st.z,
     tx: zone.cu,
     ty: P.faceY0 + zone.cv * cosT + 0.06 * sinT,           // just through the face
-    tz: zone.cv * sinT - 0.06 * cosT,
+    tz: Math.max(zone.cv * sinT - 0.06 * cosT, P.pitZ),
     value: zone.value, hole: zone.hole,
   };
-  st.events.push({ type: 'capture', hole: zone.hole, value: zone.value, u, v });
 }
 
-/** Missed the rings: roll down the face into the return, worth nothing. */
-function startSinkGutterRoll(board, st, u, v) {
-  const P = board.physics;
-  const sinT = Math.sin(P.faceTilt), cosT = Math.cos(P.faceTilt);
-  st.phase = 'sink';
-  st.sink = {
-    kind: 'roll',
-    t: 0, dur: 0.7,
-    fx: st.x, fy: st.y, fz: st.z,
-    tx: u * 0.8,
-    ty: P.faceY0 + 0.02 * cosT,
-    tz: P.pitZ + R,
-    value: 0, hole: 'gutter',
-  };
-  st.events.push({ type: 'gutter' });
-}
-
-/** Died short (pit floor) or spent (cage): drop where it is, worth nothing. */
+/** Died in the gutter void behind the hump: too weak a lob. The honest zero. */
 function startSinkGutterPit(st) {
   st.phase = 'sink';
   st.sink = {

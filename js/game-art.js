@@ -580,25 +580,27 @@ export const GAME_ART = {
                <circle cx="76" cy="10" r="1.4"/><circle cx="88" cy="10" r="1.4"/><circle cx="100" cy="10" r="1.4"/>
                <circle cx="112" cy="10" r="1.4"/><circle cx="120" cy="10" r="1.4"/>
              </g>
-             <path d="M38 18 L122 18 L130 52 L30 52 Z" fill="#f3e4c2"/>
-             <g fill="none" stroke-width="2.6">
-               <circle cx="80" cy="37" r="13.2" stroke="#c73a2e"/>
-               <circle cx="80" cy="37" r="9.2" stroke="#e8d3a4"/>
-               <circle cx="80" cy="37" r="5.4" stroke="#c73a2e"/>
-             </g>
-             <circle cx="80" cy="37" r="2.6" fill="#1d1712"/>
+             <path d="M36 18 L124 18 L132 54 L28 54 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
+             <ellipse cx="80" cy="40" rx="21" ry="15" fill="none" stroke="#f2ece0" stroke-width="3.4"/>
+             <ellipse cx="80" cy="40" rx="21" ry="15" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
              <g>
-               <circle cx="47" cy="25" r="4.6" fill="#1d1712" stroke="#c73a2e" stroke-width="2"/>
-               <circle cx="113" cy="25" r="4.6" fill="#1d1712" stroke="#c73a2e" stroke-width="2"/>
+               <circle cx="49" cy="25" r="5" fill="#221a12" stroke="#f2ece0" stroke-width="2.6"/>
+               <circle cx="111" cy="25" r="5" fill="#221a12" stroke="#f2ece0" stroke-width="2.6"/>
+               <circle cx="49" cy="25" r="6.4" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
+               <circle cx="111" cy="25" r="6.4" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
              </g>
-             <path d="M30 52 L130 52 L152 90 L8 90 Z" fill="#a86f38"/>
-             <path d="M30 52 L8 90 L2 90 L26 52 Z" fill="#54301a"/>
-             <path d="M130 52 L152 90 L158 90 L134 52 Z" fill="#54301a"/>
-             <path d="M64 90 L72 52 M96 90 L88 52" stroke="#7c4d22" stroke-width="1.2" fill="none"/>
-             <path d="M33 53 L127 53 L129 57 L31 57 Z" fill="#c98a49"/>
+             <g>
+               <circle cx="80" cy="27" r="4.6" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
+               <circle cx="80" cy="36" r="5.1" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
+               <circle cx="80" cy="45" r="5.6" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
+             </g>
+             <path d="M28 54 L132 54 L152 90 L8 90 Z" fill="#a86f38"/>
+             <path d="M28 54 L8 90 L2 90 L24 54 Z" fill="#54301a"/>
+             <path d="M132 54 L152 90 L158 90 L136 54 Z" fill="#54301a"/>
+             <path d="M64 90 L71 54 M96 90 L89 54" stroke="#7c4d22" stroke-width="1.2" fill="none"/>
+             <path d="M31 55 L129 55 L131 59 L29 59 Z" fill="#c98a49"/>
              <circle cx="80" cy="74" r="7" fill="#f6ecda"/>
              <circle cx="77.6" cy="71.6" r="2.2" fill="#fffdf5"/>
-             <path d="M80 84 L80 88" stroke="#f6ecda" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
            </svg>`,
   // The retired original build's tile, kept verbatim under its new key (hub id skeeball-old).
   skeeball_old: `<svg viewBox="0 0 160 90" aria-hidden="true">
