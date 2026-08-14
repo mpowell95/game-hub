@@ -70,19 +70,49 @@ export const BOARDS = [
       laneLen: 0.80,
       laneW: 0.66,
       bedThick: 0.06,         // slab thickness for every floor/wall box
-      humpLen: 0.30,          // the rising quarter-pipe...
-      // ...as segment angles; the last is the launch angle. FLATTENED 2026-08-14, from a 0.62
-      // rad (35 degree) ramp that threw the ball clean over the board: 31 of 51 throws never
-      // touched the scoring face at all and 25 of 51 finished against the back wall. Skeeball is
-      // a ball ROLLING up a slope, so the ramp's job is a short hop across the trough onto the
-      // bottom of the face - not a launch over it. Re-run tune-ladder.mjs after touching these.
-      humpAngles: [0.07, 0.14, 0.22, 0.30],
+      humpLen: 0.30,          // the rising kicker. SHORT as well as steep: the launch ANGLE is
+                              // what creates the arc, but the ramp's HEIGHT decides whether the
+                              // player can see past it. At 0.30 long this crest stood 0.20m up,
+                              // 0.13m proud of the board's bottom edge, and from a camera behind
+                              // the ball it hid the 20 and the 10 completely (sight.mjs measures
+                              // the clearance: -0.088m). Halving the length halves the crest and
+                              // keeps every angle. Re-run sight.mjs if this or the camera moves.
+      // ...as segment angles; the last one IS the launch angle, and it is the most load-bearing
+      // number on this machine.
+      //
+      // THE RULE: the launch angle must EXCEED `boardTilt`, or there is no arc at any power.
+      // Range up the slope for a projectile onto an incline is
+      //     R = 2 v^2 cos(t) sin(t - a) / (g cos^2(a))
+      // which goes to zero at t = a and negative below it. A ball launched shallower than the
+      // face it is flying at simply cannot get above that face: it meets the bottom edge and
+      // rolls from there, at every power, forever.
+      //
+      // Which is exactly what shipped on 2026-08-14. Chasing a max-power ramp that threw the
+      // ball clean over the board, this was flattened to 0.30 rad against a 0.56 rad board -
+      // and `tune-ladder.mjs --touch` reported the result as "101 of 101 touched the scoring
+      // face" and called it a win. Matt, next morning: *"The ball doesn't go in the air. It hits
+      // a tiny bump rather than a ramp that shoots it in the air. Regardless of how hard I throw
+      // the ball, it touches the very bottom of the scoring board 100% of the time."* Measured:
+      // peak clearance over the face 0.6-3.5cm, airborne 0.00-0.01s, and 0 of 21 throws first
+      // touched the board above v=0.10.
+      //
+      // 0.88 rad (50 degrees) clears the board's tilt by 18 and gives a real skeeball arc: the
+      // ball leaves the lip, flies 20-35cm clear of the face for a third of a second, and comes
+      // down between v=0.03 (weakest) and v=0.86 (hardest) - so more than half of all throws now
+      // drop straight into a cup without touching the board at all, which is the shot the game
+      // is FOR. Run `measure-arc.mjs` after touching these, not just `tune-ladder.mjs`.
+      humpAngles: [0.15, 0.30, 0.44, 0.59, 0.74, 0.88],
       troughLen: 0.24,        // the catch pit between the hump's crest and the board - wide
                               // enough that a ball flying back off the board's lip drops in and
                               // meets the hump's back side as a wall, instead of skipping the
                               // gap and rolling home down the lane
       troughDepth: 0.17,
-      boardLipY: 0.07,        // the board's bottom edge height
+      // The board's bottom edge height. RAISED from 0.07 on 2026-08-14: a ramp steep enough
+      // to throw the ball has a crest, and at 0.07 that crest stood proud of the board and hid
+      // the 20 and the 10 from a camera behind the ball. On a real cabinet the playfield starts
+      // ABOVE the ramp's lip for exactly this reason. sight.mjs measures the clearance; keep it
+      // positive whenever the ramp, the board or the camera moves.
+      boardLipY: 0.20,
       boardTilt: 0.56,        // ~32 degrees: a bowl to roll around, not a wall to fall down
       boardW: 0.78,           // wider than the lane, like the real cabinet's flared board - and
                               // wide enough that the channel between the ring and the rails
@@ -120,7 +150,7 @@ export const BOARDS = [
       // mouth radius (a wider mouth takes longer to cross, so it catches faster balls): 0.45
       // with r 0.060 and 0.80 with r 0.075 measure as the same ladder, and the smaller mouths
       // are the ones that leave room on the face for a number beside each hole.
-      captureDrop: 0.45,
+      captureDrop: 0.30,
 
       // THE CLASSIC LADDER. Four flush openings up the centreline, evenly spaced, with the twin
       // 100s out in the top corners where only an aimed ball reaches them. The 10 is the
@@ -148,12 +178,12 @@ export const BOARDS = [
       holes: {
         '100L': { u: -0.30, v: 0.88, r: 0.072, value: 100, collarH: 0 },
         '100R': { u: 0.30, v: 0.88, r: 0.072, value: 100, collarH: 0 },
-        c50: { u: 0, v: 0.82, r: 0.060, value: 50, collarH: 0 },
-        c40: { u: 0, v: 0.60, r: 0.060, value: 40, collarH: 0 },
-        c30: { u: 0, v: 0.38, r: 0.060, value: 30, collarH: 0 },
+        c50: { u: 0, v: 0.81, r: 0.076, value: 50, collarH: 0 },
+        c40: { u: 0, v: 0.59, r: 0.076, value: 40, collarH: 0 },
+        c30: { u: 0, v: 0.37, r: 0.076, value: 30, collarH: 0 },
         // Kept as `h20`, not renamed: the id is written into the mid-rack autosave
         // (gamehub.skeeball.save.v1) and old keys are never repurposed (THE LAW rule 5).
-        h20: { u: 0, v: 0.16, r: 0.060, value: 20, collarH: 0 },
+        h20: { u: 0, v: 0.15, r: 0.076, value: 20, collarH: 0 },
       },
       troughTenHalfW: 0.28,   // |x| under this in the trough scores 10; wider is a corner 0
 
@@ -167,8 +197,8 @@ export const BOARDS = [
       // maxSpeed it just reaches the 100s' row. The window is narrow (0.98 m/s wide) and that is
       // the point - the whole of the player's swipe now lands inside it instead of most of it
       // landing past the top of the board.
-      minSpeed: 2.066,
-      maxSpeed: 3.12,
+      minSpeed: 2.45,
+      maxSpeed: 4.60,
       aimMax: 0.15,           // radians of lateral aim. Small because the lane is long: a launch
                               // angle is integrated over ~2.5m of travel before the ball reaches
                               // the top corners, so 0.15 rad already carries it the full 0.30m

@@ -336,7 +336,7 @@ export class Renderer {
     // and seen from a low camera, so a metre up the slope covers far fewer screen pixels than a
     // metre across it. Numbers drawn round come out as letterbox slots. Drawing them stretched
     // along v by this factor makes them land on screen looking like numbers.
-    const STRETCH = 1.9;
+    const STRETCH = 1.8;
     const stencil = (txt, u, v, size, color = '#f7ecd8', ink = 'rgba(20,10,4,0.85)') => {
       x.save();
       x.translate(U(u), V(v));
@@ -398,8 +398,8 @@ export class Renderer {
       // across, so the free band is the 0.10m above a hole - the gap below the lowest one is
       // shared with the 10 slot's own number. Every label is checked against its neighbours'
       // mouths and labels; nothing here may overlap anything.
-      const label = H.value >= 100 ? H.v - 0.10 : H.v + 0.098;
-      stencil(String(H.value), H.u, label, H.value >= 100 ? 0.048 : 0.052, L.ring);
+      const label = H.value >= 100 ? H.v - 0.105 : H.v + 0.102;
+      stencil(String(H.value), H.u, label, H.value >= 100 ? 0.044 : 0.046, L.ring);
     }
 
     // The 10 slot's own number, and the corner 0s. The 0s moved inboard from u = +/-0.33 to
@@ -579,9 +579,16 @@ export class Renderer {
     const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
     const need = Math.max(
       angleOff([0, this.G.ballR, -0.12]),                       // the resting ball
-      angleOff([0, topY + this.G.backboardH + 0.20, topZ]),      // the marquee
+      // the upper case. NOT the marquee`s very top: the board was raised on 2026-08-14 so the
+      // ramp would stop hiding it, which made the machine taller, which made a frame that had to
+      // contain the marquee shrink the playfield. The board is the subject; the marquee may run
+      // off the top.
+      angleOff([0, topY + this.G.backboardH * 0.90, topZ]),
     );
-    let vFov = 2 * need * 1.045;                                 // a little air top and bottom
+    // The margin has to clear the BALL`s radius, not just its centre: angleOff() measures to a
+    // point, and at 1.045 the resting ball sat with its centre 19px from the bottom edge and its
+    // bottom half cut off by it.
+    let vFov = 2 * need * 1.12;
 
     const mid = this.M.faceToWorld(0, this.G.boardLen * 0.45, 0);
     const dist = eye.distanceTo(new THREE.Vector3(mid[0], mid[1], mid[2]));

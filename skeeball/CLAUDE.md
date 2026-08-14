@@ -189,18 +189,47 @@ alone: on a tall phone that produces a vertical field too narrow to hold the thi
 end of it. Measured after: ball on screen at rest and for **0 of 70 flight frames off screen**;
 featureless bottom band **27px (3%)**.
 
-### The ball ROLLS UP the board; it does not fly over it
+### The ball FLIES. Read this before touching the ramp.
 
-The old ramp launched at 0.62 rad (35 degrees) into a lively board: **31 of 51 throws never
-touched the scoring face at all**, 25 of 51 finished against the back wall, 18 of ~20 throws
-scoring 30+ dropped in out of the air, and a real 50 spent part of its flight above the backglass
-casting a shadow on the words NINE BALLS. Skeeball is a ball rolling up a ramp into a hole.
+**The launch angle must EXCEED `boardTilt`.** Range up the slope for a projectile onto an incline
+is `R = 2 v² cos(t) sin(t − a) / (g cos²(a))`, zero at `t = a` and negative below it. A ball
+launched shallower than the face it is flying at cannot get above that face: it meets the bottom
+edge and rolls from there, at every power, forever. That is geometry, not tuning.
 
-Three changes together: a flatter hump (`humpAngles` topping out at 0.30 rad, a short hop across
-the trough onto the bottom of the face), a dead board (`mat.boardRest` 0.26 → 0.08, `boardFric`
-0.34 → 0.62, so it lands and grips instead of bouncing), and the speed-aware capture above.
-Measured after: **101 of 101 touch the face**, 9 of 101 reach the back wall, and a traced throw
-holds `fh` pinned at exactly 0.050 - the ball's own radius - for 0.69m of contact up the slope.
+**This was got wrong twice, in opposite directions, and the second time shipped.** The original
+build launched at 0.62 rad into a lively board and the ball sailed over *everything*: 31 of 51
+throws never touched the face, 25 of 51 died against the back wall, and a real 50 spent part of
+its flight above the backglass. Correcting that, the ramp was flattened to **0.30 rad against a
+0.56 rad board** - and `tune-ladder.mjs --touch` reported it as *"101 of 101 touched the scoring
+face"* and it was written up here as a win. Matt, next morning:
+
+> *"The ball doesn't go in the air. It hits a tiny bump rather than a ramp that shoots it in the
+> air. Regardless of how hard I throw the ball, it touches the very bottom of the scoring board
+> 100% of the time. You have made it impossible for the ball to go off the ramp and land directly
+> in a scoring hole."*
+
+Measured: peak clearance over the face 0.6-3.5cm, airborne 0.00-0.01s, **0 of 21 throws first
+touched the board above v = 0.10**. A metric pointing the wrong way had been optimised to 100%.
+**"Touched the scoring face" is not a virtue** - dropping into a cup out of the air is the shot
+skeeball is FOR. What the first build got wrong was the arc's SHAPE, never that an arc existed.
+
+The shape that works, all four parts load-bearing together:
+
+- **Launch 0.88 rad (50 degrees)**, clearing the board's tilt by 18.
+- **Six ramp segments, not four.** With four the ball met the steep part too abruptly and the exit
+  velocity scattered: 34 flips, 42% repeatable. Six give it room to track the surface: 6 flips,
+  88%. A ramp's job is to be FOLLOWABLE, not just steep.
+- **The ramp stays 0.30 long**, so its crest stands 0.186m up. Shortening it lowers the crest and
+  ruins the launch (that was the 42% case).
+- **So the BOARD is raised instead**: `boardLipY` 0.07 -> 0.20, which is how a real cabinet is
+  built. At 0.07 the crest stood proud of the playfield and hid the 20 and the 10 completely from
+  a camera behind the ball. `sight.mjs` measures that clearance - keep it positive whenever the
+  ramp, the board or the camera moves.
+
+Measured after: **21 of 21 throws get airborne**, peak clearance 8-29cm, 19 of 21 first touch the
+board above v = 0.10, the landing point spreads 0.04 -> 0.97 monotonically with power, and **70 of
+101 straight throws drop into a cup without touching the board at all**. Run `measure-arc.mjs`
+after touching any of it: `tune-ladder.mjs` alone cannot see this defect, which is how it shipped.
 
 ### The dial is a ladder, and its bands were measured, not guessed
 

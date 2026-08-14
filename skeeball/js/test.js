@@ -18,6 +18,7 @@
 import { simulateThrow, startThrow, step, takeEvents, STEP } from './physics.js';
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
+import { buildMachine } from './machine.js';
 
 let passed = 0;
 const failures = [];
@@ -29,6 +30,7 @@ const eq = (label, got, want) => ok(label, JSON.stringify(got) === JSON.stringif
   `got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`);
 
 const board = boardById(DEFAULT_BOARD);
+const M = buildMachine(board.geom);
 const outcomeOf = (power, aim) => {
   const r = simulateThrow(board, { power, aim });
   return r.outcome ? r.outcome.hole : 'returned';
@@ -64,9 +66,67 @@ let sweepSlowest = 0;
       sweepSlowest = Math.max(sweepSlowest, r.time);
     }
   }
-  for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0', 'returned']) {
+  // Every SCORING outcome must be reachable somewhere in the (power, aim) space. `returned` is
+  // deliberately NOT in this list: the classic's minSpeed starts where the 20 starts, so every
+  // throw on this machine is a real throw for real points and nothing rolls back unspent. The
+  // rollback PATH is still exercised - block 6 drives it on a board whose minSpeed sits under
+  // the hump - so it cannot rot; it just is not part of this machine's dial any more.
+  for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
+  }
+  // THE SOFT END OF THE DIAL IS NEVER WASTED. `minSpeed` starts where the 20 starts, so no
+  // straight throw can fail to reach the board - that is the "25 dead steps at the bottom" defect,
+  // pinned. A ball that banks off a side rail on a hard angled fling and comes back is a different
+  // thing entirely: real, rare, and not a wasted end of the dial, so it is allowed and bounded.
+  {
+    let straightRoll = 0;
+    let anyRoll = 0;
+    for (let p = 0; p <= 40; p++) {
+      for (const aim of [0, 0.25, -0.25, 0.5, -0.5, 0.65, -0.65, 0.8, -0.8, 1, -1]) {
+        if (simulateThrow(board, { power: p / 40, aim }).outcome) continue;
+        anyRoll++;
+        if (Math.abs(aim) <= 0.25) straightRoll++;
+      }
+    }
+    ok('no straight throw ever rolls back unspent (the soft end of the dial is real)',
+      straightRoll === 0, `${straightRoll} straight throws rolled back`);
+    ok('a rail carom that comes back stays rare', anyRoll <= Math.ceil(41 * 11 * 0.02),
+      `${anyRoll} of ${41 * 11} rolled back`);
+  }
+
+  // THE BALL MUST GET IN THE AIR. The defect this exists for shipped on 2026-08-14: the ramp was
+  // flattened to 0.30 rad against a 0.56 rad board, which makes an arc geometrically impossible
+  // (see boards.js's humpAngles), and every throw at every power crawled onto the bottom edge of
+  // the face and rolled. Nothing in the suite could see it - the ladder was fine, the scores were
+  // fine, "101 of 101 touched the scoring face" read as a triumph. Skeeball is a ball that flies.
+  ok('the ramp launches STEEPER than the board is tilted (or no arc is possible at all)',
+    Math.max(...board.geom.humpAngles) > board.geom.boardTilt + 0.15,
+    `launch ${Math.max(...board.geom.humpAngles)} rad vs boardTilt ${board.geom.boardTilt} rad`);
+  {
+    // How far up the face is the ball when it FIRST comes down on it? A real throw drops into a
+    // cup or lands high; only a dribble should land on the bottom edge.
+    const landings = [];
+    for (let p = 2; p <= 20; p++) {
+      const st = startThrow(board, { power: p / 20, aim: 0 });
+      let land = null;
+      let guard = 5000;
+      const sT = Math.sin(M.tilt), cT = Math.cos(M.tilt);
+      while (!st.done && guard-- > 0) {
+        step(board, st, STEP);
+        const p2 = st.ball.position;
+        const fv = (p2.y - M.lipY) * sT - (p2.z - M.lipZ) * cT;
+        const fh = (p2.y - M.lipY) * cT + (p2.z - M.lipZ) * sT;
+        if (land === null && fv > 0 && fv < board.geom.boardLen && fh <= board.geom.ballR * 1.12) land = fv;
+      }
+      if (land !== null) landings.push(land);
+    }
+    const high = landings.filter((v) => v > 0.10).length;
+    ok('throws land UP the board, not all on its bottom edge', high >= landings.length * 0.7,
+      `${high} of ${landings.length} first touched above v=0.10`);
+    ok('the landing point spreads across the board with power',
+      landings.length > 4 && Math.max(...landings) - Math.min(...landings) > 0.45,
+      `landings ${Math.min(...landings).toFixed(2)}..${Math.max(...landings).toFixed(2)}`);
   }
   ok('nothing in the sweep needed more than 9s to settle', sweepSlowest < 9,
     `slowest: ${sweepSlowest.toFixed(1)}s`);
@@ -163,7 +223,14 @@ let sweepSlowest = 0;
   ok('the 100 is reachable, at high power with hard aim',
     corner(0.95, 0.95) === 100 || corner(0.95, -0.95) === 100 || corner(1.0, 0.95) === 100,
     `p0.95 a+-0.95 gave ${corner(0.95, 0.95)} / ${corner(0.95, -0.95)}`);
-  ok('the 100 is not on offer at mid power', corner(0.45, 0.95) !== 100 && corner(0.45, -0.95) !== 100);
+  // The 100 needs a real ANGLE, which is the axis its risk lives on. It is deliberately NOT
+  // gated on power any more: since the ramp was made to throw (2026-08-14) a hard-angled ball
+  // banks off the side rail and rides it into the corner, which is the classic bank shot and is
+  // available from mid power up. What must stay true is that a HALF-hearted angle never pays.
+  for (const a of [0.3, 0.45, -0.3, -0.45]) {
+    ok(`a half-angled ball never pays 100 (aim ${a})`,
+      corner(0.85, a) !== 100, `aim ${a} at p0.85 scored ${corner(0.85, a)}`);
+  }
   const missAim = [0.5, 0.6, 0.7].map((a) => corner(0.95, a));
   ok('missing the corner costs the ball (a half-aimed slam does not still pay 50)',
     missAim.every((v) => v < 50), `half-aimed slams scored ${missAim.join('/')}`);
