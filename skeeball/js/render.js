@@ -208,6 +208,21 @@ export class Renderer {
       this.scene.add(wall);
     }
 
+    // THE BIG RING'S WALL - drawn (2026-08-14). machine.js gives the ring real collision
+    // segments whenever `ring.solid !== false`, and v323 turned that on. Nothing in here ever
+    // drew it: the loop above skips every `ringSeg` solid, and no other code path draws the
+    // ring. So v323 shipped an INVISIBLE WALL - the circle still read as flat paint while the
+    // ball bounced off it. Matt found it by playing; every measurement that passed was
+    // describing a machine you could not see.
+    //
+    // Drawn with the same helper the cup rims use, at the ring's own radius and height, so
+    // what is on screen is the wall the ball hits.
+    if (G.ring.solid !== false && G.ringH > 0) {
+      const rim = this._scallopedRim(G.ring.R, G.ringH, 1);
+      this._onFace(rim, G.ring.u, G.ring.v, 0);
+      this.scene.add(rim);
+    }
+
     // Cabinet dressing: side panels, the marquee, its bulbs. Cosmetic only.
     this._cabinet();
   }
