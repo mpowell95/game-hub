@@ -209,7 +209,11 @@ export function buildMachine(G) {
   // Physics treats it as a dead slab; the renderer draws it as sparse wire so it reads true.
   {
     const cageHigh = [top[1] + G.backboardH * 0.68, top[2] - 0.04];       // above the backboard
-    const cageLow = [lipY + 0.60, lipZ - 0.02];                            // over the board's lip
+    // Derived from the BOARD, not a fixed 0.60: the canopy has to clear the highest point of
+    // normal play, and that scales with how tall the board stands. At a fixed 0.60 it was sized
+    // for a 32-degree board and sat inside the flight path of a 45-degree one - 14 to 20 cage
+    // contacts per 21 throws, every one of them a ball knocked out of a legitimate arc.
+    const cageLow = [lipY + G.boardLen * Math.sin(t) * 1.15, lipZ - 0.02];
     const dy = cageLow[0] - cageHigh[0];
     const dz = cageLow[1] - cageHigh[1];
     const ang = Math.atan2(-dy, dz);
@@ -227,7 +231,11 @@ export function buildMachine(G) {
   // a faint sheen; physically dead so a ball that meets it drops into the trough.
   solids.push({
     part: 'glass',
-    pos: [0, 0.95, -(G.laneLen + G.humpLen) + 0.03],
+    // Bottom edge must clear the LAUNCH ARC. The pane used to sit with its lower edge at
+    // y=0.55, which a shallow ramp passed under; a steep one (67.5 deg, crest y 0.43) drives the
+    // ball straight into it and every throw dies on the glass. Raised so the ball leaves the
+    // crest underneath it and it still catches a high ricochet on the way back.
+    pos: [0, 1.15, -(G.laneLen + G.humpLen) + 0.03],
     half: [G.boardW / 2 + railT, 0.4, 0.008],
     rot: null,
   });

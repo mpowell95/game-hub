@@ -220,9 +220,21 @@ let sweepSlowest = 0;
   // THE 100 IS THE RISK. It needs full power and a hard sideways aim, it is worth double the 50,
   // and missing it costs the ball - which is what stops "slam it straight" being the whole game.
   const corner = (p, a) => valueOf(p, a);
-  ok('the 100 is reachable, at high power with hard aim',
-    corner(0.95, 0.95) === 100 || corner(0.95, -0.95) === 100 || corner(1.0, 0.95) === 100,
-    `p0.95 a+-0.95 gave ${corner(0.95, 0.95)} / ${corner(0.95, -0.95)}`);
+  // SEARCHED, not hardcoded: which power reaches the corners depends on the ramp and the
+  // board, and a fixed p0.95 went stale the moment the geometry moved. What must hold is that
+  // the 100 is reachable SOMEWHERE with a hard angle.
+  {
+    let best = null;
+    for (let p = 20; p <= 100; p += 2) {
+      for (const a2 of [0.8, 0.9, 1.0, -0.8, -0.9, -1.0]) {
+        if (valueOf(p / 100, a2) === 100) { best = { p: p / 100, a: a2 }; break; }
+      }
+      if (best) break;
+    }
+    ok('the 100 is reachable with a hard angle', best !== null,
+      'no (power, aim) with |aim| >= 0.8 scored 100');
+    if (best) console.log('        (first at power ' + best.p.toFixed(2) + ', aim ' + best.a + ')');
+  }
   // The 100 needs a real ANGLE, which is the axis its risk lives on. It is deliberately NOT
   // gated on power any more: since the ramp was made to throw (2026-08-14) a hard-angled ball
   // banks off the side rail and rides it into the corner, which is the classic bank shot and is
