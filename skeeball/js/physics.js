@@ -163,6 +163,7 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     nudges: 0,
     emergencyUsed: false,
     troughAt: -1,
+    restAt: -1,        // when the ball first went still on the face (section 3b's region score)
   };
 
   ball.addEventListener('collide', (e) => {
@@ -264,6 +265,35 @@ function substep(st) {
       return;
     }
   } else st.troughAt = -1;
+
+  // 3b. THE PAINTED CIRCLE IS THE 20, AND THE BOARD BELOW IT IS THE 10 (2026-08-14).
+  //     Matt: "Theres a faint circle around the 20, 30, and 40, but you completely dropped it's
+  //     function for some unknown reason... That circle is the 20. It contains the 30 inside it,
+  //     and the 40 inside that. The 10 is the bottom of the square area."
+  //
+  //     The circle was drawn on the board and scored NOTHING - a ball that came to rest on the
+  //     face just sat there until the watchdog walked it off, or drifted down into the trough.
+  //     So the ring is a REGION now: a ball that stops on the board scores by where it stopped.
+  //     Inside the circle is 20, the rest of the board is 10.
+  //
+  //     This is not magnetism and does not touch the standing ban: nothing pulls, steers, slows
+  //     or corrects the ball. It comes to rest wherever it was thrown, and only THEN is the spot
+  //     it chose for itself read off the board. No cup moved and no launch speed changed.
+  if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9 && st.captured == null) {
+    const speed = Math.hypot(vel.x, vel.y, vel.z);
+    if (speed < 0.18) {
+      if (st.restAt < 0) st.restAt = st.t;
+      // Settled, not merely slow at the top of a bounce.
+      if (st.t - st.restAt > 0.35) {
+        const inRing = Math.hypot(f.u - G.ring.u, f.v - G.ring.v) < G.ring.R;
+        const id = inRing ? 'ring20' : 'field10';
+        const value = inRing ? 20 : 10;
+        st.events.push({ type: 'capture', hole: id, value, pos: { x: p.x, y: p.y, z: p.z } });
+        finishAt(st, id, value, 'region');
+        return;
+      }
+    } else st.restAt = -1;
+  } else st.restAt = -1;
 
   // 4. Rolled back home: the hump kept the ball. Not spent; the player just gets it back.
   if (p.z > -0.04 && ball.velocity.z > 0.05 && st.t > 0.4) {

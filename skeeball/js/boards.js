@@ -144,9 +144,9 @@ export const BOARDS = [
       // as a 7.5cm band it fenced the cup cluster off completely, so a rolling ball stopped dead
       // on its front arc and the only route to the 30/40/50 was over the top through the air.
       // machine.js emits no segments for it; render.js draws it into the field texture.
-      ringH: 0,
+      ringH: 0.055,
       ringThick: 0.015,
-      ring: { u: 0, v: 0.44, R: 0.29, solid: false },
+      ring: { u: 0, v: 0.44, R: 0.29, solid: true },
 
       // How low a lipLow cup's DOWN-SLOPE lip sits, as a fraction of its wall height. Moot while
       // every cup is flush (collarH 0) but kept for the next machine, which may want walls.
