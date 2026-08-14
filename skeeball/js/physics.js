@@ -57,7 +57,11 @@ function buildWorld(board) {
   // termination guarantee is physics, not a watchdog. (0.16 was enough grip to park a ball
   // against the band's up-slope face in a three-contact wedge. Real rings don't hold balls.)
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matWood, { friction: 0.3, restitution: 0.28 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matBoard, { friction: 0.32, restitution: 0.42 }));
+  // Board restitution is the knob that decides whether skeeball is LEARNABLE: a livelier board
+  // makes the carom, not the landing, choose the cup, and the straight-power ladder stops being
+  // monotonic (0.35 landed the 40 while 0.45 landed the 30 - the sweep caught it). A real wooden
+  // board is not bouncy; keep this low.
+  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matBoard, { friction: 0.34, restitution: 0.26 }));
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matWall, { friction: 0.04, restitution: 0.5 }));
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matDead, { friction: 0.2, restitution: 0.18 }));
 

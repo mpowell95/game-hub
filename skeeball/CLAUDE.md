@@ -152,10 +152,45 @@ the straight-power ladder (30 → 40 → 50), overshoot paying on average, the >
 bounce events, and the emergency path staying rare.
 
 The renderer (`render.js`, three.js) builds its scene from the SAME `machine.js` description,
-plus paint: the burnt-orange field texture with the zone stencils, value plates on every tube's
-front wall (the field stencils hide behind the tubes from the player's eye line), the cage drawn
-as the sparse wire it stands in for, real directional shadows (the depth cue that makes a hop
-readable). Reduced motion drops popup rise and particles, never the ball.
+plus paint. Reduced motion drops popup rise and particles, never the ball.
+
+### How the cups are drawn, and the three ways it was got wrong first
+
+Matt, on the first cannon-es build: *"Does it look ANYTHING like the screenshots I sent you?"* It
+did not. Every fix below is a rule now, because each replaced something that shipped and failed:
+
+- **The number goes on a PANEL on the cup's front, not wrapped round the tube.** A cylinder's
+  front arc is only a few tens of degrees wide from the player's high viewpoint, so a texture
+  wrapped around the wall loses its outer digits round the curve - "100" rendered as ")0", "50"
+  as "0". Repeating the number around the circumference (the attempt before that) turned every
+  cup into a barrel of digits, half of them mirrored by the far wall seen through the mouth.
+- **Panels are sized off the WALL's height, never the radius**, or a wide cup's panel overhangs
+  its wall and covers the mouth of the next cup down the ladder.
+- **A cup's inside is dark; the big RING's inside is not.** The ring is a fence standing on the
+  board, and giving it the cups' dark interior painted a giant black pit across the playfield.
+- **Nothing is labelled twice.** Value stencils on the field AND panels on the cups produced
+  ghost duplicates beside every cup - the thing that made the board read as numbers scattered
+  on a plank. The field carries only the 10 slot, the corner 0s and a soft target ring.
+- The cage is drawn THIN and pale; heavy dark bars sit between the camera and the board and turn
+  the top half of the screen into a fence. The backboard wears the machine's name, because a
+  blank brown wall at the end of the lane is not an arcade machine.
+- The key light is nearly overhead. A strongly side-lit key threw a hard diagonal shadow band
+  across the playfield that read as dirt on the board.
+
+### Wall heights are a PHYSICS parameter, not a look parameter
+
+Deepening the cups to make them read as cups made the 40 literally unreachable (the 30's back
+wall shielded it) - caught by the sweep, not by eye. Two rules came out of it:
+
+- **Every cup is `lipLow`**: on a real sloped board a cup's down-slope edge sits nearly flush and
+  its up-slope edge stands proud, which is exactly what lets a rolling ball drop in over the
+  front while an overshoot is still caught by the back. Uniform-height walls deep enough to see
+  into are walls the ball cannot cross.
+- **Board restitution decides whether the game is LEARNABLE.** A livelier board lets the carom,
+  not the landing, choose the cup, and the straight-power ladder stops being monotonic (0.35
+  landed the 40 while 0.45 landed the 30). It is 0.26 - a real wooden board is not bouncy.
+- `maxSpeed` is then set so slamming genuinely overshoots: mid power averages ~40, full power
+  ~15. Both facts are asserted, so neither can quietly drift.
 
 ## The records panel (the four numbers every machine shows)
 
