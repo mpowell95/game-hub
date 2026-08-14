@@ -5,8 +5,8 @@ import { startThrow, step } from './skeeball/js/physics.js';
 import { buildMachine } from './skeeball/js/machine.js';
 import { BOARDS } from './skeeball/js/boards.js';
 
-const mn = Number(process.argv[2] || 1.9);
-const mx = Number(process.argv[3] || 3.6);
+const mn = Number(process.argv[2] || BOARDS[0].geom.minSpeed);   // default from boards.js, never a stale literal
+const mx = Number(process.argv[3] || BOARDS[0].geom.maxSpeed);   // default from boards.js, never a stale literal
 const base = BOARDS[0];
 const board = {
   ...base, id: `reach-${mn}-${mx}`,
