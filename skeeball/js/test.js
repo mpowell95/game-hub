@@ -82,13 +82,56 @@ let sweepSlowest = 0;
 
 // --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
 
+// RE-GROUNDED 2026-08-14, the same way the cannon-es swap re-grounded the block before it. A
+// play review measured the shipped ladder and found it unlearnable: 43 of 100 adjacent 0.01
+// power steps flipped the outcome, 30 of the 44 bands were one step wide, the softest 25 steps
+// of the dial ALL scored the floor and so did 12 of the hardest. The rebuild (a flatter ramp, a
+// board the ball lands on and rolls up, and a capture test that asks whether the ball is slow
+// enough to drop in) turns the dial into a ladder. Three old assertions described the dial the
+// player could not use, and are replaced here by what now has to hold:
+//
+//   was: a feeble roll comes back / a dead lob dies in the 10   ->  NO DEAD ZONE AT EITHER END.
+//        Both described the soft end of the dial doing nothing. `minSpeed` now starts where the
+//        20 starts, so the bottom of the swipe is a real throw for real points. The rollback
+//        path itself is untouched in physics.js and still reachable by a machine whose minSpeed
+//        sits under the hump - the classic's simply does not.
+//
+//   was: max power scores worse than mid power (overshoot has a price)  ->  cannot hold at the
+//        same time as "no dead zone at the hard end", and was measured, not assumed. The topmost
+//        cup catches every overshoot: the backboard is dead material, so a slammed ball rebounds
+//        slowly and falls back into the 50 from just above it. The only geometries that DO
+//        punish a slam punish it off a cliff - shrinking the 50 until overshoots miss it turns
+//        the top 26-32 steps of the dial into a flat 10, which is the exact defect the rebuild
+//        exists to remove. So the price moved to where it can be paid gradually: the 100 is
+//        worth double the 50 and needs full power AND a hard sideways aim, and missing it costs
+//        you the ball. Slamming straight is the SAFE line now, not the optimal one.
 {
   const at = (p) => outcomeOf(p, 0);
-  ok('a feeble roll comes back to the player (not spent)', at(0.02) === 'returned');
-  ok('a dead lob rolls into the 10 slot, like the real bottom slot', at(0.16) === 'h10',
-    `p 0.16 straight gave ${at(0.16)}`);
-  // Straight balls past the rollback essentially always score - the classic's floor. (A rim-out
-  // to a corner 0 is real physics and allowed, but it must be the exception.)
+  const ladder = [];
+  for (let p = 0; p <= 100; p++) ladder.push(valueOf(p / 100, 0));
+
+  // NO DEAD ZONE AT EITHER END: neither the softest nor the hardest end of the dial may be a run
+  // of the floor value. This is the headline defect of the pre-rebuild build, in one assertion.
+  let low = 0;
+  for (const v of ladder) { if (v === 10 || v === 0) low++; else break; }
+  let high = 0;
+  for (let i = ladder.length - 1; i >= 0; i--) { if (ladder[i] === 10 || ladder[i] === 0) high++; else break; }
+  ok('no dead zone at the soft end of the dial (was 25 steps)', low <= 6, `${low} floor steps at the bottom`);
+  ok('no dead zone at the hard end of the dial (was 12 steps)', high <= 6, `${high} floor steps at the top`);
+
+  // THE BANDS ARE WIDE ENOUGH TO AIM AT. A player must be able to repeat a swipe and repeat the
+  // result; that is impossible if the outcome flips every step.
+  let flips = 0;
+  for (let i = 1; i < ladder.length; i++) if (ladder[i] !== ladder[i - 1]) flips++;
+  ok('the ladder is not noise: few flips between adjacent power steps (was 43/100)', flips <= 22,
+    `${flips} flips in 100 steps`);
+  const bands = [];
+  for (const v of ladder) { const l = bands[bands.length - 1]; if (l && l.v === v) l.n++; else bands.push({ v, n: 1 }); }
+  ok('few one-step bands (was 30 of 44)', bands.filter((b) => b.n === 1).length <= 12,
+    `${bands.filter((b) => b.n === 1).length} of ${bands.length} bands are one step wide`);
+
+  // Straight balls essentially always score - the classic's floor. (A rim-out to a corner 0 is
+  // real physics and allowed, but it must be the exception.)
   let zeros = 0;
   for (let p = 3; p <= 20; p++) if (valueOf(p / 20, 0) === 0) zeros++;
   ok('straight power almost always scores (at most one corner-0 fluke in the ladder)', zeros <= 1,
@@ -102,17 +145,28 @@ let sweepSlowest = 0;
   ok('straight power finds the 30, then the 40, then the 50, in that order',
     p30 !== null && p40 !== null && p50 !== null && p30 < p40 && p40 < p50,
     `first powers: c30=${p30} c40=${p40} c50=${p50}`);
-  // Overshoot pays ON AVERAGE: slamming full power must score worse than the aimed mid-power
-  // band. (A single slammed ball rattling into the 50 is real; a STRATEGY of slamming is not.)
+
+  // HARDER GOES FURTHER. The whole point of the dial: averaged over each quarter, a harder
+  // quarter must not score less than a softer one.
   const mean = (lo, hi) => {
     let s = 0, n = 0;
     for (let p = lo; p <= hi; p += 0.02) { s += valueOf(p, 0); n++; }
     return s / n;
   };
-  const mid = mean(0.55, 0.7);
-  const slam = mean(0.86, 1.0);
-  ok('max power scores worse than mid power on average (overshoot has a price)', slam < mid,
-    `mid-power mean ${mid.toFixed(1)} vs slam mean ${slam.toFixed(1)}`);
+  const q = [mean(0.00, 0.24), mean(0.25, 0.49), mean(0.50, 0.74), mean(0.75, 1.00)];
+  ok('harder goes further: each quarter of the dial outscores the one below it',
+    q[0] < q[1] && q[1] < q[2] && q[2] < q[3], `quarter means ${q.map((v) => v.toFixed(1)).join(' < ')}`);
+
+  // THE 100 IS THE RISK. It needs full power and a hard sideways aim, it is worth double the 50,
+  // and missing it costs the ball - which is what stops "slam it straight" being the whole game.
+  const corner = (p, a) => valueOf(p, a);
+  ok('the 100 is reachable, at high power with hard aim',
+    corner(0.95, 0.95) === 100 || corner(0.95, -0.95) === 100 || corner(1.0, 0.95) === 100,
+    `p0.95 a+-0.95 gave ${corner(0.95, 0.95)} / ${corner(0.95, -0.95)}`);
+  ok('the 100 is not on offer at mid power', corner(0.45, 0.95) !== 100 && corner(0.45, -0.95) !== 100);
+  const missAim = [0.5, 0.6, 0.7].map((a) => corner(0.95, a));
+  ok('missing the corner costs the ball (a half-aimed slam does not still pay 50)',
+    missAim.every((v) => v < 50), `half-aimed slams scored ${missAim.join('/')}`);
 }
 
 // --- 3b. the footage contract: rattle is real, settle always ends ------------------------------
@@ -201,10 +255,22 @@ let sweepSlowest = 0;
     return evs;
   };
 
-  // A rolled-back ball is not spent.
-  const back = play(0.02, 0);
-  ok('rolled-back ball: not spent, no score', g.ballsUsed === 0 && g.score === 0
-    && back.some((e) => e.type === 'ballBack'));
+  // A rolled-back ball is not spent. The CLASSIC can no longer produce one - its minSpeed starts
+  // where the 20 starts, so there is no wasted end of the dial (see block 3) - but the rule is
+  // about game.js, not about one machine's tuning, and a machine that serves under the hump must
+  // still get its ball back. So drive it on a board that CAN roll one back, which also keeps the
+  // physics path itself covered instead of quietly going dead.
+  {
+    const slow = { ...board, id: 'test-rollback', geom: { ...board.geom, minSpeed: 0.55, maxSpeed: 0.6 } };
+    const g2 = new SkeeballGame('classic');
+    g2.board = slow;
+    g2.throwBall({ power: 0, aim: 0 });
+    const evs = [];
+    for (let i = 0; i < 240 * 15 && g2.ball; i++) { g2.update(STEP); evs.push(...g2.takeEvents()); }
+    ok('rolled-back ball: not spent, no score', g2.ballsUsed === 0 && g2.score === 0
+      && evs.some((e) => e.type === 'ballBack'),
+      `ballsUsed=${g2.ballsUsed} score=${g2.score} sawBallBack=${evs.some((e) => e.type === 'ballBack')}`);
+  }
 
   // Score a ladder sourced from the reachability sweep itself, so this block can never drift
   // from the engine's real behavior: one of each outcome the sweep found, padded with repeats.

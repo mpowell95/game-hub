@@ -100,8 +100,14 @@ export function buildMachine(G) {
   });
 
   // --- the big ring's band ----------------------------------------------------------------------
+  // `G.ring.solid === false` makes the ring PAINT rather than a wall, and the classic board now
+  // sets it (2026-08-14). As a 7.5cm wall it fenced off the whole cup cluster: a ball rolling up
+  // the face hit its front arc and stopped dead, so the only way into the 30/40/50 was to lob
+  // over the top - which is exactly the "never touches the board" trajectory this rebuild
+  // removed. The white ring is still on the board, drawn into the field texture where the real
+  // machine's painted target circle is; it just no longer blocks the ladder.
   const ringSegs = [];
-  {
+  if (G.ring.solid !== false) {
     const N = G.ringSegments;
     const cu = G.ring.u;
     const cv = G.ring.v;
@@ -138,10 +144,17 @@ export function buildMachine(G) {
       const pu = H.u + rr * Math.cos(phi);
       const pv = H.v + rr * Math.sin(phi);
       // A lipLow cup is the real tilted tube: its mouth faces the incoming ball, so the
-      // down-slope lip is LOW (a rolling ball hops it in) and the up-slope lip is tall (an
-      // overshoot is caught). Height blends around the circle; the renderer draws the same tilt.
+      // down-slope lip is LOW (a rolling ball rides straight over it) and the up-slope lip is
+      // tall (an overshoot is caught). Height blends around the circle; render.js draws this
+      // same profile, vertex for vertex, so the cup you see is the cup the ball hits.
+      //
+      // `G.lipLowFrac` is how low the front gets, and it is now near zero (2026-08-14). At the
+      // old 0.35 the front lip stood ~18mm proud of the face, which to a 50mm ball rolling at
+      // walking pace is a step to be hit, not a rim to be crossed - it stopped the ladder before
+      // it started.
+      const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
       let h = H.collarH;
-      if (H.lipLow) h = H.collarH * (0.35 + 0.65 * (Math.sin(phi) + 1) / 2);
+      if (H.lipLow) h = H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
       solids.push({
         part: 'cupSeg',
         cup: id,

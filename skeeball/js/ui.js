@@ -108,6 +108,7 @@ export class SkeeballUI {
     this.lastScore = null;             // this session's most recent finished rack, per board id
     this.overlay = null;
     this.swipe = null;                 // active pointer samples while a swipe is live
+    this._pending = null;              // a captured ball's score, held until it has settled
     this.msgTimer = 0;
     this.top = {};                     // boardId -> { score, name } once the network answers
 
@@ -372,22 +373,53 @@ export class SkeeballUI {
     const samples = this.swipe.samples;
     this.swipe = null;
     if (!this.game || !this.game.canThrow() || samples.length < 2) return;
+    const first = samples[0];
     const end = samples[samples.length - 1];
-    // Measure over the swipe's last ~130ms: that is the release flick, which is what a real
-    // skeeball roll is - the wind-up before it is grip, not power.
-    let ref = samples[0];
-    for (const smp of samples) { if (end.t - smp.t <= 130) { ref = smp; break; } }
-    const dt = Math.max(16, end.t - ref.t) / 1000;
-    const dx = end.x - ref.x;
-    const dy = end.y - ref.y;                  // negative = upward
-    if (-dy < 24) return;                      // not a throw - a tap or a sideways wander
-    const up = -dy / dt;                       // px/s
+
+    // IS IT A THROW? Decided on the WHOLE gesture, never on the last few milliseconds. The old
+    // build asked whether the final 130ms carried 24px, which silently threw away any swipe a
+    // player made slowly: measured 2026-08-14, two of five deliberate swipes produced no ball,
+    // no message and no flicker of anything - including a 464px push up the full length of the
+    // lane over 900ms, which is the most natural "roll it gently" gesture there is. Anything
+    // that plainly travelled up the lane is a throw now, and how fast it went is the POWER, not
+    // the price of admission.
+    const totalUp = first.y - end.y;                       // + = upward
+    if (totalUp < 20) return;                              // a tap or a sideways smudge
+    const totalMs = Math.max(16, end.t - first.t);
+
+    // POWER = release speed, with the whole swipe's average as a floor. The release window is
+    // what a flick is, but a long deliberate push that eases off at the very end is still a
+    // throw of that push's strength, not of its last inch.
+    let ref = first;
+    for (const smp of samples) { if (end.t - smp.t <= 200) { ref = smp; break; } }
+    const releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
+    const wholeUp = totalUp / (totalMs / 1000);
+    const up = Math.max(releaseUp, wholeUp);               // px/s
     const H = Math.max(320, this.el.stage.getBoundingClientRect().height);
-    // Normalised against the stage height so phone and desktop feel alike: a gentle push
-    // (~0.8 stage-heights/s) is a soft roll, a brisk flick (~2 H/s) finds the rings, and only
-    // a genuine fling (3+ H/s) has the power the corner pockets ask for.
-    const power = Math.min(1, up / (H * 3.0));
-    const aim = Math.max(-1, Math.min(1, Math.atan2(dx, -dy) / 0.42));
+    // Normalised against the stage height so phone and desktop feel alike. Full power at ~1.75
+    // stage-heights/second: a slow deliberate push lands near the bottom of the dial, an ordinary
+    // swipe near the middle, a real flick at the top. Nothing is wasted at either end - at power
+    // 0 the ball still just reaches the 20 and at power 1 it just reaches the 100s' row
+    // (boards.js minSpeed/maxSpeed), so every part of the dial buys a different cup.
+    const power = Math.max(0, Math.min(1, up / (H * 1.75)));
+
+    // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
+    // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
+    // and a linear map made a 5-degree wobble the difference between the 40 and the gutter. The
+    // exponent keeps a nearly-straight swipe nearly straight and still lets a deliberate
+    // 30-degree diagonal fling reach the corner 100s.
+    //
+    // This shapes the INPUT - what direction the player asked for - and nothing else. Once
+    // thrown, the ball is the engine's and is never touched again: no magnetism, no correction.
+    // The divisor is set by what a THUMB CAN REACH, not by a round number. A swipe starts near
+    // the middle of a 393px screen and runs ~450px up it, so the widest diagonal available is
+    // about 22 degrees - anything steeper runs off the side of the phone before it has travelled
+    // far enough to be a throw. At the old 0.42 rad divisor the corner 100s needed a 30-degree
+    // swipe that physically did not fit on the screen, which is why they read as unreachable.
+    // 0.38 rad puts full aim exactly at the edge of what the hand can do.
+    const raw = Math.max(-1, Math.min(1, Math.atan2(end.x - first.x, totalUp) / 0.38));
+    const aim = Math.sign(raw) * (raw * raw);
+
     if (this.game.throwBall({ power, aim })) {
       if (this.el.hint) { this.el.hint.classList.add('is-gone'); }
     }
@@ -421,25 +453,37 @@ export class SkeeballUI {
     const Rr = this.renderer;
     for (const ev of this.game.takeEvents()) {
       switch (ev.type) {
-        case 'capture': {
-          const gold = ev.value >= 100, big = ev.value >= 50;
+        // THE BALL SETTLES FIRST, THEN THE SCORE. `capture` fires the instant the ball's centre
+        // crosses the mouth, which is ~300ms before it has finished dropping through the collar
+        // - so announcing there put the number on screen while the ball was still visibly
+        // rattling, and the throw was over before it looked over. All this does now is light the
+        // rim the ball is going into, which is what a real machine does at exactly this moment.
+        // The number, the burst and the marquee wait for `ballDone`.
+        case 'capture':
           Rr.flashHole(ev.hole);
-          Rr.popupAt(ev.pos, `+${ev.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
-          if (big) Rr.burstAt(ev.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
-          if (gold) Rr.celebrate();
+          this._pending = { pos: ev.pos, value: ev.value };
           break;
-        }
         case 'gutter':
           Rr.flashHole('gutter');
           this._say(t('msg_gutter'));
           break;
         case 'returned':
           this._say(t('msg_returned'));
+          this._pending = null;
           break;
-        case 'ballDone':
+        case 'ballDone': {
+          const at = this._pending;
+          this._pending = null;
+          if (at) {
+            const gold = at.value >= 100, big = at.value >= 50;
+            Rr.popupAt(at.pos, `+${at.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+            if (big) Rr.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
+            if (gold) Rr.celebrate();
+          }
           this._paintHud();
           writeSave(this.game.snapshot());   // the autosave that makes leaving lossless
           break;
+        }
         case 'rackOver':
           this._rackOver(ev.result);
           break;

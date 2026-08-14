@@ -62,7 +62,7 @@ gallery `padding-top: 84px` to clear it.
 | `js/vendor/` | **vendored battle-tested libraries** (2026-08-13, Matt's explicit instruction - see below): `cannon-es.js` (rigid-body physics, ESM), `three.module.min.js` + `three.core.min.js` (renderer). Committed files, no build step, no network fetch. Never hand-edit them |
 | `js/machine.js` | the machine's GEOMETRY, once, in metres: every floor, wall, band segment and collar as data. physics.js builds cannon bodies from it and render.js builds three meshes from it, so the wall you see IS the wall the ball hits |
 | `js/boards.js` | the machine registry: identity, look tokens, the `geom` block (sizes, angles, launch speeds, hole layout), unlock chain. Pure |
-| `js/physics.js` | the ball, simulated by cannon-es: materials/contact tuning, hole capture, trough scoring, the dish, the watchdog. Deterministic, no rng |
+| `js/physics.js` | the ball, simulated by cannon-es: materials/contact tuning, speed-aware hole capture, trough scoring, the watchdog (NO magnetism - see below). Deterministic, no rng |
 | `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
 | `js/render.js` | the machine on screen, drawn by three.js: scene from machine.js + cosmetic dressing, lights/shadows, painted textures, ball mesh synced from the physics body |
 | `js/howto.js` | the How To Play sheet content (repo pattern, `tic-tac-toe/CLAUDE.md`) |
@@ -126,16 +126,28 @@ nothing scripts a reaction any more:
   launch speed range) and the four ContactMaterials at the top of `physics.js` (friction and
   restitution per surface pair - wood, board, slick steel walls, dead backboard/cage).
 - **Hole capture is the one non-engine rule**, and it is what a hole IS: when the ball's centre
-  is over an opening at face level, its collision mask drops the board slab and GRAVITY takes it
-  through the mouth, still guided by the collar. No teleport, no canned sink.
+  is over an opening at face level AND IT IS SLOW ENOUGH TO DROP IN, its collision mask drops the
+  board slab and GRAVITY takes it through the mouth. No teleport, no canned sink. The speed test
+  (added 2026-08-14) is pure kinematics: in the time the ball takes to cross the mouth, does it
+  fall far enough to be past the lip? Its own inward velocity counts, so a ball dropping into a
+  cup goes in even at speed while a fast roll skims across and carries on UNCHANGED - not
+  deflected, not slowed, not steered. That single test is what makes distance up the slope choose
+  the cup, which is the whole game. Without it the first mouth a rolling ball crossed always
+  swallowed it, so nothing above the bottom cup was reachable by rolling at all.
 - **The trough scores like the real bottom slot**: centre band = 10, corners = 0. A dead lob
   rolls into the 10, exactly like the real machine; the honest zero is the corner.
-- **The dish**: the real board's lower bowl is dished so a slow ball inside the ring always
-  finds the 20. Our slab is flat, so the dish is applied as the force it exerts (gentle pull
-  toward the 20 for slow balls inside the ring only - fast rattles are never steered).
-- **The 100s are the real tilted tubes** (`lipLow`): low front lip a rolling corner ball can
-  hop in over, tall back lip that catches overshoot. Reachable only with a genuine sideways
-  fling (~p0.78/a0.65-0.75 is the sweet spot the sweep finds); never with a straight ball.
+- **NO MAGNETISM, EVER. This is a standing, permanent ban.** Balls never curve toward holes, are
+  never corrected and are never assisted; a ball goes where it was thrown. A "dish" used to live
+  in `physics.js` section 5 - a constant pull toward the 20's mouth for slow balls inside the
+  ring, justified as modelling a real dished bowl - and it was deleted on 2026-08-14 because it
+  was exactly that: a ball being steered into a hole it was not thrown at. A ball that runs out
+  of speed on the slope now does the honest thing, rolls back down and feeds the 10. **If a power
+  band needs widening, widen it in the GEOMETRY.** The input side (how a swipe becomes a power and
+  an aim, in `ui.js`) is a different thing and is fair game; the ball, once thrown, is not.
+- **The 100s are corner holes reached by AIMING**, never by a straight ball: full power plus a
+  hard sideways fling (aim >= ~0.9 at power >= 0.70; 18 of 189 cells in the aim x power grid).
+  Miss the angle and the ball is gone for 0 or 10 - that risk is what stops "slam it straight"
+  from being the whole game, since a straight slam reliably banks the 50.
 - **The spacing rule** (in `boards.js`, learned twice): every gap between two pieces of
   furniture is either MERGED or wider than a ball plus margin. An in-between gap is a pocket,
   and a three-contact pocket LOCKS the cannon solver completely - velocity writes get solved
@@ -148,49 +160,112 @@ nothing scripts a reaction any more:
 Deterministic: fixed 1/240 step, fixed solver iterations, naive broadphase (stable pair order),
 no rng anywhere. One fresh world per throw, so nothing leaks between balls. Retune freely, but
 run `node skeeball/js/test.js` first - the sweep pins reachability of every hole, the rollback,
-the straight-power ladder (30 → 40 → 50), overshoot paying on average, the >2s rattle, real
-bounce events, and the emergency path staying rare.
+the straight-power ladder (30 → 40 → 50), **no dead zone at either end of the dial**, **few flips
+between adjacent power steps**, **harder-goes-further quarter by quarter**, **the 100 needing
+power AND aim (and costing the ball when the angle is missed)**, real bounce events, and the
+emergency path staying rare. `tune-ladder.mjs` and `measure-reach.mjs` at the repo root are the
+bench tools those numbers came from; run `tune-ladder.mjs` after touching anything in `geom`.
 
 The renderer (`render.js`, three.js) builds its scene from the SAME `machine.js` description,
 plus paint. Reduced motion drops popup rise and particles, never the ball.
 
-### How the cups are drawn, and the three ways it was got wrong first
+## The 2026-08-14 rebuild: the camera, the throw, the cups, the trajectory
 
-Matt, on the first cannon-es build: *"Does it look ANYTHING like the screenshots I sent you?"* It
-did not. Every fix below is a rule now, because each replaced something that shipped and failed:
+A play review drove the shipped build through a real browser with real touch and measured four
+things that no static check could see. Each fix below is a rule now.
 
-- **The number goes on a PANEL on the cup's front, not wrapped round the tube.** A cylinder's
-  front arc is only a few tens of degrees wide from the player's high viewpoint, so a texture
-  wrapped around the wall loses its outer digits round the curve - "100" rendered as ")0", "50"
-  as "0". Repeating the number around the circumference (the attempt before that) turned every
-  cup into a barrel of digits, half of them mirrored by the far wall seen through the mouth.
-- **Panels are sized off the WALL's height, never the radius**, or a wide cup's panel overhangs
-  its wall and covers the mouth of the next cup down the ladder.
-- **A cup's inside is dark; the big RING's inside is not.** The ring is a fence standing on the
-  board, and giving it the cups' dark interior painted a giant black pit across the playfield.
-- **Nothing is labelled twice.** Value stencils on the field AND panels on the cups produced
-  ghost duplicates beside every cup - the thing that made the board read as numbers scattered
-  on a plank. The field carries only the 10 slot, the corner 0s and a soft target ring.
-- The cage is drawn THIN and pale; heavy dark bars sit between the camera and the board and turn
-  the top half of the screen into a fence. The backboard wears the machine's name, because a
-  blank brown wall at the end of the lane is not an arcade machine.
-- The key light is nearly overhead. A strongly side-lit key threw a hard diagonal shadow band
-  across the playfield that read as dirt on the board.
+### The camera stands BEHIND the ball
 
-### Wall heights are a PHYSICS parameter, not a look parameter
+It used to sit at z = -0.34, which is past the serve spot at z = -0.12 - the camera was in front
+of the ball. Measured: the ball waiting to be thrown projected to **y = -3875px on a 773px
+canvas**, i.e. nowhere near the screen, and stayed off screen for the **first 250ms of every
+throw**. Most of the lane was behind the viewer too, so the bottom 187px (22%) of the screen -
+the part the player is told to swipe on - was a featureless brown field.
 
-Deepening the cups to make them read as cups made the 40 literally unreachable (the 30's back
-wall shielded it) - caught by the sweep, not by eye. Two rules came out of it:
+The camera is now at (0, 0.42, 0.62) looking down the lane, and `resize()` derives the FOV from
+**the two points that must always be visible** (the resting ball, and the top of the marquee),
+widening only if the board would be cut off sideways. Never go back to fitting the board's width
+alone: on a tall phone that produces a vertical field too narrow to hold the thing at the near
+end of it. Measured after: ball on screen at rest and for **0 of 70 flight frames off screen**;
+featureless bottom band **27px (3%)**.
 
-- **Every cup is `lipLow`**: on a real sloped board a cup's down-slope edge sits nearly flush and
-  its up-slope edge stands proud, which is exactly what lets a rolling ball drop in over the
-  front while an overshoot is still caught by the back. Uniform-height walls deep enough to see
-  into are walls the ball cannot cross.
-- **Board restitution decides whether the game is LEARNABLE.** A livelier board lets the carom,
-  not the landing, choose the cup, and the straight-power ladder stops being monotonic (0.35
-  landed the 40 while 0.45 landed the 30). It is 0.26 - a real wooden board is not bouncy.
-- `maxSpeed` is then set so slamming genuinely overshoots: mid power averages ~40, full power
-  ~15. Both facts are asserted, so neither can quietly drift.
+### The ball ROLLS UP the board; it does not fly over it
+
+The old ramp launched at 0.62 rad (35 degrees) into a lively board: **31 of 51 throws never
+touched the scoring face at all**, 25 of 51 finished against the back wall, 18 of ~20 throws
+scoring 30+ dropped in out of the air, and a real 50 spent part of its flight above the backglass
+casting a shadow on the words NINE BALLS. Skeeball is a ball rolling up a ramp into a hole.
+
+Three changes together: a flatter hump (`humpAngles` topping out at 0.30 rad, a short hop across
+the trough onto the bottom of the face), a dead board (`mat.boardRest` 0.26 → 0.08, `boardFric`
+0.34 → 0.62, so it lands and grips instead of bouncing), and the speed-aware capture above.
+Measured after: **101 of 101 touch the face**, 9 of 101 reach the back wall, and a traced throw
+holds `fh` pinned at exactly 0.050 - the ball's own radius - for 0.69m of contact up the slope.
+
+### The dial is a ladder, and its bands were measured, not guessed
+
+The shipped power→outcome map was noise: **43 of 100 adjacent 0.01 power steps flipped the
+outcome, 30 of the 44 bands were one step wide**, and two real throws 0.002 of power apart - 0.6px
+of thumb travel over the measurement window - scored 30 and 10. The softest 25 steps of the dial
+all scored the floor, and so did 12 of the hardest.
+
+What fixed it, in order of how much each was worth:
+
+- **Every cup is FLUSH** (`collarH: 0`). Walls of 14-20mm read as nothing on screen and behaved
+  as a step to a 50mm ball; crossing three of them on the way to the 50 scattered the outcome.
+  Measured: 34 flips with 20mm walls, 17 with none, on otherwise identical geometry. This
+  reverses the old "wall heights are a physics parameter, deepen them to read as cups" rule -
+  the numbers live on the BOARD now, so nothing needs a wall to be legible.
+- **The big ring is PAINT, not a wall** (`ring.solid: false`). As a 7.5cm band it fenced the cup
+  cluster off completely: a rolling ball stopped dead on its front arc, and the only route to the
+  30/40/50 was over the top through the air.
+- **Power is spent as ENERGY** (`physics.js` interpolates v², not v). Distance up the face goes as
+  the square of arrival speed, so a dial that was linear in speed was quadratic in the thing the
+  player aims with.
+- **`minSpeed`/`maxSpeed` bracket the LADDER**, nothing more: at minSpeed the ball just reaches
+  the 20, at maxSpeed it just reaches the 100s' row. The old 1.0-7.4 window spent most of the
+  player's range past the top of the board.
+- **The hole positions sit on the measured reach curve.** `measure-reach.mjs` runs the engine with
+  the holes taken OUT and records how far up the face each power setting gets; the four cups are
+  placed on that curve at even intervals. Do not guess these.
+
+Measured after: **14 flips, 15 bands, mean band 6.7 steps, no dead zone at either end**, every
+value reachable, quarter-by-quarter means 23 < 31 < 43 < 50 (harder goes further), max flight
+1.31s (was 3.99s). `tune-ladder.mjs` prints all of it against the old numbers; run it after
+touching any of `geom`.
+
+**One trade is deliberate and was measured both ways.** The old build asserted "max power scores
+worse than mid power (overshoot has a price)". That cannot hold at the same time as "no dead zone
+at the hard end": the topmost cup catches every overshoot, because the backboard is dead material
+so a slammed ball rebounds slowly and falls back into the 50 from just above it. Every geometry
+that DOES punish a slam punishes it off a cliff - shrinking the 50 until overshoots miss it turns
+the top 26-32 steps of the dial into a flat 10, which is the defect the rebuild exists to remove.
+So the price moved to the aim axis: a straight slam banks the 50 safely, and the 100 is worth
+double but needs an angle that costs you the ball when missed.
+
+### Every number is painted on the BOARD
+
+Each cup used to wear a flat number panel placed at `z = radius * 0.995` - a flat plate set inside
+a curved wall of that same radius. A plane cannot sit inside a cylinder without intersecting it,
+so the wall cut a curved bite out of **every number on the board**: the 50, 40, 30, the ring's 20
+and both 100s all rendered with their bottom halves missing. The mouth was laid flat on the face
+while the tube was tilted -0.32 rad, so each black opening slid out from under its own cup and
+read as a blob beside the next one down. And `if (!H.collarH) continue` left the 20 with no tube
+and no number at all.
+
+Now: values are stencilled into the field texture, up-slope of their own mouth, pre-stretched by
+1.9 along v to survive the board's foreshortening. Nothing can occlude them because they are part
+of the board. The corner 0s moved inboard to u = +/-0.30 and `resize()`'s fit margin clears them,
+so they are no longer sliced by the frame edges. `_scallopedRim()` is kept for a future machine
+that wants raised rims - it follows `machine.js`'s own per-segment height profile, so a wall that
+IS drawn matches the wall the ball hits.
+
+### The ball settles first, then the score
+
+`capture` fires the instant the ball's centre crosses the mouth, ~325ms before it has finished
+dropping through. Announcing there put the number on screen while the ball was still visibly
+rattling. `capture` now only lights the rim; the `+N`, the burst and the marquee flash wait for
+`ballDone`. Measured: capture at 853ms, settle at 1178ms, popup at 1178ms.
 
 ## The records panel (the four numbers every machine shows)
 

@@ -61,11 +61,22 @@ export const BOARDS = [
     geom: {
       ballR: 0.05,
       ballMass: 0.18,
-      laneLen: 1.15,          // player's end of the lane to the foot of the hump
+      // Player's end of the lane to the foot of the hump. SHORTER than a real alley on purpose
+      // (Matt, 2026-08-13: the board is the main aspect of the game and must dominate the
+      // frame), and shortened again on 2026-08-14 when the camera moved behind the ball: from
+      // back there a 1.15m lane put a third of the screen's height between the ball and the
+      // board with nothing in it. It also decides how much a launch angle spreads sideways
+      // before the ball reaches the face, so `aimMax` is tuned against this number.
+      laneLen: 0.80,
       laneW: 0.66,
       bedThick: 0.06,         // slab thickness for every floor/wall box
       humpLen: 0.30,          // the rising quarter-pipe...
-      humpAngles: [0.14, 0.30, 0.46, 0.62], // ...as segment angles; the last is the launch angle
+      // ...as segment angles; the last is the launch angle. FLATTENED 2026-08-14, from a 0.62
+      // rad (35 degree) ramp that threw the ball clean over the board: 31 of 51 throws never
+      // touched the scoring face at all and 25 of 51 finished against the back wall. Skeeball is
+      // a ball ROLLING up a slope, so the ramp's job is a short hop across the trough onto the
+      // bottom of the face - not a launch over it. Re-run tune-ladder.mjs after touching these.
+      humpAngles: [0.07, 0.14, 0.22, 0.30],
       troughLen: 0.24,        // the catch pit between the hump's crest and the board - wide
                               // enough that a ball flying back off the board's lip drops in and
                               // meets the hump's back side as a wall, instead of skipping the
@@ -76,7 +87,12 @@ export const BOARDS = [
       boardW: 0.78,           // wider than the lane, like the real cabinet's flared board - and
                               // wide enough that the channel between the ring and the rails
                               // passes a ball freely (the spacing rule below)
-      boardLen: 0.95,         // metres up the slope
+      // Metres up the slope. The extra above the 50 is not spare: it is the room the 50's
+      // painted number needs (render.js puts each value up-slope of its own mouth, and at 0.95
+      // the top one was sliced by the board's edge), and it is what lets a genuine slam run past
+      // everything and reach the back wall - 9 of 101 straight throws do, which is the rare
+      // hard-throw outcome it should be rather than the 25-of-51 the old ramp produced.
+      boardLen: 1.02,
       railH: 0.11,
       laneRailH: 0.05,
       backboardH: 0.8,        // tall, like the real cabinet's upper case: a max-power ball must
@@ -84,48 +100,92 @@ export const BOARDS = [
                               // contact there once redirected the ball all the way home; the
                               // max-power arc tops out around y=1.25 and the top edge must clear it)
       ringSegments: 24,
-      cupSegments: 12,
+      cupSegments: 14,
       collarThick: 0.014,
-      ringH: 0.075,           // the big ring band's height off the board. These wall heights are
-                              // DEEP on purpose: a real cup is a ring you can see into, and a
-                              // shallow band foreshortens to nothing from the player's eye line,
-                              // taking its painted number with it. Physics-relevant - re-run the
-                              // reachability sweep after changing any of them.
+      // The big painted target circle. `solid: false` (2026-08-14) makes it PAINT, not a wall:
+      // as a 7.5cm band it fenced the cup cluster off completely, so a rolling ball stopped dead
+      // on its front arc and the only route to the 30/40/50 was over the top through the air.
+      // machine.js emits no segments for it; render.js draws it into the field texture.
+      ringH: 0.075,
       ringThick: 0.015,
-      ring: { u: 0, v: 0.42, R: 0.27 },   // the big ring, low on the board
+      ring: { u: 0, v: 0.47, R: 0.32, solid: false },
 
-      // THE REAL CLASSIC LAYOUT (2026-08-13, from Matt's reference photos): the 30/40 cups
-      // stacked inside the big ring, the 50 merged into its top arc, the twin 100s tucked into
-      // the top corners AGAINST the rails, the 20 a flush hole low inside the ring. The 10 is
-      // the full-width slot the board's bottom edge feeds (physics.js scores the trough), 0s are
-      // its corners. Every hole is a REAL opening: capture drops the ball through the board.
+      // How low a lipLow cup's DOWN-SLOPE lip sits, as a fraction of its wall height. Moot while
+      // every cup is flush (collarH 0) but kept for the next machine, which may want walls.
+      lipLowFrac: 0.06,
+
+      // How far the ball must drop, as a fraction of its radius, to count as fallen IN
+      // (physics.js's capture test). This is the ladder's master knob: bigger = harder to fall
+      // in = the ball runs further up the board before a cup can take it. It trades against the
+      // mouth radius (a wider mouth takes longer to cross, so it catches faster balls): 0.45
+      // with r 0.060 and 0.80 with r 0.075 measure as the same ladder, and the smaller mouths
+      // are the ones that leave room on the face for a number beside each hole.
+      captureDrop: 0.45,
+
+      // THE CLASSIC LADDER. Four flush openings up the centreline, evenly spaced, with the twin
+      // 100s out in the top corners where only an aimed ball reaches them. The 10 is the
+      // full-width slot the board's bottom edge feeds (physics.js scores the trough) and the 0s
+      // are its corners.
       //
-      // Spacing rule (learned from a parked ball, then re-learned from a solver-locked one):
-      // every gap between two pieces of furniture is either MERGED (touching, like the 100s
-      // into the top corners and the 50 into the band) or wider than a ball's diameter plus
-      // margin (>= 0.105) - anything in between is a pocket that can jam a ball on the slope,
-      // and a three-contact jam locks the solver completely. Every neighbour pair below has
-      // been checked against this rule; re-check ALL of them before moving anything.
+      // The cup a throw wins is chosen by HOW FAR UP THE FACE IT ROLLS, because a ball only
+      // falls into a mouth it is crossing slowly enough to drop through (physics.js, section 2).
+      // So these v positions ARE the power ladder: moving one moves a band. They were not
+      // guessed - measure-reach.mjs runs the engine with the holes taken OUT and records how far
+      // up the face each power setting gets, and these sit on that curve at even intervals.
+      //
+      // EVERY CUP IS FLUSH (collarH 0), which is the single biggest thing that made the ladder
+      // learnable. Walls of 14-20mm read as nothing on screen and behaved as a step to a 50mm
+      // ball: crossing three of them on the way to the 50 scattered the outcome, and the
+      // measured ladder went from 34 flips with 20mm walls to 17 with none, on otherwise
+      // identical geometry. A hole in a board is also what the reference photos show. The
+      // numbers are painted on the FACE (render.js `_paintField`), so nothing needs a wall to
+      // be legible either. Re-run tune-ladder.mjs after moving anything here.
+      //
+      // The old spacing rule (gaps either merged or >= 0.105, or a ball can jam in the pocket
+      // between two pieces of furniture) is satisfied trivially now: with no walls there is no
+      // furniture on the face to jam against, and tune-ladder.mjs reports 0/101 throws needing
+      // the jam watchdog.
       holes: {
-        '100L': { u: -0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.08, lipLow: true },
-        '100R': { u: 0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.08, lipLow: true },
-        // lipLow on EVERY cup: on a real sloped board a cup's down-slope edge sits nearly flush
-        // and its up-slope edge stands proud, which is what lets a rolling ball drop in over the
-        // front while an overshoot is still caught by the back. Uniform-height walls this deep
-        // made the 40 literally unreachable - the sweep caught it.
-        c50: { u: 0, v: 0.64, r: 0.064, value: 50, collarH: 0.058, lipLow: true },
-        c40: { u: 0, v: 0.49, r: 0.068, value: 40, collarH: 0.055, lipLow: true },
-        c30: { u: 0, v: 0.37, r: 0.074, value: 30, collarH: 0.052, lipLow: true },
-        h20: { u: 0, v: 0.22, r: 0.07, value: 20, collarH: 0 },
+        '100L': { u: -0.30, v: 0.88, r: 0.072, value: 100, collarH: 0 },
+        '100R': { u: 0.30, v: 0.88, r: 0.072, value: 100, collarH: 0 },
+        c50: { u: 0, v: 0.82, r: 0.060, value: 50, collarH: 0 },
+        c40: { u: 0, v: 0.60, r: 0.060, value: 40, collarH: 0 },
+        c30: { u: 0, v: 0.38, r: 0.060, value: 30, collarH: 0 },
+        // Kept as `h20`, not renamed: the id is written into the mid-rack autosave
+        // (gamehub.skeeball.save.v1) and old keys are never repurposed (THE LAW rule 5).
+        h20: { u: 0, v: 0.16, r: 0.060, value: 20, collarH: 0 },
       },
       troughTenHalfW: 0.28,   // |x| under this in the trough scores 10; wider is a corner 0
 
-      // The swipe's speed range (m/s at the serve). Slower than minSpeed cannot climb the hump
-      // and rolls back unspent; maxSpeed deliberately overshoots the 50 so power costs points.
-      minSpeed: 1.0,
-      maxSpeed: 7.4,
-      aimMax: 0.32,           // radians of lateral aim (~18 degrees) - the corner 100s need a
-                              // genuine sideways fling that rides the rail into the corner
+      // The swipe's speed range (m/s at the serve), and the whole reason the old build had dead
+      // zones at both ends of the thumb: it ran 1.0 to 7.4, of which everything below 1.4 could
+      // not reach the board and everything above ~3.5 flew off it. The useful window was a
+      // sliver in the middle and the player's whole range mapped onto it at random. These two
+      // numbers now bracket the LADDER: minSpeed just makes the 20, maxSpeed just clears the
+      // 50 into the 100s' row.
+      // numbers now bracket the LADDER exactly: at minSpeed the ball just reaches the 20, at
+      // maxSpeed it just reaches the 100s' row. The window is narrow (0.98 m/s wide) and that is
+      // the point - the whole of the player's swipe now lands inside it instead of most of it
+      // landing past the top of the board.
+      minSpeed: 2.066,
+      maxSpeed: 3.12,
+      aimMax: 0.15,           // radians of lateral aim. Small because the lane is long: a launch
+                              // angle is integrated over ~2.5m of travel before the ball reaches
+                              // the top corners, so 0.15 rad already carries it the full 0.30m
+                              // out to a 100. The old 0.32 put full aim a metre off the board.
+
+      // Contact model overrides (defaults and the reasoning live in physics.js). A board that
+      // the ball LANDS on and rolls up has to be dead, not lively.
+      mat: {
+        boardFric: 0.62,
+        boardRest: 0.08,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.42,
+        deadFric: 0.24,
+        deadRest: 0.10,
+      },
     },
   },
 

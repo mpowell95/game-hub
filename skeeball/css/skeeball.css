@@ -294,7 +294,10 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  /* Clear of the BALL. Since the camera moved behind the serve spot (2026-08-14) there is a
+     ball sitting in the bottom of the frame waiting to be thrown, and a hint pinned to the
+     bottom edge sat directly on top of it. Lift it to just above the ball. */
+  padding-bottom: max(118px, calc(env(safe-area-inset-bottom, 0px) + 104px));
 }
 
 /* Ornament: fades after the first throw. Out of flow concerns: inline-block, no width constraint. */

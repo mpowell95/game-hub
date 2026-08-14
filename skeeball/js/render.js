@@ -28,10 +28,26 @@ export class Renderer {
     this.scene.fog = new THREE.Fog(this.look.wall, 4.5, 9);
 
     this.camera = new THREE.PerspectiveCamera(44, 1, 0.05, 12);
-    // Low and close: the board must DOMINATE the frame (Matt's standing rule), with the lane
-    // entering from the bottom edge and the marquee just clearing the top.
-    this.camera.position.set(0, 0.62, -0.34);
-    this.camera.lookAt(0, 0.34, -2.05);
+    // WHERE THE PLAYER STANDS. Behind the ball, looking down the lane at the board - the view
+    // you have with a ball in your hand.
+    //
+    // It used to sit at z = -0.34, which is PAST the serve spot at z = -0.12: the camera was in
+    // front of the ball, so the ball waiting to be thrown projected to y = -3875px on a 773px
+    // canvas (measured 2026-08-14) and was simply not on screen. There was no ball anywhere
+    // until 250ms into a throw, when one appeared mid-flight at the bottom edge. Most of the
+    // lane was behind the viewer too, so the bottom 187px of the screen - the 22% the player is
+    // told to swipe on - was a flat brown field with nothing in it.
+    //
+    // z = +0.52 puts the eye 0.64m behind the ball. The lane now runs away from the player, the
+    // ball sits on it from the moment the rack starts, and the board still fills the frame
+    // because resize() below fits the FOV to it from wherever this camera is.
+    // The height is the compromise the framing turns on. Higher looks down on the board and
+    // shows its face square, but pushes the near ball further under the frame and forces a wider
+    // FOV to keep it, which shrinks everything. Lower keeps the ball cheaply but flattens the
+    // board towards edge-on. 0.42 holds the board readable while the ball sits comfortably in
+    // the bottom third.
+    this.camera.position.set(0, 0.42, 0.62);
+    this.camera.lookAt(0, 0.26, -1.70);
 
     // Software GL (SwiftShader - headless test runs, GPU-less desktops) cannot afford shadows,
     // antialiasing or a retina buffer; a real phone GPU takes all three without noticing.
@@ -149,52 +165,37 @@ export class Renderer {
       this.scene.add(plane);
     }
 
-    // The big ring band: a WHITE wall carrying the 20 painted around it, thin dark rim. On the
-    // real machine (and the reference app) the big ring is a scoring ring like any other, so it
-    // wears its number the same way the cups do.
-    {
-      const ring = G.ring;
-      const mesh = this._tube(ring.R, G.ringH, 20, false);
-      this._onFace(mesh, ring.u, ring.v, G.ringH / 2);
-      this.scene.add(mesh);
-      const lip = new THREE.Mesh(
-        this._track(new THREE.TorusGeometry(ring.R, G.ringThick * 0.26, 8, 72)),
-        this._mat({ color: L.ringLip, roughness: 0.5 }),
-      );
-      this._onFace(lip, ring.u, ring.v, G.ringH, true);
-      this.scene.add(lip);
-    }
-
-    // The cups: fat open tubes, white, navy lip, dark mouth sunk into the face. lipLow cups
-    // (the 100s) tilt down-slope so the mouth faces the player, like the real tilted tubes.
+    // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face,
+    // with its white rim, its navy trim and its VALUE painted into the field texture around it
+    // (see _paintField). Nothing stands up off the face, because after 2026-08-14 nothing does
+    // in the physics either - every cup is `collarH: 0` (boards.js), so this is once again
+    // literally true: the surface you see is the surface the ball rolls on.
+    //
+    // WHAT THIS REPLACED, so nobody rebuilds it. Each cup used to be a white cylinder wearing a
+    // flat number panel placed at z = radius * 0.995 - i.e. a flat plate set INSIDE a curved
+    // wall of that same radius. A plane cannot sit inside a cylinder without intersecting it, so
+    // the wall cut a curved bite out of every number: the 50, the 40, the 30, the ring's 20 and
+    // both 100s all rendered with their bottom halves missing. On top of that the mouth was laid
+    // flat on the face while the tube was tilted -0.32 rad, so each black opening slid out from
+    // under its own cup and read as a separate blob beside the next one down. Numbers belong on
+    // the board.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
-      const rr = H.r + G.collarThick / 2;
-      // The mouth: a black disc in the hole, visible from every angle that matters.
       const mouth = new THREE.Mesh(
-        this._track(new THREE.CircleGeometry(H.r + G.collarThick, 40)),
-        this._mat({ color: 0x050403, roughness: 1 }),
+        this._track(new THREE.CircleGeometry(H.r, 44)),
+        this._mat({ color: 0x0a0705, roughness: 1 }),
       );
-      this._onFace(mouth, H.u, H.v, 0.004, true);
+      this._onFace(mouth, H.u, H.v, 0.0035, true);
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
-      const h = H.collarH;      // draw the full wall: the physics profile's TALL side
-      // THE CUP, the way every real machine and the reference app draw it: a WHITE tube with
-      // its value painted BIG and BLACK around the outside wall, and a thin dark rim. The
-      // number lives on the cup itself - floating label plates beside the cups were the single
-      // worst thing about the previous pass (they also drifted onto the wrong cup).
-      const tube = this._tube(rr + G.collarThick / 2, h, H.value);
-      this._onFace(tube, H.u, H.v, h / 2);
-      if (H.lipLow) tube.rotateX(-0.32);          // mouth plane faces the incoming ball
-      this.scene.add(tube);
-      const lip = new THREE.Mesh(
-        this._track(new THREE.TorusGeometry(rr + G.collarThick / 2, G.collarThick * 0.22, 8, 40)),
-        this._mat({ color: L.ringLip, roughness: 0.5 }),
-      );
-      this._onFace(lip, H.u, H.v, h, true);
-      if (H.lipLow) lip.rotateX(-0.32);
-      this.scene.add(lip);
+      // A machine that DOES want a raised rim (a future board) still gets one, and it is drawn
+      // with the same scalloped profile machine.js gives the physics - low at the down-slope
+      // lip, full height at the up-slope one - rather than a straight cylinder plus a tilt.
+      const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
+        H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1);
+      this._onFace(wall, H.u, H.v, 0);
+      this.scene.add(wall);
     }
 
     // Cabinet dressing: side panels, the marquee, its bulbs. Cosmetic only.
@@ -225,7 +226,15 @@ export class Renderer {
     // The physics slab, drawn as the sparse wire canopy it stands in for. Deliberately THIN and
     // pale: the cage sits between the camera and the board, and heavy dark bars turned the top
     // half of the screen into a fence (they read as the subject instead of the board).
-    const mat = this._mat({ color: 0x6b5f52, roughness: 0.6, metalness: 0.35 });
+    // Pale and semi-transparent. From behind the ball the canopy sits directly across the
+    // backglass, and as opaque dark bars it read as cracks in the screen rather than as wire.
+    // It stays drawn - and stays a physics body - because the invariant that the thing you see
+    // is the thing the ball hits cuts both ways: an invisible wall would be the worse lie. It
+    // has never actually been touched (cagecheck: 0 contacts in 255 throws, ball ceiling y=0.61
+    // against a canopy at y=0.67), which is why it can afford to be this quiet.
+    const mat = this._mat({
+      color: 0xbfae95, roughness: 0.5, metalness: 0.3, transparent: true, opacity: 0.30,
+    });
     const len = s.half[2] * 2;
     for (let i = -3; i <= 3; i++) {
       const bar = new THREE.Mesh(this._track(new THREE.CylinderGeometry(0.0026, 0.0026, len, 5)), mat);
@@ -322,30 +331,84 @@ export class Renderer {
     // The 10 slot across the bottom edge, and its corner 0s - painted zones with BIG values.
     x.fillStyle = 'rgba(0,0,0,0.25)';
     x.fillRect(0, V(0.055), W, Hpx - V(0.055));
-    const stencil = (txt, u, v, size, color = '#f7ecd8') => {
+
+    // Everything painted on this face is SQUASHED by perspective: the board is tilted 32 degrees
+    // and seen from a low camera, so a metre up the slope covers far fewer screen pixels than a
+    // metre across it. Numbers drawn round come out as letterbox slots. Drawing them stretched
+    // along v by this factor makes them land on screen looking like numbers.
+    const STRETCH = 1.9;
+    const stencil = (txt, u, v, size, color = '#f7ecd8', ink = 'rgba(20,10,4,0.85)') => {
+      x.save();
+      x.translate(U(u), V(v));
+      x.scale(1, STRETCH);
       x.font = `800 ${Math.round(size * px)}px system-ui, sans-serif`;
       x.textAlign = 'center';
       x.textBaseline = 'middle';
-      x.lineWidth = Math.max(3, size * px * 0.12);
-      x.strokeStyle = 'rgba(20,10,4,0.85)';
-      x.strokeText(txt, U(u), V(v));
+      x.lineWidth = Math.max(3, size * px * 0.14);
+      x.strokeStyle = ink;
+      x.strokeText(txt, 0, 0);
       x.fillStyle = color;
-      x.fillText(txt, U(u), V(v));
+      x.fillText(txt, 0, 0);
+      x.restore();
     };
-    stencil('10', 0, 0.028, 0.062);
-    stencil('0', -0.33, 0.03, 0.05, '#ffb28a');
-    stencil('0', 0.33, 0.03, 0.05, '#ffb28a');
 
-    // NO value stencils on the field: every cup wears its own number on its wall (see
-    // _paintCupWall), and painting them here too produced ghost duplicates beside each cup -
-    // the thing that made the board read as "numbers scattered on a plank."
-    // The field carries only what the real board carries: a soft shading ring under the cup
-    // cluster, so the assembly sits in a defined target area rather than floating.
+    // The big painted target circle the real board carries, around the whole cup ladder. It was
+    // a 7.5cm WALL until 2026-08-14, which fenced the cups off from any rolling ball; as paint
+    // it still frames the cluster and blocks nothing.
     x.beginPath();
-    x.arc(U(G.ring.u), V(G.ring.v), (G.ring.R + 0.06) * px, 0, Math.PI * 2);
-    x.strokeStyle = 'rgba(255,240,215,0.28)';
-    x.lineWidth = 10;
+    x.arc(U(G.ring.u), V(G.ring.v), G.ring.R * px, 0, Math.PI * 2);
+    x.strokeStyle = 'rgba(255,246,228,0.5)';
+    x.lineWidth = 16;
     x.stroke();
+    x.beginPath();
+    x.arc(U(G.ring.u), V(G.ring.v), G.ring.R * px, 0, Math.PI * 2);
+    x.strokeStyle = L.ringLip;
+    x.lineWidth = 4;
+    x.stroke();
+
+    // EVERY HOLE: its rim, and its VALUE, painted on the board. The number sits just down-slope
+    // of its own mouth, which is where the real machine puts it and - more to the point - where
+    // it cannot be occluded by anything, because it is part of the board.
+    for (const id of Object.keys(G.holes)) {
+      const H = G.holes[id];
+      const cx = U(H.u);
+      const cy = V(H.v);
+      const rp = H.r * px;
+      // a soft seat under the rim so the hole reads as sunk into the board
+      const grad = x.createRadialGradient(cx, cy, rp * 0.9, cx, cy, rp * 1.55);
+      grad.addColorStop(0, 'rgba(20,10,4,0.42)');
+      grad.addColorStop(1, 'rgba(20,10,4,0)');
+      x.fillStyle = grad;
+      x.beginPath();
+      x.arc(cx, cy, rp * 1.55, 0, Math.PI * 2);
+      x.fill();
+      // the white rim with its navy trim line, the classic board's look
+      x.beginPath();
+      x.arc(cx, cy, rp * 1.14, 0, Math.PI * 2);
+      x.strokeStyle = L.ring;
+      x.lineWidth = rp * 0.28;
+      x.stroke();
+      x.beginPath();
+      x.arc(cx, cy, rp * 1.28, 0, Math.PI * 2);
+      x.strokeStyle = L.ringLip;
+      x.lineWidth = Math.max(3, rp * 0.07);
+      x.stroke();
+      // THE VALUE, on the board, UP-SLOPE of its own mouth. Up-slope and not down-slope because
+      // that is the only side with room: the cups sit 0.21m apart and each painted rim is 0.077m
+      // across, so the free band is the 0.10m above a hole - the gap below the lowest one is
+      // shared with the 10 slot's own number. Every label is checked against its neighbours'
+      // mouths and labels; nothing here may overlap anything.
+      const label = H.value >= 100 ? H.v - 0.10 : H.v + 0.098;
+      stencil(String(H.value), H.u, label, H.value >= 100 ? 0.048 : 0.052, L.ring);
+    }
+
+    // The 10 slot's own number, and the corner 0s. The 0s moved inboard from u = +/-0.33 to
+    // +/-0.30 on 2026-08-14: at 0.33 on a 0.78-wide board they sat right on the frame edge and
+    // both were sliced in half by it (resize()'s fit margin now clears them too).
+    stencil('10', 0, 0.022, 0.052);
+    stencil('0', -0.30, 0.025, 0.044, '#ffb28a');
+    stencil('0', 0.30, 0.025, 0.044, '#ffb28a');
+
     const tex = new THREE.CanvasTexture(c);
     tex.anisotropy = 4;
     return tex;
@@ -371,65 +434,48 @@ export class Renderer {
     return tex;
   }
 
-  /** The number panel that goes on the front of a cup: black stencil on the cup's own white, so
-   *  it reads as painted on rather than as a floating UI chip.
+  /** A raised cup rim, built to machine.js's OWN height profile: low at the down-slope lip,
+   *  rising to full height at the up-slope one. The classic board has no raised rims any more
+   *  (every hole is flush), so nothing calls this today - it is here so the next machine that
+   *  wants walls gets ones that match its physics vertex for vertex, instead of the straight
+   *  cylinder plus a cosmetic -0.32 rad tilt that used to slide each cup off its own mouth.
    *
-   *  Why a panel and not a texture wrapped round the tube: a cylinder's front arc is only a few
-   *  tens of degrees wide from the player's high viewpoint, so a wrapped number loses its outer
-   *  digits round the curve - "100" rendered as ")0" and "50" as "0". Panels are how the real
-   *  machine reads too: the number faces you square-on whatever the cup's size or position. */
-  _paintNumberPanel(value) {
-    const W = 256;
-    const Hpx = 128;
-    const c = this._canvas(W, Hpx);
-    const x = c.getContext('2d');
-    x.fillStyle = '#ffffff';
-    x.fillRect(0, 0, W, Hpx);
-    let size = 108;
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    x.fillStyle = '#15100c';
-    x.font = `900 ${size}px system-ui, "Arial Black", sans-serif`;
-    while (x.measureText(String(value)).width > W * 0.86 && size > 20) {
-      size -= 4;
-      x.font = `900 ${size}px system-ui, "Arial Black", sans-serif`;
+   *  There is deliberately NO number on it. Values are painted on the board (_paintField): a
+   *  flat plate inside a curved wall is what bit every number on this board in half. */
+  _scallopedRim(radius, height, lowFrac) {
+    const N = 40;
+    const t = this.G.collarThick;
+    const hAt = (phi) => height * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
+    const pos = [];
+    const push = (a, b, c) => { pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); };
+    for (let i = 0; i < N; i++) {
+      const p0 = (i / N) * Math.PI * 2;
+      const p1 = ((i + 1) / N) * Math.PI * 2;
+      const h0 = hAt(p0);
+      const h1 = hAt(p1);
+      for (const [r, flip] of [[radius + t / 2, false], [radius - t / 2, true]]) {
+        const a = [Math.cos(p0) * r, 0, Math.sin(p0) * r];
+        const b = [Math.cos(p1) * r, 0, Math.sin(p1) * r];
+        const c = [Math.cos(p1) * r, h1, Math.sin(p1) * r];
+        const d = [Math.cos(p0) * r, h0, Math.sin(p0) * r];
+        if (flip) { push(a, c, b); push(a, d, c); } else { push(a, b, c); push(a, c, d); }
+      }
+      // the rim's top face, closing the wall
+      const ro = radius + t / 2;
+      const ri = radius - t / 2;
+      const a = [Math.cos(p0) * ro, h0, Math.sin(p0) * ro];
+      const b = [Math.cos(p1) * ro, h1, Math.sin(p1) * ro];
+      const c = [Math.cos(p1) * ri, h1, Math.sin(p1) * ri];
+      const d = [Math.cos(p0) * ri, h0, Math.sin(p0) * ri];
+      push(a, b, c); push(a, c, d);
     }
-    x.fillText(String(value), W / 2, Hpx * 0.54);
-    const tex = new THREE.CanvasTexture(c);
-    tex.anisotropy = 4;
-    return tex;
-  }
-
-  /** One scoring tube: plain white outer wall, DARK inner wall so the cup reads as a hole rather
-   *  than a translucent hoop, and the value panel standing on its front. */
-  _tube(radius, height, value, hollow = true) {
-    const geo = this._track(new THREE.CylinderGeometry(radius, radius, height, 48, 1, true));
-    const outer = new THREE.Mesh(geo, this._mat({
-      color: 0xfdfaf3, roughness: 0.5, side: THREE.FrontSide,
-    }));
-    // A CUP is a hole, so its inside is dark. The big RING is a fence standing on the board -
-    // its inside must show the same white wall, or it reads as a giant black pit in the middle
-    // of the playfield (it did).
-    const inner = new THREE.Mesh(geo, this._mat({
-      color: hollow ? 0x1a1512 : 0xe8e0d2, roughness: hollow ? 0.95 : 0.6, side: THREE.BackSide,
-    }));
-    outer.castShadow = true;
-    outer.receiveShadow = true;
-    const group = new THREE.Group();
-    group.add(outer, inner);
-    // The panel: sat against the tube's front wall (local +Z is the player-facing side after
-    // _onFace tips it), leaning back a touch so it squares up to the camera's eye line.
-    // Sized off the WALL's height, never the radius: a panel scaled to a wide cup's radius
-    // overhung the wall top and bottom and covered the mouth of the next cup down the ladder.
-    const ph = Math.max(height * 0.62, 0.042);   // floor so a shallow wall's number stays legible
-    const panel = new THREE.Mesh(
-      this._track(new THREE.PlaneGeometry(ph * 2, ph)),
-      this._track(new THREE.MeshBasicMaterial({ map: this._track(this._paintNumberPanel(value)) })),
-    );
-    panel.position.set(0, height * 0.06, radius * 0.995);
-    panel.rotation.x = 0.3;
-    group.add(panel);
-    return group;
+    const geo = this._track(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, this._mat({ color: 0xfdfaf3, roughness: 0.5, side: THREE.DoubleSide }));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
   }
 
   /** The backboard's face: the machine's name on the cabinet colour with a trim band, the way a
@@ -451,11 +497,12 @@ export class Renderer {
     x.font = '700 118px Georgia, serif';
     x.textAlign = 'center';
     x.textBaseline = 'middle';
-    x.fillStyle = this.look.marqueeText;
-    x.fillText(this.board.name, W / 2, Hpx * 0.42);
-    x.font = '600 44px Georgia, serif';
-    x.fillStyle = 'rgba(255,217,119,0.62)';
-    x.fillText('NINE BALLS', W / 2, Hpx * 0.63);
+    // The machine's NAME belongs to the marquee above, and nowhere else. It used to be painted
+    // here as well, at 118px, so from behind the ball the player read "THE CLASSIC" twice down
+    // the top quarter of the screen. The upper case carries the ball count and its trim.
+    x.fillStyle = 'rgba(255,217,119,0.72)';
+    x.font = '600 58px Georgia, serif';
+    x.fillText('NINE BALLS', W / 2, Hpx * 0.46);
     return new THREE.CanvasTexture(c);
   }
 
@@ -506,12 +553,44 @@ export class Renderer {
     // and the frame is a crop. (Cost a whole debugging session; leave this true.)
     this.renderer.setSize(w, h, true);
     this.camera.aspect = w / h;
-    // Fit the machine's width: the board plus a whisker of margin fills the frame.
-    const halfW = this.G.boardW / 2 + 0.04;
-    const dist = 1.95;
-    const hFov = 2 * Math.atan(halfW / dist);
-    const vFov = 2 * Math.atan(Math.tan(hFov / 2) / this.camera.aspect);
-    this.camera.fov = Math.max(40, (vFov * 180) / Math.PI);
+
+    // FRAME THE MACHINE, not the board's width. The old rule set the FOV purely so the board
+    // spanned the frame horizontally, which on a tall phone left a vertical field far too narrow
+    // to contain the thing at the near end of it - the BALL. Deriving the FOV from the two
+    // points that must always be visible fixes that by construction, and keeps working if the
+    // camera ever moves again:
+    //
+    //   the ball waiting on the lane  (bottom of frame - if this is off screen there is no game)
+    //   the top of the marquee        (top of frame)
+    //
+    // Then, only if the board would be cut off sideways, widen until it is not. Vertical need
+    // leads; horizontal is the backstop.
+    const eye = this.camera.position;
+    const axis = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+    const angleOff = (pt) => {
+      const d = new THREE.Vector3(pt[0], pt[1], pt[2]).sub(eye);
+      const along = d.dot(axis);
+      if (along <= 0.01) return Math.PI / 2;
+      // vertical component only: the up-down half-angle this point needs
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
+      return Math.atan(Math.abs(d.dot(up)) / along);
+    };
+    const topY = this.M.faceToWorld(0, this.G.boardLen, 0)[1];
+    const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
+    const need = Math.max(
+      angleOff([0, this.G.ballR, -0.12]),                       // the resting ball
+      angleOff([0, topY + this.G.backboardH + 0.20, topZ]),      // the marquee
+    );
+    let vFov = 2 * need * 1.045;                                 // a little air top and bottom
+
+    const mid = this.M.faceToWorld(0, this.G.boardLen * 0.45, 0);
+    const dist = eye.distanceTo(new THREE.Vector3(mid[0], mid[1], mid[2]));
+    const halfW = this.G.boardW / 2 + 0.055;                     // clears the corner 0s at +/-0.30
+    const needH = 2 * Math.atan(halfW / dist);
+    const haveH = 2 * Math.atan(Math.tan(vFov / 2) * this.camera.aspect);
+    if (haveH < needH) vFov = 2 * Math.atan(Math.tan(needH / 2) / this.camera.aspect);
+
+    this.camera.fov = Math.min(72, Math.max(30, (vFov * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
   }
 

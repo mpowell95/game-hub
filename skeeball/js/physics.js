@@ -51,19 +51,31 @@ function buildWorld(board) {
   const matWall = new CANNON.Material('wall');     // collars, band, rails: slick painted steel
   const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
 
-  // The feel lives HERE and in boards.js's geom - nowhere else. Wall friction is deliberately
-  // NEAR ZERO: the ring and collars are slick painted steel, and low lateral grip is what makes
-  // a ball resting against the band on the slope always slide around it and roll out - the
-  // termination guarantee is physics, not a watchdog. (0.16 was enough grip to park a ball
-  // against the band's up-slope face in a three-contact wedge. Real rings don't hold balls.)
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matWood, { friction: 0.3, restitution: 0.28 }));
-  // Board restitution is the knob that decides whether skeeball is LEARNABLE: a livelier board
-  // makes the carom, not the landing, choose the cup, and the straight-power ladder stops being
-  // monotonic (0.35 landed the 40 while 0.45 landed the 30 - the sweep caught it). A real wooden
-  // board is not bouncy; keep this low.
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matBoard, { friction: 0.34, restitution: 0.26 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matWall, { friction: 0.04, restitution: 0.5 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matDead, { friction: 0.2, restitution: 0.18 }));
+  // The feel lives HERE and in boards.js's geom - nowhere else. Every number below is a DEFAULT
+  // that a board's `geom.mat` block may override, so a tuning sweep can search the contact
+  // model without editing this file.
+  //
+  // Wall friction is deliberately NEAR ZERO: the ring and collars are slick painted steel, and
+  // low lateral grip is what makes a ball resting against the band on the slope always slide
+  // around it and roll out - the termination guarantee is physics, not a watchdog. (0.16 was
+  // enough grip to park a ball against the band's up-slope face in a three-contact wedge. Real
+  // rings don't hold balls.)
+  //
+  // BOARD restitution and friction are what decide whether skeeball is LEARNABLE, and
+  // 2026-08-14 measured how much. At restitution 0.26 the ball bounced off the face instead of
+  // settling onto it, so a carom chose the cup and the straight-power ladder was noise: 43 of
+  // 100 adjacent 0.01 power steps flipped the outcome and 30 of 44 bands were one step wide.
+  // A ball that LANDS and then ROLLS makes distance up the slope a smooth function of arrival
+  // speed, which is the entire game. Friction is high for the same reason: the face has to grab
+  // the ball into a roll on contact rather than let it skid on.
+  const MAT = G.mat || {};
+  const pick = (v, dflt) => (typeof v === 'number' ? v : dflt);
+  const contact = (a, b, friction, restitution) => world.addContactMaterial(
+    new CANNON.ContactMaterial(a, b, { friction, restitution }));
+  contact(matBall, matWood, pick(MAT.woodFric, 0.30), pick(MAT.woodRest, 0.22));
+  contact(matBall, matBoard, pick(MAT.boardFric, 0.62), pick(MAT.boardRest, 0.08));
+  contact(matBall, matWall, pick(MAT.wallFric, 0.04), pick(MAT.wallRest, 0.50));
+  contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
 
   for (const s of M.solids) {
     const body = new CANNON.Body({
@@ -116,7 +128,17 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   const { world, ball, M } = buildWorld(board);
 
   const p = Math.max(0, Math.min(1, power));
-  const speed = G.minSpeed + p * (G.maxSpeed - G.minSpeed);
+  // Power is spent as ENERGY, not as speed (2026-08-14). How far a ball rolls up the face goes
+  // as the SQUARE of how fast it gets there, so a power dial that mapped linearly onto speed
+  // mapped quadratically onto the thing the player is actually aiming with: the bottom of the
+  // dial did almost nothing and the top of it did everything, which is half of why the ladder
+  // had a 25-step dead zone at the soft end. Interpolating v^2 instead makes travel up the
+  // board very nearly linear in the swipe, so the bands come out even. This is the CONTROL
+  // CURVE - what the dial means - not a force on the ball; nothing here touches the ball once
+  // it is rolling.
+  const s0 = G.minSpeed;
+  const s1 = G.maxSpeed;
+  const speed = Math.sqrt(s0 * s0 + p * (s1 * s1 - s0 * s0));
   const a = Math.max(-1, Math.min(1, aim)) * G.aimMax;
   ball.position.set(0, G.ballR, -0.12);
   ball.velocity.set(Math.sin(a) * speed, 0, -Math.cos(a) * speed);
@@ -183,17 +205,43 @@ function substep(st) {
 
   // 2. The mouths. Centre over an opening while at face level = the floor stops holding you -
   //    exactly what a hole is. The collar keeps collisions, so the drop stays guided and visible.
+  //
+  //    ...but only if the ball can ACTUALLY FALL IN, which is the rule this board is built on
+  //    (2026-08-14). A ball rolling up the face crosses every lower mouth on its way to a higher
+  //    one, and the old test - centre over the opening, full stop - meant the first mouth always
+  //    swallowed it. Nothing above the bottom cup was reachable by rolling, which is why the
+  //    shipped build could only score by lobbing balls in out of the air.
+  //
+  //    So ask the question a real hole asks: in the time this ball takes to cross the mouth,
+  //    does it drop far enough to be past the lip? Its own inward velocity counts, so a ball
+  //    dropping into a cup goes in even at speed, while a fast roll skims across and carries on
+  //    UNCHANGED - it is not deflected, slowed or steered, it simply is not caught. That single
+  //    test is what makes distance up the slope choose the cup, and it is pure kinematics: no
+  //    magnetism, no assist, no correction (see the deleted section 5 below).
+  const vel = ball.velocity;
+  const sinT = Math.sin(M.tilt);
+  const cosT = Math.cos(M.tilt);
+  // the same linear map worldToFace applies to positions, applied to the velocity
+  const vFace = Math.hypot(vel.x, vel.y * sinT - vel.z * cosT);
+  const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
+  const gPerp = 9.82 * cosT;                          // gravity's pull perpendicular to the face
+  const need = G.ballR * (typeof G.captureDrop === 'number' ? G.captureDrop : 0.55);
+  // time to fall `need` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - need = 0
+  const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * need)) / gPerp;
   if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9) {
     for (const id of Object.keys(G.holes)) {
       const hDef = G.holes[id];
       const d = Math.hypot(f.u - hDef.u, f.v - hDef.v);
-      if (d < hDef.r - G.ballR * 0.28) {
-        st.captured = id;
-        st.capturedFaceY = p.y;
-        ball.collisionFilterMask = GROUP_REST;   // the slab lets go; gravity does the rest
-        st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
-        return;
-      }
+      const rEff = hDef.r - G.ballR * 0.28;
+      if (d >= rEff) continue;
+      // how much mouth is left in front of it, along its own line
+      const cross = rEff + Math.sqrt(Math.max(0, rEff * rEff - d * d));
+      if (vFace * tDrop > cross) continue;            // too fast for this mouth: it rolls on
+      st.captured = id;
+      st.capturedFaceY = p.y;
+      ball.collisionFilterMask = GROUP_REST;   // the slab lets go; gravity does the rest
+      st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
+      return;
     }
   }
 
@@ -225,22 +273,12 @@ function substep(st) {
     return;
   }
 
-  // 5. The dish. The real board's lower bowl is dished, so a slow ball inside the big ring
-  //    always curls around the furniture and finds the 20. Our face is a flat slab, so the dish
-  //    is applied as the force it exerts: a gentle, constant pull toward the 20's mouth, only
-  //    for slow balls on the face inside the ring. Fast rattles are untouched - steering those
-  //    is exactly the "told to react" look this rebuild exists to kill.
-  const dRing = Math.hypot(f.u - G.ring.u, f.v - G.ring.v);
-  const onFace = f.h < G.ballR * 1.6 && f.v > 0 && f.v < G.boardLen;
-  if (onFace && dRing < G.ring.R - G.ballR * 0.5 && ball.velocity.length() < 1.2) {
-    const du = G.holes.h20.u - f.u;
-    const dv = G.holes.h20.v - f.v;
-    const dd = Math.hypot(du, dv) || 1;
-    const a = 1.5 * H;
-    ball.velocity.x += (du / dd) * a;
-    ball.velocity.y += (dv / dd) * a * Math.sin(M.tilt);
-    ball.velocity.z += (dv / dd) * a * -Math.cos(M.tilt);
-  }
+  // 5. (was "the dish": a constant pull toward the 20's mouth for slow balls inside the ring.
+  //    DELETED 2026-08-14 and never to return. It was magnetism - a ball being steered into a
+  //    hole it was not thrown at - which is a standing, permanent ban on this game. A ball that
+  //    runs out of speed on the slope now does the honest thing: gravity takes it back down the
+  //    face and it feeds the 10 slot at the bottom, exactly like the real machine. If a power
+  //    band needs widening, widen it in the GEOMETRY, never by moving the ball.)
 
   // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball
   //    gets popped off the face like the chatter that frees a real ball; a ball a pop cannot
