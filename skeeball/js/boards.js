@@ -86,7 +86,11 @@ export const BOARDS = [
       ringSegments: 24,
       cupSegments: 12,
       collarThick: 0.014,
-      ringH: 0.06,            // the big ring band's height off the board
+      ringH: 0.075,           // the big ring band's height off the board. These wall heights are
+                              // DEEP on purpose: a real cup is a ring you can see into, and a
+                              // shallow band foreshortens to nothing from the player's eye line,
+                              // taking its painted number with it. Physics-relevant - re-run the
+                              // reachability sweep after changing any of them.
       ringThick: 0.015,
       ring: { u: 0, v: 0.42, R: 0.27 },   // the big ring, low on the board
 
@@ -103,11 +107,15 @@ export const BOARDS = [
       // and a three-contact jam locks the solver completely. Every neighbour pair below has
       // been checked against this rule; re-check ALL of them before moving anything.
       holes: {
-        '100L': { u: -0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.085, lipLow: true },
-        '100R': { u: 0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.085, lipLow: true },
-        c50: { u: 0, v: 0.64, r: 0.064, value: 50, collarH: 0.06 },
-        c40: { u: 0, v: 0.49, r: 0.068, value: 40, collarH: 0.05 },
-        c30: { u: 0, v: 0.37, r: 0.074, value: 30, collarH: 0.045 },
+        '100L': { u: -0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.08, lipLow: true },
+        '100R': { u: 0.32, v: 0.87, r: 0.068, value: 100, collarH: 0.08, lipLow: true },
+        // lipLow on EVERY cup: on a real sloped board a cup's down-slope edge sits nearly flush
+        // and its up-slope edge stands proud, which is what lets a rolling ball drop in over the
+        // front while an overshoot is still caught by the back. Uniform-height walls this deep
+        // made the 40 literally unreachable - the sweep caught it.
+        c50: { u: 0, v: 0.64, r: 0.064, value: 50, collarH: 0.058, lipLow: true },
+        c40: { u: 0, v: 0.49, r: 0.068, value: 40, collarH: 0.055, lipLow: true },
+        c30: { u: 0, v: 0.37, r: 0.074, value: 30, collarH: 0.052, lipLow: true },
         h20: { u: 0, v: 0.22, r: 0.07, value: 20, collarH: 0 },
       },
       troughTenHalfW: 0.28,   // |x| under this in the trough scores 10; wider is a corner 0
@@ -115,7 +123,7 @@ export const BOARDS = [
       // The swipe's speed range (m/s at the serve). Slower than minSpeed cannot climb the hump
       // and rolls back unspent; maxSpeed deliberately overshoots the 50 so power costs points.
       minSpeed: 1.0,
-      maxSpeed: 6.2,
+      maxSpeed: 7.4,
       aimMax: 0.32,           // radians of lateral aim (~18 degrees) - the corner 100s need a
                               // genuine sideways fling that rides the rail into the corner
     },
