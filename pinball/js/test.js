@@ -9,9 +9,11 @@
 // the soak plays complete games with random flipper input and asserts, on EVERY step, that no ball
 // is outside the table and that the game keeps making progress.
 
-import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED } from './physics.js';
-import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH } from './table.js';
-import { Pinball, mulberry32, rampPoint, MISSIONS, PTS } from './game.js';
+import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED, BALL_R, ROLL_A } from './physics.js';
+import {
+  W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, flipperGap, FLIP, AXIS, MM_PER_UNIT,
+} from './table.js';
+import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, gravityForPitch, DIFFS } from './game.js';
 
 let fail = 0, count = 0;
 function ok(label, cond, extra) {
@@ -25,10 +27,101 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 // --- 1. the solver -------------------------------------------------------------------------------
 
 {
-  const world = { colliders: [], flippers: [], gravity: 1000, drag: 0 };
+  const world = { colliders: [], flippers: [], gravity: 1000, roll: 0 };
   const b = makeBall(0, 0);
   for (let i = 0; i < 480; i++) step(world, [b], null);
-  ok('gravity: one second of free fall reaches ~1000 u/s', near(b.vy, 1000, 12), `vy=${b.vy.toFixed(1)}`);
+  // AIR_K alone costs a few per cent over a second; ROLL_A is switched off so this measures gravity.
+  ok('gravity: one second of unresisted fall reaches ~1000 u/s', near(b.vy, 1000, 40), `vy=${b.vy.toFixed(1)}`);
+}
+
+// --- 1a. the table is a PLAYFIELD, not a wall -----------------------------------------------------
+//
+// Matt, on the shipped build (2026-08-14): "the ball falls as if the machine is a vertical wall.
+// Real pinball is much flatter than 90 degrees vertical." A real cabinet is pitched 6.5 degrees and
+// the ball rolls, so its downhill acceleration is (5/7) g sin(6.5) = 0.79 m/s^2. These assertions
+// pin the conversion in BOTH directions - the maths, and what it means on the table - so nobody can
+// "tune the feel" back into a free fall without the number saying so.
+
+{
+  const g65 = gravityForPitch(6.5);
+  const mps2 = g65 * MM_PER_UNIT / 1000;
+  ok('a 6.5 degree playfield accelerates the ball at 0.79 m/s^2', near(mps2, 0.793, 0.02),
+    `${mps2.toFixed(3)} m/s^2`);
+  ok('...which is a twelfth of a free fall, not most of one', mps2 < 9.81 / 10, `${(9.81 / mps2).toFixed(1)}x weaker`);
+  ok('every difficulty is a real operator pitch (6 to 7 degrees)',
+    Object.values(DIFFS).every((d) => d.pitch >= 6 && d.pitch <= 7),
+    Object.values(DIFFS).map((d) => d.pitch).join(', '));
+  // A drained ball rolls the length of a real playfield in about 1.5 - 1.8 s. Anything much under
+  // that is the old "vertical wall" feel coming back.
+  const world = { colliders: [], flippers: [], gravity: g65 };
+  const b = makeBall(200, 40, 0, 0);
+  let t = 0;
+  while (b.y < FLIP.pivotY && t < 10) { step(world, [b], null); t += PHYS_DT; }
+  ok('a ball takes ~1.5 s to roll from the top of the playfield to the flippers', t > 1.2 && t < 2.2,
+    `${t.toFixed(2)} s`);
+}
+
+// --- 1b. [KNOWN-BUG PROBE] rolling along a surface must not BRAKE the ball -----------------------
+//
+// Matt, same report: "When the ball is rolling on the bottom level, it drastically slows down when
+// it hits the paddle. It's confusing and not good."
+//
+// It was not the paddle. `resolve()` used to remove a fixed FRACTION of the tangential speed on
+// every resolved contact - and a resting contact is re-resolved on every physics step, 480 times a
+// second. At mu = 0.05 that is a 42 ms time constant: a ball rolling along ANY surface in the table
+// lost 92% of its speed in a fifth of a second, and the flipper is simply where a rolling ball
+// spends longest. Friction is Coulomb now (bounded by the normal impulse), so a resting ball barely
+// feels it and the honest per-second loss comes from ROLL_A instead.
+//
+// Verified RED against the old resolver: 400 -> 33 u/s over the same 0.2 s.
+
+{
+  const { flippers } = buildTable({});
+  const f = flippers[0];
+  const world = { colliders: [], flippers: [f], gravity: gravityForPitch(6.5) };
+  const a = f.angle;
+  // Sit the ball on the bat's upper face, 20 units out from the pivot, rolling toward the tip.
+  const b = makeBall(
+    f.px + Math.cos(a) * 20 - Math.sin(a) * (BALL_R + 6),
+    f.py + Math.sin(a) * 20 + Math.cos(a) * (BALL_R + 6),
+    Math.cos(a) * 400, Math.sin(a) * 400,
+  );
+  const v0 = Math.hypot(b.vx, b.vy);
+  for (let i = 0; i < 96; i++) step(world, [b], null);      // 0.2 s on the paddle
+  const v1 = Math.hypot(b.vx, b.vy);
+  ok('[KNOWN-BUG PROBE] a ball rolling on a resting flipper is not braked by it', v1 > v0 * 0.85,
+    `${v0.toFixed(0)} -> ${v1.toFixed(0)} u/s in 0.2 s`);
+
+  // ...and rolling resistance still exists, or the ball would never settle anywhere.
+  const flat = { colliders: [], flippers: [], gravity: 0 };
+  const c = makeBall(0, 0, 600, 0);
+  for (let i = 0; i < 480; i++) step(flat, [c], null);
+  const lost = 600 - c.vx;
+  ok('rolling resistance is real but small (a coasting ball loses ~10% a second)',
+    lost > ROLL_A * 0.6 && lost < 600 * 0.25, `lost ${lost.toFixed(0)} u/s in 1 s`);
+}
+
+// --- 1c. the flipper gap, to the WPC spec ---------------------------------------------------------
+//
+// "The paddles are too close together. The space between them barely fits the ball... Look online
+// for a real answer for this spacing." The real answer: WPC drills the flipper holes 6 13/16 to 7 in
+// apart and the bat is 2.8 to 3 in, which leaves about a ball and a half between the tips at rest
+// and a shade over one ball with both flippers held up. The old table measured 1.24 balls at rest -
+// tighter than any real machine. Asserted in ball diameters so it cannot drift with the scale.
+
+{
+  const inches = (u) => u * MM_PER_UNIT / 25.4;
+  ok('the ball is a real pinball (1 1/16 in)', near(inches(BALL_R * 2), 1.0625, 0.02),
+    `${inches(BALL_R * 2).toFixed(3)} in`);
+  ok('the flipper pivots are 6 13/16 - 7 in apart, as WPC drills them',
+    inches(FLIP.dx * 2) >= 6.75 && inches(FLIP.dx * 2) <= 7.05, `${inches(FLIP.dx * 2).toFixed(2)} in`);
+  ok('the bat is a real 2.8 - 3 in flipper', inches(FLIP.len) >= 2.7 && inches(FLIP.len) <= 3.05,
+    `${inches(FLIP.len).toFixed(2)} in`);
+  ok('the gap between the tips AT REST is about a ball and a half',
+    flipperGap(false) >= 1.45 && flipperGap(false) <= 1.75, `${flipperGap(false).toFixed(2)} balls`);
+  ok('...and a shade over one ball with both flippers HELD UP',
+    flipperGap(true) >= 1.05 && flipperGap(true) <= 1.35, `${flipperGap(true).toFixed(2)} balls`);
+  ok('the drain gap is measurably wider than the old table (1.24 balls)', flipperGap(false) > 1.35);
 }
 
 {
@@ -97,8 +190,9 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
 {
   const { colliders, flippers } = buildTable({ outlaneSaves: true });
-  ok('the table builds a full collider set', colliders.length > 25 && flippers.length === 2,
-    `${colliders.length} colliders`);
+  ok('the table builds a full collider set', colliders.length > 25 && flippers.length === 4,
+    `${colliders.length} colliders, ${flippers.length} flippers`);
+  ok('there is an upper flipper on each side', flippers.some((f) => f.id === 'flipUL') && flippers.some((f) => f.id === 'flipUR'));
   const ids = colliders.map((c) => c.id).filter(Boolean);
   ok('collider ids are unique', new Set(ids).size === ids.length);
 
@@ -129,9 +223,134 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
   ok('the ramp ends at the right inlane', end.x > 280 && end.y > 480, `${end.x},${end.y}`);
 }
 
+// --- 2b. EVERY SHOT MUST BE REACHABLE FROM A FLIPPER ----------------------------------------------
+//
+// The block that would have saved a whole afternoon. A pinball table is not a picture: a shot that
+// no flipper can reach is not a hard shot, it is a dead one, and nothing else in this file notices.
+// Rebuilding the playfield in one go produced, at various points, a scoop reachable in 2% of timed
+// shots, a left orbit reachable in NONE, a post arc across the middle that was a wall with holes in
+// it, and an inlane that delivered the ball past the flipper into the drain (the lower centre of a
+// soak heat map was completely blank). All four passed every other assertion here.
+//
+// So: drop a ball onto each bat at a fan of contact points, flip at a fan of moments, and require
+// that the shots the table's own header promises actually land. The thresholds are deliberately
+// loose - this is a "the shot exists" probe, not a difficulty tuner.
+
+function reachFrom(side, budgetFrames = 260) {
+  const px = AXIS + (side === 'left' ? -FLIP.dx : FLIP.dx);
+  const hits = {};
+  let trials = 0;
+  for (let off = 8; off <= 58; off += 2) {
+    for (let delay = 0; delay <= 26; delay += 1) {
+      trials++;
+      const g = new Pinball({ difficulty: 'medium', rand: mulberry32(3) });
+      g.start();
+      g.plungerUp();
+      const b = g.balls[0];
+      b.held = false; b.onPlunger = false; b.sw = {};
+      const a = side === 'left' ? FLIP.rest : Math.PI - FLIP.rest;
+      b.x = px + Math.cos(a) * off;
+      b.y = FLIP.pivotY + Math.sin(a) * off - 26;
+      b.vx = 0; b.vy = 260;
+      const seen = new Set();
+      for (let i = 0; i < budgetFrames && b.live; i++) {
+        if (i === delay) g.setFlipper(side, true);
+        if (i === delay + 12) g.setFlipper(side, false);
+        g.update(1 / 120);
+        for (const s of SWITCHES) if (b.sw && b.sw[s.id]) seen.add(s.id);
+      }
+      for (const k of seen) hits[k] = (hits[k] || 0) + 1;
+    }
+  }
+  const pct = {};
+  for (const k of Object.keys(hits)) pct[k] = hits[k] / trials;
+  return pct;
+}
+
+{
+  const L = reachFrom('left'), R = reachFrom('right');
+  const show = (p, k) => `${(100 * (p[k] || 0)).toFixed(0)}%`;
+  ok('REACH: the left flipper can shoot the RAMP', (L.rampIn || 0) > 0.08, show(L, 'rampIn'));
+  ok('REACH: the left flipper can shoot the SCOOP', (L.scoop || 0) > 0.05, show(L, 'scoop'));
+  ok('REACH: the right flipper can shoot the RAMP', (R.rampIn || 0) > 0.08, show(R, 'rampIn'));
+  ok('REACH: the right flipper can shoot the LEFT ORBIT past the spinner', (R.spinner || 0) > 0.02,
+    show(R, 'spinner'));
+  ok('REACH: an orbit shot carries the whole way round the arch', (R.orbitTop || 0) > 0.005,
+    show(R, 'orbitTop'));
+  ok('REACH: both flippers feed the inlanes (the ball comes BACK to a flipper)',
+    (L.inlaneL || 0) + (L.inlaneR || 0) > 0.03 && (R.inlaneL || 0) + (R.inlaneR || 0) > 0.03,
+    `L ${show(L, 'inlaneL')}/${show(L, 'inlaneR')}  R ${show(R, 'inlaneL')}/${show(R, 'inlaneR')}`);
+}
+
+{
+  // ...and the UPPER pair, which is the only thing that reaches the top of the table: the teardrop
+  // ramp stands between the main flippers and the drop bank on purpose. If this ever reads 0 the
+  // upper flippers are decoration and the drop bank (and therefore every mission) is unreachable.
+  let bankHits = 0, laneHits = 0, trials = 0;
+  for (let off = 6; off <= 36; off += 2) {
+    for (let delay = 0; delay <= 24; delay += 2) {
+      trials++;
+      const g = new Pinball({ difficulty: 'medium', rand: mulberry32(5) });
+      g.start();
+      g.plungerUp();
+      const up = g.flippers.find((f) => f.id === 'flipUR');
+      const b = g.balls[0];
+      b.held = false; b.onPlunger = false; b.sw = {};
+      const a = up.angle;
+      b.x = up.px + Math.cos(a) * off;
+      b.y = up.py + Math.sin(a) * off - 24;
+      b.vx = 0; b.vy = 240;
+      let bank = false, lane = false;
+      for (let i = 0; i < 180 && b.live; i++) {
+        if (i === delay) g.setFlipper('right', true);
+        if (i === delay + 12) g.setFlipper('right', false);
+        g.update(1 / 120);
+        for (const ev of g.takeEvents()) if (ev.type === 'drop') bank = true;
+        for (const k of ['laneH', 'laneU', 'laneB']) if (b.sw && b.sw[k]) lane = true;
+      }
+      if (bank) bankHits++;
+      if (lane) laneHits++;
+    }
+  }
+  ok('REACH: an UPPER flipper can shoot the drop bank across the top', bankHits / trials > 0.05,
+    `${(100 * bankHits / trials).toFixed(0)}% of ${trials} timed shots`);
+  ok('REACH: ...and the H-U-B lanes above it', laneHits > 0, `${laneHits}/${trials}`);
+}
+
+// --- 2c. [KNOWN-BUG PROBE] a solenoid cannot machine-gun ------------------------------------------
+//
+// A slingshot facing a wall a ball and a half away is a perfect resonator: full-power kick, bounce,
+// full-power kick, 30 ms apart, forever. Six soak games produced 15,633 slingshot hits and a mean
+// score inflated by an order of magnitude. Real coils have a pulse and a re-arm; physics.js has
+// COIL_REARM, and game.js refuses to SCORE a contact whose coil did not actually fire (fixing it in
+// the physics but not the score would leave the half a player can see).
+
+{
+  const sling = seg(-60, 0, 60, 0, { kick: 900, e: 0.4, r: 6 });
+  const roof = seg(-60, -40, 60, -40, { e: 0.9, r: 6 });
+  const world = { colliders: [sling, roof], flippers: [], gravity: 0 };
+  const b = makeBall(0, -20, 0, 300);
+  let fires = 0, contacts = 0;
+  for (let i = 0; i < 480; i++) {                            // one second
+    step(world, [b], (kind, id, x, y, sp, ball, fired) => { if (id === '' || kind === 'id') { contacts++; if (fired) fires++; } });
+  }
+  ok('[KNOWN-BUG PROBE] a trapped ball cannot machine-gun a slingshot', fires <= 12,
+    `${fires} coil fires in 1 s (${contacts} contacts)`);
+  ok('[KNOWN-BUG PROBE] ...but the coil does still fire', fires >= 1, `${fires} fires`);
+
+  const g = launchedLater();
+  const before = g.score;
+  for (let i = 0; i < 40; i++) g._contact('id', 'slingL', 100, 520, 900, g.balls[0], false);
+  ok('[KNOWN-BUG PROBE] a slingshot that did not fire does not score', g.score === before,
+    `+${g.score - before}`);
+  g._contact('id', 'slingL', 100, 520, 900, g.balls[0], true);
+  ok('[KNOWN-BUG PROBE] ...and one that did, does', g.score > before);
+}
+
 // --- 3. the rules ----------------------------------------------------------------------------------
 
 function fresh(diff = 'medium') { return new Pinball({ difficulty: diff, rand: mulberry32(7) }); }
+function launchedLater() { return launched(fresh()); }
 
 /** Drive a game far enough to have a live ball on the playfield. */
 function launched(g) {
@@ -213,6 +432,35 @@ function launched(g) {
   const s1 = g.score;
   g._switchHit(SWITCHES.find((s) => s.id === 'scoop'), b);
   ok('the scoop collects the super jackpot', g.score - s1 >= PTS.superJackpot && g.superLit === false);
+}
+
+{
+  // One button per side drives the main flipper AND the upper one, the way a real cabinet is wired.
+  const g = launched(fresh());
+  const byId = Object.fromEntries(g.flippers.map((f) => [f.id, f]));
+  g.setFlipper('left', true);
+  ok('a button presses both flippers on its side', byId.flipL.pressed && byId.flipUL.pressed);
+  ok('...and neither on the other side', !byId.flipR.pressed && !byId.flipUR.pressed);
+  g.setFlipper('left', false);
+  ok('releasing lets both go', !byId.flipL.pressed && !byId.flipUL.pressed);
+}
+
+{
+  // The skill shot: the star rollover is only worth the big award as the FIRST thing a ball does.
+  const g = launched(fresh());
+  const star = SWITCHES.find((s) => s.id === 'star');
+  const s0 = g.score;
+  g._switchHit(star, g.balls[0]);
+  ok('the star rollover collects the skill shot on the first shot of a ball', g.score - s0 >= PTS.skill);
+  const s1 = g.score;
+  g._switchHit(star, g.balls[0]);
+  ok('...and only once', g.score - s1 < PTS.skill);
+
+  const h = launched(fresh());
+  h._contact('id', 'pop0', 140, 256, 500, h.balls[0]);      // anything that scores spends it
+  const h0 = h.score;
+  h._switchHit(star, h.balls[0]);
+  ok('scoring anything else first spends the skill shot', h.score - h0 < PTS.skill);
 }
 
 {
@@ -298,7 +546,11 @@ function launched(g) {
   const sc = SWITCHES.find((x) => x.id === 'scoop');
   const before = g.score;
   const b = g.balls[0];
-  b.x = sc.x; b.y = sc.y + 40; b.vx = 0; b.vy = -700;   // straight up into the scoop mouth
+  // Fired along the mouth's own axis, so this stays a scoop shot if the saucer is ever re-aimed.
+  const ART_SCOOP = (await import('./table.js')).ART.scoop;
+  b.x = sc.x + Math.cos(ART_SCOOP.mouth) * 42;
+  b.y = sc.y + Math.sin(ART_SCOOP.mouth) * 42;
+  b.vx = -Math.cos(ART_SCOOP.mouth) * 700; b.vy = -Math.sin(ART_SCOOP.mouth) * 700;
   let scoops = 0, maxHeld = 0, held = 0;
   for (let i = 0; i < 600; i++) {                        // ten seconds
     g.update(1 / 60);

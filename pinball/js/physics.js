@@ -1,21 +1,38 @@
 // pinball/js/physics.js - the deterministic 2D solver. Pure: no DOM, no timers, no randomness
 // that isn't handed in. `node pinball/js/test.js` drives it headless.
 //
-// WHAT THIS FILE IS. A pinball table is a handful of static shapes, two rotating paddles, and one
-// to four small heavy circles. Everything below is that and nothing else: shapes -> contacts,
-// contacts -> impulses. It knows nothing about scoring, lamps, missions or sound. table.js says
+// WHAT THIS FILE IS. A pinball table is a handful of static shapes, two to four rotating paddles,
+// and one to four small heavy circles. Everything below is that and nothing else: shapes ->
+// contacts, contacts -> impulses. It knows nothing about scoring, lamps or missions. table.js says
 // where the shapes are, game.js says what a contact MEANS, and this file is the only place a
 // velocity ever changes for a physical reason.
 //
-// WHY FIXED-STEP SUBSTEPPING (and why the speed cap is not cosmetic). A pinball leaves a flipper
-// tip at around 2000 table-units/second. At a 60 Hz frame that is 33 units of travel in one
-// integration - nearly four ball diameters - so a naive per-frame step would put the ball on the
-// far side of a wall before any test ran, and the ball would leave the table. So: a FIXED
-// PHYS_DT of 1/480 s, run as many times as the frame needs, with the speed hard-capped at
-// MAX_SPEED. 2200 / 480 = 4.6 units of travel per step against a combined ball+wall radius of at
-// least 13, which means every wall in the table is sampled at least twice while the ball crosses
-// it. The cap is therefore a CORRECTNESS bound, not a difficulty knob: raising it without
-// shortening PHYS_DT re-opens tunnelling. `test.js`'s soak asserts no ball ever leaves the table.
+// THE TABLE IS MEASURED IN REAL UNITS (2026-08-14). Everything here is derived from one number:
+// a pinball is 1 1/16 in (26.99 mm) across, and it is BALL_R * 2 = 21 table units across, so
+//
+//     1 table unit = 1.285 mm = 0.0506 in
+//
+// which makes the 400 x 820 playfield 20.2 x 41.5 in - a real WPC playfield is 20.25 x 42. Every
+// speed, radius and clearance below is quoted in both, and the flipper geometry in table.js is
+// taken straight off a Williams parts list. Keeping the scale honest is what lets a question like
+// "is that gap right" be ANSWERED rather than eyeballed.
+//
+// A PLAYFIELD IS NOT A WALL, AND THAT IS THIS FILE'S BIGGEST SINGLE FACT. A real table is pitched
+// about 6.5 degrees; the ball is rolling, not sliding, so the acceleration down the playfield is
+// (5/7) * g * sin(6.5) = 0.79 m/s^2 - EIGHT PER CENT of what a vertical drop would give. game.js
+// computes `gravity` from the pitch in degrees for exactly this reason. Get it wrong and the ball
+// falls in tight vertical arcs instead of the long, flat, nearly-straight lines a pinball actually
+// travels in, and the table reads as a wall seen from the side. (It was 1150 u/s^2 - an effective
+// pitch of about 14 degrees - until Matt said so.)
+//
+// WHY FIXED-STEP SUBSTEPPING (and why the speed cap is not cosmetic). A ball leaves a flipper tip
+// at up to MAX_SPEED. At a 60 Hz frame that is 57 units of travel in one integration - nearly three
+// ball diameters - so a naive per-frame step would put the ball on the far side of a wall before
+// any test ran. So: a FIXED PHYS_DT of 1/480 s, run as many times as the frame needs, with the
+// speed hard-capped. 3400 / 480 = 7.1 units of travel per step against a combined ball+wall radius
+// of at least 13.5, so every wall is sampled at least twice while the ball crosses it. The cap is a
+// CORRECTNESS bound, not a difficulty knob: raising it without shortening PHYS_DT re-opens
+// tunnelling. `test.js`'s soak asserts no ball ever leaves the table.
 //
 // WHY SURFACES CARRY VELOCITY. A flipper does not bounce the ball, it THROWS it: the impulse comes
 // almost entirely from the paddle's own surface speed at the contact point (omega x r), not from
@@ -24,8 +41,17 @@
 // even though both use the same three lines of maths.
 
 export const PHYS_DT = 1 / 480;      // one physics step, seconds (see header)
-export const MAX_SPEED = 2200;       // table-units/s; a correctness bound, see header
-export const BALL_R = 9;
+export const MAX_SPEED = 3400;       // 4.37 m/s; a correctness bound, see header
+export const BALL_R = 10.5;          // 21 units across = 1 1/16 in, the real ball
+
+/** Rolling resistance, as a real deceleration rather than a percentage. A steel ball on a lacquered
+ *  playfield has a rolling-resistance coefficient around 0.006, so it sheds mu_r * g = 59 mm/s^2 =
+ *  46 u/s^2 whatever its speed - about 7% of the 6.5-degree pitch that is driving it, which is why
+ *  a real ball coasts so far. AIR_K is a small extra proportional term standing in for every other
+ *  loss (guide rubber, the glass, the ball not being perfectly round); without something
+ *  speed-dependent a ball trapped in a bumper nest never settles. */
+export const ROLL_A = 46;            // u/s^2, constant, opposes motion
+export const AIR_K = 0.055;          // 1/s, proportional
 
 /** A ball. Plain data so game.js can serialise/inspect it and test.js can build one by hand. */
 export function makeBall(x, y, vx = 0, vy = 0) {
@@ -37,10 +63,19 @@ export function makeBall(x, y, vx = 0, vy = 0) {
 // thickness radius (so a wall is a capsule, never a zero-width line - a zero-width line is the
 // classic 2D-physics tunnelling trap and there is no reason to accept it here).
 //
+// `mu` is a COULOMB friction coefficient, not a per-frame decay: see resolve().
+//
 // `kick` is the pinball-specific one: instead of bouncing, the surface guarantees a MINIMUM
 // outgoing speed along its normal. That is what a pop bumper and a slingshot physically do (they
 // fire a solenoid), and modelling them as very-high-restitution walls instead gives the tell-tale
 // wrong behaviour where a slowly-rolling ball barely reacts.
+
+/** Default coil re-arm, seconds. A real solenoid fires a fixed pulse and cannot fire again until
+ *  its switch has re-opened and the driver board has re-armed; nothing on a pinball table machine
+ *  -guns. Without it a slingshot facing a wall a ball-and-a-half away is a PERFECT RESONATOR: it
+ *  throws the ball across the gap at full power, the wall returns it, and it fires again 30 ms
+ *  later, forever. Six soak games produced 15,633 slingshot hits that way. See `rearm` below. */
+export const COIL_REARM = 0.09;
 
 /** A capsule wall from a to b. `oneWay`, if set, is a unit normal: the wall only exists for a ball
  *  whose velocity points along it (used for the shooter-lane gate, which passes a launch going up
@@ -48,8 +83,9 @@ export function makeBall(x, y, vx = 0, vy = 0) {
 export function seg(ax, ay, bx, by, opts = {}) {
   return {
     t: 'seg', ax, ay, bx, by,
-    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.02,
-    kick: opts.kick ?? 0, id: opts.id || '', oneWay: opts.oneWay || null,
+    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.06,
+    kick: opts.kick ?? 0, rearm: opts.rearm ?? COIL_REARM, cool: 0,
+    id: opts.id || '', oneWay: opts.oneWay || null,
     on: opts.on !== false,
   };
 }
@@ -58,7 +94,8 @@ export function seg(ax, ay, bx, by, opts = {}) {
 export function circle(x, y, r, opts = {}) {
   return {
     t: 'circle', x, y, r,
-    e: opts.e ?? 0.5, mu: opts.mu ?? 0.02, kick: opts.kick ?? 0,
+    e: opts.e ?? 0.5, mu: opts.mu ?? 0.06, kick: opts.kick ?? 0,
+    rearm: opts.rearm ?? COIL_REARM, cool: 0,
     id: opts.id || '', on: opts.on !== false,
   };
 }
@@ -69,19 +106,25 @@ export function circle(x, y, r, opts = {}) {
 export function arc(cx, cy, rad, a0, a1, opts = {}) {
   return {
     t: 'arc', cx, cy, rad, a0, a1,
-    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.02,
+    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.06,
     kick: opts.kick ?? 0, id: opts.id || '', on: opts.on !== false,
   };
 }
 
-/** A flipper: a capsule that rotates about `px,py`. `rest`/`up` are absolute angles in radians;
- *  `dir` is only used by the renderer to know which way the paddle faces. */
+/**
+ * A flipper: a capsule that rotates about `px,py`. `rest`/`up` are absolute angles in radians.
+ *
+ * `r` is the radius at the PIVOT and `rTip` the radius at the tip, because a real flipper bat is a
+ * wedge: the Williams bat is 0.6 in across at the base and 0.2 in at the tapered edge, which with
+ * rubber is 7 and 3 table units. Modelling the taper (instead of a constant-radius capsule) is
+ * what makes a tip shot fly flatter than a base shot, which is the whole vocabulary of aiming.
+ */
 export function flipper(px, py, len, rest, up, opts = {}) {
   return {
     t: 'flipper', px, py, len, rest, up,
-    r: opts.r ?? 8, e: opts.e ?? 0.3, mu: opts.mu ?? 0.05,
+    r: opts.r ?? 7, rTip: opts.rTip ?? 3, e: opts.e ?? 0.3, mu: opts.mu ?? 0.16,
     id: opts.id || '', angle: rest, omega: 0, pressed: false,
-    speed: opts.speed ?? 27,     // rad/s; a real flipper sweeps ~50 degrees in ~35 ms
+    speed: opts.speed ?? 26.5,   // rad/s; a real flipper sweeps 50 degrees in ~33 ms
   };
 }
 
@@ -118,6 +161,21 @@ function closestT(px, py, ax, ay, bx, by) {
  * SURFACE's frame (subtract sv), reflect, apply tangential friction, then add sv back. Doing it
  * in the world frame instead is the bug that makes a moving flipper feel like a wall - the paddle's
  * speed gets thrown away by the reflection instead of being handed to the ball.
+ *
+ * FRICTION IS COULOMB, AND THAT IS A BUG FIX, NOT A REFINEMENT (2026-08-14). This used to read
+ * `nvx -= tx * mu` - remove a fixed FRACTION of the tangential speed on every resolved contact.
+ * But a resting contact is re-resolved on every physics step, 480 times a second, so at mu = 0.05
+ * a ball rolling along a surface lost 5% of its speed every 2 ms: a 42 ms time constant. Matt, on
+ * the shipped build: "when the ball is rolling on the bottom level, it drastically slows down when
+ * it hits the paddle." It was not the paddle. It was every surface in the table, and the paddle is
+ * simply where a rolling ball spends longest.
+ *
+ * The fix is the textbook model: the tangential impulse is bounded by mu * (the NORMAL impulse).
+ * A ball resting on a flipper only pushes into it by one step's worth of gravity, so its normal
+ * impulse - and therefore its friction - is tiny; a ball slammed into a flipper has a large normal
+ * impulse and gets a correspondingly large tangential bite. Same coefficient, right physics, and
+ * the constant per-second loss a rolling ball SHOULD have now comes from ROLL_A instead, where it
+ * belongs. `test.js` carries the [KNOWN-BUG PROBE].
  */
 function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
   ball.x += nx * pen;
@@ -129,13 +187,15 @@ function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
 
   let out = { speed: -vn, nx, ny };
   if (vn < 0) {
-    const j = -(1 + e) * vn;
+    const j = -(1 + e) * vn;                 // normal impulse per unit mass, always >= 0
     let nvx = rvx + j * nx, nvy = rvy + j * ny;
-    // Tangential friction: enough to let the ball roll along a rail instead of skating, not so
-    // much that a glancing hit kills the shot.
     const tx = nvx - (nvx * nx + nvy * ny) * nx;
     const ty = nvy - (nvx * nx + nvy * ny) * ny;
-    nvx -= tx * mu; nvy -= ty * mu;
+    const ts = Math.hypot(tx, ty);
+    if (ts > 1e-6) {
+      const jt = Math.min(mu * j, ts);       // Coulomb bound, and never more than a full stop
+      nvx -= (tx / ts) * jt; nvy -= (ty / ts) * jt;
+    }
     ball.vx = nvx + svx; ball.vy = nvy + svy;
   }
 
@@ -155,6 +215,11 @@ function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
 
 // --- per-shape contact tests -------------------------------------------------------------------
 
+/** The solenoid's live kick: zero while the coil is still cooling down. `fired` on the returned
+ *  contact tells game.js whether this was a real solenoid hit or an ordinary bounce off the same
+ *  rubber, so a cooling slingshot does not keep scoring while it is not kicking. */
+function coilKick(c) { return c.cool > 0 ? 0 : (c.kick || 0); }
+
 function hitSeg(ball, s) {
   const t = closestT(ball.x, ball.y, s.ax, s.ay, s.bx, s.by);
   const qx = s.ax + (s.bx - s.ax) * t, qy = s.ay + (s.by - s.ay) * t;
@@ -170,7 +235,10 @@ function hitSeg(ball, s) {
     const along = ball.vx * s.oneWay[0] + ball.vy * s.oneWay[1];
     if (along <= 0) return null;
   }
-  return resolve(ball, nx, ny, reach - d, s.e, s.mu, s.kick, null);
+  const k = coilKick(s);
+  const out = resolve(ball, nx, ny, reach - d, s.e, s.mu, k, null);
+  if (k) { s.cool = s.rearm; out.fired = true; }
+  return out;
 }
 
 function hitCircle(ball, c) {
@@ -179,7 +247,10 @@ function hitCircle(ball, c) {
   const reach = ball.r + c.r;
   if (d >= reach) return null;
   if (d < 1e-6) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
-  return resolve(ball, nx, ny, reach - d, c.e, c.mu, c.kick, null);
+  const k = coilKick(c);
+  const out = resolve(ball, nx, ny, reach - d, c.e, c.mu, k, null);
+  if (k) { c.cool = c.rearm; out.fired = true; }
+  return out;
 }
 
 function hitArc(ball, a) {
@@ -202,10 +273,7 @@ function hitFlipper(ball, f) {
   const qx = f.px + (ex - f.px) * t, qy = f.py + (ey - f.py) * t;
   let nx = ball.x - qx, ny = ball.y - qy;
   const d = Math.hypot(nx, ny);
-  // A real flipper is a wedge: fat at the pivot, tapered at the tip. Modelling that (instead of a
-  // constant-radius capsule) is what makes a tip shot fly flatter than a base shot, which is the
-  // whole vocabulary of aiming in this game.
-  const surf = f.r * (1 - 0.35 * t);
+  const surf = f.r + (f.rTip - f.r) * t;         // the real bat's wedge, base -> tip
   const reach = ball.r + surf;
   if (d >= reach) return null;
   if (d < 1e-6) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
@@ -249,14 +317,17 @@ function ballPairs(balls, onHit) {
 /**
  * Advance the world by exactly one PHYS_DT.
  *
- * @param {object} world  { colliders, flippers, gravity, drag, nudgeX, nudgeY }
+ * @param {object} world  { colliders, flippers, gravity, roll, nudgeX, nudgeY }
  * @param {Array}  balls
- * @param {(kind, id, x, y, speed) => void} onContact  called once per resolved contact; game.js
- *        turns these into score, lamps and sound. Called AFTER the impulse, so `speed` is the
- *        closing speed that produced it.
+ * @param {(kind, id, x, y, speed, ball, fired) => void} onContact  called once per resolved
+ *        contact; game.js turns these into score and lamps. Called AFTER the impulse, so `speed`
+ *        is the closing speed that produced it, and `fired` is true only when a solenoid actually
+ *        pulsed (see COIL_REARM).
  */
 export function step(world, balls, onContact) {
   const { flippers, colliders } = world;
+
+  for (const c of colliders) if (c.cool > 0) c.cool -= PHYS_DT;
 
   for (const f of flippers) {
     const target = f.pressed ? f.up : f.rest;
@@ -276,12 +347,13 @@ export function step(world, balls, onContact) {
     if (world.nudgeX) ball.vx += world.nudgeX * PHYS_DT;
     if (world.nudgeY) ball.vy += world.nudgeY * PHYS_DT;
 
-    // A very light quadratic-ish drag. Real playfield friction is mostly rolling resistance, and
-    // without something here a ball trapped in a bumper nest never loses energy and never settles.
+    // Rolling resistance: a constant deceleration opposing motion, plus a small proportional term.
+    // See ROLL_A. The constant part is clamped so it can never reverse the ball at low speed.
     const sp = Math.hypot(ball.vx, ball.vy);
-    if (sp > 0) {
-      const d = 1 - Math.min(0.9, (world.drag ?? 0.16) * PHYS_DT * (0.5 + sp / 900));
-      ball.vx *= d; ball.vy *= d;
+    if (sp > 1e-6) {
+      const dec = Math.min(sp, (world.roll ?? ROLL_A) * PHYS_DT) + sp * AIR_K * PHYS_DT;
+      const k = Math.max(0, 1 - dec / sp);
+      ball.vx *= k; ball.vy *= k;
     }
 
     ball.x += ball.vx * PHYS_DT;
@@ -292,11 +364,11 @@ export function step(world, balls, onContact) {
       const hit = c.t === 'seg' ? hitSeg(ball, c)
         : c.t === 'circle' ? hitCircle(ball, c)
           : c.t === 'arc' ? hitArc(ball, c) : null;
-      if (hit && onContact) onContact(c.id ? 'id' : 'wall', c.id, ball.x, ball.y, hit.speed, ball);
+      if (hit && onContact) onContact(c.id ? 'id' : 'wall', c.id, ball.x, ball.y, hit.speed, ball, !!hit.fired);
     }
     for (const f of flippers) {
       const hit = hitFlipper(ball, f);
-      if (hit && onContact) onContact('flipper', f.id, ball.x, ball.y, hit.speed, ball);
+      if (hit && onContact) onContact('flipper', f.id, ball.x, ball.y, hit.speed, ball, false);
     }
 
     const s2 = Math.hypot(ball.vx, ball.vy);
@@ -307,4 +379,4 @@ export function step(world, balls, onContact) {
   ballPairs(balls, (x, y, sp) => { if (onContact) onContact('ball', 'ball', x, y, sp, null); });
 }
 
-export default { PHYS_DT, MAX_SPEED, BALL_R, makeBall, seg, circle, arc, flipper, step };
+export default { PHYS_DT, MAX_SPEED, BALL_R, ROLL_A, COIL_REARM, makeBall, seg, circle, arc, flipper, step };

@@ -17,24 +17,48 @@
 import { step, makeBall, PHYS_DT, BALL_R } from './physics.js';
 import {
   W, H, DRAIN_Y, SWITCHES, RAMP_PATH, RAMP_EXIT_V, RAMP_TIME,
-  buildTable, PLUNGER, DROP_COUNT, ART,
+  buildTable, PLUNGER, DROP_COUNT, ART, MM_PER_UNIT,
 } from './table.js';
 
-export const GRAVITY = 1150;
+/** Standard gravity, mm/s^2. */
+const G_MM = 9806.65;
+
+/**
+ * The playfield's downhill acceleration, in table units/s^2, for a pitch in DEGREES.
+ *
+ * THIS FUNCTION IS THE FIX FOR "the ball falls as if the machine is a vertical wall" (Matt,
+ * 2026-08-14). A real cabinet is pitched about 6.5 degrees and the ball ROLLS rather than slides,
+ * so a solid sphere's linear acceleration is (5/7) * g * sin(pitch) = 0.79 m/s^2 - one twelfth of
+ * a free fall. The old table used a flat 1150 units/s^2, which on this scale works out at an
+ * effective pitch of about 14 degrees, so every shot arced back down about twice as fast as it
+ * should and the table read as a wall seen edge-on.
+ *
+ * The three difficulties are now literally the three pitches a real operator would choose between,
+ * which is also why they are so close together: 6 to 7 degrees IS the whole adjustment range.
+ */
+export function gravityForPitch(deg) {
+  return (5 / 7) * G_MM * Math.sin(deg * Math.PI / 180) / MM_PER_UNIT;
+}
 
 /** Difficulty is the shared 1-4 tier vocabulary on the stats WRITE path, so these keys go straight
- *  into byDiff and difficulty-tiers.js maps them for the leaderboard with no translation layer. */
+ *  into byDiff and difficulty-tiers.js maps them for the leaderboard with no translation layer.
+ *  `pitch` is the playfield angle in degrees; see gravityForPitch(). */
 export const DIFFS = {
-  easy: { balls: 5, save: 12, gravity: 0.92, outlaneSaves: true },
-  medium: { balls: 3, save: 8, gravity: 1.0, outlaneSaves: false },
-  hard: { balls: 3, save: 3, gravity: 1.08, outlaneSaves: false },
+  easy: { balls: 5, save: 12, pitch: 6.0, outlaneSaves: true },
+  medium: { balls: 3, save: 8, pitch: 6.5, outlaneSaves: false },
+  hard: { balls: 3, save: 3, pitch: 7.0, outlaneSaves: false },
 };
+
+/** Kept as the medium-pitch value so anything reading a single "gravity" number still gets a
+ *  sensible one. The live figure always comes from gravityForPitch(). */
+export const GRAVITY = gravityForPitch(DIFFS.medium.pitch);
 
 export const PTS = {
   bumper: 1000, sling: 250, spinner: 300, lane: 1000, laneSet: 12000,
   drop: 2500, bankDone: 30000, ramp: 6000, rampCombo: 6000, orbit: 8000,
   scoop: 15000, lock: 40000, mbStart: 75000, jackpot: 60000, jackpotStep: 30000,
   superJackpot: 300000, standup: 1500, missionHit: 30000, skill: 50000,
+  post: 150, star: 2500,
 };
 
 /** The four timed missions, in fixed order. Each is started from the scoop once the drop bank has
@@ -55,6 +79,7 @@ const COMBO_WINDOW = 6;          // seconds a ramp/orbit combo stays alive
 const STUCK_NUDGE_AT = 3.5;      // seconds of near-zero speed before a gentle shove
 const STUCK_RESERVE_AT = 8;      // ...and before the ball is re-served outright
 const MAX_HOLD = 3;              // seconds a ball may legitimately be HELD (ramp ride is 1.15)
+const STUCK_MOVE = 18;           // units of travel that count as "the ball is going somewhere"
 
 /** Deterministic PRNG so test.js can replay a whole game exactly. */
 export function mulberry32(seed) {
@@ -101,7 +126,7 @@ export class Pinball {
     this.flippers = built.flippers;
     this.world = {
       colliders: this.colliders, flippers: this.flippers,
-      gravity: GRAVITY * cfg.gravity, drag: 0.16, nudgeX: 0, nudgeY: 0,
+      gravity: gravityForPitch(cfg.pitch), nudgeX: 0, nudgeY: 0,
     };
     this.balls = [];
     this.phase = 'attract';        // attract | ready | play | bonus | over
@@ -178,12 +203,19 @@ export class Pinball {
 
   // --- input -------------------------------------------------------------------------------------
 
+  /** One button per side drives BOTH flippers on that side - the main one and the upper one. That
+   *  is how a real machine with an upper flipper is wired (there is no third button on a pinball
+   *  cabinet), and it is what makes the upper pair a skill rather than a second set of controls. */
   setFlipper(side, down) {
     if (this.tilted) down = false;
-    const f = this.flippers[side === 'left' ? 0 : 1];
-    if (f.pressed === down) return;
-    f.pressed = down;
-    if (down) this.emit({ type: 'flip', side });
+    const ids = side === 'left' ? ['flipL', 'flipUL'] : ['flipR', 'flipUR'];
+    let changed = false;
+    for (const f of this.flippers) {
+      if (!ids.includes(f.id) || f.pressed === down) continue;
+      f.pressed = down;
+      changed = true;
+    }
+    if (changed && down) this.emit({ type: 'flip', side });
   }
 
   plungerDown() { if (this._plungerBall()) this.plungerHeld = true; }
@@ -206,11 +238,11 @@ export class Pinball {
    *  the ball is dead with no bonus, exactly like the real thing. */
   nudge(dir) {
     if (this.tilted || this.phase !== 'play') return;
-    const ax = dir === 'left' ? -190 : dir === 'right' ? 190 : 0;
-    const ay = dir === 'up' ? -150 : 0;
+    const ax = dir === 'left' ? -300 : dir === 'right' ? 300 : 0;
+    const ay = dir === 'up' ? -240 : 0;
     for (const b of this.balls) {
       if (!b.live || b.held) continue;
-      b.vx += ax; b.vy += ay - 60;
+      b.vx += ax; b.vy += ay - 95;
     }
     this.tiltMeter += 1;
     this.emit({ type: 'nudge', dir });
@@ -245,7 +277,7 @@ export class Pinball {
     this._heldTick(dt);
 
     const steps = Math.max(1, Math.round(dt / PHYS_DT));
-    const onContact = (kind, id, x, y, speed, ball) => this._contact(kind, id, x, y, speed, ball);
+    const onContact = (kind, id, x, y, speed, ball, fired) => this._contact(kind, id, x, y, speed, ball, fired);
     for (let i = 0; i < steps; i++) step(this.world, this.balls, onContact);
 
     this._switchTick(dt);
@@ -254,11 +286,18 @@ export class Pinball {
 
   // --- contacts ----------------------------------------------------------------------------------
 
-  _contact(kind, id, x, y, speed, ball) {
-    if (kind === 'ball') { if (speed > 120) this.emit({ type: 'clack', x, y, speed }); return; }
-    if (kind === 'flipper') { if (speed > 150) this.emit({ type: 'thock', x, y, speed }); return; }
+  /** `fired` (from physics.js) is true only when a solenoid actually pulsed. A slingshot whose coil
+   *  is still re-arming is just a piece of rubber, and it must not score - otherwise the re-arm
+   *  fixes the resonance in the physics and leaves it in the score, which is the half a player
+   *  would actually see. `_contact` is also the entry point the tests drive directly, so `fired`
+   *  defaults to true when it is not supplied. */
+  _contact(kind, id, x, y, speed, ball, fired = true) {
+    if (kind === 'ball') { if (speed > 180) this.emit({ type: 'clack', x, y, speed }); return; }
+    if (kind === 'flipper') { if (speed > 225) this.emit({ type: 'thock', x, y, speed }); return; }
     if (!id) return;
-    if (speed < 24 && !id.startsWith('pop') && !id.startsWith('sling')) return;
+    const solenoid = id.startsWith('pop') || id.startsWith('sling');
+    if (solenoid && !fired) return;
+    if (speed < 36 && !solenoid) return;
 
     if (id.startsWith('pop')) {
       this.stats.bumpers++; this.bonus.bumpers++;
@@ -291,7 +330,12 @@ export class Pinball {
       this.emit({ type: 'standup', id, x, y });
       return;
     }
-    if (speed > 220) this.emit({ type: 'clink', x, y, speed });
+    if (id.startsWith('arcPost')) {
+      this._award(PTS.post, x, y);
+      this.emit({ type: 'post', id, x, y });
+      return;
+    }
+    if (speed > 330) this.emit({ type: 'clink', x, y, speed });
   }
 
   _bankComplete(x, y) {
@@ -337,7 +381,7 @@ export class Pinball {
       case 'spinner': {
         // One pass, many clicks: the faster the ball crosses, the longer it rips. That is the one
         // switch on the table whose value depends on how well the shot was hit.
-        const rips = Math.max(1, Math.min(12, Math.round(Math.abs(b.vy) / 55)));
+        const rips = Math.max(1, Math.min(12, Math.round(Math.abs(b.vy) / 85)));
         this.bonus.spins += rips; this.stats.spins += rips;
         this._award(PTS.spinner * rips, s.x, s.y, 'spinner');
         this.emit({ type: 'spinner', rips, x: s.x, y: s.y });
@@ -366,10 +410,27 @@ export class Pinball {
         }
         break;
       }
+      // The centre rollover above the teardrop. It is the SKILL SHOT: `skillLit` is set when a ball
+      // is served and cleared by anything that scores, so the big award is only there for a player
+      // who threads it on the very first shot of the ball. (PTS.skill and `skillLit` both existed
+      // from day one and nothing ever read them; this is the shot they were waiting for.)
+      case 'star': {
+        if (this.skillLit) {
+          this.skillLit = false;
+          this._award(PTS.skill, s.x, s.y, 'skill');
+          this.emit({ type: 'skill', x: s.x, y: s.y });
+          this.emit({ type: 'msg', key: 'msg_skill', big: true });
+        } else {
+          this._combo();
+          this._award(PTS.star * this.combo, s.x, s.y);
+          this.emit({ type: 'star', combo: this.combo, x: s.x, y: s.y });
+        }
+        break;
+      }
       case 'rampIn': {
-        if (b.vy > -60) break;                       // rolling back down: not a made ramp
+        if (b.vy > -90) break;                       // rolling back down: not a made ramp
         if (b.vy > -s.needUp) {                      // hit it, but not hard enough
-          b.vy = 200; b.vx += (this.rand() - 0.5) * 90;
+          b.vy = 320; b.vx += (this.rand() - 0.5) * 140;
           this.emit({ type: 'rampreject', x: s.x, y: s.y });
           break;
         }
@@ -572,7 +633,15 @@ export class Pinball {
         b.scoop -= dt;
         if (b.scoop <= 0) {
           b.scoop = null; b.held = false;
-          b.vx = -90; b.vy = 480;
+          // ACROSS the table, not straight down, and jittered. A gentle downward kickout put the
+          // ball on a perfectly repeatable path that walked it back into the scoop's own mouth:
+          // six soak games produced 185 scoop awards, 184 of them arriving at exactly
+          // (312, 334) with exactly (255, -606) of velocity. A saucer that reloads itself is a
+          // slot machine, not a shot. Real kickouts are hard and slightly unrepeatable, so this
+          // one throws left across the playfield with a random component off the seeded PRNG (so
+          // a replayed game is still identical).
+          b.vx = -430 - this.rand() * 150;
+          b.vy = 380 + this.rand() * 160;
           this.emit({ type: 'kickout', x: b.x, y: b.y });
         }
       }
@@ -598,7 +667,7 @@ export class Pinball {
         if (b.heldFor > MAX_HOLD) {
           console.error('[pinball] a ball was held for %ss; releasing it. This is a bug.', b.heldFor.toFixed(1));
           b.heldFor = 0; b.ramp = null; b.scoop = null; b.held = false;
-          b.vx = -90; b.vy = 480;
+          b.vx = -160; b.vy = 620;
           this.emit({ type: 'ballsearch' });
         }
         continue;
@@ -615,7 +684,7 @@ export class Pinball {
       // A ball that came back down the shooter lane is not stuck, it is a weak plunge. Hand it back
       // to the plunger promptly instead of letting the generic watchdog sit on it for eight seconds
       // - a dead-looking table is the fastest way to make a player think the game has broken.
-      if (b.x > PLUNGER.laneX && b.y > 620 && Math.hypot(b.vx, b.vy) < 60) {
+      if (b.x > PLUNGER.laneX && b.y > 660 && Math.hypot(b.vx, b.vy) < 90) {
         b.laneRest = (b.laneRest || 0) + dt;
         if (b.laneRest > 0.5) {
           b.laneRest = 0; b.restTime = 0;
@@ -638,7 +707,7 @@ export class Pinball {
       // several times a second while going precisely nowhere. Displacement cannot be fooled that
       // way - if the ball has not moved a ball-width in four seconds, it is stuck, whatever its
       // velocity says.
-      if (Math.hypot(b.x - (b.ax ?? b.x), b.y - (b.ay ?? b.y)) > 16) {
+      if (Math.hypot(b.x - (b.ax ?? b.x), b.y - (b.ay ?? b.y)) > STUCK_MOVE) {
         b.ax = b.x; b.ay = b.y; b.restTime = 0;
       } else {
         if (b.ax == null) { b.ax = b.x; b.ay = b.y; }
@@ -650,8 +719,8 @@ export class Pinball {
           if (this.phase === 'play' && this.balls.filter((x) => x.live).length === 1) this.phase = 'ready';
           this.emit({ type: 'ballsearch' });
         } else if (b.restTime > STUCK_NUDGE_AT) {
-          b.vx += (this.rand() - 0.5) * 260;
-          b.vy -= 190;
+          b.vx += (this.rand() - 0.5) * 400;
+          b.vy -= 290;
           b.restTime = STUCK_NUDGE_AT * 0.4;
           this.emit({ type: 'ballsearch', soft: true });
         }
@@ -730,6 +799,9 @@ export class Pinball {
 
   _award(points, x, y, label, silent) {
     if (this.tilted && !silent) return;              // a tilted table scores nothing. That is the point.
+    // The skill shot is only there for the FIRST thing a ball does. Anything else that scores
+    // spends it, which is what makes threading the star rollover off the plunge worth the risk.
+    if (!silent && label !== 'skill') this.skillLit = false;
     const v = Math.round(points * this.scoreMult);
     this.score += v;
     if (!silent) this.emit({ type: 'score', value: v, x, y, label });
@@ -782,4 +854,4 @@ function setZero(arr) { for (let i = 0; i < arr.length; i++) arr[i] = false; }
 function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
 
 export { ART, BALL_R };
-export default { Pinball, DIFFS, MISSIONS, PTS, GRAVITY, mulberry32, rampPoint };
+export default { Pinball, DIFFS, MISSIONS, PTS, GRAVITY, gravityForPitch, mulberry32, rampPoint };

@@ -151,6 +151,7 @@ export class PinballUI {
           <p class="pb-help-example">${esc(t('help_ex2'))}</p>
           <p class="pb-help-rule">${esc(t('help_rule1'))}</p>
           <p class="pb-help-rule">${esc(t('help_rule2'))}</p>
+          <p class="pb-help-rule">${esc(t('help_rule3'))}</p>
         </div>
       </div>`);
   }
@@ -174,28 +175,30 @@ export class PinballUI {
         <path class="pb-dg-lane" d="M53 92 A47 47 0 0 1 147 92"/>
 
         <g class="pb-dg-flip">
-          <path d="M78 166 L96 177"/>
-          <path d="M122 166 L104 177"/>
+          <path d="M74 164 L96 176"/>
+          <path d="M126 164 L104 176"/>
+          <path d="M72 106 L86 114"/>
+          <path d="M128 106 L114 114"/>
         </g>
 
         <g class="pb-dg-arrow">
-          <path d="M100 160 L100 120" marker-end="url(#pb-dg-head)"/>
-          <path d="M88 162 Q120 140 138 108" marker-end="url(#pb-dg-head)"/>
-          <path d="M112 162 Q88 148 74 136" marker-end="url(#pb-dg-head)"/>
-          <path d="M52 152 Q43 100 76 62" marker-end="url(#pb-dg-head)"/>
+          <path d="M100 158 L100 128" marker-end="url(#pb-dg-head)"/>
+          <path d="M88 160 Q120 136 140 106" marker-end="url(#pb-dg-head)"/>
+          <path d="M100 102 L100 74" marker-end="url(#pb-dg-head)"/>
+          <path d="M112 160 Q66 138 56 92" marker-end="url(#pb-dg-head)"/>
         </g>
 
         <g class="pb-dg-glyph">
-          <path d="M93 112 L100 100 L107 112"/>
-          <circle cx="140" cy="98" r="8"/>
-          <path d="M58 122 L72 132 M54 130 L68 140"/>
+          <path d="M93 124 L100 112 L107 124"/>
+          <circle cx="142" cy="96" r="8"/>
+          <path d="M86 62 L114 62 M86 68 L114 68"/>
         </g>
 
         <g class="pb-dg-num">
-          <circle cx="100" cy="90" r="9"/><text x="100" y="94">1</text>
-          <circle cx="140" cy="76" r="9"/><text x="140" y="80">2</text>
-          <circle cx="70" cy="108" r="9"/><text x="70" y="112">3</text>
-          <circle cx="100" cy="46" r="9"/><text x="100" y="50">4</text>
+          <circle cx="100" cy="142" r="9"/><text x="100" y="146">1</text>
+          <circle cx="142" cy="74" r="9"/><text x="142" y="78">2</text>
+          <circle cx="100" cy="46" r="9"/><text x="100" y="50">3</text>
+          <circle cx="50" cy="72" r="9"/><text x="50" y="76">4</text>
         </g>
       </svg>
       <p class="pb-help-key">

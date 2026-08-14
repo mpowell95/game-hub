@@ -66,7 +66,7 @@ export class Renderer {
     this.shake = 0;
     this.flashAmt = 0;
     this.flashColor = C.cyan;
-    this.popPulse = [0, 0, 0];
+    this.popPulse = [0, 0, 0];   // three pop bumpers: two up top, one below the flippers
     this.slingPulse = [0, 0];
     this.dropAnim = new Array(DROP_COUNT).fill(0);
     this.standPulse = [0, 0];
@@ -174,10 +174,12 @@ export class Renderer {
     this._drawDrops(ctx, game);
     this._drawStands(ctx);
     this._drawSpinner(ctx, game);
+    this._drawPosts(ctx, game, hud);
     this._drawScoop(ctx, game, hud);
     this._drawBumpers(ctx);
     this._drawSlings(ctx);
     this._drawRamp(ctx, game, hud);
+    this._drawWires(ctx);
     this._drawPlunger(ctx, game, hud);
     this._drawFlippers(ctx, game);
     this._drawBalls(ctx, game);
@@ -250,7 +252,7 @@ export class Renderer {
     g.fillStyle = bg;
     g.fillRect(0, 0, W, H);
 
-    const neb = g.createRadialGradient(AXIS, 250, 20, AXIS, 250, 300);
+    const neb = g.createRadialGradient(AXIS, 260, 20, AXIS, 260, 320);
     neb.addColorStop(0, 'rgba(120,60,255,0.42)');
     neb.addColorStop(0.55, 'rgba(60,30,150,0.20)');
     neb.addColorStop(1, 'rgba(0,0,0,0)');
@@ -279,7 +281,7 @@ export class Renderer {
     // --- the shooter lane -------------------------------------------------------------------------
     g.save();
     g.fillStyle = 'rgba(10,6,26,0.75)';
-    g.fillRect(356, 250, 36, 480);
+    g.fillRect(360, 250, 32, 536);
     g.restore();
 
     // --- walls ------------------------------------------------------------------------------------
@@ -295,28 +297,26 @@ export class Renderer {
     this._rail(g, (p) => { p.arc(ARCH.cx, ARCH.cy, ARCH.rOut, Math.PI, TAU); });
     this._rail(g, (p) => { p.arc(ARCH.cx, ARCH.cy, ARCH.rIn, Math.PI, TAU - 20 * Math.PI / 180); });
 
-    this._rail(g, (p) => { p.moveTo(12, 250); p.lineTo(12, 556); p.lineTo(76, 716); });
-    this._rail(g, (p) => { p.moveTo(390, 250); p.lineTo(390, 730); });
-    this._rail(g, (p) => { p.moveTo(356, 290); p.lineTo(356, 730); });
-    this._rail(g, (p) => { p.moveTo(356, 556); p.lineTo(292, 716); });
-    this._rail(g, (p) => { p.moveTo(356, 724); p.lineTo(390, 724); });
-    this._rail(g, (p) => { p.moveTo(46, 250); p.lineTo(46, 392); });
+    // The outer shell, straight off ART.walls so the paint can never drift from the colliders.
+    for (const chain of ART.walls) {
+      this._rail(g, (p) => {
+        p.moveTo(chain[0][0], chain[0][1]);
+        for (let i = 1; i < chain.length; i++) p.lineTo(chain[i][0], chain[i][1]);
+      });
+    }
+    this._rail(g, (p) => { p.moveTo(392, 224); p.lineTo(392, 792); });
+    this._rail(g, (p) => { p.moveTo(360, 782); p.lineTo(392, 782); });
+    this._rail(g, (p) => { p.moveTo(62, 224); p.lineTo(62, 344); });
 
     // One-way gates get their own look: thin, brassy, obviously a flap rather than a wall.
-    this._gate(g, 390, 250, 356, 290);
-    this._gate(g, 46, 392, 92, 444);
-
-    // Ramp mouth guides.
-    this._rail(g, (p) => { p.moveTo(158, 436); p.lineTo(168, 396); }, C.magenta);
-    this._rail(g, (p) => { p.moveTo(210, 436); p.lineTo(200, 396); }, C.magenta);
+    this._gate(g, 392, 224, 360, 262);
+    this._gate(g, 62, 344, 120, 408);
 
     // Inlane / outlane dividers.
-    for (const [ax, ay, bx, by] of [[40, 524, 110, 634], [328, 524, 258, 634]]) {
-      this._rubberRail(g, ax, ay, bx, by, 5, '#9fb0d6');
-    }
+    for (const [[ax, ay], [bx, by]] of ART.rails) this._rubberRail(g, ax, ay, bx, by, 5, '#9fb0d6');
 
     // Lane-divider posts at the top.
-    for (const [x, y] of [[172, 140], [212, 140]]) this._post(g, x, y, 6);
+    for (const [x, y] of ART.lanePosts) this._post(g, x, y, 7);
 
     // The drain lip, so the bottom of the table reads as a hole rather than an edge.
     const dg = g.createLinearGradient(0, DRAIN_Y - 40, 0, H);
@@ -326,22 +326,24 @@ export class Renderer {
     g.fillRect(0, DRAIN_Y - 40, W, H - DRAIN_Y + 40);
   }
 
-  /** The painted-on artwork: shot arrows, lane fills, the table's name. Pure decoration. */
+  /** The painted-on artwork: shot arrows, lane fills, the reference table's insert arcs, the
+   *  wordmark. Pure decoration - but every position comes out of ART, so it moves when the table
+   *  moves. */
   _paintLanePaint(g) {
     g.save();
 
     // Big painted disc behind the bumper nest.
-    const rg = g.createRadialGradient(AXIS, 235, 10, AXIS, 235, 150);
+    const rg = g.createRadialGradient(AXIS, 250, 10, AXIS, 250, 150);
     rg.addColorStop(0, 'rgba(255,79,216,0.20)');
     rg.addColorStop(1, 'rgba(255,79,216,0)');
     g.fillStyle = rg;
-    g.beginPath(); g.arc(AXIS, 235, 150, 0, TAU); g.fill();
+    g.beginPath(); g.arc(AXIS, 250, 150, 0, TAU); g.fill();
 
-    // Shot arrows: three chevrons pointing the way each major shot goes.
-    this._arrows(g, 184, 470, -Math.PI / 2, C.magenta);          // ramp, straight up
-    this._arrows(g, 322, 400, -Math.PI / 2 - 0.18, C.cyan);      // right lane to the scoop
-    this._arrows(g, 30, 420, -Math.PI / 2, C.gold);              // left orbit
-    this._arrows(g, 128, 424, -0.93, C.green);                   // drop target bank
+    // Shot arrows: chevrons pointing the way each major shot goes, at the angle it is actually made.
+    this._arrows(g, AXIS, 540, -Math.PI / 2, C.magenta);           // ramp, straight up the middle
+    this._arrows(g, 268, 430, -Math.PI / 2 - 0.46, C.cyan);        // the scoop, off the left flipper
+    this._arrows(g, 46, 420, -Math.PI / 2, C.gold);                // left orbit
+    this._arrows(g, AXIS, 214, -Math.PI / 2, C.green);             // up the middle to the drop bank
 
     // The three top rollover lanes, painted as real lane channels with their letters. Without this
     // they are three invisible switches under the arch and nobody discovers the bonus multiplier.
@@ -350,32 +352,46 @@ export class Renderer {
       g.translate(lx, ly);
       g.rotate((i - 1) * 0.22);
       g.strokeStyle = 'rgba(62,232,255,0.13)';
-      g.lineWidth = 22;
+      g.lineWidth = 24;
       g.lineCap = 'round';
-      g.beginPath(); g.moveTo(0, -22); g.lineTo(0, 26); g.stroke();
+      g.beginPath(); g.moveTo(0, -24); g.lineTo(0, 28); g.stroke();
       g.globalAlpha = 0.5;
       g.fillStyle = C.cyan;
-      g.font = '800 15px "Trebuchet MS", system-ui, sans-serif';
+      g.font = '800 16px "Trebuchet MS", system-ui, sans-serif';
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('HUB'[i], 0, 2);
       g.restore();
     });
 
-    // Inlane / outlane paint.
-    for (const [[ax, ay], [bx, by]] of [[[75, 501], [145, 612]], [[293, 501], [223, 612]]]) {
+    // Inlane / outlane paint, following the dividers.
+    for (const [[ax, ay], [bx, by]] of ART.rails) {
       g.strokeStyle = 'rgba(62,232,255,0.10)';
       g.lineWidth = 26;
       g.lineCap = 'round';
       g.beginPath();
-      g.moveTo(ax + (bx - ax) * 0.12, ay + (by - ay) * 0.12);
+      g.moveTo(ax + (bx - ax) * 0.1, ay + (by - ay) * 0.1);
       g.lineTo(bx, by);
       g.stroke();
+    }
+
+    // The reference table's arcs of coloured lenses. They are LAMPS, not posts (see table.js), so
+    // they are paint - but they are the layout's signature and the table reads wrong without them.
+    const lensColor = { top: C.magenta, ramp: C.red };
+    for (const arcDef of ART.lensArcs) {
+      for (const [lx, ly] of arcDef.pts) {
+        g.beginPath(); g.arc(lx, ly, 5.5, 0, TAU);
+        g.fillStyle = 'rgba(0,0,0,0.45)'; g.fill();
+        g.beginPath(); g.arc(lx, ly, 4.2, 0, TAU);
+        g.globalAlpha = 0.55;
+        g.fillStyle = lensColor[arcDef.key] || C.cyan; g.fill();
+        g.globalAlpha = 1;
+      }
     }
 
     // The table's name across the lower playfield, ghosted into the paint. Split STAR / H U B
     // on purpose: the lower half echoes the three H-U-B rollover lanes at the top of the table.
     g.save();
-    g.translate(AXIS, 552);
+    g.translate(AXIS, 600);
     g.globalAlpha = 0.10;
     g.fillStyle = '#ffffff';
     g.font = '700 34px "Trebuchet MS", system-ui, sans-serif';
@@ -457,8 +473,63 @@ export class Renderer {
 
   // --- live playfield elements ---------------------------------------------------------------------
 
-  /** Lamp inserts. Lit is brighter AND filled with a ring; unlit is a dark hollow lens, so the two
-   *  states differ by shape as well as by brightness (the hub's colourblind rule). */
+  /** The rubber posts that ARE real colliders (table.js's ARC_POSTS), plus Casual's save posts and
+   *  the star rollover. Drawn live rather than into the static bitmap because the save posts only
+   *  exist on Casual and the star lights up. */
+  _drawPosts(ctx, game, hud) {
+    for (const [x, y] of ART.arcPosts) this._post(ctx, x, y, 5);
+    if (game.colliders.some((c) => c.id === 'savePostL')) {
+      for (const [x, y] of ART.savePosts) {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(x, y, 15, 0, TAU);
+        ctx.fillStyle = `rgba(62,242,160,${0.10 + (hud.save > 0 ? 0.14 : 0)})`;
+        ctx.fill();
+        ctx.restore();
+        this._post(ctx, x, y, 11);
+      }
+    }
+    // The star rollover: a painted star that flashes while the skill shot is still live.
+    const [sx, sy] = ART.star;
+    const live = hud.phase === 'ready' || hud.onPlunger;
+    const pulse = 0.55 + Math.sin(this.time * 8) * 0.45;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 ? 5.5 : 13;
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const px = Math.cos(a) * r, py = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = live ? C.gold : 'rgba(255,255,255,0.10)';
+    ctx.globalAlpha = live ? 0.35 + pulse * 0.5 : 1;
+    if (live) { ctx.shadowColor = C.gold; ctx.shadowBlur = 14; }
+    ctx.fill();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = live ? '#ffffff' : 'rgba(255,255,255,0.3)';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** The thin wire guides the reference table runs down onto each upper flipper. Habitrail wire
+   *  ABOVE the playfield, so they are paint only (see ART.wires) - drawn here, over everything, so
+   *  they read as being above the table rather than scratched into it. */
+  _drawWires(ctx) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const [[ax, ay], [bx, by]] of ART.wires) {
+      ctx.beginPath(); ctx.moveTo(ax + 4, ay + 7); ctx.lineTo(bx + 4, by + 7);
+      ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.strokeStyle = C.metalDark; ctx.lineWidth = 5; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.strokeStyle = C.metal; ctx.lineWidth = 2; ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   _drawInserts(ctx, game, hud) {
     const lit = {
       ramp: hud.multiball || hud.lockLit || (hud.mission && hud.mission.id === 'ramp'),
@@ -493,10 +564,13 @@ export class Renderer {
     }
   }
 
+  /** Three pop bumpers now, and they are NOT the same size: two big ones up top and the small one
+   *  the reference table puts dead centre below the flippers. Radii come out of ART.pops so the
+   *  cap can never be drawn a different size from the thing the ball actually hits. */
   _drawBumpers(ctx) {
-    ART.pops.forEach(([x, y], i) => {
+    ART.pops.forEach(([x, y, rad], i) => {
       const p = this.popPulse[i];
-      const r = 20 + p * 4;
+      const r = rad + p * 4;
       ctx.save();
       ctx.translate(x, y);
 
@@ -651,17 +725,25 @@ export class Renderer {
     hg.addColorStop(1, active ? 'rgba(62,232,255,0.5)' : 'rgba(60,70,110,0.5)');
     ctx.beginPath(); ctx.arc(0, 0, rad - 1, 0, TAU);
     ctx.fillStyle = hg; ctx.fill();
-    // Rim, with the mouth left open.
+    // Rim, with the mouth left open. Three passes, like every other rail on the table: a dark
+    // casing, the metal, and a highlight. A single mid-grey stroke left the saucer reading as a
+    // featureless black disc on a dark playfield, which is the one shot on the table a player has
+    // to be able to FIND.
     ctx.beginPath();
     ctx.arc(0, 0, rad, mouth + half, mouth - half + TAU);
-    ctx.lineWidth = 8; ctx.strokeStyle = C.ink; ctx.stroke();
+    ctx.lineWidth = 10; ctx.strokeStyle = C.ink; ctx.stroke();
     ctx.beginPath();
     ctx.arc(0, 0, rad, mouth + half, mouth - half + TAU);
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 7;
     ctx.strokeStyle = active ? C.cyan : C.metalMid;
     if (active) { ctx.shadowColor = C.cyan; ctx.shadowBlur = 10 + pulse * 14; }
     ctx.stroke();
     ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(0, 0, rad, mouth + half, mouth - half + TAU);
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.75)' : C.metal;
+    ctx.stroke();
     if (this.scoopPulse > 0.02) {
       ctx.globalAlpha = this.scoopPulse;
       ctx.beginPath(); ctx.arc(0, 0, rad + 6 + (1 - this.scoopPulse) * 20, 0, TAU);
@@ -673,18 +755,68 @@ export class Renderer {
 
   /** The ramp habitrail. Drawn ABOVE the playfield with a shadow under it, because that is the one
    *  cue that says "the ball is on a wire over the table" in a top-down 2D view. */
+  /** THE RAMP IS THE TEARDROP. The reference blueprint draws the big centre shape as an outline
+   *  with a line down its middle, which is a ramp seen from above: two side rails and the seam of
+   *  its floor. So it is drawn as a solid raised island with a mouth at the bottom facing the
+   *  flippers, a lit seam up its spine, and the habitrail wire carrying on from its top over to the
+   *  right inlane. Geometry comes from ART.ring and RAMP_PATH, which are the same numbers the
+   *  collider and the ball ride. */
   _drawRamp(ctx, game, hud) {
     const lit = hud.multiball || this.rampGlow > 0.02 || (hud.mission && hud.mission.id === 'ramp');
+    const R = ART.ring;
+    const a0 = R.mouth + R.half, a1 = R.mouth - R.half + TAU;
+
     ctx.save();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
+    // Body: the ring's arc closed off through the pointed top, filled. Drawn with a shadow under it
+    // because in a top-down 2D view a shadow is the only cue that says "this is above the wood".
+    const body = (c) => {
+      c.beginPath();
+      c.arc(R.cx, R.cy, R.rad, a0, a1);
+      c.lineTo(R.apex[0], R.apex[1]);
+      c.closePath();
+    };
+    ctx.save();
+    ctx.translate(5, 9);
+    body(ctx);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fill();
+    ctx.restore();
+
+    body(ctx);
+    const bg = ctx.createLinearGradient(R.cx, R.apex[1], R.cx, R.cy + R.rad);
+    bg.addColorStop(0, lit ? 'rgba(255,79,216,0.34)' : 'rgba(24,18,52,0.92)');
+    bg.addColorStop(1, lit ? 'rgba(120,20,90,0.55)' : 'rgba(10,6,28,0.95)');
+    ctx.fillStyle = bg;
+    ctx.fill();
+
+    // The centre seam the blueprint draws.
+    ctx.beginPath();
+    ctx.moveTo(R.apex[0], R.apex[1] + 6);
+    ctx.lineTo(R.cx, R.cy + R.rad - 4);
+    ctx.strokeStyle = lit ? 'rgba(255,255,255,0.5)' : 'rgba(160,180,230,0.22)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Both rails, in metal, so the mouth reads as an opening rather than a missing chunk.
+    this._rail(ctx, (p) => { p.arc(R.cx, R.cy, R.rad, a0, a1); }, lit ? C.magenta : null);
+    this._rail(ctx, (p) => {
+      p.moveTo(R.cx + R.rad * Math.cos(210 * Math.PI / 180), R.cy + R.rad * Math.sin(210 * Math.PI / 180));
+      p.lineTo(R.apex[0], R.apex[1]);
+      p.lineTo(R.cx + R.rad * Math.cos(330 * Math.PI / 180), R.cy + R.rad * Math.sin(330 * Math.PI / 180));
+    }, lit ? C.magenta : null);
+
+    // The habitrail out of the top, over to the right inlane. Starts inside the island so the wire
+    // reads as coming OUT of the ramp rather than starting in mid-air.
+    const wire = RAMP_PATH.slice(2);
     const path = (c) => {
       c.beginPath();
-      c.moveTo(RAMP_PATH[0][0], RAMP_PATH[0][1]);
-      for (let i = 1; i < RAMP_PATH.length; i++) c.lineTo(RAMP_PATH[i][0], RAMP_PATH[i][1]);
+      c.moveTo(wire[0][0], wire[0][1]);
+      for (let i = 1; i < wire.length; i++) c.lineTo(wire[i][0], wire[i][1]);
     };
-
-    // Drop shadow on the playfield below.
     ctx.save();
     ctx.translate(5, 8);
     path(ctx);
@@ -692,21 +824,20 @@ export class Renderer {
     ctx.restore();
 
     // Translucent, because a real ramp is a sheet of clear plastic and an opaque one hides a third
-    // of the playfield (which is precisely what the first browser run showed).
+    // of the playfield.
     path(ctx);
     ctx.strokeStyle = 'rgba(10,6,28,0.42)'; ctx.lineWidth = 24; ctx.stroke();
     path(ctx);
     ctx.strokeStyle = lit ? 'rgba(255,79,216,0.26)' : 'rgba(160,180,230,0.10)';
     ctx.lineWidth = 20; ctx.stroke();
 
-    // Two side rails.
     for (const off of [-10, 10]) {
       ctx.save();
       ctx.beginPath();
-      for (let i = 0; i < RAMP_PATH.length; i++) {
-        const [px, py] = RAMP_PATH[i];
-        const [qx, qy] = RAMP_PATH[Math.min(RAMP_PATH.length - 1, i + 1)];
-        const [ox, oy] = RAMP_PATH[Math.max(0, i - 1)];
+      for (let i = 0; i < wire.length; i++) {
+        const [px, py] = wire[i];
+        const [qx, qy] = wire[Math.min(wire.length - 1, i + 1)];
+        const [ox, oy] = wire[Math.max(0, i - 1)];
         const dx = qx - ox, dy = qy - oy;
         const l = Math.hypot(dx, dy) || 1;
         const nx = -dy / l * off, ny = dx / l * off;
@@ -727,7 +858,7 @@ export class Renderer {
     ctx.save();
     // Shaft.
     ctx.strokeStyle = C.metalDark; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(x, base + 6); ctx.lineTo(x, 740); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, base + 6); ctx.lineTo(x, 792); ctx.stroke();
     // Spring, compressing as the plunger is pulled.
     const top = base + p * 16;
     ctx.strokeStyle = hud.onPlunger ? C.gold : C.metalMid;
@@ -746,9 +877,9 @@ export class Renderer {
     // Power meter up the side of the lane.
     if (hud.onPlunger) {
       const h = 150;
-      ctx.beginPath(); roundRect(ctx, 372 - 4, base - 20 - h, 8, h, 4);
+      ctx.beginPath(); roundRect(ctx, PLUNGER.x - 4, base - 20 - h, 8, h, 4);
       ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fill();
-      ctx.beginPath(); roundRect(ctx, 372 - 4, base - 20 - h * p, 8, h * p, 4);
+      ctx.beginPath(); roundRect(ctx, PLUNGER.x - 4, base - 20 - h * p, 8, h * p, 4);
       ctx.fillStyle = p > 0.82 ? C.red : p > 0.45 ? C.gold : C.cyan;
       ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
       ctx.fill();
@@ -757,25 +888,35 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** All FOUR flippers - the main pair and the upper pair - drawn from the same loop, tapering from
+   *  `r` at the pivot to `rTip` at the tip exactly as hitFlipper() does. A constant-width paddle
+   *  would tell the player the tip is fatter than the thing they are aiming with. */
   _drawFlippers(ctx, game) {
     for (const f of game.flippers) {
       const ex = f.px + Math.cos(f.angle) * f.len;
       const ey = f.py + Math.sin(f.angle) * f.len;
+      const steps = 8;
       ctx.save();
       ctx.lineCap = 'round';
-      // Casing.
+      // Casing, then the tapered body, drawn as a short chain of narrowing strokes.
       ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
       ctx.strokeStyle = C.ink; ctx.lineWidth = f.r * 2 + 5; ctx.stroke();
-      // Body, tapering toward the tip the way the collider does.
       const grad = ctx.createLinearGradient(f.px, f.py - f.r, f.px, f.py + f.r);
       grad.addColorStop(0, '#ffffff');
       grad.addColorStop(0.45, C.cyan);
       grad.addColorStop(1, '#0f5f86');
-      ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
-      ctx.strokeStyle = grad; ctx.lineWidth = f.r * 2; ctx.stroke();
+      ctx.strokeStyle = grad;
+      for (let i = 0; i < steps; i++) {
+        const t0 = i / steps, t1 = (i + 1) / steps;
+        ctx.lineWidth = (f.r + (f.rTip - f.r) * ((t0 + t1) / 2)) * 2;
+        ctx.beginPath();
+        ctx.moveTo(f.px + (ex - f.px) * t0, f.py + (ey - f.py) * t0);
+        ctx.lineTo(f.px + (ex - f.px) * t1, f.py + (ey - f.py) * t1);
+        ctx.stroke();
+      }
       ctx.beginPath(); ctx.moveTo(ex, ey);
       ctx.lineTo(f.px + Math.cos(f.angle) * f.len * 0.35, f.py + Math.sin(f.angle) * f.len * 0.35);
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = f.r * 0.7; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = f.rTip * 0.9; ctx.stroke();
       // Pivot cap.
       this._post(ctx, f.px, f.py, f.r * 0.62);
       ctx.restore();

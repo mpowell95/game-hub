@@ -16,9 +16,9 @@ export const STRINGS = {
     diff_easy: 'Casual',
     diff_medium: 'Standard',
     diff_hard: 'Tournament',
-    diff_easy_note: '5 balls, 12 second ball save, outlanes closed by a save post.',
-    diff_medium_note: '3 balls, 8 second ball save, outlanes open.',
-    diff_hard_note: '3 balls, 3 second ball save, a steeper, faster table.',
+    diff_easy_note: '5 balls, 12 second ball save, outlanes closed by a save post. Pitched 6 degrees.',
+    diff_medium_note: '3 balls, 8 second ball save, outlanes open. Pitched 6.5 degrees, the factory setting.',
+    diff_hard_note: '3 balls, 3 second ball save, pitched 7 degrees, so the ball comes back faster.',
     play: 'Play',
     howto: 'How to play',
     your_best: 'Your best',
@@ -62,6 +62,7 @@ export const STRINGS = {
     msg_mission_fail: 'Mission over',
     msg_bonus_x: 'Bonus {n}x',
     msg_extra_ball: 'Extra ball',
+    msg_skill: 'SKILL SHOT',
 
     // missions
     mission_bumper: 'Bumper Rush',
@@ -94,6 +95,7 @@ export const STRINGS = {
     lbl_lanes: 'H U B',
     lbl_mission: 'Mission',
     lbl_multiball: 'Multiball',
+    lbl_skill: 'Skill shot',
 
     // game over
     over_h: 'Game over',
@@ -121,8 +123,9 @@ export const STRINGS = {
     help_ex1: '4 targets = the scoop starts a mission',
     help_ex2: '5 ramps = lock, 3 locks = multiball',
     help_rule1: 'Tap the left half of the table for the left flipper, the right half for the right.',
-    help_rule2: 'Nudge can save a ball. Three nudges too fast and the table tilts.',
-    help_diagram_aria: 'Playfield diagram: the ramp up the middle, the scoop up the right, the drop targets on the upper left, and the orbit round the top.',
+    help_rule2: 'Each side has a small upper flipper on the same button. It is the only way to reach the targets across the top.',
+    help_rule3: 'Nudge can save a ball. Three nudges too fast and the table tilts.',
+    help_diagram_aria: 'Playfield diagram: the ramp up the middle, the scoop up the right, the drop targets across the top, and the orbit round the top left.',
   },
 
   es: {
@@ -133,9 +136,9 @@ export const STRINGS = {
     diff_easy: 'Tranquila',
     diff_medium: 'Normal',
     diff_hard: 'Torneo',
-    diff_easy_note: '5 bolas, salvabolas de 12 segundos, calles laterales cerradas con un poste.',
-    diff_medium_note: '3 bolas, salvabolas de 8 segundos, calles laterales abiertas.',
-    diff_hard_note: '3 bolas, salvabolas de 3 segundos, mesa más inclinada y rápida.',
+    diff_easy_note: '5 bolas, salvabolas de 12 segundos, calles laterales cerradas con un poste. Inclinación de 6 grados.',
+    diff_medium_note: '3 bolas, salvabolas de 8 segundos, calles laterales abiertas. Inclinación de 6,5 grados, la de fábrica.',
+    diff_hard_note: '3 bolas, salvabolas de 3 segundos, inclinación de 7 grados, así que la bola vuelve más rápido.',
     play: 'Jugar',
     howto: 'Cómo se juega',
     your_best: 'Tu mejor marca',
@@ -176,6 +179,7 @@ export const STRINGS = {
     msg_mission_fail: 'Misión terminada',
     msg_bonus_x: 'Bonus {n}x',
     msg_extra_ball: 'Bola extra',
+    msg_skill: 'TIRO MAESTRO',
 
     hint_bank: 'Tumba las 4 dianas',
     hint_scoop: 'Hoyo listo: empieza una misión',
@@ -205,6 +209,7 @@ export const STRINGS = {
     lbl_lanes: 'H U B',
     lbl_mission: 'Misión',
     lbl_multiball: 'Multibola',
+    lbl_skill: 'Tiro maestro',
 
     over_h: 'Fin de la partida',
     over_final: 'Puntuación final',
@@ -226,8 +231,9 @@ export const STRINGS = {
     help_ex1: '4 dianas = el hoyo empieza una misión',
     help_ex2: '5 rampas = bloqueo, 3 bloqueos = multibola',
     help_rule1: 'Toca la mitad izquierda de la mesa para el flipper izquierdo, y la derecha para el derecho.',
-    help_rule2: 'Empujar puede salvar una bola. Tres empujones seguidos y la mesa hace tilt.',
-    help_diagram_aria: 'Esquema de la mesa: la rampa por el centro, el hoyo por la derecha, las dianas arriba a la izquierda y la órbita por arriba.',
+    help_rule2: 'Cada lado tiene un flipper pequeño arriba con el mismo botón. Es la única forma de llegar a las dianas de arriba.',
+    help_rule3: 'Empujar puede salvar una bola. Tres empujones seguidos y la mesa hace tilt.',
+    help_diagram_aria: 'Esquema de la mesa: la rampa por el centro, el hoyo por la derecha, las dianas arriba del todo y la órbita por arriba a la izquierda.',
   },
 };
 
