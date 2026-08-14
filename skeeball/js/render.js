@@ -38,21 +38,24 @@ export class Renderer {
     // lane was behind the viewer too, so the bottom 187px of the screen - the 22% the player is
     // told to swipe on - was a flat brown field with nothing in it.
     //
-    // z = +0.52 puts the eye 0.64m behind the ball. The lane now runs away from the player, the
-    // ball sits on it from the moment the rack starts, and the board still fills the frame
-    // because resize() below fits the FOV to it from wherever this camera is.
-    // The height is the compromise the framing turns on. Higher looks down on the board and
-    // shows its face square, but pushes the near ball further under the frame and forces a wider
-    // FOV to keep it, which shrinks everything. Lower keeps the ball cheaply but flattens the
-    // board towards edge-on. 0.42 holds the board readable while the ball sits comfortably in
-    // the bottom third.
-    this.camera.position.set(0, 0.45, 1.00);
-    // Aimed BELOW the board's bottom edge, down into the trough. Pitch was the degree of
-    // freedom the spec never had: with the aim locked on the board's centre, the board's top
-    // edge and the resting ball can never both reach their frame edges, whatever the height or
-    // distance. Solved against the acceptance checks, not chosen.
+    // z = +1.20 puts the eye behind the ball. The lane runs away from the player and the ball
+    // sits on it from the moment the rack starts.
+    //
+    // 2026-08-14, Matt: *"the NUMBER ONE issue is how massive you've made the board. It's so
+    // crazy zoomed in."* Measured at the time (frame.mjs): the machine covered 125% of screen
+    // height - the marquee and the whole backboard were above the top edge and the board's own
+    // bottom corners were cut off left and right. You could not see the cabinet as a cabinet.
+    //
+    // The camera barely moved to fix that; what was wrong was resize()'s FOV rule, which fitted
+    // the frame to the BALL and deliberately excluded the machine (see there). These values and
+    // the aim below were solved by sweeping position x aim against frame.mjs's visibility
+    // checks and taking the framing that fills the most screen with every point still inside.
+    this.camera.position.set(0, 0.50, 1.20);
+    // Aimed a fifth of the way up the board. Pitch is a real degree of freedom: with the aim
+    // locked on the board's centre the marquee and the resting ball cannot both stay inside the
+    // frame at any height or distance. Solved against frame.mjs, not chosen.
     {
-      const a = this.M.faceToWorld(0, this.G.boardLen * -0.40, 0);
+      const a = this.M.faceToWorld(0, this.G.boardLen * 0.20, 0);
       this.camera.lookAt(a[0], a[1], a[2]);
     }
 
@@ -575,46 +578,51 @@ export class Renderer {
     this.renderer.setSize(w, h, true);
     this.camera.aspect = w / h;
 
-    // FRAME THE MACHINE, not the board's width. The old rule set the FOV purely so the board
-    // spanned the frame horizontally, which on a tall phone left a vertical field far too narrow
-    // to contain the thing at the near end of it - the BALL. Deriving the FOV from the two
-    // points that must always be visible fixes that by construction, and keeps working if the
-    // camera ever moves again:
-    //
-    //   the ball waiting on the lane  (bottom of frame - if this is off screen there is no game)
-    //   the top of the marquee        (top of frame)
-    //
-    // Then, only if the board would be cut off sideways, widen until it is not. Vertical need
-    // leads; horizontal is the backstop.
     const eye = this.camera.position;
     const axis = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
-    const angleOff = (pt) => {
-      const d = new THREE.Vector3(pt[0], pt[1], pt[2]).sub(eye);
-      const along = d.dot(axis);
-      if (along <= 0.01) return Math.PI / 2;
-      // vertical component only: the up-down half-angle this point needs
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
-      return Math.atan(Math.abs(d.dot(up)) / along);
-    };
     const topY = this.M.faceToWorld(0, this.G.boardLen, 0)[1];
     const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
-    // FRAME THE BOARD, and nothing above it. Its top edge sits at the top of the canvas.
-    //
-    // The ball is deliberately NOT part of this fit any more. It sits close to the camera, so
-    // including it forced a wide FOV that squashed the board into a strip with a dead band above
-    // it - which is exactly what the 2026-08-14 screenshot showed: board 17% of screen height,
-    // 22% of the screen given over to a decorative panel. Framing the marquee had the same
-    // effect for the same reason. What keeps the ball on screen now is the camera's POSITION,
-    // and the seven screen-space acceptance checks are what verify it.
-    const need = angleOff([0, this.G.ballR, -0.12]);   // the resting ball, at the bottom edge
-    let vFov = 2 * need * 1.235;   // tuned so the resting ball measures 14% of screen width
+    const halfW = this.G.boardW / 2;
 
-    const mid = this.M.faceToWorld(0, this.G.boardLen * 0.45, 0);
-    const dist = eye.distanceTo(new THREE.Vector3(mid[0], mid[1], mid[2]));
-    const halfW = this.G.boardW / 2 + 0.055;                     // clears the corner 0s at +/-0.30
-    const needH = 2 * Math.atan(halfW / dist);
-    const haveH = 2 * Math.atan(Math.tan(vFov / 2) * this.camera.aspect);
-    if (haveH < needH) vFov = 2 * Math.atan(Math.tan(needH / 2) / this.camera.aspect);
+    // FRAME THE WHOLE MACHINE. Every point below has to be inside the canvas with room to
+    // spare, and the FOV is simply the smallest one that achieves that.
+    //
+    // This REPLACES a rule that fitted the frame to the resting BALL and said, in as many
+    // words, "frame the board, and nothing above it". That is how the marquee and the entire
+    // backboard ended up above the top edge while the board's own bottom corners ran off the
+    // sides - the machine covering 125% of screen height, which is Matt's "so crazy zoomed in".
+    // Do not go back to fitting any single point: fit the LIST, and add to the list if a future
+    // machine grows a part that must stay visible.
+    const FIT = [
+      [0, topY + this.G.backboardH + 0.21, topZ - 0.02],            // marquee, bulbs included
+      [-halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],       // backboard top corners
+      [halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],
+      this.M.faceToWorld(-halfW, this.G.boardLen, 0),               // board corners, all four
+      this.M.faceToWorld(halfW, this.G.boardLen, 0),
+      this.M.faceToWorld(-halfW, 0, 0),
+      this.M.faceToWorld(halfW, 0, 0),
+      [0, this.G.ballR, -0.12],                                     // the ball waiting to be thrown
+      [0, 0, -0.02],                                                // the near end of the lane
+    ];
+    // MARGIN: a point at 0.99 of the way to the edge is technically on screen and still reads as
+    // cut off. Fit to 90% of the half-frame so the cabinet has air around it.
+    //
+    // Deliberately TIGHTER than the 0.92 frame.mjs asserts. Whichever point binds the fit lands
+    // exactly ON this number, so fitting and asserting at the same value makes the test a
+    // coin-flip on floating-point rounding. The 0.02 gap is the slack that keeps it meaningful.
+    const MARGIN = 0.90;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
+    const up2 = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
+    let needV = 0, needHalfH = 0;
+    for (const p of FIT) {
+      const d = new THREE.Vector3(p[0], p[1], p[2]).sub(eye);
+      const along = d.dot(axis);
+      if (along <= 0.01) continue;                                  // behind the eye; cannot be framed
+      needV = Math.max(needV, Math.atan(Math.abs(d.dot(up2)) / along / MARGIN));
+      needHalfH = Math.max(needHalfH, Math.atan(Math.abs(d.dot(right)) / along / MARGIN));
+    }
+    // Vertical need and horizontal need, both expressed as a vertical FOV; take the larger.
+    const vFov = Math.max(2 * needV, 2 * Math.atan(Math.tan(needHalfH) / this.camera.aspect));
 
     this.camera.fov = Math.min(72, Math.max(30, (vFov * 180) / Math.PI));
     this.camera.updateProjectionMatrix();

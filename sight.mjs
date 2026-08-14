@@ -1,7 +1,7 @@
 // Can the camera SEE the bottom of the board over the ramp's crest?
 import { buildMachine } from './skeeball/js/machine.js';
 import { BOARDS } from './skeeball/js/boards.js';
-const CAM = { y: 0.42, z: 0.62 };            // render.js's camera
+const CAM = { y: 0.50, z: 1.20 };            // render.js's camera - keep in step with it
 for (const humpLen of [0.30, 0.22, 0.18, 0.15, 0.14, 0.12]) {
   const g = { ...BOARDS[0].geom, humpLen };
   const M = buildMachine(g);
