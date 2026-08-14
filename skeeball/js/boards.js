@@ -114,7 +114,15 @@ export const BOARDS = [
       // positive whenever the ramp, the board or the camera moves.
       boardLipY: 0.42,
       boardTilt: 0.7854,        // ~32 degrees: a bowl to roll around, not a wall to fall down
-      boardW: 0.62,           // wider than the lane, like the real cabinet's flared board - and
+      // DELIBERATELY WIDER THAN A REAL MACHINE, and not a mistake to correct back.
+      // A real cabinet's target area is about 0.53m against a 79mm ball - 6.7:1. Ours is 10:1.
+      // The reason is the phone: ball and board sit at very different distances from the camera,
+      // so the on-screen ratio is the world ratio TIMES the distance ratio. At 6.2:1 the only
+      // camera that filled the frame with the board sat 9.15m back at a 5032px focal length - a
+      // telephoto, where the lane loses all convergence and stops reading as a lane. At 10:1 a
+      // normal ~2m camera satisfies every screen check at once. Narrowing this toward realism
+      // breaks the framing. See skeeball/CLAUDE.md.
+      boardW: 1.00,           // wider than the lane, like the real cabinet's flared board - and
                               // wide enough that the channel between the ring and the rails
                               // passes a ball freely (the spacing rule below)
       // Metres up the slope. The extra above the 50 is not spare: it is the room the 50's
@@ -176,8 +184,8 @@ export const BOARDS = [
       // furniture on the face to jam against, and tune-ladder.mjs reports 0/101 throws needing
       // the jam watchdog.
       holes: {
-        '100L': { u: -0.205, v: 0.88, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
-        '100R': { u: 0.205, v: 0.88, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
+        '100L': { u: -0.320, v: 0.76, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
+        '100R': { u: 0.320, v: 0.76, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
         c50: { u: 0, v: 0.88, r: 0.095, value: 50, collarH: 0.028, lipLow: true },
         c40: { u: 0, v: 0.66, r: 0.095, value: 40, collarH: 0.028, lipLow: true },
         c30: { u: 0, v: 0.44, r: 0.095, value: 30, collarH: 0.028, lipLow: true },
@@ -199,7 +207,7 @@ export const BOARDS = [
       // landing past the top of the board.
       minSpeed: 3.39,
       maxSpeed: 5.47,
-      aimMax: 0.082,           // radians of lateral aim. Small because the lane is long: a launch
+      aimMax: 0.1316,           // radians of lateral aim. Small because the lane is long: a launch
                               // angle is integrated over ~2.5m of travel before the ball reaches
                               // the top corners, so 0.15 rad already carries it the full 0.30m
                               // out to a 100. The old 0.32 put full aim a metre off the board.

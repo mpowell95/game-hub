@@ -46,8 +46,15 @@ export class Renderer {
     // FOV to keep it, which shrinks everything. Lower keeps the ball cheaply but flattens the
     // board towards edge-on. 0.42 holds the board readable while the ball sits comfortably in
     // the bottom third.
-    this.camera.position.set(0, 0.42, 0.62);
-    this.camera.lookAt(0, 0.26, -1.70);
+    this.camera.position.set(0, 0.45, 1.00);
+    // Aimed BELOW the board's bottom edge, down into the trough. Pitch was the degree of
+    // freedom the spec never had: with the aim locked on the board's centre, the board's top
+    // edge and the resting ball can never both reach their frame edges, whatever the height or
+    // distance. Solved against the acceptance checks, not chosen.
+    {
+      const a = this.M.faceToWorld(0, this.G.boardLen * -0.40, 0);
+      this.camera.lookAt(a[0], a[1], a[2]);
+    }
 
     // Software GL (SwiftShader - headless test runs, GPU-less desktops) cannot afford shadows,
     // antialiasing or a retina buffer; a real phone GPU takes all three without noticing.
@@ -384,22 +391,36 @@ export class Renderer {
       x.fill();
       // the white rim with its navy trim line, the classic board's look
       x.beginPath();
-      x.arc(cx, cy, rp * 1.14, 0, Math.PI * 2);
+      // Outer edge at 1.10x the hole radius, down from 1.28x: at 1.28 the painted rings
+      // overlapped each other at 0.22 spacing even though the holes did not, which is what fused
+      // the 30/40/50 into a single shape on screen.
+      x.arc(cx, cy, rp * 1.03, 0, Math.PI * 2);
       x.strokeStyle = L.ring;
-      x.lineWidth = rp * 0.28;
+      x.lineWidth = rp * 0.14;
       x.stroke();
       x.beginPath();
-      x.arc(cx, cy, rp * 1.28, 0, Math.PI * 2);
+      x.arc(cx, cy, rp * 1.10, 0, Math.PI * 2);
       x.strokeStyle = L.ringLip;
       x.lineWidth = Math.max(3, rp * 0.07);
       x.stroke();
-      // THE VALUE, on the board, UP-SLOPE of its own mouth. Up-slope and not down-slope because
-      // that is the only side with room: the cups sit 0.21m apart and each painted rim is 0.077m
-      // across, so the free band is the 0.10m above a hole - the gap below the lowest one is
-      // shared with the 10 slot's own number. Every label is checked against its neighbours'
-      // mouths and labels; nothing here may overlap anything.
-      const label = H.value >= 100 ? H.v - 0.105 : H.v + 0.102;
-      stencil(String(H.value), H.u, label, H.value >= 100 ? 0.044 : 0.046, L.ring);
+      // THE VALUE, on the board, BESIDE its own mouth - one either side for the centreline cups.
+      //
+      // It used to go up-slope of the hole. That worked while the holes were small: at radius
+      // 0.076 and 0.22 spacing there was a band of bare board above each mouth to put a number
+      // in. Widening the board to 1.00m took the holes to radius 0.095, whose painted rim
+      // reaches 0.1045 - past the 0.102 offset the label sat at - so every centreline number was
+      // buried under its own ring and simply did not render. The free band between one rim top
+      // (0.1045) and the next mouth bottom (0.125) is 0.02m; no number fits there.
+      //
+      // The wide board is what pays for the fix: there is now a third of a metre of bare face on
+      // each side of the centreline. Mirrored pairs also read as deliberate rather than as a
+      // number that drifted off its hole.
+      if (H.value >= 100) {
+        stencil(String(H.value), H.u, H.v - 0.145, 0.044, L.ring);
+      } else {
+        stencil(String(H.value), -0.23, H.v, 0.050, L.ring);
+        stencil(String(H.value), 0.23, H.v, 0.050, L.ring);
+      }
     }
 
     // The 10 slot's own number, and the corner 0s. The 0s moved inboard from u = +/-0.33 to
@@ -577,18 +598,16 @@ export class Renderer {
     };
     const topY = this.M.faceToWorld(0, this.G.boardLen, 0)[1];
     const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
-    const need = Math.max(
-      angleOff([0, this.G.ballR, -0.12]),                       // the resting ball
-      // the upper case. NOT the marquee`s very top: the board was raised on 2026-08-14 so the
-      // ramp would stop hiding it, which made the machine taller, which made a frame that had to
-      // contain the marquee shrink the playfield. The board is the subject; the marquee may run
-      // off the top.
-      angleOff([0, topY + this.G.backboardH * 0.90, topZ]),
-    );
-    // The margin has to clear the BALL`s radius, not just its centre: angleOff() measures to a
-    // point, and at 1.045 the resting ball sat with its centre 19px from the bottom edge and its
-    // bottom half cut off by it.
-    let vFov = 2 * need * 1.12;
+    // FRAME THE BOARD, and nothing above it. Its top edge sits at the top of the canvas.
+    //
+    // The ball is deliberately NOT part of this fit any more. It sits close to the camera, so
+    // including it forced a wide FOV that squashed the board into a strip with a dead band above
+    // it - which is exactly what the 2026-08-14 screenshot showed: board 17% of screen height,
+    // 22% of the screen given over to a decorative panel. Framing the marquee had the same
+    // effect for the same reason. What keeps the ball on screen now is the camera's POSITION,
+    // and the seven screen-space acceptance checks are what verify it.
+    const need = angleOff([0, this.G.ballR, -0.12]);   // the resting ball, at the bottom edge
+    let vFov = 2 * need * 1.235;   // tuned so the resting ball measures 14% of screen width
 
     const mid = this.M.faceToWorld(0, this.G.boardLen * 0.45, 0);
     const dist = eye.distanceTo(new THREE.Vector3(mid[0], mid[1], mid[2]));

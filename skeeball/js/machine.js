@@ -90,6 +90,25 @@ export function buildMachine(G) {
     rot: null,
   });
 
+  // --- the flare: the taper from the lane out to the board -------------------------------------
+  // The board is 1.00m wide against a 0.53m lane (see boards.js on why the board is deliberately
+  // wider than a real machine). Without this the two just butt together at different widths and
+  // read as a mistake. A straight taper across the trough gap makes it read as a flared cabinet,
+  // which is what a real one has - just less of it.
+  {
+    const crestY = G.humpAngles.reduce((a, ang) => a + (G.humpLen / G.humpAngles.length) * Math.tan(ang), 0);
+    const crestZ = -(G.laneLen + G.humpLen);
+    const dx = G.boardW / 2 - G.laneW / 2;
+    const len = Math.hypot(dx, G.troughLen);
+    for (const side of [-1, 1]) {
+      solids.push({
+        part: 'flare',
+        pos: [side * (G.laneW / 2 + G.boardW / 2) / 2, (crestY + lipY) / 2, (crestZ + lipZ) / 2],
+        half: [0.015, G.railH / 2 + 0.02, len / 2],
+        rot: { axis: [0, 1, 0], angle: Math.atan2(side * dx, -G.troughLen) },
+      });
+    }
+  }
   // --- the board: one tilted floor slab ---------------------------------------------------------
   const boardCenter = faceToWorld(0, G.boardLen / 2, -G.bedThick / 2);
   solids.push({
