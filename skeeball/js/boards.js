@@ -284,8 +284,19 @@ export const BOARDS = [
       // ladder exactly - minSpeed just reaches the nearest hole, maxSpeed just reaches the
       // furthest - which reads well in a bench measurement and is precisely what makes a real
       // thumb saturate it. Do not re-tighten these to bracket a ladder again.
+      // maxSpeed 8.60 -> 6.20. 8.60 was raised at the same time as the ui.js saturation fix, and
+      // the two multiplied: once a natural flick correctly landed MID-dial, mid-dial against an
+      // 8.60 ceiling came out at ~6.35 m/s - faster than the old ceiling was - so an ordinary
+      // throw slammed the backboard and bounced all the way home. Matt: *"A natural flick shoots
+      // the ball straight into the top of the backboard, which causes it to bounce all the way
+      // back down the ramp."*
+      //
+      // The lesson, since this is twice now: the ceiling and the swipe curve in ui.js are ONE
+      // system. Raising the ceiling makes every throw faster, not just the hardest one. If the
+      // complaint is about how a NORMAL throw feels, the curve is the knob; the ceiling is only
+      // the knob for what the very hardest throw is worth. 6.20 is where the top corners open up.
       minSpeed: 2.60,
-      maxSpeed: 8.60,
+      maxSpeed: 6.20,
       // HOW FAR SIDEWAYS A BALL CAN BE THROWN, in radians. Matt: *"you heavily restrict the angle
       // i can throw the ball. that's the fucked part... If i want to slam it directly into the
       // wall, i must be able to."*
