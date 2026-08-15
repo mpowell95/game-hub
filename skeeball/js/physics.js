@@ -261,22 +261,29 @@ function substep(st) {
     }
   }
 
-  // 3. The trough: where short lobs die and where the board's bottom edge feeds every spent
-  //    ball. Centre band = the 10 slot, corners = the 0s, never-touched-the-board = plain 0.
-  //    (p.y < -0.3 is the belt-and-braces catch: geometry should make it unreachable, but a
-  //    ball that somehow leaves the world must still resolve, not fall forever.)
+  // 3. The trough: where a short throw dies, and where the board's bottom edge feeds every ball
+  //    that ran out of steam and came back down. IT IS WORTH NOTHING. Matt, 2026-08-15: *"it
+  //    should be 0 points if the ball falls below the 10 ring into the nothing area. I'm getting
+  //    10 points for that in my tests."*
+  //
+  //    It used to pay 10 across a centre band (`troughTenHalfW`) and 0 only in the corners, which
+  //    was right when the 10 WAS this slot - the bottom-of-the-board catcher, exactly like a real
+  //    cabinet's. It is not that any more: batch 3b made the 10 a real hole up on the face with
+  //    its own ring, and batch 3f made falling through a hole the only way to score. A ball down
+  //    here has missed every hole there is, including the 10, so paying it the 10's value both
+  //    contradicts the rule and hands out the game's floor score for the game's worst throw.
+  //
+  //    (p.y < -0.3 is the belt-and-braces catch: geometry should make it unreachable, but a ball
+  //    that somehow leaves the world must still resolve, not fall forever.)
   const inTrough = p.z > st.M.troughZ[0] - 0.24 && p.z < st.M.troughZ[1] + 0.02 && p.y < M.troughY + G.ballR + 0.03;
   if (inTrough || p.y < -0.3) {
     if (st.troughAt < 0) st.troughAt = st.t;
     const speed = ball.velocity.length();
     if (speed < 0.55 || st.t - st.troughAt > 1.6 || p.y < -0.3) {
-      // Score by WHERE the ball lies, exactly like the real slot: the centre band feeds the 10,
-      // only the corners are the 0s. (No touched-the-board test: on a real machine a lob that
-      // dies short rolls into the 10 slot too - the honest zero is the corner, not the lob.)
-      if (Math.abs(p.x) <= G.troughTenHalfW) {
-        st.events.push({ type: 'capture', hole: 'h10', value: 10, pos: { x: p.x, y: p.y, z: p.z } });
-        finishAt(st, 'h10', 10, 'hole');
-      } else finishAt(st, 'corner0', 0, 'gutter');
+      // `corner0` is kept as the id, not renamed: it is written into the mid-rack autosave and
+      // old keys are never repurposed (THE LAW rule 5). It now covers the whole trough, not just
+      // its corners.
+      finishAt(st, 'corner0', 0, 'gutter');
       return;
     }
   } else st.troughAt = -1;

@@ -250,7 +250,11 @@ export const BOARDS = [
         // arc's ends on the side rails at v = 3.13x, which is where they sit in his drawing.
         h10: { u: 0, v: X * 1.0, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
       },
-      troughTenHalfW: 0.26,   // |x| under this in the trough scores 10; wider is a corner 0
+      // RETIRED 2026-08-15 and kept only so an old saved rack still parses. The trough used to
+      // pay 10 inside this half-width; it pays nothing anywhere now, because the 10 is a real
+      // hole on the face and a ball down here has missed every hole there is. physics.js reads
+      // this no longer - delete it only alongside the save-format version bump.
+      troughTenHalfW: 0.26,
 
       // The swipe's speed range (m/s at the serve), and the whole reason the old build had dead
       // zones at both ends of the thumb: it ran 1.0 to 7.4, of which everything below 1.4 could
