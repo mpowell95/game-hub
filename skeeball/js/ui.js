@@ -413,8 +413,27 @@ export class SkeeballUI {
     //   SWIPE_SLOW  a gentle natural flick -> the softest throw the game has
     //   SWIPE_FAST  a hard natural flick   -> full power, the back wall
     // Normalised against the stage height so a phone and a desktop feel alike.
-    const SWIPE_SLOW = 0.60;
-    const SWIPE_FAST = 2.60;
+    // MEASURED OFF MATT'S OWN THUMB, 2026-08-14, with skeeball/flick-test.html (which runs this
+    // exact function, so its readings drop straight in). 28 flicks on his phone:
+    //
+    //   SLOW    n=10  avg 1.48   range 1.12 .. 1.82
+    //   NORMAL  n=10  avg 2.50   range 2.01 .. 2.88
+    //   FAST    n=8   avg 3.06   range 2.50 .. 4.39
+    //
+    // Every guessed pair before this was wrong in the same direction and it is worth seeing why.
+    // 0.60 sits BELOW anything a hand produces, so his gentlest flick already started at 44%
+    // power - that is the "to get a 10 I have to barely touch the ball" complaint. And 2.60, the
+    // guess meant to be a hard flick, lands on his NORMAL average, so an ordinary swipe was
+    // already pinned at full and a fast one was clamped. Four rounds of moving these by feel
+    // never found that, because the numbers describe a hand, and a hand has to be measured.
+    //
+    // Set from the data: the floor is just under his slowest slow flick, and full power is his
+    // fast average (anything above just clamps, which is what a hard flick wants anyway). Lands:
+    //   slow 1.48 -> 0.19   normal 2.50 -> 0.71   fast 3.06 -> 1.00
+    // Normal keeps the 0.71 it had when he reported it landing in the 30, so that is unchanged;
+    // what moves is that full power is now reachable, and the bottom of the dial is real.
+    const SWIPE_SLOW = 1.10;
+    const SWIPE_FAST = 3.05;
     const perH = up / H;
     const power = Math.max(0, Math.min(1, (perH - SWIPE_SLOW) / (SWIPE_FAST - SWIPE_SLOW)));
 
