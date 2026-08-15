@@ -127,7 +127,17 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   const G = board.geom;
   const { world, ball, M } = buildWorld(board);
 
-  const p = Math.max(0, Math.min(1, power));
+  // POWER IS NOT CLAMPED TO 0..1 (2026-08-14). 0 and 1 are the ends of the NATURAL swipe range,
+  // not the ends of what is physically possible. Matt: *"An unnaturally fast one should be able
+  // to hit like way higher up on the wall and an unnaturally slower one should be short of the
+  // board for a 0 or roll back."* Clamping here made every over-hard flick identical to a normal
+  // hard one and every feather-touch identical to a slow one, so the two most obvious things a
+  // player tries both did nothing.
+  //
+  // The outer bounds only stop absurdity (a fling off the screen, or a negative speed), and are
+  // far outside anything a hand does: -0.75 lands the ball short of the board, 2.0 buries it up
+  // the backboard. `p` below 0 is legitimate and gives a speed under minSpeed.
+  const p = Math.max(-0.75, Math.min(2.0, power));
   // Power is spent as ENERGY, not as speed (2026-08-14). How far a ball rolls up the face goes
   // as the SQUARE of how fast it gets there, so a power dial that mapped linearly onto speed
   // mapped quadratically onto the thing the player is actually aiming with: the bottom of the
@@ -138,7 +148,10 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   // it is rolling.
   const s0 = G.minSpeed;
   const s1 = G.maxSpeed;
-  const speed = Math.sqrt(s0 * s0 + p * (s1 * s1 - s0 * s0));
+  // Extrapolates outside 0..1 by the same rule it interpolates inside it, so a swipe past either
+  // end of the natural range keeps behaving like a swipe. `max(0.4, ...)` only guards the square
+  // root against a negative argument at the very bottom.
+  const speed = Math.sqrt(Math.max(0.4, s0 * s0 + p * (s1 * s1 - s0 * s0)));
   const a = Math.max(-1, Math.min(1, aim)) * G.aimMax;
   ball.position.set(0, G.ballR, -0.12);
   ball.velocity.set(Math.sin(a) * speed, 0, -Math.cos(a) * speed);

@@ -434,8 +434,14 @@ export class SkeeballUI {
     // what moves is that full power is now reachable, and the bottom of the dial is real.
     const SWIPE_SLOW = 1.10;
     const SWIPE_FAST = 3.05;
+    // NOT CLAMPED to 0..1. SWIPE_SLOW and SWIPE_FAST are the ends of the NATURAL range, not the
+    // ends of what a throw can be: 0 is "just barely reaches the board" and 1 is "the top of the
+    // 100 ring", and a swipe outside that range must keep meaning something. Matt: *"An
+    // unnaturally fast one should be able to hit like way higher up on the wall and an
+    // unnaturally slower one should be short of the board for a 0 or roll back."* physics.js
+    // extrapolates by the same rule and carries the only outer bounds.
     const perH = up / H;
-    const power = Math.max(0, Math.min(1, (perH - SWIPE_SLOW) / (SWIPE_FAST - SWIPE_SLOW)));
+    const power = (perH - SWIPE_SLOW) / (SWIPE_FAST - SWIPE_SLOW);
 
     // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
     // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
