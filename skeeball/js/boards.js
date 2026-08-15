@@ -130,7 +130,17 @@ export const BOARDS = [
       // the top one was sliced by the board's edge), and it is what lets a genuine slam run past
       // everything and reach the back wall - 9 of 101 straight throws do, which is the rare
       // hard-throw outcome it should be rather than the 25-of-51 the old ramp produced.
-      boardLen: 1.00,
+      // THE BOARD IS A RECTANGLE, NOT A SQUARE (2026-08-14, batch 3a). It was 1.00 x 1.00 -
+      // literally square. Matt's reference diagram of a real machine gives a target board of
+      // 27.5" wide x 38" tall, a ratio of 1 : 1.3818, so at boardW 1.00 the length is 1.3818.
+      //
+      // boardW is deliberately NOT the side that moved: its own comment above records that the
+      // width is set by what the camera needs to frame, and narrowing it to reach the ratio
+      // would undo that. Length is the free side.
+      //
+      // Holes and the ring were left exactly where they are by this change, which leaves them
+      // sitting low on a now-taller board. That is expected and is batch 3b's job, not this one.
+      boardLen: 1.3818,
       railH: 0.10,
       laneRailH: 0.05,
       backboardH: 0.8,        // tall, like the real cabinet's upper case: a max-power ball must
