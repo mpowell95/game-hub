@@ -29,8 +29,29 @@
  *  a hand can do makes the gentlest flick start at half power, and a value at an ORDINARY flick's
  *  speed pins every normal throw at maximum. flick-test.html measures them directly.
  */
-export const SWIPE_SLOW = 1.10;
-export const SWIPE_FAST = 3.05;
+// MEASURED, 2026-08-15, Matt's own thumb through flick-test.html. He was asked to flick each
+// kind and the page recorded what the game would read. These are not effort labels - two of them
+// name an OUTCOME, and those two are exactly what the ends of the dial mean:
+//
+//    1 slowest      n=8  avg  0.34   0.19 .. 0.63
+//    2 reach board  n=3  avg  0.65   0.53 .. 0.82   <- SWIPE_SLOW: power 0
+//    3 very slow    n=3  avg  1.35   1.25 .. 1.53
+//    5 easy lob     n=5  avg  1.89   1.55 .. 2.18
+//    6 normal       n=9  avg  3.00   2.72 .. 3.42
+//    8 hard         n=1  avg  4.93
+//    9 for a 100    n=5  avg  4.95   4.16 .. 5.69   <- SWIPE_FAST: power 1
+//   10 hardest      n=3  avg 16.62  15.08 .. 19.24
+//
+// WHAT THIS DATA CAUGHT. The previous pair was 1.10 / 3.05, so his NORMAL flick of 3.00 was
+// landing at 97% power - a normal throw was effectively a maximum one, and every complaint about
+// the feel of this game traces back to that. The pair before it was worse in the same direction.
+// Four guessed pairs, all wrong the same way, because these two numbers describe a HAND.
+//
+// Note how far 'hardest I can' sits above 'for a 100' - 16.62 against 4.95, more than three
+// times. That gap is the room above full power, and it is why the clamp had to go (physics.js
+// startThrow): it is where 'launch the thing clean over the machine' lives.
+export const SWIPE_SLOW = 0.65;
+export const SWIPE_FAST = 4.95;
 
 /** The smallest upward travel that counts as a throw at all, in px. */
 export const MIN_UP_PX = 20;
