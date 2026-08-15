@@ -97,7 +97,14 @@ export const BOARDS = [
       // board with nothing in it. It also decides how much a launch angle spreads sideways
       // before the ball reaches the face, so `aimMax` is tuned against this number.
       laneLen: 1.40,
-      laneW: 0.53,
+      // THE RAMP IS 5.375x WIDE (Matt, 2026-08-15), which with a 0.75x wall down each side is
+      // exactly the 6.875x board. So the alley, its walls and the scoring face all share one
+      // width, and the whole machine is one object.
+      //
+      // It was 0.53m - 68% of spec - and that was the single worst thing about how the ramp read:
+      // a narrow plank running into a board nearly twice its width, so the ramp looked like a
+      // separate part stuck on the end rather than the bottom of the machine.
+      laneW: X * 5.375,
       bedThick: 0.06,         // slab thickness for every floor/wall box
       humpLen: 0.42,          // the rising kicker. SHORT as well as steep: the launch ANGLE is
                               // what creates the arc, but the ramp's HEIGHT decides whether the
