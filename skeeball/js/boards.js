@@ -138,7 +138,11 @@ export const BOARDS = [
       // drop straight into a cup without touching the board at all, which is the shot the game
       // is FOR. Run `measure-arc.mjs` after touching these, not just `tune-ladder.mjs`.
       humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
-      troughLen: 0.18,        // the catch pit between the hump's crest and the board - wide
+      // THE GAP BETWEEN RAMP AND BOARD, 0.18 -> 0.225 (Matt, 2026-08-15: "lets increase it to
+      // 1.25y"). It also pushes the whole scoring face 4.5cm further from the camera, which is
+      // wanted: Matt has said the space ABOVE the board (back wall, machine name, the air over
+      // it) is useless, so screen height for the face can be taken from up there.
+      troughLen: 0.225,       // the catch pit between the hump's crest and the board - wide
                               // enough that a ball flying back off the board's lip drops in and
                               // meets the hump's back side as a wall, instead of skipping the
                               // gap and rolling home down the lane

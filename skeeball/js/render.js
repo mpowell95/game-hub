@@ -129,7 +129,11 @@ export class Renderer {
     // The physics solids, drawn as they are (visible parts only; smooth cylinders replace the
     // segmented ring/collar boxes at identical radii).
     for (const s of M.solids) {
-      if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg') continue;
+      // 'hump' is skipped since 2026-08-15: the ramp is drawn as ONE smooth solid by _rampSkin()
+      // instead of six angled boxes. Overlapping boxes stand proud of each other at every joint,
+      // and those protruding corners are what read as a staircase.
+      if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg'
+        || s.part === 'hump') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card: it wears the machine's name and trim, which
       // is what turns a brown wall at the end of the lane into an arcade machine.
@@ -174,6 +178,19 @@ export class Renderer {
       plane.receiveShadow = true;
       this.scene.add(plane);
     }
+
+    // THE RAMP'S SKIN: a smooth curved surface laid over the ramp's flat facets (2026-08-15).
+    // Matt: *"make the ramp look like a curve instead of flat steps."*
+    //
+    // The ramp is six angled boxes, and it READ as six steps - a staircase, not a ramp. This does
+    // not change the physics: the boxes are still exactly the surface the ball rolls on. It lays a
+    // smooth strip 3mm over them, sampled finely along a Catmull-Rom through the SAME corner
+    // points machine.js builds its boxes from. The curve passes through every corner and bulges a
+    // millimetre or two between them, which is precisely enough to bury the facet edges.
+    //
+    // It also carries the lane's own plank texture, so the planks run up and over the ramp
+    // instead of stopping dead at its foot - the other half of why it did not read as a ramp.
+    this._rampSkin();
 
     // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face,
     // with its white rim, its navy trim and its VALUE painted into the field texture around it
@@ -243,6 +260,68 @@ export class Renderer {
 
     // Cabinet dressing: side panels, the marquee, its bulbs. Cosmetic only.
     this._cabinet();
+  }
+
+  /** The smooth surface laid over the ramp's facets. Cosmetic only - the boxes underneath are
+   *  still the collision surface, and this samples the same profile they are built from, so it
+   *  can never describe a different ramp than the one the ball meets. */
+  _rampSkin() {
+    const G = this.G;
+    const n = G.humpAngles.length;
+    const segLen = G.humpLen / n;
+
+    // The profile's corner points, exactly as machine.js walks them.
+    const corners = [new THREE.Vector3(-G.laneLen, 0, 0)];
+    let y = 0;
+    let z = -G.laneLen;
+    for (const a of G.humpAngles) {
+      y += segLen * Math.tan(a);
+      z -= segLen;
+      corners.push(new THREE.Vector3(z, y, 0));
+    }
+
+    const SAMPLES = 72;
+    const curve = new THREE.CatmullRomCurve3(corners, false, 'catmullrom', 0.5);
+    const pts = curve.getPoints(SAMPLES);
+
+    // A closed slab: the curved top surface, both sides, and a cap at each end. Four vertices per
+    // sample - left/right, top/bottom - so the ramp is one solid object with no seam to catch the
+    // light and no facet to read as a step.
+    const halfW = G.laneW / 2;
+    const base = -0.14;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const v = i / (pts.length - 1);
+      pos.push(-halfW, p.y, p.x, halfW, p.y, p.x, -halfW, base, p.x, halfW, base, p.x);
+      uv.push(0, v, 1, v, 0, v, 1, v);
+      if (i < pts.length - 1) {
+        const b = i * 4;
+        const n = b + 4;
+        idx.push(b, b + 1, n + 1, b, n + 1, n);           // the curved top
+        idx.push(b, n, n + 2, b, n + 2, b + 2);           // left flank
+        idx.push(b + 1, b + 3, n + 3, b + 1, n + 3, n + 1); // right flank
+      }
+    }
+    const last = (pts.length - 1) * 4;
+    idx.push(0, 2, 3, 0, 3, 1);                            // foot of the ramp
+    idx.push(last, last + 1, last + 3, last, last + 3, last + 2); // the crest's face
+
+    const geo = this._track(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+
+    const tex = this._track(this._paintLane());
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    const mesh = new THREE.Mesh(geo, this._mat({ map: tex, roughness: 0.5, side: THREE.DoubleSide }));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
   }
 
   /** Place a Y-axis object (cylinder/torus/circle) on the face at (u, v, h). Tori and circles

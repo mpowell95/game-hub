@@ -214,15 +214,50 @@ export function buildMachine(G) {
 
   // --- rails and the backboard ------------------------------------------------------------------
   const railT = 0.03;
+  const topPt = faceToWorld(0, G.boardLen, 0);
+
+  // THE SIDE WALLS OF THE SCORING AREA (rebuilt 2026-08-15). Matt: *"The left and right walls of
+  // the scoring area should be much more prominent. They should connect at the top of the back
+  // wall, just below 'THE CLASSIC' banner and should be a triangle with the diagonal going from
+  // there to the bottom left corner and bottom right corners of the scoring area board. in real
+  // life you can bounce the ball off the wall and into the 100, so there needs to be a wall."*
+  //
+  // They were a 3cm strip standing 10cm off the face, the same height the whole way up - which is
+  // a rail to stop a ball leaving, not a wall to play off. A bank shot into a corner 100 needs
+  // something the ball can actually meet up there, and at the top of the board the old rail was
+  // 10cm against a 14.5cm ball.
+  //
+  // Each wall is the right triangle he described, in WORLD vertical, not perpendicular to the
+  // face - which is what a real cabinet's side panel is, and what makes it read as a wall:
+  //     A  the board's bottom corner        (no wall at all here)
+  //     B  the board's top corner
+  //     C  the top of the backboard, directly above B
+  // AB runs up the board's own slope, BC is the vertical back edge, and CA is the diagonal.
+  // Sliced into vertical boxes along z; each one stands ON the board surface and reaches up to
+  // the diagonal, so the ball meets a continuous sloping wall.
+  const zA = lipZ;
+  const yA = lipY;
+  const zB = lipZ - G.boardLen * cos;
+  const yB = lipY + G.boardLen * sin;
+  const topSlope = ((yB + G.backboardH) - yA) / (zB - zA);
+  const WALL_SEGS = 20;
   for (const s of [-1, 1]) {
-    // Board rails ride ON the face along its whole length.
-    solids.push({
-      part: 'rail',
-      pos: faceToWorld(s * (G.boardW / 2 + railT / 2), G.boardLen / 2, G.railH / 2),
-      half: [railT / 2, G.railH / 2, G.boardLen / 2],
-      rot: rotX(t),
-      railSide: s,
-    });
+    for (let i = 0; i < WALL_SEGS; i++) {
+      const z0 = zA + ((zB - zA) * i) / WALL_SEGS;
+      const z1 = zA + ((zB - zA) * (i + 1)) / WALL_SEGS;
+      const zm = (z0 + z1) / 2;
+      const yBoard = yA + (zA - zm) * (sin / cos);       // the face, climbing as z goes back
+      const yTop = yA + topSlope * (zm - zA);            // the diagonal A -> C
+      const h = yTop - yBoard;
+      if (h <= 0.004) continue;
+      solids.push({
+        part: 'rail',
+        pos: [s * (G.boardW / 2 + railT / 2), yBoard + h / 2, zm],
+        half: [railT / 2, h / 2, Math.abs(z1 - z0) / 2],
+        rot: null,
+        railSide: s,
+      });
+    }
     // Lane rails keep the roll on the wood.
     solids.push({
       part: 'laneRail',
