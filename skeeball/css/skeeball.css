@@ -448,72 +448,69 @@
 
 .sk-root .sk-ht-line { margin: 0; }
 
-.sk-root .sk-ht-goal { font-size: 16px; font-weight: 800; }
+/* Each panel: the picture, then (for two of the four) one tiny centred caption. figure
+   margins reset so the sheet's own fixed gap is the ONLY spacing between panels. */
+.sk-root .sk-ht-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gh-sp-1, 4px);
+}
 
-.sk-root .sk-ht-diagram-wrap { margin: 0; }
+.sk-root .sk-ht-img { display: block; width: 100%; height: auto; }
 
-.sk-root .sk-ht-diagram { display: block; width: 100%; height: auto; }
+.sk-root .sk-ht-caption {
+  font-size: var(--gh-fs-sm, 14px);
+  font-weight: 700;
+  color: var(--sks-muted);
+  text-align: center;
+}
 
-.sk-root .sk-ht-caption { font-size: 14px; color: var(--sks-muted); }
-
-.sk-root .sk-ht-ex { font-size: 14.5px; font-weight: 800; }
-
-.sk-root .sk-ht-rule { font-size: 13.5px; }
-
-.sk-root .sk-dg-lane,
-.sk-root .sk-dg-board {
+/* The drawing vocabulary. The one accent colour only ever appears on the thick arrowheaded
+   strokes (a distinct shape), so nothing reads by colour alone. */
+.sk-root .sk-hd-line,
+.sk-root .sk-hd-soft,
+.sk-root .sk-hd-dash,
+.sk-root .sk-hd-lock,
+.sk-root .sk-hd-locked {
   fill: none;
   stroke: var(--sks-ink);
   stroke-width: 2.5;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.sk-root .sk-dg-mouths ellipse { fill: var(--sks-ink); opacity: 0.85; }
+.sk-root .sk-hd-soft { stroke: var(--sks-muted); stroke-width: 2; }
 
-.sk-root .sk-dg-vals text {
-  fill: var(--sks-muted);
-  font-size: 10px;
-  font-weight: 800;
-  text-anchor: middle;
-  font-family: system-ui, sans-serif;
+.sk-root .sk-hd-dash { stroke: var(--sks-muted); stroke-width: 2; stroke-dasharray: 3 5; }
+
+.sk-root .sk-hd-swipe {
+  fill: none;
+  stroke: var(--gh-accent, #1769d4);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.sk-root .sk-dg-ball { fill: none; stroke: var(--sks-ink); stroke-width: 2; }
+.sk-root .sk-hd-fill { fill: var(--sks-ink); }
 
-.sk-root .sk-dg-arc { fill: none; stroke-width: 2; stroke-linecap: round; }
+/* The locked machine is dashed outline, a shape cue on top of the padlock itself. */
+.sk-root .sk-hd-locked { stroke-dasharray: 6 5; }
 
-/* Three swipes, told apart by dash pattern AND numbered circles - never colour alone. */
-.sk-root .sk-dg-arc-1 { stroke: var(--sks-muted); stroke-dasharray: 2 5; }
-.sk-root .sk-dg-arc-2 { stroke: var(--gh-accent, #1769d4); }
-.sk-root .sk-dg-arc-3 { stroke: var(--sks-ink); stroke-dasharray: 8 5; }
+.sk-root .sk-hd-lockbody { fill: var(--sks-surface); stroke: var(--sks-ink); stroke-width: 2.5; }
 
-.sk-root .sk-dg-num circle { fill: var(--sks-surface); stroke: var(--sks-ink); stroke-width: 1.5; }
-
-.sk-root .sk-dg-num text {
+.sk-root .sk-hd-num text,
+.sk-root .sk-hd-score {
   fill: var(--sks-ink);
   font-size: 10px;
   font-weight: 800;
   text-anchor: middle;
-  font-family: system-ui, sans-serif;
+  font-family: var(--gh-font, system-ui, sans-serif);
 }
 
-.sk-root .sk-ht-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; }
+.sk-root .sk-hd-num .sk-hd-num-sm { font-size: 7px; }
 
-.sk-root .sk-ht-key-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sks-muted); }
-
-.sk-root .sk-ht-key-item i {
-  font-style: normal;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1.5px solid var(--sks-ink);
-  color: var(--sks-ink);
-  font-size: 11px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
+.sk-root .sk-hd-score { font-size: 13px; }
 
 /* --------------------------------------------------------------- reduced motion --- */
 

@@ -56,18 +56,15 @@ const STRINGS = {
     over_again: 'Roll again',
     close: 'Close',
 
-    // How to play (the repo-wide pattern: one bold goal, ONE diagram, caption, X = Y, edges)
+    // How to play (2026-08-15, pictures-first: four panels, two tiny captions, arias carry
+    // the full meaning for screen readers)
     howto_h: 'How to play',
-    ht_goal: 'Land each of the 9 balls in the highest cup you can.',
-    ht_caption: 'Swipe strength decides how far up the board the ball lands.',
-    ht_ex: 'Half strength = the 50 cup',
-    ht_r1: 'The corner 100s take nearly full strength, aimed hard sideways.',
-    ht_r2: 'Too soft for the hump and the ball rolls back. Throw it again.',
-    ht_r3: 'Wherever the ball finally drops is what it scores.',
-    ht_aria: 'Side view of the board: a gentle swipe lands low in the 20, a half swipe lands in the 50 cup, a full swipe sails past the 50 to the top of the board',
-    ht_k1: 'gentle',
-    ht_k2: 'half',
-    ht_k3: 'full',
+    ht_swipe: 'Swipe to roll',
+    ht_balls: '9 balls per game',
+    ht_a_swipe: 'Swipe up the lane to roll the ball',
+    ht_a_holes: 'The board: higher holes are worth more, 20 up to 50, with a 100 in each top corner',
+    ht_a_balls: 'Nine balls in the tray, one game',
+    ht_a_unlock: 'Score {score} on the first machine and the padlock on the next machine opens',
 
     // Aria
     aria_lane: 'Skeeball machine. Swipe up on the lane to roll the ball.',
@@ -121,16 +118,12 @@ const STRINGS = {
     close: 'Cerrar',
 
     howto_h: 'Cómo se juega',
-    ht_goal: 'Mete cada una de las 9 bolas en la copa más alta que puedas.',
-    ht_caption: 'La fuerza del gesto decide hasta dónde sube la bola en el tablero.',
-    ht_ex: 'Media fuerza = la copa del 50',
-    ht_r1: 'Los 100 de las esquinas piden casi toda la fuerza, apuntando fuerte al lado.',
-    ht_r2: 'Si no sube la rampa, la bola vuelve. Lánzala otra vez.',
-    ht_r3: 'La bola vale lo que marque el hueco donde acabe cayendo.',
-    ht_aria: 'Vista lateral del tablero: un gesto suave cae abajo en el 20, medio gesto cae en la copa del 50 y un gesto fuerte pasa el 50 hasta lo alto del tablero',
-    ht_k1: 'suave',
-    ht_k2: 'medio',
-    ht_k3: 'fuerte',
+    ht_swipe: 'Desliza para lanzar',
+    ht_balls: '9 bolas por partida',
+    ht_a_swipe: 'Desliza hacia arriba por la pista para lanzar la bola',
+    ht_a_holes: 'El tablero: los huecos más altos valen más, del 20 al 50, con un 100 en cada esquina superior',
+    ht_a_balls: 'Nueve bolas en la bandeja, una partida',
+    ht_a_unlock: 'Consigue {score} en la primera máquina y se abre el candado de la siguiente',
 
     aria_lane: 'Máquina de skeeball. Desliza hacia arriba en la pista para lanzar la bola.',
   },
