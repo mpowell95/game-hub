@@ -33,6 +33,7 @@ const STRINGS = {
     sb_your_best: 'Your Best',
     sb_today: 'Today',
     sb_last_game: 'Last Game',
+    sb_held_by: 'Record held by',
     stat_last: 'Last',
 
     // Play screen
@@ -96,6 +97,7 @@ const STRINGS = {
     sb_your_best: 'Tu mejor',
     sb_today: 'Hoy',
     sb_last_game: 'Última',
+    sb_held_by: 'Récord de',
     stat_last: 'Última',
 
     hud_ball: 'Bola',

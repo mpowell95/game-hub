@@ -87,8 +87,9 @@ export class Renderer {
     // them in via setScoreboard(); the renderer only draws what it is handed, and never reads
     // storage or the network itself. Labels come in the same way so they stay translated.
     this.scoreboard = { allTime: null, best: 0, today: 0, last: null };
-    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game' };
+    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game', heldBy: 'Record held by' };
     this._backMat = null;
+    this._sbArcade = true;   // LED scoreboard; false falls back to the painted-sign version
     this._celebrateT = 0;
 
     this._lights();
@@ -155,7 +156,15 @@ export class Renderer {
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
       if (s.rot) mesh.quaternion.setFromAxisAngle(new THREE.Vector3(...s.rot.axis), s.rot.angle);
       mesh.receiveShadow = true;
-      if (s.part !== 'lane' && s.part !== 'board') mesh.castShadow = true;
+      // THE SIDE WALLS DO NOT CAST SHADOWS (2026-08-15). Matt: *"What's with the discoloration on
+      // the right side of the board? Is that a shadow or something? I don't want it."* It was
+      // exactly that - the right wall's shadow lying across the playfield.
+      //
+      // It only appeared when the walls grew: as a 0.10m rail the shadow fell within the rail's
+      // own footprint and nobody saw it, but the wall is 0.78m at the back now and its shadow
+      // reaches well onto the face. A shadow across the scoring area reads as dirt on the board,
+      // which is the same reason the key light was moved nearly overhead (see _lights).
+      if (s.part !== 'lane' && s.part !== 'board' && s.part !== 'rail') mesh.castShadow = true;
       this.scene.add(mesh);
     }
 
@@ -630,6 +639,7 @@ export class Renderer {
 
     const s = this.scoreboard || {};
     const num = (v) => (v ? String(v) : '-');
+    if (this._sbArcade) return this._paintArcadeBoard(c, x, W, Hpx, s, num);
     const cols = [
       { label: this.sbLabels.allTime, value: num(s.allTime && s.allTime.score), sub: (s.allTime && s.allTime.name) || '' },
       { label: this.sbLabels.best, value: num(s.best), sub: '' },
@@ -672,6 +682,137 @@ export class Renderer {
         x.fillText(cols[i].sub, cx, 318);
       }
     }
+    return new THREE.CanvasTexture(c);
+  }
+
+  /** THE ARCADE SCOREBOARD: a black glass panel behind a brass bezel, with the scores in real
+   *  seven-segment LEDs. The unlit segments are drawn too, just barely - that ghost of the whole
+   *  digit behind the lit one is the single thing that makes an LED display read as an LED
+   *  display rather than as printed type. */
+  _paintArcadeBoard(c, x, W, Hpx, s, num) {
+    const ON = '#ffb02e';
+    const OFF = '#241708';
+    const LABEL = '#7ec8f0';
+    const BEZEL = '#c98a3a';
+
+    const bez = x.createLinearGradient(0, 0, 0, Hpx);
+    bez.addColorStop(0, '#7a4e28');
+    bez.addColorStop(1, '#2e1a0d');
+    x.fillStyle = bez;
+    x.fillRect(0, 0, W, Hpx);
+    x.fillStyle = '#070405';
+    x.fillRect(16, 16, W - 32, Hpx - 32);
+    x.strokeStyle = BEZEL;
+    x.lineWidth = 5;
+    x.strokeRect(16, 16, W - 32, Hpx - 32);
+    x.globalAlpha = 0.03;
+    x.fillStyle = '#fff';
+    for (let yy = 24; yy < Hpx - 24; yy += 4) x.fillRect(20, yy, W - 40, 1.4);
+    x.globalAlpha = 1;
+
+    // Which of the seven bars is lit for each character.
+    const SEG = {
+      0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc',
+      5: 'afgcd', 6: 'afgecd', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg', '-': 'g',
+    };
+    const bar = (x0, y0, x1, y1, t, lit) => {
+      x.strokeStyle = lit ? ON : OFF;
+      x.lineWidth = t;
+      x.lineCap = 'round';
+      x.shadowBlur = lit ? 18 : 0;
+      x.shadowColor = lit ? ON : 'transparent';
+      x.beginPath();
+      x.moveTo(x0, y0);
+      x.lineTo(x1, y1);
+      x.stroke();
+      x.shadowBlur = 0;
+    };
+    const glyph = (gx, gy, w, h, ch) => {
+      const t = Math.max(6, h * 0.14);
+      const i = t * 0.62;
+      const lit = SEG[ch] || '';
+      const P = {
+        a: [gx + i, gy, gx + w - i, gy],
+        b: [gx + w, gy + i, gx + w, gy + h / 2 - i],
+        c: [gx + w, gy + h / 2 + i, gx + w, gy + h - i],
+        d: [gx + i, gy + h, gx + w - i, gy + h],
+        e: [gx, gy + h / 2 + i, gx, gy + h - i],
+        f: [gx, gy + i, gx, gy + h / 2 - i],
+        g: [gx + i, gy + h / 2, gx + w - i, gy + h / 2],
+      };
+      for (const k of 'abcdefg') bar(P[k][0], P[k][1], P[k][2], P[k][3], t, lit.includes(k));
+    };
+    // SIZED TO THE COLUMN, never a fixed height: three digits have to fit the same box one digit
+    // does, or a 700 runs into its neighbour.
+    const digits = (cx, cy, txt, colW, maxH) => {
+      const n = txt.length;
+      let w = (colW - 54) / (n + 0.34 * (n - 1));
+      let h = w / 0.56;
+      if (h > maxH) { h = maxH; w = h * 0.56; }
+      const gap = w * 0.34;
+      let gx = cx - (n * w + (n - 1) * gap) / 2;
+      for (const ch of txt) { glyph(gx, cy - h / 2, w, h, ch); gx += w + gap; }
+    };
+
+    const cols = [
+      { l: this.sbLabels.allTime, v: num(s.allTime && s.allTime.score) },
+      { l: this.sbLabels.best, v: num(s.best) },
+      { l: this.sbLabels.today, v: num(s.today) },
+      { l: this.sbLabels.last, v: s.last == null ? '-' : String(s.last) },
+    ];
+    const PAD = 40;
+    const colW = (W - PAD * 2) / 4;
+    // The columns occupy the TOP of the panel and the record holder's name gets a full-width
+    // strip of its own underneath. The first attempt squeezed the name into the All Time column's
+    // own quarter, which is a quarter of the panel for the one field that is free text - Matt,
+    // rightly: *"MattyIce isnt even a long profile name - there are much longer."* Nothing sits
+    // below the other three numbers, so that width was there for the taking.
+    const ROW = 300;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    for (let i = 0; i < cols.length; i++) {
+      const cx = PAD + colW * i + colW / 2;
+      if (i > 0) {
+        x.globalAlpha = 0.2;
+        x.fillStyle = BEZEL;
+        x.fillRect(PAD + colW * i - 1, 60, 2, ROW - 76);
+        x.globalAlpha = 1;
+      }
+      x.fillStyle = LABEL;
+      let fs = 30;
+      x.font = `700 ${fs}px Verdana, sans-serif`;
+      while (fs > 12 && x.measureText(cols[i].l.toUpperCase()).width > colW - 18) {
+        fs -= 1;
+        x.font = `700 ${fs}px Verdana, sans-serif`;
+      }
+      x.fillText(cols[i].l.toUpperCase(), cx, 78);
+      digits(cx, 200, cols[i].v, colW, 132);
+    }
+
+    // The holder strip: a rule across the panel, then the name at the full inner width.
+    const name = ((s.allTime && s.allTime.name) || '').trim();
+    x.globalAlpha = 0.25;
+    x.fillStyle = BEZEL;
+    x.fillRect(PAD, ROW + 18, W - PAD * 2, 2);
+    x.globalAlpha = 1;
+    x.textAlign = 'left';
+    x.fillStyle = LABEL;
+    x.font = '700 30px Verdana, sans-serif';
+    const tag = (this.sbLabels.heldBy || 'RECORD HELD BY').toUpperCase();
+    x.fillText(tag, PAD + 6, ROW + 78);
+    const nameX = PAD + 16 + x.measureText(tag).width;
+    const room = W - PAD - 10 - nameX;
+    x.fillStyle = ON;
+    let ns = 58;
+    x.font = `700 ${ns}px Verdana, sans-serif`;
+    while (ns > 18 && x.measureText(name.toUpperCase()).width > room) {
+      ns -= 2;
+      x.font = `700 ${ns}px Verdana, sans-serif`;
+    }
+    x.shadowBlur = 14;
+    x.shadowColor = ON;
+    x.fillText(name ? name.toUpperCase() : '-', nameX, ROW + 78);
+    x.shadowBlur = 0;
     return new THREE.CanvasTexture(c);
   }
 
