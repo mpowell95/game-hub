@@ -396,22 +396,27 @@ export class SkeeballUI {
     const wholeUp = totalUp / (totalMs / 1000);
     const up = Math.max(releaseUp, wholeUp);               // px/s
     const H = Math.max(320, this.el.stage.getBoundingClientRect().height);
-    // Normalised against the stage height so phone and desktop feel alike.
+    // THE DIAL SPANS THE RANGE OF NATURAL FLICKS, AND NOTHING OUTSIDE IT. Matt, after three
+    // rounds of this: *"I should NEVER have to do anything other than a natural flick. Whether
+    // it's slow, normal, or fast, that's fine. but there are natural flicks that equal each of
+    // those things that every other app in the fucking world understands."*
     //
-    // THIS DIVISOR IS THE FEEL OF THE WHOLE GAME, and it was set too low. At 1.75
-    // stage-heights/second a NATURAL flick is already past full power, so the dial pinned at its
-    // ceiling for every ordinary throw and the only way to get a soft one was to barely touch the
-    // ball. Matt: *"a natural flick is always at the max speed you've set. to try and get a 10, i
-    // have to barely touch the ball. it's unnatural."*
+    // Every previous version of this line was a bare divisor, which pins the softest throw at a
+    // dead stop and puts full power at whatever speed the divisor names. The divisor kept being
+    // set to a speed no thumb reaches (3.5 stage-heights/second), so the top of the dial - and
+    // with it the back wall - simply was not available to a human hand. Raising maxSpeed in
+    // boards.js was tried twice instead and cannot help: that changes what full power is WORTH,
+    // never what it COSTS.
     //
-    // That was first misread as "the top speed is too low" and fixed in boards.js by raising
-    // maxSpeed - which does not touch this line at all, so an ordinary flick still pinned at 1.0
-    // and simply got a faster ball out of it. Matt, immediately: *"Now if i barely touch the
-    // ball, it's launched crazy fast."* The saturation is HERE. Fix it here.
-    //
-    // 3.5 puts a comfortable flick around the middle of the dial and leaves the top half for a
-    // genuine hard throw, which is what the speed range in boards.js is now scaled for.
-    const power = Math.max(0, Math.min(1, up / (H * 3.5)));
+    // So the two ends are named, in stage-heights per second, and they are the only two numbers
+    // that decide how this game feels in the hand. Tune THESE, not the speed range:
+    //   SWIPE_SLOW  a gentle natural flick -> the softest throw the game has
+    //   SWIPE_FAST  a hard natural flick   -> full power, the back wall
+    // Normalised against the stage height so a phone and a desktop feel alike.
+    const SWIPE_SLOW = 0.60;
+    const SWIPE_FAST = 2.60;
+    const perH = up / H;
+    const power = Math.max(0, Math.min(1, (perH - SWIPE_SLOW) / (SWIPE_FAST - SWIPE_SLOW)));
 
     // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
     // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
