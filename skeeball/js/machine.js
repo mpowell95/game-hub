@@ -136,18 +136,28 @@ export function buildMachine(G) {
   for (const id of Object.keys(G.holes)) {
     const H = G.holes[id];
     if (!H.ringD) continue;
+    // `ringD` IS THE INSIDE OF THE RING (Matt, 2026-08-14) - the clear opening, not the wall's
+    // centreline and not its outside. This was built as the centreline first, which pushed the
+    // wall half its thickness (7.5mm) inward of the specified circle; because every ring is
+    // tangent to its own hole, that wall then OVERHUNG the hole's edge by 3mm the whole way
+    // round, narrowing every mouth the ball has to drop through. Worst on the 100s, whose ring is
+    // barely wider than the hole to begin with.
+    //
+    // So R is the inner radius, and the boxes are placed half a wall-thickness OUTSIDE it. The
+    // tangency in `cv` uses R, the inner edge, because that is the circle Matt's table describes.
     const R = H.ringD / 2;
+    const Rwall = R + G.ringThick / 2;           // centreline the boxes sit on
     const cu = H.u;
     const cv = H.v - H.r + R;                    // rule 1, the only placement rule there is
     // Segment count follows the RADIUS, not a constant: these rings run from 0.077m (a 100) to
     // 0.518m (the 10's arc), and one fixed count would either facet the big ones into a polygon
     // the ball can catch on a corner of, or spend hundreds of bodies on the small ones.
-    const N = Math.max(20, Math.ceil((2 * Math.PI * R) / 0.04));
-    const halfChord = R * Math.tan(Math.PI / N);
+    const N = Math.max(20, Math.ceil((2 * Math.PI * Rwall) / 0.04));
+    const halfChord = Rwall * Math.tan(Math.PI / N);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
-      const pu = cu + R * Math.cos(phi);
-      const pv = cv + R * Math.sin(phi);
+      const pu = cu + Rwall * Math.cos(phi);
+      const pv = cv + Rwall * Math.sin(phi);
       // The 10's ring is an ARC, not a circle (batch 3c): from the left wall, across the bottom,
       // to the right wall, and it STOPS. Only its lower half exists. Without this its upper arc
       // would curve back onto the board and run straight through the 50's mouth - which is a real

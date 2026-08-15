@@ -84,11 +84,11 @@ export const BOARDS = [
     // restitution per surface pair). The lane is deliberately SHORTER than a real alley (Matt,
     // 2026-08-13: the board is the main aspect of the game and must dominate the frame).
     geom: {
-      // THE BALL IS 0.78125x ACROSS (Matt, 2026-08-14), so it is part of the same proportion set
-      // as the face - see the X block at the top of this file. Radius = 0.390625x = 0.0568m,
-      // against a hole of radius 0.5x = 0.0727m: the ball passes a mouth with 1.6cm of room all
-      // round, which is why a hole has to be hit properly rather than nearly.
-      ballR: X * 0.390625,
+      // THE BALL IS 0.7x ACROSS (Matt, 2026-08-14), measured the normal way - outermost point to
+      // outermost point. Part of the same proportion set as the face; see the X block at the top.
+      // Started at 0.78125x and came down to 0.7x to open the holes up: against a hole of 0.5x
+      // radius the ball now clears the mouth by 0.15x all round instead of 0.11x.
+      ballR: X * 0.35,
       ballMass: 0.18,
       // Player's end of the lane to the foot of the hump. SHORTER than a real alley on purpose
       // (Matt, 2026-08-13: the board is the main aspect of the game and must dominate the
@@ -271,14 +271,30 @@ export const BOARDS = [
       // corners closed again. Clearance at that row is NOT monotonic in speed (the arc's peak
       // walks past it and back), so this was measured, not extrapolated: 5.80 and 6.40 both score
       // zero 100s over a 66-cell power/aim grid, 6.20 scores two.
-      minSpeed: 3.39,
-      maxSpeed: 6.20,
-      // Radians of lateral aim, and it went DOWN, not up. The corners moved out (u 0.32 -> 0.40)
-      // and up (v 0.76 -> 1.27), so the intuitive fix is more aim - but more aim spends the
-      // sideways budget too early: at 0.32 a full-aim ball is on the side rail at u = 0.50 by
-      // v = 0.73, half a metre below the corner it was aimed at. What the diagonal needs is a
-      // lateral drift that MATCHES the climb, which is a smaller angle held for longer.
-      aimMax: 0.17,
+      //
+      // WIDENED AT BOTH ENDS 2026-08-14, on Matt actually playing it: *"the whole thing requires
+      // flicks that are way too slow. a natural flick is always at the max speed you've set. to
+      // try and get a 10, i have to barely touch the ball. it's unnatural."* One window set too
+      // narrow AND too slow: an ordinary flick was pinned against the ceiling, so the top of the
+      // board could not be reached however hard he threw, and the floor sat so high that the
+      // nearest hole needed a tap instead of a throw.
+      //
+      // THE RULE THESE TWO MUST SATISFY, and the one the old pair broke: a comfortable, natural
+      // flick belongs in the MIDDLE of the range. Every previous pair was chosen to bracket the
+      // ladder exactly - minSpeed just reaches the nearest hole, maxSpeed just reaches the
+      // furthest - which reads well in a bench measurement and is precisely what makes a real
+      // thumb saturate it. Do not re-tighten these to bracket a ladder again.
+      minSpeed: 2.60,
+      maxSpeed: 8.60,
+      // HOW FAR SIDEWAYS A BALL CAN BE THROWN, in radians. Matt: *"you heavily restrict the angle
+      // i can throw the ball. that's the fucked part... If i want to slam it directly into the
+      // wall, i must be able to."*
+      //
+      // 0.17 was chosen to thread the ball into the top corners, and it bought that by making
+      // every other angle impossible - the side walls could not be reached at all, at any power.
+      // Throwing at a wall and getting nothing for it is a legitimate thing to want to do, and a
+      // game that forbids it is only smaller. Wide enough now to hit either side wall on purpose.
+      aimMax: 0.45,
 
       // Contact model overrides (defaults and the reasoning live in physics.js). A board that
       // the ball LANDS on and rolls up has to be dead, not lively.
