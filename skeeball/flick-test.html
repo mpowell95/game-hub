@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Skeeball flick test</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: #191019; color: #f7ecd8;
+    font: 15px/1.35 system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  #pad {
+    flex: 1 1 auto; position: relative;
+    background: linear-gradient(180deg, #7c4d22, #a86f38);
+    touch-action: none; overflow: hidden;
+  }
+  #pad::after {
+    content: 'flick UP anywhere in here';
+    position: absolute; inset: auto 0 14px 0; text-align: center;
+    font-size: 13px; opacity: .65; letter-spacing: .04em;
+  }
+  #big {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  #val { font-size: 68px; font-weight: 800; line-height: 1; }
+  #unit { font-size: 13px; opacity: .7; margin-top: 6px; letter-spacing: .06em; }
+  #tags { display: flex; gap: 8px; padding: 10px; }
+  #tags button {
+    flex: 1; padding: 16px 6px; font-size: 15px; font-weight: 700;
+    border: 0; border-radius: 12px; background: #2b5ea7; color: #fff;
+  }
+  #tags button:disabled { opacity: .35; }
+  #out {
+    padding: 10px 12px 14px; font-size: 14px; white-space: pre;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    background: #120b12; min-height: 132px;
+  }
+  #reset { margin: 0 10px 12px; padding: 10px; width: calc(100% - 20px);
+    border: 1px solid #55414f; background: transparent; color: #c9b8c6;
+    border-radius: 10px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="pad"><div id="big"><div id="val">-</div><div id="unit">SCREEN-HEIGHTS PER SECOND</div></div></div>
+
+<div id="tags">
+  <button data-k="slow" disabled>that was SLOW</button>
+  <button data-k="normal" disabled>NORMAL</button>
+  <button data-k="fast" disabled>FAST</button>
+</div>
+
+<div id="out">flick, then tap which kind it was</div>
+<button id="reset">clear all</button>
+
+<script>
+// The measurement below is copied VERBATIM from skeeball/js/ui.js's _swipeEnd, so the numbers
+// this page prints are the same numbers the game reads off the same flick. If that function
+// changes, change this too or the readings stop meaning anything.
+var pad = document.getElementById('pad');
+var val = document.getElementById('val');
+var out = document.getElementById('out');
+var buttons = [].slice.call(document.querySelectorAll('#tags button'));
+
+var samples = null;
+var last = null;
+var data = { slow: [], normal: [], fast: [] };
+
+pad.addEventListener('pointerdown', function (e) {
+  samples = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
+  pad.setPointerCapture(e.pointerId);
+});
+pad.addEventListener('pointermove', function (e) {
+  if (samples) samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+});
+pad.addEventListener('pointerup', function (e) {
+  if (!samples) return;
+  samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+  var s = samples; samples = null;
+
+  var first = s[0], end = s[s.length - 1];
+  var totalUp = first.y - end.y;
+  if (totalUp < 20) { val.textContent = '-'; return; }
+  var totalMs = Math.max(16, end.t - first.t);
+
+  var ref = first;
+  for (var i = 0; i < s.length; i++) { if (end.t - s[i].t <= 200) { ref = s[i]; break; } }
+  var releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
+  var wholeUp = totalUp / (totalMs / 1000);
+  var up = Math.max(releaseUp, wholeUp);
+  var H = Math.max(320, pad.getBoundingClientRect().height);
+
+  last = up / H;
+  val.textContent = last.toFixed(2);
+  buttons.forEach(function (b) { b.disabled = false; });
+});
+
+buttons.forEach(function (b) {
+  b.addEventListener('click', function () {
+    if (last == null) return;
+    data[b.dataset.k].push(last);
+    last = null;
+    buttons.forEach(function (x) { x.disabled = true; });
+    render();
+  });
+});
+
+document.getElementById('reset').addEventListener('click', function () {
+  data = { slow: [], normal: [], fast: [] };
+  last = null; val.textContent = '-';
+  buttons.forEach(function (x) { x.disabled = true; });
+  render();
+});
+
+function stat(a) {
+  if (!a.length) return '  -';
+  var lo = Math.min.apply(null, a), hi = Math.max.apply(null, a);
+  var avg = a.reduce(function (p, c) { return p + c; }, 0) / a.length;
+  return 'n=' + a.length + '  avg ' + avg.toFixed(2) + '   ' + lo.toFixed(2) + ' .. ' + hi.toFixed(2);
+}
+function render() {
+  out.textContent =
+    'SLOW    ' + stat(data.slow) + '\n' +
+    'NORMAL  ' + stat(data.normal) + '\n' +
+    'FAST    ' + stat(data.fast) + '\n\n' +
+    'screenshot this and send it';
+}
+render();
+</script>
+</body>
+</html>
