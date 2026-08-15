@@ -134,10 +134,12 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   // hard one and every feather-touch identical to a slow one, so the two most obvious things a
   // player tries both did nothing.
   //
-  // The outer bounds only stop absurdity (a fling off the screen, or a negative speed), and are
-  // far outside anything a hand does: -0.75 lands the ball short of the board, 2.0 buries it up
-  // the backboard. `p` below 0 is legitimate and gives a speed under minSpeed.
-  const p = Math.max(-0.75, Math.min(2.0, power));
+  // THERE IS NO UPPER BOUND. Matt: *"there should be no limit on how high i can throw the ball.
+  // If a swipe as hard as i can, the ball should launch like crazy high over the machine or
+  // something."* So a 2.0 ceiling came out - swipe hard enough and the ball leaves the machine,
+  // arcs over the back and resolves as the zero it deserves. The only remaining bound is at the
+  // bottom, and it exists so the square root below cannot take a negative argument.
+  const p = Math.max(-0.75, power);
   // Power is spent as ENERGY, not as speed (2026-08-14). How far a ball rolls up the face goes
   // as the SQUARE of how fast it gets there, so a power dial that mapped linearly onto speed
   // mapped quadratically onto the thing the player is actually aiming with: the bottom of the

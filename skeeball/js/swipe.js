@@ -82,7 +82,7 @@ export function powerOf(perH) {
  * extrapolates outside 0..1 by the same rule.
  */
 export function launchSpeed(power, minSpeed, maxSpeed) {
-  const p = Math.max(-0.75, Math.min(2.0, power));
+  const p = Math.max(-0.75, power);          // no upper bound - see startThrow
   return Math.sqrt(Math.max(0.4, minSpeed * minSpeed + p * (maxSpeed * maxSpeed - minSpeed * minSpeed)));
 }
 
