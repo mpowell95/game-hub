@@ -7,56 +7,70 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
-  html, body { margin: 0; height: 100%; overflow: hidden; }
+  /* Nothing on this page may scroll: a flick IS the input, so a swipe that pans the page
+     both loses the reading and drags the view out from under the thumb. */
+  html, body {
+    margin: 0; height: 100%; width: 100%;
+    position: fixed; overflow: hidden;
+    overscroll-behavior: none; touch-action: none;
+  }
   body {
     background: #191019; color: #f7ecd8;
     font: 15px/1.35 system-ui, -apple-system, sans-serif;
     display: flex; flex-direction: column;
   }
+
+  /* Readouts on TOP, swipe pad on the BOTTOM - the thumb starts low, like the real lane. */
+  #head { flex: 0 0 auto; padding: 10px 12px 0; text-align: center; }
+  #val { font-size: 56px; font-weight: 800; line-height: 1; }
+  #unit { font-size: 11px; opacity: .65; letter-spacing: .06em; margin-top: 2px; }
+
+  #tags { display: flex; gap: 8px; padding: 10px; flex: 0 0 auto; }
+  #tags button {
+    flex: 1; padding: 15px 4px; font-size: 14px; font-weight: 700;
+    border: 0; border-radius: 12px; background: #2b5ea7; color: #fff;
+  }
+  #tags button:disabled { opacity: .3; }
+
+  #out {
+    flex: 0 0 auto; padding: 8px 12px 10px; font-size: 13px; white-space: pre;
+    font-family: ui-monospace, Menlo, Consolas, monospace; background: #120b12;
+  }
+  #reset {
+    flex: 0 0 auto; margin: 8px 10px; padding: 8px;
+    border: 1px solid #55414f; background: transparent; color: #c9b8c6;
+    border-radius: 10px; font-size: 12px;
+  }
+
   #pad {
-    flex: 1 1 auto; position: relative;
+    flex: 1 1 auto; position: relative; min-height: 180px;
     background: linear-gradient(180deg, #7c4d22, #a86f38);
     touch-action: none; overflow: hidden;
   }
   #pad::after {
-    content: 'flick UP anywhere in here';
-    position: absolute; inset: auto 0 14px 0; text-align: center;
-    font-size: 13px; opacity: .65; letter-spacing: .04em;
+    content: 'flick UP from here';
+    position: absolute; inset: auto 0 12px 0; text-align: center;
+    font-size: 13px; opacity: .6; letter-spacing: .04em;
   }
-  #big {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; pointer-events: none;
-  }
-  #val { font-size: 68px; font-weight: 800; line-height: 1; }
-  #unit { font-size: 13px; opacity: .7; margin-top: 6px; letter-spacing: .06em; }
-  #tags { display: flex; gap: 8px; padding: 10px; }
-  #tags button {
-    flex: 1; padding: 16px 6px; font-size: 15px; font-weight: 700;
-    border: 0; border-radius: 12px; background: #2b5ea7; color: #fff;
-  }
-  #tags button:disabled { opacity: .35; }
-  #out {
-    padding: 10px 12px 14px; font-size: 14px; white-space: pre;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    background: #120b12; min-height: 132px;
-  }
-  #reset { margin: 0 10px 12px; padding: 10px; width: calc(100% - 20px);
-    border: 1px solid #55414f; background: transparent; color: #c9b8c6;
-    border-radius: 10px; font-size: 13px; }
 </style>
 </head>
 <body>
 
-<div id="pad"><div id="big"><div id="val">-</div><div id="unit">SCREEN-HEIGHTS PER SECOND</div></div></div>
+<div id="head">
+  <div id="val">-</div>
+  <div id="unit">SCREEN-HEIGHTS PER SECOND</div>
+</div>
 
 <div id="tags">
-  <button data-k="slow" disabled>that was SLOW</button>
+  <button data-k="slow" disabled>SLOW</button>
   <button data-k="normal" disabled>NORMAL</button>
   <button data-k="fast" disabled>FAST</button>
 </div>
 
 <div id="out">flick, then tap which kind it was</div>
 <button id="reset">clear all</button>
+
+<div id="pad"></div>
 
 <script>
 // The measurement below is copied VERBATIM from skeeball/js/ui.js's _swipeEnd, so the numbers
@@ -70,6 +84,10 @@ var buttons = [].slice.call(document.querySelectorAll('#tags button'));
 var samples = null;
 var last = null;
 var data = { slow: [], normal: [], fast: [] };
+
+// Bound to the PAD, never to document/window (the repo's standing touch rule): a non-passive
+// touchmove on document turns off compositor scrolling for the whole page.
+pad.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
 
 pad.addEventListener('pointerdown', function (e) {
   samples = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
@@ -93,7 +111,9 @@ pad.addEventListener('pointerup', function (e) {
   var releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
   var wholeUp = totalUp / (totalMs / 1000);
   var up = Math.max(releaseUp, wholeUp);
-  var H = Math.max(320, pad.getBoundingClientRect().height);
+  // The GAME normalises against its stage height; this page's pad is shorter, so normalise
+  // against the window instead - otherwise every reading here would be inflated.
+  var H = Math.max(320, window.innerHeight);
 
   last = up / H;
   val.textContent = last.toFixed(2);
