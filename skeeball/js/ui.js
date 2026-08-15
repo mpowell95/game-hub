@@ -396,12 +396,22 @@ export class SkeeballUI {
     const wholeUp = totalUp / (totalMs / 1000);
     const up = Math.max(releaseUp, wholeUp);               // px/s
     const H = Math.max(320, this.el.stage.getBoundingClientRect().height);
-    // Normalised against the stage height so phone and desktop feel alike. Full power at ~1.75
-    // stage-heights/second: a slow deliberate push lands near the bottom of the dial, an ordinary
-    // swipe near the middle, a real flick at the top. Nothing is wasted at either end - at power
-    // 0 the ball still just reaches the 20 and at power 1 it just reaches the 100s' row
-    // (boards.js minSpeed/maxSpeed), so every part of the dial buys a different cup.
-    const power = Math.max(0, Math.min(1, up / (H * 1.75)));
+    // Normalised against the stage height so phone and desktop feel alike.
+    //
+    // THIS DIVISOR IS THE FEEL OF THE WHOLE GAME, and it was set too low. At 1.75
+    // stage-heights/second a NATURAL flick is already past full power, so the dial pinned at its
+    // ceiling for every ordinary throw and the only way to get a soft one was to barely touch the
+    // ball. Matt: *"a natural flick is always at the max speed you've set. to try and get a 10, i
+    // have to barely touch the ball. it's unnatural."*
+    //
+    // That was first misread as "the top speed is too low" and fixed in boards.js by raising
+    // maxSpeed - which does not touch this line at all, so an ordinary flick still pinned at 1.0
+    // and simply got a faster ball out of it. Matt, immediately: *"Now if i barely touch the
+    // ball, it's launched crazy fast."* The saturation is HERE. Fix it here.
+    //
+    // 3.5 puts a comfortable flick around the middle of the dial and leaves the top half for a
+    // genuine hard throw, which is what the speed range in boards.js is now scaled for.
+    const power = Math.max(0, Math.min(1, up / (H * 3.5)));
 
     // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
     // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
