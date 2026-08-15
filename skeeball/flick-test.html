@@ -32,7 +32,7 @@
   #undo { background: #5a3a2a !important; }
 
   #out {
-    flex: 0 0 auto; padding: 6px 10px 8px; font-size: 12px; white-space: pre;
+    flex: 0 0 auto; padding: 6px 10px 8px; font-size: 11px; white-space: pre;
     font-family: ui-monospace, Menlo, Consolas, monospace; background: #120b12;
   }
   #reset { flex: 0 0 auto; margin: 6px 10px; padding: 7px;
@@ -60,11 +60,15 @@
 
 <div id="tags">
   <button data-k="s1"><b>1</b><br>slowest<br>I can</button>
-  <button data-k="s2"><b>2</b><br>very<br>slow</button>
-  <button data-k="s3"><b>3</b><br>slow</button>
-  <button data-k="s4"><b>4</b><br>normal</button>
-  <button data-k="s5"><b>5</b><br>hard</button>
-  <button data-k="s6"><b>6</b><br>hardest<br>I can</button>
+  <button data-k="s2"><b>2</b><br>just reach<br>the board</button>
+  <button data-k="s3"><b>3</b><br>very<br>slow</button>
+  <button data-k="s4"><b>4</b><br>slow</button>
+  <button data-k="s5"><b>5</b><br>easy<br>lob</button>
+  <button data-k="s6"><b>6</b><br>normal</button>
+  <button data-k="s7"><b>7</b><br>firm</button>
+  <button data-k="s8"><b>8</b><br>hard</button>
+  <button data-k="s9"><b>9</b><br>aiming<br>for a 100</button>
+  <button data-k="s10"><b>10</b><br>hardest<br>I can</button>
   <button id="undo">undo last</button>
 </div>
 
@@ -87,13 +91,12 @@ const derived = document.getElementById('derived');
 const out = document.getElementById('out');
 const buttons = [...document.querySelectorAll('#tags button[data-k]')];
 
-// Numbered slowest to fastest, so the readings come back in an order that can be read straight
-// down the column. Nothing here is intent-based ("just reach the board") any more - those two
-// buckets asked Matt to guess at an outcome and only muddled the scale.
-const KEYS = ['s1', 's2', 's3', 's4', 's5', 's6'];
+// Numbered slowest to hardest, so the readings come back in an order that reads straight down the
+// column and each row's own number says where it sits on the scale.
+const KEYS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
 const LABEL = {
-  s1: '1 slowest', s2: '2 very slow', s3: '3 slow',
-  s4: '4 normal', s5: '5 hard', s6: '6 hardest',
+  s1: ' 1 slowest', s2: ' 2 reach board', s3: ' 3 very slow', s4: ' 4 slow', s5: ' 5 easy lob',
+  s6: ' 6 normal', s7: ' 7 firm', s8: ' 8 hard', s9: ' 9 for a 100', s10: '10 hardest',
 };
 
 let samples = null;
@@ -149,10 +152,10 @@ document.getElementById('reset').addEventListener('click', () => {
 
 function row(k) {
   const a = data[k];
-  if (!a.length) return LABEL[k].padEnd(13) + '-';
+  if (!a.length) return LABEL[k].padEnd(15) + '-';
   const lo = Math.min(...a), hi = Math.max(...a);
   const avg = a.reduce((p, c) => p + c, 0) / a.length;
-  return LABEL[k].padEnd(13) + 'n=' + String(a.length).padEnd(3)
+  return LABEL[k].padEnd(15) + 'n=' + String(a.length).padEnd(3)
     + 'avg ' + avg.toFixed(2) + '   ' + lo.toFixed(2) + '..' + hi.toFixed(2);
 }
 function render() {
