@@ -310,8 +310,16 @@ export const BOARDS = [
       // system. Raising the ceiling makes every throw faster, not just the hardest one. If the
       // complaint is about how a NORMAL throw feels, the curve is the knob; the ceiling is only
       // the knob for what the very hardest throw is worth. 6.20 is where the top corners open up.
+      // maxSpeed 6.20 -> 6.60 (Matt, 2026-08-15: "the fast throw doesn't go up high enough. make
+      // a small adjustment"). This is the RIGHT knob for that complaint and the swipe curve is
+      // not: his fast flick measures 4.95, which is SWIPE_FAST exactly, so it already arrives at
+      // power 1.00. The reading is correct; what power 1.00 was WORTH was too little.
+      //
+      // It does lift the whole dial by about 6% - speed is interpolated across the range, so
+      // there is no way to pay the top end more without paying the middle a little more too.
+      // Deliberate and measured: a normal flick goes 4.91 -> 5.20 m/s.
       minSpeed: 2.60,
-      maxSpeed: 6.20,
+      maxSpeed: 6.60,
       // HOW FAR SIDEWAYS A BALL CAN BE THROWN, in radians. Matt: *"you heavily restrict the angle
       // i can throw the ball. that's the fucked part... If i want to slam it directly into the
       // wall, i must be able to."*
