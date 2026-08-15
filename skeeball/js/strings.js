@@ -29,7 +29,7 @@ const STRINGS = {
     stat_today: 'Today',
     stat_top: 'Top',
     // The backboard scoreboard's four column labels (2026-08-15). Matt's own words.
-    sb_all_time: 'Hub Record',
+    sb_all_time: 'Hub Wide Record',
     sb_your_best: 'Your Best',
     sb_today: 'Today',
     sb_last_game: 'Last Game',

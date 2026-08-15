@@ -49,7 +49,7 @@ function panel() {
 // A - five full-width rows, label left, value right
 function optionA() {
   const [c,x] = panel();
-  const rows = [['HUB RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last],['HOLDER',D.name]];
+  const rows = [['HUB WIDE RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last],['USERNAME',D.name]];
   const rh = (H-10)/5;
   rows.forEach((r,i) => {
     const y = 5 + rh*i + rh/2;
@@ -66,7 +66,7 @@ function optionA() {
 // B - 2x2 boxed cells, holder strip beneath
 function optionB() {
   const [c,x] = panel();
-  const cells = [['HUB RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last]];
+  const cells = [['HUB WIDE RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last]];
   const gw = (W-14)/2, gh = (H-46)/2;
   cells.forEach((r,i) => {
     const cx = 7 + gw*(i%2), cy = 6 + gh*Math.floor(i/2);
@@ -79,7 +79,7 @@ function optionB() {
   const ny = H-34;
   x.strokeStyle='rgba(201,138,58,.5)'; x.strokeRect(7,ny,W-14,28);
   x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='left'; x.textBaseline='middle';
-  x.fillText('HOLDER', 12, ny+8);
+  x.fillText('USERNAME', 12, ny+8);
   x.fillStyle=AM; x.font='700 16px Verdana'; x.textAlign='right';
   x.fillText(D.name, W-12, ny+18);
   return c;
@@ -88,13 +88,13 @@ function optionB() {
 // C - one record at a time, cycling
 function optionC(which) {
   const [c,x] = panel();
-  const set = [['HUB RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
+  const set = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
   const r = set[which % 4];
   x.textAlign='center'; x.textBaseline='middle';
   x.fillStyle=CY; x.font='700 13px Verdana'; x.fillText(r[0], W/2, 22);
   x.fillStyle=AM; x.font='700 58px Verdana'; x.fillText(r[1], W/2, r[2] ? 68 : 76);
   if (r[2]) {
-    x.fillStyle=CY; x.font='700 9px Verdana'; x.fillText('HOLDER', W/2, 104);
+    x.fillStyle=CY; x.font='700 9px Verdana'; x.fillText('USERNAME', W/2, 104);
     x.fillStyle=AM; x.font='700 18px Verdana'; x.fillText(r[2], W/2, 121);
   }
   for (let i=0;i<4;i++) {
