@@ -7,8 +7,6 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
-  /* Nothing on this page may scroll: a flick IS the input, so a swipe that pans the page
-     both loses the reading and drags the view out from under the thumb. */
   html, body {
     margin: 0; height: 100%; width: 100%;
     position: fixed; overflow: hidden;
@@ -16,41 +14,39 @@
   }
   body {
     background: #191019; color: #f7ecd8;
-    font: 15px/1.35 system-ui, -apple-system, sans-serif;
+    font: 14px/1.3 system-ui, -apple-system, sans-serif;
     display: flex; flex-direction: column;
   }
 
-  /* Readouts on TOP, swipe pad on the BOTTOM - the thumb starts low, like the real lane. */
-  #head { flex: 0 0 auto; padding: 10px 12px 0; text-align: center; }
-  #val { font-size: 56px; font-weight: 800; line-height: 1; }
-  #unit { font-size: 11px; opacity: .65; letter-spacing: .06em; margin-top: 2px; }
+  #head { flex: 0 0 auto; padding: 6px 12px 0; text-align: center; }
+  #val { font-size: 46px; font-weight: 800; line-height: 1; }
+  #sub { font-size: 11px; opacity: .7; margin-top: 1px; }
 
-  #tags { display: flex; gap: 8px; padding: 10px; flex: 0 0 auto; }
+  #tags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 8px 4px; flex: 0 0 auto; }
   #tags button {
-    flex: 1; padding: 15px 4px; font-size: 14px; font-weight: 700;
-    border: 0; border-radius: 12px; background: #2b5ea7; color: #fff;
+    padding: 12px 2px; font-size: 12px; font-weight: 700; line-height: 1.15;
+    border: 0; border-radius: 10px; background: #2b5ea7; color: #fff;
   }
-  #tags button:disabled { opacity: .3; }
+  #tags button:disabled { opacity: .28; }
+  #undo { background: #5a3a2a !important; }
 
   #out {
-    flex: 0 0 auto; padding: 8px 12px 10px; font-size: 13px; white-space: pre;
+    flex: 0 0 auto; padding: 6px 10px 8px; font-size: 12px; white-space: pre;
     font-family: ui-monospace, Menlo, Consolas, monospace; background: #120b12;
   }
-  #reset {
-    flex: 0 0 auto; margin: 8px 10px; padding: 8px;
+  #reset { flex: 0 0 auto; margin: 6px 10px; padding: 7px;
     border: 1px solid #55414f; background: transparent; color: #c9b8c6;
-    border-radius: 10px; font-size: 12px;
-  }
+    border-radius: 9px; font-size: 12px; }
 
   #pad {
-    flex: 1 1 auto; position: relative; min-height: 180px;
+    flex: 1 1 auto; position: relative; min-height: 150px;
     background: linear-gradient(180deg, #7c4d22, #a86f38);
     touch-action: none; overflow: hidden;
   }
   #pad::after {
     content: 'flick UP from here';
-    position: absolute; inset: auto 0 12px 0; text-align: center;
-    font-size: 13px; opacity: .6; letter-spacing: .04em;
+    position: absolute; inset: auto 0 10px 0; text-align: center;
+    font-size: 12px; opacity: .55;
   }
 </style>
 </head>
@@ -58,97 +54,109 @@
 
 <div id="head">
   <div id="val">-</div>
-  <div id="unit">SCREEN-HEIGHTS PER SECOND</div>
+  <div id="sub">screen-heights/sec &nbsp;·&nbsp; <span id="derived">-</span></div>
 </div>
 
 <div id="tags">
-  <button data-k="slow" disabled>SLOW</button>
-  <button data-k="normal" disabled>NORMAL</button>
-  <button data-k="fast" disabled>FAST</button>
+  <button data-k="slowest">as SLOW<br>as I can</button>
+  <button data-k="slow">SLOW</button>
+  <button data-k="easy">EASY<br>lob</button>
+  <button data-k="normal">NORMAL</button>
+  <button data-k="hard">HARD</button>
+  <button data-k="hardest">as HARD<br>as I can</button>
+  <button data-k="board">just reach<br>the BOARD</button>
+  <button data-k="hundred">aiming for<br>a 100</button>
+  <button id="undo">undo last</button>
 </div>
 
-<div id="out">flick, then tap which kind it was</div>
+<div id="out"></div>
 <button id="reset">clear all</button>
 
 <div id="pad"></div>
 
-<script>
-// The measurement below is copied VERBATIM from skeeball/js/ui.js's _swipeEnd, so the numbers
-// this page prints are the same numbers the game reads off the same flick. If that function
-// changes, change this too or the readings stop meaning anything.
-var pad = document.getElementById('pad');
-var val = document.getElementById('val');
-var out = document.getElementById('out');
-var buttons = [].slice.call(document.querySelectorAll('#tags button'));
+<script type="module">
+// The measurement comes from the GAME'S OWN MODULE - not a copy of it. That is the whole point of
+// this file existing: an earlier version hand-copied ui.js's maths, the two drifted inside one
+// edit, and this page then printed confident readings on a scale the game did not use.
+import { swipeSpeed, powerOf, launchSpeed, SWIPE_SLOW, SWIPE_FAST } from './js/swipe.js';
+import { BOARDS } from './js/boards.js';
 
-var samples = null;
-var last = null;
-var data = { slow: [], normal: [], fast: [] };
+const G = BOARDS[0].geom;
+const pad = document.getElementById('pad');
+const val = document.getElementById('val');
+const derived = document.getElementById('derived');
+const out = document.getElementById('out');
+const buttons = [...document.querySelectorAll('#tags button[data-k]')];
 
-// Bound to the PAD, never to document/window (the repo's standing touch rule): a non-passive
-// touchmove on document turns off compositor scrolling for the whole page.
-pad.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+const KEYS = ['slowest', 'slow', 'easy', 'normal', 'hard', 'hardest', 'board', 'hundred'];
+const LABEL = {
+  slowest: 'SLOWEST', slow: 'SLOW', easy: 'EASY LOB', normal: 'NORMAL',
+  hard: 'HARD', hardest: 'HARDEST', board: 'JUST REACH', hundred: 'FOR A 100',
+};
 
-pad.addEventListener('pointerdown', function (e) {
+let samples = null;
+let last = null;
+let order = [];                                  // for undo
+let data = Object.fromEntries(KEYS.map((k) => [k, []]));
+
+pad.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+pad.addEventListener('pointerdown', (e) => {
   samples = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
   pad.setPointerCapture(e.pointerId);
 });
-pad.addEventListener('pointermove', function (e) {
+pad.addEventListener('pointermove', (e) => {
   if (samples) samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
 });
-pad.addEventListener('pointerup', function (e) {
+pad.addEventListener('pointerup', (e) => {
   if (!samples) return;
   samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
-  var s = samples; samples = null;
+  const s = samples; samples = null;
 
-  var first = s[0], end = s[s.length - 1];
-  var totalUp = first.y - end.y;
-  if (totalUp < 20) { val.textContent = '-'; return; }
-  var totalMs = Math.max(16, end.t - first.t);
-
-  var ref = first;
-  for (var i = 0; i < s.length; i++) { if (end.t - s[i].t <= 200) { ref = s[i]; break; } }
-  var releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
-  var wholeUp = totalUp / (totalMs / 1000);
-  var up = Math.max(releaseUp, wholeUp);
-  // The GAME normalises against its stage height; this page's pad is shorter, so normalise
-  // against the window instead - otherwise every reading here would be inflated.
-  var H = Math.max(320, window.innerHeight);
-
-  last = up / H;
-  val.textContent = last.toFixed(2);
-  buttons.forEach(function (b) { b.disabled = false; });
+  const perH = swipeSpeed(s, window.innerHeight);
+  if (perH == null) { val.textContent = '-'; derived.textContent = 'too short to count'; return; }
+  last = perH;
+  val.textContent = perH.toFixed(2);
+  const p = powerOf(perH);
+  derived.textContent = 'power ' + p.toFixed(2) + '  ·  ' + launchSpeed(p, G.minSpeed, G.maxSpeed).toFixed(2) + ' m/s';
+  buttons.forEach((b) => { b.disabled = false; });
 });
 
-buttons.forEach(function (b) {
-  b.addEventListener('click', function () {
-    if (last == null) return;
-    data[b.dataset.k].push(last);
-    last = null;
-    buttons.forEach(function (x) { x.disabled = true; });
-    render();
-  });
-});
+buttons.forEach((b) => b.addEventListener('click', () => {
+  if (last == null) return;
+  data[b.dataset.k].push(last);
+  order.push(b.dataset.k);
+  last = null;
+  buttons.forEach((x) => { x.disabled = true; });
+  render();
+}));
 
-document.getElementById('reset').addEventListener('click', function () {
-  data = { slow: [], normal: [], fast: [] };
-  last = null; val.textContent = '-';
-  buttons.forEach(function (x) { x.disabled = true; });
+document.getElementById('undo').addEventListener('click', () => {
+  const k = order.pop();
+  if (k) data[k].pop();
   render();
 });
 
-function stat(a) {
-  if (!a.length) return '  -';
-  var lo = Math.min.apply(null, a), hi = Math.max.apply(null, a);
-  var avg = a.reduce(function (p, c) { return p + c; }, 0) / a.length;
-  return 'n=' + a.length + '  avg ' + avg.toFixed(2) + '   ' + lo.toFixed(2) + ' .. ' + hi.toFixed(2);
+document.getElementById('reset').addEventListener('click', () => {
+  data = Object.fromEntries(KEYS.map((k) => [k, []]));
+  order = []; last = null;
+  val.textContent = '-'; derived.textContent = '-';
+  buttons.forEach((x) => { x.disabled = true; });
+  render();
+});
+
+function row(k) {
+  const a = data[k];
+  if (!a.length) return LABEL[k].padEnd(10) + '  -';
+  const lo = Math.min(...a), hi = Math.max(...a);
+  const avg = a.reduce((p, c) => p + c, 0) / a.length;
+  return LABEL[k].padEnd(10) + ' n=' + String(a.length).padEnd(3)
+    + 'avg ' + avg.toFixed(2) + '   ' + lo.toFixed(2) + '..' + hi.toFixed(2);
 }
 function render() {
-  out.textContent =
-    'SLOW    ' + stat(data.slow) + '\n' +
-    'NORMAL  ' + stat(data.normal) + '\n' +
-    'FAST    ' + stat(data.fast) + '\n\n' +
-    'screenshot this and send it';
+  out.textContent = KEYS.map(row).join('\n')
+    + '\n\ncurrent: SLOW ' + SWIPE_SLOW.toFixed(2) + '  FAST ' + SWIPE_FAST.toFixed(2)
+    + '\nscreenshot this and send it';
 }
 render();
 </script>

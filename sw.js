@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v335';
+const CACHE = 'game-hub-v336';
 
 const ASSETS = [
   './',
@@ -229,6 +229,7 @@ const ASSETS = [
   './skeeball/flick-test.html',
   './skeeball/css/skeeball.css',
   './skeeball/js/ui.js',
+  './skeeball/js/swipe.js',
   './skeeball/js/game.js',
   './skeeball/js/physics.js',
   './skeeball/js/howto.js',

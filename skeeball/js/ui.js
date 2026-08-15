@@ -23,6 +23,7 @@ import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { Renderer } from './render.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 import { howToMarkup } from './howto.js';
+import { swipeSpeed, powerOf } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
@@ -376,82 +377,15 @@ export class SkeeballUI {
     const first = samples[0];
     const end = samples[samples.length - 1];
 
-    // IS IT A THROW? Decided on the WHOLE gesture, never on the last few milliseconds. The old
-    // build asked whether the final 130ms carried 24px, which silently threw away any swipe a
-    // player made slowly: measured 2026-08-14, two of five deliberate swipes produced no ball,
-    // no message and no flicker of anything - including a 464px push up the full length of the
-    // lane over 900ms, which is the most natural "roll it gently" gesture there is. Anything
-    // that plainly travelled up the lane is a throw now, and how fast it went is the POWER, not
-    // the price of admission.
-    const totalUp = first.y - end.y;                       // + = upward
-    if (totalUp < 20) return;                              // a tap or a sideways smudge
-    const totalMs = Math.max(16, end.t - first.t);
-
-    // POWER = release speed, with the whole swipe's average as a floor. The release window is
-    // what a flick is, but a long deliberate push that eases off at the very end is still a
-    // throw of that push's strength, not of its last inch.
-    let ref = first;
-    for (const smp of samples) { if (end.t - smp.t <= 200) { ref = smp; break; } }
-    const releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
-    const wholeUp = totalUp / (totalMs / 1000);
-    const up = Math.max(releaseUp, wholeUp);               // px/s
-    // NORMALISED AGAINST THE WINDOW, NOT THE STAGE (2026-08-14). It used to divide by the stage
-    // element's height, which is smaller than the window - so the game read a BIGGER number than
-    // skeeball/flick-test.html did for the identical flick, and every SWIPE_SLOW/SWIPE_FAST value
-    // measured on that page was applied to a scale that did not match it. Matt, throwing as slowly
-    // as he physically could: *"I'm throwing the ball at 0.46 speed - the slowest I physically can
-    // - and it's still landing in the 10 or even bouncing off the 20."* 0.46 on the page was a
-    // good deal more than 0.46 here, so a throw meant to fall short of the board still made it.
-    //
-    // The measuring tool and the thing being measured have to use the same ruler. If this line
-    // ever changes, change flick-test.html's to match in the same commit.
-    const H = Math.max(320, window.innerHeight);
-    // THE DIAL SPANS THE RANGE OF NATURAL FLICKS, AND NOTHING OUTSIDE IT. Matt, after three
-    // rounds of this: *"I should NEVER have to do anything other than a natural flick. Whether
-    // it's slow, normal, or fast, that's fine. but there are natural flicks that equal each of
-    // those things that every other app in the fucking world understands."*
-    //
-    // Every previous version of this line was a bare divisor, which pins the softest throw at a
-    // dead stop and puts full power at whatever speed the divisor names. The divisor kept being
-    // set to a speed no thumb reaches (3.5 stage-heights/second), so the top of the dial - and
-    // with it the back wall - simply was not available to a human hand. Raising maxSpeed in
-    // boards.js was tried twice instead and cannot help: that changes what full power is WORTH,
-    // never what it COSTS.
-    //
-    // So the two ends are named, in stage-heights per second, and they are the only two numbers
-    // that decide how this game feels in the hand. Tune THESE, not the speed range:
-    //   SWIPE_SLOW  a gentle natural flick -> the softest throw the game has
-    //   SWIPE_FAST  a hard natural flick   -> full power, the back wall
-    // Normalised against the stage height so a phone and a desktop feel alike.
-    // MEASURED OFF MATT'S OWN THUMB, 2026-08-14, with skeeball/flick-test.html (which runs this
-    // exact function, so its readings drop straight in). 28 flicks on his phone:
-    //
-    //   SLOW    n=10  avg 1.48   range 1.12 .. 1.82
-    //   NORMAL  n=10  avg 2.50   range 2.01 .. 2.88
-    //   FAST    n=8   avg 3.06   range 2.50 .. 4.39
-    //
-    // Every guessed pair before this was wrong in the same direction and it is worth seeing why.
-    // 0.60 sits BELOW anything a hand produces, so his gentlest flick already started at 44%
-    // power - that is the "to get a 10 I have to barely touch the ball" complaint. And 2.60, the
-    // guess meant to be a hard flick, lands on his NORMAL average, so an ordinary swipe was
-    // already pinned at full and a fast one was clamped. Four rounds of moving these by feel
-    // never found that, because the numbers describe a hand, and a hand has to be measured.
-    //
-    // Set from the data: the floor is just under his slowest slow flick, and full power is his
-    // fast average (anything above just clamps, which is what a hard flick wants anyway). Lands:
-    //   slow 1.48 -> 0.19   normal 2.50 -> 0.71   fast 3.06 -> 1.00
-    // Normal keeps the 0.71 it had when he reported it landing in the 30, so that is unchanged;
-    // what moves is that full power is now reachable, and the bottom of the dial is real.
-    const SWIPE_SLOW = 1.10;
-    const SWIPE_FAST = 3.05;
-    // NOT CLAMPED to 0..1. SWIPE_SLOW and SWIPE_FAST are the ends of the NATURAL range, not the
-    // ends of what a throw can be: 0 is "just barely reaches the board" and 1 is "the top of the
-    // 100 ring", and a swipe outside that range must keep meaning something. Matt: *"An
-    // unnaturally fast one should be able to hit like way higher up on the wall and an
-    // unnaturally slower one should be short of the board for a 0 or roll back."* physics.js
-    // extrapolates by the same rule and carries the only outer bounds.
-    const perH = up / H;
-    const power = (perH - SWIPE_SLOW) / (SWIPE_FAST - SWIPE_SLOW);
+    // THE SWIPE MATHS LIVES IN js/swipe.js AND IS NOT REPEATED HERE. skeeball/flick-test.html
+    // imports the same file, so the number that page prints IS the number this line computes.
+    // They used to be two hand-copied copies, and they drifted inside a single edit - see that
+    // file's header for exactly how, and what it cost.
+    const perH = swipeSpeed(samples, window.innerHeight);
+    if (perH == null) return;                              // a tap or a sideways smudge
+    // NOT CLAMPED to 0..1: swipe.js's SWIPE_SLOW/SWIPE_FAST mark the ends of the NATURAL range,
+    // not of what a throw can be, and physics.js extrapolates past both.
+    const power = powerOf(perH);
 
     // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
     // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
@@ -467,7 +401,7 @@ export class SkeeballUI {
     // far enough to be a throw. At the old 0.42 rad divisor the corner 100s needed a 30-degree
     // swipe that physically did not fit on the screen, which is why they read as unreachable.
     // 0.38 rad puts full aim exactly at the edge of what the hand can do.
-    const raw = Math.max(-1, Math.min(1, Math.atan2(end.x - first.x, totalUp) / 0.38));
+    const raw = Math.max(-1, Math.min(1, Math.atan2(end.x - first.x, first.y - end.y) / 0.38));
     const aim = Math.sign(raw) * (raw * raw);
 
     if (this.game.throwBall({ power, aim })) {
