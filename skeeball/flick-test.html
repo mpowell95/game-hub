@@ -18,36 +18,45 @@
     display: flex; flex-direction: column;
   }
 
-  #head { flex: 0 0 auto; padding: 6px 12px 0; text-align: center; }
-  #val { font-size: 46px; font-weight: 800; line-height: 1; }
-  #sub { font-size: 11px; opacity: .7; margin-top: 1px; }
+  /* THE PAD IS THE POINT OF THIS PAGE, so it gets a guaranteed share of the screen and everything
+     else is sized around it. The first version let ten buttons and ten stat rows push it down to a
+     sliver you could not flick in. */
+  #head { flex: 0 0 auto; padding: 4px 10px 2px; text-align: center; }
+  #val { font-size: 30px; font-weight: 800; line-height: 1.05; }
+  #sub { font-size: 10px; opacity: .7; }
 
-  #tags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 8px 4px; flex: 0 0 auto; }
+  /* Five across, two down: half the height of the old three-across grid. */
+  #tags { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px 6px; flex: 0 0 auto; }
   #tags button {
-    padding: 10px 2px; font-size: 11px; font-weight: 600; line-height: 1.2;
-    border: 0; border-radius: 10px; background: #2b5ea7; color: #fff;
+    padding: 7px 1px; font-size: 8.5px; font-weight: 600; line-height: 1.1;
+    border: 0; border-radius: 8px; background: #2b5ea7; color: #fff;
   }
-  #tags button b { font-size: 19px; font-weight: 800; }
+  #tags button b { display: block; font-size: 17px; font-weight: 800; }
   #tags button:disabled { opacity: .28; }
-  #undo { background: #5a3a2a !important; }
 
+  #btm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 6px 4px; flex: 0 0 auto; }
+  #btm button {
+    padding: 8px; border-radius: 8px; font-size: 12px; border: 1px solid #55414f;
+    background: transparent; color: #c9b8c6;
+  }
+  #undo { background: #5a3a2a !important; border-color: #5a3a2a !important; color: #fff !important; }
+
+  /* Scrolls WITHIN itself if the readings outgrow it, so it can never squeeze the pad. */
   #out {
-    flex: 0 0 auto; padding: 6px 10px 8px; font-size: 11px; white-space: pre;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 5px 8px; font-size: 11px; line-height: 1.32; white-space: pre;
     font-family: ui-monospace, Menlo, Consolas, monospace; background: #120b12;
   }
-  #reset { flex: 0 0 auto; margin: 6px 10px; padding: 7px;
-    border: 1px solid #55414f; background: transparent; color: #c9b8c6;
-    border-radius: 9px; font-size: 12px; }
 
   #pad {
-    flex: 1 1 auto; position: relative; min-height: 150px;
+    flex: 0 0 auto; height: 30vh; min-height: 165px; position: relative;
     background: linear-gradient(180deg, #7c4d22, #a86f38);
     touch-action: none; overflow: hidden;
   }
   #pad::after {
     content: 'flick UP from here';
-    position: absolute; inset: auto 0 10px 0; text-align: center;
-    font-size: 12px; opacity: .55;
+    position: absolute; inset: auto 0 8px 0; text-align: center;
+    font-size: 11px; opacity: .55;
   }
 </style>
 </head>
@@ -59,22 +68,24 @@
 </div>
 
 <div id="tags">
-  <button data-k="s1"><b>1</b><br>slowest<br>I can</button>
-  <button data-k="s2"><b>2</b><br>just reach<br>the board</button>
-  <button data-k="s3"><b>3</b><br>very<br>slow</button>
-  <button data-k="s4"><b>4</b><br>slow</button>
-  <button data-k="s5"><b>5</b><br>easy<br>lob</button>
-  <button data-k="s6"><b>6</b><br>normal</button>
-  <button data-k="s7"><b>7</b><br>firm</button>
-  <button data-k="s8"><b>8</b><br>hard</button>
-  <button data-k="s9"><b>9</b><br>aiming<br>for a 100</button>
-  <button data-k="s10"><b>10</b><br>hardest<br>I can</button>
+  <button data-k="s1"><b>1</b>slowest</button>
+  <button data-k="s2"><b>2</b>reach board</button>
+  <button data-k="s3"><b>3</b>very slow</button>
+  <button data-k="s4"><b>4</b>slow</button>
+  <button data-k="s5"><b>5</b>easy lob</button>
+  <button data-k="s6"><b>6</b>normal</button>
+  <button data-k="s7"><b>7</b>firm</button>
+  <button data-k="s8"><b>8</b>hard</button>
+  <button data-k="s9"><b>9</b>for a 100</button>
+  <button data-k="s10"><b>10</b>hardest</button>
+</div>
+
+<div id="btm">
   <button id="undo">undo last</button>
+  <button id="reset">clear all</button>
 </div>
 
 <div id="out"></div>
-<button id="reset">clear all</button>
-
 <div id="pad"></div>
 
 <script type="module">
