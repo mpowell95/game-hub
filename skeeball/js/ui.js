@@ -395,7 +395,17 @@ export class SkeeballUI {
     const releaseUp = (ref.y - end.y) / (Math.max(16, end.t - ref.t) / 1000);
     const wholeUp = totalUp / (totalMs / 1000);
     const up = Math.max(releaseUp, wholeUp);               // px/s
-    const H = Math.max(320, this.el.stage.getBoundingClientRect().height);
+    // NORMALISED AGAINST THE WINDOW, NOT THE STAGE (2026-08-14). It used to divide by the stage
+    // element's height, which is smaller than the window - so the game read a BIGGER number than
+    // skeeball/flick-test.html did for the identical flick, and every SWIPE_SLOW/SWIPE_FAST value
+    // measured on that page was applied to a scale that did not match it. Matt, throwing as slowly
+    // as he physically could: *"I'm throwing the ball at 0.46 speed - the slowest I physically can
+    // - and it's still landing in the 10 or even bouncing off the 20."* 0.46 on the page was a
+    // good deal more than 0.46 here, so a throw meant to fall short of the board still made it.
+    //
+    // The measuring tool and the thing being measured have to use the same ruler. If this line
+    // ever changes, change flick-test.html's to match in the same commit.
+    const H = Math.max(320, window.innerHeight);
     // THE DIAL SPANS THE RANGE OF NATURAL FLICKS, AND NOTHING OUTSIDE IT. Matt, after three
     // rounds of this: *"I should NEVER have to do anything other than a natural flick. Whether
     // it's slow, normal, or fast, that's fine. but there are natural flicks that equal each of
