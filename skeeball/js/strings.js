@@ -29,11 +29,10 @@ const STRINGS = {
     stat_today: 'Today',
     stat_top: 'Top',
     // The backboard scoreboard's four column labels (2026-08-15). Matt's own words.
-    sb_all_time: 'All Time',
+    sb_all_time: 'Hub Record',
     sb_your_best: 'Your Best',
     sb_today: 'Today',
-    sb_last_game: 'Last Game',
-    sb_held_by: 'Record held by',
+    sb_last_game: 'Last Game',
     stat_last: 'Last',
 
     // Play screen
@@ -93,11 +92,10 @@ const STRINGS = {
     stat_best: 'Mejor',
     stat_today: 'Hoy',
     stat_top: 'Récord',
-    sb_all_time: 'Histórico',
+    sb_all_time: 'Récord del Hub',
     sb_your_best: 'Tu mejor',
     sb_today: 'Hoy',
-    sb_last_game: 'Última',
-    sb_held_by: 'Récord de',
+    sb_last_game: 'Última',
     stat_last: 'Última',
 
     hud_ball: 'Bola',

@@ -178,7 +178,6 @@ export class SkeeballUI {
       best: t('sb_your_best'),
       today: t('sb_today'),
       last: t('sb_last_game'),
-      heldBy: t('sb_held_by'),
     };
     this.renderer.setScoreboard({
       allTime: this.top[id] || null,

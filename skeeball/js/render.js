@@ -87,7 +87,7 @@ export class Renderer {
     // them in via setScoreboard(); the renderer only draws what it is handed, and never reads
     // storage or the network itself. Labels come in the same way so they stay translated.
     this.scoreboard = { allTime: null, best: 0, today: 0, last: null };
-    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game', heldBy: 'Record held by' };
+    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game' };
     this._backMat = null;
     this._sbArcade = true;   // LED scoreboard; false falls back to the painted-sign version
     this._celebrateT = 0;
@@ -405,7 +405,18 @@ export class Renderer {
         side,
       );
       panel.position.set(s * (G.boardW / 2 + 0.055), (topY + G.backboardH) / 2 - 0.1, (M.lipZ - 0.55) / 2 + 0.12);
-      panel.castShadow = true;
+      // THIS IS THE DISCOLOURATION ON THE RIGHT OF THE BOARD, and it took two goes to find.
+      // Matt reported a patch on the right of the scoring area; the side WALLS were stopped from
+      // casting first and it made no difference. Measured properly by sampling mirrored pairs of
+      // pixels across the face: with shadows on the outer-right samples ran ~47 levels darker
+      // than their mirror, with shadows off the two sides were identical, and disabling just
+      // these two panels took every one of those deltas to zero.
+      //
+      // It is these because the key light sits at x = +0.25, off to the right, so this 2.35m slab
+      // throws its shadow straight across the right of the playfield. Pure cabinet dressing
+      // outside the play area, so nothing is lost by it not casting - and a shadow over the
+      // scoring face reads as dirt, which is why the key light is nearly overhead to begin with.
+      panel.castShadow = false;
       panel.receiveShadow = true;
       this.scene.add(panel);
     }
@@ -624,8 +635,13 @@ export class Renderer {
    *  Only the paint changes. The backboard is the same solid, in the same place, and the ball
    *  still bounces off it exactly as before. */
   _paintBackboard() {
-    const W = 1024;
-    const Hpx = 512;
+    // 2048x1024 since 2026-08-15. At 1024x512 this panel is minified hard at the far end of the
+    // lane and the digits read as fuzzy; Matt: *"the actual values are fuzzy and difficult to
+    // read. Sharpen them."* Doubling the texture, setting anisotropy (this one never had it, the
+    // field texture always did) and cutting the segment glow are the three things that were
+    // softening them.
+    const W = 2048;
+    const Hpx = 1024;
     const c = this._canvas(W, Hpx);
     const x = c.getContext('2d');
     const g = x.createLinearGradient(0, 0, 0, Hpx);
@@ -695,19 +711,26 @@ export class Renderer {
     const LABEL = '#7ec8f0';
     const BEZEL = '#c98a3a';
 
+    // THE TOP OF THIS PANEL IS NOT VISIBLE IN GAME. The marquee band and its bulb bar stand in
+    // front of the backboard's upper edge, so anything painted near y=0 is clipped by them -
+    // Matt: *"the titles are tiny and partially covered by the board above it. They are
+    // illegible."* Everything therefore starts below TOP_INSET, and the glass panel itself is
+    // inset to match so the bezel does not vanish behind the marquee either.
+    const TOP_INSET = 210;
+
     const bez = x.createLinearGradient(0, 0, 0, Hpx);
     bez.addColorStop(0, '#7a4e28');
     bez.addColorStop(1, '#2e1a0d');
     x.fillStyle = bez;
     x.fillRect(0, 0, W, Hpx);
     x.fillStyle = '#070405';
-    x.fillRect(16, 16, W - 32, Hpx - 32);
+    x.fillRect(28, TOP_INSET, W - 56, Hpx - TOP_INSET - 34);
     x.strokeStyle = BEZEL;
-    x.lineWidth = 5;
-    x.strokeRect(16, 16, W - 32, Hpx - 32);
+    x.lineWidth = 8;
+    x.strokeRect(28, TOP_INSET, W - 56, Hpx - TOP_INSET - 34);
     x.globalAlpha = 0.03;
     x.fillStyle = '#fff';
-    for (let yy = 24; yy < Hpx - 24; yy += 4) x.fillRect(20, yy, W - 40, 1.4);
+    for (let yy = TOP_INSET + 10; yy < Hpx - 44; yy += 7) x.fillRect(36, yy, W - 72, 2.4);
     x.globalAlpha = 1;
 
     // Which of the seven bars is lit for each character.
@@ -718,8 +741,10 @@ export class Renderer {
     const bar = (x0, y0, x1, y1, t, lit) => {
       x.strokeStyle = lit ? ON : OFF;
       x.lineWidth = t;
-      x.lineCap = 'round';
-      x.shadowBlur = lit ? 18 : 0;
+      x.lineCap = 'butt';        // square ends read sharper than round at this distance
+      // Glow was 18 and it was blurring each segment into its own halo, which is most of why the
+      // digits looked soft. Small enough now to say "lit" without eating the edge.
+      x.shadowBlur = lit ? 7 : 0;
       x.shadowColor = lit ? ON : 'transparent';
       x.beginPath();
       x.moveTo(x0, y0);
@@ -760,14 +785,18 @@ export class Renderer {
       { l: this.sbLabels.today, v: num(s.today) },
       { l: this.sbLabels.last, v: s.last == null ? '-' : String(s.last) },
     ];
-    const PAD = 40;
+    const PAD = 74;
     const colW = (W - PAD * 2) / 4;
-    // The columns occupy the TOP of the panel and the record holder's name gets a full-width
+    // The columns occupy the top of the glass and the record holder's name gets a full-width
     // strip of its own underneath. The first attempt squeezed the name into the All Time column's
     // own quarter, which is a quarter of the panel for the one field that is free text - Matt,
     // rightly: *"MattyIce isnt even a long profile name - there are much longer."* Nothing sits
     // below the other three numbers, so that width was there for the taking.
-    const ROW = 300;
+    const LABEL_Y = TOP_INSET + 84;
+    const DIGIT_Y = TOP_INSET + 268;
+    const RULE_Y = TOP_INSET + 430;
+    const NAME_Y = TOP_INSET + 540;
+
     x.textAlign = 'center';
     x.textBaseline = 'middle';
     for (let i = 0; i < cols.length; i++) {
@@ -775,45 +804,45 @@ export class Renderer {
       if (i > 0) {
         x.globalAlpha = 0.2;
         x.fillStyle = BEZEL;
-        x.fillRect(PAD + colW * i - 1, 60, 2, ROW - 76);
+        x.fillRect(PAD + colW * i - 2, TOP_INSET + 34, 3, RULE_Y - TOP_INSET - 60);
         x.globalAlpha = 1;
       }
+      // Labels start BIG and only shrink if they must. They were sized to fit a quarter-panel
+      // column from a 30px start, which is what made them unreadable at this distance.
       x.fillStyle = LABEL;
-      let fs = 30;
+      let fs = 62;
       x.font = `700 ${fs}px Verdana, sans-serif`;
-      while (fs > 12 && x.measureText(cols[i].l.toUpperCase()).width > colW - 18) {
+      while (fs > 22 && x.measureText(cols[i].l.toUpperCase()).width > colW - 24) {
         fs -= 1;
         x.font = `700 ${fs}px Verdana, sans-serif`;
       }
-      x.fillText(cols[i].l.toUpperCase(), cx, 78);
-      digits(cx, 200, cols[i].v, colW, 132);
+      x.fillText(cols[i].l.toUpperCase(), cx, LABEL_Y);
+      digits(cx, DIGIT_Y, cols[i].v, colW, 232);
     }
 
-    // The holder strip: a rule across the panel, then the name at the full inner width.
+    // The holder strip: a rule, then the name across the full inner width. No caption - Matt:
+    // *"delete 'record held by'. I didn't tell you to put that... This is extra prose."*
     const name = ((s.allTime && s.allTime.name) || '').trim();
     x.globalAlpha = 0.25;
     x.fillStyle = BEZEL;
-    x.fillRect(PAD, ROW + 18, W - PAD * 2, 2);
+    x.fillRect(PAD, RULE_Y, W - PAD * 2, 3);
     x.globalAlpha = 1;
-    x.textAlign = 'left';
-    x.fillStyle = LABEL;
-    x.font = '700 30px Verdana, sans-serif';
-    const tag = (this.sbLabels.heldBy || 'RECORD HELD BY').toUpperCase();
-    x.fillText(tag, PAD + 6, ROW + 78);
-    const nameX = PAD + 16 + x.measureText(tag).width;
-    const room = W - PAD - 10 - nameX;
     x.fillStyle = ON;
-    let ns = 58;
+    const room = W - PAD * 2 - 20;
+    let ns = 108;
     x.font = `700 ${ns}px Verdana, sans-serif`;
-    while (ns > 18 && x.measureText(name.toUpperCase()).width > room) {
+    while (ns > 30 && x.measureText(name.toUpperCase()).width > room) {
       ns -= 2;
       x.font = `700 ${ns}px Verdana, sans-serif`;
     }
-    x.shadowBlur = 14;
+    x.shadowBlur = 8;
     x.shadowColor = ON;
-    x.fillText(name ? name.toUpperCase() : '-', nameX, ROW + 78);
+    x.fillText(name ? name.toUpperCase() : '-', W / 2, NAME_Y);
     x.shadowBlur = 0;
-    return new THREE.CanvasTexture(c);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    return tex;
   }
 
   /**
@@ -830,16 +859,25 @@ export class Renderer {
     if (old && old.dispose) old.dispose();
   }
 
-  /** The marquee, now blank. Matt asked for the machine's name off the machine entirely when the
-   *  backboard became the scoreboard; the lit band and its bulbs stay as cabinet dressing. */
+  /** The marquee: the MACHINE's name, on the lit band over the scoreboard. It was blanked when
+   *  the backboard became the scoreboard, which left the machine with no name anywhere on it -
+   *  Matt: *"You removed THE CLASSIC. it is currently absent from the game and image."* This is
+   *  the machine's name (`board.name`), not the game's; nothing about "Skeeball" belongs here. */
   _paintMarquee() {
-    const c = this._canvas(512, 96);
+    const W = 1024;
+    const H = 192;
+    const c = this._canvas(W, H);
     const x = c.getContext('2d');
     x.fillStyle = this.look.marquee;
-    x.fillRect(0, 0, 512, 96);
-    x.fillStyle = this.look.ringLip;
-    x.fillRect(0, 42, 512, 12);
-    return new THREE.CanvasTexture(c);
+    x.fillRect(0, 0, W, H);
+    x.font = '700 104px Georgia, serif';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = this.look.marqueeText;
+    x.fillText(this.board.name, W / 2, H / 2 + 4);
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    return tex;
   }
 
   _buildBall() {
