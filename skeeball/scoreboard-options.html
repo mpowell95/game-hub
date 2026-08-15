@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Scoreboard options</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #150f14; color: #f7ecd8;
+    font: 14px/1.4 system-ui, -apple-system, sans-serif;
+    padding: 14px 12px 40px;
+  }
+  h1 { font-size: 15px; margin: 0 0 4px; letter-spacing: .04em; }
+  p.note { font-size: 12px; opacity: .68; margin: 0 0 18px; }
+  h2 { font-size: 13px; margin: 22px 0 2px; letter-spacing: .08em; text-transform: uppercase; color: #7ec8f0; }
+  p.sub { font-size: 12px; opacity: .7; margin: 0 0 8px; }
+  .real { margin-bottom: 6px; }
+  .lbl { font-size: 10px; opacity: .5; letter-spacing: .1em; text-transform: uppercase; margin: 8px 0 3px; }
+  canvas { display: block; image-rendering: auto; }
+</style>
+</head>
+<body>
+
+<h1>Scoreboard layout options</h1>
+<p class="note">
+  The panel gets <b>181 &times; 136 real pixels</b> on your phone. Each option is drawn at that
+  exact size first (top), then enlarged 2&times; so you can see the shapes. Judge legibility on the
+  small one &mdash; that is the actual size on the machine.
+</p>
+
+<div id="out"></div>
+
+<script>
+const W = 181, H = 136;
+const AM = '#ffb02e', CY = '#7ec8f0', BG = '#070405', BZ = '#c98a3a';
+const D = { hub:'1250', best:'500', today:'250', last:'190', name:'MATTYPOW' };
+
+function panel() {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = BG; x.fillRect(0,0,W,H);
+  x.strokeStyle = BZ; x.lineWidth = 2; x.strokeRect(1,1,W-2,H-2);
+  return [c, x];
+}
+
+// A - five full-width rows, label left, value right
+function optionA() {
+  const [c,x] = panel();
+  const rows = [['HUB RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last],['HOLDER',D.name]];
+  const rh = (H-10)/5;
+  rows.forEach((r,i) => {
+    const y = 5 + rh*i + rh/2;
+    if (i) { x.strokeStyle='rgba(201,138,58,.32)'; x.lineWidth=1;
+      x.beginPath(); x.moveTo(6,5+rh*i); x.lineTo(W-6,5+rh*i); x.stroke(); }
+    x.fillStyle=CY; x.font='700 9px Verdana'; x.textAlign='left'; x.textBaseline='middle';
+    x.fillText(r[0], 8, y);
+    x.fillStyle=AM; x.font='700 '+(i===4?13:19)+'px Verdana'; x.textAlign='right';
+    x.fillText(r[1], W-8, y);
+  });
+  return c;
+}
+
+// B - 2x2 boxed cells, holder strip beneath
+function optionB() {
+  const [c,x] = panel();
+  const cells = [['HUB RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last]];
+  const gw = (W-14)/2, gh = (H-46)/2;
+  cells.forEach((r,i) => {
+    const cx = 7 + gw*(i%2), cy = 6 + gh*Math.floor(i/2);
+    x.strokeStyle='rgba(201,138,58,.5)'; x.lineWidth=1; x.strokeRect(cx,cy,gw-3,gh-3);
+    x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='center'; x.textBaseline='middle';
+    x.fillText(r[0], cx+(gw-3)/2, cy+9);
+    x.fillStyle=AM; x.font='700 24px Verdana';
+    x.fillText(r[1], cx+(gw-3)/2, cy+(gh-3)/2+8);
+  });
+  const ny = H-34;
+  x.strokeStyle='rgba(201,138,58,.5)'; x.strokeRect(7,ny,W-14,28);
+  x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='left'; x.textBaseline='middle';
+  x.fillText('HOLDER', 12, ny+8);
+  x.fillStyle=AM; x.font='700 16px Verdana'; x.textAlign='right';
+  x.fillText(D.name, W-12, ny+18);
+  return c;
+}
+
+// C - one record at a time, cycling
+function optionC(which) {
+  const [c,x] = panel();
+  const set = [['HUB RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
+  const r = set[which % 4];
+  x.textAlign='center'; x.textBaseline='middle';
+  x.fillStyle=CY; x.font='700 13px Verdana'; x.fillText(r[0], W/2, 22);
+  x.fillStyle=AM; x.font='700 58px Verdana'; x.fillText(r[1], W/2, r[2] ? 68 : 76);
+  if (r[2]) {
+    x.fillStyle=CY; x.font='700 9px Verdana'; x.fillText('HOLDER', W/2, 104);
+    x.fillStyle=AM; x.font='700 18px Verdana'; x.fillText(r[2], W/2, 121);
+  }
+  for (let i=0;i<4;i++) {
+    x.fillStyle = (i === which%4) ? AM : 'rgba(255,176,46,.3)';
+    x.beginPath(); x.arc(W/2-12+i*8, H-8, 2, 0, 7); x.fill();
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function show(title, sub, canvas, id) {
+  const h = document.createElement('h2'); h.textContent = title; out.appendChild(h);
+  const p = document.createElement('p'); p.className='sub'; p.textContent = sub; out.appendChild(p);
+  const l1 = document.createElement('div'); l1.className='lbl'; l1.textContent='actual size on the machine';
+  out.appendChild(l1);
+  canvas.className = 'real'; out.appendChild(canvas);
+  const l2 = document.createElement('div'); l2.className='lbl'; l2.textContent='enlarged 2x';
+  out.appendChild(l2);
+  const big = document.createElement('canvas');
+  big.width = W*2; big.height = H*2;
+  big.style.width = Math.min(W*2, window.innerWidth-24)+'px';
+  big.getContext('2d').drawImage(canvas, 0, 0, W*2, H*2);
+  if (id) big.id = id;
+  out.appendChild(big);
+}
+
+show('A — five rows', 'Everything visible. Digits about 19px tall. Separation from the rules and from label-left / number-right.', optionA());
+show('B — 2x2 boxed grid', 'Everything visible. Digits about 24px tall, each inside its own drawn box so they cannot read as one string.', optionB());
+show('C — one at a time', 'Cycles every 3 seconds. Digits about 58px tall, three times anything else. You see one record at a time.', optionC(0), 'cyc');
+
+// let C actually cycle so you can judge it
+let n = 0;
+setInterval(() => {
+  n++;
+  const src = optionC(n);
+  const big = document.getElementById('cyc');
+  const g = big.getContext('2d');
+  g.clearRect(0,0,big.width,big.height);
+  g.drawImage(src, 0, 0, W*2, H*2);
+  const small = big.previousElementSibling.previousElementSibling;
+  if (small && small.tagName === 'CANVAS') {
+    small.getContext('2d').drawImage(src, 0, 0);
+  }
+}, 3000);
+</script>
+</body>
+</html>
