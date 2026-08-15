@@ -118,32 +118,49 @@ export function buildMachine(G) {
     rot: rotX(t),                    // slab's +y normal tipped back into the face normal
   });
 
-  // --- the big ring's band ----------------------------------------------------------------------
-  // `G.ring.solid === false` makes the ring PAINT rather than a wall, and the classic board now
-  // sets it (2026-08-14). As a 7.5cm wall it fenced off the whole cup cluster: a ball rolling up
-  // the face hit its front arc and stopped dead, so the only way into the 30/40/50 was to lob
-  // over the top - which is exactly the "never touches the board" trajectory this rebuild
-  // removed. The white ring is still on the board, drawn into the field texture where the real
-  // machine's painted target circle is; it just no longer blocks the ladder.
+  // --- the rings: ONE PER HOLE ------------------------------------------------------------------
+  // Rewritten 2026-08-14 (batch 3b). There used to be a single big band, `G.ring`, sitting at its
+  // own hand-placed centre; the board now has seven rings and every one of them is DERIVED from
+  // the hole it belongs to, so the tangency rules in boards.js cannot be broken by editing a
+  // number in isolation.
+  //
+  //   TANGENT AT THE HOLE'S BOTTOM (rule 1). The ring's lowest point is the hole's lowest point,
+  //   so its centre sits (R - r) up-slope of the hole's centre. A ring is NEVER concentric with
+  //   its hole - it hangs above it, which is why so much white shows over each mouth.
+  //
+  // The old single band named `G.holes.c50` to decide where to leave a gap, which never fired
+  // (so the band ran straight across the 20's and 40's mouths) and threw outright on a board with
+  // no c50 - `measure-reach.mjs` builds exactly that. Neither failure is possible now: a ring is
+  // tangent to its own hole by construction, and this loop just skips a hole with no `ringD`.
   const ringSegs = [];
-  if (G.ring.solid !== false) {
-    const N = G.ringSegments;
-    const cu = G.ring.u;
-    const cv = G.ring.v;
+  for (const id of Object.keys(G.holes)) {
+    const H = G.holes[id];
+    if (!H.ringD) continue;
+    const R = H.ringD / 2;
+    const cu = H.u;
+    const cv = H.v - H.r + R;                    // rule 1, the only placement rule there is
+    // Segment count follows the RADIUS, not a constant: these rings run from 0.077m (a 100) to
+    // 0.518m (the 10's arc), and one fixed count would either facet the big ones into a polygon
+    // the ball can catch on a corner of, or spend hundreds of bodies on the small ones.
+    const N = Math.max(20, Math.ceil((2 * Math.PI * R) / 0.04));
+    const halfChord = R * Math.tan(Math.PI / N);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
-      const pu = cu + G.ring.R * Math.cos(phi);
-      const pv = cv + G.ring.R * Math.sin(phi);
-      // The cup owns the junction (the pinball parking-space lesson, now applied by GEOMETRY):
-      // where the 50's collar merges into the band's top arc, the band simply has no segment.
-      const near50 = Math.hypot(pu - G.holes.c50.u, pv - G.holes.c50.v) < G.holes.c50.r + G.collarThick * 2.5;
-      if (near50) continue;
+      const pu = cu + R * Math.cos(phi);
+      const pv = cv + R * Math.sin(phi);
+      // The 10's ring is an ARC, not a circle (batch 3c): from the left wall, across the bottom,
+      // to the right wall, and it STOPS. Only its lower half exists. Without this its upper arc
+      // would curve back onto the board and run straight through the 50's mouth - which is a real
+      // crossing, not a tangency, and the only one in the whole layout.
+      if (H.ringOpen && pv > cv) continue;
+      if (Math.abs(pu) > G.boardW / 2) continue;           // clipped at the side rails
+      if (pv < 0 || pv > G.boardLen) continue;             // and at the face's own ends
       // EXACT circumscribed-polygon chord so adjacent faces meet flush at the corners. The first
       // draft padded the chord and the overlapping ends left millimetre ledges on the inner
       // surface - enough of a step to park a slow ball against, dead, on the slope.
-      const halfChord = G.ring.R * Math.tan(Math.PI / N);
       ringSegs.push({
         part: 'ringSeg',
+        ring: id,
         pos: faceToWorld(pu, pv, G.ringH / 2),
         half: [halfChord, G.ringH / 2, G.ringThick / 2],
         faceRot: { phi: phi + Math.PI / 2, tilt: t },

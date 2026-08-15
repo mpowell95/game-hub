@@ -19,6 +19,31 @@
 /** Balls in one game, the classic count. A rule of skeeball, not of one machine. */
 export const BALLS_PER_GAME = 9;
 
+// THE BOARD'S UNIT (2026-08-14, batch 3b). Matt specified the whole face as multiples of ONE
+// number: x, the diameter of a hole. Every hole, every ring and both board dimensions are given
+// as a multiple of it, so the layout below is written that way too - `X * 4.875`, never 0.709.
+// Decimals here would be rounded copies of exact sixteenths, and the tangency rules that hold the
+// face together (below) only hold if the numbers are exact.
+//
+//   board 6.875x wide by 9.5x tall  ->  9.5 / 6.875 = 1.3818, which IS boardLen/boardW (batch 3a)
+//   at boardW 1.00m, x = 0.1455m; a hole is 0.0727m in radius against a 0.05m ball
+//
+// THE TANGENCY RULES, which are the shape of the board and not decoration:
+//   1. Every hole touches its own ring at EXACTLY ONE point - the hole's bottom. So a ring's
+//      lowest point IS its hole's lowest point, which is the whole placement rule: no ring is
+//      concentric with its hole, each hangs above it.
+//   2. The 30 ring's top touches the 40 ring's bottom.
+//   3. The 40 ring's top, the 50 ring's bottom and the 20 ring's top all meet at ONE point.
+// Rules 2 and 3 make the hole spacings a CONSEQUENCE of the ring diameters, not free numbers:
+// h(n+1) = h(n) + ringD(n). Move a diameter and the holes above it move with it.
+//
+// One number in Matt's table cannot hold with the rest: he gave bottom-of-20-ring to
+// bottom-of-30-ring as 1.25x, but at 1.25x the 40 ring's top and the 20 ring's top miss each
+// other by 0.25x and rule 3's single point cannot exist. Kept the 4.875x diameter and let the
+// distance be 1.5x, because 4.875x at x = 4in is 19.5in - the circle actually dimensioned on the
+// reference drawing. `skeeball/js/test.js` asserts all three rules, so this cannot drift.
+const X = 1.00 / 6.875;
+
 export const BOARDS = [
   {
     id: 'classic',
@@ -59,7 +84,11 @@ export const BOARDS = [
     // restitution per surface pair). The lane is deliberately SHORTER than a real alley (Matt,
     // 2026-08-13: the board is the main aspect of the game and must dominate the frame).
     geom: {
-      ballR: 0.05,
+      // THE BALL IS 0.78125x ACROSS (Matt, 2026-08-14), so it is part of the same proportion set
+      // as the face - see the X block at the top of this file. Radius = 0.390625x = 0.0568m,
+      // against a hole of radius 0.5x = 0.0727m: the ball passes a mouth with 1.6cm of room all
+      // round, which is why a hole has to be hit properly rather than nearly.
+      ballR: X * 0.390625,
       ballMass: 0.18,
       // Player's end of the lane to the foot of the hump. SHORTER than a real alley on purpose
       // (Matt, 2026-08-13: the board is the main aspect of the game and must dominate the
@@ -150,13 +179,19 @@ export const BOARDS = [
       ringSegments: 24,
       cupSegments: 14,
       collarThick: 0.012,
-      // The big painted target circle. `solid: false` (2026-08-14) makes it PAINT, not a wall:
-      // as a 7.5cm band it fenced the cup cluster off completely, so a rolling ball stopped dead
-      // on its front arc and the only route to the 30/40/50 was over the top through the air.
-      // machine.js emits no segments for it; render.js draws it into the field texture.
-      ringH: 0.055,
+      // EVERY RING STANDS x TALL (Matt, 2026-08-14: "the height of Every ring is also equal to
+      // x"). That is 0.1455m against a 0.10m ball, so a ring is not a rim to be crossed - it is a
+      // wall to be cleared, and the only way into a hole is over the top of its ring and down.
+      // This is the point of the whole rebuild and it REVERSES the 2026-08-14 note below about
+      // flush cups: that note was right for a board scored by how far the ball ROLLS, and this
+      // board is scored by where the ball LANDS.
+      //
+      // Matt also settled the visual question up front: a ring may hide its own hole from the
+      // camera. "It is ok and normal if a ring blocks the view of the hole. The hole must be
+      // there still, but the ring may block visibility." So do not shrink a ring, lower it, or
+      // move a camera to keep every mouth in view.
+      ringH: X,
       ringThick: 0.015,
-      ring: { u: 0, v: 0.44, R: 0.29, solid: true },
 
       // How low a lipLow cup's DOWN-SLOPE lip sits, as a fraction of its wall height. Moot while
       // every cup is flush (collarH 0) but kept for the next machine, which may want walls.
@@ -170,38 +205,43 @@ export const BOARDS = [
       // are the ones that leave room on the face for a number beside each hole.
       captureDrop: 0.35,
 
-      // THE CLASSIC LADDER. Four flush openings up the centreline, evenly spaced, with the twin
-      // 100s out in the top corners where only an aimed ball reaches them. The 10 is the
-      // full-width slot the board's bottom edge feeds (physics.js scores the trough) and the 0s
-      // are its corners.
+      // THE FACE, to Matt's proportions (batch 3b). Seven holes, all one size (x across), each
+      // with its OWN ring - see the tangency rules in the X block at the top of this file. Every
+      // number below is a multiple of x and none of them is free: the diameters are Matt's, and
+      // the v positions fall straight out of the tangency chain.
       //
-      // The cup a throw wins is chosen by HOW FAR UP THE FACE IT ROLLS, because a ball only
-      // falls into a mouth it is crossing slowly enough to drop through (physics.js, section 2).
-      // So these v positions ARE the power ladder: moving one moves a band. They were not
-      // guessed - measure-reach.mjs runs the engine with the holes taken OUT and records how far
-      // up the face each power setting gets, and these sit on that curve at even intervals.
+      //   ring bottom = hole bottom = v - r        (rule 1: tangent at the hole's lowest point)
+      //   h20 = 2.3125x is the one placement choice, and it sets the bottom margin
+      //   h30 = h20 + 1.5x     (the 1.25x in Matt's table cannot hold - see the X block)
+      //   h40 = h30 + ringD30  (rule 2)
+      //   h50 = h40 + ringD40  (rule 3)
+      //   h10 = h20 - 1.3125x  (Matt's bottom-of-10 to bottom-of-20 distance)
       //
-      // EVERY CUP IS FLUSH (collarH 0), which is the single biggest thing that made the ladder
-      // learnable. Walls of 14-20mm read as nothing on screen and behaved as a step to a 50mm
-      // ball: crossing three of them on the way to the 50 scattered the outcome, and the
-      // measured ladder went from 34 flips with 20mm walls to 17 with none, on otherwise
-      // identical geometry. A hole in a board is also what the reference photos show. The
-      // numbers are painted on the FACE (render.js `_paintField`), so nothing needs a wall to
-      // be legible either. Re-run tune-ladder.mjs after moving anything here.
+      // machine.js derives each ring's centre from its hole; nothing here states a ring centre,
+      // so the tangency cannot be broken by editing one number in isolation.
       //
-      // The old spacing rule (gaps either merged or >= 0.105, or a ball can jam in the pocket
-      // between two pieces of furniture) is satisfied trivially now: with no walls there is no
-      // furniture on the face to jam against, and tune-ladder.mjs reports 0/101 throws needing
-      // the jam watchdog.
+      // THE 10 IS NOW A REAL HOLE. It used to be the trough's centre band (a ball that rolled
+      // back off the face scored 10 by where it landed in the pit). The trough scoring is still
+      // there and still the honest floor for a ball that never reaches the face - batch 3f is
+      // what retires the resting-position rule - but the 10 the player AIMS at is this opening.
+      //
+      // `ringD` is the ring's DIAMETER, and `ringOpen` marks the 10's: it is not a closed circle
+      // but an arc that runs from the left wall, across the bottom, to the right wall, and stops
+      // (batch 3c). machine.js emits only its lower half, clipped at the rails. Without that clip
+      // its upper arc would come back onto the board and cross the 50's mouth.
+      holeR: X * 0.5,
       holes: {
-        '100L': { u: -0.320, v: 0.76, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
-        '100R': { u: 0.320, v: 0.76, r: 0.085, value: 100, collarH: 0.028, lipLow: true },
-        c50: { u: 0, v: 0.88, r: 0.095, value: 50, collarH: 0.028, lipLow: true },
-        c40: { u: 0, v: 0.66, r: 0.095, value: 40, collarH: 0.028, lipLow: true },
-        c30: { u: 0, v: 0.44, r: 0.095, value: 30, collarH: 0.028, lipLow: true },
+        '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
+        '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
+        c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
+        c40: { u: 0, v: X * 5.625, r: X * 0.5, value: 40, ringD: X * 1.5625 },
+        c30: { u: 0, v: X * 3.8125, r: X * 0.5, value: 30, ringD: X * 1.8125 },
         // Kept as `h20`, not renamed: the id is written into the mid-rack autosave
         // (gamehub.skeeball.save.v1) and old keys are never repurposed (THE LAW rule 5).
-        h20: { u: 0, v: 0.22, r: 0.095, value: 20, collarH: 0.028, lipLow: true },
+        h20: { u: 0, v: X * 2.3125, r: X * 0.5, value: 20, ringD: X * 4.875 },
+        // The 10's ring diameter is the ONE number Matt's table does not give. 7.125x puts the
+        // arc's ends on the side rails at v = 3.13x, which is where they sit in his drawing.
+        h10: { u: 0, v: X * 1.0, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
       },
       troughTenHalfW: 0.26,   // |x| under this in the trough scores 10; wider is a corner 0
 
@@ -215,12 +255,30 @@ export const BOARDS = [
       // maxSpeed it just reaches the 100s' row. The window is narrow (0.98 m/s wide) and that is
       // the point - the whole of the player's swipe now lands inside it instead of most of it
       // landing past the top of the board.
+      //
+      // RE-BRACKETED 2026-08-14 for batch 3b's layout, and the reason is a NEW constraint that
+      // did not exist on the old board: a ring now stands x tall, so a ball has to be
+      // `ringH + ballR` = 0.195m above the face AT THE MOMENT IT ARRIVES to drop into a hole
+      // rather than bounce off the outside of its wall. Reaching a hole's v is no longer enough.
+      // The 100s sit highest (v 1.27), which is exactly where the arc has already come down, so
+      // they are the binding case: measured clearance at their row is 0.188m at maxSpeed 5.47 -
+      // seven millimetres short, and both corners were unreachable at EVERY aim because of it.
+      // At 6.00 the same row gets 0.290m and they open up. (Clearance there is not monotonic in
+      // speed - 6.50 measures 0.174 - because the arc's peak walks past the row and back; do not
+      // "improve" this by pushing the number higher.)
+      // 6.00 -> 6.20 when the ball grew to its specified 0.78125x: a bigger ball has to clear a
+      // ring by its own radius, so the bar at the 100s' row went from 0.195m to 0.202m and both
+      // corners closed again. Clearance at that row is NOT monotonic in speed (the arc's peak
+      // walks past it and back), so this was measured, not extrapolated: 5.80 and 6.40 both score
+      // zero 100s over a 66-cell power/aim grid, 6.20 scores two.
       minSpeed: 3.39,
-      maxSpeed: 5.47,
-      aimMax: 0.1316,           // radians of lateral aim. Small because the lane is long: a launch
-                              // angle is integrated over ~2.5m of travel before the ball reaches
-                              // the top corners, so 0.15 rad already carries it the full 0.30m
-                              // out to a 100. The old 0.32 put full aim a metre off the board.
+      maxSpeed: 6.20,
+      // Radians of lateral aim, and it went DOWN, not up. The corners moved out (u 0.32 -> 0.40)
+      // and up (v 0.76 -> 1.27), so the intuitive fix is more aim - but more aim spends the
+      // sideways budget too early: at 0.32 a full-aim ball is on the side rail at u = 0.50 by
+      // v = 0.73, half a metre below the corner it was aimed at. What the diagonal needs is a
+      // lateral drift that MATCHES the climb, which is a smaller angle held for longer.
+      aimMax: 0.17,
 
       // Contact model overrides (defaults and the reasoning live in physics.js). A board that
       // the ball LANDS on and rolls up has to be dead, not lively.

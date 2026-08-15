@@ -296,6 +296,61 @@ dropping through. Announcing there put the number on screen while the ball was s
 rattling. `capture` now only lights the rim; the `+N`, the burst and the marquee flash wait for
 `ballDone`. Measured: capture at 853ms, settle at 1178ms, popup at 1178ms.
 
+## The 2026-08-14 board rebuild (batches 3a, 3b, 3f) - READ THIS BEFORE THE SECTION ABOVE
+
+Matt specified the face as a drawing plus a table of proportions, and it **supersedes several
+rules in "The dial is a ladder" above**. Where the two disagree, this section wins; the older text
+is kept because its reasoning is still correct *for the board it describes*, which is not this one.
+
+**Everything is a multiple of x, the hole diameter** (`X` at the top of `boards.js`). Board 6.875x
+by 9.5x - which is 1 : 1.3818, and is where 3a's `boardLen` came from. Ball 0.78125x. Ring heights
+all x. At `boardW` 1.00m, x = 0.1455m.
+
+**Three tangency rules define the layout**, and `boards.js` states diameters only, deriving every
+ring centre and every hole spacing from them, so no single number can be edited into an
+inconsistent face:
+
+1. Every hole touches its own ring at exactly ONE point - the hole's bottom. A ring is never
+   concentric with its hole; it hangs above it.
+2. The 30 ring's top touches the 40 ring's bottom.
+3. The 40 ring's top, the 50 ring's bottom and the 20 ring's top all meet at a single point.
+
+One number in Matt's table cannot hold with the others: bottom-of-20-ring to bottom-of-30-ring is
+given as 1.25x, but at 1.25x rule 3's single point cannot exist (the 40 and 20 ring tops miss by
+0.25x). The 4.875x diameter was kept and the distance is 1.5x, because 4.875x at x = 4in is the
+19.5in circle actually dimensioned on the reference drawing. **This was Matt's call to make and he
+was told**; do not silently re-resolve it the other way.
+
+**What reverses from the older sections:**
+
+- **Cups are NOT flush any more.** Every ring is a WALL x tall. "Every cup is FLUSH (`collarH: 0`)"
+  above was right for a board scored by how far the ball ROLLS; this board is scored by where it
+  LANDS, and the wall is the point.
+- **The rings are NOT paint.** There is no `G.ring` object at all - each of the seven holes owns
+  its own ring, built by `machine.js` from that hole.
+- **A ring may hide its own mouth from the camera and that is fine.** Matt, explicitly. Do not
+  shrink a ring or move the camera to keep every hole in view.
+- **The resting-position rule is GONE** (batch 3f). Scoring a hole's value happens only by falling
+  through it. A ball that misses rolls back down into the trough and takes the 10 or a corner 0
+  there - a real outcome, not a consolation.
+
+**The new constraint that governs tuning**: a ball must be `ringH + ballR` (0.202m) above the face
+**at the moment it arrives** to drop in rather than bounce off the outside of a ring. Reaching a
+hole's `v` is no longer sufficient. The 100s sit highest and are therefore the binding case - they
+were unreachable at *every* aim until `maxSpeed` was raised, and clearance at their row is **not
+monotonic in speed** (5.80 and 6.40 both score zero 100s over a 66-cell grid; 6.20 scores two).
+Measure it, never extrapolate. More aim is also the wrong instinct: at `aimMax` 0.32 a full-aim
+ball is on the side rail at u = 0.50 by v = 0.73, well below the corner it was aimed at.
+
+**Known-red, deliberately not papered over.** Five `test.js` assertions fail on this board, all of
+them ladder-smoothness checks written for the retired rolling ladder: the soft-end dead zone,
+straight throws rolling back, flips between adjacent steps, one-step bands, and
+harder-goes-further. The measured ladder is genuinely noisy (43/100 flips) because a tall ring
+scatters a ball that clips it. **Do not fix this by loosening those assertions** - that is exactly
+the "optimised a metric pointing the wrong way" failure recorded above. The items on Matt's hold
+list (soft throws that cannot score the 10, balls that vanish without entering any hole, the
+near-miss 100 reading as a 10) are the next batch and are what should move these numbers.
+
 ## The records panel (the four numbers every machine shows)
 
 Per Matt's spec, each machine displays: the **top score by ANY player**, the current player's

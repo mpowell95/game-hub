@@ -208,19 +208,37 @@ export class Renderer {
       this.scene.add(wall);
     }
 
-    // THE BIG RING'S WALL - drawn (2026-08-14). machine.js gives the ring real collision
-    // segments whenever `ring.solid !== false`, and v323 turned that on. Nothing in here ever
-    // drew it: the loop above skips every `ringSeg` solid, and no other code path draws the
-    // ring. So v323 shipped an INVISIBLE WALL - the circle still read as flat paint while the
-    // ball bounced off it. Matt found it by playing; every measurement that passed was
-    // describing a machine you could not see.
+    // THE RINGS, drawn FROM THE PHYSICS SEGMENTS THEMSELVES (rewritten 2026-08-14, batch 3b).
     //
-    // Drawn with the same helper the cup rims use, at the ring's own radius and height, so
-    // what is on screen is the wall the ball hits.
-    if (G.ring.solid !== false && G.ringH > 0) {
-      const rim = this._scallopedRim(G.ring.R, G.ringH, 1);
-      this._onFace(rim, G.ring.u, G.ring.v, 0);
-      this.scene.add(rim);
+    // Every ring is one box per `ringSeg` solid, at that solid's own position and rotation. This
+    // is not a style choice, it is the fix for a bug that shipped: the ring used to be drawn by
+    // re-deriving a smooth circle from `G.ring`, separately from the segments machine.js emitted,
+    // and when v323 turned the band solid nothing drew it at all - an INVISIBLE WALL the ball
+    // bounced off while the circle still read as flat paint. Matt found it by playing.
+    //
+    // Deriving the drawing from the collision data makes that class of bug unrepresentable: a
+    // ring that is not built is not drawn, and a ring that IS built is drawn exactly where it is.
+    // The 10's arc stops at the rails here for free, because machine.js emitted no segments past
+    // them. Rings stand `ringH` (= x) tall and WILL hide their own mouths from a low camera -
+    // that is intended (boards.js, `ringH`), not a defect to correct.
+    {
+      const ringMat = this._mat({ color: L.ring, roughness: 0.4 });
+      const lipMat = this._mat({ color: L.ringLip, roughness: 0.5 });
+      for (const s of M.solids) {
+        if (s.part !== 'ringSeg') continue;
+        const geo = this._track(new THREE.BoxGeometry(s.half[0] * 2, s.half[1] * 2, s.half[2] * 2));
+        // Navy on the lip, white on the walls - the classic board's trim, on the real segment.
+        const mesh = new THREE.Mesh(geo, [ringMat, ringMat, lipMat, ringMat, ringMat, ringMat]);
+        mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
+        if (s.faceRot) {
+          const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), s.faceRot.tilt);
+          const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.faceRot.phi);
+          mesh.quaternion.copy(qx.multiply(qy));
+        }
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+      }
     }
 
     // Cabinet dressing: side panels, the marquee, its bulbs. Cosmetic only.
@@ -377,76 +395,52 @@ export class Renderer {
       x.restore();
     };
 
-    // The big painted target circle the real board carries, around the whole cup ladder. It was
-    // a 7.5cm WALL until 2026-08-14, which fenced the cups off from any rolling ball; as paint
-    // it still frames the cluster and blocks nothing.
-    x.beginPath();
-    x.arc(U(G.ring.u), V(G.ring.v), G.ring.R * px, 0, Math.PI * 2);
-    x.strokeStyle = 'rgba(255,246,228,0.5)';
-    x.lineWidth = 16;
-    x.stroke();
-    x.beginPath();
-    x.arc(U(G.ring.u), V(G.ring.v), G.ring.R * px, 0, Math.PI * 2);
-    x.strokeStyle = L.ringLip;
-    x.lineWidth = 4;
-    x.stroke();
-
-    // EVERY HOLE: its rim, and its VALUE, painted on the board. The number sits just down-slope
-    // of its own mouth, which is where the real machine puts it and - more to the point - where
-    // it cannot be occluded by anything, because it is part of the board.
+    // EVERY HOLE: its mouth, and its VALUE, painted on the board.
+    //
+    // The rings are NOT painted here any more (batch 3b). They are real walls standing x tall and
+    // are drawn from their own collision segments in `_build`; painting a second copy of them on
+    // the face would put a white circle on the board that no longer matches where the wall is -
+    // which is the same drawn-vs-hit split that shipped the invisible ring in the first place.
+    // What stays on the face is the dark mouth and a soft seat, so a hole reads as sunk into the
+    // board rather than printed on it.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
       const cx = U(H.u);
       const cy = V(H.v);
       const rp = H.r * px;
-      // a soft seat under the rim so the hole reads as sunk into the board
-      const grad = x.createRadialGradient(cx, cy, rp * 0.9, cx, cy, rp * 1.55);
-      grad.addColorStop(0, 'rgba(20,10,4,0.42)');
+      const grad = x.createRadialGradient(cx, cy, rp * 0.9, cx, cy, rp * 1.5);
+      grad.addColorStop(0, 'rgba(20,10,4,0.45)');
       grad.addColorStop(1, 'rgba(20,10,4,0)');
       x.fillStyle = grad;
       x.beginPath();
-      x.arc(cx, cy, rp * 1.55, 0, Math.PI * 2);
+      x.arc(cx, cy, rp * 1.5, 0, Math.PI * 2);
       x.fill();
-      // the white rim with its navy trim line, the classic board's look
       x.beginPath();
-      // Outer edge at 1.10x the hole radius, down from 1.28x: at 1.28 the painted rings
-      // overlapped each other at 0.22 spacing even though the holes did not, which is what fused
-      // the 30/40/50 into a single shape on screen.
-      x.arc(cx, cy, rp * 1.03, 0, Math.PI * 2);
-      x.strokeStyle = L.ring;
-      x.lineWidth = rp * 0.14;
-      x.stroke();
-      x.beginPath();
-      x.arc(cx, cy, rp * 1.10, 0, Math.PI * 2);
-      x.strokeStyle = L.ringLip;
-      x.lineWidth = Math.max(3, rp * 0.07);
-      x.stroke();
-      // THE VALUE, on the board, BESIDE its own mouth - one either side for the centreline cups.
-      //
-      // It used to go up-slope of the hole. That worked while the holes were small: at radius
-      // 0.076 and 0.22 spacing there was a band of bare board above each mouth to put a number
-      // in. Widening the board to 1.00m took the holes to radius 0.095, whose painted rim
-      // reaches 0.1045 - past the 0.102 offset the label sat at - so every centreline number was
-      // buried under its own ring and simply did not render. The free band between one rim top
-      // (0.1045) and the next mouth bottom (0.125) is 0.02m; no number fits there.
-      //
-      // The wide board is what pays for the fix: there is now a third of a metre of bare face on
-      // each side of the centreline. Mirrored pairs also read as deliberate rather than as a
-      // number that drifted off its hole.
-      if (H.value >= 100) {
-        stencil(String(H.value), H.u, H.v - 0.145, 0.044, L.ring);
-      } else {
-        stencil(String(H.value), -0.23, H.v, 0.050, L.ring);
-        stencil(String(H.value), 0.23, H.v, 0.050, L.ring);
-      }
+      x.arc(cx, cy, rp, 0, Math.PI * 2);
+      x.fillStyle = L.pocket;
+      x.fill();
     }
 
-    // The 10 slot's own number, and the corner 0s. The 0s moved inboard from u = +/-0.33 to
-    // +/-0.30 on 2026-08-14: at 0.33 on a 0.78-wide board they sat right on the frame edge and
-    // both were sliced in half by it (resize()'s fit margin now clears them too).
-    stencil('10', 0, 0.022, 0.052);
-    stencil('0', -0.30, 0.025, 0.044, '#ffb28a');
-    stencil('0', 0.30, 0.025, 0.044, '#ffb28a');
+    // THE VALUES, mirrored either side of each mouth and placed OUTSIDE that hole's own ring.
+    //
+    // The offset is per-hole now, because the rings are no longer one size: the 20's is 0.354m
+    // across and the 50's is 0.104m, so a single hardcoded column (this was `u = +/-0.23`) put
+    // some numbers on bare board and buried others under a ring. Deriving it from `ringD` means a
+    // number is always just clear of its own ring, whatever that ring's size.
+    for (const id of Object.keys(G.holes)) {
+      const H = G.holes[id];
+      const off = (H.ringD ? H.ringD / 2 : H.r) + 0.052;
+      const lab = String(H.value);
+      const size = H.value >= 100 ? 0.044 : 0.050;
+      for (const side of [-1, 1]) {
+        const u = H.u + side * off;
+        // The 10's arc reaches the rails, so its numbers would land off the board; the 100s sit
+        // near the corners already. Either way, anything past the edge folds back inboard.
+        const uu = Math.abs(u) > G.boardW / 2 - 0.05 ? H.u - side * off : u;
+        if (Math.abs(uu) > G.boardW / 2 - 0.05) continue;
+        stencil(lab, uu, H.v, size, L.ring);
+      }
+    }
 
     const tex = new THREE.CanvasTexture(c);
     tex.anisotropy = 4;
