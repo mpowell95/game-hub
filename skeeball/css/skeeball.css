@@ -243,41 +243,9 @@
 
 .sk-root .sk-pips i.is-used { background: #52382a; box-shadow: none; }
 
-.sk-root .sk-hud-recs {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-end;
-  max-width: 34%;
-}
-
-.sk-root .sk-hud-rec {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11px;
-  min-width: 0;
-}
-
-.sk-root .sk-hud-rec em {
-  font-style: normal;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--sk-dim);
-}
-
-.sk-root .sk-hud-rec b {
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--sk-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 110px;
-}
+/* .sk-hud-recs / .sk-hud-rec removed 2026-08-15: the TOP/BEST/TODAY strip is gone from
+   the header and those records are painted on the machine's backboard instead
+   (render.js _paintBackboard). The header keeps only the live rack: score and pips. */
 
 .sk-root .sk-stage { flex: 1 1 auto; position: relative; min-height: 0; }
 

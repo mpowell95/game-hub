@@ -83,6 +83,12 @@ export class Renderer {
     this._popups = [];
     this._particles = [];
     this._marqueeBulbs = [];
+    // The four records painted on the backboard (2026-08-15). ui.js owns the values and pushes
+    // them in via setScoreboard(); the renderer only draws what it is handed, and never reads
+    // storage or the network itself. Labels come in the same way so they stay translated.
+    this.scoreboard = { allTime: null, best: 0, today: 0, last: null };
+    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game' };
+    this._backMat = null;
     this._celebrateT = 0;
 
     this._lights();
@@ -135,14 +141,16 @@ export class Renderer {
       if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg'
         || s.part === 'hump') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
-      // The backboard is the cabinet's face card: it wears the machine's name and trim, which
-      // is what turns a brown wall at the end of the lane into an arcade machine.
-      const mat = s.part === 'lane' || s.part === 'hump' ? wood
-        : s.part === 'board' ? faceEdge
-          : s.part === 'trough' || s.part === 'kick' ? dark
-            : s.part === 'backboard'
-              ? [cabinet, cabinet, cabinet, cabinet, this._mat({ map: this._track(this._paintBackboard()), roughness: 0.6 }), cabinet]
-              : woodDark;
+      // The backboard is the cabinet's face card, and since 2026-08-15 it is the SCOREBOARD.
+      // Its material is kept on `_backMat` so setScoreboard() can repaint it in place.
+      let mat;
+      if (s.part === 'lane' || s.part === 'hump') mat = wood;
+      else if (s.part === 'board') mat = faceEdge;
+      else if (s.part === 'trough' || s.part === 'kick') mat = dark;
+      else if (s.part === 'backboard') {
+        this._backMat = this._mat({ map: this._track(this._paintBackboard()), roughness: 0.6 });
+        mat = [cabinet, cabinet, cabinet, cabinet, this._backMat, cabinet];
+      } else mat = woodDark;
       const mesh = new THREE.Mesh(this._track(new THREE.BoxGeometry(s.half[0] * 2, s.half[1] * 2, s.half[2] * 2)), mat);
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
       if (s.rot) mesh.quaternion.setFromAxisAngle(new THREE.Vector3(...s.rot.axis), s.rot.angle);
@@ -590,8 +598,22 @@ export class Renderer {
     return mesh;
   }
 
-  /** The backboard's face: the machine's name on the cabinet colour with a trim band, the way a
-   *  real cabinet's upper case is painted. Faces the player at the end of the lane. */
+  /** THE BACKBOARD IS THE SCOREBOARD (2026-08-15, Matt's spec). It used to carry the machine's
+   *  name and "NINE BALLS"; that panel now shows four records instead.
+   *
+   *  Four fixed-width columns, label over value, left to right:
+   *      All Time   the best any player has ever rolled, WITH their name
+   *      Your Best  this player's all-time best
+   *      Today      this player's best today
+   *      Last Game  the rack they just finished
+   *
+   *  THE COLUMNS ARE A FIXED PIXEL WIDTH AND THE PANEL A FIXED HEIGHT, per the spec: the texture
+   *  is a fixed 1024x512 canvas divided into four equal quarters, and every value is centred in
+   *  its own quarter. So a score going from 90 to 1000, or a name from "Al" to "Natalia", cannot
+   *  move anything else - there is no layout to shift.
+   *
+   *  Only the paint changes. The backboard is the same solid, in the same place, and the ball
+   *  still bounces off it exactly as before. */
   _paintBackboard() {
     const W = 1024;
     const Hpx = 512;
@@ -602,32 +624,80 @@ export class Renderer {
     g.addColorStop(1, this.look.cabinetEdge);
     x.fillStyle = g;
     x.fillRect(0, 0, W, Hpx);
-    // Trim bands top and bottom.
     x.fillStyle = this.look.ringLip;
-    x.fillRect(0, Hpx * 0.1, W, 14);
-    x.fillRect(0, Hpx * 0.78, W, 14);
-    x.font = '700 118px Georgia, serif';
+    x.fillRect(0, 26, W, 10);
+    x.fillRect(0, Hpx - 36, W, 10);
+
+    const s = this.scoreboard || {};
+    const num = (v) => (v ? String(v) : '-');
+    const cols = [
+      { label: this.sbLabels.allTime, value: num(s.allTime && s.allTime.score), sub: (s.allTime && s.allTime.name) || '' },
+      { label: this.sbLabels.best, value: num(s.best), sub: '' },
+      { label: this.sbLabels.today, value: num(s.today), sub: '' },
+      { label: this.sbLabels.last, value: s.last == null ? '-' : String(s.last), sub: '' },
+    ];
+
+    // A margin each side: the panel is a box whose face runs slightly wider than the part of it
+    // the camera actually shows between the cabinet's side panels, so columns pinned to the
+    // texture's edges get their outer characters shaved off. Everything lives inside the middle.
+    const PAD = 78;
+    const colW = (W - PAD * 2) / cols.length;
     x.textAlign = 'center';
     x.textBaseline = 'middle';
-    // The machine's NAME belongs to the marquee above, and nowhere else. It used to be painted
-    // here as well, at 118px, so from behind the ball the player read "THE CLASSIC" twice down
-    // the top quarter of the screen. The upper case carries the ball count and its trim.
-    x.fillStyle = 'rgba(255,217,119,0.72)';
-    x.font = '600 58px Georgia, serif';
-    x.fillText('NINE BALLS', W / 2, Hpx * 0.46);
+    // Shrink-to-fit inside one column, so no value or name can ever reach its neighbour. This is
+    // what keeps the fixed-width promise honest when a score gains a digit or a name is long.
+    const fit = (txt, weight, size, maxW) => {
+      let px = size;
+      x.font = `${weight} ${px}px Georgia, serif`;
+      while (px > 16 && x.measureText(txt).width > maxW) {
+        px -= 2;
+        x.font = `${weight} ${px}px Georgia, serif`;
+      }
+    };
+    for (let i = 0; i < cols.length; i++) {
+      const cx = PAD + colW * i + colW / 2;
+      if (i > 0) {
+        x.fillStyle = 'rgba(0,0,0,0.28)';
+        x.fillRect(PAD + colW * i - 1, 78, 2, Hpx - 156);
+      }
+      x.fillStyle = 'rgba(255,217,119,0.62)';
+      fit(cols[i].label.toUpperCase(), 600, 34, colW - 16);
+      x.fillText(cols[i].label.toUpperCase(), cx, 126);
+      x.fillStyle = this.look.marqueeText;
+      fit(cols[i].value, 700, 92, colW - 26);
+      x.fillText(cols[i].value, cx, 232);
+      if (cols[i].sub) {
+        x.fillStyle = 'rgba(255,217,119,0.72)';
+        fit(cols[i].sub, 600, 36, colW - 20);
+        x.fillText(cols[i].sub, cx, 318);
+      }
+    }
     return new THREE.CanvasTexture(c);
   }
 
+  /**
+   * Replace the four records shown on the backboard. Called by ui.js whenever any of them can
+   * have changed - on mount, when the network answers with the app-wide best, and after a rack.
+   * Repaints the one texture; nothing else in the scene is touched.
+   */
+  setScoreboard(next) {
+    this.scoreboard = { ...this.scoreboard, ...next };
+    if (!this._backMat) return;
+    const old = this._backMat.map;
+    this._backMat.map = this._track(this._paintBackboard());
+    this._backMat.needsUpdate = true;
+    if (old && old.dispose) old.dispose();
+  }
+
+  /** The marquee, now blank. Matt asked for the machine's name off the machine entirely when the
+   *  backboard became the scoreboard; the lit band and its bulbs stay as cabinet dressing. */
   _paintMarquee() {
     const c = this._canvas(512, 96);
     const x = c.getContext('2d');
     x.fillStyle = this.look.marquee;
     x.fillRect(0, 0, 512, 96);
-    x.font = '700 52px Georgia, serif';
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    x.fillStyle = this.look.marqueeText;
-    x.fillText(this.board.name, 256, 52);
+    x.fillStyle = this.look.ringLip;
+    x.fillRect(0, 42, 512, 12);
     return new THREE.CanvasTexture(c);
   }
 

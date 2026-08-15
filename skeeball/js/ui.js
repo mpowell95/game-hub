@@ -157,6 +157,34 @@ export class SkeeballUI {
         line.textContent = String(this.top[b.id].score);
       }
     }
+    // The network answer is what fills in the All Time column, so repaint the backboard with it.
+    this._pushScoreboard();
+  }
+
+  /**
+   * Hand the renderer the four records its backboard paints (2026-08-15). Called on mount, when
+   * the network answers with the app-wide best, and after every finished rack.
+   *
+   * The All Time column carries the RECORD HOLDER'S NAME as well as the score - it is the only
+   * one of the four that can belong to somebody else. The other three are always this player's.
+   * The labels are passed in translated, because the renderer has no t() of its own.
+   */
+  _pushScoreboard() {
+    if (!this.renderer || !this.game) return;
+    const id = this.game.board.id;
+    const mine = myRecords(id);
+    this.renderer.sbLabels = {
+      allTime: t('sb_all_time'),
+      best: t('sb_your_best'),
+      today: t('sb_today'),
+      last: t('sb_last_game'),
+    };
+    this.renderer.setScoreboard({
+      allTime: this.top[id] || null,
+      best: mine.mine || 0,
+      today: mine.today || 0,
+      last: this.lastScore && this.lastScore.board === id ? this.lastScore.score : null,
+    });
   }
 
   _topText(boardId) {
@@ -304,11 +332,10 @@ export class SkeeballUI {
             <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
             <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
           </div>
-          <div class="sk-hud-recs">
-            <span class="sk-hud-rec"><em>${esc(t('stat_top'))}</em><b data-role="hud-top">${(this.top[this.game.board.id] && this.top[this.game.board.id].score) || '-'}</b></span>
-            <span class="sk-hud-rec"><em>${esc(t('stat_best'))}</em><b data-role="hud-mine">${myRecords(this.game.board.id).mine || '-'}</b></span>
-            <span class="sk-hud-rec"><em>${esc(t('stat_today'))}</em><b data-role="hud-today">${myRecords(this.game.board.id).today || '-'}</b></span>
-          </div>
+          <!-- The TOP/BEST/TODAY strip that used to live here is GONE (2026-08-15). Those records
+               are painted on the machine's own backboard now (render.js setScoreboard), and Matt's
+               rule was not to show the same data twice. The header keeps only the LIVE state of
+               the rack in progress: the score and the ball pips. -->
         </div>
         <div class="sk-stage" data-role="stage">
           <canvas class="sk-canvas" data-role="canvas" role="img" aria-label="${esc(t('aria_lane'))}"></canvas>
@@ -327,13 +354,11 @@ export class SkeeballUI {
       msg: this.root.querySelector('[data-role="msg"]'),
       hint: this.root.querySelector('[data-role="hint"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
-      hudMine: this.root.querySelector('[data-role="hud-mine"]'),
-      hudToday: this.root.querySelector('[data-role="hud-today"]'),
-      hudTop: this.root.querySelector('[data-role="hud-top"]'),
     };
 
     if (this.renderer) this.renderer.dispose();
     this.renderer = new Renderer(this.el.canvas, this.game.board);
+    this._pushScoreboard();
     this._bindPlay();
     this._fit();
     if (snap) this._say(t('msg_resumed', { n: this.game.ballsUsed + 1, total: BALLS_PER_GAME }));
@@ -521,6 +546,8 @@ export class SkeeballUI {
       try { myName = (loadProfile()?.name || '').trim(); } catch { /* fine */ }
       this.top[board.id] = { score: result.score, name: myName };
     }
+    // The rack just finished, so all four of the backboard's records can have moved.
+    this._pushScoreboard();
     const isTop = prevTop > 0 && result.score > prevTop;
     const isMine = result.score > prev.mine;
     const isToday = !isMine && result.score > prev.today;
