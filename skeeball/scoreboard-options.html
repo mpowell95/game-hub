@@ -9,25 +9,28 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; background: #150f14; color: #f7ecd8;
-    font: 14px/1.4 system-ui, -apple-system, sans-serif;
-    padding: 14px 12px 40px;
+    font: 14px/1.45 system-ui, -apple-system, sans-serif;
+    padding: 14px 12px 46px;
   }
-  h1 { font-size: 15px; margin: 0 0 4px; letter-spacing: .04em; }
-  p.note { font-size: 12px; opacity: .68; margin: 0 0 18px; }
-  h2 { font-size: 13px; margin: 22px 0 2px; letter-spacing: .08em; text-transform: uppercase; color: #7ec8f0; }
-  p.sub { font-size: 12px; opacity: .7; margin: 0 0 8px; }
-  .real { margin-bottom: 6px; }
-  .lbl { font-size: 10px; opacity: .5; letter-spacing: .1em; text-transform: uppercase; margin: 8px 0 3px; }
-  canvas { display: block; image-rendering: auto; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  p.note { font-size: 12px; opacity: .68; margin: 0 0 6px; }
+  h2 { font-size: 13px; margin: 26px 0 2px; letter-spacing: .06em; text-transform: uppercase; color: #7ec8f0; }
+  p.sub { font-size: 12px; opacity: .75; margin: 0 0 8px; }
+  .lbl { font-size: 10px; opacity: .5; letter-spacing: .1em; text-transform: uppercase; margin: 9px 0 3px; }
+  canvas { display: block; }
+  .hud { background:#241a20; border:1px solid #4a3a44; border-radius:5px; padding:5px 7px;
+         font-size:10px; display:flex; justify-content:space-between; margin-bottom:5px; }
+  .hud b { color:#ffb02e; }
+  .hud span { color:#7ec8f0; letter-spacing:.08em; }
 </style>
 </head>
 <body>
 
-<h1>Scoreboard layout options</h1>
+<h1>Scoreboard — new directions</h1>
 <p class="note">
-  The panel gets <b>181 &times; 136 real pixels</b> on your phone. Each option is drawn at that
-  exact size first (top), then enlarged 2&times; so you can see the shapes. Judge legibility on the
-  small one &mdash; that is the actual size on the machine.
+  The panel is <b>181 &times; 136 real pixels</b>. The last three options all tried to fit four
+  numbers into that box. These three change the problem instead: move data off it, show less on
+  it, or make it bigger.
 </p>
 
 <div id="out"></div>
@@ -37,115 +40,90 @@ const W = 181, H = 136;
 const AM = '#ffb02e', CY = '#7ec8f0', BG = '#070405', BZ = '#c98a3a';
 const D = { hub:'1250', best:'500', today:'250', last:'190', name:'MATTYPOW' };
 
-function panel() {
+function panel(h) {
   const c = document.createElement('canvas');
-  c.width = W; c.height = H;
+  c.width = W; c.height = h || H;
   const x = c.getContext('2d');
-  x.fillStyle = BG; x.fillRect(0,0,W,H);
-  x.strokeStyle = BZ; x.lineWidth = 2; x.strokeRect(1,1,W-2,H-2);
+  x.fillStyle = BG; x.fillRect(0,0,c.width,c.height);
+  x.strokeStyle = BZ; x.lineWidth = 2; x.strokeRect(1,1,c.width-2,c.height-2);
+  x.textAlign='center'; x.textBaseline='middle';
   return [c, x];
 }
 
-// A - FOUR full-width rows, label left, value right. The username is not a row: it belongs to
-// the hub wide record and sits under that record's own number.
-function optionA() {
+// D - the machine shows ONLY the hub wide record. The three personal numbers move to the header.
+function optionD() {
   const [c,x] = panel();
+  x.fillStyle=CY; x.font='700 12px Verdana'; x.fillText('HUB WIDE RECORD', W/2, 26);
+  x.fillStyle=AM; x.font='700 62px Verdana'; x.fillText(D.hub, W/2, 74);
+  x.fillStyle=AM; x.font='700 22px Verdana'; x.fillText(D.name, W/2, 115);
+  return c;
+}
+
+// E - two lines: the record, and your best against it. Today and Last Game move to the header.
+function optionE() {
+  const [c,x] = panel();
+  x.fillStyle=CY; x.font='700 10px Verdana'; x.fillText('HUB WIDE RECORD', W/2, 18);
+  x.fillStyle=AM; x.font='700 40px Verdana'; x.fillText(D.hub, W/2, 45);
+  x.fillStyle=AM; x.font='700 13px Verdana'; x.fillText(D.name, W/2, 68);
+  x.strokeStyle='rgba(201,138,58,.4)'; x.lineWidth=1;
+  x.beginPath(); x.moveTo(10,82); x.lineTo(W-10,82); x.stroke();
+  x.fillStyle=CY; x.font='700 10px Verdana'; x.fillText('YOUR BEST', W/2, 96);
+  x.fillStyle=AM; x.font='700 32px Verdana'; x.fillText(D.best, W/2, 119);
+  return c;
+}
+
+// F - same four values, but the panel grows upward into the dead space over the machine.
+function optionF() {
+  const HF = 250;
+  const [c,x] = panel(HF);
   const rows = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
-  const hs = [42,28,28,28];
-  let y0 = 5;
+  const hs = [88,54,54,54];
+  let y0 = 0;
   rows.forEach((r,i) => {
-    const h = hs[i], mid = y0 + h/2;
-    if (i) { x.strokeStyle='rgba(201,138,58,.32)'; x.lineWidth=1;
-      x.beginPath(); x.moveTo(6,y0); x.lineTo(W-6,y0); x.stroke(); }
-    x.fillStyle=CY; x.font='700 9px Verdana'; x.textAlign='left'; x.textBaseline='middle';
-    x.fillText(r[0], 8, r[2] ? y0+13 : mid);
-    x.fillStyle=AM; x.font='700 19px Verdana'; x.textAlign='right';
-    x.fillText(r[1], W-8, r[2] ? y0+15 : mid);
-    if (r[2]) {
-      x.fillStyle=AM; x.font='700 11px Verdana'; x.textAlign='right';
-      x.fillText(r[2], W-8, y0+32);
-    }
-    y0 += h;
+    if (i) { x.strokeStyle='rgba(201,138,58,.3)'; x.lineWidth=1;
+      x.beginPath(); x.moveTo(8,y0); x.lineTo(W-8,y0); x.stroke(); }
+    x.fillStyle=CY; x.font='700 11px Verdana'; x.textAlign='left';
+    x.fillText(r[0], 10, y0 + (r[2] ? 16 : hs[i]/2));
+    x.fillStyle=AM; x.font='700 '+(r[2]?42:34)+'px Verdana'; x.textAlign='right';
+    x.fillText(r[1], W-10, y0 + (r[2] ? 46 : hs[i]/2));
+    if (r[2]) { x.fillStyle=AM; x.font='700 16px Verdana'; x.fillText(r[2], W-10, y0+74); }
+    y0 += hs[i];
   });
-  return c;
-}
-
-// B - 2x2 boxed cells. No separate strip: the username lives inside the hub wide record's own
-// cell, under its number, which is the only place it means anything. Dropping the strip gives
-// every cell 34px more height.
-function optionB() {
-  const [c,x] = panel();
-  const cells = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
-  const gw = (W-14)/2, gh = (H-12)/2;
-  cells.forEach((r,i) => {
-    const cx = 7 + gw*(i%2), cy = 6 + gh*Math.floor(i/2);
-    const iw = gw-3, ih = gh-3;
-    x.strokeStyle='rgba(201,138,58,.5)'; x.lineWidth=1; x.strokeRect(cx,cy,iw,ih);
-    x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='center'; x.textBaseline='middle';
-    x.fillText(r[0], cx+iw/2, cy+11);
-    x.fillStyle=AM; x.font='700 26px Verdana';
-    x.fillText(r[1], cx+iw/2, cy+ih/2+4);
-    if (r[2]) {
-      x.fillStyle=AM; x.font='700 10px Verdana';
-      x.fillText(r[2], cx+iw/2, cy+ih-9);
-    }
-  });
-  return c;
-}
-
-// C - one record at a time, cycling
-function optionC(which) {
-  const [c,x] = panel();
-  const set = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
-  const r = set[which % 4];
-  x.textAlign='center'; x.textBaseline='middle';
-  x.fillStyle=CY; x.font='700 13px Verdana'; x.fillText(r[0], W/2, 22);
-  x.fillStyle=AM; x.font='700 58px Verdana'; x.fillText(r[1], W/2, r[2] ? 66 : 76);
-  if (r[2]) {
-    x.fillStyle=AM; x.font='700 20px Verdana'; x.fillText(r[2], W/2, 108);
-  }
-  for (let i=0;i<4;i++) {
-    x.fillStyle = (i === which%4) ? AM : 'rgba(255,176,46,.3)';
-    x.beginPath(); x.arc(W/2-12+i*8, H-8, 2, 0, 7); x.fill();
-  }
   return c;
 }
 
 const out = document.getElementById('out');
-function show(title, sub, canvas, id) {
-  const h = document.createElement('h2'); h.textContent = title; out.appendChild(h);
-  const p = document.createElement('p'); p.className='sub'; p.textContent = sub; out.appendChild(p);
-  const l1 = document.createElement('div'); l1.className='lbl'; l1.textContent='actual size on the machine';
-  out.appendChild(l1);
-  canvas.className = 'real'; out.appendChild(canvas);
-  const l2 = document.createElement('div'); l2.className='lbl'; l2.textContent='enlarged 2x';
-  out.appendChild(l2);
+function hudStrip(text) {
+  const d = document.createElement('div'); d.className='hud'; d.innerHTML = text; return d;
+}
+function show(title, sub, canvas, hud) {
+  let h = document.createElement('h2'); h.textContent = title; out.appendChild(h);
+  let p = document.createElement('p'); p.className='sub'; p.textContent = sub; out.appendChild(p);
+  let l = document.createElement('div'); l.className='lbl'; l.textContent='actual size on the machine';
+  out.appendChild(l);
+  if (hud) out.appendChild(hudStrip(hud));
+  out.appendChild(canvas);
+  l = document.createElement('div'); l.className='lbl'; l.textContent='enlarged 2x'; out.appendChild(l);
   const big = document.createElement('canvas');
-  big.width = W*2; big.height = H*2;
-  big.style.width = Math.min(W*2, window.innerWidth-24)+'px';
-  big.getContext('2d').drawImage(canvas, 0, 0, W*2, H*2);
-  if (id) big.id = id;
+  big.width = canvas.width*2; big.height = canvas.height*2;
+  big.style.width = Math.min(canvas.width*2, window.innerWidth-24)+'px';
+  big.getContext('2d').drawImage(canvas, 0, 0, big.width, big.height);
   out.appendChild(big);
 }
 
-show('A — four rows', 'Everything visible. Digits about 19px. Separated by rules and by label-left / number-right. The hub wide row is taller so the username sits under its own number.', optionA());
-show('B — 2x2 boxed grid', 'Everything visible. Digits about 26px, each in its own drawn box so they cannot read as one string. The username sits inside the hub wide cell.', optionB());
-show('C — one at a time', 'Cycles every 3 seconds. Digits about 58px, more than double anything else. You see one record at a time.', optionC(0), 'cyc');
+show('D — the machine is the hall of fame',
+     'The backboard shows one thing: the hub wide record and who holds it, at 62px. Your Best, Today and Last Game move to the header bar, which has empty space beside the score. Nothing is cramped because nothing is competing.',
+     optionD(),
+     '<span>BEST</span> <b>500</b> &nbsp; <span>TODAY</span> <b>250</b> &nbsp; <span>LAST</span> <b>190</b>');
 
-// let C actually cycle so you can judge it
-let n = 0;
-setInterval(() => {
-  n++;
-  const src = optionC(n);
-  const big = document.getElementById('cyc');
-  const g = big.getContext('2d');
-  g.clearRect(0,0,big.width,big.height);
-  g.drawImage(src, 0, 0, W*2, H*2);
-  const small = big.previousElementSibling.previousElementSibling;
-  if (small && small.tagName === 'CANVAS') {
-    small.getContext('2d').drawImage(src, 0, 0);
-  }
-}, 3000);
+show('E — the record and your shot at it',
+     'Only the two numbers that mean anything mid-rack: the record to beat, and your best. Today and Last Game go to the header. Digits 40px and 32px.',
+     optionE(),
+     '<span>TODAY</span> <b>250</b> &nbsp; <span>LAST</span> <b>190</b>');
+
+show('F — make the panel bigger',
+     'All four stay on the machine, but the backboard grows upward into the dead space above it (250px instead of 136). Rows get 54-88px each, digits 34-42px. Costs screen height that is currently empty.',
+     optionF());
 </script>
 </body>
 </html>
