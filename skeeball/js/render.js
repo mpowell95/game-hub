@@ -668,7 +668,11 @@ export class Renderer {
     // field texture always did) and cutting the segment glow are the three things that were
     // softening them.
     const W = 2048;
-    const Hpx = 1024;
+    // THE TEXTURE MUST MATCH THE PANEL'S SHAPE. It was a flat 2048x1024 (2:1) painted onto a
+    // backboard that is 1.06m wide by 0.8m tall (1.33:1), so everything drawn on it has been
+    // stretched 50% taller than it should be - every version of this scoreboard, including the
+    // shipped one. Deriving the height from the real solid removes the distortion.
+    const Hpx = Math.round(W * (this.G.backboardH / (this.G.boardW + 0.06)));
     const c = this._canvas(W, Hpx);
     const x = c.getContext('2d');
     const g = x.createLinearGradient(0, 0, 0, Hpx);
@@ -827,6 +831,77 @@ export class Renderer {
       return t;
     };
     const inner = W - 170;
+
+    // K / L / N - J'S TYPE, ON THE BACK WALL. Matt kept J and asked for its font, style and
+    // legibility on the machine. So: plain bold sans, cyan label over amber value, no
+    // seven-segment digits, no glow, no serif - none of which survived being shrunk anyway.
+    //
+    // Sizes are stated in ON-SCREEN pixels and converted, because that is the only number that
+    // means anything. The panel is 181px wide on a phone, so one screen pixel is W/181 texture
+    // pixels. J's value type is 22px on screen; that is the yardstick.
+    if (this._sbLayout === 'K' || this._sbLayout === 'L' || this._sbLayout === 'N') {
+      const PX = W / 181;                       // texture pixels per on-screen pixel
+      const sp = (n) => n * PX;
+      const say = (txt, cx, cy, size, colour, align, maxW) => {
+        x.fillStyle = colour; x.textAlign = align || 'center'; x.textBaseline = 'middle';
+        let s2 = sp(size);
+        x.font = `700 ${s2}px Verdana, sans-serif`;
+        if (maxW) while (s2 > sp(6) && x.measureText(txt).width > maxW) {
+          s2 -= sp(0.5); x.font = `700 ${s2}px Verdana, sans-serif`;
+        }
+        x.fillText(txt, cx, cy);
+      };
+      const rule = (x0, y0, w0, h0) => {
+        x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(x0, y0, w0, h0); x.globalAlpha = 1;
+      };
+      const pad = sp(7);
+      const usableTop = TOP_INSET + sp(3);
+      const usableH = Hpx - usableTop - sp(6);
+
+      if (this._sbLayout === 'K') {
+        // Four rows the full width of the panel: the widest each value can possibly be.
+        const rh = usableH / 4;
+        cols.forEach((r, i) => {
+          const y = usableTop + rh * i;
+          if (i) rule(pad, y, W - pad * 2, sp(0.7));
+          const solo = i === 0 && holder;
+          say(r.l.toUpperCase(), pad + sp(4), y + (solo ? sp(9) : rh / 2), 9, LABEL, 'left', W * 0.5);
+          say(r.v, W - pad - sp(4), y + (solo ? sp(11) : rh / 2), solo ? 21 : 19, ON, 'right', W * 0.44);
+          if (solo) say(holder, W - pad - sp(4), y + rh - sp(8), 10, ON, 'right', W * 0.55);
+        });
+      } else if (this._sbLayout === 'L') {
+        // Two by two: each value gets half the width and half the height, so the type doubles.
+        const cw = (W - pad * 2) / 2;
+        const ch = usableH / 2;
+        cols.forEach((r, i) => {
+          const cx = pad + cw * (i % 2);
+          const cy = usableTop + ch * Math.floor(i / 2);
+          if (i % 2) rule(cx, cy + sp(3), sp(0.7), ch - sp(6));
+          if (i > 1) rule(cx, cy, cw, sp(0.7));
+          const solo = i === 0 && holder;
+          say(r.l.toUpperCase(), cx + cw / 2, cy + sp(9), 9, LABEL, 'center', cw - sp(8));
+          say(r.v, cx + cw / 2, cy + ch * (solo ? 0.48 : 0.62), solo ? 24 : 27, ON, 'center', cw - sp(10));
+          if (solo) say(holder, cx + cw / 2, cy + ch - sp(8), 10, ON, 'center', cw - sp(8));
+        });
+      } else {
+        // N - the record owns the top half at full width; the other three share the bottom.
+        const topH = usableH * 0.52;
+        say(cols[0].l.toUpperCase(), W / 2, usableTop + sp(9), 10, LABEL, 'center', W - pad * 2);
+        say(cols[0].v, W / 2, usableTop + topH * 0.5, 36, ON, 'center', W - pad * 4);
+        if (holder) say(holder, W / 2, usableTop + topH - sp(8), 12, ON, 'center', W - pad * 3);
+        rule(pad, usableTop + topH, W - pad * 2, sp(0.7));
+        const cw = (W - pad * 2) / 3;
+        const by = usableTop + topH;
+        const bh = usableH - topH;
+        cols.slice(1).forEach((r, i) => {
+          const cx = pad + cw * i;
+          if (i) rule(cx, by + sp(4), sp(0.7), bh - sp(8));
+          say(r.l.toUpperCase(), cx + cw / 2, by + sp(10), 8, LABEL, 'center', cw - sp(6));
+          say(r.v, cx + cw / 2, by + bh * 0.62, 20, ON, 'center', cw - sp(8));
+        });
+      }
+      return finish();
+    }
 
     // G - THE BACKGLASS. The wall is 2.6x taller, so the panel is no longer a postage stamp and
     // the numbers get real pixels. Two rows of two, each in its own lit box.
