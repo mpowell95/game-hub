@@ -832,6 +832,21 @@ export class Renderer {
     };
     const inner = W - 170;
 
+    // Q - A BLANK WALL. No text, no digits, no panel, no writing of any kind: the back wall is
+    // just the cabinet, the way an empty machine looks. Nothing is drawn on it and no records
+    // are shown anywhere else either - this is here to see the MACHINE without a scoreboard on
+    // it. The marquee above still carries the machine's name; that is the band, not the wall.
+    if (this._sbLayout === 'Q') {
+      x.fillStyle = bez;
+      x.fillRect(0, 0, W, Hpx);
+      x.globalAlpha = 0.35;
+      x.fillStyle = BEZEL;
+      x.fillRect(0, Hpx * 0.10, W, 12);
+      x.fillRect(0, Hpx * 0.88, W, 12);
+      x.globalAlpha = 1;
+      return finish();
+    }
+
     // K / L / N - J'S TYPE, ON THE BACK WALL. Matt kept J and asked for its font, style and
     // legibility on the machine. So: plain bold sans, cyan label over amber value, no
     // seven-segment digits, no glow, no serif - none of which survived being shrunk anyway.
