@@ -24,6 +24,8 @@ import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
 import { howToHtml, createHowTo } from './howto.js';
 
@@ -202,6 +204,11 @@ function pitSlot(k, n) {
 class MancalaUI {
   constructor(container) {
     this.container = container;
+    this._codeCopyOff = enableCodeCopy(this.container);   // tap the room code to copy it
+    this._reactions = createReactions({             // quick-chat reactions during MP
+      send: (p) => { if (this.mp && this.mp.code) net.sendReaction(this.mp.code, String(this.mp.role), p); },
+      mySeatKey: () => (this.mp ? String(this.mp.role) : null),
+    });
 
     // Identity + difficulty prefill. Precedence: this game's own last-used
     // settings, then the shared profile, then built-in defaults.
@@ -318,6 +325,8 @@ class MancalaUI {
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
     this.mp = null;
+    if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
+    if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     this.container.removeEventListener('click', this._onClick);
     this.container.removeEventListener('input', this._onInput);
     document.removeEventListener('keydown', this._onKey);
@@ -487,7 +496,7 @@ class MancalaUI {
       const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_share_code'));
       return `<div class="mc-mp-lobby">
         <span class="mc-mp-label">${t('mp_code_aria')}</span>
-        <div class="mc-mp-code">${code ? esc(code) : '····'}</div>
+        <div class="mc-mp-code" data-role="mp-code" role="button" tabindex="0">${code ? esc(code) : '····'}</div>
         <span class="mc-mp-label">${t('mp_opponent_label')}</span>
         <div class="mc-mp-oppslot">${guest
           ? `<span>${esc(guest.avatar || '🙂')}</span><span>${esc(guest.name || '')}</span>`
@@ -501,7 +510,7 @@ class MancalaUI {
     const host = room && room.host;
     return `<div class="mc-mp-lobby">
       <span class="mc-mp-label">${t('mp_code_aria')}</span>
-      <div class="mc-mp-code">${esc(this._mpJoinedCode || '')}</div>
+      <div class="mc-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(this._mpJoinedCode || '')}</div>
       <span class="mc-mp-label">${t('mp_host_label')}</span>
       <div class="mc-mp-oppslot">${host
         ? `<span>${esc(host.avatar || '🙂')}</span><span>${esc(host.name || '')}</span>`
@@ -1475,6 +1484,7 @@ class MancalaUI {
   _mpRoomCallback(room) {
     if (this._dead) return;
     this._mpLobbyRoom = room;
+    if (this._reactions) { this._reactions.onRoom(room); this._reactions.setActive(!!(this.mp && this.mp.code)); }
     if (this.mp) { this._mpOnRoomUpdate(room); return; }
     if (this._lobby) this.renderSetup();
     if (this._lobby === 'join' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
@@ -1624,6 +1634,7 @@ class MancalaUI {
   /** Explicit abandon (the in-game/end-card Leave button), unlike destroy()'s
    *  backgrounding: this ends the room for the opponent too. */
   _mpLeaveToSetup() {
+    if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     const mp = this.mp;
     this.mp = null;
     this._mpClearSave();

@@ -20,6 +20,8 @@ import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -104,6 +106,11 @@ function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(v
 class EscobaUI {
   constructor(container) {
     this.container = container;
+    this._codeCopyOff = enableCodeCopy(this.container);   // tap the room code to copy it
+    this._reactions = createReactions({             // quick-chat reactions during MP
+      send: (p) => { if (this.mp && this.mp.code) net.sendReaction(this.mp.code, String(this.mp.seat), p); },
+      mySeatKey: () => (this.mp ? String(this.mp.seat) : null),
+    });
     this._dead = false;
     this.game = null;
     this._pending = null;        // { resolve } while the engine awaits the human move
@@ -318,6 +325,7 @@ class EscobaUI {
 
   showSetup() {
     if (this._dead) return;
+    if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     if (this.game) { this.game.abort(); this.game = null; }
     this._resolvePending(null);
     this._resolveModal();
@@ -584,7 +592,7 @@ class EscobaUI {
       const ready = filled >= seatCount;
       return `<div class="eb-mp-lobby">
         <span class="eb-label">${esc(t('lbl_room_code'))}</span>
-        ${code ? `<div class="eb-mp-code">${esc(code)}</div>` : `<div class="eb-mp-code eb-mp-code-empty">····</div>`}
+        ${code ? `<div class="eb-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(code)}</div>` : `<div class="eb-mp-code eb-mp-code-empty">····</div>`}
         <span class="eb-label">${esc(t('lbl_players_filled', { filled, total: seatCount }))}</span>
         ${this._renderMpSeatList(room)}
         <p class="eb-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
@@ -599,7 +607,7 @@ class EscobaUI {
     // so _mpJoinedCode is always set here. Same seat list the host sees.
     return `<div class="eb-mp-lobby">
       <span class="eb-label">${esc(t('lbl_room_code'))}</span>
-      <div class="eb-mp-code">${esc(this._mpJoinedCode)}</div>
+      <div class="eb-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(this._mpJoinedCode)}</div>
       <span class="eb-label">${esc(t('lbl_players_filled', { filled, total: seatCount }))}</span>
       ${this._renderMpSeatList(room)}
       <p class="eb-mp-msg is-info" data-role="mp-msg">${esc(t('mp_waiting_host'))}</p>
@@ -2113,6 +2121,7 @@ class EscobaUI {
   _mpRoomCallback(room) {
     if (this._dead) return;
     this._mpLobbyRoom = room;
+    if (this._reactions) { this._reactions.onRoom(room); this._reactions.setActive(!!(this.mp && this.mp.code)); }
     if (this.mp) { this._mpOnRoomUpdate(room); return; }
     if (this._screen === 'host-lobby' || this._screen === 'join-lobby') this.renderSetup();
     if (this._screen === 'join-lobby' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
@@ -2440,6 +2449,8 @@ class EscobaUI {
     }
     net.disconnect();
     this.mp = null;
+    if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
+    if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
     if (this._matResizeObserver) this._matResizeObserver.disconnect();
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
