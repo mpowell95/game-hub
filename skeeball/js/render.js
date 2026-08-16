@@ -839,7 +839,7 @@ export class Renderer {
     // Sizes are stated in ON-SCREEN pixels and converted, because that is the only number that
     // means anything. The panel is 181px wide on a phone, so one screen pixel is W/181 texture
     // pixels. J's value type is 22px on screen; that is the yardstick.
-    if (this._sbLayout === 'K' || this._sbLayout === 'L' || this._sbLayout === 'N') {
+    if (this._sbLayout === 'K' || this._sbLayout === 'L' || this._sbLayout === 'N' || this._sbLayout === 'P') {
       const PX = W / 181;                       // texture pixels per on-screen pixel
       const sp = (n) => n * PX;
       const say = (txt, cx, cy, size, colour, align, maxW) => {
@@ -863,6 +863,23 @@ export class Renderer {
       const BOTTOM_INSET = Hpx * 0.14;
       const usableTop = TOP_INSET + sp(3);
       const usableH = Hpx - usableTop - BOTTOM_INSET;
+
+      // P - NO WORDS AT ALL. No labels, no name, nothing but the four numbers. Which is which is
+      // carried by size and position only: the hub wide record is the big one on top, and the
+      // three personal numbers read left to right underneath in the order they always appear -
+      // your best, today, last game. Every pixel the labels were using goes to the digits.
+      if (this._sbLayout === 'P') {
+        const topH = usableH * 0.56;
+        say(cols[0].v, W / 2, usableTop + topH * 0.5, 44, ON, 'center', W - pad * 4);
+        rule(pad * 2, usableTop + topH, W - pad * 4, sp(0.7));
+        const cw = (W - pad * 2) / 3;
+        cols.slice(1).forEach((r, i) => {
+          const cx = pad + cw * i;
+          if (i) rule(cx, usableTop + topH + sp(4), sp(0.7), usableH - topH - sp(8));
+          say(r.v, cx + cw / 2, usableTop + topH + (usableH - topH) * 0.55, 22, ON, 'center', cw - sp(6));
+        });
+        return finish();
+      }
 
       if (this._sbLayout === 'K') {
         // Four rows the full width of the panel: the widest each value can possibly be. The
