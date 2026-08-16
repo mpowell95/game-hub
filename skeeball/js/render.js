@@ -855,19 +855,29 @@ export class Renderer {
         x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(x0, y0, w0, h0); x.globalAlpha = 1;
       };
       const pad = sp(7);
+      // THE PANEL HAS A SAFE AREA AT BOTH ENDS. The marquee stands in front of its top edge, and
+      // the board's own top rim - a 6cm slab 2cm nearer the camera - stands in front of its
+      // bottom edge. Painting to the texture's edges puts content behind both. The first version
+      // of these layouts only allowed for the top, which is why every one of them had its last
+      // row sliced off along the bottom.
+      const BOTTOM_INSET = Hpx * 0.14;
       const usableTop = TOP_INSET + sp(3);
-      const usableH = Hpx - usableTop - sp(6);
+      const usableH = Hpx - usableTop - BOTTOM_INSET;
 
       if (this._sbLayout === 'K') {
-        // Four rows the full width of the panel: the widest each value can possibly be.
-        const rh = usableH / 4;
+        // Four rows the full width of the panel: the widest each value can possibly be. The
+        // record's row is taller because it carries a name underneath - at an even quarter each
+        // the name printed straight through the number.
+        const wts = [0.34, 0.22, 0.22, 0.22];
+        let y = usableTop;
         cols.forEach((r, i) => {
-          const y = usableTop + rh * i;
+          const rh = usableH * wts[i];
           if (i) rule(pad, y, W - pad * 2, sp(0.7));
           const solo = i === 0 && holder;
-          say(r.l.toUpperCase(), pad + sp(4), y + (solo ? sp(9) : rh / 2), 9, LABEL, 'left', W * 0.5);
-          say(r.v, W - pad - sp(4), y + (solo ? sp(11) : rh / 2), solo ? 21 : 19, ON, 'right', W * 0.44);
-          if (solo) say(holder, W - pad - sp(4), y + rh - sp(8), 10, ON, 'right', W * 0.55);
+          say(r.l.toUpperCase(), pad + sp(4), y + (solo ? sp(8) : rh / 2), 9, LABEL, 'left', W * 0.5);
+          say(r.v, W - pad - sp(4), y + (solo ? sp(10) : rh / 2), solo ? 19 : 19, ON, 'right', W * 0.44);
+          if (solo) say(holder, W - pad - sp(4), y + rh - sp(6), 9, ON, 'right', W * 0.55);
+          y += rh;
         });
       } else if (this._sbLayout === 'L') {
         // Two by two: each value gets half the width and half the height, so the type doubles.
