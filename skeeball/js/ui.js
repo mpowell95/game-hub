@@ -173,6 +173,33 @@ export class SkeeballUI {
     if (!this.renderer || !this.game) return;
     const id = this.game.board.id;
     const mine = myRecords(id);
+    // ?sb=J - the four records live in the HUD instead of on the machine. This is the only
+    // surface in the game drawn at native resolution: a backboard texture is minified about 11:1
+    // by the time it reaches the far end of the lane, DOM text is not minified at all.
+    let sbq = '';
+    try { sbq = (new URLSearchParams(location.search).get('sb') || '').toUpperCase(); } catch { sbq = ''; }
+    if (sbq === 'J') {
+      const top = this.top[id] || null;
+      const last = this.lastScore && this.lastScore.board === id ? this.lastScore.score : null;
+      let strip = this.root.querySelector('[data-role="sb-hud"]');
+      if (!strip) {
+        strip = document.createElement('div');
+        strip.setAttribute('data-role', 'sb-hud');
+        strip.style.cssText = 'position:absolute;left:0;right:0;top:0;z-index:4;display:flex;'
+          + 'justify-content:space-around;padding:6px 4px;background:rgba(7,4,5,.82);'
+          + 'border-bottom:2px solid #c98a3a;pointer-events:none;font-variant-numeric:tabular-nums;';
+        if (this.el.stage) this.el.stage.appendChild(strip);
+      }
+      const cell = (label, value, sub) => `<div style="text-align:center;min-width:60px">
+        <div style="font-size:9px;letter-spacing:.1em;color:#7ec8f0;font-weight:700">${esc(label.toUpperCase())}</div>
+        <div style="font-size:22px;line-height:1.05;color:#ffb02e;font-weight:800">${esc(String(value || '-'))}</div>
+        ${sub ? `<div style="font-size:10px;color:#ffb02e;font-weight:700">${esc(sub.toUpperCase())}</div>` : ''}
+      </div>`;
+      strip.innerHTML = cell(t('sb_all_time'), top && top.score, (top && top.name) || '')
+        + cell(t('sb_your_best'), mine.mine, '')
+        + cell(t('sb_today'), mine.today, '')
+        + cell(t('sb_last_game'), last, '');
+    }
     this.renderer.sbLabels = {
       allTime: t('sb_all_time'),
       best: t('sb_your_best'),

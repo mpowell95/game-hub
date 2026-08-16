@@ -29,7 +29,11 @@ export class Renderer {
     this._sbLayout = sb.toUpperCase();
     // F needs a TALLER backboard, which is geometry rather than paint, so the geom is cloned and
     // grown for that trial only. Never mutate board.geom - it is shared with the physics.
-    this.G = this._sbLayout === 'F' ? { ...board.geom, backboardH: board.geom.backboardH * 1.9 } : board.geom;
+    // G grows the back wall into a real arcade BACKGLASS. Geometry, not paint, so the geom is
+    // cloned - board.geom is shared with the physics and must never be mutated.
+    this.G = this._sbLayout === 'G' ? { ...board.geom, backboardH: board.geom.backboardH * 2.6 }
+      : this._sbLayout === 'F' ? { ...board.geom, backboardH: board.geom.backboardH * 1.9 }
+        : board.geom;
     this.M = buildMachine(this.G);
 
     this.scene = new THREE.Scene();
@@ -437,6 +441,20 @@ export class Renderer {
     );
     marquee.position.set(0, topY + G.backboardH + 0.02, M.faceToWorld(0, G.boardLen, 0)[2] - 0.02);
     this.scene.add(marquee);
+    // H - THE OVERHEAD SIGN. The back wall is 3.3m from the camera; this hangs at the FRONT of
+    // the cabinet, roughly 1.6m away, so the same physical sign covers about four times the
+    // screen area. That is the whole idea: stop fighting for pixels on the furthest surface in
+    // the scene and hang the numbers on the nearest one, the way a bowling alley does.
+    if (this._sbLayout === 'H') {
+      const signW = G.boardW + 0.75;
+      const signH = 0.42;
+      const sign = new THREE.Mesh(
+        this._track(new THREE.BoxGeometry(signW, signH, 0.05)),
+        [side, side, side, side, this._mat({ map: this._track(this._paintOverheadSign(signW, signH)) }), side],
+      );
+      sign.position.set(0, topY + G.backboardH * 0.72, M.lipZ + 0.62);
+      this.scene.add(sign);
+    }
     const bulbGeo = this._track(new THREE.SphereGeometry(0.014, 10, 8));
     for (let i = 0; i < 7; i++) {
       const bulb = new THREE.Mesh(bulbGeo, this._track(new THREE.MeshStandardMaterial({
@@ -809,6 +827,41 @@ export class Renderer {
       return t;
     };
     const inner = W - 170;
+
+    // G - THE BACKGLASS. The wall is 2.6x taller, so the panel is no longer a postage stamp and
+    // the numbers get real pixels. Two rows of two, each in its own lit box.
+    if (this._sbLayout === 'G') {
+      const top = TOP_INSET - 60;
+      const gw = (W - 200) / 2;
+      const gh = (Hpx - top - 90) / 2;
+      cols.forEach((r, i) => {
+        const cx = 100 + gw * (i % 2);
+        const cy = top + gh * Math.floor(i / 2);
+        x.globalAlpha = 0.4; x.strokeStyle = BEZEL; x.lineWidth = 3;
+        x.strokeRect(cx + 8, cy + 8, gw - 16, gh - 16); x.globalAlpha = 1;
+        x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = LABEL;
+        fit(r.l.toUpperCase(), 700, 52, gw - 40);
+        x.fillText(r.l.toUpperCase(), cx + gw / 2, cy + 52);
+        digits(cx + gw / 2, cy + gh * 0.56, r.v, gw - 50, gh * 0.46);
+        if (i === 0 && holder) {
+          x.fillStyle = ON; fit(holder, 700, 46, gw - 40);
+          x.fillText(holder, cx + gw / 2, cy + gh - 34);
+        }
+      });
+      return finish();
+    }
+
+    // H and J - the stats are NOT on the back wall. It carries the machine's name only. H hangs
+    // them on an overhead sign near the camera; J puts them in the HUD as real DOM text, which
+    // is the one place in this game they are drawn at native resolution and cannot be minified.
+    if (this._sbLayout === 'H' || this._sbLayout === 'J') {
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillStyle = this.look.marqueeText;
+      fit(this.board.name, 700, 190, W - 220);
+      x.fillText(this.board.name, W / 2, TOP_INSET + (Hpx - TOP_INSET) / 2);
+      return finish();
+    }
+
     if (this._sbLayout === 'D' || this._sbLayout === 'E') {
       x.textAlign = 'center'; x.textBaseline = 'middle';
       const big = this._sbLayout === 'D';
@@ -926,6 +979,46 @@ export class Renderer {
     this._backMat.map = this._track(this._paintBackboard());
     this._backMat.needsUpdate = true;
     if (old && old.dispose) old.dispose();
+  }
+
+  /** H's overhead sign: four stats across a wide illuminated board hung at the front of the
+   *  cabinet. Its texture is sized to the sign's own aspect so nothing is stretched. */
+  _paintOverheadSign(signW, signH) {
+    const W = 2048;
+    const Hpx = Math.round(W * (signH / signW));
+    const c = this._canvas(W, Hpx);
+    const x = c.getContext('2d');
+    const s = this.scoreboard || {};
+    const num = (v) => (v ? String(v) : '-');
+    x.fillStyle = '#060404'; x.fillRect(0, 0, W, Hpx);
+    x.strokeStyle = '#c98a3a'; x.lineWidth = 10; x.strokeRect(6, 6, W - 12, Hpx - 12);
+    const cols = [
+      [this.sbLabels.allTime, num(s.allTime && s.allTime.score), ((s.allTime && s.allTime.name) || '').toUpperCase()],
+      [this.sbLabels.best, num(s.best), ''],
+      [this.sbLabels.today, num(s.today), ''],
+      [this.sbLabels.last, s.last == null ? '-' : String(s.last), ''],
+    ];
+    const cw = (W - 60) / 4;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    const fit = (t, w0, st, mw) => {
+      let p = st; x.font = `${w0} ${p}px Verdana, sans-serif`;
+      while (p > 12 && x.measureText(t).width > mw) { p -= 2; x.font = `${w0} ${p}px Verdana, sans-serif`; }
+      return p;
+    };
+    cols.forEach((r, i) => {
+      const cx = 30 + cw * i + cw / 2;
+      if (i) { x.globalAlpha = 0.3; x.fillStyle = '#c98a3a'; x.fillRect(30 + cw * i, 26, 3, Hpx - 52); x.globalAlpha = 1; }
+      x.fillStyle = '#7ec8f0'; fit(r[0].toUpperCase(), 700, 44, cw - 26);
+      x.fillText(r[0].toUpperCase(), cx, 52);
+      x.fillStyle = '#ffb02e'; fit(r[1], 700, 132, cw - 30);
+      x.shadowBlur = 12; x.shadowColor = '#ffb02e';
+      x.fillText(r[1], cx, Hpx * 0.55);
+      x.shadowBlur = 0;
+      if (r[2]) { fit(r[2], 700, 42, cw - 26); x.fillText(r[2], cx, Hpx - 40); }
+    });
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    return tex;
   }
 
   /** The marquee: the MACHINE's name, on the lit band over the scoreboard. It was blanked when
