@@ -98,6 +98,20 @@ const GAMES = [
     art: GAME_ART["parchis"],
   },
   {
+    // ADMIN ONLY (Matt's demo, 2026-08-16): a GDevelop no-code export wired in as a launch-out
+    // game (like Parchís above), to prove the "build it yourself in GDevelop -> export to web ->
+    // drop it in the hub" workflow. `devOnly` keeps the card off everyone else's launcher. It
+    // records no hub stats (not integrated with game-stats), so it needs no GAME_META row, no
+    // name-gate, and no players-agg branch. Dropping `devOnly` is the whole of "release it".
+    id: 'car-race',
+    title: 'Car Race',
+    blurb: 'GDevelop demo: a no-code 3D racer, exported to the web and dropped into the hub.',
+    href: 'car-race/',
+    accent: '#4b5058',
+    art: GAME_ART["car-race"],
+    devOnly: true,
+  },
+  {
     id: 'dominoes',
     released: '2026-08-01',
     title: { en: 'Dominoes', es: 'Dominó' },
