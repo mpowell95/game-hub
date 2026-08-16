@@ -284,27 +284,19 @@ export function buildMachine(G) {
     rot: null,
   });
 
-  // --- the cage: the slanted wire canopy every real classic has over its board ------------------
-  // It is what stops rainbow shots: a high arc (or a high backboard rebound) meets it and drops
-  // onto the face to rattle out honestly, instead of sailing back over the trough to the lane.
-  // Physics treats it as a dead slab; the renderer draws it as sparse wire so it reads true.
-  {
-    const cageHigh = [top[1] + G.backboardH * 0.68, top[2] - 0.04];       // above the backboard
-    // Derived from the BOARD, not a fixed 0.60: the canopy has to clear the highest point of
-    // normal play, and that scales with how tall the board stands. At a fixed 0.60 it was sized
-    // for a 32-degree board and sat inside the flight path of a 45-degree one - 14 to 20 cage
-    // contacts per 21 throws, every one of them a ball knocked out of a legitimate arc.
-    const cageLow = [lipY + G.boardLen * Math.sin(t) * 1.15, lipZ - 0.02];
-    const dy = cageLow[0] - cageHigh[0];
-    const dz = cageLow[1] - cageHigh[1];
-    const ang = Math.atan2(-dy, dz);
-    solids.push({
-      part: 'cage',
-      pos: [0, (cageHigh[0] + cageLow[0]) / 2, (cageHigh[1] + cageLow[1]) / 2],
-      half: [G.boardW / 2 + railT, 0.015, Math.hypot(dy, dz) / 2 + 0.02],
-      rot: rotX(ang),
-    });
-  }
+  // --- the cage: REMOVED 2026-08-16 ------------------------------------------------------------
+  // There used to be a slanted wire canopy over the board here, to stop rainbow shots: a high arc
+  // met it and dropped onto the face instead of sailing out of the machine. Matt spotted its
+  // wires as faint lines across the back wall and asked what they were.
+  //
+  // It went rather than being hidden, because it contradicted a rule he had already set: *"there
+  // should be no limit on how high i can throw the ball. If a swipe as hard as i can, the ball
+  // should launch like crazy high over the machine or something."* A canopy whose entire job is
+  // to catch those throws cannot coexist with that. The clamp on power came off for the same
+  // reason; this is the physical half of the same decision.
+  //
+  // Do not put it back to "fix" a ball leaving the machine. A ball thrown that hard is SUPPOSED
+  // to leave, and it still resolves - it arcs out, comes down, and scores the zero it earned.
 
   // --- the front glass: the pane every real cabinet has above the hump --------------------------
   // Launch arcs pass UNDER its bottom edge on the way in (they cross the crest low); what it
