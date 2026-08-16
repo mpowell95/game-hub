@@ -113,6 +113,35 @@ export const GAME_ART = {
               <circle cx="131" cy="52" r="2.6"/><circle cx="145" cy="52" r="2.6"/>
             </g>
           </svg>`,
+  'car-race': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#3f7d2c"/>
+            <rect y="30" width="160" height="4" fill="#e8e2d0"/>
+            <rect y="34" width="160" height="42" fill="#4b5058"/>
+            <rect y="76" width="160" height="4" fill="#e8e2d0"/>
+            <g fill="#f2d24a">
+              <rect x="6" y="53" width="16" height="4"/><rect x="34" y="53" width="16" height="4"/>
+              <rect x="62" y="53" width="16" height="4"/><rect x="90" y="53" width="16" height="4"/>
+              <rect x="118" y="53" width="16" height="4"/><rect x="146" y="53" width="16" height="4"/>
+            </g>
+            <rect x="120" y="34" width="12" height="42" fill="#ffffff"/>
+            <g fill="#1a1a1a">
+              <rect x="120" y="34" width="4" height="6"/><rect x="128" y="34" width="4" height="6"/>
+              <rect x="124" y="40" width="4" height="6"/>
+              <rect x="120" y="46" width="4" height="6"/><rect x="128" y="46" width="4" height="6"/>
+              <rect x="124" y="52" width="4" height="6"/>
+              <rect x="120" y="58" width="4" height="6"/><rect x="128" y="58" width="4" height="6"/>
+              <rect x="124" y="64" width="4" height="6"/>
+              <rect x="120" y="70" width="4" height="6"/><rect x="128" y="70" width="4" height="6"/>
+            </g>
+            <g>
+              <rect x="34" y="44" width="52" height="16" rx="5" fill="#e0532f"/>
+              <path d="M44 44 L52 36 L72 36 L80 44 Z" fill="#f2b705"/>
+              <rect x="53" y="37.5" width="17" height="6" rx="1.5" fill="#bfe3ff"/>
+              <rect x="82" y="50" width="5" height="4" rx="1" fill="#ffd76a"/>
+              <circle cx="46" cy="62" r="6.5" fill="#1a1a1a"/><circle cx="46" cy="62" r="2.6" fill="#9aa0a6"/>
+              <circle cx="74" cy="62" r="6.5" fill="#1a1a1a"/><circle cx="74" cy="62" r="2.6" fill="#9aa0a6"/>
+            </g>
+          </svg>`,
   escoba: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#175c3b"/>
             <g transform="rotate(-18 34 46)">

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v361';
+const CACHE = 'game-hub-v362';
 
 const ASSETS = [
   './',
@@ -117,6 +117,10 @@ const ASSETS = [
   // Parchís (self-contained single file)
   './parchis/',
   './parchis/index.html',
+  // Car Race (admin-only GDevelop demo, launch-out). Only the launch page is precached; the
+  // ~212-file GDevelop bundle warms on demand when online (it is a devOnly demo, not offline-critical).
+  './car-race/',
+  './car-race/index.html',
   // Filler module
   './filler/',
   './filler/index.html',
