@@ -20,8 +20,17 @@ export class Renderer {
   constructor(canvas, board) {
     this.board = board;
     this.look = board.look;
-    this.G = board.geom;
-    this.M = buildMachine(board.geom);
+    // SCOREBOARD LAYOUT TRIAL (2026-08-15). `?sb=D|E|F` on the skeeball URL swaps the backboard's
+    // layout so Matt can judge each one ON THE MACHINE, on his own phone, at true size - flat
+    // mockups of the panel told him nothing about how it reads in context. No parameter means the
+    // shipped layout. Delete this and the layouts it selects once one is chosen.
+    let sb = '';
+    try { sb = new URLSearchParams(location.search).get('sb') || ''; } catch { sb = ''; }
+    this._sbLayout = sb.toUpperCase();
+    // F needs a TALLER backboard, which is geometry rather than paint, so the geom is cloned and
+    // grown for that trial only. Never mutate board.geom - it is shared with the physics.
+    this.G = this._sbLayout === 'F' ? { ...board.geom, backboardH: board.geom.backboardH * 1.9 } : board.geom;
+    this.M = buildMachine(this.G);
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.look.wall);
@@ -785,6 +794,66 @@ export class Renderer {
       { l: this.sbLabels.today, v: num(s.today) },
       { l: this.sbLabels.last, v: s.last == null ? '-' : String(s.last) },
     ];
+    const holder = ((s.allTime && s.allTime.name) || '').trim().toUpperCase();
+
+    // --- ?sb= LAYOUT TRIALS. Each returns early with its own finished panel. -----------------
+    const fit = (txt, weight, start, maxW) => {
+      let px = start;
+      x.font = `${weight} ${px}px Verdana, sans-serif`;
+      while (px > 14 && x.measureText(txt).width > maxW) { px -= 2; x.font = `${weight} ${px}px Verdana, sans-serif`; }
+      return px;
+    };
+    const finish = () => {
+      const t = new THREE.CanvasTexture(c);
+      t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      return t;
+    };
+    const inner = W - 170;
+    if (this._sbLayout === 'D' || this._sbLayout === 'E') {
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      const big = this._sbLayout === 'D';
+      x.fillStyle = LABEL; fit(cols[0].l.toUpperCase(), 700, big ? 76 : 60, inner);
+      x.fillText(cols[0].l.toUpperCase(), W / 2, TOP_INSET + (big ? 96 : 72));
+      x.fillStyle = ON;
+      const dh = big ? 330 : 200;
+      digits(W / 2, TOP_INSET + (big ? 300 : 200), cols[0].v, W - 120, dh);
+      if (holder) {
+        x.fillStyle = ON; fit(holder, 700, big ? 120 : 76, inner);
+        x.shadowBlur = 8; x.shadowColor = ON;
+        x.fillText(holder, W / 2, big ? Hpx - 120 : TOP_INSET + 372);
+        x.shadowBlur = 0;
+      }
+      if (!big) {
+        const midY = TOP_INSET + 420;
+        x.globalAlpha = 0.35; x.fillStyle = BEZEL; x.fillRect(90, midY, W - 180, 3); x.globalAlpha = 1;
+        x.fillStyle = LABEL; fit(cols[1].l.toUpperCase(), 700, 60, inner);
+        x.fillText(cols[1].l.toUpperCase(), W / 2, midY + 70);
+        digits(W / 2, midY + 210, cols[1].v, W - 120, 180);
+      }
+      return finish();
+    }
+    if (this._sbLayout === 'F') {
+      const avail = Hpx - TOP_INSET - 50;
+      const hs = [0.31, 0.23, 0.23, 0.23];
+      let y = TOP_INSET + 14;
+      cols.forEach((r, i) => {
+        const rh = avail * hs[i];
+        if (i) { x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(90, y, W - 180, 2); x.globalAlpha = 1; }
+        x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = LABEL;
+        fit(r.l.toUpperCase(), 700, 56, W * 0.46);
+        x.fillText(r.l.toUpperCase(), 100, y + (i === 0 ? 46 : rh / 2));
+        x.fillStyle = ON;
+        const dW = W * 0.42;
+        digits(W - 100 - dW / 2, y + (i === 0 ? 130 : rh / 2), r.v, dW, i === 0 ? 150 : 118);
+        if (i === 0 && holder) {
+          x.textAlign = 'right'; fit(holder, 700, 70, W * 0.5);
+          x.fillText(holder, W - 100, y + rh - 34);
+        }
+        y += rh;
+      });
+      return finish();
+    }
+
     const PAD = 74;
     const colW = (W - PAD * 2) / 4;
     // The columns occupy the top of the glass and the record holder's name gets a full-width
