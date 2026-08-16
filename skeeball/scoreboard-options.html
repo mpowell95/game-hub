@@ -46,42 +46,50 @@ function panel() {
   return [c, x];
 }
 
-// A - five full-width rows, label left, value right
+// A - FOUR full-width rows, label left, value right. The username is not a row: it belongs to
+// the hub wide record and sits under that record's own number.
 function optionA() {
   const [c,x] = panel();
-  const rows = [['HUB WIDE RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last],['USERNAME',D.name]];
-  const rh = (H-10)/5;
+  const rows = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
+  const hs = [42,28,28,28];
+  let y0 = 5;
   rows.forEach((r,i) => {
-    const y = 5 + rh*i + rh/2;
+    const h = hs[i], mid = y0 + h/2;
     if (i) { x.strokeStyle='rgba(201,138,58,.32)'; x.lineWidth=1;
-      x.beginPath(); x.moveTo(6,5+rh*i); x.lineTo(W-6,5+rh*i); x.stroke(); }
+      x.beginPath(); x.moveTo(6,y0); x.lineTo(W-6,y0); x.stroke(); }
     x.fillStyle=CY; x.font='700 9px Verdana'; x.textAlign='left'; x.textBaseline='middle';
-    x.fillText(r[0], 8, y);
-    x.fillStyle=AM; x.font='700 '+(i===4?13:19)+'px Verdana'; x.textAlign='right';
-    x.fillText(r[1], W-8, y);
+    x.fillText(r[0], 8, r[2] ? y0+13 : mid);
+    x.fillStyle=AM; x.font='700 19px Verdana'; x.textAlign='right';
+    x.fillText(r[1], W-8, r[2] ? y0+15 : mid);
+    if (r[2]) {
+      x.fillStyle=AM; x.font='700 11px Verdana'; x.textAlign='right';
+      x.fillText(r[2], W-8, y0+32);
+    }
+    y0 += h;
   });
   return c;
 }
 
-// B - 2x2 boxed cells, holder strip beneath
+// B - 2x2 boxed cells. No separate strip: the username lives inside the hub wide record's own
+// cell, under its number, which is the only place it means anything. Dropping the strip gives
+// every cell 34px more height.
 function optionB() {
   const [c,x] = panel();
-  const cells = [['HUB WIDE RECORD',D.hub],['YOUR BEST',D.best],['TODAY',D.today],['LAST GAME',D.last]];
-  const gw = (W-14)/2, gh = (H-46)/2;
+  const cells = [['HUB WIDE RECORD',D.hub,D.name],['YOUR BEST',D.best,''],['TODAY',D.today,''],['LAST GAME',D.last,'']];
+  const gw = (W-14)/2, gh = (H-12)/2;
   cells.forEach((r,i) => {
     const cx = 7 + gw*(i%2), cy = 6 + gh*Math.floor(i/2);
-    x.strokeStyle='rgba(201,138,58,.5)'; x.lineWidth=1; x.strokeRect(cx,cy,gw-3,gh-3);
+    const iw = gw-3, ih = gh-3;
+    x.strokeStyle='rgba(201,138,58,.5)'; x.lineWidth=1; x.strokeRect(cx,cy,iw,ih);
     x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='center'; x.textBaseline='middle';
-    x.fillText(r[0], cx+(gw-3)/2, cy+9);
-    x.fillStyle=AM; x.font='700 24px Verdana';
-    x.fillText(r[1], cx+(gw-3)/2, cy+(gh-3)/2+8);
+    x.fillText(r[0], cx+iw/2, cy+11);
+    x.fillStyle=AM; x.font='700 26px Verdana';
+    x.fillText(r[1], cx+iw/2, cy+ih/2+4);
+    if (r[2]) {
+      x.fillStyle=AM; x.font='700 10px Verdana';
+      x.fillText(r[2], cx+iw/2, cy+ih-9);
+    }
   });
-  const ny = H-34;
-  x.strokeStyle='rgba(201,138,58,.5)'; x.strokeRect(7,ny,W-14,28);
-  x.fillStyle=CY; x.font='700 8px Verdana'; x.textAlign='left'; x.textBaseline='middle';
-  x.fillText('USERNAME', 12, ny+8);
-  x.fillStyle=AM; x.font='700 16px Verdana'; x.textAlign='right';
-  x.fillText(D.name, W-12, ny+18);
   return c;
 }
 
@@ -92,10 +100,9 @@ function optionC(which) {
   const r = set[which % 4];
   x.textAlign='center'; x.textBaseline='middle';
   x.fillStyle=CY; x.font='700 13px Verdana'; x.fillText(r[0], W/2, 22);
-  x.fillStyle=AM; x.font='700 58px Verdana'; x.fillText(r[1], W/2, r[2] ? 68 : 76);
+  x.fillStyle=AM; x.font='700 58px Verdana'; x.fillText(r[1], W/2, r[2] ? 66 : 76);
   if (r[2]) {
-    x.fillStyle=CY; x.font='700 9px Verdana'; x.fillText('USERNAME', W/2, 104);
-    x.fillStyle=AM; x.font='700 18px Verdana'; x.fillText(r[2], W/2, 121);
+    x.fillStyle=AM; x.font='700 20px Verdana'; x.fillText(r[2], W/2, 108);
   }
   for (let i=0;i<4;i++) {
     x.fillStyle = (i === which%4) ? AM : 'rgba(255,176,46,.3)';
@@ -121,9 +128,9 @@ function show(title, sub, canvas, id) {
   out.appendChild(big);
 }
 
-show('A — five rows', 'Everything visible. Digits about 19px tall. Separation from the rules and from label-left / number-right.', optionA());
-show('B — 2x2 boxed grid', 'Everything visible. Digits about 24px tall, each inside its own drawn box so they cannot read as one string.', optionB());
-show('C — one at a time', 'Cycles every 3 seconds. Digits about 58px tall, three times anything else. You see one record at a time.', optionC(0), 'cyc');
+show('A — four rows', 'Everything visible. Digits about 19px. Separated by rules and by label-left / number-right. The hub wide row is taller so the username sits under its own number.', optionA());
+show('B — 2x2 boxed grid', 'Everything visible. Digits about 26px, each in its own drawn box so they cannot read as one string. The username sits inside the hub wide cell.', optionB());
+show('C — one at a time', 'Cycles every 3 seconds. Digits about 58px, more than double anything else. You see one record at a time.', optionC(0), 'cyc');
 
 // let C actually cycle so you can judge it
 let n = 0;
