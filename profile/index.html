@@ -126,6 +126,29 @@
     .pf-seg .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
     .pf-seg .lb-dshape-x2 { width: 1.7em; }
 
+    /* Quick chat customizer. A dimmed tile/chip is OFF, a bright bordered one is ON:
+       brightness is the signal, the accent border is secondary (colorblind rule). */
+    .pf-qc-label { font-weight: 700; font-size: .78rem; color: var(--hub-muted); margin: 12px 0 6px; }
+    .pf-qc-emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+    .pf-qc-emojis button {
+      font-size: 24px; line-height: 1; border: 2px solid transparent; background: var(--hub-surface-2);
+      border-radius: 10px; padding: 8px 0; cursor: pointer; touch-action: manipulation; opacity: .38;
+      transition: opacity .12s ease, border-color .12s ease;
+    }
+    .pf-qc-emojis button.is-on { opacity: 1; border-color: var(--hub-accent); background: var(--hub-surface); }
+    .pf-qc-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pf-qc-phrases button {
+      font: inherit; font-weight: 600; font-size: .84rem; border: 2px solid transparent;
+      background: var(--hub-surface-2); color: var(--hub-muted); border-radius: 999px; padding: 6px 12px;
+      cursor: pointer; touch-action: manipulation; opacity: .55; transition: opacity .12s ease, border-color .12s ease;
+    }
+    .pf-qc-phrases button.is-on { opacity: 1; color: var(--hub-ink); border-color: var(--hub-accent); background: var(--hub-surface); }
+    .pf-qc-custom { display: flex; flex-direction: column; gap: 6px; }
+    .pf-qc-custom input {
+      font: inherit; width: 100%; padding: 9px 11px; border-radius: 10px;
+      border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
+    }
+
     .pf-add {
       font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 14px; width: 100%;
       border-radius: 11px; border: 1px dashed var(--hub-accent); background: transparent; color: var(--hub-accent);
@@ -216,6 +239,17 @@
           <summary data-i18n="pf_theme_h">Theme</summary>
           <div class="pf-seg" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div>
         </details>
+
+        <details class="pf-collapse pf-subcollapse" id="pf-quickchat">
+          <summary data-i18n="pf_quickchat_summary">Quick chat</summary>
+          <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:6px 0 10px">Pick the reactions you send during multiplayer games.</p>
+          <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
+          <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
+          <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
+          <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
+          <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
+          <div class="pf-qc-custom" id="pf-qc-custom"></div>
+        </details>
       </section>
 
       <section class="pf-section">
@@ -288,6 +322,7 @@
     import { makeT, onLangChange } from '../js/i18n.js';
     import { getTheme, setTheme } from '../js/theme.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
+    import { loadPalette, savePalette, ALL_EMOJIS, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
     import STRINGS from '../js/strings.js';
 
     const t = makeT(STRINGS);
@@ -301,7 +336,7 @@
     applyI18n();
     // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
     // "(2 new)" off the replies button on a language switch.
-    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); paintReplyCount(); });
+    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat(); paintReplyCount(); });
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -360,6 +395,9 @@
       codeMsg: $('#pf-code-msg'),
       nameMsg: $('#pf-name-msg'),
       deviceId: $('#pf-device-id'),
+      qcEmojis: $('#pf-qc-emojis'),
+      qcPhrases: $('#pf-qc-phrases'),
+      qcCustom: $('#pf-qc-custom'),
     };
     const msg = (el, t) => { if (el) el.textContent = t || ''; };
     let prevName = (state.name || '').trim();
@@ -440,6 +478,59 @@
         if (!btn) return;
         setTheme(btn.dataset.theme);
         renderTheme();
+      });
+    }
+
+    // -- Quick chat -----------------------------------------------------------------
+    // The palette of reactions this device sends in multiplayer games. A device
+    // preference (gamehub.quickchat.v1 via js/mp-reactions.js), same class as theme/
+    // language - never a gamehub.profile field, never player history.
+    const qc = loadPalette();
+    const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const saveQc = () => savePalette(qc);   // normalizes a copy; leaves the working `qc` untouched
+
+    function renderQuickChat() {
+      if (!els.qcEmojis) return;
+      els.qcEmojis.innerHTML = ALL_EMOJIS.map((e) => {
+        const on = qc.emojis.includes(e);
+        return `<button type="button" data-qc-emoji="${escAttr(e)}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${e}</button>`;
+      }).join('');
+      els.qcPhrases.innerHTML = Object.keys(PHRASES).map((id) => {
+        const on = qc.phrases.includes(id);
+        return `<button type="button" data-qc-phrase="${id}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(reactionText({ t: 'p', v: id }))}</button>`;
+      }).join('');
+      renderQcCustom();
+    }
+    function renderQcCustom() {
+      let rows = '';
+      for (let i = 0; i < CUSTOM_MAX; i++) {
+        rows += `<input type="text" data-qc-custom="${i}" maxlength="${CUSTOM_MAXLEN}" autocomplete="off" value="${escAttr(qc.custom[i] || '')}" placeholder="${escAttr(t('pf_quickchat_custom_ph'))}">`;
+      }
+      els.qcCustom.innerHTML = rows;
+    }
+    if (els.qcEmojis) {
+      els.qcEmojis.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-qc-emoji]'); if (!b) return;
+        const e = b.dataset.qcEmoji, i = qc.emojis.indexOf(e);
+        if (i >= 0) qc.emojis.splice(i, 1); else qc.emojis.push(e);
+        const on = qc.emojis.includes(e);
+        b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
+        saveQc();
+      });
+      els.qcPhrases.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-qc-phrase]'); if (!b) return;
+        const id = b.dataset.qcPhrase, i = qc.phrases.indexOf(id);
+        if (i >= 0) qc.phrases.splice(i, 1); else qc.phrases.push(id);
+        const on = qc.phrases.includes(id);
+        b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
+        saveQc();
+      });
+      // Edit custom lines. Don't re-render on input (it would drop focus mid-type);
+      // just track the value at its slot and persist.
+      els.qcCustom.addEventListener('input', (ev) => {
+        const inp = ev.target.closest('[data-qc-custom]'); if (!inp) return;
+        qc.custom[+inp.dataset.qcCustom] = inp.value;
+        saveQc();
       });
     }
 
@@ -593,6 +684,7 @@
       renderColors();
       renderOpps();
       renderTheme();
+      renderQuickChat();
     }
     // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from
     // game-stats.js, because that function MINTS and persists an id when none exists - a display

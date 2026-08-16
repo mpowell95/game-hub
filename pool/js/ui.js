@@ -38,6 +38,8 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -140,6 +142,11 @@ function clearKey(key) { try { localStorage.removeItem(key); } catch { /* ignore
 class PoolUI {
   constructor(container) {
     this.root = container;
+    this._codeCopyOff = enableCodeCopy(container);   // tap the shared room code to copy it
+    this._reactions = createReactions({             // quick-chat reactions during MP
+      send: (p) => { if (this.mp && this.mp.code) net.sendReaction(this.mp.code, String(this.mp.role), p); },
+      mySeatKey: () => (this.mp ? String(this.mp.role) : null),
+    });
     this.view = 'setup';         // 'setup' | 'game'
     this.mode = 'ai';             // 'ai' | 'practice' | 'online'
     this.settings = loadSettings();
@@ -213,6 +220,8 @@ class PoolUI {
     clearTimeout(this._quitTimer); this._quitTimer = null;
     if (this.mp && this.mp.code) net.leaveRoom(this.mp.code, this.mp.role).catch(() => {});
     net.disconnect();
+    if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
+    if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     this._disableWorker();
     this.root.innerHTML = '';
   }
@@ -326,6 +335,7 @@ class PoolUI {
    *  rule (root CLAUDE.md, accessibility - Matt is red/green colorblind) and this screen was
    *  breaking it, showing difficulty as words alone. */
   _renderSetup() {
+    if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     const savedMp = readJSON(MP_SAVE_KEY);
     const opp = (this.profile && this.profile.opponents && this.profile.opponents[0]) || null;
     const oppName = (opp && opp.name) || t('mode_ai');
@@ -1539,7 +1549,9 @@ class PoolUI {
       gameNum: 0, nextDealer: 0, series: { wins: [0, 0] }, lastScoredGame: 0,
     };
     net.heartbeat(res.code, 'host');
-    if (status) status.textContent = t('share_code', { code: res.code });
+    // res.code is generated from net.js's CODE_CHARS (A-Z/2-9), so it is safe to
+    // inline; wrapping it in a data-role="mp-code" span makes it tap-to-copy.
+    if (status) status.innerHTML = t('share_code', { code: `<span class="p2-mp-code" data-role="mp-code" role="button" tabindex="0">${res.code}</span>` });
     await net.onRoom(res.code, (room) => this._mpRoomCallback(room));
   }
 
@@ -1592,6 +1604,7 @@ class PoolUI {
   }
 
   async _mpRoomCallback(room) {
+    if (this._reactions) { this._reactions.onRoom(room); this._reactions.setActive(!!(this.mp && this.mp.code)); }
     if (!room || !this.mp) return;
     const mp = this.mp;
     mp.lastRoomSnapshot = room;

@@ -35,6 +35,8 @@
 // already-synced state, so both sides compute the identical result deterministically.
 
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
 import { deviceId, recordYahtzee } from '../../js/game-stats.js';
@@ -145,6 +147,8 @@ const gameMarkup = () => `
 let state = null;
 let root = null;          // the .yz-root element mounted into container
 let screenHost = null;    // swaps between the setup/lobby screen and gameMarkup()
+let codeCopyOff = null;   // teardown for the tap-to-copy room-code delegation
+let reactions = null;     // quick-chat reactions controller (active only during MP)
 let destroyed = true;     // true whenever no live instance is mounted
 let resizeHandler = null;
 let howTo = null;
@@ -843,6 +847,7 @@ function applyMpSnapshot(snap){
 function mpRoomCallback(room){
   if(destroyed) return;
   mpLobbyRoom = room;
+  if (reactions) { reactions.onRoom(room); reactions.setActive(!!(state && state.mp && state.mp.code)); }
   if(state && state.mp){ mpOnRoomUpdate(room); return; }
   if(lobby) renderSetupScreen();
   if(lobby==='join' && mpJoinedCode && room && room.status==='active' && room.round){
@@ -918,6 +923,7 @@ function renderMpEndOverlay(message){
 }
 
 function returnToSetup(){
+  if (reactions) reactions.setActive(false);   // no reactions off the table
   net.disconnect();
   state = null;
   view = 'setup';
@@ -1425,7 +1431,7 @@ function lobbyHTML(){
     const msg = mpError || (mpBusy ? t('creating') : t('share_code'));
     return `<div class="yz-mp-lobby">
       <span class="yz-mp-label">Room code</span>
-      <div class="yz-mp-code">${code ? esc(code) : '····'}</div>
+      <div class="yz-mp-code" data-role="mp-code" role="button" tabindex="0">${code ? esc(code) : '····'}</div>
       <span class="yz-mp-label">${t('opponent')}</span>
       <div class="yz-mp-oppslot">${guest
         ? `<span class="yz-mp-oppav">${esc(guest.avatar||'\u{1F642}')}</span><span class="yz-mp-oppname">${esc(guest.name||'')}</span>`
@@ -1439,7 +1445,7 @@ function lobbyHTML(){
   const host = room && room.host;
   return `<div class="yz-mp-lobby">
     <span class="yz-mp-label">Room code</span>
-    <div class="yz-mp-code">${esc(mpJoinedCode||'')}</div>
+    <div class="yz-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(mpJoinedCode||'')}</div>
     <span class="yz-mp-label">${t('host')}</span>
     <div class="yz-mp-oppslot">${host
       ? `<span class="yz-mp-oppav">${esc(host.avatar||'\u{1F642}')}</span><span class="yz-mp-oppname">${esc(host.name||'')}</span>`
@@ -1630,6 +1636,11 @@ export function init(container){
   container.innerHTML = `<div class="yz-root"><div id="screenHost"></div>${howToHtml()}</div>`;
   root = container.querySelector('.yz-root');
   screenHost = root.querySelector('#screenHost');
+  codeCopyOff = enableCodeCopy(root);   // tap the room code to copy it (delegated on the persistent root)
+  reactions = createReactions({             // quick-chat reactions during MP
+    send: (p) => { if (state && state.mp && state.mp.code) net.sendReaction(state.mp.code, String(state.mp.role), p); },
+    mySeatKey: () => ((state && state.mp) ? String(state.mp.role) : null),
+  });
   howTo = createHowTo(root);
 
   view = 'setup'; mpMode = 'solo'; lobby = null; mpBusy = false; mpError = '';
@@ -1691,6 +1702,8 @@ export function destroy(){
   }
 
   if(offLang){ offLang(); offLang = null; }
+  if(codeCopyOff){ codeCopyOff(); codeCopyOff = null; }
+  if(reactions){ reactions.destroy(); reactions = null; }
   if(howTo){ howTo.destroy(); howTo = null; }
   clearTimeout(catHoldTimer); catHoldTimer = null; catHoldFired = false;
   if(root){

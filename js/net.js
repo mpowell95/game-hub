@@ -304,6 +304,27 @@ export async function reportRoundResult(code, role, result) {
   await _api.update(roomRef(code), { [`${role}Result`]: { ...result, at: Date.now() }, updated: Date.now() });
 }
 
+/** ANY seat: fire a quick-chat reaction into the room under the sender's OWN slot
+ *  (`rooms/<CODE>/reactions/<seatKey>`). Ephemeral and per-seat by design: a new
+ *  reaction OVERWRITES the sender's previous one, so the node is bounded (at most one
+ *  entry per seat) and never needs pruning -- the opposite of the seq-keyed move log.
+ *  `payload` is the tiny { t, v } shape from js/mp-reactions.js (an emoji, a preset
+ *  phrase id, or a short custom string); the receiver resolves it to display text in
+ *  its own language. Writing the child is enough to wake every peer's onRoom, so there
+ *  is no `updated` bump here (the heartbeat keeps the room's TTL fresh anyway). Fully
+ *  best-effort: a dropped reaction is never worth surfacing. Scope discipline unchanged:
+ *  `rooms/<CODE>` only. */
+export async function sendReaction(code, seatKey, payload) {
+  if (!code || seatKey == null || !payload || (payload.t !== 'e' && payload.t !== 'p' && payload.t !== 'c')) return;
+  if (!(await init())) return;
+  const slot = String(seatKey).replace(/[.#$/[\]]/g, '_');   // RTDB keys can't contain . # $ / [ ]
+  const v = String(payload.v == null ? '' : payload.v).slice(0, 40);
+  if (!v) return;
+  try {
+    await _api.set(_api.ref(_db, `rooms/${code}/reactions/${slot}`), { t: payload.t, v, at: Date.now() });
+  } catch { /* best-effort: a reaction that fails to send is never worth an error */ }
+}
+
 /** Host only: publish a full-state recovery snapshot after a hash mismatch.
  *  With `seat` given, the snapshot is addressed to THAT seat
  *  (`recovery/answers/<seat>`) and retires that seat's outstanding request in
@@ -411,6 +432,6 @@ export function disconnect() {
 
 export default {
   init, createRoom, joinRoom, joinSeat, vacateSeat, startRound, appendMove, writeResult, reportRoundResult,
-  writeRecovery, requestRecovery, clearRecovery,
+  sendReaction, writeRecovery, requestRecovery, clearRecovery,
   onRoom, heartbeat, stopHeartbeat, leaveRoom, disconnect,
 };

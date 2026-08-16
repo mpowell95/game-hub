@@ -38,6 +38,8 @@ import { recordBoggle, recordHeadToHead, loadStats, deviceId } from '../../js/ga
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import { roundEndsAt, wonFor, bothResultsIn } from './mp-round.js';
 import STRINGS from './strings.js';
 
@@ -194,6 +196,11 @@ function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ign
 class BoggleUI {
   constructor(container) {
     this.container = container;
+    this._codeCopyOff = enableCodeCopy(this.container);   // tap the room code to copy it
+    this._reactions = createReactions({             // quick-chat reactions during MP
+      send: (p) => { if (this.mp && this.mp.code) net.sendReaction(this.mp.code, String(this.mp.role), p); },
+      mySeatKey: () => (this.mp ? String(this.mp.role) : null),
+    });
     this._dead = false;
     this.view = 'setup';
     this._setupExpanded = null;
@@ -291,6 +298,8 @@ class BoggleUI {
       net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
+    if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     if (this.root) {
       this.root.removeEventListener('click', this._onClick);
       this.root.removeEventListener('input', this._onInput);
@@ -501,7 +510,7 @@ class BoggleUI {
       const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_share_code'));
       return `<div class="bg-mp-lobby">
         <span class="bg-mp-label">${esc(t('mp_code_aria'))}</span>
-        <div class="bg-mp-code">${code ? esc(code) : '····'}</div>
+        <div class="bg-mp-code" data-role="mp-code" role="button" tabindex="0">${code ? esc(code) : '····'}</div>
         <span class="bg-mp-label">${esc(t('mp_opponent_label'))}</span>
         <div class="bg-mp-oppslot">${guest
           ? `<span class="bg-mp-oppav">${esc(guest.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(guest.name || '')}</span>`
@@ -517,7 +526,7 @@ class BoggleUI {
     const timerMinutes = room && room.config && room.config.timerMinutes;
     return `<div class="bg-mp-lobby">
       <span class="bg-mp-label">${esc(t('mp_code_aria'))}</span>
-      <div class="bg-mp-code">${esc(this._mpJoinedCode || '')}</div>
+      <div class="bg-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(this._mpJoinedCode || '')}</div>
       <span class="bg-mp-label">${esc(t('mp_host_label'))}</span>
       <div class="bg-mp-oppslot">${host
         ? `<span class="bg-mp-oppav">${esc(host.avatar || '🙂')}</span><span class="bg-mp-oppname">${esc(host.name || '')}</span>`
@@ -661,6 +670,7 @@ class BoggleUI {
   _mpRoomCallback(room) {
     if (this._dead) return;
     this._mpLobbyRoom = room;
+    if (this._reactions) { this._reactions.onRoom(room); this._reactions.setActive(!!(this.mp && this.mp.code)); }
     if (this.mp) { this._mpOnRoomUpdate(room); return; }
     if (this._lobby === 'join' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
       this._mpGuestJoinMatch(room);
@@ -961,6 +971,7 @@ class BoggleUI {
    *  abandons the room -- see its own comment), this always marks the room
    *  ended, exactly like every reference game's own leave action. */
   _mpLeaveMatch() {
+    if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     if (!this.mp) return;
     this.stopTimer();
     const { code, role } = this.mp;

@@ -18,6 +18,8 @@ import { showCodeReveal } from '../../js/challenge/reveal.js';
 import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
+import { enableCodeCopy } from '../../js/mp-code-copy.js';
+import { createReactions } from '../../js/mp-reactions-ui.js';
 import { makeT } from '../../js/i18n.js';
 import { setTheme, resolvedTheme } from '../../js/theme.js';
 import STRINGS from './strings.js';
@@ -136,6 +138,11 @@ function sortHand(hand, mode) {
 class ChinchonUI {
   constructor(container) {
     this.container = container;
+    this._codeCopyOff = enableCodeCopy(container);   // tap the room code to copy it
+    this._reactions = createReactions({             // quick-chat reactions during MP
+      send: (p) => { if (this.mp && this.mp.code) net.sendReaction(this.mp.code, String(this.mp.seat), p); },
+      mySeatKey: () => (this.mp ? String(this.mp.seat) : null),
+    });
     this._dead = false;
     this.game = null;
     this._pending = null;        // { kind:'draw'|'discard'|'close', resolve }
@@ -351,6 +358,7 @@ class ChinchonUI {
 
   showSetup() {
     if (this._dead) return;
+    if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     // An explicit quit-to-setup mid-solo-match abandons that match (unlike
     // destroy()/hub navigation, which leaves the autosave in place for a
     // silent resume) -- clear it so re-entering the game doesn't restore a
@@ -629,7 +637,7 @@ class ChinchonUI {
       const ready = filled >= seatCount;
       return `<div class="cc-mp-lobby">
         <span class="cc-label">${t('aria_room_code')}</span>
-        ${code ? `<div class="cc-mp-code">${esc(code)}</div>` : `<div class="cc-mp-code cc-mp-code-empty">····</div>`}
+        ${code ? `<div class="cc-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(code)}</div>` : `<div class="cc-mp-code cc-mp-code-empty">····</div>`}
         <span class="cc-label">${t('mp_players_label', { filled, total: seatCount })}</span>
         ${this._renderMpSeatList(room)}
         <p class="cc-mp-summary">${esc(this._mpConfigSummary(room && room.config))}</p>
@@ -643,7 +651,7 @@ class ChinchonUI {
     // to tap Start. Same seat list as the host sees.
     return `<div class="cc-mp-lobby">
       <span class="cc-label">${t('aria_room_code')}</span>
-      <div class="cc-mp-code">${esc(this._mpJoinedCode)}</div>
+      <div class="cc-mp-code" data-role="mp-code" role="button" tabindex="0">${esc(this._mpJoinedCode)}</div>
       <span class="cc-label">${t('mp_players_label', { filled, total: seatCount })}</span>
       ${this._renderMpSeatList(room)}
       <p class="cc-mp-msg" data-role="mp-msg">${t('mp_waiting_host')}</p>
@@ -2157,6 +2165,7 @@ class ChinchonUI {
   _mpRoomCallback(room) {
     if (this._dead) return;
     this._mpLobbyRoom = room;
+    if (this._reactions) { this._reactions.onRoom(room); this._reactions.setActive(!!(this.mp && this.mp.code)); }
     if (this.mp) { this._mpOnRoomUpdate(room); return; }
     if (this._screen === 'host-lobby' || this._screen === 'join-lobby') this.renderSetup();
     if (this._screen === 'join-lobby' && this._mpJoinedCode && room && room.status === 'active' && room.round) {
@@ -2594,6 +2603,8 @@ class ChinchonUI {
     this._resolveModal();       // unblock any awaiting round modal
     net.disconnect();
     this.mp = null;
+    if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
+    if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
