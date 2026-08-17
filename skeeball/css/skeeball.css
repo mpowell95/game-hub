@@ -435,6 +435,53 @@
   border-color: var(--sks-line);
 }
 
+/* DEV TOOL, remove with the flick test before this game goes public (Matt, 2026-08-17). The pad
+   gets a guaranteed share of the sheet; everything else is sized around it. */
+.sk-root .sk-veil-flick .sk-sheet {
+  width: min(460px, 100%);
+  height: min(94dvh, 780px);
+  max-height: 94dvh;
+  display: flex;
+  flex-direction: column;
+}
+.sk-root .sk-fk {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.sk-root .sk-fk-head { text-align: center; }
+.sk-root .sk-fk-val { font-size: 30px; font-weight: 800; line-height: 1.05; color: var(--sk-gold); }
+.sk-root .sk-fk-sub { font-size: 10px; color: var(--sk-dim); }
+.sk-root .sk-fk-tags { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.sk-root .sk-fk-tags button {
+  padding: 6px 1px; font-size: 8.5px; font-weight: 600; line-height: 1.1;
+  border: 0; border-radius: 8px; background: #2b5ea7; color: #fff; touch-action: manipulation;
+}
+.sk-root .sk-fk-tags button b { display: block; font-size: 16px; font-weight: 800; }
+.sk-root .sk-fk-tags button:disabled { opacity: .28; }
+.sk-root .sk-fk-btm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sk-root .sk-fk-btm button {
+  padding: 8px; border-radius: 8px; font-size: 12px; touch-action: manipulation;
+  border: 1px solid var(--sk-line); background: transparent; color: var(--sk-dim);
+}
+.sk-root .sk-fk-undo { background: #5a3a2a !important; border-color: #5a3a2a !important; color: #fff !important; }
+.sk-root .sk-fk-out {
+  flex: 0 0 auto; max-height: 118px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 5px 8px; font-size: 11px; line-height: 1.32; white-space: pre;
+  font-family: ui-monospace, Menlo, Consolas, monospace; background: #120b12; border-radius: 8px;
+}
+.sk-root .sk-fk-pad {
+  flex: 1 1 auto; min-height: 150px; position: relative; border-radius: 10px;
+  background: linear-gradient(180deg, #7c4d22, #a86f38); touch-action: none; overflow: hidden;
+}
+.sk-root .sk-fk-pad::after {
+  content: 'flick UP from here'; position: absolute; inset: auto 0 8px 0;
+  text-align: center; font-size: 11px; opacity: .55; color: #2a170c;
+}
+
 .sk-root .sk-veil-howto .sk-sheet-head h2 { color: var(--sks-ink); font-family: inherit; }
 
 .sk-root .sk-veil-howto .sk-x { color: var(--sks-muted); }
