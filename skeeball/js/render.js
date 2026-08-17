@@ -20,20 +20,7 @@ export class Renderer {
   constructor(canvas, board) {
     this.board = board;
     this.look = board.look;
-    // SCOREBOARD LAYOUT TRIAL (2026-08-15). `?sb=D|E|F` on the skeeball URL swaps the backboard's
-    // layout so Matt can judge each one ON THE MACHINE, on his own phone, at true size - flat
-    // mockups of the panel told him nothing about how it reads in context. No parameter means the
-    // shipped layout. Delete this and the layouts it selects once one is chosen.
-    let sb = '';
-    try { sb = new URLSearchParams(location.search).get('sb') || ''; } catch { sb = ''; }
-    this._sbLayout = sb.toUpperCase();
-    // F needs a TALLER backboard, which is geometry rather than paint, so the geom is cloned and
-    // grown for that trial only. Never mutate board.geom - it is shared with the physics.
-    // G grows the back wall into a real arcade BACKGLASS. Geometry, not paint, so the geom is
-    // cloned - board.geom is shared with the physics and must never be mutated.
-    this.G = this._sbLayout === 'G' ? { ...board.geom, backboardH: board.geom.backboardH * 2.6 }
-      : this._sbLayout === 'F' ? { ...board.geom, backboardH: board.geom.backboardH * 1.9 }
-        : board.geom;
+    this.G = board.geom;
     this.M = buildMachine(this.G);
 
     this.scene = new THREE.Scene();
@@ -452,20 +439,6 @@ export class Renderer {
     );
     marquee.position.set(0, topY + G.backboardH + 0.02, M.faceToWorld(0, G.boardLen, 0)[2] - 0.02);
     this.scene.add(marquee);
-    // H - THE OVERHEAD SIGN. The back wall is 3.3m from the camera; this hangs at the FRONT of
-    // the cabinet, roughly 1.6m away, so the same physical sign covers about four times the
-    // screen area. That is the whole idea: stop fighting for pixels on the furthest surface in
-    // the scene and hang the numbers on the nearest one, the way a bowling alley does.
-    if (this._sbLayout === 'H') {
-      const signW = G.boardW + 0.75;
-      const signH = 0.42;
-      const sign = new THREE.Mesh(
-        this._track(new THREE.BoxGeometry(signW, signH, 0.05)),
-        [side, side, side, side, this._mat({ map: this._track(this._paintOverheadSign(signW, signH)) }), side],
-      );
-      sign.position.set(0, topY + G.backboardH * 0.72, M.lipZ + 0.62);
-      this.scene.add(sign);
-    }
     const bulbGeo = this._track(new THREE.SphereGeometry(0.014, 10, 8));
     for (let i = 0; i < 7; i++) {
       const bulb = new THREE.Mesh(bulbGeo, this._track(new THREE.MeshStandardMaterial({
@@ -749,7 +722,6 @@ export class Renderer {
    *  display rather than as printed type. */
   _paintArcadeBoard(c, x, W, Hpx, s, num) {
     const ON = '#ffb02e';
-    const OFF = '#241708';
     const LABEL = '#7ec8f0';
     const BEZEL = '#c98a3a';
 
@@ -775,52 +747,6 @@ export class Renderer {
     for (let yy = TOP_INSET + 10; yy < Hpx - 44; yy += 7) x.fillRect(36, yy, W - 72, 2.4);
     x.globalAlpha = 1;
 
-    // Which of the seven bars is lit for each character.
-    const SEG = {
-      0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc',
-      5: 'afgcd', 6: 'afgecd', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg', '-': 'g',
-    };
-    const bar = (x0, y0, x1, y1, t, lit) => {
-      x.strokeStyle = lit ? ON : OFF;
-      x.lineWidth = t;
-      x.lineCap = 'butt';        // square ends read sharper than round at this distance
-      // Glow was 18 and it was blurring each segment into its own halo, which is most of why the
-      // digits looked soft. Small enough now to say "lit" without eating the edge.
-      x.shadowBlur = lit ? 7 : 0;
-      x.shadowColor = lit ? ON : 'transparent';
-      x.beginPath();
-      x.moveTo(x0, y0);
-      x.lineTo(x1, y1);
-      x.stroke();
-      x.shadowBlur = 0;
-    };
-    const glyph = (gx, gy, w, h, ch) => {
-      const t = Math.max(6, h * 0.14);
-      const i = t * 0.62;
-      const lit = SEG[ch] || '';
-      const P = {
-        a: [gx + i, gy, gx + w - i, gy],
-        b: [gx + w, gy + i, gx + w, gy + h / 2 - i],
-        c: [gx + w, gy + h / 2 + i, gx + w, gy + h - i],
-        d: [gx + i, gy + h, gx + w - i, gy + h],
-        e: [gx, gy + h / 2 + i, gx, gy + h - i],
-        f: [gx, gy + i, gx, gy + h / 2 - i],
-        g: [gx + i, gy + h / 2, gx + w - i, gy + h / 2],
-      };
-      for (const k of 'abcdefg') bar(P[k][0], P[k][1], P[k][2], P[k][3], t, lit.includes(k));
-    };
-    // SIZED TO THE COLUMN, never a fixed height: three digits have to fit the same box one digit
-    // does, or a 700 runs into its neighbour.
-    const digits = (cx, cy, txt, colW, maxH) => {
-      const n = txt.length;
-      let w = (colW - 54) / (n + 0.34 * (n - 1));
-      let h = w / 0.56;
-      if (h > maxH) { h = maxH; w = h * 0.56; }
-      const gap = w * 0.34;
-      let gx = cx - (n * w + (n - 1) * gap) / 2;
-      for (const ch of txt) { glyph(gx, cy - h / 2, w, h, ch); gx += w + gap; }
-    };
-
     const cols = [
       { l: this.sbLabels.allTime, v: num(s.allTime && s.allTime.score) },
       { l: this.sbLabels.best, v: num(s.best) },
@@ -829,270 +755,57 @@ export class Renderer {
     ];
     const holder = ((s.allTime && s.allTime.name) || '').trim().toUpperCase();
 
-    // --- ?sb= LAYOUT TRIALS. Each returns early with its own finished panel. -----------------
-    const fit = (txt, weight, start, maxW) => {
-      let px = start;
-      x.font = `${weight} ${px}px Verdana, sans-serif`;
-      while (px > 14 && x.measureText(txt).width > maxW) { px -= 2; x.font = `${weight} ${px}px Verdana, sans-serif`; }
-      return px;
-    };
     const finish = () => {
       const t = new THREE.CanvasTexture(c);
       t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
       return t;
     };
-    const inner = W - 170;
 
-    // Q - A BLANK WALL. No text, no digits, no panel, no writing of any kind: the back wall is
-    // just the cabinet, the way an empty machine looks. Nothing is drawn on it and no records
-    // are shown anywhere else either - this is here to see the MACHINE without a scoreboard on
-    // it. The marquee above still carries the machine's name; that is the band, not the wall.
-    if (this._sbLayout === 'Q') {
-      x.fillStyle = bez;
-      x.fillRect(0, 0, W, Hpx);
-      x.globalAlpha = 0.35;
-      x.fillStyle = BEZEL;
-      x.fillRect(0, Hpx * 0.10, W, 12);
-      x.fillRect(0, Hpx * 0.88, W, 12);
-      x.globalAlpha = 1;
-      return finish();
-    }
-
-    // K / L / N - J'S TYPE, ON THE BACK WALL. Matt kept J and asked for its font, style and
-    // legibility on the machine. So: plain bold sans, cyan label over amber value, no
-    // seven-segment digits, no glow, no serif - none of which survived being shrunk anyway.
-    //
-    // Sizes are stated in ON-SCREEN pixels and converted, because that is the only number that
-    // means anything. The panel is 181px wide on a phone, so one screen pixel is W/181 texture
-    // pixels. J's value type is 22px on screen; that is the yardstick.
-    if (this._sbLayout === 'K' || this._sbLayout === 'L' || this._sbLayout === 'N' || this._sbLayout === 'P') {
-      const PX = W / 181;                       // texture pixels per on-screen pixel
-      const sp = (n) => n * PX;
-      const say = (txt, cx, cy, size, colour, align, maxW) => {
-        x.fillStyle = colour; x.textAlign = align || 'center'; x.textBaseline = 'middle';
-        let s2 = sp(size);
-        x.font = `700 ${s2}px Verdana, sans-serif`;
-        if (maxW) while (s2 > sp(6) && x.measureText(txt).width > maxW) {
-          s2 -= sp(0.5); x.font = `700 ${s2}px Verdana, sans-serif`;
-        }
-        x.fillText(txt, cx, cy);
-      };
-      const rule = (x0, y0, w0, h0) => {
-        x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(x0, y0, w0, h0); x.globalAlpha = 1;
-      };
-      const pad = sp(7);
-      // THE PANEL HAS A SAFE AREA AT BOTH ENDS. The marquee stands in front of its top edge, and
-      // the board's own top rim - a 6cm slab 2cm nearer the camera - stands in front of its
-      // bottom edge. Painting to the texture's edges puts content behind both. The first version
-      // of these layouts only allowed for the top, which is why every one of them had its last
-      // row sliced off along the bottom.
-      const BOTTOM_INSET = Hpx * 0.14;
-      const usableTop = TOP_INSET + sp(3);
-      const usableH = Hpx - usableTop - BOTTOM_INSET;
-
-      // P - NO WORDS AT ALL. No labels, no name, nothing but the four numbers. Which is which is
-      // carried by size and position only: the hub wide record is the big one on top, and the
-      // three personal numbers read left to right underneath in the order they always appear -
-      // your best, today, last game. Every pixel the labels were using goes to the digits.
-      if (this._sbLayout === 'P') {
-        const topH = usableH * 0.56;
-        say(cols[0].v, W / 2, usableTop + topH * 0.5, 44, ON, 'center', W - pad * 4);
-        rule(pad * 2, usableTop + topH, W - pad * 4, sp(0.7));
-        const cw = (W - pad * 2) / 3;
-        cols.slice(1).forEach((r, i) => {
-          const cx = pad + cw * i;
-          if (i) rule(cx, usableTop + topH + sp(4), sp(0.7), usableH - topH - sp(8));
-          say(r.v, cx + cw / 2, usableTop + topH + (usableH - topH) * 0.55, 22, ON, 'center', cw - sp(6));
-        });
-        return finish();
+    // Plain bold sans, cyan label over amber value: no seven-segment digits, no glow, no serif -
+    // none survived being shrunk to the size this panel allows on a phone. Sizes are stated in
+    // ON-SCREEN pixels and converted, because that is the only measure that means anything here:
+    // the panel is 181px wide on a phone, so one screen pixel is W/181 texture pixels.
+    const PX = W / 181;                       // texture pixels per on-screen pixel
+    const sp = (n) => n * PX;
+    const say = (txt, cx, cy, size, colour, align, maxW) => {
+      x.fillStyle = colour; x.textAlign = align || 'center'; x.textBaseline = 'middle';
+      let s2 = sp(size);
+      x.font = `700 ${s2}px Verdana, sans-serif`;
+      if (maxW) while (s2 > sp(6) && x.measureText(txt).width > maxW) {
+        s2 -= sp(0.5); x.font = `700 ${s2}px Verdana, sans-serif`;
       }
+      x.fillText(txt, cx, cy);
+    };
+    const rule = (x0, y0, w0, h0) => {
+      x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(x0, y0, w0, h0); x.globalAlpha = 1;
+    };
+    const pad = sp(7);
+    // THE PANEL HAS A SAFE AREA AT BOTH ENDS. The marquee stands in front of its top edge, and
+    // the board's own top rim - a 6cm slab 2cm nearer the camera - stands in front of its bottom
+    // edge. Painting to the texture's edges puts content behind both.
+    const BOTTOM_INSET = Hpx * 0.14;
+    const usableTop = TOP_INSET + sp(3);
+    const usableH = Hpx - usableTop - BOTTOM_INSET;
 
-      if (this._sbLayout === 'K') {
-        // Four rows the full width of the panel: the widest each value can possibly be. The
-        // record's row is taller because it carries a name underneath - at an even quarter each
-        // the name printed straight through the number.
-        const wts = [0.34, 0.22, 0.22, 0.22];
-        let y = usableTop;
-        cols.forEach((r, i) => {
-          const rh = usableH * wts[i];
-          if (i) rule(pad, y, W - pad * 2, sp(0.7));
-          const solo = i === 0 && holder;
-          say(r.l.toUpperCase(), pad + sp(4), y + (solo ? sp(8) : rh / 2), 9, LABEL, 'left', W * 0.5);
-          say(r.v, W - pad - sp(4), y + (solo ? sp(10) : rh / 2), solo ? 19 : 19, ON, 'right', W * 0.44);
-          if (solo) say(holder, W - pad - sp(4), y + rh - sp(6), 9, ON, 'right', W * 0.55);
-          y += rh;
-        });
-      } else if (this._sbLayout === 'L') {
-        // Two by two: each value gets half the width and half the height, so the type doubles.
-        const cw = (W - pad * 2) / 2;
-        const ch = usableH / 2;
-        cols.forEach((r, i) => {
-          const cx = pad + cw * (i % 2);
-          const cy = usableTop + ch * Math.floor(i / 2);
-          if (i % 2) rule(cx, cy + sp(3), sp(0.7), ch - sp(6));
-          if (i > 1) rule(cx, cy, cw, sp(0.7));
-          const solo = i === 0 && holder;
-          say(r.l.toUpperCase(), cx + cw / 2, cy + sp(9), 9, LABEL, 'center', cw - sp(8));
-          say(r.v, cx + cw / 2, cy + ch * (solo ? 0.48 : 0.62), solo ? 24 : 27, ON, 'center', cw - sp(10));
-          if (solo) say(holder, cx + cw / 2, cy + ch - sp(8), 10, ON, 'center', cw - sp(8));
-        });
-      } else {
-        // N - the record owns the top half at full width; the other three share the bottom.
-        const topH = usableH * 0.52;
-        say(cols[0].l.toUpperCase(), W / 2, usableTop + sp(9), 10, LABEL, 'center', W - pad * 2);
-        say(cols[0].v, W / 2, usableTop + topH * 0.5, 36, ON, 'center', W - pad * 4);
-        if (holder) say(holder, W / 2, usableTop + topH - sp(8), 12, ON, 'center', W - pad * 3);
-        rule(pad, usableTop + topH, W - pad * 2, sp(0.7));
-        const cw = (W - pad * 2) / 3;
-        const by = usableTop + topH;
-        const bh = usableH - topH;
-        cols.slice(1).forEach((r, i) => {
-          const cx = pad + cw * i;
-          if (i) rule(cx, by + sp(4), sp(0.7), bh - sp(8));
-          say(r.l.toUpperCase(), cx + cw / 2, by + sp(10), 8, LABEL, 'center', cw - sp(6));
-          say(r.v, cx + cw / 2, by + bh * 0.62, 20, ON, 'center', cw - sp(8));
-        });
-      }
-      return finish();
-    }
-
-    // G - THE BACKGLASS. The wall is 2.6x taller, so the panel is no longer a postage stamp and
-    // the numbers get real pixels. Two rows of two, each in its own lit box.
-    if (this._sbLayout === 'G') {
-      const top = TOP_INSET - 60;
-      const gw = (W - 200) / 2;
-      const gh = (Hpx - top - 90) / 2;
-      cols.forEach((r, i) => {
-        const cx = 100 + gw * (i % 2);
-        const cy = top + gh * Math.floor(i / 2);
-        x.globalAlpha = 0.4; x.strokeStyle = BEZEL; x.lineWidth = 3;
-        x.strokeRect(cx + 8, cy + 8, gw - 16, gh - 16); x.globalAlpha = 1;
-        x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = LABEL;
-        fit(r.l.toUpperCase(), 700, 52, gw - 40);
-        x.fillText(r.l.toUpperCase(), cx + gw / 2, cy + 52);
-        digits(cx + gw / 2, cy + gh * 0.56, r.v, gw - 50, gh * 0.46);
-        if (i === 0 && holder) {
-          x.fillStyle = ON; fit(holder, 700, 46, gw - 40);
-          x.fillText(holder, cx + gw / 2, cy + gh - 34);
-        }
-      });
-      return finish();
-    }
-
-    // H and J - the stats are NOT on the back wall. It carries the machine's name only. H hangs
-    // them on an overhead sign near the camera; J puts them in the HUD as real DOM text, which
-    // is the one place in this game they are drawn at native resolution and cannot be minified.
-    if (this._sbLayout === 'H' || this._sbLayout === 'J') {
-      x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillStyle = this.look.marqueeText;
-      fit(this.board.name, 700, 190, W - 220);
-      x.fillText(this.board.name, W / 2, TOP_INSET + (Hpx - TOP_INSET) / 2);
-      return finish();
-    }
-
-    if (this._sbLayout === 'D' || this._sbLayout === 'E') {
-      x.textAlign = 'center'; x.textBaseline = 'middle';
-      const big = this._sbLayout === 'D';
-      x.fillStyle = LABEL; fit(cols[0].l.toUpperCase(), 700, big ? 76 : 60, inner);
-      x.fillText(cols[0].l.toUpperCase(), W / 2, TOP_INSET + (big ? 96 : 72));
-      x.fillStyle = ON;
-      const dh = big ? 330 : 200;
-      digits(W / 2, TOP_INSET + (big ? 300 : 200), cols[0].v, W - 120, dh);
-      if (holder) {
-        x.fillStyle = ON; fit(holder, 700, big ? 120 : 76, inner);
-        x.shadowBlur = 8; x.shadowColor = ON;
-        x.fillText(holder, W / 2, big ? Hpx - 120 : TOP_INSET + 372);
-        x.shadowBlur = 0;
-      }
-      if (!big) {
-        const midY = TOP_INSET + 420;
-        x.globalAlpha = 0.35; x.fillStyle = BEZEL; x.fillRect(90, midY, W - 180, 3); x.globalAlpha = 1;
-        x.fillStyle = LABEL; fit(cols[1].l.toUpperCase(), 700, 60, inner);
-        x.fillText(cols[1].l.toUpperCase(), W / 2, midY + 70);
-        digits(W / 2, midY + 210, cols[1].v, W - 120, 180);
-      }
-      return finish();
-    }
-    if (this._sbLayout === 'F') {
-      const avail = Hpx - TOP_INSET - 50;
-      const hs = [0.31, 0.23, 0.23, 0.23];
-      let y = TOP_INSET + 14;
-      cols.forEach((r, i) => {
-        const rh = avail * hs[i];
-        if (i) { x.globalAlpha = 0.3; x.fillStyle = BEZEL; x.fillRect(90, y, W - 180, 2); x.globalAlpha = 1; }
-        x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = LABEL;
-        fit(r.l.toUpperCase(), 700, 56, W * 0.46);
-        x.fillText(r.l.toUpperCase(), 100, y + (i === 0 ? 46 : rh / 2));
-        x.fillStyle = ON;
-        const dW = W * 0.42;
-        digits(W - 100 - dW / 2, y + (i === 0 ? 130 : rh / 2), r.v, dW, i === 0 ? 150 : 118);
-        if (i === 0 && holder) {
-          x.textAlign = 'right'; fit(holder, 700, 70, W * 0.5);
-          x.fillText(holder, W - 100, y + rh - 34);
-        }
-        y += rh;
-      });
-      return finish();
-    }
-
-    const PAD = 74;
-    const colW = (W - PAD * 2) / 4;
-    // The columns occupy the top of the glass and the record holder's name gets a full-width
-    // strip of its own underneath. The first attempt squeezed the name into the All Time column's
-    // own quarter, which is a quarter of the panel for the one field that is free text - Matt,
-    // rightly: *"MattyIce isnt even a long profile name - there are much longer."* Nothing sits
-    // below the other three numbers, so that width was there for the taking.
-    const LABEL_Y = TOP_INSET + 84;
-    const DIGIT_Y = TOP_INSET + 268;
-    const RULE_Y = TOP_INSET + 430;
-    const NAME_Y = TOP_INSET + 540;
-
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    for (let i = 0; i < cols.length; i++) {
-      const cx = PAD + colW * i + colW / 2;
-      if (i > 0) {
-        x.globalAlpha = 0.2;
-        x.fillStyle = BEZEL;
-        x.fillRect(PAD + colW * i - 2, TOP_INSET + 34, 3, RULE_Y - TOP_INSET - 60);
-        x.globalAlpha = 1;
-      }
-      // Labels start BIG and only shrink if they must. They were sized to fit a quarter-panel
-      // column from a 30px start, which is what made them unreadable at this distance.
-      x.fillStyle = LABEL;
-      let fs = 62;
-      x.font = `700 ${fs}px Verdana, sans-serif`;
-      while (fs > 22 && x.measureText(cols[i].l.toUpperCase()).width > colW - 24) {
-        fs -= 1;
-        x.font = `700 ${fs}px Verdana, sans-serif`;
-      }
-      x.fillText(cols[i].l.toUpperCase(), cx, LABEL_Y);
-      digits(cx, DIGIT_Y, cols[i].v, colW, 232);
-    }
-
-    // The holder strip: a rule, then the name across the full inner width. No caption - Matt:
-    // *"delete 'record held by'. I didn't tell you to put that... This is extra prose."*
-    const name = ((s.allTime && s.allTime.name) || '').trim();
-    x.globalAlpha = 0.25;
-    x.fillStyle = BEZEL;
-    x.fillRect(PAD, RULE_Y, W - PAD * 2, 3);
-    x.globalAlpha = 1;
-    x.fillStyle = ON;
-    const room = W - PAD * 2 - 20;
-    let ns = 108;
-    x.font = `700 ${ns}px Verdana, sans-serif`;
-    while (ns > 30 && x.measureText(name.toUpperCase()).width > room) {
-      ns -= 2;
-      x.font = `700 ${ns}px Verdana, sans-serif`;
-    }
-    x.shadowBlur = 8;
-    x.shadowColor = ON;
-    x.fillText(name ? name.toUpperCase() : '-', W / 2, NAME_Y);
-    x.shadowBlur = 0;
-
-    const tex = new THREE.CanvasTexture(c);
-    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    return tex;
+    // Two by two: each value gets half the width and half the height, so the type reads twice as
+    // big as any single row of four could - the layout constraint that killed every earlier
+    // attempt (four numbers across a 181px panel gives each one 45px, and no texture resolution
+    // fixes that). The Hub Wide Record's cell (top-left) is the only one that also carries a name:
+    // the username of the player who holds it, an attribute of that one score and never a fifth
+    // category, so its value sits a little higher to leave room for the holder beneath it.
+    const cw = (W - pad * 2) / 2;
+    const ch = usableH / 2;
+    cols.forEach((r, i) => {
+      const cx = pad + cw * (i % 2);
+      const cy = usableTop + ch * Math.floor(i / 2);
+      if (i % 2) rule(cx, cy + sp(3), sp(0.7), ch - sp(6));
+      if (i > 1) rule(cx, cy, cw, sp(0.7));
+      const solo = i === 0 && holder;
+      say(r.l.toUpperCase(), cx + cw / 2, cy + sp(9), 9, LABEL, 'center', cw - sp(8));
+      say(r.v, cx + cw / 2, cy + ch * (solo ? 0.48 : 0.62), solo ? 24 : 27, ON, 'center', cw - sp(10));
+      if (solo) say(holder, cx + cw / 2, cy + ch - sp(8), 10, ON, 'center', cw - sp(8));
+    });
+    return finish();
   }
 
   /**
@@ -1107,46 +820,6 @@ export class Renderer {
     this._backMat.map = this._track(this._paintBackboard());
     this._backMat.needsUpdate = true;
     if (old && old.dispose) old.dispose();
-  }
-
-  /** H's overhead sign: four stats across a wide illuminated board hung at the front of the
-   *  cabinet. Its texture is sized to the sign's own aspect so nothing is stretched. */
-  _paintOverheadSign(signW, signH) {
-    const W = 2048;
-    const Hpx = Math.round(W * (signH / signW));
-    const c = this._canvas(W, Hpx);
-    const x = c.getContext('2d');
-    const s = this.scoreboard || {};
-    const num = (v) => (v ? String(v) : '-');
-    x.fillStyle = '#060404'; x.fillRect(0, 0, W, Hpx);
-    x.strokeStyle = '#c98a3a'; x.lineWidth = 10; x.strokeRect(6, 6, W - 12, Hpx - 12);
-    const cols = [
-      [this.sbLabels.allTime, num(s.allTime && s.allTime.score), ((s.allTime && s.allTime.name) || '').toUpperCase()],
-      [this.sbLabels.best, num(s.best), ''],
-      [this.sbLabels.today, num(s.today), ''],
-      [this.sbLabels.last, s.last == null ? '-' : String(s.last), ''],
-    ];
-    const cw = (W - 60) / 4;
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    const fit = (t, w0, st, mw) => {
-      let p = st; x.font = `${w0} ${p}px Verdana, sans-serif`;
-      while (p > 12 && x.measureText(t).width > mw) { p -= 2; x.font = `${w0} ${p}px Verdana, sans-serif`; }
-      return p;
-    };
-    cols.forEach((r, i) => {
-      const cx = 30 + cw * i + cw / 2;
-      if (i) { x.globalAlpha = 0.3; x.fillStyle = '#c98a3a'; x.fillRect(30 + cw * i, 26, 3, Hpx - 52); x.globalAlpha = 1; }
-      x.fillStyle = '#7ec8f0'; fit(r[0].toUpperCase(), 700, 44, cw - 26);
-      x.fillText(r[0].toUpperCase(), cx, 52);
-      x.fillStyle = '#ffb02e'; fit(r[1], 700, 132, cw - 30);
-      x.shadowBlur = 12; x.shadowColor = '#ffb02e';
-      x.fillText(r[1], cx, Hpx * 0.55);
-      x.shadowBlur = 0;
-      if (r[2]) { fit(r[2], 700, 42, cw - 26); x.fillText(r[2], cx, Hpx - 40); }
-    });
-    const tex = new THREE.CanvasTexture(c);
-    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    return tex;
   }
 
   /** The marquee: the MACHINE's name, on the lit band over the scoreboard. It was blanked when
