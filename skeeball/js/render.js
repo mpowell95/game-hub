@@ -139,8 +139,12 @@ export class Renderer {
       // 'hump' is skipped since 2026-08-15: the ramp is drawn as ONE smooth solid by _rampSkin()
       // instead of six angled boxes. Overlapping boxes stand proud of each other at every joint,
       // and those protruding corners are what read as a staircase.
+      // 'rail' is skipped since 2026-08-16 for the same reason as 'hump': its WALL_SEGS vertical
+      // boxes have flat, stepped tops, so the diagonal read as a pixelated staircase in game
+      // (Matt). _sideWalls() draws ONE smooth wall per side from machine.js's railProfile - the
+      // exact hull of these same boxes, so the wall you see is the wall the ball hits.
       if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg'
-        || s.part === 'hump') continue;
+        || s.part === 'hump' || s.part === 'rail') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card, and since 2026-08-15 it is the SCOREBOARD.
       // Its material is kept on `_backMat` so setScoreboard() can repaint it in place.
@@ -208,6 +212,7 @@ export class Renderer {
     // It also carries the lane's own plank texture, so the planks run up and over the ramp
     // instead of stopping dead at its foot - the other half of why it did not read as a ramp.
     this._rampSkin();
+    this._sideWalls();
 
     // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face,
     // with its white rim, its navy trim and its VALUE painted into the field texture around it
@@ -339,6 +344,39 @@ export class Renderer {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.scene.add(mesh);
+  }
+
+  /** The two side walls, ONE smooth solid each, built from machine.js's railProfile - the exact
+   *  hull of the WALL_SEGS physics boxes. Those boxes' flat, stepped tops read as a pixelated
+   *  diagonal in game (Matt, 2026-08-16); this draws the clean raked wall over them. The physics
+   *  is untouched: this is the _rampSkin pattern applied to the rails, so the wall you see is the
+   *  wall the ball hits. Side walls never cast a shadow (a shadow on the playfield reads as dirt). */
+  _sideWalls() {
+    const M = this.M;
+    const prof = M.railProfile;         // [[z,y] x4]: front-bottom, back-bottom, back-top, front-top
+    if (!prof) return;
+    const xi = M.railInnerX, t = M.railT;
+    const mat = this._mat({ color: this.look.woodDark, roughness: 0.7, side: THREE.DoubleSide });
+    for (const s of [-1, 1]) {
+      const xa = s * xi, xb = s * (xi + t);
+      const near = prof.map(([z, y]) => [xa, y, z]);
+      const far = prof.map(([z, y]) => [xb, y, z]);
+      const pos = [];
+      const push = (v) => pos.push(v[0], v[1], v[2]);
+      const tri = (a, b, c) => { push(a); push(b); push(c); };
+      tri(near[0], near[1], near[2]); tri(near[0], near[2], near[3]);   // inner face
+      tri(far[0], far[2], far[1]); tri(far[0], far[3], far[2]);         // outer face
+      for (let i = 0; i < 4; i++) {                                     // the rim (4 quads)
+        const j = (i + 1) % 4;
+        tri(near[i], far[i], far[j]); tri(near[i], far[j], near[j]);
+      }
+      const geo = this._track(new THREE.BufferGeometry());
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+    }
   }
 
   /** Place a Y-axis object (cylinder/torus/circle) on the face at (u, v, h). Tori and circles

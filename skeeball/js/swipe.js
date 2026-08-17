@@ -50,8 +50,18 @@
 // Note how far 'hardest I can' sits above 'for a 100' - 16.62 against 4.95, more than three
 // times. That gap is the room above full power, and it is why the clamp had to go (physics.js
 // startThrow): it is where 'launch the thing clean over the machine' lives.
+//
+// SWIPE_FAST lowered 4.95 -> 4.20 (Matt, 2026-08-16: "make it a little easier to flick and reach
+// the top"). SWIPE_FAST is the flick that earns power 1, and power 1 is the launch that JUST
+// reaches the 100s' row - so at 4.95 only his hardest 100-attempts got there, and the softer half
+// of his own measured 'for a 100' band (4.16 .. 4.95) landed at power 0.82 .. 1.0, a hair under
+// the top. 4.20 sits at the BOTTOM of that measured band, so the whole band now clears full power
+// and reaches the top. This is not a fresh guess: it is pinned to his own data, the low edge of
+// the outcome the number is defined by. The gentle end is untouched (SWIPE_SLOW still power 0), so
+// a soft throw is unchanged, and a NORMAL 3.00 flick still lands mid-dial at 0.66 (was 0.55),
+// nowhere near maxed - the 'every normal throw is a maximum one' regression this file guards.
 export const SWIPE_SLOW = 0.65;
-export const SWIPE_FAST = 4.95;
+export const SWIPE_FAST = 4.20;
 
 /** The smallest upward travel that counts as a throw at all, in px. */
 export const MIN_UP_PX = 20;
