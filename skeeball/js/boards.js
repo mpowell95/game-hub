@@ -64,7 +64,7 @@ export const BOARDS = [
       cabinetEdge: '#3a1f0f',
       face: '#c96f2e',        // burnt-orange target field
       faceEdge: '#8f4c1d',
-      ring: '#f2ece0',        // the white raised rings
+      ring: '#f6f5f2',        // the white PVC rings - neutral white, not the old cream (#f2ece0)
       ringLip: '#2b5ea7',     // the navy trim painted on every ring's lip
       value: '#221a12',       // stencilled numbers
       pocket: '#221a12',      // the dark of an open hole
@@ -339,6 +339,9 @@ export const BOARDS = [
         woodRest: 0.22,
         wallFric: 0.04,
         wallRest: 0.42,
+        // The white PVC rings: barely bounce (a skeeball is heavy), low grip so nothing wedges.
+        ringFric: 0.06,
+        ringRest: 0.18,
         deadFric: 0.24,
         deadRest: 0.10,
       },
