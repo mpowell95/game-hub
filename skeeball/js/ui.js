@@ -23,7 +23,7 @@ import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { Renderer } from './render.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 import { howToMarkup } from './howto.js';
-import { swipeSpeed, powerOf } from './swipe.js';
+import { swipeSpeed, powerOf, launchSpeed, SWIPE_SLOW, SWIPE_FAST } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
@@ -257,6 +257,9 @@ export class SkeeballUI {
           <button type="button" class="sk-howto-link" data-role="howto">&#128214; ${esc(t('howto'))}</button>
           <button type="button" class="gh-btn ${save ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-role="play">
             ${esc(save ? t('new_game') : t('play'))}</button>
+          <!-- DEV TOOL, remove before this game goes public (Matt, 2026-08-17). The flick-speed
+               tester, in-game so it can be pulled up on a phone. Reuses swipe.js, same as the game. -->
+          <button type="button" class="sk-howto-link" data-role="flick">&#128296; Flick test</button>
         </div>
       </div>`;
 
@@ -277,12 +280,119 @@ export class SkeeballUI {
       });
     });
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
+    this.root.querySelector('[data-role="flick"]').addEventListener('click', () => this._showFlickTest());
     // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
     // is a resume convenience, not earned history; the Resume button sits directly above).
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
       clearSave();
       this._startGame(null);
     });
+  }
+
+  /** DEV TOOL, remove before this game goes public (Matt, 2026-08-17). The flick-speed tester that
+   *  set SWIPE_SLOW/SWIPE_FAST, brought in-game so it can be run on a phone. It is the same logic
+   *  as skeeball/flick-test.html, over the SAME swipe.js the game reads, so the numbers it prints
+   *  are the numbers a throw would produce. All listeners are on the pad inside the overlay, so
+   *  _closeOverlay() removes them with it - nothing lands on document/window. */
+  _showFlickTest() {
+    const KEYS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
+    const LABEL = {
+      s1: ' 1 slowest', s2: ' 2 reach board', s3: ' 3 very slow', s4: ' 4 slow', s5: ' 5 easy lob',
+      s6: ' 6 normal', s7: ' 7 firm', s8: ' 8 hard', s9: ' 9 for a 100', s10: '10 hardest',
+    };
+    const TAGS = [
+      ['s1', '1', 'slowest'], ['s2', '2', 'reach board'], ['s3', '3', 'very slow'], ['s4', '4', 'slow'],
+      ['s5', '5', 'easy lob'], ['s6', '6', 'normal'], ['s7', '7', 'firm'], ['s8', '8', 'hard'],
+      ['s9', '9', 'for a 100'], ['s10', '10', 'hardest'],
+    ];
+    const el = this._openOverlay('flick', `
+      <div class="sk-sheet-head">
+        <h2>Flick test</h2>
+        <button type="button" class="sk-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
+      </div>
+      <div class="sk-fk">
+        <div class="sk-fk-head">
+          <div class="sk-fk-val" data-el="val">-</div>
+          <div class="sk-fk-sub">screen-heights/sec &middot; <span data-el="derived">-</span></div>
+        </div>
+        <div class="sk-fk-tags">${TAGS.map(([k, n, l]) =>
+          `<button type="button" data-k="${k}" disabled><b>${n}</b>${l}</button>`).join('')}</div>
+        <div class="sk-fk-btm">
+          <button type="button" class="sk-fk-undo" data-el="undo">undo last</button>
+          <button type="button" data-el="reset">clear all</button>
+        </div>
+        <div class="sk-fk-out" data-el="out"></div>
+        <div class="sk-fk-pad" data-el="pad"></div>
+      </div>`);
+
+    const geom = boardById(this.settings.board).geom;
+    const q = (s) => el.querySelector(s);
+    const pad = q('[data-el="pad"]');
+    const valEl = q('[data-el="val"]');
+    const derEl = q('[data-el="derived"]');
+    const outEl = q('[data-el="out"]');
+    const tagBtns = [...el.querySelectorAll('.sk-fk-tags button[data-k]')];
+
+    let samples = null;
+    let last = null;
+    let order = [];
+    let data = Object.fromEntries(KEYS.map((k) => [k, []]));
+
+    const render = () => {
+      const row = (k) => {
+        const a = data[k];
+        if (!a.length) return LABEL[k].padEnd(15) + '-';
+        const lo = Math.min(...a), hi = Math.max(...a);
+        const avg = a.reduce((p, c) => p + c, 0) / a.length;
+        return LABEL[k].padEnd(15) + 'n=' + String(a.length).padEnd(3)
+          + 'avg ' + avg.toFixed(2) + '   ' + lo.toFixed(2) + '..' + hi.toFixed(2);
+      };
+      outEl.textContent = KEYS.map(row).join('\n')
+        + '\n\ncurrent: SLOW ' + SWIPE_SLOW.toFixed(2) + '  FAST ' + SWIPE_FAST.toFixed(2)
+        + '\nscreenshot this and send it';
+    };
+
+    pad.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    pad.addEventListener('pointerdown', (e) => {
+      samples = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
+      pad.setPointerCapture(e.pointerId);
+    });
+    pad.addEventListener('pointermove', (e) => {
+      if (samples) samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+    });
+    pad.addEventListener('pointerup', (e) => {
+      if (!samples) return;
+      samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+      const s = samples; samples = null;
+      const perH = swipeSpeed(s, window.innerHeight);
+      if (perH == null) { valEl.textContent = '-'; derEl.textContent = 'too short to count'; return; }
+      last = perH;
+      valEl.textContent = perH.toFixed(2);
+      const p = powerOf(perH);
+      derEl.textContent = 'power ' + p.toFixed(2) + '  ·  ' + launchSpeed(p, geom.minSpeed, geom.maxSpeed).toFixed(2) + ' m/s';
+      tagBtns.forEach((b) => { b.disabled = false; });
+    });
+    tagBtns.forEach((b) => b.addEventListener('click', () => {
+      if (last == null) return;
+      data[b.dataset.k].push(last);
+      order.push(b.dataset.k);
+      last = null;
+      tagBtns.forEach((x) => { x.disabled = true; });
+      render();
+    }));
+    q('[data-el="undo"]').addEventListener('click', () => {
+      const k = order.pop();
+      if (k) data[k].pop();
+      render();
+    });
+    q('[data-el="reset"]').addEventListener('click', () => {
+      data = Object.fromEntries(KEYS.map((k) => [k, []]));
+      order = []; last = null;
+      valEl.textContent = '-'; derEl.textContent = '-';
+      tagBtns.forEach((x) => { x.disabled = true; });
+      render();
+    });
+    render();
   }
 
   _showHowTo() {
