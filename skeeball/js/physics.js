@@ -48,7 +48,8 @@ function buildWorld(board) {
   const matBall = new CANNON.Material('ball');
   const matWood = new CANNON.Material('wood');     // lane + hump: varnished, low bounce
   const matBoard = new CANNON.Material('board');   // the face: livelier
-  const matWall = new CANNON.Material('wall');     // collars, band, rails: slick painted steel
+  const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
+  const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
 
   // The feel lives HERE and in boards.js's geom - nowhere else. Every number below is a DEFAULT
@@ -75,6 +76,12 @@ function buildWorld(board) {
   contact(matBall, matWood, pick(MAT.woodFric, 0.30), pick(MAT.woodRest, 0.22));
   contact(matBall, matBoard, pick(MAT.boardFric, 0.62), pick(MAT.boardRest, 0.08));
   contact(matBall, matWall, pick(MAT.wallFric, 0.04), pick(MAT.wallRest, 0.50));
+  // THE RINGS ARE WHITE PLASTIC (PVC), NOT STEEL (Matt, 2026-08-17). A skeeball is heavy and the
+  // rings barely give, so a ball that clips a rim should lose its energy and drop or dribble down,
+  // never keep bouncing across the ring tops and back out (which it did at wallRest 0.50). Low
+  // restitution kills the bounce; friction stays LOW so a ball can never wedge and stick against a
+  // ring - that near-zero grip is the termination guarantee (see the wall-friction note above).
+  contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
 
   for (const s of M.solids) {
@@ -83,7 +90,8 @@ function buildWorld(board) {
       shape: new CANNON.Box(new CANNON.Vec3(s.half[0], s.half[1], s.half[2])),
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'trough' ? matBoard
-          : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'glass' ? matDead : matWall,
+          : s.part === 'ringSeg' || s.part === 'cupSeg' ? matRing
+            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'glass' ? matDead : matWall,
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
