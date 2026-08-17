@@ -28,7 +28,8 @@ import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordSkeeball, unlockSkeeballBoard } from '../../js/game-stats.js';
+import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
+import { getStatsApp } from '../../js/firebase-boot.js';   // DEV throw-logging, remove before public
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
@@ -416,10 +417,13 @@ export class SkeeballUI {
     // not of what a throw can be, and physics.js extrapolates past both.
     const power = powerOf(perH);
 
-    // DEV readout, remove before this game goes public (Matt, 2026-08-17): show every real flick's
-    // measured speed live on the play screen, so the swipe curve is tuned by playing, not a tool.
+    // DEV, remove before this game goes public (Matt, 2026-08-17): the live readout, plus the
+    // captured throw params - logged with their real result at ballDone (see _drainEvents /
+    // _logThrow), so we have measured data (flick -> power -> launch -> actual hole), not just the
+    // calculation, to check whether the swipe curve is right.
+    const launch = launchSpeed(power, this.game.board.geom.minSpeed, this.game.board.geom.maxSpeed);
     if (this.el && this.el.flickread) {
-      this.el.flickread.textContent = `flick ${perH.toFixed(2)} h/s  ·  pow ${power.toFixed(2)}  ·  ${launchSpeed(power, this.game.board.geom.minSpeed, this.game.board.geom.maxSpeed).toFixed(2)} m/s`;
+      this.el.flickread.textContent = `flick ${perH.toFixed(2)} h/s  ·  pow ${power.toFixed(2)}  ·  ${launch.toFixed(2)} m/s`;
     }
 
     // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
@@ -441,7 +445,26 @@ export class SkeeballUI {
 
     if (this.game.throwBall({ power, aim })) {
       if (this.el.hint) { this.el.hint.classList.add('is-gone'); }
+      // DEV, remove before public: hold this throw's inputs; _drainEvents logs them with the real
+      // result when the ball settles (ballDone).
+      this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
     }
+  }
+
+  /** DEV, remove before this game goes public (Matt, 2026-08-17). One settled throw's inputs and
+   *  its REAL result, pushed to skeeballThrows/<deviceId>/ so we can read back actual play data
+   *  (flick -> power -> launch -> hole) and check it against the calculated ranges. Best-effort and
+   *  fire-and-forget: this is throwaway instrumentation, not player history, so a failed write is
+   *  simply dropped (never queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
+  async _logThrow(rec) {
+    const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
+      name: (loadProfile() || {}).name || '', at: Date.now() };
+    try {
+      const boot = await getStatsApp();
+      if (!boot) return;
+      const { db, api } = boot;
+      await api.set(api.push(api.ref(db, 'skeeballThrows/' + deviceId())), full);
+    } catch { /* dev data, best-effort */ }
   }
 
   // --- the frame -------------------------------------------------------------------------------
@@ -501,6 +524,9 @@ export class SkeeballUI {
           }
           this._paintHud();
           writeSave(this.game.snapshot());   // the autosave that makes leaving lossless
+          // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
+          // can read back (real data to check the calculated ranges against).
+          if (this._lastThrow) { this._logThrow({ ...this._lastThrow, value: ev.value | 0, hole: String(ev.hole || '-') }); this._lastThrow = null; }
           break;
         }
         case 'rackOver':
