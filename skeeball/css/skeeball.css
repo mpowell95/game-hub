@@ -437,6 +437,7 @@
 
 /* DEV readout, remove before this game goes public (Matt, 2026-08-17): the live flick speed of
    every real throw, floated over the top of the play stage so it never blocks the lane. */
+.sk-root .sk-dbg { top: 34px !important; font-size: 11px; }
 .sk-root .sk-flickread {
   position: absolute;
   top: 8px;

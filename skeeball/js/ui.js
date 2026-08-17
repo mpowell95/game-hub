@@ -344,6 +344,7 @@ export class SkeeballUI {
           <!-- DEV readout, remove before this game goes public (Matt, 2026-08-17): every real flick's
                measured speed, so the swipe curve can be tuned while actually playing. -->
           <div class="sk-flickread" data-role="flickread" aria-hidden="true">flick: -</div>
+          <div class="sk-flickread sk-dbg" data-role="dbg" aria-hidden="true">log: -</div>
           <div class="sk-swipe" data-role="swipe" aria-hidden="true">
             <span class="sk-hint" data-role="hint">${esc(t('hint_swipe'))}</span>
           </div>
@@ -359,7 +360,9 @@ export class SkeeballUI {
       hint: this.root.querySelector('[data-role="hint"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
       flickread: this.root.querySelector('[data-role="flickread"]'),   // DEV readout, remove before public
+      dbg: this.root.querySelector('[data-role="dbg"]'),               // DEV log diagnostic, remove before public
     };
+    this._dbg = { thrown: 0, done: 0, log: 0, ok: 0, err: '-' };       // DEV: throw-logging counters
 
     if (this.renderer) this.renderer.dispose();
     this.renderer = new Renderer(this.el.canvas, this.game.board);
@@ -448,6 +451,7 @@ export class SkeeballUI {
       // DEV, remove before public: hold this throw's inputs; _drainEvents logs them with the real
       // result when the ball settles (ballDone).
       this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
+      if (this._dbg) { this._dbg.thrown++; this._renderDbg(); }
     }
   }
 
@@ -457,14 +461,27 @@ export class SkeeballUI {
    *  fire-and-forget: this is throwaway instrumentation, not player history, so a failed write is
    *  simply dropped (never queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
   async _logThrow(rec) {
+    if (this._dbg) { this._dbg.log++; this._renderDbg(); }
     const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
       name: (loadProfile() || {}).name || '', at: Date.now() };
     try {
       const boot = await getStatsApp();
-      if (!boot) return;
+      if (!boot) { if (this._dbg) { this._dbg.err = 'no-boot'; this._renderDbg(); } return; }
       const { db, api } = boot;
       await api.set(api.push(api.ref(db, 'skeeballThrows/' + deviceId())), full);
-    } catch { /* dev data, best-effort */ }
+      if (this._dbg) { this._dbg.ok++; this._dbg.err = '-'; this._renderDbg(); }
+    } catch (e) {
+      if (this._dbg) { this._dbg.err = String((e && e.message) || e).slice(0, 48); this._renderDbg(); }
+    }
+  }
+
+  /** DEV diagnostic, remove before public: show the throw-logging counters on screen so the
+   *  pipeline can be watched on a real device - thrown (a throw was captured), done (a ball
+   *  settled), log (a write was attempted), ok (a write committed), and the last error. */
+  _renderDbg() {
+    if (!this.el || !this.el.dbg || !this._dbg) return;
+    const d = this._dbg;
+    this.el.dbg.textContent = `thrown ${d.thrown} · done ${d.done} · log ${d.log} · ok ${d.ok} · err ${d.err}`;
   }
 
   // --- the frame -------------------------------------------------------------------------------
@@ -526,6 +543,7 @@ export class SkeeballUI {
           writeSave(this.game.snapshot());   // the autosave that makes leaving lossless
           // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
           // can read back (real data to check the calculated ranges against).
+          if (this._dbg) { this._dbg.done++; this._renderDbg(); }
           if (this._lastThrow) { this._logThrow({ ...this._lastThrow, value: ev.value | 0, hole: String(ev.hole || '-') }); this._lastThrow = null; }
           break;
         }
