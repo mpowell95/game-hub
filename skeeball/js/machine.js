@@ -227,27 +227,39 @@ export function buildMachine(G) {
   // something the ball can actually meet up there, and at the top of the board the old rail was
   // 10cm against a 14.5cm ball.
   //
-  // Each wall is the right triangle he described, in WORLD vertical, not perpendicular to the
-  // face - which is what a real cabinet's side panel is, and what makes it read as a wall:
-  //     A  the board's bottom corner        (no wall at all here)
+  // Each wall in WORLD vertical, not perpendicular to the face - which is what a real cabinet's
+  // side panel is, and what makes it read as a wall:
+  //     A  the board's bottom corner (player end)
   //     B  the board's top corner
   //     C  the top of the backboard, directly above B
-  // AB runs up the board's own slope, BC is the vertical back edge, and CA is the diagonal.
-  // Sliced into vertical boxes along z; each one stands ON the board surface and reaches up to
-  // the diagonal, so the ball meets a continuous sloping wall.
+  // AB runs up the board's own slope, BC is the vertical back edge, and the top edge is the
+  // diagonal. Sliced into vertical boxes along z; each stands ON the board surface and reaches up
+  // to that diagonal, so the ball meets a continuous sloping wall.
+  //
+  // THE FRONT DOES NOT TAPER TO ZERO ANY MORE (Matt, 2026-08-16: *"l needs to come more towards
+  // the player. I want to be able to bounce the ball off it and into the 100, but that's not
+  // possible right now because it's not wide enough."*). It used to be a true triangle - zero
+  // height at A - so a hard, wide fling reached the side low on the board where there was no wall
+  // at all and sailed straight off for a 0 (measured: power 1.0 at any wide aim scored 0/10 with
+  // ZERO bounces - the ball never met a wall). `railFrontH` gives the player end a real bankable
+  // height, so the wall now runs the whole length and a wide ball caroms off it toward the corner
+  // 100 instead of leaving. It still rakes up to the full backboard height at the back, so it
+  // reads as a raked side wall rather than a full slab.
+  const railFrontH = 0.34;
   const zA = lipZ;
   const yA = lipY;
   const zB = lipZ - G.boardLen * cos;
   const yB = lipY + G.boardLen * sin;
-  const topSlope = ((yB + G.backboardH) - yA) / (zB - zA);
+  // The top edge now runs from the front-top corner (yA + railFrontH) up to C.
+  const topSlope = ((yB + G.backboardH) - (yA + railFrontH)) / (zB - zA);
   const WALL_SEGS = 20;
   for (const s of [-1, 1]) {
     for (let i = 0; i < WALL_SEGS; i++) {
       const z0 = zA + ((zB - zA) * i) / WALL_SEGS;
       const z1 = zA + ((zB - zA) * (i + 1)) / WALL_SEGS;
       const zm = (z0 + z1) / 2;
-      const yBoard = yA + (zA - zm) * (sin / cos);       // the face, climbing as z goes back
-      const yTop = yA + topSlope * (zm - zA);            // the diagonal A -> C
+      const yBoard = yA + (zA - zm) * (sin / cos);              // the face, climbing as z goes back
+      const yTop = (yA + railFrontH) + topSlope * (zm - zA);    // the raked top, front -> C
       const h = yTop - yBoard;
       if (h <= 0.004) continue;
       solids.push({
@@ -332,6 +344,14 @@ export function buildMachine(G) {
     tilt: t,
     troughZ: [-(G.laneLen + G.humpLen + G.troughLen) + 0.01, -(G.laneLen + G.humpLen) + 0.01],
     troughY: -G.troughDepth,
+    // The side wall's outline in the (z, y) plane, so render.js can draw ONE smooth wall per side
+    // instead of the WALL_SEGS boxes above - whose stepped tops read as a pixelated hypotenuse in
+    // game (Matt, 2026-08-16). Same source as the physics boxes, so the smooth wall you see is the
+    // wall the ball hits (the ramp already does this via _rampSkin). Order: front-bottom,
+    // back-bottom, back-top, front-top. railInnerX is the inner face; the wall is railT thick.
+    railProfile: [[zA, yA], [zB, yB], [zB, yB + G.backboardH], [zA, yA + railFrontH]],
+    railInnerX: G.boardW / 2,
+    railT,
   };
 }
 
