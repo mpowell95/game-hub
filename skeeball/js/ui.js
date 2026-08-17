@@ -310,6 +310,15 @@ export class SkeeballUI {
       clearSave();
       this._startGame(null);
     });
+    // ?sb=... goes straight to the machine. The scoreboard trials are ON the play screen, and a
+    // headless browser cannot click Play - this is what lets them be screenshotted and actually
+    // looked at rather than described. Goes when the trials go.
+    try {
+      if ((new URLSearchParams(location.search).get('sb') || '')) {
+        clearSave();
+        this._startGame(null);
+      }
+    } catch { /* no query string is fine */ }
   }
 
   _showHowTo() {

@@ -412,26 +412,37 @@ export class Renderer {
     const M = this.M;
     const side = this._mat({ color: L.cabinet, roughness: 0.8 });
     const topY = M.faceToWorld(0, G.boardLen, 0)[1];
-    for (const s of [-1, 1]) {
-      const panel = new THREE.Mesh(
-        this._track(new THREE.BoxGeometry(0.045, topY + G.backboardH + 0.15, -M.lipZ + 0.55)),
-        side,
+
+    // THE TALL SIDE PANELS ARE GONE (2026-08-16). There were two slabs here, 2.35m tall and 2.59m
+    // long, standing at x = +/-0.555 - taller than the whole machine and running its entire
+    // length. From behind the ball they read as the walls of a corridor, and they were what made
+    // the background look like a strange blue patch: the only place it showed through was the gap
+    // between them.
+    //
+    // They were not from any reference. Frames pulled from the low-angle POV clip - the one shot
+    // from this exact camera position - show LOW padded rails at lane height, thin posts, and the
+    // rest of the arcade visible past them. Nothing tall and solid flanks a real lane. This was
+    // generic "cabinet dressing" sized off `backboardH`, so it silently grew every time the back
+    // wall did, and it was never once checked against a photo.
+    //
+    // The real thing is already in the machine: `laneRail` at 0.05m, which is the low rail the
+    // references actually show. Nothing replaces these.
+    //
+    // If the cabinet now looks flat, the cause is lighting, not missing geometry - these were
+    // receiveShadow:true and were catching fill light down both sides. Fix the light, do not put
+    // slabs back.
+
+    // A dark arcade wall behind the machine. With the slabs gone the background is no longer a
+    // sliver, it is the whole upper half of the frame, and a flat colour fill reads as a void.
+    // Far enough back to sit inside the fog, so it fades rather than presenting a hard edge.
+    {
+      const backWall = new THREE.Mesh(
+        this._track(new THREE.PlaneGeometry(14, 7)),
+        this._mat({ color: 0x140d14, roughness: 1 }),
       );
-      panel.position.set(s * (G.boardW / 2 + 0.055), (topY + G.backboardH) / 2 - 0.1, (M.lipZ - 0.55) / 2 + 0.12);
-      // THIS IS THE DISCOLOURATION ON THE RIGHT OF THE BOARD, and it took two goes to find.
-      // Matt reported a patch on the right of the scoring area; the side WALLS were stopped from
-      // casting first and it made no difference. Measured properly by sampling mirrored pairs of
-      // pixels across the face: with shadows on the outer-right samples ran ~47 levels darker
-      // than their mirror, with shadows off the two sides were identical, and disabling just
-      // these two panels took every one of those deltas to zero.
-      //
-      // It is these because the key light sits at x = +0.25, off to the right, so this 2.35m slab
-      // throws its shadow straight across the right of the playfield. Pure cabinet dressing
-      // outside the play area, so nothing is lost by it not casting - and a shadow over the
-      // scoring face reads as dirt, which is why the key light is nearly overhead to begin with.
-      panel.castShadow = false;
-      panel.receiveShadow = true;
-      this.scene.add(panel);
+      backWall.position.set(0, 1.6, M.lipZ - 3.4);
+      backWall.receiveShadow = false;
+      this.scene.add(backWall);
     }
     // The marquee over the backboard, with its bulbs.
     const mTex = this._track(this._paintMarquee());
