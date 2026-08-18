@@ -6,6 +6,11 @@
 > overrides them. This game's specific obligations are under "Persistence and THE LAW" — read
 > that before touching anything that stores or records.
 
+**`skeeball/DECISIONS.md`** carries the full tuning history (measurements, rejected approaches,
+what broke and why) that used to live as narrative comments in `skeeball/js/*.js`. The source
+files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
+points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
+
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
 build was then kept in the hub as **Skeeball_old** (`skeeball_old/`, hub id `skeeball-old`;
