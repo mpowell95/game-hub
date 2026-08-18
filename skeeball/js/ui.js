@@ -451,6 +451,10 @@ export class SkeeballUI {
       // DEV, remove before public: hold this throw's inputs; _drainEvents logs them with the real
       // result when the ball settles (ballDone).
       this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
+      // DEV, remove before public: per-throw physics stats, tallied from the event stream in
+      // _drainEvents and logged with the result at ballDone.
+      this._throwStats = { bounces: 0, backboard: 0, impact: false, impactSpeed: null, seq: [],
+        t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()) };
       if (this._dbg) { this._dbg.thrown++; this._renderDbg(); }
     }
   }
@@ -511,6 +515,14 @@ export class SkeeballUI {
   _drainEvents() {
     const Rr = this.renderer;
     for (const ev of this.game.takeEvents()) {
+      // DEV, remove before public: tally every physics event of the throw in flight.
+      const ts = this._throwStats;
+      if (ts) {
+        ts.seq.push(ev.type);
+        if (ev.type === 'bounce') ts.bounces++;
+        else if (ev.type === 'backboard') ts.backboard++;
+        else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
+      }
       switch (ev.type) {
         // THE BALL SETTLES FIRST, THEN THE SCORE. `capture` fires the instant the ball's centre
         // crosses the mouth, which is ~300ms before it has finished dropping through the collar
@@ -544,7 +556,16 @@ export class SkeeballUI {
           // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
           // can read back (real data to check the calculated ranges against).
           if (this._dbg) { this._dbg.done++; this._renderDbg(); }
-          if (this._lastThrow) { this._logThrow({ ...this._lastThrow, value: ev.value | 0, hole: String(ev.hole || '-') }); this._lastThrow = null; }
+          if (this._lastThrow) {
+            const ts = this._throwStats || {};
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            this._logThrow({ ...this._lastThrow, value: ev.value | 0, hole: String(ev.hole || '-'),
+              bounces: ts.bounces | 0, backboard: ts.backboard | 0, touchedBoard: !!ts.impact,
+              impactSpeed: (ts.impactSpeed != null ? ts.impactSpeed : null),
+              settleMs: (ts.t0 ? Math.round(now - ts.t0) : null),
+              seq: (ts.seq || []).join(',') });
+            this._lastThrow = null; this._throwStats = null;
+          }
           break;
         }
         case 'rackOver':
