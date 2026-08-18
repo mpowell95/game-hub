@@ -1,18 +1,14 @@
-// skeeball/js/machine.js - the machine's GEOMETRY, once, in metres. Both engines read this one
-// description: physics.js turns every entry in `solids` into a cannon-es static body, and
-// render.js turns the same entries into three.js meshes (plus cosmetic dressing that the ball
-// can never touch). That is the whole point of this file: the wall you see IS the wall the ball
-// hits, so the two can never drift apart the way a hand-drawn board and a hand-rolled collision
-// model did.
+// skeeball/js/machine.js - the machine's GEOMETRY, once, in metres. GUARD: both physics.js and
+// render.js build from this one description, so the wall you see IS the wall the ball hits and
+// the two can never drift apart.
 //
 // Coordinates: world x = lateral (right +), y = up, z = toward the player (the machine extends
 // into -z). The lane's top surface is y = 0. Face coordinates (u lateral, v metres up the slope
 // from the board's bottom edge, h height off the face plane) are mapped through faceToWorld().
 //
 // Every solid is a BOX: { pos: [x,y,z], half: [hx,hy,hz], rot: {axis, angle} | null, part }.
-// Curved furniture (the big ring's band, the cup collars) is approximated with short box
-// segments - the standard rigid-body approach - while the renderer draws the smooth cylinder at
-// the same radius, a sub-centimetre visual difference that keeps contacts exact.
+// Curved furniture is approximated with short box segments; the renderer draws the smooth
+// cylinder at the same radius, a sub-centimetre difference that keeps contacts exact.
 
 /** Build the whole machine description for one board's `geom` block. */
 export function buildMachine(G) {
@@ -68,10 +64,8 @@ export function buildMachine(G) {
 
   // --- the trough: the catch pit between the hump's crest and the board's bottom edge -----------
   // A weak lob dies here; a ball that rolls back off the board's bottom edge lands here too.
-  // Where it lands decides the score (physics.js): centre = the 10 slot, corners = the 0s,
-  // never-touched-the-board = 0. The floor is real so the ball visibly drops in and rests.
-  // Floor runs from the hump's base all the way UNDER the board's bottom edge - no seam a ball
-  // can slip through (v1 had a gap here and a soft lob fell out of the world).
+  // GUARD: the floor runs from the hump's base all the way UNDER the board's bottom edge - no
+  // seam a ball can slip through.
   const troughFar = lipZ - 0.18;
   const troughNear = -G.laneLen - G.humpLen + 0.02;
   solids.push({
@@ -119,55 +113,35 @@ export function buildMachine(G) {
   });
 
   // --- the rings: ONE PER HOLE ------------------------------------------------------------------
-  // Rewritten 2026-08-14 (batch 3b). There used to be a single big band, `G.ring`, sitting at its
-  // own hand-placed centre; the board now has seven rings and every one of them is DERIVED from
-  // the hole it belongs to, so the tangency rules in boards.js cannot be broken by editing a
-  // number in isolation.
-  //
-  //   TANGENT AT THE HOLE'S BOTTOM (rule 1). The ring's lowest point is the hole's lowest point,
-  //   so its centre sits (R - r) up-slope of the hole's centre. A ring is NEVER concentric with
-  //   its hole - it hangs above it, which is why so much white shows over each mouth.
-  //
-  // The old single band named `G.holes.c50` to decide where to leave a gap, which never fired
-  // (so the band ran straight across the 20's and 40's mouths) and threw outright on a board with
-  // no c50 - `measure-reach.mjs` builds exactly that. Neither failure is possible now: a ring is
-  // tangent to its own hole by construction, and this loop just skips a hole with no `ringD`.
+  // GUARD: every ring is DERIVED from the hole it belongs to (rule 1 - tangent at the hole's
+  // bottom, centre sits (R - r) up-slope of the hole's centre), not hand-placed. A ring is never
+  // concentric with its hole. See DECISIONS.md#ring-geometry.
   const ringSegs = [];
   for (const id of Object.keys(G.holes)) {
     const H = G.holes[id];
     if (!H.ringD) continue;
-    // `ringD` IS THE INSIDE OF THE RING (Matt, 2026-08-14) - the clear opening, not the wall's
-    // centreline and not its outside. This was built as the centreline first, which pushed the
-    // wall half its thickness (7.5mm) inward of the specified circle; because every ring is
-    // tangent to its own hole, that wall then OVERHUNG the hole's edge by 3mm the whole way
-    // round, narrowing every mouth the ball has to drop through. Worst on the 100s, whose ring is
-    // barely wider than the hole to begin with.
-    //
-    // So R is the inner radius, and the boxes are placed half a wall-thickness OUTSIDE it. The
-    // tangency in `cv` uses R, the inner edge, because that is the circle Matt's table describes.
+    // GUARD: `ringD` is the INSIDE of the ring (the clear opening), not the wall's centreline.
+    // R is the inner radius; the boxes sit half a wall-thickness OUTSIDE it, and `cv` (rule 1's
+    // placement) uses R, the inner edge. See DECISIONS.md#ring-geometry.
     const R = H.ringD / 2;
     const Rwall = R + G.ringThick / 2;           // centreline the boxes sit on
     const cu = H.u;
     const cv = H.v - H.r + R;                    // rule 1, the only placement rule there is
-    // Segment count follows the RADIUS, not a constant: these rings run from 0.077m (a 100) to
-    // 0.518m (the 10's arc), and one fixed count would either facet the big ones into a polygon
-    // the ball can catch on a corner of, or spend hundreds of bodies on the small ones.
+    // Segment count scales with RADIUS, not a fixed constant, since these rings range from a
+    // 100's small ring to the 10's much larger arc.
     const N = Math.max(20, Math.ceil((2 * Math.PI * Rwall) / 0.04));
     const halfChord = Rwall * Math.tan(Math.PI / N);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
       const pu = cu + Rwall * Math.cos(phi);
       const pv = cv + Rwall * Math.sin(phi);
-      // The 10's ring is an ARC, not a circle (batch 3c): from the left wall, across the bottom,
-      // to the right wall, and it STOPS. Only its lower half exists. Without this its upper arc
-      // would curve back onto the board and run straight through the 50's mouth - which is a real
-      // crossing, not a tangency, and the only one in the whole layout.
+      // GUARD: the 10's ring is an ARC, not a circle - only its lower half exists, because a full
+      // circle at that diameter crosses the 50's mouth.
       if (H.ringOpen && pv > cv) continue;
       if (Math.abs(pu) > G.boardW / 2) continue;           // clipped at the side rails
       if (pv < 0 || pv > G.boardLen) continue;             // and at the face's own ends
-      // EXACT circumscribed-polygon chord so adjacent faces meet flush at the corners. The first
-      // draft padded the chord and the overlapping ends left millimetre ledges on the inner
-      // surface - enough of a step to park a slow ball against, dead, on the slope.
+      // GUARD: EXACT circumscribed-polygon chord so adjacent faces meet flush at the corners - a
+      // padded chord leaves a ledge a slow ball can rest against.
       ringSegs.push({
         part: 'ringSeg',
         ring: id,
@@ -189,15 +163,10 @@ export function buildMachine(G) {
       const phi = (i / N) * Math.PI * 2;
       const pu = H.u + rr * Math.cos(phi);
       const pv = H.v + rr * Math.sin(phi);
-      // A lipLow cup is the real tilted tube: its mouth faces the incoming ball, so the
-      // down-slope lip is LOW (a rolling ball rides straight over it) and the up-slope lip is
-      // tall (an overshoot is caught). Height blends around the circle; render.js draws this
-      // same profile, vertex for vertex, so the cup you see is the cup the ball hits.
-      //
-      // `G.lipLowFrac` is how low the front gets, and it is now near zero (2026-08-14). At the
-      // old 0.35 the front lip stood ~18mm proud of the face, which to a 50mm ball rolling at
-      // walking pace is a step to be hit, not a rim to be crossed - it stopped the ladder before
-      // it started.
+      // A lipLow cup is a tilted tube: the down-slope lip is LOW (a rolling ball rides over it)
+      // and the up-slope lip is tall (an overshoot is caught). Height blends around the circle;
+      // render.js draws this same profile, vertex for vertex, so the cup you see is the cup the
+      // ball hits.
       const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
       let h = H.collarH;
       if (H.lipLow) h = H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
@@ -216,35 +185,21 @@ export function buildMachine(G) {
   const railT = 0.03;
   const topPt = faceToWorld(0, G.boardLen, 0);
 
-  // THE SIDE WALLS OF THE SCORING AREA (rebuilt 2026-08-15). Matt: *"The left and right walls of
-  // the scoring area should be much more prominent. They should connect at the top of the back
-  // wall, just below 'THE CLASSIC' banner and should be a triangle with the diagonal going from
-  // there to the bottom left corner and bottom right corners of the scoring area board. in real
-  // life you can bounce the ball off the wall and into the 100, so there needs to be a wall."*
+  // GUARD: the side walls must be bankable - a hard, wide throw needs a wall it can actually
+  // carom off into a corner 100, not just a rail that stops a ball leaving. And the front must
+  // NOT taper to zero height: a true triangle leaves the player end of the wall too short to
+  // meet a low, wide fling, which sails off the side untouched instead of banking. See
+  // DECISIONS.md#side-walls.
   //
-  // They were a 3cm strip standing 10cm off the face, the same height the whole way up - which is
-  // a rail to stop a ball leaving, not a wall to play off. A bank shot into a corner 100 needs
-  // something the ball can actually meet up there, and at the top of the board the old rail was
-  // 10cm against a 14.5cm ball.
-  //
-  // Each wall in WORLD vertical, not perpendicular to the face - which is what a real cabinet's
-  // side panel is, and what makes it read as a wall:
+  // Each wall in WORLD vertical, not perpendicular to the face - what a real cabinet's side panel
+  // is, and what makes it read as a wall:
   //     A  the board's bottom corner (player end)
   //     B  the board's top corner
   //     C  the top of the backboard, directly above B
   // AB runs up the board's own slope, BC is the vertical back edge, and the top edge is the
   // diagonal. Sliced into vertical boxes along z; each stands ON the board surface and reaches up
-  // to that diagonal, so the ball meets a continuous sloping wall.
-  //
-  // THE FRONT DOES NOT TAPER TO ZERO ANY MORE (Matt, 2026-08-16: *"l needs to come more towards
-  // the player. I want to be able to bounce the ball off it and into the 100, but that's not
-  // possible right now because it's not wide enough."*). It used to be a true triangle - zero
-  // height at A - so a hard, wide fling reached the side low on the board where there was no wall
-  // at all and sailed straight off for a 0 (measured: power 1.0 at any wide aim scored 0/10 with
-  // ZERO bounces - the ball never met a wall). `railFrontH` gives the player end a real bankable
-  // height, so the wall now runs the whole length and a wide ball caroms off it toward the corner
-  // 100 instead of leaving. It still rakes up to the full backboard height at the back, so it
-  // reads as a raked side wall rather than a full slab.
+  // to that diagonal, so the ball meets a continuous sloping wall. `railFrontH` gives the player
+  // end a real bankable height instead of tapering to zero.
   const railFrontH = 0.34;
   const zA = lipZ;
   const yA = lipY;
@@ -296,19 +251,12 @@ export function buildMachine(G) {
     rot: null,
   });
 
-  // --- the cage: REMOVED 2026-08-16 ------------------------------------------------------------
-  // There used to be a slanted wire canopy over the board here, to stop rainbow shots: a high arc
-  // met it and dropped onto the face instead of sailing out of the machine. Matt spotted its
-  // wires as faint lines across the back wall and asked what they were.
-  //
-  // It went rather than being hidden, because it contradicted a rule he had already set: *"there
-  // should be no limit on how high i can throw the ball. If a swipe as hard as i can, the ball
-  // should launch like crazy high over the machine or something."* A canopy whose entire job is
-  // to catch those throws cannot coexist with that. The clamp on power came off for the same
-  // reason; this is the physical half of the same decision.
-  //
-  // Do not put it back to "fix" a ball leaving the machine. A ball thrown that hard is SUPPOSED
-  // to leave, and it still resolves - it arcs out, comes down, and scores the zero it earned.
+  // --- the cage: REMOVED, do not reintroduce -----------------------------------------------------
+  // GUARD: there is no wire canopy over the board. There used to be, to catch overly high
+  // "rainbow" throws before they left the machine, but it contradicts the rule that there is no
+  // upper limit on throw power - a ball thrown hard enough to leave the machine is SUPPOSED to
+  // leave, and it still resolves (arcs out, comes down, scores what it earned). Do not put a
+  // canopy back to "fix" a ball leaving the machine. See DECISIONS.md#removed-features-and-why-they-stay-removed.
 
   // --- the front glass: the pane every real cabinet has above the hump --------------------------
   // Launch arcs pass UNDER its bottom edge on the way in (they cross the crest low); what it
@@ -316,10 +264,8 @@ export function buildMachine(G) {
   // a faint sheen; physically dead so a ball that meets it drops into the trough.
   solids.push({
     part: 'glass',
-    // Bottom edge must clear the LAUNCH ARC. The pane used to sit with its lower edge at
-    // y=0.55, which a shallow ramp passed under; a steep one (67.5 deg, crest y 0.43) drives the
-    // ball straight into it and every throw dies on the glass. Raised so the ball leaves the
-    // crest underneath it and it still catches a high ricochet on the way back.
+    // GUARD: bottom edge must clear the LAUNCH ARC, or every throw dies on the glass instead of
+    // launching. Height must be re-checked whenever the launch angle or hump geometry changes.
     pos: [0, 1.15, -(G.laneLen + G.humpLen) + 0.03],
     half: [G.boardW / 2 + railT, 0.4, 0.008],
     rot: null,
@@ -344,11 +290,11 @@ export function buildMachine(G) {
     tilt: t,
     troughZ: [-(G.laneLen + G.humpLen + G.troughLen) + 0.01, -(G.laneLen + G.humpLen) + 0.01],
     troughY: -G.troughDepth,
-    // The side wall's outline in the (z, y) plane, so render.js can draw ONE smooth wall per side
-    // instead of the WALL_SEGS boxes above - whose stepped tops read as a pixelated hypotenuse in
-    // game (Matt, 2026-08-16). Same source as the physics boxes, so the smooth wall you see is the
-    // wall the ball hits (the ramp already does this via _rampSkin). Order: front-bottom,
-    // back-bottom, back-top, front-top. railInnerX is the inner face; the wall is railT thick.
+    // The side wall's outline in the (z, y) plane, so render.js can draw ONE smooth wall per
+    // side instead of the WALL_SEGS boxes above (same pattern as the ramp's _rampSkin - the
+    // smooth wall drawn is built from the same points the physics boxes use). Order:
+    // front-bottom, back-bottom, back-top, front-top. railInnerX is the inner face; the wall is
+    // railT thick.
     railProfile: [[zA, yA], [zB, yB], [zB, yB + G.backboardH], [zA, yA + railFrontH]],
     railInnerX: G.boardW / 2,
     railT,
