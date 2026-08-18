@@ -193,8 +193,9 @@ export function buildMachine(G) {
       const apexV = (c50.v - c50.r + R) + R;       // ring centre v (rule 1) + radius = its top point
       solids.push({
         part: 'splitter',
-        pos: faceToWorld(0, apexV, G.ringH * 0.9),
-        half: [0.004, G.ringH * 0.6, 0.035],       // thin across u (tips ballLR), tall, short up-slope
+        // Only 0.25x tall (Matt, 2026-08-17), sitting on top of the ring's rim.
+        pos: faceToWorld(0, apexV, G.ringH * 1.125),
+        half: [0.004, G.ringH * 0.125, 0.035],     // thin across u (tips ball L/R), 0.25x tall, short up-slope
         faceRot: { phi: Math.PI, tilt: t },
         railSide: 0,
       });
