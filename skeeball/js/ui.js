@@ -106,6 +106,7 @@ export class SkeeballUI {
     this._pending = null;              // a captured ball's score, held until it has settled
     this.msgTimer = 0;
     this.top = {};                     // boardId -> { score, name } once the network answers
+    this.hubAvg = null;                // hub-wide average score across synced players (game-over card)
 
     this._onPointerMove = (e) => this._swipeMove(e);
     this._onPointerUp = (e) => this._swipeEnd(e);
@@ -151,6 +152,14 @@ export class SkeeballUI {
         line.textContent = String(this.top[b.id].score);
       }
     }
+    // Hub-wide average score across every synced player (lifetime points / games), for the
+    // game-over card. Falls to null offline; the tile then shows a dash and fills in once online.
+    let hubPts = 0, hubGames = 0;
+    for (const r of rows) {
+      const sk = r && r.games && r.games.skeeball && r.games.skeeball.sk;
+      if (sk) { hubPts += sk.points | 0; hubGames += sk.played | 0; }
+    }
+    this.hubAvg = hubGames ? Math.round(hubPts / hubGames) : null;
     // The network answer is what fills in the All Time column, so repaint the backboard with it.
     this._pushScoreboard();
   }
@@ -622,34 +631,48 @@ export class SkeeballUI {
     const isTop = prevTop > 0 && result.score > prevTop;
     const isMine = result.score > prev.mine;
     const isToday = !isMine && result.score > prev.today;
-    const pill = (key) => `<span class="sk-newpill">${esc(t(key))}</span>`;
 
-    const row = (label, value, isNew, newKey, cls = '') => `
-      <div class="sk-rec${cls}"><dt>${label}</dt><dd>${value}${isNew ? pill(newKey) : ''}</dd></div>`;
+    // One pill on the score, strongest claim first: machine record > personal best > best today.
+    const pillKey = isTop ? 'over_new_top' : isMine ? 'over_new_mine' : isToday ? 'over_new_today' : '';
+    const pill = pillKey ? `<span class="gh-chip gh-chip--accent">${esc(t(pillKey))}</span>` : '';
 
-    const el = this._openOverlay('over', `
-      <div class="sk-sheet-head">
-        <h2>${esc(t('over_h'))}</h2>
-        <button type="button" class="sk-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
-      </div>
-      <div class="sk-sheet-body">
-        <p class="sk-final-label">${esc(t('over_final'))} · ${esc(board.name)}</p>
-        <p class="sk-final">${result.score}</p>
-        <dl class="sk-records sk-records-over">
-          ${row(`${esc(t('rec_top'))} <span>(${esc(t('rec_top_any'))})</span>`, esc(this._topText(board.id)), isTop, 'over_new_top', ' sk-rec-top')}
-          ${row(esc(t('rec_mine')), now.mine || '-', isMine, 'over_new_mine')}
-          ${row(esc(t('rec_today')), now.today || '-', isToday, 'over_new_today')}
-        </dl>
-        <div class="sk-tiles">
-          <div class="sk-tile"><b>${result.bestThrow}</b><span>${esc(t('over_best_throw'))}</span></div>
-          <div class="sk-tile"><b>${result.hundreds}</b><span>${esc(t('over_hundreds'))}</span></div>
-          <div class="sk-tile"><b>${result.fifties}</b><span>${esc(t('over_fifties'))}</span></div>
+    // Your average: lifetime points / games, from the store this rack was just written to.
+    let myAvg = null;
+    try {
+      const sk = (loadStats().games.skeeball || {}).sk || {};
+      if (sk.played) myAvg = Math.round((sk.points | 0) / sk.played);
+    } catch { /* no stats is fine - the tile shows a dash */ }
+    const dash = (n) => (n == null || n === '' || n === 0 ? '-' : String(n));
+
+    // Hub-standard card (batch G): css/ui.css's .gh-overlay + .gh-modal, so it follows the hub
+    // theme, plus the .sk-over-* skin for the score, the hub-wide-record row and the stat tiles.
+    const el = document.createElement('div');
+    el.className = 'gh-overlay sk-over-veil';
+    el.innerHTML = `
+      <div class="gh-modal sk-over" role="dialog" aria-label="${esc(t('over_h'))}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
+        <h2 class="sk-over-title">${esc(t('over_h'))}</h2>
+        <p class="sk-over-machine">${esc(board.name)}</p>
+        <p class="sk-over-score">${result.score}</p>
+        ${pill}
+        <div class="sk-over-rec">
+          <em>${esc(t('over_hub_record'))}</em>
+          <b>${esc(this._topText(board.id))}</b>
         </div>
-        <div class="sk-sheet-actions">
-          <button type="button" class="sk-play" data-role="again">${esc(t('over_again'))}</button>
-          <button type="button" class="sk-link" data-role="gallery">${esc(t('quit'))}</button>
+        <div class="sk-over-tiles">
+          <div class="sk-over-tile"><b>${dash(now.mine)}</b><span>${esc(t('rec_mine'))}</span></div>
+          <div class="sk-over-tile"><b>${dash(now.today)}</b><span>${esc(t('rec_today'))}</span></div>
+          <div class="sk-over-tile"><b>${dash(myAvg)}</b><span>${esc(t('over_your_avg'))}</span></div>
+          <div class="sk-over-tile"><b>${dash(this.hubAvg)}</b><span>${esc(t('over_hub_avg'))}</span></div>
         </div>
-      </div>`);
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${esc(t('over_again'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="gallery">${esc(t('quit'))}</button>
+        </div>
+      </div>`;
+    this._closeOverlay();
+    this.root.appendChild(el);
+    this.overlay = el;
     if (isMine || isTop) this.renderer.celebrate();
     el.querySelector('[data-role="again"]').addEventListener('click', () => this._startGame(null));
     el.querySelector('[data-role="gallery"]').addEventListener('click', () => this._renderSetup());

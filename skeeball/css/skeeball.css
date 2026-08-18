@@ -425,6 +425,33 @@
 
 .sk-root .sk-sheet-actions { display: flex; flex-direction: column; gap: 6px; }
 
+/* Game over overlay - hub-standard card (batch G, 2026-08-18). Built on css/ui.css's
+   .gh-overlay / .gh-modal / .gh-btn / .gh-chip primitives so it follows the hub theme; only the
+   score, the hub-wide-record row and the stat tiles need a game-specific skin, all on --gh-* tokens. */
+.sk-root .sk-over { text-align: center; }
+.sk-root .sk-over-title { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: var(--gh-ink); }
+.sk-root .sk-over-machine {
+  margin: 14px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--gh-muted);
+}
+.sk-root .sk-over-score {
+  margin: 2px 0 8px; font-size: 60px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--gh-ink);
+}
+.sk-root .sk-over-rec {
+  margin: 18px 0 0; padding: 10px 12px; background: var(--gh-surface-2);
+  border: 1px solid var(--gh-border); border-radius: var(--gh-r-md);
+}
+.sk-root .sk-over-rec em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+.sk-root .sk-over-rec b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--gh-ink); overflow-wrap: anywhere; }
+.sk-root .sk-over-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.sk-root .sk-over-tile {
+  background: var(--gh-surface-2); border: 1px solid var(--gh-border);
+  border-radius: var(--gh-r-md); padding: 11px 6px;
+}
+.sk-root .sk-over-tile b { display: block; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
+.sk-root .sk-over-tile span { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+
 /* ------------------------------------------------------------- how to play --- */
 /* tic-tac-toe/CLAUDE.md's pattern: one flex column with a FIXED gap (spacing never left to
    collapse), every line a single row (ui.js measures and locks nowrap), the diagram carried by

@@ -44,7 +44,7 @@ const STRINGS = {
     quit: 'Back to machines',
 
     // Game over
-    over_h: 'Rack complete',
+    over_h: 'Game over',
     over_final: 'Final score',
     over_new_mine: 'NEW BEST',
     over_new_today: 'BEST TODAY',
@@ -52,7 +52,10 @@ const STRINGS = {
     over_best_throw: 'Best ball',
     over_hundreds: '100s',
     over_fifties: '50s',
-    over_again: 'Roll again',
+    over_hub_record: 'Hub-wide record',
+    over_your_avg: 'Your average',
+    over_hub_avg: 'Hub average',
+    over_again: 'Play again',
     close: 'Close',
 
     // How to play: pictures-first, four panels, two tiny captions; arias carry the full
@@ -105,7 +108,7 @@ const STRINGS = {
     msg_resumed: 'Sigues donde lo dejaste: bola {n} de {total}',
     quit: 'Volver a las máquinas',
 
-    over_h: 'Partida completa',
+    over_h: 'Fin de la partida',
     over_final: 'Puntuación final',
     over_new_mine: 'TU MEJOR',
     over_new_today: 'MEJOR DE HOY',
@@ -113,6 +116,9 @@ const STRINGS = {
     over_best_throw: 'Mejor bola',
     over_hundreds: 'Cienes',
     over_fifties: 'Cincuentas',
+    over_hub_record: 'Récord del Hub',
+    over_your_avg: 'Tu promedio',
+    over_hub_avg: 'Promedio del Hub',
     over_again: 'Otra partida',
     close: 'Cerrar',
 
