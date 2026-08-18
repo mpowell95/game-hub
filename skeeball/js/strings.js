@@ -1,7 +1,6 @@
 // skeeball/js/strings.js - the EN/ES dictionary (js/i18n.js's makeT; English is the source of
-// truth and the fallback). Machine NAMES are proper nouns painted on the marquee and are not
-// routed through t() - same standing rule as STARHUB and the card-suit vocabulary. Spanish keeps
-// the borrowed arcade vocabulary players actually say.
+// truth and the fallback). Machine NAMES are proper nouns and are never routed through t() -
+// same standing rule as STARHUB. Spanish keeps the arcade vocabulary players actually say.
 
 const STRINGS = {
   en: {
@@ -28,11 +27,11 @@ const STRINGS = {
     stat_best: 'Best',
     stat_today: 'Today',
     stat_top: 'Top',
-    // The backboard scoreboard's four column labels (2026-08-15). Matt's own words.
+    // The backboard scoreboard's four column labels.
     sb_all_time: 'Hub Wide Record',
     sb_your_best: 'Your Best',
     sb_today: 'Today',
-    sb_last_game: 'Last Game',
+    sb_last_game: 'Last Game',
     stat_last: 'Last',
 
     // Play screen
@@ -45,7 +44,7 @@ const STRINGS = {
     quit: 'Back to machines',
 
     // Game over
-    over_h: 'Rack complete',
+    over_h: 'Game over',
     over_final: 'Final score',
     over_new_mine: 'NEW BEST',
     over_new_today: 'BEST TODAY',
@@ -53,11 +52,14 @@ const STRINGS = {
     over_best_throw: 'Best ball',
     over_hundreds: '100s',
     over_fifties: '50s',
-    over_again: 'Roll again',
+    over_hub_record: 'Hub-wide record',
+    over_your_avg: 'Your average',
+    over_hub_avg: 'Hub average',
+    over_again: 'Play again',
     close: 'Close',
 
-    // How to play (2026-08-15, pictures-first: four panels, two tiny captions, arias carry
-    // the full meaning for screen readers)
+    // How to play: pictures-first, four panels, two tiny captions; arias carry the full
+    // meaning for screen readers
     howto_h: 'How to play',
     ht_swipe: 'Swipe to roll',
     ht_balls: '9 balls per game',
@@ -95,7 +97,7 @@ const STRINGS = {
     sb_all_time: 'Récord del Hub',
     sb_your_best: 'Tu mejor',
     sb_today: 'Hoy',
-    sb_last_game: 'Última',
+    sb_last_game: 'Última',
     stat_last: 'Última',
 
     hud_ball: 'Bola',
@@ -106,7 +108,7 @@ const STRINGS = {
     msg_resumed: 'Sigues donde lo dejaste: bola {n} de {total}',
     quit: 'Volver a las máquinas',
 
-    over_h: 'Partida completa',
+    over_h: 'Fin de la partida',
     over_final: 'Puntuación final',
     over_new_mine: 'TU MEJOR',
     over_new_today: 'MEJOR DE HOY',
@@ -114,6 +116,9 @@ const STRINGS = {
     over_best_throw: 'Mejor bola',
     over_hundreds: 'Cienes',
     over_fifties: 'Cincuentas',
+    over_hub_record: 'Récord del Hub',
+    over_your_avg: 'Tu promedio',
+    over_hub_avg: 'Promedio del Hub',
     over_again: 'Otra partida',
     close: 'Cerrar',
 

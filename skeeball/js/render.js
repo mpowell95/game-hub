@@ -1,14 +1,8 @@
-// skeeball/js/render.js - the machine on screen, drawn by three.js (skeeball/js/vendor/,
-// vendored 2026-08-13 alongside cannon-es on Matt's instruction). The scene is built from the
-// SAME machine description physics.js simulates (machine.js), so the geometry on screen is the
-// geometry the ball hits - plus purely cosmetic dressing (paint, marquee, cabinet, room) that
-// has no physics body and never will.
-//
-// What this renderer exists to fix, in Matt's words (2026-08-13): the board must read as a
-// SLOPED RAMP, not a wall (true perspective camera + directional light + real shadows); the
-// point values must be READABLE (fat tubes, big stencilled numbers painted on the field); the
-// zones must be DEFINED (each mouth's zone painted right on the board texture). The ball is a
-// real mesh driven by the physics body's position AND quaternion, so it visibly rolls.
+// skeeball/js/render.js - the machine on screen, drawn by three.js (skeeball/js/vendor/). GUARD:
+// the scene is built from the SAME machine description physics.js simulates (machine.js), so
+// the geometry on screen is the geometry the ball hits - plus purely cosmetic dressing (paint,
+// marquee, cabinet, room) that has no physics body and never will. The ball is a real mesh
+// driven by the physics body's position AND quaternion, so it visibly rolls.
 
 import * as THREE from './vendor/three.module.min.js';
 import { buildMachine } from './machine.js';
@@ -28,32 +22,11 @@ export class Renderer {
     this.scene.fog = new THREE.Fog(this.look.wall, 4.5, 9);
 
     this.camera = new THREE.PerspectiveCamera(44, 1, 0.05, 12);
-    // WHERE THE PLAYER STANDS. Behind the ball, looking down the lane at the board - the view
-    // you have with a ball in your hand.
-    //
-    // It used to sit at z = -0.34, which is PAST the serve spot at z = -0.12: the camera was in
-    // front of the ball, so the ball waiting to be thrown projected to y = -3875px on a 773px
-    // canvas (measured 2026-08-14) and was simply not on screen. There was no ball anywhere
-    // until 250ms into a throw, when one appeared mid-flight at the bottom edge. Most of the
-    // lane was behind the viewer too, so the bottom 187px of the screen - the 22% the player is
-    // told to swipe on - was a flat brown field with nothing in it.
-    //
-    // z = +1.20 puts the eye behind the ball. The lane runs away from the player and the ball
-    // sits on it from the moment the rack starts.
-    //
-    // 2026-08-14, Matt: *"the NUMBER ONE issue is how massive you've made the board. It's so
-    // crazy zoomed in."* Measured at the time (frame.mjs): the machine covered 125% of screen
-    // height - the marquee and the whole backboard were above the top edge and the board's own
-    // bottom corners were cut off left and right. You could not see the cabinet as a cabinet.
-    //
-    // The camera barely moved to fix that; what was wrong was resize()'s FOV rule, which fitted
-    // the frame to the BALL and deliberately excluded the machine (see there). These values and
-    // the aim below were solved by sweeping position x aim against frame.mjs's visibility
-    // checks and taking the framing that fills the most screen with every point still inside.
+    // WHERE THE PLAYER STANDS: behind the ball, looking down the lane at the board. GUARD:
+    // position and aim (below) were solved by sweeping against frame.mjs's visibility checks,
+    // not chosen by eye - see DECISIONS.md#camera-history before moving either. The FOV rule in
+    // resize() is what actually controls how tightly the machine is framed.
     this.camera.position.set(0, 0.50, 1.20);
-    // Aimed a fifth of the way up the board. Pitch is a real degree of freedom: with the aim
-    // locked on the board's centre the marquee and the resting ball cannot both stay inside the
-    // frame at any height or distance. Solved against frame.mjs, not chosen.
     {
       const a = this.M.faceToWorld(0, this.G.boardLen * 0.20, 0);
       this.camera.lookAt(a[0], a[1], a[2]);
@@ -83,9 +56,9 @@ export class Renderer {
     this._popups = [];
     this._particles = [];
     this._marqueeBulbs = [];
-    // The four records painted on the backboard (2026-08-15). ui.js owns the values and pushes
-    // them in via setScoreboard(); the renderer only draws what it is handed, and never reads
-    // storage or the network itself. Labels come in the same way so they stay translated.
+    // The four records painted on the backboard. ui.js owns the values and pushes them in via
+    // setScoreboard(); the renderer only draws what it is handed, and never reads storage or the
+    // network itself. Labels come in the same way so they stay translated.
     this.scoreboard = { allTime: null, best: 0, today: 0, last: null };
     this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game' };
     this._backMat = null;
@@ -136,18 +109,14 @@ export class Renderer {
     // The physics solids, drawn as they are (visible parts only; smooth cylinders replace the
     // segmented ring/collar boxes at identical radii).
     for (const s of M.solids) {
-      // 'hump' is skipped since 2026-08-15: the ramp is drawn as ONE smooth solid by _rampSkin()
-      // instead of six angled boxes. Overlapping boxes stand proud of each other at every joint,
-      // and those protruding corners are what read as a staircase.
-      // 'rail' is skipped since 2026-08-16 for the same reason as 'hump': its WALL_SEGS vertical
-      // boxes have flat, stepped tops, so the diagonal read as a pixelated staircase in game
-      // (Matt). _sideWalls() draws ONE smooth wall per side from machine.js's railProfile - the
-      // exact hull of these same boxes, so the wall you see is the wall the ball hits.
+      // 'hump' and 'rail' are skipped here: both are drawn as ONE smooth solid instead (by
+      // _rampSkin() and _sideWalls() respectively) built from the same corner points, because
+      // the individual angled/stepped physics boxes read as a visible staircase.
       if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg'
         || s.part === 'hump' || s.part === 'rail' || s.part === 'splitter') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
-      // The backboard is the cabinet's face card, and since 2026-08-15 it is the SCOREBOARD.
-      // Its material is kept on `_backMat` so setScoreboard() can repaint it in place.
+      // The backboard is the cabinet's face card and the SCOREBOARD. Its material is kept on
+      // `_backMat` so setScoreboard() can repaint it in place.
       let mat;
       if (s.part === 'lane' || s.part === 'hump') mat = wood;
       else if (s.part === 'board') mat = faceEdge;
@@ -160,14 +129,8 @@ export class Renderer {
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
       if (s.rot) mesh.quaternion.setFromAxisAngle(new THREE.Vector3(...s.rot.axis), s.rot.angle);
       mesh.receiveShadow = true;
-      // THE SIDE WALLS DO NOT CAST SHADOWS (2026-08-15). Matt: *"What's with the discoloration on
-      // the right side of the board? Is that a shadow or something? I don't want it."* It was
-      // exactly that - the right wall's shadow lying across the playfield.
-      //
-      // It only appeared when the walls grew: as a 0.10m rail the shadow fell within the rail's
-      // own footprint and nobody saw it, but the wall is 0.78m at the back now and its shadow
-      // reaches well onto the face. A shadow across the scoring area reads as dirt on the board,
-      // which is the same reason the key light was moved nearly overhead (see _lights).
+      // GUARD: the side walls do not cast shadows. A shadow across the scoring area reads as
+      // dirt on the board - the same reason the key light is nearly overhead (see _lights).
       if (s.part !== 'lane' && s.part !== 'board' && s.part !== 'rail') mesh.castShadow = true;
       this.scene.add(mesh);
     }
@@ -200,34 +163,13 @@ export class Renderer {
       this.scene.add(plane);
     }
 
-    // THE RAMP'S SKIN: a smooth curved surface laid over the ramp's flat facets (2026-08-15).
-    // Matt: *"make the ramp look like a curve instead of flat steps."*
-    //
-    // The ramp is six angled boxes, and it READ as six steps - a staircase, not a ramp. This does
-    // not change the physics: the boxes are still exactly the surface the ball rolls on. It lays a
-    // smooth strip 3mm over them, sampled finely along a Catmull-Rom through the SAME corner
-    // points machine.js builds its boxes from. The curve passes through every corner and bulges a
-    // millimetre or two between them, which is precisely enough to bury the facet edges.
-    //
-    // It also carries the lane's own plank texture, so the planks run up and over the ramp
-    // instead of stopping dead at its foot - the other half of why it did not read as a ramp.
     this._rampSkin();
     this._sideWalls();
 
     // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face,
-    // with its white rim, its navy trim and its VALUE painted into the field texture around it
-    // (see _paintField). Nothing stands up off the face, because after 2026-08-14 nothing does
-    // in the physics either - every cup is `collarH: 0` (boards.js), so this is once again
-    // literally true: the surface you see is the surface the ball rolls on.
-    //
-    // WHAT THIS REPLACED, so nobody rebuilds it. Each cup used to be a white cylinder wearing a
-    // flat number panel placed at z = radius * 0.995 - i.e. a flat plate set INSIDE a curved
-    // wall of that same radius. A plane cannot sit inside a cylinder without intersecting it, so
-    // the wall cut a curved bite out of every number: the 50, the 40, the 30, the ring's 20 and
-    // both 100s all rendered with their bottom halves missing. On top of that the mouth was laid
-    // flat on the face while the tube was tilted -0.32 rad, so each black opening slid out from
-    // under its own cup and read as a separate blob beside the next one down. Numbers belong on
-    // the board.
+    // with its VALUE painted into the field texture around it (see _paintField), since every cup
+    // is `collarH: 0` (boards.js) - the surface you see is the surface the ball rolls on. GUARD:
+    // numbers belong on the board, not on a cup wall - see DECISIONS.md#removed-scenery.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
       const mouth = new THREE.Mesh(
@@ -238,28 +180,19 @@ export class Renderer {
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
-      // A machine that DOES want a raised rim (a future board) still gets one, and it is drawn
-      // with the same scalloped profile machine.js gives the physics - low at the down-slope
-      // lip, full height at the up-slope one - rather than a straight cylinder plus a tilt.
+      // A future machine wanting a raised rim gets one matching machine.js's own height profile.
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
         H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1);
       this._onFace(wall, H.u, H.v, 0);
       this.scene.add(wall);
     }
 
-    // THE RINGS, drawn FROM THE PHYSICS SEGMENTS THEMSELVES (rewritten 2026-08-14, batch 3b).
-    //
-    // Every ring is one box per `ringSeg` solid, at that solid's own position and rotation. This
-    // is not a style choice, it is the fix for a bug that shipped: the ring used to be drawn by
-    // re-deriving a smooth circle from `G.ring`, separately from the segments machine.js emitted,
-    // and when v323 turned the band solid nothing drew it at all - an INVISIBLE WALL the ball
-    // bounced off while the circle still read as flat paint. Matt found it by playing.
-    //
-    // Deriving the drawing from the collision data makes that class of bug unrepresentable: a
-    // ring that is not built is not drawn, and a ring that IS built is drawn exactly where it is.
-    // The 10's arc stops at the rails here for free, because machine.js emitted no segments past
-    // them. Rings stand `ringH` (= x) tall and WILL hide their own mouths from a low camera -
-    // that is intended (boards.js, `ringH`), not a defect to correct.
+    // THE RINGS, drawn FROM THE PHYSICS SEGMENTS THEMSELVES. GUARD: every ring is one box per
+    // `ringSeg` solid, at that solid's own position and rotation - not a style choice, but what
+    // makes an invisible-wall bug (drawing not matching collision) structurally impossible. See
+    // DECISIONS.md#removed-scenery. The 10's arc stops at the rails here for free, because
+    // machine.js emitted no segments past them. Rings WILL hide their own mouths from a low
+    // camera - that is intended (boards.js, `ringH`), not a defect to correct.
     {
       const ringMat = this._mat({ color: L.ring, roughness: 0.4 });
       const lipMat = this._mat({ color: L.ringLip, roughness: 0.5 });
@@ -347,10 +280,9 @@ export class Renderer {
   }
 
   /** The two side walls, ONE smooth solid each, built from machine.js's railProfile - the exact
-   *  hull of the WALL_SEGS physics boxes. Those boxes' flat, stepped tops read as a pixelated
-   *  diagonal in game (Matt, 2026-08-16); this draws the clean raked wall over them. The physics
-   *  is untouched: this is the _rampSkin pattern applied to the rails, so the wall you see is the
-   *  wall the ball hits. Side walls never cast a shadow (a shadow on the playfield reads as dirt). */
+   *  hull of the WALL_SEGS physics boxes, whose flat stepped tops would otherwise read as a
+   *  pixelated diagonal. The physics is untouched: same pattern as _rampSkin, applied to the
+   *  rails. Side walls never cast a shadow (a shadow on the playfield reads as dirt). */
   _sideWalls() {
     const M = this.M;
     const prof = M.railProfile;         // [[z,y] x4]: front-bottom, back-bottom, back-top, front-top
@@ -400,15 +332,9 @@ export class Renderer {
   }
 
   _cage(s) {
-    // The physics slab, drawn as the sparse wire canopy it stands in for. Deliberately THIN and
-    // pale: the cage sits between the camera and the board, and heavy dark bars turned the top
-    // half of the screen into a fence (they read as the subject instead of the board).
-    // Pale and semi-transparent. From behind the ball the canopy sits directly across the
-    // backglass, and as opaque dark bars it read as cracks in the screen rather than as wire.
-    // It stays drawn - and stays a physics body - because the invariant that the thing you see
-    // is the thing the ball hits cuts both ways: an invisible wall would be the worse lie. It
-    // has never actually been touched (cagecheck: 0 contacts in 255 throws, ball ceiling y=0.61
-    // against a canopy at y=0.67), which is why it can afford to be this quiet.
+    // Draws a physics slab as a sparse wire canopy: thin and pale so it doesn't read as the
+    // subject over the board. machine.js no longer builds a 'cage' solid (see its removal
+    // note); this stays in case a future machine reintroduces one.
     const mat = this._mat({
       color: 0xbfae95, roughness: 0.5, metalness: 0.3, transparent: true, opacity: 0.30,
     });
@@ -438,24 +364,11 @@ export class Renderer {
     const side = this._mat({ color: L.cabinet, roughness: 0.8 });
     const topY = M.faceToWorld(0, G.boardLen, 0)[1];
 
-    // THE TALL SIDE PANELS ARE GONE (2026-08-16). There were two slabs here, 2.35m tall and 2.59m
-    // long, standing at x = +/-0.555 - taller than the whole machine and running its entire
-    // length. From behind the ball they read as the walls of a corridor, and they were what made
-    // the background look like a strange blue patch: the only place it showed through was the gap
-    // between them.
-    //
-    // They were not from any reference. Frames pulled from the low-angle POV clip - the one shot
-    // from this exact camera position - show LOW padded rails at lane height, thin posts, and the
-    // rest of the arcade visible past them. Nothing tall and solid flanks a real lane. This was
-    // generic "cabinet dressing" sized off `backboardH`, so it silently grew every time the back
-    // wall did, and it was never once checked against a photo.
-    //
-    // The real thing is already in the machine: `laneRail` at 0.05m, which is the low rail the
-    // references actually show. Nothing replaces these.
-    //
-    // If the cabinet now looks flat, the cause is lighting, not missing geometry - these were
-    // receiveShadow:true and were catching fill light down both sides. Fix the light, do not put
-    // slabs back.
+    // GUARD: THE TALL SIDE PANELS ARE GONE and must not be reintroduced. There is no reference
+    // photo of a real machine with tall solid panels flanking the lane; from behind the ball
+    // they read as the walls of a corridor. `laneRail` is the real low rail a real cabinet has.
+    // If the cabinet looks flat without them, the fix is lighting, not geometry - see
+    // DECISIONS.md#removed-features-and-why-they-stay-removed.
 
     // A dark arcade wall behind the machine. With the slabs gone the background is no longer a
     // sliver, it is the whole upper half of the frame, and a flat colour fill reads as a void.
@@ -551,14 +464,10 @@ export class Renderer {
       x.restore();
     };
 
-    // EVERY HOLE: its mouth, and its VALUE, painted on the board.
-    //
-    // The rings are NOT painted here any more (batch 3b). They are real walls standing x tall and
-    // are drawn from their own collision segments in `_build`; painting a second copy of them on
-    // the face would put a white circle on the board that no longer matches where the wall is -
-    // which is the same drawn-vs-hit split that shipped the invisible ring in the first place.
-    // What stays on the face is the dark mouth and a soft seat, so a hole reads as sunk into the
-    // board rather than printed on it.
+    // EVERY HOLE: its mouth, and its VALUE, painted on the board. GUARD: rings are NOT painted
+    // here - they are real walls drawn from their own collision segments in `_build`, and a
+    // second painted copy here would drift out of sync with where the wall actually is. See
+    // DECISIONS.md#removed-scenery.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
       const cx = U(H.u);
@@ -577,12 +486,9 @@ export class Renderer {
       x.fill();
     }
 
-    // THE VALUES, mirrored either side of each mouth and placed OUTSIDE that hole's own ring.
-    //
-    // The offset is per-hole now, because the rings are no longer one size: the 20's is 0.354m
-    // across and the 50's is 0.104m, so a single hardcoded column (this was `u = +/-0.23`) put
-    // some numbers on bare board and buried others under a ring. Deriving it from `ringD` means a
-    // number is always just clear of its own ring, whatever that ring's size.
+    // THE VALUES, mirrored either side of each mouth, placed OUTSIDE that hole's own ring. GUARD:
+    // the offset is derived from each hole's own `ringD`, never a fixed column - rings are not
+    // all one size, so a fixed offset buries some numbers under a ring.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
       const off = (H.ringD ? H.ringD / 2 : H.r) + 0.052;
@@ -667,33 +573,16 @@ export class Renderer {
     return mesh;
   }
 
-  /** THE BACKBOARD IS THE SCOREBOARD (2026-08-15, Matt's spec). It used to carry the machine's
-   *  name and "NINE BALLS"; that panel now shows four records instead.
-   *
-   *  Four fixed-width columns, label over value, left to right:
-   *      All Time   the best any player has ever rolled, WITH their name
-   *      Your Best  this player's all-time best
-   *      Today      this player's best today
-   *      Last Game  the rack they just finished
-   *
-   *  THE COLUMNS ARE A FIXED PIXEL WIDTH AND THE PANEL A FIXED HEIGHT, per the spec: the texture
-   *  is a fixed 1024x512 canvas divided into four equal quarters, and every value is centred in
-   *  its own quarter. So a score going from 90 to 1000, or a name from "Al" to "Natalia", cannot
-   *  move anything else - there is no layout to shift.
-   *
-   *  Only the paint changes. The backboard is the same solid, in the same place, and the ball
-   *  still bounces off it exactly as before. */
+  /** THE BACKBOARD IS THE SCOREBOARD: four records, label over value, left to right (All Time
+   *  with the record holder's name, Your Best, Today, Last Game). GUARD: THE COLUMNS ARE A
+   *  FIXED PIXEL WIDTH AND THE PANEL A FIXED HEIGHT - a score gaining a digit, or a long player
+   *  name, cannot move anything else, because there is no layout to shift, only the paint.
+   *  See DECISIONS.md#scoreboard. The backboard is the same solid, in the same place, and the
+   *  ball still bounces off it exactly as before. */
   _paintBackboard() {
-    // 2048x1024 since 2026-08-15. At 1024x512 this panel is minified hard at the far end of the
-    // lane and the digits read as fuzzy; Matt: *"the actual values are fuzzy and difficult to
-    // read. Sharpen them."* Doubling the texture, setting anisotropy (this one never had it, the
-    // field texture always did) and cutting the segment glow are the three things that were
-    // softening them.
     const W = 2048;
-    // THE TEXTURE MUST MATCH THE PANEL'S SHAPE. It was a flat 2048x1024 (2:1) painted onto a
-    // backboard that is 1.06m wide by 0.8m tall (1.33:1), so everything drawn on it has been
-    // stretched 50% taller than it should be - every version of this scoreboard, including the
-    // shipped one. Deriving the height from the real solid removes the distortion.
+    // GUARD: the texture's aspect ratio must match the real backboard solid's, or everything
+    // painted on it is stretched out of proportion.
     const Hpx = Math.round(W * (this.G.backboardH / (this.G.boardW + 0.06)));
     const c = this._canvas(W, Hpx);
     const x = c.getContext('2d');
@@ -763,11 +652,9 @@ export class Renderer {
     const LABEL = '#7ec8f0';
     const BEZEL = '#c98a3a';
 
-    // THE TOP OF THIS PANEL IS NOT VISIBLE IN GAME. The marquee band and its bulb bar stand in
-    // front of the backboard's upper edge, so anything painted near y=0 is clipped by them -
-    // Matt: *"the titles are tiny and partially covered by the board above it. They are
-    // illegible."* Everything therefore starts below TOP_INSET, and the glass panel itself is
-    // inset to match so the bezel does not vanish behind the marquee either.
+    // GUARD: THE TOP OF THIS PANEL IS NOT VISIBLE IN GAME. The marquee band and its bulb bar
+    // stand in front of the backboard's upper edge, so anything painted near y=0 is clipped by
+    // them. Everything starts below TOP_INSET; the glass panel itself is inset to match.
     const TOP_INSET = 210;
 
     const bez = x.createLinearGradient(0, 0, 0, Hpx);
@@ -799,10 +686,9 @@ export class Renderer {
       return t;
     };
 
-    // Plain bold sans, cyan label over amber value: no seven-segment digits, no glow, no serif -
-    // none survived being shrunk to the size this panel allows on a phone. Sizes are stated in
-    // ON-SCREEN pixels and converted, because that is the only measure that means anything here:
-    // the panel is 181px wide on a phone, so one screen pixel is W/181 texture pixels.
+    // GUARD: plain bold sans, cyan label over amber value - no seven-segment digits, no glow, no
+    // serif. None of those survive being shrunk to the size this panel allows on a phone. Sizes
+    // are stated in ON-SCREEN pixels and converted, since the panel is only 181px wide there.
     const PX = W / 181;                       // texture pixels per on-screen pixel
     const sp = (n) => n * PX;
     const say = (txt, cx, cy, size, colour, align, maxW) => {
@@ -860,10 +746,8 @@ export class Renderer {
     if (old && old.dispose) old.dispose();
   }
 
-  /** The marquee: the MACHINE's name, on the lit band over the scoreboard. It was blanked when
-   *  the backboard became the scoreboard, which left the machine with no name anywhere on it -
-   *  Matt: *"You removed THE CLASSIC. it is currently absent from the game and image."* This is
-   *  the machine's name (`board.name`), not the game's; nothing about "Skeeball" belongs here. */
+  /** The marquee: the MACHINE's name, on the lit band over the scoreboard. GUARD: this is the
+   *  machine's name (`board.name`), not the game's - nothing about "Skeeball" belongs here. */
   _paintMarquee() {
     const W = 1024;
     const H = 192;
@@ -925,12 +809,9 @@ export class Renderer {
     // FRAME THE WHOLE MACHINE. Every point below has to be inside the canvas with room to
     // spare, and the FOV is simply the smallest one that achieves that.
     //
-    // This REPLACES a rule that fitted the frame to the resting BALL and said, in as many
-    // words, "frame the board, and nothing above it". That is how the marquee and the entire
-    // backboard ended up above the top edge while the board's own bottom corners ran off the
-    // sides - the machine covering 125% of screen height, which is Matt's "so crazy zoomed in".
-    // Do not go back to fitting any single point: fit the LIST, and add to the list if a future
-    // machine grows a part that must stay visible.
+    // GUARD: do not go back to fitting a single point (e.g. just the resting ball) - fit the
+    // LIST, and add to the list if a future machine grows a part that must stay visible. See
+    // DECISIONS.md#camera-history for what single-point framing broke last time.
     const FIT = [
       [0, topY + this.G.backboardH + 0.21, topZ - 0.02],            // marquee, bulbs included
       [-halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],       // backboard top corners

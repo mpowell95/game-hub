@@ -1,21 +1,11 @@
-// skeeball/js/howto.js - the How To Play sheet's content. Rebuilt 2026-08-15 on Matt's
-// instruction: almost no words, the pictures carry everything, and nothing anyone already
-// knows about skeeball gets explained. Exactly four panels:
+// skeeball/js/howto.js - the How To Play sheet's content. Pictures carry everything; nothing
+// anyone already knows about skeeball gets explained in words. Four panels: swipe to roll,
+// holes score amounts, nine balls per game, the unlock chain (target score is IN the image,
+// a starburst repeated on the padlock tag, never a sentence).
 //
-//   1. Swipe to roll        - a hand, an upward swipe arrow, the ball, the lane.
-//   2. Holes score amounts  - the board face with its values in the holes, an up arrow with
-//                             a plus sign saying higher is worth more. No caption at all.
-//   3. Nine balls per game  - the tray holding exactly nine balls.
-//   4. The unlock chain     - beat the score shown on machine 1 and the padlock on machine 2
-//                             opens. Picture only, per the instruction: the score is IN the
-//                             image (a starburst, repeated on the padlock tag so the pairing
-//                             reads by shape), never a sentence.
-//
-// The whole-screen rules (tic-tac-toe/CLAUDE.md, "How-to-play screens") still bind: the two
-// captions are .sk-ht-line so ui.js's _fitHelpLines measures and locks them to one row, the
-// sheet body is one flex column with a fixed gap, and every meaning in the SVGs is carried by
-// shape, outline, numbers and arrows - the one accent colour is always paired with a shape
-// (the thick arrowheaded swipe stroke, the plus-topped value arrow), never colour alone.
+// The whole-screen rules (tic-tac-toe/CLAUDE.md, "How-to-play screens") still bind: captions
+// are .sk-ht-line so ui.js's _fitHelpLines locks them to one row, and every meaning in the
+// SVGs is carried by shape, outline, numbers and arrows - never colour alone.
 
 import { BOARDS } from './boards.js';
 
@@ -37,7 +27,7 @@ function star(cx, cy, r) {
 /** The whole sheet body. `t` is ui.js's makeT instance. */
 export function howToMarkup(t) {
   // The real unlock target, read off the machine list so the picture stays true when the
-  // second machine ships. Until one exists, the 450 from boards.js's own template comment.
+  // second machine ships.
   const next = BOARDS.find((b) => b && b.unlock);
   const score = next ? next.unlock.score : 450;
   return `

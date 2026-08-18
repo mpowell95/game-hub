@@ -1,12 +1,11 @@
 // skeeball/js/game.js - the rules of one game (a "rack") on one machine. Pure: no DOM, no
-// storage, no clock of its own. Nine balls, every settled ball scores its hole's value, and when
-// the ninth settles the rack is over and `result()` is exactly the payload `recordSkeeball` in
-// js/game-stats.js expects. The ui owns WHEN to persist; this file owns WHAT is true.
+// storage, no clock of its own. Nine balls, every settled ball scores its hole's value, and
+// `result()` is exactly the payload `recordSkeeball` in js/game-stats.js expects. The ui owns
+// WHEN to persist; this file owns WHAT is true.
 //
-// Snapshots: `snapshot()` captures the between-throws state (never a ball in flight - the lane is
-// the stable state of skeeball, and a throw resolves in under two seconds). `SkeeballGame.restore`
-// rebuilds a game from one. The ui saves after every settled ball, which is what makes leaving
-// mid-rack lossless (the hub contract's autosave/resume class, root CLAUDE.md).
+// `snapshot()` captures only the between-throws state, never a ball in flight - that is what
+// makes leaving mid-rack lossless (the hub contract's autosave/resume class, root CLAUDE.md).
+// `SkeeballGame.restore` rebuilds a game from one.
 
 import { startThrow, step, takeEvents } from './physics.js';
 import { boardById, BALLS_PER_GAME } from './boards.js';
