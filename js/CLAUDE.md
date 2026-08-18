@@ -1355,10 +1355,10 @@ BOTH places: a "USE WHAT EXISTS" table in the always-loaded root file, and a tes
 **When you change a convention here, update that table too** — it is the copy a new-game session
 will actually read.
 
-**A non-passive `touchmove` on `document` is a page-wide tax, not a local guard.** Snake (and
-`snake-v2`) installed one to stop a D-pad drag panning the page. It works, but it tells the browser
+**A non-passive `touchmove` on `document` is a page-wide tax, not a local guard.** Snake installed
+one to stop a D-pad drag panning the page. It works, but it tells the browser
 that any touch scroll ANYWHERE might be cancelled, so compositor-thread scrolling is off for the
-whole page, on every screen, for as long as the game is mounted. Both are now bound to the game's
+whole page, on every screen, for as long as the game is mounted. It is now bound to the game's
 own root element instead, which loses no coverage (a `touchmove` is dispatched at the element the
 touch STARTED on and bubbles from there). See `snake/CLAUDE.md` for the full note. If a future game
 needs a scroll guard, scope it to the game root — never to `document`.

@@ -13,12 +13,12 @@ points to the full story. Read it before touching physics, geometry, or the swip
 
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
-build was then kept in the hub as **Skeeball_old** (`skeeball_old/`, hub id `skeeball-old`;
-Matt's ask, same day) for side-by-side comparison while this machine is tuned — see that
-folder's CLAUDE.md for exactly what its rename changed. Both builds record into the SHARED
-`skeeball` stats id, and both use the board id `classic`, so that machine's records (bests, the
-daily map, the top-score panel) are one continuous bucket across the two builds — deliberate,
-so no play is ever orphaned. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
+build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub id
+`skeeball-old`) for side-by-side comparison while this machine was tuned, and **removed
+2026-08-18 at Matt's ask** once the comparison was done (it is in git history). It recorded into
+the SHARED `skeeball` stats id and used the same board id `classic`, so every rack it ever played
+is still in this game's own records (bests, the daily map, the top-score panel) — one continuous
+bucket, nothing orphaned by its removal. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
 lane, the burnt-orange board with the white cup ladder, twin corner 100 cups, and a marquee. The
 player swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine
 balls to a rack.
@@ -437,7 +437,7 @@ invisible (rule 1; the comment on the `TABS` row records this).
   "Delete the sound option. No sound."). Nothing here constructs an AudioContext.
 - **`skeeball.css` is two skins and the split is deliberate** (2026-08-13, the setup overhaul):
   the SETUP and HOW-TO screens belong to the hub — light `--sks-*` tokens on `.sk-root` with a
-  `:root.gh-dark .sk-root` override, skeeball_old's lines 9-35 pattern — while the PLAY screen
+  `:root.gh-dark .sk-root` override (the pattern the retired build used) — while the PLAY screen
   keeps the warm dark arcade look in both themes (Ball Run/Hill Climb/Pinball's class). The
   header comment in the CSS marks where one skin ends and the other begins. Do not "unify" them.
 - The swipe measures the RELEASE flick (the last ~130ms), not the whole gesture — the wind-up is

@@ -23,12 +23,10 @@ const DICTS = [
   { name: 'boggle/js/strings.js', path: './boggle/js/strings.js' },
   { name: 'uno/js/strings.js', path: './uno/js/strings.js' },
   { name: 'dominoes/js/strings.js', path: './dominoes/js/strings.js' },
-  { name: 'snake-v2/js/strings.js', path: './snake-v2/js/strings.js' },
   { name: 'hill-climb/js/strings.js', path: './hill-climb/js/strings.js' },
   { name: 'battleship/js/strings.js', path: './battleship/js/strings.js' },
   { name: 'yahtzee/js/strings.js', path: './yahtzee/js/strings.js' },
   { name: 'skeeball/js/strings.js', path: './skeeball/js/strings.js' },
-  { name: 'skeeball_old/js/strings.js', path: './skeeball_old/js/strings.js' },
   { name: 'pinball/js/strings.js', path: './pinball/js/strings.js' },
 ];
 
