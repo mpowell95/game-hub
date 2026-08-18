@@ -854,23 +854,37 @@ export class Renderer {
   framePreview(w, h) {
     this.renderer.setSize(w, h, true);
     this.camera.aspect = w / h;
+    const G = this.G, M = this.M;
+    const topY = M.faceToWorld(0, G.boardLen, 0)[1];
+    const topZ = M.faceToWorld(0, G.boardLen, 0)[2];
+    const halfW = G.boardW / 2;
+    const marquee = [0, topY + G.backboardH + 0.21, topZ - 0.02];
+    const boardBot = M.faceToWorld(0, 0, 0);
+    // RE-AIM at the midpoint of the marquee and the board's bottom edge. The play camera aims low
+    // on the board (faceToWorld v*0.20), so a symmetric fit spills the whole lane into the shot -
+    // measured: board-bottom projected to y -0.98 but the lane still filled the lower frame.
+    // Centring the frame on the board face instead drops the FOV to ~31 deg and pushes the lane
+    // off-screen (measured lane y -2.6), which is the actual "zoom to the board" Matt asked for.
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(
+      (marquee[0] + boardBot[0]) / 2,
+      (marquee[1] + boardBot[1]) / 2,
+      (marquee[2] + boardBot[2]) / 2,
+    );
     const eye = this.camera.position;
     const axis = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
-    const topY = this.M.faceToWorld(0, this.G.boardLen, 0)[1];
-    const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
-    const halfW = this.G.boardW / 2;
-    const FIT = [
-      [0, topY + this.G.backboardH + 0.21, topZ - 0.02],       // marquee, bulbs included
-      [-halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],  // backboard top corners
-      [halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],
-      this.M.faceToWorld(-halfW, this.G.boardLen, 0),          // board top corners
-      this.M.faceToWorld(halfW, this.G.boardLen, 0),
-      this.M.faceToWorld(-halfW, 0, 0),                        // board bottom corners (crop below here)
-      this.M.faceToWorld(halfW, 0, 0),
-    ];
-    const MARGIN = 0.96;
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
     const up2 = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
+    const FIT = [
+      marquee,
+      [-halfW, topY + G.backboardH - 0.01, topZ - 0.02],  // backboard top corners
+      [halfW, topY + G.backboardH - 0.01, topZ - 0.02],
+      M.faceToWorld(-halfW, G.boardLen, 0),               // board top corners
+      M.faceToWorld(halfW, G.boardLen, 0),
+      M.faceToWorld(-halfW, 0, 0),                        // board bottom corners (frame ends here)
+      M.faceToWorld(halfW, 0, 0),
+    ];
+    const MARGIN = 0.98;
     let needV = 0, needHalfH = 0;
     for (const p of FIT) {
       const d = new THREE.Vector3(p[0], p[1], p[2]).sub(eye);
@@ -880,7 +894,7 @@ export class Renderer {
       needHalfH = Math.max(needHalfH, Math.atan(Math.abs(d.dot(right)) / along / MARGIN));
     }
     const vFov = Math.max(2 * needV, 2 * Math.atan(Math.tan(needHalfH) / this.camera.aspect));
-    this.camera.fov = Math.min(72, Math.max(20, (vFov * 180) / Math.PI));
+    this.camera.fov = Math.min(72, Math.max(15, (vFov * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
   }
 
