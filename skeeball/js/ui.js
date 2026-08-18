@@ -1,23 +1,16 @@
 // skeeball/js/ui.js - the DOM shell, the swipe, and the hub module contract.
 //
-// Two screens plus overlays, all mounted into the one container the hub hands us:
-//   SETUP  the machine gallery: each cabinet card carries the four records the machine tracks -
-//          the top score by ANY player, this player's all-time best, this player's best today,
-//          and the last game rolled - plus Play/Resume and How to play.
-//   PLAY   the canvas (render.js) under a marquee-style HUD: score, ball pips, the records
-//          strip, and the swipe surface that IS the lane.
-//   OVER   the finished rack: final score, which records it broke, and the tally - with a close
-//          X in the corner (root CLAUDE.md's rule for every end-of-game panel).
+// Three screens plus overlays, all mounted into the one container the hub hands us: SETUP (the
+// machine gallery and its records), PLAY (the canvas under a marquee-style HUD, the swipe
+// surface that IS the lane), OVER (the finished rack, with a close X per root CLAUDE.md's rule).
 //
 // This file owns the clock, the storage keys and every listener. The rules live in game.js, the
 // machines in boards.js, the solver in physics.js, the pixels in render.js.
 //
-// isInProgress(): the AUTOSAVE/RESUME meaning of the contract (root CLAUDE.md, "The module
-// contract" - Escoba's class, not Ball Run's): it returns FALSE even mid-rack, because leaving
-// is lossless. The between-throws state is snapshotted to gamehub.skeeball.save.v1 after every
-// settled ball, and the setup screen's Play button becomes "Resume rack" while one is banked. A
-// ball actually in flight resolves in under two seconds and is not part of the saved state; the
-// throw a player abandons mid-air was theirs to abandon.
+// GUARD: isInProgress() is the AUTOSAVE/RESUME meaning of the module contract (root CLAUDE.md,
+// "The module contract" - Escoba's class, not Ball Run's) and always returns FALSE, even
+// mid-rack - the between-throws state is snapshotted after every settled ball, so leaving is
+// lossless. A ball in flight is not part of the saved state.
 
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { Renderer } from './render.js';
@@ -163,8 +156,8 @@ export class SkeeballUI {
   }
 
   /**
-   * Hand the renderer the four records its backboard paints (2026-08-15). Called on mount, when
-   * the network answers with the app-wide best, and after every finished rack.
+   * Hand the renderer the four records its backboard paints. Called on mount, when the network
+   * answers with the app-wide best, and after every finished rack.
    *
    * The All Time column carries the RECORD HOLDER'S NAME as well as the score - it is the only
    * one of the four that can belong to somebody else. The other three are always this player's.
@@ -333,16 +326,15 @@ export class SkeeballUI {
             <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
             <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
           </div>
-          <!-- The TOP/BEST/TODAY strip that used to live here is GONE (2026-08-15). Those records
-               are painted on the machine's own backboard now (render.js setScoreboard), and Matt's
-               rule was not to show the same data twice. The header keeps only the LIVE state of
-               the rack in progress: the score and the ball pips. -->
+          <!-- No TOP/BEST/TODAY strip here: those records are painted on the machine's own
+               backboard (render.js setScoreboard) so the data isn't shown twice. The header
+               keeps only the LIVE state of the rack in progress: score and ball pips. -->
         </div>
         <div class="sk-stage" data-role="stage">
           <canvas class="sk-canvas" data-role="canvas" role="img" aria-label="${esc(t('aria_lane'))}"></canvas>
           <div class="sk-msg" data-role="msg" aria-live="polite"></div>
-          <!-- DEV readout, remove before this game goes public (Matt, 2026-08-17): every real flick's
-               measured speed, so the swipe curve can be tuned while actually playing. -->
+          <!-- DEV readout, remove before this game goes public: every real flick's measured
+               speed, so the swipe curve can be tuned while actually playing. -->
           <div class="sk-flickread" data-role="flickread" aria-hidden="true">flick: -</div>
           <div class="sk-flickread sk-dbg" data-role="dbg" aria-hidden="true">log: -</div>
           <div class="sk-swipe" data-role="swipe" aria-hidden="true">
@@ -420,29 +412,20 @@ export class SkeeballUI {
     // not of what a throw can be, and physics.js extrapolates past both.
     const power = powerOf(perH);
 
-    // DEV, remove before this game goes public (Matt, 2026-08-17): the live readout, plus the
-    // captured throw params - logged with their real result at ballDone (see _drainEvents /
-    // _logThrow), so we have measured data (flick -> power -> launch -> actual hole), not just the
-    // calculation, to check whether the swipe curve is right.
+    // DEV, remove before public: the live readout, plus the captured throw params - logged with
+    // their real result at ballDone (see _drainEvents / _logThrow), so there's measured data
+    // (flick -> power -> launch -> actual hole), not just the calculation, to check the curve.
     const launch = launchSpeed(power, this.game.board.geom.minSpeed, this.game.board.geom.maxSpeed);
     if (this.el && this.el.flickread) {
       this.el.flickread.textContent = `flick ${perH.toFixed(2)} h/s  ·  pow ${power.toFixed(2)}  ·  ${launch.toFixed(2)} m/s`;
     }
 
-    // AIM: the direction of the whole swipe, eased. Small deviations have to stay small - the
-    // lane is 2.5m long, so a launch angle is multiplied by the time the ball spends travelling,
-    // and a linear map made a 5-degree wobble the difference between the 40 and the gutter. The
-    // exponent keeps a nearly-straight swipe nearly straight and still lets a deliberate
-    // 30-degree diagonal fling reach the corner 100s.
-    //
-    // This shapes the INPUT - what direction the player asked for - and nothing else. Once
+    // AIM: the direction of the whole swipe, eased so a small wobble stays small and a
+    // deliberate diagonal still reaches the corner 100s. This shapes the INPUT only - once
     // thrown, the ball is the engine's and is never touched again: no magnetism, no correction.
-    // The divisor is set by what a THUMB CAN REACH, not by a round number. A swipe starts near
-    // the middle of a 393px screen and runs ~450px up it, so the widest diagonal available is
-    // about 22 degrees - anything steeper runs off the side of the phone before it has travelled
-    // far enough to be a throw. At the old 0.42 rad divisor the corner 100s needed a 30-degree
-    // swipe that physically did not fit on the screen, which is why they read as unreachable.
-    // 0.38 rad puts full aim exactly at the edge of what the hand can do.
+    // GUARD: the divisor is set by the real maximum diagonal a thumb can reach on a 393px
+    // screen, not a round number - too large a divisor and the corner 100s need a swipe angle
+    // that physically doesn't fit on the screen, making them unreachable.
     const raw = Math.max(-1, Math.min(1, Math.atan2(end.x - first.x, first.y - end.y) / 0.38));
     const aim = Math.sign(raw) * (raw * raw);
 
@@ -460,11 +443,11 @@ export class SkeeballUI {
     }
   }
 
-  /** DEV, remove before this game goes public (Matt, 2026-08-17). One settled throw's inputs and
-   *  its REAL result, pushed to skeeballThrows/<deviceId>/ so we can read back actual play data
-   *  (flick -> power -> launch -> hole) and check it against the calculated ranges. Best-effort and
-   *  fire-and-forget: this is throwaway instrumentation, not player history, so a failed write is
-   *  simply dropped (never queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
+  /** DEV, remove before this game goes public. One settled throw's inputs and its REAL result,
+   *  pushed to skeeballThrows/<deviceId>/ so actual play data (flick -> power -> launch -> hole)
+   *  can be checked against the calculated ranges. Best-effort and fire-and-forget: this is
+   *  throwaway instrumentation, not player history, so a failed write is simply dropped (never
+   *  queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
   async _logThrow(rec) {
     if (this._dbg) { this._dbg.log++; this._renderDbg(); }
     const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
