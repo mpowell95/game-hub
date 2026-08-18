@@ -64,6 +64,9 @@ const STRINGS = {
     // How to play: pictures-first, four panels, two tiny captions; arias carry the full
     // meaning for screen readers
     howto_h: 'How to play',
+    ht_roll: 'Swipe up to roll',
+    ht_unlock: 'Hit the target to unlock machines',
+    ht_ok: 'OK',
     ht_swipe: 'Swipe to roll',
     ht_balls: '9 balls per game',
     ht_a_swipe: 'Swipe up the lane to roll the ball',
@@ -129,6 +132,9 @@ const STRINGS = {
     close: 'Cerrar',
 
     howto_h: 'Cómo se juega',
+    ht_roll: 'Desliza hacia arriba para lanzar',
+    ht_unlock: 'Alcanza la meta para desbloquear máquinas',
+    ht_ok: 'Vale',
     ht_swipe: 'Desliza para lanzar',
     ht_balls: '9 bolas por partida',
     ht_a_swipe: 'Desliza hacia arriba por la pista para lanzar la bola',
