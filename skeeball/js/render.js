@@ -144,7 +144,7 @@ export class Renderer {
       // (Matt). _sideWalls() draws ONE smooth wall per side from machine.js's railProfile - the
       // exact hull of these same boxes, so the wall you see is the wall the ball hits.
       if (s.part === 'keep' || s.part === 'glass' || s.part === 'ringSeg' || s.part === 'cupSeg'
-        || s.part === 'hump' || s.part === 'rail') continue;
+        || s.part === 'hump' || s.part === 'rail' || s.part === 'splitter') continue;
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card, and since 2026-08-15 it is the SCOREBOARD.
       // Its material is kept on `_backMat` so setScoreboard() can repaint it in place.
