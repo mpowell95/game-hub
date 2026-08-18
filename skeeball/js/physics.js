@@ -90,7 +90,7 @@ function buildWorld(board) {
       shape: new CANNON.Box(new CANNON.Vec3(s.half[0], s.half[1], s.half[2])),
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'trough' ? matBoard
-          : s.part === 'ringSeg' || s.part === 'cupSeg' ? matRing
+          : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
             : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'glass' ? matDead : matWall,
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,

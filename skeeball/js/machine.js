@@ -179,6 +179,28 @@ export function buildMachine(G) {
   }
   solids.push(...ringSegs);
 
+  // --- the 50-ring splitter (Matt, 2026-08-17) -------------------------------------------------
+  // A ball thrown to land EXACTLY on the top of the 50 ring perches there and dawdles for a second
+  // before rolling off to one side and down to the 10 - an ugly, confusing delay. This is a small
+  // thin fin standing on that apex: it removes the flat balance point, so a ball that lands there
+  // tips off to the left or right at once. Invisible to the player (render.js skips 'splitter');
+  // slick-ish so the ball slides off rather than sticking. It is geometry, not steering - the ball
+  // is never pulled anywhere, it just can't balance on a knife edge (the no-magnetism ban holds).
+  {
+    const c50 = G.holes.c50;
+    if (c50 && c50.ringD) {
+      const R = c50.ringD / 2;
+      const apexV = (c50.v - c50.r + R) + R;       // ring centre v (rule 1) + radius = its top point
+      solids.push({
+        part: 'splitter',
+        pos: faceToWorld(0, apexV, G.ringH * 0.9),
+        half: [0.004, G.ringH * 0.6, 0.035],       // thin across u (tips ballLR), tall, short up-slope
+        faceRot: { phi: Math.PI, tilt: t },
+        railSide: 0,
+      });
+    }
+  }
+
   // --- the cup collars --------------------------------------------------------------------------
   for (const id of Object.keys(G.holes)) {
     const H = G.holes[id];
