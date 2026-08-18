@@ -91,7 +91,7 @@ function renderMachineImage(board) {
   try {
     const c = document.createElement('canvas');
     const r = new Renderer(c, board);
-    r.resize(600, 800);
+    r.framePreview(600, 800);
     r.render(null, 0);
     const url = c.toDataURL('image/jpeg', 0.85);
     r.dispose();
