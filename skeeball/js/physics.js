@@ -1,20 +1,15 @@
-// skeeball/js/physics.js - the ball, simulated by cannon-es (skeeball/js/vendor/cannon-es.js, a
-// battle-tested rigid-body engine; vendored 2026-08-13 on Matt's instruction after three rounds
-// of hand-rolled collision code kept failing his eye test: "you can clearly tell it's being told
-// to react a certain way"). Nothing here scripts a reaction any more. The machine is real
-// geometry (machine.js), the ball is a real rigid sphere with mass, spin and contact friction,
-// and rolling, hops, rim rattles and backboard bounces are all whatever the contact solver says.
+// skeeball/js/physics.js - the ball, simulated by cannon-es (skeeball/js/vendor/cannon-es.js).
+// GUARD: nothing here scripts a reaction. The machine is real geometry (machine.js), the ball is
+// a real rigid sphere with mass, spin and contact friction, and rolling, hops, rim rattles and
+// backboard bounces are all whatever the contact solver says. See DECISIONS.md#why-cannon-es.
 //
-// The ONE non-engine rule left is hole capture, and it is the same rule a real hole enforces:
-// when the ball's centre is over an opening, the floor under it is gone. We implement exactly
-// that - the ball's collision mask drops the board slab and GRAVITY takes it through the mouth,
-// still colliding with the cup's collar on the way down. No teleport, no canned sink.
+// The ONE non-engine rule is hole capture, the same rule a real hole enforces: when the ball's
+// centre is over an opening and slow enough, the floor under it is gone and GRAVITY takes it
+// through the mouth. No teleport, no canned sink. See DECISIONS.md#hole-capture.
 //
-// Same public surface the old engine had, so game.js is untouched:
-//   startThrow(board, {power, aim}) -> st      step(board, st, dt)
-//   takeEvents(st) -> [...]                     st.outcome = {hole, value} | null
-//   simulateThrow(board, params) for the tests. Deterministic: no rng anywhere, fixed timestep,
-//   fixed solver iterations, naive broadphase (stable pair order).
+// Public surface: startThrow(board, {power, aim}) -> st, step(board, st, dt), takeEvents(st),
+// simulateThrow(board, params) for tests. Deterministic: no rng, fixed timestep and solver
+// iterations, naive broadphase (stable pair order).
 
 import * as CANNON from './vendor/cannon-es.js';
 import { buildMachine } from './machine.js';
@@ -54,21 +49,10 @@ function buildWorld(board) {
 
   // The feel lives HERE and in boards.js's geom - nowhere else. Every number below is a DEFAULT
   // that a board's `geom.mat` block may override, so a tuning sweep can search the contact
-  // model without editing this file.
-  //
-  // Wall friction is deliberately NEAR ZERO: the ring and collars are slick painted steel, and
-  // low lateral grip is what makes a ball resting against the band on the slope always slide
-  // around it and roll out - the termination guarantee is physics, not a watchdog. (0.16 was
-  // enough grip to park a ball against the band's up-slope face in a three-contact wedge. Real
-  // rings don't hold balls.)
-  //
-  // BOARD restitution and friction are what decide whether skeeball is LEARNABLE, and
-  // 2026-08-14 measured how much. At restitution 0.26 the ball bounced off the face instead of
-  // settling onto it, so a carom chose the cup and the straight-power ladder was noise: 43 of
-  // 100 adjacent 0.01 power steps flipped the outcome and 30 of 44 bands were one step wide.
-  // A ball that LANDS and then ROLLS makes distance up the slope a smooth function of arrival
-  // speed, which is the entire game. Friction is high for the same reason: the face has to grab
-  // the ball into a roll on contact rather than let it skid on.
+  // model without editing this file. GUARD: wall and ring friction stay NEAR ZERO - low lateral
+  // grip is what makes a ball resting against a ring on the slope always slide off and roll out,
+  // the termination guarantee is physics, not a watchdog. The board is deliberately low-bounce so
+  // the ball LANDS and ROLLS rather than caroming unpredictably. See DECISIONS.md#contact-materials.
   const MAT = G.mat || {};
   const pick = (v, dflt) => (typeof v === 'number' ? v : dflt);
   const contact = (a, b, friction, restitution) => world.addContactMaterial(
@@ -76,11 +60,9 @@ function buildWorld(board) {
   contact(matBall, matWood, pick(MAT.woodFric, 0.30), pick(MAT.woodRest, 0.22));
   contact(matBall, matBoard, pick(MAT.boardFric, 0.62), pick(MAT.boardRest, 0.08));
   contact(matBall, matWall, pick(MAT.wallFric, 0.04), pick(MAT.wallRest, 0.50));
-  // THE RINGS ARE WHITE PLASTIC (PVC), NOT STEEL (Matt, 2026-08-17). A skeeball is heavy and the
-  // rings barely give, so a ball that clips a rim should lose its energy and drop or dribble down,
-  // never keep bouncing across the ring tops and back out (which it did at wallRest 0.50). Low
-  // restitution kills the bounce; friction stays LOW so a ball can never wedge and stick against a
-  // ring - that near-zero grip is the termination guarantee (see the wall-friction note above).
+  // GUARD: the rings are PVC, not steel - a ball that clips a rim loses its energy and drops or
+  // dribbles down rather than bouncing across ring tops and back out. Low restitution kills the
+  // bounce; friction stays low so a ball never wedges against a ring.
   contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
 
@@ -145,27 +127,16 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   const G = board.geom;
   const { world, ball, M } = buildWorld(board);
 
-  // POWER IS NOT CLAMPED TO 0..1 (2026-08-14). 0 and 1 are the ends of the NATURAL swipe range,
-  // not the ends of what is physically possible. Matt: *"An unnaturally fast one should be able
-  // to hit like way higher up on the wall and an unnaturally slower one should be short of the
-  // board for a 0 or roll back."* Clamping here made every over-hard flick identical to a normal
-  // hard one and every feather-touch identical to a slow one, so the two most obvious things a
-  // player tries both did nothing.
-  //
-  // THERE IS NO UPPER BOUND. Matt: *"there should be no limit on how high i can throw the ball.
-  // If a swipe as hard as i can, the ball should launch like crazy high over the machine or
-  // something."* So a 2.0 ceiling came out - swipe hard enough and the ball leaves the machine,
-  // arcs over the back and resolves as the zero it deserves. The only remaining bound is at the
-  // bottom, and it exists so the square root below cannot take a negative argument.
+  // GUARD: POWER IS NOT CLAMPED TO 0..1. 0 and 1 are the ends of the NATURAL swipe range, not
+  // the ends of what is physically possible - a harder-than-normal swipe reaches higher up the
+  // wall, a softer one falls short for a 0 or rolls back. THERE IS NO UPPER BOUND: swipe hard
+  // enough and the ball leaves the machine entirely and resolves as the zero it earns. The only
+  // bound is at the bottom, so the square root below cannot take a negative argument.
   const p = Math.max(-0.75, power);
-  // Power is spent as ENERGY, not as speed (2026-08-14). How far a ball rolls up the face goes
-  // as the SQUARE of how fast it gets there, so a power dial that mapped linearly onto speed
-  // mapped quadratically onto the thing the player is actually aiming with: the bottom of the
-  // dial did almost nothing and the top of it did everything, which is half of why the ladder
-  // had a 25-step dead zone at the soft end. Interpolating v^2 instead makes travel up the
-  // board very nearly linear in the swipe, so the bands come out even. This is the CONTROL
-  // CURVE - what the dial means - not a force on the ball; nothing here touches the ball once
-  // it is rolling.
+  // GUARD: power is spent as ENERGY, not as speed - interpolating v^2 rather than v, because
+  // distance up the face scales with the SQUARE of arrival speed. This is the CONTROL CURVE -
+  // what the dial means - not a force on the ball; nothing here touches the ball once rolling.
+  // See DECISIONS.md#power-curve-rebuild.
   const s0 = G.minSpeed;
   const s1 = G.maxSpeed;
   // Extrapolates outside 0..1 by the same rule it interpolates inside it, so a swipe past either
@@ -212,13 +183,12 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
     }
-    // DEV throw-logging (Matt, 2026-08-18): log EVERY contact against EVERY part - side walls (rail),
-    // rings (ringSeg), cup collars (cupSeg), lane, hump, trough, flare, glass, keep, everything - with
-    // WHERE it hit (ball centre), how hard (vn), which cup/ring if the body carries one, and when.
-    // vn > 0.05 drops the solver's per-step resting/rolling contacts (normal velocity ~0) while
-    // keeping every real touch, down to a soft side-wall graze. `capture`/`gutter`/`done` still carry
-    // the final outcome. Capped so a jammed ball cannot grow the array without bound. Read back with
-    // read-skeeball-throws.mjs. Remove with the rest of the throw-logging before Skeeball goes public.
+    // DEV throw-logging, remove before public: log EVERY contact against EVERY part - side
+    // walls, rings, cup collars, lane, hump, trough, flare, glass, keep, everything - with
+    // WHERE it hit, how hard (vn), which cup/ring if the body carries one, and when. vn > 0.05
+    // drops the solver's per-step resting/rolling contacts while keeping every real touch, down
+    // to a soft side-wall graze. `capture`/`gutter`/`done` still carry the final outcome. Capped
+    // so a jammed ball cannot grow the array without bound. Read back with read-skeeball-throws.mjs.
     if (vn > 0.05 && st.nContacts < 300) {
       st.nContacts += 1;
       const p = ball.position;
@@ -255,20 +225,12 @@ function substep(st) {
   const f = worldToFace(M, G, p);
 
   // 2. The mouths. Centre over an opening while at face level = the floor stops holding you -
-  //    exactly what a hole is. The collar keeps collisions, so the drop stays guided and visible.
-  //
-  //    ...but only if the ball can ACTUALLY FALL IN, which is the rule this board is built on
-  //    (2026-08-14). A ball rolling up the face crosses every lower mouth on its way to a higher
-  //    one, and the old test - centre over the opening, full stop - meant the first mouth always
-  //    swallowed it. Nothing above the bottom cup was reachable by rolling, which is why the
-  //    shipped build could only score by lobbing balls in out of the air.
-  //
-  //    So ask the question a real hole asks: in the time this ball takes to cross the mouth,
-  //    does it drop far enough to be past the lip? Its own inward velocity counts, so a ball
-  //    dropping into a cup goes in even at speed, while a fast roll skims across and carries on
-  //    UNCHANGED - it is not deflected, slowed or steered, it simply is not caught. That single
-  //    test is what makes distance up the slope choose the cup, and it is pure kinematics: no
-  //    magnetism, no assist, no correction (see the deleted section 5 below).
+  //    exactly what a hole is, but only if the ball can ACTUALLY FALL IN. GUARD: this is a
+  //    KINEMATIC test, never a "centre over the hole" test - in the time this ball takes to
+  //    cross the mouth, does it drop far enough to be past the lip? A ball dropping into a cup
+  //    goes in even at speed; a fast roll skims across and carries on UNCHANGED, not deflected,
+  //    slowed or steered. No magnetism, no assist, no correction (see the banned section 5
+  //    below). See DECISIONS.md#hole-capture.
   const vel = ball.velocity;
   const sinT = Math.sin(M.tilt);
   const cosT = Math.cos(M.tilt);
@@ -297,16 +259,9 @@ function substep(st) {
   }
 
   // 3. The trough: where a short throw dies, and where the board's bottom edge feeds every ball
-  //    that ran out of steam and came back down. IT IS WORTH NOTHING. Matt, 2026-08-15: *"it
-  //    should be 0 points if the ball falls below the 10 ring into the nothing area. I'm getting
-  //    10 points for that in my tests."*
-  //
-  //    It used to pay 10 across a centre band (`troughTenHalfW`) and 0 only in the corners, which
-  //    was right when the 10 WAS this slot - the bottom-of-the-board catcher, exactly like a real
-  //    cabinet's. It is not that any more: batch 3b made the 10 a real hole up on the face with
-  //    its own ring, and batch 3f made falling through a hole the only way to score. A ball down
-  //    here has missed every hole there is, including the 10, so paying it the 10's value both
-  //    contradicts the rule and hands out the game's floor score for the game's worst throw.
+  //    that ran out of steam and came back down. GUARD: IT IS WORTH NOTHING - the 10 is a real
+  //    hole on the face now, so a ball down here has missed every hole there is, including the
+  //    10, and must not be paid the 10's value. See DECISIONS.md#trough-and-lip.
   //
   //    (p.y < -0.3 is the belt-and-braces catch: geometry should make it unreachable, but a ball
   //    that somehow leaves the world must still resolve, not fall forever.)
@@ -323,26 +278,12 @@ function substep(st) {
     }
   } else st.troughAt = -1;
 
-  // 3b. THE RESTING-POSITION RULE IS GONE (batch 3f, 2026-08-14). There is no section here on
-  //     purpose, and putting one back would undo the whole point of batches 3b-3f.
-  //
-  //     It used to say: a ball that comes to rest ON THE FACE scores by where it stopped - inside
-  //     the big circle 20, anywhere else 10. That was the right answer for the board it was
-  //     written for, where the rings were flat paint and nothing stood up off the face, so a ball
-  //     that stopped on the board had no other way to resolve.
-  //
-  //     This board is different. Every ring is a wall x tall, and a hole is entered by arcing
-  //     over that wall and dropping in. Matt: "Scoring is by falling through a hole. The
-  //     resting-position rule comes out." So the ONLY way to score a hole's value is section 2's
-  //     capture - actually falling through the mouth.
-  //
-  //     A ball that does not fall in is not scored here at all. It is left alone, and on a face
-  //     tilted 45 degrees it does what it does on a real machine: rolls back down, off the bottom
-  //     edge, into the trough, where section 3 above scores it 10 in the centre band or 0 in a
-  //     corner. That is the honest floor, and it is a REAL outcome the ball earned rather than a
-  //     consolation the code handed it. The watchdog covers the rare ball that parks.
-  //
-  //     The removed block also carried the last reader of `st.restAt`, so that field went with it.
+  // 3b. GUARD: THERE IS NO RESTING-POSITION SCORING RULE, and there must not be one again. A
+  //     ball that comes to rest on the face without falling through a hole is not scored here at
+  //     all - it is left alone, and rolls back down into the trough like a real machine, where
+  //     section 3 above gives it the honest floor score. The ONLY way to score a hole's value is
+  //     section 2's capture - actually falling through the mouth. See
+  //     DECISIONS.md#removed-features-and-why-they-stay-removed.
 
   // 4. Rolled back home: the hump kept the ball. Not spent; the player just gets it back.
   if (p.z > -0.04 && ball.velocity.z > 0.05 && st.t > 0.4) {
@@ -352,12 +293,11 @@ function substep(st) {
     return;
   }
 
-  // 5. (was "the dish": a constant pull toward the 20's mouth for slow balls inside the ring.
-  //    DELETED 2026-08-14 and never to return. It was magnetism - a ball being steered into a
-  //    hole it was not thrown at - which is a standing, permanent ban on this game. A ball that
-  //    runs out of speed on the slope now does the honest thing: gravity takes it back down the
-  //    face and it feeds the 10 slot at the bottom, exactly like the real machine. If a power
-  //    band needs widening, widen it in the GEOMETRY, never by moving the ball.)
+  // 5. GUARD: NO MAGNETISM, EVER. There is no pull toward any hole for a slow ball - a ball is
+  //    never steered toward a hole it was not thrown at. A ball that runs out of speed on the
+  //    slope does the honest thing: gravity takes it back down the face into the trough. If a
+  //    power band needs widening, widen it in the GEOMETRY, never by moving the ball. See
+  //    DECISIONS.md#removed-features-and-why-they-stay-removed.
 
   // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball
   //    gets popped off the face like the chatter that frees a real ball; a ball a pop cannot
