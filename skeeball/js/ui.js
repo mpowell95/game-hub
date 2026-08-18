@@ -350,20 +350,16 @@ export class SkeeballUI {
 
   _showHowTo() {
     const board = boardById(this.settings.board);
-    // Mancala's how-to treatment (mancala/js/howto.js): a dark modal with a white illustration
-    // card. Here the illustration is the ACTUAL machine (the cached render) with a ball rolling up
-    // into a cup, and the caption cross-fades roll -> unlock. Always dark, like Mancala's sheet.
+    // Mancala's how-to chrome (dark modal, white card, chunky OK) but the illustration is a LIVE
+    // throw: the real engine (render.js + game.js physics) loops a scoring roll, so it looks like an
+    // actual ball was thrown rather than a flat overlay. The caption cross-fades roll -> unlock.
     const el = document.createElement('div');
     el.className = 'sk-hp-veil';
     el.innerHTML = `
       <div class="sk-hp-modal" role="dialog" aria-modal="true" aria-label="${esc(t('howto_h'))}">
         <div class="sk-hp-title">${esc(t('howto_h'))}</div>
         <div class="sk-hp-card">
-          <div class="sk-hp-panel">
-            <img class="sk-hp-img" alt="${esc(board.name)}" />
-            <span class="sk-hp-ball" aria-hidden="true"></span>
-            <span class="sk-hp-score" aria-hidden="true">+50</span>
-          </div>
+          <div class="sk-hp-panel"><canvas class="sk-hp-canvas" aria-hidden="true"></canvas></div>
           <p class="sk-hp-cap">
             <span class="c1">${esc(t('ht_roll'))}</span>
             <span class="c2">${esc(t('ht_unlock'))}</span>
@@ -372,13 +368,86 @@ export class SkeeballUI {
         <button type="button" class="sk-hp-ok" data-role="ok">${esc(t('ht_ok'))}</button>
       </div>`;
     this._closeOverlay();
+    this._stopHpDemo();
     this.root.appendChild(el);
     this.overlay = el;
-    const img = el.querySelector('.sk-hp-img');
-    if (img) this._ensureMachineImg(board, img);
-    const close = () => { if (el.parentNode) el.parentNode.removeChild(el); if (this.overlay === el) this.overlay = null; };
+    const canvas = el.querySelector('.sk-hp-canvas');
+    // Start after layout so the canvas has real dimensions to size the renderer to.
+    if (canvas) requestAnimationFrame(() => { if (this.overlay === el) this._startHpDemo(board, canvas); });
+    const close = () => {
+      this._stopHpDemo();
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (this.overlay === el) this.overlay = null;
+    };
     el.querySelector('[data-role="ok"]').addEventListener('click', close);
     el.addEventListener('click', (e) => { if (e.target === el) close(); });
+  }
+
+  /** The how-to illustration is a REAL throw, looped: the actual renderer + physics engine, a
+   *  measured power that scores the 50, re-thrown after it settles. That is why it looks like a
+   *  thrown ball and not an overlay - it IS the game. Torn down by _stopHpDemo on close/destroy. */
+  _startHpDemo(board, canvas) {
+    try {
+      this._stopHpDemo();
+      const rect = canvas.getBoundingClientRect();
+      const R = new Renderer(canvas, board);
+      R.resize(Math.max(2, Math.round(rect.width)), Math.max(2, Math.round(rect.height)));
+      this._hpRenderer = R;
+      this._hpGame = new SkeeballGame(board.id);
+      this._hpLast = 0;
+      this._hpSettleAt = 0;
+      this._hpThrown = false;
+      this._hpPending = null;
+      // Reduced motion: one still frame (the machine with a ball ready at the serve spot), no loop.
+      const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) { R.render(this._hpGame, 0); return; }
+      const frame = (ts) => {
+        if (!this._hpRenderer || !this._hpGame) return;
+        this._hpRaf = requestAnimationFrame(frame);
+        const now = ts / 1000;
+        const dt = Math.min(this._hpLast ? now - this._hpLast : 1 / 60, 0.05);
+        this._hpLast = now;
+        this._hpGame.update(dt);
+        // Minimal event drain (mirrors _drainEvents): light the rim on capture, pop the score on
+        // ballDone, so the demo shows the ball dropping in AND the +50.
+        for (const ev of this._hpGame.takeEvents()) {
+          if (ev.type === 'capture') { this._hpRenderer.flashHole(ev.hole); this._hpPending = { pos: ev.pos, value: ev.value }; }
+          else if (ev.type === 'ballDone') {
+            const at = this._hpPending; this._hpPending = null;
+            if (at) {
+              const gold = at.value >= 100, big = at.value >= 50;
+              this._hpRenderer.popupAt(at.pos, `+${at.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+              if (big) this._hpRenderer.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
+              if (gold) this._hpRenderer.celebrate();
+            }
+          }
+        }
+        this._hpRenderer.render(this._hpGame, dt);
+        if (!this._hpGame.ball) {
+          if (!this._hpSettleAt) this._hpSettleAt = now;
+          const pause = this._hpThrown ? 1.3 : 0.5;
+          if (now - this._hpSettleAt > pause) {
+            if (this._hpGame.over) this._hpGame = new SkeeballGame(board.id);  // fresh rack, loops forever
+            this._hpGame.throwBall({ power: 0.60, aim: 0 });   // measured: a straight 0.60 scores the 50
+            this._hpThrown = true;
+            this._hpSettleAt = 0;
+          }
+        } else {
+          this._hpSettleAt = 0;
+        }
+      };
+      this._hpRaf = requestAnimationFrame(frame);
+    } catch (err) {
+      console.error('[skeeball] how-to demo failed', err);
+      this._stopHpDemo();
+    }
+  }
+
+  _stopHpDemo() {
+    if (this._hpRaf) { cancelAnimationFrame(this._hpRaf); this._hpRaf = 0; }
+    if (this._hpRenderer) { this._hpRenderer.dispose(); this._hpRenderer = null; }
+    this._hpGame = null;
+    this._hpPending = null;
   }
 
   /** The pattern's single-row rule (tic-tac-toe/CLAUDE.md): measure each line's rendered width
@@ -795,6 +864,7 @@ export class SkeeballUI {
   destroy() {
     this.disposed = true;
     this._stopLoop();
+    this._stopHpDemo();
     this._closeOverlay();
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
