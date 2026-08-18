@@ -190,13 +190,24 @@ export function buildMachine(G) {
     const c50 = G.holes.c50;
     if (c50 && c50.ringD) {
       const R = c50.ringD / 2;
-      const apexV = (c50.v - c50.r + R) + R;       // ring centre v (rule 1) + radius = its top point
+      const apexV = (c50.v - c50.r + R) + R;       // the 50 ring's top point (up-slope apex)
+      // A RAMP against the ring's up-slope wall (Matt's sketch, 2026-08-17): it slopes from the top
+      // of the wall down to the board, up-slope, so a ball landing on the ring's top rolls straight
+      // off it instead of perching. Built as a thin tilted slab; both the board's tilt and the
+      // ramp's slope are rotations about world-x, so it composes to one rotX angle.
+      const run = G.ringH * 0.9;                   // how far up-slope the ramp reaches the board
+      const A = faceToWorld(0, apexV, G.ringH);    // top of the up-slope ring wall
+      const B = faceToWorld(0, apexV + run, 0);    // the board, up-slope of it
+      const dy = B[1] - A[1], dz = B[2] - A[2];
+      const L = Math.hypot(dy, dz);
+      const ang = Math.atan2(-dy, dz);             // rotX so the slab's long axis lies along A->B
+      const th = 0.03;
+      const ny = Math.cos(t), nz = Math.sin(t);    // face normal, to sink the slab under its surface
       solids.push({
         part: 'splitter',
-        // Only 0.25x tall (Matt, 2026-08-17), sitting on top of the ring's rim.
-        pos: faceToWorld(0, apexV, G.ringH * 1.125),
-        half: [0.004, G.ringH * 0.125, 0.035],     // thin across u (tips ball L/R), 0.25x tall, short up-slope
-        faceRot: { phi: Math.PI, tilt: t },
+        pos: [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2 - ny * th / 2, (A[2] + B[2]) / 2 - nz * th / 2],
+        half: [0.07, th / 2, L / 2],               // wide across u, thin, long down the ramp
+        rot: { axis: [1, 0, 0], angle: ang },
         railSide: 0,
       });
     }
