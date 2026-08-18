@@ -340,23 +340,44 @@ export class SkeeballUI {
     const cached = this._machineImg[board.id];
     if (cached) { imgEl.src = cached; return; }
     requestAnimationFrame(() => {
-      if (this.disposed || this.screen !== 'setup') return;
+      if (this.disposed) return;
       const url = renderMachineImage(board);
       if (!url) return;
       this._machineImg[board.id] = url;
-      const live = this.root.querySelector(`img[data-machine="${board.id}"]`);
-      if (live) live.src = url;
+      imgEl.src = url;
     });
   }
 
   _showHowTo() {
-    const el = this._openOverlay('howto', `
-      <div class="sk-sheet-head">
-        <h2>${esc(t('howto_h'))}</h2>
-        <button type="button" class="sk-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
-      </div>
-      <div class="sk-sheet-body sk-help">${howToMarkup(t)}</div>`);
-    this._fitHelpLines(el);
+    const board = boardById(this.settings.board);
+    // Mancala's how-to treatment (mancala/js/howto.js): a dark modal with a white illustration
+    // card. Here the illustration is the ACTUAL machine (the cached render) with a ball rolling up
+    // into a cup, and the caption cross-fades roll -> unlock. Always dark, like Mancala's sheet.
+    const el = document.createElement('div');
+    el.className = 'sk-hp-veil';
+    el.innerHTML = `
+      <div class="sk-hp-modal" role="dialog" aria-modal="true" aria-label="${esc(t('howto_h'))}">
+        <div class="sk-hp-title">${esc(t('howto_h'))}</div>
+        <div class="sk-hp-card">
+          <div class="sk-hp-panel">
+            <img class="sk-hp-img" alt="${esc(board.name)}" />
+            <span class="sk-hp-ball" aria-hidden="true"></span>
+          </div>
+          <p class="sk-hp-cap">
+            <span class="c1">${esc(t('ht_roll'))}</span>
+            <span class="c2">${esc(t('ht_unlock'))}</span>
+          </p>
+        </div>
+        <button type="button" class="sk-hp-ok" data-role="ok">${esc(t('ht_ok'))}</button>
+      </div>`;
+    this._closeOverlay();
+    this.root.appendChild(el);
+    this.overlay = el;
+    const img = el.querySelector('.sk-hp-img');
+    if (img) this._ensureMachineImg(board, img);
+    const close = () => { if (el.parentNode) el.parentNode.removeChild(el); if (this.overlay === el) this.overlay = null; };
+    el.querySelector('[data-role="ok"]').addEventListener('click', close);
+    el.addEventListener('click', (e) => { if (e.target === el) close(); });
   }
 
   /** The pattern's single-row rule (tic-tac-toe/CLAUDE.md): measure each line's rendered width
