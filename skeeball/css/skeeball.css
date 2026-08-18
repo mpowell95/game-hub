@@ -234,50 +234,7 @@
 .sk-root .sk-hp-title { color: #fff; font-weight: 800; font-size: 20px; letter-spacing: 0.04em; text-align: center; }
 .sk-root .sk-hp-card { background: #fff; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .sk-root .sk-hp-panel { position: relative; border-radius: 10px; aspect-ratio: 3 / 4; overflow: hidden; background: #140d0a; }
-.sk-root .sk-hp-img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.sk-root .sk-hp-ball {
-  position: absolute;
-  left: 50%;
-  bottom: 2%;
-  width: 7%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffffff, #d8d2c8 42%, #8a8377);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
-  transform: translateX(-50%);
-  animation: sk-hp-roll 1.9s ease-in infinite;
-}
-/* A successful roll: the ball rolls up the board and drops INTO the top-centre 50 cup (its centre
-   is at bottom 37% of this thumbnail, measured by projecting the hole through the preview camera),
-   then a +50 pops. Deliberately quick, and it lands in a hole rather than fading in mid-air. */
-@keyframes sk-hp-roll {
-  0% { bottom: 2%; opacity: 0; transform: translateX(-50%) scale(0.85); }
-  8% { opacity: 1; }
-  46% { bottom: 37%; opacity: 1; transform: translateX(-50%) scale(1); }
-  56% { bottom: 36%; opacity: 1; transform: translateX(-50%) scale(0.45); }
-  63% { bottom: 36%; opacity: 0; transform: translateX(-50%) scale(0.25); }
-  100% { bottom: 36%; opacity: 0; transform: translateX(-50%) scale(0.25); }
-}
-.sk-root .sk-hp-score {
-  position: absolute;
-  left: 50%;
-  bottom: 42%;
-  transform: translateX(-50%);
-  color: #ffd977;
-  font-weight: 900;
-  font-size: 23px;
-  letter-spacing: 0.02em;
-  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  pointer-events: none;
-  animation: sk-hp-score 1.9s ease-out infinite;
-}
-@keyframes sk-hp-score {
-  0%, 52% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.7); }
-  62% { opacity: 1; transform: translateX(-50%) translateY(-2px) scale(1.15); }
-  84% { opacity: 1; transform: translateX(-50%) translateY(-16px) scale(1); }
-  96%, 100% { opacity: 0; transform: translateX(-50%) translateY(-24px) scale(1); }
-}
+.sk-root .sk-hp-canvas { display: block; width: 100%; height: 100%; }
 .sk-root .sk-hp-cap { position: relative; min-height: 3.2em; margin: 0; padding: 2px 6px 6px; }
 .sk-root .sk-hp-cap span {
   position: absolute;
@@ -311,8 +268,6 @@
 }
 .sk-root .sk-hp-ok:active { transform: translateY(2px); box-shadow: 0 2px 0 #b4531c; }
 @media (prefers-reduced-motion: reduce) {
-  .sk-root .sk-hp-ball { animation: none; bottom: 37%; opacity: 1; transform: translateX(-50%) scale(1); }
-  .sk-root .sk-hp-score { animation: none; opacity: 1; transform: translateX(-50%); }
   .sk-root .sk-hp-cap .c1 { animation: none; opacity: 1; }
   .sk-root .sk-hp-cap .c2 { animation: none; opacity: 0; }
 }
