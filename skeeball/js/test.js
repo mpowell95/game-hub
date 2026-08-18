@@ -1,19 +1,12 @@
 // skeeball/js/test.js - headless engine tests (wired into run-all-tests.mjs). No DOM, no
-// storage: physics.js (cannon-es underneath since 2026-08-13), game.js and boards.js are pure,
-// and everything here drives them the way ui.js does - through throw params and the event
-// stream, never by poking fields - so a rename fails a test instead of silently passing.
+// storage: physics.js, game.js and boards.js are pure, and everything here drives them the way
+// ui.js does - through throw params and the event stream, never by poking fields directly - so
+// a rename fails a test instead of silently passing.
 //
-// The reachability sweep is the load-bearing block: it proves every hole on the machine can
-// actually be scored by SOME swipe, that a too-weak roll comes back, and that the power curve
-// keeps its shape (up through the cups as power climbs; overshoot pays on average). Those are
-// the mechanics Matt tunes by feel; this pins them so a geometry or material tweak that kills
-// the 100 pockets or the rollback fails here before anyone plays a broken machine.
-//
-// What changed with the engine swap: outcomes come from a real rigid-body solver, so a few old
-// assertions were re-grounded in what a REAL machine does - there is no "gutter void" any more
-// (a dead lob rolls into the 10 slot, exactly like the real bottom slot), and "max power must
-// not be a clean 50" became "overshoot pays ON AVERAGE" (a slammed ball genuinely can rattle
-// into the 50 now and then; what must not happen is full power beating aimed mid power).
+// The reachability sweep is the load-bearing block: it proves every hole can actually be scored
+// by SOME swipe, that a too-weak roll comes back, and that the power curve keeps its shape. It
+// pins the mechanics tuned by feel, so a geometry or material tweak that kills the 100
+// pockets or the rollback fails here before anyone plays a broken machine.
 
 import { simulateThrow, startThrow, step, takeEvents, STEP } from './physics.js';
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
@@ -67,18 +60,16 @@ let sweepSlowest = 0;
     }
   }
   // Every SCORING outcome must be reachable somewhere in the (power, aim) space. `returned` is
-  // deliberately NOT in this list: the classic's minSpeed starts where the 20 starts, so every
-  // throw on this machine is a real throw for real points and nothing rolls back unspent. The
-  // rollback PATH is still exercised - block 6 drives it on a board whose minSpeed sits under
-  // the hump - so it cannot rot; it just is not part of this machine's dial any more.
+  // deliberately NOT in this list: the classic's minSpeed starts where the 20 starts, so nothing
+  // on this machine rolls back unspent. The rollback path itself is still exercised in block 6,
+  // on a board whose minSpeed sits under the hump.
   for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
   }
-  // THE SOFT END OF THE DIAL IS NEVER WASTED. `minSpeed` starts where the 20 starts, so no
-  // straight throw can fail to reach the board - that is the "25 dead steps at the bottom" defect,
-  // pinned. A ball that banks off a side rail on a hard angled fling and comes back is a different
-  // thing entirely: real, rare, and not a wasted end of the dial, so it is allowed and bounded.
+  // THE SOFT END OF THE DIAL IS NEVER WASTED: no straight throw may fail to reach the board. A
+  // ball that banks off a side rail on a hard angled fling and comes back is a different thing -
+  // real, rare, and allowed within a bound.
   {
     let straightRoll = 0;
     let anyRoll = 0;
@@ -95,11 +86,8 @@ let sweepSlowest = 0;
       `${anyRoll} of ${41 * 11} rolled back`);
   }
 
-  // THE BALL MUST GET IN THE AIR. The defect this exists for shipped on 2026-08-14: the ramp was
-  // flattened to 0.30 rad against a 0.56 rad board, which makes an arc geometrically impossible
-  // (see boards.js's humpAngles), and every throw at every power crawled onto the bottom edge of
-  // the face and rolled. Nothing in the suite could see it - the ladder was fine, the scores were
-  // fine, "101 of 101 touched the scoring face" read as a triumph. Skeeball is a ball that flies.
+  // THE BALL MUST GET IN THE AIR. A "touched the scoring face" check alone cannot see a ramp
+  // that never launches - see DECISIONS.md#launch-angle-history.
   ok('the ramp launches STEEPER than the board is tilted (or no arc is possible at all)',
     Math.max(...board.geom.humpAngles) > board.geom.boardTilt + 0.15,
     `launch ${Math.max(...board.geom.humpAngles)} rad vs boardTilt ${board.geom.boardTilt} rad`);
@@ -141,30 +129,8 @@ let sweepSlowest = 0;
 }
 
 // --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
-
-// RE-GROUNDED 2026-08-14, the same way the cannon-es swap re-grounded the block before it. A
-// play review measured the shipped ladder and found it unlearnable: 43 of 100 adjacent 0.01
-// power steps flipped the outcome, 30 of the 44 bands were one step wide, the softest 25 steps
-// of the dial ALL scored the floor and so did 12 of the hardest. The rebuild (a flatter ramp, a
-// board the ball lands on and rolls up, and a capture test that asks whether the ball is slow
-// enough to drop in) turns the dial into a ladder. Three old assertions described the dial the
-// player could not use, and are replaced here by what now has to hold:
-//
-//   was: a feeble roll comes back / a dead lob dies in the 10   ->  NO DEAD ZONE AT EITHER END.
-//        Both described the soft end of the dial doing nothing. `minSpeed` now starts where the
-//        20 starts, so the bottom of the swipe is a real throw for real points. The rollback
-//        path itself is untouched in physics.js and still reachable by a machine whose minSpeed
-//        sits under the hump - the classic's simply does not.
-//
-//   was: max power scores worse than mid power (overshoot has a price)  ->  cannot hold at the
-//        same time as "no dead zone at the hard end", and was measured, not assumed. The topmost
-//        cup catches every overshoot: the backboard is dead material, so a slammed ball rebounds
-//        slowly and falls back into the 50 from just above it. The only geometries that DO
-//        punish a slam punish it off a cliff - shrinking the 50 until overshoots miss it turns
-//        the top 26-32 steps of the dial into a flat 10, which is the exact defect the rebuild
-//        exists to remove. So the price moved to where it can be paid gradually: the 100 is
-//        worth double the 50 and needs full power AND a hard sideways aim, and missing it costs
-//        you the ball. Slamming straight is the SAFE line now, not the optimal one.
+// This block IS the current contract for the power curve - see DECISIONS.md#power-curve-rebuild
+// for why it looks like this rather than the simpler "overshoot always costs you" shape.
 {
   const at = (p) => outcomeOf(p, 0);
   const ladder = [];
@@ -235,10 +201,9 @@ let sweepSlowest = 0;
       'no (power, aim) with |aim| >= 0.8 scored 100');
     if (best) console.log('        (first at power ' + best.p.toFixed(2) + ', aim ' + best.a + ')');
   }
-  // The 100 needs a real ANGLE, which is the axis its risk lives on. It is deliberately NOT
-  // gated on power any more: since the ramp was made to throw (2026-08-14) a hard-angled ball
-  // banks off the side rail and rides it into the corner, which is the classic bank shot and is
-  // available from mid power up. What must stay true is that a HALF-hearted angle never pays.
+  // The 100 needs a real ANGLE, which is the axis its risk lives on, not power - a hard-angled
+  // ball can bank off the side rail into the corner from mid power up. What must stay true is
+  // that a HALF-hearted angle never pays.
   for (const a of [0.3, 0.45, -0.3, -0.45]) {
     ok(`a half-angled ball never pays 100 (aim ${a})`,
       corner(0.85, a) !== 100, `aim ${a} at p0.85 scored ${corner(0.85, a)}`);
@@ -262,7 +227,7 @@ let sweepSlowest = 0;
   }
   ok('at least one throw works the board for over 2s, like the footage', longest > 2,
     `longest honest settle in the probe sweep: ${longest.toFixed(2)}s`);
-  // And that longest rattler produces real bounce events - the thing the old model faked.
+  // And that longest rattler produces real bounce events.
   const st = startThrow(board, longestParams || { power: 0.5, aim: 0.3 });
   let bounces = 0;
   for (let i = 0; i < 240 * 14 && !st.done; i++) {
@@ -334,11 +299,10 @@ let sweepSlowest = 0;
     return evs;
   };
 
-  // A rolled-back ball is not spent. The CLASSIC can no longer produce one - its minSpeed starts
-  // where the 20 starts, so there is no wasted end of the dial (see block 3) - but the rule is
-  // about game.js, not about one machine's tuning, and a machine that serves under the hump must
-  // still get its ball back. So drive it on a board that CAN roll one back, which also keeps the
-  // physics path itself covered instead of quietly going dead.
+  // A rolled-back ball is not spent. The classic board can no longer produce one (its minSpeed
+  // starts where the 20 starts), but the rule belongs to game.js, not to one machine's tuning -
+  // drive it on a synthetic board whose minSpeed sits under the hump so the rollback path stays
+  // covered.
   {
     const slow = { ...board, id: 'test-rollback', geom: { ...board.geom, minSpeed: 0.55, maxSpeed: 0.6 } };
     const g2 = new SkeeballGame('classic');
