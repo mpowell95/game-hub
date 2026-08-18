@@ -82,6 +82,26 @@ function clearSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to lose - the rack is recorded */ }
 }
 
+/** One throwaway Renderer draws the machine (no ball) to an off-DOM canvas we read back as a
+ *  JPEG - render.js sets preserveDrawingBuffer, so the canvas is readable, and the WebGL context
+ *  is disposed immediately after. This is how the setup carousel (and later the how-to card) show
+ *  the ACTUAL machine rather than a drawing (batch G, 2026-08-18). Returns null on any failure so
+ *  the caller keeps its placeholder rather than breaking. */
+function renderMachineImage(board) {
+  try {
+    const c = document.createElement('canvas');
+    const r = new Renderer(c, board);
+    r.resize(600, 800);
+    r.render(null, 0);
+    const url = c.toDataURL('image/jpeg', 0.85);
+    r.dispose();
+    return url;
+  } catch (err) {
+    console.error('[skeeball] machine preview render failed', err);
+    return null;
+  }
+}
+
 /** This player's own records for a board, straight from the shared store (never a local copy). */
 function myRecords(boardId) {
   try {
@@ -107,6 +127,7 @@ export class SkeeballUI {
     this.msgTimer = 0;
     this.top = {};                     // boardId -> { score, name } once the network answers
     this.hubAvg = null;                // hub-wide average score across synced players (game-over card)
+    this._machineImg = {};             // boardId -> cached data URL of the actual machine render
 
     this._onPointerMove = (e) => this._swipeMove(e);
     this._onPointerUp = (e) => this._swipeEnd(e);
@@ -210,81 +231,121 @@ export class SkeeballUI {
     try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
     const save = loadSave();
     const board = boardById(this.settings.board);
-    const rec = myRecords(board.id);
-    const last = this.lastScore && this.lastScore.board === board.id ? this.lastScore.score : null;
     const val = (n) => (n ? String(n) : '-');
 
-    // Escoba's page order (the repo's setup-screen reference): resume if a save exists, one
-    // stats line, the settings card (here: the machine accordion), the how-to text link, ONE
-    // primary action. Collapsed rows show label + current value; open one to change it.
-    const machinesBody = BOARDS.map((b) => {
+    // Your average, game-wide (lifetime points / games). One machine today, so this IS the Classic
+    // average; a per-board average would need a per-board points sum the store does not keep yet.
+    let myAvg = null;
+    try { if (sk.played) myAvg = Math.round((sk.points | 0) / sk.played); } catch { /* fine */ }
+
+    // A swipeable carousel of machines (Matt's call over Escoba's accordion): one slide per
+    // machine, each showing that machine's ACTUAL board (render.js render, cached as an image),
+    // never a drawing. Locked machines show a padlock. Scroll-snap does the swipe; with one
+    // machine there is a single centred card and no carousel chrome.
+    const idx = Math.max(0, BOARDS.findIndex((b) => b.id === board.id));
+    const slides = BOARDS.map((b) => {
       const open = isUnlocked(sk, b.id, DEFAULT_BOARD);
       if (!open) {
         const from = boardById(b.unlock.board);
-        return `<div class="sk-mrow is-locked"><b>${esc(b.name)}</b>
-          <span>${esc(t('unlock_hint', { score: b.unlock.score, name: from.name }))}</span></div>`;
+        return `<div class="sk-slide sk-slide-locked" data-board="${b.id}">
+          <div class="sk-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <p class="sk-slide-name">${esc(b.name)}</p>
+          <p class="sk-slide-locktext">${esc(t('unlock_hint', { score: b.unlock.score, name: from.name }))}</p>
+        </div>`;
       }
       const r = myRecords(b.id);
-      const sel = b.id === board.id;
-      return `<button type="button" class="sk-mrow${sel ? ' is-selected' : ''}" data-pick="${b.id}">
-        <b>${esc(b.name)}</b>
-        <span class="sk-mrow-tag">${esc(t(b.taglineKey))}</span>
-        <span class="sk-mrow-recs">
-          <span><em>${esc(t('rec_top'))}</em><b data-rec-top="${b.id}">${this._topText(b.id)}</b></span>
-          <span><em>${esc(t('rec_mine'))}</em><b>${val(r.mine)}</b></span>
-          <span><em>${esc(t('rec_today'))}</em><b>${val(r.today)}</b></span>
-          <span><em>${esc(t('rec_last'))}</em><b>${this.lastScore && this.lastScore.board === b.id ? this.lastScore.score : '-'}</b></span>
-        </span>
-      </button>`;
+      return `<div class="sk-slide" data-board="${b.id}">
+        <p class="sk-slide-name">${esc(b.name)}</p>
+        <div class="sk-slide-machine"><img class="sk-slide-img" data-machine="${b.id}" alt="${esc(b.name)}" /></div>
+        <div class="sk-slide-recwide"><em>${esc(t('over_hub_record'))}</em><b data-rec-top="${b.id}">${esc(this._topText(b.id))}</b></div>
+        <div class="sk-slide-rec3">
+          <div class="sk-slide-rec"><b>${val(r.mine)}</b><em>${esc(t('rec_mine'))}</em></div>
+          <div class="sk-slide-rec"><b>${val(r.today)}</b><em>${esc(t('rec_today'))}</em></div>
+          <div class="sk-slide-rec"><b>${val(myAvg)}</b><em>${esc(t('over_your_avg'))}</em></div>
+        </div>
+      </div>`;
     }).join('');
+    const multi = BOARDS.length > 1;
 
     this.root.innerHTML = `
       <div class="sk-setup">
         <div class="sk-setup-inner">
           <h1 class="sk-title">${esc(t('title'))}</h1>
+          <div class="sk-carwrap">
+            <div class="sk-car" data-role="car">${slides}</div>
+            ${multi ? `<button type="button" class="sk-car-chev l" data-role="prev" aria-label="${esc(t('prev_machine'))}">&#8249;</button>
+            <button type="button" class="sk-car-chev r" data-role="next" aria-label="${esc(t('next_machine'))}">&#8250;</button>` : ''}
+          </div>
+          ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
+          <p class="sk-car-hint">${esc(t('car_hint'))}</p>` : ''}
           ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
             ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
-          <p class="sk-statline">
-            ${esc(t('stat_best'))} <b>${val(rec.mine)}</b> &middot;
-            ${esc(t('stat_today'))} <b>${val(rec.today)}</b> &middot;
-            ${esc(t('stat_top'))} <b data-rec-top-line="${board.id}">${val(this.top[board.id] && this.top[board.id].score)}</b> &middot;
-            ${esc(t('stat_last'))} <b>${last == null ? '-' : last}</b>
-          </p>
-          <div class="gh-acc">
-            <button type="button" class="gh-acc__head" data-role="acc" aria-expanded="${this._accOpen ? 'true' : 'false'}">
-              <span>${esc(t('machine'))}</span>
-              <span class="gh-acc__value">${esc(board.name)}</span>
-            </button>
-            <div class="gh-acc__body" ${this._accOpen ? '' : 'hidden'}>${machinesBody}</div>
-          </div>
-          <button type="button" class="sk-howto-link" data-role="howto">&#128214; ${esc(t('howto'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/><path d="M12 6.5V18.6"/></svg>
+            ${esc(t('howto'))}</button>
           <button type="button" class="gh-btn ${save ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-role="play">
             ${esc(save ? t('new_game') : t('play'))}</button>
         </div>
       </div>`;
+
+    // Paint each unlocked machine's actual board (cached), deferred so the setup shows first.
+    for (const b of BOARDS) {
+      if (!isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
+      const imgEl = this.root.querySelector(`img[data-machine="${b.id}"]`);
+      if (imgEl) this._ensureMachineImg(b, imgEl);
+    }
+
+    // The centred slide IS the selected machine. Scroll-snap does the swipe; this settle listener
+    // pins the selection and the active dot. No-op with one machine (nothing scrolls).
+    const car = this.root.querySelector('[data-role="car"]');
+    if (car && multi) {
+      requestAnimationFrame(() => { car.scrollLeft = idx * car.clientWidth; });
+      let rafId = 0;
+      car.addEventListener('scroll', () => {
+        if (rafId) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          const w = car.clientWidth || 1;
+          const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
+          const b = BOARDS[i];
+          if (b && isUnlocked(sk, b.id, DEFAULT_BOARD) && b.id !== this.settings.board) {
+            this.settings = saveSettings({ board: b.id });
+          }
+          this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
+        });
+      }, { passive: true });
+      const prev = this.root.querySelector('[data-role="prev"]');
+      const next = this.root.querySelector('[data-role="next"]');
+      if (prev) prev.addEventListener('click', () => car.scrollBy({ left: -car.clientWidth, behavior: 'smooth' }));
+      if (next) next.addEventListener('click', () => car.scrollBy({ left: car.clientWidth, behavior: 'smooth' }));
+    }
 
     if (save) {
       this.root.querySelector('[data-role="resume"]').addEventListener('click', () => {
         this._startGame(loadSave());
       });
     }
-    this.root.querySelector('[data-role="acc"]').addEventListener('click', () => {
-      this._accOpen = !this._accOpen;
-      this._renderSetup();
-    });
-    this.root.querySelectorAll('[data-pick]').forEach((el) => {
-      el.addEventListener('click', () => {
-        this.settings = saveSettings({ board: el.dataset.pick });
-        this._accOpen = false;
-        this._renderSetup();
-      });
-    });
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
     // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
     // is a resume convenience, not earned history; the Resume button sits directly above).
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
       clearSave();
       this._startGame(null);
+    });
+  }
+
+  /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
+   *  deferred one frame so the setup paints first. A failure leaves the dark placeholder. */
+  _ensureMachineImg(board, imgEl) {
+    const cached = this._machineImg[board.id];
+    if (cached) { imgEl.src = cached; return; }
+    requestAnimationFrame(() => {
+      if (this.disposed || this.screen !== 'setup') return;
+      const url = renderMachineImage(board);
+      if (!url) return;
+      this._machineImg[board.id] = url;
+      const live = this.root.querySelector(`img[data-machine="${board.id}"]`);
+      if (live) live.src = url;
     });
   }
 

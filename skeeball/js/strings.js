@@ -14,6 +14,9 @@ const STRINGS = {
     howto: 'How to play',
     locked: 'Locked',
     unlock_hint: 'Score {score} on {name} to unlock',
+    car_hint: 'Swipe to switch machines',
+    prev_machine: 'Previous machine',
+    next_machine: 'Next machine',
 
     // The records panel - the four numbers every machine shows
     rec_top: 'Top score',
@@ -82,6 +85,9 @@ const STRINGS = {
     howto: 'Cómo se juega',
     locked: 'Bloqueada',
     unlock_hint: 'Consigue {score} en {name} para desbloquearla',
+    car_hint: 'Desliza para cambiar de máquina',
+    prev_machine: 'Máquina anterior',
+    next_machine: 'Máquina siguiente',
 
     rec_top: 'Récord',
     rec_top_any: 'cualquier jugador',
