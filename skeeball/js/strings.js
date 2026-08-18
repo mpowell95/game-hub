@@ -1,7 +1,6 @@
 // skeeball/js/strings.js - the EN/ES dictionary (js/i18n.js's makeT; English is the source of
-// truth and the fallback). Machine NAMES are proper nouns painted on the marquee and are not
-// routed through t() - same standing rule as STARHUB and the card-suit vocabulary. Spanish keeps
-// the borrowed arcade vocabulary players actually say.
+// truth and the fallback). Machine NAMES are proper nouns and are never routed through t() -
+// same standing rule as STARHUB. Spanish keeps the arcade vocabulary players actually say.
 
 const STRINGS = {
   en: {
@@ -28,11 +27,11 @@ const STRINGS = {
     stat_best: 'Best',
     stat_today: 'Today',
     stat_top: 'Top',
-    // The backboard scoreboard's four column labels (2026-08-15). Matt's own words.
+    // The backboard scoreboard's four column labels.
     sb_all_time: 'Hub Wide Record',
     sb_your_best: 'Your Best',
     sb_today: 'Today',
-    sb_last_game: 'Last Game',
+    sb_last_game: 'Last Game',
     stat_last: 'Last',
 
     // Play screen
@@ -56,8 +55,8 @@ const STRINGS = {
     over_again: 'Roll again',
     close: 'Close',
 
-    // How to play (2026-08-15, pictures-first: four panels, two tiny captions, arias carry
-    // the full meaning for screen readers)
+    // How to play: pictures-first, four panels, two tiny captions; arias carry the full
+    // meaning for screen readers
     howto_h: 'How to play',
     ht_swipe: 'Swipe to roll',
     ht_balls: '9 balls per game',
@@ -95,7 +94,7 @@ const STRINGS = {
     sb_all_time: 'Récord del Hub',
     sb_your_best: 'Tu mejor',
     sb_today: 'Hoy',
-    sb_last_game: 'Última',
+    sb_last_game: 'Última',
     stat_last: 'Última',
 
     hud_ball: 'Bola',
