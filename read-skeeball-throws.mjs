@@ -47,6 +47,13 @@ if (RAW) {
       ' -> ', String(r.value).padStart(3), '(' + (r.hole || '-') + ')',
       ' ', String(r.seq || '').replace(/,/g, ' '),
     );
+    // Full contact journey (throws logged since 2026-08-18 carry it): every part touched, in
+    // order, with where and how hard - part:cup@speed (u,v across/up, z toward player).
+    const cs = contactsOf(r);
+    if (cs.length) {
+      console.log('     path:', cs.map((c) =>
+        `${c.part}${c.cup ? ':' + c.cup : ''}@${(+c.speed).toFixed(2)}(${(+c.x).toFixed(2)},${(+c.z).toFixed(2)})`).join(' > '));
+    }
   }
   process.exit(0);
 }
@@ -86,6 +93,29 @@ if (zeros.length) {
   console.log('\nmiss/0 by hole:', Object.entries(byHole).map(([h, n]) => `${h}:${n}`).join('  '));
 }
 
+// Contact analysis (only throws logged since 2026-08-18 carry the full contact journey).
+const withContacts = rows.filter((r) => contactsOf(r).length);
+if (withContacts.length) {
+  const firstHit = {}, everTouched = {};
+  for (const r of withContacts) {
+    const cs = contactsOf(r);
+    firstHit[cs[0].part] = (firstHit[cs[0].part] || 0) + 1;
+    for (const p of new Set(cs.map((c) => c.part))) everTouched[p] = (everTouched[p] || 0) + 1;
+  }
+  const fmt = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join('  ');
+  console.log(`\ncontacts logged on ${withContacts.length}/${rows.length} throws`);
+  console.log('first contact (part):', fmt(firstHit));
+  console.log('parts touched (throws that hit it):', fmt(everTouched));
+} else {
+  console.log('\n(no throws carry the full contact journey yet - play some on a build dated 2026-08-18+)');
+}
+
+function contactsOf(r) {
+  const c = r.contacts;
+  if (Array.isArray(c)) return c.filter(Boolean);
+  if (c && typeof c === 'object') return Object.keys(c).map((k) => c[k]).filter(Boolean); // RTDB array-as-object
+  return [];
+}
 function num(v, w) { return (v == null ? '-' : (+v).toFixed(2)).padStart(w); }
 function avgOf(arr) {
   const a = arr.filter((x) => typeof x === 'number');

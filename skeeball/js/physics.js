@@ -189,6 +189,7 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     capturedFaceY: 0,
     touchedBoard: false,
     bounces: 0,
+    nContacts: 0,             // DEV throw-logging: count of contact events emitted (cap guard)
     airborne: false,
     // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
     // lesson survives the engine swap).
@@ -200,13 +201,29 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
   };
 
   ball.addEventListener('collide', (e) => {
-    const part = e.body.userData && e.body.userData.part;
+    const ud = (e.body && e.body.userData) || {};
+    const part = ud.part;
     const vn = e.contact ? Math.abs(e.contact.getImpactVelocityAlongNormal()) : 0;
+    // Game-feel events (UNCHANGED): the scoring face (H) registers first-touch and hard bounces,
+    // the backboard (M) its own knocks. render/rules and the tests key off exactly these.
     if (part === 'board') {
       if (!st.touchedBoard) { st.touchedBoard = true; st.events.push({ type: 'impact', speed: vn }); }
       if (vn > 0.5) { st.bounces += 1; st.events.push({ type: 'bounce', speed: vn }); }
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
+    }
+    // DEV throw-logging (Matt, 2026-08-18): log EVERY contact against EVERY part - side walls (rail),
+    // rings (ringSeg), cup collars (cupSeg), lane, hump, trough, flare, glass, keep, everything - with
+    // WHERE it hit (ball centre), how hard (vn), which cup/ring if the body carries one, and when.
+    // vn > 0.05 drops the solver's per-step resting/rolling contacts (normal velocity ~0) while
+    // keeping every real touch, down to a soft side-wall graze. `capture`/`gutter`/`done` still carry
+    // the final outcome. Capped so a jammed ball cannot grow the array without bound. Read back with
+    // read-skeeball-throws.mjs. Remove with the rest of the throw-logging before Skeeball goes public.
+    if (vn > 0.05 && st.nContacts < 300) {
+      st.nContacts += 1;
+      const p = ball.position;
+      st.events.push({ type: 'contact', part: part || '?', cup: ud.cup || null, speed: +vn.toFixed(3),
+        x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), t: +st.t.toFixed(3) });
     }
   });
 

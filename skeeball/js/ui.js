@@ -454,6 +454,7 @@ export class SkeeballUI {
       // DEV, remove before public: per-throw physics stats, tallied from the event stream in
       // _drainEvents and logged with the result at ballDone.
       this._throwStats = { bounces: 0, backboard: 0, impact: false, impactSpeed: null, seq: [],
+        contacts: [],
         t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()) };
       if (this._dbg) { this._dbg.thrown++; this._renderDbg(); }
     }
@@ -518,10 +519,17 @@ export class SkeeballUI {
       // DEV, remove before public: tally every physics event of the throw in flight.
       const ts = this._throwStats;
       if (ts) {
-        ts.seq.push(ev.type);
-        if (ev.type === 'bounce') ts.bounces++;
-        else if (ev.type === 'backboard') ts.backboard++;
-        else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
+        // DEV, remove before public: the full contact log (every part the ball touched, where, how
+        // hard, when) rides its own array; `seq` stays the readable event-type list it always was.
+        if (ev.type === 'contact') {
+          if (ts.contacts) ts.contacts.push({ part: ev.part, cup: ev.cup || null, speed: ev.speed,
+            x: ev.x, y: ev.y, z: ev.z, t: ev.t });
+        } else {
+          ts.seq.push(ev.type);
+          if (ev.type === 'bounce') ts.bounces++;
+          else if (ev.type === 'backboard') ts.backboard++;
+          else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
+        }
       }
       switch (ev.type) {
         // THE BALL SETTLES FIRST, THEN THE SCORE. `capture` fires the instant the ball's centre
@@ -563,7 +571,12 @@ export class SkeeballUI {
               bounces: ts.bounces | 0, backboard: ts.backboard | 0, touchedBoard: !!ts.impact,
               impactSpeed: (ts.impactSpeed != null ? ts.impactSpeed : null),
               settleMs: (ts.t0 ? Math.round(now - ts.t0) : null),
-              seq: (ts.seq || []).join(',') });
+              seq: (ts.seq || []).join(','),
+              // DEV, remove before public: the whole journey - every contact in order (part / cup /
+              // pos / speed / t), the first hit, and the final drop point the capture already knows.
+              contacts: ts.contacts || [],
+              firstHit: (ts.contacts && ts.contacts[0]) || null,
+              drop: (at && at.pos) ? { x: +at.pos.x.toFixed(3), y: +at.pos.y.toFixed(3), z: +at.pos.z.toFixed(3) } : null });
             this._lastThrow = null; this._throwStats = null;
           }
           break;
