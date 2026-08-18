@@ -261,22 +261,6 @@ const GAMES = [
     devOnly: true,
   },
   {
-    // The RETIRED original Skeeball build (pre-2026-08-13 rewrite), kept in the hub for
-    // side-by-side comparison while the new machine is tuned - Matt's ask: renamed, not deleted.
-    // Folder skeeball_old/, CSS prefix .sko-, its own settings/save keys
-    // (gamehub.skeeball_old.v1 / .save.v1). It still records to the SHARED 'skeeball' stats id,
-    // exactly as it always did, so nothing it ever wrote is orphaned. Admin only, like the new one.
-    id: 'skeeball-old',
-    title: 'Skeeball_old',
-    blurb: { en: 'The retired original Skeeball build, kept for comparison. Flick the ball up the lane; the corner cups pay 100.',
-      es: 'La versión original retirada de Skeeball, conservada para comparar. Lanza la bola por la pista; las copas de las esquinas valen 100.' },
-    module: '../skeeball_old/js/ui.js',
-    immersive: true,
-    accent: '#C8452F',
-    devOnly: true,
-    art: GAME_ART["skeeball_old"],
-  },
-  {
     id: 'uno',
     title: 'Uno',
     blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',
@@ -342,7 +326,7 @@ const GAMES = [
   },
   {
     // ADMIN ONLY for now (Matt's ask): `devOnly` keeps the card off the launcher for everyone but
-    // Matt and the tester, exactly like snake-v2 above. The matching My Stats tab is gated the same
+    // Matt and the tester, exactly like Skeeball above. The matching My Stats tab is gated the same
     // way (js/game-stats-ui.js's TABS), so an unreleased game does not leave a stray empty tab
     // sitting in everyone else's stats. Dropping `devOnly` is the whole of "release it".
     id: 'pinball',
@@ -357,20 +341,6 @@ const GAMES = [
     immersive: true,
     accent: '#2a1163',
     art: GAME_ART["pinball"],
-    devOnly: true,
-  },
-  {
-    // Snake's chrome rebuilt on the shared layer (css/ui.css), for side-by-side comparison with
-    // the real Snake, which is untouched and still in the list above. Still gated devOnly (Pool no
-    // longer is - it shipped 2026-08-10).
-    // Shares Snake's ENGINE by import (never a copy) and its board/D-pad CSS, so only the chrome
-    // differs. Records stats through the same recordSnake call the real Snake uses.
-    id: 'snake-v2',
-    title: { en: 'Snake v2', es: 'Snake v2' },
-    blurb: { en: 'The old phone classic.', es: 'El clásico de los móviles de antes.' },
-    module: '../snake-v2/js/ui.js',
-    accent: '#3f7d2c',
-    art: GAME_ART["snake-v2"],
     devOnly: true,
   },
 ];

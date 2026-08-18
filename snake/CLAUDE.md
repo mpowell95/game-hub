@@ -8,14 +8,13 @@ The old phone classic, built 2026-07-23 at a family member's request — **in Sp
 it the first game born on the shared i18n layer (`js/i18n.js`) and the reference implementation
 for it.
 
-> **There is a second Snake in the tree, and it is not a fork.** `snake-v2/` is a hidden
+> **There WAS a second Snake in the tree, and it was never a fork.** `snake-v2/` was a hidden
 > (`devOnly`) preview of Snake's chrome rebuilt on the shared UI layer (`css/ui.css`), created
-> 2026-08-01. It **imports** this game's `js/game.js` and spreads its `js/strings.js` rather than
-> copying either, and it loads `css/snake.css` for the board and D-pad, so the rules, the
-> dictionary and the play surface here are its only source. It records through this game's own
-> `recordSnake` call, into the same `snake` counters, so its runs are ordinary Snake runs. Nothing
-> in this folder was changed for it. See `snake-v2/CLAUDE.md`; if that direction is approved, the work
-> lands in THIS folder's own files and `snake-v2/` is deleted.
+> 2026-08-01 and **removed 2026-08-18 at Matt's ask**. It imported this game's `js/game.js`,
+> spread its `js/strings.js`, loaded `css/snake.css` for the board and D-pad, and recorded through
+> this game's own `recordSnake` call into the same `snake` counters, so its runs were ordinary
+> Snake runs and nothing it wrote is orphaned. Nothing in this folder was ever changed for it, and
+> nothing here changed when it went. It is in git history if the chrome direction is revisited.
 
 Hub integration: in-hub `module:` (`snake/js/ui.js`), not immersive. `isInProgress()` uses the
 LITERAL meaning (no mid-run resume, same class as Ball Run only — every other module game

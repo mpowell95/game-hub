@@ -350,7 +350,7 @@ that only lives in prose is advice, and advice loses to a session that never rea
 | The name gate | `await requireName()` in `index.html` **before** `init()` — `js/name-gate.js` | mounting ungated. This is where the leaderboard's ~20 permanent "Unnamed player" rows came from |
 | Multiplayer | `js/net.js` (`rooms/<CODE>`) | a second Firebase app or your own room layer. Read `js/CLAUDE.md`'s lockstep invariants first — five of them each encode a real, fixed bug |
 | Hub tile art | `GAME_ART[id]` — `js/game-art.js` | inlining SVG in the `GAMES` entry; the leaderboard reads the same map |
-| Buttons, cards, fields, modals | `css/ui.css`'s `.gh-*` primitives + `--gh-*` tokens | rebuilding chrome from scratch. **Currently used by no shipped game** — `snake-v2/` is the proof it works (140 lines of CSS against the real Snake's 279 for the same screens). A new game is the cheapest possible place to adopt it, because there is nothing to migrate |
+| Buttons, cards, fields, modals | `css/ui.css`'s `.gh-*` primitives + `--gh-*` tokens | rebuilding chrome from scratch. Skeeball's setup and how-to screens use them; a `snake-v2/` preview (removed 2026-08-18) proved the whole chrome fits in 140 lines of CSS against the real Snake's 279 for the same screens. A new game is the cheapest possible place to adopt it, because there is nothing to migrate |
 
 **Scroll and touch rules, which are the ones most often missed:**
 
@@ -507,7 +507,6 @@ working in that folder).
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Pinball | in-hub `module:`, immersive, **admin only** (`devOnly`) | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` |
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines, no opponent) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
-| Skeeball_old | in-hub `module:`, immersive, **devOnly** (the retired pre-2026-08-13 build, kept renamed for comparison) | `.sko-root` / `.sko-` | `gamehub.skeeball_old.v1` | `recordSkeeball` (shared `skeeball` stats id) |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |

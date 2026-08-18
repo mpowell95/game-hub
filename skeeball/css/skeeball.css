@@ -4,7 +4,7 @@
    Two skins on purpose (Matt, 2026-08-13): the PLAY screen is the warm dark alley in both hub
    themes (in-game art, Ball Run/Hill Climb/Pinball's class), while the SETUP screen and the
    how-to sheet are hub pages - hub-matching light tokens with a :root.gh-dark override (the
-   --sks-* block below, skeeball_old's pattern), controls from css/ui.css's .gh-* primitives.
+   --sks-* block below), controls from css/ui.css's .gh-* primitives.
 
    NAMING (test-game-conventions.mjs enforces this): no class is both a layout container and
    something decoration hides. Layout classes are .sk-play-wrap / .sk-stage / .sk-setup-inner /
@@ -56,7 +56,7 @@
 
 /* ------------------------------------------------------------ the machine gallery --- */
 /* The setup screen BELONGS TO THE HUB, not to the alley: hub-matching light values with a
-   :root.gh-dark override (the skeeball_old pattern, and Matt's 2026-08-13 instruction after the
+   :root.gh-dark override (Matt's 2026-08-13 instruction after the
    dark arcade-styled version: "the set up screen as a whole is really bad"). The PLAY screen
    below keeps the warm dark alley - that is in-game art; this is a hub page. The controls are
    css/ui.css's .gh-* primitives; only the skeeball-specific rows are styled here. */
