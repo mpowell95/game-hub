@@ -847,6 +847,43 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Zoomed framing for the setup/how-to thumbnail: fit the BOARD FACE + marquee and crop the
+   *  lane, so the preview is the machine's business end rather than the whole cabinet. Same math
+   *  as resize() with a lane-free FIT list and a tighter margin (batch G, 2026-08-18). The play
+   *  camera (resize) is untouched - this is only ever called on a throwaway preview Renderer. */
+  framePreview(w, h) {
+    this.renderer.setSize(w, h, true);
+    this.camera.aspect = w / h;
+    const eye = this.camera.position;
+    const axis = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+    const topY = this.M.faceToWorld(0, this.G.boardLen, 0)[1];
+    const topZ = this.M.faceToWorld(0, this.G.boardLen, 0)[2];
+    const halfW = this.G.boardW / 2;
+    const FIT = [
+      [0, topY + this.G.backboardH + 0.21, topZ - 0.02],       // marquee, bulbs included
+      [-halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],  // backboard top corners
+      [halfW, topY + this.G.backboardH - 0.01, topZ - 0.02],
+      this.M.faceToWorld(-halfW, this.G.boardLen, 0),          // board top corners
+      this.M.faceToWorld(halfW, this.G.boardLen, 0),
+      this.M.faceToWorld(-halfW, 0, 0),                        // board bottom corners (crop below here)
+      this.M.faceToWorld(halfW, 0, 0),
+    ];
+    const MARGIN = 0.96;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
+    const up2 = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
+    let needV = 0, needHalfH = 0;
+    for (const p of FIT) {
+      const d = new THREE.Vector3(p[0], p[1], p[2]).sub(eye);
+      const along = d.dot(axis);
+      if (along <= 0.01) continue;
+      needV = Math.max(needV, Math.atan(Math.abs(d.dot(up2)) / along / MARGIN));
+      needHalfH = Math.max(needHalfH, Math.atan(Math.abs(d.dot(right)) / along / MARGIN));
+    }
+    const vFov = Math.max(2 * needV, 2 * Math.atan(Math.tan(needHalfH) / this.camera.aspect));
+    this.camera.fov = Math.min(72, Math.max(20, (vFov * 180) / Math.PI));
+    this.camera.updateProjectionMatrix();
+  }
+
   render(game, dt) {
     const st = game && game.ball;    // the physics throw state; st.ball is the cannon body
     if (st && st.ball) {
