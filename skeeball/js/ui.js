@@ -362,6 +362,7 @@ export class SkeeballUI {
           <div class="sk-hp-panel">
             <img class="sk-hp-img" alt="${esc(board.name)}" />
             <span class="sk-hp-ball" aria-hidden="true"></span>
+            <span class="sk-hp-score" aria-hidden="true">+50</span>
           </div>
           <p class="sk-hp-cap">
             <span class="c1">${esc(t('ht_roll'))}</span>
