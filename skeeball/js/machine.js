@@ -191,15 +191,21 @@ export function buildMachine(G) {
     if (c50 && c50.ringD) {
       const R = c50.ringD / 2;
       const apexV = (c50.v - c50.r + R) + R;       // the 50 ring's top point (up-slope apex)
-      // A thin RIDGE at u=0 on the ring's apex (Matt, 2026-08-17): a ball perched on the 50's top
-      // can't balance on a knife edge, so it sheds to the LEFT or RIGHT at once - killing the
-      // perch delay. Thin across u = splits the ball sideways (the axis the ball already rolls on).
+      // A triangular-prism WEDGE on the board, flush against the 50 ring's up-slope edge (Matt's
+      // mockups, 2026-08-17): a triangle seen from above (apex up-slope, base on the ring), a flat
+      // top 0.25x tall (NO slope from the side). Its two angled sides shove a ball off to the left
+      // or right so it drops to the 10 faster. Built as a convex prism - see physics.js 'prism'.
+      const vBase = apexV + G.ringThick / 2;     // the base touches the ring's up-slope outer edge
+      const hb = 0.04;                            // half the base width (across u)
+      const len = 0.08;                           // up-slope length, base -> apex
+      const hgt = G.ringH * 0.25;                 // 0.25x tall, flat top
       solids.push({
         part: 'splitter',
-        pos: faceToWorld(0, apexV, G.ringH * 1.125),
-        half: [0.005, G.ringH * 0.125, 0.04],      // thin across u, 0.25x tall, short up-slope
-        faceRot: { phi: Math.PI, tilt: t },
-        railSide: 0,
+        shape: 'prism',
+        verts: [
+          faceToWorld(-hb, vBase, 0), faceToWorld(hb, vBase, 0), faceToWorld(0, vBase + len, 0),
+          faceToWorld(-hb, vBase, hgt), faceToWorld(hb, vBase, hgt), faceToWorld(0, vBase + len, hgt),
+        ],
       });
     }
   }

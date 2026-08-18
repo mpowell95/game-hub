@@ -85,9 +85,17 @@ function buildWorld(board) {
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
 
   for (const s of M.solids) {
+    // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
+    // box at s.pos/s.rot. The triangular wedge above the 50 (machine.js) is the only prism.
+    const shape = s.shape === 'prism'
+      ? new CANNON.ConvexPolyhedron({
+        vertices: s.verts.map((p) => new CANNON.Vec3(p[0], p[1], p[2])),
+        faces: [[0, 2, 1], [3, 5, 4], [0, 3, 4, 1], [1, 2, 5, 4], [2, 0, 3, 5]],
+      })
+      : new CANNON.Box(new CANNON.Vec3(s.half[0], s.half[1], s.half[2]));
     const body = new CANNON.Body({
       type: CANNON.Body.STATIC,
-      shape: new CANNON.Box(new CANNON.Vec3(s.half[0], s.half[1], s.half[2])),
+      shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
@@ -95,12 +103,14 @@ function buildWorld(board) {
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
-    body.position.set(s.pos[0], s.pos[1], s.pos[2]);
-    if (s.rot) body.quaternion.setFromAxisAngle(new CANNON.Vec3(...s.rot.axis), s.rot.angle);
-    else if (s.faceRot) {
-      const qx = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), s.faceRot.tilt);
-      const qy = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), s.faceRot.phi);
-      body.quaternion = qx.mult(qy);
+    if (s.shape !== 'prism') {
+      body.position.set(s.pos[0], s.pos[1], s.pos[2]);
+      if (s.rot) body.quaternion.setFromAxisAngle(new CANNON.Vec3(...s.rot.axis), s.rot.angle);
+      else if (s.faceRot) {
+        const qx = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), s.faceRot.tilt);
+        const qy = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), s.faceRot.phi);
+        body.quaternion = qx.mult(qy);
+      }
     }
     body.userData = { part: s.part, cup: s.cup || null };
     world.addBody(body);
