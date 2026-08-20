@@ -504,11 +504,13 @@ export class Renderer {
     const G = this.G;
     const fieldTex = this._track(this._paintField());
     const laneTex = this._track(this._paintLane());
-    // GUARD: the two are NOT at the same depth. Level with each other their marquees land on
-    // the same screen line and the pair read as one lit band ruled across the frame - a wall
-    // again, just a brighter one. Staggering them breaks the line and gives the row some depth.
-    this._neighbourMachine(-1.15, -1.42, fieldTex, laneTex);
-    this._neighbourMachine(1.15, -1.88, fieldTex, laneTex);
+    // A ROW: both at the same offset and the same depth, so they are two of the same cabinet
+    // rather than two different ones. GUARD: they were briefly staggered to stop their marquee
+    // bands ruling one lit line across the frame; that worked but made the pair look mismatched,
+    // which reads as a bug rather than as character when there are only two. The line is held off
+    // by keeping the band dim instead (see its emissiveIntensity) - if it ever comes back, dim the
+    // band or narrow it, do not stagger the machines.
+    for (const side of [-1, 1]) this._neighbourMachine(side * 1.15, -1.6, fieldTex, laneTex);
   }
 
   /** One background machine, at (dx) across and (dz) further from the player. */
@@ -584,7 +586,7 @@ export class Renderer {
           // GUARD: barely lit. Both neighbours' bands sit at the same height and read as ONE
           // horizontal line across the frame, so anything brighter than this stops being a row of
           // marquees and becomes a lit stripe on a wall behind the machine.
-          emissiveIntensity: 0.14, roughness: 0.9 }),
+          emissiveIntensity: 0.075, roughness: 0.9 }),
       );
       band.position.set(dx, top[1] + G.backboardH + 0.16, top[2] - 0.02);
       add(band);
