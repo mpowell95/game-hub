@@ -137,6 +137,23 @@ export const BOARDS = [
       // faster balls. See DECISIONS.md#ring-geometry.
       captureDrop: 0.35,
 
+      // THE CONTACT MODEL, overriding the defaults at the top of physics.js. Everything the ball
+      // touches is soft except the side rails, which were left at 0.50 - by a distance the
+      // springiest surface on the machine, when the board is 0.08 and the rings 0.18.
+      //
+      // That mattered because the ONLY route to a corner 100 is a bank off a side rail. The ball
+      // came off it fast, arrived at a cup whose ring leaves just 26mm around the ball, caught one
+      // rim, crossed to the other and bounced out. Matt, playing it: "it hits both sides of the
+      // rim of the 100 ring and bounces out."
+      //
+      // ring100Rest deadens the two corner rings ONLY. Not so a rim clip always drops - it should
+      // not - just often enough that a good line is rewarded. The 10 through 50 keep ringRest and
+      // play exactly as they did.
+      mat: {
+        wallRest: 0.25,
+        ring100Rest: 0.10,
+      },
+
       // THE FACE. Seven holes, all one size (x across), each with its OWN ring - see the
       // tangency rules in the X block at the top of this file. Positions are derived, not free:
       //   ring bottom = hole bottom = v - r        (rule 1: tangent at the hole's lowest point)
