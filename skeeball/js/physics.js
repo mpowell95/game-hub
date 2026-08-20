@@ -46,6 +46,9 @@ function buildWorld(board) {
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
+  // The two corner 100s get their OWN ring material so they can be deadened without touching the
+  // 10 through 50. See the ring100Rest note in boards.js.
+  const matRing100 = new CANNON.Material('ring100');
 
   // The feel lives HERE and in boards.js's geom - nowhere else. Every number below is a DEFAULT
   // that a board's `geom.mat` block may override, so a tuning sweep can search the contact
@@ -64,6 +67,7 @@ function buildWorld(board) {
   // dribbles down rather than bouncing across ring tops and back out. Low restitution kills the
   // bounce; friction stays low so a ball never wedges against a ring.
   contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
+  contact(matBall, matRing100, pick(MAT.ring100Fric, 0.06), pick(MAT.ring100Rest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
 
   for (const s of M.solids) {
@@ -80,7 +84,8 @@ function buildWorld(board) {
       shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
         : s.part === 'board' || s.part === 'trough' ? matBoard
-          : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
+          : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
+            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
             : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'glass' ? matDead : matWall,
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
