@@ -15,7 +15,6 @@
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { Renderer } from './render.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
-import { howToMarkup } from './howto.js';
 import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -450,22 +449,6 @@ export class SkeeballUI {
     this._hpPending = null;
   }
 
-  /** The pattern's single-row rule (tic-tac-toe/CLAUDE.md): measure each line's rendered width
-   *  against the container's real width, size down until it fits, then lock it with nowrap. */
-  _fitHelpLines(el) {
-    for (const line of el.querySelectorAll('.sk-ht-line')) {
-      line.style.whiteSpace = 'nowrap';
-      let size = parseFloat(getComputedStyle(line).fontSize) || 15;
-      let guard = 14;
-      while (line.scrollWidth > line.clientWidth && size > 10 && guard-- > 0) {
-        size -= 0.5;
-        line.style.fontSize = `${size}px`;
-      }
-      // If it still cannot fit at the floor, let it wrap rather than clip.
-      if (line.scrollWidth > line.clientWidth) line.style.whiteSpace = 'normal';
-    }
-  }
-
   // --- play ------------------------------------------------------------------------------------
 
   _startGame(snap) {
@@ -795,7 +778,7 @@ export class SkeeballUI {
 
     // One pill on the score, strongest claim first: machine record > personal best > best today.
     const pillKey = isTop ? 'over_new_top' : isMine ? 'over_new_mine' : isToday ? 'over_new_today' : '';
-    const pill = pillKey ? `<span class="gh-chip gh-chip--accent">${esc(t(pillKey))}</span>` : '';
+    const pill = pillKey ? `<span class="gh-chip gh-chip--accent sk-over-pill">${esc(t(pillKey))}</span>` : '';
 
     // Your average: lifetime points / games, from the store this rack was just written to.
     let myAvg = null;
@@ -842,17 +825,6 @@ export class SkeeballUI {
   }
 
   // --- overlays --------------------------------------------------------------------------------
-
-  _openOverlay(kind, html) {
-    this._closeOverlay();
-    const el = document.createElement('div');
-    el.className = `sk-veil sk-veil-${kind}`;
-    el.innerHTML = `<div class="sk-sheet">${html}</div>`;
-    this.root.appendChild(el);
-    this.overlay = el;
-    el.querySelectorAll('[data-role="close"]').forEach((b) => b.addEventListener('click', () => this._closeOverlay()));
-    return el;
-  }
 
   _closeOverlay() {
     if (this.overlay && this.overlay.parentNode) this.overlay.parentNode.removeChild(this.overlay);

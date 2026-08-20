@@ -555,33 +555,59 @@ export const GAME_ART = {
   // with a full-bleed background, nothing cropped.
   skeeball: `<svg viewBox="0 0 160 90" aria-hidden="true">
              <rect width="160" height="90" fill="#140d0a"/>
-             <rect x="30" y="4" width="100" height="12" rx="3" fill="#28150b" stroke="#6b4526" stroke-width="1"/>
+             <g opacity="0.34">
+               <rect x="-10" y="6" width="44" height="6" rx="2" fill="#3a2416"/>
+               <rect x="-8" y="12" width="40" height="11" fill="#241610"/>
+               <path d="M-5 23 L30 23 L37 54 L-12 54 Z" fill="#7a4520"/>
+               <g fill="none" stroke="#8d8880" stroke-width="1.5">
+                 <ellipse cx="13" cy="47" rx="16" ry="3.8"/><ellipse cx="13" cy="40" rx="9.5" ry="2.9"/>
+                 <ellipse cx="13" cy="34" rx="4.8" ry="2.2"/><ellipse cx="13" cy="29" rx="4" ry="1.9"/>
+               </g>
+               <path d="M-12 54 L37 54 L47 90 L-24 90 Z" fill="#5e3d1f"/>
+               <rect x="126" y="6" width="44" height="6" rx="2" fill="#3a2416"/>
+               <rect x="128" y="12" width="40" height="11" fill="#241610"/>
+               <path d="M130 23 L165 23 L172 54 L123 54 Z" fill="#7a4520"/>
+               <g fill="none" stroke="#8d8880" stroke-width="1.5">
+                 <ellipse cx="147" cy="47" rx="16" ry="3.8"/><ellipse cx="147" cy="40" rx="9.5" ry="2.9"/>
+                 <ellipse cx="147" cy="34" rx="4.8" ry="2.2"/><ellipse cx="147" cy="29" rx="4" ry="1.9"/>
+               </g>
+               <path d="M123 54 L172 54 L184 90 L113 90 Z" fill="#5e3d1f"/>
+             </g>
+             <rect x="54" y="3" width="52" height="8" rx="2" fill="#28150b" stroke="#6b4526" stroke-width="1"/>
              <g fill="#ffd977">
-               <circle cx="40" cy="10" r="1.4"/><circle cx="52" cy="10" r="1.4"/><circle cx="64" cy="10" r="1.4"/>
-               <circle cx="76" cy="10" r="1.4"/><circle cx="88" cy="10" r="1.4"/><circle cx="100" cy="10" r="1.4"/>
-               <circle cx="112" cy="10" r="1.4"/><circle cx="120" cy="10" r="1.4"/>
+               <circle cx="61" cy="7" r="1"/><circle cx="70" cy="7" r="1"/><circle cx="80" cy="7" r="1"/>
+               <circle cx="90" cy="7" r="1"/><circle cx="99" cy="7" r="1"/>
              </g>
-             <path d="M36 18 L124 18 L132 54 L28 54 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
-             <ellipse cx="80" cy="40" rx="21" ry="15" fill="none" stroke="#f2ece0" stroke-width="3.4"/>
-             <ellipse cx="80" cy="40" rx="21" ry="15" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
-             <g>
-               <circle cx="49" cy="25" r="5" fill="#221a12" stroke="#f2ece0" stroke-width="2.6"/>
-               <circle cx="111" cy="25" r="5" fill="#221a12" stroke="#f2ece0" stroke-width="2.6"/>
-               <circle cx="49" cy="25" r="6.4" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
-               <circle cx="111" cy="25" r="6.4" fill="none" stroke="#2b5ea7" stroke-width="0.8"/>
+             <rect x="56" y="11" width="48" height="11" fill="#2a1c14" stroke="#54301a" stroke-width="0.8"/>
+             <g opacity="0.55">
+               <path d="M80 13 L80 21 M58 17 L102 17" stroke="#54301a" stroke-width="0.6"/>
+               <g fill="#ffd977">
+                 <rect x="66" y="14.4" width="5" height="1.2"/><rect x="89" y="14.4" width="5" height="1.2"/>
+                 <rect x="66" y="18.6" width="5" height="1.2"/><rect x="89" y="18.6" width="5" height="1.2"/>
+               </g>
              </g>
-             <g>
-               <circle cx="80" cy="27" r="4.6" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
-               <circle cx="80" cy="36" r="5.1" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
-               <circle cx="80" cy="45" r="5.6" fill="#221a12" stroke="#f2ece0" stroke-width="2.4"/>
+             <path d="M59 22 L101 22 L108 56 L52 56 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
+             <g fill="none" stroke="#f2ece0" stroke-width="2.8">
+               <ellipse cx="80" cy="50" rx="21" ry="4.8"/>
+               <ellipse cx="80" cy="43" rx="14" ry="4"/>
              </g>
-             <path d="M28 54 L132 54 L152 90 L8 90 Z" fill="#a86f38"/>
-             <path d="M28 54 L8 90 L2 90 L24 54 Z" fill="#54301a"/>
-             <path d="M132 54 L152 90 L158 90 L136 54 Z" fill="#54301a"/>
-             <path d="M64 90 L71 54 M96 90 L89 54" stroke="#7c4d22" stroke-width="1.2" fill="none"/>
-             <path d="M31 55 L129 55 L131 59 L29 59 Z" fill="#c98a49"/>
-             <circle cx="80" cy="74" r="7" fill="#f6ecda"/>
-             <circle cx="77.6" cy="71.6" r="2.2" fill="#fffdf5"/>
+             <g fill="none" stroke="#2b5ea7" stroke-width="0.7">
+               <ellipse cx="80" cy="50" rx="21" ry="4.8"/>
+               <ellipse cx="80" cy="43" rx="14" ry="4"/>
+             </g>
+             <g fill="#221a12" stroke="#f2ece0" stroke-width="2.4">
+               <ellipse cx="80" cy="37" rx="5.6" ry="2.8"/>
+               <ellipse cx="80" cy="32" rx="5" ry="2.5"/>
+               <ellipse cx="80" cy="27.5" rx="4.4" ry="2.2"/>
+               <ellipse cx="64" cy="27" rx="3.6" ry="2.3"/>
+               <ellipse cx="96" cy="27" rx="3.6" ry="2.3"/>
+             </g>
+             <path d="M52 56 L108 56 L114 90 L46 90 Z" fill="#a86f38"/>
+             <path d="M52 56 L46 90 L39 90 L47 56 Z" fill="#54301a"/>
+             <path d="M108 56 L114 90 L121 90 L113 56 Z" fill="#54301a"/>
+             <path d="M54 57 L106 57 L107 60 L53 60 Z" fill="#c98a49"/>
+             <circle cx="80" cy="76" r="5.2" fill="#f6ecda"/>
+             <circle cx="78.3" cy="74.3" r="1.7" fill="#fffdf5"/>
            </svg>`,
 };
 
