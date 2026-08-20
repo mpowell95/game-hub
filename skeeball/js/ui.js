@@ -672,7 +672,9 @@ export class SkeeballUI {
             if (gold) Rr.celebrate();
           }
           this._paintHud();
-          writeSave(this.game.snapshot());   // the autosave that makes leaving lossless
+          // GUARD: only with NOTHING in the air. A snapshot has no room for a ball in flight,
+          // so saving mid-flight would quietly drop it and hand the player a free re-throw.
+          if (!this.game.balls.length) writeSave(this.game.snapshot());
           // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
           // can read back (real data to check the calculated ranges against).
           if (this._lastThrow) {

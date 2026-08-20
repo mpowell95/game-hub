@@ -1249,13 +1249,20 @@ export class Renderer {
       x.fill();
     }
     const tex = this._track(new THREE.CanvasTexture(c));
-    this.ball = new THREE.Mesh(
-      this._track(new THREE.SphereGeometry(R, 30, 22)),
-      this._mat({ map: tex, roughness: 0.42, metalness: 0.02 }),
-    );
-    this.ball.castShadow = true;
-    this.ball.visible = false;
-    this.scene.add(this.ball);
+    // ONE MESH PER BALL THAT CAN BE IN THE AIR AT ONCE, plus the one waiting on the lane. They
+    // all share a geometry and a material, so the pool costs almost nothing and it means a second
+    // throw never has to wait for the first to finish before it has something to draw.
+    const geo = this._track(new THREE.SphereGeometry(R, 30, 22));
+    const mat = this._mat({ map: tex, roughness: 0.42, metalness: 0.02 });
+    this._balls = [];
+    for (let i = 0; i <= BALLS_PER_GAME; i++) {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = true;
+      m.visible = false;
+      this.scene.add(m);
+      this._balls.push(m);
+    }
+    this.ball = this._balls[0];
   }
 
   // --- per-frame -------------------------------------------------------------------------------
@@ -1366,25 +1373,34 @@ export class Renderer {
   }
 
   render(game, dt) {
-    const st = game && game.ball;    // the physics throw state; st.ball is the cannon body
-    if (st && st.ball) {
-      this.ball.visible = true;
+    // Every throw still in the air gets a mesh; whatever is left over is hidden.
+    const live = (game && game.balls) || (game && game.ball ? [game.ball] : []);
+    let used = 0;
+    for (const st of live) {
+      if (!st || !st.ball || used >= this._balls.length) continue;
+      const m = this._balls[used++];
+      m.visible = true;
       const p = st.ball.position;
-      this.ball.position.set(p.x, p.y, p.z);
+      m.position.set(p.x, p.y, p.z);
       const q = st.ball.quaternion;
-      this.ball.quaternion.set(q.x, q.y, q.z, q.w);
-    } else {
-      // Waiting on the lane: show the next ball at the serve spot while the rack is live.
-      if (game && !game.over) {
-        this.ball.visible = true;
-        this.ball.position.set(0, this.G.ballR, -0.12);
-      } else this.ball.visible = false;
+      m.quaternion.set(q.x, q.y, q.z, q.w);
     }
+    // The next ball sits at the serve spot only when it can actually be thrown, so it appearing
+    // IS the cue that the lane is yours again.
+    const ready = game && !game.over && (!game.canThrow || game.canThrow());
+    if (ready && used < this._balls.length) {
+      const m = this._balls[used++];
+      m.visible = true;
+      m.quaternion.set(0, 0, 0, 1);
+      m.position.set(0, this.G.ballR, -0.12);
+    }
+    for (let i = used; i < this._balls.length; i++) this._balls[i].visible = false;
 
     // The tray holds every ball still to come AFTER the one on the lane, so it visibly empties.
     if (this._trayBalls) {
+      const sent = game && typeof game.thrown === 'number' ? game.thrown : (game ? game.ballsUsed : 0);
       const left = game && !game.over
-        ? Math.max(0, BALLS_PER_GAME - game.ballsUsed - 1)
+        ? Math.max(0, BALLS_PER_GAME - sent - (ready ? 1 : 0))
         : this._trayBalls.length;
       for (let i = 0; i < this._trayBalls.length; i++) this._trayBalls[i].visible = i < left;
     }

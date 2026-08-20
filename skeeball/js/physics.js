@@ -175,6 +175,12 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     const ud = (e.body && e.body.userData) || {};
     const part = ud.part;
     const vn = e.contact ? Math.abs(e.contact.getImpactVelocityAlongNormal()) : 0;
+    // ARRIVED: the ball has reached the far end of the machine and hit something there. game.js
+    // hands the player their next ball on this rather than on the ball SETTLING, which can take
+    // up to MAX_T - twelve seconds is an absurd time to stand holding nothing (Matt, 2026-08-20).
+    // GUARD: the lane and the hump do not count. The ball is touching those from the moment it is
+    // served, so counting them would arm the next throw before this one had gone anywhere.
+    if (!st.arrived && part && part !== 'lane' && part !== 'hump') st.arrived = true;
     // Game-feel events (UNCHANGED): the scoring face (H) registers first-touch and hard bounces,
     // the backboard (M) its own knocks. render/rules and the tests key off exactly these.
     if (part === 'board') {
