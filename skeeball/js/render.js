@@ -10,6 +10,46 @@ import { buildMachine } from './machine.js';
 const REDUCED = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// A NUMBER'S SIZE ON A WALL, as a share of that wall's height, and the widest arc it may wrap
+// before it stops reading. Shared by all three number routines so they cannot drift apart.
+const NUM_CAP = 0.46;
+const MAX_WRAP = 65 * Math.PI / 180;
+// A digit's width at NUM_CAP, as a multiple of the wall height: 0.6 em advance, 0.72 em cap
+// height, plus the 1.30 side margin the painters use. Only ever used to decide which side of
+// MAX_WRAP a number falls on, so an estimate is enough.
+const DIGIT_W = 0.6 / 0.72 * 1.30;
+
+/** WHICH NUMBERS CANNOT GO ON A RING WALL - derived from the board, so a NEW MACHINE CONFIGURES
+ *  ITSELF and nobody has to remember this.
+ *
+ *  Every centre-column number except the top one would otherwise be painted on the OUTER wall of
+ *  the ring above its hole. That wall is convex: it curves away from the player at its edges, so
+ *  past about 65 degrees of wrap a digit turns edge-on and vanishes behind the ring's own
+ *  silhouette. On THE CLASSIC that is exactly what happened to the 30 and the 40, which sit on
+ *  the two tightest rings on the board (11-12cm across) - they shipped clipped on 2026-08-19.
+ *
+ *  Those numbers get a concave arc instead (see _numberPlates). The top hole never needs one: its
+ *  own ring is the last in the stack, so that ring's far wall is free and the number goes there,
+ *  which is what the 50 does.
+ *
+ *  BUILDING A NEW BOARD: nothing to set. Widen a ring and its number moves back onto the wall by
+ *  itself; tighten one and it gets an arc. If a number looks wrong, this threshold is the knob.
+ */
+function platedHoles(G) {
+  const column = Object.keys(G.holes)
+    .filter((id) => G.holes[id].ringD && Math.abs(G.holes[id].u) < 1e-6)
+    .sort((a, b) => G.holes[a].v - G.holes[b].v);
+  const out = new Set();
+  for (let i = 0; i < column.length - 1; i++) {
+    const digits = String(G.holes[column[i]].value).length;
+    const target = G.holes[column[i + 1]];
+    const Rwall = target.ringD / 2 + G.ringThick / 2;
+    const ink = digits * DIGIT_W * G.ringH * NUM_CAP;
+    if (ink / Rwall > MAX_WRAP) out.add(column[i]);
+  }
+  return out;
+}
+
 // How much of a ring's white is SELF-LIT rather than lit by the scene. See the GUARD in the ring
 // block of _buildMachine: without this the walls render warm grey, because they stand edge-on to
 // a nearly-overhead key light. Raising it flattens the rings; lowering it greys them.
@@ -212,6 +252,7 @@ export class Renderer {
       });
       const lipMat = this._mat({ color: L.ringLip, roughness: 0.5 });
       const numbers = this._ringNumbers(RING_GLOW);
+      this._numberPlates(RING_GLOW);
       const EMPTY = {};
       for (const s of M.solids) {
         if (s.part !== 'ringSeg') continue;
@@ -445,6 +486,98 @@ export class Renderer {
     return c;
   }
 
+  /** THE NUMBERS THAT CANNOT GO ON A RING. Every ring in the centre column is TANGENT to the next
+   *  one, so their walls stand back to back with no gap: the far wall of the 40's ring is pressed
+   *  flat against the near wall of the 50's, and the 30's against the 40's. That far wall is the
+   *  concave, player-facing surface a number wants (it is the one the 50 uses), and for everything
+   *  below the top of the stack it is buried - not merely shadowed, but touching. Confirmed by
+   *  colouring each ring's inner face in and by raising the camera: two touching surfaces stay
+   *  touching from every angle, and no tilt or camera move recovers them (2026-08-20).
+   *
+   *  So those numbers get their own surface: a short open arc standing on the board just above the
+   *  mouth, concave toward the player, clear of every ring. Purely cosmetic - no physics body, in
+   *  the same class as the marquee and the cabinet (see the file header). Sized and placed so it
+   *  cannot touch its own ring: the arc's ends stay inside the ring's near and far walls, and its
+   *  top stays below the next ring up.
+   *
+   *  GUARD: the 10 and 20 are NOT plated. They sit on rings wide enough (36cm and 53cm) that a
+   *  number on the outer wall barely curves at all, and they already read clean. The 50 is not
+   *  plated either - it is the top of the stack, so its own ring's far wall is free.
+   */
+  _numberPlates(glow) {
+    const G = this.G;
+    const L = this.look;
+    // The arc is CONCENTRIC WITH ITS OWN RING and the same height as it, just set INSET metres
+    // in from the ring's far wall - far enough to clear the wall of the ring above, close enough
+    // that it reads as that ring's own inner face rather than a ring of its own.
+    const INSET = 0.030;
+    const HALF_ARC = 62 * Math.PI / 180;
+    const CAP = NUM_CAP;                      // matches the 50's, so every number is one size
+    const RISE = 0.72;                        // and sits at the same height on the wall
+    const PPM = 2200;
+
+    for (const id of platedHoles(G)) {
+      const H = G.holes[id];
+      // machine.js's own ring placement: centre sits (R - r) up-slope of the hole.
+      const cv = H.v - H.r + H.ringD / 2;
+      const R = H.ringD / 2 + G.ringThick / 2 - INSET;
+      const PLATE_H = G.ringH;
+      const lab = String(H.value);
+
+      // Fit the number to the wall's height, then to its width.
+      const probe = this._canvas(8, 8).getContext('2d');
+      const maxH = PLATE_H * CAP * PPM;
+      const maxW = 2 * HALF_ARC * R * PPM * 0.72;      // leave a margin at both ends
+      let fontPx = maxH / 0.72;
+      for (let i = 0; i < 5; i++) {
+        probe.font = `800 ${fontPx}px system-ui, sans-serif`;
+        const m = probe.measureText(lab);
+        const inkH = (m.actualBoundingBoxAscent || fontPx * 0.72) + (m.actualBoundingBoxDescent || 0);
+        const k = Math.min(maxH / inkH, maxW / m.width);
+        if (Math.abs(k - 1) < 0.01) break;
+        fontPx *= k;
+      }
+
+      const cw = Math.max(8, Math.round(2 * HALF_ARC * R * PPM));
+      const ch = Math.max(8, Math.round(PLATE_H * PPM));
+      const c = this._canvas(cw, ch);
+      const x = c.getContext('2d');
+      x.fillStyle = L.ring;
+      x.fillRect(0, 0, cw, ch);
+      x.fillStyle = L.value;
+      x.font = `800 ${fontPx}px system-ui, sans-serif`;
+      x.textAlign = 'center';
+      x.textBaseline = 'alphabetic';
+      const m = x.measureText(lab);
+      const up = m.actualBoundingBoxAscent || fontPx * 0.72;
+      const down = m.actualBoundingBoxDescent || 0;
+      x.fillText(lab, cw / 2, ch * (1 - RISE) + (up - down) / 2);
+
+      const tex = this._track(new THREE.CanvasTexture(c));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      // We look at this arc from INSIDE, so its u runs the other way about; without the flip the
+      // number comes out mirrored.
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.repeat.x = -1;
+      tex.offset.x = 1;
+
+      // _onFace puts local +X on the face's u and local -Z on its v, so the arc's TOP - the part
+      // up-slope of the mouth - is at theta = PI.
+      const geo = this._track(new THREE.CylinderGeometry(
+        R, R, PLATE_H, 48, 1, true, Math.PI - HALF_ARC, 2 * HALF_ARC,
+      ));
+      const mesh = new THREE.Mesh(geo, this._mat({
+        map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow,
+        roughness: 0.4, side: THREE.DoubleSide,
+      }));
+      this._onFace(mesh, H.u, cv, PLATE_H / 2);
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      this.scene.add(mesh);
+    }
+  }
+
   /** THE NUMBERS, PRINTED ON THE RINGS. Each hole's value goes on the first ring wall the player
    *  sees ABOVE that hole. The rings are TANGENT, so that wall is the bottom of the NEXT ring up;
    *  the topmost hole has no ring above it, so its value goes on the INSIDE of its own ring's far
@@ -479,7 +612,9 @@ export class Renderer {
     const column = Object.keys(G.holes)
       .filter((id) => G.holes[id].ringD && Math.abs(G.holes[id].u) < 1e-6)
       .sort((a, b) => G.holes[a].v - G.holes[b].v);
+    const plated = platedHoles(G);
     column.forEach((id, i) => {
+      if (plated.has(id)) return;         // this one is on a free-standing plate, see _numberPlates
       const top = i === column.length - 1;
       jobs.push({ ring: top ? id : column[i + 1], label: String(G.holes[id].value), top });
     });
@@ -495,7 +630,7 @@ export class Renderer {
     // machine's do. CAP is the ceiling on height - our wall is much taller relative to its ring
     // than a real one, so most numbers are limited by the arc, not by this.
     const PERDIGIT = 40 * Math.PI / 180;
-    const CAP = 0.46;                         // number height, as a share of the wall's height
+    const CAP = NUM_CAP;                      // number height, as a share of the wall's height
     // How far UP the wall the number sits, as a share of the wall's height off the board. GUARD:
     // this is not a centred number nudged for looks. Because the rings are tangent, the wall that
     // carries a number has the ring below it standing at full height directly in front - and

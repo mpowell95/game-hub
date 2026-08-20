@@ -281,6 +281,38 @@ the layout — only the text inside a column changes size to fit. Plain bold san
 used for the values; more decorative styles (segmented "LED" digits, serif numerals) were tried
 and none of them stayed legible once shrunk to the actual on-screen size of the panel on a phone.
 
+### Where the point values live
+
+Every value is painted on a RING, never on the board face. The face carried a mirrored pair of
+stencilled numbers per hole until 2026-08-19; they read as scores scattered at random and were
+removed. Do not paint them back.
+
+A ring wall offers exactly two surfaces the player can see: the OUTER face of its near wall
+(convex, curving away at the edges) and the INNER face of its far wall (concave, curving toward
+you). Concave reads far better, but in this stack it is usually buried: the rings are TANGENT, so
+the far wall of one ring stands back to back with the near wall of the next, touching it. Only
+the TOP ring of the column has a free far wall. That is why the 50 can sit on its own ring and
+nothing else in the column can - confirmed by colouring every inner face in, and by raising the
+camera. Two touching surfaces stay touching from every angle; neither a camera move nor a tilt
+change recovers them.
+
+So the rule, in `render.js`:
+
+- Top hole of the column: its own ring, far wall, concave. (The 50.)
+- Any other hole: the OUTER wall of the ring above it, provided the number does not wrap more
+  than `MAX_WRAP` on that ring. (The 10 and 20, whose rings are 36cm and 53cm across.)
+- Past that threshold a digit turns edge-on and vanishes behind the ring silhouette, so the
+  number gets a concave arc of its own: concentric with its own ring and the same height as it,
+  set `INSET` in from the far wall so it clears the ring above while still reading as that
+  ring's own inner face. (The 30 and 40, on the two tightest rings on the board.) The arc is
+  cosmetic geometry with no physics body - a ball can pass through it.
+
+`platedHoles()` decides this FROM THE BOARD, so a new machine configures itself: widen a ring and
+its number moves back onto the wall, tighten one and it gets an arc. Nothing to set per board.
+
+The 30 and 40 shipped clipped on 2026-08-19 because every number was put on a ring wall
+regardless of how far it had to wrap.
+
 ### Removed scenery
 
 See DECISIONS.md#removed-features-and-why-they-stay-removed for the wire cage and tall side panel
