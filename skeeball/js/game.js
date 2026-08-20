@@ -21,7 +21,16 @@ export class SkeeballGame {
     this.hundreds = 0;
     this.fifties = 0;
     this.bestThrow = 0;
-    this.ball = null;                // live physics state, or null while a ball waits on the lane
+    // LIVE THROWS, oldest first. More than one can be in the air: the next ball arrives when
+    // the last one TOUCHES THE BOARD, not when it finishes settling, because settling can take up
+    // to the 12s emergency cap and nobody should ever wait that long to throw again (Matt,
+    // 2026-08-20). `ball` below still answers "is anything in flight" for everything that only
+    // needs to know that.
+    this.balls = [];
+    // Balls SENT. This is what the nine-ball limit counts, NOT ballsUsed - with two in the air,
+    // counting settled balls would let a tenth be thrown while the ninth was still rolling. A
+    // ball that comes back unspent is subtracted again in _settle.
+    this.thrown = 0;
     this.over = false;
     this.events = [];
   }
@@ -38,6 +47,9 @@ export class SkeeballGame {
     g.fifties = snap.fifties | 0;
     g.bestThrow = snap.bestThrow | 0;
     g.over = g.ballsUsed >= BALLS_PER_GAME;
+    // A snapshot is only ever written with nothing in the air (ui.js checks), so every ball that
+    // was thrown has also settled.
+    g.thrown = g.ballsUsed;
     return g;
   }
 
@@ -55,33 +67,49 @@ export class SkeeballGame {
   }
 
   ballsLeft() { return BALLS_PER_GAME - this.ballsUsed; }
-  canThrow() { return !this.over && !this.ball; }
+
+  /** The oldest throw still in the air, or null. Kept because most callers only ask "is a ball
+   *  live?", and it means the renderer, the tests and the how-to demo did not all need rewriting
+   *  when a second ball became possible. */
+  get ball() { return this.balls[0] || null; }
+
+  canThrow() {
+    if (this.over || this.thrown >= BALLS_PER_GAME) return false;
+    const last = this.balls[this.balls.length - 1];
+    return !last || !!last.arrived;   // physics.js sets this on the first contact at the board end
+  }
 
   /** Roll one ball. power 0..1, aim -1..1 (see physics.js). */
   throwBall(params) {
     if (!this.canThrow()) return false;
-    this.ball = startThrow(this.board, params);
+    this.balls.push(startThrow(this.board, params));
+    this.thrown += 1;
     this.events.push({ type: 'throw' });
     return true;
   }
 
   update(dt) {
-    if (!this.ball) return;
-    const ball = this.ball;
-    step(this.board, ball, dt);
-    for (const ev of takeEvents(ball)) {
-      // Physics events pass through for the renderer, and the rules react to the two that matter:
-      // 'done' (the ball settled in a hole or the gutter) and 'returned' (it rolled back home,
-      // which resolves the throw without spending the ball).
-      this.events.push(ev);
-      if (ev.type === 'done' || ev.type === 'returned') this._settle(ball.outcome);
+    if (!this.balls.length) return;
+    // A COPY: _settle removes from this.balls while we are walking it.
+    for (const ball of this.balls.slice()) {
+      step(this.board, ball, dt);
+      for (const ev of takeEvents(ball)) {
+        // Physics events pass through for the renderer, and the rules react to the two that
+        // matter: 'done' (the ball settled in a hole or the gutter) and 'returned' (it rolled
+        // back home, which resolves the throw without spending the ball).
+        this.events.push(ev);
+        if (ev.type === 'done' || ev.type === 'returned') this._settle(ball, ball.outcome);
+      }
     }
   }
 
-  _settle(outcome) {
-    this.ball = null;
+  _settle(ball, outcome) {
+    const i = this.balls.indexOf(ball);
+    if (i >= 0) this.balls.splice(i, 1);
     if (!outcome) {
-      // Rolled back to the player: the ball is not spent, no score changes.
+      // Rolled back to the player: the ball is not spent, no score changes - and it goes back on
+      // the count, so the player gets to throw it again.
+      this.thrown -= 1;
       this.events.push({ type: 'ballBack' });
       return;
     }
