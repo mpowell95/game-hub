@@ -519,7 +519,6 @@ export class SkeeballUI {
     this._pushScoreboard();
     this._bindPlay();
     this._fit();
-    if (snap) this._say(t('msg_resumed', { n: this.game.ballsUsed + 1, total: BALLS_PER_GAME }));
     this.last = 0;
     this.raf = requestAnimationFrame(this._loop);
   }
