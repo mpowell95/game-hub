@@ -8,7 +8,7 @@
 
    NAMING (test-game-conventions.mjs enforces this): no class is both a layout container and
    something decoration hides. Layout classes are .sk-play-wrap / .sk-stage / .sk-setup-inner /
-   .sk-sheet; anything that fades (.sk-hint, .sk-msg) is an out-of-flow ornament with its own
+   .sk-rack; anything that fades (.sk-hint, .sk-msg) is an out-of-flow ornament with its own
    name and no width constraint. */
 
 .sk-root {
@@ -209,7 +209,7 @@
    card, chunky OK) applied to Skeeball, but the illustration is the ACTUAL machine (the cached
    render) with a ball rolling up into a cup, and the caption cross-fades roll -> unlock. Deliberately
    always dark (Mancala's sheet is), regardless of the hub theme. Own class prefix (.sk-hp-) so it
-   never collides with the retired four-panel sheet's .sk-ht-/.sk-hd- styles. */
+   own class prefix (.sk-hp-); the four-panel sheet it replaced was deleted 2026-08-20. */
 .sk-root .sk-hp-veil {
   position: fixed;
   inset: 0;
@@ -495,57 +495,6 @@
   100% { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 
-/* ------------------------------------------------------------------ overlays --- */
-
-.sk-root .sk-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  background: rgba(8, 4, 2, 0.72);
-}
-
-.sk-root .sk-sheet {
-  width: min(430px, 100%);
-  max-height: min(86dvh, 640px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: linear-gradient(180deg, var(--sk-panel) 0%, #170d08 100%);
-  border: 1px solid var(--sk-line);
-  border-radius: 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-}
-
-.sk-root .sk-sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 6px;
-}
-
-.sk-root .sk-sheet-head h2 {
-  margin: 0;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 20px;
-  letter-spacing: 0.06em;
-  color: var(--sk-gold);
-}
-
-.sk-root .sk-x {
-  border: 0;
-  background: none;
-  color: var(--sk-dim);
-  font-size: 26px;
-  line-height: 1;
-  padding: 4px 8px;
-  touch-action: manipulation;
-}
-
-.sk-root .sk-sheet-body { padding: 6px 16px 18px; }
-
 .sk-root .sk-final-label {
   margin: 4px 0 0;
   font-size: 11px;
@@ -608,8 +557,6 @@
   color: var(--sk-dim);
 }
 
-.sk-root .sk-sheet-actions { display: flex; flex-direction: column; gap: 6px; }
-
 /* Game over overlay - hub-standard card (batch G, 2026-08-18). Built on css/ui.css's
    .gh-overlay / .gh-modal / .gh-btn / .gh-chip primitives so it follows the hub theme; only the
    score, the hub-wide-record row and the stat tiles need a game-specific skin, all on --gh-* tokens. */
@@ -619,9 +566,35 @@
   margin: 14px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--gh-muted);
 }
+/* THE ONE HERO. GUARD: this card had six things in the same costume - same surface, same
+   border, same weight - so the eye had nowhere to land and the score, the thing the player
+   actually came back for, read as just another tile. The score is the only large, coloured,
+   moving element on the card now; everything below it is deliberately quieter. Do not give the
+   tiles their boxes back. */
 .sk-root .sk-over-score {
-  margin: 2px 0 8px; font-size: 60px; font-weight: 800; line-height: 1;
-  font-variant-numeric: tabular-nums; color: var(--gh-ink);
+  margin: 2px 0 8px; font-size: 68px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  /* the machine's own amber, not the hub's ink - it belongs to the game, not to the dialog */
+  color: var(--sk-amber);
+  text-shadow: 0 0 22px rgba(255, 157, 61, 0.45);
+  animation: sk-over-score-in 0.5s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+
+@keyframes sk-over-score-in {
+  0%   { opacity: 0; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Gold, not the hub accent: the pill sat in the same blue as the Play again button underneath
+   it, and the two fought for the eye. Blue on this card now means exactly one thing - the
+   action. */
+.sk-root .sk-over-pill {
+  background: linear-gradient(180deg, #ffd977 0%, #ff9d3d 100%);
+  border-color: transparent;
+  color: #3a1f0a;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 .sk-root .sk-over-rec {
   margin: 18px 0 0; padding: 10px 12px; background: var(--gh-surface-2);
@@ -629,100 +602,16 @@
 }
 .sk-root .sk-over-rec em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
 .sk-root .sk-over-rec b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--gh-ink); overflow-wrap: anywhere; }
-.sk-root .sk-over-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-.sk-root .sk-over-tile {
-  background: var(--gh-surface-2); border: 1px solid var(--gh-border);
-  border-radius: var(--gh-r-md); padding: 11px 6px;
+/* Reference, not competition: no surface, no border, no box. These four are here to be looked
+   UP when the player wants them, and the record row above keeps its panel precisely because it
+   is now the only one on the card. */
+.sk-root .sk-over-tiles {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px 8px; margin-top: 16px;
 }
-.sk-root .sk-over-tile b { display: block; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
-.sk-root .sk-over-tile span { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
-
-/* ------------------------------------------------------------- how to play --- */
-/* tic-tac-toe/CLAUDE.md's pattern: one flex column with a FIXED gap (spacing never left to
-   collapse), every line a single row (ui.js measures and locks nowrap), the diagram carried by
-   shape, numbers and dashes, never colour alone. Hub-belonging skin, same tokens as the setup. */
-
-.sk-root .sk-veil-howto .sk-sheet {
-  background: var(--sks-surface);
-  border-color: var(--sks-line);
-}
-
-.sk-root .sk-veil-howto .sk-sheet-head h2 { color: var(--sks-ink); font-family: inherit; }
-
-.sk-root .sk-veil-howto .sk-x { color: var(--sks-muted); }
-
-.sk-root .sk-veil-howto .sk-help {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  color: var(--sks-ink);
-}
-
-.sk-root .sk-ht-line { margin: 0; }
-
-/* Each panel: the picture, then (for two of the four) one tiny centred caption. figure
-   margins reset so the sheet's own fixed gap is the ONLY spacing between panels. */
-.sk-root .sk-ht-fig {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--gh-sp-1, 4px);
-}
-
-.sk-root .sk-ht-img { display: block; width: 100%; height: auto; }
-
-.sk-root .sk-ht-caption {
-  font-size: var(--gh-fs-sm, 14px);
-  font-weight: 700;
-  color: var(--sks-muted);
-  text-align: center;
-}
-
-/* The drawing vocabulary. The one accent colour only ever appears on the thick arrowheaded
-   strokes (a distinct shape), so nothing reads by colour alone. */
-.sk-root .sk-hd-line,
-.sk-root .sk-hd-soft,
-.sk-root .sk-hd-dash,
-.sk-root .sk-hd-lock,
-.sk-root .sk-hd-locked {
-  fill: none;
-  stroke: var(--sks-ink);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.sk-root .sk-hd-soft { stroke: var(--sks-muted); stroke-width: 2; }
-
-.sk-root .sk-hd-dash { stroke: var(--sks-muted); stroke-width: 2; stroke-dasharray: 3 5; }
-
-.sk-root .sk-hd-swipe {
-  fill: none;
-  stroke: var(--gh-accent, #1769d4);
-  stroke-width: 5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.sk-root .sk-hd-fill { fill: var(--sks-ink); }
-
-/* The locked machine is dashed outline, a shape cue on top of the padlock itself. */
-.sk-root .sk-hd-locked { stroke-dasharray: 6 5; }
-
-.sk-root .sk-hd-lockbody { fill: var(--sks-surface); stroke: var(--sks-ink); stroke-width: 2.5; }
-
-.sk-root .sk-hd-num text,
-.sk-root .sk-hd-score {
-  fill: var(--sks-ink);
-  font-size: 10px;
-  font-weight: 800;
-  text-anchor: middle;
-  font-family: var(--gh-font, system-ui, sans-serif);
-}
-
-.sk-root .sk-hd-num .sk-hd-num-sm { font-size: 7px; }
-
-.sk-root .sk-hd-score { font-size: 13px; }
+.sk-root .sk-over-tile { padding: 0; }
+.sk-root .sk-over-tile b { display: block; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
+.sk-root .sk-over-tile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
 
 /* --------------------------------------------------------------- reduced motion --- */
 
@@ -731,4 +620,5 @@
   .sk-root .sk-msg { transition: none; animation: none; }
   .sk-root .sk-msg.is-on { animation: none; }
   .sk-root .sk-score.is-hit { animation: none; }
+  .sk-root .sk-over-score { animation: none; }
 }
