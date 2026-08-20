@@ -7,8 +7,11 @@ desktop.ini
 # Node (no deps committed; here in case tooling is added later)
 node_modules/
 
-# Editor / tooling config (not part of the app)
-.claude/
+# Editor / tooling config (not part of the app). settings.json is the exception:
+# it carries the Claude Code output style, and web/iOS sessions clone a fresh
+# container every time, so a committed file is the ONLY place that setting survives.
+.claude/*
+!.claude/settings.json
 
 # Local working docs (not for the public repo)
 HANDOFF.md
