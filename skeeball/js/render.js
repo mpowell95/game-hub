@@ -481,50 +481,113 @@ export class Renderer {
     this.scene.add(floor);
   }
 
-  /** THE MACHINES EITHER SIDE. Real skeeball is never one cabinet on its own - it is a row of
-   *  them - and without neighbours ours reads as a model floating in a void.
+  /** THE MACHINES EITHER SIDE. Real skeeball is a ROW of cabinets; on its own ours reads as a
+   *  model floating in a void.
    *
-   *  GUARD: a neighbour is a SILHOUETTE, not a copy. Building one from this machine's own solids
-   *  is the obvious thing and it looks wrong: the rails alone are 40 short boxes stepped along the
-   *  ramp, which the real machine hides behind one smooth skin (_sideWalls, _rampSkin) and which
-   *  copied raw read as a visible staircase down each side of the screen. Four slabs give the same
-   *  shape at this distance with none of that. No physics body, no shadows, no scoring parts.
+   *  GUARD 1 - THEY ARE SET BACK, and that is not a style choice. Measured against the play
+   *  camera: a neighbour level with us puts its marquee at screen y = 0.2%, i.e. off the top edge,
+   *  so all that survives in frame is a slab of dark cabinet - which is exactly how the first
+   *  attempt at this ended up looking like a corridor wall rather than a machine. Set back 1.6m
+   *  its marquee lands at y = 15% and about 28% of its board width is on screen. Move it and
+   *  re-measure, or it goes back to being a wall.
    *
-   *  The offset is measured, not chosen: at the board's depth our own board fills 25-75% of a
-   *  portrait stage, so a neighbour centred at 1.22m puts its inner edge just past ours with a gap
-   *  between, and runs off the frame edge the way the next machine in a row does. Closer and it
-   *  overlaps our board; further and only a sliver survives.
+   *  GUARD 2 - THEY ARE MACHINES, NOT MASSES. What makes a shape read as skeeball at the frame
+   *  edge is the lit marquee, the orange board and the white rings, in that order - not the
+   *  silhouette. Dark slabs in roughly the right shape do not read as anything. So each neighbour
+   *  gets the real board paint (the same texture object as ours), real ring cylinders, and a lit
+   *  band, dimmed by material colour rather than by leaving detail out.
+   *
+   *  GUARD 3 - dressing only. No physics body, no shadows, no cup mouths, no scoring parts. The
+   *  ball never reaches them and never will.
    */
   _neighbours() {
     const G = this.G;
+    const fieldTex = this._track(this._paintField());
+    const laneTex = this._track(this._paintLane());
+    // GUARD: the two are NOT at the same depth. Level with each other their marquees land on
+    // the same screen line and the pair read as one lit band ruled across the frame - a wall
+    // again, just a brighter one. Staggering them breaks the line and gives the row some depth.
+    this._neighbourMachine(-1.15, -1.42, fieldTex, laneTex);
+    this._neighbourMachine(1.15, -1.88, fieldTex, laneTex);
+  }
+
+  /** One background machine, at (dx) across and (dz) further from the player. */
+  _neighbourMachine(dx, dz, fieldTex, laneTex) {
+    const G = this.G;
     const M = this.M;
-    const HALF_W = G.boardW * 0.58;
-    const lip = M.faceToWorld(0, 0, 0);
-    const top = M.faceToWorld(0, G.boardLen, 0);
-    const nearZ = 0.1;
-    const floorY = -G.troughDepth - 0.06;
-    const headY = top[1] + G.backboardH;
+    const DIM = 0x6b6b6b;                     // multiplies the shared paint down; see GUARD 2
+    const at = (u, v, h) => { const c = M.faceToWorld(u, v, h); return [c[0] + dx, c[1], c[2] + dz]; };
+    const add = (mesh) => { mesh.castShadow = false; mesh.receiveShadow = false; this.scene.add(mesh); return mesh; };
+    const tiltQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), M.tilt);
 
-    // Flat and dark: these live behind the fog and must never pull the eye off our own board.
-    const body = this._mat({ color: 0x2a1a12, roughness: 1, metalness: 0 });
-    const head = this._mat({ color: 0x231409, roughness: 1, metalness: 0 });
-
-    for (const side of [-1, 1]) {
-      const dx = side * 1.22;
-      const slab = (py, pz, hy, hz, mat) => {
-        const m = new THREE.Mesh(this._track(new THREE.BoxGeometry(HALF_W * 2, hy * 2, hz * 2)), mat);
-        m.position.set(dx, py, pz);
-        m.castShadow = false;
-        m.receiveShadow = false;
-        this.scene.add(m);
-      };
-      // the long low cabinet under the lane, and the tower the board and backboard sit in
-      slab((floorY + 0.06) / 2, (nearZ + lip[2]) / 2, (0.06 - floorY) / 2, (nearZ - lip[2]) / 2, body);
-      slab((floorY + headY) / 2, (lip[2] + top[2]) / 2 - 0.06, (headY - floorY) / 2, 0.52, body);
-      // the lit band over its backboard, so a neighbour reads as a machine and not a crate.
-      // GUARD: unlit. A gold emissive here, even at a twentieth, put a pale slab in each top
-      // corner of the frame that read brighter than our own marquee.
-      slab(headY + 0.16, top[2] - 0.02, 0.15, 0.05, head);
+    // the board face, in the machine's own paint
+    {
+      const plane = new THREE.Mesh(
+        this._track(new THREE.PlaneGeometry(G.boardW, G.boardLen)),
+        this._mat({ map: fieldTex, color: DIM, roughness: 0.9 }),
+      );
+      plane.position.set(...at(0, G.boardLen / 2, 0.0015));
+      plane.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - M.tilt));
+      add(plane);
+    }
+    // the lane running back toward the player
+    {
+      const plane = new THREE.Mesh(
+        this._track(new THREE.PlaneGeometry(G.laneW, G.laneLen)),
+        this._mat({ map: laneTex, color: DIM, roughness: 0.95 }),
+      );
+      plane.position.set(dx, 0.001, -G.laneLen / 2 + dz);
+      plane.rotation.x = -Math.PI / 2;
+      add(plane);
+    }
+    // the rings: what actually says "skeeball" from the frame edge
+    {
+      const white = this._mat({ color: 0xb9b4ac, roughness: 0.6 });
+      for (const id of Object.keys(G.holes)) {
+        const H = G.holes[id];
+        if (!H.ringD) continue;
+        const R = H.ringD / 2 + G.ringThick / 2;
+        const cv = H.v - H.r + H.ringD / 2;
+        const ring = new THREE.Mesh(
+          this._track(new THREE.CylinderGeometry(R, R, G.ringH, 20, 1, true)), white,
+        );
+        ring.position.set(...at(H.u, cv, G.ringH / 2));
+        ring.quaternion.copy(tiltQ);
+        ring.material.side = THREE.DoubleSide;
+        add(ring);
+      }
+    }
+    // cabinet: two side walls down the length, the backboard, and the lit band over it
+    {
+      const wood = this._mat({ color: 0x4a2c17, roughness: 0.95 });
+      const dark = this._mat({ color: 0x1f1209, roughness: 1 });
+      const lip = at(0, 0, 0);
+      const top = at(0, G.boardLen, 0);
+      const floorY = -G.troughDepth - 0.06;
+      const nearZ = 0.1 + dz;
+      for (const sx of [-1, 1]) {
+        const wall = new THREE.Mesh(
+          this._track(new THREE.BoxGeometry(0.07, Math.abs(floorY) + 0.16, nearZ - top[2])),
+          wood,
+        );
+        wall.position.set(dx + sx * (G.boardW / 2 + 0.02), (floorY + 0.16) / 2, (nearZ + top[2]) / 2);
+        add(wall);
+      }
+      const back = new THREE.Mesh(
+        this._track(new THREE.BoxGeometry(G.boardW * 1.04, G.backboardH, 0.08)), dark,
+      );
+      back.position.set(dx, top[1] + G.backboardH / 2, top[2] - 0.03);
+      add(back);
+      const band = new THREE.Mesh(
+        this._track(new THREE.BoxGeometry(G.boardW * 1.16, 0.3, 0.09)),
+        this._mat({ color: this.look.marquee, emissive: this.look.marqueeText,
+          // GUARD: barely lit. Both neighbours' bands sit at the same height and read as ONE
+          // horizontal line across the frame, so anything brighter than this stops being a row of
+          // marquees and becomes a lit stripe on a wall behind the machine.
+          emissiveIntensity: 0.14, roughness: 0.9 }),
+      );
+      band.position.set(dx, top[1] + G.backboardH + 0.16, top[2] - 0.02);
+      add(band);
     }
   }
 
