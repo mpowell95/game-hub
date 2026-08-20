@@ -42,7 +42,6 @@ const STRINGS = {
     hud_score_aria: 'Score',
     hint_swipe: 'Swipe up the lane to roll',
     msg_gutter: 'MISS!',
-    msg_resumed: 'Picked up where you left off: ball {n} of {total}',
     quit: 'Back to machines',
 
     // Game over
@@ -112,7 +111,6 @@ const STRINGS = {
     hud_score_aria: 'Puntos',
     hint_swipe: 'Desliza hacia arriba para lanzar',
     msg_gutter: 'FALLO!',
-    msg_resumed: 'Sigues donde lo dejaste: bola {n} de {total}',
     quit: 'Volver a las máquinas',
 
     over_h: 'Fin de la partida',

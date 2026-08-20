@@ -6,6 +6,7 @@
 
 import * as THREE from './vendor/three.module.min.js';
 import { buildMachine } from './machine.js';
+import { BALLS_PER_GAME } from './boards.js';
 
 const REDUCED = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -112,6 +113,8 @@ export class Renderer {
 
     this._lights();
     this._buildMachine();
+    this._neighbours();
+    this._ballTray();
     this._buildBall();
   }
 
@@ -476,6 +479,103 @@ export class Renderer {
     floor.position.set(0, -this.G.troughDepth - 0.06, -2);
     floor.receiveShadow = true;
     this.scene.add(floor);
+  }
+
+  /** THE MACHINES EITHER SIDE. Real skeeball is never one cabinet on its own - it is a row of
+   *  them - and without neighbours ours reads as a model floating in a void.
+   *
+   *  GUARD: a neighbour is a SILHOUETTE, not a copy. Building one from this machine's own solids
+   *  is the obvious thing and it looks wrong: the rails alone are 40 short boxes stepped along the
+   *  ramp, which the real machine hides behind one smooth skin (_sideWalls, _rampSkin) and which
+   *  copied raw read as a visible staircase down each side of the screen. Four slabs give the same
+   *  shape at this distance with none of that. No physics body, no shadows, no scoring parts.
+   *
+   *  The offset is measured, not chosen: at the board's depth our own board fills 25-75% of a
+   *  portrait stage, so a neighbour centred at 1.22m puts its inner edge just past ours with a gap
+   *  between, and runs off the frame edge the way the next machine in a row does. Closer and it
+   *  overlaps our board; further and only a sliver survives.
+   */
+  _neighbours() {
+    const G = this.G;
+    const M = this.M;
+    const HALF_W = G.boardW * 0.58;
+    const lip = M.faceToWorld(0, 0, 0);
+    const top = M.faceToWorld(0, G.boardLen, 0);
+    const nearZ = 0.1;
+    const floorY = -G.troughDepth - 0.06;
+    const headY = top[1] + G.backboardH;
+
+    // Flat and dark: these live behind the fog and must never pull the eye off our own board.
+    const body = this._mat({ color: 0x2a1a12, roughness: 1, metalness: 0 });
+    const head = this._mat({ color: 0x231409, roughness: 1, metalness: 0 });
+
+    for (const side of [-1, 1]) {
+      const dx = side * 1.22;
+      const slab = (py, pz, hy, hz, mat) => {
+        const m = new THREE.Mesh(this._track(new THREE.BoxGeometry(HALF_W * 2, hy * 2, hz * 2)), mat);
+        m.position.set(dx, py, pz);
+        m.castShadow = false;
+        m.receiveShadow = false;
+        this.scene.add(m);
+      };
+      // the long low cabinet under the lane, and the tower the board and backboard sit in
+      slab((floorY + 0.06) / 2, (nearZ + lip[2]) / 2, (0.06 - floorY) / 2, (nearZ - lip[2]) / 2, body);
+      slab((floorY + headY) / 2, (lip[2] + top[2]) / 2 - 0.06, (headY - floorY) / 2, 0.52, body);
+      // the lit band over its backboard, so a neighbour reads as a machine and not a crate.
+      // GUARD: unlit. A gold emissive here, even at a twentieth, put a pale slab in each top
+      // corner of the frame that read brighter than our own marquee.
+      slab(headY + 0.16, top[2] - 0.02, 0.15, 0.05, head);
+    }
+  }
+
+  /** THE BALL RETURN: the channel down the right-hand side where the balls you have not thrown
+   *  yet are waiting. GUARD: dressing again - the balls in it are props with no physics body, and
+   *  the one you actually throw is `this.ball`, served at the lane's near end as it always was.
+   *  What this buys is that the next ball now comes from SOMEWHERE. It was already instant (the
+   *  swipe re-arms the moment a ball settles, ~0.17s after it drops in) but it appeared out of
+   *  nothing, which read as a wait that was never there.
+   *
+   *  Placed against the outside of the right rail and running UP the lane, because that is where
+   *  it is visible: measured on a portrait stage, a tray beside the near end of the lane is off
+   *  the right edge of the screen entirely - the rails reach the frame edge down there. */
+  _ballTray() {
+    const G = this.G;
+    const railX = G.laneW / 2;
+    const x0 = railX + 0.02;                       // inner face, just clear of the rail
+    const w = 0.17;
+    const cx = x0 + w / 2;
+    const zNear = -0.55;
+    const zFar = -1.52;
+    const cz = (zNear + zFar) / 2;
+    const half = (zNear - zFar) / 2;
+    const floorY = -0.012;
+    const wood = this._mat({ color: this.look.woodDark, roughness: 0.75 });
+    const edge = this._mat({ color: this.look.cabinetEdge, roughness: 0.85 });
+
+    const box = (px, py, pz, hx, hy, hz, mat) => {
+      const m = new THREE.Mesh(this._track(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2)), mat);
+      m.position.set(px, py, pz);
+      m.receiveShadow = true;
+      this.scene.add(m);
+      return m;
+    };
+    box(cx, floorY - 0.012, cz, w / 2, 0.012, half, wood);                 // the channel floor
+    box(x0, floorY + 0.03, cz, 0.008, 0.042, half, edge);                  // lane-side wall
+    box(x0 + w, floorY + 0.03, cz, 0.008, 0.042, half, edge);              // outer wall
+    box(cx, floorY + 0.03, zNear, w / 2, 0.042, 0.008, edge);              // the near end stop
+
+    // The waiting balls. One per ball still to be thrown AFTER the one on the lane, so the tray
+    // empties as the rack runs down - render() sets how many are showing.
+    this._trayBalls = [];
+    const step = G.ballR * 2.12;
+    for (let i = 0; i < BALLS_PER_GAME - 1; i++) {
+      const b = new THREE.Mesh(this.ballGeo || (this.ballGeo = this._track(new THREE.SphereGeometry(G.ballR, 20, 14))),
+        this._mat({ color: 0xefe6d4, roughness: 0.45 }));
+      b.position.set(cx, floorY + G.ballR, zNear - 0.07 - i * step);
+      b.castShadow = true;
+      this.scene.add(b);
+      this._trayBalls.push(b);
+    }
   }
 
   // --- the painted textures --------------------------------------------------------------------
@@ -1214,6 +1314,14 @@ export class Renderer {
         this.ball.visible = true;
         this.ball.position.set(0, this.G.ballR, -0.12);
       } else this.ball.visible = false;
+    }
+
+    // The tray holds every ball still to come AFTER the one on the lane, so it visibly empties.
+    if (this._trayBalls) {
+      const left = game && !game.over
+        ? Math.max(0, BALLS_PER_GAME - game.ballsUsed - 1)
+        : this._trayBalls.length;
+      for (let i = 0; i < this._trayBalls.length; i++) this._trayBalls[i].visible = i < left;
     }
 
     const step = REDUCED ? 0 : dt;
