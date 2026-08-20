@@ -97,7 +97,10 @@ export const BOARDS = [
       // the view of the lowest holes. See DECISIONS.md#trough-and-lip. sight.mjs measures the
       // clearance; keep it positive whenever the ramp, the board or the camera move.
       boardLipY: 0.42,
-      boardTilt: 0.7854,        // ~32 degrees: a bowl to roll around, not a wall to fall down
+      // GUARD: 0.7854 is PI/4, i.e. 45 degrees. This line said "~32 degrees" until 2026-08-20;
+      // the comment was wrong, not the value, and it had already been copied into render.js and
+      // CLAUDE.md. A bowl to roll around, not a wall to fall down.
+      boardTilt: 0.7854,
       // GUARD: deliberately wider than a real machine's proportions, not a mistake to correct
       // toward realism. See DECISIONS.md#board-dimensions-and-aspect-ratio.
       boardW: 1.00,           // wider than the lane, like the real cabinet's flared board - and
