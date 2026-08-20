@@ -10,6 +10,11 @@ import { buildMachine } from './machine.js';
 const REDUCED = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// How much of a ring's white is SELF-LIT rather than lit by the scene. See the GUARD in the ring
+// block of _buildMachine: without this the walls render warm grey, because they stand edge-on to
+// a nearly-overhead key light. Raising it flattens the rings; lowering it greys them.
+const RING_GLOW = 0.60;
+
 export class Renderer {
   constructor(canvas, board) {
     this.board = board;
@@ -194,13 +199,31 @@ export class Renderer {
     // machine.js emitted no segments past them. Rings WILL hide their own mouths from a low
     // camera - that is intended (boards.js, `ringH`), not a defect to correct.
     {
-      const ringMat = this._mat({ color: L.ring, roughness: 0.4 });
+      // GUARD: THE RINGS MUST READ WHITE, AND AN ALBEDO ALONE WILL NOT DO IT. Every ring wall
+      // stands perpendicular to a board tilted 45 degrees, so its normal lies IN the board plane
+      // and the nearly-overhead key light (see _lights) does no more than graze it. The wall at
+      // the bottom of each ring - the one facing the player, the one you look straight at - gets
+      // no key at all, and a white albedo there renders about #9b8978: the warm grey of item 14.
+      // The emissive floor is what makes every face read white from every angle. Fix it HERE, on
+      // this one material: moving or adding a light to chase it relights the whole machine, and
+      // the key's position is itself the fix for an older bug.
+      const ringMat = this._mat({
+        color: L.ring, roughness: 0.4, emissive: L.ring, emissiveIntensity: RING_GLOW,
+      });
       const lipMat = this._mat({ color: L.ringLip, roughness: 0.5 });
+      const numbers = this._ringNumbers(RING_GLOW);
+      const EMPTY = {};
       for (const s of M.solids) {
         if (s.part !== 'ringSeg') continue;
         const geo = this._track(new THREE.BoxGeometry(s.half[0] * 2, s.half[1] * 2, s.half[2] * 2));
         // Navy on the lip, white on the walls - the classic board's trim, on the real segment.
-        const mesh = new THREE.Mesh(geo, [ringMat, ringMat, lipMat, ringMat, ringMat, ringMat]);
+        // `faceRot` aims the box's +Z face radially OUTWARD on every segment and -Z inward, so
+        // slot 4 is the wall seen from outside the ring and slot 5 the one seen through its mouth.
+        // Slots 0 and 1 are the box's own side faces, the ones that show as slivers at the seams.
+        const n = numbers.get(s) || EMPTY;
+        const mesh = new THREE.Mesh(geo, [
+          n.xHi || ringMat, n.xLo || ringMat, lipMat, ringMat, n.outer || ringMat, n.inner || ringMat,
+        ]);
         mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
         if (s.faceRot) {
           const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), s.faceRot.tilt);
@@ -208,7 +231,11 @@ export class Renderer {
           mesh.quaternion.copy(qx.multiply(qy));
         }
         mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        // GUARD: a ring does NOT receive shadows. It is 20-57 separate boxes standing flush
+        // against one another and only 15mm thick - well under the shadow map's texel footprint -
+        // so they acne each other into a speckled grey band, the other half of item 14. They
+        // still CAST, which is what gives the rings their form against the face.
+        mesh.receiveShadow = false;
         this.scene.add(mesh);
       }
     }
@@ -418,6 +445,180 @@ export class Renderer {
     return c;
   }
 
+  /** THE NUMBERS, PRINTED ON THE RINGS. Each hole's value goes on the first ring wall the player
+   *  sees ABOVE that hole. The rings are TANGENT, so that wall is the bottom of the NEXT ring up;
+   *  the topmost hole has no ring above it, so its value goes on the INSIDE of its own ring's far
+   *  wall - the big clear white face at the head of the board. Reading up the middle you then get
+   *  10, 20, 30, 40, 50, each sitting directly above the cup it pays, and the lowest ring (the
+   *  10's big arc) carries nothing at all.
+   *
+   *  GUARD: this is NOT each ring labelled with its own hole. That is what it first shipped as on
+   *  2026-08-19 and it reads exactly one ring low, because a ring's bottom wall sits BELOW the
+   *  hole it belongs to. The 100s are not in that column - nothing sits above them - so they keep
+   *  their number on their own ring, which is where it looks right.
+   *
+   *  GUARD: this adds NO geometry. A number is a texture on the ring segments that already exist,
+   *  so it cannot drift from the wall it is printed on, and a ring that moves carries its number
+   *  with it. Returns a Map of ringSeg solid -> { outer, inner, xHi, xLo }, any of them missing.
+   */
+  _ringNumbers(glow) {
+    const G = this.G;
+    const L = this.look;
+    const out = new Map();
+    const byRing = new Map();
+    for (const s of this.M.solids) {
+      if (s.part !== 'ringSeg') continue;
+      if (!byRing.has(s.ring)) byRing.set(s.ring, []);
+      byRing.get(s.ring).push(s);
+    }
+
+    // WHAT GOES ON WHICH RING: the centre column bottom hole first, each value onto the ring above
+    // it, and the top hole's value onto the far side of its own ring. Derived from the holes, not
+    // a hand-written list, so a machine with a different stack still labels itself correctly.
+    const jobs = [];
+    const column = Object.keys(G.holes)
+      .filter((id) => G.holes[id].ringD && Math.abs(G.holes[id].u) < 1e-6)
+      .sort((a, b) => G.holes[a].v - G.holes[b].v);
+    column.forEach((id, i) => {
+      const top = i === column.length - 1;
+      jobs.push({ ring: top ? id : column[i + 1], label: String(G.holes[id].value), top });
+    });
+    for (const id of Object.keys(G.holes)) {
+      const H = G.holes[id];
+      if (!H.ringD || Math.abs(H.u) < 1e-6) continue;
+      jobs.push({ ring: id, label: String(H.value), top: false });
+    }
+
+    // The two knobs worth touching. PERDIGIT is how far round the ring one digit may wrap before
+    // it turns too far from the player to read, and it is per digit on purpose: it is what lets a
+    // 100 curl further round its small ring than a 40 does round a bigger one, the way the real
+    // machine's do. CAP is the ceiling on height - our wall is much taller relative to its ring
+    // than a real one, so most numbers are limited by the arc, not by this.
+    const PERDIGIT = 40 * Math.PI / 180;
+    const CAP = 0.46;                         // number height, as a share of the wall's height
+    // How far UP the wall the number sits, as a share of the wall's height off the board. GUARD:
+    // this is not a centred number nudged for looks. Because the rings are tangent, the wall that
+    // carries a number has the ring below it standing at full height directly in front - and
+    // measured from the play camera, that buries the bottom ~40% of it. Keep the ink in the clear
+    // top half, and keep CAP small enough that it still fits there.
+    const RISE = 0.71;
+    const PPM = 2200;                         // texture pixels per metre of ring
+
+    for (const job of jobs) {
+      const segs = byRing.get(job.ring);
+      const H = G.holes[job.ring];
+      if (!segs || !H || !H.ringD) continue;
+      // The wall's centreline radius - machine.js's own definition, from the same two numbers.
+      const Rwall = H.ringD / 2 + G.ringThick / 2;
+      const lab = job.label;
+      // Which wall of this ring the player is looking at: the bottom of it from OUTSIDE, or - for
+      // the top hole's own ring - the far side of it from INSIDE, through the ring's mouth.
+      const centre = job.top ? Math.PI / 2 : -Math.PI / 2;
+      const maxH = G.ringH * CAP * PPM;
+      const maxW = PERDIGIT * lab.length * Rwall * PPM;
+
+      // Fit the number to the wall's height, then to the arc. On a tight ring the arc runs out
+      // first and the number shrinks - which is exactly what the real machine's 100s do.
+      const probe = this._canvas(8, 8).getContext('2d');
+      let fontPx = maxH / 0.72;
+      let inkW = 0;
+      for (let i = 0; i < 5; i++) {
+        probe.font = `800 ${fontPx}px system-ui, sans-serif`;
+        const m = probe.measureText(lab);
+        const inkH = (m.actualBoundingBoxAscent || fontPx * 0.72)
+          + (m.actualBoundingBoxDescent || 0);
+        inkW = m.width * 1.30;                // + a margin, so the ink never runs to the seam
+        const k = Math.min(maxH / inkH, maxW / inkW);
+        if (Math.abs(k - 1) < 0.01) break;
+        fontPx *= k;
+        inkW *= k;
+      }
+
+      // The segments the number lands on, and the arc they span - SNAPPED to whole segments, so
+      // every slice of the texture is one full segment face and nothing is clamped at the ends.
+      const half = inkW / PPM / (2 * Rwall);
+      const win = segs
+        .map((o) => {
+          // machine.js stores `faceRot.phi = phi + PI/2`; recover the segment's own angle.
+          const a = o.faceRot.phi - Math.PI / 2;
+          return { s: o, p: Math.atan2(Math.sin(a), Math.cos(a)), ha: Math.atan(o.half[0] / Rwall) };
+        })
+        .filter((o) => Math.abs(o.p - centre) < half + o.ha)
+        .sort((a, b) => a.p - b.p);
+      if (!win.length) continue;
+      const a0 = win[0].p - win[0].ha;
+      const a1 = win[win.length - 1].p + win[win.length - 1].ha;
+      const span = a1 - a0;
+      if (!(span > 0)) continue;
+      // Texture u, from the PLAYER's left to their right. On the outside of a ring that runs with
+      // the segment angle; on the inside we are looking at the wall the other way about, so it
+      // runs against it - a number printed with the outside rule would come out mirrored.
+      const T = job.top ? (a) => (a1 - a) / span : (a) => (a - a0) / span;
+
+      // ONE canvas per number, as wide as that snapped arc and as tall as the wall, so the number
+      // is printed at its true size on the wall and each segment simply shows its own slice.
+      const cw = Math.max(8, Math.round(span * Rwall * PPM));
+      const ch = Math.max(8, Math.round(G.ringH * PPM));
+      const c = this._canvas(cw, ch);
+      const x = c.getContext('2d');
+      x.fillStyle = L.ring;                   // the same white as the wall either side of it
+      x.fillRect(0, 0, cw, ch);
+      x.fillStyle = L.value;
+      x.font = `800 ${fontPx}px system-ui, sans-serif`;
+      x.textAlign = 'center';
+      x.textBaseline = 'alphabetic';
+      const m = x.measureText(lab);
+      const up = m.actualBoundingBoxAscent || fontPx * 0.72;
+      const down = m.actualBoundingBoxDescent || 0;
+      // Centre the INK, not the em box: digits have no descender, so a 'middle' baseline prints
+      // them high of where it looks centred. Across the wall the number goes at the ring's TRUE
+      // centre angle, not at the middle of the canvas - the window was snapped out to whole
+      // segments, so its middle can sit up to half a segment off to one side. Up the wall, canvas
+      // y = 0 is the TOP, so RISE (measured up from the board) counts down from there.
+      x.fillText(lab, T(centre) * cw, ch * (1 - RISE) + (up - down) / 2);
+
+      // GUARD: not tracked for disposal - it is only a template and is never uploaded. Its clones
+      // are, and they all share this one canvas as their source.
+      const base = new THREE.CanvasTexture(c);
+      base.colorSpace = THREE.SRGBColorSpace;
+      base.anisotropy = 4;
+      for (const o of win) {
+        const lo = T(o.p - o.ha);
+        const hi = T(o.p + o.ha);
+        const rec = out.get(o.s) || {};
+        const slice = this._decal(base, Math.min(lo, hi), Math.abs(hi - lo), glow);
+        if (job.top) rec.inner = slice; else rec.outer = slice;
+        // GUARD: THE SEAMS. A ring is circumscribed boxes, so neighbouring corners overlap and a
+        // sliver of the box's own SIDE face shows through at every join - and being plain white it
+        // cut a bright line straight down the middle of a digit (confirmed by colouring the side
+        // faces in: there is a sliver at every single seam). Give each side face the one texture
+        // COLUMN that belongs at that exact angle - a zero-width slice, so every pixel of the
+        // sliver is the colour the wall has there - and the digit runs unbroken across the join.
+        rec.xHi = this._decal(base, T(o.p + o.ha), 0, glow);
+        rec.xLo = this._decal(base, T(o.p - o.ha), 0, glow);
+        out.set(o.s, rec);
+      }
+    }
+    return out;
+  }
+
+  /** One slice of a ring-number texture, as a material. A `rep` of 0 gives a single column, which
+   *  is what the seam slivers want. `emissive` is plain white here, NOT L.ring, so that
+   *  white x glow x texel comes to the same value as the bare wall's L.ring x glow: the printed
+   *  band and the wall either side of it have to be one continuous surface. The emissiveMap is
+   *  what keeps the ink dark - a flat emissive would raise the digits to the grey of the glow. */
+  _decal(base, off, rep, glow) {
+    const tex = this._track(base.clone());
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.repeat.set(rep, 1);
+    tex.offset.set(off, 0);
+    tex.needsUpdate = true;
+    return this._mat({
+      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.4,
+    });
+  }
+
   /** The board face paint: field colour, zone stencils, mouth footprints, the 10 slot. */
   _paintField() {
     const G = this.G;
@@ -440,34 +641,18 @@ export class Renderer {
     }
     x.globalAlpha = 1;
 
-    // The 10 slot across the bottom edge, and its corner 0s - painted zones with BIG values.
+    // The 10 slot across the bottom edge, and its corner 0s - a painted zone, and only that:
+    // the values that used to go with it are on the rings now (see _ringNumbers).
     x.fillStyle = 'rgba(0,0,0,0.25)';
     x.fillRect(0, V(0.055), W, Hpx - V(0.055));
 
-    // Everything painted on this face is SQUASHED by perspective: the board is tilted 32 degrees
-    // and seen from a low camera, so a metre up the slope covers far fewer screen pixels than a
-    // metre across it. Numbers drawn round come out as letterbox slots. Drawing them stretched
-    // along v by this factor makes them land on screen looking like numbers.
-    const STRETCH = 1.8;
-    const stencil = (txt, u, v, size, color = '#f7ecd8', ink = 'rgba(20,10,4,0.85)') => {
-      x.save();
-      x.translate(U(u), V(v));
-      x.scale(1, STRETCH);
-      x.font = `800 ${Math.round(size * px)}px system-ui, sans-serif`;
-      x.textAlign = 'center';
-      x.textBaseline = 'middle';
-      x.lineWidth = Math.max(3, size * px * 0.14);
-      x.strokeStyle = ink;
-      x.strokeText(txt, 0, 0);
-      x.fillStyle = color;
-      x.fillText(txt, 0, 0);
-      x.restore();
-    };
-
-    // EVERY HOLE: its mouth, and its VALUE, painted on the board. GUARD: rings are NOT painted
-    // here - they are real walls drawn from their own collision segments in `_build`, and a
-    // second painted copy here would drift out of sync with where the wall actually is. See
-    // DECISIONS.md#removed-scenery.
+    // EVERY HOLE: its mouth. GUARD: rings are NOT painted here - they are real walls drawn from
+    // their own collision segments in `_build`, and a second painted copy here would drift out
+    // of sync with where the wall actually is. See DECISIONS.md#removed-scenery.
+    // GUARD: NO VALUES ARE PAINTED ON THIS FACE. Every reference photo (skeeball/References/)
+    // carries each number ON ITS OWN RING and nothing on the board between them. The face used to
+    // stencil a mirrored pair of numbers per hole, which read as scores scattered at random. They
+    // live in `_ringNumbers` now - do not paint them back onto the field.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
       const cx = U(H.u);
@@ -484,24 +669,6 @@ export class Renderer {
       x.arc(cx, cy, rp, 0, Math.PI * 2);
       x.fillStyle = L.pocket;
       x.fill();
-    }
-
-    // THE VALUES, mirrored either side of each mouth, placed OUTSIDE that hole's own ring. GUARD:
-    // the offset is derived from each hole's own `ringD`, never a fixed column - rings are not
-    // all one size, so a fixed offset buries some numbers under a ring.
-    for (const id of Object.keys(G.holes)) {
-      const H = G.holes[id];
-      const off = (H.ringD ? H.ringD / 2 : H.r) + 0.052;
-      const lab = String(H.value);
-      const size = H.value >= 100 ? 0.044 : 0.050;
-      for (const side of [-1, 1]) {
-        const u = H.u + side * off;
-        // The 10's arc reaches the rails, so its numbers would land off the board; the 100s sit
-        // near the corners already. Either way, anything past the edge folds back inboard.
-        const uu = Math.abs(u) > G.boardW / 2 - 0.05 ? H.u - side * off : u;
-        if (Math.abs(uu) > G.boardW / 2 - 0.05) continue;
-        stencil(lab, uu, H.v, size, L.ring);
-      }
     }
 
     const tex = new THREE.CanvasTexture(c);
