@@ -42,8 +42,17 @@ function face({ cx, topY, botY, topHalf, botHalf, id, detail }) {
     rings.push({ hid, h, y, x: xOf(h.u, y), rx: rxOf(R, y), ry: ryOf(R), open: !!h.ringOpen,
       big: R > 0.25 });
   }
-  // Far first: up the board is further away, so the big near rings paint over nothing.
-  rings.sort((a, b) => a.y - b.y);
+  // DRAW ORDER, and it is not depth. The two big rings go down FIRST, outermost first, then
+  // every cup on top of them. Sorting purely by depth puts the 20 after the 40 and 50 - its
+  // centre is lower down the board than theirs - and its band then paints straight over their
+  // rims at the tangent point. On the machine the cups STAND IN FRONT of the big rings, which is
+  // what the 3D render shows, so the cups have to be painted last.
+  rings.sort((a, b) => {
+    const bigA = a.big || a.open, bigB = b.big || b.open;
+    if (bigA !== bigB) return bigA ? -1 : 1;      // rings under cups
+    if (bigA) return b.rx - a.rx;                 // widest ring first: the 10, then the 20
+    return a.y - b.y;                             // cups far first, so the nearest sits on top
+  });
 
   for (const r of rings) {
     const x = n(r.x), y = n(r.y), rx = n(r.rx), ry = n(r.ry);
