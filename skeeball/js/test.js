@@ -13,6 +13,19 @@ import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 import { buildMachine } from './machine.js';
 
+// TWO SPEEDS. Nearly all of this file's runtime is four blocks that fire thousands of simulated
+// throws at the real engine - the reachability sweep alone is 861. They are worth running, but
+// only when THE PHYSICS OR THE BOARD has moved; nothing else in the repo can change what a thrown
+// ball does. The rest - the rules, the counters, snapshot/restore, the unlock chain - is cheap
+// and runs every time.
+//
+//   node skeeball/js/test.js            the cheap half, seconds
+//   node skeeball/js/test.js --full     everything, minutes
+//
+// run-all-tests.mjs passes --full by itself when physics.js, boards.js or machine.js differs from
+// origin/main, so nobody has to remember to.
+const FULL = process.argv.includes('--full') || process.env.SKB_FULL === '1';
+
 let passed = 0;
 const failures = [];
 function ok(label, cond, detail) {
@@ -65,8 +78,21 @@ let sweepSlowest = 0;
 // reporting a hole as unreachable the moment the geometry moves an inch.
 const SWEEP_AIMS = Array.from({ length: 21 }, (_, i) => +(-1 + i * 0.1).toFixed(2));
 const SWEEP_POWERS = 41;
+// A fast run skips the sweep, but block 6 builds its rack from whatever the sweep found, so seed
+// one throw per outcome. These are MEASURED landing points, not guesses. If one goes stale block 6
+// does not care - every assertion there is self-consistent (the score equals the sum of whatever
+// actually landed) - and proving they are still right is exactly what --full is for.
+if (!FULL) {
+  for (const [hole, power, aim] of [
+    ['h10', 0.15, 0], ['h20', 0.25, 0], ['c30', 0.35, 0], ['c40', 0.50, 0], ['c50', 0.62, 0],
+    ['100L', 0.92, -0.42], ['100R', 0.75, 0.17], ['corner0', 0.83, 0],
+  ]) {
+    const r = simulateThrow(board, { power, aim });
+    if (r.outcome && r.outcome.hole === hole) found.set(hole, { power, aim });
+  }
+}
 {
-  for (let p = 0; p < SWEEP_POWERS; p++) {
+  if (FULL) for (let p = 0; p < SWEEP_POWERS; p++) {
     for (const aim of SWEEP_AIMS) {
       const r = simulateThrow(board, { power: p / (SWEEP_POWERS - 1), aim });
       const hole = r.outcome ? r.outcome.hole : 'returned';
@@ -79,14 +105,14 @@ const SWEEP_POWERS = 41;
   // deliberately NOT in this list: the classic's minSpeed starts where the 20 starts, so nothing
   // on this machine rolls back unspent. The rollback path itself is still exercised in block 6,
   // on a board whose minSpeed sits under the hump.
-  for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
+  if (FULL) for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
   }
   // THE SOFT END OF THE DIAL IS NEVER WASTED: no straight throw may fail to reach the board. A
   // ball that banks off a side rail on a hard angled fling and comes back is a different thing -
   // real, rare, and allowed within a bound.
-  {
+  if (FULL) {
     let straightRoll = 0;
     let anyRoll = 0;
     for (let p = 0; p <= 40; p++) {
@@ -157,7 +183,7 @@ const SWEEP_POWERS = 41;
 // --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
 // This block IS the current contract for the power curve - see DECISIONS.md#power-curve-rebuild
 // for why it looks like this rather than the simpler "overshoot always costs you" shape.
-{
+if (FULL) {
   const at = (p) => outcomeOf(p, 0);
   const ladder = [];
   for (let p = 0; p <= 100; p++) ladder.push(valueOf(p / 100, 0));
@@ -298,7 +324,7 @@ const SWEEP_POWERS = 41;
 
 // --- 5. the soak: no throw ever hangs, leaks or invents a value --------------------------------
 
-{
+if (FULL) {
   // Deterministic pseudo-random driver (mulberry32) - reproducible failures or none at all.
   let seed = 0xC0FFEE;
   const rng = () => {
@@ -430,4 +456,8 @@ const SWEEP_POWERS = 41;
 // --- summary -----------------------------------------------------------------------------------
 
 console.log(`\nSkeeball engine: ${passed} passed, ${failures.length} failed.`);
+if (!FULL) {
+  console.log('  FAST RUN - the heavy physics blocks were SKIPPED: the reachability sweep, the');
+  console.log('  rollback bound, the power curve and the soak. Run with --full to include them.');
+}
 if (failures.length) { for (const f of failures) console.log(`  - ${f}`); process.exit(1); }

@@ -205,16 +205,27 @@ export function buildMachine(G) {
   const yA = lipY;
   const zB = lipZ - G.boardLen * cos;
   const yB = lipY + G.boardLen * sin;
-  // The top edge now runs from the front-top corner (yA + railFrontH) up to C.
-  const topSlope = ((yB + G.backboardH) - (yA + railFrontH)) / (zB - zA);
-  const WALL_SEGS = 20;
+  // GUARD: THE WALL STARTS OVER THE TROUGH, NOT AT THE BOARD'S LIP. It used to begin exactly at
+  // zA, which left the narrow END of it - the edge facing the player - standing in the air the
+  // ball flies through on its way to a corner 100. Measured over 210 hard-angled throws: 9% hit
+  // that end face, and every single one of them came back a 0, a 10 or a 20. Never anything
+  // else, because a flat edge-on hit kills the ball's angle instead of turning it. Carried
+  // forward over the trough, an angled ball meets the wall's INNER FACE and banks, which is the
+  // shot the corner cups exist for. (Matt, 2026-08-20.)
+  const zFront = lipZ + G.troughLen;
+  const yTrough = -G.troughDepth;
+  // The top edge runs from the front-top corner (yA + railFrontH) up to C.
+  const topSlope = ((yB + G.backboardH) - (yA + railFrontH)) / (zB - zFront);
+  const WALL_SEGS = 24;
   for (const s of [-1, 1]) {
     for (let i = 0; i < WALL_SEGS; i++) {
-      const z0 = zA + ((zB - zA) * i) / WALL_SEGS;
-      const z1 = zA + ((zB - zA) * (i + 1)) / WALL_SEGS;
+      const z0 = zFront + ((zB - zFront) * i) / WALL_SEGS;
+      const z1 = zFront + ((zB - zFront) * (i + 1)) / WALL_SEGS;
       const zm = (z0 + z1) / 2;
-      const yBoard = yA + (zA - zm) * (sin / cos);              // the face, climbing as z goes back
-      const yTop = (yA + railFrontH) + topSlope * (zm - zA);    // the raked top, front -> C
+      // Over the trough there is no board under the wall, so it reaches down to the trough floor
+      // - otherwise the extension would hang in the air with a gap beneath it.
+      const yBoard = zm > zA ? yTrough : yA + (zA - zm) * (sin / cos);
+      const yTop = (yA + railFrontH) + topSlope * (zm - zFront);   // the raked top, front -> C
       const h = yTop - yBoard;
       if (h <= 0.004) continue;
       solids.push({
@@ -295,7 +306,7 @@ export function buildMachine(G) {
     // smooth wall drawn is built from the same points the physics boxes use). Order:
     // front-bottom, back-bottom, back-top, front-top. railInnerX is the inner face; the wall is
     // railT thick.
-    railProfile: [[zA, yA], [zB, yB], [zB, yB + G.backboardH], [zA, yA + railFrontH]],
+    railProfile: [[zFront, yTrough], [zB, yB], [zB, yB + G.backboardH], [zFront, yA + railFrontH]],
     railInnerX: G.boardW / 2,
     railT,
   };
