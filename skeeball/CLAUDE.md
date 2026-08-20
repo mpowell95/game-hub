@@ -123,7 +123,7 @@ react a certain way."* It was replaced wholesale by cannon-es (see "The vendored
 nothing scripts a reaction any more:
 
 - **The machine is real geometry** (`machine.js`): lane, hump quarter-pipe (launch angle IS the
-  last segment's angle), trough, tilted board slab (~32 degrees), ring band and cup collars as
+  last segment's angle), trough, tilted board slab (45 degrees), ring band and cup collars as
   flush box-segment polygons, rails, tall backboard, the wire cage over the board, the front
   glass, a kick panel under the lip. The ball is a rigid sphere with mass and spin; rolling,
   hops, rim rattles and backboard reactions all come out of the contact solver.

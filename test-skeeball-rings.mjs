@@ -1,7 +1,8 @@
 // Headless check of _ringNumbers: canvas + document shimmed, real three, real geometry.
+const painted = [];              // every number this run draws, in order
 const ctx = {
   font: '800 100px x', textAlign: '', textBaseline: '', fillStyle: '',
-  fillRect() {}, fillText() {},
+  fillRect() {}, fillText(t) { painted.push(String(t)); },
   measureText(t) {
     const px = parseFloat(String(this.font).match(/(\d+(?:\.\d+)?)px/)[1]);
     return { width: 0.60 * px * t.length, actualBoundingBoxAscent: 0.72 * px, actualBoundingBoxDescent: 0 };
@@ -22,8 +23,16 @@ const fake = {
   _track(x) { return x; },
   _mat(o) { return new THREE.MeshStandardMaterial(o); },
   _decal: Renderer.prototype._decal,
+  _onFace: Renderer.prototype._onFace,
+  scene: { add() {} },
 };
 const map = Renderer.prototype._ringNumbers.call(fake, 0.60);
+const onRings = painted.slice();
+painted.length = 0;
+// The values that cannot go on a ring wall get a free-standing concave arc instead - see
+// _numberPlates and DECISIONS.md#where-the-point-values-live.
+Renderer.prototype._numberPlates.call(fake, 0.60);
+const onPlates = painted.slice();
 
 const norm = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const rings = new Map();
@@ -36,13 +45,32 @@ for (const [solid, rec] of map) {
   if (rec.inner) g.inner.push({ p, ha, m: rec.inner, rec });
 }
 
-// The asked-for layout: each value on the ring ABOVE its hole, the 50 on the inside of its own
-// ring's far wall, and the 10's ring - the lowest - carrying nothing at all.
-const WANT = { h20: '10', c30: '20', c40: '30', c50: '40', '100L': '100', '100R': '100' };
+// THE LAYOUT. Each value sits on the ring ABOVE its hole where the number can survive the wrap;
+// the 50 goes on the inside of its own ring's far wall (it is the top of the stack, so that wall
+// is free); the 30 and 40 are on concave arcs of their own because their rings are the tightest
+// on the board and a number wide enough to read runs off the visible face; and the 10's ring -
+// the lowest - carries nothing at all.
+const WANT = { h20: '10', c30: '20', '100L': '100', '100R': '100' };
 const WANT_INNER = { c50: '50' };
+const WANT_PLATES = ['30', '40'];
 
 let bad = 0;
 const fail = (m) => { console.log('  FAIL ' + m); bad++; };
+
+// THE ONE THAT MATTERS, and the one that does not care where anything lives: every value on the
+// machine is painted EXACTLY ONCE. A number that moves is fine; a number that is dropped, or
+// drawn twice because it was moved without being removed from its old home, is not.
+{
+  const all = [...onRings, ...onPlates].sort();
+  const want = Object.keys(G.holes).map((id) => String(G.holes[id].value)).sort();
+  const same = all.length === want.length && all.every((v, i) => v === want[i]);
+  console.log('painted:', all.join(' '), '| rings:', onRings.join(' ') || 'none',
+    '| plates:', onPlates.join(' ') || 'none');
+  if (!same) fail(`every value painted once: got [${all.join(', ')}], wanted [${want.join(', ')}]`);
+  const platesSorted = onPlates.slice().sort();
+  if (platesSorted.join(',') !== WANT_PLATES.slice().sort().join(','))
+    fail(`plates: got [${platesSorted.join(', ')}], wanted [${WANT_PLATES.join(', ')}]`);
+}
 
 for (const id of Object.keys(G.holes)) {
   const H = G.holes[id];
