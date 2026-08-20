@@ -41,8 +41,7 @@ const STRINGS = {
     hud_ball: 'Ball',
     hud_score_aria: 'Score',
     hint_swipe: 'Swipe up the lane to roll',
-    msg_returned: 'Too soft. Have it back.',
-    msg_gutter: 'Gutter.',
+    msg_gutter: 'MISS!',
     msg_resumed: 'Picked up where you left off: ball {n} of {total}',
     quit: 'Back to machines',
 
@@ -112,8 +111,7 @@ const STRINGS = {
     hud_ball: 'Bola',
     hud_score_aria: 'Puntos',
     hint_swipe: 'Desliza hacia arriba para lanzar',
-    msg_returned: 'Muy floja. Te la devuelve.',
-    msg_gutter: 'Al canal.',
+    msg_gutter: 'FALLO!',
     msg_resumed: 'Sigues donde lo dejaste: bola {n} de {total}',
     quit: 'Volver a las máquinas',
 

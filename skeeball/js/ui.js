@@ -480,24 +480,23 @@ export class SkeeballUI {
 
     this.root.innerHTML = `
       <div class="sk-play-wrap">
-        <div class="sk-hud">
-          <button type="button" class="sk-hud-back" data-role="machines" aria-label="${esc(t('quit'))}">☰</button>
-          <div class="sk-hud-mid">
-            <div class="sk-hud-name">${esc(this.game.board.name)}</div>
-            <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
-            <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
-          </div>
-          <!-- No TOP/BEST/TODAY strip here: those records are painted on the machine's own
-               backboard (render.js setScoreboard) so the data isn't shown twice. The header
-               keeps only the LIVE state of the rack in progress: score and ball pips. -->
+        <button type="button" class="sk-menu" data-role="machines" aria-label="${esc(t('quit'))}">☰</button>
+        <!-- THE LIVE RACK, DIRECTLY ABOVE THE MACHINE. GUARD: this is IN FLOW, above the stage,
+             NOT floated over it. Floated, it overlapped the machine's own marquee the moment the
+             stage went full-bleed - the renderer fits the machine to whatever height the stage
+             has, so anything lying on top of the stage collides with it. In flow, the stage gets
+             what is left and the two can never meet. It is no longer a bar at the very top of the
+             screen either: that was too far from the board to catch the eye, and it crowded the
+             hub's floating Hub button. No TOP/BEST/TODAY strip here - those records are painted
+             on the machine's own backboard (render.js setScoreboard), never shown twice. -->
+        <div class="sk-rack">
+          <div class="sk-hud-name">${esc(this.game.board.name)}</div>
+          <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
+          <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
         </div>
         <div class="sk-stage" data-role="stage">
           <canvas class="sk-canvas" data-role="canvas" role="img" aria-label="${esc(t('aria_lane'))}"></canvas>
           <div class="sk-msg" data-role="msg" aria-live="polite"></div>
-          <!-- DEV readout, remove before this game goes public: every real flick's measured
-               speed, so the swipe curve can be tuned while actually playing. -->
-          <div class="sk-flickread" data-role="flickread" aria-hidden="true">flick: -</div>
-          <div class="sk-flickread sk-dbg" data-role="dbg" aria-hidden="true">log: -</div>
           <div class="sk-swipe" data-role="swipe" aria-hidden="true">
             <span class="sk-hint" data-role="hint">${esc(t('hint_swipe'))}</span>
           </div>
@@ -512,10 +511,8 @@ export class SkeeballUI {
       msg: this.root.querySelector('[data-role="msg"]'),
       hint: this.root.querySelector('[data-role="hint"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
-      flickread: this.root.querySelector('[data-role="flickread"]'),   // DEV readout, remove before public
-      dbg: this.root.querySelector('[data-role="dbg"]'),               // DEV log diagnostic, remove before public
     };
-    this._dbg = { thrown: 0, done: 0, log: 0, ok: 0, err: '-' };       // DEV: throw-logging counters
+    this._shownScore = this.game.score;   // what the counter is currently showing; see _paintHud
 
     if (this.renderer) this.renderer.dispose();
     this.renderer = new Renderer(this.el.canvas, this.game.board);
@@ -573,13 +570,13 @@ export class SkeeballUI {
     // not of what a throw can be, and physics.js extrapolates past both.
     const power = powerOf(perH);
 
-    // DEV, remove before public: the live readout, plus the captured throw params - logged with
-    // their real result at ballDone (see _drainEvents / _logThrow), so there's measured data
-    // (flick -> power -> launch -> actual hole), not just the calculation, to check the curve.
+    // The throw's params, logged with their real result at ballDone (see _drainEvents /
+    // _logThrow), so there is measured data (flick -> power -> launch -> actual hole) and not
+    // just the calculation. GUARD: this is RECORDED, never displayed. The on-screen readout of it
+    // came off 2026-08-20 - players have no use for it - but the logging behind it stays, because
+    // it is the only way to check the curve against people who are not Matt. Read it back with
+    // read-skeeball-throws.mjs.
     const launch = launchSpeed(power, this.game.board.geom.minSpeed, this.game.board.geom.maxSpeed);
-    if (this.el && this.el.flickread) {
-      this.el.flickread.textContent = `flick ${perH.toFixed(2)} h/s  ·  pow ${power.toFixed(2)}  ·  ${launch.toFixed(2)} m/s`;
-    }
 
     // AIM: the direction of the whole swipe, eased so a small wobble stays small and a
     // deliberate diagonal still reaches the corner 100s. This shapes the INPUT only - once
@@ -600,7 +597,6 @@ export class SkeeballUI {
       this._throwStats = { bounces: 0, backboard: 0, impact: false, impactSpeed: null, seq: [],
         contacts: [],
         t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()) };
-      if (this._dbg) { this._dbg.thrown++; this._renderDbg(); }
     }
   }
 
@@ -610,27 +606,14 @@ export class SkeeballUI {
    *  throwaway instrumentation, not player history, so a failed write is simply dropped (never
    *  queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
   async _logThrow(rec) {
-    if (this._dbg) { this._dbg.log++; this._renderDbg(); }
     const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
       name: (loadProfile() || {}).name || '', at: Date.now() };
     try {
       const boot = await getStatsApp();
-      if (!boot) { if (this._dbg) { this._dbg.err = 'no-boot'; this._renderDbg(); } return; }
+      if (!boot) return;
       const { db, api } = boot;
       await api.set(api.push(api.ref(db, 'skeeballThrows/' + deviceId())), full);
-      if (this._dbg) { this._dbg.ok++; this._dbg.err = '-'; this._renderDbg(); }
-    } catch (e) {
-      if (this._dbg) { this._dbg.err = String((e && e.message) || e).slice(0, 48); this._renderDbg(); }
-    }
-  }
-
-  /** DEV diagnostic, remove before public: show the throw-logging counters on screen so the
-   *  pipeline can be watched on a real device - thrown (a throw was captured), done (a ball
-   *  settled), log (a write was attempted), ok (a write committed), and the last error. */
-  _renderDbg() {
-    if (!this.el || !this.el.dbg || !this._dbg) return;
-    const d = this._dbg;
-    this.el.dbg.textContent = `thrown ${d.thrown} · done ${d.done} · log ${d.log} · ok ${d.ok} · err ${d.err}`;
+    } catch { /* throwaway instrumentation: a dropped write never becomes a player-visible error */ }
   }
 
   // --- the frame -------------------------------------------------------------------------------
@@ -644,6 +627,7 @@ export class SkeeballUI {
     this.game.update(dt);
     this._drainEvents();
     this.renderer.render(this.game, dt);
+    this._tickScore(dt);
     if (this.msgTimer > 0) {
       this.msgTimer -= dt;
       if (this.msgTimer <= 0) this.el.msg.classList.remove('is-on');
@@ -690,8 +674,10 @@ export class SkeeballUI {
           Rr.flashHole('gutter');
           this._say(t('msg_gutter'));
           break;
+        // GUARD: a returned ball says NOTHING. It used to call "Too soft. Have it back." - a
+        // scolding for a throw the player just watched fall short, and the most frequent message
+        // in the game. Silence reads better; the ball rolling back IS the message.
         case 'returned':
-          this._say(t('msg_returned'));
           this._pending = null;
           break;
         case 'ballDone': {
@@ -707,7 +693,6 @@ export class SkeeballUI {
           writeSave(this.game.snapshot());   // the autosave that makes leaving lossless
           // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
           // can read back (real data to check the calculated ranges against).
-          if (this._dbg) { this._dbg.done++; this._renderDbg(); }
           if (this._lastThrow) {
             const ts = this._throwStats || {};
             const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -733,10 +718,35 @@ export class SkeeballUI {
     }
   }
 
+  /** GUARD: the score is NOT written straight to the element here. It used to be, and points
+   *  landing was a silent digit swap that was genuinely easy to miss - the ball, the burst and
+   *  the number all happened at once and the number lost. _frame runs the count up to the new
+   *  total (see _tickScore) and this only sets the target and fires the flash. */
   _paintHud() {
-    this.el.score.textContent = String(this.game.score);
+    this.el.score.classList.remove('is-hit');
+    if (this.game.score > this._shownScore) {
+      // reflow, so re-adding the class restarts the animation on a second score in a row
+      void this.el.score.offsetWidth;
+      this.el.score.classList.add('is-hit');
+    } else {
+      this._shownScore = this.game.score;      // a new rack: no run-up, just show it
+      this.el.score.textContent = String(this.game.score);
+    }
     this.el.pips.innerHTML = Array.from({ length: BALLS_PER_GAME }, (_, i) =>
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
+  }
+
+  /** Run the displayed score up to the real one. Deliberately quick - this is a machine totting
+   *  up, not a progress bar - and always lands exactly on the target rather than easing into it. */
+  _tickScore(dt) {
+    if (!this.el || !this.el.score) return;
+    const target = this.game.score;
+    if (this._shownScore === target) return;
+    // Whole points per second, scaled to the gap, so a 10 and a 100 both take about a third of
+    // a second rather than the 100 taking ten times as long.
+    const step = Math.max(1, Math.ceil((target - this._shownScore) * dt * 4.5));
+    this._shownScore = Math.min(target, this._shownScore + step);
+    this.el.score.textContent = String(this._shownScore);
   }
 
   _say(text) {
