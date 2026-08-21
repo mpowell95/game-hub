@@ -111,6 +111,21 @@
   min-height: 0;
 }
 
+/* Dev only (isDevProfile), and never rendered for anyone else. Deliberately plain and dashed:
+   it should not look like part of the game. Delete with the button when Skeeball ships. */
+.sk-root .sk-devreset {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px dashed var(--sks-line);
+  background: transparent;
+  color: var(--sks-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .sk-root .sk-title {
   margin: 0;
   font-size: clamp(20px, 5.5vw, 26px);
