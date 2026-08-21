@@ -368,6 +368,41 @@ export class SkeeballUI {
     });
   }
 
+  /** The pause card. This button used to be an INSTANT QUIT: one tap and you were on the
+   *  gallery with no way to say you had not meant it. Nothing was ever lost - the autosave
+   *  lands after every settled ball - but for the two seconds before you spotted the Resume
+   *  button it read as though a live game had been binned (Matt, 2026-08-21). Hub-standard
+   *  card, the same .gh-overlay/.gh-modal primitives the game-over one uses. */
+  _showPause() {
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal sk-pause" role="dialog" aria-modal="true" aria-label="${esc(t('paused'))}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
+        <h2 class="sk-pause-title">${esc(t('paused'))}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${esc(t('new_game'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="gallery">${esc(t('quit'))}</button>
+        </div>
+      </div>`;
+    this._closeOverlay();
+    this.root.appendChild(el);
+    this.overlay = el;
+    const close = () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (this.overlay === el) this.overlay = null;
+    };
+    el.querySelector('[data-role="close"]').addEventListener('click', close);
+    el.querySelector('[data-role="resume"]').addEventListener('click', close);
+    // GUARD: this DISCARDS the live rack, exactly as the gallery's New game does with a banked
+    // one. Same rule in both places, so the word means one thing wherever a player meets it.
+    el.querySelector('[data-role="new"]').addEventListener('click', () => { close(); clearSave(); this._startGame(null); });
+    // Leaving is lossless: the gallery's button will say Resume.
+    el.querySelector('[data-role="gallery"]').addEventListener('click', () => { close(); this._renderSetup(); });
+    el.addEventListener('click', (e) => { if (e.target === el) close(); });
+  }
+
   _showHowTo() {
     const board = boardById(this.settings.board);
     // Mancala's how-to chrome (dark modal, white card, chunky OK) but the illustration is a LIVE
@@ -484,7 +519,7 @@ export class SkeeballUI {
 
     this.root.innerHTML = `
       <div class="sk-play-wrap">
-        <button type="button" class="sk-menu" data-role="machines" aria-label="${esc(t('quit'))}">☰</button>
+        <button type="button" class="sk-menu" data-role="machines" aria-label="${esc(t('pause'))}">☰</button>
         <!-- THE LIVE RACK, DIRECTLY ABOVE THE MACHINE. GUARD: this is IN FLOW, above the stage,
              NOT floated over it. Floated, it overlapped the machine's own marquee the moment the
              stage went full-bleed - the renderer fits the machine to whatever height the stage
@@ -528,11 +563,7 @@ export class SkeeballUI {
   }
 
   _bindPlay() {
-    this.root.querySelector('[data-role="machines"]').addEventListener('click', () => {
-      // Mid-rack state is already banked (autosave lands after every settled ball), so leaving
-      // for the gallery is lossless; the card's button will say Resume.
-      this._renderSetup();
-    });
+    this.root.querySelector('[data-role="machines"]').addEventListener('click', () => this._showPause());
     const zone = this.el.swipe;
     zone.addEventListener('pointerdown', (e) => {
       e.preventDefault();

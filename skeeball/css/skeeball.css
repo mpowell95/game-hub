@@ -589,6 +589,9 @@
 /* Game over overlay - hub-standard card (batch G, 2026-08-18). Built on css/ui.css's
    .gh-overlay / .gh-modal / .gh-btn / .gh-chip primitives so it follows the hub theme; only the
    score, the hub-wide-record row and the stat tiles need a game-specific skin, all on --gh-* tokens. */
+.sk-root .sk-pause { text-align: center; }
+.sk-root .sk-pause-title { margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
+
 .sk-root .sk-over { text-align: center; }
 .sk-root .sk-over-title { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: var(--gh-ink); }
 .sk-root .sk-over-machine {
