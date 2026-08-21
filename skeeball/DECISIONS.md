@@ -182,6 +182,32 @@ power no longer costs a player anything by itself; only a hard sideways aim that
 current test suite in `test.js` is the executable record of what the resulting ladder must look
 like: band width, no dead zones, and quarter-by-quarter improvement with more power.
 
+### Swipe power is 2-D
+
+Power used to be clocked from the swipe's UPWARD travel only (`first.y - end.y`), while aim was
+read from the same swipe's ANGLE. That put the two inputs in direct opposition: angling toward a
+100 discarded the sideways part of the gesture, so the harder a player angled the softer the game
+heard them. Worse, the aim mapping clamps at 0.38 rad (21.8 degrees) — past that, extra angle
+bought no extra aim and cost power anyway. A 45-degree swipe lost 29% of its speed for aim it
+already had at 22 degrees, which is why an angled throw could land SHORTER than a straight one at
+the same effort (Matt, 2026-08-21: "I aim for the 100 and throw it harder. It lands even shorter
+than the one thrown straight.").
+
+Speed is now the swipe's actual 2-D distance over time, so angling costs nothing. The gate that
+decides whether a gesture was a throw at all stays vertical — a sideways smudge is still not a
+throw — and a release window that finished downward is discarded rather than measured, which the
+old signed subtraction got for free by going negative.
+
+The key property: for a straight swipe `hypot(0, dy) === |dy|`, so the new ruler is bit-identical
+to the old one at every speed a straight throw can have (verified over 780 synthetic gestures,
+max difference 0). None of the measured tuning moved — `SWIPE_SLOW`/`SWIPE_FAST`, the speed
+range, the power curve and the ladder all still stand. Only angled throws changed, and only by
+getting back the effort they were already spending.
+
+Note that `startThrow` applies a second cosine — launch velocity is rotated, so the forward
+component is `speed * cos(aim * aimMax)`. That one is NOT a bug and must stay: a ball thrown
+sideways genuinely travels less far up the face, and every measured number already includes it.
+
 ## Physics
 
 ### Why cannon-es
