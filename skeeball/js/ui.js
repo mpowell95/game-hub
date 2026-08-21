@@ -21,7 +21,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
-import { readGoals, goalsWon, GOAL_BEST, GOAL_TOTAL } from './goals.js';
+import { readGoals, readGoalsLive, readCupsLive, goalsWon } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
@@ -108,6 +108,10 @@ function renderMachineImage(board, sb) {
     return null;
   }
 }
+
+/** 1240 -> "1.2k", 2000 -> "2k". The goal rails are 66px wide; four digits over four more do
+ *  not fit, and nobody reads a lifetime total to the point anyway. */
+const shortNum = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/.0$/, '')}k` : String(n));
 
 /** This player's own records for a board, straight from the shared store (never a local copy). */
 function myRecords(boardId) {
@@ -557,6 +561,9 @@ export class SkeeballUI {
           <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
           <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
         </div>
+        <!-- The goal rails, in the gutters either side of the machine. Absolutely positioned
+             against .sk-play-wrap, so this wrapper is only a handle for repainting them. -->
+        <div class="sk-grails" data-role="grails">${this._goalRailsMarkup()}</div>
         <div class="sk-stage" data-role="stage">
           <canvas class="sk-canvas" data-role="canvas" role="img" aria-label="${esc(t('aria_lane'))}"></canvas>
           <div class="sk-msg" data-role="msg" aria-live="polite"></div>
@@ -571,6 +578,7 @@ export class SkeeballUI {
       canvas: this.root.querySelector('[data-role="canvas"]'),
       score: this.root.querySelector('[data-role="score"]'),
       pips: this.root.querySelector('[data-role="pips"]'),
+      grails: this.root.querySelector('[data-role="grails"]'),
       msg: this.root.querySelector('[data-role="msg"]'),
       hint: this.root.querySelector('[data-role="hint"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
@@ -791,6 +799,8 @@ export class SkeeballUI {
     }
     this.el.pips.innerHTML = Array.from({ length: BALLS_PER_GAME }, (_, i) =>
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
+    // The rails move on the same beat: a settled ball can change all three numbers.
+    this._paintGoalRails();
   }
 
   /** Run the displayed score up to the real one. Deliberately quick - this is a machine totting
@@ -812,27 +822,67 @@ export class SkeeballUI {
     this.msgTimer = 1.8;
   }
 
-  /** THE THREE GOALS, and how far along. GUARD: read fresh from the store every time rather than
-   *  cached on `this` - a rack recorded on another device changes them, and this screen is the
-   *  first thing shown after every game. js/goals.js explains why nothing is stored here. */
-  _goalsMarkup() {
-    const goals = readGoals();
-    const label = {
-      cups: t('goal_cups'),
-      best: t('goal_best', { n: GOAL_BEST }),
-      total: t('goal_total', { n: GOAL_TOTAL }),
-    };
-    const done = goals.every((g) => g.met);
-    const rows = goals.map((g) => `
-      <li class="sk-goal${g.met ? ' is-done' : ''}">
-        <span class="sk-goal-tick" aria-hidden="true">${g.met ? '&#10003;' : ''}</span>
-        <span class="sk-goal-text">${esc(label[g.id])}</span>
-        <span class="sk-goal-num">${g.met ? esc(t('goal_done')) : `${g.now}/${g.target}`}</span>
-      </li>`).join('');
-    return `<div class="sk-goals${done ? ' is-all' : ''}">
-        <p class="sk-goals-h">${esc(done ? t('goals_all') : t('goals_h'))}</p>
-        <ul class="sk-goals-list">${rows}</ul>
+  /** THE THREE GOALS, live on the lane: two rails in the gutters either side of the machine.
+   *
+   *  GUARD: THESE LIE OVER THE STAGE, which .sk-rack deliberately does not. That is safe only
+   *  because they sit in the gutters frame.mjs measures - 66px clear at the board's widest
+   *  point, wider further up - and never over the board itself. Re-run frame.mjs before moving
+   *  either one inward, and keep pointer-events: none on them so a rail can never eat a swipe.
+   *
+   *  Read fresh every time rather than cached on `this`: a rack recorded on another device
+   *  moves them. js/goals.js explains why nothing is stored here. */
+  _goalRailsMarkup() {
+    const rack = this.game ? this.game.result() : null;
+    const [cups, best, total] = readGoalsLive(rack);
+    const box = (label, g) => `
+      <div class="sk-goal${g.met ? ' is-done' : ''}">
+        <em>${esc(label)}</em>
+        <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
+        <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
       </div>`;
+    // 100 at the top down to 10 - the board's own order, so the column reads against the cups
+    // it is naming rather than against nothing.
+    const pips = readCupsLive(rack).slice().reverse()
+      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}"></i>`).join('');
+    return `
+      <div class="sk-grail sk-grail--l">
+        ${box(t('g_cups'), cups)}
+        <div class="sk-vals">${pips}</div>
+      </div>
+      <div class="sk-grail sk-grail--r">
+        ${box(t('g_single'), best)}
+        ${box(t('g_total'), total)}
+      </div>`;
+  }
+
+  /** The same three on the game-over card, in the SAME tile as the four stats above them so the
+   *  card reads as one thing rather than as something bolted on. Cups hit opens a row naming
+   *  which values are still owed - three identical numbers cannot say that on their own.
+   *  Reads the recorded store, not the live rack: by the time this card exists the rack is in. */
+  _goalTilesMarkup() {
+    const [cups, best, total] = readGoals();
+    const tile = (label, g, attrs) => `
+      <div class="sk-gtile${g.met ? ' is-done' : ''}"${attrs || ''}>
+        <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(label)}</span>
+      </div>`;
+    const chips = readCupsLive(null)
+      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}">${c.value}</i>`).join('');
+    const tapAttrs = ' data-role="cupstile" role="button" tabindex="0"'
+      + ' aria-expanded="false" aria-controls="sk-gpop"';
+    return `
+      <div class="sk-gsep"><span>${esc(t('goals_h'))}</span></div>
+      <div class="sk-gtiles">
+        ${tile(t('g_cups'), cups, tapAttrs)}
+        ${tile(t('g_single'), best)}
+        ${tile(t('g_total'), total)}
+      </div>
+      <div class="sk-gpop" id="sk-gpop" data-role="cupspop" hidden>${chips}</div>`;
+  }
+
+  /** Repaint the lane rails. Called wherever the ball count is repainted, which is the same
+   *  moment any of the three numbers can have moved. */
+  _paintGoalRails() {
+    if (this.el && this.el.grails) this.el.grails.innerHTML = this._goalRailsMarkup();
   }
 
   /** One firework per goal just earned, a bigger volley when that completed the set. Fired from
@@ -944,6 +994,7 @@ export class SkeeballUI {
           <div class="sk-over-tile"><b>${dash(myAvg)}</b><span>${esc(t('over_your_avg'))}</span></div>
           <div class="sk-over-tile"><b>${dash(this.hubAvg)}</b><span>${esc(t('over_hub_avg'))}</span></div>
         </div>
+        ${this._goalTilesMarkup()}
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${esc(t('over_again'))}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="gallery">${esc(t('quit'))}</button>
@@ -957,6 +1008,20 @@ export class SkeeballUI {
     el.querySelector('[data-role="gallery"]').addEventListener('click', () => this._renderSetup());
     // The X closes to the gallery rather than leaving a finished rack behind the sheet.
     el.querySelector('[data-role="close"]').addEventListener('click', () => this._renderSetup());
+    // Cups hit opens the row naming which values are still owed. Three numbers cannot say
+    // WHICH two you are missing, and that is the only part a player can act on.
+    const cupsTile = el.querySelector('[data-role="cupstile"]');
+    const cupsPop = el.querySelector('[data-role="cupspop"]');
+    if (cupsTile && cupsPop) {
+      const toggleCups = () => {
+        cupsPop.hidden = !cupsPop.hidden;
+        cupsTile.setAttribute('aria-expanded', String(!cupsPop.hidden));
+      };
+      cupsTile.addEventListener('click', toggleCups);
+      cupsTile.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCups(); }
+      });
+    }
   }
 
   // --- overlays --------------------------------------------------------------------------------
