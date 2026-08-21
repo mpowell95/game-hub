@@ -24,6 +24,7 @@ import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../
 import { readGoals, readGoalsLive, readCupsLive, goalsWon } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
+import { isDevProfile } from '../../js/challenge/hooks.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -335,6 +336,7 @@ export class SkeeballUI {
             ${esc(t('howto'))}</button>
           <button type="button" class="gh-btn ${save ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-role="play">
             ${esc(save ? t('new_game') : t('play'))}</button>
+          ${this._devResetMarkup()}
         </div>
       </div>`;
 
@@ -375,6 +377,8 @@ export class SkeeballUI {
         this._startGame(loadSave());
       });
     }
+    const devReset = this.root.querySelector('[data-role="devreset"]');
+    if (devReset) devReset.addEventListener('click', () => this._devResetStats());
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
     // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
     // is a resume convenience, not earned history; the Resume button sits directly above).
@@ -382,6 +386,15 @@ export class SkeeballUI {
       clearSave();
       this._startGame(null);
     });
+  }
+
+  /** The dev-only reset control, or nothing at all for everyone else. Rendered rather than
+   *  hidden with CSS: a button that is not in the DOM cannot be found and pressed. */
+  _devResetMarkup() {
+    let name = '';
+    try { name = (loadProfile()?.name || '').trim(); } catch { return ''; }
+    if (!isDevProfile(name)) return '';
+    return `<button type="button" class="sk-devreset" data-role="devreset">${esc(t('devreset'))}</button>`;
   }
 
   /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
@@ -410,6 +423,40 @@ export class SkeeballUI {
    *  lands after every settled ball - but for the two seconds before you spotted the Resume
    *  button it read as though a live game had been binned (Matt, 2026-08-21). Hub-standard
    *  card, the same .gh-overlay/.gh-modal primitives the game-over one uses. */
+  /** DEV ONLY, gated on isDevProfile - the same gate js/hub.js uses for `devOnly` cards, so
+   *  nobody but Matt and the tester can reach it. Exists so the three goals, and the fireworks
+   *  that fire when they complete, can be watched again from zero.
+   *
+   *  GUARD, THE LAW. This deletes THIS GAME'S BLOCK AND NOTHING ELSE: `games.skeeball` out of
+   *  each stats store, plus Skeeball's own two keys. It never removes a whole store, never
+   *  touches another game's block, and never runs without an explicit confirm. `syncMyStats`
+   *  mirrors the local store up on the next hub load and NOTHING syncs back down, so this is
+   *  permanent - which is why the confirm says so in words rather than asking "are you sure".
+   *  Delete this button and its string when Skeeball ships. */
+  _devResetStats() {
+    if (!window.confirm(t('devreset_confirm'))) return;
+    const hit = [];
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k !== 'gamehub.stats' && !k.startsWith('gamehub.stats.p.')) continue;
+        const store = JSON.parse(localStorage.getItem(k) || 'null');
+        if (!store || !store.games || !store.games.skeeball) continue;
+        delete store.games.skeeball;
+        localStorage.setItem(k, JSON.stringify(store));
+        hit.push(k);
+      }
+      localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SETTINGS_KEY);
+    } catch (err) {
+      console.error('[skeeball] dev reset failed, nothing further changed', err);
+      return;
+    }
+    console.warn('[skeeball] dev reset: cleared games.skeeball from', hit);
+    // Full reload rather than a re-render: this.top, this.hubAvg and the cached machine
+    // pictures all hold the old numbers, and a dev tool is not worth threading that through.
+    location.reload();
+  }
+
   _showPause() {
     const el = document.createElement('div');
     el.className = 'gh-overlay';
