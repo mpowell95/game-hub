@@ -278,7 +278,6 @@ export class SkeeballUI {
           </div>
           ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
           <p class="sk-car-hint">${esc(t('car_hint'))}</p>` : ''}
-          ${this._goalsMarkup()}
           ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
             ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
