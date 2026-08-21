@@ -21,6 +21,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
+import { readGoals, goalsWon, GOAL_BEST, GOAL_TOTAL } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';   // DEV throw-logging, remove before public
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
@@ -277,6 +278,7 @@ export class SkeeballUI {
           </div>
           ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
           <p class="sk-car-hint">${esc(t('car_hint'))}</p>` : ''}
+          ${this._goalsMarkup()}
           ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
             ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
@@ -739,6 +741,61 @@ export class SkeeballUI {
     this.msgTimer = 1.8;
   }
 
+  /** THE THREE GOALS, and how far along. GUARD: read fresh from the store every time rather than
+   *  cached on `this` - a rack recorded on another device changes them, and this screen is the
+   *  first thing shown after every game. js/goals.js explains why nothing is stored here. */
+  _goalsMarkup() {
+    const goals = readGoals();
+    const label = {
+      cups: t('goal_cups'),
+      best: t('goal_best', { n: GOAL_BEST }),
+      total: t('goal_total', { n: GOAL_TOTAL }),
+    };
+    const done = goals.every((g) => g.met);
+    const rows = goals.map((g) => `
+      <li class="sk-goal${g.met ? ' is-done' : ''}">
+        <span class="sk-goal-tick" aria-hidden="true">${g.met ? '&#10003;' : ''}</span>
+        <span class="sk-goal-text">${esc(label[g.id])}</span>
+        <span class="sk-goal-num">${g.met ? esc(t('goal_done')) : `${g.now}/${g.target}`}</span>
+      </li>`).join('');
+    return `<div class="sk-goals${done ? ' is-all' : ''}">
+        <p class="sk-goals-h">${esc(done ? t('goals_all') : t('goals_h'))}</p>
+        <ul class="sk-goals-list">${rows}</ul>
+      </div>`;
+  }
+
+  /** One firework per goal just earned, a bigger volley when that completed the set. Fired from
+   *  _rackOver, which reads the goals BEFORE recording the rack and again after, so it celebrates
+   *  the rack that actually earned it and can never fire twice for the same goal.
+   *  GUARD: silent under reduced motion - the goals panel still says what was earned. */
+  _fireworks(n, big) {
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !this.root) return;
+    const host = document.createElement('div');
+    host.className = 'sk-fw' + (big ? ' is-big' : '');
+    host.setAttribute('aria-hidden', 'true');
+    const shots = big ? 7 : n;
+    let html = '';
+    for (let i = 0; i < shots; i++) {
+      // Spread across the upper half, each a beat after the last, so they read as several
+      // fireworks rather than one flash. Every spark is one element: cheap, and nothing to
+      // tear down afterwards but the host.
+      const x = 12 + (76 * (i + 0.5)) / shots + (i % 2 ? 6 : -6);
+      const y = 18 + (i % 3) * 12;
+      const delay = (i * (big ? 0.16 : 0.22)).toFixed(2);
+      const hue = big ? [45, 28, 8, 45, 28, 8, 45][i % 7] : [45, 28, 8][i % 3];
+      let sparks = '';
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        sparks += `<i style="--dx:${(Math.cos(a) * 100).toFixed(0)}px;--dy:${(Math.sin(a) * 100).toFixed(0)}px"></i>`;
+      }
+      html += `<span class="sk-fw-burst" style="left:${x.toFixed(1)}%;top:${y}%;--d:${delay}s;--h:${hue}">${sparks}</span>`;
+    }
+    host.innerHTML = html;
+    this.root.appendChild(host);
+    setTimeout(() => host.remove(), big ? 3200 : 2400);
+  }
+
   // --- the finished rack -----------------------------------------------------------------------
 
   _rackOver(result) {
@@ -746,6 +803,7 @@ export class SkeeballUI {
     // What stood BEFORE this rack lands in the store - that is what "NEW BEST" means.
     const prev = myRecords(board.id);
     const prevTop = (this.top[board.id] && this.top[board.id].score) || 0;
+    const goalsBefore = readGoals();
 
     if (!this.recorded) {
       this.recorded = true;
@@ -765,6 +823,10 @@ export class SkeeballUI {
       clearSave();
     }
     this.lastScore = { board: board.id, score: result.score };
+
+    // What this rack just earned. recordSkeeball has already run above, so the store is current.
+    const won = goalsWon(goalsBefore, readGoals());
+    if (won.fresh.length) this._fireworks(won.fresh.length, won.all);
 
     const now = myRecords(board.id);
     if (this.top[board.id] && result.score > (this.top[board.id].score | 0)) {

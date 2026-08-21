@@ -613,6 +613,121 @@
 .sk-root .sk-over-tile b { display: block; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
 .sk-root .sk-over-tile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
 
+
+/* ------------------------------------------------------------------ the goals --- */
+/* The three things that open the next machine. Sits under the carousel on the setup screen,
+   because that is where you look BEFORE playing and straight after a rack ends. Read fresh from
+   the shared store each render - see js/goals.js. */
+
+.sk-root .sk-goals {
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--sk-line);
+  border-radius: 12px;
+  background: var(--sk-panel-2);
+  text-align: left;
+}
+
+.sk-root .sk-goals-h {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sk-dim);
+}
+
+.sk-root .sk-goals-list { margin: 0; padding: 0; list-style: none; }
+
+.sk-root .sk-goal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-ink);
+}
+
+.sk-root .sk-goal-tick {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sk-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #2a1a0c;
+}
+
+.sk-root .sk-goal-text { flex: 1 1 auto; min-width: 0; }
+
+.sk-root .sk-goal-num {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--sk-dim);
+}
+
+/* Done reads gold, and the tick fills - so a glance down the list is a glance at the count. */
+.sk-root .sk-goal.is-done { color: var(--sk-gold); }
+.sk-root .sk-goal.is-done .sk-goal-tick { background: var(--sk-gold); border-color: var(--sk-gold); }
+.sk-root .sk-goal.is-done .sk-goal-num { color: var(--sk-gold); }
+
+.sk-root .sk-goals.is-all { border-color: var(--sk-gold); }
+.sk-root .sk-goals.is-all .sk-goals-h { color: var(--sk-gold); }
+
+/* --------------------------------------------------------------- the fireworks --- */
+/* One burst per goal earned, seven when the set completes. Built and removed by ui.js's
+   _fireworks; every spark is a single element flying out along its own --dx/--dy, so there is no
+   canvas to set up or tear down. GUARD: pointer-events none and out of the a11y tree - this is
+   celebration, and the goals panel is what actually says what was earned. */
+
+.sk-root .sk-fw {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sk-root .sk-fw-burst {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: sk-fw-rise 0.42s ease-out var(--d) both;
+}
+
+.sk-root .sk-fw-burst i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: hsl(var(--h) 95% 62%);
+  box-shadow: 0 0 8px hsl(var(--h) 95% 62% / 0.9);
+  animation: sk-fw-spark 1.5s cubic-bezier(0.15, 0.7, 0.3, 1) calc(var(--d) + 0.42s) both;
+}
+
+.sk-root .sk-fw.is-big .sk-fw-burst i { width: 8px; height: 8px; margin: -4px 0 0 -4px; }
+
+@keyframes sk-fw-rise {
+  from { transform: translateY(38vh) scale(0.4); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes sk-fw-spark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  70% { opacity: 1; }
+  /* the +40px is gravity: the sparks fall as they fade, so it reads as a firework not a starburst */
+  100% { transform: translate(var(--dx), calc(var(--dy) + 40px)) scale(0.3); opacity: 0; }
+}
+
 /* --------------------------------------------------------------- reduced motion --- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -621,4 +736,6 @@
   .sk-root .sk-msg.is-on { animation: none; }
   .sk-root .sk-score.is-hit { animation: none; }
   .sk-root .sk-over-score { animation: none; }
+  /* ui.js does not build the fireworks at all under reduced motion; this is belt and braces. */
+  .sk-root .sk-fw { display: none; }
 }

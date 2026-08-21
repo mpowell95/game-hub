@@ -18,6 +18,14 @@ const STRINGS = {
     prev_machine: 'Previous machine',
     next_machine: 'Next machine',
 
+    // The three goals that open the next machine (js/goals.js)
+    goals_h: 'Next machine',
+    goal_cups: 'Land a 50 and a 100',
+    goal_best: 'Score {n} in one game',
+    goal_total: 'Score {n} points in total',
+    goal_done: 'Done',
+    goals_all: 'ALL THREE DONE',
+
     // The records panel - the four numbers every machine shows
     rec_top: 'Top score',
     rec_top_any: 'any player',
@@ -90,7 +98,14 @@ const STRINGS = {
     prev_machine: 'Máquina anterior',
     next_machine: 'Máquina siguiente',
 
-    rec_top: 'Récord',
+    goals_h: 'Siguiente máquina',
+    goal_cups: 'Encesta un 50 y un 100',
+    goal_best: 'Haz {n} en una partida',
+    goal_total: 'Suma {n} puntos en total',
+    goal_done: 'Hecho',
+    goals_all: 'LOS TRES HECHOS',
+
+    rec_top: 'Puntuación máxima',
     rec_top_any: 'cualquier jugador',
     rec_mine: 'Tu mejor',
     rec_today: 'Hoy',
