@@ -165,7 +165,7 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     capturedFaceY: 0,
     touchedBoard: false,
     bounces: 0,
-    nContacts: 0,             // DEV throw-logging: count of contact events emitted (cap guard)
+    nContacts: 0,             // contact events emitted so far, so the cap below can bite
     airborne: false,
     // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
     // lesson survives the engine swap).
@@ -194,12 +194,10 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     } else if (part === 'backboard' && vn > 0.4) {
       st.events.push({ type: 'backboard', speed: vn });
     }
-    // DEV throw-logging, remove before public: log EVERY contact against EVERY part - side
-    // walls, rings, cup collars, lane, hump, trough, flare, glass, keep, everything - with
-    // WHERE it hit, how hard (vn), which cup/ring if the body carries one, and when. vn > 0.05
-    // drops the solver's per-step resting/rolling contacts while keeping every real touch, down
-    // to a soft side-wall graze. `capture`/`gutter`/`done` still carry the final outcome. Capped
-    // so a jammed ball cannot grow the array without bound. Read back with read-skeeball-throws.mjs.
+    // Every real touch against every part, with where and how hard. vn > 0.05 drops the solver's
+    // per-step resting contacts while keeping a soft side-wall graze; the cap stops a jammed ball
+    // growing the array without bound. The throw log no longer carries these (see _logThrow in
+    // ui.js), but the tests and the bench tools read them to work out where a ball actually went.
     if (vn > 0.05 && st.nContacts < 300) {
       st.nContacts += 1;
       const p = ball.position;

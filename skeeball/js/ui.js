@@ -22,7 +22,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup scree
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
 import { readGoals, goalsWon, GOAL_BEST, GOAL_TOTAL } from './goals.js';
-import { getStatsApp } from '../../js/firebase-boot.js';   // DEV throw-logging, remove before public
+import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
@@ -573,22 +573,28 @@ export class SkeeballUI {
 
     if (this.game.throwBall({ power, aim })) {
       if (this.el.hint) { this.el.hint.classList.add('is-gone'); }
-      // DEV, remove before public: hold this throw's inputs; _drainEvents logs them with the real
-      // result when the ball settles (ballDone).
+      // Held until the ball settles, then logged with its real result at ballDone.
       this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
-      // DEV, remove before public: per-throw physics stats, tallied from the event stream in
-      // _drainEvents and logged with the result at ballDone.
+
       this._throwStats = { bounces: 0, backboard: 0, impact: false, impactSpeed: null, seq: [],
-        contacts: [],
         t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()) };
     }
   }
 
-  /** DEV, remove before this game goes public. One settled throw's inputs and its REAL result,
-   *  pushed to skeeballThrows/<deviceId>/ so actual play data (flick -> power -> launch -> hole)
-   *  can be checked against the calculated ranges. Best-effort and fire-and-forget: this is
-   *  throwaway instrumentation, not player history, so a failed write is simply dropped (never
-   *  queued, never blocks the game). Read it with read-skeeball-throws.mjs. */
+  /** THE ONLY THING THIS GAME SENDS ANYWHERE BESIDES A SCORE. One settled throw's inputs and its
+   *  real result, pushed to skeeballThrows/<deviceId>/, so the swipe curve can be checked against
+   *  people who are not Matt rather than against the calculation. Kept deliberately for that
+   *  (2026-08-20); it is what will say whether the 100 is reachable in real hands.
+   *
+   *  Best-effort and fire-and-forget: throwaway instrumentation, not player history, so a failed
+   *  write is dropped rather than queued and never blocks the game. Read it back with
+   *  read-skeeball-throws.mjs.
+   *
+   *  GUARD: NO CONTACT JOURNEY. This used to carry every part the ball touched on the way down -
+   *  up to 300 entries per throw, per player, nine times a game. That existed to chase physics
+   *  bugs which are now fixed, and nothing has read it since. What stays is what calibration
+   *  actually needs: the flick, the power it mapped to, the aim, the launch speed, where it
+   *  landed and how long it took. */
   async _logThrow(rec) {
     const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
       name: (loadProfile() || {}).name || '', at: Date.now() };
@@ -628,20 +634,12 @@ export class SkeeballUI {
   _drainEvents() {
     const Rr = this.renderer;
     for (const ev of this.game.takeEvents()) {
-      // DEV, remove before public: tally every physics event of the throw in flight.
       const ts = this._throwStats;
-      if (ts) {
-        // DEV, remove before public: the full contact log (every part the ball touched, where, how
-        // hard, when) rides its own array; `seq` stays the readable event-type list it always was.
-        if (ev.type === 'contact') {
-          if (ts.contacts) ts.contacts.push({ part: ev.part, cup: ev.cup || null, speed: ev.speed,
-            x: ev.x, y: ev.y, z: ev.z, t: ev.t });
-        } else {
-          ts.seq.push(ev.type);
-          if (ev.type === 'bounce') ts.bounces++;
-          else if (ev.type === 'backboard') ts.backboard++;
-          else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
-        }
+      if (ts && ev.type !== 'contact') {
+        ts.seq.push(ev.type);
+        if (ev.type === 'bounce') ts.bounces++;
+        else if (ev.type === 'backboard') ts.backboard++;
+        else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
       }
       switch (ev.type) {
         // THE BALL SETTLES FIRST, THEN THE SCORE. `capture` fires the instant the ball's centre
@@ -677,8 +675,6 @@ export class SkeeballUI {
           // GUARD: only with NOTHING in the air. A snapshot has no room for a ball in flight,
           // so saving mid-flight would quietly drop it and hand the player a free re-throw.
           if (!this.game.balls.length) writeSave(this.game.snapshot());
-          // DEV, remove before public: this ball's inputs + its REAL result, to a Firebase node we
-          // can read back (real data to check the calculated ranges against).
           if (this._lastThrow) {
             const ts = this._throwStats || {};
             const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -687,10 +683,6 @@ export class SkeeballUI {
               impactSpeed: (ts.impactSpeed != null ? ts.impactSpeed : null),
               settleMs: (ts.t0 ? Math.round(now - ts.t0) : null),
               seq: (ts.seq || []).join(','),
-              // DEV, remove before public: the whole journey - every contact in order (part / cup /
-              // pos / speed / t), the first hit, and the final drop point the capture already knows.
-              contacts: ts.contacts || [],
-              firstHit: (ts.contacts && ts.contacts[0]) || null,
               drop: (at && at.pos) ? { x: +at.pos.x.toFixed(3), y: +at.pos.y.toFixed(3), z: +at.pos.z.toFixed(3) } : null });
             this._lastThrow = null; this._throwStats = null;
           }
