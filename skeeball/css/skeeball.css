@@ -486,7 +486,6 @@
   padding-bottom: max(118px, calc(env(safe-area-inset-bottom, 0px) + 104px));
 }
 
-
 /* Ornament: the one-line caller (MISS, resumed). Absolute = out of flow. GUARD: NO PANEL behind
    it - it used to sit in a dark rounded box with a border, which read as a system notification
    sitting on top of the game rather than as part of it. It is arcade lettering now: big, gold,
@@ -715,30 +714,8 @@
 
 /* One pip per point value, 100 at the top down to 10 - the board's own order, so the column
    reads against the cups it names. Same 8px circle the ball count uses, so it reads as the same
-   kind of thing rather than as a second, unrelated counter. */
-.sk-root .sk-vals { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
 /* GUARD: THE VALUE GOES IN THE PIP. These were 8px dots for one afternoon and said nothing at
    all - six identical circles cannot tell you WHICH cups you still owe, which is the only
-   part of this goal a player can act on (Matt, 2026-08-21, looking at it on a phone). */
-.sk-root .sk-vals i {
-  display: block;
-  min-width: 34px;
-  padding: 3px 0;
-  border-radius: 6px;
-  border: 1px solid #6b5344;
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: #8d7a63;
-}
-.sk-root .sk-vals i.is-hit {
-  background: var(--sk-amber);
-  border-color: var(--sk-amber);
-  color: #241610;
-  box-shadow: 0 0 5px rgba(255, 157, 61, 0.7);
-}
 
 /* On the game-over card the goals use the HUB's tile, identical to the four stats above them,
    so the card reads as one thing. Hub variables, not Skeeball's: this card follows the hub. */
@@ -793,32 +770,6 @@
 .sk-root .sk-gtile.is-done b { color: #a06a00; }
 .sk-root .sk-gtile.is-done span { color: #8a6410; }
 .sk-root .sk-gtile span { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--gh-muted); }
-.sk-root .sk-gtile[data-role='cupstile'] { cursor: pointer; position: relative; }
-
-.sk-root .sk-gpop {
-  display: flex;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 8px;
-  padding: 10px 8px;
-  background: var(--gh-surface-2);
-  border: 1px solid var(--gh-line);
-  border-radius: 9px;
-}
-/* [hidden] has to win against the display:flex above it. */
-.sk-root .sk-gpop[hidden] { display: none; }
-.sk-root .sk-gpop i {
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  min-width: 27px;
-  padding: 4px 2px;
-  border-radius: 6px;
-  border: 1px solid var(--gh-line);
-  color: var(--gh-muted);
-}
-.sk-root .sk-gpop i.is-hit { background: var(--gh-accent); border-color: var(--gh-accent); color: #fff; }
 
 .sk-root .sk-pause { text-align: center; }
 .sk-root .sk-pause-title { margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
@@ -875,7 +826,6 @@
 .sk-root .sk-over-tile { padding: 0; }
 .sk-root .sk-over-tile b { display: block; font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
 .sk-root .sk-over-tile span { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--gh-muted); }
-
 
 /* --------------------------------------------------------------- the fireworks --- */
 /* One burst per goal earned, seven when the set completes. Built and removed by ui.js's
@@ -940,7 +890,6 @@
   /* ui.js does not build the fireworks at all under reduced motion; this is belt and braces. */
   .sk-root .sk-fw { display: none; }
 }
-
 
 /* ------------------------------------------------------------ portrait only --- */
 /* manifest.webmanifest asks for portrait, but that only binds an INSTALLED app: a browser tab
