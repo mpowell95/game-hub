@@ -18,6 +18,11 @@ import { loadStats } from '../../js/game-stats.js';
 export const GOAL_BEST = 300;
 export const GOAL_TOTAL = 2000;
 
+/** The six point values, low to high, paired with the store counter that tracks each. ONE list:
+ *  readGoals, readGoalsLive and readCupsLive all count off it, so they cannot disagree about
+ *  what "every point value" means. */
+const CUPS = [['tens', 10], ['twenties', 20], ['thirties', 30], ['forties', 40], ['fifties', 50], ['hundreds', 100]];
+
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
 };
@@ -27,13 +32,42 @@ const sk = () => {
 export function readGoals(store) {
   const s = store || sk();
   // One ball in each of the six, ever - not in one game, and not one of each in a row.
-  const cups = ['tens', 'twenties', 'thirties', 'forties', 'fifties', 'hundreds']
-    .reduce((n, k) => n + ((s[k] | 0) > 0 ? 1 : 0), 0);
+  const cups = CUPS.reduce((n, [k]) => n + ((s[k] | 0) > 0 ? 1 : 0), 0);
   return [
     { id: 'cups', now: cups, target: 6, met: cups >= 6 },
     { id: 'best', now: Math.min(s.bestGame | 0, GOAL_BEST), target: GOAL_BEST, met: (s.bestGame | 0) >= GOAL_BEST },
     { id: 'total', now: Math.min(s.points | 0, GOAL_TOTAL), target: GOAL_TOTAL, met: (s.points | 0) >= GOAL_TOTAL },
   ];
+}
+
+/**
+ * The same three goals, counting a rack that is STILL IN PROGRESS. The store only learns about
+ * a rack when it is recorded, so without this the play screen's rails would sit frozen for the
+ * whole nine balls and only jump at the end - which reads as broken, not as slow.
+ *
+ * `rack` is game.js's result() for the live rack. The unlock itself still runs off readGoals
+ * against the recorded store; this is a display reading and nothing decides anything on it.
+ */
+export function readGoalsLive(rack, store) {
+  const s = store || sk();
+  const r = rack || {};
+  const cups = CUPS.reduce((n, [k]) => n + (((s[k] | 0) > 0 || (r[k] | 0) > 0) ? 1 : 0), 0);
+  // Best is the best SINGLE game either way, so a live rack that beats the record counts now.
+  const best = Math.max(s.bestGame | 0, r.score | 0);
+  const total = (s.points | 0) + (r.score | 0);
+  return [
+    { id: 'cups', now: cups, target: 6, met: cups >= 6 },
+    { id: 'best', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
+    { id: 'total', now: Math.min(total, GOAL_TOTAL), target: GOAL_TOTAL, met: total >= GOAL_TOTAL },
+  ];
+}
+
+/** Which point values have been landed, low to high, counting an in-progress rack. The display
+ *  reverses this: the play screen's column runs 100 down to 10, matching the board. */
+export function readCupsLive(rack, store) {
+  const s = store || sk();
+  const r = rack || {};
+  return CUPS.map(([k, value]) => ({ value, hit: (s[k] | 0) > 0 || (r[k] | 0) > 0 }));
 }
 
 /** Which goals went from unmet to met between two readings, and whether that completed the set.

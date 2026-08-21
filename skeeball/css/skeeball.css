@@ -589,6 +589,131 @@
 /* Game over overlay - hub-standard card (batch G, 2026-08-18). Built on css/ui.css's
    .gh-overlay / .gh-modal / .gh-btn / .gh-chip primitives so it follows the hub theme; only the
    score, the hub-wide-record row and the stat tiles need a game-specific skin, all on --gh-* tokens. */
+/* ------------------------------------------------------------ the three goals --- */
+/* GUARD: THE RAILS LIE OVER THE STAGE, which .sk-rack deliberately does not. That is safe only
+   because they sit in the gutters frame.mjs measures either side of the machine - 66px clear at
+   the board's widest point, wider further up - and never over the board itself. The neighbouring
+   machines behind them are barely lit, so each block carries its own dark backing. Re-run
+   frame.mjs before moving either rail inward, and never take pointer-events: none off them: a
+   rail that can be hit is a rail that can eat a swipe. */
+.sk-root .sk-grail {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
+  z-index: 3;
+  /* Narrower on a narrow phone: the gutter is a share of the width, not a constant. */
+  width: min(66px, 16vw);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  pointer-events: none;
+}
+.sk-root .sk-grail--l { left: 8px; }
+.sk-root .sk-grail--r { right: 8px; }
+
+.sk-root .sk-goal {
+  background: rgba(26, 16, 12, 0.86);
+  border: 1px solid var(--sk-line);
+  border-radius: 9px;
+  padding: 6px 5px 7px;
+  text-align: center;
+}
+.sk-root .sk-goal em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  color: var(--sk-dim);
+}
+.sk-root .sk-goal b {
+  display: block;
+  margin-top: 1px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--sk-cream);
+}
+.sk-root .sk-goal b i { font-style: normal; color: #8d7a63; }
+.sk-root .sk-goal.is-done b,
+.sk-root .sk-goal.is-done b i { color: var(--sk-amber); }
+.sk-root .sk-goal-bar {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--sk-line);
+  overflow: hidden;
+}
+.sk-root .sk-goal-bar i { display: block; height: 100%; border-radius: 2px; background: var(--sk-amber); }
+
+/* One pip per point value, 100 at the top down to 10 - the board's own order, so the column
+   reads against the cups it names. Same 8px circle the ball count uses, so it reads as the same
+   kind of thing rather than as a second, unrelated counter. */
+.sk-root .sk-vals { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 8px; }
+.sk-root .sk-vals i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #6b5344; }
+.sk-root .sk-vals i.is-hit {
+  background: var(--sk-amber);
+  border-color: var(--sk-amber);
+  box-shadow: 0 0 5px rgba(255, 157, 61, 0.7);
+}
+
+/* On the game-over card the goals use the HUB's tile, identical to the four stats above them,
+   so the card reads as one thing. Hub variables, not Skeeball's: this card follows the hub. */
+.sk-root .sk-gsep { display: flex; align-items: center; gap: 8px; margin: 13px 0 8px; }
+.sk-root .sk-gsep::before,
+.sk-root .sk-gsep::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--gh-line); }
+.sk-root .sk-gsep span { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--gh-muted); }
+.sk-root .sk-gtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.sk-root .sk-gtile {
+  background: var(--gh-surface-2);
+  border: 1px solid var(--gh-line);
+  border-radius: 9px;
+  padding: 8px 4px;
+}
+.sk-root .sk-gtile b {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gh-ink);
+  font-variant-numeric: tabular-nums;
+}
+.sk-root .sk-gtile.is-done b { color: var(--gh-accent); }
+.sk-root .sk-gtile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+.sk-root .sk-gtile[data-role='cupstile'] { cursor: pointer; position: relative; }
+.sk-root .sk-gtile[data-role='cupstile']::after {
+  content: '▾';
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 11px;
+  color: var(--gh-muted);
+}
+.sk-root .sk-gpop {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px 8px;
+  background: var(--gh-surface-2);
+  border: 1px solid var(--gh-line);
+  border-radius: 9px;
+}
+/* [hidden] has to win against the display:flex above it. */
+.sk-root .sk-gpop[hidden] { display: none; }
+.sk-root .sk-gpop i {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-width: 27px;
+  padding: 4px 2px;
+  border-radius: 6px;
+  border: 1px solid var(--gh-line);
+  color: var(--gh-muted);
+}
+.sk-root .sk-gpop i.is-hit { background: var(--gh-accent); border-color: var(--gh-accent); color: #fff; }
+
 .sk-root .sk-pause { text-align: center; }
 .sk-root .sk-pause-title { margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
 

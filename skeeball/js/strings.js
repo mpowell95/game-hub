@@ -24,6 +24,11 @@ const STRINGS = {
     // The three goals that open the next machine (js/goals.js)
     goals_h: 'Next machine',
     goal_cups: 'Land a ball in every point value',
+    // Short forms for the lane rails and the game-over tiles. Kept separate from the sentences
+    // above so a rail label can stay short without the full goal text going vague.
+    g_cups: 'Cups hit',
+    g_single: 'Single game',
+    g_total: 'Total points',
     goal_best: 'Score {n} in one game',
     goal_total: 'Score {n} points in total',
     goal_done: 'Done',
@@ -106,6 +111,9 @@ const STRINGS = {
 
     goals_h: 'Siguiente máquina',
     goal_cups: 'Encesta en cada valor de puntos',
+    g_cups: 'Copas acertadas',
+    g_single: 'Una partida',
+    g_total: 'Puntos totales',
     goal_best: 'Haz {n} en una partida',
     goal_total: 'Suma {n} puntos en total',
     goal_done: 'Hecho',
