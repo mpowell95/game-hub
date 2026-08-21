@@ -294,16 +294,14 @@ function substep(st) {
   //     section 2's capture - actually falling through the mouth. See
   //     DECISIONS.md#removed-features-and-why-they-stay-removed.
 
-  // 4. Rolled back home. TWO VERY DIFFERENT THROWS LAND HERE AND THEY MUST NOT BE PAID THE SAME:
-  //    a soft one the hump kept, which never reached the board and is honestly not spent - and a
-  //    hard one that cleared the board, hit the back and ran all the way home, which has missed
-  //    every hole there is and owes the player nothing. `st.arrived` is what tells them apart: it
-  //    is set on the first contact at the board end, so it is true for the second and false for
-  //    the first. Until 2026-08-21 both were gifted back silently (the "Too soft, have it back"
-  //    toast having been deleted the same week), so about one hard throw in eight refunded itself
-  //    with no score, no message and no ball spent, which reads as the game ignoring you.
+  // 4. Rolled back home: the ball is not spent, the player just gets it back. GUARD: THIS APPLIES
+  //    TO EVERY BALL THAT COMES BACK DOWN THE RAMP, however hard it was thrown - a soft one the
+  //    hump kept and a hard one that cleared the board, hit the back and ran all the way home are
+  //    both returned. Do not split them again. On 2026-08-21 an `st.arrived` test was added here
+  //    so that the hard one resolved as a zero and spent the ball; that was a gameplay rule
+  //    nobody asked for, and Matt reverted it the same day. If a returned ball needs to stop
+  //    reading as the game ignoring you, that is a FEEDBACK problem, not a scoring one.
   if (p.z > -0.04 && ball.velocity.z > 0.05 && st.t > 0.4) {
-    if (st.arrived) { finishAt(st, 'corner0', 0, 'gutter'); return; }
     st.outcome = null;
     st.done = true;
     st.events.push({ type: 'returned' });

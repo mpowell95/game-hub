@@ -212,6 +212,15 @@ export class SkeeballUI {
       if (sk) { hubPts += sk.points | 0; hubGames += sk.played | 0; }
     }
     this.hubAvg = hubGames ? Math.round(hubPts / hubGames) : null;
+    // The setup card's picture has the four records BAKED INTO IT (see _ensureMachineImg),
+    // and the hub-wide one only exists once this answer lands - so the first render always
+    // painted a dash in that column and never went back for it. Re-ensure whatever slide is
+    // still on screen: the image cache is keyed on the records, so this is a no-op unless a
+    // number actually moved, and there is nothing to find on the play screen.
+    for (const b of BOARDS) {
+      const imgEl = this.root.querySelector(`img[data-machine="${b.id}"]`);
+      if (imgEl) this._ensureMachineImg(b, imgEl);
+    }
     // The network answer is what fills in the All Time column, so repaint the backboard with it.
     this._pushScoreboard();
   }
@@ -567,9 +576,7 @@ export class SkeeballUI {
         <div class="sk-stage" data-role="stage">
           <canvas class="sk-canvas" data-role="canvas" role="img" aria-label="${esc(t('aria_lane'))}"></canvas>
           <div class="sk-msg" data-role="msg" aria-live="polite"></div>
-          <div class="sk-swipe" data-role="swipe" aria-hidden="true">
-            <span class="sk-hint" data-role="hint">${esc(t('hint_swipe'))}</span>
-          </div>
+          <div class="sk-swipe" data-role="swipe" aria-hidden="true"></div>
         </div>
       </div>`;
 
@@ -580,7 +587,6 @@ export class SkeeballUI {
       pips: this.root.querySelector('[data-role="pips"]'),
       grails: this.root.querySelector('[data-role="grails"]'),
       msg: this.root.querySelector('[data-role="msg"]'),
-      hint: this.root.querySelector('[data-role="hint"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
     };
     this._shownScore = this.game.score;   // what the counter is currently showing; see _paintHud
@@ -654,7 +660,6 @@ export class SkeeballUI {
     const aim = Math.sign(raw) * (raw * raw);
 
     if (this.game.throwBall({ power, aim })) {
-      if (this.el.hint) { this.el.hint.classList.add('is-gone'); }
       // Held until the ball settles, then logged with its real result at ballDone.
       this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
 
@@ -843,7 +848,7 @@ export class SkeeballUI {
     // 100 at the top down to 10 - the board's own order, so the column reads against the cups
     // it is naming rather than against nothing.
     const pips = readCupsLive(rack).slice().reverse()
-      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}"></i>`).join('');
+      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}">${c.value}</i>`).join('');
     return `
       <div class="sk-grail sk-grail--l">
         ${box(t('g_cups'), cups)}
@@ -851,7 +856,10 @@ export class SkeeballUI {
       </div>
       <div class="sk-grail sk-grail--r">
         ${box(t('g_single'), best)}
-        ${box(t('g_total'), total)}
+      </div>
+      <div class="sk-gtotal${total.met ? ' is-done' : ''}">
+        <em>${esc(t('g_total'))}</em>
+        <b>${shortNum(total.now)}<i>/${shortNum(total.target)}</i></b>
       </div>`;
   }
 
