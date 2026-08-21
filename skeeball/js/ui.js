@@ -131,6 +131,13 @@ export class SkeeballUI {
 
     this._onPointerMove = (e) => this._swipeMove(e);
     this._onPointerUp = (e) => this._swipeEnd(e);
+    // GUARD: A CANCELLED GESTURE IS NOT A THROW. pointercancel fires when the browser takes the
+    // pointer away mid-swipe - switching apps, a system edge-swipe, a call arriving - and it used
+    // to run the same handler as pointerup, so leaving the game with a finger down launched a ball
+    // the player never released (Matt, 2026-08-21). Dropping the samples IS the fix.
+    this._onPointerCancel = () => { this.swipe = null; };
+    // Same reason one layer out: some platforms hide the page without ever cancelling the pointer.
+    this._onHide = () => { if (document.visibilityState === 'hidden') this.swipe = null; };
     this._loop = (ts) => this._frame(ts);
 
     ensureCSS();
@@ -141,7 +148,8 @@ export class SkeeballUI {
     this._unsubViewport = onViewportResize(() => this._fit());
     window.addEventListener('pointermove', this._onPointerMove);
     window.addEventListener('pointerup', this._onPointerUp);
-    window.addEventListener('pointercancel', this._onPointerUp);
+    window.addEventListener('pointercancel', this._onPointerCancel);
+    document.addEventListener('visibilitychange', this._onHide);
 
     // The landscape door. On <body> rather than inside this.root, because every screen change
     // replaces this.root's innerHTML and would take it with it. Visibility is entirely the
@@ -631,7 +639,12 @@ export class SkeeballUI {
     this._tickScore(dt);
     if (this.msgTimer > 0) {
       this.msgTimer -= dt;
-      if (this.msgTimer <= 0) this.el.msg.classList.remove('is-on');
+      if (this.msgTimer <= 0) {
+        this.el.msg.classList.remove('is-on');
+        // The node is aria-live. Leaving the word in it after the fade means a screen reader goes
+        // on announcing a MISS! from several throws ago, so the text goes out with the opacity.
+        this.el.msg.textContent = '';
+      }
     }
   }
 
@@ -916,7 +929,8 @@ export class SkeeballUI {
     this._closeOverlay();
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
-    window.removeEventListener('pointercancel', this._onPointerUp);
+    window.removeEventListener('pointercancel', this._onPointerCancel);
+    document.removeEventListener('visibilitychange', this._onHide);
     if (this._rotate) { this._rotate.remove(); this._rotate = null; }
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
