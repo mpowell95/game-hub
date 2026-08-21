@@ -8,7 +8,7 @@
 
    NAMING (test-game-conventions.mjs enforces this): no class is both a layout container and
    something decoration hides. Layout classes are .sk-play-wrap / .sk-stage / .sk-setup-inner /
-   .sk-rack; anything that fades (.sk-hint, .sk-msg) is an out-of-flow ornament with its own
+   .sk-rack; anything that fades (.sk-msg) is an out-of-flow ornament with its own
    name and no width constraint. */
 
 .sk-root {
@@ -468,25 +468,6 @@
   padding-bottom: max(118px, calc(env(safe-area-inset-bottom, 0px) + 104px));
 }
 
-/* Ornament: fades after the first throw. Out of flow concerns: inline-block, no width constraint. */
-.sk-root .sk-hint {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--sk-dim);
-  background: rgba(20, 13, 10, 0.6);
-  border: 1px solid var(--sk-line);
-  border-radius: 999px;
-  padding: 8px 16px;
-  animation: sk-hint-pulse 2.2s ease-in-out infinite;
-}
-
-.sk-root .sk-hint.is-gone { display: none; }
-
-@keyframes sk-hint-pulse {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
-}
 
 /* Ornament: the one-line caller (MISS, resumed). Absolute = out of flow. GUARD: NO PANEL behind
    it - it used to sit in a dark rounded box with a border, which read as a system notification
@@ -610,6 +591,68 @@
 .sk-root .sk-grail--l { left: 8px; }
 .sk-root .sk-grail--r { right: 8px; }
 
+/* A vignette down both edges, under the rails and over the scene. The neighbouring machines
+   live out there and they are busy; with three goal boxes on top of them the gutters read as
+   clutter (Matt, 2026-08-21: "it looks like too much is going on"). A horizontal fade from
+   each edge inward, rather than a box, so it dies out well before the lane and never draws a
+   band across the wood. Cheaper and safer than relighting the neighbours in render.js, and it
+   leaves the machine itself untouched. */
+.sk-root .sk-grails::before,
+.sk-root .sk-grails::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26vw;
+  max-width: 150px;
+  z-index: 2;
+  pointer-events: none;
+}
+.sk-root .sk-grails::before { left: 0; background: linear-gradient(to right, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
+
+/* Total points lives in the strip of empty back wall between the ball count and the top of the
+   machine's marquee - the only dead space on this screen, and the goal that changes slowest, so
+   it is the one that can sit furthest from the eye. Measured at real stage dimensions (frame.mjs
+   mirrored at stage height, not viewport height): the band is 48px at 375x667, 55px at 360x740,
+   61px at 375x812, 72px at 430x932, and a notch costs about 4px of it because the rack grows and
+   the stage shrinks together. This bar is 28px, so the tightest phone keeps ~16px clear. If the
+   rack ever gets taller, re-measure before assuming this still fits. */
+.sk-root .sk-gtotal {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 120px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 8px;
+  background: rgba(26, 16, 12, 0.86);
+  border: 1px solid var(--sk-line);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sk-root .sk-gtotal em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sk-dim);
+}
+.sk-root .sk-gtotal b {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--sk-cream);
+}
+/* On one row here, unlike the rails: there is width to spare, and stacking it would double the
+   bar's height and stop it fitting the band. */
+.sk-root .sk-gtotal b i { font-style: normal; font-size: 11px; color: #8d7a63; }
+.sk-root .sk-gtotal.is-done b,
+.sk-root .sk-gtotal.is-done b i { color: var(--sk-amber); }
+.sk-root .sk-grails::after { right: 0; background: linear-gradient(to left, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
+
 .sk-root .sk-goal {
   background: rgba(26, 16, 12, 0.86);
   border: 1px solid var(--sk-line);
@@ -634,7 +677,16 @@
   font-variant-numeric: tabular-nums;
   color: var(--sk-cream);
 }
-.sk-root .sk-goal b i { font-style: normal; color: #8d7a63; }
+/* GUARD: THE TARGET SITS ON ITS OWN LINE. Inline, "300/300" is about 70px at 15px bold - wider
+   than the 66px rail - and the right-hand one ran off the edge of the screen (Matt,
+   2026-08-21). Stacked, no pair of numbers can outgrow the box however big they get. */
+.sk-root .sk-goal b i {
+  display: block;
+  margin-top: -1px;
+  font-style: normal;
+  font-size: 11px;
+  color: #8d7a63;
+}
 .sk-root .sk-goal.is-done b,
 .sk-root .sk-goal.is-done b i { color: var(--sk-amber); }
 .sk-root .sk-goal-bar {
@@ -650,11 +702,27 @@
 /* One pip per point value, 100 at the top down to 10 - the board's own order, so the column
    reads against the cups it names. Same 8px circle the ball count uses, so it reads as the same
    kind of thing rather than as a second, unrelated counter. */
-.sk-root .sk-vals { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 8px; }
-.sk-root .sk-vals i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #6b5344; }
+.sk-root .sk-vals { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
+/* GUARD: THE VALUE GOES IN THE PIP. These were 8px dots for one afternoon and said nothing at
+   all - six identical circles cannot tell you WHICH cups you still owe, which is the only
+   part of this goal a player can act on (Matt, 2026-08-21, looking at it on a phone). */
+.sk-root .sk-vals i {
+  display: block;
+  min-width: 34px;
+  padding: 3px 0;
+  border-radius: 6px;
+  border: 1px solid #6b5344;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: #8d7a63;
+}
 .sk-root .sk-vals i.is-hit {
   background: var(--sk-amber);
   border-color: var(--sk-amber);
+  color: #241610;
   box-shadow: 0 0 5px rgba(255, 157, 61, 0.7);
 }
 
@@ -822,7 +890,6 @@
 /* --------------------------------------------------------------- reduced motion --- */
 
 @media (prefers-reduced-motion: reduce) {
-  .sk-root .sk-hint { animation: none; }
   .sk-root .sk-msg { transition: none; animation: none; }
   .sk-root .sk-msg.is-on { animation: none; }
   .sk-root .sk-score.is-hit { animation: none; }

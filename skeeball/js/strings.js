@@ -56,7 +56,6 @@ const STRINGS = {
     // Play screen
     hud_ball: 'Ball',
     hud_score_aria: 'Score',
-    hint_swipe: 'Swipe up the lane to roll',
     msg_gutter: 'MISS!',
     quit: 'Back to machines',
 
@@ -138,7 +137,6 @@ const STRINGS = {
 
     hud_ball: 'Bola',
     hud_score_aria: 'Puntos',
-    hint_swipe: 'Desliza hacia arriba para lanzar',
     msg_gutter: 'FALLO!',
     quit: 'Volver a las máquinas',
 

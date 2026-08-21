@@ -253,25 +253,28 @@ higher one, that version meant the first (lowest) hole a ball crossed always cau
 above the bottom hole was ever reachable by rolling, only by lobbing a ball through the air. The
 kinematic version replaced it.
 
-### The free ball is only for a throw that never left
+### A ball that comes back down the ramp is always given back
 
 A ball that ends up back at the near end of the lane, rolling toward the player, is handed back
 rather than spent. That rule exists for a throw too soft to clear the hump: the ball never reached
 the board, so charging the player for it would be dishonest, and a real machine would not have
 taken it either.
 
-A throw hard enough to clear the board, hit the back and run all the way home arrives at exactly
-the same place by exactly the same test, and until 2026-08-21 it was refunded too — silently,
-because the "Too soft, have it back" toast had been deleted days earlier as noise. Measured
-headless across power 0.70-1.30 and aim 0-1, about **one throw in eight** refunded itself with no
-score, no message and no ball spent. A playtester who flicks hard reads that as the game ignoring
-them, and reasonably concludes it is broken.
+It applies to a hard throw too. A ball that clears the board, hits the back and runs all the way
+home arrives at the same place by the same test, and is returned for the same reason: it is back
+in your hand, so the machine has not taken it.
 
-`st.arrived` separates the two: it is set on the first contact at the board end, so it is true for
-the overthrow and false for the short roll. An arrived ball that comes home has missed every hole
-there is and resolves as the zero it earns, through the same `corner0` gutter path as any other
-miss. Do not widen the free-ball rule to cover overthrows again — the whole point of the power
-curve is that a throw can be too hard.
+**This was briefly changed and changed back on 2026-08-21.** A playtest found that roughly one
+hard throw in eight (measured headless across power 0.70-1.30 and aim 0-1) came back with no
+score, no message and no ball spent, and read as the game ignoring the player. The fix shipped
+was an `st.arrived` test that made the hard case resolve as a zero and spend the ball. Matt
+reverted it the same day: the free return is the intended behaviour and nobody had asked for it
+to change.
+
+The finding underneath it still stands. A ball that silently reappears is a **feedback** problem,
+not a scoring one, and it is open. Whatever fixes it must not spend the ball. Note that the
+obvious answer is already ruled out: "Too soft, have it back" was deleted days earlier for being
+noise, so it cannot simply come back as it was.
 
 ### Removed features and why they stay removed
 
