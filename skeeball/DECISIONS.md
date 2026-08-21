@@ -253,6 +253,26 @@ higher one, that version meant the first (lowest) hole a ball crossed always cau
 above the bottom hole was ever reachable by rolling, only by lobbing a ball through the air. The
 kinematic version replaced it.
 
+### The free ball is only for a throw that never left
+
+A ball that ends up back at the near end of the lane, rolling toward the player, is handed back
+rather than spent. That rule exists for a throw too soft to clear the hump: the ball never reached
+the board, so charging the player for it would be dishonest, and a real machine would not have
+taken it either.
+
+A throw hard enough to clear the board, hit the back and run all the way home arrives at exactly
+the same place by exactly the same test, and until 2026-08-21 it was refunded too — silently,
+because the "Too soft, have it back" toast had been deleted days earlier as noise. Measured
+headless across power 0.70-1.30 and aim 0-1, about **one throw in eight** refunded itself with no
+score, no message and no ball spent. A playtester who flicks hard reads that as the game ignoring
+them, and reasonably concludes it is broken.
+
+`st.arrived` separates the two: it is set on the first contact at the board end, so it is true for
+the overthrow and false for the short roll. An arrived ball that comes home has missed every hole
+there is and resolves as the zero it earns, through the same `corner0` gutter path as any other
+miss. Do not widen the free-ball rule to cover overthrows again — the whole point of the power
+curve is that a throw can be too hard.
+
 ### Removed features and why they stay removed
 
 These were built, then deliberately deleted, and must not be reintroduced:

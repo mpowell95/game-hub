@@ -143,8 +143,20 @@ export class SkeeballUI {
     window.addEventListener('pointerup', this._onPointerUp);
     window.addEventListener('pointercancel', this._onPointerUp);
 
+    // The landscape door. On <body> rather than inside this.root, because every screen change
+    // replaces this.root's innerHTML and would take it with it. Visibility is entirely the
+    // stylesheet's; this only has to exist and carry the translated line.
+    this._rotate = document.createElement('div');
+    this._rotate.className = 'sk-rotate';
+    this._rotate.innerHTML = `<p>${esc(t('rotate'))}</p>`;
+    document.body.appendChild(this._rotate);
+
     this._refreshTopRecords();
-    this._renderSetup();
+    // A RELOAD MID-RACK PUTS YOU BACK ON THE LANE, not on the gallery. The rack always survived
+    // a refresh, but you landed on the machine screen and had to find Resume - two taps back to
+    // a game you never left (playtest, 2026-08-21).
+    const resume = loadSave();
+    if (resume) this._startGame(resume); else this._renderSetup();
   }
 
   // --- records ---------------------------------------------------------------------------------
@@ -905,6 +917,7 @@ export class SkeeballUI {
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
     window.removeEventListener('pointercancel', this._onPointerUp);
+    if (this._rotate) { this._rotate.remove(); this._rotate = null; }
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
     this.game = null;
