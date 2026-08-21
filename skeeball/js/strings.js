@@ -23,16 +23,11 @@ const STRINGS = {
 
     // The three goals that open the next machine (js/goals.js)
     goals_h: 'Next machine',
-    goal_cups: 'Land a ball in every point value',
     // Short forms for the lane rails and the game-over tiles. Kept separate from the sentences
     // above so a rail label can stay short without the full goal text going vague.
-    g_cups: 'Cups hit',
+    g_hundreds: '100s landed',
     g_single: 'Single game',
     g_total: 'Total points',
-    goal_best: 'Score {n} in one game',
-    goal_total: 'Score {n} points in total',
-    goal_done: 'Done',
-    goals_all: 'ALL THREE DONE',
     goals_unlocked: 'UNLOCKED',
     // Dev only, gated on isDevProfile. Delete both when Skeeball ships.
     devreset: 'Reset Skeeball stats',
@@ -61,7 +56,7 @@ const STRINGS = {
     hud_ball: 'Ball',
     hud_score_aria: 'Score',
     msg_gutter: 'MISS!',
-    quit: 'Back to machines',
+    quit: 'Back to setup screen',
 
     // Game over
     over_h: 'Game over',
@@ -113,14 +108,9 @@ const STRINGS = {
     next_machine: 'Máquina siguiente',
 
     goals_h: 'Siguiente máquina',
-    goal_cups: 'Encesta en cada valor de puntos',
-    g_cups: 'Copas acertadas',
+    g_hundreds: '100 conseguidos',
     g_single: 'Una partida',
     g_total: 'Puntos totales',
-    goal_best: 'Haz {n} en una partida',
-    goal_total: 'Suma {n} puntos en total',
-    goal_done: 'Hecho',
-    goals_all: 'LOS TRES HECHOS',
     goals_unlocked: 'DESBLOQUEADA',
     devreset: 'Reiniciar estadísticas de Skeeball',
     devreset_confirm: '¿Borrar todas las estadísticas de Skeeball en este dispositivo?\n\nTu mejor puntuación, la de hoy, el promedio, los puntos totales y los tres objetivos se van. La próxima carga del hub también los quita del servidor, y nada los restaura.\n\nNingún otro juego se ve afectado. Esto no se puede deshacer.',
@@ -145,7 +135,7 @@ const STRINGS = {
     hud_ball: 'Bola',
     hud_score_aria: 'Puntos',
     msg_gutter: 'FALLO!',
-    quit: 'Volver a las máquinas',
+    quit: 'Volver a la pantalla inicial',
 
     over_h: 'Fin de la partida',
     over_final: 'Puntuación final',

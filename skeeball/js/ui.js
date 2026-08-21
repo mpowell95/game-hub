@@ -21,7 +21,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
-import { readGoals, readGoalsLive, readCupsLive, goalsWon } from './goals.js';
+import { readGoals, readGoalsLive, goalsWon } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
@@ -885,21 +885,16 @@ export class SkeeballUI {
    *  moves them. js/goals.js explains why nothing is stored here. */
   _goalRailsMarkup() {
     const rack = this.game ? this.game.result() : null;
-    const [cups, best, total] = readGoalsLive(rack);
+    const [hundreds, best, total] = readGoalsLive(rack);
     const box = (label, g) => `
       <div class="sk-goal${g.met ? ' is-done' : ''}">
         <em>${esc(label)}</em>
         <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
         <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
       </div>`;
-    // 100 at the top down to 10 - the board's own order, so the column reads against the cups
-    // it is naming rather than against nothing.
-    const pips = readCupsLive(rack).slice().reverse()
-      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}">${c.value}</i>`).join('');
     return `
       <div class="sk-grail sk-grail--l">
-        ${box(t('g_cups'), cups)}
-        <div class="sk-vals">${pips}</div>
+        ${box(t('g_hundreds'), hundreds)}
       </div>
       <div class="sk-grail sk-grail--r">
         ${box(t('g_single'), best)}
@@ -916,28 +911,23 @@ export class SkeeballUI {
    *  Reads the recorded store, not the live rack: by the time this card exists the rack is in. */
   _goalTilesMarkup() {
     const goals = readGoals();
-    const [cups, best, total] = goals;
+    const [hundreds, best, total] = goals;
     // All three done: the tiles have nothing left to say, so they go and the unlock takes the
-    // space. Three tiles reading 6/6, 300/300, 2k/2k are a receipt, not a reward.
+    // space. Three tiles reading 5/5, 360/360, 10k/10k are a receipt, not a reward.
     if (goals.every((g) => g.met)) {
       return `<div class="sk-gwon"><em>${esc(t('goals_h'))}</em><b>${esc(t('goals_unlocked'))}</b></div>`;
     }
-    const tile = (label, g, attrs) => `
-      <div class="sk-gtile${g.met ? ' is-done' : ''}"${attrs || ''}>
+    const tile = (label, g) => `
+      <div class="sk-gtile${g.met ? ' is-done' : ''}">
         <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(label)}</span>
       </div>`;
-    const chips = readCupsLive(null)
-      .map((c) => `<i class="${c.hit ? 'is-hit' : ''}">${c.value}</i>`).join('');
-    const tapAttrs = ' data-role="cupstile" role="button" tabindex="0"'
-      + ' aria-expanded="false" aria-controls="sk-gpop"';
     return `
       <div class="sk-gsep"><span>${esc(t('goals_h'))}</span></div>
       <div class="sk-gtiles">
-        ${tile(t('g_cups'), cups, tapAttrs)}
+        ${tile(t('g_hundreds'), hundreds)}
         ${tile(t('g_single'), best)}
         ${tile(t('g_total'), total)}
-      </div>
-      <div class="sk-gpop" id="sk-gpop" data-role="cupspop" hidden>${chips}</div>`;
+      </div>`;
   }
 
   /** Repaint the lane rails. Called wherever the ball count is repainted, which is the same
@@ -1069,20 +1059,6 @@ export class SkeeballUI {
     el.querySelector('[data-role="gallery"]').addEventListener('click', () => this._renderSetup());
     // The X closes to the gallery rather than leaving a finished rack behind the sheet.
     el.querySelector('[data-role="close"]').addEventListener('click', () => this._renderSetup());
-    // Cups hit opens the row naming which values are still owed. Three numbers cannot say
-    // WHICH two you are missing, and that is the only part a player can act on.
-    const cupsTile = el.querySelector('[data-role="cupstile"]');
-    const cupsPop = el.querySelector('[data-role="cupspop"]');
-    if (cupsTile && cupsPop) {
-      const toggleCups = () => {
-        cupsPop.hidden = !cupsPop.hidden;
-        cupsTile.setAttribute('aria-expanded', String(!cupsPop.hidden));
-      };
-      cupsTile.addEventListener('click', toggleCups);
-      cupsTile.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCups(); }
-      });
-    }
   }
 
   // --- overlays --------------------------------------------------------------------------------
