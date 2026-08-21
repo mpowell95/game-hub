@@ -569,6 +569,13 @@ function ensureSk(g) {
   for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'bestGame', 'bestThrow', 'hundreds', 'fifties']) {
     if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
   }
+  // Added 2026-08-20 for the unlock goal "land a ball in every point value", and ADDITIVE in the
+  // same way `boards`/`unlocked` were: absent on any device that has not played since, defaulted
+  // to 0 here, only ever incremented. The 50s and 100s were already counted; these four complete
+  // the set so the goal can be answered honestly rather than inferred.
+  for (const k of ['tens', 'twenties', 'thirties', 'forties']) {
+    if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
+  }
   // Added 2026-08-11 with the boards rework, both ADDITIVE and both still absent on any device
   // that has not played since: `boards` is per-machine records (see js/arcade-scores.js, which
   // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
@@ -1265,7 +1272,7 @@ export function recordBattleship(difficulty, won, extras) {
  *  - `played`/`balls`/`points`/`bestGame`/`bestThrow`/`hundreds`/`fifties` are mode-agnostic
  *    lifetime numbers and keep accumulating across both eras.
  *
- *  `extras` = { score, balls, hundreds, fifties, bestThrow, at }. `at` is the game's finish time,
+ *  `extras` = { score, balls, tens, twenties, thirties, forties, hundreds, fifties, bestThrow, at }. `at` is the game's finish time,
  *  used only to pick the local day bucket, and is injectable so tests are not clock-dependent.
  */
 export function recordSkeeball(boardId, extras) {
@@ -1281,6 +1288,10 @@ export function recordSkeeball(boardId, extras) {
   g.sk.points += score;
   g.sk.hundreds += Math.max(0, e.hundreds | 0);
   g.sk.fifties += Math.max(0, e.fifties | 0);
+  g.sk.tens += Math.max(0, e.tens | 0);
+  g.sk.twenties += Math.max(0, e.twenties | 0);
+  g.sk.thirties += Math.max(0, e.thirties | 0);
+  g.sk.forties += Math.max(0, e.forties | 0);
   g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
   g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
   recordBoardGame(g.sk, board, { score, bestThrow: e.bestThrow | 0, at: e.at });

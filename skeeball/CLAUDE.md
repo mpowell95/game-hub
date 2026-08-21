@@ -374,6 +374,16 @@ Per Matt's spec, each machine displays: the **top score by ANY player**, the cur
 
 ## Persistence and THE LAW
 
+> **The Skeeball data in the store today is TEST DATA.** Matt's note, 2026-08-20: every Skeeball
+> record currently in the hub - the MattyIce scores included - is his own testing, and he expects
+> to clear it before the game goes public. So THE LAW's weight here is about the SHARED files, not
+> about Skeeball's own counters: `js/game-stats.js` and `js/players-agg.js` carry every other
+> game's real plays, and those are what must never be put at risk.
+>
+> **This does not license deleting anything.** Never delete player data - Skeeball's or any other
+> game's - without Matt asking for it in so many words. "It is only test data" is his call to
+> make, never an assumption to act on.
+
 **The stats id `skeeball` and sub-counter `sk` predate this rewrite and carry real plays.**
 Everything this build writes goes through the SAME shared plumbing the old one used, so that
 history keeps accumulating rather than being orphaned:

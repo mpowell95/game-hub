@@ -6,15 +6,11 @@
 // they live in the shared store, which syncs across devices and is never rewritten destructively.
 // A goals flag kept in localStorage here would be lost on one device and out of step on two.
 //
-// WHY "A 50 AND A 100" AND NOT "EVERY POINT VALUE" (Matt asked for the latter, 2026-08-20): the
-// store counts 50s and 100s but not 10s, 20s, 30s or 40s. Counting those means new fields in
-// js/game-stats.js AND in js/players-agg.js's merge - the two files THE LAW is really about - plus
-// their regression tests. For one goal that is not a trade worth making, because the requirement
-// is the same in practice: nobody reaches 2000 lifetime points without having landed all four of
-// the lower cups many times over. The two shots ever genuinely in doubt are the 50 and the 100,
-// and those are exactly the two the store already counts. If the literal six-value version is
-// ever wanted, it is those two files plus `result()` in game.js and the payload-shape assertion
-// in test.js - not a change to make casually.
+// EVERY POINT VALUE means every point value. The store used to count only 50s and 100s, so this
+// briefly shipped as "land a 50 and a 100" on the reasoning that nobody reaches 2000 points
+// without hitting the lower cups anyway. Matt's call, 2026-08-20: follow the requirement, do not
+// approximate it. tens/twenties/thirties/forties now ride the same additive path the 50s and 100s
+// always did (js/game-stats.js, and js/players-agg.js for the cross-device merge).
 
 import { loadStats } from '../../js/game-stats.js';
 
@@ -30,11 +26,11 @@ const sk = () => {
  *  `met` is the only thing the unlock itself cares about. Order is the order they are shown. */
 export function readGoals(store) {
   const s = store || sk();
-  const fifties = s.fifties | 0;
-  const hundreds = s.hundreds | 0;
-  const cups = (fifties > 0 ? 1 : 0) + (hundreds > 0 ? 1 : 0);
+  // One ball in each of the six, ever - not in one game, and not one of each in a row.
+  const cups = ['tens', 'twenties', 'thirties', 'forties', 'fifties', 'hundreds']
+    .reduce((n, k) => n + ((s[k] | 0) > 0 ? 1 : 0), 0);
   return [
-    { id: 'cups', now: cups, target: 2, met: cups >= 2 },
+    { id: 'cups', now: cups, target: 6, met: cups >= 6 },
     { id: 'best', now: Math.min(s.bestGame | 0, GOAL_BEST), target: GOAL_BEST, met: (s.bestGame | 0) >= GOAL_BEST },
     { id: 'total', now: Math.min(s.points | 0, GOAL_TOTAL), target: GOAL_TOTAL, met: (s.points | 0) >= GOAL_TOTAL },
   ];

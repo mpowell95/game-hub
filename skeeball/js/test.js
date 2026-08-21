@@ -405,9 +405,15 @@ if (FULL) {
   // (js/game-stats.js: { score, balls, hundreds, fifties, bestThrow }; `at` is the caller's).
   const res = overEv.result;
   eq('result() carries exactly the recorder extras',
-    Object.keys(res).sort(), ['balls', 'bestThrow', 'fifties', 'hundreds', 'score']);
+    Object.keys(res).sort(),
+    ['balls', 'bestThrow', 'fifties', 'forties', 'hundreds', 'score', 'tens', 'thirties', 'twenties']);
+  const countOf = (v) => g.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
+  // GUARD: key ORDER matters - eq() compares JSON.stringify, so this must list them in the
+  // same order result() builds them.
   eq('result() agrees with the game', res,
-    { score: g.score, balls: 9, hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow });
+    { score: g.score, balls: 9,
+      tens: countOf(10), twenties: countOf(20), thirties: countOf(30), forties: countOf(40),
+      hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow });
 }
 
 // --- 7. snapshot / restore: leaving mid-rack is lossless ---------------------------------------

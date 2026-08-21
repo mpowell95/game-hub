@@ -134,9 +134,17 @@ export class SkeeballGame {
   /** The recorder payload: exactly what recordSkeeball(boardId, extras) wants, `at` supplied by
    *  the caller so tests are not clock-dependent (js/game-stats.js documents the shape). */
   result() {
+    // tens..forties are COUNTED FROM this.throws rather than kept as four more running counters,
+    // so they need no place in the snapshot - `throws` is already in it, so they survive a
+    // resume for free. hundreds/fifties keep their existing counters; they predate this.
+    const by = (v) => this.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
     return {
       score: this.score,
       balls: this.ballsUsed,
+      tens: by(10),
+      twenties: by(20),
+      thirties: by(30),
+      forties: by(40),
       hundreds: this.hundreds,
       fifties: this.fifties,
       bestThrow: this.bestThrow,
