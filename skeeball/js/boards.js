@@ -170,8 +170,18 @@ export const BOARDS = [
       // back into the trough. See DECISIONS.md#ring-geometry.
       holeR: X * 0.5,
       holes: {
-        '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
-        '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
+        // GUARD: 1.19 is the WIDEST RING THAT STILL FITS WHOLE. Past about 1.198 the ring runs off
+        // the top edge of the board and machine.js drops the segments that fall outside it - at 1.25
+        // three of its twenty wall segments are missing and a ball can roll out the back of it. It
+        // was 1.0625, which left
+        // just 26mm around the ball and made the 100 a pinhole rather than a shot: measured across
+        // nine aim angles, the longest run of consecutive swipe strengths that scored was 1 to 4,
+        // against 8 for the 50. Matt, playing it: the gap between landing short and hitting the
+        // back wall felt like the gap between a 40 and a 50. At 1.25 three ADJACENT angles open up
+        // (0.34/0.36/0.38, runs of 8/6/6 over powers 70-77) - one learnable sweet spot, with the
+        // angles either side still noisy, which is what a risk shot should look like.
+        '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
+        '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
         c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
         c40: { u: 0, v: X * 5.625, r: X * 0.5, value: 40, ringD: X * 1.5625 },
         c30: { u: 0, v: X * 3.8125, r: X * 0.5, value: 30, ringD: X * 1.8125 },
