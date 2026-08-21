@@ -87,10 +87,17 @@ function clearSave() {
  *  is disposed immediately after. This is how the setup carousel (and later the how-to card) show
  *  the ACTUAL machine rather than a drawing (batch G, 2026-08-18). Returns null on any failure so
  *  the caller keeps its placeholder rather than breaking. */
-function renderMachineImage(board) {
+function renderMachineImage(board, sb) {
   try {
     const c = document.createElement('canvas');
     const r = new Renderer(c, board);
+    // GUARD: HAND IT THE RECORDS. The backboard IS the machine's scoreboard, and a Renderer
+    // nobody pushes values into paints its constructor defaults - four dashes. That is what put
+    // an empty ALL TIME / YOUR BEST / TODAY / LAST GAME strip in the setup picture, four inches
+    // above the player's real stats, reading as though their history had been lost (playtest,
+    // 2026-08-21). Labels first: setScoreboard repaints, and repaints with whatever labels it
+    // finds.
+    if (sb) { r.sbLabels = sb.labels; r.setScoreboard(sb.values); }
     r.framePreview(600, 800);
     r.render(null, 0);
     const url = c.toDataURL('image/jpeg', 0.85);
@@ -127,7 +134,7 @@ export class SkeeballUI {
     this.msgTimer = 0;
     this.top = {};                     // boardId -> { score, name } once the network answers
     this.hubAvg = null;                // hub-wide average score across synced players (game-over card)
-    this._machineImg = {};             // boardId -> cached data URL of the actual machine render
+    this._machineImg = {};             // board id + its records -> cached data URL of that render
 
     this._onPointerMove = (e) => this._swipeMove(e);
     this._onPointerUp = (e) => this._swipeEnd(e);
@@ -206,29 +213,39 @@ export class SkeeballUI {
   }
 
   /**
-   * Hand the renderer the four records its backboard paints. Called on mount, when the network
-   * answers with the app-wide best, and after every finished rack.
+   * The four backboard records for a board, labels translated. ONE source for both the live
+   * machine and the setup screen's cached picture of it: the picture used to be rendered
+   * without ever being handed any values, so the two disagreed on the same screen.
    *
    * The All Time column carries the RECORD HOLDER'S NAME as well as the score - it is the only
    * one of the four that can belong to somebody else. The other three are always this player's.
-   * The labels are passed in translated, because the renderer has no t() of its own.
+   * The labels are translated here, because the renderer has no t() of its own.
    */
+  _scoreboardFor(boardId) {
+    const mine = myRecords(boardId);
+    return {
+      labels: {
+        allTime: t('sb_all_time'),
+        best: t('sb_your_best'),
+        today: t('sb_today'),
+        last: t('sb_last_game'),
+      },
+      values: {
+        allTime: this.top[boardId] || null,
+        best: mine.mine || 0,
+        today: mine.today || 0,
+        last: this.lastScore && this.lastScore.board === boardId ? this.lastScore.score : null,
+      },
+    };
+  }
+
+  /** Hand the live renderer those records. Called on mount, when the network answers with the
+   *  app-wide best, and after every finished rack. */
   _pushScoreboard() {
     if (!this.renderer || !this.game) return;
-    const id = this.game.board.id;
-    const mine = myRecords(id);
-    this.renderer.sbLabels = {
-      allTime: t('sb_all_time'),
-      best: t('sb_your_best'),
-      today: t('sb_today'),
-      last: t('sb_last_game'),
-    };
-    this.renderer.setScoreboard({
-      allTime: this.top[id] || null,
-      best: mine.mine || 0,
-      today: mine.today || 0,
-      last: this.lastScore && this.lastScore.board === id ? this.lastScore.score : null,
-    });
+    const sb = this._scoreboardFor(this.game.board.id);
+    this.renderer.sbLabels = sb.labels;
+    this.renderer.setScoreboard(sb.values);
   }
 
   _topText(boardId) {
@@ -357,13 +374,20 @@ export class SkeeballUI {
   /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
    *  deferred one frame so the setup paints first. A failure leaves the dark placeholder. */
   _ensureMachineImg(board, imgEl) {
-    const cached = this._machineImg[board.id];
+    const sb = this._scoreboardFor(board.id);
+    const v = sb.values;
+    // GUARD: KEYED ON THE VALUES, not just the board id. The picture has the records baked into
+    // it now, so a new personal best has to produce a new picture - keyed on the id alone the
+    // setup screen would go on showing yesterday's numbers until the tab was closed.
+    const at = v.allTime || {};
+    const key = [board.id, at.score || 0, at.name || '', v.best, v.today, v.last].join('|');
+    const cached = this._machineImg[key];
     if (cached) { imgEl.src = cached; return; }
     requestAnimationFrame(() => {
       if (this.disposed) return;
-      const url = renderMachineImage(board);
+      const url = renderMachineImage(board, sb);
       if (!url) return;
-      this._machineImg[board.id] = url;
+      this._machineImg[key] = url;
       imgEl.src = url;
     });
   }
