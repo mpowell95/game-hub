@@ -324,9 +324,14 @@ export function aggregatePlayers(all) {
         // Counters (played/won/lost/tied, balls thrown, lifetime points, 100s and 50s) ADD; the two
         // bests take Math.max, NEVER a sum - a summed bestGame would invent a score nobody ever
         // threw, which is rule 4 as well as rule 2.
-        if (!dst.sk) dst.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0 };
-        for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'hundreds', 'fifties']) {
-          dst.sk[k] += src.sk[k] | 0;
+        if (!dst.sk) {
+          dst.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0, tens: 0, twenties: 0, thirties: 0, forties: 0 };
+        }
+        // tens..forties added 2026-08-20 (the "every point value" unlock goal). Counters, so they
+        // ADD like the rest; `| 0` covers a device that has not played since they existed.
+        for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'hundreds', 'fifties',
+          'tens', 'twenties', 'thirties', 'forties']) {
+          dst.sk[k] = (dst.sk[k] | 0) + (src.sk[k] | 0);
         }
         dst.sk.bestGame = Math.max(dst.sk.bestGame | 0, src.sk.bestGame | 0);
         dst.sk.bestThrow = Math.max(dst.sk.bestThrow | 0, src.sk.bestThrow | 0);

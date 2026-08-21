@@ -20,7 +20,7 @@ const STRINGS = {
 
     // The three goals that open the next machine (js/goals.js)
     goals_h: 'Next machine',
-    goal_cups: 'Land a 50 and a 100',
+    goal_cups: 'Land a ball in every point value',
     goal_best: 'Score {n} in one game',
     goal_total: 'Score {n} points in total',
     goal_done: 'Done',
@@ -99,7 +99,7 @@ const STRINGS = {
     next_machine: 'Máquina siguiente',
 
     goals_h: 'Siguiente máquina',
-    goal_cups: 'Encesta un 50 y un 100',
+    goal_cups: 'Encesta en cada valor de puntos',
     goal_best: 'Haz {n} en una partida',
     goal_total: 'Suma {n} puntos en total',
     goal_done: 'Hecho',
