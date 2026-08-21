@@ -642,7 +642,7 @@ export class SkeeballUI {
     this.renderer = new Renderer(this.el.canvas, this.game.board);
     this._pushScoreboard();
     this._bindPlay();
-    this._fit();
+    if (!this._fit()) this._fitWhenLaidOut();
     this.last = 0;
     this.raf = requestAnimationFrame(this._loop);
   }
@@ -1094,11 +1094,30 @@ export class SkeeballUI {
 
   // --- layout ----------------------------------------------------------------------------------
 
+  /** Size the renderer to the stage. Returns FALSE when the stage has no size yet - the caller
+   *  has to care, because a silent no-op here leaves the renderer at its constructor size for
+   *  the rest of the session. See _fitWhenLaidOut. */
   _fit() {
-    if (!this.renderer || !this.el || !this.el.stage) return;
+    if (!this.renderer || !this.el || !this.el.stage) return false;
     const r = this.el.stage.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
+    if (r.width < 2 || r.height < 2) return false;
     this.renderer.resize(r.width, r.height);
+    return true;
+  }
+
+  /** GUARD: KEEP TRYING UNTIL THE STAGE HAS A SIZE. _startGame can run straight out of the
+   *  constructor - a reload mid-rack boots onto the lane rather than the gallery - and at that
+   *  point this.root has not laid out, so getBoundingClientRect answers 0 and _fit does nothing.
+   *  Nothing re-fits afterwards unless a viewport resize happens to fire, so the canvas keeps
+   *  its constructor size: on 2026-08-21 that shipped as a machine squashed into the top half of
+   *  the screen, cropped and off-centre. Bounded, and a no-op on the normal path where the first
+   *  _fit already succeeded. */
+  _fitWhenLaidOut(tries = 12) {
+    requestAnimationFrame(() => {
+      if (this.disposed || this.screen !== 'play') return;
+      if (this._fit() || tries <= 1) return;
+      this._fitWhenLaidOut(tries - 1);
+    });
   }
 
   // --- teardown --------------------------------------------------------------------------------
