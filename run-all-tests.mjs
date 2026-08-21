@@ -57,6 +57,7 @@ const SUITES = [
   // WHICH number is printed on WHICH skeeball ring. Node has no canvas, so this shims one and
   // checks the layout arithmetic only - it cannot tell you the board looks right. It exists
   // because the layout shipped one ring low once (see the GUARD in render.js _ringNumbers).
+  { file: 'test-skeeball-machine-spec.mjs' },
   { file: 'test-skeeball-rings.mjs' },
   // The first suite here that LOOKS at the game. Needs a real browser, so it SKIPs (never
   // fails) without playwright-core/Chromium - same contract as the jsdom suites below.
