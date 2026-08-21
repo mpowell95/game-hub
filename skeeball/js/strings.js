@@ -33,6 +33,7 @@ const STRINGS = {
     goal_total: 'Score {n} points in total',
     goal_done: 'Done',
     goals_all: 'ALL THREE DONE',
+    goals_unlocked: 'UNLOCKED',
 
     // The records panel - the four numbers every machine shows
     rec_top: 'Top score',
@@ -117,6 +118,7 @@ const STRINGS = {
     goal_total: 'Suma {n} puntos en total',
     goal_done: 'Hecho',
     goals_all: 'LOS TRES HECHOS',
+    goals_unlocked: 'DESBLOQUEADA',
 
     rec_top: 'Puntuación máxima',
     rec_top_any: 'cualquier jugador',

@@ -307,12 +307,12 @@ export class SkeeballUI {
       return `<div class="sk-slide" data-board="${b.id}">
         <p class="sk-slide-name">${esc(b.name)}</p>
         <div class="sk-slide-machine"><img class="sk-slide-img" data-machine="${b.id}" alt="${esc(b.name)}" /></div>
-        <div class="sk-slide-recwide"><em>${esc(t('over_hub_record'))}</em><b data-rec-top="${b.id}">${esc(this._topText(b.id))}</b></div>
         <div class="sk-slide-rec3">
           <div class="sk-slide-rec"><b>${val(r.mine)}</b><em>${esc(t('rec_mine'))}</em></div>
           <div class="sk-slide-rec"><b>${val(r.today)}</b><em>${esc(t('rec_today'))}</em></div>
           <div class="sk-slide-rec"><b>${val(myAvg)}</b><em>${esc(t('over_your_avg'))}</em></div>
         </div>
+        <div class="sk-slide-recwide"><em>${esc(t('over_hub_record'))}</em><b data-rec-top="${b.id}">${esc(this._topText(b.id))}</b></div>
       </div>`;
     }).join('');
     const multi = BOARDS.length > 1;
@@ -868,7 +868,13 @@ export class SkeeballUI {
    *  which values are still owed - three identical numbers cannot say that on their own.
    *  Reads the recorded store, not the live rack: by the time this card exists the rack is in. */
   _goalTilesMarkup() {
-    const [cups, best, total] = readGoals();
+    const goals = readGoals();
+    const [cups, best, total] = goals;
+    // All three done: the tiles have nothing left to say, so they go and the unlock takes the
+    // space. Three tiles reading 6/6, 300/300, 2k/2k are a receipt, not a reward.
+    if (goals.every((g) => g.met)) {
+      return `<div class="sk-gwon"><em>${esc(t('goals_h'))}</em><b>${esc(t('goals_unlocked'))}</b></div>`;
+    }
     const tile = (label, g, attrs) => `
       <div class="sk-gtile${g.met ? ' is-done' : ''}"${attrs || ''}>
         <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(label)}</span>

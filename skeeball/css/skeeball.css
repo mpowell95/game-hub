@@ -166,9 +166,12 @@
      ratio on every phone - 280px of height whether the screen had it or not, which is what pushed
      Play off the bottom of a 667px one. Driving height from vh and letting the ratio derive the
      width keeps the picture as big as the screen can afford and no bigger. */
-  height: clamp(150px, 34vh, 280px);
+  /* Sized to EAT THE SLACK. The card is a flex column in a full-height screen; whatever this
+     box does not take becomes dead white space above and below it. It was capped at 210px
+     wide on a 420px card, which left ~90px of nothing at each end (Matt, 2026-08-21). */
+  height: clamp(170px, 46vh, 460px);
   width: auto;
-  max-width: 210px;
+  max-width: min(340px, 82%);
   aspect-ratio: 3 / 4;
   flex: 0 0 auto;
   margin: 0 auto clamp(7px, 1.4vh, 12px);
@@ -582,7 +585,7 @@
   top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
   z-index: 3;
   /* Narrower on a narrow phone: the gutter is a share of the width, not a constant. */
-  width: min(66px, 16vw);
+  width: min(76px, 19vw);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -619,7 +622,8 @@
    rack ever gets taller, re-measure before assuming this still fits. */
 .sk-root .sk-gtotal {
   position: absolute;
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 120px);
+  /* Same top edge as the rails, so the three read as one row rather than a stagger. */
+  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
@@ -672,21 +676,16 @@
 .sk-root .sk-goal b {
   display: block;
   margin-top: 1px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--sk-cream);
 }
-/* GUARD: THE TARGET SITS ON ITS OWN LINE. Inline, "300/300" is about 70px at 15px bold - wider
-   than the 66px rail - and the right-hand one ran off the edge of the screen (Matt,
-   2026-08-21). Stacked, no pair of numbers can outgrow the box however big they get. */
-.sk-root .sk-goal b i {
-  display: block;
-  margin-top: -1px;
-  font-style: normal;
-  font-size: 11px;
-  color: #8d7a63;
-}
+/* GUARD: ONE LINE, AND THE BOX IS SIZED FOR THE WIDEST PAIR. Stacking the target read as
+   wasted height (Matt, 2026-08-21). "300/300" is ~48px at these sizes against ~59px of inner
+   width. If a target ever needs five digits, widen the rail - do not stack it again. */
+.sk-root .sk-goal b i { font-style: normal; font-size: 11px; color: #8d7a63; }
 .sk-root .sk-goal.is-done b,
 .sk-root .sk-goal.is-done b i { color: var(--sk-amber); }
 .sk-root .sk-goal-bar {
@@ -731,7 +730,34 @@
 .sk-root .sk-gsep { display: flex; align-items: center; gap: 8px; margin: 13px 0 8px; }
 .sk-root .sk-gsep::before,
 .sk-root .sk-gsep::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--gh-line); }
-.sk-root .sk-gsep span { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--gh-muted); }
+.sk-root .sk-gsep span { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; color: var(--gh-ink); }
+/* All three done. Gold, and big enough to read as a reward rather than a fifth statistic. */
+.sk-root .sk-gwon {
+  margin-top: 13px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff5d6, #ffe7a6);
+  border: 1px solid #e3bf72;
+  text-align: center;
+}
+.sk-root .sk-gwon em {
+  display: block;
+  font-style: normal;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a6410;
+}
+.sk-root .sk-gwon b {
+  display: block;
+  margin-top: 3px;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #7a4e00;
+}
+
 .sk-root .sk-gtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .sk-root .sk-gtile {
   background: var(--gh-surface-2);
@@ -741,22 +767,19 @@
 }
 .sk-root .sk-gtile b {
   display: block;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 800;
   color: var(--gh-ink);
   font-variant-numeric: tabular-nums;
 }
-.sk-root .sk-gtile.is-done b { color: var(--gh-accent); }
-.sk-root .sk-gtile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+/* A met goal is GOLD, not the hub's blue: blue on the card's grey read as another stat rather
+   than as something earned (Matt, 2026-08-21). */
+.sk-root .sk-gtile.is-done { background: #fff6df; border-color: #e8c98a; }
+.sk-root .sk-gtile.is-done b { color: #a06a00; }
+.sk-root .sk-gtile.is-done span { color: #8a6410; }
+.sk-root .sk-gtile span { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--gh-muted); }
 .sk-root .sk-gtile[data-role='cupstile'] { cursor: pointer; position: relative; }
-.sk-root .sk-gtile[data-role='cupstile']::after {
-  content: '▾';
-  position: absolute;
-  top: 2px;
-  right: 5px;
-  font-size: 11px;
-  color: var(--gh-muted);
-}
+
 .sk-root .sk-gpop {
   display: flex;
   justify-content: center;
@@ -825,8 +848,8 @@
   margin: 18px 0 0; padding: 10px 12px; background: var(--gh-surface-2);
   border: 1px solid var(--gh-border); border-radius: var(--gh-r-md);
 }
-.sk-root .sk-over-rec em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
-.sk-root .sk-over-rec b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--gh-ink); overflow-wrap: anywhere; }
+.sk-root .sk-over-rec em { display: block; font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--gh-muted); }
+.sk-root .sk-over-rec b { display: block; margin-top: 2px; font-size: 19px; font-weight: 800; color: var(--gh-ink); overflow-wrap: anywhere; }
 /* Reference, not competition: no surface, no border, no box. These four are here to be looked
    UP when the player wants them, and the record row above keeps its panel precisely because it
    is now the only one on the card. */
@@ -835,8 +858,8 @@
   gap: 14px 8px; margin-top: 16px;
 }
 .sk-root .sk-over-tile { padding: 0; }
-.sk-root .sk-over-tile b { display: block; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
-.sk-root .sk-over-tile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+.sk-root .sk-over-tile b { display: block; font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
+.sk-root .sk-over-tile span { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--gh-muted); }
 
 
 /* --------------------------------------------------------------- the fireworks --- */
