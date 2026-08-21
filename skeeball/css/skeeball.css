@@ -86,21 +86,34 @@
   overscroll-behavior: contain;
   background: var(--sks-bg);
   color: var(--sks-ink);
-  /* Clear the hub's floating back button (top-left, immersive mode). */
-  padding: max(84px, env(safe-area-inset-top, 0px) + 64px) 16px 32px;
+  /* GUARD: THE SETUP SCREEN NEVER SCROLLS, ON ANY PHONE. It held at 375x812 - the only size it
+     was ever measured at - and overflowed at 375x667, at 360x740 once a rack was saved, and in
+     landscape, where all three buttons sat 289-405px below the fold (playtest, 2026-08-21).
+     Nothing on this screen may carry a fixed height again: the pads clamp, the type clamps, and
+     the machine picture is sized from the viewport (see .sk-slide-machine). The top pad clears
+     the hub's floating back button, and gives that up before it gives up reaching Play. The
+     bottom pad clears the home-indicator bar. overflow-y stays as a net, never as the plan. */
+  padding:
+    clamp(56px, env(safe-area-inset-top, 0px) + 64px, 84px)
+    16px
+    calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
 }
 
 .sk-root .sk-setup-inner {
   max-width: 440px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: clamp(8px, 1.6vh, 14px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .sk-root .sk-title {
   margin: 0;
-  font-size: 26px;
+  font-size: clamp(20px, 5.5vw, 26px);
   font-weight: 800;
   text-align: center;
   color: var(--sks-ink);
@@ -119,9 +132,11 @@
    machine, each showing that machine's ACTUAL board (render.js render, cached as an image, never
    a drawing). Scroll-snap does the swipe; with one machine it is a single centred card and the
    dots/arrows/hint are not rendered. Follows the hub theme through --sks-*. */
-.sk-root .sk-carwrap { position: relative; }
+.sk-root .sk-carwrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 .sk-root .sk-car {
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -134,19 +149,29 @@
 .sk-root .sk-slide {
   scroll-snap-align: center;
   flex: 0 0 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
   background: var(--sks-surface);
   border: 1px solid var(--sks-line);
   border-radius: 18px;
-  padding: 16px;
+  padding: clamp(10px, 2vh, 16px);
   box-shadow: 0 2px 12px rgba(16, 30, 54, 0.08);
   text-align: center;
 }
-.sk-root .sk-slide-name { margin: 0 0 10px; font-size: 22px; font-weight: 800; letter-spacing: 0.02em; color: var(--sks-ink); }
+.sk-root .sk-slide-name { margin: 0 0 clamp(6px, 1.2vh, 10px); font-size: clamp(18px, 4.6vw, 22px); font-weight: 800; letter-spacing: 0.02em; color: var(--sks-ink); }
 .sk-root .sk-slide-machine {
-  width: 100%;
+  /* GUARD: SIZED FROM THE VIEWPORT, NOT FROM A CONSTANT. This box used to be 210px wide at a 3:4
+     ratio on every phone - 280px of height whether the screen had it or not, which is what pushed
+     Play off the bottom of a 667px one. Driving height from vh and letting the ratio derive the
+     width keeps the picture as big as the screen can afford and no bigger. */
+  height: clamp(150px, 34vh, 280px);
+  width: auto;
   max-width: 210px;
   aspect-ratio: 3 / 4;
-  margin: 0 auto 12px;
+  flex: 0 0 auto;
+  margin: 0 auto clamp(7px, 1.4vh, 12px);
   border-radius: 12px;
   overflow: hidden;
   background: #140d0a;
@@ -159,7 +184,7 @@
   padding: 9px 12px;
   margin-bottom: 8px;
 }
-.sk-root .sk-slide-recwide em { display: block; font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--sks-muted); }
+.sk-root .sk-slide-recwide em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-recwide b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--sks-ink); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .sk-root .sk-slide-rec3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .sk-root .sk-slide-rec {
@@ -169,7 +194,7 @@
   padding: 9px 5px;
 }
 .sk-root .sk-slide-rec b { display: block; font-size: 16px; font-weight: 800; color: var(--sks-ink); font-variant-numeric: tabular-nums; }
-.sk-root .sk-slide-rec em { display: block; margin-top: 2px; font-style: normal; font-size: 10px; font-weight: 700; color: var(--sks-muted); }
+.sk-root .sk-slide-rec em { display: block; margin-top: 2px; font-style: normal; font-size: 11px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-locked {
   display: flex;
   flex-direction: column;
@@ -186,8 +211,9 @@
   position: absolute;
   top: 42%;
   transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
+  /* 44x44 floor, same as every other control. */
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid var(--sks-line);
   background: var(--sks-surface);
@@ -198,8 +224,8 @@
   place-items: center;
   box-shadow: 0 2px 8px rgba(16, 30, 54, 0.14);
 }
-.sk-root .sk-car-chev.l { left: -4px; }
-.sk-root .sk-car-chev.r { right: -4px; }
+.sk-root .sk-car-chev.l { left: -8px; }
+.sk-root .sk-car-chev.r { right: -8px; }
 .sk-root .sk-car-dots { display: flex; justify-content: center; gap: 7px; }
 .sk-root .sk-car-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--sks-line); transition: background-color 0.2s, transform 0.2s; }
 .sk-root .sk-car-dots i.on { background: var(--gh-accent, #1769d4); transform: scale(1.15); }
@@ -309,7 +335,7 @@
 
 .sk-root .sk-mrow-recs em {
   font-style: normal;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -365,8 +391,9 @@
   top: max(10px, env(safe-area-inset-top, 0px));
   right: 12px;
   z-index: 4;
-  width: 40px;
-  height: 40px;
+  /* 44x44 is the floor for a reliable thumb; do not shrink it back to fit a layout. */
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid var(--sk-line);
   background: var(--sk-panel);
@@ -523,7 +550,7 @@
   display: inline-block;
   margin-left: 8px;
   vertical-align: 2px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: #2a1608;
@@ -552,7 +579,7 @@
 .sk-root .sk-tile span {
   display: block;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;

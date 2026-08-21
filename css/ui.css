@@ -387,8 +387,11 @@
   position: absolute;
   top: var(--gh-sp-2);
   right: var(--gh-sp-2);
-  width: 36px;
-  height: 36px;
+  /* 44x44 is the floor for a reliable thumb (WCAG 2.5.5 / Apple HIG). This is the shared
+     primitive, so the size is right for every game at once - that is the point of it living here
+     rather than being re-solved per game. */
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border: 0;
