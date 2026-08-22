@@ -354,6 +354,131 @@ export const BOARDS = [
       },
     },
   },
+
+  {
+    id: 'basketball',
+    name: 'BASKET FEVER',
+    taglineKey: 'board_basketball_tag',
+    // Complete POPONGO's three objectives (js/goals.js). Same goals-based shape as POPONGO's own
+    // unlock; unlocksEarned() ignores it (no `score` field) and ui.js applies it.
+    unlock: { board: 'popongo', goals: true },
+
+    // Matched to the reference photos in skeeball/Machines/Machine 4 - Basketball/ (the real
+    // Basket Fever cabinet): yellow-and-black cabinet, blue face, orange wire hoops, red LED
+    // glow, white nets. `glow`/`net` are required by look.complete but currently painted by
+    // nothing.
+    look: {
+      wood: '#2b2b30',
+      woodDark: '#191a1e',
+      cabinet: '#f2c526',
+      cabinetEdge: '#1a1a1a',
+      face: '#1f4e9c',
+      faceEdge: '#143564',
+      ring: '#e8541f',
+      ringLip: '#ffd23f',
+      value: '#ffffff',
+      pocket: '#0a0705',
+      marquee: '#1e63b8',
+      marqueeText: '#ffd23f',
+      bulb: '#ffd23f',
+      glow: '#ff3b1f',
+      wall: '#161016',
+      net: '#f2f2f2',
+    },
+
+    // The hoops ride the ARRANGEMENT LAYER even though nothing about them is movable in real
+    // life: on a collar board the cup layer is what carries a printed value onto the collar's
+    // far wall (render.js _cupPlate) - a collar hole with a hand-written value would render
+    // with no number at all. The arrangement is FIXED (the real machine's 10/20/10, 30/60/30,
+    // 50/100/50 grid) and there is no rearrangement story here. Every hoop is the same orange;
+    // game.js's colorSweep is gated on need > 1, so a one-color board can never count a
+    // "color sweep" into sk.colorSweeps (which would falsely satisfy POPONGO's colors goal).
+    cups: {
+      h10a: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
+      h10b: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
+      h20: { value: 20, color: '#e8541f', ink: '#ffffff', label: '20' },
+      h30a: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
+      h30b: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
+      h50a: { value: 50, color: '#e8541f', ink: '#ffffff', label: '50' },
+      h50b: { value: 50, color: '#e8541f', ink: '#ffffff', label: '50' },
+      h60: { value: 60, color: '#e8541f', ink: '#ffffff', label: '60' },
+      h100: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
+    },
+    arrangement: {
+      lowL: 'h10a', lowC: 'h20', lowR: 'h10b',
+      midL: 'h30a', midC: 'h60', midR: 'h30b',
+      topL: 'h50a', topC: 'h100', topR: 'h50b',
+    },
+
+    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane, same ramp,
+    // same throw - the face is the only thing that changes). troughTenHalfW and ringSegments are
+    // deliberately absent: both are classic-only vestiges (see the spec, sections 6 and 12).
+    geom: {
+      ballR: X * 0.35,
+      ballMass: 0.18,
+      laneLen: 1.40,
+      laneW: X * 4.875,
+      bedThick: 0.06,
+      humpLen: 0.42,
+      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+      troughLen: 0.225,
+      troughDepth: 0.15,
+      boardLipY: 0.42,
+      boardTilt: 0.7854,
+      boardW: 1.00,
+      boardLen: 1.3818,
+      railH: 0.10,
+      laneRailH: 0.05,
+      backboardH: 0.8,
+      cupSegments: 14,
+      collarThick: 0.012,
+      ringH: X,
+      ringThick: 0.015,
+      lipLowFrac: 0.50,
+      captureDrop: 0.35,
+
+      // THE FACE: nine hoops in a 3x3 grid, each a raised cup collar (POPONGO's system) - the
+      // real Basket Fever's three shelves of three baskets, row height picking the row and aim
+      // picking the column. Every coordinate here is POPONGO-PROVEN: the three rows are its
+      // bot/mid/top rows (v 2.3125X / 5.6125X / 8.9125X), the outer columns its measured
+      // rail-safe lateral (u ±2.07X - collar-to-rail wall gap 0.785X), and collarH its measured
+      // 0.35X (0.5X made upper slots unreachable at every cell of POPONGO's sweep). Same-row
+      // wall gap 2.07X − 1.165X = 0.905X, row-to-row 3.3X − 1.165X = 2.135X - everything over
+      // the 0.78X floor with nothing merged (a collar near a FLAT wall is a pocket even at zero
+      // gap; see DECISIONS.md#popongo-layout).
+      holeR: X * 0.5,
+      holes: {
+        lowL: { u: -X * 2.07, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
+        lowC: { u: 0, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
+        lowR: { u: X * 2.07, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
+        midL: { u: -X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        midR: { u: X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        topL: { u: -X * 2.07, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
+        topC: { u: 0, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
+        topR: { u: X * 2.07, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
+      },
+
+      minSpeed: 2.60,
+      maxSpeed: 6.60,
+      aimMax: 0.45,
+
+      mat: {
+        boardFric: 0.62,
+        boardRest: 0.08,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.42,
+        ringFric: 0.06,
+        ringRest: 0.18,
+        ring100Fric: 0.06,
+        ring100Rest: 0.18,
+        deadFric: 0.24,
+        deadRest: 0.10,
+      },
+    },
+  },
 ];
 
 // THE STAMPING LOOP: on a cup board, a hole's value IS the value of the cup sitting in its slot.

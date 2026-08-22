@@ -158,6 +158,21 @@ descending arc met the wall face instead of clearing it), and lower walls scatte
 less. Verified after: all nine slots capturable without the watchdog, 0 emergencies in 459
 throws.
 
+### Basket Fever layout
+
+BASKET FEVER's nine hoops are a 3x3 sub-lattice of POPONGO's measured lattice, on purpose: rows
+at POPONGO's bot/mid/top v (2.3125X / 5.6125X / 8.9125X), columns at 0 and its rail-safe ±2.07X,
+collars at its measured 0.35X. Nothing was re-derived because every constraint (the 0.78X wall
+gap floor, the collar-off-the-rails rule, the arrival-clearance a 0.35X collar asks for) was
+already paid for by POPONGO's sweep. Same-row wall gap 0.905X, row-to-row 2.135X, collar-to-rail
+0.785X.
+
+The build sweep (27 powers x 17 aims, 459 throws, the POPONGO method): all nine slots
+clean-capturable, 0 emergencies. The ladder it measured: low row captures from p≈0.20, middle
+from p≈0.44, top from p≈0.72; side hoops need aim (lowL at p0.20/a-0.38, topR at p0.72/a0.25);
+the 100 (topC) takes a straight throw at p0.72-0.84. Row height picks the row, aim picks the
+column, which is the real machine's game.
+
 ## Swipe and power
 
 ### Measured swipe data
