@@ -34,6 +34,10 @@ export const PG_COLORS = 4;      // POPONGO: land all four scoring colors in ONE
 export const PG_BEST = 30;       // POPONGO: score 30+ in a single game
 export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 
+export const BB_HOOP = 100;      // BASKET FEVER: sink the 100 hoop (proved by per-board bestThrow)
+export const BB_BEST = 300;      // BASKET FEVER: score 300+ in a single game
+export const BB_TOTAL = 3000;    // BASKET FEVER: 3,000 points in total on the machine
+
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
 };
@@ -69,6 +73,21 @@ const GOALS = {
       { id: 'colors', labelKey: 'g_colors', now: colorsNow, target: PG_COLORS, met: sweptEver || liveColors >= PG_COLORS },
       { id: 'best', labelKey: 'g_single', now: Math.min(best, PG_BEST), target: PG_BEST, met: best >= PG_BEST },
       { id: 'total', labelKey: 'g_total', now: Math.min(total, PG_TOTAL), target: PG_TOTAL, met: total >= PG_TOTAL },
+    ];
+  },
+  basketball(s, r) {
+    const b = (s.boards || {}).basketball || {};
+    // The 100 hoop: the top-centre basket is the only 100 on this face, so a per-board best
+    // throw of 100 IS proof it was sunk - no new counter needed (b.bestThrow is Math.max only,
+    // synced, and cross-device merged by js/arcade-scores.js). The rail shows the best throw
+    // climbing toward 100 rather than a bare 0/1.
+    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    return [
+      { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BB_HOOP), target: BB_HOOP, met: bt >= BB_HOOP },
+      { id: 'best', labelKey: 'g_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
+      { id: 'total', labelKey: 'g_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
     ];
   },
 };

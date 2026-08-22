@@ -18,10 +18,12 @@ build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub
 2026-08-18 at Matt's ask** once the comparison was done (it is in git history). It recorded into
 the SHARED `skeeball` stats id and used the same board id `classic`, so every rack it ever played
 is still in this game's own records (bests, the daily map, the top-score panel) — one continuous
-bucket, nothing orphaned by its removal. Two machines exist: **THE CLASSIC** (a
+bucket, nothing orphaned by its removal. Three machines exist: **THE CLASSIC** (a
 boardwalk cabinet with a varnished oak lane, the burnt-orange board with the white cup ladder,
-twin corner 100 cups, and a marquee) and **POPONGO** (2026-08-22, the real cup-board lawn game as
-a second face on the same cabinet - see "POPONGO and the arrangement layer" below). The player
+twin corner 100 cups, and a marquee), **POPONGO** (2026-08-22, the real cup-board lawn game as
+a second face on the same cabinet - see "POPONGO and the arrangement layer" below) and
+**BASKET FEVER** (2026-08-22, the arcade basketball machine as a third face - see "BASKET FEVER"
+below). The player
 swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
 a rack.
 
@@ -412,6 +414,31 @@ and two black **equalizers**.
   No hole has a `ringD`, so `_ringNumbers`/`platedHoles` no-op; the classic's bottom-slot band
   is gated on `!board.cups`. The setup slides, game-over card and hub average are all
   PER-BOARD numbers now - machines score on different scales, so blended averages meant nothing.
+
+## BASKET FEVER (2026-08-22)
+
+The third machine, built from the real Basket Fever cabinet in `skeeball/Machines/Machine 4 -
+Basketball/` (photos): nine orange wire baskets on three shelves, 10/20/10 low, 30/60/30 middle,
+50/100/50 top. In this engine a hoop IS a POPONGO cup: a raised collar on a hole, entered by a
+ball dropping in out of the air - no new physics, no new capture rule.
+
+- **The layout is a sub-lattice of POPONGO's proven one**: rows at its bot/mid/top v
+  (2.3125X / 5.6125X / 8.9125X), outer columns at its measured rail-safe u (±2.07X), collars at
+  its measured 0.35X. Every wall gap ≥ 0.78X, nothing merged. Slot ids `lowL`..`topR`, frozen
+  (THE LAW rule 5). Sweep at build: all nine slots clean-capturable, **0 emergencies in 459
+  throws** (DECISIONS.md#basket-fever-layout has the ladder).
+- **It rides the arrangement layer with a FIXED arrangement**: the cup layer is what puts a
+  printed value on a collar wall (`_cupPlate`), so the nine hoops are "cups" `h10a`..`h100`
+  (values frozen to ids) even though nothing about them is movable. All one orange.
+- **`colorSweep` is gated on `need > 1`** (`game.js`): on a one-color cup board every scoring
+  rack would otherwise count a "color sweep" into the GLOBAL `sk.colorSweeps` and falsely
+  complete POPONGO's colors goal. A sweep of one color is not a sweep.
+- **Goals** (`goals.js`, no new counters): sink the 100 hoop (per-board `bestThrow ≥ 100` -
+  the top-centre hoop is the only 100 on the face, so the best throw IS the proof), 300+ in a
+  single game (per-board best), 3,000 total points on the machine (per-board points). All three
+  read `sk.boards.basketball`, synced and cross-device merged by `js/arcade-scores.js`.
+- **Unlock**: `{ board: 'popongo', goals: true }` - complete POPONGO's three objectives. Same
+  goals shape as POPONGO's own unlock; `ui.js` needed nothing.
 
 ## The records panel (the four numbers every machine shows)
 
