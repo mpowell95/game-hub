@@ -384,6 +384,15 @@ Per Matt's spec, each machine displays: the **top score by ANY player**, the cur
 > **This does not license deleting anything.** Never delete player data - Skeeball's or any other
 > game's - without Matt asking for it in so many words. "It is only test data" is his call to
 > make, never an assumption to act on.
+>
+> **He asked, and it was cleared on 2026-08-22.** `clear-skeeball-stats.mjs` (repo root, kept for
+> audit) deleted `players/*/stats/games/skeeball` on all 55 nodes carrying it - 64 plays, top score
+> 700 - after a full backup, and verified by fresh re-read that every other game object was
+> untouched. Every node with plays was Matt or MattyIce; the "family members may have real plays"
+> worry above was checked against the data first and did not hold. **The server half is not the
+> whole job**: `syncMyStats()` mirrors the device's entire local store, so any device still holding
+> local Skeeball data re-uploads it on its next hub load. The dev-only "Reset Skeeball stats"
+> button is the device half, and has to be pressed on each device still in use.
 
 **The stats id `skeeball` and sub-counter `sk` predate this rewrite and carry real plays.**
 Everything this build writes goes through the SAME shared plumbing the old one used, so that
