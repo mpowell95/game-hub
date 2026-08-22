@@ -83,10 +83,12 @@ function buildWorld(board) {
       type: CANNON.Body.STATIC,
       shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
-        : s.part === 'board' || s.part === 'trough' ? matBoard
+        : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
             : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+      // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
+      // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
@@ -119,13 +121,10 @@ function buildWorld(board) {
   return { world, ball, M };
 }
 
-/** World position -> face coordinates {u, v, h} (machine.js documents the basis). */
+/** World position -> face coordinates {u, v, h, tilt}. machine.js owns the mapping now (it is
+ *  piecewise on a stepped machine); this wrapper keeps the old call shape. */
 function worldToFace(M, G, p) {
-  const dy = p.y - M.lipY;
-  const dz = p.z - M.lipZ;
-  const sin = Math.sin(M.tilt);
-  const cos = Math.cos(M.tilt);
-  return { u: p.x, v: dy * sin - dz * cos, h: dy * cos + dz * sin };
+  return M.worldToFace(p);
 }
 
 export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
@@ -225,11 +224,31 @@ function substep(st) {
   st.t += H;
   const p = ball.position;
 
-  // 1. Captured: the floor is gone under the mouth; ride gravity down through it.
+  // 1. Captured: the floor is gone under the mouth; ride gravity down through it. GUARD:
+  //    CAPTURE IS A PREDICTION, NOT A SCORE (Matt, 2026-08-22: the machine paid a ball that
+  //    rattled a rim and bounced OUT). The kinematic test in section 2 says the ball SHOULD
+  //    fall in, but it can still strike the far collar wall or a ring inside the mouth and
+  //    bounce back out - those walls stay solid while only the floor slab lets go. So nothing
+  //    is committed until the ball has ACTUALLY PASSED THROUGH the plane inside the mouth;
+  //    a ball that climbs back out above the face gets the floor back and plays on. Points
+  //    are ONLY awarded when a ball falls fully through a hole - on every machine.
   if (st.captured) {
-    if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) {
-      const hDef = G.holes[st.captured];
+    const hDef = G.holes[st.captured];
+    const fc = worldToFace(M, G, p);
+    const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
+    if (st.t > MAX_T) {
       finishAt(st, st.captured, hDef.value, 'hole');
+    } else if (fc.h < -G.ballR * 1.2) {
+      // Below the playing plane. Through the mouth = the score; through the slab anywhere
+      // else (a bounce-out that slid under the intangible floor before escaping) = a miss.
+      if (d < hDef.r + G.ballR) finishAt(st, st.captured, hDef.value, 'hole');
+      else finishAt(st, 'corner0', 0, 'gutter');
+    } else if (fc.h > G.ballR * 1.05 && d > hDef.r) {
+      // Clear of the slab's surface and outside the mouth: it bounced out. Give the floor
+      // back and let it play on - this ball has scored nothing yet.
+      st.events.push({ type: 'rimout', hole: st.captured });
+      st.captured = null;
+      ball.collisionFilterMask = GROUP_FLOOR | GROUP_REST;
     }
     return;
   }
@@ -244,8 +263,10 @@ function substep(st) {
   //    slowed or steered. No magnetism, no assist, no correction (see the banned section 5
   //    below). See DECISIONS.md#hole-capture.
   const vel = ball.velocity;
-  const sinT = Math.sin(M.tilt);
-  const cosT = Math.cos(M.tilt);
+  // The LOCAL surface frame - on a stepped machine each tread has its own tilt, and capture's
+  // kinematics answer to the surface the ball is actually over.
+  const sinT = Math.sin(f.tilt);
+  const cosT = Math.cos(f.tilt);
   // the same linear map worldToFace applies to positions, applied to the velocity
   const vFace = Math.hypot(vel.x, vel.y * sinT - vel.z * cosT);
   const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
@@ -344,9 +365,10 @@ function substep(st) {
     st.nudges += 1;
     if (st.nudges <= 2) {
       const side = p.x >= 0 ? -1 : 1;
+      const tLoc = typeof f.tilt === 'number' ? f.tilt : M.tilt;
       ball.velocity.x += side * 0.3;
-      ball.velocity.y += 0.55 * Math.cos(M.tilt);
-      ball.velocity.z += 0.3 * Math.sin(M.tilt) + 0.15;
+      ball.velocity.y += 0.55 * Math.cos(tLoc);
+      ball.velocity.z += 0.3 * Math.sin(tLoc) + 0.15;
     } else if (st.cupBoard) {
       // Two pops did nothing: it is jammed. On a CUP BOARD a jammed ball is a MISS, full stop:
       // falling through a mouth is the only way to score here, and walking a stuck ball into
