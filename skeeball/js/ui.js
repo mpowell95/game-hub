@@ -993,7 +993,11 @@ export class SkeeballUI {
     }
     host.innerHTML = html;
     this.root.appendChild(host);
-    setTimeout(() => host.remove(), big ? 3200 : 2400);
+    const runs = big ? 3200 : 2400;
+    // The game-over card waits for this. A goal earned on the ninth ball used to be covered by
+    // the card the instant it landed (Matt, 2026-08-21).
+    this._fwUntil = Math.max(this._fwUntil || 0, Date.now() + runs);
+    setTimeout(() => host.remove(), runs);
   }
 
   // --- the finished rack -----------------------------------------------------------------------
@@ -1078,13 +1082,28 @@ export class SkeeballUI {
         </div>
       </div>`;
     this._closeOverlay();
-    this.root.appendChild(el);
+    this._showWhenQuiet(el);
     this.overlay = el;
     if (isMine || isTop) this.renderer.celebrate();
     el.querySelector('[data-role="again"]').addEventListener('click', () => this._startGame(null));
     el.querySelector('[data-role="gallery"]').addEventListener('click', () => this._renderSetup());
     // The X closes to the gallery rather than leaving a finished rack behind the sheet.
     el.querySelector('[data-role="close"]').addEventListener('click', () => this._renderSetup());
+  }
+
+  /** Put the game-over card up only once nothing is still moving: the fireworks have finished
+   *  and the score has finished counting. A goal earned on the last ball fired its burst and
+   *  the card landed on top of it in the same instant, which is no celebration at all.
+   *  Bounded at 4s so a stuck counter can never strand the player on the lane. */
+  _showWhenQuiet(el, waited = 0) {
+    const fwLeft = Math.max(0, (this._fwUntil || 0) - Date.now());
+    const counting = this.game && this._shownScore !== this.game.score;
+    if ((fwLeft > 0 || counting) && waited < 4000) {
+      setTimeout(() => { if (!this.disposed && this.screen === 'play') this._showWhenQuiet(el, waited + 120); }, 120);
+      return;
+    }
+    if (this.disposed || this.screen !== 'play') return;
+    this.root.appendChild(el);
   }
 
   // --- overlays --------------------------------------------------------------------------------
