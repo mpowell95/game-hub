@@ -19,7 +19,6 @@ const STRINGS = {
     locked: 'Locked',
     unlock_hint: 'Score {score} on {name} to unlock',
     unlock_goals_hint: 'Complete all three goals on {name} to unlock',
-    car_hint: 'Swipe to switch machines',
     prev_machine: 'Previous machine',
     next_machine: 'Next machine',
 
@@ -107,7 +106,6 @@ const STRINGS = {
     locked: 'Bloqueada',
     unlock_hint: 'Consigue {score} en {name} para desbloquearla',
     unlock_goals_hint: 'Completa los tres objetivos de {name} para desbloquearla',
-    car_hint: 'Desliza para cambiar de máquina',
     prev_machine: 'Máquina anterior',
     next_machine: 'Máquina siguiente',
 
