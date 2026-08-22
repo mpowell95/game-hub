@@ -1387,6 +1387,29 @@ Now, per rule 6's own reference pattern:
 - **Retry on reconnect.** `hub.js` syncs on load, tab-hide, return-to-launcher, and now the `online`
   event. `syncMyStats` mirrors the whole store every time, so any retry repairs a missed period.
 
+### A dev server never writes to the family database (2026-08-22)
+
+`stats-net.js` refuses every WRITE when `location.hostname` is localhost - `syncMyStats`,
+`claimUsername` and `adminReleaseUsername` all return false before touching the network.
+**Reads stay on**, because a leaderboard with no data in it cannot be checked.
+
+Written after it happened three times in one day. `test-visual.mjs`'s PLAY probes mint a fresh
+deviceId per run and had left 17 throwaway "Visual Test" players on the board; then two sessions
+verifying UI changes in a localhost preview seeded a scratch profile, loaded the hub, and
+`syncMyStats()` mirrored the scratch store straight onto the real leaderboard, where Matt found it
+and asked twice. **`syncMyStats()` sends `loadStats()` wholesale, so ANY local store becomes a
+public record on the next hub load.** Cleaning up afterwards is not a fix: it depends on the person
+who made the mess noticing it.
+
+- The skip is **not silent** (rule 6): it `console.warn`s what was blocked and why, and writes
+  `lastErr: 'dev-origin-blocked'` into `gamehub.syncHealth.v1`.
+- **Not covered, deliberately**: a dev server reached over the LAN by IP (phone to laptop). Every
+  incident so far has been localhost, and guessing at private ranges is the worse trade.
+- To test the sync itself, opt in per browser instead of editing the file:
+  `localStorage.setItem('gamehub.devAllowSync.v1', '1')`.
+- Cleaning up what did leak: `delete-test-players.mjs` at the repo root, which refuses any node
+  that has an h2h, is somebody's recorded opponent, or owns a username.
+
 **Diagnosing "my history is missing" (do this before suspecting the leaderboard):** on the player's
 own device, open the hub and run `JSON.parse(localStorage['gamehub.syncHealth.v1'])`. `ok:false`, or
 `localPlays` well above `remotePlays`, means the data is fine locally and the SYNC is the problem.

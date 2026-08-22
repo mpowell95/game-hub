@@ -38,6 +38,41 @@ export async function init() {
 // asking why they were not on the board. A sync that cannot fail loudly is a sync you cannot trust.
 const SYNC_KEY = 'gamehub.syncHealth.v1';
 
+// A DEV SERVER NEVER WRITES TO THE FAMILY'S DATABASE. Reads are fine and stay on - a leaderboard
+// with no data in it cannot be checked - but nothing local may ever create or change a players/ or
+// usernames/ record.
+//
+// This is not hypothetical. It has happened three times: test-visual.mjs's PLAY probes minted a
+// throwaway "Visual Test" player on every run until 17 of them were deleted on 2026-08-22, and
+// twice that same day a session verifying a change in a localhost preview seeded a profile, loaded
+// the hub, and watched syncMyStats() mirror its scratch data straight onto the real leaderboard
+// where Matt then found it. syncMyStats() sends loadStats() wholesale, so ANY local store becomes a
+// public record on the next hub load. Cleaning up afterwards is not a fix - it depends on the
+// person who made the mess noticing it.
+//
+// NOT COVERED, deliberately: a dev server reached over the LAN by IP (192.168.x, phone-to-laptop).
+// Every incident so far has been localhost, and a hostname allowlist that tries to guess at private
+// ranges is a worse trade than a short honest one.
+//
+// To test the sync itself, opt in per browser rather than editing this file:
+//   localStorage.setItem('gamehub.devAllowSync.v1', '1')
+const DEV_SYNC_OK = 'gamehub.devAllowSync.v1';
+function isDevOrigin() {
+  try {
+    const h = String(location.hostname || '').toLowerCase();
+    return h === 'localhost' || h === '0.0.0.0' || h === '127.0.0.1' || h === '::1' || h === '[::1]' || h.endsWith('.localhost');
+  } catch { return false; }
+}
+/** True when this page may write. Loud and recorded when it may not - a skipped write that says
+ *  nothing is the exact shape of the bug THE LAW rule 6 exists for, even when the skip is wanted. */
+function writesAllowed(what) {
+  if (!isDevOrigin()) return true;
+  try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
+  console.warn(`[stats-net] ${what} BLOCKED: this is a dev origin (${location.hostname}) and dev never writes to the family database. `
+    + `Local play is still recorded on this device. To allow it in this browser: localStorage.setItem('${DEV_SYNC_OK}', '1')`);
+  return false;
+}
+
 function readSyncHealth() {
   try { return JSON.parse(localStorage.getItem(SYNC_KEY) || 'null') || {}; } catch { return {}; }
 }
@@ -75,6 +110,10 @@ export async function syncMyStats() {
   // node (see game-stats.js's "WHOSE stats these are" block).
   const id = statsId();
   const localPlays = localPlayCount();
+  if (!writesAllowed('syncMyStats')) {
+    writeSyncHealth({ ok: false, lastErrAt: Date.now(), lastErr: 'dev-origin-blocked', localPlays });
+    return false;
+  }
   if (!(await init())) {
     // Not necessarily a bug (offline play is supported and expected), but it must be VISIBLE: while
     // this persists, this device's history exists nowhere but this device.
@@ -178,7 +217,7 @@ export async function usernameStatus(name, myCode) {
 
 /** Claim `name` for myCode, releasing a previously-owned `prevName` (only if I owned it). Best-effort. */
 export async function claimUsername(name, myCode, prevName) {
-  if (!myCode || !(await init())) return false;
+  if (!myCode || !writesAllowed('claimUsername') || !(await init())) return false;
   try {
     const key = uname(name);
     if (key) await _api.update(_api.ref(_db, 'usernames/' + encodeKey(key)), { code: String(myCode).toUpperCase(), at: _api.serverTimestamp() });
@@ -195,7 +234,7 @@ export async function claimUsername(name, myCode, prevName) {
 /** Admin escape hatch: force-release a name reservation regardless of owner. */
 export async function adminReleaseUsername(name) {
   const key = uname(name);
-  if (!key || !(await init())) return false;
+  if (!key || !writesAllowed('adminReleaseUsername') || !(await init())) return false;
   try { await _api.remove(_api.ref(_db, 'usernames/' + encodeKey(key))); return true; }
   catch { return false; }
 }
