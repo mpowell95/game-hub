@@ -378,6 +378,9 @@ export class SkeeballUI {
       });
     }
     const devReset = this.root.querySelector('[data-role="devreset"]');
+    // The screen reserves a strip for it (see .sk-hasdev). Without that the button, being out
+    // of flow, lands straight on top of Play.
+    this.root.classList.toggle('sk-hasdev', !!devReset);
     if (devReset) devReset.addEventListener('click', () => this._devResetStats());
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
     // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
