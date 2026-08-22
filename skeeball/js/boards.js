@@ -437,7 +437,11 @@ export const BOARDS = [
     // same throw - the face is the only thing that changes). troughTenHalfW and ringSegments are
     // deliberately absent: both are classic-only vestiges (see the spec, sections 6 and 12).
     geom: {
-      ballR: X * 0.35,
+      // THE SMALL BALL (Matt's real-machine video, 2026-08-22): the real Basket Fever throws a
+      // small ball into GENEROUS baskets - measured off the footage, the mouth is about twice
+      // the ball. POPONGO's ping-pong size exactly (ball.ratio waived below, its precedent),
+      // which is also what lets three big mouths fit one row within the rail-gap floors.
+      ballR: X * 0.28,
       ballMass: 0.18,
       laneLen: 1.40,
       laneW: X * 4.875,
@@ -446,15 +450,19 @@ export const BOARDS = [
       // STEEPER THAN THE CLASSIC'S RAMP, deliberately (Matt, 2026-08-22: the throw must read as
       // SHOOTING A BASKETBALL, not rolling a skeeball). Final segment 70 degrees - the spec's
       // allowed maximum (section 5, 55-70) - in six even steps so the ball can track the
-      // surface. Range up the face barely moves (R goes as cos(t)sin(t - tilt): 0.289 v^2 vs
-      // 0.285 at 64 degrees) but the peak is higher and the descent steeper, so the ball drops
-      // INTO a basket from above instead of skimming up the face. Re-swept after: all nine
-      // hoops clean-capturable, 0 emergencies.
+      // surface. Range up the face barely moves (R goes as cos(t)sin(t - tilt)/cos^2(tilt))
+      // but the peak is higher and the descent steeper, so the ball drops INTO a basket from
+      // above instead of skimming up the face. Re-swept after: all nine hoops clean-capturable,
+      // 0 emergencies.
       humpAngles: [0.2036, 0.4072, 0.6109, 0.8145, 1.0181, 1.2217],
       troughLen: 0.225,
       troughDepth: 0.15,
       boardLipY: 0.42,
-      boardTilt: 0.7854,
+      // 50 DEGREES - the spec's maximum tilt (section 3, 40-50), against the classic's 45. The
+      // real board is vertical (the video: a miss is always FALLING, never rolling); this is as
+      // close as a capture-on-a-face engine gets, and with the slick dead face below it turns
+      // a miss into a quick slide off the bottom instead of a pinball roll among the rims.
+      boardTilt: 0.8726,
       boardW: 1.00,
       boardLen: 1.3818,
       railH: 0.10,
@@ -467,46 +475,66 @@ export const BOARDS = [
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
-      // THE FACE: nine hoops in a 3x3 grid, each a raised cup collar (POPONGO's system) - the
-      // real Basket Fever's three shelves of three baskets, row height picking the row and aim
-      // picking the column. Every coordinate here is POPONGO-PROVEN: the three rows are its
-      // bot/mid/top rows (v 2.3125X / 5.6125X / 8.9125X), the outer columns its measured
-      // rail-safe lateral (u ±2.07X - collar-to-rail wall gap 0.785X), and collarH its measured
-      // 0.35X (0.5X made upper slots unreachable at every cell of POPONGO's sweep). Same-row
-      // wall gap 2.07X − 1.165X = 0.905X, row-to-row 3.3X − 1.165X = 2.135X - everything over
-      // the 0.78X floor with nothing merged (a collar near a FLAT wall is a pocket even at zero
-      // gap; see DECISIONS.md#popongo-layout).
-      holeR: X * 0.5,
+      // THE FACE: nine hoops in a 3x3 grid - the real Basket Fever's three tiers of three
+      // baskets, row height picking the row and aim picking the column. Rows keep POPONGO's
+      // proven bot/mid/top v (2.3125X / 5.6125X / 8.9125X) and its rail-safe outer columns
+      // (u ±2.07X). MOUTHS ARE 1.125X (r 0.5625X, POPONGO's cup size) against the 0.28X ball -
+      // mouth/ball ~2.0, measured off Matt's real-machine footage. Collar outer reach 0.645X:
+      // same-row wall gap 2.07X − 1.29X = 0.78X, collar-to-rail 3.4375X − 2.07X − 0.645X =
+      // 0.7225X, both over the small ball's 0.64X floor (POPONGO's lattice standard; a collar
+      // near a FLAT wall is a pocket even at zero gap - DECISIONS.md#popongo-layout).
+      //
+      // EVERY HOOP IS lipLow - the tilted rim (machine.js's blended collar profile, its first
+      // shipped use): the up-slope back wall stands full height and the player-facing lip drops
+      // to lipLowFrac of it, so relative to the ground the rim plane leans toward horizontal -
+      // the real machine's baskets hang with mouths parallel to the ground (Matt's video). A
+      // ball out of the air drops in over the low front; an overshoot is caught by the tall
+      // back.
+      holeR: X * 0.5625,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
-        lowC: { u: 0, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
-        lowR: { u: X * 2.07, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
-        midL: { u: -X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
-        midC: { u: 0, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
-        midR: { u: X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
-        topL: { u: -X * 2.07, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
-        topC: { u: 0, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
-        topR: { u: X * 2.07, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
+        lowL: { u: -X * 2.07, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        lowC: { u: 0, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        lowR: { u: X * 2.07, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        midL: { u: -X * 2.07, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        midC: { u: 0, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        midR: { u: X * 2.07, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        topL: { u: -X * 2.07, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        topC: { u: 0, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        topR: { u: X * 2.07, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
       },
+      lipLowFrac: 0.45,
 
       minSpeed: 2.60,
       maxSpeed: 6.60,
       aimMax: 0.45,
 
+      // A SLICK, DEAD FACE, unlike every other board (Matt's video: the real board is vertical,
+      // so a miss FALLS - it never rolls around among the baskets). Low grip + low bounce means
+      // a ball that does not drop into a mouth slides straight off the bottom at 50 degrees
+      // instead of pinballing between rims for seconds. Rims slightly livelier than POPONGO's
+      // cups so a rim hit kicks away crisply.
       mat: {
-        boardFric: 0.62,
-        boardRest: 0.08,
+        boardFric: 0.12,
+        boardRest: 0.05,
         woodFric: 0.30,
         woodRest: 0.22,
         wallFric: 0.04,
         wallRest: 0.42,
         ringFric: 0.06,
-        ringRest: 0.18,
+        ringRest: 0.30,
         ring100Fric: 0.06,
-        ring100Rest: 0.18,
+        ring100Rest: 0.30,
         deadFric: 0.24,
         deadRest: 0.10,
       },
+    },
+
+    specWaivers: {
+      'ball.ratio': 'Matt asked for the real Basket Fever feel from his machine footage, '
+        + '2026-08-22: a small ball into generous baskets (mouth ~2x the ball). At the 0.35X '
+        + 'ball three big mouths cannot fit one row inside the rail-gap floors, so the ball is '
+        + '0.28X (POPONGO\'s waived size) and the mouths 1.125X. Sweep re-run: all nine hoops '
+        + 'clean-capturable, zero emergencies.',
     },
   },
 ];

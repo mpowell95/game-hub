@@ -956,6 +956,47 @@ export class Renderer {
     }
     x.globalAlpha = 1;
 
+    // BASKET FEVER's three tiers (Matt's real-machine footage): a cream shelf band behind each
+    // row of hoops with a shadow line under it, and yellow stars scattered on the blue panels
+    // between - the real cabinet's stepped look, as PAINT only. GUARD: paint, never geometry -
+    // a physical ledge on the face is a three-contact pocket that locks the solver.
+    if (this.board.dressing === 'basketball') {
+      const rows = [...new Set(Object.values(G.holes).map((h) => h.v))].sort((a, b) => a - b);
+      for (const rv of rows) {
+        const top = V(rv + G.holeR + 0.075);
+        const bot = V(rv + G.holeR - 0.01);
+        x.fillStyle = '#efe7d2';
+        x.fillRect(0, top, W, bot - top);
+        x.fillStyle = 'rgba(0,0,0,0.22)';
+        x.fillRect(0, bot - 4, W, 4);
+      }
+      // The stars: a fixed pseudo-scatter (i-hashed, no rng) kept between the bands.
+      const star = (sx, sy, r, rot) => {
+        x.save();
+        x.translate(sx, sy);
+        x.rotate(rot);
+        x.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const rr = k % 2 ? r * 0.42 : r;
+          const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+          x[k ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        x.closePath();
+        x.fill();
+        x.restore();
+      };
+      x.fillStyle = '#ffd23f';
+      for (let i = 0; i < 26; i++) {
+        const su = ((i * 0.383 + 0.13) % 1) * G.boardW - G.boardW / 2;
+        const sv = ((i * 0.617 + 0.07) % 1) * G.boardLen;
+        // skip stars that would land inside a band or on a mouth
+        const nearBand = rows.some((rv) => Math.abs(sv - (rv + G.holeR + 0.03)) < 0.06);
+        const nearHole = Object.values(G.holes).some((h) => Math.hypot(su - h.u, sv - h.v) < h.r + 0.05);
+        if (nearBand || nearHole) continue;
+        star(U(su), V(sv), 9 + (i % 3) * 4, (i * 0.7) % (Math.PI * 2));
+      }
+    }
+
     // The 10 slot across the bottom edge, and its corner 0s - a painted zone, and only that:
     // the values that used to go with it are on the rings now (see _ringNumbers). A cup board
     // has no bottom slot - its lowest cup is just the nearest cup - so the band is the
@@ -1135,11 +1176,12 @@ export class Renderer {
     this.scene.add(mesh);
   }
 
-  /** BASKET FEVER's hoop: the physics collar drawn as an orange WIRE basket - a rim torus at
-   *  the collar's exact top (the height the ball really rattles on), a thinner mid ring, and
-   *  vertical struts down to the face, all at the collar wall's radius. Cosmetic: the solid the
-   *  ball hits is machine.js's collar boxes, and every wire sits ON that wall's surface, so
-   *  nothing the ball does contradicts what is drawn. */
+  /** BASKET FEVER's hoop: the physics collar drawn as an orange WIRE basket, matched to Matt's
+   *  real-machine footage - a rim wire that FOLLOWS machine.js's blended lipLow profile (tall
+   *  up-slope back, low player-facing front - the rim seen is the rim hit), a tapered wire body
+   *  down to a small bottom ring, and struts between. Cosmetic beyond the rim: the solid the
+   *  ball hits is machine.js's collar boxes at the rim's radius; the taper sits inside them,
+   *  like a real basket's mesh inside its mounting ring. */
   _wireBasket(H, color) {
     const G = this.G;
     const R = H.r + G.collarThick / 2;
@@ -1148,24 +1190,35 @@ export class Renderer {
     // the face gets no key light, and a thin wire even less.
     const mat = this._mat({ color: col, roughness: 0.4, metalness: 0.25, emissive: col, emissiveIntensity: 0.4 });
     const g = new THREE.Group();
-    const rim = new THREE.Mesh(this._track(new THREE.TorusGeometry(R, 0.007, 8, 36)), mat);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = H.collarH;
-    g.add(rim);
-    const mid = new THREE.Mesh(this._track(new THREE.TorusGeometry(R, 0.004, 6, 30)), mat);
-    mid.rotation.x = Math.PI / 2;
-    mid.position.y = H.collarH * 0.52;
-    g.add(mid);
-    const strutGeo = this._track(new THREE.CylinderGeometry(0.0035, 0.0035, H.collarH, 6));
-    const N = 10;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const s = new THREE.Mesh(strutGeo, mat);
-      s.position.set(Math.cos(a) * R, H.collarH / 2, Math.sin(a) * R);
+    const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
+    const hAt = (phi) => (H.lipLow
+      ? H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2)
+      : H.collarH);
+    const Rbot = R * 0.66;
+    const ring = (radius, yAt, wire) => {
+      const pts = [];
+      for (let i = 0; i < 24; i++) {
+        const p = (i / 24) * Math.PI * 2;
+        pts.push(new THREE.Vector3(Math.cos(p) * radius, yAt(p), Math.sin(p) * radius));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts, true);
+      const m = new THREE.Mesh(this._track(new THREE.TubeGeometry(curve, 48, wire, 6, true)), mat);
+      m.castShadow = true;
+      g.add(m);
+    };
+    ring(R, hAt, 0.0065);                            // the rim, on the physics profile
+    ring(Rbot, () => 0.006, 0.0035);                 // the basket's small bottom ring
+    for (let i = 0; i < 8; i++) {                    // tapered struts between them
+      const a = (i / 8) * Math.PI * 2;
+      const top = new THREE.Vector3(Math.cos(a) * R, hAt(a), Math.sin(a) * R);
+      const bot = new THREE.Vector3(Math.cos(a) * Rbot, 0.006, Math.sin(a) * Rbot);
+      const d = bot.clone().sub(top);
+      const s = new THREE.Mesh(this._track(new THREE.CylinderGeometry(0.003, 0.003, d.length(), 5)), mat);
+      s.position.copy(top.clone().add(bot).multiplyScalar(0.5));
+      s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
       s.castShadow = true;
       g.add(s);
     }
-    rim.castShadow = true;
     this._onFace(g, H.u, H.v, 0);
     this.scene.add(g);
   }
@@ -1180,8 +1233,11 @@ export class Renderer {
   _hoopBackboard(H, cup, glow) {
     const G = this.G;
     const R = H.r + G.collarThick + 0.006;
-    const PLATE_H = H.collarH * 1.9;
-    const HALF_ARC = 50 * Math.PI / 180;
+    // 2.6x the collar so the card stands well proud of the rim's tall back - the real cabinet's
+    // number cards are prominent (Matt's footage), and the lower cards were hiding behind their
+    // own rims at 1.9x.
+    const PLATE_H = H.collarH * 2.6;
+    const HALF_ARC = 55 * Math.PI / 180;
     const PPM = 2200;
     const lab = String(cup.label);
 

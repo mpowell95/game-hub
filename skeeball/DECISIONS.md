@@ -197,6 +197,18 @@ physics (the needH rim rule): all nine hoops clean-capturable, 0 emergencies in 
 slowest settle 9.1s; the ladder moved to low p≈0.28, middle p≈0.52, top p≈0.8, the 100 straight
 at p0.76-0.8.
 
+The real-machine pass, same day again, against Matt's footage of an actual Basket Fever cabinet
+(in Machines/Machine 4 - Basketball/). Three measured facts drove it: the real ball is SMALL
+against generous baskets (mouth ~2x the ball - the first draft had it at 1.43 and considered
+going BIGGER, which the footage reversed); the baskets hang with mouths near-parallel to the
+ground; and a miss always FALLS off the vertical board - it never rolls around. So: ball 0.28X
+(ball.ratio waived, POPONGO's size) with mouths 1.125X; every hoop lipLow at lipLowFrac 0.45
+(the tilted-rim profile's first shipped use) on a 50-degree face (the spec's tilt maximum); and
+a slick dead board mat (boardFric 0.12, boardRest 0.05) with livelier rims (ringRest 0.30) so a
+miss slides straight off. Measured across the 459-throw sweep: slowest settle 9.07s -> 3.33s,
+all nine hoops still clean-capturable, 0 emergencies, ladder low p≈0.24-0.32 / mid p≈0.48-0.6 /
+top p≈0.72-0.84 with the 100 straight at p0.72-0.84.
+
 ## Swipe and power
 
 ### Measured swipe data
