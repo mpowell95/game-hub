@@ -152,6 +152,21 @@
   text-align: center;
 }
 .sk-root .sk-slide-name { margin: 0 0 clamp(6px, 1.2vh, 10px); font-size: clamp(18px, 4.6vw, 22px); font-weight: 800; letter-spacing: 0.02em; color: var(--sks-ink); }
+/* The dev bypass's marker: this machine is open for TESTING, not earned (ui.js devAll). The
+   word carries the meaning; the tint is emphasis, never the signal. */
+.sk-root .sk-devtag {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--sks-line);
+  background: var(--sks-surface-2);
+  color: var(--sks-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
 .sk-root .sk-slide-machine {
   /* GUARD: IT FLEXES, IT NEVER FIXES. This box takes the slack the card has spare so the
      screen is not mostly white space - but it must YIELD when there is none, or it pushes

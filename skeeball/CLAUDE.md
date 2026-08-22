@@ -395,6 +395,10 @@ and two black **equalizers**.
   the synced store). `unlocksEarned()` in boards.js stays score-only and ignores goals entries.
 - **The locked slide grew its MACHINE-SPEC section 17 sliver**: the real render, CSS-cropped,
   greyed and blurred (`.sk-lock-peek`), behind the padlock.
+- **The dev bypass** (Matt, 2026-08-22): a dev profile (`isDevProfile`) sees every machine OPEN
+  on the gallery, marked with a `TEST` chip, so a new machine is playable the moment it deploys.
+  Display and selection only - `sk.unlocked` is never written by it, and every other player
+  still meets the real lock.
 - **The layout was measured, not guessed, and one standing rule came out of it**: the first
   draft put midL/midR FLUSH against the side rails (the classic-100s pattern) and a sweep showed
   12% of ALL throws three-contact-locking in the crevice where the curved collar meets the flat
