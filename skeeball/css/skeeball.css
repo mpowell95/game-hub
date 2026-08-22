@@ -111,32 +111,6 @@
   min-height: 0;
 }
 
-/* Dev only (isDevProfile), and never rendered for anyone else. Deliberately plain and dashed:
-   it should not look like part of the game. Delete with the button when Skeeball ships. */
-/* GUARD: OUT OF FLOW, BUT THE SCREEN STILL RESERVES ITS STRIP. In the column it took ~55px off
-   the card and squeezed the setup screen; pinned to the viewport with nothing reserved it
-   landed on top of Play (Matt, 2026-08-21, both). .sk-hasdev - set by ui.js only when the
-   button actually rendered - adds the strip, so a non-dev profile pays nothing for it. */
-/* The strip. Only ever present for a dev profile. */
-.sk-root.sk-hasdev .sk-setup { padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
-
-.sk-root .sk-devreset {
-  position: absolute;
-  left: 50%;
-  bottom: calc(4px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  z-index: 5;
-  min-height: 32px;
-  padding: 0 16px;
-  border-radius: 8px;
-  border: 1px dashed var(--sks-line);
-  background: transparent;
-  color: var(--sks-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-
 .sk-root .sk-title {
   margin: 0;
   font-size: clamp(20px, 5.5vw, 26px);
@@ -144,15 +118,6 @@
   text-align: center;
   color: var(--sks-ink);
 }
-
-.sk-root .sk-statline {
-  margin: 0;
-  text-align: center;
-  font-size: 13.5px;
-  color: var(--sks-muted);
-}
-
-.sk-root .sk-statline b { color: var(--sks-ink); font-variant-numeric: tabular-nums; }
 
 /* Machine carousel (batch G, 2026-08-18): a scroll-snap row of machine slides. One slide per
    machine, each showing that machine's ACTUAL board (render.js render, cached as an image, never
@@ -329,70 +294,6 @@
   .sk-root .sk-hp-cap .c2 { animation: none; opacity: 0; }
 }
 
-/* Machine rows inside the accordion body: tappable cards, selected one marked. */
-.sk-root .sk-mrow {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 1.5px solid var(--sks-line);
-  border-radius: 12px;
-  background: var(--sks-surface);
-  color: var(--sks-ink);
-  padding: 12px 14px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.sk-root .sk-mrow + .sk-mrow { margin-top: 8px; }
-
-.sk-root .sk-mrow.is-selected { border-color: var(--gh-accent, #1769d4); box-shadow: 0 0 0 1px var(--gh-accent, #1769d4) inset; }
-
-.sk-root .sk-mrow.is-locked { opacity: 0.6; cursor: default; }
-
-.sk-root .sk-mrow > b { display: block; font-size: 16px; letter-spacing: 0.04em; }
-
-.sk-root .sk-mrow-tag { display: block; margin-top: 3px; font-size: 12.5px; color: var(--sks-muted); }
-
-.sk-root .sk-mrow-recs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
-  margin-top: 10px;
-}
-
-.sk-root .sk-mrow-recs > span { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-
-.sk-root .sk-mrow-recs em {
-  font-style: normal;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--sks-muted);
-  white-space: nowrap;
-}
-
-.sk-root .sk-mrow-recs b {
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The plain text how-to link, escoba's shape. */
-.sk-root .sk-howto-link {
-  border: 0;
-  background: none;
-  padding: 6px;
-  font: inherit;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--sks-muted);
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
 /* --------------------------------------------------------------------- play --- */
 
 .sk-root .sk-play-wrap {
@@ -531,68 +432,6 @@
   56%  { opacity: 0.1; }
   68%  { opacity: 1; }
   100% { opacity: 1; transform: translateX(-50%) scale(1); }
-}
-
-.sk-root .sk-final-label {
-  margin: 4px 0 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-align: center;
-  color: var(--sk-dim);
-}
-
-.sk-root .sk-final {
-  margin: 2px 0 12px;
-  text-align: center;
-  font-size: 54px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--sk-amber);
-  text-shadow: 0 0 22px rgba(255, 157, 61, 0.5);
-}
-
-.sk-root .sk-records-over { margin-bottom: 14px; }
-
-.sk-root .sk-newpill {
-  display: inline-block;
-  margin-left: 8px;
-  vertical-align: 2px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: #2a1608;
-  background: var(--sk-gold);
-  border-radius: 999px;
-  padding: 2px 7px;
-}
-
-.sk-root .sk-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.sk-root .sk-tile {
-  background: var(--sk-panel-2);
-  border: 1px solid var(--sk-line);
-  border-radius: 9px;
-  padding: 10px 8px;
-  text-align: center;
-}
-
-.sk-root .sk-tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-
-.sk-root .sk-tile span {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--sk-dim);
 }
 
 /* Game over overlay - hub-standard card (batch G, 2026-08-18). Built on css/ui.css's
