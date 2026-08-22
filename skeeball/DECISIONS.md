@@ -188,6 +188,15 @@ from p≈0.44, top from p≈0.72; side hoops need aim (lowL at p0.20/a-0.38, top
 the 100 (topC) takes a straight throw at p0.72-0.84. Row height picks the row, aim picks the
 column, which is the real machine's game.
 
+Same day, at Matt's ask ("shooting a basketball... needs to reflect that"), the ramp steepened
+to a 70-degree final segment (the spec maximum) in six even steps. Range up an incline goes as
+cos(t)sin(t - tilt), so at the 45-degree face the reach barely moves (0.289 v^2 at 70 vs 0.285
+at 64 degrees) while the peak rises and the descent steepens - the ball drops into a basket
+from above instead of skimming up to it. Re-swept at 70 degrees under the post-POPONGO capture
+physics (the needH rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws,
+slowest settle 9.1s; the ladder moved to low p≈0.28, middle p≈0.52, top p≈0.8, the 100 straight
+at p0.76-0.8.
+
 ## Swipe and power
 
 ### Measured swipe data

@@ -452,6 +452,20 @@ ball dropping in out of the air - no new physics, no new capture rule.
   read `sk.boards.basketball`, synced and cross-device merged by `js/arcade-scores.js`.
 - **Unlock**: `{ board: 'popongo', goals: true }` - complete POPONGO's three objectives. Same
   goals shape as POPONGO's own unlock; `ui.js` needed nothing.
+- **The basketball dressing** (Matt, 2026-08-22: "cups instead of basketball baskets... shooting
+  a basketball"): the board entry carries `dressing: 'basketball'` and `render.js` branches on
+  it three ways - the ball is an orange BASKETBALL (seamed texture in `_buildBall`, orange tray
+  balls), each collar is drawn as an orange WIRE basket (`_wireBasket`: rim torus at the physics
+  collar's exact top, mid ring, ten struts - all on the collar wall's surface, so the rim seen
+  is the rim hit), and each value rides a white mini BACKBOARD with a red-boxed number on the
+  hoop's up-slope side (`_hoopBackboard`; the part above the rim is cosmetic-only). Physics is
+  untouched by all three; THE CLASSIC and POPONGO render exactly as before (no `dressing`).
+- **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
+  spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
+  up the face barely moves but the peak is higher and the descent steeper, dropping the ball
+  into a basket from above. Re-swept at 70 degrees under the post-POPONGO capture physics
+  (the `needH` rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws; ladder
+  low row from p~0.28, middle p~0.52, top p~0.8, the 100 straight at p0.76-0.8.
 
 ## The records panel (the four numbers every machine shows)
 
