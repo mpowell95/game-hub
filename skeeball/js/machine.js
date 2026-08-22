@@ -269,24 +269,14 @@ export function buildMachine(G) {
   // leave, and it still resolves (arcs out, comes down, scores what it earned). Do not put a
   // canopy back to "fix" a ball leaving the machine. See DECISIONS.md#removed-features-and-why-they-stay-removed.
 
-  // --- the front glass: the pane every real cabinet has above the hump --------------------------
-  // Launch arcs pass UNDER its bottom edge on the way in (they cross the crest low); what it
-  // stops is the rare hard ricochet flying back out of the machine at half height. Rendered as
-  // a faint sheen; physically dead so a ball that meets it drops into the trough.
-  solids.push({
-    part: 'glass',
-    // GUARD: bottom edge must clear the LAUNCH ARC, or every throw dies on the glass instead of
-    // launching. Height must be re-checked whenever the launch angle or hump geometry changes.
-    pos: [0, 1.15, -(G.laneLen + G.humpLen) + 0.03],
-    half: [G.boardW / 2 + railT, 0.4, 0.008],
-    rot: null,
-  });
 
-  // --- invisible containment (physics only; render skips part 'keep') ---------------------------
+  // --- invisible containment: FOUR WALLS, NO LID (physics only; render skips part 'keep') -------
+  // GUARD: nothing spans the top of the machine. A ball thrown hard enough leaves, and resolves
+  // on the way down - physics.js catches anything below y -0.3 and the stall watchdog covers the
+  // rest. Do not add a ceiling, a canopy or a pane over the crest.
   const keepH = 1.6;
   const zMin = top[2] - 0.3;
   solids.push(
-    { part: 'keep', pos: [0, keepH, (zMin + 0.4) / 2], half: [1.2, 0.02, (0.4 - zMin) / 2], rot: null },        // ceiling
     { part: 'keep', pos: [0, keepH / 2, 0.45], half: [1.2, keepH / 2, 0.02], rot: null },                        // behind the player
     { part: 'keep', pos: [0, keepH / 2, zMin], half: [1.2, keepH / 2, 0.02], rot: null },                        // behind the backboard
     { part: 'keep', pos: [-(G.boardW / 2 + railT + 0.04), keepH / 2, (zMin + 0.4) / 2], half: [0.02, keepH / 2, (0.4 - zMin) / 2], rot: null },
