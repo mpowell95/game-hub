@@ -436,10 +436,25 @@ Basketball/` (photos): nine orange wire baskets on three shelves, 10/20/10 low, 
 ball dropping in out of the air - no new physics, no new capture rule.
 
 - **The layout is a sub-lattice of POPONGO's proven one**: rows at its bot/mid/top v
-  (2.3125X / 5.6125X / 8.9125X), outer columns at its measured rail-safe u (±2.07X), collars at
-  its measured 0.35X. Every wall gap ≥ 0.78X, nothing merged. Slot ids `lowL`..`topR`, frozen
-  (THE LAW rule 5). Sweep at build: all nine slots clean-capturable, **0 emergencies in 459
-  throws** (DECISIONS.md#basket-fever-layout has the ladder).
+  (2.3125X / 5.6125X / 8.9125X), outer columns at its measured rail-safe u (±2.07X). Slot ids
+  `lowL`..`topR`, frozen (THE LAW rule 5). Every sweep to date: all nine slots
+  clean-capturable, **0 emergencies in 459 throws** (DECISIONS.md#basket-fever-layout).
+- **Rebuilt against Matt's real-machine footage the same day** (a Basket Fever cabinet playing,
+  in `Machines/Machine 4 - Basketball/`; watch it before retuning anything here):
+  - **Small ball, generous baskets**: ball 0.28X (`ball.ratio` waived - POPONGO's exact size
+    and precedent), mouths 1.125X (r 0.5625X), mouth/ball ~2.0 measured off the footage. Wall
+    gaps 0.78X same-row / 0.7225X to the rails, over the small ball's 0.64X floor.
+  - **Every hoop is `lipLow`** - the tilted-rim collar profile's first shipped use: tall
+    up-slope back, player-facing lip at `lipLowFrac` 0.45, so the rim plane leans toward
+    horizontal like the real baskets (mouths parallel to the ground). The wire-basket renderer
+    follows the same blended profile, vertex-for-vertex in spirit: the rim seen is the rim hit.
+  - **50-degree face (the spec max) + a slick dead board mat** (`boardFric` 0.12, `boardRest`
+    0.05; rims livelier at `ringRest` 0.30): the real board is vertical and a miss always
+    FALLS, never rolls. Measured: slowest settle dropped 9.07s -> 3.33s across the sweep, with
+    the same clean capture of all nine hoops.
+  - **The three tiers are painted** (`_paintField`, dressing-gated): cream shelf band behind
+    each row, yellow stars on the blue between. PAINT ONLY - a physical ledge is a
+    solver-locking pocket. Backboard cards grew to 2.6x collar height.
 - **It rides the arrangement layer with a FIXED arrangement**: the cup layer is what puts a
   printed value on a collar wall (`_cupPlate`), so the nine hoops are "cups" `h10a`..`h100`
   (values frozen to ids) even though nothing about them is movable. All one orange.
