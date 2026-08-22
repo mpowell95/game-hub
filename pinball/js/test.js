@@ -10,8 +10,9 @@
 // is outside the table and that the game keeps making progress.
 
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED } from './physics.js';
-import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH } from './table.js';
-import { Pinball, mulberry32, rampPoint, MISSIONS, PTS } from './game.js';
+import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER } from './table.js';
+import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
+import { Renderer } from './render.js';
 
 let fail = 0, count = 0;
 function ok(label, cond, extra) {
@@ -453,6 +454,157 @@ function launched(g) {
   ok('result() carries the counters the stats screen renders',
     r.score === 123456 && r.jackpots === 3 && r.multiballs === 1 && r.missions === 2);
   ok('result() has no negative counters', Object.values(r).every((v) => typeof v !== 'number' || v >= 0));
+}
+
+// --- 6. the 2026-08-20 playtest ------------------------------------------------------------------
+//
+// Five defects found by watching a 35 s screen recording of one real ball, each confirmed against
+// the engine before anything was changed. Every probe below was born RED against the build that
+// shipped that day; they are here so none of them can come back quietly.
+
+{
+  // (a) THE PADDLE WAS THE DEADEST SURFACE ON THE TABLE. flipper() defaulted to e = 0.3, against
+  // 0.42 for a wall, 0.40 for the arch and 0.50 for a post - the ball lost more energy hitting the
+  // flipper than the woodwork. On a real inlane feed it arrived at 668 and was down to 80 within
+  // two touches: 12% of peak. A real flipper rubber returns 0.6-0.8.
+  const f = flipper(100, 640, 58, 0.4, -0.4);
+  const wall = seg(0, 0, 10, 0), post = circle(0, 0, 5);
+  ok('[PLAYTEST 2026-08-20] the flipper is live rubber, not the deadest thing on the table',
+    f.e >= 0.55 && f.e <= 0.8 && f.e > wall.e && f.e > post.e,
+    `flipper e=${f.e}, wall e=${wall.e}, post e=${post.e}`);
+
+  const { colliders, flippers } = buildTable({});
+  const world = { colliders, flippers, gravity: GRAVITY, drag: 0.133, nudgeX: 0, nudgeY: 0 };
+  const b = makeBall(100, 560, 30, 300);
+  let peak = 0, first = null;
+  for (let i = 0; i < Math.round(2.2 / PHYS_DT) && first == null; i++) {
+    peak = Math.max(peak, Math.hypot(b.vx, b.vy));
+    step(world, [b], (k) => { if (k === 'flipper') first = Math.hypot(b.vx, b.vy) / peak; });
+    if (b.y > DRAIN_Y) break;
+  }
+  ok('[PLAYTEST 2026-08-20] a ball keeps most of its speed off the first paddle contact',
+    first != null && first > 0.5, `kept ${((first ?? 0) * 100).toFixed(0)}% (shipped build: 31%)`);
+}
+
+{
+  // (b) SLINGSHOT POINTS HAD NO COOLDOWN. _contact awarded PTS.sling unconditionally, and the
+  // speed < 24 filter that debounces every other switch explicitly exempts slings - so a ball
+  // rattling in the pocket scored 250 a frame. The recording banked 17,400 points that way on ONE
+  // ball while the upper playfield went untouched and the mission banner never moved.
+  const g = new Pinball({ difficulty: 'medium' });
+  g.start(); g.phase = 'play';
+  const before = g.score;
+  for (let i = 0; i < 40; i++) { g.time += 0.02; g._contact('seg', 'slingL', 100, 550, 300, g.balls[0]); }
+  const paid = g.score - before;
+  ok('[PLAYTEST 2026-08-20] forty slingshot contacts in 0.8 s do not pay forty times',
+    paid <= PTS.sling * 3, `paid ${paid} for 40 contacts (the shipped build would pay ${PTS.sling * 40})`);
+
+  const s2 = g.score;
+  g.time += 5;
+  g._contact('seg', 'slingL', 100, 550, 300, g.balls[0]);
+  ok('[PLAYTEST 2026-08-20] ...but a genuine slingshot hit later still scores',
+    g.score - s2 === PTS.sling, `${g.score - s2}`);
+}
+
+{
+  // (c) NOTHING COULD SEE A BALL LOOPING. The stuck watchdog measures DISPLACEMENT from an anchor,
+  // so it only ever catches a ball that is wedged and still; a ball ping-ponging between the two
+  // slingshots travels 60+ units a cycle and resets that anchor several times a second. The
+  // recording showed 26 s of exactly that, and across 708 s of simulated play the watchdog fired
+  // zero times. The fix is a second watchdog measuring TIME BELOW THE SLINGSHOTS WHILE MOVING.
+  const g = new Pinball({ difficulty: 'medium' });
+  g.start(); g.phase = 'play';
+  const b = g.balls[0];
+  b.held = false; b.onPlunger = false; b.ax = null; b.ay = null; b.restTime = 0; b.loopFor = 0;
+  b.x = 184; b.y = 560; b.vx = 420; b.vy = 0;
+  let broke = false, worst = 0;
+  const orig = g.emit.bind(g);
+  g.emit = (e) => { if (e.type === 'ballsearch') broke = true; return orig(e); };
+  for (let i = 0; i < 60 * 12; i++) {
+    // pin the ball in the pocket the way the two slingshots do, and never flip
+    if (b.live && b.y > 470) { b.y = Math.max(b.y, 520); if (Math.abs(b.vx) < 200) b.vx = b.vx < 0 ? -420 : 420; }
+    g.update(1 / 60);
+    if (!g.balls[0] || g.balls[0] !== b || b.held) break;
+    worst = Math.max(worst, b.loopFor || 0);
+    if (broke) break;
+  }
+  ok('[PLAYTEST 2026-08-20] a ball looping in the slingshot pocket is shoved out, not left there',
+    broke, `loopFor peaked at ${worst.toFixed(1)}s, shoved=${broke}`);
+  // `worst > 0.5` is not decoration: without it this passes vacuously on a build that has no
+  // loopFor at all, which is exactly the build it is supposed to fail against.
+  ok('[PLAYTEST 2026-08-20] the loop watchdog is a hard time bound, not a tuning knob',
+    worst > 0.5 && worst <= 6.5, `${worst.toFixed(1)}s`);
+}
+
+{
+  // (d) THE FLIPPER WENT WHITE THE MOMENT YOU PRESSED IT. The paddle gradient was anchored to a
+  // 16-unit VERTICAL band at the pivot; a raised paddle's tip sits ~24 units ABOVE the pivot, so the
+  // whole swept paddle clamped to stop 0 (#ffffff) - the same white the static dividers and rails
+  // beside it are painted. Both flips visible in the recording were misses. The gradient has to
+  // follow the paddle's own axis instead, so it shades identically at every angle.
+  const calls = [];
+  const noop = () => {};
+  const stub = {
+    save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop,
+    fill: noop, arc: noop, closePath: noop, translate: noop, rotate: noop, scale: noop,
+    setTransform: noop, clip: noop, fillText: noop,
+    createLinearGradient(x0, y0, x1, y1) { calls.push([x0, y0, x1, y1]); return { addColorStop: noop }; },
+    createRadialGradient() { return { addColorStop: noop }; },
+    measureText() { return { width: 10 }; },
+  };
+  const r = Object.create(Renderer.prototype);
+  r._post = noop;
+  const mk = (angle) => {
+    calls.length = 0;
+    r._drawFlippers(stub, { flippers: [flipper(116, 640, 58, angle, angle, { id: 'flipL' })] });
+    return calls[0];
+  };
+  const rest = mk(27 * Math.PI / 180);
+  const up = mk(-25 * Math.PI / 180);
+  const span = (c) => (c ? Math.hypot(c[2] - c[0], c[3] - c[1]) : 0);
+  const mid = (c) => (c ? [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2] : [0, 0]);
+  // The paddle midpoint at the raised angle, which is where the gradient has to be centred. The old
+  // build centred it on the PIVOT at every angle, so comparing against the pivot is what makes this
+  // probe fail on the shipped code instead of passing vacuously.
+  const upMid = [116 + Math.cos(-25 * Math.PI / 180) * 58 / 2, 640 + Math.sin(-25 * Math.PI / 180) * 58 / 2];
+  ok('[PLAYTEST 2026-08-20] the paddle gradient turns with the paddle instead of being pinned down-screen',
+    !!rest && !!up && (Math.abs(rest[0] - up[0]) > 1 || Math.abs(rest[1] - up[1]) > 1),
+    `rest=${rest} up=${up}`);
+  ok('[PLAYTEST 2026-08-20] ...centred on the raised paddle itself, not on its pivot, so it is never solid white',
+    Math.hypot(mid(up)[0] - upMid[0], mid(up)[1] - upMid[1]) < 1
+    && Math.abs(span(rest) - span(up)) < 0.5 && span(up) > 4,
+    `gradient centre ${mid(up).map((v) => v.toFixed(1))} vs paddle midpoint ${upMid.map((v) => v.toFixed(1))}`);
+}
+
+{
+  // (e) THE TABLE PLAYED LIKE A WALL. GRAVITY 1150 units/s^2, on a table scaled so 760 units is a
+  // real 42-inch playfield, is 1.615 m/s^2 - g*sin(9.5deg). Real machines are set to 6.5 degrees and
+  // the steepest tournament setups stop around 7. The fix is a uniform time-rescale: velocities
+  // scale by sqrt(790/1150), so every trajectory stays geometrically identical and the shot map is
+  // untouched - the ball simply travels it 21% slower.
+  const unit = 1.067 / H;                     // metres per table unit, from the long dimension
+  const deg = Math.asin(GRAVITY * unit / 9.81) * 180 / Math.PI;
+  ok('[PLAYTEST 2026-08-20] the playfield is a real pinball incline, not a vertical wall',
+    deg >= 5.5 && deg <= 7.2, `${deg.toFixed(1)} degrees (shipped build: 9.5)`);
+  ok('[PLAYTEST 2026-08-20] the ball is still a real pinball at that scale',
+    Math.abs(18 * unit * 1000 - 27) < 4, `${(18 * unit * 1000).toFixed(1)} mm`);
+
+  // The plunger skill curve has to survive the rescale: a stab still dribbles back down the lane, a
+  // full pull still makes the orbit. That relationship IS the plunger, and it is easy to lose here.
+  const reach = (v) => {
+    const { colliders, flippers } = buildTable({});
+    const world = { colliders, flippers, gravity: GRAVITY, drag: 0.133, nudgeX: 0, nudgeY: 0 };
+    const b = makeBall(PLUNGER.x, PLUNGER.y, 0, -v);
+    let minY = 9e9;
+    for (let i = 0; i < Math.round(6 / PHYS_DT); i++) {
+      step(world, [b], null); minY = Math.min(minY, b.y); if (b.y > DRAIN_Y) break;
+    }
+    return minY;
+  };
+  ok('[PLAYTEST 2026-08-20] a soft plunge still fails to make the orbit',
+    reach(PLUNGER.minV) > 150, `y=${reach(PLUNGER.minV).toFixed(0)}`);
+  ok('[PLAYTEST 2026-08-20] a full plunge still makes it',
+    reach(PLUNGER.maxV) < 120, `y=${reach(PLUNGER.maxV).toFixed(0)}`);
 }
 
 console.log(`\n${count - fail}/${count} passed`);

@@ -20,7 +20,28 @@ import {
   buildTable, PLUNGER, DROP_COUNT, ART,
 } from './table.js';
 
-export const GRAVITY = 1150;
+/**
+ * Acceleration DOWN THE PLAYFIELD, table-units/s^2 - not free fall. The table is 400 x 760 units
+ * standing in for a real 20.25 x 42 inch playfield, so one unit is 1.40 mm (which also makes the
+ * 18-unit ball 25.3 mm, against a real pinball's 27 - the scale is honest, so this number can be
+ * checked against a real machine and is, in test.js section 6e).
+ *
+ * 790 units/s^2 = 1.62 m/s^2 = g * sin(6.5 degrees), which is exactly how a real cabinet is set up.
+ * It was 1150 until 2026-08-20: g * sin(9.5 degrees), steeper than any real machine (tournament
+ * setups stop around 7) and the reason a playtester said the table felt "basically on a vertical
+ * wall."
+ *
+ * THIS WAS A UNIFORM TIME-RESCALE, NOT A PHYSICS REWRITE, and that is the part to preserve. Every
+ * velocity constant in physics.js and table.js was multiplied by sqrt(790/1150) at the same time -
+ * MAX_SPEED, the flipper sweep rate, both plunger limits, both kicker strengths, the ramp exit and
+ * its duration, the ramp's needUp gate. Since a ballistic rise is v^2/2g and both halves scaled
+ * together, EVERY TRAJECTORY IS GEOMETRICALLY IDENTICAL to the shipped table: the shot map, the
+ * clearances in table.js and the plunger skill curve are all untouched, and the ball simply travels
+ * the same paths 21% slower. Change this number on its own and all of that silently drifts - the
+ * plunger skill curve is the first thing to go, because minV is tuned to just barely FAIL to clear
+ * the arch.
+ */
+export const GRAVITY = 790;
 
 /** Difficulty is the shared 1-4 tier vocabulary on the stats WRITE path, so these keys go straight
  *  into byDiff and difficulty-tiers.js maps them for the leaderboard with no translation layer. */
@@ -54,6 +75,13 @@ const LOCKS_FOR_MULTIBALL = 3;
 const COMBO_WINDOW = 6;          // seconds a ramp/orbit combo stays alive
 const STUCK_NUDGE_AT = 3.5;      // seconds of near-zero speed before a gentle shove
 const STUCK_RESERVE_AT = 8;      // ...and before the ball is re-served outright
+// The ORBIT watchdog (see _drainTick). STUCK_* above catches a ball that is WEDGED; these catch a
+// ball that is LOOPING, which is a different failure and the one this table actually has.
+const LOOP_Y = 470;              // below this line is the slingshot/flipper pocket
+const LOOP_MIN_SPEED = 70;       // under this the ball is cradled, not looping - leave it alone
+const LOOP_BREAK_AT = 6;         // seconds of looping down there before the table shoves it out
+const LOOP_KICK_OUT = 560;       // upward speed of that shove: clears the slingshot tops with room
+const SLING_REPAY = 0.45;        // seconds before the same slingshot may score again
 const MAX_HOLD = 3;              // seconds a ball may legitimately be HELD (ramp ride is 1.15)
 
 /** Deterministic PRNG so test.js can replay a whole game exactly. */
@@ -136,6 +164,7 @@ export class Pinball {
     this.stats = { bumpers: 0, ramps: 0, orbits: 0, drops: 0, spins: 0, jackpots: 0, multiballs: 0, missions: 0, bestBall: 0 };
     this.lanes = { laneH: false, laneU: false, laneB: false };
     this.laneSets = 0;
+    this.slingPaid = {};
     this._resetDrops();
   }
 
@@ -268,7 +297,17 @@ export class Pinball {
       return;
     }
     if (id.startsWith('sling')) {
-      this._award(PTS.sling, x, y);
+      // Slingshot points are debounced PER SIDE. A slingshot is the one switch on this table that can
+      // legitimately fire again a few hundredths of a second later, and the award used to be
+      // unconditional - line 261 above also exempts slings from the low-speed filter that debounces
+      // everything else - so a ball rattling in the pocket scored 250 a frame. A 2026-08-20
+      // playtest banked 17,400 points that way on ONE ball while the upper playfield went untouched.
+      // The flash and the sound still fire on every contact; only the SCORE is gated, so the table
+      // still feels alive while a rattle stops paying like a shot.
+      if (this.time - (this.slingPaid[id] ?? -99) >= SLING_REPAY) {
+        this.slingPaid[id] = this.time;
+        this._award(PTS.sling, x, y);
+      }
       this.emit({ type: 'sling', id, x, y });
       return;
     }
@@ -655,6 +694,31 @@ export class Pinball {
           b.restTime = STUCK_NUDGE_AT * 0.4;
           this.emit({ type: 'ballsearch', soft: true });
         }
+      }
+
+      // ORBIT watchdog. The block above measures DISPLACEMENT FROM AN ANCHOR, so all it can see is a
+      // ball that is wedged and still. It is structurally blind to the failure this table actually
+      // has: a ball ping-ponging between the two slingshots travels 60+ units a cycle, so it resets
+      // that anchor several times a second while going nowhere that matters - not on a shot, not
+      // draining, just farming the slings. A 2026-08-20 playtest recorded 26 seconds of exactly that
+      // on one ball, with the entire upper playfield untouched and the mission banner unchanged, and
+      // the displacement watchdog never fired once in 708 s of simulated play.
+      //
+      // Measured as TIME SPENT BELOW THE SLINGSHOTS WHILE STILL MOVING, which a lively loop cannot
+      // fool the way it fools displacement. A cradled ball (under LOOP_MIN_SPEED) is exempt on
+      // purpose: trapping the ball on a flipper is a skill, and the displacement watchdog above is
+      // already what covers a genuinely dead one. This is a hard time bound, not a tuning knob - it
+      // holds at every difficulty and survives any later change to the slingshot geometry.
+      if (b.y > LOOP_Y && Math.hypot(b.vx, b.vy) > LOOP_MIN_SPEED) {
+        b.loopFor = (b.loopFor || 0) + dt;
+        if (b.loopFor > LOOP_BREAK_AT) {
+          b.loopFor = 0;
+          b.vx += (this.rand() - 0.5) * 180;
+          b.vy = -Math.max(Math.abs(b.vy), LOOP_KICK_OUT);
+          this.emit({ type: 'ballsearch', soft: true });
+        }
+      } else if (b.y < LOOP_Y) {
+        b.loopFor = 0;
       }
     }
     if (drained) this.balls = this.balls.filter((b) => b.live);

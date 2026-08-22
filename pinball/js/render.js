@@ -767,10 +767,25 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
       ctx.strokeStyle = C.ink; ctx.lineWidth = f.r * 2 + 5; ctx.stroke();
       // Body, tapering toward the tip the way the collider does.
-      const grad = ctx.createLinearGradient(f.px, f.py - f.r, f.px, f.py + f.r);
+      //
+      // THE GRADIENT RUNS ACROSS THE PADDLE'S OWN AXIS, NOT DOWN THE SCREEN. It used to be
+      // createLinearGradient(px, py - r, px, py + r): a 16-unit vertical band pinned to the PIVOT.
+      // A raised paddle's tip sits ~24 units ABOVE its pivot, so the whole swept paddle fell past
+      // stop 0 and clamped to solid #ffffff - the flipper turned white the moment you pressed, and
+      // white is exactly what the dividers and rails beside it are painted. The one instant you most
+      // need to see where your flipper is was the instant it camouflaged itself against the static
+      // furniture (2026-08-20 playtest: both flips visible in the clip were misses). Anchoring the
+      // gradient on the paddle's own normal gives the same cross-section shading at every angle.
+      const gnx = -Math.sin(f.angle), gny = Math.cos(f.angle);
+      const gmx = (f.px + ex) / 2, gmy = (f.py + ey) / 2;
+      const grad = ctx.createLinearGradient(gmx - gnx * f.r, gmy - gny * f.r, gmx + gnx * f.r, gmy + gny * f.r);
+      // ...and the paddle reads as ENERGIZED while it is held. A flipper that looks identical firing
+      // and at rest gives the player nothing to aim with. Colour is never the only cue here - the
+      // paddle is also visibly rotated - so this satisfies root CLAUDE.md's shape-not-hue rule, and
+      // gold against cyan is on the safe axis for red/green colourblindness.
       grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.45, C.cyan);
-      grad.addColorStop(1, '#0f5f86');
+      grad.addColorStop(0.45, f.pressed ? C.gold : C.cyan);
+      grad.addColorStop(1, f.pressed ? '#8a5b00' : '#0f5f86');
       ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(ex, ey);
       ctx.strokeStyle = grad; ctx.lineWidth = f.r * 2; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(ex, ey);
