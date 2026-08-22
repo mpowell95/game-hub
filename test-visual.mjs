@@ -346,11 +346,15 @@ const PLAY = {
   skeeball: {
     what: 'swipe real racks up the lane: score, records, and the stats write all have to move',
     async run(page, cdp, tap) {
-      // The gallery: one machine card with the four records slots and a Play button.
+      // The gallery: the carousel's selected slide carries four record slots (best / today /
+      // average, plus the hub-wide record row) and a Play button. `.sk-statline` was the
+      // RETIRED accordion setup's selector - this probe went stale when batch G (2026-08-18)
+      // replaced that screen with the carousel, and reported 0 slots against a screen showing
+      // all four. Locked slides carry none, so the count is over the unlocked ones.
       const play = await page.$('[data-role="play"]');
       if (!play) return { ok: false, why: 'no Play button on the setup screen' };
-      const recSlots = await page.$$eval('.sk-statline b', (els) => els.length);
-      if (recSlots < 4) return { ok: false, why: `stat line shows ${recSlots} record slots, spec says 4 (best / today / top / last)` };
+      const recSlots = await page.$$eval('.sk-slide-rec b, .sk-slide-recwide b', (els) => els.length);
+      if (recSlots < 4) return { ok: false, why: `the machine slide shows ${recSlots} record slots, spec says 4 (best / today / average / hub-wide record)` };
       const readSk = () => page.evaluate(() => {
         try { return ((JSON.parse(localStorage.getItem('gamehub.stats') || '{}').games || {}).skeeball || {}).sk || {}; }
         catch { return {}; }
@@ -401,11 +405,11 @@ const PLAY = {
       let over = false;
       for (let i = 0; i < 30 && !over; i++) {
         const usedBefore = await settled();
-        if (usedBefore === -1) { over = !!(await page.$('.sk-veil-over')); break; }
+        if (usedBefore === -1) { over = !!(await page.$('.sk-over-veil')); break; }
         await swipe(durations[i % durations.length]);
         const t0 = Date.now();
         while (Date.now() - t0 < 9000) {
-          if (await page.$('.sk-veil-over')) { over = true; break; }
+          if (await page.$('.sk-over-veil')) { over = true; break; }
           const used = await settled();
           if (used > usedBefore || used === -1) break;
           await page.waitForTimeout(200);
@@ -413,11 +417,11 @@ const PLAY = {
       }
       if (!over) {
         const t0 = Date.now();
-        while (Date.now() - t0 < 5000 && !over) { over = !!(await page.$('.sk-veil-over')); await page.waitForTimeout(250); }
+        while (Date.now() - t0 < 5000 && !over) { over = !!(await page.$('.sk-over-veil')); await page.waitForTimeout(250); }
       }
       if (!over) return { ok: false, why: 'threw a full rack and the rack-over sheet never appeared' };
 
-      const finalTxt = await page.$eval('.sk-final', (el) => el.textContent.trim()).catch(() => null);
+      const finalTxt = await page.$eval('.sk-over-score', (el) => el.textContent.trim()).catch(() => null);
       const after = await readSk();
       if (((after.played | 0) - (before.played | 0)) < 1) {
         return { ok: false, why: 'the rack finished but recordSkeeball never wrote it (sk.played did not move)' };

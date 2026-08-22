@@ -18,10 +18,12 @@ build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub
 2026-08-18 at Matt's ask** once the comparison was done (it is in git history). It recorded into
 the SHARED `skeeball` stats id and used the same board id `classic`, so every rack it ever played
 is still in this game's own records (bests, the daily map, the top-score panel) — one continuous
-bucket, nothing orphaned by its removal. One machine exists so far, **THE CLASSIC**: a boardwalk cabinet with a varnished oak
-lane, the burnt-orange board with the white cup ladder, twin corner 100 cups, and a marquee. The
-player swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine
-balls to a rack.
+bucket, nothing orphaned by its removal. Two machines exist: **THE CLASSIC** (a
+boardwalk cabinet with a varnished oak lane, the burnt-orange board with the white cup ladder,
+twin corner 100 cups, and a marquee) and **POPONGO** (2026-08-22, the real cup-board lawn game as
+a second face on the same cabinet - see "POPONGO and the arrangement layer" below). The player
+swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
+a rack.
 
 **The board was rebuilt to the REAL classic layout on 2026-08-13** against reference photos Matt
 provided, after the first version shipped a wrong "bullseye" board invented from memory — the
@@ -71,7 +73,7 @@ gallery `padding-top: 84px` to clear it.
 | `js/physics.js` | the ball, simulated by cannon-es: materials/contact tuning, speed-aware hole capture, trough scoring, the watchdog (NO magnetism - see below). Deterministic, no rng |
 | `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
 | `js/render.js` | the machine on screen, drawn by three.js: scene from machine.js + cosmetic dressing, lights/shadows, painted textures, ball mesh synced from the physics body |
-| `js/howto.js` | the How To Play sheet content (repo pattern, `tic-tac-toe/CLAUDE.md`) |
+| `js/howto.js` | the How To Play sheet content (repo pattern, `docs/BUILDING-A-GAME.md`) |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, the swipe, storage, records panel, the hub module contract |
 | `js/test.js` | headless engine tests incl. the reachability sweep and the soak (wired into `run-all-tests.mjs`) |
@@ -109,7 +111,7 @@ redesign starts from those documents, not from taste:
   `.gh-*` primitives (`ui.js` injects `css/ui.css` idempotently before its own sheet, the same
   marker `bug-report-ui.js` uses) — the accordion is `.gh-acc`, the buttons are `.gh-btn`; only
   the skeeball-specific bits (`.sk-statline`, `.sk-mrow`, `.sk-howto-link`) are local CSS.
-- **How To Play** follows `tic-tac-toe/CLAUDE.md`'s five-part pattern, restated in `howto.js`'s
+- **How To Play** follows `docs/BUILDING-A-GAME.md`'s five-part pattern, restated in `howto.js`'s
   header: one bold goal line, ONE diagram of the one non-obvious mechanic (swipe strength =
   landing height, drawn as a side view with three numbered arcs), a caption, an X = Y example
   ("Half strength = the 50 cup"), then the edge cases one sentence each. Every text line is
@@ -357,6 +359,55 @@ scatters a ball that clips it. **Do not fix this by loosening those assertions**
 the "optimised a metric pointing the wrong way" failure recorded above. The items on Matt's hold
 list (soft throws that cannot score the 10, balls that vanish without entering any hole, the
 near-miss 100 reading as a 10) are the next batch and are what should move these numbers.
+
+## POPONGO and the arrangement layer (2026-08-22)
+
+The second machine, built from the real product in `skeeball/Machines/Machine 2 - Popongo/`
+(rules PDF + photos): nine identical holes in a 1-2-3-2-1 diamond on bare light wood, each slot
+wearing a raised cup collar, nine cups - one green 6, two yellow 4s, two red 2s, two blue 1s,
+and two black **equalizers**.
+
+- **The arrangement layer** (`boards.js`): SLOTS own the geometry, CUPS own the value and the
+  paint. `geom.holes` uses slot-named ids (`top`/`uppL`/`uppR`/`midL`/`midC`/`midR`/`lowL`/
+  `lowR`/`bot` - frozen, THE LAW rule 5, they ride the mid-rack autosave); `cups` holds the nine
+  cups (`g6`..`eqB` - each cup's value frozen to its id forever); `arrangement` maps slot to cup,
+  defaulting to the product photo's staging. Hole values are STAMPED from the arrangement at
+  module load, and `game.js` scores through `cupAt()`, so player-facing rearrangement later is a
+  data remap plus a screen - never an engine or physics change (every cup is the same shape).
+  Rearrangement is deliberately deferred: what custom layouts do to records and unlock
+  comparability is Matt's call after he has played it.
+- **The equalizer** (`game.js` `_settle`): landing in a black cup wipes what the previous ball
+  EARNED this rack (its `earned` field, so an already-wiped ball or a previous equalizer wipes
+  as zero; the score can never go negative). `ballDone` carries `{eq, wiped}`; ui.js shows
+  `−N`. The rules PDF's "1 point if the ball sticks between cups" is deliberately NOT
+  implemented - resting-position scoring is banned (see the batch 3f note above).
+- **Goals are per-machine** (`goals.js`'s `GOALS` map; each goal carries a `labelKey`).
+  THE CLASSIC's trio still reads the GLOBAL sk fields it always did (switching to
+  `boards.classic` would show less progress than devices have already seen; known quirk: popongo
+  points nudge the classic's 10k total, since `sk.points` is lifetime-global). POPONGO's:
+  all four colors in one rack, 30+ in a single game, 1,000 lifetime points on the machine
+  (per-board record). The color sweep needed one new additive counter, **`sk.colorSweeps`** -
+  item 7's three edits are done (`ensureSk`/`recordSkeeball`, the `players-agg.js` sk branch,
+  the players-agg.test case).
+- **The unlock is GOALS-BASED**: `unlock: { board: 'classic', goals: true }` = complete THE
+  CLASSIC's three objectives. Applied by ui.js's `_earnedUnlocks` (after each recorded rack) and
+  `_ensureGoalUnlocks` (once per mount - retroactive, and cross-device since goals derive from
+  the synced store). `unlocksEarned()` in boards.js stays score-only and ignores goals entries.
+- **The locked slide grew its MACHINE-SPEC section 17 sliver**: the real render, CSS-cropped,
+  greyed and blurred (`.sk-lock-peek`), behind the padlock.
+- **The layout was measured, not guessed, and one standing rule came out of it**: the first
+  draft put midL/midR FLUSH against the side rails (the classic-100s pattern) and a sweep showed
+  12% of ALL throws three-contact-locking in the crevice where the curved collar meets the flat
+  rail - every one walked out by the watchdog and gifted to those cups. **A collar near a FLAT
+  wall is a pocket even at zero gap**; every collar now keeps ≥ 0.78X wall gaps everywhere
+  (boards.js documents the lattice numbers). Final sweep: all nine slots clean-capturable,
+  0 emergencies in 459 throws.
+- **Renderer**: collars take their cup's color (`_scallopedRim` color param) and the cup's value
+  rides `_cupPlate` - a concave arc inside the cup's own far wall, where the real product prints
+  it (a cup is CONCENTRIC with its hole, unlike a ring, so the arc centres on the hole).
+  No hole has a `ringD`, so `_ringNumbers`/`platedHoles` no-op; the classic's bottom-slot band
+  is gated on `!board.cups`. The setup slides, game-over card and hub average are all
+  PER-BOARD numbers now - machines score on different scales, so blended averages meant nothing.
 
 ## The records panel (the four numbers every machine shows)
 

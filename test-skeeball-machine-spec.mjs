@@ -149,20 +149,24 @@ for (const board of BOARDS) {
     `a closed ring must lose no segments to the face edges - widen the board or shrink ringD: ${clipped.join(', ')}`);
 
   // --- 9 mat.single -------------------------------------------------------------------------
-  // Source text, not values: a second `mat: {` at the same level silently replaces the first,
-  // and by the time the object is parsed there is nothing left to detect.
+  // Source text, not values: a second `mat: {` inside ONE board's entry silently replaces the
+  // first, and by the time the object is parsed there is nothing left to detect. Each mat line
+  // is attributed to the nearest preceding `id: '...'` line, so two boards' single blocks are
+  // never mistaken for a duplicate of each other (they were, when this counted by indent alone -
+  // the day the second machine landed).
   const MAT_LINE = new RegExp('^\\s*mat:\\s*\\{');
-  const perIndent = {};
-  SRC.split(String.fromCharCode(10)).forEach((l, i) => {
-    if (!MAT_LINE.test(l)) return;
-    const ind = l.length - l.replace(new RegExp('^\\s+'), '').length;
-    (perIndent[ind] = perIndent[ind] || []).push(i + 1);
+  const ID_LINE = /^\s*id:\s*'([^']+)'/;
+  const perBoard = {};
+  let curId = null;
+  SRC.split(/\r?\n/).forEach((l, i) => {
+    const idm = ID_LINE.exec(l);
+    if (idm) { curId = idm[1]; return; }
+    if (MAT_LINE.test(l) && curId) (perBoard[curId] = perBoard[curId] || []).push(i + 1);
   });
-  const dupes = Object.entries(perIndent).filter(([, ls]) => ls.length > 1);
-  rule(board, 'mat.single', dupes.length === 0,
+  const mine = perBoard[board.id] || [];
+  rule(board, 'mat.single', mine.length <= 1,
     'geom may hold exactly ONE mat block; a later one at the same level silently replaces the '
-    + 'earlier and every value in it is lost. Duplicates at lines: '
-    + dupes.map(([ind, ls]) => ls.join(' and ') + ' (indent ' + ind + ')').join('; '));
+    + 'earlier and every value in it is lost. Duplicates at lines: ' + mine.join(' and '));
 
   // --- 9 mat.complete -----------------------------------------------------------------------
   const mat = G.mat || {};
@@ -196,8 +200,12 @@ for (const board of BOARDS) {
     if (!en[board.taglineKey]) entryBad.push(`en.${board.taglineKey}`);
     if (!es[board.taglineKey]) entryBad.push(`es.${board.taglineKey}`);
   }
-  if (board.unlock !== null && !(board.unlock && board.unlock.board && board.unlock.score > 0)) {
-    entryBad.push('unlock must be null or { board, score }');
+  // Two unlock shapes exist: { board, score } (reach that score in one game) and
+  // { board, goals: true } (complete all three of that board's objectives - js/goals.js,
+  // applied by ui.js's _earnedUnlocks/_ensureGoalUnlocks). POPONGO is the first goals unlock.
+  if (board.unlock !== null && !(board.unlock && board.unlock.board
+    && (board.unlock.score > 0 || board.unlock.goals === true))) {
+    entryBad.push('unlock must be null, { board, score } or { board, goals: true }');
   }
   rule(board, 'entry.complete', entryBad.length === 0, `missing or wrong: ${entryBad.join(', ')}`);
 }

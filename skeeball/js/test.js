@@ -460,14 +460,77 @@ if (G.mat) {
   const res = overEv.result;
   eq('result() carries exactly the recorder extras',
     Object.keys(res).sort(),
-    ['balls', 'bestThrow', 'fifties', 'forties', 'hundreds', 'score', 'tens', 'thirties', 'twenties']);
+    ['balls', 'bestThrow', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'hundreds', 'score', 'tens', 'thirties', 'twenties']);
   const countOf = (v) => g.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
   // GUARD: key ORDER matters - eq() compares JSON.stringify, so this must list them in the
-  // same order result() builds them.
+  // same order result() builds them. colorsHit/colorSweep are the cup-board extras (POPONGO,
+  // 2026-08-22) and stay 0 on a ringed board like this one.
   eq('result() agrees with the game', res,
     { score: g.score, balls: 9,
       tens: countOf(10), twenties: countOf(20), thirties: countOf(30), forties: countOf(40),
-      hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow });
+      hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow,
+      colorsHit: 0, colorSweep: 0 });
+}
+
+// --- 6b. POPONGO: the arrangement layer and the equalizer (pure rules, no physics) --------------
+// A settled ball is fed straight to _settle with the SLOT physics would report, so these are
+// deterministic and instant. The cup sitting in the slot (boards.js `arrangement`) decides the
+// value; the black cups wipe what the previous ball EARNED and nothing else.
+{
+  const settle = (g2, hole) => g2._settle(null, { hole, value: g2.board.geom.holes[hole].value | 0 });
+  const g = new SkeeballGame('popongo');
+  ok('popongo exists and is its own board', g.board.id === 'popongo');
+  eq('hole values are stamped from the arrangement (top holds the green 6)', g.board.geom.holes.top.value, 6);
+  eq('equalizer slots are worth zero on the face', [g.board.geom.holes.uppL.value, g.board.geom.holes.lowR.value], [0, 0]);
+
+  settle(g, 'midC');                       // blue 1
+  eq('a cup pays its value', g.score, 1);
+  settle(g, 'top');                        // green 6
+  eq('values accumulate', g.score, 7);
+  let evs = g.takeEvents();
+  settle(g, 'uppL');                       // black: wipes the 6 the previous ball earned
+  evs = g.takeEvents();
+  const eqEv = evs.find((e) => e.type === 'ballDone');
+  eq('the equalizer wipes the previous ball, not the rack', g.score, 1);
+  eq('and says exactly what it took', [eqEv.eq, eqEv.wiped, eqEv.value], [true, 6, 0]);
+  settle(g, 'lowR');                       // black again: previous ball (the equalizer) earned 0
+  eq('an equalizer after an equalizer takes nothing', g.score, 1);
+  ok('the score can never go negative from a wipe', g.score >= 0);
+
+  // The color sweep: land every scoring color in one rack (green + yellow + red + blue). This
+  // rack deliberately never touches a red cup, so it collects three and no sweep.
+  settle(g, 'bot');                        // yellow 4
+  let r = g.result();
+  eq('three colors so far (black is not a color to collect)', r.colorsHit, 3);
+  eq('no sweep until all four', r.colorSweep, 0);
+  settle(g, 'uppR');                       // yellow again - still 3 distinct
+  eq('a repeat color adds nothing', g.result().colorsHit, 3);
+  settle(g, 'lowL');                       // blue again
+  settle(g, 'bot');                        // yellow again
+  settle(g, 'top');                        // ninth ball; green already counted
+  r = g.result();
+  eq('still three distinct colors, red never landed', r.colorsHit, 3);
+  eq('so no sweep', r.colorSweep, 0);
+  ok('nine settled balls end a popongo rack too', g.over);
+
+  // A rack that does land all four sweeps.
+  const g2 = new SkeeballGame('popongo');
+  for (const hole of ['top', 'bot', 'midL', 'midC']) settle(g2, hole);
+  eq('green+yellow+red+blue is a sweep', [g2.result().colorsHit, g2.result().colorSweep], [4, 1]);
+
+  // Snapshot round trip carries `earned`, so a restored rack cannot be re-wiped into new money.
+  const g3 = new SkeeballGame('popongo');
+  settle(g3, 'top');
+  settle(g3, 'uppL');                      // wiped the 6
+  const snap = g3.snapshot();
+  const g4 = SkeeballGame.restore(snap);
+  eq('restore keeps the wiped score', g4.score, g3.score);
+  eq('and the wiped ball has nothing left to lose', g4.throws[0].earned, 0);
+  g4._settle(null, { hole: 'lowR', value: 0 });   // another equalizer straight after restore
+  eq('a post-restore equalizer still takes nothing from a wiped ball', g4.score, g3.score);
+
+  // THE CLASSIC is untouched by all of this: no cups, values ride the holes as ever.
+  ok('classic has no arrangement layer', !boardById('classic').cups);
 }
 
 // --- 7. snapshot / restore: leaving mid-rack is lossless ---------------------------------------

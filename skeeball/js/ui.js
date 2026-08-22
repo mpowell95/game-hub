@@ -14,14 +14,14 @@
 
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { Renderer } from './render.js';
-import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
+import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
 import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
-import { readGoals, readGoalsLive } from './goals.js';
+import { readGoals, readGoalsLive, allGoalsMet } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
@@ -137,7 +137,7 @@ export class SkeeballUI {
     this._pending = null;              // a captured ball's score, held until it has settled
     this.msgTimer = 0;
     this.top = {};                     // boardId -> { score, name } once the network answers
-    this.hubAvg = null;                // hub-wide average score across synced players (game-over card)
+    this.hubAvg = {};                  // boardId -> hub-wide average score across synced players (game-over card)
     this._machineImg = {};             // board id + its records -> cached data URL of that render
 
     this._onPointerMove = (e) => this._swipeMove(e);
@@ -171,11 +171,44 @@ export class SkeeballUI {
     document.body.appendChild(this._rotate);
 
     this._refreshTopRecords();
+    this._ensureGoalUnlocks();
     // A RELOAD MID-RACK PUTS YOU BACK ON THE LANE, not on the gallery. The rack always survived
     // a refresh, but you landed on the machine screen and had to find Resume - two taps back to
     // a game you never left (playtest, 2026-08-21).
     const resume = loadSave();
     if (resume) this._startGame(resume); else this._renderSetup();
+  }
+
+  // --- unlocks ---------------------------------------------------------------------------------
+
+  /** Every machine this board's finished rack has just earned. Two unlock shapes exist
+   *  (boards.js): { board, score } - reach that score in one game - and { board, goals: true } -
+   *  complete all three of that board's objectives (js/goals.js). The goals check reads the
+   *  RECORDED store, so callers run this after recordSkeeball has landed. */
+  _earnedUnlocks(boardId, score) {
+    const out = [];
+    for (const b of BOARDS) {
+      if (!b.unlock || b.unlock.board !== boardId) continue;
+      const ok = b.unlock.goals ? allGoalsMet(boardId) : (score | 0) >= (b.unlock.score | 0);
+      if (ok) out.push(b.id);
+    }
+    return out;
+  }
+
+  /** Goals completed BEFORE this shipped (or on another device - the goals derive from the
+   *  synced store) must still open the machine they promise: check once per mount, additive and
+   *  idempotent, so nobody is asked to re-earn something the store already proves. */
+  _ensureGoalUnlocks() {
+    try {
+      const sk = (loadStats().games.skeeball || {}).sk || {};
+      for (const b of BOARDS) {
+        if (!b.unlock || !b.unlock.goals) continue;
+        if (isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
+        if (allGoalsMet(b.unlock.board)) unlockSkeeballBoard(b.id);
+      }
+    } catch (err) {
+      console.error('[skeeball] goal-unlock check failed', err);
+    }
   }
 
   // --- records ---------------------------------------------------------------------------------
@@ -204,14 +237,19 @@ export class SkeeballUI {
         line.textContent = String(this.top[b.id].score);
       }
     }
-    // Hub-wide average score across every synced player (lifetime points / games), for the
-    // game-over card. Falls to null offline; the tile then shows a dash and fills in once online.
-    let hubPts = 0, hubGames = 0;
-    for (const r of rows) {
-      const sk = r && r.games && r.games.skeeball && r.games.skeeball.sk;
-      if (sk) { hubPts += sk.points | 0; hubGames += sk.played | 0; }
+    // Hub-wide average score across every synced player, PER MACHINE (each board's own points /
+    // plays - machines score on different scales, so a blended average would mean nothing), for
+    // the game-over card. Falls to nulls offline; the tile shows a dash and fills in once online.
+    this.hubAvg = {};
+    for (const b of BOARDS) {
+      let hubPts = 0, hubGames = 0;
+      for (const r of rows) {
+        const rec = r && r.games && r.games.skeeball && r.games.skeeball.sk
+          && r.games.skeeball.sk.boards && r.games.skeeball.sk.boards[b.id];
+        if (rec) { hubPts += rec.points | 0; hubGames += rec.plays | 0; }
+      }
+      this.hubAvg[b.id] = hubGames ? Math.round(hubPts / hubGames) : null;
     }
-    this.hubAvg = hubGames ? Math.round(hubPts / hubGames) : null;
     // The setup card's picture has the four records BAKED INTO IT (see _ensureMachineImg),
     // and the hub-wide one only exists once this answer lands - so the first render always
     // painted a dash in that column and never went back for it. Re-ensure whatever slide is
@@ -283,11 +321,6 @@ export class SkeeballUI {
     const board = boardById(this.settings.board);
     const val = (n) => (n ? String(n) : '-');
 
-    // Your average, game-wide (lifetime points / games). One machine today, so this IS the Classic
-    // average; a per-board average would need a per-board points sum the store does not keep yet.
-    let myAvg = null;
-    try { if (sk.played) myAvg = Math.round((sk.points | 0) / sk.played); } catch { /* fine */ }
-
     // A swipeable carousel of machines (Matt's call over Escoba's accordion): one slide per
     // machine, each showing that machine's ACTUAL board (render.js render, cached as an image),
     // never a drawing. Locked machines show a padlock. Scroll-snap does the swipe; with one
@@ -297,13 +330,24 @@ export class SkeeballUI {
       const open = isUnlocked(sk, b.id, DEFAULT_BOARD);
       if (!open) {
         const from = boardById(b.unlock.board);
+        // The locked slide (MACHINE-SPEC section 17): the machine greyed out behind a large
+        // lock, with only a SLIVER of the board visible - the picture is the real render, but
+        // the CSS window (.sk-lock-peek) crops, greys and blurs it down to a tease.
+        const hint = b.unlock.goals
+          ? t('unlock_goals_hint', { name: from.name })
+          : t('unlock_hint', { score: b.unlock.score, name: from.name });
         return `<div class="sk-slide sk-slide-locked" data-board="${b.id}">
+          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
           <div class="sk-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
           <p class="sk-slide-name">${esc(b.name)}</p>
-          <p class="sk-slide-locktext">${esc(t('unlock_hint', { score: b.unlock.score, name: from.name }))}</p>
+          <p class="sk-slide-locktext">${esc(hint)}</p>
         </div>`;
       }
       const r = myRecords(b.id);
+      // Your average ON THIS MACHINE (its per-board record - js/arcade-scores.js keeps points
+      // and plays per board since 2026-08-11). Dash until it has any plays.
+      const bRec = (sk.boards || {})[b.id] || {};
+      const myAvg = bRec.plays ? Math.round((bRec.points | 0) / bRec.plays) : null;
       return `<div class="sk-slide" data-board="${b.id}">
         <p class="sk-slide-name">${esc(b.name)}</p>
         <div class="sk-slide-machine"><img class="sk-slide-img" data-machine="${b.id}" alt="${esc(b.name)}" /></div>
@@ -338,10 +382,12 @@ export class SkeeballUI {
         </div>
       </div>`;
 
-    // Paint each unlocked machine's actual board (cached), deferred so the setup shows first.
+    // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
+    // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
     for (const b of BOARDS) {
-      if (!isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
-      const imgEl = this.root.querySelector(`img[data-machine="${b.id}"]`);
+      const open = isUnlocked(sk, b.id, DEFAULT_BOARD);
+      const imgEl = this.root.querySelector(open
+        ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
     }
 
@@ -551,7 +597,7 @@ export class SkeeballUI {
     this._closeOverlay();
     this.game = snap ? SkeeballGame.restore(snap) : new SkeeballGame(board.id);
     // What was already met before this rack. Anything that turns met from here is fresh.
-    this._goalsMet = new Set(readGoalsLive(null).filter((g) => g.met).map((g) => g.id));
+    this._goalsMet = new Set(readGoalsLive(this.game.board.id, null).filter((g) => g.met).map((g) => g.id));
 
     const pips = Array.from({ length: BALLS_PER_GAME }, (_, i) =>
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
@@ -759,8 +805,16 @@ export class SkeeballUI {
         case 'ballDone': {
           const at = this._pending;
           this._pending = null;
-          if (at) {
-            const gold = at.value >= 100, big = at.value >= 50;
+          if (at && ev.eq) {
+            // An equalizer cup (POPONGO's black): the popup says what it took, not what it paid.
+            // The minus sign carries the meaning; the red is emphasis, never the signal.
+            Rr.popupAt(at.pos, ev.wiped ? `−${ev.wiped}` : '0', '#ff6b5e', !!ev.wiped);
+          } else if (at) {
+            // The board's OWN scale decides what counts as a big deal: the classic's 50/100
+            // thresholds read as literal values, so on a 1-6 cup board nothing would ever
+            // celebrate. Gold = the machine's best cup, big = over half of it.
+            const topValue = Math.max(...Object.values(this.game.board.geom.holes).map((h) => h.value | 0));
+            const gold = at.value > 0 && at.value >= topValue, big = at.value >= topValue / 2;
             Rr.popupAt(at.pos, `+${at.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
             if (big) Rr.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
             if (gold) Rr.celebrate();
@@ -843,23 +897,27 @@ export class SkeeballUI {
    *  moves them. js/goals.js explains why nothing is stored here. */
   _goalRailsMarkup() {
     const rack = this.game ? this.game.result() : null;
-    const [hundreds, best, total] = readGoalsLive(rack);
-    const box = (label, g) => `
+    const boardId = this.game ? this.game.board.id : this.settings.board;
+    // THE MACHINE'S OWN three goals (js/goals.js is per-machine now): first on the left rail,
+    // second on the right, third across the bottom. Labels ride each goal's own labelKey, so
+    // this markup never has to know whose goals it is painting.
+    const [g1, g2, g3] = readGoalsLive(boardId, rack);
+    const box = (g) => `
       <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
-        <em>${esc(label)}</em>
+        <em>${esc(t(g.labelKey))}</em>
         <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
         <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
       </div>`;
     return `
       <div class="sk-grail sk-grail--l">
-        ${box(t('g_hundreds'), hundreds)}
+        ${box(g1)}
       </div>
       <div class="sk-grail sk-grail--r">
-        ${box(t('g_single'), best)}
+        ${box(g2)}
       </div>
-      <div class="sk-gtotal${total.met ? ' is-done' : ''}">
-        <em>${esc(t('g_total'))}</em>
-        <b>${shortNum(total.now)}<i>/${shortNum(total.target)}</i></b>
+      <div class="sk-gtotal${g3.met ? ' is-done' : ''}">
+        <em>${esc(t(g3.labelKey))}</em>
+        <b>${shortNum(g3.now)}<i>/${shortNum(g3.target)}</i></b>
       </div>`;
   }
 
@@ -868,23 +926,26 @@ export class SkeeballUI {
    *  which values are still owed - three identical numbers cannot say that on their own.
    *  Reads the recorded store, not the live rack: by the time this card exists the rack is in. */
   _goalTilesMarkup() {
-    const goals = readGoals();
-    const [hundreds, best, total] = goals;
+    const boardId = this.game ? this.game.board.id : this.settings.board;
+    const goals = readGoals(boardId);
+    // The header says what completing these actually does: 'Next machine' when another machine's
+    // unlock hangs off this board's goals, plain 'Objectives' when nothing does (POPONGO today) -
+    // promising a next machine that does not exist would be a lie on a reward card.
+    const opensNext = BOARDS.some((b) => b.unlock && b.unlock.goals && b.unlock.board === boardId);
+    const head = opensNext ? t('goals_h') : t('goals_obj_h');
     // All three done: the tiles have nothing left to say, so they go and the unlock takes the
     // space. Three tiles reading 5/5, 360/360, 10k/10k are a receipt, not a reward.
     if (goals.every((g) => g.met)) {
-      return `<div class="sk-gwon"><em>${esc(t('goals_h'))}</em><b>${esc(t('goals_unlocked'))}</b></div>`;
+      return `<div class="sk-gwon"><em>${esc(head)}</em><b>${esc(t(opensNext ? 'goals_unlocked' : 'goals_done'))}</b></div>`;
     }
-    const tile = (label, g) => `
+    const tile = (g) => `
       <div class="sk-gtile${g.met ? ' is-done' : ''}">
-        <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(label)}</span>
+        <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(t(g.labelKey))}</span>
       </div>`;
     return `
-      <div class="sk-gsep"><span>${esc(t('goals_h'))}</span></div>
+      <div class="sk-gsep"><span>${esc(head)}</span></div>
       <div class="sk-gtiles">
-        ${tile(t('g_hundreds'), hundreds)}
-        ${tile(t('g_single'), best)}
-        ${tile(t('g_total'), total)}
+        ${goals.map(tile).join('')}
       </div>`;
   }
 
@@ -895,7 +956,7 @@ export class SkeeballUI {
    *  the rack in progress counts, and `_goalsMet` makes each one fire exactly once. */
   _checkGoalsNow() {
     if (!this.game || !this._goalsMet) return;
-    const live = readGoalsLive(this.game.result());
+    const live = readGoalsLive(this.game.board.id, this.game.result());
     const fresh = live.filter((g) => g.met && !this._goalsMet.has(g.id));
     if (!fresh.length) return;
     for (const g of fresh) {
@@ -968,7 +1029,7 @@ export class SkeeballUI {
         console.error('[skeeball] could not record the rack', err);
       }
       try {
-        for (const id of unlocksEarned(board.id, result.score)) unlockSkeeballBoard(id);
+        for (const id of this._earnedUnlocks(board.id, result.score)) unlockSkeeballBoard(id);
       } catch (err) {
         console.error('[skeeball] could not store an earned unlock', err);
       }
@@ -996,11 +1057,14 @@ export class SkeeballUI {
     const pillKey = isTop ? 'over_new_top' : isMine ? 'over_new_mine' : isToday ? 'over_new_today' : '';
     const pill = pillKey ? `<span class="gh-chip gh-chip--accent sk-over-pill">${esc(t(pillKey))}</span>` : '';
 
-    // Your average: lifetime points / games, from the store this rack was just written to.
+    // Your average ON THIS MACHINE: its per-board points / plays, from the store this rack was
+    // just written to (a blended cross-machine average reads as wrong the moment two machines
+    // score on different scales - a 30 popongo rack is a good one, a 30 classic rack is not).
     let myAvg = null;
     try {
       const sk = (loadStats().games.skeeball || {}).sk || {};
-      if (sk.played) myAvg = Math.round((sk.points | 0) / sk.played);
+      const bRec = (sk.boards || {})[board.id] || {};
+      if (bRec.plays) myAvg = Math.round((bRec.points | 0) / bRec.plays);
     } catch { /* no stats is fine - the tile shows a dash */ }
     const dash = (n) => (n == null || n === '' || n === 0 ? '-' : String(n));
 
@@ -1023,7 +1087,7 @@ export class SkeeballUI {
           <div class="sk-over-tile"><b>${dash(now.mine)}</b><span>${esc(t('rec_mine'))}</span></div>
           <div class="sk-over-tile"><b>${dash(now.today)}</b><span>${esc(t('rec_today'))}</span></div>
           <div class="sk-over-tile"><b>${dash(myAvg)}</b><span>${esc(t('over_your_avg'))}</span></div>
-          <div class="sk-over-tile"><b>${dash(this.hubAvg)}</b><span>${esc(t('over_hub_avg'))}</span></div>
+          <div class="sk-over-tile"><b>${dash(this.hubAvg && this.hubAvg[board.id])}</b><span>${esc(t('over_hub_avg'))}</span></div>
         </div>
         ${this._goalTilesMarkup()}
         <div class="gh-modal__actions">

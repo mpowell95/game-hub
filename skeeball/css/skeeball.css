@@ -198,6 +198,22 @@
   min-height: 320px;
   border-style: dashed;
 }
+/* The locked slide's SLIVER (MACHINE-SPEC section 17): the machine's real render, cropped to a
+   band, greyed and blurred - enough to make the player curious, not enough to show the board.
+   The window height is the tease's whole tuning: taller shows the layout, shorter shows nothing. */
+.sk-root .sk-lock-peek {
+  width: min(52vw, 220px);
+  height: 72px;
+  overflow: hidden;
+  border-radius: 12px;
+  position: relative;
+}
+.sk-root .sk-lock-img {
+  display: block;
+  width: 100%;
+  transform: translateY(-38%);
+  filter: grayscale(1) brightness(0.5) blur(3px);
+}
 .sk-root .sk-lock { width: 54px; height: 54px; border-radius: 50%; background: var(--sks-surface-2); display: grid; place-items: center; color: var(--sks-muted); }
 .sk-root .sk-lock svg { width: 26px; height: 26px; }
 .sk-root .sk-slide-locktext { margin: 0; font-size: 13px; color: var(--sks-muted); max-width: 210px; }
