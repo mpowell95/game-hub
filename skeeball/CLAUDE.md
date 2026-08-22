@@ -383,14 +383,15 @@ and two black **equalizers**.
   as zero; the score can never go negative). `ballDone` carries `{eq, wiped}`; ui.js shows
   `−N`. The rules PDF's "1 point if the ball sticks between cups" is deliberately NOT
   implemented - resting-position scoring is banned (see the batch 3f note above).
-- **Goals are per-machine** (`goals.js`'s `GOALS` map; each goal carries a `labelKey`).
-  THE CLASSIC's trio still reads the GLOBAL sk fields it always did (switching to
-  `boards.classic` would show less progress than devices have already seen; known quirk: popongo
-  points nudge the classic's 10k total, since `sk.points` is lifetime-global). POPONGO's:
-  all four colors in one rack, 30+ in a single game, 1,000 lifetime points on the machine
-  (per-board record). The color sweep needed one new additive counter, **`sk.colorSweeps`** -
-  item 7's three edits are done (`ensureSk`/`recordSkeeball`, the `players-agg.js` sk branch,
-  the players-agg.test case).
+- **Goals are per-machine, and they count ONLY that machine's plays** (`goals.js`'s `GOALS`
+  map; each goal carries a `labelKey`). Matt, 2026-08-22, after a POPONGO rack advanced the
+  classic's Total points: *"they should be completely distinct."* Every score goal reads the
+  machine's own `sk.boards.<id>` record; only the classic's five-100s goal uses a global
+  counter (`sk.hundreds`), which is inherently classic-only because no other machine pays 100.
+  POPONGO's trio: all four colors in one rack, 30+ in a single game, 1,000 points on the
+  machine. The color sweep needed one new additive counter, **`sk.colorSweeps`** - item 7's
+  three edits are done (`ensureSk`/`recordSkeeball`, the `players-agg.js` sk branch, the
+  players-agg.test case).
 - **The unlock is GOALS-BASED**: `unlock: { board: 'classic', goals: true }` = complete THE
   CLASSIC's three objectives. Applied by ui.js's `_earnedUnlocks` (after each recorded rack) and
   `_ensureGoalUnlocks` (once per mount - retroactive, and cross-device since goals derive from
@@ -408,9 +409,21 @@ and two black **equalizers**.
   wall is a pocket even at zero gap**; every collar now keeps ≥ 0.78X wall gaps everywhere
   (boards.js documents the lattice numbers). Final sweep: all nine slots clean-capturable,
   0 emergencies in 459 throws.
+- **The ping-pong ball** (Matt, 2026-08-22, same day: cups read tiny and too far apart): the
+  real Popongo is a ping pong ball into solo cups (mouth ~2.4x the ball), and at the classic's
+  0.35X ball the 3-across row physically caps the mouths at ~1.0X. So POPONGO's ball is
+  **0.28X** (`ball.ratio` waived, `specWaivers` in its entry) and its cups are **0.5625X**
+  (mouth/ball ~2.0), on a tighter lattice (t 1.63X, s 1.075X, min wall gap 0.64X vs the 0.56X
+  ball).
+- **Scoring is honest on cup boards, in physics** (Matt, same day: "points just from hitting a
+  cup"): capture on a COLLARED hole requires falling below the RIM plane within the mouth, not
+  just past the face plane (`physics.js`, the `needH` term - flush holes keep the classic's
+  exact numbers), and a jammed or capped ball on a cup board resolves as the trough's zero
+  instead of being walked into the nearest mouth (`st.cupBoard`). Falling through a mouth is
+  the ONLY way to score here, including for the watchdog.
 - **Renderer**: collars take their cup's color (`_scallopedRim` color param) and the cup's value
-  rides `_cupPlate` - a concave arc inside the cup's own far wall, where the real product prints
-  it (a cup is CONCENTRIC with its hole, unlike a ring, so the arc centres on the hole).
+  rides `_cupPlate` - an arc on the cup's player-facing outer wall, where the real product
+  prints it (a cup is CONCENTRIC with its hole, unlike a ring, so the arc centres on the hole).
   No hole has a `ringD`, so `_ringNumbers`/`platedHoles` no-op; the classic's bottom-slot band
   is gated on `!board.cups`. The setup slides, game-over card and hub average are all
   PER-BOARD numbers now - machines score on different scales, so blended averages meant nothing.

@@ -161,6 +161,9 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     events: [{ type: 'launch' }],
     outcome: null,
     done: false,
+    // A CUP BOARD (any hole wearing a collar - POPONGO) resolves its emergencies differently:
+    // see the watchdog and the cap below. Decided once per throw, here.
+    cupBoard: Object.values(G.holes).some((h) => h && h.collarH > 0),
     captured: null,           // hole id once the mouth has the ball
     capturedFaceY: 0,
     touchedBoard: false,
@@ -248,8 +251,6 @@ function substep(st) {
   const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
   const gPerp = 9.82 * cosT;                          // gravity's pull perpendicular to the face
   const need = G.ballR * (typeof G.captureDrop === 'number' ? G.captureDrop : 0.55);
-  // time to fall `need` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - need = 0
-  const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * need)) / gPerp;
   if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9) {
     for (const id of Object.keys(G.holes)) {
       const hDef = G.holes[id];
@@ -258,6 +259,16 @@ function substep(st) {
       if (d >= rEff) continue;
       // how much mouth is left in front of it, along its own line
       const cross = rEff + Math.sqrt(Math.max(0, rEff * rEff - d * d));
+      // GUARD: ON A COLLARED CUP, "past the lip" means BELOW THE RIM, not past the face plane.
+      // The base `need` was calibrated for flush holes; a ball crossing a collar's mouth from
+      // above must also descend to under the rim plane before the far side, or it is really
+      // clipping the far rim and bouncing OUT - and it used to be scored anyway, which read as
+      // points for merely hitting a cup (Matt, 2026-08-22). Pure kinematics per hole; a hole
+      // with no collar (every hole on THE CLASSIC) keeps the original number exactly.
+      const lip = hDef.collarH > 0 ? hDef.collarH : 0;
+      const needH = lip > 0 ? need + Math.max(0, f.h - lip) : need;
+      // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
+      const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
       if (vFace * tDrop > cross) continue;            // too fast for this mouth: it rolls on
       st.captured = id;
       st.capturedFaceY = p.y;
@@ -336,6 +347,14 @@ function substep(st) {
       ball.velocity.x += side * 0.3;
       ball.velocity.y += 0.55 * Math.cos(M.tilt);
       ball.velocity.z += 0.3 * Math.sin(M.tilt) + 0.15;
+    } else if (st.cupBoard) {
+      // Two pops did nothing: it is jammed. On a CUP BOARD a jammed ball is a MISS, full stop:
+      // falling through a mouth is the only way to score here, and walking a stuck ball into
+      // the nearest cup (the classic's walkout below) is a scripted score - it read as points
+      // for merely touching a cup (Matt, 2026-08-22). The ball did not go in; it pays nothing.
+      st.emergencyUsed = true;
+      finishAt(st, 'corner0', 0, 'gutter');
+      return;
     } else {
       // Two pops did nothing: it is jammed. Aim the walk at the nearest mouth's centre.
       let best = null;
@@ -353,9 +372,12 @@ function substep(st) {
     }
   }
 
-  // 7. The cap. Should be unreachable (tests assert it): score the ball where it stands.
+  // 7. The cap. Should be unreachable (tests assert it): score the ball where it stands - except
+  //    on a cup board, where a ball that never fell through a mouth earned nothing (the same
+  //    honesty as the jam branch above).
   if (st.t > MAX_T) {
     st.emergencyUsed = true;
+    if (st.cupBoard) { finishAt(st, 'corner0', 0, 'gutter'); return; }
     let best = null;
     for (const id of Object.keys(G.holes)) {
       const hDef = G.holes[id];

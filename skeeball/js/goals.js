@@ -17,12 +17,17 @@
 //
 // PER-MACHINE since 2026-08-22 (POPONGO). Every reader passes the BOARD ID; each goal carries its
 // own `labelKey` into strings.js so ui.js renders any machine's rails without knowing whose goals
-// they are. THE CLASSIC's goals deliberately keep reading the GLOBAL sk fields they always read
-// (hundreds/bestGame/points) rather than moving to sk.boards.classic - switching would show less
-// progress than a device had already been shown (pre-2026-08-11 plays exist only in the global
-// fields), which reads as regression. Known, accepted quirk: a POPONGO rack's points also nudge
-// the classic total goal, since sk.points is lifetime-global. POPONGO's goals read its own
-// per-board record (sk.boards.popongo) and are clean from day one.
+// they are.
+//
+// GUARD: A MACHINE'S OBJECTIVES COUNT ONLY THAT MACHINE'S PLAYS - Matt, 2026-08-22, the day he
+// caught a POPONGO rack advancing THE CLASSIC's "Total points": "Total points for that objective
+// MUST be scored ONLY on THE CLASSIC... they should be completely distinct." So every score goal
+// reads the machine's OWN per-board record (sk.boards.<id>, js/arcade-scores.js), never the
+// lifetime-global sk fields, which blend all machines. (The classic briefly read the globals to
+// avoid regressing pre-2026-08-11 progress; the 2026-08-22 stats clear made that moot, and
+// per-board records ARE the complete record since.) The classic's hundreds goal reads the global
+// sk.hundreds, which is inherently classic-only today - it counts 100-point balls and no other
+// machine pays 100; give a future 100-paying machine its own counter rather than sharing this one.
 
 import { loadStats } from '../../js/game-stats.js';
 
@@ -47,10 +52,11 @@ const sk = () => {
  *  recorded store alone, which is what the unlock itself trusts. */
 const GOALS = {
   classic(s, r) {
-    // Five 100s EVER, not in one game.
+    const b = (s.boards || {}).classic || {};
+    // Five 100s EVER, not in one game. Global counter, but only the classic pays 100s.
     const h = (s.hundreds | 0) + (r ? r.hundreds | 0 : 0);
-    const best = Math.max(s.bestGame | 0, r ? r.score | 0 : 0);
-    const total = (s.points | 0) + (r ? r.score | 0 : 0);
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
       { id: 'hundreds', labelKey: 'g_hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
       { id: 'best', labelKey: 'g_single', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
