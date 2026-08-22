@@ -166,10 +166,11 @@ Deterministic: fixed 1/240 step, fixed solver iterations, naive broadphase (stab
 no rng anywhere. One fresh world per throw, so nothing leaks between balls. Retune freely, but
 run `node skeeball/js/test.js` first - the sweep pins reachability of every hole, the rollback,
 the straight-power ladder (30 → 40 → 50), **no dead zone at either end of the dial**, **few flips
-between adjacent power steps**, **harder-goes-further quarter by quarter**, **the 100 needing
-power AND aim (and costing the ball when the angle is missed)**, real bounce events, and the
-emergency path staying rare. `tune-ladder.mjs` and `measure-reach.mjs` at the repo root are the
-bench tools those numbers came from; run `tune-ladder.mjs` after touching anything in `geom`.
+between adjacent power steps**, **the 100 needing power AND aim (and costing the ball when the
+angle is missed)**, real bounce events, and the emergency path staying rare. Pass `--auto` or a
+group flag — a plain run skips every one of those (see Testing). `tune-ladder.mjs` and
+`measure-reach.mjs` at the repo root are the bench tools those numbers came from; run
+`tune-ladder.mjs` after touching anything in `geom`.
 
 The renderer (`render.js`, three.js) builds its scene from the SAME `machine.js` description,
 plus paint. Reduced motion drops popup rise and particles, never the ball.
@@ -427,13 +428,27 @@ invisible (rule 1; the comment on the `TABS` row records this).
 
 ## Testing
 
-- `node skeeball/js/test.js` — 41 assertions (~1 min; cannon runs every throw for real):
-  determinism, the reachability sweep (every hole, the rollback, emergencies rare), the
-  straight-power ladder (30 → 40 → 50) and overshoot-pays-on-average, the >2s rattle with real
-  bounce events, statistical left/right symmetry (knife-edge throws may split - the solver
-  iterates contacts in list order), a 250-throw soak (settles, in bounds, legal values only),
-  the nine-ball rules through the real API, the recorder payload shape, snapshot/restore, and
-  the unlock chain.
+- `node skeeball/js/test.js` — **50 assertions at `--full`, 20 without** (2026-08-22). The heavy
+  physics blocks are grouped by what makes them go red, and a plain run skips all of them:
+
+  ```bash
+  node skeeball/js/test.js          # the cheap half only - what run-all-tests.mjs runs
+  node skeeball/js/test.js --auto   # pick groups from what differs from origin/main
+  node skeeball/js/test.js --mat    # or --reach --dial --ramp --holes
+  node skeeball/js/test.js --full   # everything, minutes
+  ```
+
+  `reach` (the 41x21 sweep, the settle cap, the walkout rate) and `dial` (the power curve's
+  shape) answer to any physical change; `ramp` (the ball gets airborne, a weak throw comes back)
+  only to the ramp, lane and throw speeds; `mat` (the 100 stays a skill shot, the >2s rattle with
+  real bounce events, the 250-throw soak) only to bounce and grip; `holes` (statistical left/right
+  symmetry — knife-edge throws may split, since the solver iterates contacts in list order) only
+  to hole positions and board dimensions. Always run, cheap: determinism, the nine-ball rules
+  through the real API, the recorder payload shape, snapshot/restore, and the unlock chain.
+
+  The old **harder-goes-further quarter-by-quarter** assertion was deleted 2026-08-21 at Matt's
+  ask as obsolete; the ladder assertions in the `dial` group cover the same ground. Do not re-add
+  it.
 - `node test-game-conventions.mjs` — the shared checklist (viewport, touch, overlays, name gate,
   module contract, listener balance, dictionary, the layout-class collision rule).
 - `node test-visual.mjs skeeball` — the only suite that LOOKS at it. Its PLAY probe swipes the
@@ -450,9 +465,11 @@ invisible (rule 1; the comment on the `TABS` row records this).
   `:root.gh-dark .sk-root` override (the pattern the retired build used) — while the PLAY screen
   keeps the warm dark arcade look in both themes (Ball Run/Hill Climb/Pinball's class). The
   header comment in the CSS marks where one skin ends and the other begins. Do not "unify" them.
-- The swipe measures the RELEASE flick (the last ~130ms), not the whole gesture — the wind-up is
-  grip, not power. Power normalises against the stage height so a phone and a desktop feel
-  alike. **Samples are clocked with `e.timeStamp`, never `performance.now()`** — under load the
+- The swipe takes **the faster of the release flick and the whole gesture** (`swipeSpeed()` in
+  `js/swipe.js`): the release window is the first sample within ~200ms of the end, to the end,
+  and is discarded if it finished downward; the whole gesture is first sample to last. `max` of
+  the two, so angling a throw costs no power. Power normalises against the stage height so a
+  phone and a desktop feel alike. **Samples are clocked with `e.timeStamp`, never `performance.now()`** — under load the
   handlers run late and bunched, and handler-time clocking collapses a strong swipe into a
   dribble. That bug only shows on a busy main thread, which is exactly a cheap phone.
 - `physics.js` has no randomness at all. If a future machine wants scatter, thread a seeded rng
