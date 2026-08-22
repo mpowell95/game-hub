@@ -148,15 +148,30 @@ gap is zero. Merging works for ring segments against a rail (the classic's 100s)
 work for a collar a ball approaches along the rail. Standing rule: keep every collar at least a
 ball plus margin off the rails.
 
-The shipped lattice (row step t = 1.65X, lateral half-step s = 1.035X) makes every wall gap -
-same-row, diagonal, and collar-to-rail - at least 0.78X against the 0.70X ball, with nothing
-merged. That needed the top slot raised to v = 8.9125X (above the classic 100s' row) to buy the
-diagonals their length; it stays reachable because a 0.35X collar asks for far less arrival
-clearance than the classic's X-tall rings. Collars are 0.35X for the same two reasons the sweep
-gave: at 0.5X the two upper-diagonal slots were unreachable at every cell of the grid (the
-descending arc met the wall face instead of clearing it), and lower walls scatter clipped balls
-less. Verified after: all nine slots capturable without the watchdog, 0 emergencies in 459
-throws.
+The first shipped lattice (t = 1.65X, s = 1.035X, cups 0.5X, the classic's 0.35X ball) made
+every wall gap at least 0.78X with nothing merged. Collars are 0.35X for the same two reasons
+the sweep gave: at 0.5X the two upper-diagonal slots were unreachable at every cell of the grid
+(the descending arc met the wall face instead of clearing it), and lower walls scatter clipped
+balls less.
+
+Matt's first play (2026-08-22, same day) resized the whole face: the real Popongo is a PING PONG
+ball into SOLO cups - mouth about 2.4x the ball - and at the classic's ball our mouths read tiny
+and sat far apart. They could not simply grow: the 3-across row binds cup size (three collars
+plus four ball-passing gaps inside boardW), and at a 0.70X ball the mouths cap at ~1.0X, which
+is where they already were. **Shrinking the ball is what buys the cup feel** - `ballR 0.28X`
+under a `ball.ratio` waiver in the board entry - so the cups grew to `0.5625X` (mouth/ball
+~2.0) on a tighter lattice: t = 1.63X, s = 1.075X, minimum wall gap 0.64X against the 0.56X
+ball, top slot at v = 8.8325X. Re-swept after: all nine slots clean-capturable, 0 emergencies
+in 459 throws.
+
+The same play session found capture paying for balls that merely HIT a cup. Two causes, both
+fixed in physics.js, both cup-board-gated so THE CLASSIC's numbers are byte-identical: the
+capture test's `need` was calibrated for FLUSH holes, so a fast ball crossing a collared mouth
+"captured" when it would really clip the far rim and bounce out (`needH` now adds
+`max(0, h − collarH)` - past the lip means below the RIM); and the watchdog walked a jammed
+ball into the nearest mouth, a scripted score. On a cup board a jammed or capped ball now
+resolves as the trough's zero: falling through a mouth is the only way to score, watchdog
+included.
 
 ## Swipe and power
 

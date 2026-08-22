@@ -47,7 +47,10 @@ c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
 | `ballR` | `0.350X` |
 | `ballMass` | `0.18` |
 
-Size the machine, not the ball.
+Size the machine, not the ball. The one shipped exception is POPONGO's ping-pong ball
+(`0.28X`, under a `ball.ratio` waiver Matt asked for by name): its real game's cup-to-ball
+ratio was unreachable any other way, because a 3-across cup row caps cup size against the
+rails. A waiver, not a precedent — the next machine starts at `0.350X`.
 
 ## 3 · Cabinet — `board.dims`
 
@@ -198,6 +201,12 @@ Two things follow, and they are the whole feel of the machine:
 - **The ball's own speed into the face counts.** `hDot` is in `tDrop`, so a ball arriving out of
   the air drops in at speeds a rolling ball skims straight across at. That is what makes distance
   up the slope choose the cup, instead of the first mouth a roll reaches swallowing everything.
+- **On a COLLARED hole, "past the lip" means below the RIM plane**, not the face plane: when the
+  hole has a `collarH`, `need` grows by `max(0, h − collarH)` (the `needH` term in `physics.js`),
+  so a fast ball clipping across a cup's mouth is not scored for what would really be a far-rim
+  bounce. Flush holes keep the numbers above exactly. Same honesty in the emergencies: on a cup
+  board a jammed or capped ball resolves as the trough's zero — the watchdog never walks a ball
+  into a mouth there.
 
 `geom.captureDrop` is `0.35` on THE CLASSIC. **Write it on every machine.** Leave it out and
 `physics.js` silently falls back to `0.55` — a much harder machine — and no test catches it.
@@ -416,6 +425,10 @@ building it as well as using it.
 
 **Every machine has its own objectives.** They are what unlocks the next machine, and Matt sets
 them per board — never assume the previous machine's.
+
+**Objectives are completely distinct per machine** (Matt, 2026-08-22): a machine's goals count
+only THAT machine's plays. Score goals read the machine's own `sk.boards.<id>` record, never the
+lifetime-global `sk` fields, which blend every machine.
 
 The fireworks and the tiles that show progress are shared by every machine. Only the objectives
 themselves change. Colours of the tiles may change with the machine.
