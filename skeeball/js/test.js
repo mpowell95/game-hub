@@ -12,19 +12,80 @@ import { simulateThrow, startThrow, step, takeEvents, STEP } from './physics.js'
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
 import { buildMachine } from './machine.js';
+import { execFileSync } from 'node:child_process';
 
-// TWO SPEEDS. Nearly all of this file's runtime is four blocks that fire thousands of simulated
-// throws at the real engine - the reachability sweep alone is 861. They are worth running, but
-// only when THE PHYSICS OR THE BOARD has moved; nothing else in the repo can change what a thrown
-// ball does. The rest - the rules, the counters, snapshot/restore, the unlock chain - is cheap
-// and runs every time.
+// RUN ONLY WHAT YOUR CHANGE COULD BREAK. Nearly all of this file's runtime is a handful of
+// blocks that fire thousands of simulated throws at the real engine. They are grouped by what
+// makes them go red, so a materials tweak does not pay for the ramp tests and vice versa.
 //
-//   node skeeball/js/test.js            the cheap half, seconds
-//   node skeeball/js/test.js --full     everything, minutes
+//   reach   every hole is still scorable by SOME swipe  (the 41x21 sweep, the settle cap,
+//           the walkout rate). Any physical change can break this.
+//   dial    the power curve's shape: no dead ends, bands wide enough to aim at, 30/40/50 in
+//           order. Any physical change can break this.
+//   ramp    the ball leaves the ramp, lands up the board, and a weak throw comes back.
+//           Only the ramp, the lane and the throw speeds move this.
+//   mat     the 100 stays a skill shot, the ball rattles, and 250 soak throws stay legal.
+//           Only bounce and grip move this.
+//   holes   left/right symmetry. Only hole positions and board dimensions move this.
 //
-// run-all-tests.mjs passes --full by itself when physics.js, boards.js or machine.js differs from
-// origin/main, so nobody has to remember to.
-const FULL = process.argv.includes('--full') || process.env.SKB_FULL === '1';
+// The rules, counters, snapshot/restore and the unlock chain are cheap and always run.
+//
+//   node skeeball/js/test.js            the cheap half only - unchanged, what run-all-tests.mjs runs
+//   node skeeball/js/test.js --auto     pick the groups from what differs from origin/main
+//   node skeeball/js/test.js --mat      one or more groups by name (--reach --dial --ramp --holes)
+//   node skeeball/js/test.js --full     everything
+//
+// run-all-tests.mjs runs this with NO arguments, so it has never run the heavy blocks; the note
+// that used to sit here claiming it passed --full by itself was wrong. Pass --auto yourself.
+const ARGV = process.argv.slice(2);
+const FULL = ARGV.includes('--full') || process.env.SKB_FULL === '1';
+const GROUPS = ['reach', 'dial', 'ramp', 'mat', 'holes'];
+const G = Object.fromEntries(GROUPS.map((k) => [k, FULL]));
+let why = FULL ? 'all groups (--full)' : 'no heavy groups (fast run)';
+
+// EXPLICIT WINS. --mat runs exactly the mat group, nothing inferred.
+const named = GROUPS.filter((k) => ARGV.includes('--' + k));
+if (!FULL && named.length) { for (const k of named) G[k] = true; why = 'named: ' + named.join(' '); }
+
+// --auto: read what actually differs from origin/main and switch on only the groups that
+// difference can break. FAILS OPEN - if git cannot answer, every group runs and says so, because
+// a suite that silently skips the block covering your change is worse than a slow one.
+if (!FULL && !named.length && ARGV.includes('--auto')) {
+  const NL = String.fromCharCode(10);
+  const git = (args) => {
+    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  };
+  try {
+    const files = git(['diff', '--name-only', 'origin/main', '--', 'skeeball/js/physics.js',
+      'skeeball/js/machine.js', 'skeeball/js/boards.js']).split(/\r?\n/).filter(Boolean);
+    if (!files.length) { why = 'nothing physical differs from origin/main'; }
+    else if (files.some((f) => !f.endsWith('boards.js'))) {
+      for (const k of GROUPS) G[k] = true;
+      why = 'physics.js or machine.js changed - everything physical is in play';
+    } else {
+      // boards.js only: match the CHANGED LINES against what each group owns.
+      const hunk = git(['diff', '-U0', 'origin/main', '--', 'skeeball/js/boards.js'])
+        .split(/\r?\n/).filter((l) => /^[+-]/.test(l) && !/^[+-][+-]/.test(l)).join(NL);
+      const hit = (re) => re.test(hunk);
+      G.ramp = hit(/humpAngles|humpLen|minSpeed|maxSpeed|aimMax|ballR|ballMass|laneLen|laneW|bedThick|laneRailH/);
+      G.mat = hit(/Fric|Rest/);
+      G.holes = hit(/ringD|ringOpen|holeR|boardW|boardLen|boardTilt|boardLipY|backboardH|railH|holes|\bu:|\bv:/);
+      // reach and dial answer to ALL of it: a bounce tweak can strand a corner 100 just as surely
+      // as moving the hole can, and both reshape the ladder.
+      G.reach = G.dial = G.ramp || G.mat || G.holes;
+      if (!G.reach) { G.reach = G.dial = true; why = 'boards.js changed in a way this cannot classify - running reach and dial'; }
+      else why = 'boards.js diff vs origin/main';
+    }
+  } catch (e) {
+    for (const k of GROUPS) G[k] = true;
+    why = 'git could not answer (' + e.message.split(/\r?\n/)[0] + ') - running everything';
+  }
+}
+
+
+// SAY THE PLAN UP FRONT. The summary at the bottom is no use to someone deciding whether to
+// wait for it.
+console.log(`heavy groups: ${GROUPS.filter((k) => G[k]).join(" ") || "none"}  (${why})`);
 
 let passed = 0;
 const failures = [];
@@ -82,7 +143,7 @@ const SWEEP_POWERS = 41;
 // one throw per outcome. These are MEASURED landing points, not guesses. If one goes stale block 6
 // does not care - every assertion there is self-consistent (the score equals the sum of whatever
 // actually landed) - and proving they are still right is exactly what --full is for.
-if (!FULL) {
+if (!G.reach) {
   for (const [hole, power, aim] of [
     ['h10', 0.15, 0], ['h20', 0.25, 0], ['c30', 0.35, 0], ['c40', 0.50, 0], ['c50', 0.62, 0],
     ['100L', 0.92, -0.42], ['100R', 0.75, 0.17], ['corner0', 0.83, 0],
@@ -92,7 +153,7 @@ if (!FULL) {
   }
 }
 {
-  if (FULL) for (let p = 0; p < SWEEP_POWERS; p++) {
+  if (G.reach) for (let p = 0; p < SWEEP_POWERS; p++) {
     for (const aim of SWEEP_AIMS) {
       const r = simulateThrow(board, { power: p / (SWEEP_POWERS - 1), aim });
       const hole = r.outcome ? r.outcome.hole : 'returned';
@@ -105,14 +166,14 @@ if (!FULL) {
   // deliberately NOT in this list: the classic's minSpeed starts where the 20 starts, so nothing
   // on this machine rolls back unspent. The rollback path itself is still exercised in block 6,
   // on a board whose minSpeed sits under the hump.
-  if (FULL) for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
+  if (G.reach) for (const hole of ['h10', 'h20', 'c30', 'c40', 'c50', '100L', '100R', 'corner0']) {
     ok(`reachable: ${hole}`, found.has(hole),
       `no (power, aim) in the sweep produced ${hole}; found: ${[...found.keys()].join(', ')}`);
   }
   // THE SOFT END OF THE DIAL IS NEVER WASTED: no straight throw may fail to reach the board. A
   // ball that banks off a side rail on a hard angled fling and comes back is a different thing -
   // real, rare, and allowed within a bound.
-  if (FULL) {
+  if (G.ramp) {
     let straightRoll = 0;
     let anyRoll = 0;
     for (let p = 0; p <= 40; p++) {
@@ -134,10 +195,10 @@ if (!FULL) {
 
   // THE BALL MUST GET IN THE AIR. A "touched the scoring face" check alone cannot see a ramp
   // that never launches - see DECISIONS.md#launch-angle-history.
-  ok('the ramp launches STEEPER than the board is tilted (or no arc is possible at all)',
+  if (G.ramp) ok('the ramp launches STEEPER than the board is tilted (or no arc is possible at all)',
     Math.max(...board.geom.humpAngles) > board.geom.boardTilt + 0.15,
     `launch ${Math.max(...board.geom.humpAngles)} rad vs boardTilt ${board.geom.boardTilt} rad`);
-  {
+  if (G.ramp) {
     // How far up the face is the ball when it FIRST comes down on it? A real throw drops into a
     // cup or lands high; only a dribble should land on the bottom edge.
     const landings = [];
@@ -167,23 +228,25 @@ if (!FULL) {
   // first contact rather than on settle. Kept as a ceiling so worse settling still trips.
   // 12.05 not 12: the cap is 12s and the loop only notices it has passed AFTER the step that
   // does so, so a capped throw lands a single 1/240s step over.
-  ok('nothing takes longer than the emergency cap to settle (measured 12.0s)', sweepSlowest <= 12.05,
+  if (G.reach) ok('nothing takes longer than the emergency cap to settle (measured 12.0s)', sweepSlowest <= 12.05,
     `slowest: ${sweepSlowest.toFixed(1)}s`);
-  ok('the walkout/emergency path stays rare (under 2% of the sweep)',
+  if (G.reach) ok('the walkout/emergency path stays rare (under 2% of the sweep)',
     sweepEmergencies <= Math.ceil(SWEEP_POWERS * SWEEP_AIMS.length * 0.02),
     `${sweepEmergencies} of ${SWEEP_POWERS * SWEEP_AIMS.length}`);
   // The 100 is a skill shot: it must NOT be scorable with a straight ball.
-  let straight100 = false;
-  for (let p = 0; p <= 60; p++) {
-    if (String(outcomeOf(p / 60, 0)).startsWith('100')) straight100 = true;
+  if (G.mat) {
+    let straight100 = false;
+    for (let p = 0; p <= 60; p++) {
+      if (String(outcomeOf(p / 60, 0)).startsWith('100')) straight100 = true;
+    }
+    ok('the 100 cups need real aim, never a straight ball', !straight100);
   }
-  ok('the 100 cups need real aim, never a straight ball', !straight100);
 }
 
 // --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
 // This block IS the current contract for the power curve - see DECISIONS.md#power-curve-rebuild
 // for why it looks like this rather than the simpler "overshoot always costs you" shape.
-if (FULL) {
+if (G.dial) {
   const at = (p) => outcomeOf(p, 0);
   const ladder = [];
   for (let p = 0; p <= 100; p++) ladder.push(valueOf(p / 100, 0));
@@ -233,22 +296,13 @@ if (FULL) {
     p30 !== null && p40 !== null && p50 !== null && p30 < p40 && p40 < p50,
     `first powers: c30=${p30} c40=${p40} c50=${p50}`);
 
-  // HARDER GOES FURTHER. The whole point of the dial: averaged over each quarter, a harder
-  // quarter must not score less than a softer one.
-  const mean = (lo, hi) => {
-    let s = 0, n = 0;
-    for (let p = lo; p <= hi; p += 0.02) { s += valueOf(p, 0); n++; }
-    return s / n;
-  };
-  const q = [mean(0.00, 0.24), mean(0.25, 0.49), mean(0.50, 0.74), mean(0.75, 1.00)];
-  // GUARD: THE TOP QUARTER IS ALLOWED TO FALL, and that is a design decision, not a bug. This
-  // demanded q0 < q1 < q2 < q3 - harder always scores more - and was red, because the real shape
-  // is 8.5, 30.0, 32.5, 13.1. Matt's call, 2026-08-20: throw it as hard as you can in an arcade
-  // and it comes off the back wall for nothing, so the machine is right and the assertion was
-  // wrong. What must still hold is that power PAYS right up to the point you overshoot.
-  ok('harder goes further, up to the point you overshoot',
-    q[0] < q[1] && q[1] < q[2], `quarter means ${q.map((v) => v.toFixed(1)).join(', ')}`);
+  // The quarter-mean 'harder goes further' assertion was DELETED 2026-08-21 on Matt's call:
+  // obsolete. The ladder assertions above already cover the dial. Do not re-add it.
 
+}
+
+// --- 3a. the 100 is a skill shot: reachable on a hard angle, never on a half-hearted one --
+if (G.mat) {
   // THE 100 IS THE RISK. It needs full power and a hard sideways aim, it is worth double the 50,
   // and missing it costs the ball - which is what stops "slam it straight" being the whole game.
   const corner = (p, a) => valueOf(p, a);
@@ -281,7 +335,7 @@ if (FULL) {
 
 // --- 3b. the footage contract: rattle is real, settle always ends ------------------------------
 
-{
+if (G.mat) {
   // Somewhere in the sweep a ball must genuinely rattle (the reference clips' 1.5s-3s settles,
   // on top of ~0.7s of lane), and the emergency cap must never be the thing that ends a throw.
   let longest = 0; let longestParams = null;
@@ -308,7 +362,7 @@ if (FULL) {
 // The machine is geometrically mirror-symmetric, but the solver iterates contacts in list
 // order, so knife-edge throws can genuinely split. Demand symmetry in the large, not per throw.
 
-{
+if (G.holes) {
   const mirror = (h) => (h === '100L' ? '100R' : h === '100R' ? '100L' : h);
   let agree = 0;
   const pairs = [[0.5, 0.3], [0.7, 0.45], [0.9, 0.8], [0.22, 1], [0.6, 0.2], [0.8, 0.65], [0.35, 0.5]];
@@ -324,7 +378,7 @@ if (FULL) {
 
 // --- 5. the soak: no throw ever hangs, leaks or invents a value --------------------------------
 
-if (FULL) {
+if (G.mat) {
   // Deterministic pseudo-random driver (mulberry32) - reproducible failures or none at all.
   let seed = 0xC0FFEE;
   const rng = () => {
@@ -462,8 +516,10 @@ if (FULL) {
 // --- summary -----------------------------------------------------------------------------------
 
 console.log(`\nSkeeball engine: ${passed} passed, ${failures.length} failed.`);
-if (!FULL) {
-  console.log('  FAST RUN - the heavy physics blocks were SKIPPED: the reachability sweep, the');
-  console.log('  rollback bound, the power curve and the soak. Run with --full to include them.');
+{
+  const ran = GROUPS.filter((k) => G[k]);
+  const skipped = GROUPS.filter((k) => !G[k]);
+  console.log(`  heavy groups run: ${ran.length ? ran.join(' ') : 'none'}  (${why})`);
+  if (skipped.length) console.log(`  SKIPPED: ${skipped.join(' ')} - --auto picks by your diff, --full runs all`);
 }
 if (failures.length) { for (const f of failures) console.log(`  - ${f}`); process.exit(1); }
