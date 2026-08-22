@@ -604,7 +604,6 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 // add the GAME_META row. An entry here that HAS been added to GAME_META fails too, so the list
 // cannot go stale.
 const OFF_THE_BOARD = {
-  skeeball: 'admin-only; the row reappears the moment the hub GAMES entry drops devOnly',
   pinball: 'admin-only; same',
 };
 {
@@ -641,7 +640,11 @@ const OFF_THE_BOARD = {
     hubSrc.slice(m.index, i + 1 < hits.length ? hits[i + 1].index : hubSrc.length)
   )).map((m) => m[1]));
 
-  ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 2);
+  // A sanity check on the PARSING, not on the registry: if a regex silently matched nothing, every
+  // assertion below would pass vacuously. devOnly was `>= 2` until Skeeball was released on
+  // 2026-08-22 and Pinball became the only dev-only game; the floor is 1 because at zero the
+  // devOnly branch below is never exercised at all.
+  ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 1);
 
   for (const id of statsIds) {
     if (metaIds.includes(id)) continue;

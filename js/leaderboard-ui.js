@@ -132,10 +132,11 @@ const GAME_META = [
   // while the board counted 0 - stored, synced, and invisible, which is THE LAW rule 1 exactly.
   // players-agg.test.mjs's second [KNOWN-BUG PROBE] block now fails if a shipped game is absent.
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
-  // Skeeball is deliberately ABSENT while it is admin-only, same as Pinball: the leaderboard is
-  // the shared bragging wall and an unreleased game has no business on it. Nothing is lost - the
-  // plays are in every device's store and in players/, and the row reappears the moment the
-  // GAMES entry drops `devOnly`.
+  // Skeeball joined on 2026-08-22, the day its hub entry dropped `devOnly`. It was deliberately
+  // absent before that, same as Pinball still is: the leaderboard is the shared bragging wall and
+  // an unreleased game has no business on it. Its pre-release plays were never lost - they sat in
+  // every device's store and in players/ the whole time, and counted the moment this row existed.
+  { id: 'skeeball', labelKey: 'game_title_skeeball' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
