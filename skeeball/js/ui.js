@@ -21,7 +21,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
-import { readGoals, readGoalsLive, goalsWon } from './goals.js';
+import { readGoals, readGoalsLive } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
@@ -597,6 +597,8 @@ export class SkeeballUI {
     this.recorded = false;
     this._closeOverlay();
     this.game = snap ? SkeeballGame.restore(snap) : new SkeeballGame(board.id);
+    // What was already met before this rack. Anything that turns met from here is fresh.
+    this._goalsMet = new Set(readGoalsLive(null).filter((g) => g.met).map((g) => g.id));
 
     const pips = Array.from({ length: BALLS_PER_GAME }, (_, i) =>
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
@@ -853,6 +855,7 @@ export class SkeeballUI {
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
     // The rails move on the same beat: a settled ball can change all three numbers.
     this._paintGoalRails();
+    this._checkGoalsNow();
   }
 
   /** Run the displayed score up to the real one. Deliberately quick - this is a machine totting
@@ -871,7 +874,9 @@ export class SkeeballUI {
   _say(text) {
     this.el.msg.textContent = text;
     this.el.msg.classList.add('is-on');
-    this.msgTimer = 1.8;
+    // 0.9s, not 1.8: the next ball arrives on TOUCHDOWN (~1.2s), so a longer message is still
+    // sitting over the lane when the player is lining up the next throw (Matt, 2026-08-21).
+    this.msgTimer = 0.9;
   }
 
   /** THE THREE GOALS, live on the lane: two rails in the gutters either side of the machine.
@@ -887,7 +892,7 @@ export class SkeeballUI {
     const rack = this.game ? this.game.result() : null;
     const [hundreds, best, total] = readGoalsLive(rack);
     const box = (label, g) => `
-      <div class="sk-goal${g.met ? ' is-done' : ''}">
+      <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
         <em>${esc(label)}</em>
         <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
         <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
@@ -928,6 +933,26 @@ export class SkeeballUI {
         ${tile(t('g_single'), best)}
         ${tile(t('g_total'), total)}
       </div>`;
+  }
+
+  /** GUARD: A GOAL IS CELEBRATED THE MOMENT IT LANDS, not when the rack ends. This used to run
+   *  off _rackOver, comparing the goals before and after the rack was recorded - so a fifth
+   *  100 thrown on ball 3 was celebrated after ball 9, behind the game-over card, and nothing
+   *  whatsoever marked the moment it happened (Matt, 2026-08-21). It reads the LIVE goals, so
+   *  the rack in progress counts, and `_goalsMet` makes each one fire exactly once. */
+  _checkGoalsNow() {
+    if (!this.game || !this._goalsMet) return;
+    const live = readGoalsLive(this.game.result());
+    const fresh = live.filter((g) => g.met && !this._goalsMet.has(g.id));
+    if (!fresh.length) return;
+    for (const g of fresh) {
+      this._goalsMet.add(g.id);
+      // Applied AFTER the repaint above, so it survives until the next ball and the one-shot
+      // animation plays once rather than restarting on every beat.
+      const box = this.root.querySelector(`[data-goal="${g.id}"]`);
+      if (box) box.classList.add('is-fresh');
+    }
+    this._fireworks(fresh.length, live.every((g) => g.met));
   }
 
   /** Repaint the lane rails. Called wherever the ball count is repainted, which is the same
@@ -975,7 +1000,6 @@ export class SkeeballUI {
     // What stood BEFORE this rack lands in the store - that is what "NEW BEST" means.
     const prev = myRecords(board.id);
     const prevTop = (this.top[board.id] && this.top[board.id].score) || 0;
-    const goalsBefore = readGoals();
 
     if (!this.recorded) {
       this.recorded = true;
@@ -996,9 +1020,8 @@ export class SkeeballUI {
     }
     this.lastScore = { board: board.id, score: result.score };
 
-    // What this rack just earned. recordSkeeball has already run above, so the store is current.
-    const won = goalsWon(goalsBefore, readGoals());
-    if (won.fresh.length) this._fireworks(won.fresh.length, won.all);
+    // Nothing is celebrated here any more: _checkGoalsNow fires the moment a goal lands, off
+    // the live reading. Firing again from the recorded one would double every celebration.
 
     const now = myRecords(board.id);
     if (this.top[board.id] && result.score > (this.top[board.id].score | 0)) {
