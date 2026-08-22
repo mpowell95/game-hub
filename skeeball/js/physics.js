@@ -86,7 +86,7 @@ function buildWorld(board) {
         : s.part === 'board' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'glass' ? matDead : matWall,
+            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
