@@ -233,6 +233,15 @@ export class Renderer {
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
+      // BASKET FEVER (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
+      // basket with a white mini backboard carrying the value - the real cabinet's furniture.
+      // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
+      // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
+      if (this.board.dressing === 'basketball') {
+        this._wireBasket(H, cup && cup.color);
+        if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
+        continue;
+      }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
         H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1,
         cup && cup.color);
@@ -641,7 +650,7 @@ export class Renderer {
     const step = G.ballR * 2.12;
     for (let i = 0; i < BALLS_PER_GAME - 1; i++) {
       const b = new THREE.Mesh(this.ballGeo || (this.ballGeo = this._track(new THREE.SphereGeometry(G.ballR, 20, 14))),
-        this._mat({ color: 0xefe6d4, roughness: 0.45 }));
+        this._mat({ color: this.board.dressing === 'basketball' ? 0xe8641f : 0xefe6d4, roughness: 0.45 }));
       b.position.set(cx, floorY + G.ballR, zNear - 0.07 - i * step);
       b.castShadow = true;
       this.scene.add(b);
@@ -1126,6 +1135,103 @@ export class Renderer {
     this.scene.add(mesh);
   }
 
+  /** BASKET FEVER's hoop: the physics collar drawn as an orange WIRE basket - a rim torus at
+   *  the collar's exact top (the height the ball really rattles on), a thinner mid ring, and
+   *  vertical struts down to the face, all at the collar wall's radius. Cosmetic: the solid the
+   *  ball hits is machine.js's collar boxes, and every wire sits ON that wall's surface, so
+   *  nothing the ball does contradicts what is drawn. */
+  _wireBasket(H, color) {
+    const G = this.G;
+    const R = H.r + G.collarThick / 2;
+    const col = new THREE.Color(color || 0xe8541f);
+    // The emissive floor is the collar walls' lesson (_scallopedRim): a wall perpendicular to
+    // the face gets no key light, and a thin wire even less.
+    const mat = this._mat({ color: col, roughness: 0.4, metalness: 0.25, emissive: col, emissiveIntensity: 0.4 });
+    const g = new THREE.Group();
+    const rim = new THREE.Mesh(this._track(new THREE.TorusGeometry(R, 0.007, 8, 36)), mat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = H.collarH;
+    g.add(rim);
+    const mid = new THREE.Mesh(this._track(new THREE.TorusGeometry(R, 0.004, 6, 30)), mat);
+    mid.rotation.x = Math.PI / 2;
+    mid.position.y = H.collarH * 0.52;
+    g.add(mid);
+    const strutGeo = this._track(new THREE.CylinderGeometry(0.0035, 0.0035, H.collarH, 6));
+    const N = 10;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const s = new THREE.Mesh(strutGeo, mat);
+      s.position.set(Math.cos(a) * R, H.collarH / 2, Math.sin(a) * R);
+      s.castShadow = true;
+      g.add(s);
+    }
+    rim.castShadow = true;
+    this._onFace(g, H.u, H.v, 0);
+    this.scene.add(g);
+  }
+
+  /** BASKET FEVER's value: a white mini BACKBOARD standing on the hoop's UP-SLOPE side (the
+   *  real cabinet mounts one behind every basket), the number in a red-bordered box. Same
+   *  concentric-arc construction as _cupPlate - the shape a cylinder can hold - but centred at
+   *  theta = PI (up-slope; theta = 0 faces the player, see _cupPlate's _onFace note) and read
+   *  from its CONCAVE side by a camera looking up the slope, so the number is drawn mirrored.
+   *  Rises to 1.9x the collar height; the part above the rim is cosmetic only - no physics
+   *  body - which a descending ball can, rarely and briefly, pass through. */
+  _hoopBackboard(H, cup, glow) {
+    const G = this.G;
+    const R = H.r + G.collarThick + 0.006;
+    const PLATE_H = H.collarH * 1.9;
+    const HALF_ARC = 50 * Math.PI / 180;
+    const PPM = 2200;
+    const lab = String(cup.label);
+
+    const cw = Math.max(8, Math.round(2 * HALF_ARC * R * PPM));
+    const ch = Math.max(8, Math.round(PLATE_H * PPM));
+    const c = this._canvas(cw, ch);
+    const x = c.getContext('2d');
+    x.fillStyle = '#f2efe6';
+    x.fillRect(0, 0, cw, ch);
+    // the red-bordered value box, like the reference cabinet's number cards
+    const bw = cw * 0.56, bh = ch * 0.62;
+    const bx = (cw - bw) / 2, by = ch * 0.10;
+    x.fillStyle = '#ffffff';
+    x.fillRect(bx, by, bw, bh);
+    x.lineWidth = Math.max(2, ch * 0.045);
+    x.strokeStyle = '#d3392e';
+    x.strokeRect(bx, by, bw, bh);
+    // the number, mirrored so it reads correctly from the cylinder's inside
+    let fontPx = bh * 0.8;
+    x.font = `800 ${fontPx}px system-ui, sans-serif`;
+    const m0 = x.measureText(lab);
+    fontPx *= Math.min(1, (bw * 0.82) / m0.width);
+    x.save();
+    x.translate(cw, 0);
+    x.scale(-1, 1);
+    x.font = `800 ${fontPx}px system-ui, sans-serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = '#1c1c1c';
+    x.fillText(lab, cw / 2, by + bh / 2 + fontPx * 0.04);
+    x.restore();
+
+    const tex = this._track(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+
+    const geo = this._track(new THREE.CylinderGeometry(
+      R, R, PLATE_H, 32, 1, true, Math.PI - HALF_ARC, 2 * HALF_ARC,
+    ));
+    const mesh = new THREE.Mesh(geo, this._mat({
+      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow,
+      roughness: 0.5, side: THREE.DoubleSide,
+    }));
+    this._onFace(mesh, H.u, H.v, PLATE_H / 2);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    this.scene.add(mesh);
+  }
+
   /** THE BACKBOARD IS THE SCOREBOARD: four records, label over value, left to right (All Time
    *  with the record holder's name, Your Best, Today, Last Game). GUARD: THE COLUMNS ARE A
    *  FIXED PIXEL WIDTH AND THE PANEL A FIXED HEIGHT - a score gaining a digit, or a long player
@@ -1323,16 +1429,36 @@ export class Renderer {
     // A speckled two-tone surface so the ROLL is visible - a plain sphere spins invisibly.
     const c = this._canvas(128, 64);
     const x = c.getContext('2d');
-    x.fillStyle = '#efe6d4';
-    x.fillRect(0, 0, 128, 64);
-    x.fillStyle = 'rgba(120,90,50,0.5)';
-    x.fillRect(0, 28, 128, 8);
-    for (let i = 0; i < 46; i++) {
-      x.globalAlpha = 0.18;
-      x.beginPath();
-      x.arc((i * 53) % 128, (i * 29) % 64, 2.2, 0, Math.PI * 2);
-      x.fillStyle = i % 2 ? '#6b4a26' : '#fffdf6';
-      x.fill();
+    if (this.board.dressing === 'basketball') {
+      // A BASKETBALL: pebbled orange with black seams. Equirect wrap: the horizontal band is
+      // the equator seam, the vertical bands are meridians. The pebble speckle keeps the roll
+      // visible, same job as the classic ball's flecks.
+      x.fillStyle = '#e8641f';
+      x.fillRect(0, 0, 128, 64);
+      for (let i = 0; i < 60; i++) {
+        x.globalAlpha = 0.14;
+        x.beginPath();
+        x.arc((i * 41) % 128, (i * 23) % 64, 1.6, 0, Math.PI * 2);
+        x.fillStyle = i % 2 ? '#a3400f' : '#ff8a45';
+        x.fill();
+      }
+      x.globalAlpha = 1;
+      x.fillStyle = '#241505';
+      x.fillRect(0, 30, 128, 3);                        // equator
+      for (const sx of [0, 32, 64, 96]) x.fillRect(sx, 0, 3, 64);   // meridians
+    } else {
+      x.fillStyle = '#efe6d4';
+      x.fillRect(0, 0, 128, 64);
+      x.fillStyle = 'rgba(120,90,50,0.5)';
+      x.fillRect(0, 28, 128, 8);
+      for (let i = 0; i < 46; i++) {
+        x.globalAlpha = 0.18;
+        x.beginPath();
+        x.arc((i * 53) % 128, (i * 29) % 64, 2.2, 0, Math.PI * 2);
+        x.fillStyle = i % 2 ? '#6b4a26' : '#fffdf6';
+        x.fill();
+      }
+      x.globalAlpha = 1;
     }
     const tex = this._track(new THREE.CanvasTexture(c));
     // ONE MESH PER BALL THAT CAN BE IN THE AIR AT ONCE, plus the one waiting on the lane. They

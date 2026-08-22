@@ -377,6 +377,11 @@ export const BOARDS = [
     id: 'basketball',
     name: 'BASKET FEVER',
     taglineKey: 'board_basketball_tag',
+    // Render dressing (Matt, 2026-08-22: "cups instead of basketball baskets... shooting a
+    // basketball"): render.js branches on this to draw the ball as a basketball, the collars as
+    // orange wire baskets, and each value on a white mini backboard behind its hoop. Physics is
+    // untouched - the wall the ball hits is still machine.js's collar.
+    dressing: 'basketball',
     // Complete POPONGO's three objectives (js/goals.js). Same goals-based shape as POPONGO's own
     // unlock; unlocksEarned() ignores it (no `score` field) and ui.js applies it.
     unlock: { board: 'popongo', goals: true },
@@ -438,7 +443,14 @@ export const BOARDS = [
       laneW: X * 4.875,
       bedThick: 0.06,
       humpLen: 0.42,
-      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+      // STEEPER THAN THE CLASSIC'S RAMP, deliberately (Matt, 2026-08-22: the throw must read as
+      // SHOOTING A BASKETBALL, not rolling a skeeball). Final segment 70 degrees - the spec's
+      // allowed maximum (section 5, 55-70) - in six even steps so the ball can track the
+      // surface. Range up the face barely moves (R goes as cos(t)sin(t - tilt): 0.289 v^2 vs
+      // 0.285 at 64 degrees) but the peak is higher and the descent steeper, so the ball drops
+      // INTO a basket from above instead of skimming up the face. Re-swept after: all nine
+      // hoops clean-capturable, 0 emergencies.
+      humpAngles: [0.2036, 0.4072, 0.6109, 0.8145, 1.0181, 1.2217],
       troughLen: 0.225,
       troughDepth: 0.15,
       boardLipY: 0.42,
