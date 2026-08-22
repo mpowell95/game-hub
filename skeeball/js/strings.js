@@ -29,9 +29,6 @@ const STRINGS = {
     g_single: 'Single game',
     g_total: 'Total points',
     goals_unlocked: 'UNLOCKED',
-    // Dev only, gated on isDevProfile. Delete both when Skeeball ships.
-    devreset: 'Reset Skeeball stats',
-    devreset_confirm: 'Delete every Skeeball stat on this device?\n\nYour best, today, average, lifetime points and all three goal counters go. The next hub load removes them from the server too, and nothing syncs them back.\n\nEvery other game is untouched. This cannot be undone.',
 
     // The records panel - the four numbers every machine shows
     rec_top: 'Top score',
@@ -112,8 +109,6 @@ const STRINGS = {
     g_single: 'Una partida',
     g_total: 'Puntos totales',
     goals_unlocked: 'DESBLOQUEADA',
-    devreset: 'Reiniciar estadísticas de Skeeball',
-    devreset_confirm: '¿Borrar todas las estadísticas de Skeeball en este dispositivo?\n\nTu mejor puntuación, la de hoy, el promedio, los puntos totales y los tres objetivos se van. La próxima carga del hub también los quita del servidor, y nada los restaura.\n\nNingún otro juego se ve afectado. Esto no se puede deshacer.',
 
     rec_top: 'Puntuación máxima',
     rec_top_any: 'cualquier jugador',
