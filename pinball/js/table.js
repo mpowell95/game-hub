@@ -55,7 +55,7 @@ const mx = (x) => 368 - x;
 // dribbles back down the lane and has to be re-plunged, a normal pull makes the orbit. That is the
 // whole plunger skill curve, and it only works because a dribbled ball is handed straight back to
 // the plunger (game.js's shooter-lane rest check) rather than sitting there dead.
-export const PLUNGER = { x: 373, y: 708, minV: 980, maxV: 1820, laneX: 360 };
+export const PLUNGER = { x: 373, y: 708, minV: 812, maxV: 1508, laneX: 360 };
 
 /** Flipper geometry, shared with the renderer so the paddle art and the collider can never drift. */
 export const FLIP = { len: 58, r: 8, rest: 27 * D, sweep: 52 * D, pivotY: 640, dx: 68 };
@@ -69,7 +69,7 @@ export const SWITCHES = [
   { id: 'laneH', x: 152, y: 146, r: 13 },
   { id: 'laneU', x: 192, y: 132, r: 13 },
   { id: 'laneB', x: 232, y: 146, r: 13 },
-  { id: 'rampIn', x: 184, y: 396, r: 17, needUp: 230 },         // fast enough UP = made the ramp
+  { id: 'rampIn', x: 184, y: 396, r: 17, needUp: 191 },         // fast enough UP = made the ramp
   { id: 'scoop', x: 298, y: 302, r: 10, capture: true },        // saucer: holds the ball (see SCOOP)
   { id: 'inlaneL', x: 93, y: 568, r: 12 },
   { id: 'inlaneR', x: mx(93), y: 568, r: 12 },
@@ -86,8 +86,8 @@ export const RAMP_PATH = [
   [184, 392], [184, 330], [192, 268], [214, 222], [250, 200], [290, 204],
   [320, 232], [336, 278], [340, 338], [336, 404], [326, 462], [309, 512],
 ];
-export const RAMP_EXIT_V = [-142, 264];   // along the right inlane, downhill toward the flipper
-export const RAMP_TIME = 1.15;            // seconds end to end
+export const RAMP_EXIT_V = [-118, 219];   // along the right inlane, downhill toward the flipper
+export const RAMP_TIME = 1.39;            // seconds end to end
 
 /** Drop target bank: four targets on one diagonal, upper left. Fed by the RIGHT flipper. */
 const BANK_A = [70, 338], BANK_U = [0.8, 0.6], BANK_LEN = 19, BANK_STEP = 23.67;
@@ -146,9 +146,9 @@ export function buildTable(opts = {}) {
   add(seg(46, 392, 92, 444, { id: 'orbitDeflect', e: 0.3, oneWay: [0, 1] }));
 
   // --- upper playfield -------------------------------------------------------------------------
-  add(circle(110, 262, 20, { id: 'pop0', kick: 430, e: 0.45 }));
-  add(circle(184, 196, 20, { id: 'pop1', kick: 430, e: 0.45 }));
-  add(circle(250, 242, 20, { id: 'pop2', kick: 430, e: 0.45 }));
+  add(circle(110, 262, 20, { id: 'pop0', kick: 356, e: 0.45 }));
+  add(circle(184, 196, 20, { id: 'pop1', kick: 356, e: 0.45 }));
+  add(circle(250, 242, 20, { id: 'pop2', kick: 356, e: 0.45 }));
 
   add(circle(172, 140, 6, { id: 'lanePost0', e: 0.6 }));
   add(circle(212, 140, 6, { id: 'lanePost1', e: 0.6 }));
@@ -172,8 +172,8 @@ export function buildTable(opts = {}) {
 
   // --- lower playfield -------------------------------------------------------------------------
   // Slingshots first: `kick` means a guaranteed outgoing speed, which is what the solenoid does.
-  add(seg(75, 501, 145, 612, { r: 7, e: 0.4, kick: 520, id: 'slingL' }));
-  add(seg(mx(75), 501, mx(145), 612, { r: 7, e: 0.4, kick: 520, id: 'slingR' }));
+  add(seg(75, 501, 145, 612, { r: 7, e: 0.4, kick: 431, id: 'slingL' }));
+  add(seg(mx(75), 501, mx(145), 612, { r: 7, e: 0.4, kick: 431, id: 'slingR' }));
   // Inlane/outlane dividers. Their lower ends deliberately OVERLAP the flipper pivots (8.5 apart
   // against 13 of combined thickness). An end cap sitting a few units clear of the pivot instead
   // makes a narrow upward-facing V, and a V between two convex surfaces is a STABLE resting place:

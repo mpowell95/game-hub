@@ -12,7 +12,7 @@
 // integration - nearly four ball diameters - so a naive per-frame step would put the ball on the
 // far side of a wall before any test ran, and the ball would leave the table. So: a FIXED
 // PHYS_DT of 1/480 s, run as many times as the frame needs, with the speed hard-capped at
-// MAX_SPEED. 2200 / 480 = 4.6 units of travel per step against a combined ball+wall radius of at
+// MAX_SPEED. 1820 / 480 = 3.8 units of travel per step against a combined ball+wall radius of at
 // least 13, which means every wall in the table is sampled at least twice while the ball crosses
 // it. The cap is therefore a CORRECTNESS bound, not a difficulty knob: raising it without
 // shortening PHYS_DT re-opens tunnelling. `test.js`'s soak asserts no ball ever leaves the table.
@@ -24,7 +24,7 @@
 // even though both use the same three lines of maths.
 
 export const PHYS_DT = 1 / 480;      // one physics step, seconds (see header)
-export const MAX_SPEED = 2200;       // table-units/s; a correctness bound, see header
+export const MAX_SPEED = 1820;       // table-units/s; a correctness bound, see header
 export const BALL_R = 9;
 
 /** A ball. Plain data so game.js can serialise/inspect it and test.js can build one by hand. */
@@ -75,13 +75,24 @@ export function arc(cx, cy, rad, a0, a1, opts = {}) {
 }
 
 /** A flipper: a capsule that rotates about `px,py`. `rest`/`up` are absolute angles in radians;
- *  `dir` is only used by the renderer to know which way the paddle faces. */
+ *  `dir` is only used by the renderer to know which way the paddle faces.
+ *
+ *  `e` IS 0.65 ON PURPOSE AND MUST STAY ABOVE THE WALLS. It was 0.3 until 2026-08-20, which made the
+ *  paddle the DEADEST surface on the whole table - below a wall (0.42), the arch (0.40) and a post
+ *  (0.50). A ball fed down the inlane arrived at 668 units/s and was down to 80 within two touches:
+ *  it lost more energy hitting the flipper than it would have hitting the woodwork, and a playtest
+ *  recording shows the result, a ball that dribbles and dies every time it lands on a paddle. Real
+ *  flipper rubber returns 0.6-0.8. Lowering this again to 'calm the table down' re-breaks the one
+ *  surface the player actually controls; if the table needs calming, calm the kickers instead.
+ *
+ *  `speed` and every other velocity here are on the 2026-08-20 incline rescale - see game.js's
+ *  GRAVITY. They are sqrt(790/1150) of their old values, which leaves trajectories identical. */
 export function flipper(px, py, len, rest, up, opts = {}) {
   return {
     t: 'flipper', px, py, len, rest, up,
-    r: opts.r ?? 8, e: opts.e ?? 0.3, mu: opts.mu ?? 0.05,
+    r: opts.r ?? 8, e: opts.e ?? 0.65, mu: opts.mu ?? 0.05,
     id: opts.id || '', angle: rest, omega: 0, pressed: false,
-    speed: opts.speed ?? 27,     // rad/s; a real flipper sweeps ~50 degrees in ~35 ms
+    speed: opts.speed ?? 22.4,   // rad/s; a real flipper sweeps ~50 degrees in ~40 ms
   };
 }
 
@@ -280,7 +291,7 @@ export function step(world, balls, onContact) {
     // without something here a ball trapped in a bumper nest never loses energy and never settles.
     const sp = Math.hypot(ball.vx, ball.vy);
     if (sp > 0) {
-      const d = 1 - Math.min(0.9, (world.drag ?? 0.16) * PHYS_DT * (0.5 + sp / 900));
+      const d = 1 - Math.min(0.9, (world.drag ?? 0.133) * PHYS_DT * (0.5 + sp / 746));
       ball.vx *= d; ball.vy *= d;
     }
 
