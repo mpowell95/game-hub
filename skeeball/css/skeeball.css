@@ -113,9 +113,13 @@
 
 /* Dev only (isDevProfile), and never rendered for anyone else. Deliberately plain and dashed:
    it should not look like part of the game. Delete with the button when Skeeball ships. */
-/* GUARD: OUT OF FLOW. In the column it took ~55px off the card and squeezed the setup screen
-   (Matt, 2026-08-21: "you made it way worse on the bottom"). Pinned to the screen instead, so
-   a dev-only control cannot cost the real layout a single pixel. */
+/* GUARD: OUT OF FLOW, BUT THE SCREEN STILL RESERVES ITS STRIP. In the column it took ~55px off
+   the card and squeezed the setup screen; pinned to the viewport with nothing reserved it
+   landed on top of Play (Matt, 2026-08-21, both). .sk-hasdev - set by ui.js only when the
+   button actually rendered - adds the strip, so a non-dev profile pays nothing for it. */
+/* The strip. Only ever present for a dev profile. */
+.sk-root.sk-hasdev .sk-setup { padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+
 .sk-root .sk-devreset {
   position: absolute;
   left: 50%;
