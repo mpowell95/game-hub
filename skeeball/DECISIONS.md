@@ -226,6 +226,24 @@ one back-wall clip). What each clip proved and what changed:
   459 throws, slowest settle 4.92s; ladder low from p~0.20 / mid p~0.40 / top p~0.60, the 100
   straight at p0.60-0.72.
 
+The staircase tuning pass, same day, from Matt's first play of it: (1) "thrown straight at any
+fast speed, the ball bounces off the back wall and into the 100 almost every time" - the top
+basket sat 1.5cm from the back wall, directly under both the wall-drip and wall-rebound landing
+zones. Probed with straight throws p0.60-1.30: repositioning alone just moved which power band
+paid (front placement at 0.30m treads: rebounds landed on it; taller collars: no help). What
+worked is DEEPER treads (2.475X / 0.36m) with the basket at the FRONT (0.75X from the front
+edge): every wall-drip, wall-rebound and tier-fall zone is now behind the collar with a real
+passage (0.166m), so those balls roll around the basket and off the edge. Measured: topC on
+fast straight throws went "almost every time" -> 2 of 15, one being the legitimate direct arc.
+(2) "a little too easy" - mouths tightened 1.125X -> 1.0X; direct bands are now 3-6 hundredths
+per tier. (3) "balls that fall from one level down should very rarely land in a lower basket" -
+same front-placement fix; the falling ball hugs the riser and lands behind the collar. (4)
+"everything seems a little low... the back wall seems larger than in the other games" - risers
+1.65X -> 1.925X (staircase tops at ~1.37m, near the classic face's 1.40m) and backboardH back
+to 0.85. deadRest 0.32 so a hard throw bounces BACK toward the player off the wall. Swept: all
+nine capturable, 2 emergencies in 459 (0.4%, honest 0s), vertical pops 5/117 with zero off the
+wall.
+
 The real-machine pass, same day again, against Matt's footage of an actual Basket Fever cabinet
 (in Machines/Machine 4 - Basketball/). Three measured facts drove it: the real ball is SMALL
 against generous baskets (mouth ~2x the ball - the first draft had it at 1.43 and considered
