@@ -242,13 +242,15 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
-    // ADMIN ONLY for now (Matt's ask, 2026-08-11), exactly like Pinball below: `devOnly` keeps
-    // the card off the launcher for everyone but Matt and the tester while the machines/unlock
-    // rework is played in. Dropping `devOnly` is the whole of "release it" - and THAT is when it
-    // gets a `released` date, so the New pill announces the day the family can actually play it.
+    // RELEASED 2026-08-22 (Matt's call). Admin-only from 2026-08-11 while the machines/unlock
+    // rework was played in; dropping `devOnly` was the whole of it, and the `released` date below
+    // is what makes the New pill announce it. Its leaderboard row went in at the same time
+    // (GAME_META in js/leaderboard-ui.js) - players-agg.test.mjs fails if a released game has no
+    // row, because that is how Yahtzee's wins silently counted as zero.
     // Rebuilt from scratch 2026-08-13 (see skeeball/CLAUDE.md); the stats id and its history
     // predate the rebuild and are untouched.
     id: 'skeeball',
+    released: '2026-08-22',
     title: 'Skeeball',
     blurb: { en: 'Roll it up the lane and lob it into the rings. Nine balls, five rings, two corner pockets worth 100.',
       es: 'Lanza la bola por la pista y encéstala en los anillos. Nueve bolas, cinco anillos y dos huecos de 100 en las esquinas.' },
@@ -258,7 +260,6 @@ const GAMES = [
     immersive: true,
     accent: '#54301a',
     art: GAME_ART["skeeball"],
-    devOnly: true,
   },
   {
     id: 'uno',

@@ -29,15 +29,16 @@ exact failure `VISUAL-PROCESS.md` exists to prevent (look at the picture before 
 if there is no picture, ask for one). That rule was read and skipped anyway; do not repeat this.
 The photos and researched behavior now live in this file and in `boards.js`'s `scoring` comment.
 
-**Admin only for now**, exactly like Pinball: the hub entry carries `devOnly: true`. Unlike
-Pinball, the stats id already has REAL family history (the game was live for a couple of hours
+**RELEASED 2026-08-22.** The hub entry dropped `devOnly` and took a `released` date the same day,
+which is what makes the launcher's New pill announce it. Admin-only before that, from 2026-08-11.
+Unlike Pinball, which is still admin-only, the stats id already has REAL family history (the game was live for a couple of hours
 on 2026-08-11 under the previous build), which drives every storage decision below.
 
 ## Hub integration
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../skeeball/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `skeeball` |
+| Registry | `module: '../skeeball/js/ui.js'`, `immersive: true`, `released: '2026-08-22'`, hub id `skeeball` |
 | Stats id | `skeeball` (recorder `recordSkeeball`, sub-counter `sk`) — **pre-existing, frozen** |
 | CSS root / prefix | `.sk-root` / `.sk-` |
 | Settings key | `gamehub.skeeball.v1` (one preference: the selected machine) |
@@ -415,9 +416,10 @@ history keeps accumulating rather than being orphaned:
   branch) all predate this rewrite and were left as they are; `players-agg.test.mjs` carries the
   regression case.
 
-The leaderboard row is deliberately absent while the game is admin-only (`GAME_META` in
-`js/leaderboard-ui.js` says so in place; `players-agg.test.mjs`'s `OFF_THE_BOARD` checks the
-claim). The My Stats tab is deliberately PRESENT and not devOnly — family members may have real
+The leaderboard row went in on 2026-08-22, with the release: a `GAME_META` entry in
+`js/leaderboard-ui.js`, and `skeeball` out of `players-agg.test.mjs`'s `OFF_THE_BOARD`. It was
+deliberately absent before then. That test's parser guard also dropped from `devOnly.size >= 2` to
+`>= 1`, because Pinball is now the only admin-only game left. The My Stats tab is deliberately PRESENT and not devOnly — family members may have real
 plays from the hours the old build was live, and hiding the tab would make their own history
 invisible (rule 1; the comment on the `TABS` row records this).
 
