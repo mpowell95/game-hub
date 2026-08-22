@@ -148,6 +148,22 @@ for (const board of BOARDS) {
   rule(board, 'rings.clipped', clipped.length === 0,
     `a closed ring must lose no segments to the face edges - widen the board or shrink ringD: ${clipped.join(', ')}`);
 
+  // --- 9 mat.single -------------------------------------------------------------------------
+  // Source text, not values: a second `mat: {` at the same level silently replaces the first,
+  // and by the time the object is parsed there is nothing left to detect.
+  const MAT_LINE = new RegExp('^\\s*mat:\\s*\\{');
+  const perIndent = {};
+  SRC.split(String.fromCharCode(10)).forEach((l, i) => {
+    if (!MAT_LINE.test(l)) return;
+    const ind = l.length - l.replace(new RegExp('^\\s+'), '').length;
+    (perIndent[ind] = perIndent[ind] || []).push(i + 1);
+  });
+  const dupes = Object.entries(perIndent).filter(([, ls]) => ls.length > 1);
+  rule(board, 'mat.single', dupes.length === 0,
+    'geom may hold exactly ONE mat block; a later one at the same level silently replaces the '
+    + 'earlier and every value in it is lost. Duplicates at lines: '
+    + dupes.map(([ind, ls]) => ls.join(' and ') + ' (indent ' + ind + ')').join('; '));
+
   // --- 9 mat.complete -----------------------------------------------------------------------
   const mat = G.mat || {};
   const matBad = [];

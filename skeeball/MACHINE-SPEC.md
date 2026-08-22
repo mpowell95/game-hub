@@ -1,11 +1,22 @@
-# Skeeball machine spec
+# Building a Skeeball machine
 
-Every rule here is checked by `test-skeeball-machine-spec.mjs`, against **every** board in
-`BOARDS`. Rule ids in headings are the ids the test reports and the keys a waiver uses.
+Every machine is a copy of THE CLASSIC with a different board face, its own objectives, and its
+own colours.
 
-To break a rule, see **Waivers** at the bottom. There is no other way.
+**Part 1** is fixed. Copy those values exactly.
+**Part 2** is the board face. Different every time.
+**Part 3** is objectives. Different every time.
+**Part 4** is colour. Different every time.
+**Part 5** is wiring it in and checking it.
+
+Rule ids in headings are the ids `test-skeeball-machine-spec.mjs` reports and the keys a waiver
+uses. Waivers are section 20.
 
 ---
+
+# PART 1 — THE MACHINE
+
+Identical on every machine. Copy it.
 
 ## 1 · The unit — `unit.holes`
 
@@ -13,19 +24,14 @@ To break a rule, see **Waivers** at the bottom. There is no other way.
 X = boardW / 6.875        // 0.145455 on THE CLASSIC
 ```
 
-`boardW` is the anchor. Change it and `X` changes with it.
+`boardW` is the anchor. Change it and every other measurement moves with it.
 
-**Every `u`, `v`, `r` and `ringD` must be written as `X * n`** — never a raw metre value, or
-the layout stops scaling when the board is resized. `0` is allowed for a centred `u`.
+Write `u`, `v`, `r` and `ringD` as `X * n`. A raw metre value stops the layout scaling when the
+board is resized. `0` is fine for a centred `u`.
 
 ```js
 c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
 ```
-
-Everything else in `geom` may be written either way. Prefer `X` for anything that should move
-when the board is resized; a raw value is fine for anything that should not.
-
----
 
 ## 2 · Ball — `ball.ratio`
 
@@ -34,11 +40,9 @@ when the board is resized; a raw value is fine for anything that should not.
 | `ballR` | `0.350X` |
 | `ballMass` | `0.18` |
 
-`ballR` is fixed at `0.350X`. Size the machine, not the ball.
+Size the machine, not the ball.
 
----
-
-## 3 · Board — `board.dims`
+## 3 · Cabinet — `board.dims`
 
 | | |
 |---|---|
@@ -49,11 +53,7 @@ when the board is resized; a raw value is fine for anything that should not.
 | `backboardH` | `5.500X` |
 | `railH` | `0.6875X` |
 
-`boardW` defines `X`. Change `boardW` and every other value moves with it.
-
-Tilt range: `40°`–`50°`. `boardLen` range: `8.5X`–`10.5X`.
-
----
+Allowed: tilt `40°`–`50°`, `boardLen` `8.5X`–`10.5X`.
 
 ## 4 · Lane — `lane.dims`
 
@@ -64,9 +64,7 @@ Tilt range: `40°`–`50°`. `boardLen` range: `8.5X`–`10.5X`.
 | `bedThick` | `0.4125X` |
 | `laneRailH` | `0.34375X` |
 
-`laneW` must be less than `boardW`.
-
----
+`laneW` must be narrower than `boardW`.
 
 ## 5 · Ramp — `ramp.angles`
 
@@ -75,12 +73,9 @@ Tilt range: `40°`–`50°`. `boardLen` range: `8.5X`–`10.5X`.
 | `humpLen` | `2.8875X` |
 | `humpAngles` | `10.7°, 21.3°, 32.0°, 42.7°, 53.3°, 64.0°` |
 
-Six segments. Strictly increasing. The last is the launch angle.
+Six segments, each steeper than the last. The final one is the launch angle: allowed `55°`–`70°`.
 
-Launch angle range: `55°`–`70°`. Re-run `sight.mjs` after changing `humpLen`, the board, or the
-camera.
-
----
+Re-run `node sight.mjs` after changing the ramp, the cabinet or the camera.
 
 ## 6 · Trough — `trough.dims`
 
@@ -89,38 +84,105 @@ camera.
 | `troughLen` | `1.5469X` |
 | `troughDepth` | `1.0313X` |
 
-The trough scores `0`. `troughTenHalfW` is retired — keep it, it does nothing.
+The trough scores `0`. `troughTenHalfW` does nothing; leave it alone.
+
+## 7 · Bounce and grip — `mat.single`, `mat.complete`
+
+Write exactly one `mat` block. If two appear side by side, JavaScript keeps only the last one and
+throws the other away without saying so. Every value in the first stops working and nothing
+reports it.
+
+| surface | `fric` | `rest` | what it covers |
+|---|---|---|---|
+| `board` | `0.62` | `0.08` | the scoring face, the trough |
+| `wood` | `0.30` | `0.22` | lane bed, ramp |
+| `wall` | `0.04` | `0.42` | side rails, ramp rails, trough end face, the flare |
+| `ring` | `0.06` | `0.18` | rings and cup collars, 10 through 50 |
+| `ring100` | `0.06` | `0.18` | the two corner rings |
+| `dead` | `0.24` | `0.10` | backboard, kicker, containment walls |
+
+`fric` is grip: 0 slides, 1 grabs. Allowed `0`–`1`.
+`rest` is bounce: 0 is dead, 1 returns as fast as it arrived. Allowed `0`–`0.6`.
+
+Always write `ring100Fric` and `ring100Rest`. Leave them out and the corner rings do not fall back
+to `ringFric` / `ringRest` — they use the built-in defaults in `physics.js` instead.
+
+## 8 · Throwing — `throw.range`
+
+| | |
+|---|---|
+| `minSpeed` | `2.60` m/s |
+| `maxSpeed` | `6.60` m/s |
+| `aimMax` | `0.45` rad |
+
+Power is spent as energy, not speed:
+
+```
+speed = sqrt(minSpeed² + power × (maxSpeed² − minSpeed²))
+```
+
+Power is not capped. Under `0` falls short of the board; over `1` climbs the backboard and leaves
+the machine.
+
+Aim turns the launch without changing its speed:
+
+```
+a = clamp(aim, −1, 1) × aimMax
+v = (sin(a) × speed, 0, −cos(a) × speed)
+```
+
+`minSpeed` under `maxSpeed`. `aimMax` between `0.30` and `0.60`, wide enough to hit a side wall on
+purpose. A comfortable flick must land in the middle of the speed range — never set `minSpeed` and
+`maxSpeed` to the nearest and furthest holes.
+
+Swipe reading lives in `js/swipe.js` and is shared by every machine: `SWIPE_SLOW 0.65`,
+`SWIPE_FAST 4.20`, `MIN_UP_PX 20`. Speed is the whole gesture's 2-D distance over time.
+
+## 9 · Scoring a ball
+
+A ball drops in when it is inside `r − ballR × 0.28` of a hole centre and slow enough for the
+mouth still in front of it:
+
+```
+cross = rEff + sqrt(rEff² − d²)
+drops in if  vFace × captureDrop ≤ cross
+```
+
+`captureDrop` is `0.35`.
+
+- A ball that stops on the face without dropping in is not scored. It rolls back to the trough and
+  takes the trough's `0`.
+- A ball that comes back down the ramp is not spent. Give it back, however hard it was thrown.
+- Never steer a ball toward a hole. If a hole is too hard to hit, widen the geometry.
+- Nothing spans the top of the machine. No ceiling, no canopy, no pane. A ball thrown hard enough
+  leaves, comes down, and scores what it earns.
+
+## 10 · The back wall
+
+The four records — all-time, your best, today, last game — are painted on the back wall
+automatically, the same on every machine. Do not build them.
 
 ---
 
-## 7 · Holes — `holes.uniform`, `holes.inside`, `holes.spacing`, `holes.frozen`
+# PART 2 — THE BOARD FACE
 
-Every hole: `{ u, v, r, value, ringD }`, plus `ringOpen: true` where the ring is an arc.
+Matt decides how many holes, what they pay, and where they go. These are the rules for building
+whatever he asks for.
 
-| id | `u` | `v` | `ringD` | value |
-|---|---|---|---|---|
-| `100L` | `-2.750X` | `8.750X` | `1.1900X` | 100 |
-| `100R` | `2.750X` | `8.750X` | `1.1900X` | 100 |
-| `c50` | `0` | `7.188X` | `1.4375X` | 50 |
-| `c40` | `0` | `5.625X` | `1.5625X` | 40 |
-| `c30` | `0` | `3.813X` | `1.8125X` | 30 |
-| `h20` | `0` | `2.313X` | `4.8750X` | 20 |
-| `h10` | `0` | `1.000X` | `7.1250X` | 10, `ringOpen` |
+## 11 · Where a hole can go — `holes.uniform`, `holes.inside`, `holes.spacing`, `holes.frozen`
 
-`u` is across the face, `0` at centre, range `±boardW/2`. `v` is up the face, `0` at the bottom
-edge, `boardLen` at the top.
+A hole is `{ u, v, r, value, ringD }`, plus `ringOpen: true` if its ring is an arc.
 
-**Rules:**
+`u` runs across the face: `0` at the centre, `±boardW/2` at the edges.
+`v` runs up the face: `0` at the bottom edge, `boardLen` at the top.
 
-- Every hole has `r = holeR = 0.500X`. No exceptions. — `holes.uniform`
-- Every hole centre sits at least `holeR` from all four face edges. — `holes.inside`
-- Neighbouring hole centres sit at least `1.30X` apart. — `holes.spacing`
-- A hole id that has shipped is frozen. Never remove one, never change its `value`. Ids are
-  written into `gamehub.skeeball.save.v1`. Retire by leaving it in place. — `holes.frozen`
+- Every hole is the same size: `r = holeR = 0.500X`. — `holes.uniform`
+- Every hole centre sits at least `holeR` from all four edges. — `holes.inside`
+- Hole centres sit at least `1.30X` apart. — `holes.spacing`
+- A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
+  written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
 
----
-
-## 8 · Rings — `rings.derived`, `rings.clipped`
+## 12 · Building a ring — `rings.derived`, `rings.clipped`
 
 | | |
 |---|---|
@@ -129,34 +191,45 @@ edge, `boardLen` at the top.
 | `collarThick` | `0.0825X` |
 | `cupSegments` | `14` |
 | `lipLowFrac` | `0.5` |
-| `captureDrop` | `0.35` |
 
-**`ringD` is the ring's INSIDE diameter** — the clear opening. Not the outer edge, not the
-centreline.
+`ringD` is the ring's inside diameter — the clear opening. Not the outer edge, not the middle of
+the wall.
 
-**A ring is never concentric with its hole.** It is tangent at the hole's bottom:
+A ring is never centred on its hole. It touches the hole at the hole's lowest point, so the ring
+sits up-slope:
 
 ```
-R  = ringD / 2                 // inner radius
-cu = hole.u                    // same across the face
-cv = hole.v - hole.r + R       // centre sits (R - r) up-slope
+R  = ringD / 2
+cu = hole.u
+cv = hole.v − hole.r + R
 ```
 
-This is the only placement rule. Do not hand-place a ring.
+That is the only placement rule. Never position a ring by hand.
 
-Segment count is computed, not configured:
+Segment count comes from the size, not from you:
 
 ```
 Rwall = ringD / 2 + ringThick / 2
-N     = max(20, ceil(2 * PI * Rwall / 0.04))
+N     = max(20, ceil(2 × PI × Rwall / 0.04))
 ```
 
-`geom.ringSegments` is **dead** — nothing reads it. Do not set it.
+`geom.ringSegments` is read by nothing. Do not set it.
 
-`machine.js` drops any segment falling outside the face.
+### Rings that cross each other
 
-- A ring without `ringOpen` must lose **zero** segments. — `rings.clipped`
-- A ring with `ringOpen` keeps only the half below its centre, and may lose more at the edges.
+Rings may overlap. A big low ring passes straight through the ones above it — they are separate
+walls and a ball meets whichever it reaches first. Never shrink a ring to avoid a neighbour.
+
+If a ring is wide enough to close over a hole further up the board, give it `ringOpen: true`. That
+keeps only the half below its own centre, so it reads as an arc across the bottom.
+
+### Rings near the edge
+
+`machine.js` deletes any wall segment falling outside the face.
+
+- A ring without `ringOpen` must lose no segments. If it loses any, it is too wide for where its
+  hole sits: move the hole inward or reduce `ringD`. — `rings.clipped`
+- A ring with `ringOpen` may lose segments at the edges.
 
 Count them:
 
@@ -164,121 +237,77 @@ Count them:
 M.solids.filter(s => s.part === 'ringSeg' && s.ring === id).length
 ```
 
-Baseline on THE CLASSIC: `100L` 20, `100R` 20, `c50` 20, `c40` 20, `c30` 22, `h20` 57, `h10` 33.
+### Holes in the corners
+
+A corner hole is reached by banking off the side wall, so its ring sits close to the edge. Keep
+`ringD` small enough that no segment is deleted, and re-check after every move. A corner ring is
+usually the tightest on the board.
+
+### Never build a right-angled pocket
+
+Three flat surfaces meeting at right angles, anywhere a ball can reach, will trap it. The physics
+cannot push it back out. Angle one of the three, or leave a gap.
+
+## 13 · Painting the numbers
+
+Numbers are painted wrapped around a ring wall, not flat on the board. Two positions exist:
+
+- **Top of a ring** — the number curves over the ring's upper outside.
+- **Bottom of a ring** — the number curves under the ring's lower outside.
+
+Which ring carries which number is worked out automatically:
+
+- For holes in the centre column, a hole's number goes on the **bottom of the ring above it**.
+- The **topmost** hole in the column is the exception: its number goes on the **top of its own
+  ring**.
+- A hole off the centre line carries its own number on the **bottom of its own ring**.
+- If a number is too wide to wrap around the ring it was given, it becomes a free-standing plate
+  on the board instead. This happens on its own.
+
+That is only the default. If Matt says where a number goes, it goes there — add the override to
+the hole and build it. No override exists in the code today, so the first time he asks, you are
+building it as well as using it.
 
 ---
 
-## 9 · Materials — `mat.complete`
+# PART 3 — OBJECTIVES
 
-All ten keys required.
+**Every machine has its own objectives.** They are what unlocks the next machine, and Matt sets
+them per board — never assume the previous machine's.
 
-| pair | fric | rest | governs |
-|---|---|---|---|
-| `board` | `0.62` | `0.08` | the scoring face |
-| `wood` | `0.30` | `0.22` | lane bed, ramp |
-| `wall` | `0.04` | `0.42` | side rails, backboard |
-| `ring` | `0.06` | `0.18` | ring walls, cup collars |
-| `dead` | `0.24` | `0.10` | trough, corner rings |
+The fireworks and the tiles that show progress are shared by every machine. Only the objectives
+themselves change. Colours of the tiles may change with the machine.
 
-Friction range `0`–`1`. Restitution range `0`–`0.6`.
+THE CLASSIC's, as an example of the shape: land five 100s, score 360 in a single game, score
+10,000 points in total.
 
----
-
-## 10 · Throwing — `throw.range`
-
-| | |
-|---|---|
-| `minSpeed` | `2.60` m/s |
-| `maxSpeed` | `6.60` m/s |
-| `aimMax` | `0.45` rad |
-
-Power is spent as **energy**, not speed:
-
-```
-speed = sqrt(minSpeed^2 + power * (maxSpeed^2 - minSpeed^2))
-```
-
-Power is not clamped. Below `0` falls short; above `1` climbs the backboard.
-
-Launch velocity rotates, magnitude is preserved:
-
-```
-a = clamp(aim, -1, 1) * aimMax
-v = (sin(a) * speed, 0, -cos(a) * speed)
-```
-
-**Rules:**
-
-- `minSpeed < maxSpeed`.
-- `aimMax` between `0.30` and `0.60` rad. Wide enough to hit a side wall on purpose.
-- A comfortable flick must land in the **middle** of the speed range. Never bracket `minSpeed`
-  and `maxSpeed` to the nearest and furthest holes.
-
-Swipe constants live in `js/swipe.js` and are shared by every machine:
-
-| | |
-|---|---|
-| `SWIPE_SLOW` | `0.65` screen-heights/sec → power 0 |
-| `SWIPE_FAST` | `4.20` screen-heights/sec → power 1 |
-| `MIN_UP_PX` | `20` |
-
-Swipe speed is the gesture's **2-D** distance over time. The throw test is the upward component
-only.
+**The code does not support this yet.** `skeeball/js/goals.js` holds one global set of three,
+hardcoded, with no board attached. Per-machine objectives have to be built before a second machine
+can have its own.
 
 ---
 
-## 11 · Capture
+# PART 4 — COLOUR — `look.complete`
 
-A ball drops in when its face-plane distance to a hole centre is under `r - ballR * 0.28`, and it
-is not travelling too fast for the remaining mouth:
+All twenty keys, all `#rrggbb`.
 
-```
-cross = rEff + sqrt(rEff^2 - d^2)
-capture if  vFace * captureDrop <= cross
-```
-
-A ball that stops on the face without falling through is **not** scored. It rolls back to the
-trough and takes the trough's `0`.
-
-A ball that returns to the near end of the lane is **not spent**. Give it back, however hard it
-was thrown.
-
-There is no magnetism. Never steer a ball toward a hole. Widen the geometry instead.
-
----
-
-## 12 · Backboard stats
-
-Four records, painted on the backboard, pushed in by `ui.js`:
-
-```js
-{ allTime, best, today, last }
-```
-
-`allTime` may carry a name. The other three are always this player's. The renderer never reads
-storage or the network.
-
----
-
-## 13 · Colours — `look.complete`
-
-All twenty keys required, all `#rrggbb`.
-
-| | |
+| key | paints |
 |---|---|
 | `wood`, `woodDark` | lane bed |
 | `cabinet`, `cabinetEdge` | side panels |
-| `face`, `faceEdge` | scoring face |
+| `face`, `faceEdge` | the scoring face |
 | `ring`, `ringLip` | ring wall, ring lip |
 | `value`, `pocket` | painted numbers, hole interior |
-| `marquee`, `marqueeText`, `bulb` | header sign |
+| `marquee`, `marqueeText`, `bulb` | the header sign |
 | `glow` | score and effects |
-| `wall` | room behind the machine |
+| `wall` | the room behind the machine |
 | `net` | ball return |
 
 ---
 
-## 14 · Board entry — `entry.complete`
+# PART 5 — WIRING IT IN
+
+## 14 · The board entry — `entry.complete`
 
 ```js
 {
@@ -286,24 +315,46 @@ All twenty keys required, all `#rrggbb`.
   name: 'THE NAME',                         // proper noun, untranslated
   taglineKey: 'board_<id>_tag',             // + en and es strings
   unlock: { board: '<previous id>', score: N },
-  look: { ... },                            // section 13
-  geom: { ... },                            // sections 1-10
+  look: { ... },                            // Part 4
+  geom: { ... },                            // Parts 1 and 2
 }
 ```
 
 `unlock` is `null` only on the first machine.
 
-Regenerate the hub tile after adding a board:
+## 15 · The hub tile
 
 ```bash
 node gen-skeeball-tile.mjs
 ```
 
----
+Regenerate it after adding a board. The tile is drawn from `boards.js`, never by hand.
 
-## 15 · Verification
+## 16 · The setup screen
 
-Run all four. All must pass.
+The picture of the machine on the setup screen is rendered from the board itself. A new machine
+gets one with no extra work.
+
+With more than one machine, the setup screen becomes a swipeable carousel: dots, arrows and a
+side-swipe between machines. That code switches on by itself at two machines and **has never run
+with more than one**. Check the dots, the arrows and the swipe by hand.
+
+## 17 · A locked machine
+
+A machine that has not been unlocked yet shows a locked slide instead of the normal one: the
+machine greyed out behind a large lock, with only a sliver of the board visible — enough to make
+the player curious, not enough to show what it is.
+
+**This does not exist yet and has to be built.**
+
+## 18 · Testing a board's shape
+
+Give any test board a **new `id`**. Reuse an existing one and the engine hands back the old shape
+from memory without saying so, and every number measured is wrong.
+
+## 19 · Checks
+
+Run all four.
 
 ```bash
 node skeeball/js/test.js --full
@@ -312,30 +363,32 @@ node test-skeeball-rings.mjs
 node test-game-conventions.mjs
 ```
 
-`skeeball/js/test.js` runs the reachability sweep and the soak against **every** board in the
-list. A new machine is covered automatically. Reachability is a property of the whole layout, so
-re-run it after any hole moves.
+`skeeball/js/test.js` throws thousands of balls at every board in the list, so a new machine is
+covered the moment it exists. It checks every hole can actually be scored, which depends on the
+whole layout — re-run it after moving any hole.
 
----
+## 20 · Breaking a rule
 
-## Waivers
+You may only break a rule when Matt has told you to, for that machine. A deliberately bouncy
+machine, or a rolling one instead of a bouncing one — his call, made in advance. Never your own
+judgement during a build.
 
-A rule may be broken only with a waiver in the board entry, keyed by rule id:
+Record it in the board entry, keyed by rule id, naming the rule and the reason:
 
 ```js
 specWaivers: {
-  'holes.spacing': 'c40 and c50 sit 1.19X apart, under the 1.30X minimum. This board is '
-    + 'deliberately short. Sweep re-run: every hole still scores across at least 4 '
-    + 'consecutive swipe strengths.',
+  'mat.complete': 'Matt asked for a deliberately bouncy machine, 2026-08-22. wallRest 0.55, above '
+    + 'the 0.6 ceiling on nothing else. Sweep re-run: every hole still scores.',
 },
 ```
 
-The test:
+| you did this | what happens |
+|---|---|
+| broke a rule, wrote no waiver | the test stops you |
+| broke a rule, wrote a proper waiver | allowed, and the reason is printed |
+| wrote a waiver for a rule you did not break | the test stops you — delete it |
+| wrote a reason under 40 characters | the test stops you — say why properly |
 
-- **fails** if a rule is broken with no waiver
-- **fails** if a waiver names a rule that is not actually broken
-- **fails** if a reason is under 40 characters
-- otherwise passes, and prints every waiver under `RULES BROKEN ON THIS MACHINE`
+Waivers print at the end of the run under `RULES BROKEN ON THIS MACHINE`.
 
-**Every waiver must be quoted in the PR body and in the message to Matt.** The test prints a
-block ready to paste.
+Copy that block into the pull request and into your message to Matt — the rule you broke and why.
