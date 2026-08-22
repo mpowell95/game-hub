@@ -113,9 +113,16 @@
 
 /* Dev only (isDevProfile), and never rendered for anyone else. Deliberately plain and dashed:
    it should not look like part of the game. Delete with the button when Skeeball ships. */
+/* GUARD: OUT OF FLOW. In the column it took ~55px off the card and squeezed the setup screen
+   (Matt, 2026-08-21: "you made it way worse on the bottom"). Pinned to the screen instead, so
+   a dev-only control cannot cost the real layout a single pixel. */
 .sk-root .sk-devreset {
-  align-self: center;
-  min-height: 44px;
+  position: absolute;
+  left: 50%;
+  bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 5;
+  min-height: 32px;
   padding: 0 16px;
   border-radius: 8px;
   border: 1px dashed var(--sks-line);
@@ -700,8 +707,36 @@
    wasted height (Matt, 2026-08-21). "300/300" is ~48px at these sizes against ~59px of inner
    width. If a target ever needs five digits, widen the rail - do not stack it again. */
 .sk-root .sk-goal b i { font-style: normal; font-size: 11px; color: #8d7a63; }
+/* GUARD: A DONE GOAL FILLS. This used to recolour the number from cream to amber and nothing
+   else, which at 14px against boxes that already have amber in them read as no change at all
+   - Matt landed his fifth 100 and said the tile looked identical (2026-08-21). Inverting the
+   whole box is the point: it should be obvious without being looked at. */
+.sk-root .sk-goal.is-done,
+.sk-root .sk-gtotal.is-done {
+  background: var(--sk-amber);
+  border-color: var(--sk-amber);
+}
+.sk-root .sk-goal.is-done em,
+.sk-root .sk-gtotal.is-done em { color: #3a1f0f; }
 .sk-root .sk-goal.is-done b,
-.sk-root .sk-goal.is-done b i { color: var(--sk-amber); }
+.sk-root .sk-goal.is-done b i,
+.sk-root .sk-gtotal.is-done b,
+.sk-root .sk-gtotal.is-done b i { color: #241610; }
+.sk-root .sk-goal.is-done b::after,
+.sk-root .sk-gtotal.is-done b::after { content: ' ✓'; }
+.sk-root .sk-goal.is-done .sk-goal-bar { background: rgba(36, 22, 16, 0.3); }
+.sk-root .sk-goal.is-done .sk-goal-bar i { background: #241610; }
+/* The beat a goal completes. Applied after the repaint, so it plays once and is gone by the
+   next ball. The fireworks are the celebration; this is what says WHICH box earned them. */
+@media (prefers-reduced-motion: no-preference) {
+  .sk-root .sk-goal.is-fresh { animation: sk-goal-pop 0.75s cubic-bezier(0.2, 1.4, 0.4, 1); }
+}
+@keyframes sk-goal-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
 .sk-root .sk-goal-bar {
   display: block;
   height: 3px;
