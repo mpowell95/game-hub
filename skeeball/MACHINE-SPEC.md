@@ -18,16 +18,23 @@ uses. Waivers are section 20.
 
 Identical on every machine. Copy it.
 
+**The tables below are written as X-multiples; `boards.js` writes most of them as raw metres**
+(`bedThick: 0.06`, `humpLen: 0.42`, `boardLen: 1.3818`, and so on). The two are equivalent — every
+multiple in Part 1 converts to the metre in the file — and writing `X * n` instead is equally fine.
+Outside the holes there is no rule either way. Inside them there is: see section 1.
+
 ## 1 · The unit — `unit.holes`
 
-```
-X = boardW / 6.875        // 0.145455 on THE CLASSIC
+```js
+const X = 1.00 / 6.875;   // boardW / 6.875 = 0.1454545… m on THE CLASSIC
 ```
 
-`boardW` is the anchor. Change it and every other measurement moves with it.
+`boardW` is the anchor, and on THE CLASSIC it is **`1.00` metre** — the one raw number the machine
+hangs off. Change it and every other measurement moves with it.
 
-Write `u`, `v`, `r` and `ringD` as `X * n`. A raw metre value stops the layout scaling when the
-board is resized. `0` is fine for a centred `u`.
+Only the holes' `u`, `v`, `r` and `ringD` are REQUIRED to be `X * n`; that is what `unit.holes`
+checks. A raw metre there stops the layout scaling when the board is resized. `0` is fine for a
+centred `u`.
 
 ```js
 c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
@@ -75,6 +82,15 @@ Allowed: tilt `40°`–`50°`, `boardLen` `8.5X`–`10.5X`.
 
 Six segments, each steeper than the last. The final one is the launch angle: allowed `55°`–`70°`.
 
+**Those degrees are rounded. Copy the radians, not the degrees:**
+
+```js
+humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+```
+
+Converting the rounded degrees back does not reproduce them — `10.7°` is `0.18675` rad, and the
+file says `0.1862`.
+
 Re-run `node sight.mjs` after changing the ramp, the cabinet or the camera.
 
 ## 6 · Trough — `trough.dims`
@@ -84,7 +100,10 @@ Re-run `node sight.mjs` after changing the ramp, the cabinet or the camera.
 | `troughLen` | `1.5469X` |
 | `troughDepth` | `1.0313X` |
 
-The trough scores `0`. `troughTenHalfW` does nothing; leave it alone.
+The trough scores `0`.
+
+`troughTenHalfW` is read by nothing. THE CLASSIC keeps its `0.26` because old saved racks
+reference it (THE LAW rule 5 — old keys are never deleted). **A new machine omits it entirely.**
 
 ## 7 · Bounce and grip — `mat.single`, `mat.complete`
 
@@ -121,8 +140,9 @@ Power is spent as energy, not speed:
 speed = sqrt(minSpeed² + power × (maxSpeed² − minSpeed²))
 ```
 
-Power is not capped. Under `0` falls short of the board; over `1` climbs the backboard and leaves
-the machine.
+Power has no upper bound, but it is floored at `−0.75` (`physics.js` `startThrow`), so the square
+root always has something to work with. Under `0` falls short of the board; over `1` climbs the
+backboard and leaves the machine.
 
 Aim turns the launch without changing its speed:
 
@@ -136,19 +156,51 @@ purpose. A comfortable flick must land in the middle of the speed range — neve
 `maxSpeed` to the nearest and furthest holes.
 
 Swipe reading lives in `js/swipe.js` and is shared by every machine: `SWIPE_SLOW 0.65`,
-`SWIPE_FAST 4.20`, `MIN_UP_PX 20`. Speed is the whole gesture's 2-D distance over time.
+`SWIPE_FAST 4.20`, `MIN_UP_PX 20`.
+
+Speed is **the faster of two readings**, not one (`swipeSpeed()`):
+
+- the **release window** — the first sample within `200 ms` of the end, to the end, as 2-D
+  distance over elapsed time. Discarded (counted as `0`) if that window finished DOWNWARD.
+- the **whole gesture** — first sample to last, the same way.
+
+`max` of the two, then divided by `max(320, windowH)` so a phone and a desktop feel alike. A
+gesture that did not travel at least `MIN_UP_PX` upward overall is not a swipe at all and reads
+as nothing.
 
 ## 9 · Scoring a ball
 
-A ball drops in when it is inside `r − ballR × 0.28` of a hole centre and slow enough for the
-mouth still in front of it:
+Capture is only tested when the ball is AT FACE LEVEL and on the board: `h < ballR × 1.9`, and
+`v` between `0` and `boardLen`. Off the face, nothing can be scored.
+
+There it is a kinematic question, never a "centre over the hole" one: **in the time this ball
+takes to cross the mouth, does it fall far enough to be past the lip?**
 
 ```
-cross = rEff + sqrt(rEff² − d²)
-drops in if  vFace × captureDrop ≤ cross
+rEff  = hole.r − ballR × 0.28        the mouth, shrunk by the ball's own width
+d     = distance from the ball to the hole centre     (no capture unless d < rEff)
+cross = rEff + sqrt(rEff² − d²)      how much mouth is left in front of it, along its own line
+
+vFace = the ball's speed ACROSS the face
+hDot  = the ball's speed INTO the face   (+ away from it, − into it)
+gPerp = 9.82 × cos(boardTilt)        gravity's pull perpendicular to the face
+need  = ballR × captureDrop          how far it must drop to count as fallen IN
+
+tDrop = (hDot + sqrt(hDot² + 2 × gPerp × need)) / gPerp
+
+drops in if  vFace × tDrop ≤ cross
 ```
 
-`captureDrop` is `0.35`.
+Two things follow, and they are the whole feel of the machine:
+
+- **`captureDrop` sets a DISTANCE, not a time** — a fraction of the ball's radius. Bigger means
+  further to fall, which means harder to fall in. It is the ladder's master knob.
+- **The ball's own speed into the face counts.** `hDot` is in `tDrop`, so a ball arriving out of
+  the air drops in at speeds a rolling ball skims straight across at. That is what makes distance
+  up the slope choose the cup, instead of the first mouth a roll reaches swallowing everything.
+
+`geom.captureDrop` is `0.35` on THE CLASSIC. **Write it on every machine.** Leave it out and
+`physics.js` silently falls back to `0.55` — a much harder machine — and no test catches it.
 
 - A ball that stops on the face without dropping in is not scored. It rolls back to the trough and
   takes the trough's `0`.
@@ -182,6 +234,27 @@ A hole is `{ u, v, r, value, ringD }`, plus `ringOpen: true` if its ring is an a
 - A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
   written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
 
+### The tangency stack — what binds, and what is just THE CLASSIC
+
+`boards.js` names three tangency rules. Only the first one binds a new machine.
+
+1. **Every ring touches its own hole at one point, the hole's bottom.** This binds every board and
+   cannot be broken, because no board states a ring centre: `machine.js` derives it from the hole
+   (section 12). There is nothing to get wrong.
+2. **The 30 ring's top touches the 40 ring's bottom.**
+3. **The 40 ring's top, the 50 ring's bottom and the 20 ring's top meet at one point.**
+
+Rules 2 and 3 are **THE CLASSIC's own stack, not a constraint on your machine.** They hold exactly
+on it — both touches land on `5.125X` and `6.6875X` respectively — because its centre column is
+spaced `h(n+1) = h(n) + ringD(n)`, which makes hole spacing a consequence of ring diameters rather
+than a free number.
+
+**Nothing tests rules 2 or 3.** There is no tangency assertion in `skeeball/js/test.js`,
+`test-skeeball-machine-spec.mjs` or `test-skeeball-rings.mjs`. (`boards.js`'s header says
+`skeeball/js/test.js` asserts all three. It does not.) So a new machine may space its column
+however Matt asks, and nothing will object — and equally, nothing is guarding THE CLASSIC's stack
+from drifting if someone edits a diameter without moving the holes above it.
+
 ## 12 · Building a ring — `rings.derived`, `rings.clipped`
 
 | | |
@@ -213,7 +286,30 @@ Rwall = ringD / 2 + ringThick / 2
 N     = max(20, ceil(2 × PI × Rwall / 0.04))
 ```
 
-`geom.ringSegments` is read by nothing. Do not set it.
+`geom.ringSegments` is read by nothing. Do not set it. THE CLASSIC carries a vestigial
+`ringSegments: 24` — harmless, unread, and kept where it is; do not copy it into a new machine.
+
+### Cups, collars and lips
+
+Three of the numbers in the table are for CUPS, not rings, and do nothing on a flush board.
+
+A ring is a wall up-slope of its hole. A **collar** is a wall standing on the hole itself:
+`cupSegments` boxes, `collarThick` thick, in a circle right at the hole's edge and concentric
+with it. A hole gets one only by asking: set `collarH` (the wall's height) on the hole. No hole
+on THE CLASSIC sets it, so no collar exists today — the three values sit ready for a machine
+that wants raised rims.
+
+- `collarThick` — the collar wall's thickness, `ringThick`'s counterpart.
+- `cupSegments` — how many boxes a collar is built from. Fixed, unlike a ring's derived count,
+  because every collar is hole-sized. Raise it only if a collar reads visibly faceted.
+- `lipLowFrac` — the shape of a TILTED collar. Give the hole `lipLow: true` and its down-slope
+  lip drops to `lipLowFrac × collarH` while the up-slope lip keeps full height, blending around
+  the circle: a rolling ball rides in over the low front, an overshoot is caught by the tall
+  back. Lower means easier entry from below. Without `lipLow` on the hole, the collar is a
+  level rim and this number does nothing.
+
+render.js draws the same height profile the physics boxes use, vertex for vertex
+(`_scallopedRim`), so the rim you see is the rim the ball hits.
 
 ### Rings that cross each other
 
@@ -252,17 +348,29 @@ cannot push it back out. Angle one of the three, or leave a gap.
 
 Numbers are painted wrapped around a ring wall, not flat on the board. Two positions exist:
 
-- **Top of a ring** — the number curves over the ring's upper outside.
-- **Bottom of a ring** — the number curves under the ring's lower outside.
+- **Bottom of a ring** — the number curves under the ring's lower OUTSIDE, facing the player.
+- **Top of a ring** — the number is painted on the INSIDE of the ring's far wall, read through the
+  ring's own mouth. Not over the outside of it.
 
 Which ring carries which number is worked out automatically:
 
 - For holes in the centre column, a hole's number goes on the **bottom of the ring above it**.
 - The **topmost** hole in the column is the exception: its number goes on the **top of its own
-  ring**.
+  ring** — which is why that one is read through the mouth. Its ring is last in the stack, so
+  nothing stands in front of its far wall.
 - A hole off the centre line carries its own number on the **bottom of its own ring**.
-- If a number is too wide to wrap around the ring it was given, it becomes a free-standing plate
-  on the board instead. This happens on its own.
+- **The concave-arc fallback**, for a number that would wrap too far to read. A ring's outer wall
+  curves away from the player at its edges, so past about `65°` of wrap a digit turns edge-on and
+  disappears behind the ring's own silhouette. When the estimated wrap exceeds that, the number
+  is not painted on the wall at all: it gets a short arc of its own, **concentric with that same
+  ring, the same height as it, set `0.030` m in from the wall's centreline**, concave toward the
+  player and spanning `±62°`. Cosmetic only, no physics body. This happens by itself; nothing to
+  configure.
+
+  **The fallback only ever applies to centre-column holes below the top one** — those are the only
+  ones whose number is painted on somebody else's ring. An off-centre hole's number stays on its
+  own ring's bottom however wide it is, and the topmost hole never needs the fallback because its
+  far wall is free.
 
 That is only the default. If Matt says where a number goes, it goes there — add the override to
 the hole and build it. No override exists in the code today, so the first time he asks, you are
@@ -289,7 +397,7 @@ can have its own.
 
 # PART 4 — COLOUR — `look.complete`
 
-All twenty keys, all `#rrggbb`.
+All sixteen keys, all `#rrggbb`. `look.complete` fails on any that is missing or malformed.
 
 | key | paints |
 |---|---|
@@ -299,9 +407,12 @@ All twenty keys, all `#rrggbb`.
 | `ring`, `ringLip` | ring wall, ring lip |
 | `value`, `pocket` | painted numbers, hole interior |
 | `marquee`, `marqueeText`, `bulb` | the header sign |
-| `glow` | score and effects |
 | `wall` | the room behind the machine |
-| `net` | ball return |
+| `glow` | **nothing today** — required, but read by nothing in `skeeball/js` |
+| `net` | **nothing today** — required, but read by nothing in `skeeball/js` |
+
+`glow` and `net` still have to be there and still have to be valid hex: the rule checks all
+sixteen. Give them sensible colours for the machine anyway, in case something starts reading them.
 
 ---
 
@@ -321,6 +432,10 @@ All twenty keys, all `#rrggbb`.
 ```
 
 `unlock` is `null` only on the first machine.
+
+**Ignore the "next machine goes here" comment at the bottom of `boards.js`'s `BOARDS` array.** It
+is stale: it shows `physics: {...}, scoring: {...}`, neither of which is a board key. The template
+above — `look` and `geom` — is the correct shape.
 
 ## 15 · The hub tile
 
