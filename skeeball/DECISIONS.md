@@ -197,6 +197,35 @@ physics (the needH rim rule): all nine hoops clean-capturable, 0 emergencies in 
 slowest settle 9.1s; the ladder moved to low p≈0.28, middle p≈0.52, top p≈0.8, the 100 straight
 at p0.76-0.8.
 
+The STAIRCASE rebuild, same day, at Matt's direct order ("change the board from a single board
+with a back wall to... 3 stairs... even if that means new engines or physics must be calculated
+and created"), driven by four more of his recordings (two full rounds, one points-error clip,
+one back-wall clip). What each clip proved and what changed:
+
+- The points clip: a ball rattled the 20's rim, bounced OUT and rolled away, and was paid +20.
+  Root cause in physics.js: capture dropped the floor slab and then COMMITTED once the ball had
+  fallen 26cm below the capture point - but a bounced-out ball also ends up below, because the
+  slab it would land on is intangible. Capture is now a prediction: commit only below the
+  surface plane INSIDE the mouth; clear of the slab outside the mouth restores the floor
+  (rimout) and plays on. Applies to every machine; the classic's full heavy suite passed
+  unchanged after it.
+- The back-wall clip: the ball "hit something and shot vertically". A velocity-flip probe over
+  117 hard throws attributed the pops: 8 were the steep FACE itself acting as a ski jump at its
+  top (tangential velocity turning up-slope), 5 were backboard contacts, 1 a rail top. The
+  staircase removes the ski jump outright (overshoots hit vertical risers face-on and bounce
+  back toward the player); the two friction/bounce causes measured after that - a gripping
+  dead wall flicking a sliding ball upward, and lively horizontal side-wall tops - fixed by
+  deadFric 0.06 and wallRest 0.15, plus backboardH 1.10 so no reachable descent finds the top
+  edge. Probe after: 14 -> 4 pops, all four honest rim rattles at p >= 1.10.
+- The full rounds + the first machine video: the geometry. geom.steps builds three 2.0625X
+  treads (leaning 0.10 rad toward the player, so a miss rolls off the front and drops a tier -
+  the footage's exact miss) alternating with three 1.65X vertical risers; machine.js unrolls
+  face coordinates along the staircase so every downstream system kept its (u, v) addresses.
+  Holes moved INTO the treads (v 1.3125X / 5.025X / 8.7375X), each walled by a full-circle
+  collar so the mouth is the only way in. Swept: all nine clean-capturable, 0 emergencies in
+  459 throws, slowest settle 4.92s; ladder low from p~0.20 / mid p~0.40 / top p~0.60, the 100
+  straight at p0.60-0.72.
+
 The real-machine pass, same day again, against Matt's footage of an actual Basket Fever cabinet
 (in Machines/Machine 4 - Basketball/). Three measured facts drove it: the real ball is SMALL
 against generous baskets (mouth ~2x the ball - the first draft had it at 1.43 and considered

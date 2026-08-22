@@ -144,6 +144,15 @@ nothing scripts a reaction any more:
   deflected, not slowed, not steered. That single test is what makes distance up the slope choose
   the cup, which is the whole game. Without it the first mouth a rolling ball crossed always
   swallowed it, so nothing above the bottom cup was reachable by rolling at all.
+- **CAPTURE IS A PREDICTION; ONLY PASSING THROUGH THE PLANE SCORES** (2026-08-22, on every
+  machine). Matt's clip showed BASKET FEVER paying a ball that rattled a rim and bounced out:
+  the collar walls stay solid after capture, so the ball can strike the far wall inside the
+  mouth and climb back out - and the old commit rule ("fell 26cm below the capture point")
+  scored it anyway, because with the floor slab intangible it always ends up below. Now the
+  captured block in `physics.js` commits ONLY when the ball is below the surface plane INSIDE
+  the mouth; a ball that gets clear of the slab outside the mouth has the floor restored
+  (`rimout` event) and plays on, and one that slips under the slab outside the mouth resolves
+  as a 0. Points are only ever awarded for a ball that fully passes through a hole.
 - **The trough scores like the real bottom slot**: centre band = 10, corners = 0. A dead lob
   rolls into the 10, exactly like the real machine; the honest zero is the corner.
 - **NO MAGNETISM, EVER. This is a standing, permanent ban.** Balls never curve toward holes, are
@@ -435,26 +444,39 @@ Basketball/` (photos): nine orange wire baskets on three shelves, 10/20/10 low, 
 50/100/50 top. In this engine a hoop IS a POPONGO cup: a raised collar on a hole, entered by a
 ball dropping in out of the air - no new physics, no new capture rule.
 
-- **The layout is a sub-lattice of POPONGO's proven one**: rows at its bot/mid/top v
-  (2.3125X / 5.6125X / 8.9125X), outer columns at its measured rail-safe u (±2.07X). Slot ids
-  `lowL`..`topR`, frozen (THE LAW rule 5). Every sweep to date: all nine slots
-  clean-capturable, **0 emergencies in 459 throws** (DECISIONS.md#basket-fever-layout).
-- **Rebuilt against Matt's real-machine footage the same day** (a Basket Fever cabinet playing,
-  in `Machines/Machine 4 - Basketball/`; watch it before retuning anything here):
-  - **Small ball, generous baskets**: ball 0.28X (`ball.ratio` waived - POPONGO's exact size
-    and precedent), mouths 1.125X (r 0.5625X), mouth/ball ~2.0 measured off the footage. Wall
-    gaps 0.78X same-row / 0.7225X to the rails, over the small ball's 0.64X floor.
-  - **Every hoop is `lipLow`** - the tilted-rim collar profile's first shipped use: tall
-    up-slope back, player-facing lip at `lipLowFrac` 0.45, so the rim plane leans toward
-    horizontal like the real baskets (mouths parallel to the ground). The wire-basket renderer
-    follows the same blended profile, vertex-for-vertex in spirit: the rim seen is the rim hit.
-  - **50-degree face (the spec max) + a slick dead board mat** (`boardFric` 0.12, `boardRest`
-    0.05; rims livelier at `ringRest` 0.30): the real board is vertical and a miss always
-    FALLS, never rolls. Measured: slowest settle dropped 9.07s -> 3.33s across the sweep, with
-    the same clean capture of all nine hoops.
-  - **The three tiers are painted** (`_paintField`, dressing-gated): cream shelf band behind
-    each row, yellow stars on the blue between. PAINT ONLY - a physical ledge is a
-    solver-locking pocket. Backboard cards grew to 2.6x collar height.
+- **THE BOARD IS A REAL STAIRCASE** (Matt, 2026-08-22, from his real-machine footage: "3
+  stairs... even if that means new engines or physics must be calculated and created"). The
+  single tilted face is GONE on this machine. `geom.steps` in the board entry lists six surface
+  segments - three near-flat TREADS (2.0625X long, leaning 0.10 rad toward the player so a miss
+  rolls off the front edge instead of parking) alternating with three VERTICAL risers (1.65X
+  tall, the ~8in drop Matt measured) - and `machine.js` builds the whole playing surface from
+  them. **Face coordinates UNROLL along the staircase**: v runs up tread 1, up riser 1, along
+  tread 2 and so on, so holes, collars, paint, capture and every render call keep the one
+  (u, v) address system. `faceToWorld`/`worldToFace`/`tiltAt` are piecewise in machine.js; with
+  one segment they reduce exactly to the old flat-face maths, so THE CLASSIC and POPONGO are
+  byte-identical in behavior (the full heavy suite passed after the change).
+- **Risers are walls, never floors** (`part: 'riser'`, GROUP_REST): a captured ball can only
+  fall through a TREAD, and an overshoot hits a riser face-on and bounces back toward the
+  player - which also killed the "ski jump" launch the old 50-degree face gave fast overshoots.
+- **Each basket funnels into a hole in its TREAD, and the mouth is the only way in**: a
+  full-circle collar (no lipLow) walls off every rolling entry; the mouth leans 0.10 rad toward
+  the player with its tread, like the hanging baskets in the footage. Holes sit 0.75X in from
+  each tread's back edge (v 1.3125X / 5.025X / 8.7375X unrolled; u 0, ±2.07X). Small ball
+  (0.28X, `ball.ratio` waived), mouths 1.125X - mouth/ball ~2.0 off the footage.
+- **The back wall** rises from the third riser's top, taller than spec (backboardH 1.10, under
+  the board.dims waiver): the probe on Matt's "shoots vertically in the air" clip showed steep
+  descents finding the old wall's top edge. With the height, plus near-zero wall grip
+  (`deadFric` 0.06 - a fast ball sliding down a GRIPPING wall gets flicked upward by the
+  friction impulse, the other measured cause) and deadened side walls (`wallRest` 0.15 - their
+  horizontal tops bounced steep descents straight up), the vertical-pop probe went 14 -> 4
+  pops per 117 hard throws, all four now honest rim rattles at overshoot power.
+- **Sweeps on the staircase**: all nine mouths clean-capturable, 0 emergencies in 459 throws,
+  slowest settle 4.92s; ladder low tier from p~0.20, middle from p~0.40, top from p~0.60, the
+  100 straight at p0.60-0.72 (DECISIONS.md#basket-fever-layout).
+- **The tiers are painted on their own segments** (`_paintField` + one field plane per segment
+  in `_build`, each mapping its v-slice of the one unrolled texture): cream shelf treads, blue
+  star-scattered risers. Backboard value cards are flat planes ON the risers (`_hoopBackboard`)
+  - real wall behind them, nothing phantom, nothing curved.
 - **It rides the arrangement layer with a FIXED arrangement**: the cup layer is what puts a
   printed value on a collar wall (`_cupPlate`), so the nine hoops are "cups" `h10a`..`h100`
   (values frozen to ids) even though nothing about them is movable. All one orange.

@@ -458,16 +458,36 @@ export const BOARDS = [
       troughLen: 0.225,
       troughDepth: 0.15,
       boardLipY: 0.42,
-      // 50 DEGREES - the spec's maximum tilt (section 3, 40-50), against the classic's 45. The
-      // real board is vertical (the video: a miss is always FALLING, never rolling); this is as
-      // close as a capture-on-a-face engine gets, and with the slick dead face below it turns
-      // a miss into a quick slide off the bottom instead of a pinball roll among the rims.
+      // Nominal only on this machine: `steps` below replaces the single tilted face entirely
+      // (machine.js builds the staircase from it and never reads boardTilt when steps exist).
+      // Kept in the allowed range for the spec check and the camera's fallback maths.
       boardTilt: 0.8726,
       boardW: 1.00,
-      boardLen: 1.3818,
+      // THE STAIRCASE (Matt, 2026-08-22, from his real-machine footage: "3 stairs... a
+      // horizontal board with 3 holes, a vertical wall... then the back wall"): three TIERS,
+      // each a near-flat TREAD carrying three basket mouths followed by a VERTICAL RISER, and
+      // the back wall above the third riser. Face coordinates unroll along the whole surface
+      // (machine.js), so v runs tread 1 -> riser 1 -> tread 2 -> ... Each tread leans 0.10 rad
+      // toward the player ("slightly angled back towards the player so balls don't get stuck") -
+      // a missed ball rolls forward off the tread's front edge and drops to the tier below,
+      // exactly the footage's miss. boardLen is the unrolled total; board.dims is waived for it.
+      steps: [
+        { len: X * 2.0625, tilt: 0.10 },       // tread 1 (0.30 m)
+        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 1 (0.24 m - the ~8in drop Matt measured)
+        { len: X * 2.0625, tilt: 0.10 },       // tread 2
+        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 2
+        { len: X * 2.0625, tilt: 0.10 },       // tread 3
+        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 3 (the back wall rises behind it)
+      ],
+      boardLen: X * 11.1375,
       railH: 0.10,
       laneRailH: 0.05,
-      backboardH: 0.8,
+      // Taller than the spec's 5.5X, under the board.dims waiver: Matt's "shoots vertically in
+      // the air" clip was steep descents finding the old wall's TOP EDGE (probed: 5 of 14
+      // vertical pops were backboard-edge contacts) - an edge contact turns forward speed into
+      // a vertical launch. Tall enough and a hard throw hits the FACE and dies there, bouncing
+      // back toward the player, which is what he asked for.
+      backboardH: 1.10,
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
@@ -475,56 +495,52 @@ export const BOARDS = [
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
-      // THE FACE: nine hoops in a 3x3 grid - the real Basket Fever's three tiers of three
-      // baskets, row height picking the row and aim picking the column. Rows keep POPONGO's
-      // proven bot/mid/top v (2.3125X / 5.6125X / 8.9125X) and its rail-safe outer columns
-      // (u ±2.07X). MOUTHS ARE 1.125X (r 0.5625X, POPONGO's cup size) against the 0.28X ball -
-      // mouth/ball ~2.0, measured off Matt's real-machine footage. Collar outer reach 0.645X:
-      // same-row wall gap 2.07X − 1.29X = 0.78X, collar-to-rail 3.4375X − 2.07X − 0.645X =
-      // 0.7225X, both over the small ball's 0.64X floor (POPONGO's lattice standard; a collar
-      // near a FLAT wall is a pocket even at zero gap - DECISIONS.md#popongo-layout).
-      //
-      // EVERY HOOP IS lipLow - the tilted rim (machine.js's blended collar profile, its first
-      // shipped use): the up-slope back wall stands full height and the player-facing lip drops
-      // to lipLowFrac of it, so relative to the ground the rim plane leans toward horizontal -
-      // the real machine's baskets hang with mouths parallel to the ground (Matt's video). A
-      // ball out of the air drops in over the low front; an overshoot is caught by the tall
-      // back.
+      // THE HOLES: three per tread, sunk into the TREAD itself - the real machine's baskets
+      // funnel into holes in the shelf, and the only way in is through the basket's mouth from
+      // above (a full-circle collar walls off every rolling entry). MOUTHS ARE 1.125X
+      // (r 0.5625X) against the 0.28X ball - mouth/ball ~2.0, measured off Matt's footage.
+      // Each hole sits 0.75X in from its tread's back edge, so the collar (outer reach 0.645X)
+      // stays on the tread with clearance to the riser behind it. In unrolled v: tread 1 ends
+      // at 2.0625X, tread 2 spans 3.7125X-5.775X, tread 3 spans 7.425X-9.4875X. Same-row wall
+      // gap 2.07X − 1.29X = 0.78X, collar-to-rail 0.7225X - both over the 0.28X ball's 0.64X
+      // floor (POPONGO's lattice standard). The mouths lean 0.10 rad toward the player with
+      // their tread - no lipLow needed; the tread's own tilt IS the real basket's lean.
       holeR: X * 0.5625,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        lowC: { u: 0, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        lowR: { u: X * 2.07, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        midL: { u: -X * 2.07, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        midC: { u: 0, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        midR: { u: X * 2.07, v: X * 5.6125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        topL: { u: -X * 2.07, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        topC: { u: 0, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
-        topR: { u: X * 2.07, v: X * 8.9125, r: X * 0.5625, collarH: X * 0.35, lipLow: true },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
+        midL: { u: -X * 2.07, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
+        midR: { u: X * 2.07, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
+        topL: { u: -X * 2.07, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
+        topC: { u: 0, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
+        topR: { u: X * 2.07, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
       },
-      lipLowFrac: 0.45,
 
       minSpeed: 2.60,
       maxSpeed: 6.60,
       aimMax: 0.45,
 
-      // A SLICK, DEAD FACE, unlike every other board (Matt's video: the real board is vertical,
-      // so a miss FALLS - it never rolls around among the baskets). Low grip + low bounce means
-      // a ball that does not drop into a mouth slides straight off the bottom at 50 degrees
-      // instead of pinballing between rims for seconds. Rims slightly livelier than POPONGO's
-      // cups so a rim hit kicks away crisply.
+      // SLICK AND DEAD almost everywhere, unlike every other board (Matt's footage: on the real
+      // machine the ball is in the air, in a basket, or falling - never rolling around or
+      // caroming). Treads are slick so a miss rolls off the front edge; the back wall's grip is
+      // near zero (deadFric) because a fast ball sliding down a gripping wall gets flicked
+      // upward by the friction impulse - the measured cause of half the remaining vertical
+      // pops; and the side walls are deadened (wallRest) because their horizontal tops bounced
+      // steep descents straight up (the other half).
       mat: {
         boardFric: 0.12,
         boardRest: 0.05,
         woodFric: 0.30,
         woodRest: 0.22,
         wallFric: 0.04,
-        wallRest: 0.42,
+        wallRest: 0.15,
         ringFric: 0.06,
         ringRest: 0.30,
         ring100Fric: 0.06,
         ring100Rest: 0.30,
-        deadFric: 0.24,
+        deadFric: 0.06,
         deadRest: 0.10,
       },
     },
@@ -535,6 +551,10 @@ export const BOARDS = [
         + 'ball three big mouths cannot fit one row inside the rail-gap floors, so the ball is '
         + '0.28X (POPONGO\'s waived size) and the mouths 1.125X. Sweep re-run: all nine hoops '
         + 'clean-capturable, zero emergencies.',
+      'board.dims': 'Matt ordered the stepped rebuild, 2026-08-22: "change the board from a '
+        + 'single board with a back wall to... 3 stairs", even if new physics had to be built. '
+        + 'boardLen is the UNROLLED length of three treads plus three risers (11.1375X), which '
+        + 'necessarily exceeds the flat-board 10.5X ceiling. Sweep re-run on the staircase.',
     },
   },
 ];

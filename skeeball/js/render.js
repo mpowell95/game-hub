@@ -183,19 +183,30 @@ export class Renderer {
       this.scene.add(mesh);
     }
 
-    // The painted field: a plane on the face carrying the burnt-orange paint, the zone
-    // stencils and every mouth's footprint - the "what is worth what" layer.
+    // The painted field: the "what is worth what" layer. One plane per SURFACE SEGMENT (a
+    // single one on a flat board; per tread and riser on a staircase), each mapping its own
+    // v-slice of the one unrolled field texture, so the paint and the physics surface can never
+    // disagree about where anything is.
     {
       const tex = this._track(this._paintField());
-      const plane = new THREE.Mesh(
-        this._track(new THREE.PlaneGeometry(G.boardW, G.boardLen)),
-        this._mat({ map: tex, roughness: 0.8 }),
-      );
-      const c = M.faceToWorld(0, G.boardLen / 2, 0.0015);
-      plane.position.set(c[0], c[1], c[2]);
-      plane.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - M.tilt));
-      plane.receiveShadow = true;
-      this.scene.add(plane);
+      for (const fr of (M.frames || [{ v0: 0, v1: G.boardLen, tilt: M.tilt }])) {
+        const len = fr.v1 - fr.v0;
+        const slice = tex.clone();
+        this._track(slice);
+        // v maps to the texture's Y bottom-up (V(v) = Hpx - v*px in _paintField).
+        slice.repeat.set(1, len / G.boardLen);
+        slice.offset.set(0, fr.v0 / G.boardLen);
+        slice.needsUpdate = true;
+        const plane = new THREE.Mesh(
+          this._track(new THREE.PlaneGeometry(G.boardW, len)),
+          this._mat({ map: slice, roughness: 0.8 }),
+        );
+        const c = M.faceToWorld(0, (fr.v0 + fr.v1) / 2, 0.0015);
+        plane.position.set(c[0], c[1], c[2]);
+        plane.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - fr.tilt));
+        plane.receiveShadow = true;
+        this.scene.add(plane);
+      }
     }
 
     // Lane surface detail: a long plane with plank lines and the serve arrow.
@@ -402,7 +413,9 @@ export class Renderer {
   _onFace(mesh, u, v, h, flat = false) {
     const c = this.M.faceToWorld(u, v, h);
     mesh.position.set(c[0], c[1], c[2]);
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.M.tilt);
+    // The LOCAL surface tilt: on a stepped machine each segment has its own (machine.js tiltAt).
+    const tilt = this.M.tiltAt ? this.M.tiltAt(v) : this.M.tilt;
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt);
     mesh.quaternion.copy(q);
     if (flat) mesh.rotateX(-Math.PI / 2);
   }
@@ -956,21 +969,10 @@ export class Renderer {
     }
     x.globalAlpha = 1;
 
-    // BASKET FEVER's three tiers (Matt's real-machine footage): a cream shelf band behind each
-    // row of hoops with a shadow line under it, and yellow stars scattered on the blue panels
-    // between - the real cabinet's stepped look, as PAINT only. GUARD: paint, never geometry -
-    // a physical ledge on the face is a three-contact pocket that locks the solver.
-    if (this.board.dressing === 'basketball') {
-      const rows = [...new Set(Object.values(G.holes).map((h) => h.v))].sort((a, b) => a - b);
-      for (const rv of rows) {
-        const top = V(rv + G.holeR + 0.075);
-        const bot = V(rv + G.holeR - 0.01);
-        x.fillStyle = '#efe7d2';
-        x.fillRect(0, top, W, bot - top);
-        x.fillStyle = 'rgba(0,0,0,0.22)';
-        x.fillRect(0, bot - 4, W, 4);
-      }
-      // The stars: a fixed pseudo-scatter (i-hashed, no rng) kept between the bands.
+    // BASKET FEVER's staircase paint (Matt's real-machine footage): each TREAD is the cream
+    // shelf the baskets stand on, each RISER is a blue panel scattered with yellow stars - the
+    // real cabinet's tiers, painted onto the exact segments the ball plays on.
+    if (this.board.dressing === 'basketball' && this.M.frames) {
       const star = (sx, sy, r, rot) => {
         x.save();
         x.translate(sx, sy);
@@ -985,15 +987,27 @@ export class Renderer {
         x.fill();
         x.restore();
       };
-      x.fillStyle = '#ffd23f';
-      for (let i = 0; i < 26; i++) {
-        const su = ((i * 0.383 + 0.13) % 1) * G.boardW - G.boardW / 2;
-        const sv = ((i * 0.617 + 0.07) % 1) * G.boardLen;
-        // skip stars that would land inside a band or on a mouth
-        const nearBand = rows.some((rv) => Math.abs(sv - (rv + G.holeR + 0.03)) < 0.06);
-        const nearHole = Object.values(G.holes).some((h) => Math.hypot(su - h.u, sv - h.v) < h.r + 0.05);
-        if (nearBand || nearHole) continue;
-        star(U(su), V(sv), 9 + (i % 3) * 4, (i * 0.7) % (Math.PI * 2));
+      let si = 0;
+      for (const fr of this.M.frames) {
+        const top = V(fr.v1);
+        const bot = V(fr.v0);
+        if (fr.tilt < 1.0) {
+          // a tread: the cream shelf, with a shadow line at its back edge (under the riser)
+          x.fillStyle = '#e9e0c8';
+          x.fillRect(0, top, W, bot - top);
+          x.fillStyle = 'rgba(0,0,0,0.20)';
+          x.fillRect(0, top, W, 5);
+        } else {
+          // a riser: blue panel with a fixed pseudo-scatter of stars (i-hashed, no rng)
+          x.fillStyle = L.face;
+          x.fillRect(0, top, W, bot - top);
+          x.fillStyle = '#ffd23f';
+          for (let k = 0; k < 7; k++, si++) {
+            const su = ((si * 0.383 + 0.13) % 1) * G.boardW - G.boardW / 2;
+            const sv = fr.v0 + 0.03 + ((si * 0.617 + 0.07) % 1) * (fr.v1 - fr.v0 - 0.06);
+            star(U(su), V(sv), 8 + (si % 3) * 4, (si * 0.7) % (Math.PI * 2));
+          }
+        }
       }
     }
 
@@ -1223,66 +1237,56 @@ export class Renderer {
     this.scene.add(g);
   }
 
-  /** BASKET FEVER's value: a white mini BACKBOARD standing on the hoop's UP-SLOPE side (the
-   *  real cabinet mounts one behind every basket), the number in a red-bordered box. Same
-   *  concentric-arc construction as _cupPlate - the shape a cylinder can hold - but centred at
-   *  theta = PI (up-slope; theta = 0 faces the player, see _cupPlate's _onFace note) and read
-   *  from its CONCAVE side by a camera looking up the slope, so the number is drawn mirrored.
-   *  Rises to 1.9x the collar height; the part above the rim is cosmetic only - no physics
-   *  body - which a descending ball can, rarely and briefly, pass through. */
+  /** BASKET FEVER's value: a white mini BACKBOARD card mounted on the RISER behind its basket -
+   *  exactly where the real cabinet prints them (Matt's footage: a fan-topped white card with
+   *  the number in a red-bordered box, above every basket). The riser is a real flat wall, so
+   *  this is a flat plane sitting 8mm proud of solid geometry - nothing phantom, nothing
+   *  curved. */
   _hoopBackboard(H, cup, glow) {
     const G = this.G;
-    const R = H.r + G.collarThick + 0.006;
-    // 2.6x the collar so the card stands well proud of the rim's tall back - the real cabinet's
-    // number cards are prominent (Matt's footage), and the lower cards were hiding behind their
-    // own rims at 1.9x.
-    const PLATE_H = H.collarH * 2.6;
-    const HALF_ARC = 55 * Math.PI / 180;
-    const PPM = 2200;
     const lab = String(cup.label);
+    // the riser behind this hoop's tread: the next frame after the one holding H.v
+    const frames = this.M.frames || [];
+    const ti = frames.findIndex((fr) => H.v >= fr.v0 && H.v <= fr.v1);
+    const riser = frames[ti + 1];
+    if (!riser || riser.tilt < 1.0) return;          // no riser behind (flat board) - no card
 
-    const cw = Math.max(8, Math.round(2 * HALF_ARC * R * PPM));
-    const ch = Math.max(8, Math.round(PLATE_H * PPM));
+    const CARD_W = 0.135;
+    const CARD_H = Math.min(0.16, (riser.v1 - riser.v0) - 0.04);
+    const cw = 340, ch = Math.round(cw * (CARD_H / CARD_W));
     const c = this._canvas(cw, ch);
     const x = c.getContext('2d');
     x.fillStyle = '#f2efe6';
     x.fillRect(0, 0, cw, ch);
-    // the red-bordered value box, like the reference cabinet's number cards
-    const bw = cw * 0.56, bh = ch * 0.62;
-    const bx = (cw - bw) / 2, by = ch * 0.10;
+    // the red-bordered value box
+    const bw = cw * 0.64, bh = ch * 0.56;
+    const bx = (cw - bw) / 2, by = ch * 0.12;
     x.fillStyle = '#ffffff';
     x.fillRect(bx, by, bw, bh);
-    x.lineWidth = Math.max(2, ch * 0.045);
+    x.lineWidth = Math.max(3, ch * 0.05);
     x.strokeStyle = '#d3392e';
     x.strokeRect(bx, by, bw, bh);
-    // the number, mirrored so it reads correctly from the cylinder's inside
     let fontPx = bh * 0.8;
     x.font = `800 ${fontPx}px system-ui, sans-serif`;
-    const m0 = x.measureText(lab);
-    fontPx *= Math.min(1, (bw * 0.82) / m0.width);
-    x.save();
-    x.translate(cw, 0);
-    x.scale(-1, 1);
+    fontPx *= Math.min(1, (bw * 0.82) / x.measureText(lab).width);
     x.font = `800 ${fontPx}px system-ui, sans-serif`;
     x.textAlign = 'center';
     x.textBaseline = 'middle';
     x.fillStyle = '#1c1c1c';
     x.fillText(lab, cw / 2, by + bh / 2 + fontPx * 0.04);
-    x.restore();
 
     const tex = this._track(new THREE.CanvasTexture(c));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
-    tex.wrapS = THREE.ClampToEdgeWrapping;
 
-    const geo = this._track(new THREE.CylinderGeometry(
-      R, R, PLATE_H, 32, 1, true, Math.PI - HALF_ARC, 2 * HALF_ARC,
-    ));
-    const mesh = new THREE.Mesh(geo, this._mat({
-      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow,
-      roughness: 0.5, side: THREE.DoubleSide,
-    }));
-    this._onFace(mesh, H.u, H.v, PLATE_H / 2);
+    const mesh = new THREE.Mesh(
+      this._track(new THREE.PlaneGeometry(CARD_W, CARD_H)),
+      this._mat({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.5 }),
+    );
+    const vCard = riser.v0 + 0.02 + CARD_H / 2;
+    const p = this.M.faceToWorld(H.u, vCard, 0.008);
+    mesh.position.set(p[0], p[1], p[2]);
+    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - riser.tilt));
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     this.scene.add(mesh);
