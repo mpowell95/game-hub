@@ -205,10 +205,187 @@ export const BOARDS = [
     },
   },
 
-  // The next machine goes here: { id: '...', name: '...', taglineKey: '...',
-  //   unlock: { board: 'classic', score: 450 }, look: {...}, physics: {...}, scoring: {...} }.
-  // See skeeball/CLAUDE.md, "Adding the next machine".
+  {
+    id: 'popongo',
+    name: 'POPONGO',
+    taglineKey: 'board_popongo_tag',
+    // GOALS-BASED UNLOCK: { board, goals: true } means "complete every objective on <board>"
+    // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
+    // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
+    // always false.
+    unlock: { board: 'classic', goals: true },
+
+    // Matched to the real product photos in skeeball/Machines/Machine 2 - Popongo/: bare light
+    // wood board and lane, colored cups, a playful blue marquee. `glow`/`net` are required by
+    // look.complete but currently painted by nothing.
+    look: {
+      wood: '#c9a36a',
+      woodDark: '#96713f',
+      cabinet: '#8a6a42',
+      cabinetEdge: '#5f4527',
+      face: '#d9b87f',
+      faceEdge: '#b18f55',
+      ring: '#f6f5f2',
+      ringLip: '#2b5ea7',
+      value: '#1c150c',
+      pocket: '#171006',
+      marquee: '#123a5e',
+      marqueeText: '#ffd977',
+      bulb: '#ffd977',
+      glow: '#ffb02e',
+      wall: '#161016',
+      net: '#d9c9a8',
+    },
+
+    // THE ARRANGEMENT LAYER. The real Popongo's cups are loose hardware - identical cylinders
+    // differing only in color and printed value, rearrangeable between games - so the SLOTS own
+    // the geometry and the CUPS own the value and the paint:
+    //   `cups`         the nine physical cups: value, color, printed label, ink color for the
+    //                  label, and an optional `effect` ('equalizer': landing here wipes the
+    //                  points the previous ball earned this rack - game.js applies it).
+    //   `arrangement`  which cup sits in which slot. THE DEFAULT IS THE PRODUCT PHOTO's staging
+    //                  (playpopongo.png), which also follows the rules sheet's own guidance
+    //                  (like colors spaced apart). One arrangement ships; player rearrangement
+    //                  is deferred, and when it comes it is a game-level remap over these same
+    //                  slots - never a geometry change, because every cup is the same shape.
+    // Hole VALUES are stamped from the arrangement at the bottom of this file, so physics and
+    // the machine-spec test see ordinary valued holes and there is exactly ONE source of truth.
+    // THE LAW rule 5: slot ids AND cup ids are storage (slot ids ride the mid-rack autosave;
+    // cup values are frozen to cup ids forever). Slots are named for POSITION on purpose -
+    // cups are the things that move.
+    cups: {
+      g6: { value: 6, color: '#2e9d4a', ink: '#ffffff', label: '6' },
+      y4a: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
+      y4b: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
+      r2a: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
+      r2b: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
+      b1a: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
+      b1b: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
+      eqA: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
+      eqB: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
+    },
+    arrangement: {
+      top: 'g6',
+      uppL: 'eqA', uppR: 'y4a',
+      midL: 'r2a', midC: 'b1a', midR: 'r2b',
+      lowL: 'b1b', lowR: 'eqB',
+      bot: 'y4b',
+    },
+
+    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane, same ramp,
+    // same throw - the face is the only thing that changes). troughTenHalfW and ringSegments are
+    // deliberately absent: both are classic-only vestiges (see the spec, sections 6 and 12).
+    geom: {
+      ballR: X * 0.35,
+      ballMass: 0.18,
+      laneLen: 1.40,
+      laneW: X * 4.875,
+      bedThick: 0.06,
+      humpLen: 0.42,
+      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+      troughLen: 0.225,
+      troughDepth: 0.15,
+      boardLipY: 0.42,
+      boardTilt: 0.7854,
+      boardW: 1.00,
+      boardLen: 1.3818,
+      railH: 0.10,
+      laneRailH: 0.05,
+      backboardH: 0.8,
+      cupSegments: 14,
+      collarThick: 0.012,
+      ringH: X,
+      ringThick: 0.015,
+      lipLowFrac: 0.50,
+      captureDrop: 0.35,
+
+      // THE FACE: nine identical holes in a diamond (1-2-3-2-1), each wearing a raised cup
+      // collar (collarH) instead of a ring - the collar system machine.js has carried since the
+      // classic's flush rebuild, used here for the first time. No hole has a ringD.
+      //
+      // The lattice, and why these exact numbers (see DECISIONS.md#popongo-layout):
+      //   row step t = 1.65X, lateral half-step s = 1.035X
+      //   - NOTHING IS MERGED AND NOTHING IS TIGHT: every neighbour pair - same-row (2s),
+      //     diagonal (sqrt(s^2+t^2) = 1.948X) and collar-to-rail - leaves a wall gap of at
+      //     least 0.78X, over a ball (0.70X) plus margin. The first draft put midL/midR FLUSH
+      //     against the rails (the classic-100s idea) and a measured sweep showed why that is
+      //     wrong for a collar: a flat rail and a curved collar wall converge gradually, and
+      //     every ball that entered the crevice three-contact-locked the solver - 12% of all
+      //     throws ended in the watchdog's walkout, gifted to midL/midR. GUARD: a collar near
+      //     a FLAT wall is a pocket even when their closest gap is zero; keep every collar a
+      //     ball-width off the rails.
+      //   - bot sits at v = 2.3125X (the classic 20's row - minSpeed's reach); top at
+      //     v = 8.9125X, a touch above the classic 100s' row, which the raised top row of a
+      //     diamond needs for its diagonals to clear - reachable because a collar (0.35X) asks
+      //     for far less arrival clearance than the classic's X-tall rings did.
+      // Values are NOT written here - they come from the arrangement (see the stamping loop at
+      // the bottom of this file). collarH is a SLOT property (slots own geometry; cups own
+      // value and paint), uniform across the face like the real product's identical cups.
+      holeR: X * 0.5,
+      holes: {
+        top: { u: 0, v: X * 8.9125, r: X * 0.5, collarH: X * 0.35 },
+        uppL: { u: -X * 1.035, v: X * 7.2625, r: X * 0.5, collarH: X * 0.35 },
+        uppR: { u: X * 1.035, v: X * 7.2625, r: X * 0.5, collarH: X * 0.35 },
+        midL: { u: -X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        midR: { u: X * 2.07, v: X * 5.6125, r: X * 0.5, collarH: X * 0.35 },
+        lowL: { u: -X * 1.035, v: X * 3.9625, r: X * 0.5, collarH: X * 0.35 },
+        lowR: { u: X * 1.035, v: X * 3.9625, r: X * 0.5, collarH: X * 0.35 },
+        bot: { u: 0, v: X * 2.3125, r: X * 0.5, collarH: X * 0.35 },
+      },
+
+      minSpeed: 2.60,
+      maxSpeed: 6.60,
+      aimMax: 0.45,
+
+      mat: {
+        boardFric: 0.62,
+        boardRest: 0.08,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.42,
+        ringFric: 0.06,
+        ringRest: 0.18,
+        ring100Fric: 0.06,
+        ring100Rest: 0.18,
+        deadFric: 0.24,
+        deadRest: 0.10,
+      },
+    },
+  },
 ];
+
+// THE STAMPING LOOP: on a cup board, a hole's value IS the value of the cup sitting in its slot.
+// Stamped once at module load so physics.js, the tests and every reader see ordinary valued
+// holes, while the arrangement stays the single source of truth - a value edited by hand in
+// `holes` would be overwritten here, which is the point.
+for (const b of BOARDS) {
+  if (!b.cups || !b.arrangement) continue;
+  for (const slot of Object.keys(b.geom.holes)) {
+    const cup = b.cups[b.arrangement[slot]];
+    b.geom.holes[slot].value = cup ? cup.value | 0 : 0;
+  }
+}
+
+/** The cup sitting in a slot, or null (every board without an arrangement layer - THE CLASSIC). */
+export function cupAt(board, slotId) {
+  if (!board || !board.cups || !board.arrangement) return null;
+  return board.cups[board.arrangement[slotId]] || null;
+}
+
+/** The distinct colors a cup board pays for (scoring cups only - the equalizers are not a
+ *  "color" to collect). Empty set on a board with no cups. */
+export function scoringColors(board) {
+  const out = new Set();
+  if (board && board.cups) {
+    for (const id of Object.keys(board.cups)) {
+      const c = board.cups[id];
+      if (c && (c.value | 0) > 0) out.add(c.color);
+    }
+  }
+  return out;
+}
 
 export const DEFAULT_BOARD = 'classic';
 

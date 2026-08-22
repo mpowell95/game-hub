@@ -576,6 +576,10 @@ function ensureSk(g) {
   for (const k of ['tens', 'twenties', 'thirties', 'forties']) {
     if (!Number.isFinite(g.sk[k])) g.sk[k] = 0;
   }
+  // Added 2026-08-22 for POPONGO's "all four colors in one game" objective (skeeball/js/goals.js):
+  // how many racks have landed every scoring color at least once. ADDITIVE like the block above -
+  // absent on any device that has not played since, defaulted to 0 here, only ever incremented.
+  if (!Number.isFinite(g.sk.colorSweeps)) g.sk.colorSweeps = 0;
   // Added 2026-08-11 with the boards rework, both ADDITIVE and both still absent on any device
   // that has not played since: `boards` is per-machine records (see js/arcade-scores.js, which
   // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
@@ -1292,6 +1296,7 @@ export function recordSkeeball(boardId, extras) {
   g.sk.twenties += Math.max(0, e.twenties | 0);
   g.sk.thirties += Math.max(0, e.thirties | 0);
   g.sk.forties += Math.max(0, e.forties | 0);
+  if (e.colorSweep) g.sk.colorSweeps += 1;
   g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
   g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
   recordBoardGame(g.sk, board, { score, bestThrow: e.bestThrow | 0, at: e.at });

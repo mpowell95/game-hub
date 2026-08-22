@@ -130,6 +130,34 @@ zero. A true zero-height taper at the front meant a hard, wide throw could sail 
 the board at a height where no wall existed yet, scoring nothing and never touching a wall at
 all — the opposite of the bankable shot the wall exists to provide.
 
+### Popongo layout
+
+POPONGO's nine slots form a 1-2-3-2-1 diamond, and every number in it is a consequence of four
+fixed quantities: the ball (0.70X across), the collar's outer reach (0.5825X from a slot centre),
+the board's half-width (3.4375X), and the reachable band of the face (v 2.3125X at minSpeed up to
+just under the top edge at full power).
+
+The first draft placed the middle row's outer slots flush against the side rails, copying the
+classic's corner-100 pattern (merged furniture is one of the spacing rule's two legal answers). A
+measured sweep (459 throws over the aim x power grid) rejected it: 12.6% of ALL throws ended in
+the watchdog's emergency walkout, every single one wedged where the curved collar wall meets the
+flat rail, and every walkout was then "scored" into the adjacent cup. A circle against a FLAT
+wall converges gradually - the pinch zone where the gap is narrower than the ball extends far
+from the tangent point - so a collar near a rail is a three-contact lock even when their closest
+gap is zero. Merging works for ring segments against a rail (the classic's 100s); it does not
+work for a collar a ball approaches along the rail. Standing rule: keep every collar at least a
+ball plus margin off the rails.
+
+The shipped lattice (row step t = 1.65X, lateral half-step s = 1.035X) makes every wall gap -
+same-row, diagonal, and collar-to-rail - at least 0.78X against the 0.70X ball, with nothing
+merged. That needed the top slot raised to v = 8.9125X (above the classic 100s' row) to buy the
+diagonals their length; it stays reachable because a 0.35X collar asks for far less arrival
+clearance than the classic's X-tall rings. Collars are 0.35X for the same two reasons the sweep
+gave: at 0.5X the two upper-diagonal slots were unreachable at every cell of the grid (the
+descending arc met the wall face instead of clearing it), and lower walls scatter clipped balls
+less. Verified after: all nine slots capturable without the watchdog, 0 emergencies in 459
+throws.
+
 ## Swipe and power
 
 ### Measured swipe data

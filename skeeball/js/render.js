@@ -214,12 +214,17 @@ export class Renderer {
     this._rampSkin();
     this._sideWalls();
 
-    // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face,
-    // with its VALUE painted into the field texture around it (see _paintField), since every cup
-    // is `collarH: 0` (boards.js) - the surface you see is the surface the ball rolls on. GUARD:
-    // numbers belong on the board, not on a cup wall - see DECISIONS.md#removed-scenery.
+    // THE CUPS. A hole in a board, drawn as a hole in a board: a dark mouth flush in the face.
+    // On THE CLASSIC every hole is `collarH: 0` (boards.js) and its VALUE is on a ring wall
+    // (_ringNumbers) - numbers do not belong on the board face; see DECISIONS.md#removed-scenery.
+    // On a CUP BOARD (POPONGO) a hole wears a raised collar in ITS CUP's color (boards.js's
+    // arrangement layer), matching machine.js's physics profile vertex for vertex, and carries
+    // the cup's printed value on an arc inside its own far wall (_cupPlate) - where the real
+    // product prints it.
     for (const id of Object.keys(G.holes)) {
       const H = G.holes[id];
+      const cup = this.board.cups && this.board.arrangement
+        ? this.board.cups[this.board.arrangement[id]] : null;
       const mouth = new THREE.Mesh(
         this._track(new THREE.CircleGeometry(H.r, 44)),
         this._mat({ color: 0x0a0705, roughness: 1 }),
@@ -228,11 +233,12 @@ export class Renderer {
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
-      // A future machine wanting a raised rim gets one matching machine.js's own height profile.
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
-        H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1);
+        H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1,
+        cup && cup.color);
       this._onFace(wall, H.u, H.v, 0);
       this.scene.add(wall);
+      if (cup && cup.label) this._cupPlate(H, cup, RING_GLOW);
     }
 
     // THE RINGS, drawn FROM THE PHYSICS SEGMENTS THEMSELVES. GUARD: every ring is one box per
@@ -942,9 +948,13 @@ export class Renderer {
     x.globalAlpha = 1;
 
     // The 10 slot across the bottom edge, and its corner 0s - a painted zone, and only that:
-    // the values that used to go with it are on the rings now (see _ringNumbers).
-    x.fillStyle = 'rgba(0,0,0,0.25)';
-    x.fillRect(0, V(0.055), W, Hpx - V(0.055));
+    // the values that used to go with it are on the rings now (see _ringNumbers). A cup board
+    // has no bottom slot - its lowest cup is just the nearest cup - so the band is the
+    // classic-style boards' alone.
+    if (!this.board.cups) {
+      x.fillStyle = 'rgba(0,0,0,0.25)';
+      x.fillRect(0, V(0.055), W, Hpx - V(0.055));
+    }
 
     // EVERY HOLE: its mouth. GUARD: rings are NOT painted here - they are real walls drawn from
     // their own collision segments in `_build`, and a second painted copy here would drift out
@@ -1002,9 +1012,10 @@ export class Renderer {
    *  wants walls gets ones that match its physics vertex for vertex, instead of the straight
    *  cylinder plus a cosmetic -0.32 rad tilt that used to slide each cup off its own mouth.
    *
-   *  There is deliberately NO number on it. Values are painted on the board (_paintField): a
-   *  flat plate inside a curved wall is what bit every number on this board in half. */
-  _scallopedRim(radius, height, lowFrac) {
+   *  There is deliberately NO number on the rim itself: a FLAT plate inside a curved wall is
+   *  what bit every number on this board in half once. A cup board's value rides _cupPlate
+   *  instead - a CURVED arc, concentric with the cup, which is the shape a cylinder can hold. */
+  _scallopedRim(radius, height, lowFrac, color) {
     const N = 40;
     const t = this.G.collarThick;
     const hAt = (phi) => height * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2);
@@ -1034,10 +1045,85 @@ export class Renderer {
     const geo = this._track(new THREE.BufferGeometry());
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, this._mat({ color: 0xfdfaf3, roughness: 0.5, side: THREE.DoubleSide }));
+    // A cup board hands in its cup's color; the default is the classic's plastic cream. The
+    // emissive floor is the ring walls' lesson (see the ringMat GUARD): a wall standing
+    // perpendicular to the face gets no key light, so albedo alone renders it as mud.
+    const col = new THREE.Color(color || 0xfdfaf3);
+    const mesh = new THREE.Mesh(geo, this._mat({
+      color: col, roughness: 0.5, side: THREE.DoubleSide,
+      emissive: col, emissiveIntensity: color ? 0.35 : 0,
+    }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
+  }
+
+  /** A CUP'S PRINTED VALUE: an arc hugging the OUTSIDE of the collar's down-slope wall - the
+   *  face the play camera actually sees (the colored band on every cup from behind the ball),
+   *  and where the real Popongo prints its numbers. Same construction as _numberPlates (which
+   *  serves the classic's tight RINGS), but a cup is CONCENTRIC with its hole, so the arc
+   *  centres on the hole itself and stands the collar's height. GUARD: not inside the mouth -
+   *  the first draft put it just inside the far wall, which buried it inside the collar solid
+   *  AND faced it away from a camera that looks at these cups edge-on. Cosmetic only - no
+   *  physics body; the collar the ball hits is _scallopedRim's machine.js twin. */
+  _cupPlate(H, cup, glow) {
+    const G = this.G;
+    const R = H.r + G.collarThick + 0.004;          // just proud of the collar's outer face
+    const PLATE_H = H.collarH;
+    const HALF_ARC = 58 * Math.PI / 180;
+    const CAP = 0.78;                               // the digit fills the band, like the real
+    const RISE = 0.50;                              // cups - this wall is half a ring's height
+                                                    // and read from further away
+    const PPM = 2200;
+    const lab = String(cup.label);
+
+    const probe = this._canvas(8, 8).getContext('2d');
+    const maxH = PLATE_H * CAP * PPM;
+    const maxW = 2 * HALF_ARC * R * PPM * 0.72;
+    let fontPx = maxH / 0.72;
+    for (let i = 0; i < 5; i++) {
+      probe.font = `800 ${fontPx}px system-ui, sans-serif`;
+      const m = probe.measureText(lab);
+      const inkH = (m.actualBoundingBoxAscent || fontPx * 0.72) + (m.actualBoundingBoxDescent || 0);
+      const k = Math.min(maxH / inkH, maxW / m.width);
+      if (Math.abs(k - 1) < 0.01) break;
+      fontPx *= k;
+    }
+
+    const cw = Math.max(8, Math.round(2 * HALF_ARC * R * PPM));
+    const ch = Math.max(8, Math.round(PLATE_H * PPM));
+    const c = this._canvas(cw, ch);
+    const x = c.getContext('2d');
+    x.fillStyle = cup.color;
+    x.fillRect(0, 0, cw, ch);
+    x.fillStyle = cup.ink || '#ffffff';
+    x.font = `800 ${fontPx}px system-ui, sans-serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'alphabetic';
+    const m = x.measureText(lab);
+    const up = m.actualBoundingBoxAscent || fontPx * 0.72;
+    const down = m.actualBoundingBoxDescent || 0;
+    x.fillText(lab, cw / 2, ch * (1 - RISE) + (up - down) / 2);
+
+    const tex = this._track(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    // Read from OUTSIDE (the ring numbers' outer-wall case): u runs with the angle, no flip.
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+
+    // _onFace puts local +X on the face's u and local -Z on its v, so theta = 0 faces DOWN-SLOPE
+    // - straight at the player behind the ball.
+    const geo = this._track(new THREE.CylinderGeometry(
+      R, R, PLATE_H, 40, 1, true, -HALF_ARC, 2 * HALF_ARC,
+    ));
+    const mesh = new THREE.Mesh(geo, this._mat({
+      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow,
+      roughness: 0.4, side: THREE.DoubleSide,
+    }));
+    this._onFace(mesh, H.u, H.v, PLATE_H / 2);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    this.scene.add(mesh);
   }
 
   /** THE BACKBOARD IS THE SCOREBOARD: four records, label over value, left to right (All Time

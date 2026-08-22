@@ -1,4 +1,7 @@
-// skeeball/js/goals.js - the three things that open the next machine, and how far along you are.
+// skeeball/js/goals.js - each machine's three objectives, and how far along you are. THE
+// CLASSIC's three are what open POPONGO (boards.js `unlock: { board: 'classic', goals: true }`,
+// applied by ui.js via allGoalsMet); POPONGO's three are its own scoreboard until a machine 3
+// exists to hang off them.
 //
 // GUARD: NOTHING IS STORED HERE. Every goal is DERIVED from counters the shared store already
 // keeps (js/game-stats.js's `sk` block), and recomputed on demand. That is deliberate: goal
@@ -11,51 +14,82 @@
 // without hitting the lower cups anyway. Matt's call, 2026-08-20: follow the requirement, do not
 // approximate it. tens/twenties/thirties/forties now ride the same additive path the 50s and 100s
 // always did (js/game-stats.js, and js/players-agg.js for the cross-device merge).
+//
+// PER-MACHINE since 2026-08-22 (POPONGO). Every reader passes the BOARD ID; each goal carries its
+// own `labelKey` into strings.js so ui.js renders any machine's rails without knowing whose goals
+// they are. THE CLASSIC's goals deliberately keep reading the GLOBAL sk fields they always read
+// (hundreds/bestGame/points) rather than moving to sk.boards.classic - switching would show less
+// progress than a device had already been shown (pre-2026-08-11 plays exist only in the global
+// fields), which reads as regression. Known, accepted quirk: a POPONGO rack's points also nudge
+// the classic total goal, since sk.points is lifetime-global. POPONGO's goals read its own
+// per-board record (sk.boards.popongo) and are clean from day one.
 
 import { loadStats } from '../../js/game-stats.js';
 
-/** Highest score in one game that opens goal 2, and the lifetime total that opens goal 3. */
 export const GOAL_HUNDREDS = 5;
 export const GOAL_BEST = 360;
 export const GOAL_TOTAL = 10000;
+
+export const PG_COLORS = 4;      // POPONGO: land all four scoring colors in ONE game
+export const PG_BEST = 30;       // POPONGO: score 30+ in a single game
+export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
 };
 
-/** The three goals, each with where the player currently stands. `now`/`target` drive the bar;
- *  `met` is the only thing the unlock itself cares about. Order is the order they are shown. */
-export function readGoals(store) {
-  const s = store || sk();
-  // Five 100s EVER, not in one game.
-  const h = s.hundreds | 0;
-  return [
-    { id: 'hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
-    { id: 'best', now: Math.min(s.bestGame | 0, GOAL_BEST), target: GOAL_BEST, met: (s.bestGame | 0) >= GOAL_BEST },
-    { id: 'total', now: Math.min(s.points | 0, GOAL_TOTAL), target: GOAL_TOTAL, met: (s.points | 0) >= GOAL_TOTAL },
-  ];
+/** Each machine's three goals as one function over (store, live rack | null). `rack` is game.js's
+ *  result() mid-rack, so the rails move ball by ball; readGoals passes null and answers from the
+ *  recorded store alone, which is what the unlock itself trusts. */
+const GOALS = {
+  classic(s, r) {
+    // Five 100s EVER, not in one game.
+    const h = (s.hundreds | 0) + (r ? r.hundreds | 0 : 0);
+    const best = Math.max(s.bestGame | 0, r ? r.score | 0 : 0);
+    const total = (s.points | 0) + (r ? r.score | 0 : 0);
+    return [
+      { id: 'hundreds', labelKey: 'g_hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
+      { id: 'best', labelKey: 'g_single', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
+      { id: 'total', labelKey: 'g_total', now: Math.min(total, GOAL_TOTAL), target: GOAL_TOTAL, met: total >= GOAL_TOTAL },
+    ];
+  },
+  popongo(s, r) {
+    const b = (s.boards || {}).popongo || {};
+    // All four colors in ONE game: the live rack's own distinct colors while playing
+    // (game.js result().colorsHit), done-forever once any rack has swept them
+    // (sk.colorSweeps, counted by recordSkeeball). The recorded store keeps no
+    // best-colors-in-a-rack number on purpose - one more counter for a bar nobody
+    // watches outside a live rack.
+    const sweptEver = (s.colorSweeps | 0) > 0;
+    const liveColors = r ? r.colorsHit | 0 : 0;
+    const colorsNow = sweptEver ? PG_COLORS : Math.min(liveColors, PG_COLORS);
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    return [
+      { id: 'colors', labelKey: 'g_colors', now: colorsNow, target: PG_COLORS, met: sweptEver || liveColors >= PG_COLORS },
+      { id: 'best', labelKey: 'g_single', now: Math.min(best, PG_BEST), target: PG_BEST, met: best >= PG_BEST },
+      { id: 'total', labelKey: 'g_total', now: Math.min(total, PG_TOTAL), target: PG_TOTAL, met: total >= PG_TOTAL },
+    ];
+  },
+};
+
+/** The three goals for one machine, from the RECORDED store - what the unlock trusts. */
+export function readGoals(boardId, store) {
+  const fn = GOALS[boardId] || GOALS.classic;
+  return fn(store || sk(), null);
 }
 
 /**
- * The same three goals, counting a rack that is STILL IN PROGRESS. The store only learns about
- * a rack when it is recorded, so without this the play screen's rails would sit frozen for the
- * whole nine balls and only jump at the end - which reads as broken, not as slow.
+ * The same three, counting a rack that is STILL IN PROGRESS. The store only learns about a rack
+ * when it is recorded, so without this the play screen's rails would sit frozen for the whole
+ * nine balls and only jump at the end - which reads as broken, not as slow.
  *
  * `rack` is game.js's result() for the live rack. The unlock itself still runs off readGoals
  * against the recorded store; this is a display reading and nothing decides anything on it.
  */
-export function readGoalsLive(rack, store) {
-  const s = store || sk();
-  const r = rack || {};
-  const h = (s.hundreds | 0) + (r.hundreds | 0);
-  // Best is the best SINGLE game either way, so a live rack that beats the record counts now.
-  const best = Math.max(s.bestGame | 0, r.score | 0);
-  const total = (s.points | 0) + (r.score | 0);
-  return [
-    { id: 'hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
-    { id: 'best', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
-    { id: 'total', now: Math.min(total, GOAL_TOTAL), target: GOAL_TOTAL, met: total >= GOAL_TOTAL },
-  ];
+export function readGoalsLive(boardId, rack, store) {
+  const fn = GOALS[boardId] || GOALS.classic;
+  return fn(store || sk(), rack || null);
 }
 
 /** Which goals went from unmet to met between two readings, and whether that completed the set.
@@ -67,6 +101,6 @@ export function goalsWon(before, after) {
   return { fresh, all: fresh.length > 0 && after.every((g) => g.met) };
 }
 
-export function allGoalsMet(store) {
-  return readGoals(store).every((g) => g.met);
+export function allGoalsMet(boardId, store) {
+  return readGoals(boardId, store).every((g) => g.met);
 }

@@ -8,7 +8,7 @@
 // `SkeeballGame.restore` rebuilds a game from one.
 
 import { startThrow, step, takeEvents } from './physics.js';
-import { boardById, BALLS_PER_GAME } from './boards.js';
+import { boardById, BALLS_PER_GAME, cupAt, scoringColors } from './boards.js';
 
 export { BALLS_PER_GAME };
 
@@ -41,7 +41,14 @@ export class SkeeballGame {
     g.score = snap.score | 0;
     g.ballsUsed = Math.min(BALLS_PER_GAME, Math.max(0, snap.ballsUsed | 0));
     g.throws = Array.isArray(snap.throws)
-      ? snap.throws.slice(0, g.ballsUsed).map((t) => ({ value: t.value | 0, hole: String(t.hole || 'gutter') }))
+      ? snap.throws.slice(0, g.ballsUsed).map((t) => ({
+        value: t.value | 0,
+        hole: String(t.hole || 'gutter'),
+        // `earned` arrived with the equalizer (2026-08-22): what this ball still contributes to
+        // the score after any later equalizer wiped it. Old saves predate it - there the ball
+        // still holds everything it scored.
+        earned: Number.isFinite(t.earned) ? t.earned | 0 : t.value | 0,
+      }))
       : [];
     g.hundreds = snap.hundreds | 0;
     g.fifties = snap.fifties | 0;
@@ -59,7 +66,7 @@ export class SkeeballGame {
       board: this.board.id,
       score: this.score,
       ballsUsed: this.ballsUsed,
-      throws: this.throws.map((t) => ({ value: t.value, hole: t.hole })),
+      throws: this.throws.map((t) => ({ value: t.value, hole: t.hole, earned: t.earned })),
       hundreds: this.hundreds,
       fifties: this.fifties,
       bestThrow: this.bestThrow,
@@ -113,16 +120,39 @@ export class SkeeballGame {
       this.events.push({ type: 'ballBack' });
       return;
     }
-    const value = outcome.value | 0;
+    // THE ARRANGEMENT LAYER: physics reports the SLOT; the cup sitting in it (boards.js's
+    // `arrangement`) decides what that is worth. On a board with no cups (THE CLASSIC) the cup
+    // is null and the hole's own value stands - identical numbers today, since boards.js stamps
+    // hole values FROM the arrangement, but scoring through the cup is what lets a future
+    // rearrangement be a data change instead of an engine change.
+    const cup = cupAt(this.board, outcome.hole);
+    let value = cup ? cup.value | 0 : outcome.value | 0;
+    // THE EQUALIZER (Popongo's black cups): landing here wipes whatever the immediately previous
+    // ball EARNED this rack - its `earned`, not its printed value, so an already-wiped ball (or
+    // a previous equalizer) has nothing left to lose and wipes as zero. The real game's rule,
+    // solo-adapted; the wipe itself is worth nothing and cannot go below what the previous ball
+    // actually contributed, so the score can never go negative.
+    let eq = false;
+    let wiped = 0;
+    if (cup && cup.effect === 'equalizer') {
+      eq = true;
+      value = 0;
+      const prev = this.throws[this.throws.length - 1];
+      if (prev && (prev.earned | 0) > 0) {
+        wiped = prev.earned | 0;
+        this.score -= wiped;
+        prev.earned = 0;
+      }
+    }
     this.ballsUsed += 1;
     this.score += value;
-    this.throws.push({ value, hole: outcome.hole });
+    this.throws.push({ value, hole: outcome.hole, earned: value });
     if (value === 100) this.hundreds += 1;
     if (value === 50) this.fifties += 1;
     this.bestThrow = Math.max(this.bestThrow, value);
     this.events.push({
       type: 'ballDone',
-      value, hole: outcome.hole,
+      value, hole: outcome.hole, eq, wiped,
       score: this.score, ballsLeft: this.ballsLeft(),
     });
     if (this.ballsUsed >= BALLS_PER_GAME) {
@@ -138,6 +168,18 @@ export class SkeeballGame {
     // so they need no place in the snapshot - `throws` is already in it, so they survive a
     // resume for free. hundreds/fifties keep their existing counters; they predate this.
     const by = (v) => this.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
+    // The cup-board extras: how many distinct scoring COLORS this rack has landed, and whether
+    // that is all of them (POPONGO's "all four colors in one game" objective - js/goals.js reads
+    // colorsHit live, recordSkeeball counts colorSweep into sk.colorSweeps). Both stay 0 on a
+    // board with no cups.
+    const colors = new Set();
+    if (this.board.cups) {
+      for (const th of this.throws) {
+        const cup = cupAt(this.board, th.hole);
+        if (cup && (cup.value | 0) > 0) colors.add(cup.color);
+      }
+    }
+    const need = scoringColors(this.board).size;
     return {
       score: this.score,
       balls: this.ballsUsed,
@@ -148,6 +190,8 @@ export class SkeeballGame {
       hundreds: this.hundreds,
       fifties: this.fifties,
       bestThrow: this.bestThrow,
+      colorsHit: colors.size,
+      colorSweep: need > 0 && colors.size >= need ? 1 : 0,
     };
   }
 

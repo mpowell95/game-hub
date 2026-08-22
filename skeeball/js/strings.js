@@ -9,6 +9,7 @@ const STRINGS = {
     // Setup / machine select
     setup_machines: 'Machines',
     board_classic_tag: 'The boardwalk original. Nine balls, the cup ladder, two corner 100s.',
+    board_popongo_tag: 'Nine color cups on bare wood. The black cups take back your last ball.',
     play: 'Play',
     resume: 'Resume',
     howto: 'How to play',
@@ -17,6 +18,7 @@ const STRINGS = {
     paused: 'Paused',
     locked: 'Locked',
     unlock_hint: 'Score {score} on {name} to unlock',
+    unlock_goals_hint: 'Complete all three goals on {name} to unlock',
     car_hint: 'Swipe to switch machines',
     prev_machine: 'Previous machine',
     next_machine: 'Next machine',
@@ -28,7 +30,10 @@ const STRINGS = {
     g_hundreds: '100s landed',
     g_single: 'Single game',
     g_total: 'Total points',
+    g_colors: 'All 4 colors',
+    goals_obj_h: 'Objectives',
     goals_unlocked: 'UNLOCKED',
+    goals_done: 'COMPLETE',
 
     // The records panel - the four numbers every machine shows
     rec_top: 'Top score',
@@ -81,7 +86,7 @@ const STRINGS = {
     ht_a_swipe: 'Swipe up the lane to roll the ball',
     ht_a_holes: 'The board: higher holes are worth more, 20 up to 50, with a 100 in each top corner',
     ht_a_balls: 'Nine balls in the tray, one game',
-    ht_a_unlock: 'Score {score} on the first machine and the padlock on the next machine opens',
+    ht_a_unlock: 'Complete the three goals on the first machine and the padlock on the next machine opens',
 
     // Aria
     aria_lane: 'Skeeball machine. Swipe up on the lane to roll the ball.',
@@ -92,6 +97,7 @@ const STRINGS = {
 
     setup_machines: 'Máquinas',
     board_classic_tag: 'La original del paseo marítimo. Nueve bolas, la escalera de copas y dos 100 en las esquinas.',
+    board_popongo_tag: 'Nueve copas de colores sobre madera. Las copas negras te quitan la última bola.',
     play: 'Jugar',
     resume: 'Seguir la partida',
     howto: 'Cómo se juega',
@@ -100,6 +106,7 @@ const STRINGS = {
     paused: 'En pausa',
     locked: 'Bloqueada',
     unlock_hint: 'Consigue {score} en {name} para desbloquearla',
+    unlock_goals_hint: 'Completa los tres objetivos de {name} para desbloquearla',
     car_hint: 'Desliza para cambiar de máquina',
     prev_machine: 'Máquina anterior',
     next_machine: 'Máquina siguiente',
@@ -108,7 +115,10 @@ const STRINGS = {
     g_hundreds: '100 conseguidos',
     g_single: 'Una partida',
     g_total: 'Puntos totales',
+    g_colors: 'Los 4 colores',
+    goals_obj_h: 'Objetivos',
     goals_unlocked: 'DESBLOQUEADA',
+    goals_done: 'COMPLETADOS',
 
     rec_top: 'Puntuación máxima',
     rec_top_any: 'cualquier jugador',
@@ -155,7 +165,7 @@ const STRINGS = {
     ht_a_swipe: 'Desliza hacia arriba por la pista para lanzar la bola',
     ht_a_holes: 'El tablero: los huecos más altos valen más, del 20 al 50, con un 100 en cada esquina superior',
     ht_a_balls: 'Nueve bolas en la bandeja, una partida',
-    ht_a_unlock: 'Consigue {score} en la primera máquina y se abre el candado de la siguiente',
+    ht_a_unlock: 'Completa los tres objetivos de la primera máquina y se abre el candado de la siguiente',
 
     aria_lane: 'Máquina de skeeball. Desliza hacia arriba en la pista para lanzar la bola.',
   },

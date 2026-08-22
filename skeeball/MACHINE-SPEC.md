@@ -223,7 +223,9 @@ whatever he asks for.
 
 ## 11 · Where a hole can go — `holes.uniform`, `holes.inside`, `holes.spacing`, `holes.frozen`
 
-A hole is `{ u, v, r, value, ringD }`, plus `ringOpen: true` if its ring is an arc.
+A hole is `{ u, v, r, value, ringD }`, plus `ringOpen: true` if its ring is an arc. On a CUP
+BOARD (see "The arrangement layer" below) a hole is `{ u, v, r, collarH }` instead — no `ringD`,
+and no written `value`, because the value comes from the cup sitting in the slot.
 
 `u` runs across the face: `0` at the centre, `±boardW/2` at the edges.
 `v` runs up the face: `0` at the bottom edge, `boardLen` at the top.
@@ -233,6 +235,28 @@ A hole is `{ u, v, r, value, ringD }`, plus `ringOpen: true` if its ring is an a
 - Hole centres sit at least `1.30X` apart. — `holes.spacing`
 - A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
   written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
+
+### The arrangement layer — cup boards (POPONGO's pattern)
+
+A machine whose scoring furniture is movable in real life (POPONGO's nine identical cups) splits
+the face into two layers, both on the board entry:
+
+- `geom.holes` — the SLOTS. Named for POSITION (`top`, `midL`, `bot`, …), each `{ u, v, r,
+  collarH }`. Slots own all geometry; their ids are frozen (they ride the autosave).
+- `cups` + `arrangement` — the CUPS (`{ value, color, ink, label, effect? }`, ids like `g6`,
+  `eqA`; values frozen per cup id) and which cup sits in which slot.
+
+Hole values are STAMPED from the arrangement by the loop at the bottom of `boards.js`; never
+write a `value` on a cup-board hole by hand — it would be overwritten. `game.js` scores through
+`cupAt()`, and the renderer paints each collar in its cup's `color` with the `label` on an arc
+inside the cup's far wall. All automatic; nothing to build per machine.
+
+`effect: 'equalizer'` on a cup makes landing there wipe the points the previous ball earned this
+rack (`game.js`; the popup shows `−N`). It is the only cup effect that exists.
+
+Player-facing rearrangement is deferred on purpose. When Matt asks for it, it is a game-level
+remap over these same slots plus a screen — never a geometry or physics change, because every
+cup is the same shape. What custom layouts do to records and unlocks is his call at that point.
 
 ### The tangency stack — what binds, and what is just THE CLASSIC
 
@@ -296,8 +320,8 @@ Three of the numbers in the table are for CUPS, not rings, and do nothing on a f
 A ring is a wall up-slope of its hole. A **collar** is a wall standing on the hole itself:
 `cupSegments` boxes, `collarThick` thick, in a circle right at the hole's edge and concentric
 with it. A hole gets one only by asking: set `collarH` (the wall's height) on the hole. No hole
-on THE CLASSIC sets it, so no collar exists today — the three values sit ready for a machine
-that wants raised rims.
+on THE CLASSIC sets it; every hole on POPONGO does (`X * 0.35` — measured: at `X * 0.5` its two
+upper-diagonal slots were unreachable at every cell of the sweep).
 
 - `collarThick` — the collar wall's thickness, `ringThick`'s counterpart.
 - `cupSegments` — how many boxes a collar is built from. Fixed, unlike a ring's derived count,
@@ -344,6 +368,16 @@ usually the tightest on the board.
 Three flat surfaces meeting at right angles, anywhere a ball can reach, will trap it. The physics
 cannot push it back out. Angle one of the three, or leave a gap.
 
+### A collar near a flat wall is a pocket even at zero gap
+
+Merging furniture into a rail is legal for RING SEGMENTS (THE CLASSIC's corner 100s). It is NOT
+legal for a collar: a curved collar wall and a flat rail converge gradually, so the pinch where
+their gap is narrower than the ball extends far from the touch point, and a ball entering it
+three-contact-locks the solver. Measured on POPONGO's first draft: 12% of ALL throws ended in
+the watchdog's walkout, every one wedged there. Keep every collar at least a ball plus margin
+(`0.78X` wall gap) off the rails — and off every other collar. See
+DECISIONS.md#popongo-layout.
+
 ## 13 · Painting the numbers
 
 Numbers are painted wrapped around a ring wall, not flat on the board. Two positions exist:
@@ -386,12 +420,17 @@ them per board — never assume the previous machine's.
 The fireworks and the tiles that show progress are shared by every machine. Only the objectives
 themselves change. Colours of the tiles may change with the machine.
 
-THE CLASSIC's, as an example of the shape: land five 100s, score 360 in a single game, score
-10,000 points in total.
+THE CLASSIC's: land five 100s, score 360 in a single game, score 10,000 points in total.
+POPONGO's: land all four cup colors in one game, score 30+ in a single game, 1,000 points in
+total on the machine.
 
-**The code does not support this yet.** `skeeball/js/goals.js` holds one global set of three,
-hardcoded, with no board attached. Per-machine objectives have to be built before a second machine
-can have its own.
+Per-machine objectives are supported (2026-08-22): add the machine's three to the `GOALS` map in
+`skeeball/js/goals.js` — each goal carries a `labelKey` into `strings.js`, and the rails, the
+game-over tiles and the fireworks are board-generic from there. A goal that needs a counter the
+store does not keep yet (POPONGO's color sweep needed `sk.colorSweeps`) means the root
+checklist's three-edit rule: `ensureSk`/`recordSkeeball` in `js/game-stats.js`, the sk branch in
+`js/players-agg.js`, and a case in `players-agg.test.mjs` — miss the agg branch and the counter
+zeroes the moment a second device syncs.
 
 ---
 
@@ -425,17 +464,19 @@ sixteen. Give them sensible colours for the machine anyway, in case something st
   id: 'frozen-slug',                        // never reused, never changed
   name: 'THE NAME',                         // proper noun, untranslated
   taglineKey: 'board_<id>_tag',             // + en and es strings
-  unlock: { board: '<previous id>', score: N },
+  unlock: { board: '<previous id>', score: N },   // or { board: '<previous id>', goals: true }
   look: { ... },                            // Part 4
   geom: { ... },                            // Parts 1 and 2
+  cups: { ... }, arrangement: { ... },      // cup boards only - see Part 2's arrangement layer
 }
 ```
 
-`unlock` is `null` only on the first machine.
-
-**Ignore the "next machine goes here" comment at the bottom of `boards.js`'s `BOARDS` array.** It
-is stale: it shows `physics: {...}, scoring: {...}`, neither of which is a board key. The template
-above — `look` and `geom` — is the correct shape.
+`unlock` is `null` only on the first machine. Two unlock shapes exist and `entry.complete`
+accepts both: `{ board, score }` — reach that score in one game on that board — and
+`{ board, goals: true }` — complete all three of that board's Part 3 objectives (POPONGO's
+shape). The goals form is applied by `ui.js` (`_earnedUnlocks` after every recorded rack,
+`_ensureGoalUnlocks` once per mount so goals completed earlier or on another device still open
+it); `unlocksEarned()` in `boards.js` handles only score unlocks.
 
 ## 15 · The hub tile
 
@@ -451,8 +492,8 @@ The picture of the machine on the setup screen is rendered from the board itself
 gets one with no extra work.
 
 With more than one machine, the setup screen becomes a swipeable carousel: dots, arrows and a
-side-swipe between machines. That code switches on by itself at two machines and **has never run
-with more than one**. Check the dots, the arrows and the swipe by hand.
+side-swipe between machines. It switched on for real when POPONGO landed (2026-08-22). Still
+check the dots, the arrows and the swipe by hand after adding a machine.
 
 ## 17 · A locked machine
 
@@ -460,7 +501,9 @@ A machine that has not been unlocked yet shows a locked slide instead of the nor
 machine greyed out behind a large lock, with only a sliver of the board visible — enough to make
 the player curious, not enough to show what it is.
 
-**This does not exist yet and has to be built.**
+Built (2026-08-22): the sliver is the machine's real render, cropped, greyed and blurred by
+`.sk-lock-peek` in `skeeball.css` — how much it teases is that window's height and blur, nothing
+in JS. The hint line under the lock states the unlock in words (score or goals, per section 14).
 
 ## 18 · Testing a board's shape
 
@@ -478,9 +521,13 @@ node test-skeeball-rings.mjs
 node test-game-conventions.mjs
 ```
 
-`skeeball/js/test.js` throws thousands of balls at every board in the list, so a new machine is
-covered the moment it exists. It checks every hole can actually be scored, which depends on the
-whole layout — re-run it after moving any hole.
+`skeeball/js/test.js`'s cheap half (rules, snapshots, unlock chain, the recorder payload) runs
+over every board, so a new machine's DATA is covered the moment it exists — but its heavy
+physics groups (`--reach`, `--dial`, …) throw at `DEFAULT_BOARD` only. **A new board's
+reachability is NOT tested automatically: sweep it yourself** — run `simulateThrow` over the
+aim × power grid and require every hole capturable with zero `emergencyUsed` (POPONGO's build
+used exactly this; DECISIONS.md#popongo-layout has the numbers a failing sweep produces).
+Re-run after moving any hole: reachability is a property of the whole layout.
 
 ## 20 · Breaking a rule
 

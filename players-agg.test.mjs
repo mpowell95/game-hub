@@ -374,7 +374,7 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
       skeeball: {
         total: { played: 4, won: 3, lost: 1 },
         byDiff: { medium: { played: 4, won: 3, lost: 1 } },
-        sk: { played: 4, won: 3, lost: 1, tied: 0, balls: 36, points: 1240, bestGame: 410, bestThrow: 300, hundreds: 3, fifties: 7 },
+        sk: { played: 4, won: 3, lost: 1, tied: 0, balls: 36, points: 1240, bestGame: 410, bestThrow: 300, hundreds: 3, fifties: 7, colorSweeps: 1 },
       },
     }, 100),
     d2: rec({ playerId: 'sk777', name: 'Roller' }, {
@@ -392,6 +392,9 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('skeeball: W/L/T all sum', [sk.won, sk.lost, sk.tied], [4, 2, 1]);
   eq('skeeball: balls and lifetime points sum', [sk.balls, sk.points], [63, 1940]);
   eq('skeeball: 100s and 50s sum', [sk.hundreds, sk.fifties], [4, 9]);
+  // colorSweeps (POPONGO's all-four-colors objective, 2026-08-22): a counter, so it ADDS, and a
+  // device from before it existed (d2 here) contributes 0 rather than poisoning the sum.
+  eq('skeeball: colorSweeps sum across devices, absent reads as 0', sk.colorSweeps, 1);
   eq('skeeball: bestGame is the max, not the sum', sk.bestGame, 410);
   eq('skeeball: bestThrow is the max, not the sum', sk.bestThrow, 300);
   eq('skeeball: totals still aggregate alongside', grp.games.skeeball.total.played, 7);
