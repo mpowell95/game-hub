@@ -285,10 +285,26 @@ function hcBestAt(g, tier) {
 /** The number a game's leaderboard is ranked by, at `tier`. Nuts & Bolts needs no special case:
  *  every solve increments both `played` and `won` by exactly 1 (recordNutsBolts), so winsAtTier
  *  already equals "levels solved at this tier". */
+/** Skeeball's best single rack. GUARD: NEVER winsAtTier for this game. recordSkeeball calls
+ *  bumpTotals(..., true), so every rack is stored as a "win" and wins is just played wearing a
+ *  different label - the card showed the same number twice, one of them meaningless (Matt,
+ *  2026-08-22, from the live board: "6 PLAYED / 6 wins"). Solo games rank on a BEST, the way Ball
+ *  Run, Snake and Hill Climb already do; this game only ever fell through to wins because it had
+ *  no case here.
+ *
+ *  Tier-blind on purpose: Skeeball's byDiff is keyed by MACHINE (classic, popongo), and
+ *  tierOf('classic') is null, so there is no tier to slice a best by. gameDetail already drops
+ *  rows with no plays at the selected tier, so this is only ever asked with tier null today.
+ *  When the filter becomes a MACHINE filter, read sk.boards[machine].best here. */
+function skBestAt(g) {
+  const sk = g.games.skeeball && g.games.skeeball.sk;
+  return sk ? (sk.bestGame | 0) : 0;
+}
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
+  if (id === 'skeeball') return skBestAt(g);
   return winsAtTier(g, [id], tier);
 }
 
@@ -321,6 +337,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_longest: 'lb_sort_longest',
   lb_unit_solved: 'lb_sort_solved',
   lb_unit_meters: 'lb_sort_meters',
+  // Skeeball and Pinball both rank on points; without this row both sort menus said "Wins".
+  lb_unit_points: 'lb_sort_points',
 };
 function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[unitKeyOf(id)] || 'lb_sort_wins';
@@ -574,6 +592,11 @@ const TEXTURE = {
     { labelKey: 'lb_tex_sk_best_game', get: (g) => (((g.games.skeeball || {}).sk || {}).bestGame) | 0 },
     { labelKey: 'lb_tex_sk_best_throw', get: (g) => (((g.games.skeeball || {}).sk || {}).bestThrow) | 0 },
     { labelKey: 'lb_tex_sk_hundreds', get: (g) => (((g.games.skeeball || {}).sk || {}).hundreds) | 0 },
+    { labelKey: 'lb_tex_sk_points', get: (g) => (((g.games.skeeball || {}).sk || {}).points) | 0 },
+    // POPONGO's all-four-colors objective. Recorded since 2026-08-22 and shown nowhere until now.
+    // A chip with no positive value is skipped by textureHTML, so this stays invisible until
+    // somebody actually sweeps.
+    { labelKey: 'lb_tex_sk_sweeps', get: (g) => (((g.games.skeeball || {}).sk || {}).colorSweeps) | 0 },
   ],
   tictactoe: [
     { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
