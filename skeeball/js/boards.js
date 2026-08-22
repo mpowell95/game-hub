@@ -471,23 +471,25 @@ export const BOARDS = [
       // toward the player ("slightly angled back towards the player so balls don't get stuck") -
       // a missed ball rolls forward off the tread's front edge and drops to the tier below,
       // exactly the footage's miss. boardLen is the unrolled total; board.dims is waived for it.
+      // Risers 0.28 m (Matt, tuning pass: "everything seems a little low... the back wall seems
+      // larger than in the other games") - the staircase now tops out at ~1.35 m, near the
+      // classic face's 1.40 m, so the cabinet reads the same height as its neighbours and the
+      // back wall shrinks back to the other machines' proportion.
       steps: [
-        { len: X * 2.0625, tilt: 0.10 },       // tread 1 (0.30 m)
-        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 1 (0.24 m - the ~8in drop Matt measured)
-        { len: X * 2.0625, tilt: 0.10 },       // tread 2
-        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 2
-        { len: X * 2.0625, tilt: 0.10 },       // tread 3
-        { len: X * 1.65, tilt: Math.PI / 2 },  // riser 3 (the back wall rises behind it)
+        { len: X * 2.475, tilt: 0.10 },       // tread 1 (0.30 m)
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 1 (0.28 m)
+        { len: X * 2.475, tilt: 0.10 },       // tread 2
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 2
+        { len: X * 2.475, tilt: 0.10 },       // tread 3
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 3 (the back wall rises behind it)
       ],
-      boardLen: X * 11.1375,
+      boardLen: X * 13.2,
       railH: 0.10,
       laneRailH: 0.05,
-      // Taller than the spec's 5.5X, under the board.dims waiver: Matt's "shoots vertically in
-      // the air" clip was steep descents finding the old wall's TOP EDGE (probed: 5 of 14
-      // vertical pops were backboard-edge contacts) - an edge contact turns forward speed into
-      // a vertical launch. Tall enough and a hard throw hits the FACE and dies there, bouncing
-      // back toward the player, which is what he asked for.
-      backboardH: 1.10,
+      // Back at the other machines' proportion (Matt: the wall read oversized). The vertical-pop
+      // guard that briefly pushed this to 1.10 is carried by the staircase itself now (no steep
+      // face to ski-jump off) plus the slick dead wall below; the probe stays the check.
+      backboardH: 0.85,
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
@@ -497,25 +499,32 @@ export const BOARDS = [
 
       // THE HOLES: three per tread, sunk into the TREAD itself - the real machine's baskets
       // funnel into holes in the shelf, and the only way in is through the basket's mouth from
-      // above (a full-circle collar walls off every rolling entry). MOUTHS ARE 1.125X
-      // (r 0.5625X) against the 0.28X ball - mouth/ball ~2.0, measured off Matt's footage.
-      // Each hole sits 0.75X in from its tread's back edge, so the collar (outer reach 0.645X)
-      // stays on the tread with clearance to the riser behind it. In unrolled v: tread 1 ends
-      // at 2.0625X, tread 2 spans 3.7125X-5.775X, tread 3 spans 7.425X-9.4875X. Same-row wall
-      // gap 2.07X − 1.29X = 0.78X, collar-to-rail 0.7225X - both over the 0.28X ball's 0.64X
-      // floor (POPONGO's lattice standard). The mouths lean 0.10 rad toward the player with
-      // their tread - no lipLow needed; the tread's own tilt IS the real basket's lean.
-      holeR: X * 0.5625,
+      // above (a full-circle collar walls off every rolling entry). MOUTHS ARE 1.0X (r 0.5X)
+      // against the 0.28X ball - tightened from 1.125X at Matt's tuning pass ("a little too
+      // easy").
+      //
+      // THE BASKETS SIT AT THE FRONT OF EACH TREAD (0.75X from the tread's front edge), and
+      // that placement is load-bearing twice over (Matt's tuning pass): a hard straight throw
+      // killed by the back wall used to slide down onto the top basket's mouth and pay the 100
+      // almost every time, and a ball dropping tier-to-tier hugs the riser it fell past and
+      // used to land straight in the basket below. Both landing zones are now BEHIND the
+      // collars - the ball lands on bare tread, rolls forward, and has to go around the basket
+      // wall to leave. Collar back edge to riser: 2.0625X − 0.75X − 0.5825X = 0.73X, over the
+      // ball's 0.64X floor, so nothing wedges back there. Same-row wall gap 2.07X − 1.165X =
+      // 0.905X ("balls just barely fit between baskets" - the footage). Tread starts in
+      // unrolled v: 0 / 3.9875X / 7.975X; the mouths lean 0.10 rad toward the player with
+      // their tread.
+      holeR: X * 0.5,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5625, collarH: X * 0.35 },
-        midL: { u: -X * 2.07, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
-        midC: { u: 0, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
-        midR: { u: X * 2.07, v: X * 5.025, r: X * 0.5625, collarH: X * 0.35 },
-        topL: { u: -X * 2.07, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
-        topC: { u: 0, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
-        topR: { u: X * 2.07, v: X * 8.7375, r: X * 0.5625, collarH: X * 0.35 },
+        lowL: { u: -X * 2.07, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
+        lowC: { u: 0, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
+        lowR: { u: X * 2.07, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
+        midL: { u: -X * 2.07, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
+        midR: { u: X * 2.07, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
+        topL: { u: -X * 2.07, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
+        topC: { u: 0, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
+        topR: { u: X * 2.07, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
       },
 
       minSpeed: 2.60,
@@ -541,7 +550,10 @@ export const BOARDS = [
         ring100Fric: 0.06,
         ring100Rest: 0.30,
         deadFric: 0.06,
-        deadRest: 0.10,
+        // Livelier than the other machines' dead wall on purpose (Matt, tuning pass): a hard
+        // straight throw should BOUNCE BACK toward the player off the back wall, not die
+        // against it and drip down onto the top tier.
+        deadRest: 0.32,
       },
     },
 
