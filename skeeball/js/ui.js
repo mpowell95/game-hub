@@ -380,8 +380,7 @@ export class SkeeballUI {
             ${multi ? `<button type="button" class="sk-car-chev l" data-role="prev" aria-label="${esc(t('prev_machine'))}">&#8249;</button>
             <button type="button" class="sk-car-chev r" data-role="next" aria-label="${esc(t('next_machine'))}">&#8250;</button>` : ''}
           </div>
-          ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
-          <p class="sk-car-hint">${esc(t('car_hint'))}</p>` : ''}
+          ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
           ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
             ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">

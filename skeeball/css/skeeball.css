@@ -186,22 +186,27 @@
 /* contain, not cover: the box is now whatever height the card can spare, so a fixed crop would
    cut the machine off at one size and not another. */
 .sk-root .sk-slide-img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* THE RECORDS ARE REFERENCE, NOT FURNITURE (Matt, 2026-08-22: "a bit crowded"). They used to be
+   four filled, bordered boxes stacked under the machine - inside a card that is already a box,
+   under a picture that is already a box. The Game over card settled this same question the other
+   way months ago and its comment says why: "no surface, no border, no box... these are here to be
+   looked UP when the player wants them". Same numbers, same job, so the same treatment. What is
+   left doing the separating is one hairline above the hub-wide record, which is the only one of
+   the four that is about other people. */
 .sk-root .sk-slide-recwide {
-  background: var(--sks-surface-2);
-  border: 1px solid var(--sks-line);
-  border-radius: 10px;
-  padding: 9px 12px;
-  margin-bottom: 8px;
+  margin-top: clamp(6px, 1.2vh, 10px);
+  padding-top: clamp(6px, 1.2vh, 10px);
+  border-top: 1px solid var(--sks-line);
 }
 .sk-root .sk-slide-recwide em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-recwide b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--sks-ink); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.sk-root .sk-slide-rec3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.sk-root .sk-slide-rec {
-  background: var(--sks-surface-2);
-  border: 1px solid var(--sks-line);
-  border-radius: 10px;
-  padding: 9px 5px;
+.sk-root .sk-slide-rec3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: clamp(8px, 1.6vh, 12px);
 }
+.sk-root .sk-slide-rec { padding: 0; }
 .sk-root .sk-slide-rec b { display: block; font-size: 16px; font-weight: 800; color: var(--sks-ink); font-variant-numeric: tabular-nums; }
 .sk-root .sk-slide-rec em { display: block; margin-top: 2px; font-style: normal; font-size: 12px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-locked {
@@ -254,7 +259,6 @@
 .sk-root .sk-car-dots { display: flex; justify-content: center; gap: 7px; }
 .sk-root .sk-car-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--sks-line); transition: background-color 0.2s, transform 0.2s; }
 .sk-root .sk-car-dots i.on { background: var(--gh-accent, #1769d4); transform: scale(1.15); }
-.sk-root .sk-car-hint { margin: 0; text-align: center; font-size: 12px; color: var(--sks-muted); }
 
 /* How to play (batch G, 2026-08-18): Mancala's carousel treatment (dark modal, white illustration
    card, chunky OK) applied to Skeeball, but the illustration is the ACTUAL machine (the cached
