@@ -213,7 +213,7 @@
   padding: 9px 12px;
   margin-bottom: 8px;
 }
-.sk-root .sk-slide-recwide em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--sks-muted); }
+.sk-root .sk-slide-recwide em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-recwide b { display: block; margin-top: 2px; font-size: 16px; font-weight: 800; color: var(--sks-ink); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .sk-root .sk-slide-rec3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .sk-root .sk-slide-rec {
@@ -223,7 +223,7 @@
   padding: 9px 5px;
 }
 .sk-root .sk-slide-rec b { display: block; font-size: 16px; font-weight: 800; color: var(--sks-ink); font-variant-numeric: tabular-nums; }
-.sk-root .sk-slide-rec em { display: block; margin-top: 2px; font-style: normal; font-size: 11px; font-weight: 700; color: var(--sks-muted); }
+.sk-root .sk-slide-rec em { display: block; margin-top: 2px; font-style: normal; font-size: 12px; font-weight: 700; color: var(--sks-muted); }
 .sk-root .sk-slide-locked {
   display: flex;
   flex-direction: column;
@@ -364,7 +364,7 @@
 
 .sk-root .sk-mrow-recs em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -535,7 +535,7 @@
 
 .sk-root .sk-final-label {
   margin: 4px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -588,7 +588,7 @@
 .sk-root .sk-tile span {
   display: block;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -664,7 +664,7 @@
 }
 .sk-root .sk-gtotal em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--sk-dim);
@@ -692,7 +692,7 @@
 .sk-root .sk-goal em {
   display: block;
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 1.15;
