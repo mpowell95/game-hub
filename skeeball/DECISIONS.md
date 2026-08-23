@@ -474,6 +474,25 @@ instead of being lifted into the 50/40, while the honest straight 50 at p 0.60-0
 arc into the cup, no wall) survives. The corner emergencies fell 31 -> 4, all 4 pre-existing
 low-power lane stalls.
 
+### A ball stalled on the lane is returned, not cap-zeroed (2026-08-23, same day)
+
+A real-Chrome playtest found the lane dead for 40+ seconds after a hard wide throw: the ball
+bounced all the way back and CREPT on the lane bed to the full 12s emergency cap, and a lane
+ball touches nothing that counts as ARRIVED, so no next ball was served the whole time (the
+throttled tab's clock stretched 12 sim seconds to 40 real ones). Reproduced headless at
+p1.02 aim +/-0.65; the four weak wide-angle lane stalls were the same class ending as watchdog
+jam-zeros. Fix (physics.js section 4b): a genuinely slow ball on the lane bed past the serve
+is RETURNED - section 4's guard already decided this ("EVERY ball that comes back down the
+ramp is returned, however hard it was thrown"); one that never left the lane, doubly so. On a
+real machine you just pick it back up. Emergencies on the sweep: 4 -> 0.
+
+The same playtest's "ball hangs above the scoreboard" report was measured and is NOT a bug:
+at p1.2-1.6 (a fast desktop mouse drag - the dial has no ceiling, by rule) the FREE-FLIGHT
+arc peaks at y 2.1-2.7 before touching anything, and at the wall vy in equals vy out. The
+slow-motion look was the tab's throttled clock (step() advances at most 0.1s of sim per
+frame, so heavy screenshotting runs the game at fraction speed). Do not add a ceiling, a
+power clamp, or wall lift back in response to that report.
+
 ## Rendering
 
 ### Camera and framing

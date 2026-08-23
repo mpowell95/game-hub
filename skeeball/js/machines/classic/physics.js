@@ -388,6 +388,22 @@ function substep(st) {
     return;
   }
 
+  // 4b. Stalled on the LANE: the same rule as 4, reached by STOPPING instead of by crossing
+  //     home. A ball dying on the lane bed touches nothing that counts as ARRIVED, so it held
+  //     the next ball hostage while the watchdog creep-chased it - measured 2026-08-23: a hard
+  //     wide throw (p1.02, aim 0.65) bounced back and crept mid-lane to the full 12s cap for a
+  //     silent 0, and the four weak wide-angle lane stalls ended as watchdog jam-zeros. On a
+  //     real machine a ball sitting on the lane is simply picked back up. Same z-window as the
+  //     lane+hump, below board height, genuinely slow, past the serve: it is RETURNED, however
+  //     hard it was thrown - the rule in section 4's guard already decided this.
+  if (p.z > -(G.laneLen + G.humpLen) && p.z < -0.04 && p.y < G.ballR * 2.4
+    && st.t > 1.0 && ball.velocity.length() < 0.35) {
+    st.outcome = null;
+    st.done = true;
+    st.events.push({ type: 'returned' });
+    return;
+  }
+
   // 5. GUARD: NO MAGNETISM, EVER. There is no pull toward any hole for a slow ball - a ball is
   //    never steered toward a hole it was not thrown at. A ball that runs out of speed on the
   //    slope does the honest thing: gravity takes it back down the face into the trough. If a
