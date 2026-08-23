@@ -520,6 +520,28 @@ Three fixes from Matt's phone test of v444, same evening:
    ui.js now puts a ResizeObserver on the stage element itself (coalesced to one _fit per
    frame, disconnected in destroy), so ANY late layout change re-fits, deploys included.
 
+### Tangency is OUTER-SURFACE tangency (2026-08-23, Matt's correction of the ring rules)
+
+A top-down diagram generated from the live geometry showed the centre column's rings CROSSING
+each other and standing over neighbouring mouths. Matt: "OBVIOUSLY the rings should be tangent
+along their outermost point - not the inside. Using the inside creates overlap that not only
+would NOT exist in real life, but would actively ruin the game." He is right: the original
+derivation met rules 2 and 3 at the wall CENTRELINES (spacing h(n+1) = h(n) + ringD(n)), so
+every meeting was a one-wall-thickness overlap - the 40's ring wall stood 1.5cm inside the
+50's mouth opening, and the 20's and 40's walls ran through each other.
+
+The corrected derivation (boards.js, the X block): where two rings meet, their OUTER faces
+touch - h(n+1) = h(n) + ringD(n) + 2*RING_T. Keeping the spec's h20 anchor and every ring
+diameter untouched, it resolves exactly: the 30 moves DOWN 2*RING_T (3cm), the 50 moves UP
+2*RING_T; the 10, 20, 40 and both 100s do not move, and rule 3's triple point (40 top, 50
+bottom, 20 top at ONE point) survives to the last digit at the outer faces. Rule 1 was
+already physical (a ring's inner face kisses its own mouth's bottom edge, wall outside the
+opening) and is unchanged.
+
+The rules are now REAL assertions in test.js section 0 (they were prose-only before, which is
+how the centreline version slipped through): rule 2 outer, rule 3 outer, and "no ring wall
+stands over a neighbouring mouth opening", all exact to float noise.
+
 ### The corner gussets came out the same day (2026-08-23, Matt's call, measured tradeoff)
 
 Matt on the plates: "I don't like the diagonal pieces above the 100... make something smaller

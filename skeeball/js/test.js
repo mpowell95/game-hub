@@ -112,6 +112,32 @@ const valueOf = (power, aim) => {
   return r.outcome ? r.outcome.value : 0;
 };
 
+// --- 0. the tangency rules, as REAL assertions (they were only prose before) --------------------
+// Outer-surface tangency (Matt, 2026-08-23: "OBVIOUSLY the rings should be tangent along their
+// outermost point - not the inside"): where two rings meet, their OUTER faces touch, and no
+// ring wall ever stands over any mouth's opening. These are exact equalities of derived
+// numbers from boards.js - not physics - so the tolerance is float noise only.
+{
+  const Gt = board.geom;
+  const t2 = Gt.ringThick;
+  const ring = (id) => {
+    const H = Gt.holes[id];
+    return { topOut: H.v - H.r + H.ringD + t2, botOut: H.v - H.r - t2 };
+  };
+  const eps = 1e-9;
+  const r20 = ring('h20'), r30 = ring('c30'), r40 = ring('c40'), r50 = ring('c50');
+  ok('rule 2: the 30 ring top and the 40 ring bottom touch at their OUTER faces',
+    Math.abs(r30.topOut - r40.botOut) < eps, `30 top ${r30.topOut} vs 40 bottom ${r40.botOut}`);
+  ok('rule 3: the 40 top, 50 bottom and 20 top OUTER faces meet at ONE point',
+    Math.abs(r40.topOut - r50.botOut) < eps && Math.abs(r20.topOut - r50.botOut) < eps,
+    `40 ${r40.topOut}, 50 ${r50.botOut}, 20 ${r20.topOut}`);
+  ok('no ring wall stands over a neighbouring mouth opening',
+    r30.topOut < (Gt.holes.c40.v - Gt.holes.c40.r) + eps
+    && r40.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps
+    && r20.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps,
+    'a ring top crosses a mouth edge');
+}
+
 // --- 1. determinism ---------------------------------------------------------------------------
 
 {

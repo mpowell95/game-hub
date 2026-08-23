@@ -23,12 +23,22 @@ export const BALLS_PER_GAME = 9;
 // all three so this cannot drift. See DECISIONS.md#ring-geometry for the derivation and a
 // deliberate exception to the original spec table.
 //   1. Every hole touches its own ring at EXACTLY ONE point - the hole's bottom. No ring is
-//      concentric with its hole; each hangs above it.
+//      concentric with its hole; each hangs above it. (The ring wall's INNER face kisses the
+//      mouth's edge - the wall stands outside its own opening, never over it.)
 //   2. The 30 ring's top touches the 40 ring's bottom.
 //   3. The 40 ring's top, the 50 ring's bottom and the 20 ring's top all meet at ONE point.
-// Rules 2 and 3 make hole spacing a CONSEQUENCE of ring diameters, not a free number:
-// h(n+1) = h(n) + ringD(n). Move a diameter and the holes above it move with it.
+//
+// RULES 2 AND 3 ARE OUTER-SURFACE TANGENCY (Matt, 2026-08-23: "OBVIOUSLY the rings should be
+// tangent along their outermost point - not the inside"). The first build met them at the wall
+// CENTRELINES, which made every meeting a one-wall-thickness OVERLAP: the 40's ring stood 1.5cm
+// INSIDE the 50's mouth opening, and the 20's and 40's walls ran through each other - neither
+// could exist on a real board. Where two rings meet, their outer faces touch:
+//   h(n+1) = h(n) + ringD(n) + 2 * RING_T.
+// With h20 kept at the spec's 2.3125x anchor, that resolves EXACTLY (test.js asserts it): the
+// 30 sits at 3.8125x - 2*RING_T and the 50 at 7.1875x + 2*RING_T; the 10, 20, 40 and both 100s
+// do not move, and rule 3's triple point survives to the last digit.
 const X = 1.00 / 6.875;
+const RING_T = 0.015;             // the ring wall's thickness; geom.ringThick and the v shifts share it
 
 export const BOARDS = [
   {
@@ -125,7 +135,7 @@ export const BOARDS = [
       // that is fine. Do not shrink a ring, lower it, or move a camera to keep every mouth in
       // view. See DECISIONS.md#ring-geometry.
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
 
       // How low a lipLow cup's DOWN-SLOPE lip sits, as a fraction of its wall height. Moot while
       // every cup is flush (collarH 0) but kept for the next machine, which may want walls.
@@ -165,9 +175,11 @@ export const BOARDS = [
         // angles either side still noisy, which is what a risk shot should look like.
         '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
         '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
-        c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
+        // The 50 and 30 carry the outer-tangency shifts (the X-block comment derives them); the
+        // 40 between them and everything else sits exactly on the spec's x-multiples.
+        c50: { u: 0, v: X * 7.1875 + RING_T * 2, r: X * 0.5, value: 50, ringD: X * 1.4375 },
         c40: { u: 0, v: X * 5.625, r: X * 0.5, value: 40, ringD: X * 1.5625 },
-        c30: { u: 0, v: X * 3.8125, r: X * 0.5, value: 30, ringD: X * 1.8125 },
+        c30: { u: 0, v: X * 3.8125 - RING_T * 2, r: X * 0.5, value: 30, ringD: X * 1.8125 },
         // GUARD, THE LAW rule 5: kept as `h20`, not renamed - the id is written into the
         // mid-rack autosave (gamehub.skeeball.save.v1) and old keys are never repurposed.
         h20: { u: 0, v: X * 2.3125, r: X * 0.5, value: 20, ringD: X * 4.875 },
@@ -310,7 +322,7 @@ export const BOARDS = [
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
@@ -502,7 +514,7 @@ export const BOARDS = [
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
