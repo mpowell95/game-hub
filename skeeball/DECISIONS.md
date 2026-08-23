@@ -542,6 +542,27 @@ The rules are now REAL assertions in test.js section 0 (they were prose-only bef
 how the centreline version slipped through): rule 2 outer, rule 3 outer, and "no ring wall
 stands over a neighbouring mouth opening", all exact to float noise.
 
+### Matt's tape-measure pass (2026-08-23, same day): the ball, H, I, and the 100 rings
+
+Matt measured the real cabinet and corrected four numbers at once, all in the classic's
+boards.js entry:
+
+- **The ball is 3.0in at x = 4in** - ballR 0.375X (0.75x across), up from the spec sheet's
+  0.350X, under a ball.ratio waiver (the spec predates the measurement; the real ball wins).
+- **Measurement H** (30-ring bottom outer face to 20-ring bottom inner face) **= 1.25x = 5in.**
+  This is the spec table's own 1.25x, which the 2026-08-14 session overrode to 1.5x to make
+  rule 3's triple point exist. Matt has now resolved that conflict the other way with a tape
+  measure, so **rule 3 is retired**: at 1.25x the 20-ring's top stops 8.6mm short of the
+  50-ring's bottom - a gap, never an overlap, and test.js asserts both directions.
+- **Measurement I** (20-ring bottom outer face to the 10 arc's inner edge) **= 1.375x = 5.5in**,
+  fixing the 10's position (it was 1.3125x-derived before).
+- **The 100 rings are 4.25in = 1.0625X again** - the diameter the 2026-08-14 note called a
+  pinhole, but measured off the real cabinet and paired with the corrected (bigger) ball; the
+  pair was re-swept together rather than judged by the old note.
+
+The column re-derives cleanly: h20 stays the anchor, H and I fix the 30 and 10, rule 2's
+outer tangency chains the 40 and 50. All of it is exact assertions in test.js section 0 now.
+
 ### The corner gussets came out the same day (2026-08-23, Matt's call, measured tradeoff)
 
 Matt on the plates: "I don't like the diagonal pieces above the 100... make something smaller

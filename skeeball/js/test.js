@@ -128,9 +128,21 @@ const valueOf = (power, aim) => {
   const r20 = ring('h20'), r30 = ring('c30'), r40 = ring('c40'), r50 = ring('c50');
   ok('rule 2: the 30 ring top and the 40 ring bottom touch at their OUTER faces',
     Math.abs(r30.topOut - r40.botOut) < eps, `30 top ${r30.topOut} vs 40 bottom ${r40.botOut}`);
-  ok('rule 3: the 40 top, 50 bottom and 20 top OUTER faces meet at ONE point',
-    Math.abs(r40.topOut - r50.botOut) < eps && Math.abs(r20.topOut - r50.botOut) < eps,
-    `40 ${r40.topOut}, 50 ${r50.botOut}, 20 ${r20.topOut}`);
+  ok('rule 2: the 40 ring top and the 50 ring bottom touch at their OUTER faces',
+    Math.abs(r40.topOut - r50.botOut) < eps, `40 top ${r40.topOut} vs 50 bottom ${r50.botOut}`);
+  // Rule 3's triple point is RETIRED: Matt's 2026-08-23 tape-measure spec (H = 1.25x) is the
+  // spec table's own number, at which the triple cannot exist. The 20's ring top must stop
+  // SHORT of the 50's ring - a gap is fine, an overlap never is.
+  ok('the 20 ring top stays clear of the 50 ring bottom (gap allowed, overlap never)',
+    r20.topOut <= r50.botOut + eps, `20 top ${r20.topOut} vs 50 bottom ${r50.botOut}`);
+  // Matt's measured spans, 2026-08-23, at x = 4in: H = 5in, I = 5.5in.
+  const Xu = 1.00 / 6.875;
+  ok('measurement H: 30-ring bottom (outer) to 20-ring bottom (inner) is exactly 1.25x',
+    Math.abs((r30.botOut - (Gt.holes.h20.v - Gt.holes.h20.r)) - Xu * 1.25) < eps,
+    `got ${(r30.botOut - (Gt.holes.h20.v - Gt.holes.h20.r)).toFixed(6)}`);
+  ok('measurement I: 20-ring bottom (outer) to the 10 arc (inner) is exactly 1.375x',
+    Math.abs((r20.botOut - (Gt.holes.h10.v - Gt.holes.h10.r)) - Xu * 1.375) < eps,
+    `got ${(r20.botOut - (Gt.holes.h10.v - Gt.holes.h10.r)).toFixed(6)}`);
   ok('no ring wall stands over a neighbouring mouth opening',
     r30.topOut < (Gt.holes.c40.v - Gt.holes.c40.r) + eps
     && r40.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps
