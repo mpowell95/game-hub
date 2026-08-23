@@ -224,16 +224,35 @@ function substep(st) {
   st.t += H;
   const p = ball.position;
 
-  // 1. Captured: the floor is gone under the mouth; ride gravity down through it. GUARD:
-  //    CAPTURE IS A PREDICTION, NOT A SCORE (Matt, 2026-08-22: the machine paid a ball that
-  //    rattled a rim and bounced OUT). The kinematic test in section 2 says the ball SHOULD
-  //    fall in, but it can still strike the far collar wall or a ring inside the mouth and
-  //    bounce back out - those walls stay solid while only the floor slab lets go. So nothing
-  //    is committed until the ball has ACTUALLY PASSED THROUGH the plane inside the mouth;
-  //    a ball that climbs back out above the face gets the floor back and plays on. Points
-  //    are ONLY awarded when a ball falls fully through a hole - on every machine.
+  // 1. Captured: the floor is gone under the mouth; ride gravity down through it.
+  //
+  // GUARD: THE CAPTURE RULE IS PER BOARD FAMILY, AND IT MUST STAY THAT WAY.
+  //
+  // A COLLARED CUP BOARD (POPONGO, BASKET FEVER) treats capture as a PREDICTION, NOT A SCORE
+  // (Matt, 2026-08-22: the machine paid a ball that rattled a rim and bounced OUT). Those mouths
+  // have walls standing above the face, so a captured ball really can strike the far collar wall
+  // and climb back out - nothing commits until it has ACTUALLY PASSED THROUGH the plane INSIDE
+  // the mouth, and a ball that gets clear gets its floor back and plays on.
+  //
+  // THE CLASSIC KEEPS THE RULE IT SHIPPED WITH: flush, ringed holes and the 0.26m drop test it
+  // was tuned against. The prediction rule was written for machine 3 and applied "on every
+  // machine" (28299ac), which silently changed how THE CLASSIC played overnight - three days
+  // after it went live, with its own boards.js entry untouched. Matt, 2026-08-23, on finding
+  // POPONGO/BASKET FEVER work inside the classic's physics: "WHAT THE FUCK". A machine nobody
+  // asked you to touch does not change.
+  //
+  // ALL THREE MACHINES SHARE THIS ONE FILE. boards.js is the only per-machine data there is, so
+  // an engine rule with no gate hits every machine by default. Gate the next one the way
+  // st.cupBoard gates this one (set once per throw in startThrow), and name in the commit
+  // message which machines you changed.
   if (st.captured) {
     const hDef = G.holes[st.captured];
+    // THE CLASSIC: the original rule, unchanged since it went live. A flush hole has no wall to
+    // bounce a captured ball back out of, so the 0.26m drop below the capture point IS the score.
+    if (!st.cupBoard) {
+      if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) finishAt(st, st.captured, hDef.value, 'hole');
+      return;
+    }
     const fc = worldToFace(M, G, p);
     const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
     if (st.t > MAX_T) {
@@ -364,16 +383,9 @@ function substep(st) {
   //    move is JAMMED (three contact normals can lock the solver completely - measured, not
   //    theory), and jams get walked out: a slow positional roll toward the nearest mouth until
   //    physics takes back over or the mouth captures it.
-  if (st.walkout) {
-    ball.velocity.set(0, 0, 0);
-    ball.position.x += st.walkout.x * 0.0012;
-    ball.position.y += st.walkout.y * 0.0012;
-    ball.position.z += st.walkout.z * 0.0012;
-    if (Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z) > 0.06) st.walkout = null;
-  }
   const moved = Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z);
-  if (moved > 0.03 && !st.walkout) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
-  else if (!st.walkout && st.t - st.anchor.t > 0.9) {
+  if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
+  else if (st.t - st.anchor.t > 0.9) {
     st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
     st.nudges += 1;
     if (st.nudges <= 2) {
@@ -382,28 +394,14 @@ function substep(st) {
       ball.velocity.x += side * 0.3;
       ball.velocity.y += 0.55 * Math.cos(tLoc);
       ball.velocity.z += 0.3 * Math.sin(tLoc) + 0.15;
-    } else if (st.cupBoard) {
-      // Two pops did nothing: it is jammed. On a CUP BOARD a jammed ball is a MISS, full stop:
-      // falling through a mouth is the only way to score here, and walking a stuck ball into
-      // the nearest cup (the classic's walkout below) is a scripted score - it read as points
-      // for merely touching a cup (Matt, 2026-08-22). The ball did not go in; it pays nothing.
+    } else {
+      // Two pops did nothing: it is JAMMED, on every machine. It scores nothing and it is over.
+      // It is NOT walked toward a mouth - that was a scripted score, and it paid a player for
+      // touching a cup rather than falling through one (Matt, 2026-08-22: "Stuck balls should
+      // score ZERO. and not be moved. It should vanish.").
       st.emergencyUsed = true;
       finishAt(st, 'corner0', 0, 'gutter');
       return;
-    } else {
-      // Two pops did nothing: it is jammed. Aim the walk at the nearest mouth's centre.
-      let best = null;
-      for (const id of Object.keys(G.holes)) {
-        const hDef = G.holes[id];
-        const d = Math.hypot(f.u - hDef.u, f.v - hDef.v);
-        if (!best || d < best.d) best = { id, d, hDef };
-      }
-      if (best) {
-        const w1 = st.M.faceToWorld(best.hDef.u, best.hDef.v, G.ballR);
-        const len = Math.hypot(w1[0] - p.x, w1[1] - p.y, w1[2] - p.z) || 1;
-        st.walkout = { x: (w1[0] - p.x) / len, y: (w1[1] - p.y) / len, z: (w1[2] - p.z) / len };
-        st.emergencyUsed = true;
-      }
     }
   }
 

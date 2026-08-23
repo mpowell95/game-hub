@@ -11,6 +11,31 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
+## HARD RULE: work on one machine, change one machine
+
+Matt, 2026-08-23, on discovering that work done for POPONGO and BASKET FEVER had changed how THE
+CLASSIC plays: *"WHAT THE FUCK!?!?!?!? FIX THIS IMMEDIATELY."*
+
+All three machines share ONE `physics.js` and ONE `machine.js`. `boards.js` is the only
+per-machine data there is. **An engine rule written without a gate therefore hits every machine
+by default** - including a released one nobody asked you to touch.
+
+It has happened once, and it shipped: `28299ac` (BASKET FEVER's staircase) rewrote the capture
+commit rule and said so in its own message - "CAPTURE IS A PREDICTION, NOT A SCORE - **on every
+machine**". THE CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon, with
+its `boards.js` entry untouched, so nothing in the per-machine data could explain it.
+
+Before you commit any change to `physics.js` or `machine.js`:
+
+1. **Gate it.** `st.cupBoard` (set once per throw in `startThrow`, true for any board with a
+   `collarH` hole) is the existing gate. `655975b` and `6f41ea5` did this correctly and left THE
+   CLASSIC untouched; `28299ac` did not.
+2. **Name the machines you changed in the commit message.** "on every machine" is a decision, not
+   an aside - if you mean it, say why the released machine had to change too, and ask first.
+3. **Prove the others did not move.** Simulate a fixed grid of throws (41 powers x 21 aims) before
+   and after, and diff the outcomes. A released machine must come back byte-identical.
+
+
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
 build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub id
@@ -171,10 +196,13 @@ nothing scripts a reaction any more:
   furniture is either MERGED or wider than a ball plus margin. An in-between gap is a pocket,
   and a three-contact pocket LOCKS the cannon solver completely - velocity writes get solved
   back to zero. Check every neighbour pair before moving any cup.
-- **The watchdog** (displacement-anchored, never speed): a parked ball gets popped off the face
-  like real chatter; a ball two pops cannot move is jammed and gets walked out slowly toward
-  the nearest mouth. The 12s cap should be unreachable; the tests keep the whole emergency
-  path under 2% of the sweep.
+- **The watchdog** (displacement-anchored, never speed): a parked ball gets two small nudges. A
+  ball those two nudges cannot move is jammed - three contact normals can lock the solver
+  completely. **A jammed ball scores ZERO and is gone** (Matt, 2026-08-22). It is never walked,
+  steered or nudged toward a cup: THE CLASSIC used to slide it into the nearest mouth and pay for
+  it, which is a score for touching a cup rather than falling through one. Both machines now
+  resolve a jam the same way, so there is no per-board branch. The 12s cap should be unreachable;
+  the tests keep the whole emergency path under 2% of the sweep.
 
 Deterministic: fixed 1/240 step, fixed solver iterations, naive broadphase (stable pair order),
 no rng anywhere. One fresh world per throw, so nothing leaks between balls. Retune freely, but
@@ -282,32 +310,6 @@ Measured after: **14 flips, 15 bands, mean band 6.7 steps, no dead zone at eithe
 value reachable, quarter-by-quarter means 23 < 31 < 43 < 50 (harder goes further), max flight
 1.31s (was 3.99s). `tune-ladder.mjs` prints all of it against the old numbers; run it after
 touching any of `geom`.
-
-**DELETED 2026-08-22, at Matt's instruction.** This spot used to hold a passage calling
-"a slammed ball falls off the dead backboard straight into the 50" a deliberate trade. It was not
-a trade, it was a defect with a rationale attached, and writing it down here is what stopped it
-being fixed: a session that reads "deliberate" does not re-measure. Matt, watching it happen on
-his phone: *"Balls that bounce off the back wall go into the 50 easily. we need to stop that."*
-
-**STILL OPEN as of 2026-08-22 - the defect is real and NOT yet fixed.** Two fixes were tried and
-measured, and both failed the same way. Raking the backboard forward (its top toward the player,
-6-24 degrees) does not send the ball down the board: it is dead when it arrives, so it just drops
-into the 40 instead of the 50, and at 24 degrees the count only falls because a quarter of all
-throws stop scoring at all (zeros 9 -> 37 over the same sweep). Making the wall livelier
-(deadRest 0.10 -> 0.45) does the same thing - on straight throws the zeros go 0 -> 13 while the
-50 barely moves (8 -> 5).
-
-The one thing both attempts confirm is the part of the deleted passage that WAS true: **do not fix
-this by shrinking a cup or deadening the top of the dial.** An overshoot has to be sent somewhere,
-not made worthless.
-
-What the measurements point at instead: the problem is not the wall, it is that **the top cup sits
-directly under it with no run-off in between**. Anything that acts on the wall only changes which
-mouth the dead ball falls into, because it is still falling inside the cup field. The fix is bare
-face above the highest cup - long enough that a ball off the wall lands on board and has to roll -
-which means moving the cup stack down or lengthening the board above it. That touches the tangency
-stack and the measured reach curve the holes are placed on, so it is a face rebuild, not a tweak,
-and it needs Matt's go-ahead before anyone starts.
 
 ### Every number is painted on the BOARD
 
