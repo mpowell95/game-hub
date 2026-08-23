@@ -224,16 +224,35 @@ function substep(st) {
   st.t += H;
   const p = ball.position;
 
-  // 1. Captured: the floor is gone under the mouth; ride gravity down through it. GUARD:
-  //    CAPTURE IS A PREDICTION, NOT A SCORE (Matt, 2026-08-22: the machine paid a ball that
-  //    rattled a rim and bounced OUT). The kinematic test in section 2 says the ball SHOULD
-  //    fall in, but it can still strike the far collar wall or a ring inside the mouth and
-  //    bounce back out - those walls stay solid while only the floor slab lets go. So nothing
-  //    is committed until the ball has ACTUALLY PASSED THROUGH the plane inside the mouth;
-  //    a ball that climbs back out above the face gets the floor back and plays on. Points
-  //    are ONLY awarded when a ball falls fully through a hole - on every machine.
+  // 1. Captured: the floor is gone under the mouth; ride gravity down through it.
+  //
+  // GUARD: THE CAPTURE RULE IS PER BOARD FAMILY, AND IT MUST STAY THAT WAY.
+  //
+  // A COLLARED CUP BOARD (POPONGO, BASKET FEVER) treats capture as a PREDICTION, NOT A SCORE
+  // (Matt, 2026-08-22: the machine paid a ball that rattled a rim and bounced OUT). Those mouths
+  // have walls standing above the face, so a captured ball really can strike the far collar wall
+  // and climb back out - nothing commits until it has ACTUALLY PASSED THROUGH the plane INSIDE
+  // the mouth, and a ball that gets clear gets its floor back and plays on.
+  //
+  // THE CLASSIC KEEPS THE RULE IT SHIPPED WITH: flush, ringed holes and the 0.26m drop test it
+  // was tuned against. The prediction rule was written for machine 3 and applied "on every
+  // machine" (28299ac), which silently changed how THE CLASSIC played overnight - three days
+  // after it went live, with its own boards.js entry untouched. Matt, 2026-08-23, on finding
+  // POPONGO/BASKET FEVER work inside the classic's physics: "WHAT THE FUCK". A machine nobody
+  // asked you to touch does not change.
+  //
+  // ALL THREE MACHINES SHARE THIS ONE FILE. boards.js is the only per-machine data there is, so
+  // an engine rule with no gate hits every machine by default. Gate the next one the way
+  // st.cupBoard gates this one (set once per throw in startThrow), and name in the commit
+  // message which machines you changed.
   if (st.captured) {
     const hDef = G.holes[st.captured];
+    // THE CLASSIC: the original rule, unchanged since it went live. A flush hole has no wall to
+    // bounce a captured ball back out of, so the 0.26m drop below the capture point IS the score.
+    if (!st.cupBoard) {
+      if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) finishAt(st, st.captured, hDef.value, 'hole');
+      return;
+    }
     const fc = worldToFace(M, G, p);
     const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
     if (st.t > MAX_T) {

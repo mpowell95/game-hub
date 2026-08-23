@@ -11,6 +11,31 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
+## HARD RULE: work on one machine, change one machine
+
+Matt, 2026-08-23, on discovering that work done for POPONGO and BASKET FEVER had changed how THE
+CLASSIC plays: *"WHAT THE FUCK!?!?!?!? FIX THIS IMMEDIATELY."*
+
+All three machines share ONE `physics.js` and ONE `machine.js`. `boards.js` is the only
+per-machine data there is. **An engine rule written without a gate therefore hits every machine
+by default** - including a released one nobody asked you to touch.
+
+It has happened once, and it shipped: `28299ac` (BASKET FEVER's staircase) rewrote the capture
+commit rule and said so in its own message - "CAPTURE IS A PREDICTION, NOT A SCORE - **on every
+machine**". THE CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon, with
+its `boards.js` entry untouched, so nothing in the per-machine data could explain it.
+
+Before you commit any change to `physics.js` or `machine.js`:
+
+1. **Gate it.** `st.cupBoard` (set once per throw in `startThrow`, true for any board with a
+   `collarH` hole) is the existing gate. `655975b` and `6f41ea5` did this correctly and left THE
+   CLASSIC untouched; `28299ac` did not.
+2. **Name the machines you changed in the commit message.** "on every machine" is a decision, not
+   an aside - if you mean it, say why the released machine had to change too, and ask first.
+3. **Prove the others did not move.** Simulate a fixed grid of throws (41 powers x 21 aims) before
+   and after, and diff the outcomes. A released machine must come back byte-identical.
+
+
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
 build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub id
