@@ -476,14 +476,14 @@ export const BOARDS = [
       // classic face's 1.40 m, so the cabinet reads the same height as its neighbours and the
       // back wall shrinks back to the other machines' proportion.
       steps: [
-        { len: X * 2.475, tilt: 0.10 },       // tread 1 (0.30 m)
+        { len: X * 2.0625, tilt: 0.10 },       // tread 1 (0.30 m)
         { len: X * 1.925, tilt: Math.PI / 2 }, // riser 1 (0.28 m)
-        { len: X * 2.475, tilt: 0.10 },       // tread 2
+        { len: X * 2.0625, tilt: 0.10 },       // tread 2
         { len: X * 1.925, tilt: Math.PI / 2 }, // riser 2
-        { len: X * 2.475, tilt: 0.10 },       // tread 3
+        { len: X * 2.0625, tilt: 0.10 },       // tread 3
         { len: X * 1.925, tilt: Math.PI / 2 }, // riser 3 (the back wall rises behind it)
       ],
-      boardLen: X * 13.2,
+      boardLen: X * 11.9625,
       railH: 0.10,
       laneRailH: 0.05,
       // Back at the other machines' proportion (Matt: the wall read oversized). The vertical-pop
@@ -503,28 +503,25 @@ export const BOARDS = [
       // against the 0.28X ball - tightened from 1.125X at Matt's tuning pass ("a little too
       // easy").
       //
-      // THE BASKETS SIT AT THE FRONT OF EACH TREAD (0.75X from the tread's front edge), and
-      // that placement is load-bearing twice over (Matt's tuning pass): a hard straight throw
-      // killed by the back wall used to slide down onto the top basket's mouth and pay the 100
-      // almost every time, and a ball dropping tier-to-tier hugs the riser it fell past and
-      // used to land straight in the basket below. Both landing zones are now BEHIND the
-      // collars - the ball lands on bare tread, rolls forward, and has to go around the basket
-      // wall to leave. Collar back edge to riser: 2.0625X − 0.75X − 0.5825X = 0.73X, over the
-      // ball's 0.64X floor, so nothing wedges back there. Same-row wall gap 2.07X − 1.165X =
-      // 0.905X ("balls just barely fit between baskets" - the footage). Tread starts in
-      // unrolled v: 0 / 3.9875X / 7.975X; the mouths lean 0.10 rad toward the player with
-      // their tread.
+      // THE BASKETS SIT AT THE BACK OF EACH TREAD (0.75X from the tread's back edge, against
+      // the riser like the real cabinet's hanging baskets), and this is MATT'S EXPLICIT CALL,
+      // 2026-08-23: a front-of-tread placement shipped briefly to stop wall-killed and
+      // tier-falling balls dropping in, and he ordered it undone - "a horrible fix that creates
+      // significantly more problems than it fixes." Do NOT move these forward again. The known
+      // consequence is accepted: a ball the back wall kills, or one falling from the tier
+      // above, can land in a basket - that is how the real machine plays. Tread starts in
+      // unrolled v: 0 / 3.9875X / 7.975X; the mouths lean 0.10 rad with their tread.
       holeR: X * 0.5,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
-        lowC: { u: 0, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
-        lowR: { u: X * 2.07, v: X * 0.75, r: X * 0.5, collarH: X * 0.35 },
-        midL: { u: -X * 2.07, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
-        midC: { u: 0, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
-        midR: { u: X * 2.07, v: X * 5.15, r: X * 0.5, collarH: X * 0.35 },
-        topL: { u: -X * 2.07, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
-        topC: { u: 0, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
-        topR: { u: X * 2.07, v: X * 9.55, r: X * 0.5, collarH: X * 0.35 },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
       },
 
       minSpeed: 2.60,

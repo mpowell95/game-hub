@@ -484,16 +484,15 @@ ball dropping in out of the air - no new physics, no new capture rule.
   player - which also killed the "ski jump" launch the old 50-degree face gave fast overshoots.
 - **Each basket funnels into a hole in its TREAD, and the mouth is the only way in**: a
   full-circle collar (no lipLow) walls off every rolling entry; the mouth leans 0.10 rad toward
-  the player with its tread. **THE BASKETS SIT AT THE FRONT OF EACH TREAD (0.75X from the
-  tread's front edge; v 0.75X / 5.15X / 9.55X unrolled, u 0, ±2.07X), and both halves of that
-  are load-bearing** (Matt's tuning pass): a hard straight throw killed by the back wall used
-  to drip down onto the top basket and pay the 100 almost every time, and a tier-falling ball
-  hugs the riser it fell past - both landing zones are now BEHIND the collars on bare tread
-  (0.166 m of passage back there), so those balls roll forward AROUND the basket and off the
-  edge. Measured: straight throws p0.60-1.30 went from topC "almost every time" to 2 of 15
-  (one of them the legitimate direct arc). Small ball (0.28X, `ball.ratio` waived); mouths
-  tightened to 1.0X at the same pass ("a little too easy") - direct-entry bands are now
-  3-6 hundredths of power wide per tier (aim-0 mid p0.41-0.46, top p0.63-0.72).
+  the player with its tread. **THE BASKETS SIT AT THE BACK OF EACH TREAD, against the risers
+  like the real cabinet's hanging baskets (0.75X from each tread's back edge; v 1.3125X / 5.3X
+  / 9.2875X unrolled, u 0, ±2.07X) - MATT'S EXPLICIT CALL, 2026-08-23, do not move them
+  forward again.** A front-of-tread placement shipped for a few hours to stop wall-killed and
+  tier-falling balls dropping into baskets, and he ordered it undone: "a horrible fix that
+  creates significantly more problems than it fixes." The accepted consequence, measured on the
+  reverted layout: straight fast throws p0.60-1.30 score 12 of 15 (7 topC, 5 midC) via the
+  wall - that is how the real machine plays. Small ball (0.28X, `ball.ratio` waived); mouths
+  1.0X ("a little too easy" pass).
 - **The back wall** rises from the third riser's top at backboardH 0.85 - the other machines'
   proportion (Matt: the 1.10 wall "seems larger than in the other games"; the taller staircase
   itself now keeps the top edge out of reach). `deadRest` 0.32 makes a hard throw BOUNCE BACK
@@ -501,10 +500,8 @@ ball dropping in out of the air - no new physics, no new capture rule.
   sliding down a GRIPPING wall gets flicked upward by the friction impulse) and deadened
   side-wall tops (`wallRest` 0.15) keep the vertical-pop probe at 5 per 117 hard throws, all
   rim rattles or hidden containment hits behind the backboard - zero off the wall itself.
-- **Sweeps on the staircase**: all nine mouths capturable, 2 emergencies in 459 throws (0.4%,
-  both extreme-aim overshoots resolving as honest 0s - under the standing 2% bar), slowest
-  settle 7.9s; ladder low tier p~0.13-0.20, middle p~0.41-0.46, top p~0.63-0.72
-  (DECISIONS.md#basket-fever-layout).
+- **Sweeps on the staircase** (post-revert layout): all nine mouths capturable, 0 emergencies
+  in 459 throws, slowest settle 5.4s (DECISIONS.md#basket-fever-layout).
 - **The tiers are painted on their own segments** (`_paintField` + one field plane per segment
   in `_build`, each mapping its v-slice of the one unrolled texture): cream shelf treads, blue
   star-scattered risers. Backboard value cards are flat planes ON the risers (`_hoopBackboard`)
