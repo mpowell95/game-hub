@@ -10,7 +10,10 @@
 // Run: node test-skeeball-machine-spec.mjs   (also wired into run-all-tests.mjs)
 
 import { BOARDS } from './skeeball/js/boards.js';
-import { buildMachine } from './skeeball/js/machine.js';
+// EACH BOARD IS BUILT BY ITS OWN machine.js (skeeball/js/engines.js) - there is no shared one
+// since 2026-08-23. Building every board with the classic's would check geometry no player ever
+// touches, which is worse than not checking it.
+import { engineFor } from './skeeball/js/engines.js';
 import STRINGS from './skeeball/js/strings.js';
 import { readFileSync } from 'node:fs';
 
@@ -132,7 +135,7 @@ for (const board of BOARDS) {
     `every hole needs a numeric value: ${badValue.join(', ')}`);
 
   // --- 8 rings ------------------------------------------------------------------------------
-  const M = buildMachine(G);
+  const M = engineFor(board.id).buildMachine(G);
   const notDerived = [];
   const clipped = [];
   for (const [id, H] of holes) {

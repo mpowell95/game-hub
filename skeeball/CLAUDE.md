@@ -11,30 +11,66 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
-## HARD RULE: work on one machine, change one machine
+## HARD RULE: every machine owns its own engine
 
-Matt, 2026-08-23, on discovering that work done for POPONGO and BASKET FEVER had changed how THE
-CLASSIC plays: *"WHAT THE FUCK!?!?!?!? FIX THIS IMMEDIATELY."*
+Matt, 2026-08-23, on learning that one `physics.js` served all three machines: *"It's absolutely
+insane you've been editing 1 file for different games and silently changing other machines."*
+He is right, and it cost him the release.
 
-All three machines share ONE `physics.js` and ONE `machine.js`. `boards.js` is the only
-per-machine data there is. **An engine rule written without a gate therefore hits every machine
-by default** - including a released one nobody asked you to touch.
+**Each machine has its OWN copy of `physics.js`, `machine.js` and `render.js`,** under
+`skeeball/js/machines/<board-id>/`. There is no shared engine. `skeeball/js/engines.js` maps a
+board id to its three files and is the only thing that knows they exist.
 
-It has happened once, and it shipped: `28299ac` (BASKET FEVER's staircase) rewrote the capture
-commit rule and said so in its own message - "CAPTURE IS A PREDICTION, NOT A SCORE - **on every
-machine**". THE CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon, with
-its `boards.js` entry untouched, so nothing in the per-machine data could explain it.
+```
+skeeball/js/
+  boards.js  game.js  goals.js  ui.js  swipe.js  strings.js   <- all machines
+  engines.js                                                  <- board id -> its engine
+  machines/classic/     physics.js  machine.js  render.js
+  machines/popongo/     physics.js  machine.js  render.js
+  machines/basketball/  physics.js  machine.js  render.js
+```
 
-Before you commit any change to `physics.js` or `machine.js`:
+**Editing `machines/popongo/physics.js` cannot affect THE CLASSIC, because the classic never
+loads that file.** The isolation is the filesystem. There is no flag to set, no gate to remember
+and no test you have to run first.
 
-1. **Gate it.** `st.cupBoard` (set once per throw in `startThrow`, true for any board with a
-   `collarH` hole) is the existing gate. `655975b` and `6f41ea5` did this correctly and left THE
-   CLASSIC untouched; `28299ac` did not.
-2. **Name the machines you changed in the commit message.** "on every machine" is a decision, not
-   an aside - if you mean it, say why the released machine had to change too, and ask first.
-3. **Prove the others did not move.** Simulate a fixed grid of throws (41 powers x 21 aims) before
-   and after, and diff the outcomes. A released machine must come back byte-identical.
+### Why it is built this way
 
+Until 2026-08-23 all three ran one `physics.js`, one `machine.js` and one `render.js` - 2,330
+lines - with per-machine behaviour written as branches (`cupBoard`, `collarH`, `cups`). Every
+branch was somewhere a change for one machine could reach another, and one of them shipped:
+`28299ac`, written for BASKET FEVER, rewrote the capture rule "on every machine" and moved **456
+of 861** throws on THE CLASSIC, dropping a fixed 861-throw grid from 12,240 points to 6,870. THE
+CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon with its own
+`boards.js` entry untouched, so nothing in the per-machine data could explain it. Matt pulled the
+game from the hub over it.
+
+The fix that night (`24ba484`) gated that one rule on `st.cupBoard`. **Gating is not the answer
+and was never going to be** - it works only for the branches somebody remembers to write.
+Separate files are the answer.
+
+### The cost, accepted deliberately
+
+A genuine engine bug is now fixed once per machine that has it, and the copies drift. **The drift
+is the point** - these are different machines. When you fix something real, say in the commit
+which machines you applied it to and which you deliberately did not.
+
+### Adding a machine
+
+1. `cp -r skeeball/js/machines/classic skeeball/js/machines/<id>` - every machine starts as a copy
+   of THE CLASSIC, then diverges freely.
+2. Add one row to `skeeball/js/engines.js`.
+3. Add the three files to `sw.js`'s `ASSETS` and bump `CACHE`.
+4. Add the `boards.js` entry.
+
+Nothing else changes, and nothing you do inside your folder can reach another machine.
+
+### Still true, and still worth doing
+
+`boards.js`, `game.js`, `goals.js` and `ui.js` ARE shared across machines - they are the registry,
+the rules of a rack, the objectives and the shell, not the machine. A change there does reach every
+machine. Before committing one, simulate a fixed grid (41 powers x 21 aims) on each machine before
+and after and diff the outcomes; a machine you did not mean to touch must come back identical.
 
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
@@ -105,17 +141,18 @@ gallery `padding-top: 84px` to clear it.
 | File | Role |
 |---|---|
 | `js/vendor/` | **vendored battle-tested libraries** (2026-08-13, Matt's explicit instruction - see below): `cannon-es.js` (rigid-body physics, ESM), `three.module.min.js` + `three.core.min.js` (renderer). Committed files, no build step, no network fetch. Never hand-edit them |
-| `js/machine.js` | the machine's GEOMETRY, once, in metres: every floor, wall, band segment and collar as data. physics.js builds cannon bodies from it and render.js builds three meshes from it, so the wall you see IS the wall the ball hits |
+| `js/machines/<id>/machine.js` | **one per machine.** That machine's GEOMETRY, once, in metres: every floor, wall, band segment and collar as data. physics.js builds cannon bodies from it and render.js builds three meshes from it, so the wall you see IS the wall the ball hits |
+| `js/engines.js` | board id -> that machine's own `{ physics, buildMachine, Renderer }`. The ONLY file that knows the three engine folders exist; see the HARD RULE above |
 | `js/boards.js` | the machine registry: identity, look tokens, the `geom` block (sizes, angles, launch speeds, hole layout), unlock chain. Pure |
-| `js/physics.js` | the ball, simulated by cannon-es: materials/contact tuning, speed-aware hole capture, trough scoring, the watchdog (NO magnetism - see below). Deterministic, no rng |
+| `js/machines/<id>/physics.js` | **one per machine.** The ball, simulated by cannon-es: materials/contact tuning, speed-aware hole capture, trough scoring, the watchdog (NO magnetism - see below). Deterministic, no rng |
 | `js/game.js` | the rules of a rack: nine balls, scoring, the event stream, snapshot/restore, the recorder payload. Pure |
-| `js/render.js` | the machine on screen, drawn by three.js: scene from machine.js + cosmetic dressing, lights/shadows, painted textures, ball mesh synced from the physics body |
+| `js/machines/<id>/render.js` | **one per machine.** That machine on screen, drawn by three.js: scene from machine.js + cosmetic dressing, lights/shadows, painted textures, ball mesh synced from the physics body |
 | `js/howto.js` | the How To Play sheet content (repo pattern, `docs/BUILDING-A-GAME.md`) |
 | `js/strings.js` | the EN/ES dictionary |
 | `js/ui.js` | DOM shell, the swipe, storage, records panel, the hub module contract |
 | `js/test.js` | headless engine tests incl. the reachability sweep and the soak (wired into `run-all-tests.mjs`) |
 
-`machine.js`, `boards.js`, `physics.js` and `game.js` are DOM-free and that is load-bearing:
+Every `machines/<id>/machine.js` and `physics.js`, plus `boards.js` and `game.js`, are DOM-free and that is load-bearing:
 `node skeeball/js/test.js` plays hundreds of throws in node (cannon-es runs fine there), and the
 same determinism is why the tuning is testable at all.
 

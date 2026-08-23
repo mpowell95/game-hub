@@ -13,7 +13,7 @@
 // lossless. A ball in flight is not part of the saved state.
 
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
-import { Renderer } from './render.js';
+import { engineFor } from './engines.js';
 import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
 import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
 import STRINGS from './strings.js';
@@ -91,7 +91,7 @@ function clearSave() {
 function renderMachineImage(board, sb) {
   try {
     const c = document.createElement('canvas');
-    const r = new Renderer(c, board);
+    const r = new (engineFor(board.id).Renderer)(c, board);
     // GUARD: HAND IT THE RECORDS. The backboard IS the machine's scoreboard, and a Renderer
     // nobody pushes values into paints its constructor defaults - four dashes. That is what put
     // an empty ALL TIME / YOUR BEST / TODAY / LAST GAME strip in the setup picture, four inches
@@ -537,7 +537,7 @@ export class SkeeballUI {
     try {
       this._stopHpDemo();
       const rect = canvas.getBoundingClientRect();
-      const R = new Renderer(canvas, board);
+      const R = new (engineFor(board.id).Renderer)(canvas, board);
       R.resize(Math.max(2, Math.round(rect.width)), Math.max(2, Math.round(rect.height)));
       this._hpRenderer = R;
       this._hpGame = new SkeeballGame(board.id);
@@ -649,7 +649,7 @@ export class SkeeballUI {
     this._shownScore = this.game.score;   // what the counter is currently showing; see _paintHud
 
     if (this.renderer) this.renderer.dispose();
-    this.renderer = new Renderer(this.el.canvas, this.game.board);
+    this.renderer = new (engineFor(this.game.board.id).Renderer)(this.el.canvas, this.game.board);
     this._pushScoreboard();
     this._bindPlay();
     if (!this._fit()) this._fitWhenLaidOut();

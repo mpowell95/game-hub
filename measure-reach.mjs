@@ -1,8 +1,8 @@
 // How far up the face does a throw actually get? Run the real engine with NO holes in the board,
 // so nothing captures, and record the highest face-v the ball reaches. That curve is the ladder:
 // put a hole where you want a band to start and the band is that wide, by construction.
-import { startThrow, step } from './skeeball/js/physics.js';
-import { buildMachine } from './skeeball/js/machine.js';
+import { startThrow, step } from './skeeball/js/machines/classic/physics.js';
+import { buildMachine } from './skeeball/js/machines/classic/machine.js';
 import { BOARDS } from './skeeball/js/boards.js';
 
 const mn = Number(process.argv[2] || BOARDS[0].geom.minSpeed);   // default from boards.js, never a stale literal

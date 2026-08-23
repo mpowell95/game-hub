@@ -7,7 +7,7 @@
 // makes leaving mid-rack lossless (the hub contract's autosave/resume class, root CLAUDE.md).
 // `SkeeballGame.restore` rebuilds a game from one.
 
-import { startThrow, step, takeEvents } from './physics.js';
+import { engineFor } from './engines.js';
 import { boardById, BALLS_PER_GAME, cupAt, scoringColors } from './boards.js';
 
 export { BALLS_PER_GAME };
@@ -89,7 +89,7 @@ export class SkeeballGame {
   /** Roll one ball. power 0..1, aim -1..1 (see physics.js). */
   throwBall(params) {
     if (!this.canThrow()) return false;
-    this.balls.push(startThrow(this.board, params));
+    this.balls.push(engineFor(this.board.id).physics.startThrow(this.board, params));
     this.thrown += 1;
     this.events.push({ type: 'throw' });
     return true;
@@ -99,8 +99,9 @@ export class SkeeballGame {
     if (!this.balls.length) return;
     // A COPY: _settle removes from this.balls while we are walking it.
     for (const ball of this.balls.slice()) {
-      step(this.board, ball, dt);
-      for (const ev of takeEvents(ball)) {
+      const P = engineFor(this.board.id).physics;
+      P.step(this.board, ball, dt);
+      for (const ev of P.takeEvents(ball)) {
         // Physics events pass through for the renderer, and the rules react to the two that
         // matter: 'done' (the ball settled in a hole or the gutter) and 'returned' (it rolled
         // back home, which resolves the throw without spending the ball).

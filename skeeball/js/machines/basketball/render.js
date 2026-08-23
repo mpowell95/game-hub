@@ -4,9 +4,9 @@
 // marquee, cabinet, room) that has no physics body and never will. The ball is a real mesh
 // driven by the physics body's position AND quaternion, so it visibly rolls.
 
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 import { buildMachine } from './machine.js';
-import { BALLS_PER_GAME } from './boards.js';
+import { BALLS_PER_GAME } from '../../boards.js';
 
 const REDUCED = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;

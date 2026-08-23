@@ -13,8 +13,8 @@ globalThis.matchMedia = () => ({ matches: false });
 
 const THREE = await import('./skeeball/js/vendor/three.module.min.js');
 const { BOARDS } = await import('./skeeball/js/boards.js');
-const { buildMachine } = await import('./skeeball/js/machine.js');
-const { Renderer } = await import('./skeeball/js/render.js');
+const { buildMachine } = await import('./skeeball/js/machines/classic/machine.js');
+const { Renderer } = await import('./skeeball/js/machines/classic/render.js');
 
 const G = BOARDS[0].geom, M = buildMachine(G);
 const fake = {
