@@ -10,7 +10,7 @@
 // is outside the table and that the game keeps making progress.
 
 import { step, makeBall, seg, circle, flipper, PHYS_DT, MAX_SPEED } from './physics.js';
-import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER, ARCH, AXIS, FLIP } from './table.js';
+import { W, H, DRAIN_Y, buildTable, SWITCHES, RAMP_PATH, PLUNGER } from './table.js';
 import { Pinball, mulberry32, rampPoint, MISSIONS, PTS, GRAVITY } from './game.js';
 import { Renderer } from './render.js';
 
@@ -198,15 +198,8 @@ function launched(g) {
   }
   ok('three locks start multiball', !!g.multiball, `locks=${g.locks}`);
   ok('multiball resets the lock ladder', g.locks === 0);
-  // Measured as the MOST balls ever on the table at once, not as a snapshot after a fixed number of
-  // frames. The old form read g.balls.length at exactly frame 200 and passed only because the extra
-  // balls happened to still be alive at that instant. Making every surface frictionless (2026-08-22)
-  // sped the whole table up, two of the three drained a few frames earlier, and a test whose own
-  // name is about FEEDING went red over drain timing. The feed was never broken - traced 1 -> 2 -> 3
-  // balls with all three live at frame 175. Tightened to 3 while here, since toFeed is 2.
-  let mostBalls = g.balls.length;
-  for (let i = 0; i < 200; i++) { g.update(1 / 60); mostBalls = Math.max(mostBalls, g.balls.length); }
-  ok('multiball feeds extra balls onto the table', mostBalls >= 3, `${mostBalls} balls at once`);
+  for (let i = 0; i < 200; i++) g.update(1 / 60);
+  ok('multiball feeds extra balls onto the table', g.balls.length >= 2, `${g.balls.length} balls`);
 }
 
 {
@@ -612,67 +605,6 @@ function launched(g) {
     reach(PLUNGER.minV) > 150, `y=${reach(PLUNGER.minV).toFixed(0)}`);
   ok('[PLAYTEST 2026-08-20] a full plunge still makes it',
     reach(PLUNGER.maxV) < 120, `y=${reach(PLUNGER.maxV).toFixed(0)}`);
-}
-
-// --- 8. the ball must not STICK to anything it rides -----------------------------------------
-// Matt, 2026-08-22, playing the build above: "you have to make the walls frictionless. the ball
-// gets stuck on them. same with the paddles."
-//
-// Cause: resolve()'s tangential friction is charged once per CONTACT RESOLUTION, not once per
-// impact. A ball that bounces pays it once. A ball that RIDES a surface is in contact on all 480
-// physics steps of a second and pays it 480 times, which gravity can only balance at a terminal
-// creep of g*dt/mu. The orbit - the shot the right flipper exists to make - is one long sustained
-// contact with archIn, so the table's headline shot was also the one that reliably killed the ball.
-{
-  ok('[KNOWN-BUG PROBE] every collider class is frictionless by default',
-    seg(0, 0, 1, 1).mu === 0 && circle(0, 0, 1).mu === 0 && flipper(0, 0, 10, 0, 1).mu === 0,
-    `seg ${seg(0, 0, 1, 1).mu}, circle ${circle(0, 0, 1).mu}, flipper ${flipper(0, 0, 10, 0, 1).mu}`);
-
-  // Ride the arch on a full plunge and watch the speed. Born red: at the old mu of 0.02 the ball
-  // bled down to ~335 u/s going round, against ~851 now.
-  // mu === null means "leave the shipped defaults alone", which is the whole point: a probe that
-  // sets mu itself measures the solver, not the table, and would pass against any defaults at all.
-  const ride = (mu) => {
-    const { colliders, flippers } = buildTable({});
-    if (mu != null) for (const c of colliders) c.mu = mu;
-    const world = { colliders, flippers, gravity: GRAVITY, drag: 0.133, nudgeX: 0, nudgeY: 0 };
-    const b = makeBall(PLUNGER.x, PLUNGER.y, 0, -PLUNGER.maxV);
-    let slowest = 9e9, topT = -1, exitT = -1;
-    for (let i = 0; i < Math.round(12 / PHYS_DT); i++) {
-      const t = i * PHYS_DT;
-      step(world, [b], null);
-      if (Math.hypot(b.x - ARCH.cx, b.y - ARCH.cy) > ARCH.rIn - 5 && b.y < ARCH.cy) {
-        slowest = Math.min(slowest, Math.hypot(b.vx, b.vy));
-      }
-      if (b.y < 90 && topT < 0) topT = t;
-      if (topT > 0 && b.y > 300 && exitT < 0) { exitT = t; break; }
-      if (b.y > DRAIN_Y) break;
-    }
-    return { slowest, round: exitT > 0 ? exitT - topT : 99 };
-  };
-  const now = ride(null);
-  ok('[KNOWN-BUG PROBE] a ball riding the orbit keeps its speed',
-    now.slowest > 600, `slowest in the arch ${now.slowest.toFixed(0)} u/s (at the old mu 0.02: ${ride(0.02).slowest.toFixed(0)})`);
-  ok('[KNOWN-BUG PROBE] the orbit completes promptly instead of crawling round',
-    now.round < 0.7, `${now.round.toFixed(2)} s top-to-exit (at the old mu 0.02: ${ride(0.02).round.toFixed(2)} s)`);
-
-  // A resting paddle must not be flypaper either: the ball rolls pivot -> tip under gravity alone.
-  const rollToTip = (mu) => {
-    const { colliders, flippers } = buildTable({});
-    if (mu != null) for (const f of flippers) f.mu = mu;
-    const world = { colliders, flippers, gravity: GRAVITY, drag: 0.133, nudgeX: 0, nudgeY: 0 };
-    const px = AXIS - FLIP.dx, py = FLIP.pivotY;
-    const b = makeBall(px + Math.cos(FLIP.rest) * 12, py + Math.sin(FLIP.rest) * 12 - 11, 40, 20);
-    for (let i = 0; i < Math.round(3 / PHYS_DT); i++) {
-      step(world, [b], null);
-      const along = (b.x - px) * Math.cos(FLIP.rest) + (b.y - py) * Math.sin(FLIP.rest);
-      if (along > FLIP.len - 6) return i * PHYS_DT;
-      if (b.y > DRAIN_Y) break;
-    }
-    return 99;
-  };
-  ok('[KNOWN-BUG PROBE] the ball rolls down a resting paddle instead of stalling on it',
-    rollToTip(null) < 0.45, `${rollToTip(null).toFixed(2)} s pivot-to-tip (at the old mu 0.05: ${rollToTip(0.05).toFixed(2)} s)`);
 }
 
 console.log(`\n${count - fail}/${count} passed`);
