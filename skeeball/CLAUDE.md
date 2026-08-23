@@ -283,14 +283,31 @@ value reachable, quarter-by-quarter means 23 < 31 < 43 < 50 (harder goes further
 1.31s (was 3.99s). `tune-ladder.mjs` prints all of it against the old numbers; run it after
 touching any of `geom`.
 
-**One trade is deliberate and was measured both ways.** The old build asserted "max power scores
-worse than mid power (overshoot has a price)". That cannot hold at the same time as "no dead zone
-at the hard end": the topmost cup catches every overshoot, because the backboard is dead material
-so a slammed ball rebounds slowly and falls back into the 50 from just above it. Every geometry
-that DOES punish a slam punishes it off a cliff - shrinking the 50 until overshoots miss it turns
-the top 26-32 steps of the dial into a flat 10, which is the defect the rebuild exists to remove.
-So the price moved to the aim axis: a straight slam banks the 50 safely, and the 100 is worth
-double but needs an angle that costs you the ball when missed.
+**DELETED 2026-08-22, at Matt's instruction.** This spot used to hold a passage calling
+"a slammed ball falls off the dead backboard straight into the 50" a deliberate trade. It was not
+a trade, it was a defect with a rationale attached, and writing it down here is what stopped it
+being fixed: a session that reads "deliberate" does not re-measure. Matt, watching it happen on
+his phone: *"Balls that bounce off the back wall go into the 50 easily. we need to stop that."*
+
+**STILL OPEN as of 2026-08-22 - the defect is real and NOT yet fixed.** Two fixes were tried and
+measured, and both failed the same way. Raking the backboard forward (its top toward the player,
+6-24 degrees) does not send the ball down the board: it is dead when it arrives, so it just drops
+into the 40 instead of the 50, and at 24 degrees the count only falls because a quarter of all
+throws stop scoring at all (zeros 9 -> 37 over the same sweep). Making the wall livelier
+(deadRest 0.10 -> 0.45) does the same thing - on straight throws the zeros go 0 -> 13 while the
+50 barely moves (8 -> 5).
+
+The one thing both attempts confirm is the part of the deleted passage that WAS true: **do not fix
+this by shrinking a cup or deadening the top of the dial.** An overshoot has to be sent somewhere,
+not made worthless.
+
+What the measurements point at instead: the problem is not the wall, it is that **the top cup sits
+directly under it with no run-off in between**. Anything that acts on the wall only changes which
+mouth the dead ball falls into, because it is still falling inside the cup field. The fix is bare
+face above the highest cup - long enough that a ball off the wall lands on board and has to roll -
+which means moving the cup stack down or lengthening the board above it. That touches the tangency
+stack and the measured reach curve the holes are placed on, so it is a face rebuild, not a tweak,
+and it needs Matt's go-ahead before anyone starts.
 
 ### Every number is painted on the BOARD
 
