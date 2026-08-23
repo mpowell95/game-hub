@@ -235,7 +235,7 @@ honest state and this paragraph is the reason.
 - **There is no sound, and no audio layer.** Not muted, not defaulted off: `audio.js` is deleted and
   nothing constructs an AudioContext (Matt, 2026-08-11: "Delete the sound option. No sound."). The
   setup screen has no toggle. It is one commit back in git if it is ever wanted again.
-- **The How To Play screen follows the repo-wide pattern** in `tic-tac-toe/CLAUDE.md` and nothing
+- **The How To Play screen follows the repo-wide pattern** in `docs/BUILDING-A-GAME.md` and nothing
   else: one bold sentence, ONE diagram carrying the non-obvious part, a caption, an X = Y example,
   then short plain rules. The first version was five paragraphs of prose that re-explained pinball
   to people who already know what a flipper is; what a player actually does not know is WHERE THIS

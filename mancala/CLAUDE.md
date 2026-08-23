@@ -27,7 +27,7 @@ delete (unlike Boggle) — this is shapes-only.
 
 **How-to-play overhaul (2026-07-24, HANDOFF-FB2-HOWTO2 item 1):** the old five prose `<section>`s
 (board/turn/extra-turn/capture/end) are gone, replaced with the repo-wide pattern
-(tic-tac-toe/CLAUDE.md): a goal line, one mini-board diagram (`_sowDiagram()` in `ui.js`) showing
+(`docs/BUILDING-A-GAME.md`): a goal line, one mini-board diagram (`_sowDiagram()` in `ui.js`) showing
 the counterclockwise sow with a visible dashed hop over the opponent's mancala, a caption, an
 "X = Y" example, and two rule bullets. Matt's own words: "must be completely overhauled... same
 excess-prose issue."
