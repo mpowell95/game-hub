@@ -325,21 +325,19 @@ function substep(st) {
   //    power band needs widening, widen it in the GEOMETRY, never by moving the ball. See
   //    DECISIONS.md#removed-features-and-why-they-stay-removed.
 
-  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball
-  //    gets popped off the face like the chatter that frees a real ball; a ball a pop cannot
-  //    move is JAMMED (three contact normals can lock the solver completely - measured, not
-  //    theory), and jams get walked out: a slow positional roll toward the nearest mouth until
-  //    physics takes back over or the mouth captures it.
-  if (st.walkout) {
-    ball.velocity.set(0, 0, 0);
-    ball.position.x += st.walkout.x * 0.0012;
-    ball.position.y += st.walkout.y * 0.0012;
-    ball.position.z += st.walkout.z * 0.0012;
-    if (Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z) > 0.06) st.walkout = null;
-  }
+  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball gets
+  //    two small nudges; a ball those cannot move is JAMMED (three contact normals can lock the
+  //    solver completely - measured, not theory).
+  //
+  //    A JAMMED BALL SCORES ZERO AND IS GONE. It is not walked, nudged or steered anywhere.
+  //    Matt, 2026-08-22: "Stuck balls should score ZERO. and not be moved. It should vanish."
+  //    Until then THE CLASSIC slid a jammed ball into the nearest mouth and PAID for it, which
+  //    is a scripted score - points for touching a cup rather than falling through one. POPONGO
+  //    already resolved a jam as a miss; both machines now do the same thing, so there is no
+  //    per-board branch left here to disagree about.
   const moved = Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z);
-  if (moved > 0.03 && !st.walkout) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
-  else if (!st.walkout && st.t - st.anchor.t > 0.9) {
+  if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
+  else if (st.t - st.anchor.t > 0.9) {
     st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
     st.nudges += 1;
     if (st.nudges <= 2) {
@@ -347,28 +345,13 @@ function substep(st) {
       ball.velocity.x += side * 0.3;
       ball.velocity.y += 0.55 * Math.cos(M.tilt);
       ball.velocity.z += 0.3 * Math.sin(M.tilt) + 0.15;
-    } else if (st.cupBoard) {
-      // Two pops did nothing: it is jammed. On a CUP BOARD a jammed ball is a MISS, full stop:
-      // falling through a mouth is the only way to score here, and walking a stuck ball into
-      // the nearest cup (the classic's walkout below) is a scripted score - it read as points
-      // for merely touching a cup (Matt, 2026-08-22). The ball did not go in; it pays nothing.
+    } else {
+      // Two pops did nothing: it is JAMMED, on every machine. It scores nothing and it is over.
+      // It is NOT walked toward a mouth - that was a scripted score, and it paid a player for
+      // touching a cup rather than falling through one (Matt, 2026-08-22).
       st.emergencyUsed = true;
       finishAt(st, 'corner0', 0, 'gutter');
       return;
-    } else {
-      // Two pops did nothing: it is jammed. Aim the walk at the nearest mouth's centre.
-      let best = null;
-      for (const id of Object.keys(G.holes)) {
-        const hDef = G.holes[id];
-        const d = Math.hypot(f.u - hDef.u, f.v - hDef.v);
-        if (!best || d < best.d) best = { id, d, hDef };
-      }
-      if (best) {
-        const w1 = st.M.faceToWorld(best.hDef.u, best.hDef.v, G.ballR);
-        const len = Math.hypot(w1[0] - p.x, w1[1] - p.y, w1[2] - p.z) || 1;
-        st.walkout = { x: (w1[0] - p.x) / len, y: (w1[1] - p.y) / len, z: (w1[2] - p.z) / len };
-        st.emergencyUsed = true;
-      }
     }
   }
 

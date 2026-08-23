@@ -252,13 +252,30 @@ export function buildMachine(G) {
       rot: null,
     });
   }
-  // The backboard: the vertical wall rising from the board's top edge. A real wall the engine
-  // bounces the ball off - the reaction IS the contact solve, nothing is scripted.
+  // The backboard: the wall rising from the board's top edge. A real wall the engine bounces the
+  // ball off - the reaction IS the contact solve, nothing is scripted.
+  //
+  // GUARD: IT REACHES PAST THE MARQUEE, and MARQUEE_RISE is why. The marquee is drawn by
+  // render.js as a box 0.3 tall centred 0.02 above backboardH, so its top sits 0.17 above the
+  // board height. A wall that stopped at backboardH left an 18cm slot between its top and the
+  // top of the sign, and a hard throw threaded it and ended up BEHIND the marquee (Matt,
+  // 2026-08-22: "it goes over the wall but under/behind the THE CLASSIC header board thing.
+  // that's wrong"). A real cabinet has no such slot - the sign is mounted ON a solid back, not
+  // hung in front of a gap.
+  //
+  // This is NOT the banned ceiling (MACHINE-SPEC section 9). Nothing spans the top: a ball
+  // thrown hard enough still clears the whole machine and leaves. This only closes the slot
+  // BEHIND the sign, which is cabinet, not sky. If render.js's marquee size or offset changes,
+  // change this with it.
   const top = faceToWorld(0, G.boardLen, 0);
+  // 0.18, not 0.17: the box is seated 0.01 low (the -0.01 below), so the extra centimetre is
+  // what actually brings its top level with the sign's.
+  const MARQUEE_RISE = 0.18;                 // render.js: centre +0.02, half-height 0.15, seat 0.01
+  const bbH = G.backboardH + MARQUEE_RISE;
   solids.push({
     part: 'backboard',
-    pos: [0, top[1] + G.backboardH / 2 - 0.01, top[2] - 0.02],
-    half: [G.boardW / 2 + railT, G.backboardH / 2, 0.02],
+    pos: [0, top[1] + bbH / 2 - 0.01, top[2] - 0.02],
+    half: [G.boardW / 2 + railT, bbH / 2, 0.02],
     rot: null,
   });
 
