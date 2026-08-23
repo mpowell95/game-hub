@@ -242,15 +242,20 @@ const GAMES = [
     art: GAME_ART["snake"],
   },
   {
-    // RELEASED 2026-08-22 (Matt's call). Admin-only from 2026-08-11 while the machines/unlock
-    // rework was played in; dropping `devOnly` was the whole of it, and the `released` date below
-    // is what makes the New pill announce it. Its leaderboard row went in at the same time
-    // (GAME_META in js/leaderboard-ui.js) - players-agg.test.mjs fails if a released game has no
-    // row, because that is how Yahtzee's wins silently counted as zero.
+    // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Pinball below. It was released
+    // 2026-08-22 and pulled back the next day: work done for POPONGO and BASKET FEVER had been
+    // landing in the shared engine and changing how THE CLASSIC plays (see skeeball/CLAUDE.md,
+    // "work on one machine, change one machine"). `devOnly` keeps the card off the launcher for
+    // everyone but Matt and the tester while that settles.
+    //
+    // Re-releasing is the same four edits, in reverse: drop `devOnly`, add a FRESH `released`
+    // date (the only input to the New pill - the old 2026-08-22 date is deliberately gone so the
+    // pill announces the real day), put the GAME_META row back in js/leaderboard-ui.js, and take
+    // `skeeball` back out of players-agg.test.mjs's OFF_THE_BOARD. Miss the row and every
+    // Skeeball win counts as ZERO while My Stats still shows it - that is how Yahtzee shipped.
     // Rebuilt from scratch 2026-08-13 (see skeeball/CLAUDE.md); the stats id and its history
     // predate the rebuild and are untouched.
     id: 'skeeball',
-    released: '2026-08-22',
     title: 'Skeeball',
     blurb: { en: 'Roll it up the lane and lob it into the rings. Nine balls, five rings, two corner pockets worth 100.',
       es: 'Lanza la bola por la pista y encéstala en los anillos. Nueve bolas, cinco anillos y dos huecos de 100 en las esquinas.' },
@@ -260,6 +265,7 @@ const GAMES = [
     immersive: true,
     accent: '#54301a',
     art: GAME_ART["skeeball"],
+    devOnly: true,
   },
   {
     id: 'uno',
