@@ -170,6 +170,30 @@ a fast desktop connection and misbehaved on a phone with poor service. The full 
   expires on its own — a recovered connection needs no event to go back to network-first.
 - **A request with nothing cached is never short-circuited** by either mechanism: it waits for the
   network, because a deadline with no fallback would only turn a slow load into a broken one.
+- **(2026-08-23) The warm CARRIES UNCHANGED FILES FORWARD across a CACHE bump instead of
+  re-downloading them.** Matt: the launcher "became noticeably laggy where it used to be snappy."
+  Measured cause: CACHE is bumped on essentially every commit (182 bumps in the 14 days before
+  this landed), every bump rolled the cache name over, and `warmRest()` re-downloaded the ENTIRE
+  REST tier - 347 requests / 12.6 MB per deploy, saturating the connection for the whole session
+  on any device that opened the hub after a deploy, which at ~13 deploys/day meant essentially
+  every open. HTTP validators cannot fix it: GitHub Pages re-stamps every file's mtime (and so
+  its ETag) on every deploy, so a conditional request 200s the full body even for a file
+  unchanged in weeks. The fix is the **GENERATED `REST_MANIFEST` block in sw.js** - a content
+  hash per REST file, written by `validate-sw-assets.mjs` from the bytes on disk (that script
+  already runs before every deploy; `test-sw-strategy.mjs` fails if a stale manifest is about to
+  ship). The warm diffs it against the manifest the previous deploy stored in its cache and
+  copies unchanged files across; only genuinely changed files fetch. Measured effect: a
+  no-REST-change deploy fell from **12.6 MB / 387 requests to 1.5 MB / 95 requests** (the
+  remainder is the page's own load plus the still-atomic ~865 KB shell install), and the warm
+  settles in ~0 s instead of 17-31 s. A stale manifest is bounded: code is network-first at
+  request time regardless, so stale bytes could only ever be served offline or past the deadline.
+- **(2026-08-23) Old caches are deleted at the END of the warm, not at activate.** They are the
+  carry-forward copy source AND the fetch handler's fallback while the warm runs - the old
+  delete-at-activate behaviour opened a window on every deploy (seconds on wifi, minutes on a
+  phone) where games had no cache at all and every request queued behind the warm. Both fetch
+  paths now consult the CURRENT cache before the global `caches.match` (which searches in
+  cache-CREATION order and would otherwise let the older generation answer). At most one extra
+  generation lingers, and only until the next completed warm.
 
 Measured on a warm cache against a server injecting 8s per request (the regime the report was
 about): **40.6s → 2.6s** to a rendered launcher. `cache: 'reload'` is untouched — the
@@ -249,7 +273,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | Script | Role |
 |---|---|
 | `server.mjs` | local dev server (ES modules/SW need real HTTP, not `file://`) |
-| `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. Run before every deploy. |
+| `validate-sw-assets.mjs` | fails if any `sw.js` `ASSETS` entry is missing on disk; warns about deployed files not in the list. **Since 2026-08-23 it also maintains sw.js's generated `REST_MANIFEST` block** (content hash per REST file - what lets the warm carry unchanged files across a CACHE bump instead of re-downloading ~11 MB per deploy): a stale block is rewritten in place, so re-run it and commit sw.js after changing any game file. Run before every deploy. |
 | `test-sw-strategy.mjs` | (2026-08-02) `validate-sw-assets.mjs` checks WHICH files `sw.js` precaches; this checks HOW it serves them. Runs the real `sw.js` in a `vm` sandbox with a fake `caches`/`fetch` (so it can't drift from the shipped file) and pins the two-tier install, the fetch deadline, the slow-connection latch, and cache-first images. Its `[KNOWN-BUG PROBE]` block is the regression tripwire for the atomic-install failure that used to strand a whole deploy on one 404. |
 | `players-agg.test.mjs` | headless unit tests for `js/players-agg.js`, plus a **[KNOWN-BUG PROBE] structural guard on checklist item 7**: it discovers every sub-counter key from `js/game-stats.js` itself and fails unless each one has BOTH a `players-agg.js` branch and a My Stats renderer. The per-game cases beside it are hand-written, so they only cover games someone remembered to add; this covers a NEW game's counter the day it is written. Missing the agg branch zeroes that counter the moment a person's second device syncs, with every local store intact - THE LAW rule 1, and the root file records it being missed twice in a row. **A second structural probe (2026-08-11) covers the whole GAME, not its sub-counters**: every stats id in `game-stats.js` must have a `GAME_META` row in `js/leaderboard-ui.js`, or be listed in `OFF_THE_BOARD` *and* still be `devOnly` in `js/hub.js` — so a game released off the board fails the day it ships. Written because Yahtzee had no row, and it took a player's bug report to notice. |
 | `test-new-badge.mjs` | (2026-08-01) headless unit tests for `js/new-badge.js` (window edges, malformed/absent dates, future dates), plus a scrape of the real `GAMES` registry asserting every `released` date that IS present parses — a typo'd date is the silent failure here (the game ships, the pill never appears) |
@@ -325,9 +349,10 @@ that only lives in prose is advice, and advice loses to a session that never rea
 **When you bump `CACHE` in `sw.js`, bump it past what is on `main` RIGHT NOW, not past what is in
 your working copy.** Two branches open at once will both compute the same next number — that
 happened on 2026-08-02 and produced two different builds both calling themselves `game-hub-v260`.
-It is not cosmetic: `activate` only deletes caches whose name DIFFERS, and `warmRest` skips entries
-already present so the warm can resume, so a device holding the other build's cache keeps it, takes
-your shell over the top, and never refreshes the game files underneath — a permanently mixed build.
+It is not cosmetic: the worker only ever deletes caches whose name DIFFERS (at the end of the warm,
+since 2026-08-23), and `warmRest` skips entries already present so the warm can resume, so a device
+holding the other build's cache keeps it, takes your shell over the top, and never refreshes the
+game files underneath — a permanently mixed build.
 
 ### Adding a game — checklist
 
