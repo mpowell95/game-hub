@@ -43,6 +43,7 @@ function eq(label, actual, expected) {
 class FakeResponse {
   constructor(body, { ok: isOk = true, tag = '' } = {}) { this.body = body; this.ok = isOk; this.tag = tag; }
   clone() { return new FakeResponse(this.body, { ok: this.ok, tag: this.tag }); }
+  async json() { return JSON.parse(this.body); }
 }
 
 class FakeRequest {
@@ -82,10 +83,13 @@ class FakeCache {
   }
 }
 
-/** Builds a sandbox and evaluates the real sw.js in it. `net` decides what the network does. */
-function bootWorker({ net }) {
+/** Builds a sandbox and evaluates the real sw.js in it. `net` decides what the network does.
+ *  Pass `src` to boot a MODIFIED worker source (the deploy-bump probes), and `existingCaches`
+ *  to hand a new worker the cache state a previous one left behind - which is exactly what a
+ *  real browser does across a deploy. */
+function bootWorker({ net, src = SW_SRC, existingCaches } = {}) {
   const listeners = {};
-  const caches = new Map();
+  const caches = existingCaches || new Map();
   const logs = [];
 
   const fetchImpl = async (req) => net(req instanceof FakeRequest ? req : new FakeRequest(req));
@@ -118,7 +122,7 @@ function bootWorker({ net }) {
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(SW_SRC, sandbox, { filename: 'sw.js' });
+  vm.runInContext(src, sandbox, { filename: 'sw.js' });
 
   /** Drive an event the way the browser would, resolving whatever the handler passed to waitUntil. */
   const fire = async (type, extra = {}) => {
@@ -141,7 +145,20 @@ const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SRC)[1];
 // The real ASSETS/SHELL/REST arrays, pulled from the file itself so the tests describe the shipped
 // list rather than a guess at it (the same extraction trick validate-sw-assets.mjs uses).
 const buildSrc = SW_SRC.slice(SW_SRC.indexOf('const ASSETS = ['), SW_SRC.indexOf("self.addEventListener('install'"));
-const { ASSETS, SHELL, REST } = new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST };`)();
+const { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY } =
+  new Function(`${buildSrc}\nreturn { ASSETS, SHELL, REST, REST_MANIFEST, MANIFEST_KEY };`)();
+
+/** The warm is fire-and-forget from activate, so probes wait for its own completion signal:
+ *  the manifest it writes as its second-to-last act (cleanup of old caches is the last). */
+async function drainWarm(w, cacheName, maxMs = 3000) {
+  const t0 = Date.now();
+  for (;;) {
+    const c = w.caches.get(cacheName);
+    if (c && c.map.has(keyOf(MANIFEST_KEY))) return true;
+    if (Date.now() - t0 > maxMs) return false;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
 
 // --- 1. the install is small and atomic; the heavy tier is NOT part of it -----------------------
 
@@ -190,9 +207,9 @@ console.log('\n--- [KNOWN-BUG PROBE] a missing game asset must not abort the ins
   ok(`install still succeeds with ${dead} 404ing`, !installFailed);
 
   await w.fire('activate');
-  // The warm is deliberately fire-and-forget (it must not block functional events), so let its
-  // microtasks and awaits drain before asserting on the result.
-  await new Promise((r) => setTimeout(r, 30));
+  // The warm is deliberately fire-and-forget (it must not block functional events), so wait for
+  // its own completion signal before asserting on the result.
+  ok('the warm still completes with the bad path in the list', await drainWarm(w, CACHE_NAME));
 
   const cache = w.caches.get(CACHE_NAME);
   ok('the shell is cached despite the bad path', cache.map.has(keyOf('./index.html')));
@@ -355,6 +372,115 @@ console.log('\n--- fetch: images remain cache-first ---');
   ok('...but with NOTHING cached, the error response is still passed through honestly',
     !!(res && res.ok === false && res.tag === 'NET-503'),
     'a request with no cached copy has nothing better to offer, and must not invent one');
+}
+
+// --- 7. the manifest-driven warm: a deploy must not re-download the whole REST tier -------------
+// [KNOWN-BUG PROBE] Born red on 2026-08-23 against the pre-manifest worker. CACHE is bumped on
+// essentially every commit (~13 deploys/day when this landed), and every bump rolled the cache
+// name over, so warmRest() re-downloaded the ENTIRE ~11 MB REST tier on nearly every open of the
+// hub - measured at 347 requests / 12.6 MB per deploy, which is the "launcher got laggy" report:
+// the storm saturated the connection for the whole session on any device that opened the hub
+// after a deploy. The REST_MANIFEST content hashes are what let the warm tell "unchanged" (GitHub
+// Pages re-stamps every mtime/ETag per deploy, so HTTP validators cannot), and the old cache is
+// the copy source.
+
+console.log('\n--- [KNOWN-BUG PROBE] a CACHE bump carries unchanged REST files forward ---');
+
+{
+  // Deploy 1: a fresh device installs and warms in full (that part is expected and unchanged).
+  let netPaths = [];
+  const recorder = async (req) => { netPaths.push(new URL(req.url).pathname); return new FakeResponse('gen1'); };
+  const w1 = bootWorker({ net: recorder });
+  await w1.fire('install');
+  await w1.fire('activate');
+  ok('deploy 1: the fresh-install warm completes', await drainWarm(w1, CACHE_NAME));
+  const restFetches1 = netPaths.filter((p) => REST.some((r) => keyOf(r) === ORIGIN + p)).length;
+  ok('deploy 1: a fresh device fetches the whole REST tier (nothing to carry yet)',
+    restFetches1 >= REST.length - 1, `fetched ${restFetches1} of ${REST.length}`);
+
+  // Deploy 2: CACHE bumped, manifest UNCHANGED (the overwhelmingly common deploy).
+  const bumped = SW_SRC.replace(/const CACHE = 'game-hub-v(\d+)'/, (_, n) => `const CACHE = 'game-hub-v${Number(n) + 1000}'`);
+  const BUMPED_NAME = /const CACHE = '([^']+)'/.exec(bumped)[1];
+  netPaths = [];
+  const w2 = bootWorker({ net: recorder, src: bumped, existingCaches: w1.caches });
+  await w2.fire('install');
+  await w2.fire('activate');
+  ok('deploy 2: the warm completes', await drainWarm(w2, BUMPED_NAME));
+  const restFetches2 = netPaths.filter((p) => REST.some((r) => keyOf(r) === ORIGIN + p)).length;
+  eq('[KNOWN-BUG PROBE] deploy 2 re-downloads ZERO unchanged REST files (was: all 292)', restFetches2, 0);
+  const newCache = w2.caches.get(BUMPED_NAME);
+  ok('every REST entry was carried into the new cache anyway',
+    REST.every((p) => newCache.map.has(keyOf(p))),
+    'carried-forward entries must be present, not merely skipped');
+  ok('the old cache is deleted once the warm is done (still exactly one generation at rest)',
+    !w2.caches.has(CACHE_NAME));
+
+  // Deploy 3: one REST file actually changed (its hash differs) - that one, and only that one,
+  // must be re-fetched. A manifest that carried a CHANGED file forward would serve stale bytes
+  // to the cache-first image path forever, which is the one invariant the old full re-download
+  // bought; this probe is what proves the manifest keeps it.
+  const changedPath = REST.find((p) => REST_MANIFEST[p]);
+  const bumped3 = bumped
+    .replace(/const CACHE = '([^']+)'/, `const CACHE = 'game-hub-v99999'`)
+    .replace(`'${changedPath}': '${REST_MANIFEST[changedPath]}'`, `'${changedPath}': 'aaaaaaaaaa'`);
+  netPaths = [];
+  const w3 = bootWorker({ net: recorder, src: bumped3, existingCaches: w2.caches });
+  await w3.fire('install');
+  await w3.fire('activate');
+  ok('deploy 3: the warm completes', await drainWarm(w3, 'game-hub-v99999'));
+  const restFetches3 = netPaths.filter((p) => REST.some((r) => keyOf(r) === ORIGIN + p));
+  eq('a changed hash re-fetches exactly that file', restFetches3.length, 1);
+  ok('...and it is the changed file', restFetches3[0] === new URL(keyOf(changedPath)).pathname,
+    `fetched ${restFetches3[0]}`);
+}
+
+// --- 8. mid-warm, the previous deploy's cache still answers -------------------------------------
+// The old delete-at-activate behaviour opened a window on EVERY deploy where games had no cache
+// at all: the old cache was gone and the new one held only the shell, so any game opened during
+// the warm queued behind it on the network (and was broken offline). Old caches now live until
+// the warm finishes - and the CURRENT cache must win when both hold an entry, because
+// caches.match searches in cache-CREATION order, which would hand back the older copy.
+
+console.log('\n--- fetch: current cache beats a lingering older generation ---');
+
+{
+  const w = bootWorker({ net: async () => { throw new Error('offline'); } });
+  const older = await w.cachesApi.open('game-hub-v1');       // created FIRST, like a real leftover
+  const current = await w.cachesApi.open(CACHE_NAME);
+  await older.put(new FakeRequest('./js/hub.js'), new FakeResponse('STALE', { tag: 'old-gen' }));
+  await current.put(new FakeRequest('./js/hub.js'), new FakeResponse('FRESH', { tag: 'current' }));
+  const res = await w.fire('fetch', { request: new FakeRequest('./js/hub.js') });
+  eq('the CURRENT cache answers even though the older cache was created first', res.body, 'FRESH');
+
+  const onlyOld = await w.fire('fetch', { request: new FakeRequest('./css/hub.css') }).catch(() => null);
+  // seed only the old generation for a second path:
+  await older.put(new FakeRequest('./css/name-gate.css'), new FakeResponse('OLD-ONLY'));
+  const res2 = await w.fire('fetch', { request: new FakeRequest('./css/name-gate.css') });
+  eq('an entry only the older generation holds still answers mid-warm (no dead window)', res2.body, 'OLD-ONLY');
+}
+
+// --- 9. the manifest itself must match the bytes on disk ----------------------------------------
+// validate-sw-assets.mjs REWRITES the block; this check is what makes run-all-tests.mjs fail if a
+// stale one is about to ship (a session that edited a game file and skipped the validator). The
+// cost of shipping stale is bounded - online play is network-first regardless - but the whole
+// point of the manifest is that it tells the truth about the bytes.
+
+console.log('\n--- the REST_MANIFEST matches the deployed bytes ---');
+
+{
+  const { createHash } = await import('node:crypto');
+  const { readFileSync: rf, existsSync: ex } = await import('node:fs');
+  const stale = [];
+  for (const entry of REST) {
+    let rel = entry.replace(/^\.\//, '');
+    if (rel === '' || rel.endsWith('/')) rel += 'index.html';
+    const abs = join(ROOT, rel);
+    if (!ex(abs)) continue; // validate-sw-assets.mjs owns missing-file failures
+    const h = createHash('sha256').update(rf(abs)).digest('hex').slice(0, 10);
+    if (REST_MANIFEST[entry] !== h) stale.push(entry);
+  }
+  ok('REST_MANIFEST matches the bytes on disk (else run: node validate-sw-assets.mjs, commit sw.js)',
+    stale.length === 0, `stale entries: ${stale.slice(0, 5).join(', ')}${stale.length > 5 ? ` (+${stale.length - 5} more)` : ''}`);
 }
 
 // --- summary -----------------------------------------------------------------------------------

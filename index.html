@@ -169,10 +169,18 @@
     }
 
     // Register the service worker (offline + installable). Ignored on file://.
+    //
+    // readyState check (2026-08-23): this line runs AFTER the awaited dynamic imports above, and
+    // the window 'load' event does NOT wait for those - so on a slow connection load has often
+    // already fired by the time this executes, and a bare addEventListener('load') callback would
+    // simply never run. Measured for real: with modules throttled, load fired at ~285 ms while
+    // the import chain finished at ~750 ms, and the SW never registered at all on a first visit.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      window.addEventListener('load', () => {
+      const registerSW = () => {
         navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
-      });
+      };
+      if (document.readyState === 'complete') registerSW();
+      else window.addEventListener('load', registerSW);
     }
   </script>
 </body>

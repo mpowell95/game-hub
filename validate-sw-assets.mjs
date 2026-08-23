@@ -5,11 +5,19 @@
 // deployed .js/.css/.html files that AREN'T in ASSETS, so a future addition isn't forgotten the
 // way connect-four/index.html was.
 //
+// Since 2026-08-23 it ALSO maintains sw.js's REST_MANIFEST block: the content hash per REST-tier
+// file that lets warmRest() carry unchanged files across a CACHE bump instead of re-downloading
+// the whole ~11 MB tier on every deploy (GitHub Pages re-stamps every mtime/ETag per deploy, so
+// only a content hash can prove "unchanged"). A stale manifest is REWRITTEN in place here - this
+// script already runs before every deploy, so keeping it fresh is not a new step - and
+// test-sw-strategy.mjs fails loudly if a stale one is ever about to ship anyway.
+//
 // Run: node validate-sw-assets.mjs
 
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname, relative } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SW_PATH = join(ROOT, 'sw.js');
@@ -137,4 +145,44 @@ if (missingFromAssets.length) {
   console.log('ok   every scanned .js/.css/.html file is in ASSETS (or a documented exclusion)');
 }
 
-process.exit(offenders.length ? 1 : 0);
+// --- 4. The REST content manifest: verify against disk, rewrite in place when stale ------------
+// The same executed-slice trick as step 1 gives the real SHELL/REST split (isShellAsset and the
+// two filters are inside the slice), so this can never disagree with the worker about which tier
+// a path is in.
+let manifestFailed = false;
+{
+  const { REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
+  const expected = {};
+  for (const entry of REST) {
+    const rel = resolveAssetPath(entry);
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) continue; // already reported as an offender in step 2
+    expected[entry] = createHash('sha256').update(readFileSync(abs)).digest('hex').slice(0, 10);
+  }
+  const START = '// __REST_MANIFEST_START__';
+  const END = '// __REST_MANIFEST_END__';
+  const a = swSrc.indexOf(START);
+  const b = swSrc.indexOf(END);
+  if (a < 0 || b < 0 || b <= a) {
+    console.log('\nFAIL: could not locate the REST_MANIFEST markers in sw.js (markers moved?)');
+    manifestFailed = true;
+  } else {
+    let current = {};
+    try {
+      const block = swSrc.slice(a, b);
+      current = new Function(`${block.split('\n').filter((l) => !l.startsWith('//')).join('\n')}\nreturn REST_MANIFEST;`)();
+    } catch { /* unparseable block: treat as fully stale and rewrite */ }
+    const changed = REST.filter((p) => current[p] !== expected[p]);
+    const removed = Object.keys(current).filter((p) => !(p in expected));
+    if (changed.length || removed.length) {
+      const lines = REST.filter((p) => p in expected).map((p) => `  '${p}': '${expected[p]}',`);
+      const block = `${START}\nconst REST_MANIFEST = {\n${lines.join('\n')}\n};\n${END}`;
+      writeFileSync(SW_PATH, swSrc.slice(0, a) + block + swSrc.slice(b + END.length));
+      console.log(`\nok   REST_MANIFEST rewritten: ${changed.length} added/changed, ${removed.length} removed - commit sw.js`);
+    } else {
+      console.log('ok   REST_MANIFEST matches the bytes on disk');
+    }
+  }
+}
+
+process.exit(offenders.length || manifestFailed ? 1 : 0);
