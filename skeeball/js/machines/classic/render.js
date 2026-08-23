@@ -179,7 +179,7 @@ export class Renderer {
       mesh.receiveShadow = true;
       // GUARD: the side walls do not cast shadows. A shadow across the scoring area reads as
       // dirt on the board - the same reason the key light is nearly overhead (see _lights).
-      if (s.part !== 'lane' && s.part !== 'board' && s.part !== 'rail') mesh.castShadow = true;
+      if (s.part !== 'lane' && s.part !== 'board' && s.part !== 'rail' && s.part !== 'cove') mesh.castShadow = true;
       this.scene.add(mesh);
     }
 

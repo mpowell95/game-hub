@@ -441,6 +441,39 @@ These were built, then deliberately deleted, and must not be reintroduced:
   in-play camera angle they read as the walls of a corridor rather than an arcade cabinet. If the
   background looks visually flat without them, the fix is lighting, not reintroducing the panels.
 
+### The back wall does not lift the ball (2026-08-23)
+
+Matt: "in real life there is NO rise. There would NEVER be ANY rise." Balls were leaving the
+backboard travelling upward, peaking as much as 0.73m ABOVE where they arrived, then dropping
+into the 40/50 or an off-centre 100 - a slam paid by a physics artifact. Measured to three
+separate causes, each fixed at its own root; the 2026-08-22 session's parked "rise with no
+friction to explain it" was causes 2 and 3 wearing cause 1's jersey:
+
+1. **Wall grip x serve topspin** (the big one, +1.8 m/s in one wall-only contact step). The ball
+   reaches the wall still spinning (~75 rad/s - nothing in flight slows a spin), and a gripping
+   wall converts spin into climb, like a wheel mounting a curb. Worse, cannon caps friction at
+   grip x GRAVITY x mass (the 'mug' term), never by how hard the ball actually pressed in, so
+   the impulse ran ~3x past the real Coulomb limit. Fix: the backboard has its own zero-grip
+   material (`matBack` in physics.js; the kicker keeps matDead's grip). A padded wall cannot
+   transmit a curb-climb impulse.
+2. **The top-corner cradle** (+2.76 m/s solver escape kicks, and 27 of 861 sweep throws parked
+   for watchdog jam-zeros). The 100 ring's flat rim top, the backboard and the rail formed a
+   three-point cradle exactly one ball wide - the spacing rule's pocket, at the one spot the
+   sweep's reach checks never rolled through. Fix: the corner gussets in machine.js - real
+   cabinetry merging the gap, sloped to shed balls onto the open centre face (deliberately
+   never toward the mouth: no geometry-assisted 100s).
+3. **The top-crease corner rebound** (kept - it is real). Where the 45-degree face meets the
+   wall, a ball can touch both in the same solver step, and the face honestly converts
+   wall-ward speed into a small upward hop (~5cm), exactly as a real V-corner does. This is
+   not the wall lifting the ball, and no "fix" for it is wanted.
+
+The rule is pinned by test.js: in a WALL-ONLY contact step, upward gain must be <= 0, no
+tolerance. Outcome shift, measured on the 861-cell grid: 50 cells changed, all wall-involved;
+overpowered straight slams (p >= 0.675) now die at the wall and roll home for the trough's 10
+instead of being lifted into the 50/40, while the honest straight 50 at p 0.60-0.65 (a real
+arc into the cup, no wall) survives. The corner emergencies fell 31 -> 4, all 4 pre-existing
+low-power lane stalls.
+
 ## Rendering
 
 ### Camera and framing

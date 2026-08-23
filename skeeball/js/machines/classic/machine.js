@@ -346,6 +346,40 @@ export function buildMachine(G) {
     rot: null,
   });
 
+  // --- the corner gussets -------------------------------------------------------------------------
+  // A sloped block filling each top corner, from just behind the 100 ring's crown back to the
+  // wall and sideways into the rail. WHY: the crown's flat rim top, the backboard and the rail
+  // form a three-point cradle exactly one ball wide - measured 2026-08-23, 27 of 861 sweep
+  // throws ended parked at (±0.45, 1.52, -2.97) on that perch, every one a watchdog jam-zero,
+  // and the wedge's three contact normals are also what fired the solver's +2.76 m/s escape
+  // kick (the "rise with no friction" the 2026-08-22 session parked unexplained). The spacing
+  // rule (boards.js): every gap is MERGED or wider than a ball. This merges it.
+  //
+  // The slope sheds toward the OPEN CENTRE FACE, never toward the mouth - a ball dying in the
+  // corner slides off the gusset onto bare board between the 100 and the 50 column and rolls
+  // home honestly. It deliberately stops 0.05 short of the mouth's edge, so nothing funnels
+  // into the 100 (the no-magnetism ban applies to geometry too). Both ends are buried (rail
+  // side into the rail, back into the wall), so the gusset itself opens no new slot.
+  for (const s of [-1, 1]) {
+    const id = s < 0 ? '100L' : '100R';
+    const rim = ringSegs.filter((r) => r.ring === id);
+    const apexY = Math.max(...rim.map((r) => r.pos[1] + r.half[1]));   // crown top, world y
+    const apexSeg = rim.find((r) => r.pos[1] + r.half[1] === apexY);
+    const H100 = G.holes[id];
+    const xIn = s * (Math.abs(H100.u) - H100.r - 0.05);   // low edge: over open face, clear of the mouth
+    const xOut = s * (G.boardW / 2 + railT / 2);          // high edge: buried in the rail
+    const yIn = apexY - 0.03;                             // below the crown apex, over open face
+    const yOut = apexY + 0.055;                           // crosses the crown with a sub-ball gap
+    const zBack = top[2] - 0.01;                          // buried in the backboard
+    const zFront = apexSeg.pos[2] + 0.02;                 // just behind the crown's line
+    solids.push({
+      part: 'cove',
+      pos: [(xIn + xOut) / 2, (yIn + yOut) / 2, (zBack + zFront) / 2],
+      half: [Math.hypot(xOut - xIn, yOut - yIn) / 2, 0.01, Math.abs(zBack - zFront) / 2],
+      rot: { axis: [0, 0, 1], angle: Math.atan2(yOut - yIn, xOut - xIn) },
+    });
+  }
+
   // --- the cage: REMOVED, do not reintroduce -----------------------------------------------------
   // GUARD: there is no wire canopy over the board. There used to be, to catch overly high
   // "rainbow" throws before they left the machine, but it contradicts the rule that there is no

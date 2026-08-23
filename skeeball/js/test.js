@@ -246,6 +246,49 @@ if (!G.reach) {
     }
     ok('the 100 cups need real aim, never a straight ball', !straight100);
   }
+
+  // THE BACK WALL, ALONE, NEVER LIFTS A BALL. Matt: "in real life there is NO rise. There would
+  // NEVER be ANY rise." The wall is vertical and grip-free (classic physics.js, matBack), so a
+  // contact with the wall and nothing else can only change the ball's z speed - any upward gain
+  // in a wall-only step is the engine inventing force along a frictionless surface.
+  //
+  // It used to lift. The wall had grip (deadFric 0.24), the ball reaches it still carrying its
+  // serve topspin, and the spin bit and drove it UP - measured 2026-08-23: one wall-only step
+  // added +1.8 m/s of upward speed, peaking 0.73m above arrival, then dropping into the 40/50
+  // or a 100. Two other culprits wore the wall's jersey and are why this is scoped to WALL-ONLY
+  // steps (they were 2026-08-22's parked "rise with no friction" mystery): the top-corner
+  // cradle's solver escape kick (+2.76 m/s - fixed by machine.js's corner gussets), and the
+  // top-crease corner rebound, where the 45-degree face and the wall touch in the SAME step and
+  // the face honestly converts wall-ward speed into a small hop. That last one is real physics
+  // - a ball thrown into a V-corner rebounds - and stays.
+  //
+  // Written as the RULE, not a tolerance: no margin to creep, nothing to loosen later.
+  if (G.reach || G.mat) {
+    let worst = null;
+    let checked = 0;
+    for (let p2 = 60; p2 <= 115; p2 += 1) {
+      for (const aim of [-1, -0.6, -0.3, 0, 0.3, 0.6, 1]) {
+        const st = startThrow(board, { power: p2 / 100, aim });
+        for (let i = 0; i < 240 * 12 && !st.done; i++) {
+          const vyBefore = st.ball.velocity.y;
+          step(board, st, STEP);
+          takeEvents(st);
+          // "Wall-only" is judged on the SOLVER's contact list, never on logged contact events: a
+          // resting face contact is below the event log's vn threshold, so in the crease the face
+          // lifts the ball while the event log shows only the wall - measured 2026-08-23, all 68
+          // event-judged "wall-only" gains were board+backboard in the solver.
+          const parts = st.world.contacts.map((c) => ((c.bi.userData || c.bj.userData) || {}).part);
+          if (!parts.length || !parts.every((q) => q === 'backboard')) continue;
+          checked++;
+          const gained = st.ball.velocity.y - vyBefore;
+          if (!worst || gained > worst.gained) worst = { gained, power: p2 / 100, aim };
+        }
+      }
+    }
+    ok('the back wall alone never lifts a ball (no upward gain, at any power or aim)',
+      !worst || worst.gained <= 0,
+      worst ? `worst: ${worst.gained >= 0 ? '+' : ''}${worst.gained.toFixed(3)} m/s at power ${worst.power.toFixed(2)}, aim ${worst.aim} (${checked} wall-only contact steps checked)` : 'no wall contacts');
+  }
 }
 
 // --- 3. the power curve keeps its emergent shape (aim 0) ---------------------------------------
