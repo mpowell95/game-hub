@@ -58,16 +58,26 @@ exact failure `VISUAL-PROCESS.md` exists to prevent (look at the picture before 
 if there is no picture, ask for one). That rule was read and skipped anyway; do not repeat this.
 The photos and researched behavior now live in this file and in `boards.js`'s `scoring` comment.
 
-**RELEASED 2026-08-22.** The hub entry dropped `devOnly` and took a `released` date the same day,
-which is what makes the launcher's New pill announce it. Admin-only before that, from 2026-08-11.
-Unlike Pinball, which is still admin-only, the stats id already has REAL family history (the game was live for a couple of hours
-on 2026-08-11 under the previous build), which drives every storage decision below.
+**ADMIN ONLY AGAIN since 2026-08-23** (Matt's ask), exactly like Pinball: the hub entry carries
+`devOnly: true` and no `released` date. It WAS released 2026-08-22 and pulled back the next day,
+after work done for POPONGO and BASKET FEVER turned out to be landing in the shared engine and
+changing how THE CLASSIC plays - see "work on one machine, change one machine" above.
+
+Re-releasing is four edits, and three of them are what stop the release being silently broken:
+drop `devOnly` in `js/hub.js`, add a FRESH `released` date there (the only input to the launcher's
+New pill - the old date is gone on purpose so the pill announces the real day), put the
+`GAME_META` row back in `js/leaderboard-ui.js`, and take `skeeball` back out of
+`players-agg.test.mjs`'s `OFF_THE_BOARD`. Miss the row and every Skeeball win counts as ZERO
+while My Stats still shows it, which is how Yahtzee shipped.
+
+Unlike Pinball, the stats id already has REAL family history (the game was live for a couple of
+hours on 2026-08-11 under the previous build), which drives every storage decision below.
 
 ## Hub integration
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../skeeball/js/ui.js'`, `immersive: true`, `released: '2026-08-22'`, hub id `skeeball` |
+| Registry | `module: '../skeeball/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `skeeball` |
 | Stats id | `skeeball` (recorder `recordSkeeball`, sub-counter `sk`) — **pre-existing, frozen** |
 | CSS root / prefix | `.sk-root` / `.sk-` |
 | Settings key | `gamehub.skeeball.v1` (one preference: the selected machine) |
@@ -593,10 +603,12 @@ history keeps accumulating rather than being orphaned:
   branch) all predate this rewrite and were left as they are; `players-agg.test.mjs` carries the
   regression case.
 
-The leaderboard row went in on 2026-08-22, with the release: a `GAME_META` entry in
-`js/leaderboard-ui.js`, and `skeeball` out of `players-agg.test.mjs`'s `OFF_THE_BOARD`. It was
-deliberately absent before then. That test's parser guard also dropped from `devOnly.size >= 2` to
-`>= 1`, because Pinball is now the only admin-only game left. The My Stats tab is deliberately PRESENT and not devOnly — family members may have real
+The leaderboard row went in on 2026-08-22 with the release and came back OUT on 2026-08-23 with
+the pull-back: no `GAME_META` entry in `js/leaderboard-ui.js`, and `skeeball` back in
+`players-agg.test.mjs`'s `OFF_THE_BOARD` (that test asserts an `OFF_THE_BOARD` entry is not
+stale, so the two can never disagree). That test's parser guard tracks the count of dev-only
+games and went `>= 2` -> `>= 1` -> `>= 2` across the same three days. NOTHING WAS LOST either
+time (THE LAW rule 1): every play stayed in each device's store and in `players/`. The My Stats tab is deliberately PRESENT and not devOnly — family members may have real
 plays from the hours the old build was live, and hiding the tab would make their own history
 invisible (rule 1; the comment on the `TABS` row records this).
 
