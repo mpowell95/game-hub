@@ -45,7 +45,8 @@ function buildWorld(board) {
   const matBoard = new CANNON.Material('board');   // the face: livelier
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
-  const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
+  const matDead = new CANNON.Material('dead');     // kick + keep: padded, kills the ball
+  const matBack = new CANNON.Material('back');     // the backboard: padded AND grip-free (see its contact)
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
   const matRing100 = new CANNON.Material('ring100');
@@ -69,6 +70,20 @@ function buildWorld(board) {
   contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
   contact(matBall, matRing100, pick(MAT.ring100Fric, 0.06), pick(MAT.ring100Rest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
+  // THE BACK WALL HAS NO GRIP, AND THAT IS THE POINT. The ball reaches it still carrying its
+  // serve topspin (~75 rad/s - nothing in flight slows a spin), and a gripping wall converts
+  // spin into LIFT: measured 2026-08-23, a single contact step added +1.8 m/s of upward speed
+  // with only the backboard touching, and the ball peaked 0.73m HIGHER than it arrived, then
+  // dropped into the 40/50 (or off-centre into a 100). Matt: "in real life there is NO rise.
+  // There would NEVER be ANY rise." A padded wall cannot transmit a curb-climb impulse.
+  //
+  // The engine also over-applies wall friction ~3x past the real Coulomb limit: cannon caps
+  // friction at grip x GRAVITY x mass (vendor/cannon-es.js, the 'mug' term), never at grip x
+  // how hard the ball actually pressed in, which is far too generous on a fast graze. We do
+  // not hand-patch the vendored engine; zero grip removes the input it was over-applying.
+  // BASKET FEVER's engine reached the same conclusion independently (deadFric 0.06 on its
+  // bank-shot wall). 'kick' and 'keep' stay on matDead: the kicker keeps its grip.
+  contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
 
   for (const s of M.solids) {
     // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
@@ -86,7 +101,8 @@ function buildWorld(board) {
         : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+            : s.part === 'backboard' || s.part === 'cove' ? matBack
+            : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
