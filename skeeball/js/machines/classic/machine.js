@@ -346,39 +346,25 @@ export function buildMachine(G) {
     rot: null,
   });
 
-  // --- the corner gussets -------------------------------------------------------------------------
-  // A sloped block filling each top corner, from just behind the 100 ring's crown back to the
-  // wall and sideways into the rail. WHY: the crown's flat rim top, the backboard and the rail
-  // form a three-point cradle exactly one ball wide - measured 2026-08-23, 27 of 861 sweep
-  // throws ended parked at (±0.45, 1.52, -2.97) on that perch, every one a watchdog jam-zero,
-  // and the wedge's three contact normals are also what fired the solver's +2.76 m/s escape
-  // kick (the "rise with no friction" the 2026-08-22 session parked unexplained). The spacing
-  // rule (boards.js): every gap is MERGED or wider than a ball. This merges it.
+  // --- the corner gussets: REMOVED 2026-08-23, the same day they went in -------------------------
+  // Two sloped plates briefly filled the top corners, because under the DEAD wall (backRest
+  // 0.10) the 100 ring's flat rim top + the rail + the backboard formed a three-point cradle
+  // exactly one ball wide: 27 of 861 sweep throws parked there as watchdog jam-zeros, and the
+  // wedge's contact normals fired the solver's +2.76 m/s escape kicks. Matt disliked the look
+  // ("diagonal pieces above the 100... less in the way") - fairly: the plates roofed the whole
+  // 100 mouth. By then the wall had become BOUNCY (backRest 0.60, boards.js), which ejects most
+  // corner arrivals, and Matt chose bare corners over the plates knowing the tests' numbers.
   //
-  // The slope sheds toward the OPEN CENTRE FACE, never toward the mouth - a ball dying in the
-  // corner slides off the gusset onto bare board between the 100 and the 50 column and rolls
-  // home honestly. It deliberately stops 0.05 short of the mouth's edge, so nothing funnels
-  // into the 100 (the no-magnetism ban applies to geometry too). Both ends are buried (rail
-  // side into the rail, back into the wall), so the gusset itself opens no new slot.
-  for (const s of [-1, 1]) {
-    const id = s < 0 ? '100L' : '100R';
-    const rim = ringSegs.filter((r) => r.ring === id);
-    const apexY = Math.max(...rim.map((r) => r.pos[1] + r.half[1]));   // crown top, world y
-    const apexSeg = rim.find((r) => r.pos[1] + r.half[1] === apexY);
-    const H100 = G.holes[id];
-    const xIn = s * (Math.abs(H100.u) - H100.r - 0.05);   // low edge: over open face, clear of the mouth
-    const xOut = s * (G.boardW / 2 + railT / 2);          // high edge: buried in the rail
-    const yIn = apexY - 0.03;                             // below the crown apex, over open face
-    const yOut = apexY + 0.055;                           // crosses the crown with a sub-ball gap
-    const zBack = top[2] - 0.01;                          // buried in the backboard
-    const zFront = apexSeg.pos[2] + 0.02;                 // just behind the crown's line
-    solids.push({
-      part: 'cove',
-      pos: [(xIn + xOut) / 2, (yIn + yOut) / 2, (zBack + zFront) / 2],
-      half: [Math.hypot(xOut - xIn, yOut - yIn) / 2, 0.01, Math.abs(zBack - zFront) / 2],
-      rot: { axis: [0, 0, 1], angle: Math.atan2(yOut - yIn, xOut - xIn) },
-    });
-  }
+  // THE MEASURED RESIDUAL, accepted deliberately: gusset-free under the bouncy wall, 10 of 861
+  // sweep throws (1.2%, inside the 2% walkout cap; was 27 under the dead wall) still find the
+  // perch on hard extreme-corner slams and resolve by the watchdog's own rule - a jammed ball
+  // scores zero and vanishes - and the corner's solver kicks are back at <= +0.94 m/s (a ~5cm
+  // hop; the old +2.76 class is gone with the wall's grip). Engine suite green throughout.
+  //
+  // GUARD: the corner protection is the WALL'S RESTITUTION, not geometry. If backRest ever
+  // drops back near dead (< ~0.3), re-run the emergency sweep before shipping - the cradle
+  // strengthens with a dead wall, and test.js's walkout cap plus the wall-lift assertion are
+  // the tripwires that catch it.
 
   // --- the cage: REMOVED, do not reintroduce -----------------------------------------------------
   // GUARD: there is no wire canopy over the board. There used to be, to catch overly high
