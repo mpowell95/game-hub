@@ -226,6 +226,19 @@ one back-wall clip). What each clip proved and what changed:
   459 throws, slowest settle 4.92s; ladder low from p~0.20 / mid p~0.40 / top p~0.60, the 100
   straight at p0.60-0.72.
 
+REVERSED 2026-08-23, Matt's explicit order after he saw the traced-trajectory blueprint of what
+the fix below actually did: the front-of-tread basket placement (and the deeper 0.36m treads
+that existed to serve it) is "a horrible fix that creates significantly more problems than it
+fixes." Baskets are back at the BACK of each 0.30m tread, against the risers, where the real
+cabinet hangs them. The consequence is accepted and on the record: straight fast throws
+p0.60-1.30 score 12 of 15 through the back wall (7 into the 100, 5 into the 60) - that is the
+real machine's behavior, not a defect to re-fix. Everything else from the tuning pass stands
+(1.0X mouths, 0.28m risers, backboardH 0.85, deadRest 0.32). Do not re-apply the front
+placement. Post-revert sweep: all nine capturable, 0 emergencies in 459, slowest settle 5.4s.
+
+The original tuning-pass record, kept for history (its placement half is the part that was
+reversed):
+
 The staircase tuning pass, same day, from Matt's first play of it: (1) "thrown straight at any
 fast speed, the ball bounces off the back wall and into the 100 almost every time" - the top
 basket sat 1.5cm from the back wall, directly under both the wall-drip and wall-rebound landing
