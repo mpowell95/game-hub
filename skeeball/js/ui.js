@@ -653,6 +653,20 @@ export class SkeeballUI {
     this._pushScoreboard();
     this._bindPlay();
     if (!this._fit()) this._fitWhenLaidOut();
+    // Watch the STAGE ELEMENT for size changes, not just the viewport. On the first load after
+    // a deploy the stage measures before skeeball.css has re-fetched, so _fit() succeeds at the
+    // unstyled size and nothing re-fits when the stylesheet lands - the machine rendered
+    // squashed into the top half until the game was closed and reopened (Matt, 2026-08-23).
+    // onViewportResize cannot see that reflow (the window never resized); only the element can.
+    // Coalesced to one _fit per frame; _fit() itself is a no-op when nothing changed materially.
+    if (this._ro) this._ro.disconnect();
+    if (typeof ResizeObserver === 'function') {
+      this._ro = new ResizeObserver(() => {
+        if (this._roRaf) return;
+        this._roRaf = requestAnimationFrame(() => { this._roRaf = 0; this._fit(); });
+      });
+      this._ro.observe(this.el.stage);
+    }
     this.last = 0;
     this.raf = requestAnimationFrame(this._loop);
   }
@@ -1178,6 +1192,8 @@ export class SkeeballUI {
     if (this._rotate) { this._rotate.remove(); this._rotate = null; }
     if (this._unsubLang) this._unsubLang();
     if (this._unsubViewport) this._unsubViewport();
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
+    if (this._roRaf) { cancelAnimationFrame(this._roRaf); this._roRaf = 0; }
     this.game = null;
     if (this.renderer) this.renderer.dispose();   // WebGL contexts leak if not released
     this.renderer = null;

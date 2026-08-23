@@ -201,6 +201,15 @@ export const BOARDS = [
         ring100Rest: 0.18,
         deadFric: 0.24,
         deadRest: 0.10,
+        // The backboard's own pair (matBack in machines/classic/physics.js). Zero grip: the wall
+        // must never convert serve topspin into climb (DECISIONS.md, "The back wall does not
+        // lift the ball"). 0.60 restitution: Matt, 2026-08-23, after a wall ball dropped into
+        // the 50 - "make it way bouncier, so it bounces way back towards the user". Measured at
+        // 0.60 over 34 hard wall throws: the 100s-off-the-wall fall 6 -> 0, dead-drop 50s gone,
+        // 27 of 34 end in the honest 10 or 0, and the rebound is visible. The kicker keeps
+        // deadFric/deadRest above.
+        backFric: 0,
+        backRest: 0.60,
       },
     },
   },
