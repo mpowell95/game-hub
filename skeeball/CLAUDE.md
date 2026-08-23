@@ -447,6 +447,13 @@ and two black **equalizers**.
   exact numbers), and a jammed or capped ball on a cup board resolves as the trough's zero
   instead of being walked into the nearest mouth (`st.cupBoard`). Falling through a mouth is
   the ONLY way to score here, including for the watchdog.
+- **And the honest rule cuts BOTH ways** (Matt's 23:42 clip, 2026-08-22, on BASKET FEVER): a
+  ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's VOLUME
+  and captures at any rattle speed (`physics.js`, the `lip > 0 && f.h < lip` branch). Without
+  it, a fast arrival that failed the kinematic prediction ended up sitting on the still-solid
+  slab INSIDE the collar - visibly in the basket - and could hop back out over the rim. The
+  pass-through commit still decides the score, so nothing pays without falling through; the
+  classic's flush holes (lip 0) are untouched.
 - **Renderer**: collars take their cup's color (`_scallopedRim` color param) and the cup's value
   rides `_cupPlate` - an arc on the cup's player-facing outer wall, where the real product
   prints it (a cup is CONCENTRIC with its hole, unlike a ring, so the arc centres on the hole).

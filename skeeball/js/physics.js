@@ -287,6 +287,19 @@ function substep(st) {
       // points for merely hitting a cup (Matt, 2026-08-22). Pure kinematics per hole; a hole
       // with no collar (every hole on THE CLASSIC) keeps the original number exactly.
       const lip = hDef.collarH > 0 ? hDef.collarH : 0;
+      // A ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's
+      // VOLUME - a real basket has it at any rattle speed. Without this, a fast arrival that
+      // failed the kinematic test below ended up sitting on the still-solid slab INSIDE the
+      // collar - visibly "in the basket" - and could hop back out over the rim (Matt's clip,
+      // 2026-08-22 23:42). Capture releases the slab; the pass-through commit at the top of
+      // this function still decides the score, so nothing pays without falling through.
+      if (lip > 0 && f.h < lip) {
+        st.captured = id;
+        st.capturedFaceY = p.y;
+        ball.collisionFilterMask = GROUP_REST;
+        st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
+        return;
+      }
       const needH = lip > 0 ? need + Math.max(0, f.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
