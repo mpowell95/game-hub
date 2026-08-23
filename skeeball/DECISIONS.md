@@ -493,6 +493,33 @@ slow-motion look was the tab's throttled clock (step() advances at most 0.1s of 
 frame, so heavy screenshotting runs the game at fraction speed). Do not add a ceiling, a
 power clamp, or wall lift back in response to that report.
 
+### The wall BOUNCES the ball back; the sign never moved, the wall grew around it (2026-08-23)
+
+Three fixes from Matt's phone test of v444, same evening:
+
+1. **The classic's wall is BOUNCY now (`backRest` 0.60 in its boards.js mat), not dead.** With
+   the grip fix in, a dead wall (rest 0.10) killed a slam's speed and DROPPED the ball straight
+   down at the wall's base - where the top cups live, so Matt's first test throw hit the wall
+   and dripped into the 50. His call: "make it way bouncier, so it bounces way back towards the
+   user" - which is also how the real cabinet's backstop behaves. Swept 0.10/0.30/0.45/0.60
+   over 34 hard wall throws: at 0.60 the 100s-off-the-wall fall 6 -> 0, the dead-drop 50s are
+   gone, 27 of 34 end in the honest 10 or 0, and the rebound reads on screen. BASKET FEVER's
+   own wall keeps its separately-tuned 0.32 bank shot; POPONGO's engine has no matBack and
+   reads none of these keys (verified by grep - the classic-only isolation held).
+2. **The sign was never lowered - the DRAWN wall was raised through it** (the jam-marquee slot
+   fix extended the physics wall past the marquee, and render drew the whole taller box with
+   the scoreboard texture: scoreboard stretched, sign visually buried; Matt read it as "Opus
+   brought the sign down"). All three machines' render.js now split the wall: scoreboard face
+   at its original backboardH, the MARQUEE_RISE extension drawn as plain cabinet (the solid
+   back the sign is mounted on), the sign untouched above the scoreboard. Physics unchanged -
+   the slot stays closed.
+3. **The squashed first render after a deploy** (machine drawn in the top half of the screen
+   until the game was closed and reopened): the stage was measured before skeeball.css had
+   re-fetched through the rolling-over service worker, `_fit()` succeeded at the unstyled size,
+   and nothing re-fit when the stylesheet landed - a viewport listener cannot see that reflow.
+   ui.js now puts a ResizeObserver on the stage element itself (coalesced to one _fit per
+   frame, disconnected in destroy), so ANY late layout change re-fits, deploys included.
+
 ## Rendering
 
 ### Camera and framing

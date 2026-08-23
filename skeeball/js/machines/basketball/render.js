@@ -165,14 +165,42 @@ export class Renderer {
       if (s.part === 'cage') { this._cage(s); continue; }
       // The backboard is the cabinet's face card and the SCOREBOARD. Its material is kept on
       // `_backMat` so setScoreboard() can repaint it in place.
+      //
+      // The physics wall is TALLER than the scoreboard: machine.js extends it past the marquee
+      // (MARQUEE_RISE) so no ball can thread behind the sign. Drawing that whole box with the
+      // scoreboard texture stretched the scoreboard over the extension and buried the sign
+      // inside the wall - Matt, 2026-08-23: the change "brought the sign down really low
+      // instead of making the wall go higher". So the scoreboard face keeps its original
+      // backboardH height, and the extension above it is drawn as plain cabinet: the solid
+      // back the sign is mounted on. The sign itself (_cabinet) rides just above the
+      // scoreboard, exactly where it always was.
+      if (s.part === 'backboard') {
+        this._backMat = this._mat({ map: this._track(this._paintBackboard()), roughness: 0.6 });
+        const botY = s.pos[1] - s.half[1];
+        const sb = new THREE.Mesh(
+          this._track(new THREE.BoxGeometry(s.half[0] * 2, G.backboardH, s.half[2] * 2)),
+          [cabinet, cabinet, cabinet, cabinet, this._backMat, cabinet],
+        );
+        sb.position.set(s.pos[0], botY + G.backboardH / 2, s.pos[2]);
+        sb.receiveShadow = true;
+        sb.castShadow = true;
+        this.scene.add(sb);
+        const riseH = s.half[1] * 2 - G.backboardH;
+        if (riseH > 0.001) {
+          const rise = new THREE.Mesh(
+            this._track(new THREE.BoxGeometry(s.half[0] * 2, riseH, s.half[2] * 2)), cabinet);
+          rise.position.set(s.pos[0], botY + G.backboardH + riseH / 2, s.pos[2]);
+          rise.receiveShadow = true;
+          rise.castShadow = true;
+          this.scene.add(rise);
+        }
+        continue;
+      }
       let mat;
       if (s.part === 'lane' || s.part === 'hump') mat = wood;
       else if (s.part === 'board') mat = faceEdge;
       else if (s.part === 'trough' || s.part === 'kick') mat = dark;
-      else if (s.part === 'backboard') {
-        this._backMat = this._mat({ map: this._track(this._paintBackboard()), roughness: 0.6 });
-        mat = [cabinet, cabinet, cabinet, cabinet, this._backMat, cabinet];
-      } else mat = woodDark;
+      else mat = woodDark;
       const mesh = new THREE.Mesh(this._track(new THREE.BoxGeometry(s.half[0] * 2, s.half[1] * 2, s.half[2] * 2)), mat);
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
       if (s.rot) mesh.quaternion.setFromAxisAngle(new THREE.Vector3(...s.rot.axis), s.rot.angle);
