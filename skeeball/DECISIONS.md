@@ -520,6 +520,19 @@ Three fixes from Matt's phone test of v444, same evening:
    ui.js now puts a ResizeObserver on the stage element itself (coalesced to one _fit per
    frame, disconnected in destroy), so ANY late layout change re-fits, deploys included.
 
+### The corner gussets came out the same day (2026-08-23, Matt's call, measured tradeoff)
+
+Matt on the plates: "I don't like the diagonal pieces above the 100... make something smaller
+and less in the way" - fairly, since they roofed the whole 100 mouth. Measured gusset-free
+under the NEW bouncy wall (backRest 0.60): 10 of 861 sweep throws still find the corner perch
+on hard extreme-corner slams (1.2%, inside the 2% walkout cap; 27 under the dead wall) and
+resolve by the jam rule - zero, ball gone - and the corner solver kicks return at <= +0.94 m/s
+(~5cm hop; the +2.76 class died with the wall's grip). Engine suite 59/0 either way. Matt
+chose bare corners over the plates ("deploy whatever the tests say is best"), so the corners
+are bare and the residual is the accepted cost, on the record here. The guard in machine.js
+says when to re-measure: if the wall's restitution ever drops back toward dead, the cradle
+strengthens again.
+
 ## Rendering
 
 ### Camera and framing
