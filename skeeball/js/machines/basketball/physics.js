@@ -11,7 +11,7 @@
 // simulateThrow(board, params) for tests. Deterministic: no rng, fixed timestep and solver
 // iterations, naive broadphase (stable pair order).
 
-import * as CANNON from './vendor/cannon-es.js';
+import * as CANNON from '../../vendor/cannon-es.js';
 import { buildMachine } from './machine.js';
 
 const H = 1 / 240;               // fixed physics step; flight and thin collars need the rate

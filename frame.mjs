@@ -15,7 +15,7 @@
 // FOV rule). It is a copy, so it can drift. If you change the camera in render.js, change it
 // here too; the mirrored blocks are marked.
 import * as THREE from './skeeball/js/vendor/three.module.min.js';
-import { buildMachine } from './skeeball/js/machine.js';
+import { buildMachine } from './skeeball/js/machines/classic/machine.js';
 import { BOARDS } from './skeeball/js/boards.js';
 
 // A phone, portrait. The tightest case: a tall narrow frame has the least horizontal room.

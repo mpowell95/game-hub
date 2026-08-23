@@ -8,10 +8,10 @@
 // pins the mechanics tuned by feel, so a geometry or material tweak that kills the 100
 // pockets or the rollback fails here before anyone plays a broken machine.
 
-import { simulateThrow, startThrow, step, takeEvents, STEP } from './physics.js';
+import { engineFor } from './engines.js';
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { BOARDS, boardById, unlocksEarned, DEFAULT_BOARD } from './boards.js';
-import { buildMachine } from './machine.js';
+
 import { execFileSync } from 'node:child_process';
 
 // RUN ONLY WHAT YOUR CHANGE COULD BREAK. Nearly all of this file's runtime is a handful of
@@ -56,8 +56,8 @@ if (!FULL && !named.length && ARGV.includes('--auto')) {
     return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   };
   try {
-    const files = git(['diff', '--name-only', 'origin/main', '--', 'skeeball/js/physics.js',
-      'skeeball/js/machine.js', 'skeeball/js/boards.js']).split(/\r?\n/).filter(Boolean);
+    const files = git(['diff', '--name-only', 'origin/main', '--', 'skeeball/js/machines/classic/physics.js',
+      'skeeball/js/machines/classic/machine.js', 'skeeball/js/boards.js']).split(/\r?\n/).filter(Boolean);
     if (!files.length) { why = 'nothing physical differs from origin/main'; }
     else if (files.some((f) => !f.endsWith('boards.js'))) {
       for (const k of GROUPS) G[k] = true;
@@ -97,6 +97,11 @@ const eq = (label, got, want) => ok(label, JSON.stringify(got) === JSON.stringif
   `got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`);
 
 const board = boardById(DEFAULT_BOARD);
+// THE BOARD UNDER TEST BRINGS ITS OWN ENGINE (skeeball/js/engines.js). Every direct physics
+// call below is on THE CLASSIC, so these are the classic's own physics.js and machine.js, and
+// nothing in another machine's folder can move them. The game-level blocks (SkeeballGame)
+// resolve their engine per board, so a popongo rack there runs popongo's.
+const { physics: { simulateThrow, startThrow, step, takeEvents, STEP }, buildMachine } = engineFor(board.id);
 const M = buildMachine(board.geom);
 const outcomeOf = (power, aim) => {
   const r = simulateThrow(board, { power, aim });

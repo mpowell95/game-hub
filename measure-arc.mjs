@@ -20,8 +20,8 @@
 //     R = 2 v^2 cos(t) sin(t - a) / (g cos^2(a))
 // which is zero at t = a and negative below it. Everything else here is tuning; that is geometry.
 
-import { startThrow, step } from './skeeball/js/physics.js';
-import { buildMachine } from './skeeball/js/machine.js';
+import { startThrow, step } from './skeeball/js/machines/classic/physics.js';
+import { buildMachine } from './skeeball/js/machines/classic/machine.js';
 import { BOARDS } from './skeeball/js/boards.js';
 
 const overrides = JSON.parse(process.argv.find((a) => a.startsWith('{')) || '{}');

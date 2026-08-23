@@ -19,7 +19,7 @@
 // WHAT GOOD LOOKS LIKE: few flips, wide bands, no dead zone at either end, every value on the
 // board reachable, and monotonic - harder goes further - up to the overshoot.
 
-import { simulateThrow } from './skeeball/js/physics.js';
+import { simulateThrow } from './skeeball/js/machines/classic/physics.js';
 import { BOARDS } from './skeeball/js/boards.js';
 
 const args = process.argv.slice(2);
