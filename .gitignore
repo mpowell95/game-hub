@@ -8,7 +8,8 @@ desktop.ini
 node_modules/
 
 # Editor / tooling config (not part of the app)
-.claude/
+.claude/*
+!.claude/skills/
 
 # Local working docs (not for the public repo)
 HANDOFF.md

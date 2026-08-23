@@ -98,18 +98,39 @@ const eq = (label, got, want) => ok(label, JSON.stringify(got) === JSON.stringif
 
 const board = boardById(DEFAULT_BOARD);
 const M = buildMachine(board.geom);
+// THE SAME THROW IS NEVER SIMULATED TWICE. The engine is deterministic - the block directly
+// below proves it - so (board, power, aim) fixes the result completely. Counted over a --full
+// run, 813 of the 2484 throws it asks for are repeats of one already computed: block 3's ladder
+// is re-run in full three times by `firstAt`, which is 321 of the dial group's 422 on its own.
+// Memoising costs nothing in coverage and removes a third of the runtime.
+//
+// KEYED ON THE BOARD ID, not just the throw. A second machine in BOARDS would otherwise be handed
+// the classic's answer for the same swipe, and every number measured on it would be a lie that no
+// assertion could catch.
+//
+// The returned object is SHARED between callers - never mutate a throw result.
+const _throws = new Map();
+function throwOnce(b, power, aim) {
+  const k = b.id + "|" + power + "|" + aim;
+  let r = _throws.get(k);
+  if (r === undefined) { r = simulateThrow(b, { power, aim }); _throws.set(k, r); }
+  return r;
+}
 const outcomeOf = (power, aim) => {
-  const r = simulateThrow(board, { power, aim });
+  const r = throwOnce(board, power, aim);
   return r.outcome ? r.outcome.hole : 'returned';
 };
 const valueOf = (power, aim) => {
-  const r = simulateThrow(board, { power, aim });
+  const r = throwOnce(board, power, aim);
   return r.outcome ? r.outcome.value : 0;
 };
 
 // --- 1. determinism ---------------------------------------------------------------------------
 
 {
+  // GUARD: THESE TWO CALLS BYPASS `throwOnce` ON PURPOSE. Memoised, this would compare an object
+  // with ITSELF and pass however non-deterministic the engine became - and the memo's correctness
+  // rests on this very assertion, so it must never be the thing being cached.
   const a = simulateThrow(board, { power: 0.63, aim: 0.21 });
   const b = simulateThrow(board, { power: 0.63, aim: 0.21 });
   eq('same throw, same outcome, same timing', [a.outcome, a.time], [b.outcome, b.time]);
@@ -148,14 +169,14 @@ if (!G.reach) {
     ['h10', 0.15, 0], ['h20', 0.25, 0], ['c30', 0.35, 0], ['c40', 0.50, 0], ['c50', 0.62, 0],
     ['100L', 0.92, -0.42], ['100R', 0.75, 0.17], ['corner0', 0.83, 0],
   ]) {
-    const r = simulateThrow(board, { power, aim });
+    const r = throwOnce(board, power, aim);
     if (r.outcome && r.outcome.hole === hole) found.set(hole, { power, aim });
   }
 }
 {
   if (G.reach) for (let p = 0; p < SWEEP_POWERS; p++) {
     for (const aim of SWEEP_AIMS) {
-      const r = simulateThrow(board, { power: p / (SWEEP_POWERS - 1), aim });
+      const r = throwOnce(board, p / (SWEEP_POWERS - 1), aim);
       const hole = r.outcome ? r.outcome.hole : 'returned';
       if (!found.has(hole)) found.set(hole, { power: p / (SWEEP_POWERS - 1), aim });
       if (r.emergencyUsed) sweepEmergencies++;
@@ -178,7 +199,7 @@ if (!G.reach) {
     let anyRoll = 0;
     for (let p = 0; p <= 40; p++) {
       for (const aim of [0, 0.25, -0.25, 0.5, -0.5, 0.65, -0.65, 0.8, -0.8, 1, -1]) {
-        if (simulateThrow(board, { power: p / 40, aim }).outcome) continue;
+        if (throwOnce(board, p / 40, aim).outcome) continue;
         anyRoll++;
         if (Math.abs(aim) <= 0.25) straightRoll++;
       }
@@ -240,6 +261,44 @@ if (!G.reach) {
       if (String(outcomeOf(p / 60, 0)).startsWith('100')) straight100 = true;
     }
     ok('the 100 cups need real aim, never a straight ball', !straight100);
+  }
+
+  // THE BACK WALL NEVER LIFTS A BALL. Not a little - at all. Matt, 2026-08-22, watching it on
+  // his phone: "in real life there is NO rise. There would NEVER be ANY rise." A ball cannot
+  // leave a wall travelling upward faster than it arrived; there is no contact that permits it.
+  //
+  // It used to. The wall had grip, the ball still carries ~19 turns a second of spin when it
+  // gets there, and the spin bit and drove it UP - 0.37m higher than it arrived, then down into
+  // the 40 or 50, or off-centre into a 100. The wall has no grip now (physics.js matBack), so
+  // there is no force along it to do the lifting.
+  //
+  // Written as the RULE, not as a tolerance: no margin to creep, nothing to loosen later.
+  if (G.reach) {
+    let worst = null;
+    let checked = 0;
+    for (let p2 = 60; p2 <= 115; p2 += 1) {
+      for (const aim of [-1, -0.6, -0.3, 0, 0.3, 0.6, 1]) {
+        const st = startThrow(board, { power: p2 / 100, aim });
+        let before = null;
+        for (let i = 0; i < 240 * 12 && !st.done; i++) {
+          const vyBefore = st.ball.velocity.y;
+          step(board, st, STEP);
+          for (const ev of takeEvents(st)) {
+            if (!/back/i.test(String(ev.part || ev.type))) continue;
+            before = vyBefore;
+          }
+          if (before !== null) {
+            checked++;
+            const gained = st.ball.velocity.y - before;
+            if (!worst || gained > worst.gained) worst = { gained, power: p2 / 100, aim };
+            before = null;
+          }
+        }
+      }
+    }
+    ok('the back wall never lifts a ball (no rise, at any power or aim)',
+      !worst || worst.gained <= 0,
+      worst ? `worst: +${worst.gained.toFixed(3)} m/s upward at power ${worst.power.toFixed(2)}, aim ${worst.aim} (${checked} wall contacts checked)` : 'no wall contacts');
   }
 }
 
@@ -341,7 +400,7 @@ if (G.mat) {
   let longest = 0; let longestParams = null;
   for (let p = 0; p <= 30; p++) {
     for (const aim of [0, 0.25, -0.25, 0.5, -0.5]) {
-      const r = simulateThrow(board, { power: p / 30, aim });
+      const r = throwOnce(board, p / 30, aim);
       if (!r.emergencyUsed && r.time > longest) { longest = r.time; longestParams = { power: p / 30, aim }; }
     }
   }

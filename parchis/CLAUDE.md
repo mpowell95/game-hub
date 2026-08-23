@@ -34,7 +34,7 @@ and rebuild.
   line, one inline-SVG diagram (nest to a marked start square, to a diamond-marked safe square sharing an
   opponent peacefully, to the home column and center), a caption, and 4 bullets (how to leave the nest,
   capturing plus the bonus of 20, safe squares, and the bonus of 10 for reaching center) - the repo-wide
-  How-to-play pattern from `tic-tac-toe/CLAUDE.md`. The one genuine mode difference (leaving the nest needs
+  How-to-play pattern from `docs/BUILDING-A-GAME.md`. The one genuine mode difference (leaving the nest needs
   a lone 5 in Spanish rules vs any two dice summing to 5 in American rules) is folded into a single bullet
   rather than kept as separate tabs, since every other bullet is identical across modes. `i18n.js`'s old
   per-mode `RULES` table and `rules(mode)` function are gone; `hud.js`'s `HUD.openRules(back)` no longer

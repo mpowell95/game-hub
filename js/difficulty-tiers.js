@@ -1,5 +1,5 @@
 // difficulty-tiers.js - READ-PATH normalization of every game's difficulty vocabulary onto one
-// shared 1-4 tier scale, so the leaderboard can say "10 wins on Pro" and "10 wins on Beginner"
+// shared 1-4 tier scale, so the leaderboard can say "10 wins on Hard" and "10 wins on Easy"
 // are not the same achievement.
 //
 // This is deliberately a SEPARATE module from game-stats.js's normDiff(), which is on the WRITE
@@ -7,8 +7,8 @@
 // Nothing here ever writes. Pure and DOM-free, so it unit-tests headless with `node`.
 //
 // The canonical scale is the shared profile's (CLAUDE.md, "Consuming it in a game"): skill maps
-// 1:1 as 1 Beginner, 2 Intermediate, 3 Pro. Connect Four's Expert is explicitly NOT a profile
-// tier, so it (and Nuts & Bolts' Extra Hard) sit in an optional tier 4 above Pro.
+// 1:1 as 1 Easy, 2 Medium, 3 Hard. Connect Four's Expert is explicitly NOT a profile
+// tier, so it (and Nuts & Bolts' Extra Hard) sit in an optional tier 4 above Hard.
 
 export const TIERS = [1, 2, 3, 4];
 // Display vocabulary (2026-07-24, Matt's explicit reversal of batch 8's Beginner/Intermediate/

@@ -20,73 +20,12 @@ export function buildMachine(G) {
   const lipZ = -(G.laneLen + G.humpLen + G.troughLen);
   const lipY = G.boardLipY;
 
-  // THE PLAYING SURFACE AS SEGMENTS. One tilted segment (every board until BASKET FEVER's
-  // stepped rebuild, 2026-08-22), or `G.steps` - an ordered list of { len, tilt } segments
-  // forming a STAIRCASE (near-flat treads alternating with vertical risers, Matt's real-machine
-  // footage). Face coordinates are UNROLLED along the whole surface: v runs up tread 1, up
-  // riser 1, along tread 2, and so on - so holes, collars, paint and capture all keep their one
-  // (u, v) address system and nothing downstream has to know how many segments exist. The
-  // single-segment case reduces to exactly the old fixed-tilt mapping.
-  const segs = Array.isArray(G.steps) && G.steps.length
-    ? G.steps
-    : [{ len: G.boardLen, tilt: t }];
-  const frames = [];
-  {
-    let y = lipY;
-    let z = lipZ;
-    let v0 = 0;
-    for (const s of segs) {
-      const fsin = Math.sin(s.tilt);
-      const fcos = Math.cos(s.tilt);
-      frames.push({ v0, v1: v0 + s.len, y0: y, z0: z, tilt: s.tilt, sin: fsin, cos: fcos });
-      y += s.len * fsin;
-      z -= s.len * fcos;
-      v0 += s.len;
-    }
-  }
-  const frameAt = (v) => frames.find((fr) => v <= fr.v1) || frames[frames.length - 1];
-  /** The local surface tilt at unrolled v. */
-  const tiltAt = (v) => frameAt(v).tilt;
-
-  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
-  const faceToWorld = (u, v, h = 0) => {
-    const fr = frameAt(v);
-    const dv = v - fr.v0;
-    return [u, fr.y0 + dv * fr.sin + h * fr.cos, fr.z0 - dv * fr.cos + h * fr.sin];
-  };
-
-  /** World -> face {u, v, h, tilt}: the nearest segment's local coordinates. Physics reads this
-   *  for capture; with one segment it is the exact inverse of faceToWorld. */
-  const worldToFace = (p) => {
-    let best = null;
-    for (const fr of frames) {
-      const dy = p.y - fr.y0;
-      const dz = p.z - fr.z0;
-      const lv = dy * fr.sin - dz * fr.cos;
-      const lh = dy * fr.cos + dz * fr.sin;
-      const len = fr.v1 - fr.v0;
-      const inSeg = lv >= -0.02 && lv <= len + 0.02;
-      const score = (inSeg ? 0 : 1000) + Math.abs(lh);
-      if (!best || score < best.score) {
-        best = { u: p.x, v: fr.v0 + Math.max(0, Math.min(len, lv)), h: lh, tilt: fr.tilt, score };
-      }
-    }
-    return best;
-  };
-
-  /** The playing surface's y at world z (the staircase silhouette; risers are z-constant). */
-  const surfYAt = (z) => {
-    let yTop = lipY;
-    for (const fr of frames) {
-      const len = fr.v1 - fr.v0;
-      const z1 = fr.z0 - len * fr.cos;
-      if (fr.cos > 1e-6 && z <= fr.z0 + 1e-9 && z >= z1 - 1e-9) {
-        return fr.y0 + ((fr.z0 - z) / fr.cos) * fr.sin;
-      }
-      yTop = fr.y0 + len * fr.sin;
-    }
-    return yTop;
-  };
+  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the slope, h off the plane. */
+  const faceToWorld = (u, v, h = 0) => [
+    u,
+    lipY + v * sin + h * cos,
+    lipZ - v * cos + h * sin,
+  ];
 
   const solids = [];
   const rotX = (angle) => ({ axis: [1, 0, 0], angle });
@@ -164,23 +103,14 @@ export function buildMachine(G) {
       });
     }
   }
-  // --- the board: the playing surface, one slab PER SEGMENT -------------------------------------
-  // Near-flat segments (treads, and the classic's single face) are part 'board' - the floor that
-  // capture removes from under the ball. Steep segments (a staircase's risers) are part 'riser':
-  // solid walls the ball bounces off toward the player, NEVER intangible - a captured ball must
-  // fall through a tread, not through a wall.
-  for (const fr of frames) {
-    const len = fr.v1 - fr.v0;
-    const mid = (fr.v0 + fr.v1) / 2;
-    solids.push({
-      part: fr.tilt < 1.0 ? 'board' : 'riser',
-      pos: faceToWorld(0, mid, -G.bedThick / 2),
-      half: [G.boardW / 2, G.bedThick / 2, len / 2],
-      rot: rotX(fr.tilt),
-      segV0: fr.v0,
-      segV1: fr.v1,
-    });
-  }
+  // --- the board: one tilted floor slab ---------------------------------------------------------
+  const boardCenter = faceToWorld(0, G.boardLen / 2, -G.bedThick / 2);
+  solids.push({
+    part: 'board',
+    pos: boardCenter,
+    half: [G.boardW / 2, G.bedThick / 2, G.boardLen / 2],
+    rot: rotX(t),                    // slab's +y normal tipped back into the face normal
+  });
 
   // --- the rings: ONE PER HOLE ------------------------------------------------------------------
   // GUARD: every ring is DERIVED from the hole it belongs to (rule 1 - tangent at the hole's
@@ -217,7 +147,7 @@ export function buildMachine(G) {
         ring: id,
         pos: faceToWorld(pu, pv, G.ringH / 2),
         half: [halfChord, G.ringH / 2, G.ringThick / 2],
-        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+        faceRot: { phi: phi + Math.PI / 2, tilt: t },
       });
     }
   }
@@ -245,7 +175,7 @@ export function buildMachine(G) {
         cup: id,
         pos: faceToWorld(pu, pv, h / 2),
         half: [rr * Math.tan(Math.PI / N), h / 2, G.collarThick / 2],
-        faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+        faceRot: { phi: phi + Math.PI / 2, tilt: t },
         segH: h,
       });
     }
@@ -293,9 +223,8 @@ export function buildMachine(G) {
       const z1 = zFront + ((zB - zFront) * (i + 1)) / WALL_SEGS;
       const zm = (z0 + z1) / 2;
       // Over the trough there is no board under the wall, so it reaches down to the trough floor
-      // - otherwise the extension would hang in the air with a gap beneath it. Over the board it
-      // reaches down to the playing surface (the staircase silhouette on a stepped machine).
-      const yBoard = zm > zA ? yTrough : surfYAt(zm);
+      // - otherwise the extension would hang in the air with a gap beneath it.
+      const yBoard = zm > zA ? yTrough : yA + (zA - zm) * (sin / cos);
       const yTop = (yA + railFrontH) + topSlope * (zm - zFront);   // the raked top, front -> C
       const h = yTop - yBoard;
       if (h <= 0.004) continue;
@@ -323,21 +252,25 @@ export function buildMachine(G) {
       rot: null,
     });
   }
-  // The backboard: the vertical wall rising from the board's top edge. A real wall the engine
-  // bounces the ball off - the reaction IS the contact solve, nothing is scripted.
-  const top = faceToWorld(0, G.boardLen, 0);
-  // GUARD: THE WALL REACHES PAST THE MARQUEE. render.js draws the marquee as a box 0.3 tall
-  // centred 0.02 above backboardH, so its top sits 0.17 higher than the wall used to. That left
-  // an 18cm slot between wall-top and sign-top, and a hard throw threaded it and finished BEHIND
-  // the header board (Matt, 2026-08-22: "it goes over the wall but under/behind the THE CLASSIC
-  // header board thing. that's wrong"). A real cabinet has no such slot - the sign is mounted on
-  // a solid back, not hung in front of a gap.
+  // The backboard: the wall rising from the board's top edge. A real wall the engine bounces the
+  // ball off - the reaction IS the contact solve, nothing is scripted.
   //
-  // NOT the banned ceiling (MACHINE-SPEC section 9): nothing spans the top, and a ball thrown
-  // hard enough still clears the machine and leaves. This closes the slot BEHIND the sign, which
-  // is cabinet, not sky. 0.18 not 0.17 because the box is seated 0.01 low (the -0.01 below).
-  // If render.js's marquee size or offset moves, move this with it.
-  const MARQUEE_RISE = 0.18;
+  // GUARD: IT REACHES PAST THE MARQUEE, and MARQUEE_RISE is why. The marquee is drawn by
+  // render.js as a box 0.3 tall centred 0.02 above backboardH, so its top sits 0.17 above the
+  // board height. A wall that stopped at backboardH left an 18cm slot between its top and the
+  // top of the sign, and a hard throw threaded it and ended up BEHIND the marquee (Matt,
+  // 2026-08-22: "it goes over the wall but under/behind the THE CLASSIC header board thing.
+  // that's wrong"). A real cabinet has no such slot - the sign is mounted ON a solid back, not
+  // hung in front of a gap.
+  //
+  // This is NOT the banned ceiling (MACHINE-SPEC section 9). Nothing spans the top: a ball
+  // thrown hard enough still clears the whole machine and leaves. This only closes the slot
+  // BEHIND the sign, which is cabinet, not sky. If render.js's marquee size or offset changes,
+  // change this with it.
+  const top = faceToWorld(0, G.boardLen, 0);
+  // 0.18, not 0.17: the box is seated 0.01 low (the -0.01 below), so the extra centimetre is
+  // what actually brings its top level with the sign's.
+  const MARQUEE_RISE = 0.18;                 // render.js: centre +0.02, half-height 0.15, seat 0.01
   const bbH = G.backboardH + MARQUEE_RISE;
   solids.push({
     part: 'backboard',
@@ -370,9 +303,6 @@ export function buildMachine(G) {
   return {
     solids,
     faceToWorld,
-    worldToFace,
-    tiltAt,
-    frames,
     lipY,
     lipZ,
     tilt: t,

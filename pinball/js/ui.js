@@ -128,8 +128,8 @@ export class PinballUI {
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
   }
 
-  /** How to play. Follows the repo-wide pattern (tic-tac-toe/CLAUDE.md, "How-to-play screens",
-   *  which the root file names as the reference): one short bold sentence, ONE diagram carrying
+  /** How to play. Follows the repo-wide pattern (docs/BUILDING-A-GAME.md, "How-to-play screens",
+   *  reference implementation tic-tac-toe/js/ui.js): one short bold sentence, ONE diagram carrying
    *  the genuinely non-obvious part, a caption, a concrete "X = Y" example, then any remaining
    *  rules as short plain sentences.
    *

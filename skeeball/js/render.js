@@ -183,30 +183,19 @@ export class Renderer {
       this.scene.add(mesh);
     }
 
-    // The painted field: the "what is worth what" layer. One plane per SURFACE SEGMENT (a
-    // single one on a flat board; per tread and riser on a staircase), each mapping its own
-    // v-slice of the one unrolled field texture, so the paint and the physics surface can never
-    // disagree about where anything is.
+    // The painted field: a plane on the face carrying the burnt-orange paint, the zone
+    // stencils and every mouth's footprint - the "what is worth what" layer.
     {
       const tex = this._track(this._paintField());
-      for (const fr of (M.frames || [{ v0: 0, v1: G.boardLen, tilt: M.tilt }])) {
-        const len = fr.v1 - fr.v0;
-        const slice = tex.clone();
-        this._track(slice);
-        // v maps to the texture's Y bottom-up (V(v) = Hpx - v*px in _paintField).
-        slice.repeat.set(1, len / G.boardLen);
-        slice.offset.set(0, fr.v0 / G.boardLen);
-        slice.needsUpdate = true;
-        const plane = new THREE.Mesh(
-          this._track(new THREE.PlaneGeometry(G.boardW, len)),
-          this._mat({ map: slice, roughness: 0.8 }),
-        );
-        const c = M.faceToWorld(0, (fr.v0 + fr.v1) / 2, 0.0015);
-        plane.position.set(c[0], c[1], c[2]);
-        plane.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - fr.tilt));
-        plane.receiveShadow = true;
-        this.scene.add(plane);
-      }
+      const plane = new THREE.Mesh(
+        this._track(new THREE.PlaneGeometry(G.boardW, G.boardLen)),
+        this._mat({ map: tex, roughness: 0.8 }),
+      );
+      const c = M.faceToWorld(0, G.boardLen / 2, 0.0015);
+      plane.position.set(c[0], c[1], c[2]);
+      plane.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - M.tilt));
+      plane.receiveShadow = true;
+      this.scene.add(plane);
     }
 
     // Lane surface detail: a long plane with plank lines and the serve arrow.
@@ -244,15 +233,6 @@ export class Renderer {
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
-      // BASKET FEVER (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
-      // basket with a white mini backboard carrying the value - the real cabinet's furniture.
-      // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
-      // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
-      if (this.board.dressing === 'basketball') {
-        this._wireBasket(H, cup && cup.color);
-        if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
-        continue;
-      }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
         H.lipLow ? (typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35) : 1,
         cup && cup.color);
@@ -413,9 +393,7 @@ export class Renderer {
   _onFace(mesh, u, v, h, flat = false) {
     const c = this.M.faceToWorld(u, v, h);
     mesh.position.set(c[0], c[1], c[2]);
-    // The LOCAL surface tilt: on a stepped machine each segment has its own (machine.js tiltAt).
-    const tilt = this.M.tiltAt ? this.M.tiltAt(v) : this.M.tilt;
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.M.tilt);
     mesh.quaternion.copy(q);
     if (flat) mesh.rotateX(-Math.PI / 2);
   }
@@ -663,7 +641,7 @@ export class Renderer {
     const step = G.ballR * 2.12;
     for (let i = 0; i < BALLS_PER_GAME - 1; i++) {
       const b = new THREE.Mesh(this.ballGeo || (this.ballGeo = this._track(new THREE.SphereGeometry(G.ballR, 20, 14))),
-        this._mat({ color: this.board.dressing === 'basketball' ? 0xe8641f : 0xefe6d4, roughness: 0.45 }));
+        this._mat({ color: 0xefe6d4, roughness: 0.45 }));
       b.position.set(cx, floorY + G.ballR, zNear - 0.07 - i * step);
       b.castShadow = true;
       this.scene.add(b);
@@ -969,48 +947,6 @@ export class Renderer {
     }
     x.globalAlpha = 1;
 
-    // BASKET FEVER's staircase paint (Matt's real-machine footage): each TREAD is the cream
-    // shelf the baskets stand on, each RISER is a blue panel scattered with yellow stars - the
-    // real cabinet's tiers, painted onto the exact segments the ball plays on.
-    if (this.board.dressing === 'basketball' && this.M.frames) {
-      const star = (sx, sy, r, rot) => {
-        x.save();
-        x.translate(sx, sy);
-        x.rotate(rot);
-        x.beginPath();
-        for (let k = 0; k < 10; k++) {
-          const rr = k % 2 ? r * 0.42 : r;
-          const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
-          x[k ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr);
-        }
-        x.closePath();
-        x.fill();
-        x.restore();
-      };
-      let si = 0;
-      for (const fr of this.M.frames) {
-        const top = V(fr.v1);
-        const bot = V(fr.v0);
-        if (fr.tilt < 1.0) {
-          // a tread: the cream shelf, with a shadow line at its back edge (under the riser)
-          x.fillStyle = '#e9e0c8';
-          x.fillRect(0, top, W, bot - top);
-          x.fillStyle = 'rgba(0,0,0,0.20)';
-          x.fillRect(0, top, W, 5);
-        } else {
-          // a riser: blue panel with a fixed pseudo-scatter of stars (i-hashed, no rng)
-          x.fillStyle = L.face;
-          x.fillRect(0, top, W, bot - top);
-          x.fillStyle = '#ffd23f';
-          for (let k = 0; k < 7; k++, si++) {
-            const su = ((si * 0.383 + 0.13) % 1) * G.boardW - G.boardW / 2;
-            const sv = fr.v0 + 0.03 + ((si * 0.617 + 0.07) % 1) * (fr.v1 - fr.v0 - 0.06);
-            star(U(su), V(sv), 8 + (si % 3) * 4, (si * 0.7) % (Math.PI * 2));
-          }
-        }
-      }
-    }
-
     // The 10 slot across the bottom edge, and its corner 0s - a painted zone, and only that:
     // the values that used to go with it are on the rings now (see _ringNumbers). A cup board
     // has no bottom slot - its lowest cup is just the nearest cup - so the band is the
@@ -1185,108 +1121,6 @@ export class Renderer {
       roughness: 0.4, side: THREE.DoubleSide,
     }));
     this._onFace(mesh, H.u, H.v, PLATE_H / 2);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    this.scene.add(mesh);
-  }
-
-  /** BASKET FEVER's hoop: the physics collar drawn as an orange WIRE basket, matched to Matt's
-   *  real-machine footage - a rim wire that FOLLOWS machine.js's blended lipLow profile (tall
-   *  up-slope back, low player-facing front - the rim seen is the rim hit), a tapered wire body
-   *  down to a small bottom ring, and struts between. Cosmetic beyond the rim: the solid the
-   *  ball hits is machine.js's collar boxes at the rim's radius; the taper sits inside them,
-   *  like a real basket's mesh inside its mounting ring. */
-  _wireBasket(H, color) {
-    const G = this.G;
-    const R = H.r + G.collarThick / 2;
-    const col = new THREE.Color(color || 0xe8541f);
-    // The emissive floor is the collar walls' lesson (_scallopedRim): a wall perpendicular to
-    // the face gets no key light, and a thin wire even less.
-    const mat = this._mat({ color: col, roughness: 0.4, metalness: 0.25, emissive: col, emissiveIntensity: 0.4 });
-    const g = new THREE.Group();
-    const lowFrac = typeof G.lipLowFrac === 'number' ? G.lipLowFrac : 0.35;
-    const hAt = (phi) => (H.lipLow
-      ? H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2)
-      : H.collarH);
-    const Rbot = R * 0.66;
-    const ring = (radius, yAt, wire) => {
-      const pts = [];
-      for (let i = 0; i < 24; i++) {
-        const p = (i / 24) * Math.PI * 2;
-        pts.push(new THREE.Vector3(Math.cos(p) * radius, yAt(p), Math.sin(p) * radius));
-      }
-      const curve = new THREE.CatmullRomCurve3(pts, true);
-      const m = new THREE.Mesh(this._track(new THREE.TubeGeometry(curve, 48, wire, 6, true)), mat);
-      m.castShadow = true;
-      g.add(m);
-    };
-    ring(R, hAt, 0.0065);                            // the rim, on the physics profile
-    ring(Rbot, () => 0.006, 0.0035);                 // the basket's small bottom ring
-    for (let i = 0; i < 8; i++) {                    // tapered struts between them
-      const a = (i / 8) * Math.PI * 2;
-      const top = new THREE.Vector3(Math.cos(a) * R, hAt(a), Math.sin(a) * R);
-      const bot = new THREE.Vector3(Math.cos(a) * Rbot, 0.006, Math.sin(a) * Rbot);
-      const d = bot.clone().sub(top);
-      const s = new THREE.Mesh(this._track(new THREE.CylinderGeometry(0.003, 0.003, d.length(), 5)), mat);
-      s.position.copy(top.clone().add(bot).multiplyScalar(0.5));
-      s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
-      s.castShadow = true;
-      g.add(s);
-    }
-    this._onFace(g, H.u, H.v, 0);
-    this.scene.add(g);
-  }
-
-  /** BASKET FEVER's value: a white mini BACKBOARD card mounted on the RISER behind its basket -
-   *  exactly where the real cabinet prints them (Matt's footage: a fan-topped white card with
-   *  the number in a red-bordered box, above every basket). The riser is a real flat wall, so
-   *  this is a flat plane sitting 8mm proud of solid geometry - nothing phantom, nothing
-   *  curved. */
-  _hoopBackboard(H, cup, glow) {
-    const G = this.G;
-    const lab = String(cup.label);
-    // the riser behind this hoop's tread: the next frame after the one holding H.v
-    const frames = this.M.frames || [];
-    const ti = frames.findIndex((fr) => H.v >= fr.v0 && H.v <= fr.v1);
-    const riser = frames[ti + 1];
-    if (!riser || riser.tilt < 1.0) return;          // no riser behind (flat board) - no card
-
-    const CARD_W = 0.135;
-    const CARD_H = Math.min(0.16, (riser.v1 - riser.v0) - 0.04);
-    const cw = 340, ch = Math.round(cw * (CARD_H / CARD_W));
-    const c = this._canvas(cw, ch);
-    const x = c.getContext('2d');
-    x.fillStyle = '#f2efe6';
-    x.fillRect(0, 0, cw, ch);
-    // the red-bordered value box
-    const bw = cw * 0.64, bh = ch * 0.56;
-    const bx = (cw - bw) / 2, by = ch * 0.12;
-    x.fillStyle = '#ffffff';
-    x.fillRect(bx, by, bw, bh);
-    x.lineWidth = Math.max(3, ch * 0.05);
-    x.strokeStyle = '#d3392e';
-    x.strokeRect(bx, by, bw, bh);
-    let fontPx = bh * 0.8;
-    x.font = `800 ${fontPx}px system-ui, sans-serif`;
-    fontPx *= Math.min(1, (bw * 0.82) / x.measureText(lab).width);
-    x.font = `800 ${fontPx}px system-ui, sans-serif`;
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    x.fillStyle = '#1c1c1c';
-    x.fillText(lab, cw / 2, by + bh / 2 + fontPx * 0.04);
-
-    const tex = this._track(new THREE.CanvasTexture(c));
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-
-    const mesh = new THREE.Mesh(
-      this._track(new THREE.PlaneGeometry(CARD_W, CARD_H)),
-      this._mat({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.5 }),
-    );
-    const vCard = riser.v0 + 0.02 + CARD_H / 2;
-    const p = this.M.faceToWorld(H.u, vCard, 0.008);
-    mesh.position.set(p[0], p[1], p[2]);
-    mesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - riser.tilt));
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     this.scene.add(mesh);
@@ -1489,36 +1323,16 @@ export class Renderer {
     // A speckled two-tone surface so the ROLL is visible - a plain sphere spins invisibly.
     const c = this._canvas(128, 64);
     const x = c.getContext('2d');
-    if (this.board.dressing === 'basketball') {
-      // A BASKETBALL: pebbled orange with black seams. Equirect wrap: the horizontal band is
-      // the equator seam, the vertical bands are meridians. The pebble speckle keeps the roll
-      // visible, same job as the classic ball's flecks.
-      x.fillStyle = '#e8641f';
-      x.fillRect(0, 0, 128, 64);
-      for (let i = 0; i < 60; i++) {
-        x.globalAlpha = 0.14;
-        x.beginPath();
-        x.arc((i * 41) % 128, (i * 23) % 64, 1.6, 0, Math.PI * 2);
-        x.fillStyle = i % 2 ? '#a3400f' : '#ff8a45';
-        x.fill();
-      }
-      x.globalAlpha = 1;
-      x.fillStyle = '#241505';
-      x.fillRect(0, 30, 128, 3);                        // equator
-      for (const sx of [0, 32, 64, 96]) x.fillRect(sx, 0, 3, 64);   // meridians
-    } else {
-      x.fillStyle = '#efe6d4';
-      x.fillRect(0, 0, 128, 64);
-      x.fillStyle = 'rgba(120,90,50,0.5)';
-      x.fillRect(0, 28, 128, 8);
-      for (let i = 0; i < 46; i++) {
-        x.globalAlpha = 0.18;
-        x.beginPath();
-        x.arc((i * 53) % 128, (i * 29) % 64, 2.2, 0, Math.PI * 2);
-        x.fillStyle = i % 2 ? '#6b4a26' : '#fffdf6';
-        x.fill();
-      }
-      x.globalAlpha = 1;
+    x.fillStyle = '#efe6d4';
+    x.fillRect(0, 0, 128, 64);
+    x.fillStyle = 'rgba(120,90,50,0.5)';
+    x.fillRect(0, 28, 128, 8);
+    for (let i = 0; i < 46; i++) {
+      x.globalAlpha = 0.18;
+      x.beginPath();
+      x.arc((i * 53) % 128, (i * 29) % 64, 2.2, 0, Math.PI * 2);
+      x.fillStyle = i % 2 ? '#6b4a26' : '#fffdf6';
+      x.fill();
     }
     const tex = this._track(new THREE.CanvasTexture(c));
     // ONE MESH PER BALL THAT CAN BE IN THE AIR AT ONCE, plus the one waiting on the lane. They

@@ -30,10 +30,40 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 //
 // The rule for adding to this list: only real, already-shipped debt, never a new game taking a
 // shortcut. If you are about to add a game you just wrote to this list, fix the game instead.
-// EMPTY, and that is the point: Yahtzee was the last entry and the last untranslated in-hub game
-// (2026-08-11). Every in-hub game now routes its strings through a { en, es } dictionary. A stale
-// entry fails this suite, so leaving Yahtzee listed after translating it would have gone red.
-const KNOWN_GAPS = {};
+// The i18n check that first populated this list is EMPTY now: Yahtzee was the last entry and the
+// last untranslated in-hub game (2026-08-11); every in-hub game routes its strings through a
+// { en, es } dictionary. A stale entry fails this suite, so leaving Yahtzee listed after
+// translating it would have gone red.
+//
+// The font-size check (added when docs/BUILDING-A-GAME.md's UX floor was written) starts with
+// real pre-existing debt, named down to the exact declaration rather than excused by whole game -
+// a game-level key would silently excuse every future sub-11px rule in that game too.
+const KNOWN_GAPS = {
+  'no CSS font-size under 11px (docs/BUILDING-A-GAME.md, "The UX floor")': {
+    'boggle/css/boggle.css:106': 'score summary micro-label, pre-existing',
+    'boggle/css/boggle.css:225': 'tally count micro-label, pre-existing',
+    'chinchon/css/chinchon.css:640': 'stats chart axis label, pre-existing',
+    'escoba/css/escoba.css:314': 'card badge, pre-existing',
+    'escoba/css/escoba.css:677': 'stats chart axis label, pre-existing',
+    'filler/css/filler.css:229': 'pre-existing',
+    'filler/css/filler.css:272': 'pre-existing',
+    'mancala/css/mancala.css:284': 'pre-existing',
+    'mancala/css/mancala.css:868': 'pit-count micro-label, pre-existing',
+    'mancala/css/mancala.css:876': 'pit-count micro-label, pre-existing',
+    'nuts-bolts/css/nuts-bolts.css:186': 'pre-existing',
+    'yahtzee/css/yahtzee.css:575': 'scorecard micro-label, pre-existing',
+    'yahtzee/css/yahtzee.css:583': 'scorecard micro-label, pre-existing',
+    'yahtzee/css/yahtzee.css:594': 'bonus label, pre-existing',
+    'yahtzee/css/yahtzee.css:595': 'bonus value, pre-existing',
+    'yahtzee/css/yahtzee.css:597': 'pre-existing',
+    'yahtzee/css/yahtzee.css:623': 'pre-existing',
+    'yahtzee/css/yahtzee.css:628': 'pre-existing',
+    'yahtzee/css/yahtzee.css:635': 'pre-existing',
+    'yahtzee/css/yahtzee.css:652': 'help-tip text, pre-existing',
+    'yahtzee/css/yahtzee.css:659': 'help-tip text, pre-existing',
+    'yahtzee/css/yahtzee.css:702': 'pre-existing',
+  },
+};
 
 let passed = 0;
 const failures = [];
@@ -308,6 +338,34 @@ check(
   + 'screen renders into makes the whole game invisible with no error and no failing test - exactly '
   + 'how Battleship shipped a blank screen twice. Give the ornament its own name (.xx-ordnance, not '
   + '.xx-shell) and keep decoration and layout in separate namespaces.'
+);
+
+// --- text stays readable: no CSS font-size under 11px -------------------------------------------
+// docs/BUILDING-A-GAME.md, "Part 0 - The UX floor" - born from the 2026-08-21 Skeeball playtest.
+
+function gameCss(game) {
+  const dir = join(ROOT, game, 'css');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => ({ path: `${game}/css/${f}`, src: readFileSync(join(dir, f), 'utf8') }));
+}
+
+check(
+  'no CSS font-size under 11px (docs/BUILDING-A-GAME.md, "The UX floor")',
+  GAMES.flatMap((g) => gameCss(g).flatMap(({ path, src }) => {
+    const offenders = [];
+    src.split('\n').forEach((line, i) => {
+      const decls = line.match(/font-size:\s*[\d.]+px/g) || [];
+      for (const decl of decls) {
+        if (parseFloat(decl.match(/[\d.]+/)[0]) < 11) offenders.push(`${path}:${i + 1} ${decl.trim()}`);
+      }
+    });
+    return offenders;
+  })),
+  'text under 11px is not comfortably readable on a phone. Raise it, or if this is a genuinely '
+  + 'decorative micro-label with no reading purpose, say so and add it to KNOWN_GAPS by the exact '
+  + 'file:line, not by whole game (a game-level exemption excuses every future violation too).'
 );
 
 // --- summary ------------------------------------------------------------------------------------

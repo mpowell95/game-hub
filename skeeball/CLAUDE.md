@@ -11,31 +11,6 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
-## HARD RULE: work on one machine, change one machine
-
-Matt, 2026-08-23, on discovering that work done for POPONGO and BASKET FEVER had changed how THE
-CLASSIC plays: *"WHAT THE FUCK!?!?!?!? FIX THIS IMMEDIATELY."*
-
-All three machines share ONE `physics.js` and ONE `machine.js`. `boards.js` is the only
-per-machine data there is. **An engine rule written without a gate therefore hits every machine
-by default** - including a released one nobody asked you to touch.
-
-It has happened once, and it shipped: `28299ac` (BASKET FEVER's staircase) rewrote the capture
-commit rule and said so in its own message - "CAPTURE IS A PREDICTION, NOT A SCORE - **on every
-machine**". THE CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon, with
-its `boards.js` entry untouched, so nothing in the per-machine data could explain it.
-
-Before you commit any change to `physics.js` or `machine.js`:
-
-1. **Gate it.** `st.cupBoard` (set once per throw in `startThrow`, true for any board with a
-   `collarH` hole) is the existing gate. `655975b` and `6f41ea5` did this correctly and left THE
-   CLASSIC untouched; `28299ac` did not.
-2. **Name the machines you changed in the commit message.** "on every machine" is a decision, not
-   an aside - if you mean it, say why the released machine had to change too, and ask first.
-3. **Prove the others did not move.** Simulate a fixed grid of throws (41 powers x 21 aims) before
-   and after, and diff the outcomes. A released machine must come back byte-identical.
-
-
 A realistic arcade skeeball alley, rebuilt **from scratch on 2026-08-13** (nothing of the
 previous build — layout, art, physics, structure — was carried over or consulted). The previous
 build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub id
@@ -43,12 +18,10 @@ build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub
 2026-08-18 at Matt's ask** once the comparison was done (it is in git history). It recorded into
 the SHARED `skeeball` stats id and used the same board id `classic`, so every rack it ever played
 is still in this game's own records (bests, the daily map, the top-score panel) — one continuous
-bucket, nothing orphaned by its removal. Three machines exist: **THE CLASSIC** (a
+bucket, nothing orphaned by its removal. Two machines exist: **THE CLASSIC** (a
 boardwalk cabinet with a varnished oak lane, the burnt-orange board with the white cup ladder,
-twin corner 100 cups, and a marquee), **POPONGO** (2026-08-22, the real cup-board lawn game as
-a second face on the same cabinet - see "POPONGO and the arrangement layer" below) and
-**BASKET FEVER** (2026-08-22, the arcade basketball machine as a third face - see "BASKET FEVER"
-below). The player
+twin corner 100 cups, and a marquee) and **POPONGO** (2026-08-22, the real cup-board lawn game as
+a second face on the same cabinet - see "POPONGO and the arrangement layer" below). The player
 swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
 a rack.
 
@@ -169,15 +142,6 @@ nothing scripts a reaction any more:
   deflected, not slowed, not steered. That single test is what makes distance up the slope choose
   the cup, which is the whole game. Without it the first mouth a rolling ball crossed always
   swallowed it, so nothing above the bottom cup was reachable by rolling at all.
-- **CAPTURE IS A PREDICTION; ONLY PASSING THROUGH THE PLANE SCORES** (2026-08-22, on every
-  machine). Matt's clip showed BASKET FEVER paying a ball that rattled a rim and bounced out:
-  the collar walls stay solid after capture, so the ball can strike the far wall inside the
-  mouth and climb back out - and the old commit rule ("fell 26cm below the capture point")
-  scored it anyway, because with the floor slab intangible it always ends up below. Now the
-  captured block in `physics.js` commits ONLY when the ball is below the surface plane INSIDE
-  the mouth; a ball that gets clear of the slab outside the mouth has the floor restored
-  (`rimout` event) and plays on, and one that slips under the slab outside the mouth resolves
-  as a 0. Points are only ever awarded for a ball that fully passes through a hole.
 - **The trough scores like the real bottom slot**: centre band = 10, corners = 0. A dead lob
   rolls into the 10, exactly like the real machine; the honest zero is the corner.
 - **NO MAGNETISM, EVER. This is a standing, permanent ban.** Balls never curve toward holes, are
@@ -449,94 +413,12 @@ and two black **equalizers**.
   exact numbers), and a jammed or capped ball on a cup board resolves as the trough's zero
   instead of being walked into the nearest mouth (`st.cupBoard`). Falling through a mouth is
   the ONLY way to score here, including for the watchdog.
-- **And the honest rule cuts BOTH ways** (Matt's 23:42 clip, 2026-08-22, on BASKET FEVER): a
-  ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's VOLUME
-  and captures at any rattle speed (`physics.js`, the `lip > 0 && f.h < lip` branch). Without
-  it, a fast arrival that failed the kinematic prediction ended up sitting on the still-solid
-  slab INSIDE the collar - visibly in the basket - and could hop back out over the rim. The
-  pass-through commit still decides the score, so nothing pays without falling through; the
-  classic's flush holes (lip 0) are untouched.
 - **Renderer**: collars take their cup's color (`_scallopedRim` color param) and the cup's value
   rides `_cupPlate` - an arc on the cup's player-facing outer wall, where the real product
   prints it (a cup is CONCENTRIC with its hole, unlike a ring, so the arc centres on the hole).
   No hole has a `ringD`, so `_ringNumbers`/`platedHoles` no-op; the classic's bottom-slot band
   is gated on `!board.cups`. The setup slides, game-over card and hub average are all
   PER-BOARD numbers now - machines score on different scales, so blended averages meant nothing.
-
-## BASKET FEVER (2026-08-22)
-
-The third machine, built from the real Basket Fever cabinet in `skeeball/Machines/Machine 4 -
-Basketball/` (photos): nine orange wire baskets on three shelves, 10/20/10 low, 30/60/30 middle,
-50/100/50 top. In this engine a hoop IS a POPONGO cup: a raised collar on a hole, entered by a
-ball dropping in out of the air - no new physics, no new capture rule.
-
-- **THE BOARD IS A REAL STAIRCASE** (Matt, 2026-08-22, from his real-machine footage: "3
-  stairs... even if that means new engines or physics must be calculated and created"). The
-  single tilted face is GONE on this machine. `geom.steps` in the board entry lists six surface
-  segments - three near-flat TREADS (2.475X / 0.36 m deep, leaning 0.10 rad toward the player
-  so a miss rolls off the front edge instead of parking) alternating with three VERTICAL risers
-  (1.925X / 0.28 m) - and `machine.js` builds the whole playing surface from
-  them. **Face coordinates UNROLL along the staircase**: v runs up tread 1, up riser 1, along
-  tread 2 and so on, so holes, collars, paint, capture and every render call keep the one
-  (u, v) address system. `faceToWorld`/`worldToFace`/`tiltAt` are piecewise in machine.js; with
-  one segment they reduce exactly to the old flat-face maths, so THE CLASSIC and POPONGO are
-  byte-identical in behavior (the full heavy suite passed after the change).
-- **Risers are walls, never floors** (`part: 'riser'`, GROUP_REST): a captured ball can only
-  fall through a TREAD, and an overshoot hits a riser face-on and bounces back toward the
-  player - which also killed the "ski jump" launch the old 50-degree face gave fast overshoots.
-- **Each basket funnels into a hole in its TREAD, and the mouth is the only way in**: a
-  full-circle collar (no lipLow) walls off every rolling entry; the mouth leans 0.10 rad toward
-  the player with its tread. **THE BASKETS SIT AT THE FRONT OF EACH TREAD (0.75X from the
-  tread's front edge; v 0.75X / 5.15X / 9.55X unrolled, u 0, ±2.07X), and both halves of that
-  are load-bearing** (Matt's tuning pass): a hard straight throw killed by the back wall used
-  to drip down onto the top basket and pay the 100 almost every time, and a tier-falling ball
-  hugs the riser it fell past - both landing zones are now BEHIND the collars on bare tread
-  (0.166 m of passage back there), so those balls roll forward AROUND the basket and off the
-  edge. Measured: straight throws p0.60-1.30 went from topC "almost every time" to 2 of 15
-  (one of them the legitimate direct arc). Small ball (0.28X, `ball.ratio` waived); mouths
-  tightened to 1.0X at the same pass ("a little too easy") - direct-entry bands are now
-  3-6 hundredths of power wide per tier (aim-0 mid p0.41-0.46, top p0.63-0.72).
-- **The back wall** rises from the third riser's top at backboardH 0.85 - the other machines'
-  proportion (Matt: the 1.10 wall "seems larger than in the other games"; the taller staircase
-  itself now keeps the top edge out of reach). `deadRest` 0.32 makes a hard throw BOUNCE BACK
-  toward the player rather than dying flat; near-zero wall grip (`deadFric` 0.06 - a fast ball
-  sliding down a GRIPPING wall gets flicked upward by the friction impulse) and deadened
-  side-wall tops (`wallRest` 0.15) keep the vertical-pop probe at 5 per 117 hard throws, all
-  rim rattles or hidden containment hits behind the backboard - zero off the wall itself.
-- **Sweeps on the staircase**: all nine mouths capturable, 2 emergencies in 459 throws (0.4%,
-  both extreme-aim overshoots resolving as honest 0s - under the standing 2% bar), slowest
-  settle 7.9s; ladder low tier p~0.13-0.20, middle p~0.41-0.46, top p~0.63-0.72
-  (DECISIONS.md#basket-fever-layout).
-- **The tiers are painted on their own segments** (`_paintField` + one field plane per segment
-  in `_build`, each mapping its v-slice of the one unrolled texture): cream shelf treads, blue
-  star-scattered risers. Backboard value cards are flat planes ON the risers (`_hoopBackboard`)
-  - real wall behind them, nothing phantom, nothing curved.
-- **It rides the arrangement layer with a FIXED arrangement**: the cup layer is what puts a
-  printed value on a collar wall (`_cupPlate`), so the nine hoops are "cups" `h10a`..`h100`
-  (values frozen to ids) even though nothing about them is movable. All one orange.
-- **`colorSweep` is gated on `need > 1`** (`game.js`): on a one-color cup board every scoring
-  rack would otherwise count a "color sweep" into the GLOBAL `sk.colorSweeps` and falsely
-  complete POPONGO's colors goal. A sweep of one color is not a sweep.
-- **Goals** (`goals.js`, no new counters): sink the 100 hoop (per-board `bestThrow ≥ 100` -
-  the top-centre hoop is the only 100 on the face, so the best throw IS the proof), 300+ in a
-  single game (per-board best), 3,000 total points on the machine (per-board points). All three
-  read `sk.boards.basketball`, synced and cross-device merged by `js/arcade-scores.js`.
-- **Unlock**: `{ board: 'popongo', goals: true }` - complete POPONGO's three objectives. Same
-  goals shape as POPONGO's own unlock; `ui.js` needed nothing.
-- **The basketball dressing** (Matt, 2026-08-22: "cups instead of basketball baskets... shooting
-  a basketball"): the board entry carries `dressing: 'basketball'` and `render.js` branches on
-  it three ways - the ball is an orange BASKETBALL (seamed texture in `_buildBall`, orange tray
-  balls), each collar is drawn as an orange WIRE basket (`_wireBasket`: rim torus at the physics
-  collar's exact top, mid ring, ten struts - all on the collar wall's surface, so the rim seen
-  is the rim hit), and each value rides a white mini BACKBOARD with a red-boxed number on the
-  hoop's up-slope side (`_hoopBackboard`; the part above the rim is cosmetic-only). Physics is
-  untouched by all three; THE CLASSIC and POPONGO render exactly as before (no `dressing`).
-- **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
-  spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
-  up the face barely moves but the peak is higher and the descent steeper, dropping the ball
-  into a basket from above. Re-swept at 70 degrees under the post-POPONGO capture physics
-  (the `needH` rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws; ladder
-  low row from p~0.28, middle p~0.52, top p~0.8, the 100 straight at p0.76-0.8.
 
 ## The records panel (the four numbers every machine shows)
 

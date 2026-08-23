@@ -45,7 +45,8 @@ function buildWorld(board) {
   const matBoard = new CANNON.Material('board');   // the face: livelier
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
-  const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
+  const matDead = new CANNON.Material('dead');
+  const matBack = new CANNON.Material('back');     // backboard + kick: padded, kills the ball
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
   const matRing100 = new CANNON.Material('ring100');
@@ -69,6 +70,24 @@ function buildWorld(board) {
   contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
   contact(matBall, matRing100, pick(MAT.ring100Fric, 0.06), pick(MAT.ring100Rest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
+  // THE BACK WALL HAS NO GRIP, AND THAT IS THE POINT. A ball reaching it is still spinning at
+  // ~19 turns a second - it was served rolling, and nothing in the air slows a spin. Give that
+  // wall any grip and the spin bites: the ball is driven UP the wall. Measured 2026-08-22, it
+  // left 0.37m HIGHER than it arrived and dropped into the 40 or 50 - off-centre, into a 100.
+  //
+  // A ball cannot come off a wall higher than it arrived. Matt: "in real life there is NO rise.
+  // There would NEVER be ANY rise." With no friction there is no force along the wall at all, so
+  // a rise is not merely small, it is impossible. test.js asserts it on every throw that gets
+  // there: vertical speed after the wall must never exceed vertical speed before it.
+  //
+  // The engine makes this worse than physics allows. cannon caps friction at
+  // grip x GRAVITY x mass (vendor/cannon-es.js, the 'mug' term), never at grip x how hard the
+  // ball actually pressed in. On a light, fast graze that cap is far too generous - measured 3x
+  // over the real Coulomb limit. We do not hand-patch the vendored engine (see CLAUDE.md); zero
+  // grip removes the input it was over-applying, which fixes it at the source.
+  //
+  // 'kick' and 'keep' stay on matDead: the kicker needs its grip to keep a trough ball in.
+  contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
 
   for (const s of M.solids) {
     // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
@@ -83,12 +102,11 @@ function buildWorld(board) {
       type: CANNON.Body.STATIC,
       shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
-        : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
+        : s.part === 'board' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
-      // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
-      // staircase's risers are walls - they stay solid for a captured ball, always.
+            : s.part === 'backboard' ? matBack
+            : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
@@ -121,10 +139,13 @@ function buildWorld(board) {
   return { world, ball, M };
 }
 
-/** World position -> face coordinates {u, v, h, tilt}. machine.js owns the mapping now (it is
- *  piecewise on a stepped machine); this wrapper keeps the old call shape. */
+/** World position -> face coordinates {u, v, h} (machine.js documents the basis). */
 function worldToFace(M, G, p) {
-  return M.worldToFace(p);
+  const dy = p.y - M.lipY;
+  const dz = p.z - M.lipZ;
+  const sin = Math.sin(M.tilt);
+  const cos = Math.cos(M.tilt);
+  return { u: p.x, v: dy * sin - dz * cos, h: dy * cos + dz * sin };
 }
 
 export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
@@ -225,49 +246,10 @@ function substep(st) {
   const p = ball.position;
 
   // 1. Captured: the floor is gone under the mouth; ride gravity down through it.
-  //
-  // GUARD: THE CAPTURE RULE IS PER BOARD FAMILY, AND IT MUST STAY THAT WAY.
-  //
-  // A COLLARED CUP BOARD (POPONGO, BASKET FEVER) treats capture as a PREDICTION, NOT A SCORE
-  // (Matt, 2026-08-22: the machine paid a ball that rattled a rim and bounced OUT). Those mouths
-  // have walls standing above the face, so a captured ball really can strike the far collar wall
-  // and climb back out - nothing commits until it has ACTUALLY PASSED THROUGH the plane INSIDE
-  // the mouth, and a ball that gets clear gets its floor back and plays on.
-  //
-  // THE CLASSIC KEEPS THE RULE IT SHIPPED WITH: flush, ringed holes and the 0.26m drop test it
-  // was tuned against. The prediction rule was written for machine 3 and applied "on every
-  // machine" (28299ac), which silently changed how THE CLASSIC played overnight - three days
-  // after it went live, with its own boards.js entry untouched. Matt, 2026-08-23, on finding
-  // POPONGO/BASKET FEVER work inside the classic's physics: "WHAT THE FUCK". A machine nobody
-  // asked you to touch does not change.
-  //
-  // ALL THREE MACHINES SHARE THIS ONE FILE. boards.js is the only per-machine data there is, so
-  // an engine rule with no gate hits every machine by default. Gate the next one the way
-  // st.cupBoard gates this one (set once per throw in startThrow), and name in the commit
-  // message which machines you changed.
   if (st.captured) {
-    const hDef = G.holes[st.captured];
-    // THE CLASSIC: the original rule, unchanged since it went live. A flush hole has no wall to
-    // bounce a captured ball back out of, so the 0.26m drop below the capture point IS the score.
-    if (!st.cupBoard) {
-      if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) finishAt(st, st.captured, hDef.value, 'hole');
-      return;
-    }
-    const fc = worldToFace(M, G, p);
-    const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
-    if (st.t > MAX_T) {
+    if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) {
+      const hDef = G.holes[st.captured];
       finishAt(st, st.captured, hDef.value, 'hole');
-    } else if (fc.h < -G.ballR * 1.2) {
-      // Below the playing plane. Through the mouth = the score; through the slab anywhere
-      // else (a bounce-out that slid under the intangible floor before escaping) = a miss.
-      if (d < hDef.r + G.ballR) finishAt(st, st.captured, hDef.value, 'hole');
-      else finishAt(st, 'corner0', 0, 'gutter');
-    } else if (fc.h > G.ballR * 1.05 && d > hDef.r) {
-      // Clear of the slab's surface and outside the mouth: it bounced out. Give the floor
-      // back and let it play on - this ball has scored nothing yet.
-      st.events.push({ type: 'rimout', hole: st.captured });
-      st.captured = null;
-      ball.collisionFilterMask = GROUP_FLOOR | GROUP_REST;
     }
     return;
   }
@@ -282,10 +264,8 @@ function substep(st) {
   //    slowed or steered. No magnetism, no assist, no correction (see the banned section 5
   //    below). See DECISIONS.md#hole-capture.
   const vel = ball.velocity;
-  // The LOCAL surface frame - on a stepped machine each tread has its own tilt, and capture's
-  // kinematics answer to the surface the ball is actually over.
-  const sinT = Math.sin(f.tilt);
-  const cosT = Math.cos(f.tilt);
+  const sinT = Math.sin(M.tilt);
+  const cosT = Math.cos(M.tilt);
   // the same linear map worldToFace applies to positions, applied to the velocity
   const vFace = Math.hypot(vel.x, vel.y * sinT - vel.z * cosT);
   const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
@@ -306,19 +286,6 @@ function substep(st) {
       // points for merely hitting a cup (Matt, 2026-08-22). Pure kinematics per hole; a hole
       // with no collar (every hole on THE CLASSIC) keeps the original number exactly.
       const lip = hDef.collarH > 0 ? hDef.collarH : 0;
-      // A ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's
-      // VOLUME - a real basket has it at any rattle speed. Without this, a fast arrival that
-      // failed the kinematic test below ended up sitting on the still-solid slab INSIDE the
-      // collar - visibly "in the basket" - and could hop back out over the rim (Matt's clip,
-      // 2026-08-22 23:42). Capture releases the slab; the pass-through commit at the top of
-      // this function still decides the score, so nothing pays without falling through.
-      if (lip > 0 && f.h < lip) {
-        st.captured = id;
-        st.capturedFaceY = p.y;
-        ball.collisionFilterMask = GROUP_REST;
-        st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
-        return;
-      }
       const needH = lip > 0 ? need + Math.max(0, f.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
@@ -378,11 +345,16 @@ function substep(st) {
   //    power band needs widening, widen it in the GEOMETRY, never by moving the ball. See
   //    DECISIONS.md#removed-features-and-why-they-stay-removed.
 
-  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball
-  //    gets popped off the face like the chatter that frees a real ball; a ball a pop cannot
-  //    move is JAMMED (three contact normals can lock the solver completely - measured, not
-  //    theory), and jams get walked out: a slow positional roll toward the nearest mouth until
-  //    physics takes back over or the mouth captures it.
+  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball gets
+  //    two small nudges; a ball those cannot move is JAMMED (three contact normals can lock the
+  //    solver completely - measured, not theory).
+  //
+  //    A JAMMED BALL SCORES ZERO AND IS GONE. It is not walked, nudged or steered anywhere.
+  //    Matt, 2026-08-22: "Stuck balls should score ZERO. and not be moved. It should vanish."
+  //    Until then THE CLASSIC slid a jammed ball into the nearest mouth and PAID for it, which
+  //    is a scripted score - points for touching a cup rather than falling through one. POPONGO
+  //    already resolved a jam as a miss; both machines now do the same thing, so there is no
+  //    per-board branch left here to disagree about.
   const moved = Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z);
   if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
   else if (st.t - st.anchor.t > 0.9) {
@@ -390,15 +362,13 @@ function substep(st) {
     st.nudges += 1;
     if (st.nudges <= 2) {
       const side = p.x >= 0 ? -1 : 1;
-      const tLoc = typeof f.tilt === 'number' ? f.tilt : M.tilt;
       ball.velocity.x += side * 0.3;
-      ball.velocity.y += 0.55 * Math.cos(tLoc);
-      ball.velocity.z += 0.3 * Math.sin(tLoc) + 0.15;
+      ball.velocity.y += 0.55 * Math.cos(M.tilt);
+      ball.velocity.z += 0.3 * Math.sin(M.tilt) + 0.15;
     } else {
       // Two pops did nothing: it is JAMMED, on every machine. It scores nothing and it is over.
       // It is NOT walked toward a mouth - that was a scripted score, and it paid a player for
-      // touching a cup rather than falling through one (Matt, 2026-08-22: "Stuck balls should
-      // score ZERO. and not be moved. It should vanish.").
+      // touching a cup rather than falling through one (Matt, 2026-08-22).
       st.emergencyUsed = true;
       finishAt(st, 'corner0', 0, 'gutter');
       return;

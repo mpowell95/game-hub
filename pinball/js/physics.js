@@ -48,7 +48,7 @@ export function makeBall(x, y, vx = 0, vy = 0) {
 export function seg(ax, ay, bx, by, opts = {}) {
   return {
     t: 'seg', ax, ay, bx, by,
-    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0,
+    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.02,
     kick: opts.kick ?? 0, id: opts.id || '', oneWay: opts.oneWay || null,
     on: opts.on !== false,
   };
@@ -58,7 +58,7 @@ export function seg(ax, ay, bx, by, opts = {}) {
 export function circle(x, y, r, opts = {}) {
   return {
     t: 'circle', x, y, r,
-    e: opts.e ?? 0.5, mu: opts.mu ?? 0, kick: opts.kick ?? 0,
+    e: opts.e ?? 0.5, mu: opts.mu ?? 0.02, kick: opts.kick ?? 0,
     id: opts.id || '', on: opts.on !== false,
   };
 }
@@ -69,7 +69,7 @@ export function circle(x, y, r, opts = {}) {
 export function arc(cx, cy, rad, a0, a1, opts = {}) {
   return {
     t: 'arc', cx, cy, rad, a0, a1,
-    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0,
+    r: opts.r ?? 4, e: opts.e ?? 0.42, mu: opts.mu ?? 0.02,
     kick: opts.kick ?? 0, id: opts.id || '', on: opts.on !== false,
   };
 }
@@ -90,7 +90,7 @@ export function arc(cx, cy, rad, a0, a1, opts = {}) {
 export function flipper(px, py, len, rest, up, opts = {}) {
   return {
     t: 'flipper', px, py, len, rest, up,
-    r: opts.r ?? 8, e: opts.e ?? 0.65, mu: opts.mu ?? 0,
+    r: opts.r ?? 8, e: opts.e ?? 0.65, mu: opts.mu ?? 0.05,
     id: opts.id || '', angle: rest, omega: 0, pressed: false,
     speed: opts.speed ?? 22.4,   // rad/s; a real flipper sweeps ~50 degrees in ~40 ms
   };
@@ -142,27 +142,8 @@ function resolve(ball, nx, ny, pen, e, mu, kick, sv) {
   if (vn < 0) {
     const j = -(1 + e) * vn;
     let nvx = rvx + j * nx, nvy = rvy + j * ny;
-    // Tangential friction, and WHY EVERY SURFACE ON THIS TABLE NOW DEFAULTS TO mu = 0.
-    //
-    // This is charged ONCE PER CONTACT RESOLUTION, not once per impact, and those are not the same
-    // thing. A ball that bounces off a wall pays it once and does not care. A ball RIDING a surface
-    // - the orbit lane's floor, an inlane divider, a resting paddle - is in contact on every one of
-    // the 480 physics steps in a second, so it paid mu 480 times a second. At the old 0.02 that is
-    // (1 - 0.02)^480 = 6e-5 of its tangential speed per second of contact, against which gravity can
-    // only hold a terminal creep of g*dt/mu = 82 units/s. A healthy ball moves at ~800. The orbit is
-    // this table's headline shot and it is one long sustained contact with archIn, so the shot the
-    // right flipper exists to make was the shot that reliably turned the ball into a crawl: a
-    // 60-ball soak charged 344 s of sub-90 u/s crawling to archIn alone, and 40 s more to the two
-    // inlane dividers. Zeroing mu takes the same soak from 36.9% of ball life spent crawling to
-    // 20.0%, and cuts the dividers by 10-30x.
-    //
-    // Nothing is lost by removing it, because it was double-counting: the `drag` term in step() is
-    // already the playfield's rolling resistance and its own comment says so. Coulomb friction
-    // (tangential impulse bounded by mu * NORMAL impulse) would be the principled way to keep a
-    // little without the sustained-contact blowup - it is deliberately not done here, because
-    // nothing on this table needs it and an unused mechanism that behaves this badly when it does
-    // engage is worse than no mechanism. mu is kept as a per-collider option, defaulting to 0, so a
-    // future surface that genuinely wants grip can ask for it and own the consequences.
+    // Tangential friction: enough to let the ball roll along a rail instead of skating, not so
+    // much that a glancing hit kills the shot.
     const tx = nvx - (nvx * nx + nvy * ny) * nx;
     const ty = nvy - (nvx * nx + nvy * ny) * ny;
     nvx -= tx * mu; nvy -= ty * mu;

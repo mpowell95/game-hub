@@ -43,7 +43,7 @@ Your session ends and your eyes go with it. Convert the picture into something d
 `node test-visual.mjs` drives a game in a real Chromium at 393x852 in light, dark and
 reduced-motion, and writes a contact sheet to `.visual-out/`.
 
-**It looks at what CHANGED, not at all 19 games every time.** Matt's rule, and it is the right one:
+**It looks at what CHANGED, not at every game every time.** Matt's rule, and it is the right one:
 a finished game re-checked on every unrelated run is 90 seconds of nothing, forever.
 
 ```
@@ -56,7 +56,7 @@ node test-visual.mjs --all           every game (a first run, or an occasional s
 **A full sweep is never automatic.** Matt's rule: *"Always ask before testing all games."* When
 shared code changes (`js/`, `css/`, the hub's `index.html`, `sw.js`) the tool says so loudly and
 recommends `--all`, because that is how every game has broken at once before. It still only checks
-what changed. Running all 19 is a decision a person makes.
+what changed. Running the full sweep is a decision a person makes.
 
 **If you are a session and shared code changed: tell Matt, recommend the sweep, and wait for a
 yes.** Do not just run it.
@@ -111,17 +111,19 @@ Pool shipped **138px too tall inside the hub**, with its controls up to 98px bel
 *"I couldn't see the full board and the controls simultaneously."* This suite called it clean, and
 it WAS clean - standalone, at 393x852, which was the only thing it looked at.
 
-Two blind spots, both now covered by the `fit` check:
+**The rule itself** (what must be true, and the measurement techniques a fix needs) now lives in
+`docs/BUILDING-A-GAME.md`, "Part 3 — Fitting a screen to available viewport space, by
+measurement" — this same lesson was independently rediscovered by Dominoes and Battleship, so the
+rule is consolidated there rather than duplicated a third time here. What stays here is the
+verification side:
 
-- **The hub is a different host.** It wraps an immersive game in ~98px of top padding for the
-  floating back button and 40px at the bottom, so a game asking for `100dvh` is 138px too tall the
-  instant it is mounted. Nothing you can do standalone will ever show that. The check mounts the
-  game into the hub's real chrome directly (the launcher hides dev-only games behind a name check,
-  and the launcher was never the point - the CSS is).
-- **A real phone is shorter than the design size.** Browser toolbars eat 100-190px, so the check
-  runs a tall AND a short viewport. A layout can pass one and fail the other.
+- **The `fit` check mounts the game into the hub's real chrome directly** (the launcher hides
+  dev-only games behind a name check, and the launcher was never the point - the CSS is), and runs
+  it at both a tall AND a short viewport, since browser toolbars eat 100-190px on a real phone and
+  a layout can pass one and fail the other.
 
-Three ways this same fix went wrong before it went right, all worth knowing:
+Three ways this same fix went wrong before it went right at Pool, all worth knowing if you're
+debugging a similar failure:
 
 1. **Cancelling the surrounding gap is not enough.** The root still ASKS for `100dvh` and is then
    pushed down, so its bottom lands past the fold. Pin the height too.
@@ -141,6 +143,15 @@ Three ways this same fix went wrong before it went right, all worth knowing:
   seconds, versus a round trip that costs a day.
 - **Send Matt the screenshot** rather than a paragraph describing it. He can reject a picture in
   five seconds and a paragraph never.
+- **If self-capturing fails, ask Matt for a screenshot rather than concluding from numbers alone.**
+  As of 2026-08-21, on the machine this session ran on, three self-capture methods all failed: the
+  preview pane's `screenshot` action (times out), reading a canvas via `toDataURL` and
+  reassembling base64 in slices (produced unprocessable images), and `test-visual.mjs` itself
+  (SKIPs without `playwright-core`/Chromium installed). This is an environment observation, not a
+  permanent law — a different session's `HANDOFF-SKEEBALL-BOARD.md` documents the `toDataURL`
+  method working elsewhere — so try the normal path first, but don't burn a long stretch of time
+  re-deriving that it's broken here again; asking Matt is always the fallback and he's answered in
+  seconds every time it's been tried.
 - **A green suite is not a rendered screen, and a rendered screen is not a played game.** The
   first half was earned twice. The second half was earned promoting Pool without playing it.
 
