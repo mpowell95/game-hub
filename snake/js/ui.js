@@ -203,7 +203,7 @@ class SnakeUI {
   }
 
   openHelp() {
-    // The repo's how-to-play pattern (tic-tac-toe/CLAUDE.md): goal, the one non-obvious mechanic
+    // The repo's how-to-play pattern (docs/BUILDING-A-GAME.md): goal, the one non-obvious mechanic
     // (here: controls + solid walls), a concrete "X = Y" example. Everyone knows Snake; no more.
     const host = document.createElement('div');
     host.className = 'sn-root sn-help-overlay';

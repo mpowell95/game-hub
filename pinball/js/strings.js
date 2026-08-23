@@ -106,7 +106,7 @@ export const STRINGS = {
     over_jackpots: 'Jackpots',
     over_bestball: 'Best ball',
 
-    // How to play. Follows the repo-wide pattern (tic-tac-toe/CLAUDE.md, "How-to-play screens"):
+    // How to play. Follows the repo-wide pattern (docs/BUILDING-A-GAME.md, "How-to-play screens"):
     // one bold sentence, ONE diagram carrying the non-obvious part, a caption, an X = Y example,
     // then any remaining rules as short plain sentences. Everything a person already knows about
     // pinball is deliberately absent. The non-obvious part here is WHERE THIS TABLE'S SHOTS ARE,

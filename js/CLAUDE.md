@@ -70,6 +70,53 @@ one incident at a time). They are the enforcement detail behind the root's one-l
 
 ---
 
+## Data governance
+
+THE LAW's operational counterpart — rules for actually touching stored/synced player data, not
+just the nine principles above. This section holds the *rules*; the human-executed *procedures*
+(the device-restore steps, the monthly Firebase export) stay in `RESTORE.md`, which is
+deliberately not duplicated here — it's a rarely-run, copy-pasteable runbook, and pulling its
+actual recipe into this always-loaded-on-any-`js/`-edit file would put a destructive procedure in
+front of far more sessions than ever need it. Read `RESTORE.md` before touching custody of
+anyone's data; the rules below are what govern that reading, not a substitute for it.
+
+- **`database.rules.json` is ONE canonical file — merge branches into it, never replace it.**
+  (`database.rules.README.md` has the full rationale; note its enumerated node list — `challenge/`,
+  `flight/`, `selfies/` — predates `players/`, `usernames/`, `deviceReports/`, `bugReports/`,
+  `bugReportShots/`, and `bugReplies/`, so treat that file's node list as stale and this repo's
+  actual RTDB rules, `auth != null` for everything, as the ground truth.)
+- **Writes to `players/`, `usernames/`, or anyone's `gamehub.profile`/`gamehub.stats` are
+  high-stakes and explicit-permission-required, not something to script and run unilaterally.**
+  Propose the exact change to Matt, get a yes, then do it. This is the operational form of rules
+  6-8 above for anything beyond a normal in-app write.
+- **A Firebase RTDB `update()` on a key REPLACES that whole subtree, it does not merge.** An empty
+  local `gamehub.stats` syncing before a restored device's real history is loaded locally can
+  silently overwrite that history in Firebase — see `RESTORE.md`'s "ordering matters" section for
+  the concrete sequence that avoids this.
+- **There is no per-play event log for any game except Ball Run.** `gamehub.stats` stores running
+  totals only. This is a hard ceiling on any future identity-correction work: exact, game-by-game
+  reattribution (as opposed to "whose bucket does this device's current total belong in") is only
+  possible for Ball Run.
+- **Firebase RTDB reads and writes do not REJECT when the device can't reach the server — they
+  simply never settle.** `await net.createRoom(...)` (or any RTDB call) on a bad connection hangs
+  forever rather than erroring. Any UI waiting on one needs a race against a timeout
+  (`battleship/CLAUDE.md`'s `_withNetTimeout`, 12s, is the worked example) — don't assume a
+  Firebase call either succeeds or fails within a reasonable time on its own.
+
+### Multiplayer process rules
+
+- **Never change `js/net.js`'s protocol as a side effect of one game's MP work.** A protocol
+  change gets its own handoff, its own review, and its own real-device verification pass at every
+  seat count it affects.
+- **A session ships MP code and headless proof. It never reports "multiplayer works."** The
+  strongest true claim available without real devices is "the protocol is proven headlessly
+  against `FakeRoom`, all invariant probes green; real-room behavior is unverified."
+- **Verify with two separate browser PROFILES, never two tabs in one profile.** Tabs in the same
+  profile share `localStorage` — and therefore `gamehub.deviceId` and one `gamehub.stats` store —
+  which hides exactly the seat and stats bugs a real MP pass exists to find.
+
+---
+
 ### Shared modules (`js/`)
 
 Everything below is imported by `hub.js` and/or the module games; a game's own `js/` files
@@ -93,7 +140,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data. Owns one preference key of its own, `gamehub.lb.sort.v1` (the sort choice, alongside `gamehub.favorites.v1`/`gamehub.theme.v1`/`gamehub.lang.v1` — THE LAW rule 2's carve-out) |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: wins are the stored `won` (a draw is NOT a win, 2026-07-28), difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool and Boggle (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) that only Chinchón uses so far; see "The ninth consumer" |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle and Battleship (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below; Battleship's is the tenth consumer, hidden-information). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) used by Chinchón (ninth consumer) and Escoba (eleventh consumer) so far. **Yahtzee also uses `js/net.js`** (2 human seats; root `CLAUDE.md`'s games table documents it) but has no dedicated consumer write-up below yet -- a real, still-open gap, not an oversight to assume is covered |
 | `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
@@ -1177,7 +1224,7 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   counts... trading precision for legibility") described the OLD, now-fixed behavior; do not
   revive it as a design goal.
 - **Difficulty is a single-select FILTER, chosen from a DROPDOWN (2026-07-29, HANDOFF-LB-FILTER-
-  SORT.md — the old 5-pill row is gone).** All (default), Beginner, Intermediate, Pro, Expert —
+  SORT.md — the old 5-pill row is gone).** All (default), Easy, Medium, Hard, Expert —
   shared between By Player and By Game and carried into a game's own page; resets to All every
   time the overlay opens (not persisted, D7). Ski-slope shapes (circle/square/diamond/
   double-diamond, `diffShapeSVG()` in leaderboard-ui.js) still carry the tier on each menu item,
@@ -1766,7 +1813,7 @@ pieces that must be kept in sync by hand whenever their canonical source changes
 
 - Read once at setup-screen load. **Precedence:** a game's own saved last-used settings (e.g.
   `chinchon-settings`) beat the profile, which beats built-in defaults. Games never write it back.
-- **Skill maps 1:1** (1 Beginner, 2 Intermediate, 3 Pro) onto each game's difficulty. Connect Four's 4th
+- **Skill maps 1:1** (1 Easy, 2 Medium, 3 Hard) onto each game's difficulty. Connect Four's 4th
   "Expert" solver is not a profile tier (it is still chosen in Connect Four's own setup).
 - Use the profile name/emoji only where a game already shows player identity; do not add new avatar
   surfaces to games that lack them.

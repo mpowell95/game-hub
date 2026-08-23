@@ -15,8 +15,9 @@
 // possible future dedicated rating page (Matt's call). This file now only imports record/bucketsOf/
 // tierMix/tierRows/cmp from it.
 //
-// Two segments (By Player / By Game, renamed from Standings/Games) plus a shared difficulty pill
-// row (All/Beginner/Intermediate/Pro/Expert) that filters both. Colorblind-safe: pills carry a
+// Two segments (By Player / By Game, renamed from Standings/Games) plus a shared difficulty
+// dropdown filter (All/Easy/Medium/Hard/Expert, 2026-07-29 - the old 5-pill row is gone) that
+// filters both. Colorblind-safe: menu items carry a
 // SHAPE per tier (circle/square/diamond/double-diamond), never hue alone; the viewer's own row uses
 // a border highlight, never color alone.
 
