@@ -23,12 +23,22 @@ export const BALLS_PER_GAME = 9;
 // all three so this cannot drift. See DECISIONS.md#ring-geometry for the derivation and a
 // deliberate exception to the original spec table.
 //   1. Every hole touches its own ring at EXACTLY ONE point - the hole's bottom. No ring is
-//      concentric with its hole; each hangs above it.
-//   2. The 30 ring's top touches the 40 ring's bottom.
-//   3. The 40 ring's top, the 50 ring's bottom and the 20 ring's top all meet at ONE point.
-// Rules 2 and 3 make hole spacing a CONSEQUENCE of ring diameters, not a free number:
-// h(n+1) = h(n) + ringD(n). Move a diameter and the holes above it move with it.
+//      concentric with its hole; each hangs above it. (The ring wall's INNER face kisses the
+//      mouth's edge - the wall stands outside its own opening, never over it.)
+//   2. Where two rings meet, they touch at their OUTER faces (Matt, 2026-08-23: "OBVIOUSLY the
+//      rings should be tangent along their outermost point - not the inside"): the 30/40 and
+//      40/50 junctions, h(n+1) = h(n) + ringD(n) + 2 * RING_T. The first build met these at the
+//      wall CENTRELINES, a one-wall-thickness overlap that put the 40's ring 1.5cm inside the
+//      50's mouth - impossible on a real board.
+//   3. RETIRED (2026-08-23). The old "40 top, 50 bottom, 20 top meet at ONE point" was the
+//      2026-08-14 session's resolution of a spec-table conflict, and Matt has now resolved it
+//      the other way WITH A TAPE MEASURE: H (30-ring bottom outer to 20-ring bottom inner) is
+//      the table's 1.25x = 5in, and at 1.25x the triple cannot exist. The 20's ring top now
+//      stops 8.6mm short of the 50's ring - a gap, never an overlap (test.js asserts both).
+//      Measurement I (20-ring bottom outer to the 10 arc's inner edge) = 1.375x = 5.5in fixes
+//      the 10 the same way.
 const X = 1.00 / 6.875;
+const RING_T = 0.015;             // the ring wall's thickness; geom.ringThick and the v shifts share it
 
 export const BOARDS = [
   {
@@ -68,7 +78,9 @@ export const BOARDS = [
     geom: {
       // Ball diameter, measured outermost point to outermost point. Part of the same
       // proportion set as the face - see the X block at the top. See DECISIONS.md#ball-size.
-      ballR: X * 0.35,
+      // 3.0in on Matt's real cabinet at x = 4in (measured 2026-08-23): 0.75x across, so ballR
+      // is 0.375X. ball.ratio is waived below - the spec's 0.350X predates the measurement.
+      ballR: X * 0.375,
       ballMass: 0.18,
       // Player's end of the lane to the foot of the hump. Shorter than a real alley so the
       // board dominates the frame; also sets how much a launch angle spreads sideways before
@@ -125,7 +137,7 @@ export const BOARDS = [
       // that is fine. Do not shrink a ring, lower it, or move a camera to keep every mouth in
       // view. See DECISIONS.md#ring-geometry.
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
 
       // How low a lipLow cup's DOWN-SLOPE lip sits, as a fraction of its wall height. Moot while
       // every cup is flush (collarH 0) but kept for the next machine, which may want walls.
@@ -141,8 +153,10 @@ export const BOARDS = [
       // tangency rules in the X block at the top of this file. Positions are derived, not free:
       //   ring bottom = hole bottom = v - r        (rule 1: tangent at the hole's lowest point)
       //   h20 = 2.3125x is the one placement choice, and it sets the bottom margin
-      //   h30 = h20 + 1.5x, h40 = h30 + ringD30 (rule 2), h50 = h40 + ringD40 (rule 3)
-      //   h10 = h20 - 1.3125x
+      //   h30 = h20 + 1.25x + RING_T               (measurement H, 2026-08-23: 5in)
+      //   h40 = h30 + ringD30 + 2*RING_T           (rule 2, outer faces)
+      //   h50 = h40 + ringD40 + 2*RING_T           (rule 2 again; rule 3's triple is retired)
+      //   h10 = h20 - 1.375x - RING_T              (measurement I, 2026-08-23: 5.5in)
       // machine.js derives each ring's centre from its hole; nothing here states a ring centre,
       // so tangency cannot be broken by editing one number in isolation.
       //
@@ -163,15 +177,21 @@ export const BOARDS = [
         // back wall felt like the gap between a 40 and a 50. At 1.25 three ADJACENT angles open up
         // (0.34/0.36/0.38, runs of 8/6/6 over powers 70-77) - one learnable sweet spot, with the
         // angles either side still noisy, which is what a risk shot should look like.
-        '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
-        '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.19 },
-        c50: { u: 0, v: X * 7.1875, r: X * 0.5, value: 50, ringD: X * 1.4375 },
-        c40: { u: 0, v: X * 5.625, r: X * 0.5, value: 40, ringD: X * 1.5625 },
-        c30: { u: 0, v: X * 3.8125, r: X * 0.5, value: 30, ringD: X * 1.8125 },
+        // 2026-08-23: 1.0625 (4.25in) again - MEASURED off the real cabinet by Matt, with the
+        // ball also corrected to its real 0.75x. The 1.19 story above stays as history of why
+        // 1.0625 once read as a pinhole; the measured pair is what ships, re-swept together.
+        '100L': { u: -X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
+        '100R': { u: X * 2.75, v: X * 8.75, r: X * 0.5, value: 100, ringD: X * 1.0625 },
+        // The column, derived from Matt's 2026-08-23 measurements (the X-block comment): H and
+        // I fix the 30 and the 10 against the anchored 20; rule 2's outer tangency chains the
+        // 40 and 50 up from the 30. Rule 3's triple point is retired - see the X block.
+        c50: { u: 0, v: X * 6.9375 + RING_T * 5, r: X * 0.5, value: 50, ringD: X * 1.4375 },
+        c40: { u: 0, v: X * 5.375 + RING_T * 3, r: X * 0.5, value: 40, ringD: X * 1.5625 },
+        c30: { u: 0, v: X * 3.5625 + RING_T, r: X * 0.5, value: 30, ringD: X * 1.8125 },
         // GUARD, THE LAW rule 5: kept as `h20`, not renamed - the id is written into the
         // mid-rack autosave (gamehub.skeeball.save.v1) and old keys are never repurposed.
         h20: { u: 0, v: X * 2.3125, r: X * 0.5, value: 20, ringD: X * 4.875 },
-        h10: { u: 0, v: X * 1.0, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
+        h10: { u: 0, v: X * 0.9375 - RING_T, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
       },
       // GUARD: retired, kept only so an old saved rack still parses (THE LAW rule 5). Pays
       // nothing anywhere now - the 10 is a real hole on the face. physics.js no longer reads
@@ -211,6 +231,12 @@ export const BOARDS = [
         backFric: 0,
         backRest: 0.60,
       },
+    },
+
+    specWaivers: {
+      'ball.ratio': 'Matt measured the real cabinet, 2026-08-23: the ball is 3.0in against '
+        + 'x = 4in, so ballR is 0.375X (0.75x across). The spec sheet\'s 0.350X predates the '
+        + 'measurement; the real ball wins. Reach, dial and mat re-swept on this exact ball.',
     },
   },
 
@@ -310,7 +336,7 @@ export const BOARDS = [
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
@@ -502,7 +528,7 @@ export const BOARDS = [
       cupSegments: 14,
       collarThick: 0.012,
       ringH: X,
-      ringThick: 0.015,
+      ringThick: RING_T,
       lipLowFrac: 0.50,
       captureDrop: 0.35,
 
