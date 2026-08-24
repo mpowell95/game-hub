@@ -680,9 +680,9 @@ ball dropping in out of the air - no new physics, no new capture rule.
 - **DEPTH IS PER ROW, NOT PER BASKET (Matt, 2026-08-24):** *"all the hoops on a row should be the
   same height, regardless of the diameter of the basket"*, and *"the top of the backboard should
   never go higher than the wall the basket is on"*. So `collarH` is one value per row - the top
-  row runs a single depth across its 4in and 3.5in baskets - set at ~2/3 of the SMALLEST diameter
-  on the row (bottom/middle `X * 0.708`, top `X * 0.583`), which keeps every basket shallower
-  than it is wide. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
+  row runs a single depth across its 4in and 3.5in baskets. The depths themselves are just the
+  depths Matt asks for and are not derived from anything; `boards.js` holds the current ones and
+  their history. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
   capped the card's dome radius against the WHOLE riser rather than the room left above its
   mount, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in rims).
   The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
