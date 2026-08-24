@@ -148,13 +148,21 @@ const valueOf = (power, aim) => {
     && r40.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps
     && r20.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps,
     'a ring top crosses a mouth edge');
-  // A ring wall stands ringH tall perpendicular to the 45-degree face, so its top rim leans
-  // exactly ringH toward the player in plan view. The 10 arc's outer base must sit at least
-  // ringH up the face or the rim OVERHANGS the board's front lip - which shipped on 2026-08-23
-  // (Matt's screenshot: the arc visibly hanging past the edge) because nothing asserted it.
-  ok("the 10 arc's leaning rim stays over the board (base >= ringH up the face)",
-    (Gt.holes.h10.v - Gt.holes.h10.r - t2) >= Gt.ringH - eps,
-    `arc outer base at ${(Gt.holes.h10.v - Gt.holes.h10.r - t2).toFixed(4)}, ringH ${Gt.ringH.toFixed(4)}`);
+  // THE 50'S CAP IS THE COLUMN'S ANCHOR (Matt, 2026-08-23): the 50-ring's outer top sits at
+  // the 100 rings' centre, at the highest. The whole column chains down from this.
+  {
+    const H100 = Gt.holes['100L'];
+    const cv100 = H100.v - H100.r + H100.ringD / 2;
+    ok("the 50 ring's top never rises past the 100 rings' centre (Matt's cap)",
+      r50.topOut <= cv100 + eps, `50 top ${r50.topOut.toFixed(4)} vs 100 centre ${cv100.toFixed(4)}`);
+  }
+  // The bottom lands where the cap leaves it. Matt chose to spend the front strip ("use that
+  // space... Edit the constraint you just made") accepting the rim's ~1.4in plan lean over it,
+  // but the arc's BASE must keep a real footing - under ~half a hole of board the arc reads as
+  // falling off the edge again (the 2026-08-23 screenshot that started this).
+  ok("the 10 arc's outer base keeps at least 0.5x of board under it",
+    (Gt.holes.h10.v - Gt.holes.h10.r - t2) >= Xu * 0.5 - eps,
+    `arc outer base at ${(Gt.holes.h10.v - Gt.holes.h10.r - t2).toFixed(4)}, floor ${(Xu * 0.5).toFixed(4)}`);
 }
 
 // --- 1. determinism ---------------------------------------------------------------------------
