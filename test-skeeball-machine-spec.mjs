@@ -130,7 +130,12 @@ for (const board of BOARDS) {
   rule(board, 'holes.spacing', tooClose.length === 0,
     `hole centres must be at least 1.30X apart: ${tooClose.join(', ')}`);
 
-  const badValue = holes.filter(([, h]) => !(h.value >= 0)).map(([id]) => id);
+  // A NEGATIVE VALUE IS A REAL VALUE (BRICK CITY's penalty row, 2026-08-24). This used to test
+  // `h.value >= 0`, which read as "has a numeric value" but silently also banned penalty baskets,
+  // so the first machine with one failed a rule it was not breaking. What the rule actually
+  // guards is that every hole HAS a value - an undefined one means the arrangement layer never
+  // stamped it, and that hole would score as 0 with nothing to say so.
+  const badValue = holes.filter(([, h]) => !Number.isFinite(h.value)).map(([id]) => id);
   rule(board, 'holes.frozen', badValue.length === 0,
     `every hole needs a numeric value: ${badValue.join(', ')}`);
 

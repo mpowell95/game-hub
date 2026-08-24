@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v459';
+const CACHE = 'game-hub-v460';
 
 const ASSETS = [
   './',
@@ -251,6 +251,9 @@ const ASSETS = [
   './skeeball/js/machines/basketball/physics.js',
   './skeeball/js/machines/basketball/machine.js',
   './skeeball/js/machines/basketball/render.js',
+  './skeeball/js/machines/brickcity/physics.js',
+  './skeeball/js/machines/brickcity/machine.js',
+  './skeeball/js/machines/brickcity/render.js',
   './skeeball/js/vendor/cannon-es.js',
   './skeeball/js/vendor/three.module.min.js',
   './skeeball/js/vendor/three.core.min.js',
@@ -505,12 +508,12 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': 'c71ec38092',
-  './skeeball/js/ui.js': '3295221c98',
+  './skeeball/js/ui.js': 'ac71cc577c',
   './skeeball/js/swipe.js': 'c596f565de',
-  './skeeball/js/game.js': 'abaadd1506',
-  './skeeball/js/goals.js': '521b315250',
-  './skeeball/js/boards.js': '6ea3c90c92',
-  './skeeball/js/engines.js': '95ef96245d',
+  './skeeball/js/game.js': 'f1f9ad9519',
+  './skeeball/js/goals.js': '37cc2ad550',
+  './skeeball/js/boards.js': '247cae1b8a',
+  './skeeball/js/engines.js': '1196c74b9f',
   './skeeball/js/machines/classic/physics.js': 'a4a15b7180',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
   './skeeball/js/machines/classic/render.js': '98dd7bf15b',
@@ -520,10 +523,13 @@ const REST_MANIFEST = {
   './skeeball/js/machines/basketball/physics.js': 'f34b1cd4a5',
   './skeeball/js/machines/basketball/machine.js': '8d92102fe5',
   './skeeball/js/machines/basketball/render.js': 'f2bf907466',
+  './skeeball/js/machines/brickcity/physics.js': 'c6daf90433',
+  './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
+  './skeeball/js/machines/brickcity/render.js': '02f44ff065',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',
-  './skeeball/js/strings.js': 'a39ac59bcf',
+  './skeeball/js/strings.js': 'db6bf4823d',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',

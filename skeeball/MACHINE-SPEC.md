@@ -245,6 +245,15 @@ and no written `value`, because the value comes from the cup sitting in the slot
 - A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
   written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
 
+**A value may be NEGATIVE.** BRICK CITY's bottom row pays `-20 / -10 / -20`; the rule above tests
+that a hole HAS a value, not that the value is positive. Two consequences, both already handled,
+so a second penalty machine needs no new code: `game.js` floors the rack score at 0 after every
+ball (a rack can be eaten back to zero, never below it — which is what keeps the number on screen
+and the number `recordSkeeball` files the same number), and `ui.js`'s landing popup prints the
+sign (`signedValue`, a real minus). `game.js`'s `by(10)`/`by(20)`/`by(30)`/`by(40)` counters match
+exact values, so penalty balls are counted by nothing — deliberate; those counters count points
+earned. A machine that wants "penalties taken" gets its own counter and item 7's three edits.
+
 ### The arrangement layer — cup boards (POPONGO's pattern)
 
 A machine whose scoring furniture is movable in real life (POPONGO's nine identical cups) splits

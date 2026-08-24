@@ -276,5 +276,75 @@ const FIXTURE_PRE_UNIFIED = {
   eq('F: and it is not applied twice', gs.loadStats().games.escoba.total, { played: 1, won: 1, lost: 0 });
 }
 
+// --- scenario G: Skeeball's unlock chain grows a machine in the MIDDLE ----------------------
+// THE LAW rule 2 (writes are additive, only) and rule 7 (test against REAL history).
+//
+// 2026-08-24: HOT SHOT: BRICK CITY (`brickcity`) was inserted as machine 3, between HOT SHOT and
+// POPONGO, and POPONGO's own unlock moved from { board: 'basketball' } to { board: 'brickcity' }.
+// The question that has to be answered with data, not reasoning, is the one THE LAW asks: does a
+// player who ALREADY EARNED POPONGO under the old chain still have it?
+//
+// FIXTURE PROVENANCE (rule 7 - not a hand-invented shape): the two `sk` blocks below are the REAL
+// synced records of the only two devices in `players/` that held a Skeeball unlock beyond the
+// first machine, read unedited out of a full RTDB snapshot taken the same day
+// (backups/rtdb-backup.mjs, 148 player device records, the other 146 hold no `sk` block at all).
+// Device ids are truncated to their first 8 characters and the profile names dropped - this is a
+// public repo, and neither is load-bearing for what is being tested.
+{
+  const REAL_SK_A = {"unlocked":{"basketball":true,"classic":true,"popongo":true},"boards":{"basketball":{"best":540,"bestThrow":60,"daily":{"2026-08-24":540},"plays":18,"points":5120},"classic":{"best":430,"bestThrow":100,"daily":{"2026-08-24":430},"plays":312,"points":32620},"popongo":{"best":36,"bestThrow":6,"daily":{"2026-08-22":36,"2026-08-24":6},"plays":12,"points":122}},"hundreds":119,"colorSweeps":1};
+  const REAL_SK_B = {"unlocked":{"basketball":true,"classic":true,"popongo":true},"boards":{"basketball":{"best":710,"bestThrow":100,"daily":{"2026-08-22":480,"2026-08-23":480,"2026-08-24":710},"plays":28,"points":9480},"classic":{"best":450,"bestThrow":100,"daily":{"2026-08-22":230,"2026-08-23":450,"2026-08-24":350},"plays":38,"points":7850},"popongo":{"best":18,"bestThrow":6,"daily":{"2026-08-22":17,"2026-08-23":18},"plays":10,"points":88}},"hundreds":15,"colorSweeps":0};
+  // A device that has only ever played the first machine, for the other side of the check: it
+  // must NOT gain anything from the chain moving.
+  const REAL_SK_C = {"unlocked":{"classic":true},"boards":{"classic":{"best":370,"bestThrow":100,"daily":{"2026-08-24":370},"plays":14,"points":2730}},"hundreds":1,"colorSweeps":0};
+
+  const arc = await import(pathToFileURL(join(ROOT, 'js', 'arcade-scores.js')).href);
+  const { BOARDS, boardById } = await import(pathToFileURL(join(ROOT, 'skeeball', 'js', 'boards.js')).href);
+
+  // The chain itself, as data - so this test fails loudly if a future session re-points an unlock
+  // without thinking about the players standing on it.
+  eq('G: the chain is classic -> basketball -> brickcity -> popongo',
+    BOARDS.map((b) => `${b.id}<-${b.unlock ? b.unlock.board : 'open'}`),
+    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-brickcity']);
+
+  for (const [tag, SK] of [['A', REAL_SK_A], ['B', REAL_SK_B]]) {
+    // Load the real record through the CURRENT writer, exactly as a device does on its next hub
+    // open (ensureSk normalises the shape, then everything is read back).
+    freshStore({ 'gamehub.stats': { version: 1, games: { skeeball: { total: { played: 0, won: 0, lost: 0 }, byDiff: {}, sk: JSON.parse(JSON.stringify(SK)) } }, updatedAt: '2026-08-24T00:00:00.000Z' } });
+    const before = JSON.parse(JSON.stringify(SK));
+    const sk = () => gs.loadStats().games.skeeball.sk;
+
+    ok(`G${tag}: POPONGO is still unlocked after the chain moved`, arc.isUnlocked(sk(), 'popongo', 'classic'));
+    ok(`G${tag}: ...and HOT SHOT`, arc.isUnlocked(sk(), 'basketball', 'classic'));
+    ok(`G${tag}: ...and THE CLASSIC`, arc.isUnlocked(sk(), 'classic', 'classic'));
+    ok(`G${tag}: the new machine is NOT silently granted`, !arc.isUnlocked(sk(), 'brickcity', 'classic'));
+    eq(`G${tag}: every per-board record is untouched`, sk().boards, before.boards);
+
+    // Now play a rack on the new machine. Nothing about the machines already earned may move.
+    gs.recordSkeeball('brickcity', { score: 120, balls: 9, bestThrow: 40, at: '2026-08-24T12:00:00.000Z' });
+    ok(`G${tag}: POPONGO survives a rack on the new machine`, arc.isUnlocked(sk(), 'popongo', 'classic'));
+    eq(`G${tag}: ...with POPONGO's own record byte-identical`, sk().boards.popongo, before.boards.popongo);
+    eq(`G${tag}: ...and HOT SHOT's`, sk().boards.basketball, before.boards.basketball);
+    eq(`G${tag}: ...and THE CLASSIC's`, sk().boards.classic, before.boards.classic);
+    ok(`G${tag}: the new machine got its own bucket`, (sk().boards.brickcity || {}).plays === 1);
+  }
+
+  // The cross-device union: two devices, one of which never earned anything past the first
+  // machine. A union, never an intersection - the device that has less must not subtract.
+  const merged = arc.mergeUnlocked(arc.mergeUnlocked({}, REAL_SK_A.unlocked), REAL_SK_C.unlocked);
+  eq('G: unlocks union across devices rather than intersecting',
+    Object.keys(merged).sort(), ['basketball', 'classic', 'popongo']);
+
+  // And the device that only has the first machine is not handed the new one by the chain change.
+  freshStore({ 'gamehub.stats': { version: 1, games: { skeeball: { total: { played: 0, won: 0, lost: 0 }, byDiff: {}, sk: JSON.parse(JSON.stringify(REAL_SK_C)) } }, updatedAt: '2026-08-24T00:00:00.000Z' } });
+  ok('G: a first-machine-only device gains nothing from the chain moving',
+    !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'brickcity', 'classic')
+    && !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'popongo', 'classic'));
+
+  // The floor game.js applies to a rack with penalty cups, checked through the RECORDER: the
+  // number shown and the number filed have to be the same number.
+  ok('G: brickcity carries negative cups at all',
+    Object.values(boardById('brickcity').cups).some((c) => c.value < 0));
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
