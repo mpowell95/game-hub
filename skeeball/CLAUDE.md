@@ -658,9 +658,9 @@ ball dropping in out of the air - no new physics, no new capture rule.
   row runs a single depth across its 4in and 3.5in baskets - set at ~2/3 of the SMALLEST diameter
   on the row (bottom/middle `X * 0.708`, top `X * 0.583`), which keeps every basket shallower
   than it is wide. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
-  capped the card's dome radius against the WHOLE riser, but the mount adds `collarH + 0.018`
-  underneath it, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in
-  rims). The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
+  capped the card's dome radius against the WHOLE riser rather than the room left above its
+  mount, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in rims).
+  The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
   has its own engine copy and was left alone.
 - **THE VALUE CARDS ARE AN ARCH, ONE SIZE PER ROW (2026-08-24, Matt, and it applies to BOTH Hot
   Shot machines).** He asked for two things and they are the whole design: *"I do not want the

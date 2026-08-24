@@ -1416,7 +1416,7 @@ export class Renderer {
     let mount = 0, rim = 0;
     const us = [];
     for (const h of holes) {
-      mount = Math.max(mount, (h.collarH || 0) + 0.018);
+      mount = Math.max(mount, h.collarH || 0);
       // the WIDEST rim on the row, outer face included - the card is drawn in proportion to it
       rim = Math.max(rim, 2 * (h.r + (this.G.collarThick || 0) / 2));
       us.push(h.u);
@@ -1456,9 +1456,6 @@ export class Renderer {
     // next shelf. This doesn't look right." Splitting the two lets each dimension answer to its
     // own rule - WIDTH to the column pitch, HEIGHT to the riser - and the gap closes.
     const row = this._backboardRow(ti);
-    // Hung at the row's DEEPEST mount so one shelf's cards hang level, and so no card can foul
-    // its own rim: the mount clears the rim, which is what keeps the number readable from the
-    // play camera rather than hidden behind the hoop.
     const MOUNT = row.mount;
     // A REVEAL, not a flush fit - Matt: "the backboards do not have to be exactly to the top of
     // the wall they're on. you could leave like a 0.5 in gap if that makes the backboards fit
@@ -1542,10 +1539,6 @@ export class Renderer {
     });
     const edge = this._mat({ color: 0xd8d2c2, roughness: 0.6 });
     const mesh = new THREE.Mesh(geo, [face, edge]);
-    // The flat edge sits just above THE RIM, not the tread: the basket stands 0.109 m in front
-    // of the riser and its rim reaches collarH up, so a board bolted at the riser's foot has its
-    // number hidden behind the hoop from the play camera. The real cabinet mounts it clear of the
-    // rim for the same reason. MOUNT is the ROW's, so the shelf's cards hang level.
     const p = this.M.faceToWorld(H.u, riser.v0 + MOUNT, 0.006);
     mesh.position.set(p[0], p[1], p[2]);
     mesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - riser.tilt));
