@@ -7,9 +7,11 @@
 //   Games      - every hub tile, Live for everyone or Admin only (for testing). This is the
 //                `devOnly` decision, taken out of a commit-and-deploy cycle. The code default is
 //                always shown and always one tap away (Default), so the source stays the baseline.
-//   Skeeball   - each machine: released to everyone, or earned the normal way. Releasing is
-//                read-time only and can NEVER un-earn a machine somebody already unlocked
-//                (js/admin-config.js's header, THE LAW rule 2).
+//   Skeeball   - each machine, in THREE states (Matt's correction on the first version: it must
+//                separate "live and can be unlocked and played" from "not able to be played yet"):
+//                OPEN to everyone, UNLOCKABLE (live, earned the normal way), or TESTING (only a dev
+//                profile). All three are read-time only and can NEVER un-earn a machine somebody
+//                already unlocked (js/admin-config.js's header, THE LAW rule 2).
 //   This device - the local switches that used to need a console: an update check, the bug inbox,
 //                this device's id, the dev-write opt-in (dev origins only), and a reset of the
 //                one-time announcement seen-list so a popup can be re-checked.
@@ -29,8 +31,8 @@ import { BOARDS, DEFAULT_BOARD } from '../skeeball/js/boards.js';
 import { loadStats, statsId } from './game-stats.js';
 import { isUnlocked } from './arcade-scores.js';
 import {
-  readCachedConfig, refreshAdminConfig, gameOverride, boardOverride, resolveGameLive,
-  resolveBoardReleased, setGameLive, setBoardReleased,
+  readCachedConfig, refreshAdminConfig, gameOverride, boardOverride, boardTestingOverride,
+  resolveGameLive, resolveBoardMode, setGameLive, setBoardMode,
 } from './admin-config.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -82,6 +84,15 @@ function ensureCss() {
   .adm-row:first-of-type { border-top: 0; }
   .adm-row-main { flex: 1 1 220px; min-width: 0; }
   .adm-ctl { display: flex; align-items: center; gap: var(--gh-sp-2); margin-left: auto; }
+  /* Three labels do not fit beside a name at 393px, so a machine row always stacks and its
+     segmented control takes the full width. */
+  .adm-row--stack .adm-row-main { flex: 1 1 100%; }
+  .adm-ctl--wide { flex: 1 1 100%; margin-left: 0; flex-wrap: wrap; }
+  .adm-ctl--wide .gh-seg { flex: 1 1 100%; }
+  .adm-ctl--wide .gh-seg__item { flex: 1 1 0; }
+  /* Default drops under the three-way control and sits at the right, rather than being squeezed
+     off the edge beside it (which is what it did at 393px on the first try). */
+  .adm-ctl--wide > .gh-btn { margin-left: auto; }
   .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink); }
   .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
   .adm-seg { flex: 0 0 auto; }
@@ -212,26 +223,30 @@ function skeeballSectionHTML(cfg) {
   try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
   const rows = BOARDS.map((b) => {
     const first = b.id === DEFAULT_BOARD;
-    const released = resolveBoardReleased(cfg, b.id);
-    const over = boardOverride(cfg, b.id);
+    const mode = resolveBoardMode(cfg, b.id, !!b.adminOnly);
+    const set = boardOverride(cfg, b.id) !== null || boardTestingOverride(cfg, b.id) !== null;
     const earnedHere = isUnlocked(sk, b.id, DEFAULT_BOARD);
     // Machine names are proper nouns and are never routed through t() (boards.js's standing rule).
     const note = first ? t('adm_machine_first')
-      : released ? t('adm_machine_open')
-      : t('adm_machine_earn');
+      : mode === 'open' ? t('adm_machine_open_note')
+      : mode === 'unlockable' ? t('adm_machine_unlockable_note')
+      : t('adm_machine_testing_note');
+    // "You have unlocked it" is worth saying next to a machine in testing especially: it is the
+    // proof that the unlock is still there, being declined rather than deleted.
     const mine = (!first && earnedHere) ? ' ' + t('adm_machine_mine') : '';
-    return `<div class="adm-row" data-board="${esc(b.id)}">
+    return `<div class="adm-row adm-row--stack" data-board="${esc(b.id)}">
       <div class="adm-row-main">
         <div class="adm-name">${esc(b.name)}</div>
         <div class="adm-note">${esc(note + mine)}</div>
       </div>
-      ${first ? '' : `<div class="adm-ctl">
+      ${first ? '' : `<div class="adm-ctl adm-ctl--wide">
         ${segHTML(b.name, [
-          { value: 'open', label: t('adm_everyone') },
-          { value: 'earn', label: t('adm_earn_it') },
-        ], released ? 'open' : 'earn')}
+          { value: 'open', label: t('adm_mode_open') },
+          { value: 'unlockable', label: t('adm_mode_unlockable') },
+          { value: 'testing', label: t('adm_mode_testing') },
+        ], mode)}
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-boarddefault="${esc(b.id)}"
-          ${over === null ? 'disabled' : ''}>${esc(t('adm_default'))}</button>
+          ${set ? '' : 'disabled'}>${esc(t('adm_default'))}</button>
       </div>`}
     </div>`;
   }).join('');
@@ -296,11 +311,11 @@ function wire(card) {
     if (seg && gameRow) {
       run = () => setGameLive(gameRow.dataset.game, seg.dataset.set === 'live');
     } else if (seg && boardRow) {
-      run = () => setBoardReleased(boardRow.dataset.board, seg.dataset.set === 'open');
+      run = () => setBoardMode(boardRow.dataset.board, seg.dataset.set);
     } else if (gameDefault) {
       run = () => setGameLive(gameDefault.dataset.default, null);
     } else if (boardDefault) {
-      run = () => setBoardReleased(boardDefault.dataset.boarddefault, null);
+      run = () => setBoardMode(boardDefault.dataset.boarddefault, null);
     }
     if (!run) return;
 

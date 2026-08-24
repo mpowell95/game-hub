@@ -700,26 +700,45 @@ A machine no longer has to be earned to be playable by the family. The hub's **�
 (`js/admin-ui.js`, Matt only) can open any machine for everyone, and hand it back to its unlock,
 without a deploy — Matt's ask: *"I need to be able to release specific skeeball machines too."*
 
-How it lands here: `ui.js`'s three unlock gates (the carousel slide, the deferred board paint, and
-the scroll-snap selection) now read
+**Three states, not two** (Matt's correction the same day: *"this doesn't allow me to select which
+skeeball machines are live and can be unlocked and played vs what is not able to be played yet"*):
+
+| mode | who can play it | earnable? |
+|---|---|---|
+| Open | everyone, now | no unlock needed |
+| Unlockable | everyone who earns it | yes, its normal goals/score |
+| Testing | a dev profile only | no |
+
+`adminOnly` in `boards.js` is now only the CODE DEFAULT for the third one. `isBoardTesting(b.id,
+!!b.adminOnly)` resolves it, and **both unlock writers consult it** — `_earnedUnlocks()` and
+`_ensureGoalUnlocks()` skip a machine in testing and unlock one that is merely Unlockable, which is
+what makes that state real rather than cosmetic. Verified in a browser: with THE CLASSIC's three
+objectives met, BASKET FEVER unlocks under Unlockable and stays locked under Testing.
+
+How it lands in the gallery: `ui.js`'s three gates (the carousel slide, the deferred board paint,
+and the scroll-snap selection) now read
 
 ```js
-const open = devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id);
+const testing = isBoardTesting(b.id, !!b.adminOnly);
+const earned  = !testing && isUnlocked(sk, b.id, DEFAULT_BOARD);
+const open    = devAll || earned || (!testing && isBoardReleased(b.id));
 ```
 
-`isBoardReleased` comes from `js/admin-config.js` and is a synchronous read of the app-wide config
-cache. Three things about that line are load-bearing:
+Both resolvers come from `js/admin-config.js` and are synchronous reads of the app-wide config
+cache. Three things about those lines are load-bearing:
 
 - **It is an OR, and the earned half is the player's own store.** A release grants nothing
-  permanent, and flipping a machine back to "Earn it" cannot take it away from anybody who already
-  unlocked it (THE LAW rule 2). There is no code path from the admin page to `sk.unlocked` at all.
+  permanent, and moving a machine back cannot take it away from anybody who already unlocked it
+  (THE LAW rule 2): Testing DECLINES TO HONOR the unlock while it is set and honors it again the
+  moment it is not. There is no code path from the admin page to `sk.unlocked` at all.
 - **It never writes.** `unlockSkeeballBoard()` is still only ever called by `_earnedUnlocks` and
   `_ensureGoalUnlocks`, from real objective completion. A released machine that someone then earns
   properly records the unlock the normal way, on the normal path.
 - **It is separate from the dev bypass.** `devAll` (a dev profile sees every machine) is unchanged
   and still marks its slides TEST; the admin release applies to every player and does not.
 
-`test-admin-config.mjs` asserts all three sites still consult the resolver, and that no
+`test-admin-config.mjs` asserts all three sites still consult the resolvers, that both unlock
+writers skip a machine in testing, that nothing reads `b.adminOnly` directly any more, and that no
 `isBoardReleased` call sits next to an `unlockSkeeballBoard` write.
 
 ## Adding the next machine
