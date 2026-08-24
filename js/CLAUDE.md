@@ -148,6 +148,8 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/bug-report.js` | (2026-08-11) the DATA half of Report a bug: `gatherEnvironment()` (device/browser/install-state/screen/network/storage/SW/GPU/recent-errors) plus the whole `gatherDeviceReport()` payload, `prepareScreenshot()`'s downscale-until-it-fits, the `bugReports/`+`bugReportShots/` write with a verifying re-read, and the offline outbox (`gamehub.bugreports.pending.v1`) the hub drains on load/reconnect/return-to-launcher. See "Report a bug" below |
 | `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
+| `js/admin-config.js` | (2026-08-24) the app-wide admin config at `adminConfig/v1`: `isGameLive(hubId, codeDefault)` and `isBoardReleased(boardId)` (synchronous reads of the `gamehub.adminConfig.v1` cache), the pure resolvers behind them, `refreshAdminConfig()` (one background read per hub load, fires `gamehub:adminconfig` only on a real change) and the two writers, each dev-origin-guarded and verified by fresh re-read. See "The admin config" below |
+| `js/admin-ui.js` | (2026-08-24) the admin control page: game live/admin-only switches, Skeeball machine releases, this-device tools. Matt only, lazily imported by `js/hub.js`, built on `css/ui.css`'s `.gh-*` primitives |
 | `js/announce.js` | (2026-08-11) one-time launcher announcements: the entries (title/body/CTA as `{en,es}` on the entry), the seen-list (`gamehub.announce.v1`), and the pure `pendingAnnouncement()` decision. Reuses `new-badge.js`'s date parser; each entry's `until` retires it with no follow-up commit |
 | `js/announce-ui.js` | (2026-08-11) the announcement popup: DOM only, `.gh-*` primitives, dismissal recorded on close by any route |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -1158,9 +1160,15 @@ Believing him took thirty seconds (rule 8) and the fix was one line. Finding it 
 because **no other surface shows the absence** — not the game, not My Stats, not sync health.
 `players-agg.test.mjs`'s second `[KNOWN-BUG PROBE]` block now closes that: it reads the stats ids
 out of `game-stats.js` and fails unless each one has a `GAME_META` row, or sits in `OFF_THE_BOARD`
-with a reason — and an `OFF_THE_BOARD` entry must still be `devOnly` in `js/hub.js`, so releasing a
-game that is off the board fails the suite the same day (that is the check Skeeball and Pinball
-currently rest on). It was verified born red against the missing Yahtzee row.
+with a reason. It was verified born red against the missing Yahtzee row.
+
+**Since 2026-08-24 `OFF_THE_BOARD` is EMPTY, and should stay that way.** It used to hold games that
+were `devOnly` in `js/hub.js`, on the reasoning that releasing one was a commit that would add the
+row in the same breath. The admin control page ended that reasoning: `devOnly` is now only a
+DEFAULT, and Matt can release a game to everyone from inside the app with no commit and no deploy,
+so a game held off the board "until it ships" would ship without a row and zero every score on it
+from the first minute. Pinball therefore has a row while still being admin-only — it costs nothing,
+because every leaderboard surface only renders a game somebody has actually played.
 
 One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
 because the game has no difficulty setting at all. `tierOf('ai')` is `null`, so those wins count in
@@ -1743,6 +1751,63 @@ failed `persist()` through `persistOrQueue()`, and should be.
 ---
 
 ---
+
+## The admin config (2026-08-24)
+
+The switches Matt can flip from inside the app, and the contract every reader depends on. The
+motivation and the LAW angles are in the root `CLAUDE.md` ("The admin control page"); this is the
+mechanism.
+
+**The node**, in the shared named `'stats'` Firebase app, at `adminConfig/v1`:
+
+```
+{ games:    { <hubId>:   { live: true|false, at: <ms>, by: '<deviceId>' } },
+  skeeball: { boards: { <boardId>: { open: true|false, at: <ms>, by: '<deviceId>' } } } }
+```
+
+Versioned (`/v1`) so a future shape change never has to reinterpret this one. `by` is the writing
+device's `statsId()`, `at` is when — audit only, nothing reads them but the eye.
+
+**Reads are synchronous cache reads, on purpose.** `readCachedConfig()` parses
+`gamehub.adminConfig.v1` (memoized per page load) and every caller — `js/hub.js`'s card filter and
+Test pill, `js/game-stats-ui.js`'s tab gate, `skeeball/js/ui.js`'s three unlock gates — is a plain
+function call, no await. The launcher therefore paints from the last known config with no network on
+the critical path, and a phone in a drawer keeps behaving sensibly. `js/hub.js` fires one
+`refreshAdminConfig()` per load; it re-renders in place only when the fetched value actually differs
+from the cache, so the common case is a background read and no repaint.
+
+**An absent entry means the code default.** `resolveGameLive(cfg, id, codeDefault)` returns the
+override only when it is a real boolean; anything else — missing, malformed, `'yes'` — falls through
+to `!g.devOnly` from the registry. This is deliberate and is the whole reason the layer is safe: a
+config that is empty, wiped, half-written or unreachable leaves the app exactly as the source
+describes it. Hiding a game is only ever an explicit `live: false`.
+
+**Skeeball releases are additive at READ time and can never un-earn.** `isBoardReleased(id)` answers
+one question — has Matt opened this machine for everyone — and `skeeball/js/ui.js` ORs it with the
+player's own `isUnlocked(sk, id, DEFAULT_BOARD)`. Nothing in `js/admin-config.js` can write
+`sk.unlocked`, so a release grants nothing permanent and, more importantly, flipping a machine back
+to "Earn it" takes it away from exactly nobody who already earned it (THE LAW rule 2).
+`test-admin-config.mjs` pins both halves structurally against the shipped `ui.js`.
+
+**Writes verify themselves** (rule 6): `writeOverride()` `update()`s the field, then re-reads the
+whole node and compares; anything unexpected returns `{ ok: false, error }` and logs, and the admin
+page shows the failure in its status line rather than repainting as if it worked. Clearing an
+override writes `null` to the field, so the code default takes back over and no tombstone is left
+behind. A dev origin refuses to write at all unless `gamehub.devAllowSync.v1` is set — the same
+guard, and the same opt-in key, as `js/stats-net.js`, for the same reason: this node is shared by
+every device in the family.
+
+**Adding a third switch** is four edits: a resolver + its `*Override` reader in
+`js/admin-config.js`, a `setX()` on top of `writeOverride()`, a section in `js/admin-ui.js`, and a
+case in `test-admin-config.mjs` (including the structural check that the READER is actually wired
+in — the resolvers are only worth anything if a caller consults them). Keep the new branch absent by
+default, and keep "absent means the code default" true; every safety property above rests on it.
+
+**Rules:** `database.rules.json` is `auth != null` for read and write across the whole DB, so no
+rules change was needed. That also means the node is not cryptographically Matt-only — the admin
+button is gated on `isAdmin()` (a profile-name hash, like the bug inbox), which is a screen, not a
+lock. This is the family's app on a wide-open database; if that ever changes, this node needs a rule
+of its own before anything else does.
 
 ## The shared profile — contract and consumers
 
