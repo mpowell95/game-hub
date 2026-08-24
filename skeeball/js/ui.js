@@ -190,6 +190,7 @@ export class SkeeballUI {
   _earnedUnlocks(boardId, score) {
     const out = [];
     for (const b of BOARDS) {
+      if (b.adminOnly) continue;                        // admin-only machines are never unlocked by play
       if (!b.unlock || b.unlock.board !== boardId) continue;
       const ok = b.unlock.goals ? allGoalsMet(boardId) : (score | 0) >= (b.unlock.score | 0);
       if (ok) out.push(b.id);
@@ -204,6 +205,7 @@ export class SkeeballUI {
     try {
       const sk = (loadStats().games.skeeball || {}).sk || {};
       for (const b of BOARDS) {
+        if (b.adminOnly) continue;                      // never retroactively unlock an admin-only machine
         if (!b.unlock || !b.unlock.goals) continue;
         if (isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
         if (allGoalsMet(b.unlock.board)) unlockSkeeballBoard(b.id);
@@ -344,16 +346,25 @@ export class SkeeballUI {
     // machine there is a single centred card and no carousel chrome.
     const idx = Math.max(0, BOARDS.findIndex((b) => b.id === board.id));
     const slides = BOARDS.map((b) => {
-      const earned = isUnlocked(sk, b.id, DEFAULT_BOARD);
+      // An admin-only machine is open ONLY to a dev profile - never by an earned unlock - so it
+      // stays locked to everyone else while Matt is testing it (boards.js `adminOnly`).
+      const earned = !b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD);
+      // ...unless Matt has RELEASED it from the admin page, which is what that page's Skeeball
+      // section is for: `adminOnly` is the code default, the config is the override, exactly as it
+      // works for a hub game (js/admin-config.js). Still read-time only - nothing writes sk.unlocked.
       const open = devAll || earned || isBoardReleased(b.id);
       if (!open) {
-        const from = boardById(b.unlock.board);
         // The locked slide (MACHINE-SPEC section 17): the machine greyed out behind a large
         // lock, with only a SLIVER of the board visible - the picture is the real render, but
         // the CSS window (.sk-lock-peek) crops, greys and blurs it down to a tease.
-        const hint = b.unlock.goals
-          ? t('unlock_goals_hint', { name: from.name })
-          : t('unlock_hint', { score: b.unlock.score, name: from.name });
+        const from = b.unlock ? boardById(b.unlock.board) : null;
+        // An admin-only machine has no unlock a player can chase, so it says so plainly rather
+        // than promising a goal that would never open it.
+        const hint = b.adminOnly
+          ? t('lock_testing')
+          : b.unlock.goals
+            ? t('unlock_goals_hint', { name: from.name })
+            : t('unlock_hint', { score: b.unlock.score, name: from.name });
         return `<div class="sk-slide sk-slide-locked" data-board="${b.id}">
           <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
           <div class="sk-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
@@ -402,7 +413,7 @@ export class SkeeballUI {
     // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
     // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
     for (const b of BOARDS) {
-      const open = devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id);
+      const open = devAll || (!b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD)) || isBoardReleased(b.id);
       const imgEl = this.root.querySelector(open
         ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
@@ -421,7 +432,8 @@ export class SkeeballUI {
           const w = car.clientWidth || 1;
           const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
           const b = BOARDS[i];
-          if (b && (devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id)) && b.id !== this.settings.board) {
+          if (b && (devAll || (!b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD)) || isBoardReleased(b.id))
+              && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
