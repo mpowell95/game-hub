@@ -152,19 +152,21 @@ export const BOARDS = [
       // THE FACE. Seven holes, all one size (x across), each with its OWN ring - see the
       // tangency rules in the X block at the top of this file. Positions are derived, not free:
       //   ring bottom = hole bottom = v - r        (rule 1: tangent at the hole's lowest point)
-      //   h10 = 1.5x + RING_T is the anchor, and it is DERIVED, not chosen: a ring wall stands
-      //     ringH (= x) tall perpendicular to a 45-degree face, so its top rim leans exactly x
-      //     toward the player in plan view. The 10 arc's outer base must therefore sit >= x up
-      //     the face or its rim OVERHANGS the board's front lip - which is precisely what
-      //     shipped on 2026-08-23 (base at 0.23x; rim ~3in past the edge on screen, Matt: "it
-      //     falls off the board... and there's extra space at the top"). The old anchor was
-      //     h20 = 2.3125x, the last unmeasured leftover of the 08-14 build; anchoring the
-      //     column at the 10's rim-clearance instead raises everything 0.77x and consumes the
-      //     dead face that sat above the 50's ring.
-      //   h20 = h10 + 1.375x + RING_T              (measurement I, 2026-08-23: 5.5in)
-      //   h30 = h20 + 1.25x + RING_T               (measurement H, 2026-08-23: 5in)
-      //   h40 = h30 + ringD30 + 2*RING_T           (rule 2, outer faces)
-      //   h50 = h40 + ringD40 + 2*RING_T           (rule 2 again; rule 3's triple is retired)
+      //   THE ANCHOR IS THE 50'S CAP, derived top-down (Matt, 2026-08-23, in two steps): "the
+      //     top of the 50 should be like the center of the 100 rings at the highest", so the
+      //     50-ring's outer top sits EXACTLY at the 100 rings' centre (8.78125x), and the rest
+      //     of the column chains DOWN from it. The bottom then lands where it lands: the 10
+      //     arc's outer base at 0.51875x (~2.1in) from the edge - Matt saw that strip and chose
+      //     to spend it ("There's space between the bottom of the semi circle and the end of
+      //     the board now. Can't you use that? Edit the constraint you just made"), accepting
+      //     the arc rim's plan-view lean over the front strip (~1.4in) in exchange. The earlier
+      //     rim-plumb anchor (h10 = 1.5x + RING_T) put the 50 against the back wall; before
+      //     that, the unmeasured 08-14 anchor (h20 = 2.3125x) hung the rim ~3in off the board.
+      //   h50 = 7.84375x - RING_T                  (the cap: ring top outer = 8.78125x exactly)
+      //   h40 = h50 - ringD40 - 2*RING_T           (rule 2, outer faces)
+      //   h30 = h40 - ringD30 - 2*RING_T           (rule 2 again; rule 3's triple is retired)
+      //   h20 = h30 - 1.25x - RING_T               (measurement H, 2026-08-23: 5in)
+      //   h10 = h20 - 1.375x - RING_T              (measurement I, 2026-08-23: 5.5in)
       // machine.js derives each ring's centre from its hole; nothing here states a ring centre,
       // so tangency cannot be broken by editing one number in isolation.
       //
@@ -193,13 +195,13 @@ export const BOARDS = [
         // The column, derived from Matt's 2026-08-23 measurements (the X-block comment): H and
         // I fix the 30 and the 10 against the anchored 20; rule 2's outer tangency chains the
         // 40 and 50 up from the 30. Rule 3's triple point is retired - see the X block.
-        c50: { u: 0, v: X * 7.5 + RING_T * 7, r: X * 0.5, value: 50, ringD: X * 1.4375 },
-        c40: { u: 0, v: X * 5.9375 + RING_T * 5, r: X * 0.5, value: 40, ringD: X * 1.5625 },
-        c30: { u: 0, v: X * 4.125 + RING_T * 3, r: X * 0.5, value: 30, ringD: X * 1.8125 },
+        c50: { u: 0, v: X * 7.84375 - RING_T, r: X * 0.5, value: 50, ringD: X * 1.4375 },
+        c40: { u: 0, v: X * 6.28125 - RING_T * 3, r: X * 0.5, value: 40, ringD: X * 1.5625 },
+        c30: { u: 0, v: X * 4.46875 - RING_T * 5, r: X * 0.5, value: 30, ringD: X * 1.8125 },
         // GUARD, THE LAW rule 5: kept as `h20`, not renamed - the id is written into the
         // mid-rack autosave (gamehub.skeeball.save.v1) and old keys are never repurposed.
-        h20: { u: 0, v: X * 2.875 + RING_T * 2, r: X * 0.5, value: 20, ringD: X * 4.875 },
-        h10: { u: 0, v: X * 1.5 + RING_T, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
+        h20: { u: 0, v: X * 3.21875 - RING_T * 6, r: X * 0.5, value: 20, ringD: X * 4.875 },
+        h10: { u: 0, v: X * 1.84375 - RING_T * 7, r: X * 0.5, value: 10, ringD: X * 7.125, ringOpen: true },
       },
       // GUARD: retired, kept only so an old saved rack still parses (THE LAW rule 5). Pays
       // nothing anywhere now - the 10 is a real hole on the face. physics.js no longer reads
