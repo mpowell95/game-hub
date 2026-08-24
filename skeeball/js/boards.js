@@ -259,9 +259,14 @@ export const BOARDS = [
     // orange wire baskets, and each value on a white mini backboard behind its hoop. Physics is
     // untouched - the wall the ball hits is still machine.js's collar.
     dressing: 'basketball',
-    // Complete POPONGO's three objectives (js/goals.js). Same goals-based shape as POPONGO's own
-    // unlock; unlocksEarned() ignores it (no `score` field) and ui.js applies it.
+    // Complete THE CLASSIC's three objectives (js/goals.js). unlocksEarned() ignores it (no
+    // `score` field) and ui.js applies it.
     unlock: { board: 'classic', goals: true },
+    // ADMIN ONLY right now (Matt, 2026-08-24, still tuning this machine): ui.js never unlocks it
+    // by play and shows it locked to non-dev profiles; the dev bypass still opens it. NOTHING is
+    // deleted - a player who already earned it keeps sk.unlocked.basketball, and access returns
+    // the moment this flag comes off. Drop this line to release the machine.
+    adminOnly: true,
 
     // Matched to the reference photos in skeeball/Machines/Machine 4 - Basketball/ (the real
     // Basket Fever cabinet): yellow-and-black cabinet, blue face, orange wire hoops, red LED
@@ -402,20 +407,25 @@ export const BOARDS = [
       // that condition far earlier in the descent. The two effects very nearly cancel. 0.55X
       // and 0.75X were measured too (48 and 45 per 231) - the curve is flat, so pick the depth
       // that looks right, not the one that scores best.
-      holeR: X * 0.5,
+      // RIM DIAMETERS ARE MATT'S SPEC, verbatim (2026-08-24): the eight standard rims are 1.5X
+      // (6in) and the 100 rim is 1.0625X (4.25in), against the X (4in) hole and the 0.75X (3in)
+      // ball. Every rim clears the ball; the 100 is the one small, hard basket. `r` is the RIM
+      // radius (half the diameter): standard 0.75X, the 100 0.53125X. Depth (collarH) is ~2/3 of
+      // each rim's diameter, a shade shallower than the reference basket and swept to keep the
+      // stall watchdog rare (a rim as DEEP as it is wide traps the ball - measured 38% emergencies).
+      holeR: X * 0.75,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
-        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
-        midC: { u: 0, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
-        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
-        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
-        // THE 100 IS THE ONLY SMALLER RIM (Matt, 2026-08-24): 0.7083X across, the design's
-        // 4.25in against the standard 6in (0.708x smaller). Every other hoop is unchanged - this
-        // is the one shot meant to be hard. Depth tracks its own diameter ("as deep as it is wide").
-        topC: { u: 0, v: X * 9.2875, r: X * 0.35417, collarH: X * 0.7083 },
-        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.75, collarH: X * 1.0 },
+        // THE 100 IS THE SMALL RIM: 1.0625X (4.25in) across vs the eight 1.5X (6in) hoops - Matt's
+        // spec. Still 1.42x the 0.75X ball, so it fits; it is just the tight, hard target.
+        topC: { u: 0, v: X * 9.2875, r: X * 0.53125, collarH: X * 0.708 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.75, collarH: X * 1.0 },
       },
 
       minSpeed: 2.60,
@@ -474,6 +484,10 @@ export const BOARDS = [
     // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
     // always false.
     unlock: { board: 'basketball', goals: true },
+    // ADMIN ONLY right now (Matt, 2026-08-24, testing): same as basketball above - never unlocked
+    // by play, shown locked to non-dev profiles, dev bypass still opens it, nothing deleted. Drop
+    // this line to release.
+    adminOnly: true,
 
     // Matched to the real product photos in skeeball/Machines/Machine 2 - Popongo/: bare light
     // wood board and lane, colored cups, a playful blue marquee. `glow`/`net` are required by

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v456';
+const CACHE = 'game-hub-v457';
 
 const ASSETS = [
   './',
@@ -500,11 +500,11 @@ const REST_MANIFEST = {
   './skeeball/index.html': '607843c4fd',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': '489d1e169e',
-  './skeeball/js/ui.js': '67f136a5d8',
+  './skeeball/js/ui.js': '9e48a0a52f',
   './skeeball/js/swipe.js': '7c0d8669b0',
   './skeeball/js/game.js': 'b38b371d82',
   './skeeball/js/goals.js': '6b0362f158',
-  './skeeball/js/boards.js': '8a655e7b9b',
+  './skeeball/js/boards.js': '7d8f4718b3',
   './skeeball/js/engines.js': 'a1010368a4',
   './skeeball/js/machines/classic/physics.js': '18115df428',
   './skeeball/js/machines/classic/machine.js': '4ab06f4f5f',
@@ -518,7 +518,7 @@ const REST_MANIFEST = {
   './skeeball/js/vendor/cannon-es.js': 'f83c8c5721',
   './skeeball/js/vendor/three.module.min.js': '1f065b8bf5',
   './skeeball/js/vendor/three.core.min.js': '46bfe481f2',
-  './skeeball/js/strings.js': '19f67f1c6a',
+  './skeeball/js/strings.js': '7467787e1c',
   './dominoes/': 'f7098832ee',
   './dominoes/index.html': 'f7098832ee',
   './dominoes/css/dominoes.css': 'c5a84530fc',
