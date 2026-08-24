@@ -247,6 +247,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
+| `js/admin-config.js` | (2026-08-24) the app-wide **admin config** (`adminConfig/v1` in Firebase): which games are live for everyone and which Skeeball machines are open to everyone. Pure resolvers over a localStorage cache, so every reader is synchronous and offline-safe; an absent override always falls back to the code default |
+| `js/admin-ui.js` | (2026-08-24) the **admin control page** itself (Matt only, lazily imported): the game live/admin-only switches, the Skeeball machine releases, and this-device tools. See "The admin control page" below |
 | `js/announce.js` | one-time launcher announcements: the entries, the seen-list (`gamehub.announce.v1`), and the pure "does this device still owe one" decision. Each entry's `until` date retires it |
 | `js/announce-ui.js` | the announcement popup (DOM only) |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
@@ -290,6 +292,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `test-visual.mjs` | (2026-08-08) the only suite that LOOKS at a game. Drives it in a real Chromium at 393x852 in light/dark/reduced-motion and fails on: nothing painted, the body scrolling sideways, a JS error on mount, an animation too brief to follow (`MOTION` probes), or **a game that cannot actually be PLAYED** (`PLAY` probes drive the real UI with real touch to a real outcome; every run prints which games no probe has ever played), or **a game that does not FIT one screen** (`fit` checks both hosts - standalone AND mounted in the hub's real chrome - at a tall and a short phone height; the hub adds ~138px of chrome an immersive game must not ignore).  Writes a contact sheet to `.visual-out/` - **open it.** **Checks only what CHANGED** (`node test-visual.mjs`), or named games (`... escoba`), or everything (`... --all`); a shared-code change (`js/`, `css/`, `index.html`, `sw.js`) RECOMMENDS a full sweep but never runs one - **always ask Matt before testing all games** (his rule, 2026-08-08). SKIPs without playwright-core/Chromium. Written after Battleship's cannon took four rounds of Matt's time: **`VISUAL-PROCESS.md` and `reference/` are the process it belongs to, and a session doing visual work must read them first.** |
 | `test-yahtzee-ai.mjs` | (2026-08-13) the only suite that **plays** a game rather than looking at one: a full 13-round Yahtzee against the LIVE AI in a real Chromium (the real `endTurn` → `aiTakeTurn` chain, via `window.__yzTest`), then a strength profile and the die's distribution. Written after Matt read a player's 18-wins-in-20 record as rigged dice — it was a weak opponent (mean 154), and this pins the fix from **both** sides: a BAND of 185-235, so an AI that goes hopeless again fails exactly as loudly as one that becomes unbeatable. Also asserts 600,000 rolls stay uniform, so "are the dice weighted" is answered by a test instead of by re-reading `doRoll`. Full incident: `yahtzee/CLAUDE.md`. SKIPs without playwright-core/Chromium. |
 | `run-all-tests.mjs` | runs every node suite above plus the per-game engine tests, exit-code aggregated. All green expected. Run before every deploy. |
+| `test-admin-config.mjs` | (2026-08-24) headless tests for `js/admin-config.js`: the shape normalizer, both resolvers, the override readers and the cache, plus STRUCTURAL checks that the callers still OR the resolvers in (the hub card gate, the My Stats tab gate, Skeeball's three unlock gates, and Pinball's leaderboard row). The Firebase write path and `js/admin-ui.js` are not covered, and the suite header says so |
 | `test-bug-report.mjs` | (2026-08-11) headless tests for the pure halves of Report a bug: the screenshot budget, the description clamp, the inbox order and unread count (with real epoch timestamps - a `\| 0` on one scrambled both in the first draft), and the announcement's show-once/expire-by-itself decision, including the shipped announcement's own dates and EN/ES completeness. The DOM and Firebase halves are NOT covered, and the suite header says so. |
 | `read-install-state.mjs` | (2026-08-11) Matt-only: who is on the installed app and who is still in a browser tab, browser tabs first, from `players/<id>/device`. Only shows a device once it has opened the hub since this shipped - "(not seen yet)" is missing data, not a browser tab, and nothing here is retroactive |
 | `read-bug-reports.mjs` | (2026-08-11) Matt-only, the terminal view of the in-app inbox: lists `bugReports/` newest first, prints one in full, and is the only way to get the screenshots onto disk - `node read-bug-reports.mjs [--open] [<id> [--shots [dir]]] [--json]` |
@@ -413,6 +416,44 @@ profile is DEFAULTS-ONLY — every game prefills from it, each game's own saved 
 and games never write it back (the profile page is the primary writer, plus `js/hub.js`'s
 first-run gate). Extend the shape additively, never rename fields. Readers try/catch and treat
 missing or malformed data as "no profile"; a profile must never crash a game.
+## The admin control page (2026-08-24)
+
+Matt: *"I need an admin control page in the hub. I need to be able to make games admin only for
+testing and make them live. I need to be able to release specific skeeball machines too. I need all
+controls as possible from within the app."*
+
+Both switches existed before this; both were SOURCE EDITS. Hiding a game meant `devOnly: true` in
+`js/hub.js`, a `GAME_META` edit, a test-list edit, a `CACHE` bump and a deploy — Skeeball went
+through that cycle three times in three days (released 08-22, pulled back 08-23, re-released 08-24).
+Releasing one Skeeball machine early was not possible at all: a machine is opened by earning it, and
+the only bypass was the dev profile.
+
+The launcher's **🛠️ Admin** button (rendered for Matt only, beside the bug inbox) opens
+`js/admin-ui.js`, which writes `adminConfig/v1` through `js/admin-config.js`. Every device reads that
+node once per hub load and caches it locally.
+
+- **An override sits ON TOP of the code default, it does not replace it.** An absent entry means
+  "whatever `js/hub.js` says". A wiped, unreachable or never-written config leaves the app behaving
+  exactly as it does today — which is also why a config failure can never take a released game off
+  the family's launcher (THE LAW rule 1).
+- **Releasing a Skeeball machine is READ-TIME ONLY.** `skeeball/js/ui.js` ORs
+  `isBoardReleased(id)` with the player's earned `isUnlocked(...)`; nothing writes `sk.unlocked`.
+  So locking a machine back **cannot take away one somebody already earned** (rule 2), and nobody is
+  ever credited with an unlock they did not earn.
+- **Every write verifies by fresh re-read and fails loudly** (rule 6). A dev origin never writes the
+  family's config at all, same guard and same opt-in key as `js/stats-net.js`.
+- **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
+  a `GAME_META` row in `js/leaderboard-ui.js` while still being admin-only, and why
+  `players-agg.test.mjs`'s `OFF_THE_BOARD` list is now empty and must stay that way: a game released
+  from inside the app gets no release commit to add its row, and a missing row makes every win on it
+  count as zero (rule 1 — how Yahtzee shipped).
+- **Nothing on this page deletes, resets or rewrites any player's data.** The app-wide clears that do
+  exist are node scripts with backups, dry runs and verification (`clear-skeeball-stats.mjs`); a
+  button is the wrong home for them. The "This device" section is local-only (update check, bug
+  inbox, device id, the dev-write opt-in, re-show announcements).
+
+Full contract, the node shape, and how to add a third switch: `js/CLAUDE.md`, "The admin config".
+
 ### Accessibility + copy conventions
 
 - **Colorblind-safe** (Matt is red/green colorblind): wherever color is a choice, pair each hue with a

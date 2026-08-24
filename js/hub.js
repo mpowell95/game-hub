@@ -20,6 +20,7 @@ import { GAME_ART } from './game-art.js';
 import { isNewGame } from './new-badge.js';
 import { installErrorLog } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
+import { isGameLive, refreshAdminConfig, onAdminConfig } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -47,7 +48,7 @@ const titleText = (g) => (g.title && typeof g.title === 'object') ? (g.title[get
 // per folder is NOT a release date — most of this repo's early history lands on one import day
 // (2026-07-25) and several games' folders predate their launch. If a pre-existing game ever
 // wants the pill (a big relaunch, say), give it a real date by hand.
-const GAMES = [
+export const GAMES = [
   {
     id: 'connect-four',
     title: { en: 'Connect Four', es: 'Conecta 4' },
@@ -383,6 +384,11 @@ class Hub {
     this._onOnlineBugs = () => { this._drainBugReports(); this._paintReplyBadge(); };
     window.addEventListener('online', this._onOnlineBugs);
     this._maybeAnnounce();
+    // The app-wide admin config (which games are live, which Skeeball machines are open). The
+    // launcher has ALREADY painted from the cached copy - this refresh only re-renders when the
+    // fetched value actually differs, so the common case costs one background read and no repaint.
+    this._adminUnsub = onAdminConfig(() => { if (!this.current) this.render(); });
+    refreshAdminConfig();
   }
 
   /** Send anything in this device's bug-report outbox. Lazy import: only worth loading at all on
@@ -440,6 +446,15 @@ class Hub {
     } catch (err) { console.error('[hub] bug inbox failed to load', err); }
   }
 
+  /** The admin control page (js/admin-ui.js). Rendered for nobody else, and imported lazily so no
+   *  other device ever downloads it. */
+  async openAdmin() {
+    try {
+      const m = await import('./admin-ui.js');
+      await m.openAdmin();
+    } catch (err) { console.error('[hub] admin controls failed to load', err); }
+  }
+
   async _paintInboxCount() {
     const el = this.el && this.el.bugInbox;
     if (!el) return;
@@ -493,7 +508,12 @@ class Hub {
     // (Chinchón, Parchís) sort correctly. An id in storage that doesn't match a visible game
     // (retired/not-yet-unlocked) is simply never matched here - it stays in storage untouched
     // and starts showing again the moment the game reappears.
-    const visible = GAMES.filter((g) => !g.devOnly || dev);
+    // A game is live when the REMOTE ADMIN CONFIG says so, falling back to the registry's own
+    // `devOnly` when Matt has set no override (js/admin-config.js). That is what lets "make this
+    // admin-only for testing" and "make it live" happen from inside the app instead of from a
+    // commit; the registry stays the default, and a device that has never reached the config (new,
+    // offline) behaves exactly as it did before this existed. Dev profiles still see everything.
+    const visible = GAMES.filter((g) => isGameLive(g.id, !g.devOnly) || dev);
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     const byTitle = (a, b) => titleText(a).localeCompare(titleText(b));
@@ -540,6 +560,7 @@ class Hub {
           <section class="hub-extra">
             <button type="button" class="hub-statsbtn hub-bug-btn" data-role="bug" aria-label="${t('bug_btn_aria')}">${t('bug_btn')}</button>
             ${admin ? `<button type="button" class="hub-statsbtn hub-bug-inbox" data-role="buginbox">${t('bug_inbox_btn')}</button>` : ''}
+            ${admin ? `<button type="button" class="hub-statsbtn hub-admin-btn" data-role="admin">${t('adm_btn')}</button>` : ''}
             ${showKeepsake ? `<button type="button" class="hub-statsbtn hub-keepsake-btn" data-role="keepsake">${t('hub_challenge_btn')}</button>` : ''}
           </section>
           <section class="hub-game" data-role="game" hidden></section>
@@ -575,6 +596,7 @@ class Hub {
       keepsake: this.root.querySelector('[data-role="keepsake"]'),
       bug: this.root.querySelector('[data-role="bug"]'),
       bugInbox: this.root.querySelector('[data-role="buginbox"]'),
+      admin: this.root.querySelector('[data-role="admin"]'),
     };
 
     // The profile pill reads "My Profile" (consistent with My Stats / Leaderboards); the accent
@@ -627,6 +649,7 @@ class Hub {
 
     if (this.el.keepsake) this.el.keepsake.addEventListener('click', () => this.openKeepsake());
     if (this.el.bug) this.el.bug.addEventListener('click', () => this.openBugReport());
+    if (this.el.admin) this.el.admin.addEventListener('click', () => this.openAdmin());
     if (this.el.bugInbox) {
       this.el.bugInbox.addEventListener('click', () => this.openBugInbox());
       this._paintInboxCount();
@@ -855,7 +878,9 @@ class Hub {
     const isNew = isNewGame(g);
     const tags = [];
     if (g.comingSoon) tags.push(`<span class="hub-soon-tag">${t('hub_soon_tag')}</span>`);
-    else if (g.devOnly) tags.push(`<span class="hub-soon-tag">${t('hub_test_tag')}</span>`);
+    // The Test pill follows the RESOLVED state, not the registry line: a game Matt has pulled back
+    // from the admin page is in testing whatever js/hub.js says, and one he has released is not.
+    else if (!isGameLive(g.id, !g.devOnly)) tags.push(`<span class="hub-soon-tag">${t('hub_test_tag')}</span>`);
     if (isNew) tags.push(`<span class="hub-new-tag">${t('hub_new_tag')}</span>`);
     const inner = `
         <span class="hub-card-art">${g.art}</span>

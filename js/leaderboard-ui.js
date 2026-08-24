@@ -139,6 +139,14 @@ const GAME_META = [
   // (THE LAW rule 1) - every play stayed in every device's store and in players/. It is also out
   // of players-agg.test.mjs's OFF_THE_BOARD now; the two can never disagree.
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
+  // Pinball joined the board 2026-08-24, the day the admin control page shipped (js/admin-config.js).
+  // It is still `devOnly` in js/hub.js, but `devOnly` is now only a DEFAULT: Matt can release a game
+  // to everyone from inside the app, with no commit and no deploy - so a game cannot wait for its
+  // GAME_META row to be added by the release commit any more. Without a row here every Pinball score
+  // would be worth zero on the board the moment it was released, while My Stats showed it: THE LAW
+  // rule 1, and exactly how Yahtzee shipped. The row costs nothing while the game is hidden -
+  // gameListHTML only renders a game somebody has actually played.
+  { id: 'pinball', labelKey: 'game_title_pinball' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);

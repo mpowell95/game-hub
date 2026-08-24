@@ -601,14 +601,16 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 // health line, or in any other test - which is why this is structural. It discovers the games from
 // game-stats.js, so a NEW game is covered the day its stats id is added.
 //
-// A game may be off the board deliberately, but only while it is `devOnly` in js/hub.js's registry
-// (the leaderboard is the shared bragging wall; an unreleased game has no business on it). That is
-// checked, not taken on trust: the day one of these drops `devOnly`, this block fails and says to
-// add the GAME_META row. An entry here that HAS been added to GAME_META fails too, so the list
-// cannot go stale.
-const OFF_THE_BOARD = {
-  pinball: 'admin-only; the row reappears the moment the hub GAMES entry drops devOnly',
-};
+// EVERY game needs a GAME_META row now, released or not - the list below is EMPTY on purpose and
+// should stay that way. Until 2026-08-24 a game could sit off the board while it was `devOnly` in
+// js/hub.js, on the reasoning that releasing it was a commit that would add the row at the same
+// time. The admin control page (js/admin-config.js, same day) ended that: `devOnly` is only a
+// DEFAULT now, and Matt can release a game to everyone from inside the app with no commit and no
+// deploy at all. A game held off the board "until it ships" would therefore ship without a row, and
+// every win on it would count as zero while My Stats showed it - THE LAW rule 1, which is the exact
+// bug this block exists for. An entry here that HAS been added to GAME_META fails too, so if a
+// future game genuinely must be excluded, the list still cannot go stale.
+const OFF_THE_BOARD = {};
 {
   const { readFileSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');

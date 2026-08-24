@@ -26,6 +26,7 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
+import { isBoardReleased } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
 
@@ -330,6 +331,13 @@ export class SkeeballUI {
     let devAll = false;
     try { devAll = isDevProfile((loadProfile()?.name || '').trim()); } catch { devAll = false; }
 
+    // RELEASED BY THE ADMIN PAGE (2026-08-24): Matt can open a machine for everybody from inside
+    // the app (js/admin-config.js), without anyone earning it and without a deploy. Like the dev
+    // bypass above this is READ-TIME only - it never writes sk.unlocked, so nothing is recorded as
+    // earned that was not - and unlike the dev bypass it applies to every player. Locking a machine
+    // back can therefore never take an EARNED one away (THE LAW rule 2): `earned` is still ORed in
+    // below, and it is the half that comes from the player's own store.
+
     // A swipeable carousel of machines (Matt's call over Escoba's accordion): one slide per
     // machine, each showing that machine's ACTUAL board (render.js render, cached as an image),
     // never a drawing. Locked machines show a padlock. Scroll-snap does the swipe; with one
@@ -337,7 +345,7 @@ export class SkeeballUI {
     const idx = Math.max(0, BOARDS.findIndex((b) => b.id === board.id));
     const slides = BOARDS.map((b) => {
       const earned = isUnlocked(sk, b.id, DEFAULT_BOARD);
-      const open = devAll || earned;
+      const open = devAll || earned || isBoardReleased(b.id);
       if (!open) {
         const from = boardById(b.unlock.board);
         // The locked slide (MACHINE-SPEC section 17): the machine greyed out behind a large
@@ -394,7 +402,7 @@ export class SkeeballUI {
     // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
     // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
     for (const b of BOARDS) {
-      const open = devAll || isUnlocked(sk, b.id, DEFAULT_BOARD);
+      const open = devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id);
       const imgEl = this.root.querySelector(open
         ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
@@ -413,7 +421,7 @@ export class SkeeballUI {
           const w = car.clientWidth || 1;
           const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
           const b = BOARDS[i];
-          if (b && (devAll || isUnlocked(sk, b.id, DEFAULT_BOARD)) && b.id !== this.settings.board) {
+          if (b && (devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id)) && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));

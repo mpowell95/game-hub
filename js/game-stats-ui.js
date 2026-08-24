@@ -15,6 +15,7 @@
 import { loadStats, statsId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
+import { isGameLive } from './admin-config.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
@@ -89,11 +90,14 @@ export function gameChoices() {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-/** The tabs this profile may see. devOnly tabs render only for Matt and the tester. */
+/** The tabs this profile may see. A devOnly tab renders for Matt and the tester - and for everyone
+ *  the day Matt releases that game from the admin page (js/admin-config.js), which is the same
+ *  resolved answer the hub card uses. Without that second half, a game released from inside the app
+ *  would appear on the launcher with no stats screen behind it. */
 function visibleTabs() {
   let dev = false;
   try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
-  return TABS.filter((tab) => !tab.devOnly || dev);
+  return TABS.filter((tab) => !tab.devOnly || dev || isGameLive(hubIdOf(tab.id), !tab.devOnly));
 }
 const C4_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
 /** A game's display title in the active language (call at render time, never module scope). */

@@ -694,6 +694,34 @@ time (THE LAW rule 1): every play stayed in each device's store and in `players/
 plays from the hours the old build was live, and hiding the tab would make their own history
 invisible (rule 1; the comment on the `TABS` row records this).
 
+## Releasing a machine from the admin page (2026-08-24)
+
+A machine no longer has to be earned to be playable by the family. The hub's **🛠️ Admin** page
+(`js/admin-ui.js`, Matt only) can open any machine for everyone, and hand it back to its unlock,
+without a deploy — Matt's ask: *"I need to be able to release specific skeeball machines too."*
+
+How it lands here: `ui.js`'s three unlock gates (the carousel slide, the deferred board paint, and
+the scroll-snap selection) now read
+
+```js
+const open = devAll || isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id);
+```
+
+`isBoardReleased` comes from `js/admin-config.js` and is a synchronous read of the app-wide config
+cache. Three things about that line are load-bearing:
+
+- **It is an OR, and the earned half is the player's own store.** A release grants nothing
+  permanent, and flipping a machine back to "Earn it" cannot take it away from anybody who already
+  unlocked it (THE LAW rule 2). There is no code path from the admin page to `sk.unlocked` at all.
+- **It never writes.** `unlockSkeeballBoard()` is still only ever called by `_earnedUnlocks` and
+  `_ensureGoalUnlocks`, from real objective completion. A released machine that someone then earns
+  properly records the unlock the normal way, on the normal path.
+- **It is separate from the dev bypass.** `devAll` (a dev profile sees every machine) is unchanged
+  and still marks its slides TEST; the admin release applies to every player and does not.
+
+`test-admin-config.mjs` asserts all three sites still consult the resolver, and that no
+`isBoardReleased` call sits next to an `unlockSkeeballBoard` write.
+
 ## Adding the next machine
 
 1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,
