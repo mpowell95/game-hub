@@ -133,12 +133,12 @@ const GAME_META = [
   // while the board counted 0 - stored, synced, and invisible, which is THE LAW rule 1 exactly.
   // players-agg.test.mjs's second [KNOWN-BUG PROBE] block now fails if a shipped game is absent.
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
-  // Skeeball is ABSENT again from 2026-08-23, the day its hub entry took `devOnly` back, same as
-  // Pinball: the leaderboard is the shared bragging wall and an unreleased game has no business
-  // on it. It was here from 2026-08-22 to 2026-08-23. NOTHING IS LOST (THE LAW rule 1) - every
-  // play stays in every device's store and in players/, and the My Stats tab is deliberately NOT
-  // devOnly, so each player can still see their own Skeeball history. The row returns the moment
-  // the GAMES entry drops `devOnly`; players-agg.test.mjs's OFF_THE_BOARD holds the claim.
+  // Skeeball is BACK on the board 2026-08-24, the day its hub entry dropped `devOnly` and took a
+  // fresh released date (Classic playable, the other two machines goal-unlocked). It was off from
+  // 2026-08-23 (pulled back the day after its first release) to now. NOTHING WAS LOST either way
+  // (THE LAW rule 1) - every play stayed in every device's store and in players/. It is also out
+  // of players-agg.test.mjs's OFF_THE_BOARD now; the two can never disagree.
+  { id: 'skeeball', labelKey: 'game_title_skeeball' },
 ];
 function gameMetaSorted() { return GAME_META.slice().sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey))); }
 const ALL_IDS = GAME_META.map((g) => g.id);
