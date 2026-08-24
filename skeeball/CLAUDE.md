@@ -662,6 +662,32 @@ ball dropping in out of the air - no new physics, no new capture rule.
   underneath it, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in
   rims). The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
   has its own engine copy and was left alone.
+- **THE VALUE CARDS ARE AN ARCH, ONE SIZE PER ROW (2026-08-24, Matt, and it applies to BOTH Hot
+  Shot machines).** He asked for two things and they are the whole design: *"I do not want the
+  backboards to overlap each other. And I don't want them to ever be taller that the wall they're
+  attached to."*
+  - **The bug was the SHAPE.** The card was a semicircle (`absarc`), so its height WAS half its
+    width - one radius doing both jobs. Height could then only be bought with width, and width is
+    exactly what the no-overlap rule caps, so every card stopped well short of its wall and left a
+    band of bare riser above it. Matt: *"notice the gap between the top of these backboards and
+    the beginning of the next shelf. This doesn't look right."* It measured 1.35in on the lower
+    rows and 2.05in on the top row, against a 7.70in wall.
+  - **The fix is `absellipse`:** width answers to the column pitch, height answers to the riser,
+    and neither can drag the other out of bounds. `_backboardRow(ti)` supplies what the ROW owns -
+    its deepest mount, its column pitch, its widest rim - so one shelf's cards are cut identically
+    and hung level, whatever the baskets under them measure. Reveals: `TOP_REVEAL` 0.33in of bare
+    riser above every card, `SIDE_GAP` 0.50in between neighbours. Matt allowed the top one
+    explicitly: *"the backboards do not have to be exactly to the top of the wall they're on. you
+    could leave like a 0.5 in gap if that makes the backboards fit better."*
+  - **WIDTH IS NOT "AS WIDE AS IT MAY BE", and this was measured, not guessed.** The first build
+    stretched every card to the no-overlap cap; rendered, it looked WORSE than the gap it fixed -
+    wide squat cards crowding each other, and the value box (a fraction of the card's HEIGHT)
+    shrank until the number was hard to read. Width is now `1.5x the widest rim on the row`,
+    widened only as far as needed to keep the arch under `ARCH_MAX` (height : half-width of 1.25),
+    then clamped by the pitch. **If you change this, RENDER IT AND LOOK** - the numbers alone said
+    the first version was fine.
+  - Both `machines/basketball/` and `machines/brickcity/` carry the fix. Brick City's copy had
+    never had even the mount fix, so its cards could exceed their wall outright.
 - **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
   spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
   up the face barely moves but the peak is higher and the descent steeper, dropping the ball
