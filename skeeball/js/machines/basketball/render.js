@@ -1362,11 +1362,21 @@ export class Renderer {
     const netMat = this._mat({
       color: 0xf7f2e4, roughness: 0.9, emissive: 0xf7f2e4, emissiveIntensity: 0.5,
     });
-    const rings = [
-      { r: R, y: (phi) => hAt(phi) - 0.004 },
-      { r: R * 0.78, y: (phi) => hAt(phi) * 0.46 },
-      { r: Rbot * 1.04, y: () => yBot + 0.004 },
-    ];
+    // A DEEP basket needs a third band or its strands read as long bare wires; a shallow one
+    // looks knitted with two. Every band is a fraction of the basket's OWN depth, so the net
+    // follows collarH wherever the geometry takes it.
+    const rings = H.collarH > R * 0.9
+      ? [
+        { r: R, y: (phi) => hAt(phi) - 0.004 },
+        { r: R * 0.87, y: (phi) => hAt(phi) * 0.67 },
+        { r: R * 0.71, y: (phi) => hAt(phi) * 0.34 },
+        { r: Rbot * 1.04, y: () => yBot + 0.004 },
+      ]
+      : [
+        { r: R, y: (phi) => hAt(phi) - 0.004 },
+        { r: R * 0.78, y: (phi) => hAt(phi) * 0.46 },
+        { r: Rbot * 1.04, y: () => yBot + 0.004 },
+      ];
     const net = [];
     const S = 9;
     for (let b = 0; b < rings.length - 1; b++) {
@@ -1380,10 +1390,12 @@ export class Renderer {
         }
       }
     }
-    for (let i = 0; i < 28; i++) {                                   // the crossing ring
-      const p0 = (i / 28) * Math.PI * 2;
-      const p1 = ((i + 1) / 28) * Math.PI * 2;
-      net.push([P(rings[1].r, rings[1].y(p0), p0), P(rings[1].r, rings[1].y(p1), p1)]);
+    for (let b = 1; b < rings.length - 1; b++) {                     // a ring at every crossing
+      for (let i = 0; i < 28; i++) {
+        const p0 = (i / 28) * Math.PI * 2;
+        const p1 = ((i + 1) / 28) * Math.PI * 2;
+        net.push([P(rings[b].r, rings[b].y(p0), p0), P(rings[b].r, rings[b].y(p1), p1)]);
+      }
     }
     g.add(new THREE.Mesh(this._mergedTubes(net, 0.0027), netMat));
 
