@@ -44,23 +44,27 @@ export const BB_HOOP = 100;      // HOT SHOT: sink the 100 hoop (proved by per-b
 export const BB_BEST = 300;      // HOT SHOT: score 300+ in a single game
 export const BB_TOTAL = 3000;    // HOT SHOT: 3,000 points in total on the machine
 
-// HOT SHOT: BRICK CITY. Tuned to THIS face, not copied from its sibling: this machine pays two
-// 100s instead of one but through 3.20 in mouths against a 3.00 in ball, its reliable row pays 40
-// where HOT SHOT's pays 60, and its bottom row TAKES points. So the single-game bar and the
-// lifetime bar both sit below HOT SHOT's for the same effort.
+// HOT SHOT: BRICK CITY. Tuned to THIS face, not copied from its sibling, and RE-TUNED 2026-08-24
+// when the penalty row and the 40 row swapped sizes - the face got materially harder and the old
+// numbers (240 / 2,000) were measured against the version where a 6.00 in middle row walled most
+// balls off the penalty row entirely.
 //
-// MEASURED, on the 41x21 grid through this machine's own engine (skeeball/MACHINE-BRICKCITY.md
-// carries the table): a rack thrown uniformly across the dial scores ~51; a player who finds the
-// 40 band every ball scores 360; 11.8% of the dial pays 40, and 0.7% of it pays 100.
+// MEASURED on the 41x21 grid through this machine's own engine (skeeball/MACHINE-BRICKCITY.md
+// carries the table). Of 861 clean cells: 111 pay -20, 65 pay -10, 40 pay 40, 14 pay 20, 7 pay 50,
+// 6 pay 100, and 563 pay nothing. MOST POWER BANDS ARE NET NEGATIVE - at 22 of the 33 bands that
+// score at all, the mean ball LOSES points. The best single band (p0.775) averages 17.1 a ball
+// over all aims, and a player who lands near its best spot (p0.775, aim -0.1) with one grid step
+// of jitter averages 32.2 a ball - about a 290 rack. That is the ceiling a good player plays
+// against, so the single-game bar sits near two thirds of it.
 //
-// GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE, and the 100 is the
-// one to watch - it is 6 grid cells here against HOT SHOT's 26, about four times harder to find
-// on the dial. It is genuinely capturable (clean captures at p0.675-0.75 with a little aim), and
-// there are two of them. If it plays too hard once somebody has actually thrown a few racks,
-// soften THIS LINE - do not widen the mouth, which is what makes the shot mean anything.
+// GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE. The 100 is the one
+// to watch - 6 grid cells here against HOT SHOT's 26, about four times harder to find on the dial
+// (p0.675-0.95, always with some aim on it). It is genuinely capturable and there are two of them.
+// If any of the three plays too hard once there are real racks behind it, soften THESE LINES - do
+// not widen a mouth, which is what makes the shot mean anything.
 export const BC_HOOP = 100;      // BRICK CITY: sink a 100 (proved by per-board bestThrow)
-export const BC_BEST = 240;      // BRICK CITY: score 240+ in a single game (six 40s)
-export const BC_TOTAL = 2000;    // BRICK CITY: 2,000 points in total on the machine
+export const BC_BEST = 200;      // BRICK CITY: score 200+ in a single game
+export const BC_TOTAL = 1500;    // BRICK CITY: 1,500 points in total on the machine
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }

@@ -641,6 +641,25 @@ ball dropping in out of the air - no new physics, no new capture rule.
   (the `needH` rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws; ladder
   low row from p~0.28, middle p~0.52, top p~0.8, the 100 straight at p0.76-0.8.
 
+## Where the three objectives sit (2026-08-24: all three in the gutters)
+
+Matt, on the deployed BRICK CITY: *"obviously I don't want the objectives to cover any machine."*
+
+The two side rails were always safe - they sit in the gutters `frame.mjs` measures either side of
+the cabinet, 66px clear at the board's widest point. **Total points was not.** It was centred in
+the strip of back wall between the ball count and the top of the marquee, on a band measured at
+48-72px across the phone sizes - and **that band is THE CLASSIC's**. `frame.mjs` builds its
+geometry from `BOARDS[0]` and `machines/classic/machine.js` only, so the number was never checked
+against the staircase machines, which stand taller. On HOT SHOT and BRICK CITY the chip landed on
+the marquee, across the lettering of a designed sign.
+
+All three now live in the rails: the signature goal alone on the left, the two SCORE goals stacked
+on the right. Measured after, on all four machines at 393x852, the boxes land in exactly the same
+three places every time - left 8-83px, right 310-385px - and never over the board.
+
+**Do not put a goal back in the centre** without a per-machine measurement of that band, which
+`frame.mjs` does not currently do (it is single-board by construction, and its header says so).
+
 ## The records panel (the four numbers every machine shows)
 
 Per Matt's spec, each machine displays: the **top score by ANY player**, the current player's
