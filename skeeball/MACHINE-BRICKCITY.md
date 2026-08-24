@@ -215,11 +215,12 @@ ball. The seven real bulb MESHES above the panel already flash on `celebrate()`,
 movement belongs; `REDUCED` at the top of `render.js` is the `prefers-reduced-motion` gate it would
 need.
 
-**The HUD used to cover this sign, and no longer does.** The shared centre goal chip ("Total
-points") sat on a band measured only against THE CLASSIC's geometry, so on the taller staircase
-machines it landed on the marquee, across the lettering. All three objectives now live in the
-gutter rails, which are measured clear for every board — see `skeeball/CLAUDE.md`, "Where the
-three objectives sit". That was a change to all four cabinets, not a BRICK CITY one.
+**The HUD used to cover this sign, and no longer does.** The shared centre goal chip sat on a
+band measured only against THE CLASSIC's geometry, so on the taller staircase machines it landed
+on the marquee, across the lettering. The chip is back, and it is IN FLOW above the stage now — the
+machine is drawn in the height that is left, so it cannot reach this sign on any board. See
+`skeeball/CLAUDE.md`, "Where the three objectives sit". That was a change to all four cabinets,
+not a BRICK CITY one.
 
 ### The palette (`look`)
 
@@ -304,8 +305,11 @@ net total points or something since it goes up and down depending on the negativ
 number is the same per-board points total the other machines use; on this face a rack contributes
 what it FINISHED with after the penalties took their cut, so the label says so. Its own string key
 (`g_net`), because the other three machines' totals only ever climb and "Total points" is still
-true there. Short on purpose: a rail box is `min(76px, 19vw)` and wraps to two lines, so "Net total
-points" would take three and push the number out.
+true there. **Short on purpose, and it was measured twice.** It began short because a rail box is
+`min(76px, 19vw)` and wraps to two lines. When the total moved to the wide bar above the machine
+that reason expired, so "Net total points" was tried — and at completion (`1.5k/1.5k ✓`) it
+measures 241px against the ~216px between the two rails on a 375px phone, overlapping both. In
+Spanish it is worse. So the short name stays, for a new reason.
 
 ### The two counters these needed
 

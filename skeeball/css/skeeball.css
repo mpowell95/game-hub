@@ -473,12 +473,13 @@
    .gh-overlay / .gh-modal / .gh-btn / .gh-chip primitives so it follows the hub theme; only the
    score, the hub-wide-record row and the stat tiles need a game-specific skin, all on --gh-* tokens. */
 /* ------------------------------------------------------------ the three goals --- */
-/* GUARD: THE RAILS LIE OVER THE STAGE, which .sk-rack deliberately does not. That is safe only
-   because they sit in the gutters frame.mjs measures either side of the machine - 66px clear at
-   the board's widest point, wider further up - and never over the board itself. The neighbouring
-   machines behind them are barely lit, so each block carries its own dark backing. Re-run
-   frame.mjs before moving either rail inward, and never take pointer-events: none off them: a
-   rail that can be hit is a rail that can eat a swipe. */
+/* GUARD: THE RAILS LIE OVER THE STAGE, which .sk-rack and .sk-gtotal-row deliberately do not.
+   That is safe only because they sit in the gutters frame.mjs measures either side of the
+   machine - 66px clear at the board's widest point, wider further up - and never over the board
+   itself. The neighbouring machines behind them are barely lit, so each block carries its own
+   dark backing. Re-run frame.mjs before moving either rail inward, and never take
+   pointer-events: none off them: a rail that can be hit is a rail that can eat a swipe.
+   ONE BOX PER RAIL since 2026-08-24: the running total is the wide bar above the machine. */
 .sk-root .sk-grail {
   position: absolute;
   top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
@@ -512,15 +513,96 @@
 }
 .sk-root .sk-grails::before { left: 0; background: linear-gradient(to right, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
 
-/* WHY THERE IS NO CENTRE CHIP ANY MORE. Total points used to sit centred in the strip of back
-   wall between the ball count and the top of the marquee, on a band measured at 48-72px across
-   the phone sizes. That band is THE CLASSIC's: frame.mjs derives it from BOARDS[0] and
-   machines/classic/machine.js, and the staircase machines (HOT SHOT, BRICK CITY) stand taller,
-   so on those the chip landed ON the marquee - over the lettering of a designed sign. Matt,
-   2026-08-24: "obviously I don't want the objectives to cover any machine." The gutters are the
-   only space on this screen measured clear for EVERY board, so the third goal moved into the
-   right rail beside the second. Do not put a goal back in the centre without a per-machine
-   measurement of that band, which frame.mjs does not currently do. */
+/* THE RUNNING TOTAL, ABOVE THE MACHINE - AND IT IS IN FLOW. Read this before making it pretty.
+   Matt, 2026-08-24: "The previous way of putting the total point horizontal over the machine was
+   great. I'm not sure why there isn't enough space there anymore."
+
+   There was always enough space. The old chip was `position: absolute` at
+   `safe-area + 134px` - 25px under the pips - and that constant came from THE CLASSIC. Measured
+   through the real UI, the gap between the pips and the top of the marquee is 53 / 69 / 77px on
+   THE CLASSIC and POPONGO at 375x667 / 393x852 / 430x932, but only 31 / 40 / 44px on the
+   staircase machines (HOT SHOT, BRICK CITY), which stand taller. Against a 28px chip pinned 25px
+   down, that leaves 6px on the small phone - so it sat straight across a designed sign, and it
+   got pulled ("obviously I don't want the objectives to cover any machine").
+
+   The fix is not a better constant and not a runtime measurement. IT IS FLOW, the same reason
+   .sk-rack is in flow: .sk-play-wrap is a column, .sk-stage is `flex: 1 1 auto`, and the
+   renderer fits the machine to whatever height the stage ends up with. A row above the stage
+   takes its height first and the machine is drawn in what is left, so this bar cannot reach a
+   marquee on any board, at any size, with nothing measured. It costs the stage ~34px, so every
+   machine renders about 4-5% smaller; that is the price and it was paid deliberately.
+
+   DO NOT give this `position: absolute` again, however tempting the extra 34px looks. */
+.sk-root .sk-gtotal-row {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 2px 12px 6px;
+  pointer-events: none;
+}
+
+.sk-root .sk-gtotal {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 14px 7px;
+  border-radius: 8px;
+  background: rgba(26, 16, 12, 0.86);
+  border: 1px solid var(--sk-line);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sk-root .sk-gtotal em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sk-dim);
+}
+.sk-root .sk-gtotal b {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--sk-cream);
+}
+/* On one row here, unlike the rails: there is width to spare, and stacking it would double the
+   bar's height for nothing. */
+.sk-root .sk-gtotal b i { font-style: normal; font-size: 11px; color: #8d7a63; }
+/* The same progress line and the same tick the rail boxes carry, so all three objectives speak
+   one vocabulary. It rides the chip's bottom EDGE rather than sitting on its own row, which is
+   what keeps the bar one line tall. */
+.sk-root .sk-gtotal .sk-goal-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  margin: 0;
+  border-radius: 0;
+}
+.sk-root .sk-gtotal.is-done em { color: var(--sk-amber); }
+.sk-root .sk-gtotal.is-done b,
+.sk-root .sk-gtotal.is-done b i { color: var(--sk-amber); }
+.sk-root .sk-gtotal.is-done b::after { content: ' ✓'; }
+@media (prefers-reduced-motion: no-preference) {
+  .sk-root .sk-gtotal.is-fresh { animation: sk-goal-pop 0.75s cubic-bezier(0.2, 1.4, 0.4, 1); }
+}
+/* A NARROW PHONE, WHERE THIS BAR AND THE RAILS SHARE A BAND OF SCREEN. The chip is centred and
+   the rails are 8px off each edge, so on a 375px screen there are only ~216px between them - and
+   the widest real case, Spanish "Puntos totales" completed ("10k/10k ✓"), measures 222px and
+   overlapped both rails by 2px. Measured, not guessed: every EN and ES label was run against its
+   own completed value at 360x740, 375x667, 393x852 and 430x932. One step down on the label, the
+   value and the padding buys ~37px, which keeps the worst case clear of both rails even at 360px,
+   the narrowest phone the hub sees. The label stays at 11px and the value at 14px: 11px is the
+   repo's minimum text size (docs/BUILDING-A-GAME.md, Part 0), so there is no room to shrink this
+   further - a longer third objective on some future machine needs a re-measure, because nothing
+   here truncates and a label that does not fit will collide instead. */
+@media (max-width: 400px) {
+  .sk-root .sk-gtotal { padding-left: 9px; padding-right: 9px; gap: 5px; }
+  .sk-root .sk-gtotal em { font-size: 11px; letter-spacing: 0.04em; }
+  .sk-root .sk-gtotal b { font-size: 14px; }
+}
 
 .sk-root .sk-grails::after { right: 0; background: linear-gradient(to left, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
 
