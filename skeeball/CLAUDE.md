@@ -559,7 +559,7 @@ ball dropping in out of the air - no new physics, no new capture rule.
   side-wall tops (`wallRest` 0.15) keep the vertical-pop probe at 5 per 117 hard throws, all
   rim rattles or hidden containment hits behind the backboard - zero off the wall itself.
 - **Sweeps on the staircase** (post-revert layout): all nine mouths capturable, 0 emergencies
-  in 459 throws, slowest settle 5.4s (DECISIONS.md#basket-fever-layout).
+  in 459 throws, slowest settle 5.4s (DECISIONS.md#hot-shot-layout).
 - **The tiers are painted on their own segments** (`_paintField` + one field plane per segment
   in `_build`, each mapping its v-slice of the one unrolled texture): cream shelf treads, blue
   star-scattered risers. Backboard value cards are flat planes ON the risers (`_hoopBackboard`)
