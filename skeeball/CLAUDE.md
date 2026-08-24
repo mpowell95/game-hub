@@ -610,6 +610,16 @@ ball dropping in out of the air - no new physics, no new capture rule.
     THE CLASSIC and POPONGO have their own copies of both painters and were deliberately NOT
     changed - the same bug is in theirs, and fixing it there re-tunes two machines nobody asked
     about.
+- **The ball, the 100 rim, and the back wall (2026-08-24, Matt).** THREE tuning changes on this
+  machine only: (1) the ball is THE CLASSIC's now (`ballR: X * 0.375`, 0.75X diameter) - the
+  0.28X ping-pong ball read too small; (2) the EIGHT standard hoops are unchanged, and ONLY the
+  100 is smaller (`topC` r `X * 0.35417`, 0.7083X across - the design's tighter top-centre rim,
+  4.25in vs 6in), the one shot meant to be hard; (3) the back wall gets THE CLASSIC's rebound
+  (basketball/physics.js's own `matBack`, `backRest 0.60 / backFric 0`) so a hard throw that used
+  to bank high off the wall and drop into the 100 comes back at the player instead. The bounce is
+  on the BACKBOARD ONLY - the tall wall ABOVE the top step; the riser directly behind the 100 is
+  a normal surface, so a direct arc still drops in. Kick panel stays on `matDead`. Sweep after:
+  emergencies 1.0%, all mouths reachable.
 - **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
   spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
   up the face barely moves but the peak is higher and the descent steeper, dropping the ball

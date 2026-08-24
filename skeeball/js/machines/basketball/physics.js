@@ -45,7 +45,11 @@ function buildWorld(board) {
   const matBoard = new CANNON.Material('board');   // the face: livelier
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
-  const matDead = new CANNON.Material('dead');     // backboard + kick: padded, kills the ball
+  const matDead = new CANNON.Material('dead');     // kick panel: padded, kills the ball
+  // The BACK WALL gets its OWN material so it can rebound a hard throw at the player (the classic's
+  // trick) without also making the front kick panel bouncy - they used to share matDead. Matt,
+  // 2026-08-24: it was too easy to bank off the back wall into the 100.
+  const matBack = new CANNON.Material('back');
   // The two corner 100s get their OWN ring material so they can be deadened without touching the
   // 10 through 50. See the ring100Rest note in boards.js.
   const matRing100 = new CANNON.Material('ring100');
@@ -69,6 +73,9 @@ function buildWorld(board) {
   contact(matBall, matRing, pick(MAT.ringFric, 0.06), pick(MAT.ringRest, 0.18));
   contact(matBall, matRing100, pick(MAT.ring100Fric, 0.06), pick(MAT.ring100Rest, 0.18));
   contact(matBall, matDead, pick(MAT.deadFric, 0.20), pick(MAT.deadRest, 0.12));
+  // Bouncy and grip-free: a hard throw comes STRAIGHT back at the player. backFric 0 so the wall
+  // can never turn serve topspin into climb (the classic's "back wall does not lift the ball").
+  contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, 0.60));
 
   for (const s of M.solids) {
     // A 'prism' carries its own world-space vertices (a convex polyhedron); everything else is a
@@ -86,7 +93,8 @@ function buildWorld(board) {
         : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' || s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+            : s.part === 'backboard' ? matBack
+              : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
