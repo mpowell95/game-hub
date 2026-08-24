@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v463';
+const CACHE = 'game-hub-v465';
 
 const ASSETS = [
   './',
@@ -50,6 +50,9 @@ const ASSETS = [
   // beside it because it is tiny and only Matt ever imports it.
   './js/admin-config.js',
   './js/admin-ui.js',
+  // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
+  // it while painting - a device without it would show scores the rest of the family no longer does.
+  './js/stats-corrections.js',
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
@@ -508,11 +511,11 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': 'd07e244fde',
-  './skeeball/js/ui.js': '4ffb0516a2',
+  './skeeball/js/ui.js': '4636aa238b',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': '3fab597c30',
   './skeeball/js/goals.js': '30e45dff4f',
-  './skeeball/js/boards.js': '612155397a',
+  './skeeball/js/boards.js': 'b1700ae84b',
   './skeeball/js/engines.js': '1196c74b9f',
   './skeeball/js/machines/classic/physics.js': 'a4a15b7180',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
@@ -522,10 +525,10 @@ const REST_MANIFEST = {
   './skeeball/js/machines/popongo/render.js': 'cc46cacf6d',
   './skeeball/js/machines/basketball/physics.js': 'f34b1cd4a5',
   './skeeball/js/machines/basketball/machine.js': '8d92102fe5',
-  './skeeball/js/machines/basketball/render.js': 'f2bf907466',
+  './skeeball/js/machines/basketball/render.js': '27baf612de',
   './skeeball/js/machines/brickcity/physics.js': 'c6daf90433',
   './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
-  './skeeball/js/machines/brickcity/render.js': 'e2b407217b',
+  './skeeball/js/machines/brickcity/render.js': '658063bcea',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',

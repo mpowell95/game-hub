@@ -652,12 +652,66 @@ ball dropping in out of the air - no new physics, no new capture rule.
   machine only: (1) the ball is THE CLASSIC's now (`ballR: X * 0.375`, 0.75X diameter) - the
   0.28X ping-pong ball read too small; (2) the EIGHT standard hoops are unchanged, and ONLY the
   100 is smaller (`topC` r `X * 0.35417`, 0.7083X across - the design's tighter top-centre rim,
-  4.25in vs 6in), the one shot meant to be hard; (3) the back wall gets THE CLASSIC's rebound
+  4.25in vs 6in), the one shot meant to be hard **(SUPERSEDED twice the same day - see the two
+  bullets below; every rim on this machine moved after this was written)**; (3) the back wall
+  gets THE CLASSIC's rebound
   (basketball/physics.js's own `matBack`, `backRest 0.60 / backFric 0`) so a hard throw that used
   to bank high off the wall and drop into the 100 comes back at the player instead. The bounce is
   on the BACKBOARD ONLY - the tall wall ABOVE the top step; the riser directly behind the 100 is
   a normal surface, so a direct arc still drops in. Kick panel stays on `matDead`. Sweep after:
   emergencies 1.0%, all mouths reachable.
+- **Every rim resized, twice, 2026-08-24 - and MATT ALWAYS SPEAKS IN DIAMETER.** He said it in
+  those words: *"i have never given you a measurement that is defined by r. I've never mentioned
+  r. EVER. I have ONLY ever stated measurement in diameter."* `r` in `geom.holes` is a RADIUS, so
+  a diameter he gives is ALWAYS halved before it goes in the table. Getting this backwards
+  doubles every basket, which is exactly what happened:
+  - **The 6in build (`58a3f0c`, shipped).** All eight standard rims went 4in -> 6in and the 100
+    went 2.83in -> 4.25in. Matt, on seeing it: *"They're massive now. The ball can't fit between
+    them at all."* He was right, and it is arithmetic, not taste: the columns are 2.07X apart =
+    8.28in centre to centre, the collar wall adds 0.33in to each outer diameter, so 6in rims
+    leave a **1.95in gap against a 3in ball**. The ball could not pass between two columns at
+    all - it could only sit on the rims or drop in one.
+  - **The fix (this pass).** Bottom and middle rows **4.25in**, the top row's two 50s **4in**,
+    the top row's 100 **3.5in**. Gaps are back to 3.70in (lower rows) and 4.20in (top row),
+    both above the 3in ball.
+  - **The check any future rim change owes:** `gap = 8.28in - (rim diameter + 0.33in)`, and it
+    must stay above 3in. A rim change that skips it can silently wall the face off again.
+- **DEPTH IS PER ROW, NOT PER BASKET (Matt, 2026-08-24):** *"all the hoops on a row should be the
+  same height, regardless of the diameter of the basket"*, and *"the top of the backboard should
+  never go higher than the wall the basket is on"*. So `collarH` is one value per row - the top
+  row runs a single depth across its 4in and 3.5in baskets - set at ~2/3 of the SMALLEST diameter
+  on the row (bottom/middle `X * 0.708`, top `X * 0.583`), which keeps every basket shallower
+  than it is wide. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
+  capped the card's dome radius against the WHOLE riser, but the mount adds `collarH + 0.018`
+  underneath it, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in
+  rims). The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
+  has its own engine copy and was left alone.
+- **THE VALUE CARDS ARE AN ARCH, ONE SIZE PER ROW (2026-08-24, Matt, and it applies to BOTH Hot
+  Shot machines).** He asked for two things and they are the whole design: *"I do not want the
+  backboards to overlap each other. And I don't want them to ever be taller that the wall they're
+  attached to."*
+  - **The bug was the SHAPE.** The card was a semicircle (`absarc`), so its height WAS half its
+    width - one radius doing both jobs. Height could then only be bought with width, and width is
+    exactly what the no-overlap rule caps, so every card stopped well short of its wall and left a
+    band of bare riser above it. Matt: *"notice the gap between the top of these backboards and
+    the beginning of the next shelf. This doesn't look right."* It measured 1.35in on the lower
+    rows and 2.05in on the top row, against a 7.70in wall.
+  - **The fix is `absellipse`:** width answers to the column pitch, height answers to the riser,
+    and neither can drag the other out of bounds. `_backboardRow(ti)` supplies what the ROW owns -
+    its deepest mount, its column pitch, its widest rim - so one shelf's cards are cut identically
+    and hung level, whatever the baskets under them measure. Reveals: `TOP_REVEAL` 0.33in of bare
+    riser above every card, `SIDE_GAP` 0.50in between neighbours. Matt allowed the top one
+    explicitly: *"the backboards do not have to be exactly to the top of the wall they're on. you
+    could leave like a 0.5 in gap if that makes the backboards fit better."*
+  - **WIDTH IS NOT "AS WIDE AS IT MAY BE", and this was measured, not guessed.** The first build
+    stretched every card to the no-overlap cap; rendered, it looked WORSE than the gap it fixed -
+    wide squat cards crowding each other, and the value box (a fraction of the card's HEIGHT)
+    shrank until the number was hard to read. Width is now `1.5x the widest rim on the row`,
+    widened only as far as needed to keep the arch under `ARCH_MAX` (height : half-width of 1.25),
+    then clamped by the pitch. **If you change this, RENDER IT AND LOOK** - the numbers alone said
+    the first version was fine.
+  - Both `machines/basketball/` and `machines/brickcity/` carry the fix. Brick City's copy had
+    never had even the mount fix, so its cards could exceed their wall outright.
 - **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
   spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
   up the face barely moves but the peak is higher and the descent steeper, dropping the ball
@@ -838,6 +892,24 @@ one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.un
 additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
 argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
 devices that hold POPONGO and asserts they still do.
+## Testing racks, and voided scores (2026-08-24)
+
+Two changes that exist because THE CLASSIC and BASKET FEVER both handed out impossible scores while
+they were being tuned, and those scores landed in the family's real records.
+
+**A machine in Testing records to `sk.practice`.** `_rackOver` resolves `isBoardTesting(board.id,
+!!board.adminOnly)` at record time and passes `practice: true`; `recordSkeeball` then writes only
+`sk.practice.boards.<id>` and returns before `bumpTotals`, the lifetime counters, the bests and the
+unlock. Nothing above it can see those racks: not goals, not the records panel, not My Stats' real
+rows, not `players-agg`, not the leaderboard. They ARE kept and shown (a labelled "Practice (not
+counted)" row in My Stats) because a stored number no screen shows reads as deleted (rule 1).
+
+**Scores already recorded can be voided per player, per machine** from the admin page. That is an
+overlay in `adminConfig/v1`, never an edit to anybody's record — see `js/CLAUDE.md`, "Score
+corrections". It reaches this folder in one place: `myRecords()` runs the board through
+`correctBoard()` before returning `mine`/`today`, so the backboard cannot show a number the
+leaderboard has stopped counting. `appWideBest` is fed by `aggregatePlayers(..., corrections())`,
+so the machine's app-wide record honors a void too.
 
 ## Adding the next machine
 

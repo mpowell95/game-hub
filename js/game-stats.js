@@ -585,6 +585,19 @@ function ensureSk(g) {
   // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
   if (!g.sk.boards || typeof g.sk.boards !== 'object') g.sk.boards = {};
   if (!g.sk.unlocked || typeof g.sk.unlocked !== 'object') g.sk.unlocked = {};
+  // Added 2026-08-24: racks thrown on a machine the admin page has set to TESTING. They are KEPT
+  // (Matt's call: "record, but never count") and they are kept HERE, in their own branch, so that
+  // no counter above can ever be reached by them - not played, not points, not a best, not an
+  // unlock, not a goal, not the leaderboard. Same per-board shape as `boards` so js/arcade-scores.js
+  // records and merges them with the same functions, and My Stats shows them on their own labelled
+  // row (stored-but-never-shown would be THE LAW rule 1 all over again).
+  //
+  // WHY THIS EXISTS: tuning a machine used to write straight into everybody's real record, and
+  // twice - THE CLASSIC and BASKET FEVER - a half-tuned board handed out scores nobody could have
+  // thrown on the finished one. Those scores then had to be chased out of Firebase by hand. A
+  // machine in testing now cannot contaminate a single number to begin with.
+  if (!g.sk.practice || typeof g.sk.practice !== 'object') g.sk.practice = {};
+  if (!g.sk.practice.boards || typeof g.sk.practice.boards !== 'object') g.sk.practice.boards = {};
 }
 
 /** Fill any missing structure so the rest of the code can assume a full shape. */
@@ -1321,10 +1334,19 @@ export function recordSkeeball(boardId, extras) {
   const st = loadStats();
   const g = st.games.skeeball;
   const board = String(boardId || 'classic');
-  bumpTotals(g, board, true);
-  ensureSk(g);
   const e = extras || {};
   const score = Math.max(0, e.score | 0);
+  ensureSk(g);
+  // `practice: true` - a rack thrown on a machine the admin page has set to TESTING. It is stored
+  // in sk.practice and RETURNS HERE: no totals, no lifetime counters, no bests, no unlock, and
+  // nothing for js/players-agg.js or the leaderboard to find. See ensureSk for why.
+  if (e.practice) {
+    recordBoardGame(g.sk.practice, board, { score, bestThrow: e.bestThrow | 0, at: e.at });
+    st.updatedAt = new Date().toISOString();
+    persist(st);
+    return st;
+  }
+  bumpTotals(g, board, true);
   g.sk.played += 1;
   g.sk.balls += Math.max(0, e.balls | 0);
   g.sk.points += score;

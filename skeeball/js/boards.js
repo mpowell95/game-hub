@@ -421,25 +421,43 @@ export const BOARDS = [
       // that condition far earlier in the descent. The two effects very nearly cancel. 0.55X
       // and 0.75X were measured too (48 and 45 per 231) - the curve is flat, so pick the depth
       // that looks right, not the one that scores best.
-      // RIM DIAMETERS ARE MATT'S SPEC, verbatim (2026-08-24): the eight standard rims are 1.5X
-      // (6in) and the 100 rim is 1.0625X (4.25in), against the X (4in) hole and the 0.75X (3in)
-      // ball. Every rim clears the ball; the 100 is the one small, hard basket. `r` is the RIM
-      // radius (half the diameter): standard 0.75X, the 100 0.53125X. Depth (collarH) is ~2/3 of
-      // each rim's diameter, a shade shallower than the reference basket and swept to keep the
-      // stall watchdog rare (a rim as DEEP as it is wide traps the ball - measured 38% emergencies).
+      // RIM DIAMETERS ARE MATT'S SPEC, IN DIAMETER, verbatim (2026-08-24, second pass): the six
+      // baskets on the bottom and middle rows are 4.25in, the two top-row 50s are 4in, and the
+      // top-row 100 is 3.5in - against the X (4in) hole and the 0.75X (3in) ball. `r` in the
+      // table below is a RADIUS, so it is always HALF the diameter Matt states: 4.25in -> X *
+      // 0.53125, 4in -> X * 0.5, 3.5in -> X * 0.4375.
+      //
+      // WHY THEY CAME DOWN FROM 6in (Matt, on the shipped 6in build: "They're massive now. The
+      // ball can't fit between them at all"). The columns are 2.07X apart, so neighbouring rims
+      // are 8.28in centre to centre, and the collar wall adds 0.33in to each outer diameter. At
+      // 6in that leaves a 1.95in gap against a 3in ball - the ball physically cannot pass
+      // between two columns, so it can only sit on the rims or drop in one. At 4.25in the gap is
+      // 3.70in, so the ball travels the face again. ANY future rim change must re-check that
+      // number: gap = 8.28in - (rim diameter + 0.33in), and it has to stay above 3in.
+      //
+      // DEPTH (collarH) IS PER ROW, NOT PER BASKET, and that is Matt's rule: "all the hoops on a
+      // row should be the same height, regardless of the diameter of the basket". So the top row
+      // runs one depth across its 4in and 3.5in baskets. Each row's depth is ~2/3 of the SMALLEST
+      // diameter on that row (bottom/middle 0.708X = 2.83in against 4.25in; top 0.583X = 2.33in
+      // against 3.5in), which keeps every basket shallower than it is wide - a rim as DEEP as it
+      // is wide traps the ball, measured at 38% emergencies.
+      //
+      // holeR is the board's nominal hole radius and no longer matches any rim here, which is
+      // what the holes.uniform waiver below is for.
       holeR: X * 0.75,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
-        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
-        midC: { u: 0, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
-        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
-        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.75, collarH: X * 1.0 },
-        // THE 100 IS THE SMALL RIM: 1.0625X (4.25in) across vs the eight 1.5X (6in) hoops - Matt's
-        // spec. Still 1.42x the 0.75X ball, so it fits; it is just the tight, hard target.
-        topC: { u: 0, v: X * 9.2875, r: X * 0.53125, collarH: X * 0.708 },
-        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.75, collarH: X * 1.0 },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.583 },
+        // THE 100 IS THE SMALL RIM: 3.5in across vs the top row's 4in 50s - Matt's spec. Still
+        // 1.17x the 3in ball, so it fits; it is just the tight, hard target. Its depth is the
+        // ROW's depth, not its own, so the three top hoops stand at one height.
+        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.583 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.583 },
       },
 
       minSpeed: 2.60,
@@ -478,17 +496,15 @@ export const BOARDS = [
     },
 
     specWaivers: {
-      // Added 2026-08-24 while machine 3 was being built: this rule was already RED on main, from
-      // the 100-rim change that shipped without its waiver. Text only - not one number on this
-      // machine moved, and its engine folder was not opened.
-      'holes.uniform': 'Matt\'s spec, 2026-08-24: the eight standard rims are 1.5X (6in) and the '
-        + '100 is deliberately the one small, hard rim at 1.0625X (4.25in). Mouth size is the '
-        + 'difficulty marker on this face, so a uniform holeR cannot express it. Still 1.42x the '
-        + '0.75X ball, so it fits; the sweep after the change kept every hoop capturable.',
+      'holes.uniform': 'Matt\'s spec, 2026-08-24 (second pass), stated in DIAMETER: the bottom '
+        + 'and middle rows are 4.25in, the top-row 50s are 4in, and the top-row 100 is 3.5in. '
+        + 'Mouth size is the difficulty marker on this face, so a uniform holeR cannot express '
+        + 'it. Every rim still clears the 3in ball, and the gap between neighbouring rims is '
+        + 'back above 3in so the ball can travel the face - the 6in build it replaced left only '
+        + '1.95in and the ball could not pass between the columns at all.',
       'ball.ratio': 'The ball is THE CLASSIC\'s (0.375X = 0.75X diameter, Matt 2026-08-24: the '
-        + 'small ball read too small). Eight hoops stay 1.0X across; only the 100 is smaller '
-        + '(0.7083X), the design\'s tighter top-centre rim. Sweep re-run: all nine hoops '
-        + 'clean-capturable, emergencies within budget.',
+        + 'small ball read too small), against rims of 4.25in, 4in and 3.5in. Sweep re-run: all '
+        + 'nine hoops clean-capturable, emergencies within budget.',
       'board.dims': 'Matt ordered the stepped rebuild, 2026-08-22: "change the board from a '
         + 'single board with a back wall to... 3 stairs", even if new physics had to be built. '
         + 'boardLen is the UNROLLED length of three treads plus three risers (11.1375X), which '
