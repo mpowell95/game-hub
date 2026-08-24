@@ -427,7 +427,13 @@ export const BOARDS = [
       // 146/861, both with all nine mouths capturable and 0 emergencies and the slowest settle a
       // shade faster at the deeper one; 0.55X and 0.75X came in at 48 and 45 per 231. The curve
       // is flat, so depth is a LOOK decision, not a scoring one.
-      // MEASURED-ON-THIS-CHANGE-PLACEHOLDER
+      // MEASURED ON THE DEPTH CHANGE ABOVE, 41x21 = 861 throws, basketball's engine only:
+      // all nine mouths still clean-capturable, ZERO watchdog walkouts either way, scoring
+      // rate 158/861 -> 131/861 and the slowest settle 6.00s -> 6.86s (the cap is 12s). The
+      // top row's share of the points fell 34.6% -> 28.1% and the middle row's rose 48.2% ->
+      // 52.7%, so the deep baskets cost the high shots a little - which is the same trade the
+      // 0.35X -> 1.0X pass measured, and it is a look decision, not a scoring one. THE CLASSIC,
+      // POPONGO and BRICK CITY came back byte-identical on the same grid (boards.js is shared).
       // RIM DIAMETERS ARE MATT'S SPEC, IN DIAMETER, verbatim (2026-08-24, second pass): the six
       // baskets on the bottom and middle rows are 4.25in, the two top-row 50s are 4in, and the
       // top-row 100 is 3.5in - against the X (4in) hole and the 0.75X (3in) ball. `r` in the
