@@ -407,20 +407,27 @@ export const BOARDS = [
       // consequence is accepted: a ball the back wall kills, or one falling from the tier
       // above, can land in a basket - that is how the real machine plays. Tread starts in
       // unrolled v: 0 / 3.9875X / 7.975X; the mouths lean 0.10 rad with their tread.
-      // THE BASKETS ARE A FULL 1.0X DEEP - as deep as the mouth is wide, which is the real
-      // basket's proportion. They were 0.35X until 2026-08-24 and read as wire rings rather
-      // than baskets. MEASURED BEFORE IT SHIPPED, on the 41x21 grid, basketball only: 0.35X
-      // scored 167/861, 1.0X scores 146/861, both with all nine mouths capturable, 0
-      // emergencies and the slowest settle a shade FASTER (5.51s -> 5.39s). Depth costs 13% of
-      // the scoring rate and buys a better row spread - the low row took 46% of every score at
-      // 0.35X and takes 40% at 1.0X.
+      // DEPTHS ARE MATT'S NUMBERS, ROW BY ROW (2026-08-24, after seeing this machine beside BRICK
+      // CITY): bottom 4.00in, middle 3.88in, top 3.50in - BRICK CITY's own depths, which is
+      // exactly what he asked for: "the baskets in brickcity are taller than regular hot shot -
+      // make the same adjustment to hot shot". They were 2.83in / 2.83in / 2.33in before that,
+      // and 1.40in before those.
+      //
+      // THEY ARE NOT DERIVED FROM ANYTHING - not from the mouth, not from each other, not from a
+      // ratio. A "a basket is as deep as its mouth is wide" line was written into this file by a
+      // session Matt never asked it from, and he threw it out: "You wrote that rule. You invented
+      // that rule. I did not tell you to, nor will I respect it." If a depth needs to change, it
+      // is his call to make.
       //
       // WHY DEPTH IS NEARLY FREE, so a future session does not "fix" the collar back down: a
       // taller rim cuts both ways in physics.js. It rejects more approaches on the outer wall,
-      // but capture is "centre below the RIM plane inside the mouth", and a rim 1.0X up trips
-      // that condition far earlier in the descent. The two effects very nearly cancel. 0.55X
-      // and 0.75X were measured too (48 and 45 per 231) - the curve is flat, so pick the depth
-      // that looks right, not the one that scores best.
+      // but capture is "centre below the RIM plane inside the mouth", and a rim standing high
+      // trips that condition far earlier in the descent. The two effects very nearly cancel.
+      // Measured back when every mouth was 1.0X: 0.35X depth scored 167/861 and 1.0X scored
+      // 146/861, both with all nine mouths capturable and 0 emergencies and the slowest settle a
+      // shade faster at the deeper one; 0.55X and 0.75X came in at 48 and 45 per 231. The curve
+      // is flat, so depth is a LOOK decision, not a scoring one.
+      // MEASURED-ON-THIS-CHANGE-PLACEHOLDER
       // RIM DIAMETERS ARE MATT'S SPEC, IN DIAMETER, verbatim (2026-08-24, second pass): the six
       // baskets on the bottom and middle rows are 4.25in, the two top-row 50s are 4in, and the
       // top-row 100 is 3.5in - against the X (4in) hole and the 0.75X (3in) ball. `r` in the
@@ -437,27 +444,24 @@ export const BOARDS = [
       //
       // DEPTH (collarH) IS PER ROW, NOT PER BASKET, and that is Matt's rule: "all the hoops on a
       // row should be the same height, regardless of the diameter of the basket". So the top row
-      // runs one depth across its 4in and 3.5in baskets. Each row's depth is ~2/3 of the SMALLEST
-      // diameter on that row (bottom/middle 0.708X = 2.83in against 4.25in; top 0.583X = 2.33in
-      // against 3.5in), which keeps every basket shallower than it is wide - a rim as DEEP as it
-      // is wide traps the ball, measured at 38% emergencies.
+      // runs one depth across its 4in and 3.5in baskets, and 3.50in is the number he picked.
       //
       // holeR is the board's nominal hole radius and no longer matches any rim here, which is
       // what the holes.uniform waiver below is for.
       holeR: X * 0.75,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 0.708 },
-        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
-        midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
-        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.708 },
-        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.583 },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
         // THE 100 IS THE SMALL RIM: 3.5in across vs the top row's 4in 50s - Matt's spec. Still
         // 1.17x the 3in ball, so it fits; it is just the tight, hard target. Its depth is the
         // ROW's depth, not its own, so the three top hoops stand at one height.
-        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.583 },
-        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.583 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.875 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
       },
 
       minSpeed: 2.60,

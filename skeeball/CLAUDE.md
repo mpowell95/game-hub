@@ -31,9 +31,10 @@ Two things that led to this, both worth not repeating:
   answer: *"You wrote that rule. You invented that rule. I did not tell you to, nor will I respect
   it."* A measurement recorded by an earlier session is data. It is not a constraint on what he is
   allowed to ask for.
-- **Check whether the thing being compared is actually different.** BRICK CITY's bottom row and
-  every HOT SHOT basket are the same numbers drawn by the same code (6.00 in mouth, 4.00 in deep).
-  A plan that had checked that first would have asked a better question sooner.
+- **Measure the two things before explaining the difference between them.** The gap Matt was
+  pointing at between BRICK CITY and HOT SHOT was DEPTH and only depth - the mouths were never
+  the question. Reading the nine numbers out of `boards.js` first would have got there in one
+  step instead of through a rule nobody asked for.
 
 ## HARD RULE: every machine owns its own engine
 
@@ -616,13 +617,13 @@ ball dropping in out of the air - no new physics, no new capture rule.
   Basketball Skeeball Arcade Cabinet/`, alongside the real-cabinet photo it was modelled on).
   PAINT AND MESHES ONLY - no `geom`, no `machine.js`, no `physics.js`, so the sweep numbers
   below still stand. Six changes, each matched to the reference:
-  - **The baskets are a FULL 1.0X DEEP** (2026-08-24) - as deep as the mouth is wide, the real
-    basket's proportion, where they were 0.35X and read as wire rings. This is a `geom` change,
-    so it was swept on the 41x21 grid (basketball's engine only) before it shipped: 167/861 ->
-    146/861 scored, all nine mouths capturable either way, 0 emergencies, slowest settle 5.51s ->
-    5.39s, and the low row's share of every score down from 46% to 40%. `boards.js` carries the
-    numbers and the reason depth is nearly free - do not shallow the collar back out to "fix"
-    scoring.
+  - **The baskets went from 0.35X to 1.0X DEEP** (2026-08-24), where at 0.35X they read as wire
+    rings rather than baskets. This is a `geom` change, so it was swept on the 41x21 grid
+    (basketball's engine only) before it shipped: 167/861 -> 146/861 scored, all nine mouths
+    capturable either way, 0 emergencies, slowest settle 5.51s -> 5.39s, and the low row's share
+    of every score down from 46% to 40%. `boards.js` carries the numbers and the reason depth is
+    nearly free - do not shallow the collar back out to "fix" scoring. (The rims and the depths
+    have both moved several times since; `boards.js` is the live copy.)
   - **The baskets have NETS.** `_wireBasket` draws the design's basket: the orange rim on the
     physics profile, a small bottom ring, ten tapered ribs, and two crossing bands of white
     strands meeting at a ring - the thing that makes a hoop read as a basket. GUARD: every
@@ -679,9 +680,9 @@ ball dropping in out of the air - no new physics, no new capture rule.
 - **DEPTH IS PER ROW, NOT PER BASKET (Matt, 2026-08-24):** *"all the hoops on a row should be the
   same height, regardless of the diameter of the basket"*, and *"the top of the backboard should
   never go higher than the wall the basket is on"*. So `collarH` is one value per row - the top
-  row runs a single depth across its 4in and 3.5in baskets - set at ~2/3 of the SMALLEST diameter
-  on the row (bottom/middle `X * 0.708`, top `X * 0.583`), which keeps every basket shallower
-  than it is wide. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
+  row runs a single depth across its 4in and 3.5in baskets. The depths themselves are just the
+  depths Matt asks for and are not derived from anything; `boards.js` holds the current ones and
+  their history. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
   capped the card's dome radius against the WHOLE riser, but the mount adds `collarH + 0.018`
   underneath it, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in
   rims). The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
