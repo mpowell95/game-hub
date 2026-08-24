@@ -579,10 +579,15 @@ baseline grid:
 2. The same plan footprint at a mis-derived height (yB + 0.23 .. 0.43): missed the perch,
    KILLED the four bank-100s - the accidental control experiment proving the banks transit the
    corner HIGH and the perch sits LOW, so height separates what plan-position cannot.
-3. The shipped version, at the measured band: 0 emergencies of 861 (from 7), the 100's scoring
-   cells 9 vs the baseline's 8 (every bank alive, one full-aim corner shot improved), and all
-   9 changed cells confined to the aim 0.3-0.5 corner-slam corridor - six dead corner zeros
-   now roll home for 10s. Straight throws byte-identical.
+3. The measured band (yB+0.03..0.19): 0 emergencies, banks alive - but Matt's play test still
+   caught it touching balls that would not have stuck ("It should never make contact with a
+   ball that otherwise would not have gotten stuck"), and its 2cm top edge was a shelf risk.
+4. The SHIPPED version: a low ribbon at seat level only (centre yB+0.045, half-height 0.038),
+   TILTED about its own long axis (top leaning inboard, s*0.55) so the top edge sheds instead
+   of seating. Final sweep vs the no-plate baseline: 0 emergencies of 861 (from 7), the 100's
+   scoring cells 8 of 8 BYTE-IDENTICAL, and exactly 7 cells changed - every one a dead
+   corner-zero becoming an honest 10, the would-have-stuck set and nothing else. Matt's spec
+   met verbatim.
 
 The lesson worth keeping: place corner furniture by MEASURED ball positions and contact sets,
 never by face-coordinate reasoning - both wrong iterations came from deriving heights instead

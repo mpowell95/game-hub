@@ -398,18 +398,19 @@ export function buildMachine(G) {
     const pRail = [s * (G.boardW / 2 + 0.005), wallZ + 0.058];  // on the rail, one ball-radius from the wall
     const dx = pRail[0] - pWall[0];
     const dz = pRail[1] - pWall[1];
-    // MEASURED, both edges. The perch (solver contacts: ringSeg + rail + backboard - the ball
-    // seated on the 100 ring's rim in the corner) has its centre at y 1.50 = yB + 0.10; the
-    // bank-100 corridor transits the same corner HIGHER, above yB + 0.22 (a misplaced first cut
-    // of this plate at yB+0.23..0.43 killed the banks and missed the perch - the accidental
-    // control experiment that located both). The band covers the perch and stops under the banks.
-    const yBot = yB + 0.03;
-    const yTop = yB + 0.19;
+    // SEAT-LEVEL ONLY (Matt, 2026-08-24: the taller band still met balls that would not have
+    // stuck - "It should never make contact with a ball that otherwise would not have gotten
+    // stuck"). The seated ball's centre is at yB + 0.10, so its bottom cap rests at ~yB + 0.05;
+    // the plate is a low ribbon spanning just that cap's band, and it is TILTED about its own
+    // long axis (top leaning inboard) so its narrow top edge sheds a ball instead of becoming
+    // a new one-centimetre-higher shelf. Anything transiting the corner with its centre more
+    // than a ball-radius above the band passes clean over it.
+    const len = Math.hypot(dx, dz);
     solids.push({
       part: 'cove',
-      pos: [(pWall[0] + pRail[0]) / 2, (yBot + yTop) / 2, (pWall[1] + pRail[1]) / 2],
-      half: [Math.hypot(dx, dz) / 2, (yTop - yBot) / 2, 0.01],
-      rot: { axis: [0, 1, 0], angle: Math.atan2(-dz, dx) },
+      pos: [(pWall[0] + pRail[0]) / 2, yB + 0.045, (pWall[1] + pRail[1]) / 2],
+      half: [len / 2, 0.038, 0.012],
+      rot: { axis: [dx / len, 0, dz / len], angle: s * 0.55 },
     });
   }
 
