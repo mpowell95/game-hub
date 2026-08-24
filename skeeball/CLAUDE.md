@@ -641,6 +641,26 @@ ball dropping in out of the air - no new physics, no new capture rule.
   (the `needH` rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws; ladder
   low row from p~0.28, middle p~0.52, top p~0.8, the 100 straight at p0.76-0.8.
 
+## Two per-board counters arrived with BRICK CITY (2026-08-24)
+
+`js/arcade-scores.js`'s board record gained two fields, and they are **per board on purpose** -
+they answer questions about ONE machine's face, and a global counter would let another machine
+satisfy another machine's objective (Matt's "completely distinct" rule, 2026-08-22):
+
+| field | shape | merged across devices by |
+|---|---|---|
+| `slots` | a SET of the hole ids ever landed on that board | **union** - a basket hit on a phone and another on a tablet are two baskets hit |
+| `cleanRacks` | a counter of finished racks that scored without touching a penalty basket | **sum** |
+
+Both are additive and both default to empty on a device that has not played since, so a record
+written before they existed loads with every number it had and gains nothing it did not earn
+(`test-stats-replay.mjs` scenario G asserts exactly that). `game.js`'s `result()` feeds them as
+`slotsHit` and `cleanRack`; `slotsHit` lists REAL holes only, so "hit every basket" can never be
+completed by missing into the trough, and `cleanRack` is gated on the board actually having a
+penalty basket, the same way `colorSweep` is gated on `need > 1`.
+
+Only BRICK CITY reads them today. A future machine that wants either gets it for free.
+
 ## Where the three objectives sit (2026-08-24: all three in the gutters)
 
 Matt, on the deployed BRICK CITY: *"obviously I don't want the objectives to cover any machine."*

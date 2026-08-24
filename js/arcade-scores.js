@@ -36,6 +36,17 @@ export function ensureBoard(boards, boardId) {
     if (!Number.isFinite(b[k])) b[k] = 0;
   }
   if (!b.daily || typeof b.daily !== 'object') b.daily = {};
+  // Added 2026-08-24 for BRICK CITY's objectives, and ADDITIVE in exactly the way every field
+  // above is - absent on any device that has not played since, defaulted here, and from then on
+  // only ever grown:
+  //   slots       WHICH holes this player has ever landed on this board, as a set. A union, never
+  //               a count, because "every basket at least once" has to survive being spread over
+  //               many racks and many devices. Per BOARD by construction, so no machine can ever
+  //               satisfy another machine's version of this (Matt's "completely distinct" rule).
+  //   cleanRacks  how many finished racks on this board scored points without touching a penalty
+  //               basket. A counter, so it only climbs.
+  if (!b.slots || typeof b.slots !== 'object') b.slots = {};
+  if (!Number.isFinite(b.cleanRacks)) b.cleanRacks = 0;
   return b;
 }
 
@@ -44,7 +55,7 @@ export function ensureBoard(boards, boardId) {
  * and today's entry only ever improves.
  * @param {object} sub the game's stats sub-counter (Skeeball's `sk`)
  * @param {string} boardId
- * @param {{score:number, bestThrow?:number, at?:number}} game
+ * @param {{score:number, bestThrow?:number, at?:number, slotsHit?:string[], cleanRack?:number}} game
  */
 export function recordBoardGame(sub, boardId, game) {
   if (!sub || !boardId) return sub;
@@ -57,6 +68,11 @@ export function recordBoardGame(sub, boardId, game) {
   b.best = Math.max(b.best | 0, score);
   b.bestThrow = Math.max(b.bestThrow | 0, Math.max(0, game?.bestThrow | 0));
   b.daily[key] = Math.max(b.daily[key] | 0, score);
+  // A SET, unioned: a slot already there stays, and nothing is ever taken out.
+  if (Array.isArray(game?.slotsHit)) {
+    for (const id of game.slotsHit) if (id) b.slots[String(id)] = true;
+  }
+  if (game?.cleanRack) b.cleanRacks += 1;
   return sub;
 }
 
@@ -102,6 +118,11 @@ export function mergeBoards(dst, src) {
     d.bestThrow = Math.max(d.bestThrow | 0, s.bestThrow | 0);
     const sd = s.daily || {};
     for (const day of Object.keys(sd)) d.daily[day] = Math.max(d.daily[day] | 0, sd[day] | 0);
+    // Slots UNION across devices, never intersect - the same reason mergeUnlocked does. A basket
+    // hit on a phone and a different one hit on a tablet are two baskets hit, not zero.
+    const ss = s.slots || {};
+    for (const slot of Object.keys(ss)) if (ss[slot]) d.slots[slot] = true;
+    d.cleanRacks += s.cleanRacks | 0;
   }
   return dst;
 }

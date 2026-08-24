@@ -44,27 +44,37 @@ export const BB_HOOP = 100;      // HOT SHOT: sink the 100 hoop (proved by per-b
 export const BB_BEST = 300;      // HOT SHOT: score 300+ in a single game
 export const BB_TOTAL = 3000;    // HOT SHOT: 3,000 points in total on the machine
 
-// HOT SHOT: BRICK CITY. Tuned to THIS face, not copied from its sibling, and RE-TUNED 2026-08-24
-// when the penalty row and the 40 row swapped sizes - the face got materially harder and the old
-// numbers (240 / 2,000) were measured against the version where a 6.00 in middle row walled most
-// balls off the penalty row entirely.
+// HOT SHOT: BRICK CITY. Its three are about its FACE, not about a number - Matt, 2026-08-24,
+// replacing the first draft's "sink a 100" and "score 240 in a game":
 //
-// MEASURED on the 41x21 grid through this machine's own engine (skeeball/MACHINE-BRICKCITY.md
-// carries the table). Of 861 clean cells: 111 pay -20, 65 pay -10, 40 pay 40, 14 pay 20, 7 pay 50,
-// 6 pay 100, and 563 pay nothing. MOST POWER BANDS ARE NET NEGATIVE - at 22 of the 33 bands that
-// score at all, the mean ball LOSES points. The best single band (p0.775) averages 17.1 a ball
-// over all aims, and a player who lands near its best spot (p0.775, aim -0.1) with one grid step
-// of jitter averages 32.2 a ball - about a 290 rack. That is the ceiling a good player plays
-// against, so the single-game bar sits near two thirds of it.
+//   1. EVERY BASKET, at least once. "they must hit every basket, not just every point value" -
+//      nine slots, not six values: this face pays 100 twice, 40 twice and -20 twice, so counting
+//      values would let a player skip three baskets entirely. Spread over as many racks as it
+//      takes (nine balls into nine different baskets in one rack is not a goal, it is a lottery),
+//      which is why it reads a UNION - sk.boards.brickcity.slots - rather than anything per-rack.
+//   2. A CLEAN RACK: nine balls, points on the board, and not one penalty basket. "must score
+//      points tho - can't just throw away all 9 balls, get 0s, and pass this objective" - so
+//      game.js requires score > 0 as well as no negative ball, and gates the whole thing on the
+//      board actually having a penalty basket.
+//   3. NET points. "You gotta change the name of the total points one to net total points or
+//      something since it goes up and down depending on the negative baskets." The number was
+//      always the per-board points total; on this machine a rack contributes what it FINISHED
+//      with after the penalties took their cut, so the label says so. Its own key, because the
+//      other three machines' totals only ever go up and "Total points" is still true there.
 //
-// GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE. The 100 is the one
-// to watch - 6 grid cells here against HOT SHOT's 26, about four times harder to find on the dial
-// (p0.675-0.95, always with some aim on it). It is genuinely capturable and there are two of them.
-// If any of the three plays too hard once there are real racks behind it, soften THESE LINES - do
-// not widen a mouth, which is what makes the shot mean anything.
-export const BC_HOOP = 100;      // BRICK CITY: sink a 100 (proved by per-board bestThrow)
-export const BC_BEST = 200;      // BRICK CITY: score 200+ in a single game
-export const BC_TOTAL = 1500;    // BRICK CITY: 1,500 points in total on the machine
+// MEASURED on the 41x21 grid (skeeball/MACHINE-BRICKCITY.md has the table): of 861 clean cells
+// 111 pay -20, 65 pay -10, 40 pay 40, 14 pay 20, 7 pay 50, 6 pay 100, and 563 pay nothing. Every
+// one of the nine baskets is reachable - that is what the build sweep asserts - so goal 1 is a
+// matter of working across the face rather than of luck.
+//
+// GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE. Goal 1 is the slow
+// one (the two 100s are 6 grid cells between them), and goal 2 is the sharp one - the penalty row
+// is the easiest thing on the face to hit, by design. If either plays wrong once there are real
+// racks behind it, change it HERE; do not resize a mouth, which is what makes the face mean
+// something.
+export const BC_BASKETS = 9;     // BRICK CITY: land in every basket at least once
+export const BC_CLEAN = 1;       // BRICK CITY: one rack that scores and takes no penalty
+export const BC_NET = 1500;      // BRICK CITY: 1,500 NET points in total on the machine
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
@@ -121,17 +131,20 @@ const GOALS = {
   },
   brickcity(s, r) {
     const b = (s.boards || {}).brickcity || {};
-    // The 100: BOTH top corners pay it and nothing else on the face does, so a per-board best
-    // throw of 100 IS proof one was sunk - no new counter needed (bestThrow is Math.max only,
-    // synced, cross-device merged by js/arcade-scores.js). The rail shows the best throw climbing
-    // toward 100 rather than a bare 0/1.
-    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
-    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
-    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    // BASKETS: the recorded union, plus whatever the live rack has added, so the rail climbs
+    // ball by ball instead of jumping at the end. A Set because the two overlap constantly.
+    const seen = new Set(Object.keys(b.slots || {}).filter((k) => (b.slots || {})[k]));
+    if (r && Array.isArray(r.slotsHit)) for (const id of r.slotsHit) seen.add(id);
+    const baskets = Math.min(seen.size, BC_BASKETS);
+    // CLEAN: done forever once any rack has managed it. The live rack only counts when it is
+    // actually finished - game.js will not report cleanRack until all nine balls are spent, so a
+    // rack that is clean SO FAR cannot light this early and then un-light on the last ball.
+    const clean = (b.cleanRacks | 0) + (r ? r.cleanRack | 0 : 0);
+    const net = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BC_HOOP), target: BC_HOOP, met: bt >= BC_HOOP },
-      { id: 'best', labelKey: 'g_single', now: Math.min(best, BC_BEST), target: BC_BEST, met: best >= BC_BEST },
-      { id: 'total', labelKey: 'g_total', now: Math.min(total, BC_TOTAL), target: BC_TOTAL, met: total >= BC_TOTAL },
+      { id: 'baskets', labelKey: 'g_baskets', now: baskets, target: BC_BASKETS, met: baskets >= BC_BASKETS },
+      { id: 'clean', labelKey: 'g_clean', now: Math.min(clean, BC_CLEAN), target: BC_CLEAN, met: clean >= BC_CLEAN },
+      { id: 'net', labelKey: 'g_net', now: Math.min(net, BC_NET), target: BC_NET, met: net >= BC_NET },
     ];
   },
 };

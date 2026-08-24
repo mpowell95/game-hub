@@ -206,9 +206,35 @@ export class SkeeballGame {
       }
     }
     const need = scoringColors(this.board).size;
+    // WHICH baskets this rack landed in, as slot ids, and whether the rack was CLEAN. Both feed
+    // BRICK CITY's objectives (js/goals.js) through the per-board record, so they are per-machine
+    // by construction and no machine can satisfy another's version of them.
+    //
+    // `slotsHit` counts only real holes: the trough's `gutter` and `corner0` are outcomes, not
+    // baskets, and "hit every basket" must not be completable by missing.
+    const holes = this.board.geom.holes || {};
+    const slotsHit = [...new Set(this.throws.map((th) => th.hole).filter((h) => holes[h]))];
+    // A CLEAN RACK: all nine balls thrown, points on the board, and not one ball in a basket that
+    // takes points away.
+    //
+    // GUARD: gated on the board actually HAVING a penalty basket, the same way colorSweep is
+    // gated on need > 1. On a machine where nothing can cost you points every scoring rack is
+    // trivially "clean", and a counter that every machine feeds means nothing on the one machine
+    // that asks the question.
+    //
+    // GUARD: `score > 0` is the half Matt asked for in so many words - you cannot pass this by
+    // throwing all nine balls away for zeros and never touching a penalty. Doing nothing is not
+    // a clean rack.
+    const hasPenalty = Object.values(this.board.cups || {}).some((c) => (c.value | 0) < 0);
+    const cleanRack = hasPenalty
+      && this.ballsUsed >= BALLS_PER_GAME
+      && this.score > 0
+      && this.throws.every((th) => (th.value | 0) >= 0) ? 1 : 0;
     return {
       score: this.score,
       balls: this.ballsUsed,
+      slotsHit,
+      cleanRack,
       tens: by(10),
       twenties: by(20),
       thirties: by(30),

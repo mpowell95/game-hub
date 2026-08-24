@@ -34,6 +34,11 @@ const STRINGS = {
     g_total: 'Total points',
     g_colors: 'All 4 colors',
     g_hoop: 'The 100 hoop',
+    // BRICK CITY's three. Kept SHORT because a rail box is min(76px, 19vw) wide and wraps to two
+    // lines; 'Net total points' would take three and push the number out of the box.
+    g_baskets: 'Every basket',
+    g_clean: 'Clean rack',
+    g_net: 'Net points',
     goals_obj_h: 'Objectives',
     goals_unlocked: 'UNLOCKED',
     goals_done: 'COMPLETE',
@@ -122,6 +127,9 @@ const STRINGS = {
     g_total: 'Puntos totales',
     g_colors: 'Los 4 colores',
     g_hoop: 'El aro de 100',
+    g_baskets: 'Cada canasta',
+    g_clean: 'Ronda limpia',
+    g_net: 'Puntos netos',
     goals_obj_h: 'Objetivos',
     goals_unlocked: 'DESBLOQUEADA',
     goals_done: 'COMPLETADOS',

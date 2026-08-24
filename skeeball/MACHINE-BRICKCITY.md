@@ -278,44 +278,57 @@ a sweep, and POPONGO's colours goal is safe from this machine.
 
 ## Objectives
 
-In `skeeball/js/goals.js`, all three derived from records this machine already keeps — no new
-counters, so nothing new to sync, merge or test under item 7's three-edit rule.
+In `skeeball/js/goals.js`. Matt replaced the first draft's "sink a 100" and "score 240 in a game"
+on 2026-08-24 — these three are about the FACE, not about a number.
 
-| goal | target | reads |
-|---|---|---|
-| Sink a 100 | `bestThrow >= 100` | `sk.boards.brickcity.bestThrow` |
-| Single game | `best >= 200` | `sk.boards.brickcity.best` |
-| Total points | `points >= 1500` | `sk.boards.brickcity.points` |
+| goal | label | target | reads |
+|---|---|---|---|
+| Every basket | `g_baskets` | all **9** slots landed, at least once each | `sk.boards.brickcity.slots` |
+| Clean rack | `g_clean` | **1** finished rack that scores and takes no penalty | `sk.boards.brickcity.cleanRacks` |
+| Net points | `g_net` | **1,500** | `sk.boards.brickcity.points` |
 
-Tuned to THIS face and deliberately not HOT SHOT's numbers (100 / 300 / 3,000), then **re-tuned
-when the rows swapped** — the face got materially harder, and 240 / 2,000 had been measured against
-the version where a 6.00 in middle row walled most balls off the penalty row.
+**Every basket, not every point value.** *"they must hit every basket, not just every point
+value."* This face pays 100 twice, 40 twice and -20 twice, so counting VALUES would let a player
+skip three baskets and still finish. It counts the nine SLOTS. Spread over as many racks as it
+takes — nine balls into nine different baskets in one rack is a lottery, not a goal — which is why
+it reads a union rather than anything per-rack.
 
-What the grid says a ball is worth now. Of 861 clean cells:
+**A clean rack means it scored.** *"must score points tho - can't just throw away all 9 balls, get
+0s, and pass this objective."* `game.js` requires all nine balls spent, `score > 0`, and not one
+ball in a negative basket. It also gates the whole thing on the board actually HAVING a penalty
+basket — on a machine where nothing can cost you points every scoring rack would trivially be
+"clean", and a flag every machine sets means nothing on the one machine that asks.
 
-| pays | cells |
-|---|---|
-| nothing | 563 |
-| **-20** | 111 |
-| **-10** | 65 |
-| 40 | 40 |
-| 20 | 14 |
-| 50 | 7 |
-| 100 | 6 |
+**Net, because it goes down as well as up.** *"You gotta change the name of the total points one to
+net total points or something since it goes up and down depending on the negative baskets."* The
+number is the same per-board points total the other machines use; on this face a rack contributes
+what it FINISHED with after the penalties took their cut, so the label says so. Its own string key
+(`g_net`), because the other three machines' totals only ever climb and "Total points" is still
+true there. Short on purpose: a rail box is `min(76px, 19vw)` and wraps to two lines, so "Net total
+points" would take three and push the number out.
 
-**Most power bands are net negative** — at 22 of the 33 bands that score at all, the mean ball
-loses points. The best single band (p0.775) averages 17.1 a ball across all aims; a player who
-lands near its best spot (p0.775, aim -0.1) with one grid step of jitter averages 32.2 a ball,
-about a **290** rack. That is the ceiling a good player plays against, so the single-game bar sits
-near two thirds of it.
+### The two counters these needed
 
-**POPONGO hangs off these three, so they have to be reachable — and the 100 is the one to watch.**
-It is **6 of 861 grid cells** here against HOT SHOT's 26, roughly four times harder to find on the
-dial (p0.675 through p0.95, always with some aim on it). It is genuinely capturable and there are
-two of them, so it is a shot to learn rather than a wall. If any of the three plays too hard once
-there are real racks behind it, **soften the constant in `goals.js` — do not widen a mouth**, which
-is the thing that makes the shot worth anything. POPONGO can also be opened for everyone from the
-in-app Admin page in the meantime, with no commit and no deploy.
+Both are **per board** (`js/arcade-scores.js`'s board record), not the global `sk` block — they
+answer questions about ONE machine's face, and a global counter would let another machine satisfy
+them. Both are additive, and both are absent-and-defaulted on any device that has not played since:
+
+- **`slots`** — a SET of the hole ids ever landed on this board. Unioned when a rack is recorded
+  and unioned again across devices in `mergeBoards`, never intersected: a basket hit on a phone
+  and a different one hit on a tablet are two baskets hit, not zero.
+- **`cleanRacks`** — a counter, so it only climbs. Summed across devices.
+
+`game.js`'s `result()` reports `slotsHit` (real holes only — the trough's `gutter` and `corner0`
+are outcomes, not baskets, so "hit every basket" can never be completed by missing) and
+`cleanRack`. `test-stats-replay.mjs` scenario G covers the union, the sum, and that a board record
+written before these existed loads with every number intact and no progress it did not earn.
+
+**POPONGO hangs off these three, so they have to be reachable.** Every one of the nine baskets is
+capturable — that is what the build sweep asserts — so goal 1 is a matter of working across the
+face rather than of luck. Goal 2 is the sharp one: the penalty row is the easiest thing on the face
+to hit, by design. If either plays wrong once there are real racks behind it, **change it in
+`goals.js` — do not resize a mouth**, which is what makes the face mean something. POPONGO can also
+be opened for everyone from the in-app Admin page in the meantime.
 
 ## Spec waivers
 
