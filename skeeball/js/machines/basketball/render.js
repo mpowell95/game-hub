@@ -1421,7 +1421,14 @@ export class Renderer {
     // semicircle over the top. The centre board is the wide one, exactly as on the machine - it
     // carries the only three-digit value and it is the one you are meant to aim at.
     const RIM = H.r + G.collarThick / 2;
-    const BR = Math.min(RIM * (lab.length > 2 ? 1.46 : 1.32), (riser.v1 - riser.v0) - 0.03);
+    // THE CARD'S TOP NEVER RISES PAST THE RISER IT IS MOUNTED ON (Matt, 2026-08-24: "the top of
+    // the backboard should never go higher than the wall the basket is on"). The mount below sits
+    // the flat edge at collarH + 0.018 up the riser and the dome adds BR on top of that, so the
+    // headroom this card actually has is the riser's own length MINUS that mount - not the whole
+    // riser, which is what the old cap measured and why a 6in rim's card stood proud of the wall.
+    const MOUNT = (H.collarH || 0) + 0.018;
+    const BR = Math.min(RIM * (lab.length > 2 ? 1.46 : 1.32),
+                        (riser.v1 - riser.v0) - MOUNT - 0.006);
 
     const cw = 420;
     const ch = Math.round(cw / 2);
