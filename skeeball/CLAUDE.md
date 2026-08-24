@@ -11,6 +11,31 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
+## HARD RULE: never change the width of a basket
+
+Matt, 2026-08-24, after a plan proposed resizing HOT SHOT's mouths to get a look he asked for:
+
+> **"NEVER CHANGE THE WIDTH OR DIAMETER OF A BASKET UNLESS I SPECIFICALLY TELL YOU TO."**
+
+A basket's `r` in `js/boards.js` - and so its mouth diameter - is HIS number on every machine. Not
+a default, not a starting point, not something to re-derive from a proportion, and not something
+to trade away because a sweep comes out nicer without it. **If a change would move a mouth and he
+has not asked for that mouth to move, the change is wrong.** Find another way, or go back and ask.
+
+Depth, position, colour and paint are ordinary work. The WIDTH is not.
+
+Two things that led to this, both worth not repeating:
+
+- **Do not invent a rule and then quote it back at him.** He asked for taller baskets; the reply
+  turned that into a "depth-to-mouth ratio" he had never mentioned and wrote it up as a spec. His
+  answer: *"You wrote that rule. You invented that rule. I did not tell you to, nor will I respect
+  it."* A measurement recorded by an earlier session is data. It is not a constraint on what he is
+  allowed to ask for.
+- **Measure the two things before explaining the difference between them.** The gap Matt was
+  pointing at between BRICK CITY and HOT SHOT was DEPTH and only depth - the mouths were never
+  the question. Reading the nine numbers out of `boards.js` first would have got there in one
+  step instead of through a rule nobody asked for.
+
 ## HARD RULE: every machine owns its own engine
 
 Matt, 2026-08-23, on learning that one `physics.js` served all three machines: *"It's absolutely
@@ -592,13 +617,13 @@ ball dropping in out of the air - no new physics, no new capture rule.
   Basketball Skeeball Arcade Cabinet/`, alongside the real-cabinet photo it was modelled on).
   PAINT AND MESHES ONLY - no `geom`, no `machine.js`, no `physics.js`, so the sweep numbers
   below still stand. Six changes, each matched to the reference:
-  - **The baskets are a FULL 1.0X DEEP** (2026-08-24) - as deep as the mouth is wide, the real
-    basket's proportion, where they were 0.35X and read as wire rings. This is a `geom` change,
-    so it was swept on the 41x21 grid (basketball's engine only) before it shipped: 167/861 ->
-    146/861 scored, all nine mouths capturable either way, 0 emergencies, slowest settle 5.51s ->
-    5.39s, and the low row's share of every score down from 46% to 40%. `boards.js` carries the
-    numbers and the reason depth is nearly free - do not shallow the collar back out to "fix"
-    scoring.
+  - **The baskets went from 0.35X to 1.0X DEEP** (2026-08-24), where at 0.35X they read as wire
+    rings rather than baskets. This is a `geom` change, so it was swept on the 41x21 grid
+    (basketball's engine only) before it shipped: 167/861 -> 146/861 scored, all nine mouths
+    capturable either way, 0 emergencies, slowest settle 5.51s -> 5.39s, and the low row's share
+    of every score down from 46% to 40%. `boards.js` carries the numbers and the reason depth is
+    nearly free - do not shallow the collar back out to "fix" scoring. (The rims and the depths
+    have both moved several times since; `boards.js` is the live copy.)
   - **The baskets have NETS.** `_wireBasket` draws the design's basket: the orange rim on the
     physics profile, a small bottom ring, ten tapered ribs, and two crossing bands of white
     strands meeting at a ring - the thing that makes a hoop read as a basket. GUARD: every

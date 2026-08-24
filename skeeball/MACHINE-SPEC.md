@@ -239,6 +239,9 @@ and no written `value`, because the value comes from the cup sitting in the slot
 `u` runs across the face: `0` at the centre, `±boardW/2` at the edges.
 `v` runs up the face: `0` at the bottom edge, `boardLen` at the top.
 
+- **NEVER CHANGE THE WIDTH OR DIAMETER OF A BASKET UNLESS MATT SPECIFICALLY TELLS YOU TO** (his
+  rule, 2026-08-24, in those words). `r` is his number on every machine. Depth, position and paint
+  are ordinary work; the mouth is not. See `skeeball/CLAUDE.md`'s hard rule.
 - Every hole is the same size: `r = holeR = 0.500X`. — `holes.uniform`
 - Every hole centre sits at least `holeR` from all four edges. — `holes.inside`
 - Hole centres sit at least `1.30X` apart. — `holes.spacing`
