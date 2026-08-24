@@ -149,6 +149,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
 | `js/admin-config.js` | (2026-08-24) the app-wide admin config at `adminConfig/v1`: `isGameLive(hubId, codeDefault)` and `isBoardReleased(boardId)` (synchronous reads of the `gamehub.adminConfig.v1` cache), the pure resolvers behind them, `refreshAdminConfig()` (one background read per hub load, fires `gamehub:adminconfig` only on a real change) and the two writers, each dev-origin-guarded and verified by fresh re-read. See "The admin config" below |
+| `js/stats-corrections.js` | (2026-08-24) the read-time score-correction overlay: `correctBoard()`, `correctSkeeballRecord()`, `correctStats()` and `snapshotOf()`. Pure, headless-testable, and never mutates its input. Applied by `players-agg.js` (per source record, before the merge), `game-stats-ui.js` (both paints) and `skeeball/js/ui.js` (the backboard) |
 | `js/admin-ui.js` | (2026-08-24) the admin control page: game live/admin-only switches, Skeeball machine releases, this-device tools. Matt only, lazily imported by `js/hub.js`, built on `css/ui.css`'s `.gh-*` primitives |
 | `js/announce.js` | (2026-08-11) one-time launcher announcements: the entries (title/body/CTA as `{en,es}` on the entry), the seen-list (`gamehub.announce.v1`), and the pure `pendingAnnouncement()` decision. Reuses `new-badge.js`'s date parser; each entry's `until` retires it with no follow-up commit |
 | `js/announce-ui.js` | (2026-08-11) the announcement popup: DOM only, `.gh-*` primitives, dismissal recorded on close by any route |
@@ -1827,6 +1828,49 @@ rules change was needed. That also means the node is not cryptographically Matt-
 button is gated on `isAdmin()` (a profile-name hash, like the bug inbox), which is a screen, not a
 lock. This is the family's app on a wide-open database; if that ever changes, this node needs a rule
 of its own before anything else does.
+
+## Score corrections: "that machine was broken" (2026-08-24)
+
+Matt: *"Worried about people getting artificially high scores on a broken board. Which is exactly
+what happened to classic and basketball skeeball."* THE CLASSIC and BASKET FEVER each handed out
+scores while their physics were half-tuned, and those scores went into the family's real records.
+
+**Editing `players/<id>` by hand does not work, and cannot be made to.** `syncMyStats()` writes
+`stats: loadStats()` — the device's ENTIRE local store — to that node on every hub load, tab hide
+and reconnect, and `update()` replaces the whole `stats` child. Nothing ever reads server stats back
+into a device. So a console edit survives until that player next opens the app, and no amount of
+care changes that: the device is the source of truth for its own history.
+
+**So a correction is an overlay, not an edit.** It lives in `adminConfig/v1/corrections/skeeball/
+<statsId>/<boardId>` — the node the admin page owns and no phone writes — and it is applied every
+time a number is DISPLAYED. The raw record is untouched, which is both THE LAW rule 1 and the only
+honest answer to "why does my best say 0 when I remember 700": the 700 is still there, marked as not
+counting, with the date and reason beside it.
+
+**It is a BASELINE, not a subtraction.** A void stores the board's raw totals at that moment. Every
+later rack counts normally, so the correction never has to be edited again — and a best survives
+only if a LATER score beat the voided one, because a maximum cannot be un-summed (rule 4: reading 0
+is honest, inventing a lower number is not).
+
+**Where it is applied**, and why each one matters:
+- `js/players-agg.js` — per SOURCE record, before the merge (corrections are keyed by `statsId`;
+  merging first would blend voided numbers where no per-device correction could reach them). This
+  one line covers the leaderboard, My Stats' combined view, and Skeeball's app-wide records.
+- `js/game-stats-ui.js` — also on the LOCAL first paint, or a voided score flashes up and vanishes.
+- `skeeball/js/ui.js` — the machine's own backboard, or the game shows a number no other screen does.
+
+**What it deliberately cannot do**, stated here so nobody rediscovers it as a bug:
+- A device that was offline through the bad build still holds those racks and uploads them later.
+  They land after the baseline, so they count. The admin page shows raw beside corrected so the
+  drift is visible, and re-voiding is one tap. A per-machine cutoff by build number would catch it
+  automatically; per-player was the ask (Matt, 2026-08-24), and this is its cost.
+- `sk.balls`, `hundreds`, `fifties`, `tens`..`forties` and `colorSweeps` have no per-machine
+  breakdown anywhere in the store, so a per-machine void leaves them exactly as they are (rule 4).
+
+**The other half is prevention.** A machine set to Testing on the admin page records to
+`sk.practice` (`js/game-stats.js`'s `recordSkeeball`, which returns before touching a single real
+counter) — kept, merged across devices, shown on its own labelled row in My Stats, and counted by
+nothing. Tuning a board can no longer contaminate anybody's record in the first place.
 
 ## The shared profile — contract and consumers
 

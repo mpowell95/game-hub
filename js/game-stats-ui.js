@@ -15,7 +15,8 @@
 import { loadStats, statsId } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
-import { isGameLive } from './admin-config.js';
+import { isGameLive, corrections } from './admin-config.js';
+import { correctStats } from './stats-corrections.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
@@ -592,13 +593,24 @@ function skBoardsTable(sk) {
     return `<tr><th scope="row">${t(`gs_sk_board_${id}`)}</th><td>${b.best | 0}</td>`
       + `<td>${(b.daily || {})[key] | 0}</td><td>${b.plays | 0}</td><td>${days}</td></tr>`;
   }).join('');
+  // Practice racks (2026-08-24): thrown while a machine was set to TESTING on the admin page, kept
+  // in sk.practice and counted by nothing. They are SHOWN, on their own labelled line, because a
+  // stored number no screen shows reads as deleted (THE LAW rule 1) - and because a tester who
+  // threw 40 racks should be able to see that they landed somewhere, just not on their record.
+  const prac = (sk && sk.practice && sk.practice.boards) || {};
+  const pracIds = Object.keys(prac).filter((id) => (prac[id] || {}).plays | 0);
+  const pracRow = pracIds.length
+    ? `<tr class="gs-prow"><th scope="row">${t('gs_sk_practice')}</th>`
+      + `<td>${Math.max(0, ...pracIds.map((id) => prac[id].best | 0))}</td><td>-</td>`
+      + `<td>${pracIds.reduce((n, id) => n + (prac[id].plays | 0), 0)}</td><td>-</td></tr>`
+    : '';
   return `
     <h4 class="gs-tbl-h">${t('gs_sk_by_board')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th>
         <th scope="col">${t('gs_sk_today')}</th><th scope="col">${t('gs_played')}</th>
         <th scope="col">${t('gs_sk_days')}</th></tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows}${pracRow}</tbody>
     </table>`;
 }
 
@@ -789,7 +801,7 @@ async function refreshCombined() {
     // statsId(), not deviceId(): the fresh local store must overlay THIS player's own remote node.
     // Keyed by device, a second player on a shared phone would overlay (and hide) the first player's
     // record instead of their own.
-    const me = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats());
+    const me = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats(), corrections());
     if (me && me.games) { _st = { games: me.games }; _combinedDevices = me.devices || 1; rerender(); }
   } catch { /* stay local */ }
 }
@@ -813,7 +825,9 @@ export function openStatsOverlay() {
   ensureCss();
   closeStats();
   _game = null;
-  _st = loadStats();
+  // The first paint is local, before the network answers - so it applies the corrections too.
+  // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
+  _st = correctStats(loadStats(), statsId(), corrections());
   _combinedDevices = 1;
   const host = document.createElement('div');
   host.className = 'gs-overlay';
@@ -883,6 +897,9 @@ function ensureCss() {
     '.gs-grid tbody th{text-align:left;font-weight:800;color:var(--hub-ink,#16243a)}',
     '.gs-grid tbody td{font-weight:800;color:var(--hub-ink,#16243a);font-variant-numeric:tabular-nums}',
     '.gs-grid tbody tr+tr th,.gs-grid tbody tr+tr td{border-top:1px solid var(--hub-surface-2,#eef2f8)}',
+    // Practice racks are real rows, deliberately quieter than the counted ones: they exist, they
+    // are visible, and nothing about them should read as part of the record above.
+    '.gs-grid tbody tr.gs-prow th,.gs-grid tbody tr.gs-prow td{color:var(--hub-muted,#5b6b82);font-weight:700;font-style:italic}',
     '.gs-cc{display:grid;gap:14px;background:#16211c;border:1px solid #23342c;border-radius:14px;padding:16px;box-shadow:0 6px 22px rgba(9,24,20,.28)}',
     '.gs-cc-sec{display:grid;gap:2px}',
     '.gs-cc-h{margin:0 0 6px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#e8b53a}',

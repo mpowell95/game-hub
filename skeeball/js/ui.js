@@ -20,13 +20,14 @@ import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId } from '../../js/game-stats.js';
+import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId, statsId } from '../../js/game-stats.js';
 import { readGoals, readGoalsLive, allGoalsMet } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
-import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
-import { isBoardReleased, isBoardTesting } from '../../js/admin-config.js';
+import { appWideBest, isUnlocked, dayKey } from '../../js/arcade-scores.js';
+import { correctBoard, correctionFor } from '../../js/stats-corrections.js';
+import { isBoardReleased, isBoardTesting, corrections, myBoardCorrections } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
 
@@ -131,7 +132,15 @@ const signedValue = (v) => {
 function myRecords(boardId) {
   try {
     const sk = (loadStats().games.skeeball || {}).sk || {};
-    return { mine: bestOn(sk, boardId), today: todayBestOn(sk, boardId, Date.now()) };
+    // An admin correction (js/stats-corrections.js) applies to the backboard's own numbers too. If
+    // it did not, a voided best would vanish from My Stats and the leaderboard while the machine
+    // itself kept showing it - one number, two answers, which is worse than not correcting at all.
+    const corrs = myBoardCorrections(statsId()) || {};
+    const board = correctBoard((sk.boards || {})[boardId], correctionFor(corrs, boardId));
+    return {
+      mine: board.best | 0,
+      today: (board.daily || {})[dayKey(Date.now())] | 0,
+    };
   } catch { return { mine: 0, today: 0 }; }
 }
 
@@ -239,7 +248,7 @@ export class SkeeballUI {
    *  its own truth. Async and best-effort: the panel renders with the local answer first. */
   async _refreshTopRecords() {
     let rows = [];
-    try { rows = aggregatePlayers(await readPlayersOnce()); }
+    try { rows = aggregatePlayers(await readPlayersOnce(), corrections()); }
     catch { rows = []; /* offline: local merge below still answers */ }
     if (this.disposed) return;
     let myName = '';
@@ -1095,7 +1104,11 @@ export class SkeeballUI {
       // Record ONCE (every write in js/game-stats.js is additive - a double call would inflate
       // the play count silently rather than fail loudly).
       try {
-        recordSkeeball(board.id, { ...result, at: Date.now() });
+        // A machine still in TESTING records to sk.practice and touches nothing else (Matt,
+        // 2026-08-24, after two boards handed out scores while they were being tuned). The flag is
+        // resolved at RECORD time, so the rack is judged by the machine's state when it was thrown.
+        const practice = isBoardTesting(board.id, !!board.adminOnly);
+        recordSkeeball(board.id, { ...result, at: Date.now(), practice });
       } catch (err) {
         console.error('[skeeball] could not record the rack', err);
       }

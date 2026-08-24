@@ -48,6 +48,7 @@ const SUITES = [
   { file: 'test-new-badge.mjs' },
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
+  { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // validate-sw-assets checks WHICH files sw.js precaches; this one checks HOW it serves them
