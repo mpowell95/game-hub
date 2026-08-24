@@ -1,7 +1,8 @@
-// skeeball/js/goals.js - each machine's three objectives, and how far along you are. THE
-// CLASSIC's three are what open POPONGO (boards.js `unlock: { board: 'classic', goals: true }`,
-// applied by ui.js via allGoalsMet); POPONGO's three are its own scoreboard until a machine 3
-// exists to hang off them.
+// skeeball/js/goals.js - each machine's three objectives, and how far along you are. Every
+// machine's three are what open the NEXT machine in the chain (boards.js `unlock: { board,
+// goals: true }`, applied by ui.js via allGoalsMet). The order lives in boards.js and is written
+// out once in skeeball/CLAUDE.md, "The unlock chain" - not here, because it has moved twice and
+// a copy of it in a third file is a copy that goes stale.
 //
 // GUARD: NOTHING IS STORED HERE. Every goal is DERIVED from counters the shared store already
 // keeps (js/game-stats.js's `sk` block), and recomputed on demand. That is deliberate: goal
@@ -42,6 +43,24 @@ export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 export const BB_HOOP = 100;      // HOT SHOT: sink the 100 hoop (proved by per-board bestThrow)
 export const BB_BEST = 300;      // HOT SHOT: score 300+ in a single game
 export const BB_TOTAL = 3000;    // HOT SHOT: 3,000 points in total on the machine
+
+// HOT SHOT: BRICK CITY. Tuned to THIS face, not copied from its sibling: this machine pays two
+// 100s instead of one but through 3.20 in mouths against a 3.00 in ball, its reliable row pays 40
+// where HOT SHOT's pays 60, and its bottom row TAKES points. So the single-game bar and the
+// lifetime bar both sit below HOT SHOT's for the same effort.
+//
+// MEASURED, on the 41x21 grid through this machine's own engine (skeeball/MACHINE-BRICKCITY.md
+// carries the table): a rack thrown uniformly across the dial scores ~51; a player who finds the
+// 40 band every ball scores 360; 11.8% of the dial pays 40, and 0.7% of it pays 100.
+//
+// GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE, and the 100 is the
+// one to watch - it is 6 grid cells here against HOT SHOT's 26, about four times harder to find
+// on the dial. It is genuinely capturable (clean captures at p0.675-0.75 with a little aim), and
+// there are two of them. If it plays too hard once somebody has actually thrown a few racks,
+// soften THIS LINE - do not widen the mouth, which is what makes the shot mean anything.
+export const BC_HOOP = 100;      // BRICK CITY: sink a 100 (proved by per-board bestThrow)
+export const BC_BEST = 240;      // BRICK CITY: score 240+ in a single game (six 40s)
+export const BC_TOTAL = 2000;    // BRICK CITY: 2,000 points in total on the machine
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
@@ -94,6 +113,21 @@ const GOALS = {
       { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BB_HOOP), target: BB_HOOP, met: bt >= BB_HOOP },
       { id: 'best', labelKey: 'g_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
       { id: 'total', labelKey: 'g_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
+    ];
+  },
+  brickcity(s, r) {
+    const b = (s.boards || {}).brickcity || {};
+    // The 100: BOTH top corners pay it and nothing else on the face does, so a per-board best
+    // throw of 100 IS proof one was sunk - no new counter needed (bestThrow is Math.max only,
+    // synced, cross-device merged by js/arcade-scores.js). The rail shows the best throw climbing
+    // toward 100 rather than a bare 0/1.
+    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    return [
+      { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BC_HOOP), target: BC_HOOP, met: bt >= BC_HOOP },
+      { id: 'best', labelKey: 'g_single', now: Math.min(best, BC_BEST), target: BC_BEST, met: best >= BC_BEST },
+      { id: 'total', labelKey: 'g_total', now: Math.min(total, BC_TOTAL), target: BC_TOTAL, met: total >= BC_TOTAL },
     ];
   },
 };

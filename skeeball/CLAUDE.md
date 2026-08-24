@@ -28,6 +28,7 @@ skeeball/js/
   machines/classic/     physics.js  machine.js  render.js
   machines/popongo/     physics.js  machine.js  render.js
   machines/basketball/  physics.js  machine.js  render.js
+  machines/brickcity/   physics.js  machine.js  render.js
 ```
 
 **Editing `machines/popongo/physics.js` cannot affect THE CLASSIC, because the classic never
@@ -79,13 +80,15 @@ build was kept alongside it in the hub as **Skeeball_old** (`skeeball_old/`, hub
 2026-08-18 at Matt's ask** once the comparison was done (it is in git history). It recorded into
 the SHARED `skeeball` stats id and used the same board id `classic`, so every rack it ever played
 is still in this game's own records (bests, the daily map, the top-score panel) — one continuous
-bucket, nothing orphaned by its removal. Three machines exist: **THE CLASSIC** (a
+bucket, nothing orphaned by its removal. Four machines exist: **THE CLASSIC** (a
 boardwalk cabinet with a varnished oak lane, the burnt-orange board with the white cup ladder,
 twin corner 100 cups, and a marquee), **POPONGO** (2026-08-22, the real cup-board lawn game as
-a second face on the same cabinet - see "POPONGO and the arrangement layer" below) and
+a second face on the same cabinet - see "POPONGO and the arrangement layer" below),
 **HOT SHOT** (2026-08-22, the arcade basketball machine as a third face - see "HOT SHOT"
-below). The player
-swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
+below), and **HOT SHOT: BRICK CITY** (2026-08-24, board id `brickcity`, HOT SHOT's sibling: the
+same cabinet and ramp, a brick marquee, and a face whose bottom row TAKES points - **its own
+documentation is `skeeball/MACHINE-BRICKCITY.md`**, and nothing about it is written up here). The
+player swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
 a rack.
 
 **The board was rebuilt to the REAL classic layout on 2026-08-13** against reference photos Matt
@@ -467,8 +470,9 @@ and two black **equalizers**.
   machine. The color sweep needed one new additive counter, **`sk.colorSweeps`** - item 7's
   three edits are done (`ensureSk`/`recordSkeeball`, the `players-agg.js` sk branch, the
   players-agg.test case).
-- **The unlock is GOALS-BASED**: `unlock: { board: 'classic', goals: true }` = complete THE
-  CLASSIC's three objectives. Applied by ui.js's `_earnedUnlocks` (after each recorded rack) and
+- **The unlock is GOALS-BASED**: `{ board, goals: true }` = complete every objective on that
+  board. POPONGO's own parent has moved twice since (it is `brickcity` now - see "The unlock
+  chain" above, which is the one place that describes the order). Applied by ui.js's `_earnedUnlocks` (after each recorded rack) and
   `_ensureGoalUnlocks` (once per mount - retroactive, and cross-device since goals derive from
   the synced store). `unlocksEarned()` in boards.js stays score-only and ignores goals entries.
 - **The locked slide grew its MACHINE-SPEC section 17 sliver**: the real render, CSS-cropped,
@@ -574,7 +578,8 @@ ball dropping in out of the air - no new physics, no new capture rule.
   the top-centre hoop is the only 100 on the face, so the best throw IS the proof), 300+ in a
   single game (per-board best), 3,000 total points on the machine (per-board points). All three
   read `sk.boards.basketball`, synced and cross-device merged by `js/arcade-scores.js`.
-- **Unlock**: `{ board: 'popongo', goals: true }` - complete POPONGO's three objectives. Same
+- **Unlock**: a goals unlock off the machine before it in the chain (see "The unlock chain"
+  above - this machine's parent has changed since it was built). Same
   goals shape as POPONGO's own unlock; `ui.js` needed nothing.
 - **The basketball dressing** (Matt, 2026-08-22: "cups instead of basketball baskets... shooting
   a basketball"): the board entry carries `dressing: 'basketball'` and `render.js` branches on
@@ -749,6 +754,27 @@ cache. Three things about those lines are load-bearing:
 `test-admin-config.mjs` asserts all three sites still consult the resolvers, that both unlock
 writers skip a machine in testing, that nothing reads `b.adminOnly` directly any more, and that no
 `isBoardReleased` call sits next to an `unlockSkeeballBoard` write.
+
+## The unlock chain
+
+```
+THE CLASSIC  ->  HOT SHOT  ->  HOT SHOT: BRICK CITY  ->  POPONGO
+ (always open)   (classic's     (hot shot's             (brick city's
+                  objectives)    objectives)             objectives)
+```
+
+Every step is a goals unlock (`{ board, goals: true }`), applied by `ui.js`'s `_earnedUnlocks`
+after each recorded rack and `_ensureGoalUnlocks` once per mount. Each machine's own entry in
+`js/boards.js` is the source of truth; the per-machine sections in this file describe FACES, not
+the chain, so **change the chain here and in `boards.js`, and nowhere else.** (Two of those
+sections named a parent that had already gone stale by the time this was written, which is why
+they now point here instead.)
+
+BRICK CITY was inserted between HOT SHOT and POPONGO on 2026-08-24, which moved POPONGO's unlock
+one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.unlocked` is an
+additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
+argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
+devices that hold POPONGO and asserts they still do.
 
 ## Adding the next machine
 

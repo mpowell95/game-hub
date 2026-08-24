@@ -464,6 +464,13 @@ export const BOARDS = [
     },
 
     specWaivers: {
+      // Added 2026-08-24 while machine 3 was being built: this rule was already RED on main, from
+      // the 100-rim change that shipped without its waiver. Text only - not one number on this
+      // machine moved, and its engine folder was not opened.
+      'holes.uniform': 'Matt\'s spec, 2026-08-24: the eight standard rims are 1.5X (6in) and the '
+        + '100 is deliberately the one small, hard rim at 1.0625X (4.25in). Mouth size is the '
+        + 'difficulty marker on this face, so a uniform holeR cannot express it. Still 1.42x the '
+        + '0.75X ball, so it fits; the sweep after the change kept every hoop capturable.',
       'ball.ratio': 'The ball is THE CLASSIC\'s (0.375X = 0.75X diameter, Matt 2026-08-24: the '
         + 'small ball read too small). Eight hoops stay 1.0X across; only the 100 is smaller '
         + '(0.7083X), the design\'s tighter top-centre rim. Sweep re-run: all nine hoops '
@@ -476,6 +483,247 @@ export const BOARDS = [
   },
 
   {
+    id: 'brickcity',
+    // FROZEN FROM FIRST PLAY (THE LAW rule 5). The marquee says HOT SHOT: BRICK CITY; the id is
+    // `brickcity` and stays `brickcity` however the sign is repainted later.
+    name: 'HOT SHOT: BRICK CITY',
+    taglineKey: 'board_brickcity_tag',
+    // Same render dressing as HOT SHOT (hoops, nets, backboards, a basketball for a ball) - this
+    // is that cabinet's sibling, wearing a brick sign and a different face. render.js branches on
+    // this string; physics never reads it.
+    dressing: 'basketball',
+    // Complete HOT SHOT's three objectives (js/goals.js). Matt confirmed the chain 2026-08-24:
+    // THE CLASSIC -> HOT SHOT -> BRICK CITY -> POPONGO, so POPONGO's own unlock was re-pointed at
+    // this machine. unlocksEarned() ignores a goals unlock (no `score` field); ui.js applies it.
+    //
+    // THE LAW rule 2: moving POPONGO further down the chain takes NOTHING away from anyone who
+    // already has it. Unlocks are an additive set in js/arcade-scores.js, union-merged across
+    // devices - unlockSkeeballBoard() only ever adds an id, and nothing anywhere removes one. A
+    // player holding sk.unlocked.popongo keeps it whatever the chain says today. Replayed against
+    // a real store before this shipped; the numbers are in skeeball/MACHINE-BRICKCITY.md.
+    unlock: { board: 'basketball', goals: true },
+    // ADMIN ONLY at ship (Matt, 2026-08-24, same as its two neighbours while he plays it): ui.js
+    // never unlocks it by play and shows it locked to non-dev profiles; the dev bypass still opens
+    // it. NOTHING is deleted by this flag. It comes off from the in-app Admin page (js/admin-ui.js)
+    // with no commit and no deploy - `adminOnly` is only the code DEFAULT now.
+    adminOnly: true,
+
+    // THE BRICK SIGN, from the design Matt handed over (skeeball/MACHINE-BRICKCITY.md carries the
+    // hexes and what each one paints). The face keeps HOT SHOT's court blue on purpose so the two
+    // cabinets read as siblings; everything else is the brick-and-chalk palette.
+    look: {
+      // Carried from HOT SHOT unchanged - the cabinet, lane and side walls are that machine's.
+      wood: '#5b5b66',
+      woodDark: '#191a1e',
+      cabinet: '#f2c526',
+      ring: '#e8541f',
+      ringLip: '#ffd23f',
+      faceEdge: '#143564',
+      wall: '#161016',
+      // HOT SHOT's court blue, kept so the two read as siblings.
+      face: '#1e63b8',
+      // The brick sign.
+      marquee: '#a33427',      // the brick panel
+      marqueeText: '#ffc53d',  // HOT SHOT lettering
+      bulb: '#ffc53d',
+      glow: '#ff6b2c',         // the ember halo behind the letters, and the ball
+      net: '#ede6da',          // the nets, and the BRICK CITY plate
+      value: '#ede6da',        // printed values
+      cabinetEdge: '#14161b',
+      pocket: '#14161b',
+    },
+
+    // THE ARRANGEMENT LAYER, HOT SHOT's pattern: on a collar board the cup is what carries a
+    // printed value onto the collar wall (render.js _cupPlate), so the nine baskets are "cups"
+    // even though nothing here is movable. The arrangement is FIXED. THE LAW rule 5: a cup's
+    // value is frozen to its id forever - `p100a` is 100 for as long as this machine exists.
+    //
+    // THE PENALTY ROW is what makes this machine different from HOT SHOT: the three baskets
+    // nearest the player TAKE points. They are the easiest things on the face to hit, and the
+    // whole shot selection follows from wanting to clear them. See game.js's `_settle` for the
+    // floor - a rack can be eaten back down to 0 but never below it.
+    cups: {
+      p100a: { value: 100, color: '#e8541f', ink: '#ede6da', label: '100' },
+      p100b: { value: 100, color: '#e8541f', ink: '#ede6da', label: '100' },
+      p50: { value: 50, color: '#e8541f', ink: '#ede6da', label: '50' },
+      p40a: { value: 40, color: '#e8541f', ink: '#ede6da', label: '40' },
+      p40b: { value: 40, color: '#e8541f', ink: '#ede6da', label: '40' },
+      p20: { value: 20, color: '#e8541f', ink: '#ede6da', label: '20' },
+      // The penalty row. One colour for the whole face is deliberate (see colorSweep's guard in
+      // game.js) - these read as penalties from the printed number and the asphalt collar, not
+      // from a hue, which is the repo's colorblind-safe rule.
+      m20a: { value: -20, color: '#14161b', ink: '#ede6da', label: '-20' },
+      m20b: { value: -20, color: '#14161b', ink: '#ede6da', label: '-20' },
+      m10: { value: -10, color: '#14161b', ink: '#ede6da', label: '-10' },
+    },
+    arrangement: {
+      lowL: 'm20a', lowC: 'm10', lowR: 'm20b',
+      midL: 'p40a', midC: 'p20', midR: 'p40b',
+      topL: 'p100a', topC: 'p50', topR: 'p100b',
+    },
+
+    // Part 1 of MACHINE-SPEC.md, copied from HOT SHOT verbatim - the ball, the lane, the hump,
+    // the 70-degree launch, the three-tier staircase, the board dimensions, the back wall, the
+    // speeds, the aim and the whole `mat` block. THE FACE IS THE ONLY THING THAT CHANGES on this
+    // machine, and inside the face only `holes` moves: column positions, row heights and the
+    // 0.75X set-back from each tread's rear edge are HOT SHOT's too.
+    geom: {
+      // THE BALL is HOT SHOT's, which is THE CLASSIC's: ballR X*0.375, so 0.75X = 3.00 in across.
+      // Every mouth on this face is measured against that 3.00 in ball and nothing else.
+      ballR: X * 0.375,
+      ballMass: 0.18,
+      laneLen: 1.40,
+      laneW: X * 4.875,
+      bedThick: 0.06,
+      humpLen: 0.42,
+      // HOT SHOT's 70-degree launch, unchanged: the throw reads as SHOOTING, so the ball drops
+      // into a basket from above instead of skimming up the face. That is what makes a mouth
+      // barely wider than the ball reachable at all on this machine.
+      humpAngles: [0.2036, 0.4072, 0.6109, 0.8145, 1.0181, 1.2217],
+      troughLen: 0.225,
+      troughDepth: 0.15,
+      boardLipY: 0.42,
+      // Nominal only: `steps` replaces the single tilted face, exactly as on HOT SHOT.
+      boardTilt: 0.8726,
+      boardW: 1.00,
+      // HOT SHOT's staircase, unchanged: three near-flat TREADS (X*2.0625 = 8.25 in = 0.30 m,
+      // leaning 0.10 rad toward the player) alternating with three VERTICAL RISERS (X*1.925 =
+      // 7.7 in = 0.28 m), the back wall above the third. Face coordinates unroll along it.
+      steps: [
+        { len: X * 2.0625, tilt: 0.10 },       // tread 1 (0.30 m)
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 1 (0.28 m)
+        { len: X * 2.0625, tilt: 0.10 },       // tread 2
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 2
+        { len: X * 2.0625, tilt: 0.10 },       // tread 3
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 3 (the back wall rises behind it)
+      ],
+      boardLen: X * 11.9625,
+      railH: 0.10,
+      laneRailH: 0.05,
+      backboardH: 0.85,
+      cupSegments: 14,
+      collarThick: 0.012,
+      ringH: X,
+      ringThick: RING_T,
+      lipLowFrac: 0.50,
+      captureDrop: 0.35,
+
+      // THE FACE. Three baskets per tread, at HOT SHOT's positions exactly: columns u = -2.07X /
+      // 0 / +2.07X (-8.28 in / 0 / +8.28 in), rows v = 1.3125X / 5.3X / 9.2875X unrolled, each
+      // basket 0.75X (3 in) back from its tread's rear edge, against the riser. What changes is
+      // the SIZE of each mouth and what it pays, and the two vary together: the deeper into the
+      // machine a basket sits, the smaller its mouth and the more it pays.
+      //
+      // `r` is the MOUTH RADIUS, so a mouth is 2r across; `collarH` is its depth, and this
+      // machine keeps HOT SHOT's "as deep as it is wide" proportion on every basket it resizes.
+      // The outer diameter of a collar is the mouth plus two collarThick (0.012 m = 0.0825X =
+      // 0.33 in), which is what the gap arithmetic below is measured on.
+      //
+      //   row 3, v 9.2875X   100 | 50 | 100   mouths 0.8X (3.20 in) and 0.875X (3.50 in)
+      //   row 2, v 5.3X       40 | 20 |  40   mouths 1.5X (6.00 in)  - HOT SHOT's, untouched
+      //   row 1, v 1.3125X   -20 |-10 | -20   mouths 1.085X (4.34 in)
+      //
+      // ROW 2 IS HOT SHOT'S ROW, KEPT (Matt, 2026-08-24: "the size of the baskets in row 2
+      // (middle) should stay the same, so keep them at whatever they're currently at"). It is
+      // therefore the WIDEST row on the face even though it is not the nearest one - deliberate,
+      // and the reason the penalty row below it is survivable: the 40s are the reliable shot.
+      //
+      // ROW 3 IS THE SKILL ROW. The 100s are 0.8X = 3.20 in against a 3.00 in ball - 0.10 in of
+      // clearance on each side. That is the tightest opening in the game by a wide margin and it
+      // is meant to be: it is the one shot on the machine that has to be aimed rather than
+      // ranged. It is also the FLOOR for a real opening - anything narrower than the ball is a
+      // painted dot, not a basket, and cannot be scored at all. The 50 between them is 0.875X =
+      // 3.50 in, still tight, as the consolation for a 100 attempt that drifts to the middle.
+      //
+      // ROW 1 IS SIZED BY ITS TWO GAPS, AND IT WAS MEASURED DOWN FROM THE 1.085X (4.34 in) IT
+      // WAS FIRST DRAWN AT. The intent behind that first number is kept: at 1.25X (5.00 in)
+      // outer, adjacent row-1 collars leave 8.28 - 5.00 = 3.28 in, so a 3.00 in ball can fall
+      // BETWEEN two penalty baskets and take a plain 0 instead of a -20. What that missed is the
+      // OTHER gap - the same collars leave only 2.97 in between the outer basket and the SIDE
+      // RAIL, against the same 3.00 in ball.
+      //
+      // That is the exact shape this file's spacing rule bans: a gap is either MERGED or wider
+      // than a ball plus margin, and an IN-BETWEEN gap is a pocket. The ball gets far enough into
+      // a 2.97 in channel to touch the collar wall and the rail at once, the tread makes a third
+      // contact, and three contact normals lock the solver; the watchdog walks it out as a zero.
+      // Measured on the full 41x21 grid through this machine's own engine: 111 of 861 throws
+      // (12.89%) ended in the watchdog, and 83 of them were that one wedge - ball centre at
+      // u = +/-12.25 in, which is the rail at ball radius, sitting on the tread at row 1's
+      // height. NOT ONE jam was inside a basket, so depth was never the problem (a 2/3-depth
+      // variant still measured 8.66%).
+      //
+      // At 0.97X (3.88 in) mouth / 1.135X (4.54 in) outer, with the columns left where Matt put
+      // them, BOTH gaps clear the ball: 3.20 in to the rail and 3.74 in between baskets. Same
+      // grid, same engine: 28 of 861 (3.25%), all nine mouths still capturable, and row 1 is
+      // still the largest mouth after HOT SHOT's kept middle row. For scale, HOT SHOT itself
+      // measures 13.36% on this grid - the staircase's own number, which this face is well under.
+      //
+      // DO NOT RESIZE ROW 1 without redoing all four numbers and re-running the sweep: widening
+      // the mouth closes the rail channel back into the wedge, and moving the columns inward to
+      // open the rail channel closes the centre gap into the same wedge. There is not much room
+      // either way - it is three collars and four gaps across 27.5 in.
+      holeR: X * 0.75,
+      holes: {
+        // The penalty row: mouth 0.97X (3.88 in), outer 1.135X (4.54 in), depth 0.97X.
+        // MEASURED DOWN FROM THE 1.085X IT WAS FIRST DRAWN AT - see the row-1 note above.
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
+        // HOT SHOT's row, untouched: mouth 1.5X (6.00 in), outer 1.665X (6.66 in), depth 1.0X.
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        // The skill row: the 100s at mouth 0.8X (3.20 in), outer 0.965X (3.86 in), depth 0.8X;
+        // the 50 at mouth 0.875X (3.50 in), outer 1.04X (4.16 in), depth 0.875X.
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.4, collarH: X * 0.8 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.875 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.4, collarH: X * 0.8 },
+      },
+
+      minSpeed: 2.60,
+      maxSpeed: 6.60,
+      aimMax: 0.45,
+
+      // HOT SHOT's materials, verbatim and for its reasons: slick treads so a miss rolls off the
+      // front edge, a near-frictionless back wall (a fast ball sliding down a GRIPPING wall gets
+      // flicked upward by the friction impulse), deadened side-wall tops, and the classic's
+      // rebound on the backboard so a hard throw comes back at the player.
+      mat: {
+        boardFric: 0.12,
+        boardRest: 0.05,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.15,
+        ringFric: 0.06,
+        ringRest: 0.30,
+        ring100Fric: 0.06,
+        ring100Rest: 0.30,
+        deadFric: 0.06,
+        deadRest: 0.32,
+        backFric: 0,
+        backRest: 0.60,
+      },
+    },
+
+    specWaivers: {
+      'ball.ratio': 'The ball is HOT SHOT\'s, which is THE CLASSIC\'s measured ball: ballR '
+        + '0.375X, so 0.75X (3.00 in) across against the spec sheet\'s 0.350X. This machine is '
+        + 'HOT SHOT\'s sibling and shares its cabinet, ramp and ball; only the face differs. The '
+        + 'spec sheet\'s ratio predates Matt\'s tape-measure pass, 2026-08-23.',
+      'board.dims': 'HOT SHOT\'s staircase, carried over unchanged (Matt ordered it 2026-08-22, '
+        + '"3 stairs" instead of one tilted face). boardLen is the UNROLLED length of three '
+        + 'treads plus three risers (11.9625X), which necessarily exceeds the flat-board 10.5X '
+        + 'ceiling, and boardTilt is nominal because `steps` replaces the single face.',
+      'holes.uniform': 'Matt\'s layout for this machine, 2026-08-24: mouth size IS the difficulty '
+        + 'ladder here, so the three rows are deliberately three sizes - 0.97X penalty mouths '
+        + 'nearest the player (measured down from 1.085X to open the side-rail channel past the '
+        + 'ball), HOT SHOT\'s 1.5X row kept in the middle at his explicit ask, and 0.8X / 0.875X '
+        + 'skill mouths at the top. A uniform face cannot express that ladder.',
+    },
+  },
+
+  {
     id: 'popongo',
     name: 'POPONGO',
     taglineKey: 'board_popongo_tag',
@@ -483,7 +731,12 @@ export const BOARDS = [
     // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
     // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
     // always false.
-    unlock: { board: 'basketball', goals: true },
+    // Re-pointed at BRICK CITY 2026-08-24 when machine 3 landed between them: the chain now
+    // reads THE CLASSIC -> HOT SHOT -> BRICK CITY -> POPONGO. THE LAW rule 2 - this takes
+    // NOTHING from anyone who has already earned POPONGO. sk.unlocked is an additive set
+    // (js/arcade-scores.js union-merges it across devices) and nothing anywhere removes an
+    // id from it, so an earned machine stays earned however the chain is rearranged later.
+    unlock: { board: 'brickcity', goals: true },
     // ADMIN ONLY right now (Matt, 2026-08-24, testing): same as basketball above - never unlocked
     // by play, shown locked to non-dev profiles, dev bypass still opens it, nothing deleted. Drop
     // this line to release.

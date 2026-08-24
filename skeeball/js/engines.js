@@ -33,10 +33,15 @@ import * as basketballPhysics from './machines/basketball/physics.js';
 import { buildMachine as basketballBuildMachine } from './machines/basketball/machine.js';
 import { Renderer as BasketballRenderer } from './machines/basketball/render.js';
 
+import * as brickcityPhysics from './machines/brickcity/physics.js';
+import { buildMachine as brickcityBuildMachine } from './machines/brickcity/machine.js';
+import { Renderer as BrickcityRenderer } from './machines/brickcity/render.js';
+
 const ENGINES = {
   classic: { physics: classicPhysics, buildMachine: classicBuildMachine, Renderer: ClassicRenderer },
   popongo: { physics: popongoPhysics, buildMachine: popongoBuildMachine, Renderer: PopongoRenderer },
   basketball: { physics: basketballPhysics, buildMachine: basketballBuildMachine, Renderer: BasketballRenderer },
+  brickcity: { physics: brickcityPhysics, buildMachine: brickcityBuildMachine, Renderer: BrickcityRenderer },
 };
 
 /** Every machine that has an engine here. `boards.js` is the data; this is the code. */

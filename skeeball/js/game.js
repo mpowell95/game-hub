@@ -147,6 +147,17 @@ export class SkeeballGame {
     }
     this.ballsUsed += 1;
     this.score += value;
+    // A RACK NEVER FINISHES BELOW ZERO (2026-08-24, with BRICK CITY's penalty row - the first
+    // machine whose cups carry NEGATIVE values). Without this floor the screen and the record
+    // would disagree: `recordSkeeball` in js/game-stats.js clamps with Math.max(0, e.score | 0),
+    // so a rack shown as -40 would be filed as 0 and the player would be told two different
+    // things about the same nine balls. Matt's call, asked and answered the day the machine was
+    // built: penalties eat what you have earned, they do not put you in debt. Clamping HERE (the
+    // one place that owns what is true) rather than loosening the recorder keeps that a display
+    // question rather than a THE LAW question - nothing recorded ever changes shape.
+    // GUARD: every board without negative cups is untouched by this line, because their scores
+    // never go under zero in the first place.
+    if (this.score < 0) this.score = 0;
     this.throws.push({ value, hole: outcome.hole, earned: value });
     // GUARD: hundreds/fifties are THE CLASSIC's counters (the global sk.hundreds feeds its
     // five-100s goal, and Matt ruled machines "completely distinct", 2026-08-22). A cup board
@@ -175,6 +186,14 @@ export class SkeeballGame {
     // so they need no place in the snapshot - `throws` is already in it, so they survive a
     // resume for free. hundreds/fifties keep their existing counters; they predate this.
     const by = (v) => this.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
+    // GUARD: `by` matches EXACT values, so BRICK CITY's -10 and -20 balls land in no counter at
+    // all, and that is deliberate. tens/twenties/thirties/forties are the "every point value"
+    // counters (js/game-stats.js's sk block, merged cross-device by js/players-agg.js); they
+    // count points EARNED. Folding a -20 into `twenties` would make a penalty read as a 20 in My
+    // Stats and on the leaderboard, and giving penalties their own counters would be three new
+    // additive keys plus the three-edit rule for each, for a number nothing asks for. If a
+    // machine ever needs "penalties taken", add it then as its own counter - do not overload
+    // these.
     // The cup-board extras: how many distinct scoring COLORS this rack has landed, and whether
     // that is all of them (POPONGO's "all four colors in one game" objective - js/goals.js reads
     // colorsHit live, recordSkeeball counts colorSweep into sk.colorSweeps). Both stay 0 on a

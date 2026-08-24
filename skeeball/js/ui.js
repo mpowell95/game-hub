@@ -115,6 +115,18 @@ function renderMachineImage(board, sb) {
  *  not fit, and nobody reads a lifetime total to the point anyway. */
 const shortNum = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/.0$/, '')}k` : String(n));
 
+/** A ball's value as the landing popup prints it, WITH ITS SIGN. Every popup used to be built as
+ *  `+${value}`, which printed "+-20" the moment a machine with negative cups existed (BRICK
+ *  CITY's penalty row, 2026-08-24). A minus sign is the whole message on those baskets, so it is
+ *  spelled with a real minus (U+2212, what POPONGO's equalizer popup already uses) rather than a
+ *  hyphen - at popup size a hyphen reads as a dash in the number. Zero prints bare. */
+const signedValue = (v) => {
+  const n = v | 0;
+  if (n > 0) return `+${n}`;
+  if (n < 0) return `\u2212${-n}`;
+  return '0';
+};
+
 /** This player's own records for a board, straight from the shared store (never a local copy). */
 function myRecords(boardId) {
   try {
@@ -590,7 +602,7 @@ export class SkeeballUI {
             const at = this._hpPending; this._hpPending = null;
             if (at) {
               const gold = at.value >= 100, big = at.value >= 50;
-              this._hpRenderer.popupAt(at.pos, `+${at.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+              this._hpRenderer.popupAt(at.pos, signedValue(at.value), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
               if (big) this._hpRenderer.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
               if (gold) this._hpRenderer.celebrate();
             }
@@ -865,7 +877,7 @@ export class SkeeballUI {
             // celebrate. Gold = the machine's best cup, big = over half of it.
             const topValue = Math.max(...Object.values(this.game.board.geom.holes).map((h) => h.value | 0));
             const gold = at.value > 0 && at.value >= topValue, big = at.value >= topValue / 2;
-            Rr.popupAt(at.pos, `+${at.value}`, gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
+            Rr.popupAt(at.pos, signedValue(at.value), gold ? '#ffd977' : big ? '#ff9d3d' : '#fff6e0', big);
             if (big) Rr.burstAt(at.pos, gold ? '#ffd977' : '#ff9d3d', gold ? 22 : 14);
             if (gold) Rr.celebrate();
           }
