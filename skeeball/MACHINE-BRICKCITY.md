@@ -56,15 +56,25 @@ All of that is HOT SHOT's, unchanged, including Matt's 2026-08-23 "do not move t
 again" call about the set-back.
 
 ```
-   row 3   v 9.2875X     100    50    100      <- the skill row: tightest mouth-to-ball in the game
-   row 2   v 5.3X         40    20     40      <- HOT SHOT's row, kept at his ask
-   row 1   v 1.3125X     -20   -10    -20      <- the penalty row, nearest the player
+   row 3   v 9.2875X     100    50    100      3.20 / 3.50 / 3.20 in   the skill row
+   row 2   v 5.3X         40    20     40      3.88 in                 a real shot, and OPEN
+   row 1   v 1.3125X     -20   -10    -20      6.00 in                 the biggest mouths here
 ```
 
-**Size and value move together: the deeper into the machine a basket sits, the smaller its mouth
-and the more it pays** — except row 2, which is HOT SHOT's row kept as-is and is therefore the
-widest thing on the face. That is deliberate and it is what makes the penalty row survivable: the
-40s are the reliable shot, so there is always something safe to aim at.
+**Size and value move together, and the ladder runs BIG TO SMALL from the player outward: the
+deeper into the machine a basket sits, the smaller its mouth and the more it pays.** The penalty
+row is the widest thing on the face on purpose — it is the easiest thing to fall into, which is
+what makes -20 a real risk rather than a decoration, and every shot selection on this machine
+follows from wanting to clear it.
+
+**The first build had this backwards** and it is worth recording why, because it looked defensible
+on paper. A question about row 2's size was answered "keep them at whatever they're currently at",
+which was read as HOT SHOT's live 1.5X rims — so the 6.00 in row landed in the MIDDLE with a
+3.88 in row under it. Matt, on seeing it: *"Why are the baskets in the middle row so big? The ball
+can't roll down to the bottom row because you made the middle row so large… The baskets in the
+bottom row should be the size of what you put in the middle row. And vice versa."* He is right —
+a 6.00 in middle row is a wall, and nothing that clears the top rows can get past it to the
+penalty row it is supposed to threaten. The two rows are swapped now.
 
 ### Every dimension, three ways
 
@@ -75,12 +85,12 @@ OUTER diameter is its mouth plus two `collarThick` (0.012 m = 0.0825X = 0.33 in)
 | | X | inches | metres |
 |---|---|---|---|
 | **Ball** (HOT SHOT's, which is THE CLASSIC's) | 0.75X across (`ballR` X\*0.375) | 3.00 | 0.10909 |
-| **Row 1 mouth** (-20 / -10 / -20) | 0.97X (`r` X\*0.485) | 3.88 | 0.09891 |
-| Row 1 outer | 1.135X | 4.54 | 0.11527 |
-| Row 1 depth (`collarH`) | 0.97X | 3.88 | 0.09891 |
-| **Row 2 mouth** (40 / 20 / 40) | 1.5X (`r` X\*0.75) | 6.00 | 0.21818 |
-| Row 2 outer | 1.665X | 6.66 | 0.24218 |
-| Row 2 depth | 1.0X | 4.00 | 0.14545 |
+| **Row 1 mouth** (-20 / -10 / -20) | 1.5X (`r` X\*0.75) | 6.00 | 0.21818 |
+| Row 1 outer | 1.665X | 6.66 | 0.24218 |
+| Row 1 depth (`collarH`) | 1.0X | 4.00 | 0.14545 |
+| **Row 2 mouth** (40 / 20 / 40) | 0.97X (`r` X\*0.485) | 3.88 | 0.09891 |
+| Row 2 outer | 1.135X | 4.54 | 0.11527 |
+| Row 2 depth | 0.97X | 3.88 | 0.09891 |
 | **Row 3 mouth, the 100s** | 0.8X (`r` X\*0.4) | 3.20 | 0.11636 |
 | Row 3 outer, the 100s | 0.965X | 3.86 | 0.14036 |
 | Row 3 depth, the 100s | 0.8X | 3.20 | 0.11636 |
@@ -119,123 +129,97 @@ useless; it is a target that looks reachable and is not.
 Measured, not asserted: the build sweep captures both 100s cleanly (see "Verification"), so the
 shot is real. It is rare, which is what a 100 should be.
 
-### Why row 1 is 0.97X and not the 1.085X it was first drawn at
+### The gaps, which decide whether a miss can travel
 
-**This is the one number that changed from the brief, and it changed because it was measured.**
+`boards.js`'s spacing rule, learned twice and written down after POPONGO's build: **a gap is
+either MERGED or wider than a ball plus margin, and an in-between gap is a pocket.** A ball that
+gets far enough into a too-tight channel to touch two things at once, with the tread as a third
+contact, locks the cannon solver; the watchdog walks it out as a zero.
 
-Row 1 was specified as a 1.085X (4.34 in) mouth, 1.25X (5.00 in) outer, on the reasoning that
-5.00 in outer collars at ±8.28 in leave 3.28 in between adjacent baskets, so a 3.00 in ball can
-still fall BETWEEN two penalty baskets and take a plain 0 instead of a -20. That reasoning is
-right and it is preserved. What it missed is the OTHER gap: the same collars leave only **2.97 in
-between the outer basket and the side rail**, against a 3.00 in ball.
+Both shipped rows are on the right side of that rule, from opposite directions:
 
-`boards.js`'s own spacing rule, learned twice and written down after POPONGO's build, says a gap
-is **either MERGED or wider than a ball plus margin, and an in-between gap is a pocket** — and
-2.97 in against a 3.00 in ball is the worst value available. The ball gets far enough into the
-channel to touch the collar wall and the rail at once, the tread makes a third contact, and three
-contact normals lock the cannon solver completely. The watchdog walks it out as a zero.
+| | outer | to the side rail | between adjacent baskets | |
+|---|---|---|---|---|
+| **row 1** at 6.00 in mouth | 6.66 in | 2.14 in | 1.62 in | both **MERGED** — far under the 3.00 in ball, so it cannot enter either and cannot wedge |
+| **row 2** at 3.88 in mouth | 4.54 in | 3.20 in | 3.74 in | both **CLEAR** the ball, so a miss here really does carry on down the face |
 
-Measured on the full 41x21 grid (861 throws) through this machine's own engine, at the briefed
-1.085X:
+A ball reaching row 1 therefore lands in a penalty basket or is stopped by one. The clear tread
+strip in front of the row, the risers and the trough are the routes to a plain 0.
 
-- **111 of 861 throws (12.89%) ended in the watchdog.**
-- **83 of those 111 were the same wedge**: ball centre at u = ±12.25 in — which is exactly the
-  rail, at ball radius — resting on the tread at row 1's height, 1.89 in outside the nearest
-  collar's rim.
-- **Not one jam was inside a basket.** Depth was never the problem, and a variant with every
-  collar at two thirds of its mouth (HOT SHOT's real proportion) still measured 8.66%. That is
-  why this machine keeps the as-deep-as-it-is-wide collars it was drawn with.
+**The one size that must not come back is 4.34 in on row 1.** At 1.25X (5.00 in) outer it leaves a
+**2.97 in** rail channel against a 3.00 in ball — the exact in-between case — and the full 41x21
+grid measured **111 of 861 throws (12.89%)** walked out by the watchdog, **83 of them wedged in
+that channel**, ball centre at u = ±12.25 in, which is the rail at ball radius. Depth was never the
+cause: a variant with every collar at two thirds of its mouth still measured 8.66%.
 
-The fix keeps the columns where Matt put them and shrinks the mouth instead:
-
-| | mouth | outer | rail channel | gap between adjacent baskets | jams (41x21) |
-|---|---|---|---|---|---|
-| as first drawn | 4.34 in | 5.00 in | **2.97 in** (ball cannot pass, ball CAN wedge) | 3.28 in | 111 (12.89%) |
-| **shipped** | **3.88 in** | **4.54 in** | **3.20 in** (ball passes) | **3.74 in** | **28 (3.25%)** |
-| measured alternative | 4.34 in | 5.00 in | 3.13 in | 3.12 in | 28 (3.25%) |
-
-**The measured alternative was real and was not taken.** Leaving the mouth at 4.34 in and moving
-row 1's columns in to ±2.03125X opens both gaps just past the ball and measures the SAME 3.25%,
-with a livelier penalty row (77 of 861 grid cells catch a penalty against 53). It was rejected
-because the columns are one of the things this machine copies from HOT SHOT unchanged — all three
-rows line up in the same three columns, and row 1's size is the number that has to absorb the gap
-arithmetic. If a future session wants the penalty row to bite harder, that variant is the measured
-way to do it, and it costs the column alignment.
-
-**For scale, HOT SHOT measures 13.36% on this same grid** — untouched, on `main`, the day this was
-built. THE CLASSIC measures 0.00% and POPONGO 0.46%, so the jam rate is a property of the
-STAIRCASE: three treads, three risers and two side rails make far more two-and-three-contact
-corners than a single tilted face does.
-
-The two kinds are distinguishable, and it is worth knowing which is which:
-
-- **Corner-parking** — the ball comes to rest in the corner where a tread meets a side rail,
-  nowhere near a collar (its nearest rim is 5.8 in away). This is HOT SHOT's, at all three rows:
-  40 of its 115. It is what this machine's residual 28 are too, and chasing it means changing the
-  row Matt asked to keep.
-- **Collar-wedging** — the ball is held between a collar's outer wall and the rail at once, 1.9 in
-  from the rim. **This one was BRICK CITY's own, and it is gone.** It was 83 of the original 111,
-  and there are zero of them now.
-
-So this face added a second failure mode on top of the inherited one, and closing it leaves the
-machine running four times cleaner than its own parent.
-
-Both routes to a plain 0 are now genuinely open, which is more than the original had: a ball can
-pass down the side of the row AND between two baskets. The clear tread strip in front of the row,
-the risers and the trough are still the other routes.
-
-Row 1 is still the largest mouth after HOT SHOT's kept middle row (3.88 in vs the 50's 3.50 in and
-the 100s' 3.20 in), so the ladder still reads correctly on the face.
-
-**Do not resize row 1 without redoing all four numbers in that table**, and re-run the sweep after:
-widening the mouth closes the rail channel back into the wedge, and moving the columns inward to
-open the rail channel closes the centre gap into the same wedge. At this mouth and these columns
-all four gaps clear the ball. There is not much room either way — the arithmetic is three collars
-plus four gaps across 27.5 in.
+**Do not resize either row without redoing all four of those gap numbers and re-running the
+sweep.** There is not much room — three collars and four gaps across 27.5 in — and the sizes that
+work are the ones either comfortably bigger than the ball or comfortably too small for it.
 
 ## The marquee
 
-Painted onto the marquee panel by `_paintMarquee()` in `skeeball/js/machines/brickcity/render.js`,
-the same way `_paintField` and `_paintLane` paint the board and the lane, with `SRGBColorSpace`
-declared (without it the sRGB hex is handed to the shader as linear albedo, the brick goes pink
-and the chalk plate goes grey). 1024 x 252 canvas, 4.06:1, matching the panel mesh.
+**The sign is the design Matt handed over, not a version of it.** `_paintMarquee()` in
+`skeeball/js/machines/brickcity/render.js` paints the artifact's `.sign` block onto the marquee
+panel the same way `_paintField` and `_paintLane` paint the board and the lane, with
+`SRGBColorSpace` declared (without it the sRGB hex reaches the shader as linear albedo, the brick
+goes pink and the chalk plate goes grey). 1024 x 252 canvas.
 
-Top to bottom: a brick panel fading `#A33427` to `#6E2018`, with mortar drawn as courses 26 px
-apart and verticals 58 px apart, every other course offset half a brick; a bulb bar across the top
-AND bottom edge; **HOT SHOT** large and centred in `#FFC53D` over an `#FF6B2C` ember glow (a hard
-`#6E2018` drop shadow, then two ember halo passes, then the letters); and below it a **BRICK CITY**
-plate — `#14161B` fill, 3 px `#EDE6DA` border, chalk lettering, with a ball-through-a-rim glyph at
-its left (orange ball, chalk rim and net). No tagline, no extra copy: those two names are the
-entire sign. The plate is dark because brick red under a yellow bulb bar is a low-contrast pair,
-and BRICK CITY needs somewhere to sit that does not compete with the glow above it.
+The CSS-to-canvas mapping, so a future session can check the sign against the artifact rather than
+against taste:
+
+| artifact CSS | painted as |
+|---|---|
+| `.sign` `background: linear-gradient(180deg, #A33427, #6E2018)` | the brick panel's vertical fade |
+| `.sign` `border: 6px solid var(--bulb)` | the **bulb-yellow frame** around the whole sign |
+| `.sign` `box-shadow: 0 0 0 5px #0D0E12` | the **dark edge ring** outside that frame |
+| `.sign::before` horizontals `rgba(0,0,0,.34)` every 26px | mortar courses |
+| `.sign::before` verticals `rgba(0,0,0,.28)` every 58px | brick joints |
+| `.sign::after` the same verticals offset `29px 13px`, masked to alternate courses | every other course offset half a brick |
+| both coursing layers at `opacity: .5` | one `globalAlpha = 0.5` pass |
+| `.bulbs` 12 bulbs, `space-between`, one bar top and one bottom | `_signBulbs` |
+| `.bulb` 11px `#FFC53D`, `0 0 10px 2px rgba(255,197,61,.75)` | lit glass with its glow |
+| `.bulb` `inset 0 -2px 3px rgba(160,105,0,.5)` | shading **under** the glass, not a highlight on top |
+| `.hot` `0 5px 0 #6E2018` | the hard drop shadow, drawn first |
+| `.hot` `0 0 48px rgba(255,107,44,.45)` then `0 0 18px rgba(255,107,44,.85)` then `0 0 2px rgba(255,197,61,.9)` | three ember/bulb halo passes, widest first |
+| `.hot` `color: #FFC53D` | the letters themselves |
+| `.plate` `#14161B`, `border: 3px solid #EDE6DA`, `radius: 2px` | the BRICK CITY plate |
+| `.plate` `box-shadow: 0 6px 0 rgba(0,0,0,.45)` | its hard, unblurred drop |
+| the plate's inline SVG | `_signRimGlyph` — orange ball, its seams, chalk rim, five net strands |
+
+**The one thing that is not the artifact's is the aspect ratio.** The mock's sign is about 2.3:1;
+this cabinet's marquee panel is 4.06:1. So the sign is drawn WIDER — the ring, the frame, the bulb
+bars, the lettering and the plate are all the artifact's, and the brick simply runs further to
+each side. Nothing else was reinterpreted.
 
 **Every letter is a path, not a font.** The design sets both names in Bungee. A webfont is not
-something this game may fetch (no build step, must work offline, and a font that has not loaded
-yet paints the sign in whatever the browser falls back to), so `_signWord` / `_signGlyph` draw a
-heavy condensed alphabet out of lines and curves. Only the ten letters these two names need exist
+something this game may fetch (no build step, must work offline, and a font that has not loaded yet
+paints the sign in whatever the browser falls back to), so `_signWord` / `_signGlyph` draw a heavy
+condensed alphabet out of lines and curves. Only the ten letters these two names need exist
 (B C H I K O R S T Y); a letter with no glyph draws nothing rather than a tofu box.
 
 The three numbers that make it read as condensed signage, and that have to agree in `_signWidth`,
-`_signWord` and the two callers: **advance 0.64 of cap height, tracking 0.12, stem 0.21.** Those
-came off a look, not a preference (`VISUAL-PROCESS.md`): at the first weight (advance 0.60, stem
-0.235) the B and the S closed their counters into a blob at display size, and the first S — built
-out of squared `arcTo` corners — read as a **5**. The S is two bezier S-curves now, and B and R
-share one `bowl` helper whose control points sit past the box edge so the bowl is as full as the
-letter instead of a timid bulge.
+`_signWord` and both callers: **advance 0.64 of cap height, tracking 0.12, stem 0.21.** Those came
+off a look, not a preference (`VISUAL-PROCESS.md`): at a heavier weight the B and the S closed
+their counters into a blob, and the first S — built out of squared `arcTo` corners — read as a
+**5**. The S is two bezier S-curves now, and B and R share one `bowl` helper whose control points
+sit past the box edge so the bowl is as full as the letter.
 
-**Sizes on the 1024 x 252 canvas:** HOT SHOT at cap 74 from y 30; the plate 86 tall from y 128,
-carrying BRICK CITY at cap 46 with a 62 px glyph. HOT SHOT was 88 and the plate 74/38 in the first
-pass, and it was corrected after looking at the real 3D scene at 393 px: at that balance the plate
-was a dark bar with unreadable text at play distance. Matt's standing instruction on exactly this
-is to **fix the sign, not the camera** — so HOT SHOT gave up the size and the plate took it. If the
-plate ever stops reading again, that is the trade to make again.
+**Sizes on the canvas:** 6px dark ring, 9px bulb frame, then the brick; bulb bars 13px inside the
+top and bottom edges; HOT SHOT at cap 78 from y 42; the plate 74 tall from y 132, carrying BRICK
+CITY at cap 40 with a 58px glyph.
 
-**No chase animation.** The design offers one and calls it a suggestion. These bulbs are painted
-INTO the texture, so a chase would mean repainting a 1024 x 252 canvas and re-uploading it every
-frame for something the player sees at the top of the screen while watching a ball. The seven real
-bulb MESHES above the panel already flash on `celebrate()`, which is where the movement belongs.
-If a chase is ever wanted it goes on those meshes, and `REDUCED` at the top of `render.js` is the
-`prefers-reduced-motion` gate it needs.
+**No chase animation.** The artifact's own notes call its chase "a suggestion, not a requirement".
+These bulbs are painted INTO the texture, so a chase would mean repainting a 1024 x 252 canvas and
+re-uploading it every frame for something the player sees at the top of the screen while watching a
+ball. The seven real bulb MESHES above the panel already flash on `celebrate()`, which is where
+movement belongs; `REDUCED` at the top of `render.js` is the `prefers-reduced-motion` gate it would
+need.
+
+**The HUD used to cover this sign, and no longer does.** The shared centre goal chip ("Total
+points") sat on a band measured only against THE CLASSIC's geometry, so on the taller staircase
+machines it landed on the marquee, across the lettering. All three objectives now live in the
+gutter rails, which are measured clear for every board — see `skeeball/CLAUDE.md`, "Where the
+three objectives sit". That was a change to all four cabinets, not a BRICK CITY one.
 
 ### The palette (`look`)
 
@@ -300,29 +284,38 @@ counters, so nothing new to sync, merge or test under item 7's three-edit rule.
 | goal | target | reads |
 |---|---|---|
 | Sink a 100 | `bestThrow >= 100` | `sk.boards.brickcity.bestThrow` |
-| Single game | `best >= 240` | `sk.boards.brickcity.best` |
-| Total points | `points >= 2000` | `sk.boards.brickcity.points` |
+| Single game | `best >= 200` | `sk.boards.brickcity.best` |
+| Total points | `points >= 1500` | `sk.boards.brickcity.points` |
 
-Tuned to THIS face and deliberately not HOT SHOT's numbers (100 / 300 / 3,000): this machine pays
-two 100s instead of one but through 3.20 in mouths, its reliable row pays 40 where HOT SHOT's pays
-60, and its bottom row takes points back — so the same effort produces a lower number here, and
-both bars drop to match.
+Tuned to THIS face and deliberately not HOT SHOT's numbers (100 / 300 / 3,000), then **re-tuned
+when the rows swapped** — the face got materially harder, and 240 / 2,000 had been measured against
+the version where a 6.00 in middle row walled most balls off the penalty row.
 
-What the grid says a rack is worth, which is where those two numbers come from:
+What the grid says a ball is worth now. Of 861 clean cells:
 
-- a rack thrown UNIFORMLY across the dial scores about **51**;
-- **11.8%** of the dial pays 40, so a player who finds that band every ball scores **360**;
-- two thirds of the balls in the 40 band and the rest in the 20 is **300**;
-- **240** is six 40s, which is a good rack and not a perfect one.
+| pays | cells |
+|---|---|
+| nothing | 563 |
+| **-20** | 111 |
+| **-10** | 65 |
+| 40 | 40 |
+| 20 | 14 |
+| 50 | 7 |
+| 100 | 6 |
+
+**Most power bands are net negative** — at 22 of the 33 bands that score at all, the mean ball
+loses points. The best single band (p0.775) averages 17.1 a ball across all aims; a player who
+lands near its best spot (p0.775, aim -0.1) with one grid step of jitter averages 32.2 a ball,
+about a **290** rack. That is the ceiling a good player plays against, so the single-game bar sits
+near two thirds of it.
 
 **POPONGO hangs off these three, so they have to be reachable — and the 100 is the one to watch.**
-It is **6 of 861 grid cells here against HOT SHOT's 26**, roughly four times harder to find on the
-dial, and it is the only one of the three that could stall someone. It is genuinely capturable
-(clean captures at p0.675-0.75 with a little aim) and there are two of them, so it is a shot to
-learn rather than a wall. If it plays too hard once there are real racks behind it, **soften
-`BC_HOOP` in `skeeball/js/goals.js` — do not widen the mouth**, which is the thing that makes the
-shot worth anything. POPONGO can also be opened for everyone from the in-app Admin page in the
-meantime, with no commit and no deploy.
+It is **6 of 861 grid cells** here against HOT SHOT's 26, roughly four times harder to find on the
+dial (p0.675 through p0.95, always with some aim on it). It is genuinely capturable and there are
+two of them, so it is a shot to learn rather than a wall. If any of the three plays too hard once
+there are real racks behind it, **soften the constant in `goals.js` — do not widen a mouth**, which
+is the thing that makes the shot worth anything. POPONGO can also be opened for everyone from the
+in-app Admin page in the meantime, with no commit and no deploy.
 
 ## Spec waivers
 
@@ -354,13 +347,20 @@ node test-visual.mjs skeeball          # the only suite that LOOKS at it
 groups throw at `DEFAULT_BOARD` only). Sweep this machine by hand after moving anything on the
 face — 41 powers x 21 aims of `simulateThrow` through `engineFor('brickcity')`.
 
-The build sweep, 41 x 21 = 861 throws:
+The shipped sweep, 41 x 21 = 861 throws:
 
 | | |
 |---|---|
-| all nine mouths clean-capturable | yes — lowL 15, lowC 20, lowR 18, midL 52, midC 37, midR 50, topL 3, topC 7, topR 3 |
-| watchdog / emergency rate | **28 of 861 (3.25%)**, down from 111 (12.89%) as first drawn |
-| where the residue is | all 28 in the MIDDLE row region, 19 of them wedged against a side rail — HOT SHOT's own geometry, which measures 13.36% on the same grid |
-| slowest settle | 6.62 s, under the 12 s cap |
-| shared-file guard | the 41 x 21 grid AND a fixed nine-ball rack replayed on classic, basketball and popongo before and after every shared-file change in this build: **all three byte-identical** |
+| all nine mouths clean-capturable | yes — lowL 54, lowC 65, lowR 57, midL 19, midC 14, midR 21, topL 3, topC 7, topR 3 |
+| the penalty row really is the easiest thing to hit | 176 of 861 grid cells (20.4%) land in it |
+| watchdog / emergency rate | **55 of 861 (6.39%)** |
+| where all 55 are | corner-parked against riser 1, nearest rim 5.8 in away — **not one is in a basket, and not one is a collar wedge**. This is HOT SHOT's own failure mode, and HOT SHOT measures **13.36%** on the same grid (THE CLASSIC 0.00%, POPONGO 0.46%) |
+| slowest settle | 5.74 s, under the 12 s cap |
+| shared-file guard | the 41 x 21 grid AND a fixed nine-ball rack replayed on classic, basketball and popongo before and after every shared-file change: **all three byte-identical** |
 | THE LAW rule 2 | `test-stats-replay.mjs` scenario G, against the real synced records of the only two devices holding POPONGO: both keep it |
+
+The jam rate rose from 3.25% to 6.39% when the rows were swapped, and that is the trade being
+made knowingly: big penalty baskets stop more balls short, and a ball stopped short on tread 1 has
+more chances to park in the riser corner. It buys the ladder Matt asked for, and it is still less
+than half the parent machine's rate. If it ever needs to come down, the lever is the **riser-1
+corner**, which is HOT SHOT's geometry — not these mouths.

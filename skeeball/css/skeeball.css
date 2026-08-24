@@ -512,48 +512,16 @@
 }
 .sk-root .sk-grails::before { left: 0; background: linear-gradient(to right, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
 
-/* Total points lives in the strip of empty back wall between the ball count and the top of the
-   machine's marquee - the only dead space on this screen, and the goal that changes slowest, so
-   it is the one that can sit furthest from the eye. Measured at real stage dimensions (frame.mjs
-   mirrored at stage height, not viewport height): the band is 48px at 375x667, 55px at 360x740,
-   61px at 375x812, 72px at 430x932, and a notch costs about 4px of it because the rack grows and
-   the stage shrinks together. This bar is 28px, so the tightest phone keeps ~16px clear. If the
-   rack ever gets taller, re-measure before assuming this still fits. */
-.sk-root .sk-gtotal {
-  position: absolute;
-  /* Same top edge as the rails, so the three read as one row rather than a stagger. */
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 5px 14px;
-  border-radius: 8px;
-  background: rgba(26, 16, 12, 0.86);
-  border: 1px solid var(--sk-line);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.sk-root .sk-gtotal em {
-  font-style: normal;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--sk-dim);
-}
-.sk-root .sk-gtotal b {
-  font-size: 15px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--sk-cream);
-}
-/* On one row here, unlike the rails: there is width to spare, and stacking it would double the
-   bar's height and stop it fitting the band. */
-.sk-root .sk-gtotal b i { font-style: normal; font-size: 11px; color: #8d7a63; }
-.sk-root .sk-gtotal.is-done b,
-.sk-root .sk-gtotal.is-done b i { color: var(--sk-amber); }
+/* WHY THERE IS NO CENTRE CHIP ANY MORE. Total points used to sit centred in the strip of back
+   wall between the ball count and the top of the marquee, on a band measured at 48-72px across
+   the phone sizes. That band is THE CLASSIC's: frame.mjs derives it from BOARDS[0] and
+   machines/classic/machine.js, and the staircase machines (HOT SHOT, BRICK CITY) stand taller,
+   so on those the chip landed ON the marquee - over the lettering of a designed sign. Matt,
+   2026-08-24: "obviously I don't want the objectives to cover any machine." The gutters are the
+   only space on this screen measured clear for EVERY board, so the third goal moved into the
+   right rail beside the second. Do not put a goal back in the centre without a per-machine
+   measurement of that band, which frame.mjs does not currently do. */
+
 .sk-root .sk-grails::after { right: 0; background: linear-gradient(to left, rgba(8, 5, 9, 0.8), rgba(8, 5, 9, 0)); }
 
 .sk-root .sk-goal {
@@ -589,19 +557,14 @@
    else, which at 14px against boxes that already have amber in them read as no change at all
    - Matt landed his fifth 100 and said the tile looked identical (2026-08-21). Inverting the
    whole box is the point: it should be obvious without being looked at. */
-.sk-root .sk-goal.is-done,
-.sk-root .sk-gtotal.is-done {
+.sk-root .sk-goal.is-done {
   background: var(--sk-amber);
   border-color: var(--sk-amber);
 }
-.sk-root .sk-goal.is-done em,
-.sk-root .sk-gtotal.is-done em { color: #3a1f0f; }
+.sk-root .sk-goal.is-done em { color: #3a1f0f; }
 .sk-root .sk-goal.is-done b,
-.sk-root .sk-goal.is-done b i,
-.sk-root .sk-gtotal.is-done b,
-.sk-root .sk-gtotal.is-done b i { color: #241610; }
-.sk-root .sk-goal.is-done b::after,
-.sk-root .sk-gtotal.is-done b::after { content: ' ✓'; }
+.sk-root .sk-goal.is-done b i { color: #241610; }
+.sk-root .sk-goal.is-done b::after { content: ' ✓'; }
 .sk-root .sk-goal.is-done .sk-goal-bar { background: rgba(36, 22, 16, 0.3); }
 .sk-root .sk-goal.is-done .sk-goal-bar i { background: #241610; }
 /* The beat a goal completes. Applied after the repaint, so it plays once and is gone by the

@@ -620,13 +620,8 @@ export const BOARDS = [
       // 0.33 in), which is what the gap arithmetic below is measured on.
       //
       //   row 3, v 9.2875X   100 | 50 | 100   mouths 0.8X (3.20 in) and 0.875X (3.50 in)
-      //   row 2, v 5.3X       40 | 20 |  40   mouths 1.5X (6.00 in)  - HOT SHOT's, untouched
-      //   row 1, v 1.3125X   -20 |-10 | -20   mouths 1.085X (4.34 in)
-      //
-      // ROW 2 IS HOT SHOT'S ROW, KEPT (Matt, 2026-08-24: "the size of the baskets in row 2
-      // (middle) should stay the same, so keep them at whatever they're currently at"). It is
-      // therefore the WIDEST row on the face even though it is not the nearest one - deliberate,
-      // and the reason the penalty row below it is survivable: the 40s are the reliable shot.
+      //   row 2, v 5.3X       40 | 20 |  40   mouths 0.97X (3.88 in)
+      //   row 1, v 1.3125X   -20 |-10 | -20   mouths 1.5X (6.00 in)
       //
       // ROW 3 IS THE SKILL ROW. The 100s are 0.8X = 3.20 in against a 3.00 in ball - 0.10 in of
       // clearance on each side. That is the tightest opening in the game by a wide margin and it
@@ -635,44 +630,55 @@ export const BOARDS = [
       // painted dot, not a basket, and cannot be scored at all. The 50 between them is 0.875X =
       // 3.50 in, still tight, as the consolation for a 100 attempt that drifts to the middle.
       //
-      // ROW 1 IS SIZED BY ITS TWO GAPS, AND IT WAS MEASURED DOWN FROM THE 1.085X (4.34 in) IT
-      // WAS FIRST DRAWN AT. The intent behind that first number is kept: at 1.25X (5.00 in)
-      // outer, adjacent row-1 collars leave 8.28 - 5.00 = 3.28 in, so a 3.00 in ball can fall
-      // BETWEEN two penalty baskets and take a plain 0 instead of a -20. What that missed is the
-      // OTHER gap - the same collars leave only 2.97 in between the outer basket and the SIDE
-      // RAIL, against the same 3.00 in ball.
+      // THE LADDER RUNS BIG-TO-SMALL FROM THE PLAYER OUTWARD, AND THAT IS THE WHOLE POINT.
+      // Matt, 2026-08-24, on the first build: "The ball can't roll down to the bottom row because
+      // you made the middle row so large... The baskets in the bottom row should be the size of
+      // what you put in the middle row. And vice versa." He is right, and the first build had it
+      // exactly backwards - a 6.00 in middle row is a wall, and nothing that clears the top rows
+      // can get down past it to the penalty row it is supposed to threaten.
       //
-      // That is the exact shape this file's spacing rule bans: a gap is either MERGED or wider
-      // than a ball plus margin, and an IN-BETWEEN gap is a pocket. The ball gets far enough into
-      // a 2.97 in channel to touch the collar wall and the rail at once, the tread makes a third
-      // contact, and three contact normals lock the solver; the watchdog walks it out as a zero.
-      // Measured on the full 41x21 grid through this machine's own engine: 111 of 861 throws
-      // (12.89%) ended in the watchdog, and 83 of them were that one wedge - ball centre at
-      // u = +/-12.25 in, which is the rail at ball radius, sitting on the tread at row 1's
-      // height. NOT ONE jam was inside a basket, so depth was never the problem (a 2/3-depth
-      // variant still measured 8.66%).
+      //   row 1  1.5X   (6.00 in)  the penalty row - the biggest mouths on the face, nearest the
+      //                            player, and the easiest things to fall into. That is what
+      //                            makes -20 a real risk rather than a decoration.
+      //   row 2  0.97X  (3.88 in)  the 40s and the 20 - a genuine shot, and OPEN: a ball that
+      //                            misses one can pass by it and carry on down the face.
+      //   row 3  0.8X / 0.875X     the skill row.
       //
-      // At 0.97X (3.88 in) mouth / 1.135X (4.54 in) outer, with the columns left where Matt put
-      // them, BOTH gaps clear the ball: 3.20 in to the rail and 3.74 in between baskets. Same
-      // grid, same engine: 28 of 861 (3.25%), all nine mouths still capturable, and row 1 is
-      // still the largest mouth after HOT SHOT's kept middle row. For scale, HOT SHOT itself
-      // measures 13.36% on this grid - the staircase's own number, which this face is well under.
+      // THE GAPS, which are what decide whether a miss can travel (this file's spacing rule: a
+      // gap is either MERGED or wider than a ball plus margin, and an IN-BETWEEN gap is a pocket
+      // that jams the solver):
       //
-      // DO NOT RESIZE ROW 1 without redoing all four numbers and re-running the sweep: widening
-      // the mouth closes the rail channel back into the wedge, and moving the columns inward to
-      // open the rail channel closes the centre gap into the same wedge. There is not much room
-      // either way - it is three collars and four gaps across 27.5 in.
+      //   row 1 at 1.665X (6.66 in) outer   rail 2.14 in, between baskets 1.62 in - both MERGED,
+      //                                     far under the 3.00 in ball, so it cannot enter either
+      //                                     and cannot wedge. A ball reaching this row lands in a
+      //                                     basket or is stopped by one; the clear tread strip in
+      //                                     front of the row, the risers and the trough are the
+      //                                     routes to a plain 0.
+      //   row 2 at 1.135X (4.54 in) outer   rail 3.20 in, between baskets 3.74 in - both CLEAR
+      //                                     the ball, so a miss here really does carry on down.
+      //
+      // The 1.085X (4.34 in) row 1 this machine was first drawn with is the one size that must
+      // not come back: at 1.25X outer it leaves a 2.97 in rail channel against a 3.00 in ball -
+      // the in-between case - and the full 41x21 grid measured 111 of 861 throws (12.89%) walked
+      // out by the watchdog, 83 of them wedged in exactly that channel. Depth was never the
+      // cause; a 2/3-depth variant still measured 8.66%.
+      //
+      // DO NOT RESIZE EITHER ROW without redoing all four of those gap numbers and re-running
+      // the sweep. There is not much room - it is three collars and four gaps across 27.5 in, and
+      // the sizes that work are the ones that are either comfortably bigger than the ball or
+      // comfortably too small for it.
       holeR: X * 0.75,
       holes: {
-        // The penalty row: mouth 0.97X (3.88 in), outer 1.135X (4.54 in), depth 0.97X.
-        // MEASURED DOWN FROM THE 1.085X IT WAS FIRST DRAWN AT - see the row-1 note above.
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.485, collarH: X * 0.97 },
-        // HOT SHOT's row, untouched: mouth 1.5X (6.00 in), outer 1.665X (6.66 in), depth 1.0X.
-        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
-        midC: { u: 0, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
-        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.75, collarH: X * 1.0 },
+        // The penalty row, and the BIGGEST mouths on the face: 1.5X (6.00 in), outer 1.665X
+        // (6.66 in), depth 1.0X. Nearest the player and the easiest thing to fall into.
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.75, collarH: X * 1.0 },
+        // The 40s and the 20: 0.97X (3.88 in), outer 1.135X (4.54 in), depth 0.97X. Both of this
+        // row's gaps clear the ball, so a miss here travels on down instead of being walled.
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.485, collarH: X * 0.97 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.485, collarH: X * 0.97 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.485, collarH: X * 0.97 },
         // The skill row: the 100s at mouth 0.8X (3.20 in), outer 0.965X (3.86 in), depth 0.8X;
         // the 50 at mouth 0.875X (3.50 in), outer 1.04X (4.16 in), depth 0.875X.
         topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.4, collarH: X * 0.8 },
@@ -716,10 +722,11 @@ export const BOARDS = [
         + 'treads plus three risers (11.9625X), which necessarily exceeds the flat-board 10.5X '
         + 'ceiling, and boardTilt is nominal because `steps` replaces the single face.',
       'holes.uniform': 'Matt\'s layout for this machine, 2026-08-24: mouth size IS the difficulty '
-        + 'ladder here, so the three rows are deliberately three sizes - 0.97X penalty mouths '
-        + 'nearest the player (measured down from 1.085X to open the side-rail channel past the '
-        + 'ball), HOT SHOT\'s 1.5X row kept in the middle at his explicit ask, and 0.8X / 0.875X '
-        + 'skill mouths at the top. A uniform face cannot express that ladder.',
+        + 'ladder here, and it runs BIG TO SMALL from the player outward - 1.5X penalty mouths '
+        + 'nearest him (the easiest thing on the face to fall into, which is what makes -20 a '
+        + 'real risk), 0.97X for the 40s and the 20, and 0.8X / 0.875X skill mouths at the top. '
+        + 'A uniform face cannot express that ladder, and a face that is widest in the MIDDLE is '
+        + 'a wall - his words, on the build that had it backwards.',
     },
   },
 

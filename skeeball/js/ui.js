@@ -955,14 +955,26 @@ export class SkeeballUI {
    *  point, wider further up - and never over the board itself. Re-run frame.mjs before moving
    *  either one inward, and keep pointer-events: none on them so a rail can never eat a swipe.
    *
+   *  GUARD: ALL THREE LIVE IN THE GUTTERS. Total points used to sit CENTRED between the ball
+   *  count and the top of the marquee, on a band measured at 48-72px. That band is THE CLASSIC's:
+   *  frame.mjs builds its geometry from BOARDS[0] and machines/classic/machine.js, and the
+   *  staircase machines stand taller, so on those the chip landed ON the marquee - across the
+   *  lettering of a sign somebody designed. Matt, 2026-08-24: "obviously I don't want the
+   *  objectives to cover any machine." The gutters are the only space on this screen that is
+   *  measured clear for EVERY board, so the third goal joins the second there rather than
+   *  sitting on a band that only one machine's geometry guarantees. Nothing here may go back to
+   *  centre without a per-machine measurement that does not exist.
+   *
    *  Read fresh every time rather than cached on `this`: a rack recorded on another device
    *  moves them. js/goals.js explains why nothing is stored here. */
   _goalRailsMarkup() {
     const rack = this.game ? this.game.result() : null;
     const boardId = this.game ? this.game.board.id : this.settings.board;
-    // THE MACHINE'S OWN three goals (js/goals.js is per-machine now): first on the left rail,
-    // second on the right, third across the bottom. Labels ride each goal's own labelKey, so
-    // this markup never has to know whose goals it is painting.
+    // THE MACHINE'S OWN three goals (js/goals.js is per-machine now). The signature goal - the
+    // one that names a shot rather than a number - takes the left rail on its own; the two
+    // SCORE goals stack together on the right, which reads as a grouping rather than as one
+    // rail that happened to get an extra box. Labels ride each goal's own labelKey, so this
+    // markup never has to know whose goals it is painting.
     const [g1, g2, g3] = readGoalsLive(boardId, rack);
     const box = (g) => `
       <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
@@ -976,10 +988,7 @@ export class SkeeballUI {
       </div>
       <div class="sk-grail sk-grail--r">
         ${box(g2)}
-      </div>
-      <div class="sk-gtotal${g3.met ? ' is-done' : ''}">
-        <em>${esc(t(g3.labelKey))}</em>
-        <b>${shortNum(g3.now)}<i>/${shortNum(g3.target)}</i></b>
+        ${box(g3)}
       </div>`;
   }
 
