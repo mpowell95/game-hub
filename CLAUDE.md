@@ -434,6 +434,14 @@ The launcher's **🛠️ Admin** button (rendered for Matt only, beside the bug 
 `js/admin-ui.js`, which writes `adminConfig/v1` through `js/admin-config.js`. Every device reads that
 node once per hub load and caches it locally.
 
+**It is written for ONE reader and looks like it.** Matt, on the first version: *"It's for me. I know
+what all the heading mean. I don't need 5 paragraphs explaining what live or admin only means."* So
+the page is four COLLAPSED accordion sections (Games, Skeeball machines, Player scores, This device;
+open state remembered in `gamehub.adminOpen.v1`), no explanatory prose, and **no Default buttons** —
+an override that matches the code default is the same thing, and "default" was a concept that existed
+nowhere but that button. `setGameLive(id, null)` / `setBoardMode(id, null)` still clear an override
+from code if a future screen needs it.
+
 - **An override sits ON TOP of the code default, it does not replace it.** An absent entry means
   "whatever `js/hub.js` says". A wiped, unreachable or never-written config leaves the app behaving
   exactly as it does today — which is also why a config failure can never take a released game off
@@ -454,6 +462,11 @@ node once per hub load and caches it locally.
   `players-agg.test.mjs`'s `OFF_THE_BOARD` list is now empty and must stay that way: a game released
   from inside the app gets no release commit to add its row, and a missing row makes every win on it
   count as zero (rule 1 — how Yahtzee shipped).
+- **The Player scores section shows where everyone stands**, per person and per machine: plays,
+  best and points as currently counted, plus that machine's three objectives with progress (read
+  through `skeeball/js/goals.js`'s `readGoals(boardId, sk)`, so the page can never disagree with the
+  rails the player sees). Grouped by PERSON, not device — a void applies to every device record that
+  person plays on, or their other phone re-supplies the numbers on its next sync.
 - **Scores thrown on a broken board can be voided, per player, per machine.** Matt, 2026-08-24:
   *"Worried about people getting artificially high scores on a broken board. Which is exactly what
   happened to classic and basketball skeeball."* The page's **Player scores** section marks a
