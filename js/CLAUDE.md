@@ -150,7 +150,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
 | `js/admin-config.js` | (2026-08-24) the app-wide admin config at `adminConfig/v1`: `isGameLive(hubId, codeDefault)` and `isBoardReleased(boardId)` (synchronous reads of the `gamehub.adminConfig.v1` cache), the pure resolvers behind them, `refreshAdminConfig()` (one background read per hub load, fires `gamehub:adminconfig` only on a real change) and the two writers, each dev-origin-guarded and verified by fresh re-read. See "The admin config" below |
 | `js/stats-corrections.js` | (2026-08-24) the read-time score-correction overlay: `correctBoard()`, `correctSkeeballRecord()`, `correctStats()` and `snapshotOf()`. Pure, headless-testable, and never mutates its input. Applied by `players-agg.js` (per source record, before the merge), `game-stats-ui.js` (both paints) and `skeeball/js/ui.js` (the backboard) |
-| `js/admin-ui.js` | (2026-08-24) the admin control page: game live/admin-only switches, Skeeball machine releases, this-device tools. Matt only, lazily imported by `js/hub.js`, built on `css/ui.css`'s `.gh-*` primitives |
+| `js/admin-ui.js` | (2026-08-24) the admin control page: four collapsed accordion sections (games, machines, player scores + objective progress, this device), no prose and no Default buttons — written for one reader. Matt only, lazily imported by `js/hub.js`, built on `css/ui.css`'s `.gh-*` primitives |
 | `js/announce.js` | (2026-08-11) one-time launcher announcements: the entries (title/body/CTA as `{en,es}` on the entry), the seen-list (`gamehub.announce.v1`), and the pure `pendingAnnouncement()` decision. Reuses `new-badge.js`'s date parser; each entry's `until` retires it with no follow-up commit |
 | `js/announce-ui.js` | (2026-08-11) the announcement popup: DOM only, `.gh-*` primitives, dismissal recorded on close by any route |
 | `js/challenge/` | retired gift/challenge system (~10 modules + assets). Still load-bearing: `hub.js` and `game-stats-ui.js` import `isDevProfile`/`isChallengeActive`/`isAdmin` from `js/challenge/hooks.js` on every load, and `isDevProfile` (the gate for unreleased `devOnly` games) is built on the challenge's `secrets.js` hash list. Deleting this directory would break the hub shell. |
@@ -1851,6 +1851,13 @@ counting, with the date and reason beside it.
 later rack counts normally, so the correction never has to be edited again — and a best survives
 only if a LATER score beat the voided one, because a maximum cannot be un-summed (rule 4: reading 0
 is honest, inventing a lower number is not).
+
+**The admin page groups by PERSON, not by device.** A void loops over every `statsId` in that
+person's identity group (`buildIdentity().keyFor`) that has played the machine — correcting one
+device record only would be undone by their second phone's next sync, since its own numbers are
+still whole. The same section shows each person's objective progress by calling
+`skeeball/js/goals.js`'s `readGoals(boardId, sk)` against their CORRECTED record, so the page and
+the rails the player sees can never disagree.
 
 **Where it is applied**, and why each one matters:
 - `js/players-agg.js` — per SOURCE record, before the merge (corrections are keyed by `statsId`;
