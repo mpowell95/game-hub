@@ -215,10 +215,11 @@ ball. The seven real bulb MESHES above the panel already flash on `celebrate()`,
 movement belongs; `REDUCED` at the top of `render.js` is the `prefers-reduced-motion` gate it would
 need.
 
-**Known, and not this machine's to fix:** the shared HUD's centre goal chip ("Total points N/2k")
-sits directly over the marquee during play and covers most of the HOT SHOT lettering. That chip is
-`ui.js` and it overlays every machine's marquee the same way, so moving it is a change to all four
-cabinets, not a BRICK CITY change.
+**The HUD used to cover this sign, and no longer does.** The shared centre goal chip ("Total
+points") sat on a band measured only against THE CLASSIC's geometry, so on the taller staircase
+machines it landed on the marquee, across the lettering. All three objectives now live in the
+gutter rails, which are measured clear for every board — see `skeeball/CLAUDE.md`, "Where the
+three objectives sit". That was a change to all four cabinets, not a BRICK CITY one.
 
 ### The palette (`look`)
 
