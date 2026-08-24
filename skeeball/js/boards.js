@@ -12,6 +12,20 @@
 // check (testable against a synthetic list); the write goes through `unlockSkeeballBoard()` in
 // js/game-stats.js, additive and union-merged across devices.
 
+// ============================================================================================
+// MATT'S RULE, 2026-08-24, in his own words:
+//
+//   "NEVER CHANGE THE WIDTH OR DIAMETER OF A BASKET UNLESS I SPECIFICALLY TELL YOU TO."
+//
+// A basket's `r` (and so its mouth diameter) is HIS number on every machine. Not a default, not
+// a starting point, not something to re-derive from a proportion or trade away to make a sweep
+// come out nicer. If a change would move a mouth and he has not asked for that mouth to move,
+// the change is wrong - find another way or go back and ask.
+//
+// This is the one rule about basket sizing. Depth, position, colour and paint are ordinary work;
+// the WIDTH is not.
+// ============================================================================================
+
 /** Balls in one game, the classic count. A rule of skeeball, not of one machine. */
 export const BALLS_PER_GAME = 9;
 
@@ -614,8 +628,8 @@ export const BOARDS = [
       // the SIZE of each mouth and what it pays, and the two vary together: the deeper into the
       // machine a basket sits, the smaller its mouth and the more it pays.
       //
-      // `r` is the MOUTH RADIUS, so a mouth is 2r across; `collarH` is its depth, and this
-      // machine keeps HOT SHOT's "as deep as it is wide" proportion on every basket it resizes.
+      // `r` is the MOUTH RADIUS, so a mouth is 2r across; `collarH` is its depth. The depths
+      // below are just the depths Matt wanted, not a proportion anything is derived from.
       // The outer diameter of a collar is the mouth plus two collarThick (0.012 m = 0.0825X =
       // 0.33 in), which is what the gap arithmetic below is measured on.
       //

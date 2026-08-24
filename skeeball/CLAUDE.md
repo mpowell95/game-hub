@@ -11,6 +11,30 @@ what broke and why) that used to live as narrative comments in `skeeball/js/*.js
 files now keep only guards and short present-tense notes; a `// See DECISIONS.md#anchor` comment
 points to the full story. Read it before touching physics, geometry, or the swipe/power curve.
 
+## HARD RULE: never change the width of a basket
+
+Matt, 2026-08-24, after a plan proposed resizing HOT SHOT's mouths to get a look he asked for:
+
+> **"NEVER CHANGE THE WIDTH OR DIAMETER OF A BASKET UNLESS I SPECIFICALLY TELL YOU TO."**
+
+A basket's `r` in `js/boards.js` - and so its mouth diameter - is HIS number on every machine. Not
+a default, not a starting point, not something to re-derive from a proportion, and not something
+to trade away because a sweep comes out nicer without it. **If a change would move a mouth and he
+has not asked for that mouth to move, the change is wrong.** Find another way, or go back and ask.
+
+Depth, position, colour and paint are ordinary work. The WIDTH is not.
+
+Two things that led to this, both worth not repeating:
+
+- **Do not invent a rule and then quote it back at him.** He asked for taller baskets; the reply
+  turned that into a "depth-to-mouth ratio" he had never mentioned and wrote it up as a spec. His
+  answer: *"You wrote that rule. You invented that rule. I did not tell you to, nor will I respect
+  it."* A measurement recorded by an earlier session is data. It is not a constraint on what he is
+  allowed to ask for.
+- **Check whether the thing being compared is actually different.** BRICK CITY's bottom row and
+  every HOT SHOT basket are the same numbers drawn by the same code (6.00 in mouth, 4.00 in deep).
+  A plan that had checked that first would have asked a better question sooner.
+
 ## HARD RULE: every machine owns its own engine
 
 Matt, 2026-08-23, on learning that one `physics.js` served all three machines: *"It's absolutely
