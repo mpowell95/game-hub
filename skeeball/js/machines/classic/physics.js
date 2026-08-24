@@ -81,7 +81,7 @@ function buildWorld(board) {
   // friction at grip x GRAVITY x mass (vendor/cannon-es.js, the 'mug' term), never at grip x
   // how hard the ball actually pressed in, which is far too generous on a fast graze. We do
   // not hand-patch the vendored engine; zero grip removes the input it was over-applying.
-  // BASKET FEVER's engine reached the same conclusion independently (deadFric 0.06 on its
+  // HOT SHOT's engine reached the same conclusion independently (deadFric 0.06 on its
   // bank-shot wall). 'kick' and 'keep' stay on matDead: the kicker keeps its grip.
   contact(matBall, matBack, pick(MAT.backFric, 0), pick(MAT.backRest, pick(MAT.deadRest, 0.12)));
 
@@ -247,7 +247,7 @@ function substep(st) {
   //
   // GUARD: THE CAPTURE RULE IS PER BOARD FAMILY, AND IT MUST STAY THAT WAY.
   //
-  // A COLLARED CUP BOARD (POPONGO, BASKET FEVER) treats capture as a PREDICTION, NOT A SCORE
+  // A COLLARED CUP BOARD (POPONGO, HOT SHOT) treats capture as a PREDICTION, NOT A SCORE
   // (Matt, 2026-08-22: the machine paid a ball that rattled a rim and bounced OUT). Those mouths
   // have walls standing above the face, so a captured ball really can strike the far collar wall
   // and climb back out - nothing commits until it has ACTUALLY PASSED THROUGH the plane INSIDE
@@ -257,7 +257,7 @@ function substep(st) {
   // was tuned against. The prediction rule was written for machine 3 and applied "on every
   // machine" (28299ac), which silently changed how THE CLASSIC played overnight - three days
   // after it went live, with its own boards.js entry untouched. Matt, 2026-08-23, on finding
-  // POPONGO/BASKET FEVER work inside the classic's physics: "WHAT THE FUCK". A machine nobody
+  // POPONGO/HOT SHOT work inside the classic's physics: "WHAT THE FUCK". A machine nobody
   // asked you to touch does not change.
   //
   // ALL THREE MACHINES SHARE THIS ONE FILE. boards.js is the only per-machine data there is, so

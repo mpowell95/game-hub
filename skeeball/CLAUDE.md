@@ -39,7 +39,7 @@ and no test you have to run first.
 Until 2026-08-23 all three ran one `physics.js`, one `machine.js` and one `render.js` - 2,330
 lines - with per-machine behaviour written as branches (`cupBoard`, `collarH`, `cups`). Every
 branch was somewhere a change for one machine could reach another, and one of them shipped:
-`28299ac`, written for BASKET FEVER, rewrote the capture rule "on every machine" and moved **456
+`28299ac`, written for HOT SHOT, rewrote the capture rule "on every machine" and moved **456
 of 861** throws on THE CLASSIC, dropping a fixed 861-throw grid from 12,240 points to 6,870. THE
 CLASSIC went live 2026-08-22 01:21 and played differently by that afternoon with its own
 `boards.js` entry untouched, so nothing in the per-machine data could explain it. Matt pulled the
@@ -83,7 +83,7 @@ bucket, nothing orphaned by its removal. Three machines exist: **THE CLASSIC** (
 boardwalk cabinet with a varnished oak lane, the burnt-orange board with the white cup ladder,
 twin corner 100 cups, and a marquee), **POPONGO** (2026-08-22, the real cup-board lawn game as
 a second face on the same cabinet - see "POPONGO and the arrangement layer" below) and
-**BASKET FEVER** (2026-08-22, the arcade basketball machine as a third face - see "BASKET FEVER"
+**HOT SHOT** (2026-08-22, the arcade basketball machine as a third face - see "HOT SHOT"
 below). The player
 swipes up the lane; the swipe's speed is the roll's power and its angle is the aim. Nine balls to
 a rack.
@@ -96,7 +96,7 @@ The photos and researched behavior now live in this file and in `boards.js`'s `s
 
 **ADMIN ONLY AGAIN since 2026-08-23** (Matt's ask), exactly like Pinball: the hub entry carries
 `devOnly: true` and no `released` date. It WAS released 2026-08-22 and pulled back the next day,
-after work done for POPONGO and BASKET FEVER turned out to be landing in the shared engine and
+after work done for POPONGO and HOT SHOT turned out to be landing in the shared engine and
 changing how THE CLASSIC plays - see "work on one machine, change one machine" above.
 
 Re-releasing is four edits, and three of them are what stop the release being silently broken:
@@ -217,7 +217,7 @@ nothing scripts a reaction any more:
   the cup, which is the whole game. Without it the first mouth a rolling ball crossed always
   swallowed it, so nothing above the bottom cup was reachable by rolling at all.
 - **CAPTURE IS A PREDICTION; ONLY PASSING THROUGH THE PLANE SCORES** (2026-08-22, on every
-  machine). Matt's clip showed BASKET FEVER paying a ball that rattled a rim and bounced out:
+  machine). Matt's clip showed HOT SHOT paying a ball that rattled a rim and bounced out:
   the collar walls stay solid after capture, so the ball can strike the far wall inside the
   mouth and climb back out - and the old commit rule ("fell 26cm below the capture point")
   scored it anyway, because with the floor slab intangible it always ends up below. Now the
@@ -496,7 +496,7 @@ and two black **equalizers**.
   exact numbers), and a jammed or capped ball on a cup board resolves as the trough's zero
   instead of being walked into the nearest mouth (`st.cupBoard`). Falling through a mouth is
   the ONLY way to score here, including for the watchdog.
-- **And the honest rule cuts BOTH ways** (Matt's 23:42 clip, 2026-08-22, on BASKET FEVER): a
+- **And the honest rule cuts BOTH ways** (Matt's 23:42 clip, 2026-08-22, on HOT SHOT): a
   ball whose CENTRE is below the rim plane while inside the mouth is inside the cup's VOLUME
   and captures at any rattle speed (`physics.js`, the `lip > 0 && f.h < lip` branch). Without
   it, a fast arrival that failed the kinematic prediction ended up sitting on the still-solid
@@ -510,7 +510,16 @@ and two black **equalizers**.
   is gated on `!board.cups`. The setup slides, game-over card and hub average are all
   PER-BOARD numbers now - machines score on different scales, so blended averages meant nothing.
 
-## BASKET FEVER (2026-08-22)
+## HOT SHOT (2026-08-22)
+
+**Naming (settled 2026-08-24 - do not "fix"):** the machine DISPLAYS as **HOT SHOT** (Matt
+renamed it from BASKET FEVER); its board `id` stays **`'basketball'`**, and so does every
+identifier built on it. That id is a frozen storage key, exactly like Monopoly Deal's
+`business` (root CLAUDE.md, THE LAW rule 5): it keys `sk.unlocked.basketball`, the per-board
+bests and totals under it, POPONGO's `unlock: { board: 'basketball' }`, and the `dressing:
+'basketball'` render branch. Renaming any of them would orphan every player's earned unlock and
+per-board history. A board id is not a display name. Only `name:` in `js/boards.js` is shown to
+a player.
 
 The third machine, built from the real Basket Fever cabinet in `skeeball/Machines/Machine 4 -
 Basketball/` (photos): nine orange wire baskets on three shelves, 10/20/10 low, 30/60/30 middle,
@@ -550,7 +559,7 @@ ball dropping in out of the air - no new physics, no new capture rule.
   side-wall tops (`wallRest` 0.15) keep the vertical-pop probe at 5 per 117 hard throws, all
   rim rattles or hidden containment hits behind the backboard - zero off the wall itself.
 - **Sweeps on the staircase** (post-revert layout): all nine mouths capturable, 0 emergencies
-  in 459 throws, slowest settle 5.4s (DECISIONS.md#basket-fever-layout).
+  in 459 throws, slowest settle 5.4s (DECISIONS.md#hot-shot-layout).
 - **The tiers are painted on their own segments** (`_paintField` + one field plane per segment
   in `_build`, each mapping its v-slice of the one unrolled texture): cream shelf treads, blue
   star-scattered risers. Backboard value cards are flat planes ON the risers (`_hoopBackboard`)

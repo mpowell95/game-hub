@@ -153,7 +153,7 @@ export class Renderer {
     const faceEdge = this._mat({ color: L.faceEdge, roughness: 0.85 });
     const white = this._mat({ color: L.ring, roughness: 0.35 });
     const dark = this._mat({ color: 0x0d0a08, roughness: 0.95 });
-    // BASKET FEVER's yellow ball-return apron: the big painted panel under the lowest shelf on
+    // HOT SHOT's yellow ball-return apron: the big painted panel under the lowest shelf on
     // the real cabinet. Paint only - the kick panel's solid, its position and its bounce are
     // machine.js's and are untouched.
     const kick = this.board.dressing === 'basketball'
@@ -278,7 +278,7 @@ export class Renderer {
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
       if (!H.collarH) continue;
-      // BASKET FEVER (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
+      // HOT SHOT (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
       // basket with a white mini backboard carrying the value - the real cabinet's furniture.
       // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
       // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
@@ -542,7 +542,7 @@ export class Renderer {
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    // BASKET FEVER's RED NEON: a tube up the front edge of each side wall and back along its
+    // HOT SHOT's RED NEON: a tube up the front edge of each side wall and back along its
     // top, framing the play window exactly as the strips do on the real cabinet. Traced from
     // machine.js's own railProfile, so the neon follows the wall wherever the wall goes. Purely
     // cosmetic - no physics body, no shadow, and no light source: the glow is the emissive plus
@@ -1037,7 +1037,7 @@ export class Renderer {
     }
     x.globalAlpha = 1;
 
-    // BASKET FEVER's staircase paint (Matt's real-machine footage): each TREAD is the cream
+    // HOT SHOT's staircase paint (Matt's real-machine footage): each TREAD is the cream
     // shelf the baskets stand on, each RISER is a blue panel scattered with yellow stars - the
     // real cabinet's tiers, painted onto the exact segments the ball plays on.
     if (this.board.dressing === 'basketball' && this.M.frames) {
@@ -1275,7 +1275,7 @@ export class Renderer {
     this.scene.add(mesh);
   }
 
-  /** BASKET FEVER's hoop: the physics collar drawn as an orange WIRE basket, matched to Matt's
+  /** HOT SHOT's hoop: the physics collar drawn as an orange WIRE basket, matched to Matt's
    *  real-machine footage - a rim wire that FOLLOWS machine.js's blended lipLow profile (tall
    *  up-slope back, low player-facing front - the rim seen is the rim hit), a tapered wire body
    *  down to a small bottom ring, and struts between. Cosmetic beyond the rim: the solid the
@@ -1403,7 +1403,7 @@ export class Renderer {
     this.scene.add(g);
   }
 
-  /** BASKET FEVER's value: a white mini BACKBOARD card mounted on the RISER behind its basket -
+  /** HOT SHOT's value: a white mini BACKBOARD card mounted on the RISER behind its basket -
    *  exactly where the real cabinet prints them (Matt's footage: a fan-topped white card with
    *  the number in a red-bordered box, above every basket). The riser is a real flat wall, so
    *  this is a flat plane sitting 8mm proud of solid geometry - nothing phantom, nothing

@@ -244,7 +244,7 @@ export const GAMES = [
   },
   {
     // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Pinball below. It was released
-    // 2026-08-22 and pulled back the next day: work done for POPONGO and BASKET FEVER had been
+    // 2026-08-22 and pulled back the next day: work done for POPONGO and HOT SHOT had been
     // landing in the shared engine and changing how THE CLASSIC plays (see skeeball/CLAUDE.md,
     // "work on one machine, change one machine"). `devOnly` keeps the card off the launcher for
     // everyone but Matt and the tester while that settles.

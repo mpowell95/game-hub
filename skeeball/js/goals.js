@@ -39,9 +39,9 @@ export const PG_COLORS = 4;      // POPONGO: land all four scoring colors in ONE
 export const PG_BEST = 30;       // POPONGO: score 30+ in a single game
 export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 
-export const BB_HOOP = 100;      // BASKET FEVER: sink the 100 hoop (proved by per-board bestThrow)
-export const BB_BEST = 300;      // BASKET FEVER: score 300+ in a single game
-export const BB_TOTAL = 3000;    // BASKET FEVER: 3,000 points in total on the machine
+export const BB_HOOP = 100;      // HOT SHOT: sink the 100 hoop (proved by per-board bestThrow)
+export const BB_BEST = 300;      // HOT SHOT: score 300+ in a single game
+export const BB_TOTAL = 3000;    // HOT SHOT: 3,000 points in total on the machine
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }

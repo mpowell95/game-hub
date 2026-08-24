@@ -252,7 +252,7 @@ export const BOARDS = [
 
   {
     id: 'basketball',
-    name: 'BASKET FEVER',
+    name: 'HOT SHOT',
     taglineKey: 'board_basketball_tag',
     // Render dressing (Matt, 2026-08-22: "cups instead of basketball baskets... shooting a
     // basketball"): render.js branches on this to draw the ball as a basketball, the collars as
@@ -269,9 +269,9 @@ export const BOARDS = [
     adminOnly: true,
 
     // Matched to the reference photos in skeeball/Machines/Machine 4 - Basketball/ (the real
-    // Basket Fever cabinet): yellow-and-black cabinet, blue face, orange wire hoops, red LED
-    // glow, white nets. `glow`/`net` are required by look.complete but currently painted by
-    // nothing.
+    // cabinet, sold as Basket Fever): yellow-and-black cabinet, blue face, orange wire
+    // hoops, red LED glow, white nets. `glow`/`net` are required by look.complete but
+    // currently painted by nothing.
     look: {
       wood: '#5b5b66',
       woodDark: '#191a1e',

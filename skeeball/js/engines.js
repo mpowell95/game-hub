@@ -5,7 +5,7 @@
 // Until 2026-08-23 all three machines ran one `physics.js`, one `machine.js` and one `render.js`
 // - 2,330 lines - with per-machine behaviour expressed as branches (`cupBoard`, `collarH`,
 // `cups`). Every one of those branches was a place a change made for one machine reached another,
-// and one of them shipped: 28299ac, written for BASKET FEVER, rewrote the capture rule "on every
+// and one of them shipped: 28299ac, written for HOT SHOT, rewrote the capture rule "on every
 // machine" and changed 456 of 861 throws on THE CLASSIC three days after it went live. Matt pulled
 // Skeeball from the hub over it, and his instruction was exact: each machine starts as a COPY of
 // the classic's files, and an edit for one machine applies only to that machine.

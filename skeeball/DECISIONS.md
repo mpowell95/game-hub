@@ -173,9 +173,9 @@ ball into the nearest mouth, a scripted score. On a cup board a jammed or capped
 resolves as the trough's zero: falling through a mouth is the only way to score, watchdog
 included.
 
-### Basket Fever layout
+### Hot Shot layout
 
-BASKET FEVER's nine hoops are a 3x3 sub-lattice of POPONGO's measured lattice, on purpose: rows
+HOT SHOT's nine hoops are a 3x3 sub-lattice of POPONGO's measured lattice, on purpose: rows
 at POPONGO's bot/mid/top v (2.3125X / 5.6125X / 8.9125X), columns at 0 and its rail-safe ±2.07X,
 collars at its measured 0.35X. Nothing was re-derived because every constraint (the 0.78X wall
 gap floor, the collar-off-the-rails rule, the arrival-clearance a 0.35X collar asks for) was
@@ -503,7 +503,7 @@ Three fixes from Matt's phone test of v444, same evening:
    and dripped into the 50. His call: "make it way bouncier, so it bounces way back towards the
    user" - which is also how the real cabinet's backstop behaves. Swept 0.10/0.30/0.45/0.60
    over 34 hard wall throws: at 0.60 the 100s-off-the-wall fall 6 -> 0, the dead-drop 50s are
-   gone, 27 of 34 end in the honest 10 or 0, and the rebound reads on screen. BASKET FEVER's
+   gone, 27 of 34 end in the honest 10 or 0, and the rebound reads on screen. HOT SHOT's
    own wall keeps its separately-tuned 0.32 bank shot; POPONGO's engine has no matBack and
    reads none of these keys (verified by grep - the classic-only isolation held).
 2. **The sign was never lowered - the DRAWN wall was raised through it** (the jam-marquee slot
