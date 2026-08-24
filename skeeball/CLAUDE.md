@@ -775,6 +775,24 @@ one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.un
 additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
 argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
 devices that hold POPONGO and asserts they still do.
+## Testing racks, and voided scores (2026-08-24)
+
+Two changes that exist because THE CLASSIC and BASKET FEVER both handed out impossible scores while
+they were being tuned, and those scores landed in the family's real records.
+
+**A machine in Testing records to `sk.practice`.** `_rackOver` resolves `isBoardTesting(board.id,
+!!board.adminOnly)` at record time and passes `practice: true`; `recordSkeeball` then writes only
+`sk.practice.boards.<id>` and returns before `bumpTotals`, the lifetime counters, the bests and the
+unlock. Nothing above it can see those racks: not goals, not the records panel, not My Stats' real
+rows, not `players-agg`, not the leaderboard. They ARE kept and shown (a labelled "Practice (not
+counted)" row in My Stats) because a stored number no screen shows reads as deleted (rule 1).
+
+**Scores already recorded can be voided per player, per machine** from the admin page. That is an
+overlay in `adminConfig/v1`, never an edit to anybody's record — see `js/CLAUDE.md`, "Score
+corrections". It reaches this folder in one place: `myRecords()` runs the board through
+`correctBoard()` before returning `mine`/`today`, so the backboard cannot show a number the
+leaderboard has stopped counting. `appWideBest` is fed by `aggregatePlayers(..., corrections())`,
+so the machine's app-wide record honors a void too.
 
 ## Adding the next machine
 

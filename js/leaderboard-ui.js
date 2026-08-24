@@ -22,6 +22,7 @@
 // a border highlight, never color alone.
 
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
+import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId } from './game-stats.js';
@@ -861,7 +862,10 @@ function currentBody() {
   const recs = visibleRecords();
   // Every real player with any recorded play is listed. Test accounts and nameless devices are not
   // - see isHiddenRow() above for both rules and why the nameless one is safe now.
-  const list = aggregatePlayers(recs).filter((g) => !isHiddenRow(g));
+  // Admin score corrections (js/stats-corrections.js) are applied inside the aggregation, per
+  // device record. The board is the one screen where a score thrown on a broken machine does the
+  // most damage, so it reads them like every other surface.
+  const list = aggregatePlayers(recs, corrections()).filter((g) => !isHiddenRow(g));
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
   if (_player) return playerDetail(list, _player);
   if (_game) return gameDetail(list, _game);

@@ -11,6 +11,7 @@
 
 import { GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
+import { correctStats } from './stats-corrections.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball']);  // solo: win-only (no loss axis) or score-based
 
@@ -94,7 +95,7 @@ export function identityKey(profileLike, fallbackId) {
  *  same object doubles as a valid `st.games` for the Stats screens. Group also carries roll-ups:
  *  { key, playerId, name, emoji, message, messageAt, devices, updatedAt, games, comp:{played,won,lost},
  *  solo:{solved,bestLevel,moves}, totalPlays }. */
-export function aggregatePlayers(all) {
+export function aggregatePlayers(all, corrections) {
   const groups = new Map();
   const ident = buildIdentity(all);
   for (const id of Object.keys(all || {})) {
@@ -132,7 +133,14 @@ export function aggregatePlayers(all) {
     // this is a preference, not history (THE LAW rule 2's carve-out), so clearing must work.
     const msgAt = +prof.messageAt || 0;
     if (msgAt >= grp.messageAt) { grp.messageAt = msgAt; grp.message = (prof.message || '').trim(); }
-    const games = (rec.stats && rec.stats.games) || {};
+    // ADMIN CORRECTIONS (2026-08-24) are applied HERE, per source record, before anything merges:
+    // they are keyed by statsId (this record's key), and merging first would blend a voided board's
+    // numbers into a person's total where no per-device correction could reach them any more.
+    // Purely a read-time overlay - `rec` is never mutated, and players/<id> is never written by any
+    // path in this file. See js/stats-corrections.js. A missing corrections argument (every caller
+    // that predates this, and every test) leaves the record exactly as it was.
+    const corrected = corrections ? correctStats(rec.stats, id, corrections) : rec.stats;
+    const games = (corrected && corrected.games) || {};
     for (const g of GAMES) {
       const src = games[g] || {};
       const t = src.total || {};
@@ -344,6 +352,13 @@ export function aggregatePlayers(all) {
         if (!dst.sk.unlocked) dst.sk.unlocked = {};
         mergeBoards(dst.sk.boards, src.sk.boards);
         mergeUnlocked(dst.sk.unlocked, src.sk.unlocked);
+        // Practice racks (2026-08-24: thrown on a machine set to TESTING) merge with the same
+        // function and stay in their own branch, so they are carried across devices like every
+        // other stored thing (rule 1) while remaining unreachable by any counter above.
+        if (src.sk.practice && src.sk.practice.boards) {
+          if (!dst.sk.practice) dst.sk.practice = { boards: {} };
+          mergeBoards(dst.sk.practice.boards, src.sk.practice.boards);
+        }
       }
     }
   }
@@ -364,7 +379,7 @@ export function aggregatePlayers(all) {
 /** The single aggregated group for a VIEWER, using their fresh LOCAL stats for their own device and
  *  remote records for their other devices (two-way sync as read-time aggregation; no copy, no
  *  double-count). Pure: caller passes profile, own deviceId, and loadStats() output. Null if no data. */
-export function aggregateForViewer(all, profileLike, myDeviceId, localStats) {
+export function aggregateForViewer(all, profileLike, myDeviceId, localStats, corrections) {
   const merged = Object.assign({}, all || {});
   const baseProf = (merged[myDeviceId] && merged[myDeviceId].profile) || {};
   const myProf = Object.assign({}, baseProf, {
@@ -376,7 +391,7 @@ export function aggregateForViewer(all, profileLike, myDeviceId, localStats) {
   });
   merged[myDeviceId] = { profile: myProf, stats: localStats, updatedAt: Number.MAX_SAFE_INTEGER };
   const myKey = buildIdentity(merged).keyFor(myProf, myDeviceId);
-  return aggregatePlayers(merged).find((g) => g.key === myKey) || null;
+  return aggregatePlayers(merged, corrections).find((g) => g.key === myKey) || null;
 }
 
 export default { aggregatePlayers, identityKey, buildIdentity, aggregateForViewer, COMPETITIVE, SOLO };

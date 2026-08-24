@@ -12,6 +12,12 @@
 //                OPEN to everyone, UNLOCKABLE (live, earned the normal way), or TESTING (only a dev
 //                profile). All three are read-time only and can NEVER un-earn a machine somebody
 //                already unlocked (js/admin-config.js's header, THE LAW rule 2).
+//   Scores     - per player, per machine: void the scores somebody threw on a machine that was
+//                broken at the time (Matt, 2026-08-24, after THE CLASSIC and BASKET FEVER both
+//                handed out impossible scores while they were being tuned). Nothing is deleted:
+//                the void is an overlay applied when numbers are DISPLAYED, and the raw record is
+//                shown beside the corrected one so the two are never confused. See
+//                js/stats-corrections.js for what it can and cannot do.
 //   This device - the local switches that used to need a console: an update check, the bug inbox,
 //                this device's id, the dev-write opt-in (dev origins only), and a reset of the
 //                one-time announcement seen-list so a popup can be re-checked.
@@ -32,8 +38,11 @@ import { loadStats, statsId } from './game-stats.js';
 import { isUnlocked } from './arcade-scores.js';
 import {
   readCachedConfig, refreshAdminConfig, gameOverride, boardOverride, boardTestingOverride,
-  resolveGameLive, resolveBoardMode, setGameLive, setBoardMode,
+  resolveGameLive, resolveBoardMode, setGameLive, setBoardMode, resolveBoardCorrections,
+  setSkeeballCorrection,
 } from './admin-config.js';
+import { correctBoard, correctionFor, snapshotOf } from './stats-corrections.js';
+import { dayKey } from './arcade-scores.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -103,6 +112,8 @@ function ensureCss() {
   .adm-msg.is-err { color: var(--gh-cb-vermilion); }
   .adm-msg.is-ok { color: var(--gh-cb-teal); }
   .adm-id { font-family: var(--gh-font-mono); font-size: var(--gh-fs-xs); word-break: break-all; }
+  /* The corrected line sits under the raw one so the two are never confused for each other. */
+  .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
   .adm-busy { opacity: .55; pointer-events: none; }`;
   document.head.appendChild(style);
 }
@@ -119,6 +130,16 @@ function closeOverlay() {
 
 /** True while a write is in flight, so two taps cannot race each other onto the same node. */
 let _busy = false;
+
+/** Every synced device record, for the Scores section. {} when offline - the section then says so. */
+let _players = {};
+
+async function readPlayers() {
+  try {
+    const net = await import('./stats-net.js');
+    return await net.readPlayersOnce();
+  } catch { return {}; }
+}
 
 /**
  * Open the admin control page. Callers gate on isAdmin() first (js/hub.js does); this is a screen,
@@ -145,8 +166,11 @@ export async function openAdmin() {
   card.querySelector('[data-role="close"]').addEventListener('click', () => closeOverlay());
 
   // Best effort: a failed refresh leaves the cached config in force and says so in the status line,
-  // rather than showing an empty screen or pretending the switches are unknown.
-  const fresh = await refreshAdminConfig();
+  // rather than showing an empty screen or pretending the switches are unknown. The player records
+  // ride the same await: the Scores section needs everyone's raw numbers to show what a void would
+  // remove, and an empty list is honest when they cannot be read.
+  const [fresh, players] = await Promise.all([refreshAdminConfig(), readPlayers()]);
+  _players = players;
   if (!_host) return;                       // closed while we were waiting
   render(card, { offline: !fresh });
 }
@@ -160,6 +184,7 @@ function render(card, opts = {}) {
     <div class="adm-scroll">
       ${gamesSectionHTML(cfg)}
       ${skeeballSectionHTML(cfg)}
+      ${scoresSectionHTML(cfg)}
       ${deviceSectionHTML()}
     </div>
     <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
@@ -257,6 +282,63 @@ function skeeballSectionHTML(cfg) {
   </section>`;
 }
 
+// --- scores: per player, per machine ---------------------------------------------------------
+
+/** Machine display name for a board id, from boards.js (proper nouns, never translated). */
+function machineName(id) {
+  const b = BOARDS.find((x) => x.id === id);
+  return b ? b.name : id;
+}
+
+/** One row per (player-device, machine) that has any recorded Skeeball play. */
+function scoreRows(cfg) {
+  const out = [];
+  for (const id of Object.keys(_players || {})) {
+    const rec = _players[id] || {};
+    const sk = ((((rec.stats || {}).games || {}).skeeball || {}).sk) || {};
+    const boards = sk.boards || {};
+    const corrs = resolveBoardCorrections(cfg, id) || {};
+    const name = ((rec.profile || {}).name || '').trim() || t('adm_sc_unnamed');
+    for (const boardId of Object.keys(boards)) {
+      const raw = boards[boardId] || {};
+      if (!((raw.plays | 0) || (raw.best | 0))) continue;
+      const corr = correctionFor(corrs, boardId);
+      out.push({ id, boardId, name, raw, corr, shown: correctBoard(raw, corr) });
+    }
+  }
+  // Worst offenders first within a player: a name is what Matt is looking for, then the machine.
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.boardId.localeCompare(b.boardId));
+}
+
+function scoresSectionHTML(cfg) {
+  const rows = scoreRows(cfg);
+  const body = !rows.length
+    ? `<p class="adm-note">${esc(t('adm_sc_empty'))}</p>`
+    : rows.map((r) => {
+      const rawLine = t('adm_sc_raw', { plays: r.raw.plays | 0, best: r.raw.best | 0, points: r.raw.points | 0 });
+      const shownLine = t('adm_sc_shown', { plays: r.shown.plays | 0, best: r.shown.best | 0, points: r.shown.points | 0 });
+      return `<div class="adm-row adm-row--stack" data-score="${esc(r.id)}" data-board="${esc(r.boardId)}">
+        <div class="adm-row-main">
+          <div class="adm-name">${esc(r.name)} &middot; ${esc(machineName(r.boardId))}</div>
+          <div class="adm-note">${esc(rawLine)}</div>
+          ${r.corr ? `<div class="adm-note adm-voided">${esc(shownLine)}</div>` : ''}
+        </div>
+        <div class="adm-ctl">
+          ${r.corr
+            ? `<button type="button" class="gh-btn gh-btn--sm" data-unvoid="1">${esc(t('adm_sc_undo'))}</button>`
+            : ''}
+          <button type="button" class="gh-btn gh-btn--sm${r.corr ? '' : ' gh-btn--danger'}" data-void="1">${
+            esc(r.corr ? t('adm_sc_revoid') : t('adm_sc_void'))}</button>
+        </div>
+      </div>`;
+    }).join('');
+  return `<section class="adm-sec">
+    <h3>${esc(t('adm_sc_title'))}</h3>
+    <p>${esc(t('adm_sc_note'))}</p>
+    ${body}
+  </section>`;
+}
+
 // --- this device ----------------------------------------------------------------------------------
 
 const ANNOUNCE_KEY = 'gamehub.announce.v1';
@@ -303,7 +385,10 @@ function wire(card) {
     const gameDefault = e.target.closest('[data-default]');
     const boardDefault = e.target.closest('[data-boarddefault]');
     const gameRow = e.target.closest('[data-game]');
-    const boardRow = e.target.closest('[data-board]');
+    const scoreRow = e.target.closest('[data-score]');
+    // A score row also carries data-board (the machine it is about), so it has to be excluded here
+    // or its buttons would be read as the machine-mode control above it.
+    const boardRow = scoreRow ? null : e.target.closest('[data-board]');
 
     let run = null;
     // Tapping the side a game is ALREADY on is not a no-op on purpose: it pins that state as an
@@ -316,6 +401,15 @@ function wire(card) {
       run = () => setGameLive(gameDefault.dataset.default, null);
     } else if (boardDefault) {
       run = () => setBoardMode(boardDefault.dataset.boarddefault, null);
+    } else if (scoreRow && (e.target.closest('[data-void]') || e.target.closest('[data-unvoid]'))) {
+      const undo = !!e.target.closest('[data-unvoid]');
+      const { score: who, board } = scoreRow.dataset;
+      // The void stores TODAY's raw totals as the line everything before is measured against, so
+      // anything thrown after it counts normally and the correction never has to be edited again
+      // (js/stats-corrections.js). Re-voiding simply takes a fresh line.
+      const raw = (((((_players[who] || {}).stats || {}).games || {}).skeeball || {}).sk || {}).boards || {};
+      run = () => setSkeeballCorrection(who, board, undo ? null : snapshotOf(raw[board], dayKey(Date.now())),
+        undo ? '' : 'broken board');
     }
     if (!run) return;
 

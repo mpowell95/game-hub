@@ -27,6 +27,17 @@
 // `devOnly` - and it is the field the first version was missing, which is why "Earn it" could not
 // actually make an adminOnly machine earnable.
 //
+// A THIRD branch, `corrections`, holds the admin's "those scores were thrown on a broken board and
+// do not count" overlays, per player-device per machine:
+//
+//   corrections: { skeeball: { '<statsId>': { classic: { plays, points, best, bestThrow, upto,
+//                                                        at, by, why } } } }
+//
+// It lives HERE, in the node phones never write, for the reason js/stats-corrections.js opens with:
+// every device mirrors its whole local store over players/<id> on each hub load, so a correction
+// made inside a player's own record is overwritten within minutes. This one cannot be. What it
+// MEANS, and what it deliberately cannot do, is documented in js/stats-corrections.js.
+//
 // An ABSENT entry means "whatever the code says", which is the important half: this layer is an
 // OVERRIDE of the source defaults, never a replacement for them. Clearing an override (the Default
 // button on the admin page) writes null and the code default takes back over, so a config node that
@@ -66,7 +77,9 @@ export function normalizeConfig(raw) {
   const games = (src.games && typeof src.games === 'object') ? src.games : {};
   const sk = (src.skeeball && typeof src.skeeball === 'object') ? src.skeeball : {};
   const boards = (sk.boards && typeof sk.boards === 'object') ? sk.boards : {};
-  return { games, skeeball: { boards } };
+  const corr = (src.corrections && typeof src.corrections === 'object') ? src.corrections : {};
+  const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr } };
 }
 
 /**
@@ -122,6 +135,15 @@ export function boardTestingOverride(cfg, boardId) {
   return row && typeof row.testing === 'boolean' ? row.testing : null;
 }
 
+/** Every score correction, as js/stats-corrections.js wants them: { skeeball: { <statsId>: {...} } }. */
+export function resolveCorrections(cfg) { return normalizeConfig(cfg).corrections; }
+
+/** One player-device's Skeeball corrections, or null. */
+export function resolveBoardCorrections(cfg, statsIdOf) {
+  const row = normalizeConfig(cfg).corrections.skeeball[statsIdOf];
+  return row && typeof row === 'object' ? row : null;
+}
+
 /**
  * The one answer the admin page and the game both work from: 'open' | 'unlockable' | 'testing'.
  * Testing wins over open - a machine nobody may play yet cannot also be open to everyone, and
@@ -169,6 +191,12 @@ export function isBoardTesting(boardId, codeDefault) {
 export function boardMode(boardId, codeAdminOnly) {
   return resolveBoardMode(readCachedConfig(), boardId, codeAdminOnly);
 }
+
+/** Every score correction, from the cache. Synchronous, so a screen can apply it while painting. */
+export function corrections() { return resolveCorrections(readCachedConfig()); }
+
+/** This player-device's Skeeball corrections, from the cache. */
+export function myBoardCorrections(statsIdOf) { return resolveBoardCorrections(readCachedConfig(), statsIdOf); }
 
 /** Subscribe to config changes (a refresh that actually changed something). Returns an unsubscribe. */
 export function onAdminConfig(cb) {
@@ -301,9 +329,33 @@ export function setBoardMode(boardId, mode) {
   });
 }
 
+/**
+ * Void (or un-void) one player-device's scores on one machine.
+ * @param {string} statsIdOf  the players/<id> key - a device+player, not a person
+ * @param {string} boardId
+ * @param {object|null} snapshot  js/stats-corrections.js's snapshotOf(board, day), or null to undo
+ * @param {string} [why]  free text, stored for the record
+ */
+export function setSkeeballCorrection(statsIdOf, boardId, snapshot, why) {
+  const path = `corrections/skeeball/${statsIdOf}/${boardId}`;
+  const fields = snapshot === null
+    ? { plays: null, points: null, best: null, bestThrow: null, upto: null, why: null }
+    : {
+      plays: snapshot.plays | 0, points: snapshot.points | 0, best: snapshot.best | 0,
+      bestThrow: snapshot.bestThrow | 0, upto: String(snapshot.upto || ''), why: String(why || ''),
+    };
+  return writeNode(path, fields, (cfg) => {
+    const got = resolveBoardCorrections(cfg, statsIdOf);
+    const row = got && got[boardId];
+    if (snapshot === null) return !row;
+    return !!row && (row.plays | 0) === (snapshot.plays | 0) && (row.points | 0) === (snapshot.points | 0);
+  });
+}
+
 export default {
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
-  setGameLive, setBoardMode,
+  setGameLive, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
+  myBoardCorrections, setSkeeballCorrection,
 };

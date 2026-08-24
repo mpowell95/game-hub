@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v460';
+const CACHE = 'game-hub-v461';
 
 const ASSETS = [
   './',
@@ -50,6 +50,9 @@ const ASSETS = [
   // beside it because it is tiny and only Matt ever imports it.
   './js/admin-config.js',
   './js/admin-ui.js',
+  // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
+  // it while painting - a device without it would show scores the rest of the family no longer does.
+  './js/stats-corrections.js',
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
@@ -508,7 +511,7 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': 'c71ec38092',
-  './skeeball/js/ui.js': 'ac71cc577c',
+  './skeeball/js/ui.js': '7863d7be73',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': 'f1f9ad9519',
   './skeeball/js/goals.js': '37cc2ad550',
