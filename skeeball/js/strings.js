@@ -36,8 +36,10 @@ const STRINGS = {
     g_hoop: 'The 100 hoop',
     // BRICK CITY's three. Kept SHORT because a rail box is min(76px, 19vw) wide and wraps to two
     // lines; 'Net total points' would take three and push the number out of the box.
+    // ROUND, not "rack" (Matt, 2026-08-24). The code and its comments still say rack - that is
+    // this engine's internal word for nine balls - but nothing a PLAYER reads does.
     g_baskets: 'Every basket',
-    g_clean: 'Clean rack',
+    g_clean: 'Clean round',
     g_net: 'Net points',
     goals_obj_h: 'Objectives',
     goals_unlocked: 'UNLOCKED',

@@ -284,7 +284,7 @@ on 2026-08-24 — these three are about the FACE, not about a number.
 | goal | label | target | reads |
 |---|---|---|---|
 | Every basket | `g_baskets` | all **9** slots landed, at least once each | `sk.boards.brickcity.slots` |
-| Clean rack | `g_clean` | **1** finished rack that scores and takes no penalty | `sk.boards.brickcity.cleanRacks` |
+| Clean round | `g_clean` | **1** finished round that scores and takes no penalty | `sk.boards.brickcity.cleanRacks` |
 | Net points | `g_net` | **1,500** | `sk.boards.brickcity.points` |
 
 **Every basket, not every point value.** *"they must hit every basket, not just every point
@@ -293,7 +293,7 @@ skip three baskets and still finish. It counts the nine SLOTS. Spread over as ma
 takes — nine balls into nine different baskets in one rack is a lottery, not a goal — which is why
 it reads a union rather than anything per-rack.
 
-**A clean rack means it scored.** *"must score points tho - can't just throw away all 9 balls, get
+**A clean round means it scored.** *"must score points tho - can't just throw away all 9 balls, get
 0s, and pass this objective."* `game.js` requires all nine balls spent, `score > 0`, and not one
 ball in a negative basket. It also gates the whole thing on the board actually HAVING a penalty
 basket — on a machine where nothing can cost you points every scoring rack would trivially be
