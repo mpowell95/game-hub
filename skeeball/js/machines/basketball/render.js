@@ -1403,6 +1403,32 @@ export class Renderer {
     this.scene.add(g);
   }
 
+
+  /** The row of baskets sharing one tread, and so one riser: the DEEPEST mount on it and the
+   *  spacing between neighbouring columns. Both are properties of the ROW rather than of any one
+   *  basket, which is why _hoopBackboard sizes its card from here - one card size and one card
+   *  height per shelf, however much the baskets under them differ. `rim` is the widest basket on
+   *  the row, which is what the card's width is drawn in proportion to. */
+  _backboardRow(ti) {
+    const fr = (this.M.frames || [])[ti];
+    const holes = Object.values(this.G.holes || {})
+      .filter((h) => !fr || (h.v >= fr.v0 && h.v <= fr.v1));
+    let mount = 0, rim = 0;
+    const us = [];
+    for (const h of holes) {
+      mount = Math.max(mount, (h.collarH || 0) + 0.018);
+      // the WIDEST rim on the row, outer face included - the card is drawn in proportion to it
+      rim = Math.max(rim, 2 * (h.r + (this.G.collarThick || 0) / 2));
+      us.push(h.u);
+    }
+    us.sort((a, b) => a - b);
+    let pitch = Infinity;
+    for (let i = 1; i < us.length; i++) pitch = Math.min(pitch, us[i] - us[i - 1]);
+    // A lone basket on a shelf has no neighbour to crowd, so nothing caps its width but the board.
+    if (!(pitch > 0) || !isFinite(pitch)) pitch = this.G.boardW || 1;
+    return { mount, pitch, rim };
+  }
+
   /** HOT SHOT's value: a white mini BACKBOARD card mounted on the RISER behind its basket -
    *  exactly where the real cabinet prints them (Matt's footage: a fan-topped white card with
    *  the number in a red-bordered box, above every basket). The riser is a real flat wall, so
@@ -1417,21 +1443,46 @@ export class Renderer {
     const riser = frames[ti + 1];
     if (!riser || riser.tilt < 1.0) return;          // no riser behind (flat board) - no card
 
-    // A HALF DOME, the shape the real cabinet's boards are cut to: flat along the bottom, a
-    // semicircle over the top. The centre board is the wide one, exactly as on the machine - it
-    // carries the only three-digit value and it is the one you are meant to aim at.
-    const RIM = H.r + G.collarThick / 2;
-    // THE CARD'S TOP NEVER RISES PAST THE RISER IT IS MOUNTED ON (Matt, 2026-08-24: "the top of
-    // the backboard should never go higher than the wall the basket is on"). The mount below sits
-    // the flat edge at collarH + 0.018 up the riser and the dome adds BR on top of that, so the
-    // headroom this card actually has is the riser's own length MINUS that mount - not the whole
-    // riser, which is what the old cap measured and why a 6in rim's card stood proud of the wall.
-    const MOUNT = (H.collarH || 0) + 0.018;
-    const BR = Math.min(RIM * (lab.length > 2 ? 1.46 : 1.32),
-                        (riser.v1 - riser.v0) - MOUNT - 0.006);
+    // AN ARCH, ONE SIZE PER ROW - and only two rules decide it (Matt, 2026-08-24): a card may
+    // never overlap its neighbour, and it may never stand taller than the wall it is bolted to.
+    // So the ROW owns the size, not the basket: every card on a shelf is cut to the same arch and
+    // hung at the same height, whatever the diameters of the baskets under it.
+    //
+    // WHY AN ARCH AND NOT A SEMICIRCLE, so nobody "simplifies" it back. The old card was a
+    // semicircle, so its height WAS half its width - one radius doing both jobs. Height could
+    // then only be bought with width, and width is precisely what the no-overlap rule caps, so
+    // every card sat well short of its wall with a band of bare riser above it. Matt, on the
+    // shipped build: "notice the gap between the top of these backboards and the beginning of the
+    // next shelf. This doesn't look right." Splitting the two lets each dimension answer to its
+    // own rule - WIDTH to the column pitch, HEIGHT to the riser - and the gap closes.
+    const row = this._backboardRow(ti);
+    // Hung at the row's DEEPEST mount so one shelf's cards hang level, and so no card can foul
+    // its own rim: the mount clears the rim, which is what keeps the number readable from the
+    // play camera rather than hidden behind the hoop.
+    const MOUNT = row.mount;
+    // A REVEAL, not a flush fit - Matt: "the backboards do not have to be exactly to the top of
+    // the wall they're on. you could leave like a 0.5 in gap if that makes the backboards fit
+    // better." TOP_REVEAL leaves bare riser above the card, SIDE_GAP leaves it between two
+    // neighbours; both are the safety margin that makes "never taller" and "never overlapping"
+    // true by construction instead of by luck.
+    const TOP_REVEAL = 0.012;                        // 0.33 in of riser above the card
+    const SIDE_GAP = 0.018;                          // 0.50 in of riser between two cards
+    const CARD_H = (riser.v1 - riser.v0) - MOUNT - TOP_REVEAL;
+    // WIDTH IS NOT JUST "AS WIDE AS IT MAY BE". Stretching every card to the no-overlap cap was
+    // tried and looked worse than the gap it fixed: the cards went wide and squat, crowded each
+    // other, and the value box - which is a fraction of the card's HEIGHT - shrank until the
+    // number was hard to read. So width is proportional to the baskets it sits over (1.5x the
+    // widest rim on the row), widened only as far as it must be to keep the arch from turning
+    // into a tall thin slot, and only then clamped by the pitch so neighbours cannot touch.
+    const ARCH_MAX = 1.25;                           // height : half-width, past which it reads narrow
+    const CARD_HW = Math.min(Math.max(row.rim * 0.75, CARD_H / ARCH_MAX),
+                             (row.pitch - SIDE_GAP) / 2);
+    if (!(CARD_H > 0) || !(CARD_HW > 0)) return;     // no room on this riser - draw nothing
 
-    const cw = 420;
-    const ch = Math.round(cw / 2);
+    // The canvas carries the card's REAL aspect, so the painted outline lands exactly on the cut
+    // edge no matter how tall the arch is on this row.
+    const cw = 480;
+    const ch = Math.max(8, Math.round(cw * CARD_H / (2 * CARD_HW)));
     const c = this._canvas(cw, ch);
     const x = c.getContext('2d');
     x.fillStyle = '#f4f1e7';
@@ -1442,7 +1493,7 @@ export class Renderer {
     x.lineWidth = Math.max(4, ch * 0.045);
     x.strokeStyle = '#3a3630';
     x.beginPath();
-    x.arc(cw / 2, ch, cw / 2 - x.lineWidth / 2, Math.PI, 0);
+    x.ellipse(cw / 2, ch, cw / 2 - x.lineWidth / 2, ch - x.lineWidth / 2, 0, Math.PI, 0);
     x.stroke();
     x.beginPath();
     x.moveTo(0, ch - x.lineWidth / 2);
@@ -1476,13 +1527,13 @@ export class Renderer {
     // face and the plain edge take different materials - and the UVs are re-derived from the
     // shape's own bounds, because the default generator hands back raw model coordinates.
     const shape = new THREE.Shape();
-    shape.absarc(0, 0, BR, 0, Math.PI, false);
+    shape.absellipse(0, 0, CARD_HW, CARD_H, 0, Math.PI, false);
     shape.closePath();
     const geo = this._track(new THREE.ExtrudeGeometry(shape, { depth: 0.012, bevelEnabled: false }));
     const pos = geo.attributes.position;
     const uv = geo.attributes.uv;
     for (let i = 0; i < pos.count; i++) {
-      uv.setXY(i, (pos.getX(i) + BR) / (2 * BR), pos.getY(i) / BR);
+      uv.setXY(i, (pos.getX(i) + CARD_HW) / (2 * CARD_HW), pos.getY(i) / CARD_H);
     }
     uv.needsUpdate = true;
 
@@ -1494,8 +1545,8 @@ export class Renderer {
     // The flat edge sits just above THE RIM, not the tread: the basket stands 0.109 m in front
     // of the riser and its rim reaches collarH up, so a board bolted at the riser's foot has its
     // number hidden behind the hoop from the play camera. The real cabinet mounts it clear of the
-    // rim for the same reason.
-    const p = this.M.faceToWorld(H.u, riser.v0 + (H.collarH || 0) + 0.018, 0.006);
+    // rim for the same reason. MOUNT is the ROW's, so the shelf's cards hang level.
+    const p = this.M.faceToWorld(H.u, riser.v0 + MOUNT, 0.006);
     mesh.position.set(p[0], p[1], p[2]);
     mesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - riser.tilt));
     mesh.castShadow = false;
