@@ -265,7 +265,10 @@ const GAMES = [
     immersive: true,
     accent: '#54301a',
     art: GAME_ART["skeeball"],
-    devOnly: true,
+    // Re-released 2026-08-24 (Matt): Classic playable, the other two machines goal-unlocked. A
+    // FRESH released date so the launcher's New pill announces the real day; the 2026-08-22 date
+    // it briefly carried is gone on purpose.
+    released: '2026-08-24',
   },
   {
     id: 'uno',

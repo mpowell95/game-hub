@@ -251,174 +251,6 @@ export const BOARDS = [
   },
 
   {
-    id: 'popongo',
-    name: 'POPONGO',
-    taglineKey: 'board_popongo_tag',
-    // GOALS-BASED UNLOCK: { board, goals: true } means "complete every objective on <board>"
-    // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
-    // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
-    // always false.
-    unlock: { board: 'classic', goals: true },
-
-    // Matched to the real product photos in skeeball/Machines/Machine 2 - Popongo/: bare light
-    // wood board and lane, colored cups, a playful blue marquee. `glow`/`net` are required by
-    // look.complete but currently painted by nothing.
-    look: {
-      wood: '#c9a36a',
-      woodDark: '#96713f',
-      cabinet: '#8a6a42',
-      cabinetEdge: '#5f4527',
-      face: '#d9b87f',
-      faceEdge: '#b18f55',
-      ring: '#f6f5f2',
-      ringLip: '#2b5ea7',
-      value: '#1c150c',
-      pocket: '#171006',
-      marquee: '#123a5e',
-      marqueeText: '#ffd977',
-      bulb: '#ffd977',
-      glow: '#ffb02e',
-      wall: '#161016',
-      net: '#d9c9a8',
-    },
-
-    // THE ARRANGEMENT LAYER. The real Popongo's cups are loose hardware - identical cylinders
-    // differing only in color and printed value, rearrangeable between games - so the SLOTS own
-    // the geometry and the CUPS own the value and the paint:
-    //   `cups`         the nine physical cups: value, color, printed label, ink color for the
-    //                  label, and an optional `effect` ('equalizer': landing here wipes the
-    //                  points the previous ball earned this rack - game.js applies it).
-    //   `arrangement`  which cup sits in which slot. THE DEFAULT IS THE PRODUCT PHOTO's staging
-    //                  (playpopongo.png), which also follows the rules sheet's own guidance
-    //                  (like colors spaced apart). One arrangement ships; player rearrangement
-    //                  is deferred, and when it comes it is a game-level remap over these same
-    //                  slots - never a geometry change, because every cup is the same shape.
-    // Hole VALUES are stamped from the arrangement at the bottom of this file, so physics and
-    // the machine-spec test see ordinary valued holes and there is exactly ONE source of truth.
-    // THE LAW rule 5: slot ids AND cup ids are storage (slot ids ride the mid-rack autosave;
-    // cup values are frozen to cup ids forever). Slots are named for POSITION on purpose -
-    // cups are the things that move.
-    cups: {
-      g6: { value: 6, color: '#2e9d4a', ink: '#ffffff', label: '6' },
-      y4a: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
-      y4b: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
-      r2a: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
-      r2b: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
-      b1a: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
-      b1b: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
-      eqA: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
-      eqB: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
-    },
-    arrangement: {
-      top: 'g6',
-      uppL: 'eqA', uppR: 'y4a',
-      midL: 'r2a', midC: 'b1a', midR: 'r2b',
-      lowL: 'b1b', lowR: 'eqB',
-      bot: 'y4b',
-    },
-
-    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane, same ramp,
-    // same throw - the face is the only thing that changes) EXCEPT the ball, under the waiver
-    // below. troughTenHalfW and ringSegments are deliberately absent: both are classic-only
-    // vestiges (see the spec, sections 6 and 12).
-    geom: {
-      // THE PING-PONG BALL (Matt, 2026-08-22): the real Popongo is a ping pong ball thrown into
-      // solo cups - mouth about 2.4x the ball - and at the classic's 0.35X ball our cups read
-      // tiny and could not grow (the 3-across row caps cup size against the rails). Shrinking
-      // the ball is what buys mouth/ball ~2.0 AND lets the cups sit closer. ball.ratio is
-      // waived for it, below.
-      ballR: X * 0.28,
-      ballMass: 0.18,
-      laneLen: 1.40,
-      laneW: X * 4.875,
-      bedThick: 0.06,
-      humpLen: 0.42,
-      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
-      troughLen: 0.225,
-      troughDepth: 0.15,
-      boardLipY: 0.42,
-      boardTilt: 0.7854,
-      boardW: 1.00,
-      boardLen: 1.3818,
-      railH: 0.10,
-      laneRailH: 0.05,
-      backboardH: 0.8,
-      cupSegments: 14,
-      collarThick: 0.012,
-      ringH: X,
-      ringThick: RING_T,
-      lipLowFrac: 0.50,
-      captureDrop: 0.35,
-
-      // THE FACE: nine identical holes in a diamond (1-2-3-2-1), each wearing a raised cup
-      // collar (collarH) instead of a ring - the collar system machine.js has carried since the
-      // classic's flush rebuild, used here for the first time. No hole has a ringD.
-      //
-      // The lattice, and why these exact numbers (see DECISIONS.md#popongo-layout):
-      //   row step t = 1.63X, lateral half-step s = 1.075X, cups r = 0.5625X, ball 0.28X
-      //   - NOTHING IS MERGED AND NOTHING IS TIGHT: every neighbour pair - same-row (2s),
-      //     diagonal (sqrt(s^2+t^2) = 1.953X) and collar-to-rail - leaves a wall gap of at
-      //     least 0.64X, over the ball (0.56X) plus margin. The first draft put midL/midR FLUSH
-      //     against the rails (the classic-100s idea) and a measured sweep showed why that is
-      //     wrong for a collar: a flat rail and a curved collar wall converge gradually, and
-      //     every ball that entered the crevice three-contact-locked the solver - 12% of all
-      //     throws ended in the watchdog's walkout, gifted to midL/midR. GUARD: a collar near
-      //     a FLAT wall is a pocket even when their closest gap is zero; keep every collar a
-      //     ball-width off the rails.
-      //   - THE CUPS ARE AS BIG AS THIS DIAMOND CAN HOLD. The 3-across row binds them: three
-      //     collars plus four ball-passing gaps must fit inside boardW, so at the classic's
-      //     0.35X ball the mouths could never exceed ~1.0X (measured: the first ship read as
-      //     tiny cups, Matt 2026-08-22). The ping-pong ball (0.28X, waived below) is what buys
-      //     mouth 1.125X at mouth/ball ~2.0 - the solo-cup feel - AND visibly closer cups.
-      //   - bot sits at v = 2.3125X (the classic 20's row - minSpeed's reach); top at
-      //     v = 8.8325X, above the classic 100s' row, which the raised top row of a diamond
-      //     needs for its diagonals to clear - reachable because a collar (0.35X) asks for far
-      //     less arrival clearance than the classic's X-tall rings did.
-      // Values are NOT written here - they come from the arrangement (see the stamping loop at
-      // the bottom of this file). collarH is a SLOT property (slots own geometry; cups own
-      // value and paint), uniform across the face like the real product's identical cups.
-      holeR: X * 0.5625,
-      holes: {
-        top: { u: 0, v: X * 8.8325, r: X * 0.5625, collarH: X * 0.35 },
-        uppL: { u: -X * 1.075, v: X * 7.2025, r: X * 0.5625, collarH: X * 0.35 },
-        uppR: { u: X * 1.075, v: X * 7.2025, r: X * 0.5625, collarH: X * 0.35 },
-        midL: { u: -X * 2.15, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
-        midC: { u: 0, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
-        midR: { u: X * 2.15, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
-        lowL: { u: -X * 1.075, v: X * 3.9425, r: X * 0.5625, collarH: X * 0.35 },
-        lowR: { u: X * 1.075, v: X * 3.9425, r: X * 0.5625, collarH: X * 0.35 },
-        bot: { u: 0, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35 },
-      },
-
-      minSpeed: 2.60,
-      maxSpeed: 6.60,
-      aimMax: 0.45,
-
-      mat: {
-        boardFric: 0.62,
-        boardRest: 0.08,
-        woodFric: 0.30,
-        woodRest: 0.22,
-        wallFric: 0.04,
-        wallRest: 0.42,
-        ringFric: 0.06,
-        ringRest: 0.18,
-        ring100Fric: 0.06,
-        ring100Rest: 0.18,
-        deadFric: 0.24,
-        deadRest: 0.10,
-      },
-    },
-
-    specWaivers: {
-      'ball.ratio': 'Matt asked for the real Popongo feel, 2026-08-22: a ping pong ball into '
-        + 'solo cups (mouth ~2.4x the ball). At the classic 0.35X ball the 3-across row caps '
-        + 'the mouths at ~1.0X, so the BALL shrinks to 0.28X and the cups grow to 0.5625X '
-        + '(mouth/ball ~2.0). Sweep re-run: every cup still scores, zero emergencies.',
-    },
-  },
-
-  {
     id: 'basketball',
     name: 'BASKET FEVER',
     taglineKey: 'board_basketball_tag',
@@ -429,7 +261,7 @@ export const BOARDS = [
     dressing: 'basketball',
     // Complete POPONGO's three objectives (js/goals.js). Same goals-based shape as POPONGO's own
     // unlock; unlocksEarned() ignores it (no `score` field) and ui.js applies it.
-    unlock: { board: 'popongo', goals: true },
+    unlock: { board: 'classic', goals: true },
 
     // Matched to the reference photos in skeeball/Machines/Machine 4 - Basketball/ (the real
     // Basket Fever cabinet): yellow-and-black cabinet, blue face, orange wire hoops, red LED
@@ -630,6 +462,174 @@ export const BOARDS = [
         + 'single board with a back wall to... 3 stairs", even if new physics had to be built. '
         + 'boardLen is the UNROLLED length of three treads plus three risers (11.1375X), which '
         + 'necessarily exceeds the flat-board 10.5X ceiling. Sweep re-run on the staircase.',
+    },
+  },
+
+  {
+    id: 'popongo',
+    name: 'POPONGO',
+    taglineKey: 'board_popongo_tag',
+    // GOALS-BASED UNLOCK: { board, goals: true } means "complete every objective on <board>"
+    // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
+    // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
+    // always false.
+    unlock: { board: 'basketball', goals: true },
+
+    // Matched to the real product photos in skeeball/Machines/Machine 2 - Popongo/: bare light
+    // wood board and lane, colored cups, a playful blue marquee. `glow`/`net` are required by
+    // look.complete but currently painted by nothing.
+    look: {
+      wood: '#c9a36a',
+      woodDark: '#96713f',
+      cabinet: '#8a6a42',
+      cabinetEdge: '#5f4527',
+      face: '#d9b87f',
+      faceEdge: '#b18f55',
+      ring: '#f6f5f2',
+      ringLip: '#2b5ea7',
+      value: '#1c150c',
+      pocket: '#171006',
+      marquee: '#123a5e',
+      marqueeText: '#ffd977',
+      bulb: '#ffd977',
+      glow: '#ffb02e',
+      wall: '#161016',
+      net: '#d9c9a8',
+    },
+
+    // THE ARRANGEMENT LAYER. The real Popongo's cups are loose hardware - identical cylinders
+    // differing only in color and printed value, rearrangeable between games - so the SLOTS own
+    // the geometry and the CUPS own the value and the paint:
+    //   `cups`         the nine physical cups: value, color, printed label, ink color for the
+    //                  label, and an optional `effect` ('equalizer': landing here wipes the
+    //                  points the previous ball earned this rack - game.js applies it).
+    //   `arrangement`  which cup sits in which slot. THE DEFAULT IS THE PRODUCT PHOTO's staging
+    //                  (playpopongo.png), which also follows the rules sheet's own guidance
+    //                  (like colors spaced apart). One arrangement ships; player rearrangement
+    //                  is deferred, and when it comes it is a game-level remap over these same
+    //                  slots - never a geometry change, because every cup is the same shape.
+    // Hole VALUES are stamped from the arrangement at the bottom of this file, so physics and
+    // the machine-spec test see ordinary valued holes and there is exactly ONE source of truth.
+    // THE LAW rule 5: slot ids AND cup ids are storage (slot ids ride the mid-rack autosave;
+    // cup values are frozen to cup ids forever). Slots are named for POSITION on purpose -
+    // cups are the things that move.
+    cups: {
+      g6: { value: 6, color: '#2e9d4a', ink: '#ffffff', label: '6' },
+      y4a: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
+      y4b: { value: 4, color: '#f2b705', ink: '#221a12', label: '4' },
+      r2a: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
+      r2b: { value: 2, color: '#d3392e', ink: '#ffffff', label: '2' },
+      b1a: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
+      b1b: { value: 1, color: '#1f5fa8', ink: '#ffffff', label: '1' },
+      eqA: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
+      eqB: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
+    },
+    arrangement: {
+      top: 'g6',
+      uppL: 'eqA', uppR: 'y4a',
+      midL: 'r2a', midC: 'b1a', midR: 'r2b',
+      lowL: 'b1b', lowR: 'eqB',
+      bot: 'y4b',
+    },
+
+    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane, same ramp,
+    // same throw - the face is the only thing that changes) EXCEPT the ball, under the waiver
+    // below. troughTenHalfW and ringSegments are deliberately absent: both are classic-only
+    // vestiges (see the spec, sections 6 and 12).
+    geom: {
+      // THE PING-PONG BALL (Matt, 2026-08-22): the real Popongo is a ping pong ball thrown into
+      // solo cups - mouth about 2.4x the ball - and at the classic's 0.35X ball our cups read
+      // tiny and could not grow (the 3-across row caps cup size against the rails). Shrinking
+      // the ball is what buys mouth/ball ~2.0 AND lets the cups sit closer. ball.ratio is
+      // waived for it, below.
+      ballR: X * 0.28,
+      ballMass: 0.18,
+      laneLen: 1.40,
+      laneW: X * 4.875,
+      bedThick: 0.06,
+      humpLen: 0.42,
+      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+      troughLen: 0.225,
+      troughDepth: 0.15,
+      boardLipY: 0.42,
+      boardTilt: 0.7854,
+      boardW: 1.00,
+      boardLen: 1.3818,
+      railH: 0.10,
+      laneRailH: 0.05,
+      backboardH: 0.8,
+      cupSegments: 14,
+      collarThick: 0.012,
+      ringH: X,
+      ringThick: RING_T,
+      lipLowFrac: 0.50,
+      captureDrop: 0.35,
+
+      // THE FACE: nine identical holes in a diamond (1-2-3-2-1), each wearing a raised cup
+      // collar (collarH) instead of a ring - the collar system machine.js has carried since the
+      // classic's flush rebuild, used here for the first time. No hole has a ringD.
+      //
+      // The lattice, and why these exact numbers (see DECISIONS.md#popongo-layout):
+      //   row step t = 1.63X, lateral half-step s = 1.075X, cups r = 0.5625X, ball 0.28X
+      //   - NOTHING IS MERGED AND NOTHING IS TIGHT: every neighbour pair - same-row (2s),
+      //     diagonal (sqrt(s^2+t^2) = 1.953X) and collar-to-rail - leaves a wall gap of at
+      //     least 0.64X, over the ball (0.56X) plus margin. The first draft put midL/midR FLUSH
+      //     against the rails (the classic-100s idea) and a measured sweep showed why that is
+      //     wrong for a collar: a flat rail and a curved collar wall converge gradually, and
+      //     every ball that entered the crevice three-contact-locked the solver - 12% of all
+      //     throws ended in the watchdog's walkout, gifted to midL/midR. GUARD: a collar near
+      //     a FLAT wall is a pocket even when their closest gap is zero; keep every collar a
+      //     ball-width off the rails.
+      //   - THE CUPS ARE AS BIG AS THIS DIAMOND CAN HOLD. The 3-across row binds them: three
+      //     collars plus four ball-passing gaps must fit inside boardW, so at the classic's
+      //     0.35X ball the mouths could never exceed ~1.0X (measured: the first ship read as
+      //     tiny cups, Matt 2026-08-22). The ping-pong ball (0.28X, waived below) is what buys
+      //     mouth 1.125X at mouth/ball ~2.0 - the solo-cup feel - AND visibly closer cups.
+      //   - bot sits at v = 2.3125X (the classic 20's row - minSpeed's reach); top at
+      //     v = 8.8325X, above the classic 100s' row, which the raised top row of a diamond
+      //     needs for its diagonals to clear - reachable because a collar (0.35X) asks for far
+      //     less arrival clearance than the classic's X-tall rings did.
+      // Values are NOT written here - they come from the arrangement (see the stamping loop at
+      // the bottom of this file). collarH is a SLOT property (slots own geometry; cups own
+      // value and paint), uniform across the face like the real product's identical cups.
+      holeR: X * 0.5625,
+      holes: {
+        top: { u: 0, v: X * 8.8325, r: X * 0.5625, collarH: X * 0.35 },
+        uppL: { u: -X * 1.075, v: X * 7.2025, r: X * 0.5625, collarH: X * 0.35 },
+        uppR: { u: X * 1.075, v: X * 7.2025, r: X * 0.5625, collarH: X * 0.35 },
+        midL: { u: -X * 2.15, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
+        midC: { u: 0, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
+        midR: { u: X * 2.15, v: X * 5.5725, r: X * 0.5625, collarH: X * 0.35 },
+        lowL: { u: -X * 1.075, v: X * 3.9425, r: X * 0.5625, collarH: X * 0.35 },
+        lowR: { u: X * 1.075, v: X * 3.9425, r: X * 0.5625, collarH: X * 0.35 },
+        bot: { u: 0, v: X * 2.3125, r: X * 0.5625, collarH: X * 0.35 },
+      },
+
+      minSpeed: 2.60,
+      maxSpeed: 6.60,
+      aimMax: 0.45,
+
+      mat: {
+        boardFric: 0.62,
+        boardRest: 0.08,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.42,
+        ringFric: 0.06,
+        ringRest: 0.18,
+        ring100Fric: 0.06,
+        ring100Rest: 0.18,
+        deadFric: 0.24,
+        deadRest: 0.10,
+      },
+    },
+
+    specWaivers: {
+      'ball.ratio': 'Matt asked for the real Popongo feel, 2026-08-22: a ping pong ball into '
+        + 'solo cups (mouth ~2.4x the ball). At the classic 0.35X ball the 3-across row caps '
+        + 'the mouths at ~1.0X, so the BALL shrinks to 0.28X and the cups grow to 0.5625X '
+        + '(mouth/ball ~2.0). Sweep re-run: every cup still scores, zero emergencies.',
     },
   },
 ];
