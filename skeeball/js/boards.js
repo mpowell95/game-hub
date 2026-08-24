@@ -482,11 +482,11 @@ export const BOARDS = [
     // same throw - the face is the only thing that changes). troughTenHalfW and ringSegments are
     // deliberately absent: both are classic-only vestiges (see the spec, sections 6 and 12).
     geom: {
-      // THE SMALL BALL (Matt's real-machine video, 2026-08-22): the real Basket Fever throws a
-      // small ball into GENEROUS baskets - measured off the footage, the mouth is about twice
-      // the ball. POPONGO's ping-pong size exactly (ball.ratio waived below, its precedent),
-      // which is also what lets three big mouths fit one row within the rail-gap floors.
-      ballR: X * 0.28,
+      // THE BALL is THE CLASSIC's ball (Matt, 2026-08-24: the small ball read too small; make
+      // it the same as the classic). ballR X*0.375 = 0.75X diameter, the classic's measured
+      // 3in-at-x=4in. The eight standard hoops stay 1.0X across (mouth ~1.33x the ball); only the
+      // 100 shrinks (below).
+      ballR: X * 0.375,
       ballMass: 0.18,
       laneLen: 1.40,
       laneW: X * 4.875,
@@ -579,7 +579,10 @@ export const BOARDS = [
         midC: { u: 0, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
         midR: { u: X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
         topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
-        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
+        // THE 100 IS THE ONLY SMALLER RIM (Matt, 2026-08-24): 0.7083X across, the design's
+        // 4.25in against the standard 6in (0.708x smaller). Every other hoop is unchanged - this
+        // is the one shot meant to be hard. Depth tracks its own diameter ("as deep as it is wide").
+        topC: { u: 0, v: X * 9.2875, r: X * 0.35417, collarH: X * 0.7083 },
         topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
       },
 
@@ -610,15 +613,19 @@ export const BOARDS = [
         // straight throw should BOUNCE BACK toward the player off the back wall, not die
         // against it and drip down onto the top tier.
         deadRest: 0.32,
+        // The back wall gets the classic's rebound (its own matBack in basketball/physics.js), so
+        // a hard throw comes back at the player rather than banking into the 100. Kick panel keeps
+        // deadRest above.
+        backFric: 0,
+        backRest: 0.60,
       },
     },
 
     specWaivers: {
-      'ball.ratio': 'Matt asked for the real Basket Fever feel from his machine footage, '
-        + '2026-08-22: a small ball into generous baskets (mouth ~2x the ball). At the 0.35X '
-        + 'ball three big mouths cannot fit one row inside the rail-gap floors, so the ball is '
-        + '0.28X (POPONGO\'s waived size) and the mouths 1.125X. Sweep re-run: all nine hoops '
-        + 'clean-capturable, zero emergencies.',
+      'ball.ratio': 'The ball is THE CLASSIC\'s (0.375X = 0.75X diameter, Matt 2026-08-24: the '
+        + 'small ball read too small). Eight hoops stay 1.0X across; only the 100 is smaller '
+        + '(0.7083X), the design\'s tighter top-centre rim. Sweep re-run: all nine hoops '
+        + 'clean-capturable, emergencies within budget.',
       'board.dims': 'Matt ordered the stepped rebuild, 2026-08-22: "change the board from a '
         + 'single board with a back wall to... 3 stairs", even if new physics had to be built. '
         + 'boardLen is the UNROLLED length of three treads plus three risers (11.1375X), which '
