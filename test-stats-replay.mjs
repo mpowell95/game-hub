@@ -344,6 +344,29 @@ const FIXTURE_PRE_UNIFIED = {
   // number shown and the number filed have to be the same number.
   ok('G: brickcity carries negative cups at all',
     Object.values(boardById('brickcity').cups).some((c) => c.value < 0));
+
+  // BRICK CITY's objectives added two ADDITIVE per-board fields on 2026-08-24 (js/arcade-scores.js:
+  // `slots`, a union of the holes ever landed, and `cleanRacks`, a counter). THE LAW rule 3: a
+  // record written before they existed must load, keep every number it had, and gain nothing it
+  // did not earn.
+  {
+    const PRE_CHANGE = { plays: 5, points: 100, best: 40, bestThrow: 40, daily: { '2026-08-23': 40 } };
+    const m = arc.mergeBoards({}, { brickcity: JSON.parse(JSON.stringify(PRE_CHANGE)) });
+    eq('G: a pre-change board record keeps every number it had',
+      { plays: m.brickcity.plays, points: m.brickcity.points, best: m.brickcity.best,
+        bestThrow: m.brickcity.bestThrow, daily: m.brickcity.daily },
+      PRE_CHANGE);
+    ok('G: ...and is credited with no baskets and no clean racks it did not earn',
+      Object.keys(m.brickcity.slots).length === 0 && m.brickcity.cleanRacks === 0);
+
+    // And both merge the only way that cannot lose progress: slots UNION, cleanRacks SUM.
+    const two = arc.mergeBoards(
+      arc.mergeBoards({}, { brickcity: { slots: { lowL: true, midC: true }, cleanRacks: 1 } }),
+      { brickcity: { slots: { midC: true, topR: true }, cleanRacks: 2 } });
+    eq('G: slots union across devices rather than intersecting',
+      Object.keys(two.brickcity.slots).sort(), ['lowL', 'midC', 'topR']);
+    ok('G: clean racks add across devices', two.brickcity.cleanRacks === 3);
+  }
 }
 
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
