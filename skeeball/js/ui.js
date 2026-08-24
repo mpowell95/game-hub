@@ -675,7 +675,13 @@ export class SkeeballUI {
           <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
           <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
         </div>
-        <!-- The goal rails, in the gutters either side of the machine. Absolutely positioned
+        <!-- Total points, IN FLOW between the rack and the stage, for the same reason .sk-rack
+             is: the stage gets what is left, so this bar can never lie across a machine's
+             marquee. It used to be absolutely positioned 25px under the pips - a constant taken
+             from THE CLASSIC's band - and on the taller staircase machines that put it straight
+             over a designed sign. See skeeball.css's block above .sk-gtotal. -->
+        <div class="sk-gtotal-row" data-role="gtotal">${this._goalTotalMarkup()}</div>
+        <!-- The other two goals, in the gutters either side of the machine. Absolutely positioned
              against .sk-play-wrap, so this wrapper is only a handle for repainting them. -->
         <div class="sk-grails" data-role="grails">${this._goalRailsMarkup()}</div>
         <div class="sk-stage" data-role="stage">
@@ -691,6 +697,7 @@ export class SkeeballUI {
       score: this.root.querySelector('[data-role="score"]'),
       pips: this.root.querySelector('[data-role="pips"]'),
       grails: this.root.querySelector('[data-role="grails"]'),
+      gtotal: this.root.querySelector('[data-role="gtotal"]'),
       msg: this.root.querySelector('[data-role="msg"]'),
       swipe: this.root.querySelector('[data-role="swipe"]'),
     };
@@ -976,15 +983,20 @@ export class SkeeballUI {
    *
    *  Read fresh every time rather than cached on `this`: a rack recorded on another device
    *  moves them. js/goals.js explains why nothing is stored here. */
-  _goalRailsMarkup() {
+  /** THE MACHINE'S OWN three goals (js/goals.js is per-machine), live against the rack in
+   *  progress. Every one of them is keyed by its own labelKey, so nothing here has to know
+   *  whose goals it is painting. */
+  _liveGoals() {
     const rack = this.game ? this.game.result() : null;
     const boardId = this.game ? this.game.board.id : this.settings.board;
-    // THE MACHINE'S OWN three goals (js/goals.js is per-machine now). The signature goal - the
-    // one that names a shot rather than a number - takes the left rail on its own; the two
-    // SCORE goals stack together on the right, which reads as a grouping rather than as one
-    // rail that happened to get an extra box. Labels ride each goal's own labelKey, so this
-    // markup never has to know whose goals it is painting.
-    const [g1, g2, g3] = readGoalsLive(boardId, rack);
+    return readGoalsLive(boardId, rack);
+  }
+
+  /** The two goals that ride the gutters: the signature goal - the one that names a shot rather
+   *  than a number - on the left, the single-game score on the right. ONE BOX PER RAIL. The
+   *  third used to stack under this one; it is the wide bar above the machine now. */
+  _goalRailsMarkup() {
+    const [g1, g2] = this._liveGoals();
     const box = (g) => `
       <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
         <em>${esc(t(g.labelKey))}</em>
@@ -997,7 +1009,21 @@ export class SkeeballUI {
       </div>
       <div class="sk-grail sk-grail--r">
         ${box(g2)}
-        ${box(g3)}
+      </div>`;
+  }
+
+  /** The RUNNING TOTAL - the third goal on every machine, and the slowest-moving of the three,
+   *  which is why it is the one that can sit furthest from the eye. One wide row above the
+   *  machine. GUARD: it carries data-goal like the rail boxes do, because _checkGoalsNow finds
+   *  the box to pop by that attribute; drop it and completing this goal stops being celebrated. */
+  _goalTotalMarkup() {
+    const g = this._liveGoals()[2];
+    if (!g) return '';
+    return `
+      <div class="sk-gtotal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
+        <em>${esc(t(g.labelKey))}</em>
+        <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
+        <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
       </div>`;
   }
 
@@ -1049,10 +1075,13 @@ export class SkeeballUI {
     this._fireworks(fresh.length, live.every((g) => g.met));
   }
 
-  /** Repaint the lane rails. Called wherever the ball count is repainted, which is the same
-   *  moment any of the three numbers can have moved. */
+  /** Repaint all three objectives. Called wherever the ball count is repainted, which is the
+   *  same moment any of the three numbers can have moved. TWO TARGETS since the total moved out
+   *  of the right rail: repaint one and the other silently stops updating mid-rack. */
   _paintGoalRails() {
-    if (this.el && this.el.grails) this.el.grails.innerHTML = this._goalRailsMarkup();
+    if (!this.el) return;
+    if (this.el.grails) this.el.grails.innerHTML = this._goalRailsMarkup();
+    if (this.el.gtotal) this.el.gtotal.innerHTML = this._goalTotalMarkup();
   }
 
   /** One firework per goal just earned, a bigger volley when that completed the set. Fired from

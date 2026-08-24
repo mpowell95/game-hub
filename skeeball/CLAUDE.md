@@ -740,24 +740,44 @@ penalty basket, the same way `colorSweep` is gated on `need > 1`.
 
 Only BRICK CITY reads them today. A future machine that wants either gets it for free.
 
-## Where the three objectives sit (2026-08-24: all three in the gutters)
+## Where the three objectives sit (2026-08-24: one per rail, the total above the machine)
 
-Matt, on the deployed BRICK CITY: *"obviously I don't want the objectives to cover any machine."*
+One goal in each gutter rail - the signature goal on the left, the single-game score on the right -
+and **the running total on a wide horizontal bar above the machine, IN FLOW**. That last word is
+the whole section.
 
-The two side rails were always safe - they sit in the gutters `frame.mjs` measures either side of
-the cabinet, 66px clear at the board's widest point. **Total points was not.** It was centred in
-the strip of back wall between the ball count and the top of the marquee, on a band measured at
-48-72px across the phone sizes - and **that band is THE CLASSIC's**. `frame.mjs` builds its
-geometry from `BOARDS[0]` and `machines/classic/machine.js` only, so the number was never checked
-against the staircase machines, which stand taller. On HOT SHOT and BRICK CITY the chip landed on
-the marquee, across the lettering of a designed sign.
+**The first attempt at the centre bar was pulled**, because it was `position: absolute` at
+`safe-area + 134px`, a constant taken from THE CLASSIC's band. Measured through the real UI, the
+gap between the ball pips and the top of the marquee is 53 / 69 / 77px on THE CLASSIC and POPONGO
+at 375x667 / 393x852 / 430x932, but only **31 / 40 / 44px** on the staircase machines - which left
+6px on the small phone for a 28px chip, so it sat across a designed sign. Matt: *"obviously I don't
+want the objectives to cover any machine."*
 
-All three now live in the rails: the signature goal alone on the left, the two SCORE goals stacked
-on the right. Measured after, on all four machines at 393x852, the boxes land in exactly the same
-three places every time - left 8-83px, right 310-385px - and never over the board.
+**All three were moved into the rails, and that was the wrong fix.** Matt, the next day: *"The
+previous way of putting the total point horizontal over the machine was great. I'm not sure why
+there isn't enough space there anymore."* There was always enough space; the bar was positioned
+badly.
 
-**Do not put a goal back in the centre** without a per-machine measurement of that band, which
-`frame.mjs` does not currently do (it is single-board by construction, and its header says so).
+**What it is now.** `.sk-gtotal-row` is a flex child of `.sk-play-wrap`, between `.sk-rack` and
+`.sk-stage`. The stage is `flex: 1 1 auto` and the renderer fits the machine to whatever height the
+stage ends up with, so a row above the stage takes its height first and the machine is drawn in
+what is left. **The bar cannot reach a marquee on any board, at any size, and nothing is measured
+to make that true.** It is the same reason `.sk-rack` is in flow, and `skeeball.css` already said
+so in the guard above it.
+
+Verified anyway, on all four machines at 375x667 / 393x852 / 430x932: the bar's bottom clears the
+highest lit part of every machine by 31px at worst. It costs the stage ~40px, so every machine
+renders about 5% smaller - that is the price, and it was paid deliberately.
+
+**The one thing that still needs measuring** is WIDTH, because the bar is centred and the rails are
+absolute: on a narrow phone they share a band of screen. At 360px there are only ~207px between the
+rails, and Spanish `"Puntos totales"` completed measures 222px at the full type size. A single
+`max-width: 400px` step (label 11px, value 14px, tighter padding) buys ~37px and keeps the worst
+case clear at every width from 360 up. 11px is the repo's floor, so there is no room below it: **a
+future machine with a longer third objective needs a re-measure**, since nothing truncates and a
+label that does not fit will collide instead.
+
+**Do not give this bar `position: absolute` again**, however tempting the 40px looks.
 
 ## The records panel (the four numbers every machine shows)
 
