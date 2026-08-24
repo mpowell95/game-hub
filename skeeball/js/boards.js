@@ -556,17 +556,31 @@ export const BOARDS = [
       // consequence is accepted: a ball the back wall kills, or one falling from the tier
       // above, can land in a basket - that is how the real machine plays. Tread starts in
       // unrolled v: 0 / 3.9875X / 7.975X; the mouths lean 0.10 rad with their tread.
+      // THE BASKETS ARE A FULL 1.0X DEEP - as deep as the mouth is wide, which is the real
+      // basket's proportion. They were 0.35X until 2026-08-24 and read as wire rings rather
+      // than baskets. MEASURED BEFORE IT SHIPPED, on the 41x21 grid, basketball only: 0.35X
+      // scored 167/861, 1.0X scores 146/861, both with all nine mouths capturable, 0
+      // emergencies and the slowest settle a shade FASTER (5.51s -> 5.39s). Depth costs 13% of
+      // the scoring rate and buys a better row spread - the low row took 46% of every score at
+      // 0.35X and takes 40% at 1.0X.
+      //
+      // WHY DEPTH IS NEARLY FREE, so a future session does not "fix" the collar back down: a
+      // taller rim cuts both ways in physics.js. It rejects more approaches on the outer wall,
+      // but capture is "centre below the RIM plane inside the mouth", and a rim 1.0X up trips
+      // that condition far earlier in the descent. The two effects very nearly cancel. 0.55X
+      // and 0.75X were measured too (48 and 45 per 231) - the curve is flat, so pick the depth
+      // that looks right, not the one that scores best.
       holeR: X * 0.5,
       holes: {
-        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
-        lowC: { u: 0, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
-        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 0.35 },
-        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
-        midC: { u: 0, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
-        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 0.35 },
-        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
-        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
-        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.35 },
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.5, collarH: X * 1.0 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.5, collarH: X * 1.0 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 1.0 },
       },
 
       minSpeed: 2.60,

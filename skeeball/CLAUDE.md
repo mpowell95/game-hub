@@ -578,6 +578,13 @@ ball dropping in out of the air - no new physics, no new capture rule.
   Basketball Skeeball Arcade Cabinet/`, alongside the real-cabinet photo it was modelled on).
   PAINT AND MESHES ONLY - no `geom`, no `machine.js`, no `physics.js`, so the sweep numbers
   below still stand. Six changes, each matched to the reference:
+  - **The baskets are a FULL 1.0X DEEP** (2026-08-24) - as deep as the mouth is wide, the real
+    basket's proportion, where they were 0.35X and read as wire rings. This is a `geom` change,
+    so it was swept on the 41x21 grid (basketball's engine only) before it shipped: 167/861 ->
+    146/861 scored, all nine mouths capturable either way, 0 emergencies, slowest settle 5.51s ->
+    5.39s, and the low row's share of every score down from 46% to 40%. `boards.js` carries the
+    numbers and the reason depth is nearly free - do not shallow the collar back out to "fix"
+    scoring.
   - **The baskets have NETS.** `_wireBasket` draws the design's basket: the orange rim on the
     physics profile, a small bottom ring, ten tapered ribs, and two crossing bands of white
     strands meeting at a ring - the thing that makes a hoop read as a basket. GUARD: every
