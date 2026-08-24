@@ -895,6 +895,43 @@ function persist(st) {
   catch (err) { console.error(`[game-stats] persist failed, this write was not saved (${key})`, err); return false; }
 }
 
+// ONE-TIME, ONE-DEVICE reset of King of Games' Skeeball objectives (Matt, 2026-08-24). His phone
+// keeps playing and is out of Matt's reach, and it is the AUTHORITY on its own stats - syncMyStats
+// overwrites players/<id>/stats wholesale from local on every open - so a server-side edit cannot
+// stick; the correction has to run on HIS device. This does it exactly once: only on the single
+// deviceId below, gated by a localStorage flag so it never re-fires and future play accumulates
+// normally from the baseline. It rides loadStats()'s migration chain, so the same persist() that
+// saves every other migration saves this, and the next syncMyStats() (which sends loadStats())
+// pushes the corrected store up, healing whatever the phone last mirrored.
+//
+// It REDUCES stored values - a deliberate, Matt-directed exception to THE LAW rule 2's "bests only
+// improve", scoped to ONE persona Matt controls and ONE device. Every other device returns at the
+// deviceId guard, untouched. Matches the server-side edit already applied to
+// players/090215fa.../stats/games/skeeball. Target: Classic points -> 5000, and the other two
+// Classic objectives restarted (five 100s and a single round >= 360): sk.hundreds -> 0,
+// classic.best -> 0; the high-score records are cleared.
+let _kogChecked = false;
+function resetKingOfGamesSkeeball(st) {
+  if (_kogChecked) return false;         // once per page load; the flag below is the cross-session guard
+  _kogChecked = true;
+  const KOG = '090215fa-e525-4bbe-99d7-58f9ae3cd437';
+  const FLAG = 'gamehub.skeeball.kogReset.v1';
+  try {
+    if (localStorage.getItem(FLAG)) return false;
+    if (deviceId() !== KOG) return false;
+    const sk = st && st.games && st.games.skeeball && st.games.skeeball.sk;
+    if (!sk) { localStorage.setItem(FLAG, '1'); return false; }   // nothing to reset; do not re-check
+    sk.hundreds = 0;
+    sk.bestGame = 0;
+    sk.bestThrow = 0;
+    const c = sk.boards && sk.boards.classic;
+    if (c) { c.best = 0; c.bestThrow = 0; c.points = 5000; delete c.daily; }
+    localStorage.setItem(FLAG, '1');
+    console.log('[game-stats] applied one-time King of Games Skeeball reset (Classic 5000 pts, objectives restarted)');
+    return true;
+  } catch (err) { console.error('[game-stats] KoG Skeeball reset failed', err); return false; }
+}
+
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
   const store = resolveStore();
@@ -927,6 +964,7 @@ export function loadStats() {
   // both land on the same load are saved together rather than one overwriting the other.
   const drained = drainPendingResults(st);
   changed = drained || changed;
+  changed = resetKingOfGamesSkeeball(st) || changed;   // one-time, one-device (see the function's note)
   ensureBr(st.games.ballrun); // re-fill BR_DIFFS defaults; migration may have reset `br` to a bare shape
   ensureBrOrbital(st.games.ballrun);
   if (changed) {
