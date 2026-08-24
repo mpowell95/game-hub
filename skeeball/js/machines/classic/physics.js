@@ -101,8 +101,11 @@ function buildWorld(board) {
         : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
           : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
             : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' || s.part === 'cove' ? matBack
-            : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+            : s.part === 'backboard' ? matBack
+            // The corner chocks ('cove', machine.js) are DEAD, never bouncy: a stuck ball that
+            // meets one should die and slide off, and the one thing Matt banned outright is a
+            // corner that flings a ball ("made the ball bounce crazy"). matDead, not matBack.
+            : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' || s.part === 'cove' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR : GROUP_REST,
