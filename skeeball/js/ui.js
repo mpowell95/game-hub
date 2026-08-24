@@ -26,7 +26,7 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { bestOn, todayBestOn, appWideBest, isUnlocked } from '../../js/arcade-scores.js';
-import { isBoardReleased } from '../../js/admin-config.js';
+import { isBoardReleased, isBoardTesting } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
 
@@ -190,7 +190,11 @@ export class SkeeballUI {
   _earnedUnlocks(boardId, score) {
     const out = [];
     for (const b of BOARDS) {
-      if (b.adminOnly) continue;                        // admin-only machines are never unlocked by play
+      // Still in testing = never unlocked by play. `adminOnly` is only the CODE DEFAULT now: the
+      // admin page can move a machine to Unlockable, and from that moment it earns normally
+      // (js/admin-config.js). Reading the resolved answer here rather than the raw flag is what
+      // makes "live and can be unlocked" a real state rather than a label.
+      if (isBoardTesting(b.id, !!b.adminOnly)) continue;
       if (!b.unlock || b.unlock.board !== boardId) continue;
       const ok = b.unlock.goals ? allGoalsMet(boardId) : (score | 0) >= (b.unlock.score | 0);
       if (ok) out.push(b.id);
@@ -205,7 +209,7 @@ export class SkeeballUI {
     try {
       const sk = (loadStats().games.skeeball || {}).sk || {};
       for (const b of BOARDS) {
-        if (b.adminOnly) continue;                      // never retroactively unlock an admin-only machine
+        if (isBoardTesting(b.id, !!b.adminOnly)) continue;   // never retroactively unlock a machine still in testing
         if (!b.unlock || !b.unlock.goals) continue;
         if (isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
         if (allGoalsMet(b.unlock.board)) unlockSkeeballBoard(b.id);
@@ -346,21 +350,22 @@ export class SkeeballUI {
     // machine there is a single centred card and no carousel chrome.
     const idx = Math.max(0, BOARDS.findIndex((b) => b.id === board.id));
     const slides = BOARDS.map((b) => {
-      // An admin-only machine is open ONLY to a dev profile - never by an earned unlock - so it
-      // stays locked to everyone else while Matt is testing it (boards.js `adminOnly`).
-      const earned = !b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD);
-      // ...unless Matt has RELEASED it from the admin page, which is what that page's Skeeball
-      // section is for: `adminOnly` is the code default, the config is the override, exactly as it
-      // works for a hub game (js/admin-config.js). Still read-time only - nothing writes sk.unlocked.
-      const open = devAll || earned || isBoardReleased(b.id);
+      // Three states, resolved from the admin config over boards.js's `adminOnly` default
+      // (js/admin-config.js): TESTING (only a dev profile), UNLOCKABLE (earned the normal way),
+      // OPEN (everyone, no unlock needed). A machine in testing is open ONLY to a dev profile and
+      // declines to honor an earned unlock while it is set - it honors it again the moment it is
+      // not, because the unlock itself is never touched (THE LAW rule 2).
+      const testing = isBoardTesting(b.id, !!b.adminOnly);
+      const earned = !testing && isUnlocked(sk, b.id, DEFAULT_BOARD);
+      const open = devAll || earned || (!testing && isBoardReleased(b.id));
       if (!open) {
         // The locked slide (MACHINE-SPEC section 17): the machine greyed out behind a large
         // lock, with only a SLIVER of the board visible - the picture is the real render, but
         // the CSS window (.sk-lock-peek) crops, greys and blurs it down to a tease.
         const from = b.unlock ? boardById(b.unlock.board) : null;
-        // An admin-only machine has no unlock a player can chase, so it says so plainly rather
+        // A machine in testing has no unlock a player can chase, so it says so plainly rather
         // than promising a goal that would never open it.
-        const hint = b.adminOnly
+        const hint = testing
           ? t('lock_testing')
           : b.unlock.goals
             ? t('unlock_goals_hint', { name: from.name })
@@ -413,7 +418,8 @@ export class SkeeballUI {
     // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
     // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
     for (const b of BOARDS) {
-      const open = devAll || (!b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD)) || isBoardReleased(b.id);
+      const bTesting = isBoardTesting(b.id, !!b.adminOnly);
+      const open = devAll || (!bTesting && (isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id)));
       const imgEl = this.root.querySelector(open
         ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
@@ -432,8 +438,9 @@ export class SkeeballUI {
           const w = car.clientWidth || 1;
           const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
           const b = BOARDS[i];
-          if (b && (devAll || (!b.adminOnly && isUnlocked(sk, b.id, DEFAULT_BOARD)) || isBoardReleased(b.id))
-              && b.id !== this.settings.board) {
+          const bOpen = !!b && (devAll || (!isBoardTesting(b.id, !!b.adminOnly)
+            && (isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id))));
+          if (bOpen && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));

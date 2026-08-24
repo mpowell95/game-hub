@@ -14,10 +14,12 @@
 //   - An ABSENT or malformed config must resolve to the CODE DEFAULT, never to hidden. A config
 //     node that is empty, wiped or unreachable can therefore never take a released game off the
 //     family's launcher.
-//   - Locking a Skeeball machine back must be a read-time NO for that machine only. The resolver
-//     answers "has the admin opened this for everyone", and every caller ORs it with the player's
-//     own earned unlock - which is why there is no way, anywhere in this file, to express
-//     "un-earn". The wiring that ORs them is asserted below against the shipped skeeball/js/ui.js.
+//   - Moving a Skeeball machine back must be a read-time NO for that machine only. The resolvers
+//     answer "has the admin opened this for everyone" and "is it still in testing", and every
+//     caller ORs the first with the player's own earned unlock - which is why there is no way,
+//     anywhere in this file, to express "un-earn". A machine in testing DECLINES to honor an
+//     earned unlock while the flag is set and honors it again the moment it is not; the unlock
+//     itself is never touched. The wiring is asserted below against the shipped skeeball/js/ui.js.
 
 import { readFileSync } from 'node:fs';
 
@@ -72,14 +74,36 @@ eq('gameOverride reports null when nothing is set', A.gameOverride({ games: {} }
 eq('gameOverride reports the set value', A.gameOverride({ games: { pinball: { live: false } } }, 'pinball'), false);
 
 // --- resolveBoardReleased: opt-in only ---------------------------------------------------------
-console.log('\n--- is this skeeball machine released ---');
+console.log('\n--- the three machine states ---');
+const cfgOf = (row) => ({ skeeball: { boards: { popongo: row } } });
 ok('no config: nothing is released', A.resolveBoardReleased(null, 'popongo') === false);
-ok('open: true releases it', A.resolveBoardReleased({ skeeball: { boards: { popongo: { open: true } } } }, 'popongo') === true);
-ok('open: false is just "earn it"', A.resolveBoardReleased({ skeeball: { boards: { popongo: { open: false } } } }, 'popongo') === false);
-ok('a truthy non-true value does not release a machine',
-  A.resolveBoardReleased({ skeeball: { boards: { popongo: { open: 1 } } } }, 'popongo') === false);
+ok('open: true releases it', A.resolveBoardReleased(cfgOf({ open: true }), 'popongo') === true);
+ok('open: false is not released', A.resolveBoardReleased(cfgOf({ open: false }), 'popongo') === false);
+ok('a truthy non-true value does not release a machine', A.resolveBoardReleased(cfgOf({ open: 1 }), 'popongo') === false);
+// The testing half is what the first version of the page was missing: with only `open`, an
+// adminOnly machine could not be made earnable at all, which is the correction this suite pins.
+ok('no config: an adminOnly machine defaults to testing', A.resolveBoardTesting(null, 'popongo', true) === true);
+ok('no config: an ordinary machine defaults to not-testing', A.resolveBoardTesting(null, 'popongo', false) === false);
+ok('testing: false takes an adminOnly machine OUT of testing',
+  A.resolveBoardTesting(cfgOf({ testing: false }), 'popongo', true) === false);
+ok('testing: true puts an ordinary machine INTO testing',
+  A.resolveBoardTesting(cfgOf({ testing: true }), 'popongo', false) === true);
 eq('boardOverride reports null when nothing is set', A.boardOverride({}, 'basketball'), null);
 eq('boardOverride reports the set value', A.boardOverride({ skeeball: { boards: { basketball: { open: true } } } }, 'basketball'), true);
+eq('boardTestingOverride reports null when nothing is set', A.boardTestingOverride({}, 'basketball'), null);
+eq('boardTestingOverride reports the set value', A.boardTestingOverride({ skeeball: { boards: { basketball: { testing: true } } } }, 'basketball'), true);
+
+// resolveBoardMode is the one answer the page and the game share.
+eq('mode with no config, adminOnly machine', A.resolveBoardMode(null, 'popongo', true), 'testing');
+eq('mode with no config, ordinary locked machine', A.resolveBoardMode(null, 'popongo', false), 'unlockable');
+eq('mode: open', A.resolveBoardMode(cfgOf({ open: true, testing: false }), 'popongo', true), 'open');
+eq('mode: unlockable (an adminOnly machine made earnable)',
+  A.resolveBoardMode(cfgOf({ open: false, testing: false }), 'popongo', true), 'unlockable');
+eq('mode: testing (an ordinary machine pulled back)',
+  A.resolveBoardMode(cfgOf({ open: false, testing: true }), 'popongo', false), 'testing');
+// A contradictory pair cannot read as playable: testing wins, so a half-applied write is safe.
+eq('testing wins over open, so a contradiction is never playable',
+  A.resolveBoardMode(cfgOf({ open: true, testing: true }), 'popongo', false), 'testing');
 
 // --- the local cache ----------------------------------------------------------------------------
 console.log('\n--- the local cache ---');
@@ -101,9 +125,19 @@ ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') ===
 console.log('\n--- the wiring ---');
 const sk = readFileSync(new URL('./skeeball/js/ui.js', import.meta.url), 'utf8');
 const orsEarned = [...sk.matchAll(/isBoardReleased\(b\.id\)/g)].length;
-ok(`skeeball/js/ui.js consults isBoardReleased on every gate (${orsEarned} sites)`, orsEarned >= 3);
+ok(`skeeball/js/ui.js consults isBoardReleased on every gallery gate (${orsEarned} sites)`, orsEarned >= 3);
+// The unlock paths must read the RESOLVED testing state, not boards.js's raw adminOnly flag -
+// otherwise "Unlockable" is a label with no effect, which is the bug this revision fixes.
+const testingSites = [...sk.matchAll(/isBoardTesting\(/g)].length;
+ok(`skeeball/js/ui.js resolves the testing state rather than reading adminOnly directly (${testingSites} sites)`,
+  testingSites >= 5 && !/\bif \(b\.adminOnly\) continue/.test(sk));
+ok('the two unlock writers both skip a machine that is still in testing',
+  /_earnedUnlocks[\s\S]{0,900}?isBoardTesting/.test(sk) && /_ensureGoalUnlocks[\s\S]{0,900}?isBoardTesting/.test(sk));
 ok('skeeball/js/ui.js never writes an unlock from the admin release (THE LAW rule 2)',
   !/isBoardReleased\([^)]*\)\s*(&&|\?)?[^\n]*unlockSkeeballBoard/.test(sk));
+const adm = readFileSync(new URL('./js/admin-ui.js', import.meta.url), 'utf8');
+ok('the admin page offers all three machine states',
+  /adm_mode_open/.test(adm) && /adm_mode_unlockable/.test(adm) && /adm_mode_testing/.test(adm));
 const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
 ok('js/hub.js resolves card visibility through isGameLive with !g.devOnly as the default',
   /isGameLive\(g\.id,\s*!g\.devOnly\)/.test(hub));

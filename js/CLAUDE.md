@@ -1762,8 +1762,23 @@ mechanism.
 
 ```
 { games:    { <hubId>:   { live: true|false, at: <ms>, by: '<deviceId>' } },
-  skeeball: { boards: { <boardId>: { open: true|false, at: <ms>, by: '<deviceId>' } } } }
+  skeeball: { boards: { <boardId>: { open: true|false, testing: true|false,
+                                     at: <ms>, by: '<deviceId>' } } } }
 ```
+
+A machine's two fields encode THREE states, resolved in one place by `resolveBoardMode()`:
+
+| stored | mode | what a player sees |
+|---|---|---|
+| `open: true` | `open` | playable now, no unlock needed |
+| `open: false, testing: false` | `unlockable` | live, earned the normal way (its goals or score) |
+| `testing: true` | `testing` | not playable yet; only a dev profile can open it |
+
+`testing` wins over `open`, so a half-applied write can never read as playable. Both fields are
+always written together (`setBoardMode()`), so a mode change cannot leave the previous mode's field
+behind. `testing` overrides `boards.js`'s `adminOnly` exactly as a game's `live` overrides
+`devOnly` — it is the field the first version of the page was missing, and without it "Earn it"
+could not make an `adminOnly` machine earnable at all (Matt caught it the same day).
 
 Versioned (`/v1`) so a future shape change never has to reinterpret this one. `by` is the writing
 device's `statsId()`, `at` is when — audit only, nothing reads them but the eye.
@@ -1785,9 +1800,13 @@ describes it. Hiding a game is only ever an explicit `live: false`.
 **Skeeball releases are additive at READ time and can never un-earn.** `isBoardReleased(id)` answers
 one question — has Matt opened this machine for everyone — and `skeeball/js/ui.js` ORs it with the
 player's own `isUnlocked(sk, id, DEFAULT_BOARD)`. Nothing in `js/admin-config.js` can write
-`sk.unlocked`, so a release grants nothing permanent and, more importantly, flipping a machine back
-to "Earn it" takes it away from exactly nobody who already earned it (THE LAW rule 2).
-`test-admin-config.mjs` pins both halves structurally against the shipped `ui.js`.
+`sk.unlocked`, so a release grants nothing permanent and, more importantly, moving a machine back
+takes it away from exactly nobody who already earned it (THE LAW rule 2): `testing` makes the
+gallery DECLINE TO HONOR an earned unlock while it is set, and honor it again the moment it is not.
+`isBoardTesting(id, adminOnly)` is also what `_earnedUnlocks()` and `_ensureGoalUnlocks()` consult —
+reading the RESOLVED state rather than the raw flag is the whole difference between "Unlockable"
+being a real state and being a label. `test-admin-config.mjs` pins all of it structurally against
+the shipped `ui.js`.
 
 **Writes verify themselves** (rule 6): `writeOverride()` `update()`s the field, then re-reads the
 whole node and compares; anything unexpected returns `{ ok: false, error }` and logs, and the admin

@@ -12,8 +12,20 @@
 //
 // THE SHAPE, at `adminConfig/v1` in the shared 'stats' Firebase app:
 //
-//   { games:    { pinball:  { live: true,  at: <ms>, by: '<deviceId>' } },
-//     skeeball: { boards: { popongo: { open: true, at: <ms>, by: '<deviceId>' } } } }
+//   { games:    { pinball:  { live: true, at: <ms>, by: '<deviceId>' } },
+//     skeeball: { boards: { popongo: { open: false, testing: false, at: <ms>, by: '<deviceId>' } } } }
+//
+// A Skeeball machine has THREE states, not two (Matt, 2026-08-24, on the first version of this
+// page: "this doesn't allow me to select which skeeball machines are live and can be unlocked and
+// played vs what is not able to be played yet"). The two fields encode them together:
+//
+//   open: true                 OPEN      playable by everyone right now, no unlock needed
+//   open: false, testing:false UNLOCKABLE live, earned the normal way (its goals or score)
+//   testing: true              TESTING   not playable yet; only a dev profile can open it
+//
+// `testing` overrides boards.js's `adminOnly` flag, the same way `live` overrides a game's
+// `devOnly` - and it is the field the first version was missing, which is why "Earn it" could not
+// actually make an adminOnly machine earnable.
 //
 // An ABSENT entry means "whatever the code says", which is the important half: this layer is an
 // OVERRIDE of the source defaults, never a replacement for them. Clearing an override (the Default
@@ -85,10 +97,39 @@ export function resolveBoardReleased(cfg, boardId) {
   return !!(row && row.open === true);
 }
 
-/** The override on a machine, or null when nothing has been set. */
+/** The override on a machine's "open to everyone" field, or null when nothing has been set. */
 export function boardOverride(cfg, boardId) {
   const row = normalizeConfig(cfg).skeeball.boards[boardId];
   return row && typeof row.open === 'boolean' ? row.open : null;
+}
+
+/**
+ * Is this machine still in testing - not playable by anybody but a dev profile? The override sits
+ * on top of boards.js's `adminOnly`, exactly as a game's `live` sits on top of `devOnly`.
+ * @param {object} cfg
+ * @param {string} boardId
+ * @param {boolean} codeDefault  the machine's own `adminOnly` flag
+ */
+export function resolveBoardTesting(cfg, boardId, codeDefault) {
+  const row = normalizeConfig(cfg).skeeball.boards[boardId];
+  if (row && typeof row.testing === 'boolean') return row.testing;
+  return !!codeDefault;
+}
+
+/** The override on a machine's testing field, or null when nothing has been set. */
+export function boardTestingOverride(cfg, boardId) {
+  const row = normalizeConfig(cfg).skeeball.boards[boardId];
+  return row && typeof row.testing === 'boolean' ? row.testing : null;
+}
+
+/**
+ * The one answer the admin page and the game both work from: 'open' | 'unlockable' | 'testing'.
+ * Testing wins over open - a machine nobody may play yet cannot also be open to everyone, and
+ * resolving it in one place stops the two fields from ever being read as a contradiction.
+ */
+export function resolveBoardMode(cfg, boardId, codeAdminOnly) {
+  if (resolveBoardTesting(cfg, boardId, codeAdminOnly)) return 'testing';
+  return resolveBoardReleased(cfg, boardId) ? 'open' : 'unlockable';
 }
 
 // --- the local cache ---------------------------------------------------------------------------
@@ -117,6 +158,17 @@ export function isGameLive(id, codeDefault) { return resolveGameLive(readCachedC
 
 /** Has this Skeeball machine been released to everyone? OR it with the earned unlock, never replace. */
 export function isBoardReleased(boardId) { return resolveBoardReleased(readCachedConfig(), boardId); }
+
+/** Is this machine still in testing (nobody but a dev profile may open it)? `codeDefault` is its
+ *  own `adminOnly` flag from boards.js. */
+export function isBoardTesting(boardId, codeDefault) {
+  return resolveBoardTesting(readCachedConfig(), boardId, codeDefault);
+}
+
+/** 'open' | 'unlockable' | 'testing' for this machine, from the cache. */
+export function boardMode(boardId, codeAdminOnly) {
+  return resolveBoardMode(readCachedConfig(), boardId, codeAdminOnly);
+}
 
 /** Subscribe to config changes (a refresh that actually changed something). Returns an unsubscribe. */
 export function onAdminConfig(cb) {
@@ -178,13 +230,14 @@ function writesAllowed() {
 function fail(msg) { console.error('[admin-config] ' + msg); return { ok: false, error: msg }; }
 
 /**
- * Write one override and VERIFY IT LANDED by fresh re-read (THE LAW rule 6). `value === null`
- * clears the override and hands the decision back to the code default.
- * @param {string} path  a path under CONFIG_PATH, e.g. 'games/pinball'
- * @param {string} field 'live' or 'open'
- * @param {boolean|null} value
+ * Write one node's override fields and VERIFY THEY LANDED by fresh re-read (THE LAW rule 6).
+ * A field whose value is `null` is CLEARED, handing that decision back to the code default.
+ * @param {string} path    a path under CONFIG_PATH, e.g. 'games/pinball'
+ * @param {object} fields  { field: boolean|null, ... } - written together, so a machine's two
+ *                         fields can never land half-applied and read as a contradiction
+ * @param {(cfg:object)=>boolean} verify  re-read check, run against the freshly fetched config
  */
-async function writeOverride(path, field, value) {
+async function writeNode(path, fields, verify) {
   if (!writesAllowed()) {
     return fail(`write BLOCKED: this is a dev origin (${location.hostname}) and dev never writes the family's config. `
       + `To allow it in this browser: localStorage.setItem('${DEV_SYNC_OK}', '1')`);
@@ -193,24 +246,20 @@ async function writeOverride(path, field, value) {
   if (!r) return fail('write failed: Firebase is unreachable or unconfigured (are you offline?)');
   const { db, api } = r;
   const full = `${CONFIG_PATH}/${path}`;
+  const cleared = Object.keys(fields).every((k) => fields[k] === null);
   let by = '';
   try { by = statsId() || ''; } catch { by = ''; }
-  const patch = value === null
-    ? { [field]: null, at: null, by: null }
-    : { [field]: !!value, at: Date.now(), by };
+  const patch = Object.assign({}, fields, cleared ? { at: null, by: null } : { at: Date.now(), by });
   try {
     await api.update(api.ref(db, full), patch);
   } catch (err) {
     return fail(`write to ${full} failed: ${(err && err.message) || err}`);
   }
-  // Fresh re-read of the WHOLE node, not of the field we just wrote: it both verifies the write and
-  // leaves the cache holding exactly what every other device will read.
+  // Fresh re-read of the WHOLE node, not of the fields we just wrote: it both verifies the write
+  // and leaves the cache holding exactly what every other device will read.
   const fresh = await refreshAdminConfig();
   if (!fresh) return fail(`write to ${full} could not be verified (the re-read failed)`);
-  const key = path.split('/').pop();
-  const got = path.startsWith('games/') ? gameOverride(fresh, key) : boardOverride(fresh, key);
-  const want = value === null ? null : !!value;
-  if (got !== want) return fail(`write to ${full} did not take: wanted ${want}, re-read ${got}`);
+  if (!verify(fresh)) return fail(`write to ${full} did not take: the re-read disagrees with what was sent`);
   return { ok: true, config: fresh };
 }
 
@@ -219,17 +268,42 @@ async function writeOverride(path, field, value) {
  * @param {string} id     hub registry id
  * @param {boolean|null} live  true = live for everyone, false = admin only (testing), null = code default
  */
-export function setGameLive(id, live) { return writeOverride(`games/${id}`, 'live', live); }
+export function setGameLive(id, live) {
+  const want = live === null ? null : !!live;
+  return writeNode(`games/${id}`, { live: want }, (cfg) => gameOverride(cfg, id) === want);
+}
+
+/** The two stored fields behind each mode. `testing` wins on read, but both are always written
+ *  explicitly so a mode change can never leave the previous mode's field behind. */
+const MODE_FIELDS = {
+  open:       { open: true,  testing: false },
+  unlockable: { open: false, testing: false },
+  testing:    { open: false, testing: true },
+};
 
 /**
- * Release a Skeeball machine to everyone, or hand it back to its unlock.
- * @param {string} boardId  a boards.js machine id
- * @param {boolean|null} open  true = open for everyone, false/null = earn it (earned unlocks keep it)
+ * Set a Skeeball machine's state - the three-way choice the admin page offers:
+ *   'open'        playable by everyone right now, no unlock needed
+ *   'unlockable'  live, earned the normal way (its goals or score)
+ *   'testing'     not playable yet; only a dev profile can open it
+ *   null          clear the override; boards.js's own `adminOnly` decides again
+ *
+ * Nothing here can un-earn a machine: `open` is ORed with the player's earned unlock at read time
+ * and no path from this file writes `sk.unlocked` (THE LAW rule 2). Moving a machine to 'testing'
+ * declines to HONOR an earned unlock while it is set, and honors it again the moment it is not.
  */
-export function setBoardReleased(boardId, open) { return writeOverride(`skeeball/boards/${boardId}`, 'open', open); }
+export function setBoardMode(boardId, mode) {
+  const fields = mode === null ? { open: null, testing: null } : MODE_FIELDS[mode];
+  if (!fields) return Promise.resolve(fail(`unknown machine mode "${mode}"`));
+  return writeNode(`skeeball/boards/${boardId}`, fields, (cfg) => {
+    if (mode === null) return boardOverride(cfg, boardId) === null && boardTestingOverride(cfg, boardId) === null;
+    return boardOverride(cfg, boardId) === fields.open && boardTestingOverride(cfg, boardId) === fields.testing;
+  });
+}
 
 export default {
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
-  boardOverride, readCachedConfig, isGameLive, isBoardReleased, onAdminConfig, refreshAdminConfig,
-  setGameLive, setBoardReleased,
+  boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
+  isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
+  setGameLive, setBoardMode,
 };

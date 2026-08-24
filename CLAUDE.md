@@ -436,10 +436,15 @@ node once per hub load and caches it locally.
   "whatever `js/hub.js` says". A wiped, unreachable or never-written config leaves the app behaving
   exactly as it does today — which is also why a config failure can never take a released game off
   the family's launcher (THE LAW rule 1).
-- **Releasing a Skeeball machine is READ-TIME ONLY.** `skeeball/js/ui.js` ORs
-  `isBoardReleased(id)` with the player's earned `isUnlocked(...)`; nothing writes `sk.unlocked`.
-  So locking a machine back **cannot take away one somebody already earned** (rule 2), and nobody is
-  ever credited with an unlock they did not earn.
+- **A Skeeball machine has THREE states, and all three are READ-TIME ONLY.** Matt, on the first
+  version of the page: *"this doesn't allow me to select which skeeball machines are live and can be
+  unlocked and played vs what is not able to be played yet."* **Open** (everyone plays it now),
+  **Unlockable** (live, earned the normal way), **Testing** (nobody but a dev profile). Testing
+  overrides `boards.js`'s `adminOnly` the same way a game's live switch overrides `devOnly`, so
+  moving a machine to Unlockable really does make it earnable. `skeeball/js/ui.js` ORs
+  `isBoardReleased(id)` with the player's earned `isUnlocked(...)` and nothing writes `sk.unlocked`,
+  so nobody is ever credited with an unlock they did not earn — and moving a machine back only
+  DECLINES TO HONOR an earned unlock while it is set, never deletes it (rule 2).
 - **Every write verifies by fresh re-read and fails loudly** (rule 6). A dev origin never writes the
   family's config at all, same guard and same opt-in key as `js/stats-net.js`.
 - **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
