@@ -153,6 +153,11 @@ export class Renderer {
     const faceEdge = this._mat({ color: L.faceEdge, roughness: 0.85 });
     const white = this._mat({ color: L.ring, roughness: 0.35 });
     const dark = this._mat({ color: 0x0d0a08, roughness: 0.95 });
+    // BASKET FEVER's yellow ball-return apron: the big painted panel under the lowest shelf on
+    // the real cabinet. Paint only - the kick panel's solid, its position and its bounce are
+    // machine.js's and are untouched.
+    const kick = this.board.dressing === 'basketball'
+      ? this._mat({ color: 0xf3c21c, roughness: 0.5 }) : dark;
 
     // The physics solids, drawn as they are (visible parts only; smooth cylinders replace the
     // segmented ring/collar boxes at identical radii).
@@ -199,7 +204,8 @@ export class Renderer {
       let mat;
       if (s.part === 'lane' || s.part === 'hump') mat = wood;
       else if (s.part === 'board') mat = faceEdge;
-      else if (s.part === 'trough' || s.part === 'kick') mat = dark;
+      else if (s.part === 'kick') mat = kick;
+      else if (s.part === 'trough') mat = dark;
       else mat = woodDark;
       const mesh = new THREE.Mesh(this._track(new THREE.BoxGeometry(s.half[0] * 2, s.half[1] * 2, s.half[2] * 2)), mat);
       mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
@@ -535,6 +541,40 @@ export class Renderer {
     floor.position.set(0, -this.G.troughDepth - 0.06, -2);
     floor.receiveShadow = true;
     this.scene.add(floor);
+
+    // BASKET FEVER's RED NEON: a tube up the front edge of each side wall and back along its
+    // top, framing the play window exactly as the strips do on the real cabinet. Traced from
+    // machine.js's own railProfile, so the neon follows the wall wherever the wall goes. Purely
+    // cosmetic - no physics body, no shadow, and no light source: the glow is the emissive plus
+    // one additive halo sleeve, which costs nothing next to a real light.
+    if (this.board.dressing === 'basketball' && M.railProfile) {
+      const P = M.railProfile;              // front-bottom, back-bottom, back-top, front-top
+      const xi = M.railInnerX;
+      const tube = this._mat({
+        color: 0xff4030, roughness: 0.35, emissive: 0xff1414, emissiveIntensity: 1.7,
+      });
+      const halo = this._track(new THREE.MeshBasicMaterial({
+        color: 0xff2a1a, transparent: true, opacity: 0.14, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      }));
+      for (const side of [-1, 1]) {
+        for (const [a, b] of [[P[0], P[3]], [P[3], P[2]]]) {
+          const p1 = new THREE.Vector3(side * (xi - 0.014), a[1], a[0]);
+          const p2 = new THREE.Vector3(side * (xi - 0.014), b[1], b[0]);
+          const d = new THREE.Vector3().subVectors(p2, p1);
+          const q = new THREE.Quaternion()
+            .setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
+          const mid = p1.clone().add(p2).multiplyScalar(0.5);
+          for (const [r, mat] of [[0.010, tube], [0.026, halo]]) {
+            const t = new THREE.Mesh(
+              this._track(new THREE.CylinderGeometry(r, r, d.length(), 10, 1, true)), mat);
+            t.position.copy(mid);
+            t.quaternion.copy(q);
+            this.scene.add(t);
+          }
+        }
+      }
+    }
   }
 
   /** THE MACHINES EITHER SIDE. Real skeeball is a ROW of cabinets; on its own ours reads as a
@@ -1020,20 +1060,35 @@ export class Renderer {
         const top = V(fr.v1);
         const bot = V(fr.v0);
         if (fr.tilt < 1.0) {
-          // a tread: the cream shelf, with a shadow line at its back edge (under the riser)
-          x.fillStyle = '#e9e0c8';
+          // A TREAD: a light oak shelf. The real cabinet's steps are varnished wood, not the
+          // cream they used to be painted here - grain running across the shelf, a shadow where
+          // the riser lands on it, and a lit front lip so the step's edge reads in perspective.
+          x.fillStyle = '#b98a4e';
           x.fillRect(0, top, W, bot - top);
-          x.fillStyle = 'rgba(0,0,0,0.20)';
-          x.fillRect(0, top, W, 5);
+          x.globalAlpha = 0.14;
+          for (let k = 0; k < 26; k++) {
+            x.fillStyle = k % 2 ? '#6d451c' : '#e0bd85';
+            const gy = top + ((k * 0.371 + 0.05) % 1) * (bot - top);
+            x.fillRect(0, gy, W, 1 + (k % 3));
+          }
+          x.globalAlpha = 1;
+          x.fillStyle = 'rgba(0,0,0,0.30)';
+          x.fillRect(0, top, W, 7);
+          x.fillStyle = 'rgba(255,242,214,0.32)';
+          x.fillRect(0, bot - 5, W, 5);
         } else {
-          // a riser: blue panel with a fixed pseudo-scatter of stars (i-hashed, no rng)
-          x.fillStyle = L.face;
+          // A RISER: the blue star panel each row of baskets hangs on, lit from above (the
+          // fixed pseudo-scatter is i-hashed, no rng).
+          const g = x.createLinearGradient(0, top, 0, bot);
+          g.addColorStop(0, '#3d8bf5');
+          g.addColorStop(1, L.face);
+          x.fillStyle = g;
           x.fillRect(0, top, W, bot - top);
-          x.fillStyle = '#ffd23f';
-          for (let k = 0; k < 7; k++, si++) {
+          x.fillStyle = '#ffdf52';
+          for (let k = 0; k < 11; k++, si++) {
             const su = ((si * 0.383 + 0.13) % 1) * G.boardW - G.boardW / 2;
-            const sv = fr.v0 + 0.03 + ((si * 0.617 + 0.07) % 1) * (fr.v1 - fr.v0 - 0.06);
-            star(U(su), V(sv), 8 + (si % 3) * 4, (si * 0.7) % (Math.PI * 2));
+            const sv = fr.v0 + 0.04 + ((si * 0.617 + 0.07) % 1) * (fr.v1 - fr.v0 - 0.08);
+            star(U(su), V(sv), 12 + (si % 4) * 5, (si * 0.7) % (Math.PI * 2));
           }
         }
       }
@@ -1074,6 +1129,7 @@ export class Renderer {
     }
 
     const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
   }
@@ -1095,6 +1151,7 @@ export class Renderer {
     for (let i = 1; i < 6; i++) x.fillRect((i / 6) * W - 1, 0, 2, Hpx);
     x.globalAlpha = 1;
     const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }
 
@@ -1224,6 +1281,46 @@ export class Renderer {
    *  down to a small bottom ring, and struts between. Cosmetic beyond the rim: the solid the
    *  ball hits is machine.js's collar boxes at the rim's radius; the taper sits inside them,
    *  like a real basket's mesh inside its mounting ring. */
+  _mergedTubes(segs, defR, sides = 5) {
+    const tmpl = new THREE.CylinderGeometry(1, 1, 1, sides, 1, true);
+    const bp = tmpl.attributes.position.array;
+    const bn = tmpl.attributes.normal.array;
+    const bi = tmpl.index.array;
+    const pos = [];
+    const nor = [];
+    const idx = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    const m = new THREE.Matrix4();
+    const nm = new THREE.Matrix3();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    for (const seg of segs) {
+      const a = seg[0];
+      const b = seg[1];
+      const r = seg[2] || defR;
+      const d = new THREE.Vector3().subVectors(b, a);
+      const len = d.length();
+      if (len < 1e-6) continue;
+      q.setFromUnitVectors(up, d.clone().divideScalar(len));
+      m.compose(a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(r, len, r));
+      nm.getNormalMatrix(m);
+      const off = pos.length / 3;
+      for (let i = 0; i < bp.length; i += 3) {
+        v.set(bp[i], bp[i + 1], bp[i + 2]).applyMatrix4(m);
+        pos.push(v.x, v.y, v.z);
+        v.set(bn[i], bn[i + 1], bn[i + 2]).applyMatrix3(nm).normalize();
+        nor.push(v.x, v.y, v.z);
+      }
+      for (let i = 0; i < bi.length; i++) idx.push(bi[i] + off);
+    }
+    tmpl.dispose();
+    const geo = this._track(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setIndex(idx);
+    return geo;
+  }
+
   _wireBasket(H, color) {
     const G = this.G;
     const R = H.r + G.collarThick / 2;
@@ -1236,31 +1333,60 @@ export class Renderer {
     const hAt = (phi) => (H.lipLow
       ? H.collarH * (lowFrac + (1 - lowFrac) * (Math.sin(phi) + 1) / 2)
       : H.collarH);
-    const Rbot = R * 0.66;
-    const ring = (radius, yAt, wire) => {
-      const pts = [];
-      for (let i = 0; i < 24; i++) {
-        const p = (i / 24) * Math.PI * 2;
-        pts.push(new THREE.Vector3(Math.cos(p) * radius, yAt(p), Math.sin(p) * radius));
-      }
-      const curve = new THREE.CatmullRomCurve3(pts, true);
-      const m = new THREE.Mesh(this._track(new THREE.TubeGeometry(curve, 48, wire, 6, true)), mat);
-      m.castShadow = true;
-      g.add(m);
-    };
-    ring(R, hAt, 0.0065);                            // the rim, on the physics profile
-    ring(Rbot, () => 0.006, 0.0035);                 // the basket's small bottom ring
-    for (let i = 0; i < 8; i++) {                    // tapered struts between them
-      const a = (i / 8) * Math.PI * 2;
-      const top = new THREE.Vector3(Math.cos(a) * R, hAt(a), Math.sin(a) * R);
-      const bot = new THREE.Vector3(Math.cos(a) * Rbot, 0.006, Math.sin(a) * Rbot);
-      const d = bot.clone().sub(top);
-      const s = new THREE.Mesh(this._track(new THREE.CylinderGeometry(0.003, 0.003, d.length(), 5)), mat);
-      s.position.copy(top.clone().add(bot).multiplyScalar(0.5));
-      s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
-      s.castShadow = true;
-      g.add(s);
+    const Rbot = R * 0.58;                           // the reference basket's taper
+    const yBot = 0.005;
+    const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
+
+    // THE ORANGE WIRE, in ONE geometry. GUARD: every basket used to be ~20 separate tube meshes,
+    // so nine of them already put ~180 draw calls on the board before a single net strand
+    // existed. The shape is unchanged; the strands are merged into one buffer per colour, so a
+    // full netted basket costs two draw calls instead of fifty.
+    const orange = [];
+    const NR = 32;
+    for (let i = 0; i < NR; i++) {
+      const p0 = (i / NR) * Math.PI * 2;
+      const p1 = ((i + 1) / NR) * Math.PI * 2;
+      orange.push([P(R, hAt(p0), p0), P(R, hAt(p1), p1), 0.0062]);   // the rim, ON the physics profile
+      orange.push([P(Rbot, yBot, p0), P(Rbot, yBot, p1), 0.0034]);   // the small bottom ring
     }
+    for (let i = 0; i < 10; i++) {                                   // tapered ribs between them
+      const a = (i / 10) * Math.PI * 2;
+      orange.push([P(R, hAt(a), a), P(Rbot, yBot, a), 0.0030]);
+    }
+    const wire = new THREE.Mesh(this._mergedTubes(orange, 0.003), mat);
+    wire.castShadow = true;
+    g.add(wire);
+
+    // THE WHITE NET: two crossing bands of strands from the rim down to the base, plus the ring
+    // where they meet - the thing that makes a hoop read as a basket rather than a wire ring.
+    const netMat = this._mat({
+      color: 0xf7f2e4, roughness: 0.9, emissive: 0xf7f2e4, emissiveIntensity: 0.5,
+    });
+    const rings = [
+      { r: R, y: (phi) => hAt(phi) - 0.004 },
+      { r: R * 0.78, y: (phi) => hAt(phi) * 0.46 },
+      { r: Rbot * 1.04, y: () => yBot + 0.004 },
+    ];
+    const net = [];
+    const S = 9;
+    for (let b = 0; b < rings.length - 1; b++) {
+      const hi = rings[b];
+      const lo = rings[b + 1];
+      for (let i = 0; i < S; i++) {
+        const a = (i / S) * Math.PI * 2 + b * 0.35;
+        for (const dir of [1, -1]) {
+          const a2 = a + dir * ((Math.PI * 2) / S) * 0.6;
+          net.push([P(hi.r, hi.y(a), a), P(lo.r, lo.y(a2), a2)]);
+        }
+      }
+    }
+    for (let i = 0; i < 28; i++) {                                   // the crossing ring
+      const p0 = (i / 28) * Math.PI * 2;
+      const p1 = ((i + 1) / 28) * Math.PI * 2;
+      net.push([P(rings[1].r, rings[1].y(p0), p0), P(rings[1].r, rings[1].y(p1), p1)]);
+    }
+    g.add(new THREE.Mesh(this._mergedTubes(net, 0.0027), netMat));
+
     this._onFace(g, H.u, H.v, 0);
     this.scene.add(g);
   }
@@ -1279,24 +1405,43 @@ export class Renderer {
     const riser = frames[ti + 1];
     if (!riser || riser.tilt < 1.0) return;          // no riser behind (flat board) - no card
 
-    const CARD_W = 0.135;
-    const CARD_H = Math.min(0.16, (riser.v1 - riser.v0) - 0.04);
-    const cw = 340, ch = Math.round(cw * (CARD_H / CARD_W));
+    // A HALF DOME, the shape the real cabinet's boards are cut to: flat along the bottom, a
+    // semicircle over the top. The centre board is the wide one, exactly as on the machine - it
+    // carries the only three-digit value and it is the one you are meant to aim at.
+    const RIM = H.r + G.collarThick / 2;
+    const BR = Math.min(RIM * (lab.length > 2 ? 1.46 : 1.32), (riser.v1 - riser.v0) - 0.03);
+
+    const cw = 420;
+    const ch = Math.round(cw / 2);
     const c = this._canvas(cw, ch);
     const x = c.getContext('2d');
-    x.fillStyle = '#f2efe6';
+    x.fillStyle = '#f4f1e7';
     x.fillRect(0, 0, cw, ch);
-    // the red-bordered value box
-    const bw = cw * 0.64, bh = ch * 0.56;
-    const bx = (cw - bw) / 2, by = ch * 0.12;
+    // The dome's own outline, traced on the arc the geometry is cut to. Canvas y grows DOWN and
+    // the texture's v = 0 is the shape's flat edge, so the flat edge is the canvas's bottom row
+    // and the apex is its top.
+    x.lineWidth = Math.max(4, ch * 0.045);
+    x.strokeStyle = '#3a3630';
+    x.beginPath();
+    x.arc(cw / 2, ch, cw / 2 - x.lineWidth / 2, Math.PI, 0);
+    x.stroke();
+    x.beginPath();
+    x.moveTo(0, ch - x.lineWidth / 2);
+    x.lineTo(cw, ch - x.lineWidth / 2);
+    x.stroke();
+    // the orange-bordered value box, sitting 42% of the radius up from the flat edge
+    const bw = cw * 0.50;
+    const bh = ch * 0.44;
+    const bx = (cw - bw) / 2;
+    const by = ch * 0.58 - bh / 2;
     x.fillStyle = '#ffffff';
     x.fillRect(bx, by, bw, bh);
-    x.lineWidth = Math.max(3, ch * 0.05);
-    x.strokeStyle = '#d3392e';
+    x.lineWidth = Math.max(4, ch * 0.05);
+    x.strokeStyle = '#e87b2a';
     x.strokeRect(bx, by, bw, bh);
-    let fontPx = bh * 0.8;
+    let fontPx = bh * 0.78;
     x.font = `800 ${fontPx}px system-ui, sans-serif`;
-    fontPx *= Math.min(1, (bw * 0.82) / x.measureText(lab).width);
+    fontPx *= Math.min(1, (bw * 0.80) / x.measureText(lab).width);
     x.font = `800 ${fontPx}px system-ui, sans-serif`;
     x.textAlign = 'center';
     x.textBaseline = 'middle';
@@ -1307,12 +1452,31 @@ export class Renderer {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
 
-    const mesh = new THREE.Mesh(
-      this._track(new THREE.PlaneGeometry(CARD_W, CARD_H)),
-      this._mat({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.5 }),
-    );
-    const vCard = riser.v0 + 0.02 + CARD_H / 2;
-    const p = this.M.faceToWorld(H.u, vCard, 0.008);
+    // A REAL SLAB, not a decal: the board stands proud of the riser so its edge catches light.
+    // ExtrudeGeometry writes group 0 for the two caps and group 1 for the rim, so the painted
+    // face and the plain edge take different materials - and the UVs are re-derived from the
+    // shape's own bounds, because the default generator hands back raw model coordinates.
+    const shape = new THREE.Shape();
+    shape.absarc(0, 0, BR, 0, Math.PI, false);
+    shape.closePath();
+    const geo = this._track(new THREE.ExtrudeGeometry(shape, { depth: 0.012, bevelEnabled: false }));
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      uv.setXY(i, (pos.getX(i) + BR) / (2 * BR), pos.getY(i) / BR);
+    }
+    uv.needsUpdate = true;
+
+    const face = this._mat({
+      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.5,
+    });
+    const edge = this._mat({ color: 0xd8d2c2, roughness: 0.6 });
+    const mesh = new THREE.Mesh(geo, [face, edge]);
+    // The flat edge sits just above THE RIM, not the tread: the basket stands 0.109 m in front
+    // of the riser and its rim reaches collarH up, so a board bolted at the riser's foot has its
+    // number hidden behind the hoop from the play camera. The real cabinet mounts it clear of the
+    // rim for the same reason.
+    const p = this.M.faceToWorld(H.u, riser.v0 + (H.collarH || 0) + 0.018, 0.006);
     mesh.position.set(p[0], p[1], p[2]);
     mesh.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -(Math.PI / 2 - riser.tilt));
     mesh.castShadow = false;

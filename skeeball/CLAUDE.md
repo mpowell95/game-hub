@@ -569,12 +569,40 @@ ball dropping in out of the air - no new physics, no new capture rule.
   goals shape as POPONGO's own unlock; `ui.js` needed nothing.
 - **The basketball dressing** (Matt, 2026-08-22: "cups instead of basketball baskets... shooting
   a basketball"): the board entry carries `dressing: 'basketball'` and `render.js` branches on
-  it three ways - the ball is an orange BASKETBALL (seamed texture in `_buildBall`, orange tray
-  balls), each collar is drawn as an orange WIRE basket (`_wireBasket`: rim torus at the physics
-  collar's exact top, mid ring, ten struts - all on the collar wall's surface, so the rim seen
-  is the rim hit), and each value rides a white mini BACKBOARD with a red-boxed number on the
-  hoop's up-slope side (`_hoopBackboard`; the part above the rim is cosmetic-only). Physics is
-  untouched by all three; THE CLASSIC and POPONGO render exactly as before (no `dressing`).
+  it - the ball is an orange BASKETBALL (seamed texture in `_buildBall`, orange tray balls),
+  each collar is drawn as an orange WIRE basket, and each value rides a white BACKBOARD above
+  its hoop. Physics is untouched by all of it; THE CLASSIC and POPONGO render exactly as before
+  (no `dressing`).
+- **The face was rebuilt to Claude Design's 3D rendering on 2026-08-23** (Matt handed over the
+  published design plus its exported project, in `skeeball/Machines/Machine 4 - Basketball/
+  Basketball Skeeball Arcade Cabinet/`, alongside the real-cabinet photo it was modelled on).
+  PAINT AND MESHES ONLY - no `geom`, no `machine.js`, no `physics.js`, so the sweep numbers
+  below still stand. Six changes, each matched to the reference:
+  - **The baskets have NETS.** `_wireBasket` draws the design's basket: the orange rim on the
+    physics profile, a small bottom ring, ten tapered ribs, and two crossing bands of white
+    strands meeting at a ring - the thing that makes a hoop read as a basket. GUARD: every
+    strand is merged into ONE buffer per colour by `_mergedTubes`, so a full netted basket is
+    two draw calls. The old ring-per-tube version was already ~180 draw calls for nine baskets
+    before a single strand existed; do not go back to one mesh per wire.
+  - **The backboards are HALF DOMES** with an orange-bordered value box, extruded 12 mm proud of
+    the riser (`_hoopBackboard`), not the flat red-boxed card they were. They are bolted clear
+    of THE RIM, not at the riser's foot: the basket stands 0.75X in front of the riser, so a
+    board mounted at the foot has its number hidden behind the hoop from the play camera.
+  - **The treads are OAK, not cream**, with grain across the shelf, a shadow where the riser
+    lands and a lit front lip; the risers are a saturated blue with a bigger star scatter.
+  - **Red NEON frames the play window**: a tube up the front edge of each side wall and back
+    along its top, traced from `machine.js`'s own `railProfile` so it follows the wall. Emissive
+    plus one additive halo sleeve - no light source.
+  - **The kick panel is the YELLOW ball-return apron**, paint only; its solid and its bounce are
+    machine.js's and are untouched.
+  - **`_paintField` and `_paintLane` now declare `SRGBColorSpace`.** This was the measured
+    reason the riser blue rendered slate however far the paint was pushed: without it the sRGB
+    hex on the canvas is handed to the shader as LINEAR albedo, which lifts and desaturates
+    every colour on the board. It also darkened the lane, so basketball's `look.wood` was
+    lifted to compensate (`woodDark` is unchanged, so the side walls stay the cabinet's black).
+    THE CLASSIC and POPONGO have their own copies of both painters and were deliberately NOT
+    changed - the same bug is in theirs, and fixing it there re-tunes two machines nobody asked
+    about.
 - **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
   spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
   up the face barely moves but the peak is higher and the descent steeper, dropping the ball
