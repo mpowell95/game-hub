@@ -563,6 +563,31 @@ boards.js entry:
 The column re-derives cleanly: h20 stays the anchor, H and I fix the 30 and 10, rule 2's
 outer tangency chains the 40 and 50. All of it is exact assertions in test.js section 0 now.
 
+### The corner plates: small, dead, and placed by measurement (2026-08-24)
+
+Matt: "something very small... behind the 100 ring that would NEVER be touched unless a ball
+was stuck or would otherwise have gotten stuck" - the gussets' successor, after the bare
+corners still produced perches (ball seated on the 100 ring's rim against rail and wall;
+solver contacts measured as ringSeg + rail + backboard, centre at y = yB + 0.10).
+
+Each is one thin DEAD plate (part 'cove' -> matDead: kills motion, never flings) cutting
+diagonally across the wall/rail corner in plan, spanning ONLY the measured perch band
+(yB + 0.03 .. yB + 0.19). Three iterations, each measured against a stash-isolated no-plate
+baseline grid:
+
+1. A face-level wedge behind the ring: zero effect (the perch is 26cm above the face).
+2. The same plan footprint at a mis-derived height (yB + 0.23 .. 0.43): missed the perch,
+   KILLED the four bank-100s - the accidental control experiment proving the banks transit the
+   corner HIGH and the perch sits LOW, so height separates what plan-position cannot.
+3. The shipped version, at the measured band: 0 emergencies of 861 (from 7), the 100's scoring
+   cells 9 vs the baseline's 8 (every bank alive, one full-aim corner shot improved), and all
+   9 changed cells confined to the aim 0.3-0.5 corner-slam corridor - six dead corner zeros
+   now roll home for 10s. Straight throws byte-identical.
+
+The lesson worth keeping: place corner furniture by MEASURED ball positions and contact sets,
+never by face-coordinate reasoning - both wrong iterations came from deriving heights instead
+of reading them off the parked ball.
+
 ### The corner gussets came out the same day (2026-08-23, Matt's call, measured tradeoff)
 
 Matt on the plates: "I don't like the diagonal pieces above the 100... make something smaller

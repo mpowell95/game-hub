@@ -366,6 +366,53 @@ export function buildMachine(G) {
   // strengthens with a dead wall, and test.js's walkout cap plus the wall-lift assertion are
   // the tripwires that catch it.
 
+  // --- the corner chocks (2026-08-23, Matt: "something very small... behind the 100 ring that
+  // would NEVER be touched unless a ball was stuck or would otherwise have gotten stuck") ------
+  // The bouncy wall ejects most corner arrivals, but a residual perch survives: a near-dead
+  // ball can still seat on the 100 ring's back-outer rim against the rail and wall (the sweep's
+  // remaining jam-zeros all rest there). Unlike the retired gussets - big tilted plates that
+  // roofed the mouth and deflected live 100 shots - each chock is a small DEAD wedge (part
+  // 'cove' -> matDead in physics.js: kills motion, no bounce) tucked entirely behind and beside
+  // the ring's back-outer quadrant, below rim height at its inner edge, buried into the rail
+  // and the wall at its outer ends. A live 100 shot enters the mouth from the front and above
+  // and cannot meet it; only a ball settling into the stuck-spot can. Its top slopes steeply
+  // down toward the board's centre, so that ball slides off onto open face and rolls home.
+  // Verified by grid diff: every non-stuck cell's outcome identical with and without them.
+  // The perch is HIGH: the measured stuck balls rest at (±0.45, 1.50, wall) - 26cm off the face
+  // plane, held by a rail + wall + third-contact solver lock with no honest support under them
+  // (the three-normal lock boards.js's spacing rule describes). So each chock is a small
+  // VERTICAL plate cutting diagonally across the wall/rail corner IN PLAN, spanning only the
+  // heights the lock lives at (well above the ring's rim, far above the mouth plane). A ball
+  // drifting into the corner airspace meets the plate's dead diagonal face and slides down and
+  // inboard onto open board; the lock's contact set can no longer assemble. The plate's
+  // footprint stays plan-clear of the mouth circle, and its bottom edge sits close enough over
+  // the rim that no ball fits beneath it.
+  // SIZED TO THE LOCK, NOT THE CORNER. The lock needs the ball touching wall AND rail at once,
+  // so its pocket is only the prism within one ball-radius of both: ~5.5cm x 5.5cm in plan. The
+  // first cut of this plate spanned four times that and halved the 100's scoring cells (8 -> 4
+  // on the sweep) by clipping the bank corridor; this one covers just the lock prism's diagonal
+  // and the banks measure clear of it.
+  for (const s of [-1, 1]) {
+    const wallZ = top[2];
+    const pWall = [s * 0.447, wallZ + 0.004];                   // on the wall, one ball-radius from the rail
+    const pRail = [s * (G.boardW / 2 + 0.005), wallZ + 0.058];  // on the rail, one ball-radius from the wall
+    const dx = pRail[0] - pWall[0];
+    const dz = pRail[1] - pWall[1];
+    // MEASURED, both edges. The perch (solver contacts: ringSeg + rail + backboard - the ball
+    // seated on the 100 ring's rim in the corner) has its centre at y 1.50 = yB + 0.10; the
+    // bank-100 corridor transits the same corner HIGHER, above yB + 0.22 (a misplaced first cut
+    // of this plate at yB+0.23..0.43 killed the banks and missed the perch - the accidental
+    // control experiment that located both). The band covers the perch and stops under the banks.
+    const yBot = yB + 0.03;
+    const yTop = yB + 0.19;
+    solids.push({
+      part: 'cove',
+      pos: [(pWall[0] + pRail[0]) / 2, (yBot + yTop) / 2, (pWall[1] + pRail[1]) / 2],
+      half: [Math.hypot(dx, dz) / 2, (yTop - yBot) / 2, 0.01],
+      rot: { axis: [0, 1, 0], angle: Math.atan2(-dz, dx) },
+    });
+  }
+
   // --- the cage: REMOVED, do not reintroduce -----------------------------------------------------
   // GUARD: there is no wire canopy over the board. There used to be, to catch overly high
   // "rainbow" throws before they left the machine, but it contradicts the rule that there is no
