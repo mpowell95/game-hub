@@ -148,6 +148,13 @@ const valueOf = (power, aim) => {
     && r40.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps
     && r20.topOut < (Gt.holes.c50.v - Gt.holes.c50.r) + eps,
     'a ring top crosses a mouth edge');
+  // A ring wall stands ringH tall perpendicular to the 45-degree face, so its top rim leans
+  // exactly ringH toward the player in plan view. The 10 arc's outer base must sit at least
+  // ringH up the face or the rim OVERHANGS the board's front lip - which shipped on 2026-08-23
+  // (Matt's screenshot: the arc visibly hanging past the edge) because nothing asserted it.
+  ok("the 10 arc's leaning rim stays over the board (base >= ringH up the face)",
+    (Gt.holes.h10.v - Gt.holes.h10.r - t2) >= Gt.ringH - eps,
+    `arc outer base at ${(Gt.holes.h10.v - Gt.holes.h10.r - t2).toFixed(4)}, ringH ${Gt.ringH.toFixed(4)}`);
 }
 
 // --- 1. determinism ---------------------------------------------------------------------------
