@@ -436,11 +436,11 @@ export const BOARDS = [
     // glow, white nets. `glow`/`net` are required by look.complete but currently painted by
     // nothing.
     look: {
-      wood: '#2b2b30',
+      wood: '#5b5b66',
       woodDark: '#191a1e',
       cabinet: '#f2c526',
       cabinetEdge: '#1a1a1a',
-      face: '#1f4e9c',
+      face: '#2560bd',
       faceEdge: '#143564',
       ring: '#e8541f',
       ringLip: '#ffd23f',
