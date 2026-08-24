@@ -1675,114 +1675,139 @@ export class Renderer {
     if (old && old.dispose) old.dispose();
   }
 
-  /** THE SIGN: "HOT SHOT: BRICK CITY", painted. GUARD: this is the MACHINE's marquee, not the
-   *  game's - nothing about "Skeeball" belongs on it, and the two names on it ARE the whole sign
-   *  (no tagline, no extra copy). Matched to the design Matt handed over; the hexes and what each
-   *  one paints are in skeeball/MACHINE-BRICKCITY.md.
+  /** THE SIGN, painted to the design Matt handed over (the `.sign` block of the Brick City
+   *  Marquee artifact) rather than to anything invented here. GUARD: this is the MACHINE's
+   *  marquee - nothing about "Skeeball" belongs on it, and the two names ARE the whole sign (no
+   *  tagline, no extra copy). Every value below is the artifact's own; skeeball/MACHINE-BRICKCITY.md
+   *  carries the CSS-to-canvas mapping.
+   *
+   *    .sign      background linear-gradient(180deg, #A33427 0%, #6E2018 100%)
+   *               border 6px solid #FFC53D, radius 3px
+   *               box-shadow 0 0 0 5px #0D0E12 - the dark edge ring OUTSIDE the bulb border
+   *    ::before   coursing: horizontals rgba(0,0,0,.34) every 26px,
+   *               verticals rgba(0,0,0,.28) every 58px, the whole layer at opacity .5
+   *    ::after    the same verticals offset (29px, 13px) and masked to ALTERNATE 26px courses,
+   *               which is what offsets every other course by half a brick
+   *    .bulb      11px round #FFC53D, glow 0 0 10px 2px rgba(255,197,61,.75),
+   *               inset 0 -2px 3px rgba(160,105,0,.5) - lit glass, shaded UNDERNEATH
+   *    .bulbs     12 per bar, space-between, one bar above the lettering and one below
+   *    .hot       #FFC53D, shadows 0 0 2px rgba(255,197,61,.9), 0 0 18px rgba(255,107,44,.85),
+   *               0 0 48px rgba(255,107,44,.45), 0 5px 0 #6E2018
+   *    .plate     #14161B, border 3px solid #EDE6DA, radius 2px, box-shadow 0 6px 0 rgba(0,0,0,.45)
+   *    .city      #EDE6DA with the ball-through-a-rim glyph at its left
+   *
+   *  THE ONE THING THAT IS NOT THE ARTIFACT'S is the aspect ratio: the mock's sign is about 2.3:1
+   *  and this cabinet's marquee panel is 4.06:1, so the sign is drawn WIDER. Nothing is redesigned
+   *  by that - the ring, the border, the bulb bars, the lettering and the plate are all the
+   *  artifact's; the brick simply runs further to each side.
    *
    *  EVERY LETTER IS A PATH, not a font. The design sets both names in Bungee, and a webfont is
    *  not something this game may fetch (no build step, works offline, and a font that has not
-   *  loaded yet paints the sign in whatever the browser falls back to). `_signWord` below draws a
-   *  heavy condensed alphabet - flat terminals, one stem weight - out of lines and arcs, so the
-   *  sign looks the same on every device with nothing to load and nothing to wait for. Only the
-   *  ten letters these two names need exist; add more when a machine needs them.
+   *  loaded yet paints the sign in whatever the browser falls back to). `_signWord` / `_signGlyph`
+   *  draw a heavy condensed alphabet out of lines and curves; only the ten letters these two
+   *  names need exist.
    *
-   *  NO CHASE ANIMATION. The design offers one and calls it a suggestion. The bulbs here are
-   *  PAINTED INTO the texture, so a chase would mean repainting a 1024x252 canvas and re-uploading
-   *  it every frame, for something the player sees at the very top of the screen while watching a
-   *  ball. The seven REAL bulb meshes above this panel already flash (they answer `celebrate()`),
-   *  which is where the movement belongs. If a chase is ever wanted, it belongs on those meshes,
-   *  and REDUCED (top of this file) is the gate it needs.
+   *  NO CHASE ANIMATION. The artifact's own notes call its chase "a suggestion, not a requirement".
+   *  These bulbs are painted INTO the texture, so a chase would mean repainting a 1024x252 canvas
+   *  and re-uploading it every frame. The seven REAL bulb meshes above this panel already flash on
+   *  celebrate(), which is where movement belongs; REDUCED (top of this file) is the
+   *  prefers-reduced-motion gate it would need.
    */
   _paintMarquee() {
     const W = 1024;
-    const H = 252;                        // 4.06:1, matching the panel mesh (boardW + 0.22) x 0.3
+    const H = 252;                      // 4.06:1, the panel mesh's own ratio
     const c = this._canvas(W, H);
     const x = c.getContext('2d');
     const L = this.look;
 
-    // 1. The brick panel: a vertical fade from the face brick to the deep brick in shadow.
-    const g = x.createLinearGradient(0, 0, 0, H);
+    const RING = 6;                     // .sign's box-shadow 0 0 0 5px #0D0E12
+    const BORDER = 9;                   // .sign's 6px solid var(--bulb)
+    const IN = RING + BORDER;
+    const bx = IN, by = IN, bw = W - IN * 2, bh = H - IN * 2;
+
+    // 1. Dark edge ring, then the bulb-yellow border, then the brick panel inside it.
+    x.fillStyle = '#0d0e12';
+    x.fillRect(0, 0, W, H);
+    x.fillStyle = L.bulb;
+    this._roundRect(x, RING, RING, W - RING * 2, H - RING * 2, 3);
+    x.fill();
+
+    const g = x.createLinearGradient(0, by, 0, by + bh);
     g.addColorStop(0, L.marquee);
     g.addColorStop(1, '#6e2018');
+    x.save();
+    this._roundRect(x, bx, by, bw, bh, 2);
+    x.clip();
     x.fillStyle = g;
-    x.fillRect(0, 0, W, H);
+    x.fillRect(bx, by, bw, bh);
 
-    // 2. The coursing. Mortar is drawn, not textured: courses 26px apart, verticals 58px, and
-    //    every OTHER course offset half a brick - which is what makes it read as brickwork
-    //    rather than as a grid.
+    // 2. The coursing, at the artifact's numbers and its .5 layer opacity.
     const COURSE = 26;
     const BRICK = 58;
+    x.globalAlpha = 0.5;
     x.lineWidth = 1;
-    for (let row = 0, y = 0; y <= H; row++, y += COURSE) {
+    for (let row = 0, y = by; y <= by + bh; row++, y += COURSE) {
       x.strokeStyle = 'rgba(0,0,0,0.34)';
       x.beginPath();
-      x.moveTo(0, y + 0.5);
-      x.lineTo(W, y + 0.5);
+      x.moveTo(bx, y + 0.5);
+      x.lineTo(bx + bw, y + 0.5);
       x.stroke();
       x.strokeStyle = 'rgba(0,0,0,0.28)';
-      const off = row % 2 ? BRICK / 2 : 0;
-      for (let bx = off; bx <= W; bx += BRICK) {
+      const off = row % 2 ? BRICK / 2 : 0;          // the ::after's half-brick shift
+      for (let vx = bx + off; vx <= bx + bw; vx += BRICK) {
         x.beginPath();
-        x.moveTo(bx + 0.5, y);
-        x.lineTo(bx + 0.5, Math.min(H, y + COURSE));
+        x.moveTo(vx + 0.5, y);
+        x.lineTo(vx + 0.5, Math.min(by + bh, y + COURSE));
         x.stroke();
       }
     }
+    x.globalAlpha = 1;
+    x.restore();
 
-    // 3. The bulb bars, top and bottom edge.
-    this._signBulbs(x, W, 17, L.bulb);
-    this._signBulbs(x, W, H - 17, L.bulb);
+    // 3. The two bulb bars.
+    this._signBulbs(x, bx + 8, bx + bw - 8, by + 13, L.bulb);
+    this._signBulbs(x, bx + 8, bx + bw - 8, by + bh - 13, L.bulb);
 
-    // 4. HOT SHOT, with the ember glow behind it. Drawn four times, back to front: a hard drop
-    //    shadow in the deep brick, two ember halos (wide and soft, then tight and hot), then the
-    //    letters themselves in bulb yellow.
-    // HOT SHOT gives up some size so BRICK CITY can have some. Looked at in the real 3D scene at
-    // 393px (VISUAL-PROCESS.md), the first balance - HOT SHOT at 88 over a 38-cap plate - left
-    // the plate a dark bar with unreadable text at play distance, which is the one thing Matt
-    // said to fix in the SIGN rather than the camera.
-    const capH = 74;
+    // 4. HOT SHOT, with the ember stack the artifact puts behind it.
+    const capH = 78;
     const stem = Math.round(capH * 0.21);
-    const hotY = 30;
-    const hotW = this._signWidth('HOT SHOT', capH);
-    const hotX = (W - hotW) / 2;
+    const hotY = 42;
+    const hotX = (W - this._signWidth('HOT SHOT', capH)) / 2;
     x.lineCap = 'butt';
     x.lineJoin = 'miter';
-
     x.save();
-    x.translate(0, 5);
+    x.translate(0, 4);                                            // 0 5px 0 var(--brick-deep)
     this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, '#6e2018', 0, null);
     x.restore();
-    this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 48, L.glow);
-    this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 18, L.glow);
+    this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 48, 'rgba(255,107,44,0.45)');
+    this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 18, 'rgba(255,107,44,0.85)');
+    this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 2, 'rgba(255,197,61,0.9)');
     this._signWord(x, 'HOT SHOT', hotX, hotY, capH, stem, L.marqueeText, 0, null);
 
-    // 5. The BRICK CITY plate: chalk on asphalt, with the ball-through-a-rim glyph at its left.
-    //    CONTRAST IS WHY IT IS DARK - brick red under a yellow bulb bar is a low-contrast pair,
-    //    and the plate gives this name somewhere to sit without competing with the glow above it.
-    const cityCap = 46;
+    // 5. The BRICK CITY plate. Chalk on asphalt because brick red under a yellow bulb bar is a
+    //    low-contrast pair, and this name needs somewhere the glow above is not competing with
+    //    (the artifact's own note).
+    const cityCap = 40;
     const cityStem = Math.round(cityCap * 0.21);
     const cityW = this._signWidth('BRICK CITY', cityCap);
-    const glyphW = 62;
+    const glyphW = 58;
     const padX = 24;
     const gap = 18;
     const plateW = padX * 2 + glyphW + gap + cityW;
-    const plateH = 86;
+    const plateH = 74;
     const plateX = Math.round((W - plateW) / 2);
-    const plateY = 128;
+    const plateY = 132;
 
-    x.save();
-    x.fillStyle = 'rgba(0,0,0,0.45)';
-    this._roundRect(x, plateX, plateY + 6, plateW, plateH, 3);
+    x.fillStyle = 'rgba(0,0,0,0.45)';                             // 0 6px 0 rgba(0,0,0,.45)
+    this._roundRect(x, plateX, plateY + 6, plateW, plateH, 2);
     x.fill();
     x.fillStyle = '#14161b';
-    this._roundRect(x, plateX, plateY, plateW, plateH, 3);
+    this._roundRect(x, plateX, plateY, plateW, plateH, 2);
     x.fill();
     x.lineWidth = 3;
     x.strokeStyle = L.net;
     this._roundRect(x, plateX + 1.5, plateY + 1.5, plateW - 3, plateH - 3, 2);
     x.stroke();
-    x.restore();
 
     this._signRimGlyph(x, plateX + padX, plateY + (plateH - glyphW) / 2, glyphW, L.glow, L.net);
     this._signWord(x, 'BRICK CITY', plateX + padX + glyphW + gap,
@@ -1790,32 +1815,38 @@ export class Renderer {
 
     const tex = new THREE.CanvasTexture(c);
     // Declared for the same measured reason _paintField and _paintLane declare it: without it the
-    // sRGB hex on this canvas is handed to the shader as LINEAR albedo, which lifts and
-    // desaturates every colour - the brick goes pink and the chalk plate goes grey.
+    // sRGB hex on this canvas reaches the shader as LINEAR albedo, which lifts and desaturates
+    // everything - the brick goes pink and the chalk plate goes grey.
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     return tex;
   }
 
-  /** One bar of bulbs across the sign, centred on `cy`. */
-  _signBulbs(x, W, cy, color) {
-    const N = 16;
-    const r = 5.5;
+  /** One bar of 12 bulbs, space-between from x0 to x1, centred on cy. */
+  _signBulbs(x, x0, x1, cy, color) {
+    const N = 12;
+    const r = 5.5;                                                // .bulb is 11px across
     for (let i = 0; i < N; i++) {
-      const cx = (W / N) * (i + 0.5);
+      const cx = x0 + r + ((x1 - x0 - r * 2) * i) / (N - 1);
       x.save();
-      x.shadowColor = color;
+      x.shadowColor = 'rgba(255,197,61,0.75)';                    // 0 0 10px 2px
       x.shadowBlur = 10;
       x.fillStyle = color;
       x.beginPath();
       x.arc(cx, cy, r, 0, Math.PI * 2);
       x.fill();
+      x.fill();                                                   // twice, for the 2px spread
       x.restore();
-      // The lit dome, so a bulb reads as glass rather than as a dot.
-      x.fillStyle = 'rgba(255,255,255,0.55)';
+      // inset 0 -2px 3px rgba(160,105,0,.5): the shading sits UNDER the glass, not on top of it.
+      x.save();
       x.beginPath();
-      x.arc(cx - r * 0.28, cy - r * 0.3, r * 0.34, 0, Math.PI * 2);
+      x.arc(cx, cy, r, 0, Math.PI * 2);
+      x.clip();
+      x.fillStyle = 'rgba(160,105,0,0.5)';
+      x.beginPath();
+      x.arc(cx, cy + r * 0.75, r * 0.85, 0, Math.PI * 2);
       x.fill();
+      x.restore();
     }
   }
 
