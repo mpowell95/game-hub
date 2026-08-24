@@ -628,12 +628,40 @@ ball dropping in out of the air - no new physics, no new capture rule.
   machine only: (1) the ball is THE CLASSIC's now (`ballR: X * 0.375`, 0.75X diameter) - the
   0.28X ping-pong ball read too small; (2) the EIGHT standard hoops are unchanged, and ONLY the
   100 is smaller (`topC` r `X * 0.35417`, 0.7083X across - the design's tighter top-centre rim,
-  4.25in vs 6in), the one shot meant to be hard; (3) the back wall gets THE CLASSIC's rebound
+  4.25in vs 6in), the one shot meant to be hard **(SUPERSEDED twice the same day - see the two
+  bullets below; every rim on this machine moved after this was written)**; (3) the back wall
+  gets THE CLASSIC's rebound
   (basketball/physics.js's own `matBack`, `backRest 0.60 / backFric 0`) so a hard throw that used
   to bank high off the wall and drop into the 100 comes back at the player instead. The bounce is
   on the BACKBOARD ONLY - the tall wall ABOVE the top step; the riser directly behind the 100 is
   a normal surface, so a direct arc still drops in. Kick panel stays on `matDead`. Sweep after:
   emergencies 1.0%, all mouths reachable.
+- **Every rim resized, twice, 2026-08-24 - and MATT ALWAYS SPEAKS IN DIAMETER.** He said it in
+  those words: *"i have never given you a measurement that is defined by r. I've never mentioned
+  r. EVER. I have ONLY ever stated measurement in diameter."* `r` in `geom.holes` is a RADIUS, so
+  a diameter he gives is ALWAYS halved before it goes in the table. Getting this backwards
+  doubles every basket, which is exactly what happened:
+  - **The 6in build (`58a3f0c`, shipped).** All eight standard rims went 4in -> 6in and the 100
+    went 2.83in -> 4.25in. Matt, on seeing it: *"They're massive now. The ball can't fit between
+    them at all."* He was right, and it is arithmetic, not taste: the columns are 2.07X apart =
+    8.28in centre to centre, the collar wall adds 0.33in to each outer diameter, so 6in rims
+    leave a **1.95in gap against a 3in ball**. The ball could not pass between two columns at
+    all - it could only sit on the rims or drop in one.
+  - **The fix (this pass).** Bottom and middle rows **4.25in**, the top row's two 50s **4in**,
+    the top row's 100 **3.5in**. Gaps are back to 3.70in (lower rows) and 4.20in (top row),
+    both above the 3in ball.
+  - **The check any future rim change owes:** `gap = 8.28in - (rim diameter + 0.33in)`, and it
+    must stay above 3in. A rim change that skips it can silently wall the face off again.
+- **DEPTH IS PER ROW, NOT PER BASKET (Matt, 2026-08-24):** *"all the hoops on a row should be the
+  same height, regardless of the diameter of the basket"*, and *"the top of the backboard should
+  never go higher than the wall the basket is on"*. So `collarH` is one value per row - the top
+  row runs a single depth across its 4in and 3.5in baskets - set at ~2/3 of the SMALLEST diameter
+  on the row (bottom/middle `X * 0.708`, top `X * 0.583`), which keeps every basket shallower
+  than it is wide. The second half was a real bug in `basketball/render.js`: `_hoopBackboard`
+  capped the card's dome radius against the WHOLE riser, but the mount adds `collarH + 0.018`
+  underneath it, so the card's top ran past the riser (0.315 m of card on a 0.28 m riser at 6in
+  rims). The cap now subtracts the mount. Only `machines/basketball/` was touched - Brick City
+  has its own engine copy and was left alone.
 - **The ramp is STEEPER than the classic's, deliberately** - final segment 70 degrees (the
   spec's section 5 maximum) in six even steps, so the throw reads as a basketball SHOT: range
   up the face barely moves but the peak is higher and the descent steeper, dropping the ball

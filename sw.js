@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v463';
+const CACHE = 'game-hub-v464';
 
 const ASSETS = [
   './',
@@ -515,7 +515,7 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': '3fab597c30',
   './skeeball/js/goals.js': '30e45dff4f',
-  './skeeball/js/boards.js': '612155397a',
+  './skeeball/js/boards.js': 'b1700ae84b',
   './skeeball/js/engines.js': '1196c74b9f',
   './skeeball/js/machines/classic/physics.js': 'a4a15b7180',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
@@ -525,7 +525,7 @@ const REST_MANIFEST = {
   './skeeball/js/machines/popongo/render.js': 'cc46cacf6d',
   './skeeball/js/machines/basketball/physics.js': 'f34b1cd4a5',
   './skeeball/js/machines/basketball/machine.js': '8d92102fe5',
-  './skeeball/js/machines/basketball/render.js': 'f2bf907466',
+  './skeeball/js/machines/basketball/render.js': '99d75810c4',
   './skeeball/js/machines/brickcity/physics.js': 'c6daf90433',
   './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
   './skeeball/js/machines/brickcity/render.js': 'e2b407217b',
