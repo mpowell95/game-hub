@@ -20,7 +20,7 @@ export function buildMachine(G) {
   const lipZ = -(G.laneLen + G.humpLen + G.troughLen);
   const lipY = G.boardLipY;
 
-  // THE PLAYING SURFACE AS SEGMENTS. One tilted segment (every board until BASKET FEVER's
+  // THE PLAYING SURFACE AS SEGMENTS. One tilted segment (every board until HOT SHOT's
   // stepped rebuild, 2026-08-22), or `G.steps` - an ordered list of { len, tilt } segments
   // forming a STAIRCASE (near-flat treads alternating with vertical risers, Matt's real-machine
   // footage). Face coordinates are UNROLLED along the whole surface: v runs up tread 1, up

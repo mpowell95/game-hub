@@ -150,7 +150,7 @@ export class SkeeballGame {
     this.throws.push({ value, hole: outcome.hole, earned: value });
     // GUARD: hundreds/fifties are THE CLASSIC's counters (the global sk.hundreds feeds its
     // five-100s goal, and Matt ruled machines "completely distinct", 2026-08-22). A cup board
-    // paying 100 or 50 (BASKET FEVER's top row) counts those landings in its own per-board
+    // paying 100 or 50 (HOT SHOT's top row) counts those landings in its own per-board
     // record (sk.boards.<id>), never here.
     if (!this.board.cups) {
       if (value === 100) this.hundreds += 1;
@@ -199,7 +199,7 @@ export class SkeeballGame {
       bestThrow: this.bestThrow,
       colorsHit: colors.size,
       // GUARD: need > 1, not > 0. sk.colorSweeps is a GLOBAL counter and POPONGO's colors goal
-      // reads it as "swept ever"; on a one-color cup board (BASKET FEVER's all-orange hoops)
+      // reads it as "swept ever"; on a one-color cup board (HOT SHOT's all-orange hoops)
       // every scoring rack would trivially "sweep" and falsely complete that goal. A sweep of
       // one color is not a sweep.
       colorSweep: need > 1 && colors.size >= need ? 1 : 0,
