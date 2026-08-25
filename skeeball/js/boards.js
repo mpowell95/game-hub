@@ -970,6 +970,237 @@ export const BOARDS = [
         + '(mouth/ball ~2.0). Sweep re-run: every cup still scores, zero emergencies.',
     },
   },
+
+  {
+    // FROZEN FROM FIRST PLAY (THE LAW rule 5). The marquee says HOT SHOT: RUNAWAY; the id is
+    // `runaway` and stays `runaway` however the sign is repainted later.
+    id: 'runaway',
+    name: 'HOT SHOT: RUNAWAY',
+    taglineKey: 'board_runaway_tag',
+    // HOT SHOT's render dressing - hoops, nets, backboards, a basketball for a ball. This is that
+    // cabinet's third sibling. render.js branches on this string; physics never reads it.
+    dressing: 'basketball',
+    // Complete POPONGO's three objectives (js/goals.js). The chain is
+    // THE CLASSIC -> HOT SHOT -> BRICK CITY -> POPONGO -> RUNAWAY, so this machine goes on the
+    // end and takes nothing away from anyone: unlocks are an additive set in js/arcade-scores.js
+    // and nothing anywhere removes one (THE LAW rule 2).
+    unlock: { board: 'popongo', goals: true },
+    // ADMIN ONLY at ship, same as its three siblings while Matt plays it. ui.js never unlocks it
+    // by play and shows it locked to non-dev profiles; the dev bypass still opens it. NOTHING is
+    // deleted by this flag, and it comes off from the in-app Admin page (js/admin-ui.js) with no
+    // commit and no deploy - `adminOnly` is only the code DEFAULT now.
+    adminOnly: true,
+
+    // HOT SHOT's cabinet and court blue, kept so the family reads as a family. What changes is
+    // the sign and the light: a cyan-on-indigo marquee and a cyan glow, for the one machine on
+    // the floor with something moving on it.
+    look: {
+      wood: '#5b5b66',
+      woodDark: '#191a1e',
+      cabinet: '#f2c526',
+      cabinetEdge: '#1a1a1a',
+      face: '#2560bd',
+      faceEdge: '#143564',
+      ring: '#e8541f',
+      ringLip: '#39e0d0',      // also paints the two end stops on the mover's track (render.js)
+      value: '#ffffff',
+      pocket: '#0a1418',       // the mouth interior, and the track groove
+      marquee: '#241a4d',
+      marqueeText: '#39e0d0',
+      bulb: '#39e0d0',
+      glow: '#39e0d0',
+      wall: '#141018',
+      net: '#f2f2f2',
+    },
+
+    // THE ARRANGEMENT LAYER, HOT SHOT's pattern: on a collar board the cup is what carries a
+    // printed value onto the basket (render.js _hoopBackboard), so these are "cups" even though
+    // nothing here is rearrangeable. THE LAW rule 5: a cup's value is frozen to its id forever.
+    //
+    // SEVEN baskets, not nine - the top row is ONE. Rows 1 and 2 are HOT SHOT's exactly, values
+    // included; the whole difference between the two machines is what is standing on row 3.
+    cups: {
+      r10a: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
+      r10b: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
+      r20: { value: 20, color: '#e8541f', ink: '#ffffff', label: '20' },
+      r30a: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
+      r30b: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
+      r60: { value: 60, color: '#e8541f', ink: '#ffffff', label: '60' },
+      // THE RUNAWAY. One colour for the whole face is deliberate and is also the colourblind-safe
+      // answer here: this basket is told apart by MOVING, which is the strongest non-colour
+      // indicator there is, and by being the only thing on its shelf - never by a hue.
+      r100: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
+    },
+    arrangement: {
+      lowL: 'r10a', lowC: 'r20', lowR: 'r10b',
+      midL: 'r30a', midC: 'r60', midR: 'r30b',
+      topC: 'r100',
+    },
+
+    geom: {
+      // Part 1 of MACHINE-SPEC.md, carried from HOT SHOT verbatim: the ball, the lane, the hump,
+      // the 70-degree launch, the three-tier staircase, the board dimensions, the back wall, the
+      // speeds, the aim and the whole `mat` block.
+      ballR: X * 0.375,
+      ballMass: 0.18,
+      laneLen: 1.40,
+      laneW: X * 4.875,
+      bedThick: 0.06,
+      humpLen: 0.42,
+      humpAngles: [0.2036, 0.4072, 0.6109, 0.8145, 1.0181, 1.2217],
+      troughLen: 0.225,
+      troughDepth: 0.15,
+      boardLipY: 0.42,
+      boardTilt: 0.8726,       // nominal: `steps` replaces the single tilted face
+      boardW: 1.00,
+      steps: [
+        { len: X * 2.0625, tilt: 0.10 },       // tread 1
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 1
+        { len: X * 2.0625, tilt: 0.10 },       // tread 2
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 2
+        { len: X * 2.0625, tilt: 0.10 },       // tread 3
+        { len: X * 1.925, tilt: Math.PI / 2 }, // riser 3 (the back wall rises behind it)
+      ],
+      boardLen: X * 11.9625,
+      railH: 0.10,
+      laneRailH: 0.05,
+      backboardH: 0.85,
+      cupSegments: 14,
+      collarThick: 0.012,
+      ringH: X,
+      ringThick: RING_T,
+      lipLowFrac: 0.50,
+      captureDrop: 0.35,
+
+      // ============================================================================
+      // THE MOVING BASKET - the only reason this machine exists.
+      // ============================================================================
+      //
+      // The top row's 100 slides left and right across tread 3 for the whole rack, on a sine:
+      //
+      //     u(t) = amp * sin(2*PI*t / period)
+      //
+      // `t` is the RACK CLOCK (js/game.js's `machineT`). The maths lives in
+      // machines/runaway/machine.js (moverU / moverVel / holeU) and NOWHERE ELSE - physics.js
+      // drives the collision bodies with it, render.js draws with it, and the spec test measures
+      // the travel envelope with it.
+      //
+      // AMPLITUDE 2.07X is not a taste call. It is bounded by two rules, and BOTH have to be
+      // re-derived if the amplitude, the mouth or the collar thickness ever change - THE MOUTH
+      // IS AN INPUT TO THIS ARITHMETIC, which is exactly what the 4in change below proved:
+      //
+      //   1. MACHINE-SPEC.md section 12's collar-near-a-wall rule. A curved collar converging on
+      //      a flat rail makes a pinch that three-contact-locks the solver; the measured cost on
+      //      POPONGO's first draft was 12% of ALL throws walked out by the watchdog. The rule is
+      //      a wall gap wider than 0.78X. At the ends of this travel the gap is
+      //      0.500 - 2.07X - (0.5X + 0.0825X) = 0.7850X (3.14 in against the 3.00 in ball).
+      //      A MOVING COLLAR IS THE WORST POSSIBLE CASE FOR THAT RULE - a static one merely sits
+      //      in a pinch, this one can drive a ball into it.
+      //
+      //      GUARD: THAT MARGIN IS NOW 0.005X, essentially nothing. It was 0.0675X at the 3.5in
+      //      mouth this machine shipped with; widening the 100 to 4in (Matt, 2026-08-25) spent
+      //      almost all of it, because a wider mouth grows the collar's OUTER diameter against a
+      //      rail that did not move. It was kept at 2.07X only because the sweep MEASURED zero
+      //      watchdog walkouts at the new size - the rule is a threshold, the sweep is the
+      //      evidence. ANY further widening of this mouth, or any increase in collarThick, goes
+      //      under the rule and MUST be paid for by shrinking the amplitude:
+      //          amp <= 0.500 - (r + collarThick) - 0.78X
+      //      Do not simply raise the mouth and re-run; work out the amplitude first.
+      //   2. holes.inside: |u| + holeR at the extreme is 2.07X + 0.75X = 2.82X, inside the
+      //      3.4375X half-width. test-skeeball-machine-spec.mjs tests the ENVELOPE, not the
+      //      resting u, precisely so this cannot be got wrong quietly. Unaffected by the mouth,
+      //      because it is measured against the board's nominal holeR, not this basket's rim.
+      //
+      // It also lands somewhere useful by luck: +/-2.07X is exactly where HOT SHOT's topL and
+      // topR sit. The 100 sweeps between the two positions that machine already proves are
+      // clean-capturable, which is why this face needed no reachability fight.
+      //
+      // PERIOD 7 s is Matt's number (2026-08-24, "~7s round trip"). What it means in play: peak
+      // speed is 2*PI*amp/7 = 0.270 m/s, and a top-row throw is in the air about 0.45 s from
+      // release (measured, sweep-mover.mjs), so the basket travels up to ~20% of its stroke
+      // while the ball is flying. That is the whole skill of the machine - you are throwing at
+      // where it is going to be, not at where it is - and it is a LEAD, not a lottery.
+      //
+      // A SINE, NOT A TRIANGLE: a triangle reverses instantaneously at each end, which hands any
+      // ball touching the rim a step change in wall velocity out of nowhere. Phase 0 is the
+      // CENTRE of the travel moving right, so every rack starts with the basket dead centre.
+      mover: { hole: 'topC', amp: X * 2.07, period: 7.0 },
+
+      // THE FACE. Rows 1 and 2 are HOT SHOT's, unchanged down to the last digit: same columns
+      // (u = -2.07X / 0 / +2.07X), same rows (v = 1.3125X / 5.3X unrolled), same 4.25in mouths,
+      // same per-row depths. Row 3 is ONE basket - the moving 100 - and it is the only thing on
+      // this face that is not HOT SHOT's.
+      //
+      // THE 100 IS 4.00 in ACROSS (r = 0.5X), MATT'S NUMBER, 2026-08-25: "increase the diameter
+      // of the 100 to 4"". It shipped at 3.50 in (0.4375X), HOT SHOT's 100 exactly, and 4in is
+      // its own size now - HOT SHOT's and BRICK CITY's 100s were deliberately NOT touched. Still
+      // the tightest opening on this machine (rows 1 and 2 are 4.25in) and 1.33x the 3.00 in
+      // ball. See the amplitude note above for what this cost at the ends of the travel; the
+      // depth is unchanged at the top row's 0.875X, per Matt's rule that a row runs one depth
+      // across whatever diameters are on it.
+      //
+      // `topC`'s `u` here is the CENTRE OF THE SWEEP, not a fixed position. Everything that reads
+      // a hole's u at simulation time goes through machine.js's holeU(); everything that reads it
+      // as data (the spec test, the tile generator) has to account for `mover` or it is measuring
+      // a basket that is only ever there for an instant twice per period.
+      //
+      // NO topL / topR. That is what makes the amplitude possible: a mover sharing its shelf with
+      // two static baskets would violate holes.spacing (1.30X centre to centre) at every step of
+      // its travel, and there is no amplitude worth having that does not. The top row of this
+      // machine is one basket by construction, not by preference.
+      holeR: X * 0.75,
+      holes: {
+        lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        lowC: { u: 0, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        lowR: { u: X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
+        midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
+      },
+
+      minSpeed: 2.60,
+      maxSpeed: 6.60,
+      aimMax: 0.45,
+
+      // HOT SHOT's materials, verbatim and for its reasons: slick treads so a miss rolls off the
+      // front edge, a near-frictionless back wall (a fast ball sliding down a GRIPPING wall gets
+      // flicked upward by the friction impulse), deadened side-wall tops, and the classic's
+      // rebound on the backboard so a hard throw comes back at the player.
+      mat: {
+        boardFric: 0.12,
+        boardRest: 0.05,
+        woodFric: 0.30,
+        woodRest: 0.22,
+        wallFric: 0.04,
+        wallRest: 0.15,
+        ringFric: 0.06,
+        ringRest: 0.30,
+        ring100Fric: 0.06,
+        ring100Rest: 0.30,
+        deadFric: 0.06,
+        deadRest: 0.32,
+        backFric: 0,
+        backRest: 0.60,
+      },
+    },
+
+    specWaivers: {
+      'ball.ratio': 'The ball is HOT SHOT\'s, which is THE CLASSIC\'s measured ball: ballR '
+        + '0.375X, so 0.75X (3.00 in) across against the spec sheet\'s 0.350X. This machine is '
+        + 'HOT SHOT\'s sibling and shares its cabinet, ramp and ball; only the top row differs. '
+        + 'The spec sheet\'s ratio predates Matt\'s tape-measure pass, 2026-08-23.',
+      'board.dims': 'HOT SHOT\'s staircase, carried over unchanged (Matt ordered it 2026-08-22, '
+        + '"3 stairs" instead of one tilted face). boardLen is the UNROLLED length of three '
+        + 'treads plus three risers (11.9625X), which necessarily exceeds the flat-board 10.5X '
+        + 'ceiling, and boardTilt is nominal because `steps` replaces the single face.',
+      'holes.uniform': 'HOT SHOT\'s mouth ladder, carried over: the six baskets on rows 1 and 2 '
+        + 'are 4.25in and the moving 100 on row 3 is 4in, which are Matt\'s numbers for those '
+        + 'baskets on that cabinet (2026-08-24, second pass). A uniform holeR cannot express a '
+        + 'face where mouth size IS the difficulty marker, and this machine changes what is on '
+        + 'the top row, not how big any basket is.',
+    },
+  },
 ];
 
 // THE STAMPING LOOP: on a cup board, a hole's value IS the value of the cup sitting in its slot.

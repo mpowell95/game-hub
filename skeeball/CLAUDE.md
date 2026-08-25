@@ -899,9 +899,9 @@ writers skip a machine in testing, that nothing reads `b.adminOnly` directly any
 ## The unlock chain
 
 ```
-THE CLASSIC  ->  HOT SHOT  ->  HOT SHOT: BRICK CITY  ->  POPONGO
- (always open)   (classic's     (hot shot's             (brick city's
-                  objectives)    objectives)             objectives)
+THE CLASSIC -> HOT SHOT -> HOT SHOT: BRICK CITY -> POPONGO -> HOT SHOT: RUNAWAY
+(always open)  (classic's   (hot shot's            (brick      (popongo's
+                objectives)  objectives)            city's)      objectives)
 ```
 
 Every step is a goals unlock (`{ board, goals: true }`), applied by `ui.js`'s `_earnedUnlocks`
@@ -911,11 +911,62 @@ the chain, so **change the chain here and in `boards.js`, and nowhere else.** (T
 sections named a parent that had already gone stale by the time this was written, which is why
 they now point here instead.)
 
+RUNAWAY was added on the END on 2026-08-25, which moved nobody's unlock and could not have: a
+machine appended to the chain changes no existing entry's `unlock`.
+
 BRICK CITY was inserted between HOT SHOT and POPONGO on 2026-08-24, which moved POPONGO's unlock
 one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.unlocked` is an
 additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
 argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
 devices that hold POPONGO and asserts they still do.
+## The moving basket (2026-08-25, HOT SHOT: RUNAWAY)
+
+**The first moving part in this repo.** Everything on every earlier machine's face is a static
+rigid body placed once at build time. `runaway`'s top row is one 100 basket that slides across
+tread 3 all rack long. Full build record, the measured numbers and the open questions:
+`skeeball/MACHINE-RUNAWAY.md`. The four things a session touching ANY machine needs from here:
+
+- **The motion is three pure functions in `js/machines/runaway/machine.js`** - `moverU(G, t)`,
+  `moverVel(G, t)`, `holeU(G, id, t)`. No state, no clock, no `Date.now()`. `physics.js` drives
+  the bodies with them, `render.js` draws with them, the spec test measures the travel envelope
+  with them. **Never write a second sine.** A copy anywhere else is a drawn basket drifting off
+  its own collision wall.
+- **A moving collar is a KINEMATIC body, never a static one whose position you rewrite.**
+  cannon-es zeroes a kinematic body's inverse solve mass (the ball cannot shove the basket) and
+  still feeds its velocity to the contact solver (a struck rim gives a real impulse). A static
+  body has velocity 0 by definition, so moving one teleports a wall through the ball with the
+  solver believing nothing moved - penetration, then an explosive push-out. Set position AND
+  velocity every substep: position is authoritative so drift cannot accumulate, velocity is what
+  the solver reads.
+- **Capture against a moving mouth is measured RELATIVE TO THE MOUTH, and latches on commit.**
+  Skip the relative velocity and a ball sitting still on the tread reads zero speed across a
+  mouth driving over it and is swallowed on contact - a magnet, which section 9 of the spec bans.
+  Skip the latch and a basket that slides on after capture re-scores a clean 100 as a gutter ball
+  halfway down its own drop.
+- **`js/game.js`'s `machineT` is the ONE clock and it must stay the one clock.** Every throw
+  builds its own cannon world and two balls can be in the air at once, so two live sims plus the
+  renderer are three independent things that each need to know where the basket is. They agree
+  only because all three are pure functions of that number. It is still a pure file: it
+  accumulates the `dt` its caller hands `update()` and never reads a clock, which is what keeps
+  a machine with a moving part deterministic.
+
+**Reachability on a machine with a mover needs a THIRD AXIS.** The same (power, aim) lands
+somewhere different depending on where the basket was at release, so `skeeball/js/test.js`'s
+41x21 (power x aim) grid measures one arbitrary frozen phase and will call the moving hole
+unreachable or trivial at random. `node sweep-mover.mjs runaway` walks power x aim x phase and is
+the tool to re-run after ANY change to that face, the amplitude, the period or the materials.
+
+**A moving basket needs its shelf to itself.** `holes.spacing`'s 1.30X would be violated at
+nearly every step of any travel worth having if a static basket shared the row. That is why
+RUNAWAY's top row is one basket - a constraint, not a preference.
+
+**NOTHING LYING FLAT ON THE TOP SHELF CAN BE SEEN.** Found while drawing RUNAWAY's mover rail: the
+camera stands behind the ball, so tread 3 is the furthest surface on the machine and the middle
+row's riser occludes it outright. A painted groove along the travel was correctly placed and
+completely invisible - in near-black AND in a lit accent, so it was geometry, not contrast. Only
+furniture with HEIGHT reads up there (the two end-stop posts do). Applies to any machine on this
+staircase, not just this one: if you are about to paint something on tread 3, don't.
+
 ## Testing racks, and voided scores (2026-08-24)
 
 Two changes that exist because THE CLASSIC and BASKET FEVER both handed out impossible scores while

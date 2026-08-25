@@ -37,11 +37,18 @@ import * as brickcityPhysics from './machines/brickcity/physics.js';
 import { buildMachine as brickcityBuildMachine } from './machines/brickcity/machine.js';
 import { Renderer as BrickcityRenderer } from './machines/brickcity/render.js';
 
+// HOT SHOT: RUNAWAY - the first machine in the repo with a MOVING PART. Its copy of the three
+// files is the only one that knows what a mover is; the other four are untouched by it.
+import * as runawayPhysics from './machines/runaway/physics.js';
+import { buildMachine as runawayBuildMachine } from './machines/runaway/machine.js';
+import { Renderer as RunawayRenderer } from './machines/runaway/render.js';
+
 const ENGINES = {
   classic: { physics: classicPhysics, buildMachine: classicBuildMachine, Renderer: ClassicRenderer },
   popongo: { physics: popongoPhysics, buildMachine: popongoBuildMachine, Renderer: PopongoRenderer },
   basketball: { physics: basketballPhysics, buildMachine: basketballBuildMachine, Renderer: BasketballRenderer },
   brickcity: { physics: brickcityPhysics, buildMachine: brickcityBuildMachine, Renderer: BrickcityRenderer },
+  runaway: { physics: runawayPhysics, buildMachine: runawayBuildMachine, Renderer: RunawayRenderer },
 };
 
 /** Every machine that has an engine here. `boards.js` is the data; this is the code. */

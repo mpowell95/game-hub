@@ -3,6 +3,11 @@
 // `result()` is exactly the payload `recordSkeeball` in js/game-stats.js expects. The ui owns
 // WHEN to persist; this file owns WHAT is true.
 //
+// "No clock of its own" still holds, and `machineT` below is not a hole in it: this file never
+// READS a clock, it only accumulates the `dt` its caller already hands `update()`. Same dt in,
+// same machineT out - which is what keeps a machine with a moving part deterministic and
+// replayable. See "The moving basket" in skeeball/CLAUDE.md.
+//
 // `snapshot()` captures only the between-throws state, never a ball in flight - that is what
 // makes leaving mid-rack lossless (the hub contract's autosave/resume class, root CLAUDE.md).
 // `SkeeballGame.restore` rebuilds a game from one.
@@ -33,6 +38,19 @@ export class SkeeballGame {
     this.thrown = 0;
     this.over = false;
     this.events = [];
+    // THE RACK CLOCK, for machines with a MOVING PART (HOT SHOT: RUNAWAY's sliding 100 basket -
+    // skeeball/js/machines/runaway/). Seconds since this rack began, advanced ONLY by the dt
+    // handed to update().
+    //
+    // GUARD: ONE CLOCK, THREE READERS, AND THEY MUST BE THE SAME ONE. Every throw builds its own
+    // cannon world (physics.js) and more than one ball can be in the air at a time, so the two
+    // live sims and the renderer are three independent things that each need to know where the
+    // basket is. They agree because all three are pure functions of THIS number: throwBall hands
+    // it to startThrow as `t0`, and render() reads `game.machineT` directly. Give any of them a
+    // clock of its own and the basket the ball hits stops being the basket on screen.
+    //
+    // Zero on every other machine, which never reads it.
+    this.machineT = 0;
   }
 
   static restore(snap) {
@@ -53,6 +71,10 @@ export class SkeeballGame {
     g.hundreds = snap.hundreds | 0;
     g.fifties = snap.fifties | 0;
     g.bestThrow = snap.bestThrow | 0;
+    // The rack clock survives a resume so a moving basket picks up mid-sweep instead of jumping
+    // back to the centre of its travel. Absent in every save written before RUNAWAY existed,
+    // which reads as 0 - the centre - and is exactly right for a machine that has no mover.
+    g.machineT = Number.isFinite(snap.machineT) ? Math.max(0, snap.machineT) : 0;
     g.over = g.ballsUsed >= BALLS_PER_GAME;
     // A snapshot is only ever written with nothing in the air (ui.js checks), so every ball that
     // was thrown has also settled.
@@ -70,6 +92,9 @@ export class SkeeballGame {
       hundreds: this.hundreds,
       fifties: this.fifties,
       bestThrow: this.bestThrow,
+      // ADDITIVE, and read back defensively (see restore): an old save has no machineT and
+      // resumes at 0. THE LAW rule 5 - this adds a key, it repurposes nothing.
+      machineT: this.machineT,
     };
   }
 
@@ -89,13 +114,21 @@ export class SkeeballGame {
   /** Roll one ball. power 0..1, aim -1..1 (see physics.js). */
   throwBall(params) {
     if (!this.canThrow()) return false;
-    this.balls.push(engineFor(this.board.id).physics.startThrow(this.board, params));
+    // `t0` is the rack clock at the instant of release: where a machine with a moving part had
+    // its basket when this ball left the ramp. Ignored by every other machine's startThrow.
+    this.balls.push(engineFor(this.board.id).physics.startThrow(
+      this.board, { ...params, t0: this.machineT },
+    ));
     this.thrown += 1;
     this.events.push({ type: 'throw' });
     return true;
   }
 
   update(dt) {
+    // GUARD: BEFORE the early return, not after. The basket keeps sweeping while the player is
+    // standing there deciding - that is the whole game on a machine with a mover, and a clock
+    // that only ran while a ball was in the air would freeze the target between throws.
+    this.machineT += Number.isFinite(dt) ? Math.max(0, dt) : 0;
     if (!this.balls.length) return;
     // A COPY: _settle removes from this.balls while we are walking it.
     for (const ball of this.balls.slice()) {
