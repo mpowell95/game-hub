@@ -276,11 +276,18 @@ export const BOARDS = [
     // Complete THE CLASSIC's three objectives (js/goals.js). unlocksEarned() ignores it (no
     // `score` field) and ui.js applies it.
     unlock: { board: 'classic', goals: true },
-    // ADMIN ONLY right now (Matt, 2026-08-24, still tuning this machine): ui.js never unlocks it
-    // by play and shows it locked to non-dev profiles; the dev bypass still opens it. NOTHING is
-    // deleted - a player who already earned it keeps sk.unlocked.basketball, and access returns
-    // the moment this flag comes off. Drop this line to release the machine.
-    adminOnly: true,
+    // LIVE AND UNLOCKABLE since 2026-08-25 (Matt: "leave as is and go live"). No `adminOnly`, so
+    // the code default is no longer Testing: the family earns this machine the normal way, off
+    // THE CLASSIC's three objectives, via the unlock above. The Admin page can still override it
+    // either way - to Open for everyone, or back to Testing - with no commit and no deploy.
+    //
+    // ITS HISTORY CAME WITH IT, KNOWINGLY. The board id `basketball` is frozen and predates the
+    // rename from BASKET FEVER, so every play ever thrown on this machine still counts: at
+    // release, MattyIce held 28 plays / 9,480 points / best 710 and King of Games 18 / 5,120 /
+    // 540, which is why Single game reads complete for one of them from the first load. Matt was
+    // shown those numbers and chose to keep them rather than void them from the Admin page.
+    // Only `slots` starts clean - it began recording 2026-08-24 - so "every basket" is 0/9 for
+    // everyone.
 
     // Matched to the reference photos in skeeball/Machines/Machine 4 - Basketball/ (the real
     // cabinet, sold as Basket Fever): yellow-and-black cabinet, blue face, orange wire
