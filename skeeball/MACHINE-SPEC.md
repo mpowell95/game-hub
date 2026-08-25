@@ -602,12 +602,20 @@ respect as it did before this section existed.
 
 ```js
 geom: {
-  mover: { hole: 'topC', amp: X * 2.07, period: 7.0 },
+  mover: { hole: 'topC', amp: X * 2.07, period: 6.0 },
 }
 ```
 
 One hole, an amplitude in face-u, and a period in seconds. The hole's own `u` stays the CENTRE of
 the sweep. `u(t) = amp * sin(2*PI*t / period)`, so phase 0 is the centre moving right.
+
+**Pick the period from how much of the stroke the basket covers during a throw's flight**, not
+from how it looks standing still. That fraction is `2*PI*amp/period * flightTime / (2*amp)`, and
+it is how much lead the shot demands. RUNAWAY runs ~24% (6 s against a measured 0.45 s flight).
+Under ~10% the mover is decoration; far above ~30% the lead stops being readable and becomes a
+guess. **The period does NOT feed the rail-gap arithmetic in section 27** - only the amplitude,
+the mouth and `collarThick` do - but changing it still requires a re-sweep, because reachability
+is a function of phase.
 
 **Use a sine, not a triangle.** A triangle reverses instantaneously at each end and hands any ball
 touching the rim a step change in wall velocity out of nowhere.

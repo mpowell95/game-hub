@@ -1091,16 +1091,24 @@ export const BOARDS = [
       // topR sit. The 100 sweeps between the two positions that machine already proves are
       // clean-capturable, which is why this face needed no reachability fight.
       //
-      // PERIOD 7 s is Matt's number (2026-08-24, "~7s round trip"). What it means in play: peak
-      // speed is 2*PI*amp/7 = 0.270 m/s, and a top-row throw is in the air about 0.45 s from
-      // release (measured, sweep-mover.mjs), so the basket travels up to ~20% of its stroke
-      // while the ball is flying. That is the whole skill of the machine - you are throwing at
-      // where it is going to be, not at where it is - and it is a LEAD, not a lottery.
+      // PERIOD 6 s is Matt's number (2026-08-25, "instead of 7s, make it 6s"). It shipped at 7 s,
+      // also his number ("~7s round trip", 2026-08-24). What it means in play: peak speed goes
+      // 0.270 -> 0.315 m/s (2*PI*amp/period), and a top-row throw is in the air about 0.45 s from
+      // release (measured, sweep-mover.mjs), so the basket now travels up to ~24% of its stroke
+      // while the ball is flying, against ~20% at 7 s. That is the whole skill of the machine -
+      // you are throwing at where it is going to be, not at where it is - and it is a LEAD, not a
+      // lottery.
+      //
+      // GUARD: THE PERIOD DOES NOT TOUCH THE RAIL-GAP ARITHMETIC ABOVE. Only the amplitude, the
+      // mouth and collarThick feed that; a faster sweep covers the same ground in less time. It
+      // DOES need a re-sweep though (MACHINE-SPEC section 28), because a faster kinematic wall
+      // meets the ball differently - and because reachability is a function of phase, which is
+      // now sampled over 6 s instead of 7.
       //
       // A SINE, NOT A TRIANGLE: a triangle reverses instantaneously at each end, which hands any
       // ball touching the rim a step change in wall velocity out of nowhere. Phase 0 is the
       // CENTRE of the travel moving right, so every rack starts with the basket dead centre.
-      mover: { hole: 'topC', amp: X * 2.07, period: 7.0 },
+      mover: { hole: 'topC', amp: X * 2.07, period: 6.0 },
 
       // THE FACE. Rows 1 and 2 are HOT SHOT's, unchanged down to the last digit: same columns
       // (u = -2.07X / 0 / +2.07X), same rows (v = 1.3125X / 5.3X unrolled), same 4.25in mouths,
