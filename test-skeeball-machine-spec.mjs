@@ -107,28 +107,51 @@ for (const board of BOARDS) {
   // --- 7 holes ------------------------------------------------------------------------------
   const holes = Object.entries(G.holes || {});
 
+  // A MOVING HOLE IS TESTED OVER ITS WHOLE TRAVEL, NOT AT ITS RESTING u.
+  //
+  // HOT SHOT: RUNAWAY's 100 basket slides across the face all rack long (its `geom.mover`, and
+  // machines/runaway/machine.js's moverU). Its written `u` is the CENTRE of the sweep - a
+  // position it occupies for an instant twice per period. Testing that number would let a
+  // machine pass `holes.inside` and `holes.spacing` at the one place the basket almost never
+  // is, while it spent the rest of the rack hanging over a rail. So a mover contributes its two
+  // EXTREMES to both rules, and a fixed hole contributes its single u to both, which is what
+  // every board that has no mover has always been checked against.
+  const mover = G.mover || null;
+  const uSpan = (id, h) => (mover && mover.hole === id
+    ? [h.u - mover.amp, h.u + mover.amp]
+    : [h.u]);
+
   const odd = holes.filter(([, h]) => Math.abs(h.r - G.holeR) > EPS).map(([id]) => id);
   rule(board, 'holes.uniform', odd.length === 0,
     `every hole must use holeR (${(G.holeR / X).toFixed(3)}X); these differ: ${odd.join(', ')}`);
 
-  const outside = holes.filter(([, h]) =>
-    Math.abs(h.u) + G.holeR > G.boardW / 2 + EPS
+  const outside = holes.filter(([id, h]) =>
+    uSpan(id, h).some((u) => Math.abs(u) + G.holeR > G.boardW / 2 + EPS)
     || h.v - G.holeR < -EPS
     || h.v + G.holeR > G.boardLen + EPS).map(([id]) => id);
   rule(board, 'holes.inside', outside.length === 0,
-    `hole centres must sit at least holeR from every face edge; too close: ${outside.join(', ')}`);
+    `hole centres must sit at least holeR from every face edge (a mover: at BOTH ends of its `
+    + `travel); too close: ${outside.join(', ')}`);
 
   const tooClose = [];
   for (let i = 0; i < holes.length; i++) {
     for (let k = i + 1; k < holes.length; k++) {
       const [idA, A] = holes[i];
       const [idB, B] = holes[k];
-      const d = Math.hypot(A.u - B.u, A.v - B.v) / X;
+      // WORST CASE ACROSS BOTH TRAVELS. With a mover in the pair this is the closest the two
+      // centres ever come during a rack, which is the only distance that means anything - a
+      // basket that clears its neighbour at the centre of its sweep and drives through it at the
+      // end is not a spaced face, it is a collision nobody measured.
+      let d = Infinity;
+      for (const ua of uSpan(idA, A)) {
+        for (const ub of uSpan(idB, B)) d = Math.min(d, Math.hypot(ua - ub, A.v - B.v) / X);
+      }
       if (d < 1.30 - 1e-3) tooClose.push(`${idA}-${idB} ${d.toFixed(3)}X`);
     }
   }
   rule(board, 'holes.spacing', tooClose.length === 0,
-    `hole centres must be at least 1.30X apart: ${tooClose.join(', ')}`);
+    `hole centres must be at least 1.30X apart, at the CLOSEST point of any travel: `
+    + `${tooClose.join(', ')}`);
 
   // A NEGATIVE VALUE IS A REAL VALUE (BRICK CITY's penalty row, 2026-08-24). This used to test
   // `h.value >= 0`, which read as "has a numeric value" but silently also banned penalty baskets,

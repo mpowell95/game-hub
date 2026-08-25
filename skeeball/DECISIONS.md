@@ -693,3 +693,73 @@ current power curve and machine feel. They replaced an earlier set of assertions
 different, retired scoring model (ball rolls to rest and scores by position, rather than falls
 through a hole) — when those two models disagree about what "correct" looks like, the test suite
 in code is authoritative, not this file.
+
+---
+
+## Moving parts
+
+<a id="moving-parts"></a>
+
+### Why the sweep is a KINEMATIC body and not a repositioned static one
+
+HOT SHOT: RUNAWAY's 100 basket slides across the face for the whole rack. The obvious
+implementation - keep the collar segments static and rewrite their `position.x` every step - is
+wrong, and it fails loudly rather than subtly.
+
+A cannon-es static body has velocity 0 **by definition**, and that zero is what the contact solver
+reads. Rewriting its position teleports the wall to a new place with the solver still believing
+nothing moved: a ball in the way ends up deeply penetrating the wall on the step after the jump,
+and the penetration is then resolved as an explosive push-out. A kinematic body is exactly the
+right primitive instead - `updateSolveMassProperties` zeroes its inverse solve mass, so the ball
+can never shove the basket, while `integrate` still moves it by its own velocity and the solver
+still sees that velocity, so a struck rim hands the ball a real impulse.
+
+Both are set every substep: position authoritatively (re-derived from the sine, so integration
+error cannot accumulate into the drawn basket and the collision one drifting apart) and velocity
+for the solver. Setting one without the other is wrong in both directions.
+
+### Why capture subtracts the mouth's own velocity
+
+Capture (see #hole-capture) asks whether the ball falls past the lip before it finishes crossing
+the mouth. That question only means anything in the mouth's frame.
+
+Measured against the BOARD instead, a ball sitting dead still on the tread has zero crossing speed,
+so `vFace * tDrop` is zero, so it drops in the instant a passing basket's mouth reaches it. The
+basket becomes a hoover that pays 100 for a ball nobody threw at it. That is the magnetism banned
+in MACHINE-SPEC.md section 9 and in `physics.js`'s section 5 guard, arriving through a door nobody
+was watching - so the subtraction is a correctness fix, not a tuning knob, and it must not be
+"simplified" back out.
+
+The mirror of it: once the ball is through the rim the mouth's position is LATCHED, because the
+ball is in the basket and travels with it. Re-measuring against a live `u` lets a basket that has
+slid on since capture re-score a clean 100 as a gutter ball partway down its own drop.
+
+### Why the amplitude does not reach the side rails
+
+Matt asked for "the left edge of the machine to the right"; the travel is +/-2.07X of a +/-3.4375X
+face. Section 12's collar-near-a-flat-wall rule is the binding constraint, not the face width: a
+curved collar converging on a flat rail forms a pinch that three-contact-locks the solver, and
+POPONGO's first draft measured 12% of ALL throws walked out by the watchdog, every one wedged
+there. The rule is a `0.78X` wall gap; 2.07X is the largest amplitude that clears it.
+
+**A moving collar is the worst possible case for that rule.** A static one merely sits in a pinch;
+this one can drive a ball into it under infinite solve mass. Measured outcome at 2.07X: zero
+walkouts in 1,848 throws and zero in a second 810-throw grid - the failure did not materialise,
+but the margin is why. Going wider means solving the pinch differently (a sloped outer collar face,
+a recessed rail pocket), not raising the number.
+
+### Why reachability grew a third axis
+
+A moving hole makes `(power, aim)` an incomplete description of a throw: the same swipe lands
+somewhere different depending on where the basket was at release. `skeeball/js/test.js`'s 41x21
+grid measures one frozen phase, and which phase it freezes is arbitrary.
+
+`sweep-mover.mjs` walks power x aim x PHASE, over a FULL period rather than a half - the sine is
+symmetric in position but not in direction, and a basket sweeping toward the ball is not the same
+shot as one sweeping away.
+
+It also re-taught the lesson the classic's corner 100s taught: **a coarse grid under-reports.** The
+21x11x8 run scored the moving 100 at four phases and never at the other four, which reads as "the
+shot does not exist at the ends of the travel". A dense probe at both of those extremes found it -
+4 of 861 cells at one end, 5 of 861 at the other, mirror-symmetric. A hole is not unreachable until
+a FINE sweep says so.

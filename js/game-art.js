@@ -565,30 +565,30 @@ export const GAME_ART = {
                <rect x="-6" y="13" width="37" height="10" fill="#241610"/>
                <path d="M-5 23 L30 23 L37 54 L-12 54 Z" fill="#7a4520"/>
                <g clip-path="url(#skb-l)" opacity="0.75">
-                 <path d="M-10.11 40.74 A 22.61 11.79 0 0 0 35.11 40.74" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
-                 <path d="M-10.11 39.11 A 22.61 11.79 0 0 0 35.11 39.11" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="12.5" cy="40.13" rx="15.47" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
-                 <ellipse cx="12.5" cy="38.5" rx="15.47" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="-1.89" cy="25.14" rx="3.38" ry="2.11" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="26.89" cy="25.14" rx="3.38" ry="2.11" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="12.5" cy="29.83" rx="4.27" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="12.5" cy="34.73" rx="4.88" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="12.5" cy="40.23" rx="5.96" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <path d="M-10.02 40.35 A 22.52 11.79 0 0 0 35.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M-10.02 38.72 A 22.52 11.79 0 0 0 35.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="12.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="12.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="-1.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="26.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
                </g>
                <path d="M-12 54 L37 54 L47 90 L-24 90 Z" fill="#5e3d1f"/>
                <rect x="127" y="7" width="41" height="6" rx="2" fill="#3a2416"/>
                <rect x="129" y="13" width="37" height="10" fill="#241610"/>
                <path d="M130 23 L165 23 L172 54 L123 54 Z" fill="#7a4520"/>
                <g clip-path="url(#skb-r)" opacity="0.75">
-                 <path d="M124.89 40.74 A 22.61 11.79 0 0 0 170.11 40.74" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
-                 <path d="M124.89 39.11 A 22.61 11.79 0 0 0 170.11 39.11" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="147.5" cy="40.13" rx="15.47" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
-                 <ellipse cx="147.5" cy="38.5" rx="15.47" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="133.11" cy="25.14" rx="3.38" ry="2.11" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="161.89" cy="25.14" rx="3.38" ry="2.11" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="147.5" cy="29.83" rx="4.27" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="147.5" cy="34.73" rx="4.88" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
-                 <ellipse cx="147.5" cy="40.23" rx="5.96" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <path d="M124.98 40.35 A 22.52 11.79 0 0 0 170.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M124.98 38.72 A 22.52 11.79 0 0 0 170.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="147.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="147.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="133.08" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="161.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
                </g>
                <path d="M123 54 L172 54 L184 90 L113 90 Z" fill="#5e3d1f"/>
              </g>
@@ -607,30 +607,30 @@ export const GAME_ART = {
              </g>
              <path d="M59 22 L101 22 L108 56 L52 56 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
              <g clip-path="url(#skb-face)">
-                 <path d="M53.71 41.46 A 26.29 12.93 0 0 0 106.29 41.46" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
-                 <path d="M53.71 39.67 A 26.29 12.93 0 0 0 106.29 39.67" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="80" cy="40.79" rx="18.01" ry="8.91" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
-                 <ellipse cx="80" cy="39" rx="18.01" ry="8.91" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="62.81" cy="27.63" rx="4.04" ry="2.31" fill="#ded7ca"/>
-                 <rect x="58.77" y="24.34" width="8.08" height="3.29" fill="#efe9dd"/>
-                 <ellipse cx="62.81" cy="24.34" rx="4.04" ry="2.31" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="62.81" cy="24.34" rx="2.34" ry="1.34" fill="#1a120c"/>
-                 <ellipse cx="97.19" cy="27.63" rx="4.04" ry="2.31" fill="#ded7ca"/>
-                 <rect x="93.15" y="24.34" width="8.08" height="3.29" fill="#efe9dd"/>
-                 <ellipse cx="97.19" cy="24.34" rx="4.04" ry="2.31" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="97.19" cy="24.34" rx="2.34" ry="1.34" fill="#1a120c"/>
-                 <ellipse cx="80" cy="32.78" rx="5.05" ry="2.76" fill="#ded7ca"/>
-                 <rect x="74.95" y="29.49" width="10.1" height="3.29" fill="#efe9dd"/>
-                 <ellipse cx="80" cy="29.49" rx="5.05" ry="2.76" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="80" cy="29.49" rx="2.93" ry="1.6" fill="#1a120c"/>
-                 <ellipse cx="80" cy="38.15" rx="5.73" ry="2.98" fill="#ded7ca"/>
-                 <rect x="74.27" y="34.86" width="11.46" height="3.29" fill="#efe9dd"/>
-                 <ellipse cx="80" cy="34.86" rx="5.73" ry="2.98" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="80" cy="34.86" rx="3.32" ry="1.73" fill="#1a120c"/>
-                 <ellipse cx="80" cy="44.19" rx="6.94" ry="3.43" fill="#ded7ca"/>
-                 <rect x="73.06" y="40.9" width="13.88" height="3.29" fill="#efe9dd"/>
-                 <ellipse cx="80" cy="40.9" rx="6.94" ry="3.43" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
-                 <ellipse cx="80" cy="40.9" rx="4.03" ry="1.99" fill="#1a120c"/>
+                 <path d="M53.8 41.02 A 26.2 12.93 0 0 0 106.2 41.02" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <path d="M53.8 39.23 A 26.2 12.93 0 0 0 106.2 39.23" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="39.76" rx="17.85" ry="8.91" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <ellipse cx="80" cy="37.97" rx="17.85" ry="8.91" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="59.13" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="62.78" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="97.22" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="93.57" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="97.22" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="97.22" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="80" cy="30.8" rx="4.96" ry="2.76" fill="#ded7ca"/>
+                 <rect x="75.04" y="27.51" width="9.92" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="27.51" rx="4.96" ry="2.76" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="27.51" rx="2.88" ry="1.6" fill="#1a120c"/>
+                 <ellipse cx="80" cy="36.91" rx="5.67" ry="2.98" fill="#ded7ca"/>
+                 <rect x="74.33" y="33.62" width="11.34" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="33.62" rx="5.67" ry="2.98" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="33.62" rx="3.29" ry="1.73" fill="#1a120c"/>
+                 <ellipse cx="80" cy="43.69" rx="6.91" ry="3.43" fill="#ded7ca"/>
+                 <rect x="73.09" y="40.4" width="13.82" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="40.4" rx="6.91" ry="3.43" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="40.4" rx="4.01" ry="1.99" fill="#1a120c"/>
              </g>
              <path d="M52 56 L108 56 L114 90 L46 90 Z" fill="#a86f38"/>
              <path d="M52 56 L46 90 L39 90 L47 56 Z" fill="#54301a"/>
