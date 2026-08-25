@@ -297,13 +297,18 @@ export const BOARDS = [
       ringLip: '#ffd23f',
       value: '#ffffff',
       pocket: '#0a0705',
-      // THE SIGN IS THE BOARD'S BLUE, exactly (Matt, 2026-08-25). It was #1e63b8 against a
-      // #2560bd face - close enough to look like a mistake rather than a choice.
-      marquee: '#2560bd',
+      // THE SIGN IS THE STAR PANEL'S BLUE (Matt, 2026-08-25). Not `face`: the risers the baskets
+      // hang on are a GRADIENT in render.js's _paintField, #3d8bf5 down to face, and the bright
+      // top is what the eye reads as "the blue with the stars". Matching `face` alone still left
+      // the sign darker than the board it sits over.
+      marquee: '#3d8bf5',
       marqueeText: '#ffd23f',
       bulb: '#ffd23f',
       glow: '#ff3b1f',
-      wall: '#161016',
+      // A DEEP NAVY, not the neutral near-black it was (#161016). The cabinet is blue and gold;
+      // a grey-black wall behind it read as a different room. This sits under the board's own
+      // blue family so the machine and its backdrop belong together.
+      wall: '#12203a',
       net: '#f2f2f2',
     },
 
