@@ -526,7 +526,12 @@ export class Renderer {
     const mTex = this._track(this._paintMarquee());
     const marquee = new THREE.Mesh(
       this._track(new THREE.BoxGeometry(G.boardW + 0.22, 0.3, 0.05)),
-      [side, side, side, side, this._mat({ map: mTex }), side],
+      // UNLIT ON PURPOSE. The sign is a vertical panel that catches almost no light in this
+      // scene, so as a lit material it rendered at rgb(30,44,67) against the rgb(67,100,150)
+      // that was painted - under half brightness - and Matt's 16-point gradient step collapsed
+      // to about 3, which reads as flat. MeshBasicMaterial ignores the lights, so the two hex
+      // values he specified are the two colours on screen. Measured both ways before changing it.
+      [side, side, side, side, new THREE.MeshBasicMaterial({ map: mTex }), side],
     );
     marquee.position.set(0, topY + G.backboardH + 0.02, M.faceToWorld(0, G.boardLen, 0)[2] - 0.02);
     this.scene.add(marquee);
@@ -1784,6 +1789,11 @@ export class Renderer {
     x.fillStyle = this.look.marqueeText;
     x.fillText(this.board.name, W / 2, H / 2 + 4);
     const tex = new THREE.CanvasTexture(c);
+    // SRGB, LIKE _paintField AND _paintLane. Without it the sRGB hex painted above is handed to
+    // the shader as LINEAR albedo, which lifts and desaturates it - the same bug those two
+    // painters were fixed for, and this one was missed. Measured: Matt's rgb(67,100,150) top
+    // stop was rendering as rgb(138,166,199) until this line existed.
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     return tex;
   }

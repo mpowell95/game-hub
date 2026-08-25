@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v477';
+const CACHE = 'game-hub-v478';
 
 const ASSETS = [
   './',
@@ -528,7 +528,7 @@ const REST_MANIFEST = {
   './skeeball/js/machines/popongo/render.js': 'cc46cacf6d',
   './skeeball/js/machines/basketball/physics.js': 'f34b1cd4a5',
   './skeeball/js/machines/basketball/machine.js': '8d92102fe5',
-  './skeeball/js/machines/basketball/render.js': '6e022bf28a',
+  './skeeball/js/machines/basketball/render.js': '99d3d32e4d',
   './skeeball/js/machines/brickcity/physics.js': 'c6daf90433',
   './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
   './skeeball/js/machines/brickcity/render.js': 'a2ca0e2013',
