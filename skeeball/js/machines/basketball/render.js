@@ -1739,7 +1739,13 @@ export class Renderer {
     const H = 192;
     const c = this._canvas(W, H);
     const x = c.getContext('2d');
-    x.fillStyle = this.look.marquee;
+    // A GRADIENT, TOP TO BOTTOM - Matt's two hex values, 2026-08-25. The sign is not a flat
+    // panel: `marquee` is its top and `marqueeBottom` its foot, so it falls off the same way the
+    // star risers below it do. A single flat blue never matched them at both ends.
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, this.look.marquee);
+    g.addColorStop(1, this.look.marqueeBottom || this.look.marquee);
+    x.fillStyle = g;
     x.fillRect(0, 0, W, H);
     x.font = '700 104px Georgia, serif';
     x.textAlign = 'center';

@@ -297,11 +297,11 @@ export const BOARDS = [
       ringLip: '#ffd23f',
       value: '#ffffff',
       pocket: '#0a0705',
-      // THE SIGN IS THE STAR PANEL'S BLUE (Matt, 2026-08-25). Not `face`: the risers the baskets
-      // hang on are a GRADIENT in render.js's _paintField, #3d8bf5 down to face, and the bright
-      // top is what the eye reads as "the blue with the stars". Matching `face` alone still left
-      // the sign darker than the board it sits over.
-      marquee: '#3d8bf5',
+      // THE SIGN IS A GRADIENT, and these two are Matt's exact values (2026-08-25, after two
+      // wrong guesses from me - `face`, then the star risers' bright top). `marquee` is the top
+      // of the sign, `marqueeBottom` its foot; render.js's _paintMarquee ramps between them.
+      marquee: '#436496',
+      marqueeBottom: '#334a75',
       marqueeText: '#ffd23f',
       bulb: '#ffd23f',
       glow: '#ff3b1f',
