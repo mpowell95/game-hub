@@ -822,6 +822,12 @@ the shape of THE LAW's founding incident.
 - **`pending` requires `earned`** (`_slideState`). The gallery shows the golden lock only for a
   machine the player already owns. A machine open to everyone by admin release never waits on a
   lock, and neither does a dev profile.
+- **The lock takes 2.4 seconds and the REVEAL is the point.** The first cut ran in 1s against a
+  54px lock: *"there's no animation at all that's visible"* - the slide re-rendered before anything
+  registered. It is five beats now (rattle, the shackle snapping open with a ring, the tumble, the
+  greyed sliver un-greying and GROWING into the machine, then the re-render), so the screen is
+  visibly becoming the unlocked card rather than being replaced by it. The 2400ms in `_popLock` and
+  the `sk-lock-*` timeline in the stylesheet have to stay in step.
 - **`_slideState(b, sk, devAll)` is now the single answer to "what is this slide"** - testing /
   earned / released / pending / open. `_renderSetup` read those three sources in three separate
   places before, and the picture-painting loop's copy had already drifted from the markup's.
@@ -832,11 +838,23 @@ the shape of THE LAW's founding incident.
 - **Silent under reduced motion**, exactly like the fireworks: `_unlockCeremony` returns before
   building anything, `_popLock` re-renders with no animation, and the game-over card still says
   UNLOCKED. Nobody is gated behind an animation they cannot see.
-- **The game-over card waits** on the same `_fwUntil` the fireworks use (5.2s), and
-  `_showWhenQuiet` is bounded at 4s of its own, so a wedged animation can never strand a player on
-  the lane.
-- **The CSS timeline lives in one comment** above `.sk-cer` in `skeeball.css`. Six
-  `animation-delay`s spread across five rules are unreadable otherwise; change a beat there and
+- **IT ENDS ON A TAP, NOT A TIMER.** The key, the machine's name and an OK button hold on screen
+  until the player dismisses them (Matt: *"make them have to click to get rid of it"*), so
+  `_showWhenQuiet` holds the game-over card for as long as `_ceremony` is true and is deliberately
+  **not** bounded by its own 4s while it is - that bound is there for a stuck score counter, not
+  for something waiting on a person. A 60s auto-dismiss in `_unlockCeremony` is what makes that
+  safe: a player who puts the phone down still gets their card.
+- **It is deliberately slow, and every swap is a cross-fade or a morph.** The first cut ran the
+  whole thing in 5.2s; Matt: *"you're rushing it... you just instantly swap what they are."* So the
+  boxes FADE to gold rather than starting gold, their labels go mid-flight so three blank gold
+  pills converge, the tiles are still on screen while the blob swells up out of them, and the key
+  GROWS OUT OF the point the blob collapsed into (a `clip-path` circle opening from 4%) rather than
+  replacing it. **Two easing traps are commented in place and both were real:** an expo-out on the
+  key was 65% done in the first eighth of its run and read as an instant swap again, and three
+  comma-separated `transform` animations on the blob let the last one's `both` fill erase the two
+  before it - which is why the merge, the beats and the collapse are ONE keyframe block.
+- **The CSS timeline lives in one comment** above `.sk-cer` in `skeeball.css`. Eight
+  `animation-delay`s spread across six rules are unreadable otherwise; change a beat there and
   update that block.
 
 `ui.js` measures the three real boxes and hands each gold tile its own `--tx`/`--ty`, so the

@@ -242,6 +242,7 @@
    this screen that does anything - 54px square is already over the 44px tap floor. Nothing here
    gates ownership: ui.js banked the unlock before this slide was ever built. */
 .sk-root .sk-lock--pop {
+  position: relative;
   border: 0;
   padding: 0;
   cursor: pointer;
@@ -255,33 +256,81 @@
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 206, 58, 0.55); }
   50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255, 206, 58, 0); }
 }
-/* The lock falls off: the shackle springs open, then the whole thing tumbles out of the slide.
-   ui.js re-renders the slide as an ordinary unlocked machine at the end (1150ms). */
+
+/* THE LOCK FALLS OFF, AND IT TAKES ITS TIME. The first cut ran in 1s against a 54px lock and
+   Matt's read was "there's no animation at all that's visible" - the slide re-rendered before
+   anything registered. It is a five-beat sequence now, and the REVEAL is the point: the greyed
+   sliver un-greys and opens up into the machine while the lock is still falling, so the screen
+   is visibly becoming the unlocked card rather than being replaced by it.
+
+     0.00  the lock rattles                                (ends 0.45)
+     0.45  the shackle snaps open, a gold ring rings out   (ends 0.85)
+     0.80  the lock tumbles off the card and falls away    (ends 1.80)
+     0.70  the sliver un-greys and grows into the machine  (ends 2.00)
+     2.40  ui.js re-renders the slide as an ordinary one
+
+   Keep this in step with the 2400ms in _popLock. */
 .sk-root .sk-slide-pop.is-popping .sk-lock--pop {
-  animation: sk-lock-fall 1s cubic-bezier(0.4, 0, 0.7, 1) 0.1s both;
+  animation:
+    sk-lock-rattle 0.45s ease-in-out both,
+    sk-lock-fall 1s cubic-bezier(0.35, 0, 0.75, 1) 0.8s both;
+}
+.sk-root .sk-slide-pop.is-popping .sk-lock--pop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(242, 183, 5, 0.9);
+  animation: sk-lock-ring 0.5s ease-out 0.45s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-lock-shackle {
-  animation: sk-lock-shackle 0.22s ease-out both;
   transform-origin: 8px 11px;
+  animation: sk-lock-shackle 0.3s cubic-bezier(0.3, 1.6, 0.5, 1) 0.45s both;
 }
-.sk-root .sk-slide-pop.is-popping .sk-lock-img { animation: sk-lock-reveal 0.9s ease-out 0.25s both; }
-.sk-root .sk-slide-pop.is-popping .sk-slide-poptext { animation: sk-lock-fade 0.3s ease-out both; }
+.sk-root .sk-slide-pop.is-popping .sk-lock-peek {
+  animation: sk-lock-open 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.7s both;
+}
+.sk-root .sk-slide-pop.is-popping .sk-lock-img {
+  animation: sk-lock-reveal 1.3s ease-out 0.7s both;
+}
+.sk-root .sk-slide-pop.is-popping .sk-slide-poptext { animation: sk-lock-fade 0.35s ease-out both; }
+@keyframes sk-lock-rattle {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  15% { transform: translateX(-4px) rotate(-6deg); }
+  32% { transform: translateX(4px) rotate(6deg); }
+  50% { transform: translateX(-4px) rotate(-5deg); }
+  68% { transform: translateX(3px) rotate(4deg); }
+  84% { transform: translateX(-2px) rotate(-2deg); }
+}
+@keyframes sk-lock-ring {
+  from { transform: scale(1); opacity: 0.95; }
+  to { transform: scale(2.4); opacity: 0; }
+}
 @keyframes sk-lock-shackle {
-  to { transform: rotate(-38deg) translateY(-2px); }
+  to { transform: rotate(-52deg) translateY(-3px); }
 }
 @keyframes sk-lock-fall {
   0% { transform: translate(0, 0) rotate(0); opacity: 1; }
-  18% { transform: translate(0, -14px) rotate(-8deg); opacity: 1; }
-  100% { transform: translate(26px, 170px) rotate(78deg); opacity: 0; }
+  22% { transform: translate(2px, -20px) rotate(-12deg); opacity: 1; }
+  100% { transform: translate(34px, 210px) rotate(96deg); opacity: 0; }
+}
+/* The tease window opening up. Height, not scale: the sliver is a CROP, and growing the crop is
+   what turns a band of blurred grey into the machine. */
+@keyframes sk-lock-open {
+  from { height: 72px; }
+  to { height: 168px; }
 }
 @keyframes sk-lock-reveal {
-  to { filter: grayscale(0) brightness(1) blur(0); }
+  from { filter: grayscale(1) brightness(0.5) blur(3px); transform: translateY(-38%); }
+  to { filter: grayscale(0) brightness(1) blur(0); transform: translateY(-8%); }
 }
 @keyframes sk-lock-fade { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .sk-root .sk-lock--pop { animation: none; }
   .sk-root .sk-slide-pop.is-popping .sk-lock--pop,
+  .sk-root .sk-slide-pop.is-popping .sk-lock--pop::after,
   .sk-root .sk-slide-pop.is-popping .sk-lock-shackle,
+  .sk-root .sk-slide-pop.is-popping .sk-lock-peek,
   .sk-root .sk-slide-pop.is-popping .sk-lock-img { animation: none; }
 }
 .sk-root .sk-slide-locktext { margin: 0; font-size: 13px; color: var(--sks-muted); max-width: 210px; }
@@ -905,120 +954,185 @@
 
 /* ------------------------------------------------------- the unlock ceremony --- */
 /* Matt, 2026-08-25: the three objectives turn gold, float together to the middle, merge into a
-   pulsing blob, shrink to a point, and a golden key pops out - all before the game-over screen.
-   ui.js measures the three real boxes and hands each tile its own --tx/--ty, so this sheet never
-   has to know where a rail is; it just plays the timeline. THEATRE ONLY: the unlock is banked
-   before a single frame of this runs, and ui.js builds none of it under reduced motion.
+   pulsing blob, shrink to a point, and something grows back out of that point into a golden key -
+   all before the game-over screen. ui.js measures the three real boxes and hands each tile its own
+   --tx/--ty, so this sheet never has to know where a rail is; it just plays the timeline. THEATRE
+   ONLY: the unlock is banked before a single frame of this runs, and ui.js builds none of it under
+   reduced motion.
 
-   THE TIMELINE, one place, because six animation-delays are otherwise unreadable:
-     0.00  the boxes are covered by gold copies of themselves and swell
-     0.55  the three fly to the centre and shrink                      (ends 1.80)
-     1.15  the veil darkens the lane behind them                       (ends 1.60)
-     1.65  the blob fades up and beats twice                           (ends 2.75)
-     2.75  the blob collapses to a point                               (ends 3.05)
-     3.00  the key springs out and holds
-     3.35  the caption rises under it
-     4.70  key and caption fade                                        (host removed at 5.20) */
+   IT IS DELIBERATELY SLOW. The first cut ran the whole thing in 5.2s and Matt's read was "you're
+   rushing it... you just instantly swap what they are". Every swap in that version is now a
+   cross-fade or a morph with room to be seen: the boxes FADE to gold rather than starting gold,
+   the tiles are still on screen while the blob swells out of them, and the key GROWS OUT OF THE
+   POINT the blob collapsed into rather than replacing it.
+
+   THE TIMELINE, one place, because eight animation-delays across six rules are unreadable:
+      0.00  the three boxes cross-fade from their normal look to gold, staggered   (ends 1.30)
+      1.30  the veil darkens the lane behind them                                  (ends 1.90)
+      1.90  the three drift to the centre, shrinking and rounding off              (ends 4.50)
+      4.50  they fade out as the blob swells up out of them - the MERGE            (ends 5.50)
+      5.50  the blob beats three times                                             (ends 7.60)
+      7.60  the blob collapses to a point                                          (ends 8.50)
+      8.30  the point flashes white-hot                                            (ends 9.00)
+      8.70  the key grows out of the point, unmasking as it goes                   (ends 10.20)
+     10.00  the machine's name rises under it                                      (ends 10.60)
+     10.70  the OK button fades in                                                 (ends 11.20)
+      then  IT HOLDS until the player taps OK (ui.js; 60s backstop)
+
+   Change a beat here and change the comment. */
 .sk-root .sk-cer {
   position: absolute;
   inset: 0;
   z-index: 9;
   pointer-events: none;
 }
+.sk-root .sk-cer.is-out { animation: sk-cer-hide 0.45s ease-in both; }
+@keyframes sk-cer-hide { to { opacity: 0; } }
+
 /* THE VEIL. GUARD: WITHOUT THIS THE CEREMONY IS ILLEGIBLE ON A LIT MACHINE. Gold on the warm
    dark lane reads fine; gold on HOT SHOT's blue backboard, over a lit scoreboard, does not - the
-   key vanished into the numbers and "Pop its lock in the gallery" could not be read at all
-   (caught in preview, 2026-08-25, against the real render rather than a stand-in). It comes in
-   AFTER the tiles have flown, so the flight still happens over the machine the player was
-   looking at, and it leaves with the key. */
+   key vanished into the numbers and the caption could not be read at all (caught in preview,
+   2026-08-25, against the real render rather than a stand-in). It comes in AFTER the boxes have
+   turned gold, so that beat still happens over the machine the player was looking at. */
 .sk-root .sk-cer::before {
   content: '';
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse 130% 72% at 50% 44%, rgba(10, 6, 3, 0.9), rgba(10, 6, 3, 0.95) 58%, rgba(10, 6, 3, 0.84));
-  animation: sk-cer-veil 0.45s ease-out 1.15s both, sk-cer-veil-out 0.5s ease-in 4.7s both;
+  animation: sk-cer-veil 0.6s ease-out 1.3s both;
 }
 @keyframes sk-cer-veil { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sk-cer-veil-out { to { opacity: 0; } }
 
 /* The originals go while their gold copies fly. They do not come back: by the time the ceremony
    ends the objectives are spent, and ui.js paints them empty for the rest of the rack. */
 .sk-root .sk-cer-on .sk-grails,
-.sk-root .sk-cer-on .sk-gtotal-row { transition: opacity 0.2s ease-out; opacity: 0; }
+.sk-root .sk-cer-on .sk-gtotal-row { transition: opacity 0.3s ease-out; opacity: 0; }
+
+/* THE GOLD IS FADED IN, NOT SWITCHED ON. The tile is gold underneath from the start and wears a
+   copy of the objective box's own dark skin on top (::after), which cross-fades away - so what
+   the player sees is the box they have been reading all rack turning to gold in place. */
 .sk-root .sk-cer-tile {
   position: absolute;
   display: grid;
   place-items: center;
   padding: 2px 4px;
   border-radius: 10px;
-  border: 1px solid #e3bf72;
   background: linear-gradient(180deg, #fff6d8, #ffd977);
-  box-shadow: 0 0 20px rgba(255, 190, 60, 0.6);
-  color: #7a4e00;
   overflow: hidden;
-  animation: sk-cer-gold 0.5s ease-out var(--d) both, sk-cer-fly 1.25s cubic-bezier(0.5, -0.35, 0.25, 1) calc(0.55s + var(--d)) both;
+  animation:
+    sk-cer-ink 1.3s ease-in-out var(--d) both,
+    sk-cer-fly 2.6s cubic-bezier(0.65, 0, 0.35, 1) calc(1.9s + var(--d)) both,
+    sk-cer-tgo 1s ease-in 4.5s forwards;
 }
+.sk-root .sk-cer-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(26, 16, 12, 0.86);
+  border: 1px solid var(--sk-line);
+  animation: sk-cer-unskin 1.3s ease-in-out var(--d) both;
+}
+/* GUARD: THE SAME TYPE AS .sk-goal em, AND IT MUST BE ALLOWED TO WRAP. The tile is sized to the
+   real box's measured rect, so a label that wraps to two lines in the rail has to wrap here too -
+   uppercasing it and pinning it to one line clipped "Every basket" to "EVERY BAS". */
 .sk-root .sk-cer-tile b {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  text-align: center;
+  /* The LABEL goes before the tile does, mid-flight - three blank gold pills converging read as
+     one thing about to fuse; three still-readable objective labels read as three cards stacking. */
+  animation: sk-cer-tgo 0.9s ease-in 3.2s both;
 }
-@keyframes sk-cer-gold {
-  0% { transform: scale(1); }
-  55% { transform: scale(1.14); }
-  100% { transform: scale(1); }
+@keyframes sk-cer-unskin { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sk-cer-ink {
+  from { color: var(--sk-dim); box-shadow: 0 0 0 rgba(255, 190, 60, 0); }
+  60% { color: #7a4e00; }
+  to { color: #7a4e00; box-shadow: 0 0 26px rgba(255, 190, 60, 0.62); }
 }
+/* Rounding off on the way in, so three boxes arrive as three blobs rather than three cards. */
 @keyframes sk-cer-fly {
-  0% { transform: translate(0, 0) scale(1); opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: translate(var(--tx), var(--ty)) scale(0.3); opacity: 0; }
+  from { transform: translate(0, 0) scale(1); border-radius: 10px; }
+  to { transform: translate(var(--tx), var(--ty)) scale(0.42); border-radius: 50%; }
 }
-/* The three, merged. Centred on its own point, so ui.js only has to give it an x/y. */
+@keyframes sk-cer-tgo { to { opacity: 0; } }
+
+/* THE MERGE, AND THE COLLAPSE, IN ONE KEYFRAME BLOCK. GUARD: one animation, not three. Three
+   comma-separated animations all writing `transform` fight over fill modes - a later one with
+   `both` applies its 0% frame from time zero and silently erases the two before it. Percentages
+   of a 4s run starting at 4.50s: 25% = 5.50, 50% = 6.50, 78% = 7.62, 100% = 8.50.
+   It starts at the scale the tiles ARRIVED at, so it swells up out of them rather than appearing
+   over them. */
 .sk-root .sk-cer-blob {
   position: absolute;
-  width: 92px;
-  height: 92px;
-  margin: -46px 0 0 -46px;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
   border-radius: 50%;
   background: radial-gradient(circle at 42% 36%, #fffbe8, #ffd977 46%, #f2a105 78%, #b96b00);
-  box-shadow: 0 0 44px rgba(255, 190, 60, 0.75);
-  animation: sk-cer-blob 1.40s ease-in-out 1.65s both;
+  box-shadow: 0 0 54px rgba(255, 190, 60, 0.75);
+  animation: sk-cer-blob 4s ease-in-out 4.5s both;
 }
 @keyframes sk-cer-blob {
-  0% { transform: scale(0.1); opacity: 0; }
-  14% { transform: scale(1); opacity: 1; }
-  32% { transform: scale(0.86); }
-  50% { transform: scale(1.08); }
-  68% { transform: scale(0.88); }
-  79% { transform: scale(1.14); opacity: 1; }
-  100% { transform: scale(0.02); opacity: 0.9; }
+  0% { transform: scale(0.42); opacity: 0; }
+  25% { transform: scale(1); opacity: 1; }
+  37% { transform: scale(0.87); }
+  50% { transform: scale(1.11); }
+  62% { transform: scale(0.89); }
+  74% { transform: scale(1.16); }
+  78% { transform: scale(1); }
+  100% { transform: scale(0.015); opacity: 1; }
 }
+
+/* The point it collapsed into, flaring - the hinge the key comes out of. */
+.sk-root .sk-cer-point {
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  margin: -65px 0 0 -65px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffdf2 0%, rgba(255, 226, 150, 0.85) 22%, rgba(255, 190, 60, 0) 62%);
+  animation: sk-cer-point 0.7s ease-out 8.3s both;
+}
+@keyframes sk-cer-point {
+  0% { transform: scale(0.04); opacity: 0; }
+  22% { transform: scale(0.34); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* GROWS OUT OF THE POINT. The clip-path circle opening from 4% is what sells it as emerging
+   rather than being swapped in: at the start there is a pinhole of key, and it widens. */
 .sk-root .sk-cer-key {
   position: absolute;
-  width: 96px;
-  height: 96px;
-  margin: -48px 0 0 -48px;
+  width: 150px;
+  height: 150px;
+  margin: -75px 0 0 -75px;
   color: #ffd977;
-  filter: drop-shadow(0 0 16px rgba(255, 190, 60, 0.9));
-  animation: sk-cer-key 1.70s cubic-bezier(0.2, 1.5, 0.4, 1) 3s both, sk-cer-out 0.5s ease-in 4.7s both;
+  filter: drop-shadow(0 0 20px rgba(255, 190, 60, 0.9));
+  /* GUARD: NOT AN EXPO-OUT. cubic-bezier(0.16, 1, 0.3, 1) is 65% done in the first eighth of its
+     run, which turned "grows out of a point" back into the instant swap this rebuild exists to
+     remove. This curve keeps the early growth visible. */
+  animation: sk-cer-grow 1.6s cubic-bezier(0.42, 0.12, 0.3, 1) 8.7s both;
 }
 .sk-root .sk-cer-key svg { width: 100%; height: 100%; }
-@keyframes sk-cer-key {
-  0% { transform: scale(0.05) rotate(-40deg); opacity: 0; }
-  36% { transform: scale(1.18) rotate(8deg); opacity: 1; }
-  60% { transform: scale(1) rotate(-4deg); }
-  100% { transform: scale(1) rotate(0); opacity: 1; }
+@keyframes sk-cer-grow {
+  0% { transform: scale(0.06) rotate(-34deg); opacity: 0; clip-path: circle(4% at 50% 50%); }
+  14% { opacity: 1; }
+  70% { transform: scale(1.06) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; clip-path: circle(75% at 50% 50%); }
 }
-@keyframes sk-cer-out { to { opacity: 0; transform: scale(0.9); } }
+
 .sk-root .sk-cer-say {
   position: absolute;
   left: 0;
   right: 0;
   text-align: center;
   padding: 0 16px;
-  animation: sk-cer-say 0.45s ease-out 3.35s both, sk-cer-out 0.5s ease-in 4.7s both;
+  animation: sk-cer-say 0.6s ease-out 10s both;
 }
 .sk-root .sk-cer-say em {
   display: block;
@@ -1030,24 +1144,42 @@
 }
 .sk-root .sk-cer-say b {
   display: block;
-  margin-top: 2px;
-  font-size: clamp(22px, 7vw, 30px);
+  margin-top: 3px;
+  font-size: clamp(24px, 7.6vw, 33px);
   font-weight: 800;
   letter-spacing: 0.02em;
   color: var(--sk-cream);
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
-}
-.sk-root .sk-cer-say i {
-  display: block;
-  margin-top: 4px;
-  font-style: normal;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--sk-dim);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
 }
 @keyframes sk-cer-say {
-  from { transform: translateY(14px); opacity: 0; }
+  from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* The only thing on this overlay that can be touched, and the only way out of it. */
+.sk-root .sk-cer-ok {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 13px 30px;
+  border: 1px solid #c9922a;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffe9a8, #f2b705);
+  color: #3a2400;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  animation: sk-cer-ok 0.5s ease-out 10.7s both;
+}
+.sk-root .sk-cer-ok:focus-visible { outline: 2px solid var(--sk-cream); outline-offset: 3px; }
+@keyframes sk-cer-ok {
+  from { transform: translateX(-50%) translateY(10px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
 }
 
 /* --------------------------------------------------------------- reduced motion --- */

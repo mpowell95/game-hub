@@ -300,7 +300,7 @@ export class SkeeballUI {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) { done(); return; }
     slide.classList.add('is-popping');
-    setTimeout(done, 1150);
+    setTimeout(done, 2400);   // keep in step with the sk-lock-* timeline in skeeball.css
   }
 
   // --- records ---------------------------------------------------------------------------------
@@ -1251,6 +1251,9 @@ export class SkeeballUI {
    *  machine. Silent under reduced motion, exactly like _fireworks; the game-over card still says
    *  UNLOCKED and the gallery still opens the machine.
    *
+   *  IT WAITS FOR A TAP. The key, the machine's name and an OK button hold on screen until the
+   *  player dismisses them; the game-over card is behind that, not behind a timer.
+   *
    *  It fires the moment the third objective lands, which can be ball 3 - the unlock itself is
    *  banked at ball 9. Quitting in between leaves the flag armed against a machine not yet
    *  earned, which the gallery reads as still locked (pending requires `earned`); the next
@@ -1294,34 +1297,47 @@ export class SkeeballUI {
 
     const el = document.createElement('div');
     el.className = 'sk-cer';
-    el.setAttribute('aria-hidden', 'true');
     el.innerHTML = `${tiles}
-      <span class="sk-cer-blob" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px"></span>
-      <span class="sk-cer-key" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px">
-        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+      <span class="sk-cer-blob" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
+      <span class="sk-cer-point" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
+      <span class="sk-cer-key" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="16" cy="16" r="9"/><path d="M22.4 22.4 38 38"/><path d="M31 31l-4.5 4.5"/><path d="M36 36l-4 4"/>
         </svg>
       </span>
-      <span class="sk-cer-say" style="top:${Math.round(cy + host.height * 0.13)}px">
-        <em>${esc(t('cer_unlocked'))}</em><b>${esc(next.name)}</b><i>${esc(t('cer_go'))}</i>
-      </span>`;
+      <span class="sk-cer-say" style="top:${Math.round(cy + host.height * 0.17)}px">
+        <em>${esc(t('cer_unlocked'))}</em><b>${esc(next.name)}</b>
+      </span>
+      <button type="button" class="sk-cer-ok" style="top:${Math.round(cy + host.height * 0.30)}px">${esc(t('cer_ok'))}</button>`;
     wrap.classList.add('sk-cer-on');
     wrap.appendChild(el);
 
-    // The game-over card waits for the whole thing. Same mechanism the fireworks use, and
-    // _showWhenQuiet is bounded at 4s of its own, so a wedged animation can never strand anyone.
-    const RUNS = 5200;
-    this._fwUntil = Math.max(this._fwUntil || 0, Date.now() + RUNS);
-    setTimeout(() => {
-      el.remove();
-      if (this.disposed) return;
-      wrap.classList.remove('sk-cer-on');
-      // The objectives are spent now, so they do not come back for the rest of this rack - which
-      // is the other half of what Matt asked for.
-      this._ceremony = false;
-      this._goalsHidden = true;
-      this._paintGoalRails();
-    }, RUNS);
+    // IT ENDS ON THE PLAYER'S TAP, not on a timer (Matt, 2026-08-25: "make them have to click to
+    // get rid of it"). _showWhenQuiet holds the game-over card for as long as _ceremony is true
+    // and is NOT bounded by its own 4s while it is - that bound is there for a stuck score
+    // counter, not for something deliberately waiting on a person. The 60s backstop below is what
+    // makes that safe: a player who puts the phone down still gets their card.
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      clearTimeout(bail);
+      el.classList.add('is-out');
+      setTimeout(() => {
+        el.remove();
+        if (this.disposed) return;
+        wrap.classList.remove('sk-cer-on');
+        // The objectives are spent now, so they do not come back for the rest of this rack -
+        // which is the other half of what Matt asked for.
+        this._ceremony = false;
+        this._goalsHidden = true;
+        this._paintGoalRails();
+      }, 460);
+    };
+    const bail = setTimeout(close, 60000);
+    el.querySelector('.sk-cer-ok').addEventListener('click', close);
+    // The fireworks' own hold still covers the opening beats, in case anything below it changes.
+    this._fwUntil = Math.max(this._fwUntil || 0, Date.now() + 3200);
   }
 
   /** Repaint all three objectives. Called wherever the ball count is repainted, which is the
@@ -1477,7 +1493,11 @@ export class SkeeballUI {
   _showWhenQuiet(el, waited = 0) {
     const fwLeft = Math.max(0, (this._fwUntil || 0) - Date.now());
     const counting = this.game && this._shownScore !== this.game.score;
-    if ((fwLeft > 0 || counting) && waited < 4000) {
+    // GUARD: THE CEREMONY IS NOT BOUNDED BY THE 4s. It ends when the player taps its OK button,
+    // and 4s in it has not even produced the key yet - the bound below exists for a stuck score
+    // counter, not for something waiting on a person. _unlockCeremony carries its own 60s
+    // backstop, so this can still never strand anyone on the lane.
+    if ((fwLeft > 0 || counting) && waited < 4000 || this._ceremony) {
       setTimeout(() => { if (!this.disposed && this.screen === 'play') this._showWhenQuiet(el, waited + 120); }, 120);
       return;
     }
