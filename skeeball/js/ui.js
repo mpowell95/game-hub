@@ -137,6 +137,39 @@ function clearLockPop(id) {
 }
 const isLockPending = (id) => !!lockPops()[id];
 
+/* THE CEREMONY A PLAYER IS STILL OWED (2026-08-25). A machine can be BANKED without its ceremony
+   ever having been seen: `_ensureGoalUnlocks` grants a machine whose parent's objectives were
+   already complete - goals met on another device, or met while the machine was still in Testing
+   and therefore skipped by both unlock writers. That grant is silent by design (it can happen at
+   mount, with no rack on screen to animate), so without this the player's reward for finishing a
+   machine is a slide that quietly stops being grey.
+
+   Matt, 2026-08-25, about King of Games, who had cleared HOT SHOT's three before BRICK CITY was
+   ever released: "I want him to see the unlock animations we created... set it so that the next
+   time he scores a single point in hot shot, the animation plays."
+
+   So a retroactive grant ARMS this, and the next ball that puts a point on the board during a
+   round on the PARENT machine plays the full ceremony. Same class as the lock pop above: local,
+   cosmetic, per device, armed and never backfilled. It cannot grant, ungrant or delay anything -
+   the unlock is banked before this flag is ever written, and losing the key only loses theatre. */
+const CEREMONY_KEY = 'gamehub.skeeball.ceremonyowed.v1';   // { [boardId]: true } - cosmetic
+function ceremoniesOwed() {
+  try {
+    const o = JSON.parse(localStorage.getItem(CEREMONY_KEY) || '{}');
+    return o && typeof o === 'object' ? o : {};
+  } catch { return {}; }
+}
+function armCeremonyOwed(id) {
+  try { localStorage.setItem(CEREMONY_KEY, JSON.stringify({ ...ceremoniesOwed(), [id]: true })); }
+  catch { /* the unlock is already banked; only the ceremony is lost */ }
+}
+function clearCeremonyOwed(id) {
+  const o = ceremoniesOwed();
+  delete o[id];
+  try { localStorage.setItem(CEREMONY_KEY, JSON.stringify(o)); } catch { /* it plays once more */ }
+}
+const isCeremonyOwed = (id) => !!ceremoniesOwed()[id];
+
 /** One throwaway Renderer draws the machine (no ball) to an off-DOM canvas we read back as a
  *  JPEG - render.js sets preserveDrawingBuffer, so the canvas is readable, and the WebGL context
  *  is disposed immediately after. This is how the setup carousel (and later the how-to card) show
@@ -303,7 +336,11 @@ export class SkeeballUI {
         if (isBoardTesting(b.id, !!b.adminOnly)) continue;   // never retroactively unlock a machine still in testing
         if (!b.unlock || !b.unlock.goals) continue;
         if (isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
-        if (allGoalsMet(b.unlock.board)) unlockSkeeballBoard(b.id);
+        if (!allGoalsMet(b.unlock.board)) continue;
+        // BANK IT FIRST, then owe the theatre. The order matters: a player who is granted a
+        // machine here and closes the app before ever playing again still owns it.
+        unlockSkeeballBoard(b.id);
+        armCeremonyOwed(b.id);
       }
     } catch (err) {
       console.error('[skeeball] goal-unlock check failed', err);
@@ -1237,7 +1274,11 @@ export class SkeeballUI {
         && !isBoardTesting(b.id, !!b.adminOnly));
       if (!opens.length) return true;
       const sk = (loadStats().games.skeeball || {}).sk || {};
-      return opens.every((b) => isUnlocked(sk, b.id, DEFAULT_BOARD) && !isLockPending(b.id));
+      // A machine that owes its ceremony is NOT spent, even though it is already banked: the
+      // ceremony flies these very boxes to the middle of the screen, so hiding them would leave
+      // it nothing to animate and the player would never see what they earned.
+      return opens.every((b) => isUnlocked(sk, b.id, DEFAULT_BOARD)
+        && !isLockPending(b.id) && !isCeremonyOwed(b.id));
     } catch { return false; }
   }
 
@@ -1314,8 +1355,30 @@ export class SkeeballUI {
    *  100 thrown on ball 3 was celebrated after ball 9, behind the game-over card, and nothing
    *  whatsoever marked the moment it happened (Matt, 2026-08-21). It reads the LIVE goals, so
    *  the rack in progress counts, and `_goalsMet` makes each one fire exactly once. */
+  /** THE CEREMONY A RETROACTIVE GRANT NEVER GOT (2026-08-25, and see CEREMONY_KEY at the top of
+   *  this file). Nothing here is fresh - the objectives were finished days ago and the machine is
+   *  already banked - so `_checkGoalsNow` below can never fire it: it only celebrates a goal that
+   *  turns met while you watch.
+   *
+   *  Matt's trigger, in his words: "the next time he scores a single point in hot shot, the
+   *  animation plays." So: a round on the parent machine, a score above zero, and the objectives
+   *  still genuinely all met in the RECORDED store (never the live rack - a machine's own goals
+   *  cannot be re-earned, and reading the store is what the unlock itself trusts).
+   *
+   *  It grants nothing, takes nothing, and can run at most once per owed machine. */
+  _checkOwedCeremony() {
+    if (!this.game || this._ceremony) return;
+    if ((this.game.score | 0) <= 0) return;
+    const boardId = this.game.board.id;
+    const owed = BOARDS.some((b) => b.unlock && b.unlock.goals && b.unlock.board === boardId
+      && !isBoardTesting(b.id, !!b.adminOnly) && isCeremonyOwed(b.id));
+    if (!owed || !allGoalsMet(boardId)) return;
+    this._unlockCeremony();
+  }
+
   _checkGoalsNow() {
     if (!this.game || !this._goalsMet) return;
+    this._checkOwedCeremony();
     const live = readGoalsLive(this.game.board.id, this.game.result());
     const fresh = live.filter((g) => g.met && !this._goalsMet.has(g.id));
     if (!fresh.length) return;
@@ -1360,14 +1423,22 @@ export class SkeeballUI {
     try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
     // The machine this opens, if it opens one and the player does not already have it. A terminal
     // machine (POPONGO) opens nothing, and gets fireworks without a key rather than a lie.
+    // ...OR one they already hold that has never been celebrated (see CEREMONY_KEY above): a
+    // machine granted retroactively is banked before its ceremony is owed, so "not unlocked yet"
+    // alone would silently skip the only showing it will ever get.
     const next = BOARDS.find((b) => b.unlock && b.unlock.goals && b.unlock.board === boardId
-      && !isBoardTesting(b.id, !!b.adminOnly) && !isUnlocked(sk, b.id, DEFAULT_BOARD));
+      && !isBoardTesting(b.id, !!b.adminOnly)
+      && (!isUnlocked(sk, b.id, DEFAULT_BOARD) || isCeremonyOwed(b.id)));
     if (!next) return;
     const wrap = this.root.querySelector('.sk-play-wrap');
     const boxes = Array.from(this.root.querySelectorAll('[data-goal]'));
     if (!wrap || !boxes.length) return;
 
     this._ceremony = true;
+    // It is being paid right now, so it is no longer owed. Cleared BEFORE the animation rather
+    // than after, so a player who quits half way through is not shown it again on their next
+    // point - the lock pop below is the half that survives leaving.
+    clearCeremonyOwed(next.id);
     armLockPop(next.id);
 
     const host = wrap.getBoundingClientRect();

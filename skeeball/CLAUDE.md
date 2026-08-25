@@ -878,6 +878,30 @@ the shape of THE LAW's founding incident.
 - **`_slideState(b, sk, devAll)` is now the single answer to "what is this slide"** - testing /
   earned / released / pending / open. `_renderSetup` read those three sources in three separate
   places before, and the picture-painting loop's copy had already drifted from the markup's.
+- **A MACHINE CAN BE BANKED WITHOUT ITS CEREMONY EVER HAVING BEEN SEEN, and that debt is now
+  remembered** (`gamehub.skeeball.ceremonyowed.v1`, 2026-08-25). `_ensureGoalUnlocks` grants a
+  machine whose parent's objectives were already complete - met on another device, or met while
+  the machine was still in TESTING and therefore skipped by both unlock writers. That grant is
+  silent by design (it runs at mount, with no rack on screen to animate), so the player's reward
+  for finishing a machine was a slide that quietly stopped being grey. Matt, about King of Games,
+  who had cleared HOT SHOT's three before BRICK CITY was ever released: *"I want him to see the
+  unlock animations we created... set it so that the next time he scores a single point in hot
+  shot, the animation plays."*
+  - A retroactive grant **banks the unlock first, then arms the debt** - a player granted a machine
+    at mount who closes the app still owns it.
+  - `_checkOwedCeremony` (called from `_checkGoalsNow`, so it runs after every settled ball) fires
+    when the round is on the PARENT machine, the score is above zero, and `allGoalsMet` still
+    reads true from the RECORDED store. `_checkGoalsNow` itself can never fire this: it only
+    celebrates a goal that turns met while you watch, and these were finished days ago.
+  - Two things had to stop excluding it: `_unlockCeremony`'s `next` now accepts a machine the
+    player already HOLDS if its ceremony is owed, and `_goalsSpent()` answers NO while one is -
+    the ceremony flies the objective boxes to the middle of the screen, so hiding them as spent
+    would leave it nothing to animate.
+  - The debt is cleared as the ceremony STARTS, not when it ends, so quitting half way through
+    does not replay it on the next point; the lock pop is the half that survives leaving.
+  - Verified in a real browser against King of Games' exact stored shape: mount banked
+    `brickcity` and armed the debt, the three completed objectives stayed on screen, one 60-point
+    ball fired the ceremony, the debt cleared and the lock pop armed.
 - **The ceremony can fire on ball 3; the unlock is banked at ball 9.** Quitting in between leaves
   the flag armed against a machine not yet earned, which the gallery reads as still locked
   (`pending` requires `earned`). The next finished rack banks it and the lock is waiting. Nothing
