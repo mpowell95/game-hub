@@ -191,22 +191,29 @@ reachability a function of a **third axis**. The same (power, aim) lands somewhe
 depending on where the basket is at release, so a two-axis sweep measures one arbitrary frozen
 phase and will call the 100 unreachable or trivial at random.
 
-**21 powers x 11 aims x 8 phases = 1,848 throws:**
+**21 powers x 11 aims x 8 phases = 1,848 throws**, at the shipped 4.00in mouth (the 3.50in
+build's numbers in brackets):
 
 | hole | captures | share |
 |---|---|---|
-| lowL | 35 | 1.89% |
+| lowL | 37 | 2.00% |
 | lowC | 81 | 4.38% |
-| lowR | 46 | 2.49% |
-| midL | 31 | 1.68% |
-| midC | 76 | 4.11% |
-| midR | 26 | 1.41% |
-| **topC (moving)** | **8** | **0.43%** |
+| lowR | 49 | 2.65% |
+| midL | 32 | 1.73% |
+| midC | 80 | 4.33% |
+| midR | 27 | 1.46% |
+| **topC (moving)** | **7** | **0.38%** |
 
-- **0 watchdog walkouts.** The crush/pinch failure mode a moving collar makes possible did not
-  appear at this amplitude, on either grid.
-- **Slowest settle 6.50 s** against the 12 s emergency cap.
-- **16.40% of throws scored**, mean 5.1 points per throw.
+- **0 watchdog walkouts**, at both mouth sizes. The crush/pinch failure mode a moving collar
+  makes possible has not appeared at this amplitude on any grid — including at 4.00in, where the
+  rail margin is only 0.005X.
+- **Slowest settle 6.55 s** against the 12 s emergency cap (6.50 s at 3.50in — unchanged).
+- **16.94% of throws scored**, mean 5.3 points per throw.
+
+**Do not read topC's 7-vs-8 as the wider mouth making no difference — that is sampling noise.**
+At 231 cells per phase this grid is far too coarse to resolve a hole this narrow; the dense probe
+below, at 861 cells per phase, is the measurement that means anything. Same lesson as the phase
+gaps, one paragraph down, and the same lesson as the classic's corner 100s.
 
 **Against HOT SHOT on the same 21x11 grid**, its static `topC` scores 3/231 = **1.30%**. So the
 moving 100 is about **3x harder than the static one** — which is the machine, and is in the same
@@ -216,16 +223,24 @@ accepted that as "the slow one").
 **The 8-phase run scored it at 4 phases and never at the other 4 — and that was the grid, not the
 machine.** A dense probe (21 powers x 41 aims, 861 cells) at each of the "never" phases found it:
 
-| phase | basket at | cells that catch the 100 |
-|---|---|---|
-| t = 0.00 s (control, scored on the coarse grid) | centre | 9 / 861 |
-| t = 1.75 s (coarse grid: never) | +2.07X, right end | 4 / 861 |
-| t = 5.25 s (coarse grid: never) | −2.07X, left end | 5 / 861 |
+| phase | basket at | 3.50in | **4.00in** |
+|---|---|---|---|
+| t = 0.00 s (control, scored on the coarse grid) | centre | 9 / 861 | **10 / 861** |
+| t = 1.75 s (coarse grid: never) | +2.07X, right end | 4 / 861 | **9 / 861** |
+| t = 5.25 s (coarse grid: never) | −2.07X, left end | 5 / 861 | **8 / 861** |
+| **total** | | **18 / 2583** | **27 / 2583** |
 
-So the 100 is catchable **wherever the basket is**, hardest at the ends, and the two ends are
-mirror-symmetric — the machine is not biased to one side. This is the same trap the classic's
-corner 100s sat in for months (`skeeball/js/test.js` section 2): **a hole is not unreachable
-until a FINE sweep says so.**
+So the 100 is catchable **wherever the basket is**, and the two ends are mirror-symmetric — the
+machine is not biased to one side. This is the same trap the classic's corner 100s sat in for
+months (`skeeball/js/test.js` section 2): **a hole is not unreachable until a FINE sweep says
+so.**
+
+**What widening the mouth to 4.00in actually bought (2026-08-25).** Half again as many catching
+cells overall — but almost all of the gain landed **at the ends of the travel**, which were the
+hard part: the two extremes went 4 -> 9 and 5 -> 8 (+125% and +60%) while the centre barely moved
+(9 -> 10). That is the useful shape of the change rather than a flat difficulty cut: the shot is
+now roughly as available across the whole sweep instead of falling off a cliff at the turnarounds,
+so timing the basket matters more and catching it at an awkward phase matters less.
 
 ---
 
@@ -247,10 +262,13 @@ Worth stating, because a moving part sounds like it should have broken several:
 
 ## Open questions for Matt
 
-1. **Difficulty.** The moving 100 is ~3x harder than HOT SHOT's static one. Goal 1 ("Catch the
-   100") is therefore the slow objective on this machine. If it plays too mean, the number to
-   change is in `js/goals.js` — **not** the mouth and **not** the period, which are what the
-   machine is.
+1. **Difficulty.** Widening the 100 to 4.00in (2026-08-25) raised the catching cells by half,
+   mostly at the ends of the travel — see the table above. It is still the hardest thing on the
+   machine and Goal 1 ("Catch the 100") is still its slow objective, just no longer punishing at
+   the turnarounds. If it now plays too *easy*, the number to move is `RA_HOOP`'s companions in
+   `js/goals.js` (the 240-in-a-game and 2,500-total bars), not the mouth again — the rail margin
+   at 4.00in is down to 0.005X and there is nothing left to widen into without shortening the
+   travel.
 2. **The travel does not reach the literal edges** (±2.07X of a ±3.4375X face, so the basket
    covers the middle 60% of the width). The 0.78X rail rule is what stops it, and going wider
    means solving the pinch a different way (a sloped outer collar face, or a recessed rail
