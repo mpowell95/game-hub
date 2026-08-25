@@ -639,12 +639,59 @@ function miniTilesHTML(tiers, valueFn) {
   }).join('')}</div>`;
 }
 
-/** By Player's six-cell category strip: a 3x2 grid, so all six fit at 360px wide with nothing
- *  truncated and nothing scrolling sideways. Each cell is a key badge (E/M/H/X/NT/VS) plus the
- *  full category name plus this person's number in it. The SELECTED category's badge is filled,
- *  which is the second place the current filter is legible - the first is the select button. */
+/** The category breakdown on a LIST CARD: ONE line, never two (Matt, 2026-08-25, seeing the 3x2
+ *  grid on a real phone - "the 6 difficulty boxes take up a lot of space"). It replaced a six-cell
+ *  grid that cost ~105px of every card; this costs ~20px.
+ *
+ *  Three rules make one line enough, and each is load-bearing:
+ *   1. A category with NO plays is not drawn. Most people have played two or three of the six, so
+ *      most cards are two or three chips wide. The card is a SUMMARY - all six always render on
+ *      the player's own detail screen (catGridHTML), so nothing becomes unreachable.
+ *   2. The SELECTED category is pinned first and drawn even at zero, so filtering to Expert shows
+ *      you the zero rather than emptying the row and leaving you wondering.
+ *   3. The rest follow by value, and anything past MAX_CHIPS collapses into a +N chip rather than
+ *      wrapping or being clipped. NO WRAP AND NO SIDEWAYS SCROLL: the row must fit 360px with the
+ *      widest number in the system (112,730) in it, which is what MAX_CHIPS is sized for. Tapping
+ *      the card opens the detail screen, where the collapsed ones are.
+ *  A chip is a key badge plus a number - the badge is the label, and it is never hue alone. */
+// A chip's width is its padding plus its characters, so the cap is BOTH a chip count and a
+// character budget: three short chips fit where three six-digit ones would not. Measured against
+// the narrowest supported screen (360px, which leaves a ~300px row) at the chip's 12.5px/800
+// tabular type, with room kept for the +N. Numbers here are wins and runs, which are in the
+// thousands today - the budget is what stops a future six-digit one from silently clipping.
+const MAX_CHIPS = 3;
+const CHIP_CHARS = 20;
 function catStripHTML(g) {
-  return `<div class="lb-strip">${CATS.map((c) => {
+  const vals = CATS.map((c) => ({ c, v: catValueOf(g, c.id) }));
+  const pinned = vals.filter((x) => x.c.id === _cat);
+  const rest = vals.filter((x) => x.c.id !== _cat && x.v > 0).sort((a, b) => b.v - a.v);
+  const candidates = pinned.concat(rest);
+  const shown = [];
+  let chars = 0;
+  for (const x of candidates) {
+    const cost = t(x.c.keyKey).length + String(x.v).length;
+    // The pinned category always earns its place; the rest have to fit.
+    if (shown.length && (shown.length >= MAX_CHIPS || chars + cost > CHIP_CHARS)) break;
+    shown.push(x);
+    chars += cost;
+  }
+  if (!shown.length) return '';
+  const hidden = candidates.length - shown.length;
+  const chips = shown.map(({ c, v }) => {
+    const sel = _cat === c.id;
+    return `<span class="lb-chipv${sel ? ' is-sel' : ''}" title="${esc(t(c.nameKey))}">`
+      + `<i class="lb-key${sel ? ' is-sel' : ''}">${esc(t(c.keyKey))}</i><b>${v}</b></span>`;
+  });
+  if (hidden > 0) chips.push(`<span class="lb-chipv is-more">+${hidden}</span>`);
+  return `<div class="lb-strip">${chips.join('')}</div>`;
+}
+
+/** The same six categories in full, on the player's own detail screen: a 3x2 grid that fits 360px
+ *  with nothing truncated. This is where every category is always shown, including the zeroes and
+ *  the ones the card's one-line strip collapsed - so the card can stay a summary without any
+ *  number becoming unreachable (THE LAW rule 1). */
+function catGridHTML(g) {
+  return `<div class="lb-grid6">${CATS.map((c) => {
     const sel = _cat === c.id;
     return `<span class="lb-cell${sel ? ' is-sel' : ''}">
       <span class="lb-cell-top"><i class="lb-key${sel ? ' is-sel' : ''}">${esc(t(c.keyKey))}</i><em>${esc(t(c.nameKey))}</em></span>
@@ -1107,7 +1154,7 @@ function playerDetail(list, key) {
     </span>
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
   </div>
-  ${catStripHTML(g)}`;
+  ${catGridHTML(g)}`;
   return head + messageHTML(g) + gsGameListHTML(g.games);
 }
 
@@ -1437,7 +1484,15 @@ function ensureCss() {
     '.lb-pnum span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin-top:3px}',
     '.lb-pfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px}',
     // --- the six-category strip: 3 by 2, so it fits 360px with nothing truncated ----------------
-    '.lb-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:8px;overflow:hidden;width:100%}',
+    // The card's one-line strip. NO WRAP: `flex-wrap:nowrap` plus a chip count capped in JS
+    // (MAX_CHIPS) is what keeps it to one line without ever clipping a number - a row that could
+    // overflow would need either a second line or a sideways scroll, and neither is allowed here.
+    '.lb-strip{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;width:100%;min-width:0}',
+    '.lb-chipv{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:7px;background:var(--lb-surface-2);font-size:12.5px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums}',
+    '.lb-chipv.is-sel{box-shadow:inset 0 0 0 1px var(--lb-sel)}',
+    '.lb-chipv.is-more{color:var(--lb-muted);font-weight:700}',
+    // The full six, on the player detail screen only (see catGridHTML).
+    '.lb-grid6{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:8px;overflow:hidden;width:100%}',
     '.lb-cell{display:flex;flex-direction:column;background:var(--lb-surface);padding:8px 6px 9px;min-width:0}',
     '.lb-cell.is-sel{background:var(--lb-surface-2)}',
     '.lb-cell-top{display:flex;align-items:baseline;gap:4px;min-width:0}',
