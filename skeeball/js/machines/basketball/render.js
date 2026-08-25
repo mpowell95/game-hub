@@ -55,6 +55,10 @@ function platedHoles(G) {
 // block of _buildMachine: without this the walls render warm grey, because they stand edge-on to
 // a nearly-overhead key light. Raising it flattens the rings; lowering it greys them.
 const RING_GLOW = 0.60;
+// The two states of a value card once the game tells the renderer which baskets are still owed
+// (setOwedSlots). Wide apart on purpose: a lit card next to a lit card says nothing.
+const CARD_OWED = 1.35;   // still to be hit - burns
+const CARD_DONE = 0.22;   // already hit - knocked back
 
 export class Renderer {
   constructor(canvas, board) {
@@ -102,6 +106,9 @@ export class Renderer {
     this._popups = [];
     this._particles = [];
     this._marqueeBulbs = [];
+    // hole id -> its value card's material, so the "still owed" glow can be set after build
+    this._cardMats = {};
+    this._owed = null;              // null = nothing told us yet, so every card stays as built
     // The four records painted on the backboard. ui.js owns the values and pushes them in via
     // setScoreboard(); the renderer only draws what it is handed, and never reads storage or the
     // network itself. Labels come in the same way so they stay translated.
@@ -284,7 +291,7 @@ export class Renderer {
       // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
       if (this.board.dressing === 'basketball') {
         this._wireBasket(H, cup && cup.color);
-        if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
+        if (cup && cup.label) this._hoopBackboard({ ...H, id }, cup, RING_GLOW);
         continue;
       }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
@@ -1538,6 +1545,11 @@ export class Renderer {
       map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, roughness: 0.5,
     });
     const edge = this._mat({ color: 0xd8d2c2, roughness: 0.6 });
+    // KEPT so setOwedSlots can dim it later. The card is the one thing on this face big enough
+    // to read at phone size, which is why the "still owed" signal lives here rather than on the
+    // rim: every card is the same cream (#f4f1e7) whatever colour its basket is, so ONE
+    // brightness works across the whole value ramp.
+    if (H.id) this._cardMats[H.id] = face;
     const mesh = new THREE.Mesh(geo, [face, edge]);
     const p = this.M.faceToWorld(H.u, riser.v0 + MOUNT, 0.006);
     mesh.position.set(p[0], p[1], p[2]);
@@ -1723,6 +1735,25 @@ export class Renderer {
    * have changed - on mount, when the network answers with the app-wide best, and after a rack.
    * Repaints the one texture; nothing else in the scene is touched.
    */
+  /** WHICH BASKETS ARE STILL OWED, for the "hit every basket" objective. The card above a
+   *  basket you have not landed yet burns bright; one you have is knocked back, so the face
+   *  reads as a checklist emptying rather than as decoration. THE CONTRAST DOES THE WORK - an
+   *  absolute brightness is invisible on its own, which is why the hit state drops well below
+   *  the built-in RING_GLOW rather than the lit state climbing above it.
+   *
+   *  Pass null (or never call it) and every card stays exactly as built - that is the state for
+   *  a player who has already hit all nine, and the reason this can never make an old device
+   *  look broken. */
+  setOwedSlots(ids) {
+    this._owed = ids ? new Set(ids) : null;
+    for (const [id, mat] of Object.entries(this._cardMats || {})) {
+      if (!mat) continue;
+      mat.emissiveIntensity = this._owed === null ? RING_GLOW
+        : (this._owed.has(id) ? CARD_OWED : CARD_DONE);
+      mat.needsUpdate = true;
+    }
+  }
+
   setScoreboard(next) {
     this.scoreboard = { ...this.scoreboard, ...next };
     if (!this._backMat) return;
