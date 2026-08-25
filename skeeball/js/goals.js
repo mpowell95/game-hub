@@ -40,9 +40,12 @@ export const PG_COLORS = 4;      // POPONGO: land all four scoring colors in ONE
 export const PG_BEST = 30;       // POPONGO: score 30+ in a single game
 export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 
-export const BB_HOOP = 100;      // HOT SHOT: sink the 100 hoop (proved by per-board bestThrow)
-export const BB_BEST = 300;      // HOT SHOT: score 300+ in a single game
-export const BB_TOTAL = 3000;    // HOT SHOT: 3,000 points in total on the machine
+// HOT SHOT, all three re-set by Matt on 2026-08-25 ahead of the machine going live. The first
+// one is no longer a number at all: "hit every basket. Not every point value. Every basket."
+// Same shape as BRICK CITY's, and it reuses the same per-board `slots` set - no new counter.
+export const BB_BASKETS = 9;     // HOT SHOT: land in every basket at least once
+export const BB_BEST = 700;      // HOT SHOT: score 700+ in a single game (was 300)
+export const BB_TOTAL = 10000;   // HOT SHOT: 10,000 points in total on the machine (was 3,000)
 
 // HOT SHOT: BRICK CITY. Its three are about its FACE, not about a number - Matt, 2026-08-24,
 // replacing the first draft's "sink a 100" and "score 240 in a game":
@@ -116,15 +119,23 @@ const GOALS = {
   },
   basketball(s, r) {
     const b = (s.boards || {}).basketball || {};
-    // The 100 hoop: the top-centre basket is the only 100 on this face, so a per-board best
-    // throw of 100 IS proof it was sunk - no new counter needed (b.bestThrow is Math.max only,
-    // synced, and cross-device merged by js/arcade-scores.js). The rail shows the best throw
-    // climbing toward 100 rather than a bare 0/1.
-    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
+    // BASKETS: the recorded union, plus whatever the live rack has added, so the rail climbs ball
+    // by ball instead of jumping at the end. Identical to BRICK CITY's - `slots` is a per-board
+    // set in js/arcade-scores.js, unioned across devices, fed by game.js's slotsHit (REAL holes
+    // only, so a miss into the trough can never complete it). No new counter.
+    //
+    // IT REPLACES "the 100 hoop" (Matt, 2026-08-25). Nothing is lost by the swap: b.bestThrow is
+    // still recorded, still Math.max only, and still shown on the machine's own records - the
+    // goal simply stops reading it. And the id changes from 'hoop' to 'baskets', so a player who
+    // completed the old one keeps every unlock it earned (sk.unlocked is additive and nothing
+    // removes an id) while the new objective starts where their own slots record starts.
+    const seen = new Set(Object.keys(b.slots || {}).filter((k) => (b.slots || {})[k]));
+    if (r && Array.isArray(r.slotsHit)) for (const id of r.slotsHit) seen.add(id);
+    const baskets = Math.min(seen.size, BB_BASKETS);
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BB_HOOP), target: BB_HOOP, met: bt >= BB_HOOP },
+      { id: 'baskets', labelKey: 'g_baskets', now: baskets, target: BB_BASKETS, met: baskets >= BB_BASKETS },
       { id: 'best', labelKey: 'g_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
       { id: 'total', labelKey: 'g_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
     ];

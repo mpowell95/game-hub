@@ -297,7 +297,9 @@ export const BOARDS = [
       ringLip: '#ffd23f',
       value: '#ffffff',
       pocket: '#0a0705',
-      marquee: '#1e63b8',
+      // THE SIGN IS THE BOARD'S BLUE, exactly (Matt, 2026-08-25). It was #1e63b8 against a
+      // #2560bd face - close enough to look like a mistake rather than a choice.
+      marquee: '#2560bd',
       marqueeText: '#ffd23f',
       bulb: '#ffd23f',
       glow: '#ff3b1f',
@@ -313,15 +315,29 @@ export const BOARDS = [
     // game.js's colorSweep is gated on need > 1, so a one-color board can never count a
     // "color sweep" into sk.colorSweeps (which would falsely satisfy POPONGO's colors goal).
     cups: {
-      h10a: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
-      h10b: { value: 10, color: '#e8541f', ink: '#ffffff', label: '10' },
-      h20: { value: 20, color: '#e8541f', ink: '#ffffff', label: '20' },
+      // A VALUE RAMP, NOT A PALETTE (Matt, 2026-08-25: "it should be obvious what the best target
+      // is without having to read anything. Just by glancing at the design"). Every hoop was the
+      // same orange, so the face said nothing about where to aim.
+      //
+      // IT RAMPS BY LIGHTNESS, NOT BY HUE, and that is the whole design. Matt is red/green
+      // colorblind (root CLAUDE.md), and dull-orange -> bright-gold is exactly the axis that
+      // collapses for him if hue is doing the work. So the 10 is the darkest thing on the face
+      // and the 100 is the brightest, and the ordering survives with no colour vision at all.
+      // The value card above each basket carries the number, which is the shape-not-hue marker
+      // the accessibility rule asks for. The 100 lands on the machine's own gold - the same
+      // colour as the marquee bulbs and its lettering - so the best target reads as the prize.
+      //
+      // `ink` is the number printed on the collar wall (render.js _cupPlate) and flips to dark
+      // on the three bright rims, where white would wash out.
+      h10a: { value: 10, color: '#7d3b22', ink: '#ffffff', label: '10' },
+      h10b: { value: 10, color: '#7d3b22', ink: '#ffffff', label: '10' },
+      h20: { value: 20, color: '#a8451f', ink: '#ffffff', label: '20' },
       h30a: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
       h30b: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
-      h50a: { value: 50, color: '#e8541f', ink: '#ffffff', label: '50' },
-      h50b: { value: 50, color: '#e8541f', ink: '#ffffff', label: '50' },
-      h60: { value: 60, color: '#e8541f', ink: '#ffffff', label: '60' },
-      h100: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
+      h50a: { value: 50, color: '#ff8a1f', ink: '#241610', label: '50' },
+      h50b: { value: 50, color: '#ff8a1f', ink: '#241610', label: '50' },
+      h60: { value: 60, color: '#ffb020', ink: '#241610', label: '60' },
+      h100: { value: 100, color: '#ffd23f', ink: '#241610', label: '100' },
     },
     arrangement: {
       lowL: 'h10a', lowC: 'h20', lowR: 'h10b',

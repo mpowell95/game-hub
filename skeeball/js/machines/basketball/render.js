@@ -1631,12 +1631,24 @@ export class Renderer {
     // them. Everything starts below TOP_INSET; the glass panel itself is inset to match.
     const TOP_INSET = 210;
 
+    // THE SURROUND IS THE BOARD'S BLUE, not the brown it was (Matt, 2026-08-25: the sign and the
+    // stats background should be "the same blue ... as the background on the board").
+    // GUARD: this is the painter Hot Shot uses - _sbArcade is true, so _paintBackboard's own
+    // gradient never runs on this machine. Change that one and nothing happens.
     const bez = x.createLinearGradient(0, 0, 0, Hpx);
-    bez.addColorStop(0, '#7a4e28');
-    bez.addColorStop(1, '#2e1a0d');
+    bez.addColorStop(0, this.look.face);
+    bez.addColorStop(1, this.look.faceEdge);
     x.fillStyle = bez;
     x.fillRect(0, 0, W, Hpx);
-    x.fillStyle = '#070405';
+    // THE GLASS IS THE BOARD'S BLUE, deepened (Matt, 2026-08-25: the sign and the stats
+    // background should be "the same blue ... as the background on the board"). It was #070405,
+    // a near-black that reads BROWN under this cabinet's warm lights - which is what made the
+    // panel look like it belonged to a different machine than the face below it.
+    // GUARD: it is the GLASS that is visible here, not the bezel behind it. This rect covers the
+    // bezel everywhere except a sliver at the bottom edge, so recolouring the bezel alone changes
+    // nothing you can see - measured with a magenta probe. And it stays DARK: the cyan labels and
+    // amber values on it have to read at the ~180px this panel occupies on a phone.
+    x.fillStyle = '#0c1c33';
     x.fillRect(28, TOP_INSET, W - 56, Hpx - TOP_INSET - 34);
     x.strokeStyle = BEZEL;
     x.lineWidth = 8;
