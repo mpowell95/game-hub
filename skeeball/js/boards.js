@@ -721,9 +721,17 @@ export const BOARDS = [
         midR: { u: X * 2.07, v: X * 5.3, r: X * 0.485, collarH: X * 0.97 },
         // The skill row: the 100s at mouth 0.8X (3.20 in), outer 0.965X (3.86 in), depth 0.8X;
         // the 50 at mouth 0.875X (3.50 in), outer 1.04X (4.16 in), depth 0.875X.
-        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.4, collarH: X * 0.8 },
-        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.875 },
-        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.4, collarH: X * 0.8 },
+        //
+        // PUSHED BACK AGAINST THE RISER, 2026-08-25, MATT'S NUMBER: every rim on this row sits
+        // 0.73 in from the wall it is bolted to - the same clearance the 40s on the row below
+        // already had. It was 1.07 in on the 100s and 0.92 in on the 50. The top tread's back
+        // edge is at v 40.15 in, so each basket's v is (40.15 - its outer radius - 0.73) and the
+        // three are NOT on one v: matching the GAP with three different mouths puts the wider 50
+        // 0.15 in forward of the 100s. That is what "0.73 in" means here; it is a gap, not a line.
+        // Recompute both numbers if a mouth or the tread ever moves.
+        topL: { u: -X * 2.07, v: X * 9.3725, r: X * 0.4, collarH: X * 0.8 },
+        topC: { u: 0, v: X * 9.335, r: X * 0.4375, collarH: X * 0.875 },
+        topR: { u: X * 2.07, v: X * 9.3725, r: X * 0.4, collarH: X * 0.8 },
       },
 
       minSpeed: 2.60,
