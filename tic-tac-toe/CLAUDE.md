@@ -71,6 +71,24 @@ only shape + name. The Ultimate/Classic variant row keeps its own explanatory hi
 (`hint_variant_ultimate`/`hint_variant_classic`) — that one was never in scope, only the
 difficulty explanation was.
 
+### Easy was an auto win (2026-08-24)
+
+Matt: *"make tic tac toe easy mode harder. it's an auto win right now."* The beginner tier took
+an immediate win and otherwise moved at RANDOM, in BOTH variants - it never blocked, so any human
+who could count three in a row won essentially every game (measured, Classic vs a casual
+win/block/center/corner human: **human 91% W, 0.5% L**).
+
+Easy now always takes its own win, blocks with probability `BEGINNER_BLOCK_CHANCE` (0.6), and
+otherwise plays center/a corner with probability `BEGINNER_GOOD_CELL_CHANCE` (0.3), else random.
+Ultimate's beginner mirrors it in its own vocabulary, with "avoid sending the opponent to a
+resolved board (a free move)" as the third step. Measured after, same casual human: **W 52% /
+D 44% / L 4%**; against PERFECT play it still never wins (W 64% / L 0% for the human), which is
+what an Easy tier should look like - winnable by anyone paying attention, no longer automatic.
+
+Both chances are deliberately below 1: at 1.0 the tier collapses into intermediate. The tuning
+numbers came from a sweep of block x good-cell over 600 games per cell; do not raise them without
+re-measuring, and do not "simplify" beginner back to win-or-random.
+
 ### Autosave/resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)
 
 Silent autosave/resume, same pattern as `mancala/js/ui.js`'s `saveGame`/`loadGame`/`clearGame`.
