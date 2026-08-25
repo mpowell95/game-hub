@@ -236,6 +236,54 @@
 }
 .sk-root .sk-lock { width: 54px; height: 54px; border-radius: 50%; background: var(--sks-surface-2); display: grid; place-items: center; color: var(--sks-muted); }
 .sk-root .sk-lock svg { width: 26px; height: 26px; }
+
+/* THE GOLDEN LOCK (2026-08-25): a machine the player has ALREADY EARNED, waiting on one tap of
+   theatre. It is a real <button> rather than the plain lock div, because it is the only lock on
+   this screen that does anything - 54px square is already over the 44px tap floor. Nothing here
+   gates ownership: ui.js banked the unlock before this slide was ever built. */
+.sk-root .sk-lock--pop {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #4a2f00;
+  background: linear-gradient(180deg, #ffe9a8, #f2b705);
+  box-shadow: 0 0 0 0 rgba(255, 206, 58, 0.55);
+  animation: sk-lock-beat 1.5s ease-in-out infinite;
+}
+.sk-root .sk-slide-poptext { color: var(--sks-ink); font-weight: 800; }
+@keyframes sk-lock-beat {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 206, 58, 0.55); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255, 206, 58, 0); }
+}
+/* The lock falls off: the shackle springs open, then the whole thing tumbles out of the slide.
+   ui.js re-renders the slide as an ordinary unlocked machine at the end (1150ms). */
+.sk-root .sk-slide-pop.is-popping .sk-lock--pop {
+  animation: sk-lock-fall 1s cubic-bezier(0.4, 0, 0.7, 1) 0.1s both;
+}
+.sk-root .sk-slide-pop.is-popping .sk-lock-shackle {
+  animation: sk-lock-shackle 0.22s ease-out both;
+  transform-origin: 8px 11px;
+}
+.sk-root .sk-slide-pop.is-popping .sk-lock-img { animation: sk-lock-reveal 0.9s ease-out 0.25s both; }
+.sk-root .sk-slide-pop.is-popping .sk-slide-poptext { animation: sk-lock-fade 0.3s ease-out both; }
+@keyframes sk-lock-shackle {
+  to { transform: rotate(-38deg) translateY(-2px); }
+}
+@keyframes sk-lock-fall {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  18% { transform: translate(0, -14px) rotate(-8deg); opacity: 1; }
+  100% { transform: translate(26px, 170px) rotate(78deg); opacity: 0; }
+}
+@keyframes sk-lock-reveal {
+  to { filter: grayscale(0) brightness(1) blur(0); }
+}
+@keyframes sk-lock-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-root .sk-lock--pop { animation: none; }
+  .sk-root .sk-slide-pop.is-popping .sk-lock--pop,
+  .sk-root .sk-slide-pop.is-popping .sk-lock-shackle,
+  .sk-root .sk-slide-pop.is-popping .sk-lock-img { animation: none; }
+}
 .sk-root .sk-slide-locktext { margin: 0; font-size: 13px; color: var(--sks-muted); max-width: 210px; }
 .sk-root .sk-car-chev {
   position: absolute;
@@ -553,6 +601,10 @@
   padding: 2px 12px 6px;
   pointer-events: none;
 }
+/* SPENT OBJECTIVES GIVE THEIR SPACE BACK (2026-08-25). ui.js paints this row empty once the
+   machine's three are all met and the machine they open is in the player's hands; the padding
+   alone would otherwise keep 8px of the stage - and the stage is the machine. */
+.sk-root .sk-gtotal-row:empty { display: none; }
 
 .sk-root .sk-gtotal {
   position: relative;
@@ -851,6 +903,136 @@
   100% { transform: translate(var(--dx), calc(var(--dy) + 40px)) scale(0.3); opacity: 0; }
 }
 
+/* ------------------------------------------------------- the unlock ceremony --- */
+/* Matt, 2026-08-25: the three objectives turn gold, float together to the middle, merge into a
+   pulsing blob, shrink to a point, and a golden key pops out - all before the game-over screen.
+   ui.js measures the three real boxes and hands each tile its own --tx/--ty, so this sheet never
+   has to know where a rail is; it just plays the timeline. THEATRE ONLY: the unlock is banked
+   before a single frame of this runs, and ui.js builds none of it under reduced motion.
+
+   THE TIMELINE, one place, because six animation-delays are otherwise unreadable:
+     0.00  the boxes are covered by gold copies of themselves and swell
+     0.55  the three fly to the centre and shrink                      (ends 1.80)
+     1.65  the blob fades up and beats twice                           (ends 2.75)
+     2.75  the blob collapses to a point                               (ends 3.05)
+     3.00  the key springs out and holds
+     3.35  the caption rises under it
+     4.70  key and caption fade                                        (host removed at 5.20) */
+.sk-root .sk-cer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+/* The originals go while their gold copies fly. They do not come back: by the time the ceremony
+   ends the objectives are spent, and ui.js paints them empty for the rest of the rack. */
+.sk-root .sk-cer-on .sk-grails,
+.sk-root .sk-cer-on .sk-gtotal-row { transition: opacity 0.2s ease-out; opacity: 0; }
+.sk-root .sk-cer-tile {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
+  border-radius: 10px;
+  border: 1px solid #e3bf72;
+  background: linear-gradient(180deg, #fff6d8, #ffd977);
+  box-shadow: 0 0 20px rgba(255, 190, 60, 0.6);
+  color: #7a4e00;
+  overflow: hidden;
+  animation: sk-cer-gold 0.5s ease-out var(--d) both, sk-cer-fly 1.25s cubic-bezier(0.5, -0.35, 0.25, 1) calc(0.55s + var(--d)) both;
+}
+.sk-root .sk-cer-tile b {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+@keyframes sk-cer-gold {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+@keyframes sk-cer-fly {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0.3); opacity: 0; }
+}
+/* The three, merged. Centred on its own point, so ui.js only has to give it an x/y. */
+.sk-root .sk-cer-blob {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  margin: -46px 0 0 -46px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 36%, #fffbe8, #ffd977 46%, #f2a105 78%, #b96b00);
+  box-shadow: 0 0 44px rgba(255, 190, 60, 0.75);
+  animation: sk-cer-blob 1.40s ease-in-out 1.65s both;
+}
+@keyframes sk-cer-blob {
+  0% { transform: scale(0.1); opacity: 0; }
+  14% { transform: scale(1); opacity: 1; }
+  32% { transform: scale(0.86); }
+  50% { transform: scale(1.08); }
+  68% { transform: scale(0.88); }
+  79% { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(0.02); opacity: 0.9; }
+}
+.sk-root .sk-cer-key {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  color: #ffd977;
+  filter: drop-shadow(0 0 16px rgba(255, 190, 60, 0.9));
+  animation: sk-cer-key 1.70s cubic-bezier(0.2, 1.5, 0.4, 1) 3s both, sk-cer-out 0.5s ease-in 4.7s both;
+}
+.sk-root .sk-cer-key svg { width: 100%; height: 100%; }
+@keyframes sk-cer-key {
+  0% { transform: scale(0.05) rotate(-40deg); opacity: 0; }
+  36% { transform: scale(1.18) rotate(8deg); opacity: 1; }
+  60% { transform: scale(1) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes sk-cer-out { to { opacity: 0; transform: scale(0.9); } }
+.sk-root .sk-cer-say {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 0 16px;
+  animation: sk-cer-say 0.45s ease-out 3.35s both, sk-cer-out 0.5s ease-in 4.7s both;
+}
+.sk-root .sk-cer-say em {
+  display: block;
+  font-style: normal;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--sk-gold);
+}
+.sk-root .sk-cer-say b {
+  display: block;
+  margin-top: 2px;
+  font-size: clamp(22px, 7vw, 30px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--sk-cream);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+.sk-root .sk-cer-say i {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sk-dim);
+}
+@keyframes sk-cer-say {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* --------------------------------------------------------------- reduced motion --- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -860,6 +1042,10 @@
   .sk-root .sk-over-score { animation: none; }
   /* ui.js does not build the fireworks at all under reduced motion; this is belt and braces. */
   .sk-root .sk-fw { display: none; }
+  /* Same belt and braces: ui.js returns from _unlockCeremony before building any of this. */
+  .sk-root .sk-cer { display: none; }
+  .sk-root .sk-cer-on .sk-grails,
+  .sk-root .sk-cer-on .sk-gtotal-row { transition: none; opacity: 1; }
 }
 
 /* ------------------------------------------------------------ portrait only --- */

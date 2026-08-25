@@ -782,6 +782,67 @@ label that does not fit will collide instead.
 
 **Do not give this bar `position: absolute` again**, however tempting the 40px looks.
 
+### The objectives VANISH once the machine has nothing left to ask for (2026-08-25)
+
+Matt: *"objectives vanish once all three reached AND next board unlocked."* Both rails and the
+total bar paint empty, and `.sk-gtotal-row:empty` collapses so the stage gets its ~40px back - a
+machine you have finished renders slightly bigger than one you have not.
+
+Two details that are load-bearing:
+
+- **The decision is made ONCE, in `_startGame` (`this._goalsHidden = this._goalsSpent()`), not on
+  every repaint.** The rack that completes the third objective has to KEEP its boxes on screen,
+  because the ceremony below flies those very boxes to the middle of the screen. Re-deciding per
+  paint would delete the thing being animated. The ceremony sets `_goalsHidden = true` itself when
+  it finishes, so they go for the rest of that rack and every rack after.
+- **A TERMINAL machine is spent on all-three-met alone.** Nothing hangs off RUNAWAY's objectives
+  (it is last in the chain), so waiting for an unlock there would leave its rails up forever.
+  `_goalsSpent()` treats "opens nothing" as spent. Anything unreadable answers NO, so the failure
+  mode is showing the objectives, never hiding something still owed.
+
+## The unlock ceremony (2026-08-25)
+
+Matt's sequence, in his words: the third objective completes, fireworks, the three objective tiles
+turn gold, float together to the middle, merge into a pulsing blob, shrink to a point, a golden key
+pops out - **all before the game-over screen** - and then the player goes to the gallery, finds the
+machine they just opened, its lock glowing and pulsing, taps it, and the lock falls off.
+
+**THE ONE RULE THIS IS BUILT ON: the key is theatre over an unlock that is already banked.** The
+earn writes `sk.unlocked` exactly when it always did (`_rackOver` -> `_earnedUnlocks` ->
+`unlockSkeeballBoard`, additive, THE LAW rule 2; `_ensureGoalUnlocks` still catches anything earned
+on another device). **Nothing in the ceremony grants anything.** If tapping the lock were what
+granted it, a player who earned a machine and closed the app would have lost it - which is exactly
+the shape of THE LAW's founding incident.
+
+- **`gamehub.skeeball.lockpop.v1`** (`{ [boardId]: true }`, local, cosmetic) is the whole of the
+  new state: "this machine owes the player a lock-pop." It is **armed by the ceremony and never
+  backfilled**, so an absent entry means "no ceremony owed" - every machine unlocked before this
+  shipped stays open exactly as it was, and a wiped key can only ever SKIP a ceremony. It can never
+  put a lock back on a machine somebody earned.
+- **`pending` requires `earned`** (`_slideState`). The gallery shows the golden lock only for a
+  machine the player already owns. A machine open to everyone by admin release never waits on a
+  lock, and neither does a dev profile.
+- **`_slideState(b, sk, devAll)` is now the single answer to "what is this slide"** - testing /
+  earned / released / pending / open. `_renderSetup` read those three sources in three separate
+  places before, and the picture-painting loop's copy had already drifted from the markup's.
+- **The ceremony can fire on ball 3; the unlock is banked at ball 9.** Quitting in between leaves
+  the flag armed against a machine not yet earned, which the gallery reads as still locked
+  (`pending` requires `earned`). The next finished rack banks it and the lock is waiting. Nothing
+  is lost on either path.
+- **Silent under reduced motion**, exactly like the fireworks: `_unlockCeremony` returns before
+  building anything, `_popLock` re-renders with no animation, and the game-over card still says
+  UNLOCKED. Nobody is gated behind an animation they cannot see.
+- **The game-over card waits** on the same `_fwUntil` the fireworks use (5.2s), and
+  `_showWhenQuiet` is bounded at 4s of its own, so a wedged animation can never strand a player on
+  the lane.
+- **The CSS timeline lives in one comment** above `.sk-cer` in `skeeball.css`. Six
+  `animation-delay`s spread across five rules are unreadable otherwise; change a beat there and
+  update that block.
+
+`ui.js` measures the three real boxes and hands each gold tile its own `--tx`/`--ty`, so the
+stylesheet never has to know where a rail is - which is what keeps this working on a machine whose
+rails sit somewhere else.
+
 ## The records panel (the four numbers every machine shows)
 
 Per Matt's spec, each machine displays: the **top score by ANY player**, the current player's
@@ -913,6 +974,10 @@ they now point here instead.)
 
 RUNAWAY was added on the END on 2026-08-25, which moved nobody's unlock and could not have: a
 machine appended to the chain changes no existing entry's `unlock`.
+
+Since 2026-08-25 a step in this chain is CELEBRATED as well as applied - see "The unlock ceremony"
+above. That is theatre only: `_earnedUnlocks` / `_ensureGoalUnlocks` are still the only writers of
+`sk.unlocked`, and the ceremony's own flag lives in its own local key.
 
 BRICK CITY was inserted between HOT SHOT and POPONGO on 2026-08-24, which moved POPONGO's unlock
 one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.unlocked` is an
