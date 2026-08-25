@@ -23,7 +23,7 @@ SHOT's rows 1 and 2 down to the last digit — the same columns, the same row he
 basket:
 
 ```
-  row 3   v 9.2875X          [ 100 ]  <- 3.50in mouth, and it SLIDES
+  row 3   v 9.2875X          [ 100 ]  <- 4.00in mouth, and it SLIDES
   row 2   v 5.3X        30  |  60  |  30
   row 1   v 1.3125X     10  |  20  |  10
 ```
@@ -64,15 +64,30 @@ that clears two hard rules at once:
    is a wall gap wider than `0.78X`. At the ends of this travel:
 
    ```
-   0.500 - 2.07X - (0.4375X + 0.0825X) = 0.8475X   (3.39in against the 3.00in ball)
+   0.500 - 2.07X - (0.5X + 0.0825X) = 0.7850X   (3.14in against the 3.00in ball)
    ```
 
-   It clears with 0.07X to spare. **A MOVING collar is the worst possible case for that rule** —
-   a static one merely sits in a pinch; this one can drive a ball into it under infinite solve
-   mass. That fear turned out to be unfounded at this amplitude (0 walkouts in 1,848 throws, and
-   0 in a second 810-throw grid), but the margin is why.
+   **A MOVING collar is the worst possible case for that rule** — a static one merely sits in a
+   pinch; this one can drive a ball into it under infinite solve mass. That fear has not
+   materialised at this amplitude (0 walkouts across every grid run so far), but the margin is
+   why.
+
+   **The margin is now 0.005X, and that is the number to watch.** It was `0.0675X` at the 3.50in
+   mouth this machine shipped with; widening the 100 to 4.00in on 2026-08-25 spent almost all of
+   it, because a wider mouth grows the collar's OUTER diameter against a rail that did not move.
+   The amplitude was kept at 2.07X only because the sweep measured zero walkouts at the new
+   size — **the rule is a threshold, the sweep is the evidence.** Any further widening of this
+   mouth, or any increase in `collarThick`, goes under the rule and has to be paid for out of the
+   amplitude:
+
+   ```
+   amp <= 0.500 - (r + collarThick) - 0.78X
+   ```
+
+   Work the amplitude out first; do not just raise the mouth and re-run.
 2. **`holes.inside`**: `|u| + holeR` at the extreme is `2.07X + 0.75X = 2.82X`, inside the
-   3.4375X half-width.
+   3.4375X half-width. Unaffected by the mouth change — it measures against the board's nominal
+   `holeR`, not this basket's rim.
 
 It also landed somewhere useful by luck: **±2.07X is exactly where HOT SHOT's `topL` and `topR`
 sit.** The 100 sweeps between two positions that machine already proves are clean-capturable,
