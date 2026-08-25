@@ -737,6 +737,7 @@ export class SkeeballUI {
     if (this.renderer) this.renderer.dispose();
     this.renderer = new (engineFor(this.game.board.id).Renderer)(this.el.canvas, this.game.board);
     this._pushScoreboard();
+    this._pushOwedSlots();
     this._bindPlay();
     if (!this._fit()) this._fitWhenLaidOut();
     // Watch the STAGE ELEMENT for size changes, not just the viewport. On the first load after
@@ -971,7 +972,31 @@ export class SkeeballUI {
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
     // The rails move on the same beat: a settled ball can change all three numbers.
     this._paintGoalRails();
+    this._pushOwedSlots();
     this._checkGoalsNow();
+  }
+
+  /** THE BASKETS YOU STILL OWE, handed to the renderer so it can light their value cards
+   *  (render.js setOwedSlots). Same source as the "every basket" objective - the per-board
+   *  `slots` set from js/arcade-scores.js, unioned with what this round has already hit - so the
+   *  face and the rail can never disagree.
+   *
+   *  Sends NULL once every basket is accounted for, which puts every card back to its built-in
+   *  brightness. A machine whose objective does not count baskets never gets a call at all, so
+   *  nothing here can light up a board that has no such goal. */
+  _pushOwedSlots() {
+    if (!this.renderer || typeof this.renderer.setOwedSlots !== 'function' || !this.game) return;
+    const board = this.game.board;
+    const ids = Object.keys((board.geom && board.geom.holes) || {});
+    if (!ids.length) return;
+    let sk = {};
+    try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
+    const rec = ((sk.boards || {})[board.id] || {}).slots || {};
+    const seen = new Set(Object.keys(rec).filter((k) => rec[k]));
+    const rack = this.game.result();
+    if (rack && Array.isArray(rack.slotsHit)) for (const id of rack.slotsHit) seen.add(id);
+    const owed = ids.filter((id) => !seen.has(id));
+    this.renderer.setOwedSlots(owed.length ? owed : null);
   }
 
   /** Run the displayed score up to the real one. Deliberately quick - this is a machine totting
