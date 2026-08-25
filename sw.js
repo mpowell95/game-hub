@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v481';
+const CACHE = 'game-hub-v482';
 
 const ASSETS = [
   './',
@@ -28,6 +28,13 @@ const ASSETS = [
   './js/viewport.js',
   './js/strings.js',
   './js/profile-store.js',
+  // Emoji picker (2026-08-25). emoji.js is validation only (~2 KB) and emoji-data.js is the
+  // browsable set (~13 KB), both small enough to be shell. The two search-keyword files are ~65 KB
+  // EACH and are deliberately kept OUT of the atomic shell - see isShellAsset below.
+  './js/emoji.js',
+  './js/emoji-data.js',
+  './js/emoji-search-en.js',
+  './js/emoji-search-es.js',
   './js/firebase-config.js',
   './js/game-stats.js',
   './js/arcade-scores.js',
@@ -357,7 +364,15 @@ ASSETS.push('./chinchon/decks/anita/betty-win.webp', './chinchon/decks/anita/bet
 //
 // validate-sw-assets.mjs still checks the full ASSETS list, so a 404'd path is still caught before
 // deploy; it just no longer strands the build if one slips through.
+// The emoji picker's per-language keyword indexes are ~65 KB each and are imported only when a
+// player types in the search box. They live under ./js/ because they are modules, but the SHELL is
+// re-downloaded in full on every CACHE bump - i.e. on every deploy - so putting 130 KB of search
+// data in it would re-pay for them a dozen times a day for a feature used a handful of times ever.
+// In REST they carry a content hash and get carried forward untouched across a bump instead.
+const NON_SHELL_JS = /^\.\/js\/emoji-search-[a-z]{2}\.js$/;
+
 function isShellAsset(p) {
+  if (NON_SHELL_JS.test(p)) return false;
   return p === './' || p === './index.html' || p === './manifest.webmanifest'
     || p.startsWith('./css/') || p.startsWith('./js/')
     || p.startsWith('./icons/') || p.startsWith('./profile/');
@@ -386,6 +401,8 @@ const REST = ASSETS.filter((p) => !isShellAsset(p));
 // deadline/latch, and the next validator run heals it.
 // __REST_MANIFEST_START__
 const REST_MANIFEST = {
+  './js/emoji-search-en.js': 'ee87f858cb',
+  './js/emoji-search-es.js': '1594c6f049',
   './img/where-hub.jpg': 'f163453a0f',
   './img/where-hub-dark.jpg': 'ec03c35a3c',
   './img/where-hub-es.jpg': 'ea7411feb8',

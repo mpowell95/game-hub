@@ -470,13 +470,20 @@ console.log('\n--- the REST_MANIFEST matches the deployed bytes ---');
 {
   const { createHash } = await import('node:crypto');
   const { readFileSync: rf, existsSync: ex } = await import('node:fs');
+  const TEXT_EXT = new Set(['.js', '.mjs', '.css', '.html', '.htm', '.json', '.txt', '.svg', '.md', '.webmanifest']);
   const stale = [];
   for (const entry of REST) {
     let rel = entry.replace(/^\.\//, '');
     if (rel === '' || rel.endsWith('/')) rel += 'index.html';
     const abs = join(ROOT, rel);
     if (!ex(abs)) continue; // validate-sw-assets.mjs owns missing-file failures
-    const h = createHash('sha256').update(rf(abs)).digest('hex').slice(0, 10);
+    // Line endings normalised for text, exactly as validate-sw-assets.mjs does it - the manifest
+    // describes the LF blob GitHub Pages serves, not the CRLF copy a Windows checkout holds. See
+    // that file's hashAsset() for the incident this rule comes from.
+    const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase();
+    const raw = rf(abs);
+    const body = TEXT_EXT.has(ext) ? Buffer.from(raw.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : raw;
+    const h = createHash('sha256').update(body).digest('hex').slice(0, 10);
     if (REST_MANIFEST[entry] !== h) stale.push(entry);
   }
   ok('REST_MANIFEST matches the bytes on disk (else run: node validate-sw-assets.mjs, commit sw.js)',
