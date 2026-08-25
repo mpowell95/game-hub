@@ -50,6 +50,7 @@ const SUITES = [
   { file: 'test-admin-config.mjs' },
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
+  { file: 'test-emoji.mjs' },
   { file: 'validate-sw-assets.mjs' },
   // validate-sw-assets checks WHICH files sw.js precaches; this one checks HOW it serves them
   // (the two-tier install and the fetch deadline). See its header for why both are needed.

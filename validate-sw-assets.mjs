@@ -149,6 +149,25 @@ if (missingFromAssets.length) {
 // The same executed-slice trick as step 1 gives the real SHELL/REST split (isShellAsset and the
 // two filters are inside the slice), so this can never disagree with the worker about which tier
 // a path is in.
+// A text asset is hashed with its line endings NORMALISED to LF, never as it sits on disk.
+// This repo has core.autocrlf=true, so a Windows checkout holds CRLF while the blob GitHub Pages
+// actually serves is LF - and cloud/Linux sessions see LF both ways. Hashing raw bytes therefore
+// gave a DIFFERENT manifest depending on which machine ran the deploy: on 2026-08-25 the shipped
+// manifest was a 109/189 mix of the two, `test-sw-strategy.mjs` failed on any Windows checkout of
+// main, and every platform flip marked ~190 unchanged files as changed - re-downloading ~11 MB
+// per deploy, which is precisely the regression the manifest was added to end (see the sw.js
+// caching notes in CLAUDE.md). Normalising makes the hash describe the DEPLOYED bytes, so the two
+// platforms agree and an unchanged file stays unchanged.
+//
+// Binaries are hashed raw: a 0x0D 0x0A pair inside a PNG or a .webp is data, not a line ending.
+const TEXT_EXT = new Set(['.js', '.mjs', '.css', '.html', '.htm', '.json', '.txt', '.svg', '.md', '.webmanifest']);
+function hashAsset(abs) {
+  const buf = readFileSync(abs);
+  const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase();
+  const body = TEXT_EXT.has(ext) ? Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : buf;
+  return createHash('sha256').update(body).digest('hex').slice(0, 10);
+}
+
 let manifestFailed = false;
 {
   const { REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
@@ -157,7 +176,7 @@ let manifestFailed = false;
     const rel = resolveAssetPath(entry);
     const abs = join(ROOT, rel);
     if (!existsSync(abs)) continue; // already reported as an offender in step 2
-    expected[entry] = createHash('sha256').update(readFileSync(abs)).digest('hex').slice(0, 10);
+    expected[entry] = hashAsset(abs);
   }
   const START = '// __REST_MANIFEST_START__';
   const END = '// __REST_MANIFEST_END__';

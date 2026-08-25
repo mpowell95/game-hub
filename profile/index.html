@@ -192,13 +192,61 @@
     .pf-modal-head strong { font-size: 1rem; }
     .pf-x { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; border: 0; background: var(--hub-surface-2);
       color: var(--hub-ink); font-size: 1.2rem; line-height: 1; cursor: pointer; }
-    .pf-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    /* The picker card is a fixed-height column: head, search, tabs, then a grid that scrolls.
+       Only the grid scrolls, so the search box and the category tabs never leave the screen. */
+    .pf-picker-card { display: flex; flex-direction: column; max-height: min(80vh, 620px); }
+    /* The grid is the ONLY part allowed to flex. Without this the head, the search box and the tab
+       strip are all shrinkable flex items and the browser squeezes them (the tab row collapsed to
+       9px) rather than scrolling the grid. */
+    .pf-picker-card > .pf-modal-head,
+    .pf-picker-card > .pf-emoji-search,
+    .pf-picker-card > .pf-emoji-cats { flex: 0 0 auto; }
+    .pf-emoji-search { position: relative; margin-bottom: 10px; }
+    .pf-emoji-search input {
+      width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 40px 0 12px;
+      font: inherit; font-size: 1rem; border-radius: 11px; border: 1px solid var(--hub-surface-2);
+      background: var(--hub-surface-2); color: var(--hub-ink);
+    }
+    .pf-emoji-qx {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      width: 36px; height: 36px; border: 0; border-radius: 9px; background: transparent;
+      color: var(--hub-muted); font-size: 1.2rem; line-height: 1; cursor: pointer; touch-action: manipulation;
+    }
+    .pf-emoji-qx[hidden] { display: none; }
+    /* Nine tabs will not fit a phone, so they scroll sideways. `overscroll-behavior: contain` stops
+       a flick that reaches either end from panning the page underneath (root CLAUDE.md scroll rule). */
+    .pf-emoji-cats {
+      display: flex; gap: 6px; overflow-x: auto; overscroll-behavior: contain;
+      margin-bottom: 10px; padding-bottom: 4px; scrollbar-width: none;
+    }
+    .pf-emoji-cats::-webkit-scrollbar { display: none; }
+    .pf-emoji-cats button {
+      flex: 0 0 auto; min-height: 34px; padding: 0 12px; font: inherit; font-size: .82rem;
+      border-radius: 999px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
+      color: var(--hub-ink); cursor: pointer; touch-action: manipulation; white-space: nowrap;
+    }
+    .pf-emoji-cats button.is-on { border-color: var(--hub-accent); background: var(--hub-surface); font-weight: 600; }
+    /* auto-fill, not a fixed 6 columns: 44px is the tap-target floor from the UX floor, and a wider
+       phone simply gets more columns instead of oversized buttons. */
+    .pf-emoji-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px;
+      overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 120px; padding: 2px;
+    }
     .pf-emoji-grid button {
       font-size: 1.6rem; line-height: 1; aspect-ratio: 1; border-radius: 11px; border: 1px solid var(--hub-surface-2);
-      background: var(--hub-surface-2); cursor: pointer; touch-action: manipulation; display: grid; place-items: center;
+      background: var(--hub-surface-2); color: var(--hub-ink);
+      cursor: pointer; touch-action: manipulation; display: grid; place-items: center;
+      /* A flag or a ZWJ family is wider than a smiley; clamp so one entry cannot stretch the row. */
+      overflow: hidden;
     }
     .pf-emoji-grid button:hover { background: #e1e8f2; }
     .pf-emoji-grid button.is-on { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: var(--hub-surface); }
+    /* "Your emoji" - the row shown when what was typed IS an emoji rather than a search word. */
+    .pf-emoji-grid .pf-emoji-head {
+      grid-column: 1 / -1; font-size: .78rem; color: var(--hub-muted);
+      text-transform: uppercase; letter-spacing: .04em; padding: 2px 2px 0;
+    }
+    .pf-emoji-empty { grid-column: 1 / -1; font-size: .9rem; color: var(--hub-muted); padding: 14px 2px; }
   </style>
 </head>
 <body>
@@ -295,11 +343,24 @@
   <!-- Emoji picker (shared by You and each opponent) -->
   <div class="pf-modal" id="pf-picker" hidden>
     <div class="pf-modal-scrim" data-picker-close></div>
-    <div class="pf-modal-card" role="dialog" aria-modal="true" aria-label="Choose an emoji" data-i18n-aria="pf_emoji_modal_h">
+    <div class="pf-modal-card pf-picker-card" role="dialog" aria-modal="true" aria-label="Choose an emoji" data-i18n-aria="pf_emoji_modal_h">
       <div class="pf-modal-head">
         <strong data-i18n="pf_emoji_modal_h">Choose an emoji</strong>
         <button type="button" class="pf-x" data-picker-close aria-label="Close" data-i18n-aria="pf_close_aria">&times;</button>
       </div>
+      <!-- One box, two jobs: type a word to search by name, or tap the keyboard's emoji key to use
+           any emoji at all. There is no web API that opens the emoji keyboard directly, so this is
+           as close as a browser gets. Only emoji are ever selectable - typed text that is not an
+           emoji simply searches, and finds nothing if it names nothing. -->
+      <div class="pf-emoji-search">
+        <input type="text" id="pf-emoji-q" autocomplete="off" autocapitalize="none" autocorrect="off"
+               spellcheck="false" enterkeyhint="search" maxlength="40"
+               placeholder="Search, or tap an emoji key" data-i18n-placeholder="pf_emoji_search_ph">
+        <button type="button" class="pf-emoji-qx" id="pf-emoji-qx" hidden
+                aria-label="Clear search" data-i18n-aria="pf_emoji_search_clear">&times;</button>
+      </div>
+      <div class="pf-emoji-cats" id="pf-emoji-cats" role="tablist"
+           aria-label="Emoji categories" data-i18n-aria="pf_emoji_cats_aria"></div>
       <div class="pf-emoji-grid" id="pf-emoji-grid"></div>
     </div>
   </div>
@@ -319,7 +380,9 @@
   <script type="module">
     import { loadProfile, saveProfile, clearProfile, newPlayerCode, canonicalizeCode } from '../js/profile-store.js';
     import * as net from '../js/stats-net.js';
-    import { makeT, onLangChange } from '../js/i18n.js';
+    import { makeT, onLangChange, getLang } from '../js/i18n.js';
+    // Validation only (~2 KB). The browsable set itself is imported lazily when the picker opens.
+    import { isEmoji, firstEmoji } from '../js/emoji.js';
     import { getTheme, setTheme } from '../js/theme.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import { loadPalette, savePalette, ALL_EMOJIS, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
@@ -336,7 +399,14 @@
     applyI18n();
     // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
     // "(2 new)" off the replies button on a language switch.
-    onLangChange(() => { applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat(); paintReplyCount(); });
+    onLangChange(() => {
+      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderQuickChat(); paintReplyCount();
+      // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
+      // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
+      searchIndex = null; searchPromise = null;
+      renderPickerCats();
+      if (!els.picker.hidden) renderPickerGrid();
+    });
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -345,7 +415,12 @@
       });
     }
 
-    const EMOJI = [
+    // The picker's fallback list, and ONLY that. The real set is the ~1870 emoji in
+    // js/emoji-data.js, loaded when the picker opens; this is what the grid falls back to if that
+    // import fails (a device offline before the service worker has precached it). An empty picker
+    // would be a dead end - these 32 are the list every profile was built from before 2026-08-25,
+    // so the fallback is exactly the old behaviour rather than a degraded new one.
+    const FALLBACK_EMOJI = [
       '🙂','😎','🤓','🥳','🤠','🧐','😺','🤖',
       '🐶','🐱','🦊','🐼','🦁','🐯','🐸','🦉',
       '🐢','🦄','🐙','🐝','🐧','🐨','🐵','🦖',
@@ -387,6 +462,9 @@
       saved: $('#pf-saved'),
       picker: $('#pf-picker'),
       grid: $('#pf-emoji-grid'),
+      pickQ: $('#pf-emoji-q'),
+      pickQx: $('#pf-emoji-qx'),
+      pickCats: $('#pf-emoji-cats'),
       reset: $('#pf-reset'),
       code: $('#pf-code'),
       codeCopy: $('#pf-code-copy'),
@@ -421,24 +499,195 @@
     }
 
     // -- Emoji picker ------------------------------------------------------------
-    let pickTarget = null; // 'you' or an opponent index
+    // Rebuilt 2026-08-25. It used to be a hardcoded grid of 32; Matt: players "should be able to
+    // open their keyboard and choose any emoji they want". No browser exposes an API that opens the
+    // OS emoji keyboard (`inputmode` has no emoji value), so this does the next best thing on both
+    // fronts at once: the whole ~1870-emoji set ships in the app, searchable and categorised, AND
+    // the search box accepts a glyph typed straight from the keyboard's emoji key.
+    //
+    // Only emoji are selectable. Typed text is treated as a search query, never as an avatar, so
+    // "reject anything that is not an emoji" falls out of the design instead of needing a warning:
+    // there is no button to press for "MP".
+    //
+    // The heavy data is imported LAZILY and in two stages - the emoji when the picker opens, the
+    // ~65 KB search keywords only once someone actually types, and only in the current language.
+
+    const RECENT_KEY = 'gamehub.emojiRecent.v1';
+    const RECENT_MAX = 24;
+    // A search that returns 900 buttons is not a search. Anything past this is noise, and building
+    // the nodes for it costs real time on a phone.
+    const SEARCH_MAX = 120;
+
+    let pickTarget = null;   // 'you' or an opponent index
+    let pickCurrent = '';    // the emoji that target already has, for the is-on outline
+    let pickCat = null;      // the open category id, or 'recent'; null until the data lands
+    let emojiData = null;    // { EMOJI_GROUPS, ALL_EMOJI } once loaded
+    let emojiDataPromise = null;
+    let searchIndex = null;  // { lang, words } once loaded
+    let searchPromise = null;
+
+    /** Recently used emoji, newest first. Own key, not the profile: a one-tap convenience, not
+     *  earned history, and keeping it out of gamehub.profile leaves that shape untouched. */
+    function loadRecent() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+        return Array.isArray(raw) ? raw.filter((e) => typeof e === 'string' && isEmoji(e)).slice(0, RECENT_MAX) : [];
+      } catch { return []; }
+    }
+    function pushRecent(emoji) {
+      try {
+        const next = [emoji, ...loadRecent().filter((e) => e !== emoji)].slice(0, RECENT_MAX);
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch { /* private mode: the picker just has no memory */ }
+    }
+
+    /** The emoji set. Resolves to the fallback list if the import fails, never to nothing. */
+    function ensureEmojiData() {
+      if (!emojiDataPromise) {
+        emojiDataPromise = import('../js/emoji-data.js')
+          .then((m) => ({ groups: m.EMOJI_GROUPS, all: m.ALL_EMOJI }))
+          .catch((err) => {
+            console.warn('[profile] emoji set unavailable, falling back to the short list', err);
+            return { groups: [{ id: 'smileys', labelKey: 'pf_emoji_cat_smileys', emoji: FALLBACK_EMOJI }], all: FALLBACK_EMOJI };
+          });
+      }
+      return emojiDataPromise;
+    }
+
+    /** The keyword index for the CURRENT language. Reloaded when the language changes. */
+    function ensureSearchIndex() {
+      const lang = getLang();
+      if (searchIndex && searchIndex.lang === lang) return Promise.resolve(searchIndex);
+      if (!searchPromise || searchPromise.lang !== lang) {
+        searchPromise = import(lang === 'es' ? '../js/emoji-search-es.js' : '../js/emoji-search-en.js')
+          .then((m) => { searchIndex = { lang, words: m.KEYWORDS }; return searchIndex; })
+          .catch((err) => {
+            console.warn('[profile] emoji search index unavailable', err);
+            searchIndex = { lang, words: [] };
+            return searchIndex;
+          });
+        searchPromise.lang = lang;
+      }
+      return searchPromise;
+    }
+
+    const gridButtons = (list) => list.map((e) =>
+      `<button type="button" data-emoji="${escAttr(e)}" class="${e === pickCurrent ? 'is-on' : ''}">${e}</button>`).join('');
+
+    function renderPickerCats() {
+      if (!emojiData) { els.pickCats.innerHTML = ''; return; }
+      const tabs = loadRecent().length
+        ? [{ id: 'recent', labelKey: 'pf_emoji_cat_recent' }, ...emojiData.groups]
+        : emojiData.groups;
+      els.pickCats.innerHTML = tabs.map((g) =>
+        `<button type="button" role="tab" data-cat="${escAttr(g.id)}" aria-selected="${g.id === pickCat}"
+                 class="${g.id === pickCat ? 'is-on' : ''}">${escAttr(t(g.labelKey))}</button>`).join('');
+    }
+
+    /** Repaint the grid for the current query + category. Async only because search is lazy. */
+    async function renderPickerGrid() {
+      const q = els.pickQ.value.trim();
+      els.pickQx.hidden = !q;
+
+      // 1. What was typed IS an emoji: offer exactly that, from any keyboard, any Unicode version.
+      const typed = firstEmoji(q);
+      if (typed) {
+        els.grid.innerHTML = `<div class="pf-emoji-head">${escAttr(t('pf_emoji_typed_h'))}</div>` + gridButtons([typed]);
+        return;
+      }
+
+      if (!emojiData) return; // still loading; the open path repaints when it lands
+
+      // 2. A search word. Matches must start a WORD, never land mid-word: a plain substring test
+      //    turned "mp" into 71 results (trumpet, lamp, camp, jump...), which is not a search.
+      //    Whole-word hits lead, so "cat" opens with the cat and not with "caterpillar".
+      if (q) {
+        const { words } = await ensureSearchIndex();
+        // Fold the query exactly as build-emoji-data.mjs folded the keywords.
+        const needle = q.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]+/g, ' ').trim();
+        const lead = [], rest = [];
+        for (let i = 0; i < words.length && lead.length + rest.length < SEARCH_MAX * 3; i++) {
+          const w = words[i];
+          if (!needle || !w) continue;
+          const atWordStart = w.startsWith(needle) || w.includes(' ' + needle);
+          if (!atWordStart) continue;
+          const wholeWord = w === needle || w.startsWith(needle + ' ')
+            || w.endsWith(' ' + needle) || w.includes(' ' + needle + ' ');
+          (wholeWord ? lead : rest).push(emojiData.all[i]);
+        }
+        const hits = [...lead, ...rest].slice(0, SEARCH_MAX);
+        els.grid.innerHTML = hits.length
+          ? gridButtons(hits)
+          : `<p class="pf-emoji-empty">${escAttr(t('pf_emoji_none'))}</p>`;
+        return;
+      }
+
+      // 3. No query: the open category.
+      const list = pickCat === 'recent'
+        ? loadRecent()
+        : (emojiData.groups.find((g) => g.id === pickCat) || emojiData.groups[0]).emoji;
+      els.grid.innerHTML = gridButtons(list);
+      els.grid.scrollTop = 0;
+    }
+
     function openPicker(target, current) {
       pickTarget = target;
-      els.grid.innerHTML = EMOJI.map((e) =>
-        `<button type="button" data-emoji="${e}" class="${e === current ? 'is-on' : ''}">${e}</button>`).join('');
+      pickCurrent = current || '';
+      els.pickQ.value = '';
+      els.pickQx.hidden = true;
       els.picker.hidden = false;
+      // Paint whatever is already in hand first, so the modal is never an empty box.
+      if (emojiData) { renderPickerCats(); renderPickerGrid(); }
+      else els.grid.innerHTML = gridButtons(loadRecent().length ? loadRecent() : FALLBACK_EMOJI);
+      // Every open lands on Recent when there is one, not on whichever tab was left open last
+      // time: the emoji this player actually uses are the ones they are most likely to want, and
+      // it is also the only view where the avatar they already have shows its selected outline.
+      pickCat = loadRecent().length ? 'recent' : null;
+      ensureEmojiData().then((data) => {
+        emojiData = data;
+        if (els.picker.hidden) return; // closed while it loaded
+        if (!pickCat) pickCat = data.groups[0].id;
+        renderPickerCats();
+        renderPickerGrid();
+      });
     }
     function closePicker() { els.picker.hidden = true; pickTarget = null; }
+
     els.grid.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-emoji]');
       if (!btn) return;
       const emoji = btn.dataset.emoji;
+      // Belt and braces: every path into the grid already validates, but this is the one place a
+      // value becomes someone's avatar, so it is also the one place worth checking twice.
+      if (!isEmoji(emoji)) return;
       if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; }
       else { state.opponents[pickTarget].emoji = emoji; renderOpps(); }
+      pushRecent(emoji);
       closePicker();
       commitNow();
     });
+    els.pickCats.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-cat]');
+      if (!btn) return;
+      pickCat = btn.dataset.cat;
+      els.pickQ.value = '';
+      renderPickerCats();
+      renderPickerGrid();
+    });
+    els.pickQ.addEventListener('input', () => { renderPickerGrid(); });
+    // Enter on a search with exactly one hit picks it, so a typed emoji needs no second tap.
+    els.pickQ.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      const only = els.grid.querySelector('button[data-emoji]');
+      if (only) only.click();
+    });
+    els.pickQx.addEventListener('click', () => { els.pickQ.value = ''; els.pickQ.focus(); renderPickerGrid(); });
     els.picker.querySelectorAll('[data-picker-close]').forEach((n) => n.addEventListener('click', closePicker));
+    // Escape closes, same as the scrim. Only while the picker is actually open.
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !els.picker.hidden) closePicker();
+    });
 
     // -- Colors ------------------------------------------------------------------
     function renderColors() {
