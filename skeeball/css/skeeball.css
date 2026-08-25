@@ -1012,7 +1012,7 @@
       5.50  the blob beats three times                                             (ends 7.60)
       7.60  the blob collapses to a point                                          (ends 8.50)
       8.30  the point flashes white-hot                                            (ends 9.00)
-      8.70  the key grows out of the point, unmasking as it goes                   (ends 10.20)
+      8.70  the key grows from a 4px speck at that point to full size            (ends 10.50)
      10.00  the machine's name rises under it                                      (ends 10.60)
      10.70  the OK button fades in                                                 (ends 11.20)
       then  IT HOLDS until the player taps OK (ui.js; 60s backstop)
@@ -1142,8 +1142,11 @@
   100% { transform: scale(1.5); opacity: 0; }
 }
 
-/* GROWS OUT OF THE POINT. The clip-path circle opening from 4% is what sells it as emerging
-   rather than being swapped in: at the start there is a pinhole of key, and it widens. */
+/* GROWS OUT OF THE POINT, AND IT IS THE KEY ITSELF THAT GROWS. GUARD: NO clip-path HERE. The cut
+   before this unmasked a full-size key through a widening circle, which is a WIPE - Matt: "make
+   sure the key actually begins small and grows. Not just the visibility of the key." It is pure
+   scale now: 0.02 of 208px is a 4px speck sitting exactly where the blob collapsed, and it grows
+   from that. The glow scales with it, because `filter` is applied before `transform`. */
 .sk-root .sk-cer-key {
   position: absolute;
   /* The key art is 106:58, so it is sized by WIDTH and the height follows. Squaring it shears it. */
@@ -1154,14 +1157,22 @@
   /* GUARD: NOT AN EXPO-OUT. cubic-bezier(0.16, 1, 0.3, 1) is 65% done in the first eighth of its
      run, which turned "grows out of a point" back into the instant swap this rebuild exists to
      remove. This curve keeps the early growth visible. */
-  animation: sk-cer-grow 1.6s cubic-bezier(0.42, 0.12, 0.3, 1) 8.7s both;
+  /* GUARD: linear, and the PACE lives in the keyframes. Every eased curve tried here dumped most
+     of the growth into a third of the run - measured 3px -> 185px in 0.65s of a 1.8s animation,
+     which is the instant swap wearing a costume again. Stepping the scale by hand is the only way
+     the growth stays watchable end to end. */
+  animation: sk-cer-grow 1.8s linear 8.7s both;
 }
 .sk-root .sk-cer-key svg { display: block; width: 100%; height: 100%; }
 @keyframes sk-cer-grow {
-  0% { transform: scale(0.06) rotate(-70deg); opacity: 0; clip-path: circle(4% at 50% 50%); }
-  14% { opacity: 1; }
-  70% { transform: scale(1.06) rotate(-20deg); }
-  100% { transform: scale(1) rotate(-28deg); opacity: 1; clip-path: circle(75% at 50% 50%); }
+  0% { transform: scale(0.02) rotate(-88deg); opacity: 0; }
+  6% { transform: scale(0.05) rotate(-84deg); opacity: 1; }
+  20% { transform: scale(0.13) rotate(-73deg); }
+  40% { transform: scale(0.33) rotate(-57deg); }
+  60% { transform: scale(0.6) rotate(-42deg); }
+  80% { transform: scale(0.9) rotate(-30deg); }
+  92% { transform: scale(1.07) rotate(-24deg); }
+  100% { transform: scale(1) rotate(-28deg); opacity: 1; }
 }
 
 .sk-root .sk-cer-say {

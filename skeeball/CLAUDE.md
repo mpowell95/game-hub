@@ -862,11 +862,17 @@ the shape of THE LAW's founding incident.
   whole thing in 5.2s; Matt: *"you're rushing it... you just instantly swap what they are."* So the
   boxes FADE to gold rather than starting gold, their labels go mid-flight so three blank gold
   pills converge, the tiles are still on screen while the blob swells up out of them, and the key
-  GROWS OUT OF the point the blob collapsed into (a `clip-path` circle opening from 4%) rather than
-  replacing it. **Two easing traps are commented in place and both were real:** an expo-out on the
-  key was 65% done in the first eighth of its run and read as an instant swap again, and three
-  comma-separated `transform` animations on the blob let the last one's `both` fill erase the two
-  before it - which is why the merge, the beats and the collapse are ONE keyframe block.
+  GROWS OUT OF the point the blob collapsed into rather than replacing it.
+  **Three traps are commented in place and all three were real.** An expo-out on the key was 65%
+  done in the first eighth of its run and read as an instant swap again. Three comma-separated
+  `transform` animations on the blob let the last one's `both` fill erase the two before it - which
+  is why the merge, the beats and the collapse are ONE keyframe block. And the key was once
+  unmasked through a widening `clip-path` circle, which is a WIPE, not growth - Matt: *"make sure
+  the key actually begins small and grows. Not just the visibility of the key."* It is pure scale
+  now, `linear` with the pace stepped by hand in the keyframes, because every eased curve tried
+  dumped most of the growth into a third of the run (measured: 3px to 185px in 0.65s of a 1.8s
+  animation). **Measure it, don't eyeball it** - the preview generator reads the key's rendered
+  width at each beat, and 2 / 9 / 21 / 59 / 133 / 234 px is what "watchable" looks like as numbers.
 - **The CSS timeline lives in one comment** above `.sk-cer` in `skeeball.css`. Eight
   `animation-delay`s spread across six rules are unreadable otherwise; change a beat there and
   update that block.
