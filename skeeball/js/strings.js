@@ -48,6 +48,26 @@ const STRINGS = {
     g_baskets: 'Every basket',
     g_clean: 'Clean round',
     g_net: 'Net points',
+    // BRICK CITY's raised set (Matt, 2026-08-25). g_baskets and g_clean are still here because
+    // HOT SHOT uses the first and nothing gains from deleting the second.
+    // 'Every basket x3' wrapped to THREE lines in a 71px rail box, standing 13px taller than the
+    // rail opposite it; 'Baskets x3' takes two, and what it drops ('every', and that there are
+    // nine) is on the box's own number and in the definition a tap away. Measured at 375x667.
+    g_baskets3: 'Baskets x3',
+    g_perfect: 'Perfect rounds',
+    // WHAT EACH OBJECTIVE ACTUALLY MEANS - shown when a player taps one (ui.js _showGoalDefs).
+    // Matt, 2026-08-25, on the perfect round: "'perfect rounds' must be defined when you click
+    // on the objective." Every machine's goals carry one, so the sheet is never half empty.
+    obj_def_h: 'What these mean',
+    d_cl_hundreds: 'Balls thrown into a 100 corner pocket, counted for as long as you have played.',
+    d_pg_colors: 'Land a cup of all four scoring colors in one round.',
+    d_bb_baskets: 'Land a ball in each of the nine baskets at least once.',
+    d_ra_hoop: 'Catch the moving 100 basket while it slides across the top row.',
+    d_bc_baskets: 'Land a ball in each of the nine baskets three times. It adds up across rounds.',
+    d_bc_perfect: 'A round where all nine balls score: no zeros, no penalty baskets. Three of them.',
+    d_bc_net: 'Every round on this machine added up, after the penalty baskets take their cut.',
+    d_single: 'Your best score in a single round on this machine.',
+    d_total: 'Every round on this machine added up.',
     // RUNAWAY's own. Two short words for the same reason as BRICK CITY's above - the rail box is
     // min(76px, 19vw) wide and wraps to two lines, and a third line pushes the number out of it.
     g_runaway: 'Catch the 100',
@@ -147,6 +167,18 @@ const STRINGS = {
     g_baskets: 'Cada canasta',
     g_clean: 'Ronda limpia',
     g_net: 'Puntos netos',
+    g_baskets3: 'Canastas x3',
+    g_perfect: 'Rondas perfectas',
+    obj_def_h: 'Qué significan',
+    d_cl_hundreds: 'Bolas encestadas en un hueco de 100 de las esquinas, contadas desde que empezaste.',
+    d_pg_colors: 'Encesta en los cuatro colores que puntúan en una sola ronda.',
+    d_bb_baskets: 'Encesta al menos una vez en cada una de las nueve canastas.',
+    d_ra_hoop: 'Atrapa la canasta de 100 mientras se desliza por la fila de arriba.',
+    d_bc_baskets: 'Encesta tres veces en cada una de las nueve canastas. Se acumula entre rondas.',
+    d_bc_perfect: 'Una ronda en la que las nueve bolas puntúan: sin ceros ni canastas de castigo. Tres veces.',
+    d_bc_net: 'Todas las rondas en esta máquina sumadas, tras el descuento de las canastas de castigo.',
+    d_single: 'Tu mejor puntuación en una sola ronda en esta máquina.',
+    d_total: 'Todas las rondas en esta máquina sumadas.',
     g_runaway: 'Atrapa el 100',
     goals_obj_h: 'Objetivos',
     goals_unlocked: 'DESBLOQUEADA',

@@ -299,6 +299,7 @@ const FIXTURE_PRE_UNIFIED = {
 
   const arc = await import(pathToFileURL(join(ROOT, 'js', 'arcade-scores.js')).href);
   const { BOARDS, boardById } = await import(pathToFileURL(join(ROOT, 'skeeball', 'js', 'boards.js')).href);
+  const { readGoals } = await import(pathToFileURL(join(ROOT, 'skeeball', 'js', 'goals.js')).href);
 
   // The chain itself, as data - so this test fails loudly if a future session re-points an unlock
   // without thinking about the players standing on it. It did exactly that when HOT SHOT:
@@ -376,6 +377,54 @@ const FIXTURE_PRE_UNIFIED = {
     eq('G: slots union across devices rather than intersecting',
       Object.keys(two.brickcity.slots).sort(), ['lowL', 'midC', 'topR']);
     ok('G: clean racks add across devices', two.brickcity.cleanRacks === 3);
+  }
+
+  // --- scenario H: BRICK CITY's objectives were RAISED the day it went live ------------------
+  // 2026-08-25, Matt: every basket THREE times, THREE perfect rounds (no zeros and no negatives),
+  // and 30,000 net points. The first two cannot be answered by the 2026-08-24 fields - a set
+  // cannot count to three, and a clean round allows a miss - so `slotHits` (counts) and
+  // `perfectRacks` (a counter) were added beside them. THE LAW rules 3 and 5: the old two are
+  // still written and still read (HOT SHOT reads `slots`), and a record written before the new
+  // two existed must load whole and be credited with nothing it did not earn.
+  {
+    const PRE = { plays: 9, points: 640, best: 180, bestThrow: 100,
+      daily: { '2026-08-24': 180 }, slots: { lowC: true, midC: true }, cleanRacks: 2 };
+    const m = arc.mergeBoards({}, { brickcity: JSON.parse(JSON.stringify(PRE)) });
+    eq('H: a record written before the raise keeps every number it had',
+      { plays: m.brickcity.plays, points: m.brickcity.points, best: m.brickcity.best,
+        bestThrow: m.brickcity.bestThrow, daily: m.brickcity.daily,
+        slots: m.brickcity.slots, cleanRacks: m.brickcity.cleanRacks },
+      PRE);
+    ok('H: ...and is credited with no basket hits and no perfect rounds it did not earn',
+      Object.keys(m.brickcity.slotHits).length === 0 && m.brickcity.perfectRacks === 0);
+
+    // Counts SUM across devices where the set unions - two devices that each hit a basket twice
+    // have hit it four times, not twice.
+    const two = arc.mergeBoards(
+      arc.mergeBoards({}, { brickcity: { slotHits: { lowL: 2, midC: 1 }, perfectRacks: 1 } }),
+      { brickcity: { slotHits: { lowL: 2, topR: 3 }, perfectRacks: 2 } });
+    eq('H: basket hit counts add across devices',
+      { lowL: two.brickcity.slotHits.lowL, midC: two.brickcity.slotHits.midC, topR: two.brickcity.slotHits.topR },
+      { lowL: 4, midC: 1, topR: 3 });
+    ok('H: perfect rounds add across devices', two.brickcity.perfectRacks === 3);
+
+    // The goals themselves, read through the shipped goals.js: nine baskets at three hits each,
+    // three perfect rounds, 30,000 net.
+    const full = {};
+    for (const id of Object.keys(boardById('brickcity').geom.holes)) full[id] = 3;
+    const done = readGoals('brickcity', { boards: { brickcity: { slotHits: full, perfectRacks: 3, points: 30000 } } });
+    ok('H: all nine baskets at three hits each completes the first objective',
+      done[0].met && done[0].now === 9 && done[0].target === 9);
+    ok('H: three perfect rounds completes the second', done[1].met && done[1].target === 3);
+    ok('H: 30,000 net completes the third', done[2].met && done[2].target === 30000);
+
+    // TWO hits on every basket is not three. The failure this guards is an off-by-one that would
+    // hand POPONGO to a player who has not done what the rail says.
+    const twoEach = {};
+    for (const id of Object.keys(boardById('brickcity').geom.holes)) twoEach[id] = 2;
+    const short = readGoals('brickcity', { boards: { brickcity: { slotHits: twoEach, perfectRacks: 2, points: 29999 } } });
+    ok('H: two hits each, two perfect rounds and 29,999 completes nothing',
+      !short[0].met && !short[1].met && !short[2].met && short[0].now === 0);
   }
 }
 

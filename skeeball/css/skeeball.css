@@ -464,6 +464,62 @@
   .sk-root .sk-hp-cap .c2 { animation: none; opacity: 0; }
 }
 
+/* WHAT THE OBJECTIVES MEAN (2026-08-25). Same chrome as the how-to sheet above - it reuses
+   .sk-hp-veil, .sk-hp-title and .sk-hp-ok - with its own card so the three rows can breathe.
+   Scrolls inside itself (overscroll-behavior on the veil) rather than letting the launcher pan
+   underneath, per root CLAUDE.md's overlay rule. */
+.sk-root .sk-def-modal {
+  position: relative;
+  width: min(100%, 330px);
+  max-height: min(84vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sks-surface);
+  border-radius: 22px;
+  padding: 16px 14px 14px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* Every win/lose style popup in this repo gets a close X in its top right (root CLAUDE.md). */
+.sk-root .sk-def-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: var(--sks-ink);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  font-family: inherit;
+}
+.sk-root .sk-def-rows { display: flex; flex-direction: column; gap: 8px; }
+.sk-root .sk-def-row {
+  background: var(--sks-surface-2);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+/* The one the player tapped, marked by a BORDER and a lifted background - never by hue alone
+   (root CLAUDE.md's colorblind rule). */
+.sk-root .sk-def-row.is-focus { border-color: #e8763c; background: #fff3e7; }
+.sk-root .sk-def-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sk-root .sk-def-head em {
+  font-style: normal;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: #2b3a55;
+}
+.sk-root .sk-def-head b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: #2b3a55; }
+.sk-root .sk-def-row.is-done .sk-def-head b::after { content: ' ✓'; }
+.sk-root .sk-def-text { margin: 4px 0 0; font-size: 13px; line-height: 1.35; color: #4a5b72; }
+
 /* --------------------------------------------------------------------- play --- */
 
 .sk-root .sk-play-wrap {
@@ -625,9 +681,16 @@
    That is safe only because they sit in the gutters frame.mjs measures either side of the
    machine - 66px clear at the board's widest point, wider further up - and never over the board
    itself. The neighbouring machines behind them are barely lit, so each block carries its own
-   dark backing. Re-run frame.mjs before moving either rail inward, and never take
-   pointer-events: none off them: a rail that can be hit is a rail that can eat a swipe.
-   ONE BOX PER RAIL since 2026-08-24: the running total is the wide bar above the machine. */
+   dark backing. Re-run frame.mjs before moving either rail inward.
+   ONE BOX PER RAIL since 2026-08-24: the running total is the wide bar above the machine.
+
+   GUARD: THE COLUMN STAYS pointer-events: none - a rail that can be hit is a rail that can eat a
+   swipe. Since 2026-08-25 the BOX inside it takes taps (it opens the objective's definition), and
+   that is safe only because of a geometry that must be re-checked if either moves: throws are
+   read by .sk-swipe, which is the BOTTOM 52% of .sk-stage, while a rail box runs from
+   safe-area + 134px to about 190px below the top of .sk-play-wrap. On the shortest phone the hub
+   sees (375x667) the swipe surface starts ~390px down, so the two are ~180px apart. Move the
+   rails down, grow the box, or raise .sk-swipe's height, and MEASURE the two rects again. */
 .sk-root .sk-grail {
   position: absolute;
   top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
@@ -698,12 +761,31 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   padding: 5px 14px 7px;
   border-radius: 8px;
   background: rgba(26, 16, 12, 0.86);
   border: 1px solid var(--sk-line);
   white-space: nowrap;
   overflow: hidden;
+}
+/* THE HIT AREA IS 44px TALL; THE BAR IS NOT. The chip measures ~30px and it is IN FLOW above the
+   stage, so every pixel of height here is a pixel the machine loses (see the block above). Rather
+   than pay ~14px of stage for the tap floor, the box keeps its size and its hit area overhangs
+   into .sk-gtotal-row's own padding, which is inert - nothing else on this screen takes a tap
+   between the pips and the lane. docs/BUILDING-A-GAME.md, Part 0: 44x44 default, a real measured
+   reason is how you depart from it. */
+.sk-root .sk-gtotal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
 }
 .sk-root .sk-gtotal em {
   font-style: normal;
@@ -764,7 +846,20 @@
   border-radius: 9px;
   padding: 6px 5px 7px;
   text-align: center;
+  /* TAPPABLE (2026-08-25): it opens what the objective means. pointer-events comes back on for
+     the BOX only, never for .sk-grail around it - see that block's guard for the geometry that
+     makes this safe. 44px is docs/BUILDING-A-GAME.md's tap floor; the box already measured about
+     that, and stating it means a shorter label can never quietly drop under it. The rails are
+     absolutely positioned, so this costs the machine no height. */
+  min-height: 44px;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
+.sk-root .sk-goal:focus-visible,
+.sk-root .sk-gtotal:focus-visible,
+.sk-root .sk-gtile:focus-visible { outline: 2px solid var(--sk-amber); outline-offset: 2px; }
 .sk-root .sk-goal em {
   display: block;
   font-style: normal;
@@ -866,6 +961,12 @@
   border: 1px solid var(--gh-line);
   border-radius: 9px;
   padding: 8px 4px;
+  /* Tappable for the same reason the rails are: this is where a player reads the objectives
+     after a round. It measures ~57px tall, over the 44px floor. */
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .sk-root .sk-gtile b {
   display: block;

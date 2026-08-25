@@ -259,6 +259,23 @@ export class SkeeballGame {
     // throwing all nine balls away for zeros and never touching a penalty. Doing nothing is not
     // a clean rack.
     const hasPenalty = Object.values(this.board.cups || {}).some((c) => (c.value | 0) < 0);
+    // HOW MANY TIMES each basket was landed this round, not just which ones. BRICK CITY's first
+    // objective is "hit every basket THREE times" (Matt, 2026-08-25), and a set cannot answer
+    // that. Same `holes` filter as slotsHit, for the same reason: the trough is not a basket.
+    const slotCounts = {};
+    for (const th of this.throws) {
+      if (holes[th.hole]) slotCounts[th.hole] = (slotCounts[th.hole] | 0) + 1;
+    }
+    // A PERFECT ROUND: all nine balls thrown and EVERY ONE of them scored - no zeros and no
+    // penalties. Matt's definition, 2026-08-25, in those words. It is strictly harder than
+    // cleanRack below, which lets a ball miss entirely as long as it does not cost points.
+    //
+    // GUARD: NOT gated on the board having a penalty basket, where cleanRack is. "Every ball
+    // scored" is a real, hard statement on any machine - nine for nine into rings or cups is
+    // never trivially true - so gating it would only hide a fact that is already honest.
+    const perfectRack = this.ballsUsed >= BALLS_PER_GAME
+      && this.throws.length >= BALLS_PER_GAME
+      && this.throws.every((th) => (th.value | 0) > 0) ? 1 : 0;
     const cleanRack = hasPenalty
       && this.ballsUsed >= BALLS_PER_GAME
       && this.score > 0
@@ -267,7 +284,9 @@ export class SkeeballGame {
       score: this.score,
       balls: this.ballsUsed,
       slotsHit,
+      slotCounts,
       cleanRack,
+      perfectRack,
       tens: by(10),
       twenties: by(20),
       thirties: by(30),
