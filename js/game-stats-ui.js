@@ -543,75 +543,225 @@ function battleshipScreen(rec) {
     ${diffTable(rec && rec.byDiff)}`;
 }
 
-// --- Skeeball (W/L/T, best game, best throw, 100s and 50s) ------------------
+// --- Skeeball (screen 5, Archetype C: the machine dimension) -----------------
+// Rebuilt 2026-08-25 from the "Leaderboard and My Stats" design handoff. Skeeball is the only game
+// in the hub with a level the others do not have: every number exists both LIFETIME and PER
+// MACHINE, so the screen is a lifetime block over one card per machine rather than one flat
+// tally grid. Read this before changing it:
+//
+//  - THE MACHINE LIST IS THE WHOLE LIST, always. A machine the player has not earned still appears,
+//    dashed and padlocked, so three machines always read as three machines.
+//  - NOTHING IS INVENTED. The handoff's mock also showed "baskets ever landed" and "clean racks"
+//    per machine; NEITHER IS STORED (js/arcade-scores.js keeps plays/points/best/bestThrow/daily,
+//    and that is all), so neither is drawn. Do not add them here from a derivation - add the
+//    counter to the writer first, or leave them out.
+//  - A STORED ZERO PRINTS 0; A VALUE NEVER RECORDED PRINTS A DASH. The four ball-value counters
+//    (tens..forties) and colorSweeps were added to the writer later than the rest, so they are
+//    genuinely ABSENT on a record from a device that has not played since - `num()` tells the two
+//    apart by `== null`, never by falsiness.
+//  - The disclosures are `<details>`, not JS state. This screen is rendered as a STRING into two
+//    different overlays (My Stats and the Leaderboard's player detail) with no per-screen state of
+//    their own, and a native disclosure is also correct under prefers-reduced-motion for free.
+//  - The vs-computer record (won/lost/tied) is FROZEN history from the pre-2026-08-11 build. It is
+//    shown only when non-zero, at the bottom, labelled as what it is - never mixed in with the
+//    solo numbers above it, where a "win rate" would be meaningless.
 
-/** Skeeball: the standard record-vs-computer screen (Won/Lost/Tied/Win rate + by-difficulty
- *  table) plus the four things the game itself accumulates — best single game, best single throw,
- *  and lifetime counts of 100 cups and 50s. `tied` is a stored counter, not derived (two totals
- *  really can land equal — js/game-stats.js's ensureSk). Lifetime points are shown too: they are
- *  the only number that reflects a long grinding history rather than one lucky game, and a stored
- *  counter no screen shows reads as deleted (THE LAW rule 1). */
+/** Every Skeeball machine, in the game's own unlock-chain order, with the colour it is actually
+ *  drawn with in the cabinet (skeeball/js/boards.js `look`). Kept HERE rather than imported from
+ *  the game so the hub's overlays never pull a whole board's geometry into the shell bundle; ids
+ *  and names are frozen (boards.js: "rename the display name freely, never the id"), and machine
+ *  NAMES are proper nouns that never route through t(). Exported for js/leaderboard-ui.js's
+ *  machine filter on Skeeball's board, so the two screens can never disagree on a machine's name. */
+export const SK_MACHINES = {
+  classic: { name: 'THE CLASSIC', color: '#a86f38' },
+  basketball: { name: 'BASKET FEVER', color: '#f2c526' },
+  popongo: { name: 'POPONGO', color: '#c9a36a' },
+};
+
+/** A machine's display name and colour, tolerating an id this table has never heard of.
+ *
+ *  THE LAW rule 1: `sk.boards` is keyed by whatever the game wrote, and a machine that has been
+ *  renamed, retired or is still only in a dev build (the live store already carries `brickcity`
+ *  buckets from an earlier build) must NOT disappear from the player's own history just because
+ *  the hub's copy of the machine list is behind. An unknown id renders under its own id in caps,
+ *  in the neutral muted colour, with every number it has intact. */
+export function skMachineMeta(id) {
+  return SK_MACHINES[id] || { name: String(id).toUpperCase(), color: '#8a93a3' };
+}
+
+/** A stored number, or a dash when the field was never recorded at all. `0` is a real answer and
+ *  prints as 0; `null`/`undefined` is missing data and prints as an em rule. */
+function skNum(v) { return v == null ? '&mdash;' : Number(v).toLocaleString(); }
+
+/** The daily best map as a sparkline, oldest day first. Returns '' for fewer than two days - a
+ *  one-point line says nothing a number has not already said. */
+function skSparkHTML(daily) {
+  const days = Object.keys(daily || {}).sort();
+  if (days.length < 2) return '';
+  const vals = days.map((d) => daily[d] | 0);
+  const max = Math.max(...vals);
+  const min = Math.min(...vals);
+  const span = Math.max(1, max - min);
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * 316 + 2).toFixed(1)},${(34 - (v - min) / span * 28).toFixed(1)}`).join(' ');
+  return `<div class="gs-sk-spark">
+    <div class="gs-sk-spark-h"><span>${esc(t('gs_sk_best_per_day'))}</span><span>${esc(t('gs_sk_days_span', { n: days.length }))}</span></div>
+    <svg viewBox="0 0 320 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline></svg>
+  </div>`;
+}
+
+/** Practice racks (2026-08-24): thrown while a machine was set to TESTING on the admin page, kept
+ *  in `sk.practice` and counted by nothing - no total, no best, no unlock, no ranking.
+ *
+ *  They are SHOWN, because a stored number no screen shows reads as deleted (THE LAW rule 1) and a
+ *  tester who threw forty racks should be able to see where they went. They are shown BELOW the
+ *  machines, dashed, muted, under their own "not counted" label, because the one thing that would
+ *  be worse than hiding them is letting them read as part of the record. Do not fold these into the
+ *  lifetime block or a machine card. */
+function skPracticeHTML(sk) {
+  const prac = ((sk || {}).practice || {}).boards || {};
+  const ids = Object.keys(prac).filter((id) => ((prac[id] || {}).plays | 0) > 0);
+  if (!ids.length) return '';
+  return `<div class="gs-sk-practice">
+    <div class="gs-sk-practice-h">${esc(t('gs_sk_practice'))}</div>
+    ${ids.map((id) => `<div class="gs-sk-prow">
+      <span class="gs-sk-nm">${esc(skMachineMeta(id).name)}</span>
+      <span><b>${skNum(prac[id].best | 0)}</b> ${esc(t('gs_sk_best_game'))}</span>
+      <span><b>${skNum(prac[id].plays | 0)}</b> ${esc(t('gs_sk_games'))}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+/** One machine the player has actually thrown on: best game and points always visible, everything
+ *  else behind a disclosure that starts closed (including the first machine's). */
+function skMachineCardHTML(id, b) {
+  const meta = skMachineMeta(id);
+  const detail = [
+    [t('gs_sk_games'), skNum(b.plays | 0)],
+    [t('gs_sk_best_throw'), skNum(b.bestThrow | 0)],
+  ].map(([k, v]) => `<div class="gs-sk-d"><span>${esc(k)}</span><b>${v}</b></div>`).join('');
+  return `<div class="gs-sk-mc">
+    <div class="gs-sk-mc-top">
+      <span class="gs-sk-stripe" style="background:${meta.color}"></span>
+      <div class="gs-sk-mc-body">
+        <div class="gs-sk-mc-id"><span class="gs-sk-mark" style="background:${meta.color}"></span><span class="gs-sk-nm">${esc(meta.name)}</span></div>
+        <div class="gs-sk-mc-nums">
+          <div><b>${skNum(b.best | 0)}</b><span>${esc(t('gs_sk_best_game'))}</span></div>
+          <div><b>${skNum(b.points | 0)}</b><span>${esc(t('gs_sk_points'))}</span></div>
+        </div>
+      </div>
+    </div>
+    <details class="gs-sk-more">
+      <summary><span class="gs-sk-more-lbl">${esc(t('gs_sk_more'))}</span><span class="gs-sk-more-hint">${esc(t('gs_sk_games_hint', { n: b.plays | 0 }))}</span></summary>
+      <div class="gs-sk-more-body">
+        <div class="gs-sk-dgrid">${detail}</div>
+        ${skSparkHTML(b.daily)}
+      </div>
+    </details>
+  </div>`;
+}
+
 function skeeballScreen(rec) {
   const sk = (rec && rec.sk) || {};
   if (!(sk.played | 0)) return emptyState('Skeeball');
-  return `
+  const boards = sk.boards || {};
+  // Known machines first, in the game's own unlock-chain order, then ANY other id the store
+  // happens to hold (see skMachineMeta) so no recorded machine can fall off this screen.
+  const known = Object.keys(SK_MACHINES);
+  const playedIds = known.filter((id) => ((boards[id] || {}).plays | 0) > 0)
+    .concat(Object.keys(boards).filter((id) => !SK_MACHINES[id] && ((boards[id] || {}).plays | 0) > 0));
+  const lockedIds = known.filter((id) => !playedIds.includes(id));
+
+  // The best game's own note: which machine holds it, and (from that machine's date-keyed daily
+  // map) the day it was set. Both are READ off stored data - if no machine's best matches the
+  // lifetime best (a record synced from a device that predates per-machine storage), the note is
+  // simply omitted rather than guessed at.
+  const bestId = playedIds.find((id) => (boards[id].best | 0) === (sk.bestGame | 0));
+  let bestNote = '';
+  if (bestId) {
+    const day = Object.keys(boards[bestId].daily || {}).sort().find((d) => (boards[bestId].daily[d] | 0) === (sk.bestGame | 0));
+    bestNote = skMachineMeta(bestId).name + (day ? `, ${day}` : '');
+  }
+  // The best throw's note is the count of balls at that exact value, and only when the value maps
+  // to a counter the store actually keeps. Anything else gets no note.
+  const throwCounts = { 10: sk.tens, 20: sk.twenties, 30: sk.thirties, 40: sk.forties, 50: sk.fifties, 100: sk.hundreds };
+  const throwN = throwCounts[sk.bestThrow | 0];
+  const throwNote = throwN == null ? '' : t('gs_sk_hit_times', { n: Number(throwN).toLocaleString() });
+
+  const lifetime = [
+    [skNum(sk.played | 0), t('gs_sk_games')],
+    [skNum(sk.balls | 0), t('gs_sk_balls')],
+    [skNum(sk.points | 0), t('gs_sk_points')],
+    [skNum(sk.hundreds), t('gs_sk_hundreds')],
+    [skNum(sk.fifties), t('gs_sk_fifties')],
+    [skNum(sk.colorSweeps), t('gs_sk_sweeps')],
+  ].map(([v, l]) => `<div class="gs-sk-cell"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
+
+  const ballRows = [
+    [t('gs_sk_tens'), sk.tens], [t('gs_sk_twenties'), sk.twenties],
+    [t('gs_sk_thirties'), sk.thirties], [t('gs_sk_forties'), sk.forties],
+  ];
+  const hasBalls = ballRows.some(([, v]) => v != null);
+  const ballBreakdown = !hasBalls ? '' : `<details class="gs-sk-more is-flat">
+    <summary><span class="gs-sk-more-lbl">${esc(t('gs_sk_every_ball'))}</span><span class="gs-sk-more-hint">${esc(t('gs_sk_ball_hint'))}</span></summary>
+    <div class="gs-sk-balls">${ballRows.map(([l, v]) => `<div class="gs-sk-d"><span>${esc(l)}</span><b>${skNum(v)}</b></div>`).join('')}</div>
+  </details>`;
+
+  // Frozen pre-2026-08-11 vs-computer history: shown only when it exists, never merged with the
+  // solo numbers, and never re-derived (THE LAW rule 1 keeps it on a screen; rule 5 keeps it stored).
+  const vs = ((sk.won | 0) + (sk.lost | 0) + (sk.tied | 0)) > 0 ? `
+    <h4 class="gs-tbl-h">${esc(t('gs_sk_vs_record'))}</h4>
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${sk.won | 0}</b><span>${t('gs_sk_wins')}</span></div>
       <div class="gs-tally"><b>${sk.lost | 0}</b><span>${t('gs_sk_losses')}</span></div>
       <div class="gs-tally"><b>${sk.tied | 0}</b><span>${t('gs_tied')}</span></div>
-      <div class="gs-tally"><b>${pct(sk.won | 0, sk.played | 0)}%</b><span>${t('gs_win_rate')}</span></div>
+      <div class="gs-tally"><b>${pct(sk.won | 0, (sk.won | 0) + (sk.lost | 0) + (sk.tied | 0))}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>` : '';
+
+  return `
+    <div class="gs-sk-hero">
+      <div class="gs-sk-hero-a">
+        <span class="gs-sk-k">${esc(t('gs_sk_best_game'))}</span>
+        <b>${skNum(sk.bestGame | 0)}</b>
+        ${bestNote ? `<span class="gs-sk-note">${esc(bestNote)}</span>` : ''}
+      </div>
+      <div class="gs-sk-hero-b">
+        <div>
+          <span class="gs-sk-k">${esc(t('gs_sk_best_throw'))}</span>
+          <b>${skNum(sk.bestThrow | 0)}</b>
+        </div>
+        ${throwNote ? `<span class="gs-sk-note">${esc(throwNote)}</span>` : ''}
+      </div>
     </div>
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${sk.bestGame | 0}</b><span>${t('gs_sk_best_game')}</span></div>
-      <div class="gs-tally"><b>${sk.bestThrow | 0}</b><span>${t('gs_sk_best_throw')}</span></div>
-      <div class="gs-tally"><b>${sk.hundreds | 0}</b><span>${t('gs_sk_hundreds')}</span></div>
-      <div class="gs-tally"><b>${sk.fifties | 0}</b><span>${t('gs_sk_fifties')}</span></div>
+    <h4 class="gs-tbl-h">${esc(t('gs_sk_lifetime_h', { n: playedIds.length }))}</h4>
+    <div class="gs-sk-grid">${lifetime}</div>
+    ${ballBreakdown}
+    <h4 class="gs-tbl-h">${esc(t('gs_sk_machines_h'))}</h4>
+    <div class="gs-sk-machines">
+      ${playedIds.map((id) => skMachineCardHTML(id, boards[id])).join('')}
+      ${lockedIds.map((id) => `<div class="gs-sk-locked">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="1.5"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+        <span class="gs-sk-nm">${esc(skMachineMeta(id).name)}</span>
+        <span class="gs-sk-lock-tag">${esc(t('gs_sk_locked'))}</span>
+      </div>`).join('')}
     </div>
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${sk.balls | 0}</b><span>${t('gs_sk_balls')}</span></div>
-      <div class="gs-tally"><b>${sk.points | 0}</b><span>${t('gs_sk_points')}</span></div>
-    </div>
-    ${skBoardsTable(sk)}
-    ${diffTable(rec && rec.byDiff)}`;
+    ${skPracticeHTML(sk)}
+    ${vs}
+    ${diffTable(skLegacyBuckets(rec && rec.byDiff, boards))}`;
 }
 
-/** Per-machine records (2026-08-11, the boards rework). THE LAW rule 1: `sk.boards` is real earned
- *  history and a screen has to show it, including the date-keyed daily map - which is rendered as
- *  "best today" plus how many days this machine has been played, so the stored days are visible as
- *  something rather than sitting silently on disk. Absent on a device that has not played since the
- *  rework, and simply omitted then rather than shown as a row of zeroes. */
-function skBoardsTable(sk) {
-  const boards = (sk && sk.boards) || {};
-  const ids = Object.keys(boards);
-  if (!ids.length) return '';
-  const today = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  const key = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
-  const rows = ids.map((id) => {
-    const b = boards[id] || {};
-    const days = Object.keys(b.daily || {}).length;
-    return `<tr><th scope="row">${t(`gs_sk_board_${id}`)}</th><td>${b.best | 0}</td>`
-      + `<td>${(b.daily || {})[key] | 0}</td><td>${b.plays | 0}</td><td>${days}</td></tr>`;
-  }).join('');
-  // Practice racks (2026-08-24): thrown while a machine was set to TESTING on the admin page, kept
-  // in sk.practice and counted by nothing. They are SHOWN, on their own labelled line, because a
-  // stored number no screen shows reads as deleted (THE LAW rule 1) - and because a tester who
-  // threw 40 racks should be able to see that they landed somewhere, just not on their record.
-  const prac = (sk && sk.practice && sk.practice.boards) || {};
-  const pracIds = Object.keys(prac).filter((id) => (prac[id] || {}).plays | 0);
-  const pracRow = pracIds.length
-    ? `<tr class="gs-prow"><th scope="row">${t('gs_sk_practice')}</th>`
-      + `<td>${Math.max(0, ...pracIds.map((id) => prac[id].best | 0))}</td><td>-</td>`
-      + `<td>${pracIds.reduce((n, id) => n + (prac[id].plays | 0), 0)}</td><td>-</td></tr>`
-    : '';
-  return `
-    <h4 class="gs-tbl-h">${t('gs_sk_by_board')}</h4>
-    <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_best')}</th>
-        <th scope="col">${t('gs_sk_today')}</th><th scope="col">${t('gs_played')}</th>
-        <th scope="col">${t('gs_sk_days')}</th></tr></thead>
-      <tbody>${rows}${pracRow}</tbody>
-    </table>`;
+
+/** Skeeball's `byDiff` is keyed by MACHINE since 2026-08-11, so the generic by-difficulty table
+ *  would repeat the machine cards above verbatim. It still holds the pre-rework easy/medium/hard
+ *  buckets from the vs-computer era, and those have no other screen (THE LAW rule 1), so the table
+ *  renders with every machine key filtered OUT - both the ones this file knows and any other id
+ *  the store holds a board record for - and nothing else changed. Returns null (no table at all)
+ *  when only machine buckets exist, which is every device that started after the rework. */
+function skLegacyBuckets(byDiff, boards) {
+  const src = byDiff || {};
+  const out = {};
+  for (const k of Object.keys(src)) if (!SK_MACHINES[k] && !(boards || {})[k]) out[k] = src[k];
+  return Object.keys(out).length ? out : null;
+
 }
 
 /** Whether a game has ANY recorded play, matching each screen's own empty-state gate exactly —
@@ -908,6 +1058,66 @@ function ensureCss() {
     '.gs-cc-k{color:#c9d6cf;font-size:.92rem;font-weight:600}',
     '.gs-cc-v{color:#f4f6fb;font-size:1.05rem;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap}',
     '.gs-cc-v em{color:#9fb4aa;font-style:normal;font-size:.82rem;font-weight:700}',
+    // --- Skeeball, screen 5 (2026-08-25 design handoff) -----------------------------------------
+    // 11px is the floor for every caption and unit word here, every control is at least 44px tall,
+    // and every numeric slot is tabular-nums and sized for six digits (112,730 is the widest real
+    // number in the system).
+    '.gs-sk-hero{display:flex;gap:10px}',
+    '.gs-sk-hero-a{flex:1.4;background:var(--hub-ink,#16243a);color:var(--hub-surface,#fff);border-radius:12px;padding:14px 15px;min-width:0}',
+    '.gs-sk-hero-b{flex:1;background:var(--hub-surface-2,#eef2f8);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:14px 15px;min-width:0;display:flex;flex-direction:column;justify-content:space-between;color:var(--hub-ink,#16243a)}',
+    '.gs-sk-k{display:block;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;opacity:.72}',
+    '.gs-sk-hero-a b{display:block;font-size:46px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.035em;line-height:1;margin-top:4px}',
+    '.gs-sk-hero-b b{display:block;font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;margin-top:4px}',
+    '.gs-sk-note{display:block;font-size:11px;opacity:.72;margin-top:6px;overflow-wrap:anywhere}',
+    '.gs-sk-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--hub-surface-2,#eef2f8);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:10px;overflow:hidden}',
+    '.gs-sk-cell{background:var(--hub-surface,#fff);padding:11px 10px 12px;min-width:0}',
+    '.gs-sk-cell b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--hub-ink,#16243a);line-height:1.1}',
+    '.gs-sk-cell span{display:block;font-size:11px;color:var(--hub-muted,#5b6b82);margin-top:3px;line-height:1.25}',
+    // The disclosures are native <details>: no JS state to thread through two overlays, and the
+    // reduced-motion behaviour is the browser's already.
+    '.gs-sk-more{border:1px solid var(--hub-surface-2,#eef2f8);border-radius:0 0 10px 10px;border-top:0;overflow:hidden}',
+    '.gs-sk-more.is-flat{border-radius:10px;border-top:1px solid var(--hub-surface-2,#eef2f8);margin-top:-4px}',
+    '.gs-sk-more summary{list-style:none;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;cursor:pointer;font-size:12.5px;font-weight:800;color:var(--hub-accent,#1769d4);background:var(--hub-surface,#fff)}',
+    '.gs-sk-more summary::-webkit-details-marker{display:none}',
+    '.gs-sk-more-hint{font-weight:600;color:var(--hub-muted,#5b6b82);font-variant-numeric:tabular-nums}',
+    '.gs-sk-more[open] .gs-sk-more-hint{display:none}',
+    '.gs-sk-more-body{border-top:1px solid var(--hub-surface-2,#eef2f8);padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px;background:var(--hub-surface,#fff)}',
+    '.gs-sk-dgrid,.gs-sk-balls{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}',
+    '.gs-sk-balls{border-top:1px solid var(--hub-surface-2,#eef2f8);padding:12px 14px 14px;background:var(--hub-surface,#fff)}',
+    '.gs-sk-d{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--hub-surface-2,#eef2f8);padding-bottom:5px;min-width:0}',
+    '.gs-sk-d span{font-size:11.5px;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-d b{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
+    '.gs-sk-spark{color:var(--hub-accent,#1769d4)}',
+    '.gs-sk-spark-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-spark-h span+span{letter-spacing:0;text-transform:none;font-weight:600;font-variant-numeric:tabular-nums}',
+    '.gs-sk-spark svg{display:block;width:100%;height:40px;border:1px solid var(--hub-surface-2,#eef2f8);border-radius:6px;background:var(--hub-surface-2,#eef2f8)}',
+    '.gs-sk-machines{display:flex;flex-direction:column;gap:10px}',
+    '.gs-sk-mc{border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;overflow:hidden;background:var(--hub-surface,#fff)}',
+    '.gs-sk-mc-top{display:flex;align-items:stretch}',
+    // The stripe and the mark are the cabinet's OWN colour (skeeball/js/boards.js `look`), so the
+    // swatch is visibly the same object the player throws at. The colour is decoration; the NAME
+    // is the identifier, which is why both are always drawn together.
+    '.gs-sk-stripe{width:6px;flex:none;border-right:1px solid var(--hub-surface-2,#eef2f8)}',
+    '.gs-sk-mc-body{flex:1;min-width:0;padding:13px 14px}',
+    '.gs-sk-mc-id{display:flex;align-items:center;gap:7px;min-width:0}',
+    '.gs-sk-mark{width:9px;height:9px;flex:none;border-radius:2px;border:1px solid var(--hub-ink,#16243a)}',
+    '.gs-sk-nm{font-size:13px;font-weight:800;letter-spacing:.05em;color:var(--hub-ink,#16243a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.gs-sk-mc-nums{display:flex;gap:22px;margin-top:11px}',
+    '.gs-sk-mc-nums b{display:block;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;color:var(--hub-ink,#16243a)}',
+    '.gs-sk-mc-nums span{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--hub-muted,#5b6b82);font-weight:700;margin-top:4px}',
+    '.gs-sk-mc .gs-sk-more{border:0;border-top:1px solid var(--hub-surface-2,#eef2f8);border-radius:0}',
+    // A machine nobody has earned still appears, so three machines always read as three machines.
+    '.gs-sk-locked{display:flex;align-items:center;gap:9px;min-height:44px;border:1px dashed var(--hub-surface-2,#eef2f8);border-radius:10px;padding:11px 13px;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-locked svg{width:15px;height:15px;flex:none}',
+    '.gs-sk-locked .gs-sk-nm{flex:1;min-width:0;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-lock-tag{flex:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;border:1px solid var(--hub-surface-2,#eef2f8);padding:3px 6px;border-radius:4px}',
+    // Practice racks sit apart on purpose - dashed, muted, under their own label - so they can
+    // never be mistaken for part of the record (see skPracticeHTML).
+    '.gs-sk-practice{border:1px dashed var(--hub-surface-2,#eef2f8);border-radius:10px;padding:10px 12px 11px;display:flex;flex-direction:column;gap:7px}',
+    '.gs-sk-practice-h{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-prow{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-prow .gs-sk-nm{flex:1 1 100%;color:var(--hub-muted,#5b6b82)}',
+    '.gs-sk-prow b{font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
     '.gs-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.9rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
     '.gs-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.78rem;padding:10px 16px 40px;margin:0}',
   ].join('');
