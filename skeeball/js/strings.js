@@ -12,6 +12,7 @@ const STRINGS = {
     board_popongo_tag: 'Nine color cups on bare wood. The black cups take back your last ball.',
     board_basketball_tag: 'Nine orange hoops on three rows. The 100 hangs top center.',
     board_brickcity_tag: 'Two 100s up top, tight as the ball. The bottom row takes points back.',
+    board_runaway_tag: 'One 100 up top, and it will not hold still. Throw where it is going.',
     play: 'Play',
     resume: 'Resume',
     howto: 'How to play',
@@ -41,6 +42,9 @@ const STRINGS = {
     g_baskets: 'Every basket',
     g_clean: 'Clean round',
     g_net: 'Net points',
+    // RUNAWAY's own. Two short words for the same reason as BRICK CITY's above - the rail box is
+    // min(76px, 19vw) wide and wraps to two lines, and a third line pushes the number out of it.
+    g_runaway: 'Catch the 100',
     goals_obj_h: 'Objectives',
     goals_unlocked: 'UNLOCKED',
     goals_done: 'COMPLETE',
@@ -110,6 +114,7 @@ const STRINGS = {
     board_popongo_tag: 'Nueve copas de colores sobre madera. Las copas negras te quitan la última bola.',
     board_basketball_tag: 'Nueve aros naranjas en tres filas. El 100 está arriba en el centro.',
     board_brickcity_tag: 'Dos 100 arriba, justos para la pelota. La fila de abajo te quita puntos.',
+    board_runaway_tag: 'Un solo 100 arriba, y no se queda quieto. Tira a donde va a estar.',
     play: 'Jugar',
     resume: 'Seguir la partida',
     howto: 'Cómo se juega',
@@ -132,6 +137,7 @@ const STRINGS = {
     g_baskets: 'Cada canasta',
     g_clean: 'Ronda limpia',
     g_net: 'Puntos netos',
+    g_runaway: 'Atrapa el 100',
     goals_obj_h: 'Objetivos',
     goals_unlocked: 'DESBLOQUEADA',
     goals_done: 'COMPLETADOS',

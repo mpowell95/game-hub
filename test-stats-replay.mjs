@@ -301,10 +301,15 @@ const FIXTURE_PRE_UNIFIED = {
   const { BOARDS, boardById } = await import(pathToFileURL(join(ROOT, 'skeeball', 'js', 'boards.js')).href);
 
   // The chain itself, as data - so this test fails loudly if a future session re-points an unlock
-  // without thinking about the players standing on it.
-  eq('G: the chain is classic -> basketball -> brickcity -> popongo',
+  // without thinking about the players standing on it. It did exactly that when HOT SHOT:
+  // RUNAWAY landed (2026-08-25); the answer that time was that RUNAWAY was APPENDED to the end
+  // rather than inserted, so unlike BRICK CITY's insertion it re-points NO existing entry's
+  // unlock and no player can be standing on a link that moved. The assertions below still prove
+  // that against the real records rather than taking the reasoning for it.
+  eq('G: the chain is classic -> basketball -> brickcity -> popongo -> runaway',
     BOARDS.map((b) => `${b.id}<-${b.unlock ? b.unlock.board : 'open'}`),
-    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-brickcity']);
+    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-brickcity',
+      'runaway<-popongo']);
 
   for (const [tag, SK] of [['A', REAL_SK_A], ['B', REAL_SK_B]]) {
     // Load the real record through the CURRENT writer, exactly as a device does on its next hub
@@ -317,6 +322,10 @@ const FIXTURE_PRE_UNIFIED = {
     ok(`G${tag}: ...and HOT SHOT`, arc.isUnlocked(sk(), 'basketball', 'classic'));
     ok(`G${tag}: ...and THE CLASSIC`, arc.isUnlocked(sk(), 'classic', 'classic'));
     ok(`G${tag}: the new machine is NOT silently granted`, !arc.isUnlocked(sk(), 'brickcity', 'classic'));
+    // Same question for the machine appended after POPONGO. These two devices HOLD popongo, so
+    // they are exactly the ones a badly-written goals unlock could hand RUNAWAY to for free -
+    // the unlock is POPONGO's three OBJECTIVES, not merely having POPONGO open.
+    ok(`G${tag}: nor is the machine appended after POPONGO`, !arc.isUnlocked(sk(), 'runaway', 'classic'));
     eq(`G${tag}: every per-board record is untouched`, sk().boards, before.boards);
 
     // Now play a rack on the new machine. Nothing about the machines already earned may move.
@@ -338,7 +347,8 @@ const FIXTURE_PRE_UNIFIED = {
   freshStore({ 'gamehub.stats': { version: 1, games: { skeeball: { total: { played: 0, won: 0, lost: 0 }, byDiff: {}, sk: JSON.parse(JSON.stringify(REAL_SK_C)) } }, updatedAt: '2026-08-24T00:00:00.000Z' } });
   ok('G: a first-machine-only device gains nothing from the chain moving',
     !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'brickcity', 'classic')
-    && !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'popongo', 'classic'));
+    && !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'popongo', 'classic')
+    && !arc.isUnlocked(gs.loadStats().games.skeeball.sk, 'runaway', 'classic'));
 
   // The floor game.js applies to a rack with penalty cups, checked through the RECORDER: the
   // number shown and the number filed have to be the same number.

@@ -245,6 +245,13 @@ and no written `value`, because the value comes from the cup sitting in the slot
 - Every hole is the same size: `r = holeR = 0.500X`. — `holes.uniform`
 - Every hole centre sits at least `holeR` from all four edges. — `holes.inside`
 - Hole centres sit at least `1.30X` apart. — `holes.spacing`
+
+**A MOVING HOLE IS MEASURED OVER ITS WHOLE TRAVEL** (see Part 6). Its written `u` is the CENTRE
+of the sweep — a position it occupies for an instant twice per period — so `holes.inside` tests
+BOTH ends of the travel and `holes.spacing` tests the closest the two centres ever come. A face
+that clears its neighbour at the centre of a sweep and drives through it at the end is not a
+spaced face; it is a collision nobody measured. `test-skeeball-machine-spec.mjs` does this from
+the board's own `geom.mover`, so a fixed hole is checked exactly as it always was.
 - A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
   written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
 
@@ -579,3 +586,108 @@ specWaivers: {
 Waivers print at the end of the run under `RULES BROKEN ON THIS MACHINE`.
 
 Copy that block into the pull request and into your message to Matt — the rule you broke and why.
+
+---
+
+# PART 6 — A MACHINE WITH A MOVING PART
+
+New 2026-08-25, with HOT SHOT: RUNAWAY (`runaway`) — the first and so far only machine whose face
+is not entirely static. **Read `skeeball/MACHINE-RUNAWAY.md` before building a second one**; this
+part is the rules, that file is the worked example with the measured numbers.
+
+Nothing here applies to a machine with no `geom.mover`, and a board without one behaves in every
+respect as it did before this section existed.
+
+## 21 · Declaring the motion
+
+```js
+geom: {
+  mover: { hole: 'topC', amp: X * 2.07, period: 7.0 },
+}
+```
+
+One hole, an amplitude in face-u, and a period in seconds. The hole's own `u` stays the CENTRE of
+the sweep. `u(t) = amp * sin(2*PI*t / period)`, so phase 0 is the centre moving right.
+
+**Use a sine, not a triangle.** A triangle reverses instantaneously at each end and hands any ball
+touching the rim a step change in wall velocity out of nowhere.
+
+## 22 · The maths lives in the machine's `machine.js`, once
+
+`moverU(G, t)`, `moverVel(G, t)` and `holeU(G, id, t)` — pure functions of time, no state, no
+clock. `physics.js` drives the bodies with them, `render.js` draws with them, the spec test
+measures the envelope with them.
+
+**Never write a second sine anywhere.** A copy is a drawn basket drifting off its own collision
+wall — the one class of bug `machine.js` exists to make impossible.
+
+## 23 · The collar bodies are KINEMATIC
+
+Not static, and never "static with its position rewritten each step". cannon-es zeroes a kinematic
+body's inverse solve mass, so the ball can never shove the basket, AND integrates it by its own
+velocity and feeds that velocity to the contact solver, so a struck rim gives a real impulse. A
+static body has velocity 0 by definition; moving one jumps a wall through the ball with the solver
+believing nothing moved — deep penetration, then an explosive push-out.
+
+Set **both** every substep: position (authoritative, re-derived from the sine, so drift cannot
+accumulate) and velocity (what the solver reads).
+
+## 24 · Capture is relative to the mouth, and latches on commit
+
+Two mandatory changes to section 9's rule, both correctness rather than tuning:
+
+- **`vFace` becomes the ball's speed across THE MOUTH**, not across the board — subtract the
+  mouth's own lateral speed. Skip it and a ball sitting still on the tread reads zero crossing
+  speed and drops in the instant the basket drives over it. That is a magnet, and section 9 bans
+  magnets.
+- **Latch the mouth's `u` at capture.** The ball is inside the basket now and rides with it;
+  re-measuring against a live `u` lets a basket that has slid on turn a clean score into a gutter
+  ball partway down its own drop.
+
+## 25 · One rack clock, three readers
+
+`js/game.js`'s `machineT`. Every throw builds its own cannon world and more than one ball can be
+in the air at once, so two live sims and the renderer are three independent things that each need
+to know where the basket is. They agree only because all three are pure functions of that one
+number: `throwBall` hands it to `startThrow` as `t0`, `render()` reads `game.machineT`.
+
+`game.js` still reads no clock — it accumulates the `dt` its caller hands `update()`, so same dt
+in, same outcome out, and the sim stays deterministic and replayable. `machineT` advances even
+with nothing in the air, so the basket keeps sweeping while the player decides.
+
+## 26 · A moving hole needs its shelf to itself
+
+`holes.spacing`'s 1.30X would be violated at nearly every step of any travel worth having if a
+static hole shared the row. This is a constraint, not a style choice.
+
+## 27 · The travel envelope is bounded by the rail-pinch rule, not by the face
+
+Section 12's collar-near-a-flat-wall rule (`0.78X` wall gap) is what stops a sweep reaching the
+side rails, and **a moving collar is the worst possible case for it** — a static collar merely
+sits in a pinch; a moving one can drive a ball into it under infinite solve mass. Work the
+amplitude out from the gap, not from the face width:
+
+```
+amp <= boardW/2 - (holeR + collarThick) - 0.78X
+```
+
+## 28 · Reachability needs a THIRD AXIS
+
+The same `(power, aim)` lands somewhere different depending on where the basket was at release, so
+the two-axis grid in `skeeball/js/test.js` measures one arbitrary frozen phase and will report a
+moving hole as unreachable or as trivial at random.
+
+```bash
+node sweep-mover.mjs <boardId>            # power x aim x phase
+node sweep-mover.mjs <boardId> --full     # 41 x 21 x 12
+```
+
+Sample phases over a FULL period, not a half: the sine is symmetric in position but not in
+direction, and a basket sweeping toward the ball is not the same shot as one sweeping away.
+
+**A coarse grid under-reports a moving hole badly.** On RUNAWAY's 21x11x8 run the 100 scored at
+four phases and never at the other four; a dense probe at one of those "never" phases found it in
+4 of 861 cells. That is the same trap the classic's corner 100s sat in for months (section 2 of
+`skeeball/js/test.js`) — a hole is not unreachable until a FINE sweep says so.
+
+Re-run it after any change to that face, the amplitude, the period or the materials.

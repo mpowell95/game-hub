@@ -76,6 +76,27 @@ export const BC_BASKETS = 9;     // BRICK CITY: land in every basket at least on
 export const BC_CLEAN = 1;       // BRICK CITY: one rack that scores and takes no penalty
 export const BC_NET = 1500;      // BRICK CITY: 1,500 NET points in total on the machine
 
+// HOT SHOT: RUNAWAY. Its three are about the one thing that makes it different - the top row's
+// 100 is moving, so hitting it once is a real achievement and hitting it twice in nine balls is
+// the machine's whole skill ceiling.
+//
+//   1. CATCH THE RUNAWAY: sink the moving 100 once. Read off the per-board bestThrow exactly the
+//      way HOT SHOT reads its own hoop goal - the 100 is the only thing on this face worth 100,
+//      so a per-board best throw of 100 IS proof it was sunk, and no new counter is needed. The
+//      rail shows the best throw climbing (60 -> 100) rather than a bare 0/1.
+//   2. A single game of 240. Below HOT SHOT's 300 on purpose: this face has seven baskets to
+//      that machine's nine and the two easiest 50s on its top row are gone.
+//   3. 2,500 points in total on the machine.
+//
+// GUARD: these three are what would unlock a SIXTH machine, so they have to stay REACHABLE.
+// Goal 1 is the slow one - sweep-mover.mjs measures the moving 100 as reachable across the
+// aim x power x phase grid, but a narrow band of it. If any of the three plays wrong once there
+// are real racks behind it, change the NUMBER here; do not widen the mouth or slow the sweep,
+// which are the two things that make this machine what it is.
+export const RA_HOOP = 100;      // RUNAWAY: sink the moving 100 (proved by per-board bestThrow)
+export const RA_BEST = 240;      // RUNAWAY: score 240+ in a single game
+export const RA_TOTAL = 2500;    // RUNAWAY: 2,500 points in total on the machine
+
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
 };
@@ -127,6 +148,20 @@ const GOALS = {
       { id: 'hoop', labelKey: 'g_hoop', now: Math.min(bt, BB_HOOP), target: BB_HOOP, met: bt >= BB_HOOP },
       { id: 'best', labelKey: 'g_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
       { id: 'total', labelKey: 'g_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
+    ];
+  },
+  runaway(s, r) {
+    const b = (s.boards || {}).runaway || {};
+    // Same shape as HOT SHOT's, and for the same reason: the moving 100 is the only basket on
+    // this face that pays 100, so a per-board bestThrow of 100 is proof it was caught.
+    // b.bestThrow is Math.max-only, synced, and cross-device merged by js/arcade-scores.js.
+    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    return [
+      { id: 'runaway', labelKey: 'g_runaway', now: Math.min(bt, RA_HOOP), target: RA_HOOP, met: bt >= RA_HOOP },
+      { id: 'best', labelKey: 'g_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
+      { id: 'total', labelKey: 'g_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
     ];
   },
   brickcity(s, r) {

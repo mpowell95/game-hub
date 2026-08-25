@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v468';
+const CACHE = 'game-hub-v469';
 
 const ASSETS = [
   './',
@@ -257,6 +257,9 @@ const ASSETS = [
   './skeeball/js/machines/brickcity/physics.js',
   './skeeball/js/machines/brickcity/machine.js',
   './skeeball/js/machines/brickcity/render.js',
+  './skeeball/js/machines/runaway/physics.js',
+  './skeeball/js/machines/runaway/machine.js',
+  './skeeball/js/machines/runaway/render.js',
   './skeeball/js/vendor/cannon-es.js',
   './skeeball/js/vendor/three.module.min.js',
   './skeeball/js/vendor/three.core.min.js',
@@ -513,10 +516,10 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': 'c3af6871f7',
   './skeeball/js/ui.js': 'a4ae3e9d80',
   './skeeball/js/swipe.js': 'c596f565de',
-  './skeeball/js/game.js': '3fab597c30',
-  './skeeball/js/goals.js': '30e45dff4f',
-  './skeeball/js/boards.js': '1532cacfdd',
-  './skeeball/js/engines.js': '1196c74b9f',
+  './skeeball/js/game.js': 'a9f7dfa433',
+  './skeeball/js/goals.js': 'fa6530b888',
+  './skeeball/js/boards.js': '65a886ffbb',
+  './skeeball/js/engines.js': '202b6fe4cc',
   './skeeball/js/machines/classic/physics.js': 'a4a15b7180',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
   './skeeball/js/machines/classic/render.js': '98dd7bf15b',
@@ -529,10 +532,13 @@ const REST_MANIFEST = {
   './skeeball/js/machines/brickcity/physics.js': 'c6daf90433',
   './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
   './skeeball/js/machines/brickcity/render.js': 'a2ca0e2013',
+  './skeeball/js/machines/runaway/physics.js': '7b9b85e7e8',
+  './skeeball/js/machines/runaway/machine.js': '1088294ad1',
+  './skeeball/js/machines/runaway/render.js': '85d0564339',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',
-  './skeeball/js/strings.js': 'ed5439e023',
+  './skeeball/js/strings.js': 'cd82162002',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': '4629eb1c77',
