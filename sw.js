@@ -452,7 +452,7 @@ const REST_MANIFEST = {
   './tic-tac-toe/css/tic-tac-toe.css': '2ada40c0a7',
   './tic-tac-toe/js/ui.js': '4956f7a2c4',
   './tic-tac-toe/js/game.js': '5dd6dfd541',
-  './tic-tac-toe/js/ai.js': '0e15362323',
+  './tic-tac-toe/js/ai.js': 'ea779916ba',
   './tic-tac-toe/js/hash.js': 'fc3c1f6bac',
   './tic-tac-toe/js/strings.js': '73f3ae5574',
   './dots-boxes/': 'fba41b481d',
