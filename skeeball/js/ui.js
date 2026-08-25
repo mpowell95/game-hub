@@ -346,7 +346,6 @@ export class SkeeballUI {
 
     let sk = {};
     try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
-    const save = loadSave();
     const board = boardById(this.settings.board);
     const val = (n) => (n ? String(n) : '-');
 
@@ -426,13 +425,16 @@ export class SkeeballUI {
             <button type="button" class="sk-car-chev r" data-role="next" aria-label="${esc(t('next_machine'))}">&#8250;</button>` : ''}
           </div>
           ${multi ? `<div class="sk-car-dots" data-role="dots">${BOARDS.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
-          ${save ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">
-            ${esc(t('resume'))} &middot; ${(save.ballsUsed | 0) + 1}/${BALLS_PER_GAME}</button>` : ''}
+          <!-- RESUME BELONGS TO ONE MACHINE. It is always in the DOM and shown/hidden by
+               _paintSetupActions, because the carousel changes the selected machine without
+               re-rendering this screen - and a Resume button that survives the swipe takes you
+               to a machine you are not looking at (Matt, 2026-08-24: "it's confusing being taken
+               to a different machine"). -->
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume" style="display:none"></button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/><path d="M12 6.5V18.6"/></svg>
             ${esc(t('howto'))}</button>
-          <button type="button" class="gh-btn ${save ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-role="play">
-            ${esc(save ? t('new_game') : t('play'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play"></button>
         </div>
       </div>`;
 
@@ -463,6 +465,10 @@ export class SkeeballUI {
             && (isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id))));
           if (bOpen && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
+            // The selection moved, so Resume/Play have to move with it. This screen is not
+            // re-rendered on a swipe (the carousel owns its own scroll position), so repaint
+            // just the two buttons.
+            this._paintSetupActions();
           }
           this.root.querySelectorAll('[data-role="dots"] i').forEach((d, di) => d.classList.toggle('on', di === i));
         });
@@ -473,18 +479,43 @@ export class SkeeballUI {
       if (next) next.addEventListener('click', () => car.scrollBy({ left: car.clientWidth, behavior: 'smooth' }));
     }
 
-    if (save) {
-      this.root.querySelector('[data-role="resume"]').addEventListener('click', () => {
-        this._startGame(loadSave());
-      });
-    }
+    // Bound ONCE - neither button is ever recreated, only repainted, so there is nothing here to
+    // rebind on a swipe. Both re-read the save at click time rather than closing over the one
+    // this render saw.
+    this.root.querySelector('[data-role="resume"]').addEventListener('click', () => {
+      const snap = loadSave();
+      if (snap && snap.board === this.settings.board) this._startGame(snap);
+    });
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
-    // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
-    // is a resume convenience, not earned history; the Resume button sits directly above).
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
-      clearSave();
+      // New game DISCARDS a banked mid-rack snapshot - the player's explicit choice (the snapshot
+      // is a resume convenience, not earned history; the Resume button sits directly above).
+      // GUARD: only when the snapshot is THIS machine's. Pressing Play on a machine you have no
+      // round going on must not throw away the round you have going somewhere else.
+      const snap = loadSave();
+      if (snap && snap.board === this.settings.board) clearSave();
       this._startGame(null);
     });
+    this._paintSetupActions();
+  }
+
+  /** Resume and Play, against the machine the carousel is currently showing. Resume appears only
+   *  on the machine its snapshot belongs to; every other machine offers a plain Play, because a
+   *  Resume that follows you across the gallery starts a game on a board you are not looking at.
+   *  Called on render and on every carousel settle. */
+  _paintSetupActions() {
+    const resume = this.root.querySelector('[data-role="resume"]');
+    const play = this.root.querySelector('[data-role="play"]');
+    if (!resume || !play) return;
+    const snap = loadSave();
+    const mine = !!snap && snap.board === this.settings.board;
+    resume.style.display = mine ? '' : 'none';
+    if (mine) {
+      resume.innerHTML = `${esc(t('resume'))} &middot; ${(snap.ballsUsed | 0) + 1}/${BALLS_PER_GAME}`;
+    }
+    play.textContent = t(mine ? 'new_game' : 'play');
+    play.classList.toggle('gh-btn--ghost', mine);
+    play.classList.toggle('gh-btn--primary', !mine);
   }
 
   /** Render a machine's ACTUAL board (render.js) to a cached image and show it in `imgEl`,
@@ -959,9 +990,11 @@ export class SkeeballUI {
   _say(text) {
     this.el.msg.textContent = text;
     this.el.msg.classList.add('is-on');
-    // 0.9s, not 1.8: the next ball arrives on TOUCHDOWN (~1.2s), so a longer message is still
-    // sitting over the lane when the player is lining up the next throw (Matt, 2026-08-21).
-    this.msgTimer = 0.9;
+    // 0.7s, down from 0.9 and 1.8 before that. The next ball arrives on TOUCHDOWN (~1.2s), so a
+    // longer message is still sitting over the lane when the player is lining up the next throw
+    // (Matt, 2026-08-21), and a score popup - the thing a MISS is now sized to match - is fully
+    // faded by 1.1s (render.js's _popups). Matt again, 2026-08-24: "stays too long."
+    this.msgTimer = 0.7;
   }
 
   /** THE THREE GOALS, live on the lane: two rails in the gutters either side of the machine.
