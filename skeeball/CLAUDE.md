@@ -723,7 +723,7 @@ ball dropping in out of the air - no new physics, no new capture rule.
   (the `needH` rim rule): all nine hoops clean-capturable, 0 emergencies in 459 throws; ladder
   low row from p~0.28, middle p~0.52, top p~0.8, the 100 straight at p0.76-0.8.
 
-## Two per-board counters arrived with BRICK CITY (2026-08-24)
+## Four per-board counters arrived with BRICK CITY (2026-08-24, two more 2026-08-25)
 
 `js/arcade-scores.js`'s board record gained two fields, and they are **per board on purpose** -
 they answer questions about ONE machine's face, and a global counter would let another machine
@@ -734,14 +734,28 @@ satisfy another machine's objective (Matt's "completely distinct" rule, 2026-08-
 | `slots` | a SET of the hole ids ever landed on that board | **union** - a basket hit on a phone and another on a tablet are two baskets hit |
 | `cleanRacks` | a counter of finished racks that scored without touching a penalty basket | **sum** |
 
-Both are additive and both default to empty on a device that has not played since, so a record
-written before they existed loads with every number it had and gains nothing it did not earn
-(`test-stats-replay.mjs` scenario G asserts exactly that). `game.js`'s `result()` feeds them as
-`slotsHit` and `cleanRack`; `slotsHit` lists REAL holes only, so "hit every basket" can never be
-completed by missing into the trough, and `cleanRack` is gated on the board actually having a
-penalty basket, the same way `colorSweep` is gated on `need > 1`.
+**Two more arrived on 2026-08-25**, when Matt raised BRICK CITY's objectives ahead of it going
+live (every basket THREE times, THREE perfect rounds - "no 0s and no negatives"). Neither of the
+first two can answer those: a set cannot count to three, and a clean round allows a miss. So they
+were ADDED BESIDE them rather than redefined - THE LAW rule 5, and `slots` is now what HOT SHOT's
+own first objective reads:
 
-Only BRICK CITY reads them today. A future machine that wants either gets it for free.
+| field | shape | merged across devices by |
+|---|---|---|
+| `slotHits` | how many times each hole has been landed on that board | **sum** - twice on the phone and once on the tablet is three |
+| `perfectRacks` | a counter of finished rounds where all nine balls SCORED | **sum** |
+
+All four are additive and all four default to empty on a device that has not played since, so a
+record written before any of them existed loads with every number it had and gains nothing it did
+not earn (`test-stats-replay.mjs` scenario G asserts that for the first pair, scenario H for the
+second). `game.js`'s `result()` feeds them as `slotsHit` / `slotCounts` / `cleanRack` /
+`perfectRack`; the two slot fields list REAL holes only, so "hit every basket" can never be
+completed by missing into the trough. `cleanRack` is gated on the board actually having a penalty
+basket, the same way `colorSweep` is gated on `need > 1`; `perfectRack` deliberately is NOT - nine
+balls out of nine scoring is a hard, honest statement about any machine.
+
+Only BRICK CITY reads `slotHits` and `perfectRacks` today, and only HOT SHOT reads `slots`. A
+future machine that wants any of them gets it for free.
 
 ## Where the three objectives sit (2026-08-24: one per rail, the total above the machine)
 
@@ -781,6 +795,25 @@ future machine with a longer third objective needs a re-measure**, since nothing
 label that does not fit will collide instead.
 
 **Do not give this bar `position: absolute` again**, however tempting the 40px looks.
+
+### An objective SAYS WHAT IT MEANS when you tap it (2026-08-25)
+
+Matt, setting BRICK CITY's new three: *"'perfect rounds' must be defined when you click on the
+objective."* Every box that shows an objective carries `data-def` - both rails, the wide total bar
+and the game-over tiles - and a tap opens `_showGoalDefs`, a sheet with all three objectives, the
+tapped one lit, each with its progress and one plain sentence. Every machine's goals carry a
+`defKey` (`goals.js`), so the sheet is never half empty.
+
+**The rails take taps now, and the guard above `.sk-grail` in `skeeball.css` had to change to say
+why that is safe.** The COLUMN keeps `pointer-events: none`; only the box inside it takes them.
+Throws are read by `.sk-swipe`, the bottom 52% of `.sk-stage`, and the rail boxes end 193px above
+it on a 375x667 phone (measured through the real UI, both boxes 71x67). Move the rails down, grow
+the box, or raise `.sk-swipe`, and measure those two rects again.
+
+**The wide bar's hit area is 44px tall while the bar itself stays ~30px** (a transparent `::after`
+overhanging into `.sk-gtotal-row`'s inert padding). That bar is IN FLOW, so every pixel of real
+height it takes is a pixel of machine - paying ~14px of stage for the tap floor was the wrong
+trade, and nothing else on that band takes a tap.
 
 ### The objectives VANISH once the machine has nothing left to ask for (2026-08-25)
 

@@ -47,6 +47,17 @@ export function ensureBoard(boards, boardId) {
   //               basket. A counter, so it only climbs.
   if (!b.slots || typeof b.slots !== 'object') b.slots = {};
   if (!Number.isFinite(b.cleanRacks)) b.cleanRacks = 0;
+  // Added 2026-08-25 when Matt re-set BRICK CITY's objectives ahead of it going live, and
+  // additive in the same way. NEITHER REPLACES THE TWO ABOVE (THE LAW rule 5 - an old key is
+  // never repurposed): `slots` still answers "have you ever hit this basket" for HOT SHOT, and
+  // `cleanRacks` is still written for anything that asks. These answer the harder questions
+  // BRICK CITY now asks:
+  //   slotHits     HOW MANY TIMES each hole has been landed on this board. Counts, summed across
+  //                devices, because "hit every basket three times" cannot be answered by a set.
+  //   perfectRacks finished rounds where all nine balls SCORED - no zeros and no penalties. A
+  //                strictly harder thing than a clean round, which allows misses.
+  if (!b.slotHits || typeof b.slotHits !== 'object') b.slotHits = {};
+  if (!Number.isFinite(b.perfectRacks)) b.perfectRacks = 0;
   return b;
 }
 
@@ -55,7 +66,8 @@ export function ensureBoard(boards, boardId) {
  * and today's entry only ever improves.
  * @param {object} sub the game's stats sub-counter (Skeeball's `sk`)
  * @param {string} boardId
- * @param {{score:number, bestThrow?:number, at?:number, slotsHit?:string[], cleanRack?:number}} game
+ * @param {{score:number, bestThrow?:number, at?:number, slotsHit?:string[], cleanRack?:number,
+ *          slotCounts?:Record<string,number>, perfectRack?:number}} game
  */
 export function recordBoardGame(sub, boardId, game) {
   if (!sub || !boardId) return sub;
@@ -73,6 +85,16 @@ export function recordBoardGame(sub, boardId, game) {
     for (const id of game.slotsHit) if (id) b.slots[String(id)] = true;
   }
   if (game?.cleanRack) b.cleanRacks += 1;
+  // COUNTS, added: the same slot hit twice in one round is two hits. A count can only climb, and
+  // a rack that reports nothing adds nothing.
+  const counts = game?.slotCounts;
+  if (counts && typeof counts === 'object') {
+    for (const id of Object.keys(counts)) {
+      const n = Math.max(0, counts[id] | 0);
+      if (id && n) b.slotHits[String(id)] = (b.slotHits[String(id)] | 0) + n;
+    }
+  }
+  if (game?.perfectRack) b.perfectRacks += 1;
   return sub;
 }
 
@@ -123,6 +145,12 @@ export function mergeBoards(dst, src) {
     const ss = s.slots || {};
     for (const slot of Object.keys(ss)) if (ss[slot]) d.slots[slot] = true;
     d.cleanRacks += s.cleanRacks | 0;
+    // Hit COUNTS add across devices (a basket hit twice on the phone and once on the tablet is
+    // three hits), where the `slots` set above unions. Both are additive; they answer different
+    // questions, so they merge differently.
+    const sh = s.slotHits || {};
+    for (const slot of Object.keys(sh)) d.slotHits[slot] = (d.slotHits[slot] | 0) + (sh[slot] | 0);
+    d.perfectRacks += s.perfectRacks | 0;
   }
   return dst;
 }

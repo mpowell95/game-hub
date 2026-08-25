@@ -225,6 +225,22 @@ export class SkeeballUI {
     // Same reason one layer out: some platforms hide the page without ever cancelling the pointer.
     this._onHide = () => { if (document.visibilityState === 'hidden') this.swipe = null; };
     this._loop = (ts) => this._frame(ts);
+    // WHAT AN OBJECTIVE MEANS, ON A TAP. Matt, 2026-08-25, setting BRICK CITY's new three:
+    // "'perfect rounds' must be defined when you click on the objective." Delegated from the
+    // root because every screen change replaces its innerHTML - a listener bound to a rail box
+    // would die with the first repaint of the rack. Removed in destroy(), so nothing outlives
+    // the mount.
+    this._onDefTap = (e) => {
+      const box = e.target && e.target.closest ? e.target.closest('[data-def]') : null;
+      if (box) this._showGoalDefs(box.getAttribute('data-def'));
+    };
+    this._onDefKey = (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const box = e.target && e.target.closest ? e.target.closest('[data-def]') : null;
+      if (!box) return;
+      e.preventDefault();
+      this._showGoalDefs(box.getAttribute('data-def'));
+    };
 
     ensureCSS();
     this.root.classList.add('sk-root');
@@ -232,6 +248,8 @@ export class SkeeballUI {
 
     this._unsubLang = onLangChange(() => { if (this.screen === 'setup') this._renderSetup(); });
     this._unsubViewport = onViewportResize(() => this._fit());
+    this.root.addEventListener('click', this._onDefTap);
+    this.root.addEventListener('keydown', this._onDefKey);
     window.addEventListener('pointermove', this._onPointerMove);
     window.addEventListener('pointerup', this._onPointerUp);
     window.addEventListener('pointercancel', this._onPointerCancel);
@@ -711,6 +729,51 @@ export class SkeeballUI {
     el.addEventListener('click', (e) => { if (e.target === el) close(); });
   }
 
+  /** WHAT THE THREE OBJECTIVES MEAN, on a tap. Matt, 2026-08-25: "'perfect rounds' must be
+   *  defined when you click on the objective." Every box that shows an objective carries
+   *  data-def - both rails, the wide total bar, and the game-over tiles - so wherever a player
+   *  meets one, tapping it opens this.
+   *
+   *  It shows ALL THREE, not just the one tapped, with the tapped one lit: a player asking what
+   *  one objective means is a player who does not know what any of them mean, and three short
+   *  lines cost nothing. Progress comes from the LIVE goals mid-round so the sheet cannot
+   *  disagree with the rail that opened it.
+   *
+   *  GUARD: read-only, and it does not pause. The rack behind it keeps its state (a ball in
+   *  flight settles and still scores); nothing here writes. */
+  _showGoalDefs(focusId) {
+    const boardId = this.game ? this.game.board.id : this.settings.board;
+    const goals = this.game ? this._liveGoals() : readGoals(boardId);
+    if (!goals || !goals.length) return;
+    const el = document.createElement('div');
+    el.className = 'sk-hp-veil sk-def-veil';
+    const rows = goals.map((g) => `
+      <div class="sk-def-row${g.id === focusId ? ' is-focus' : ''}${g.met ? ' is-done' : ''}">
+        <div class="sk-def-head">
+          <em>${esc(t(g.labelKey))}</em>
+          <b>${shortNum(g.now)}/${shortNum(g.target)}</b>
+        </div>
+        <p class="sk-def-text">${esc(t(g.defKey || 'obj_def_h'))}</p>
+      </div>`).join('');
+    el.innerHTML = `
+      <div class="sk-def-modal" role="dialog" aria-modal="true" aria-label="${esc(t('obj_def_h'))}">
+        <button type="button" class="sk-def-x" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
+        <div class="sk-hp-title">${esc(t('obj_def_h'))}</div>
+        <div class="sk-def-rows">${rows}</div>
+        <button type="button" class="sk-hp-ok" data-role="ok">${esc(t('ht_ok'))}</button>
+      </div>`;
+    this._closeOverlay();
+    this.root.appendChild(el);
+    this.overlay = el;
+    const close = () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (this.overlay === el) this.overlay = null;
+    };
+    el.querySelector('[data-role="ok"]').addEventListener('click', close);
+    el.querySelector('[data-role="close"]').addEventListener('click', close);
+    el.addEventListener('click', (e) => { if (e.target === el) close(); });
+  }
+
   /** The how-to illustration is a REAL throw, looped: the actual renderer + physics engine, a
    *  measured power that scores the 50, re-thrown after it settles. That is why it looks like a
    *  thrown ball and not an overlay - it IS the game. Torn down by _stopHpDemo on close/destroy. */
@@ -1181,8 +1244,12 @@ export class SkeeballUI {
   _goalRailsMarkup() {
     if (this._goalsHidden) return '';
     const [g1, g2] = this._liveGoals();
+    // role=button + tabindex, never a real <button>: Safari before 16.4 will not lay a <button>
+    // out reliably as a flex container, and .sk-gtotal below IS one (docs/BUILDING-A-GAME.md,
+    // Part 0). The three objective boxes are one component, so they take one shape.
     const box = (g) => `
-      <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
+      <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}" data-def="${g.id}"
+        role="button" tabindex="0" aria-label="${esc(`${t(g.labelKey)} ${g.now}/${g.target}. ${t(g.defKey || 'obj_def_h')}`)}">
         <em>${esc(t(g.labelKey))}</em>
         <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
         <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
@@ -1205,7 +1272,8 @@ export class SkeeballUI {
     const g = this._liveGoals()[2];
     if (!g) return '';
     return `
-      <div class="sk-gtotal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
+      <div class="sk-gtotal${g.met ? ' is-done' : ''}" data-goal="${g.id}" data-def="${g.id}"
+        role="button" tabindex="0" aria-label="${esc(`${t(g.labelKey)} ${g.now}/${g.target}. ${t(g.defKey || 'obj_def_h')}`)}">
         <em>${esc(t(g.labelKey))}</em>
         <b>${shortNum(g.now)}<i>/${shortNum(g.target)}</i></b>
         <span class="sk-goal-bar"><i style="width:${Math.round((100 * g.now) / g.target)}%"></i></span>
@@ -1230,7 +1298,8 @@ export class SkeeballUI {
       return `<div class="sk-gwon"><em>${esc(head)}</em><b>${esc(t(opensNext ? 'goals_unlocked' : 'goals_done'))}</b></div>`;
     }
     const tile = (g) => `
-      <div class="sk-gtile${g.met ? ' is-done' : ''}">
+      <div class="sk-gtile${g.met ? ' is-done' : ''}" data-def="${g.id}" role="button" tabindex="0"
+        aria-label="${esc(`${t(g.labelKey)} ${g.now}/${g.target}. ${t(g.defKey || 'obj_def_h')}`)}">
         <b>${shortNum(g.now)}/${shortNum(g.target)}</b><span>${esc(t(g.labelKey))}</span>
       </div>`;
     return `
@@ -1567,6 +1636,8 @@ export class SkeeballUI {
     this._stopLoop();
     this._stopHpDemo();
     this._closeOverlay();
+    this.root.removeEventListener('click', this._onDefTap);
+    this.root.removeEventListener('keydown', this._onDefKey);
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
     window.removeEventListener('pointercancel', this._onPointerCancel);

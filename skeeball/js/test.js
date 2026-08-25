@@ -561,18 +561,23 @@ if (G.mat) {
   const res = overEv.result;
   eq('result() carries exactly the recorder extras',
     Object.keys(res).sort(),
-    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'hundreds', 'score', 'slotsHit', 'tens', 'thirties', 'twenties']);
+    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'hundreds', 'perfectRack', 'score', 'slotCounts', 'slotsHit', 'tens', 'thirties', 'twenties']);
   const countOf = (v) => g.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
   // GUARD: key ORDER matters - eq() compares JSON.stringify, so this must list them in the
   // same order result() builds them. colorsHit/colorSweep are the cup-board extras (POPONGO,
-  // 2026-08-22) and stay 0 on a ringed board like this one; slotsHit/cleanRack are BRICK CITY's
-  // (2026-08-24) and ride the PER-BOARD record - slotsHit is honest everywhere (it is just which
-  // holes were hit), and cleanRack stays 0 on any board with no penalty basket, which is every
-  // board but that one.
+  // 2026-08-22) and stay 0 on a ringed board like this one; slotsHit/slotCounts/cleanRack/
+  // perfectRack are BRICK CITY's (2026-08-24, raised 2026-08-25) and ride the PER-BOARD record.
+  // slotsHit and slotCounts are honest everywhere (they are just which holes were hit, and how
+  // often); cleanRack stays 0 on any board with no penalty basket, which is every board but that
+  // one; perfectRack is NOT gated that way - all nine balls scoring is a true statement about any
+  // machine - so it reads what this rack actually did.
   const slots = [...new Set(g.throws.map((t) => t.hole).filter((h) => g.board.geom.holes[h]))];
+  const counts = {};
+  for (const t of g.throws) if (g.board.geom.holes[t.hole]) counts[t.hole] = (counts[t.hole] | 0) + 1;
+  const perfect = g.throws.length === 9 && g.throws.every((t) => (t.value | 0) > 0) ? 1 : 0;
   eq('result() agrees with the game', res,
     { score: g.score, balls: 9,
-      slotsHit: slots, cleanRack: 0,
+      slotsHit: slots, slotCounts: counts, cleanRack: 0, perfectRack: perfect,
       tens: countOf(10), twenties: countOf(20), thirties: countOf(30), forties: countOf(40),
       hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow,
       colorsHit: 0, colorSweep: 0 });

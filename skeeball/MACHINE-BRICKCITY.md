@@ -280,52 +280,70 @@ a sweep, and POPONGO's colours goal is safe from this machine.
 ## Objectives
 
 In `skeeball/js/goals.js`. Matt replaced the first draft's "sink a 100" and "score 240 in a game"
-on 2026-08-24 — these three are about the FACE, not about a number.
+on 2026-08-24, and **RAISED all three on 2026-08-25**, the day the machine was cleared to go live:
+the first set was sized for a machine only he was playing.
 
 | goal | label | target | reads |
 |---|---|---|---|
-| Every basket | `g_baskets` | all **9** slots landed, at least once each | `sk.boards.brickcity.slots` |
-| Clean round | `g_clean` | **1** finished round that scores and takes no penalty | `sk.boards.brickcity.cleanRacks` |
-| Net points | `g_net` | **1,500** | `sk.boards.brickcity.points` |
+| Every basket, three times | `g_baskets3` | all **9** slots landed **3 times each** | `sk.boards.brickcity.slotHits` |
+| Perfect rounds | `g_perfect` | **3** finished rounds where every one of the nine balls scored | `sk.boards.brickcity.perfectRacks` |
+| Net points | `g_net` | **30,000** (was 1,500) | `sk.boards.brickcity.points` |
 
-**Every basket, not every point value.** *"they must hit every basket, not just every point
-value."* This face pays 100 twice, 40 twice and -20 twice, so counting VALUES would let a player
-skip three baskets and still finish. It counts the nine SLOTS. Spread over as many racks as it
-takes — nine balls into nine different baskets in one rack is a lottery, not a goal — which is why
-it reads a union rather than anything per-rack.
+**Every basket, three times.** *"you have to hit every basket 3 times."* It still counts the nine
+SLOTS rather than the six point values (this face pays 100 twice, 40 twice and -20 twice, so
+counting values would let a player skip three baskets), but a SET cannot count to three, so the
+per-board record gained `slotHits` - counts, summed across devices. The `slots` set is untouched
+and still written; HOT SHOT's own first objective reads it (THE LAW rule 5: an old key is never
+repurposed). The rail says `Baskets x3` and its number is how many baskets are DONE, out of nine.
 
-**A clean round means it scored.** *"must score points tho - can't just throw away all 9 balls, get
-0s, and pass this objective."* `game.js` requires all nine balls spent, `score > 0`, and not one
-ball in a negative basket. It also gates the whole thing on the board actually HAVING a penalty
-basket — on a machine where nothing can cost you points every scoring rack would trivially be
-"clean", and a flag every machine sets means nothing on the one machine that asks.
+**A perfect round is no zeros and no negatives.** Matt's words: *"It means no 0s and no negatives.
+You have to do that 3 times."* That is strictly harder than the clean round it replaces, which let
+a ball miss the face entirely as long as it cost nothing. `game.js` reports `perfectRack` only when
+all nine balls are spent and every one of them scored. `cleanRacks` is still counted and still
+stored - nothing recorded stops being recorded - it is simply no longer what the objective reads.
+Unlike `cleanRack`, `perfectRack` is NOT gated on the board having a penalty basket: nine for nine
+is a true and hard statement on any machine.
 
 **Net, because it goes down as well as up.** *"You gotta change the name of the total points one to
 net total points or something since it goes up and down depending on the negative baskets."* The
-number is the same per-board points total the other machines use; on this face a rack contributes
+number is the same per-board points total the other machines use; on this face a round contributes
 what it FINISHED with after the penalties took their cut, so the label says so. Its own string key
-(`g_net`), because the other three machines' totals only ever climb and "Total points" is still
-true there. **Short on purpose, and it was measured twice.** It began short because a rail box is
-`min(76px, 19vw)` and wraps to two lines. When the total moved to the wide bar above the machine
-that reason expired, so "Net total points" was tried — and at completion (`1.5k/1.5k ✓`) it
-measures 241px against the ~216px between the two rails on a 375px phone, overlapping both. In
-Spanish it is worse. So the short name stays, for a new reason.
+(`g_net`), because the other machines' totals only ever climb. **Short on purpose, and measured
+twice**: a rail box is `min(76px, 19vw)` and wraps; at completion (`30k/30k`) the wide bar has to
+stay clear of both rails on a 375px phone. 30,000 is HOT SHOT's number, which Matt set here too.
 
-### The two counters these needed
+**Tapping an objective says what it means** (2026-08-25). *"'perfect rounds' must be defined when
+you click on the objective."* Every box that shows an objective carries `data-def` - both rails,
+the wide total bar and the game-over tiles - and a tap opens a sheet with all three, the tapped one
+lit, each with its progress and one plain sentence (`d_bc_*` in `strings.js`, EN and ES). Measured
+at 375x667 and 393x852: the rail boxes are 71x67, the wide bar's hit area is 44px tall (the bar
+itself stays 30px, because it is IN FLOW and every pixel of it costs the machine height), and the
+rails end 193px above the top of `.sk-swipe`, so a tappable rail cannot eat a throw. Re-measure
+those two rects if either the rails or the swipe surface move.
 
-Both are **per board** (`js/arcade-scores.js`'s board record), not the global `sk` block — they
+### The four counters these needed
+
+All four are **per board** (`js/arcade-scores.js`'s board record), not the global `sk` block - they
 answer questions about ONE machine's face, and a global counter would let another machine satisfy
-them. Both are additive, and both are absent-and-defaulted on any device that has not played since:
+them. All four are additive, and all four are absent-and-defaulted on any device that has not
+played since:
 
-- **`slots`** — a SET of the hole ids ever landed on this board. Unioned when a rack is recorded
-  and unioned again across devices in `mergeBoards`, never intersected: a basket hit on a phone
-  and a different one hit on a tablet are two baskets hit, not zero.
-- **`cleanRacks`** — a counter, so it only climbs. Summed across devices.
+- **`slots`** (2026-08-24) - a SET of the hole ids ever landed on this board. Unioned when a rack
+  is recorded and unioned again across devices in `mergeBoards`, never intersected. Still written
+  here; read by HOT SHOT's first objective, not by this machine's any more.
+- **`cleanRacks`** (2026-08-24) - a counter of rounds that scored without touching a penalty
+  basket. Still written; no objective reads it today.
+- **`slotHits`** (2026-08-25) - HOW MANY TIMES each hole has been landed. Counts, SUMMED across
+  devices where the set unions: a basket hit twice on the phone and once on the tablet has been hit
+  three times. This is what "every basket x3" reads.
+- **`perfectRacks`** (2026-08-25) - a counter of rounds where all nine balls scored. Summed.
 
-`game.js`'s `result()` reports `slotsHit` (real holes only — the trough's `gutter` and `corner0`
-are outcomes, not baskets, so "hit every basket" can never be completed by missing) and
-`cleanRack`. `test-stats-replay.mjs` scenario G covers the union, the sum, and that a board record
-written before these existed loads with every number intact and no progress it did not earn.
+`game.js`'s `result()` reports `slotsHit` and `slotCounts` (real holes only - the trough's `gutter`
+and `corner0` are outcomes, not baskets, so no objective here can be completed by missing), plus
+`cleanRack` and `perfectRack`. `test-stats-replay.mjs` scenario G covers the first pair and
+scenario H the second: the union, the sums, that a board record written before either pair existed
+loads with every number intact and no progress it did not earn, and that two hits on every basket
+with two perfect rounds and 29,999 points completes nothing.
 
 **POPONGO hangs off these three, so they have to be reachable.** Every one of the nine baskets is
 capturable — that is what the build sweep asserts — so goal 1 is a matter of working across the

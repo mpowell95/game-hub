@@ -1359,11 +1359,13 @@ export function recordSkeeball(boardId, extras) {
   if (e.colorSweep) g.sk.colorSweeps += 1;
   g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
   g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
-  // slotsHit / cleanRack ride the PER-BOARD record (js/arcade-scores.js), not the sk block: they
+  // slotsHit / slotCounts / cleanRack / perfectRack ride the PER-BOARD record
+  // (js/arcade-scores.js), not the sk block: they
   // answer questions about ONE machine's face, and a global counter would let another machine
   // satisfy them. Both are additive there - slots union, cleanRacks climbs.
   recordBoardGame(g.sk, board, {
     score, bestThrow: e.bestThrow | 0, at: e.at, slotsHit: e.slotsHit, cleanRack: e.cleanRack,
+    slotCounts: e.slotCounts, perfectRack: e.perfectRack,
   });
   unlockBoard(g.sk, board);          // you have played it, so it is yours
   st.updatedAt = new Date().toISOString();

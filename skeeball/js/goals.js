@@ -48,22 +48,26 @@ export const BB_BEST = 700;      // HOT SHOT: score 700+ in a single game (was 3
 export const BB_TOTAL = 30000;   // HOT SHOT: 30,000 points in total on the machine (3,000 -> 10,000 -> 30,000)
 
 // HOT SHOT: BRICK CITY. Its three are about its FACE, not about a number - Matt, 2026-08-24,
-// replacing the first draft's "sink a 100" and "score 240 in a game":
+// replacing the first draft's "sink a 100" and "score 240 in a game" - and RAISED on 2026-08-25,
+// the day the machine was cleared to go live, because the first set was sized for a machine only
+// he was playing:
 //
-//   1. EVERY BASKET, at least once. "they must hit every basket, not just every point value" -
-//      nine slots, not six values: this face pays 100 twice, 40 twice and -20 twice, so counting
-//      values would let a player skip three baskets entirely. Spread over as many racks as it
-//      takes (nine balls into nine different baskets in one rack is not a goal, it is a lottery),
-//      which is why it reads a UNION - sk.boards.brickcity.slots - rather than anything per-rack.
-//   2. A CLEAN RACK: nine balls, points on the board, and not one penalty basket. "must score
-//      points tho - can't just throw away all 9 balls, get 0s, and pass this objective" - so
-//      game.js requires score > 0 as well as no negative ball, and gates the whole thing on the
-//      board actually having a penalty basket.
-//   3. NET points. "You gotta change the name of the total points one to net total points or
-//      something since it goes up and down depending on the negative baskets." The number was
-//      always the per-board points total; on this machine a rack contributes what it FINISHED
-//      with after the penalties took their cut, so the label says so. Its own key, because the
-//      other three machines' totals only ever go up and "Total points" is still true there.
+//   1. EVERY BASKET, THREE TIMES. "you have to hit every basket 3 times." Nine slots, not six
+//      values: this face pays 100 twice, 40 twice and -20 twice, so counting values would let a
+//      player skip three baskets entirely. Counting HITS rather than a set is what the x3 needs -
+//      sk.boards.brickcity.slotHits, added the same day (js/arcade-scores.js). The `slots` set is
+//      still written and still read by HOT SHOT; it was not repurposed (THE LAW rule 5).
+//      Spread over as many rounds as it takes; nine baskets three times each in one rack is not a
+//      goal, it is a lottery.
+//   2. THREE PERFECT ROUNDS. "It means no 0s and no negatives. You have to do that 3 times."
+//      That is STRICTLY harder than the clean round this replaces, which let a ball miss the face
+//      entirely as long as it did not cost points. game.js reports perfectRack only when all nine
+//      balls are spent and every one of them scored. `cleanRacks` is still counted and still
+//      stored - nothing that was recorded stops being recorded - it is simply no longer what the
+//      objective reads.
+//   3. NET points, 30,000 - HOT SHOT's number, which Matt set for this machine too. On this face
+//      a round contributes what it FINISHED with after the penalties took their cut, which is why
+//      the label says NET where the other machines say Total.
 //
 // MEASURED on the 41x21 grid (skeeball/MACHINE-BRICKCITY.md has the table): of 861 clean cells
 // 111 pay -20, 65 pay -10, 40 pay 40, 14 pay 20, 7 pay 50, 6 pay 100, and 563 pay nothing. Every
@@ -71,13 +75,15 @@ export const BB_TOTAL = 30000;   // HOT SHOT: 30,000 points in total on the mach
 // matter of working across the face rather than of luck.
 //
 // GUARD: POPONGO's unlock hangs off these three, so they have to be REACHABLE. Goal 1 is the slow
-// one (the two 100s are 6 grid cells between them), and goal 2 is the sharp one - the penalty row
-// is the easiest thing on the face to hit, by design. If either plays wrong once there are real
-// racks behind it, change it HERE; do not resize a mouth, which is what makes the face mean
+// one (the two 100s are 6 grid cells between them and each is now wanted three times), and goal 2
+// is the sharp one - the penalty row is the easiest thing on the face to hit, by design, and a
+// perfect round has to clear it nine times running. If either plays wrong once there are real
+// rounds behind it, change it HERE; do not resize a mouth, which is what makes the face mean
 // something.
-export const BC_BASKETS = 9;     // BRICK CITY: land in every basket at least once
-export const BC_CLEAN = 1;       // BRICK CITY: one rack that scores and takes no penalty
-export const BC_NET = 1500;      // BRICK CITY: 1,500 NET points in total on the machine
+export const BC_BASKETS = 9;       // BRICK CITY: all nine baskets...
+export const BC_BASKET_HITS = 3;  // ...each landed this many times (was: at least once)
+export const BC_PERFECT = 3;      // BRICK CITY: three rounds where all nine balls scored
+export const BC_NET = 30000;      // BRICK CITY: 30,000 NET points in total (was 1,500)
 
 // HOT SHOT: RUNAWAY. Its three are about the one thing that makes it different - the top row's
 // 100 is moving, so hitting it once is a real achievement and hitting it twice in nine balls is
@@ -115,9 +121,9 @@ const GOALS = {
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'hundreds', labelKey: 'g_hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
-      { id: 'best', labelKey: 'g_single', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
-      { id: 'total', labelKey: 'g_total', now: Math.min(total, GOAL_TOTAL), target: GOAL_TOTAL, met: total >= GOAL_TOTAL },
+      { id: 'hundreds', labelKey: 'g_hundreds', defKey: 'd_cl_hundreds', now: Math.min(h, GOAL_HUNDREDS), target: GOAL_HUNDREDS, met: h >= GOAL_HUNDREDS },
+      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, GOAL_BEST), target: GOAL_BEST, met: best >= GOAL_BEST },
+      { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, GOAL_TOTAL), target: GOAL_TOTAL, met: total >= GOAL_TOTAL },
     ];
   },
   popongo(s, r) {
@@ -133,9 +139,9 @@ const GOALS = {
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'colors', labelKey: 'g_colors', now: colorsNow, target: PG_COLORS, met: sweptEver || liveColors >= PG_COLORS },
-      { id: 'best', labelKey: 'g_single', now: Math.min(best, PG_BEST), target: PG_BEST, met: best >= PG_BEST },
-      { id: 'total', labelKey: 'g_total', now: Math.min(total, PG_TOTAL), target: PG_TOTAL, met: total >= PG_TOTAL },
+      { id: 'colors', labelKey: 'g_colors', defKey: 'd_pg_colors', now: colorsNow, target: PG_COLORS, met: sweptEver || liveColors >= PG_COLORS },
+      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, PG_BEST), target: PG_BEST, met: best >= PG_BEST },
+      { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, PG_TOTAL), target: PG_TOTAL, met: total >= PG_TOTAL },
     ];
   },
   basketball(s, r) {
@@ -156,9 +162,9 @@ const GOALS = {
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'baskets', labelKey: 'g_baskets', now: baskets, target: BB_BASKETS, met: baskets >= BB_BASKETS },
-      { id: 'best', labelKey: 'g_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
-      { id: 'total', labelKey: 'g_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
+      { id: 'baskets', labelKey: 'g_baskets', defKey: 'd_bb_baskets', now: baskets, target: BB_BASKETS, met: baskets >= BB_BASKETS },
+      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, BB_BEST), target: BB_BEST, met: best >= BB_BEST },
+      { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, BB_TOTAL), target: BB_TOTAL, met: total >= BB_TOTAL },
     ];
   },
   runaway(s, r) {
@@ -170,27 +176,34 @@ const GOALS = {
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'runaway', labelKey: 'g_runaway', now: Math.min(bt, RA_HOOP), target: RA_HOOP, met: bt >= RA_HOOP },
-      { id: 'best', labelKey: 'g_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
-      { id: 'total', labelKey: 'g_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
+      { id: 'runaway', labelKey: 'g_runaway', defKey: 'd_ra_hoop', now: Math.min(bt, RA_HOOP), target: RA_HOOP, met: bt >= RA_HOOP },
+      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
+      { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
     ];
   },
   brickcity(s, r) {
     const b = (s.boards || {}).brickcity || {};
-    // BASKETS: the recorded union, plus whatever the live rack has added, so the rail climbs
-    // ball by ball instead of jumping at the end. A Set because the two overlap constantly.
-    const seen = new Set(Object.keys(b.slots || {}).filter((k) => (b.slots || {})[k]));
-    if (r && Array.isArray(r.slotsHit)) for (const id of r.slotsHit) seen.add(id);
-    const baskets = Math.min(seen.size, BC_BASKETS);
-    // CLEAN: done forever once any rack has managed it. The live rack only counts when it is
-    // actually finished - game.js will not report cleanRack until all nine balls are spent, so a
-    // rack that is clean SO FAR cannot light this early and then un-light on the last ball.
-    const clean = (b.cleanRacks | 0) + (r ? r.cleanRack | 0 : 0);
+    // BASKETS x3: recorded hit COUNTS plus whatever the live round has added, so the rail climbs
+    // ball by ball instead of jumping at the end. A basket counts once it has been landed
+    // BC_BASKET_HITS times; the rail reads "how many baskets are done", which is the only shape
+    // that fits a 76px box and still says something true.
+    const hits = {};
+    const rec = b.slotHits || {};
+    for (const id of Object.keys(rec)) hits[id] = rec[id] | 0;
+    if (r && r.slotCounts) {
+      for (const id of Object.keys(r.slotCounts)) hits[id] = (hits[id] | 0) + (r.slotCounts[id] | 0);
+    }
+    const baskets = Math.min(Object.keys(hits).filter((id) => (hits[id] | 0) >= BC_BASKET_HITS).length,
+      BC_BASKETS);
+    // PERFECT: the live round only counts when it is actually finished - game.js will not report
+    // perfectRack until all nine balls are spent, so a round that is perfect SO FAR cannot light
+    // this early and then un-light on the last ball.
+    const perfect = (b.perfectRacks | 0) + (r ? r.perfectRack | 0 : 0);
     const net = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'baskets', labelKey: 'g_baskets', now: baskets, target: BC_BASKETS, met: baskets >= BC_BASKETS },
-      { id: 'clean', labelKey: 'g_clean', now: Math.min(clean, BC_CLEAN), target: BC_CLEAN, met: clean >= BC_CLEAN },
-      { id: 'net', labelKey: 'g_net', now: Math.min(net, BC_NET), target: BC_NET, met: net >= BC_NET },
+      { id: 'baskets', labelKey: 'g_baskets3', defKey: 'd_bc_baskets', now: baskets, target: BC_BASKETS, met: baskets >= BC_BASKETS },
+      { id: 'perfect', labelKey: 'g_perfect', defKey: 'd_bc_perfect', now: Math.min(perfect, BC_PERFECT), target: BC_PERFECT, met: perfect >= BC_PERFECT },
+      { id: 'net', labelKey: 'g_net', defKey: 'd_bc_net', now: Math.min(net, BC_NET), target: BC_NET, met: net >= BC_NET },
     ];
   },
 };
