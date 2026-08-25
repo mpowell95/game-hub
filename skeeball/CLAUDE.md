@@ -782,6 +782,105 @@ label that does not fit will collide instead.
 
 **Do not give this bar `position: absolute` again**, however tempting the 40px looks.
 
+### The objectives VANISH once the machine has nothing left to ask for (2026-08-25)
+
+Matt: *"objectives vanish once all three reached AND next board unlocked."* Both rails and the
+total bar paint empty, and `.sk-gtotal-row:empty` collapses so the stage gets its ~40px back - a
+machine you have finished renders slightly bigger than one you have not.
+
+Two details that are load-bearing:
+
+- **The decision is made ONCE, in `_startGame` (`this._goalsHidden = this._goalsSpent()`), not on
+  every repaint.** The rack that completes the third objective has to KEEP its boxes on screen,
+  because the ceremony below flies those very boxes to the middle of the screen. Re-deciding per
+  paint would delete the thing being animated. The ceremony sets `_goalsHidden = true` itself when
+  it finishes, so they go for the rest of that rack and every rack after.
+- **A TERMINAL machine is spent on all-three-met alone.** Nothing hangs off RUNAWAY's objectives
+  (it is last in the chain), so waiting for an unlock there would leave its rails up forever.
+  `_goalsSpent()` treats "opens nothing" as spent. Anything unreadable answers NO, so the failure
+  mode is showing the objectives, never hiding something still owed.
+
+## The unlock ceremony (2026-08-25)
+
+Matt's sequence, in his words: the third objective completes, fireworks, the three objective tiles
+turn gold, float together to the middle, merge into a pulsing blob, shrink to a point, a golden key
+pops out - **all before the game-over screen** - and then the player goes to the gallery, finds the
+machine they just opened, its lock glowing and pulsing, taps it, and the lock falls off.
+
+**THE ONE RULE THIS IS BUILT ON: the key is theatre over an unlock that is already banked.** The
+earn writes `sk.unlocked` exactly when it always did (`_rackOver` -> `_earnedUnlocks` ->
+`unlockSkeeballBoard`, additive, THE LAW rule 2; `_ensureGoalUnlocks` still catches anything earned
+on another device). **Nothing in the ceremony grants anything.** If tapping the lock were what
+granted it, a player who earned a machine and closed the app would have lost it - which is exactly
+the shape of THE LAW's founding incident.
+
+- **`gamehub.skeeball.lockpop.v1`** (`{ [boardId]: true }`, local, cosmetic) is the whole of the
+  new state: "this machine owes the player a lock-pop." It is **armed by the ceremony and never
+  backfilled**, so an absent entry means "no ceremony owed" - every machine unlocked before this
+  shipped stays open exactly as it was, and a wiped key can only ever SKIP a ceremony. It can never
+  put a lock back on a machine somebody earned.
+- **`pending` requires `earned`** (`_slideState`). The gallery shows the golden lock only for a
+  machine the player already owns. A machine open to everyone by admin release never waits on a
+  lock, and neither does a dev profile.
+- **THE KEY GOES INTO THE LOCK.** Matt: *"The actual unlock could still be better. The key doesn't
+  even float in and go into the lock."* Before that the lock simply fell off on its own and the key
+  the player had just been handed on the lane never appeared again. It floats in from off the card,
+  levels out, drives into the keyhole (the padlock has one now), turns, and only THEN does the lock
+  react. 3.7 seconds over seven beats - the cut before it ran in 1s against a 54px lock (*"there's
+  no animation at all that's visible"*: the slide re-rendered before anything registered).
+- **The REVEAL is the point of the back half.** While the lock and key tumble off, the greyed
+  sliver un-greys and GROWS into the machine, so the screen visibly becomes the unlocked card
+  rather than being replaced by it. The 3700ms in `_popLock` and the `sk-lock-*` timeline in the
+  stylesheet have to stay in step, and the flight/drive-in/turn/fall are ONE keyframe block for
+  the same fill-mode reason the blob is.
+- **`KEY_SVG` and `LOCK_SVG` in `ui.js` are the art, used by both halves.** Matt, with a reference
+  picture: *"just make the key look a bit more like a key"* - so it is a chunky outlined cartoon
+  key (round bow with a real hole, collar, shaft, two stepped teeth), not a stroked outline.
+  **It is ONE path with `fill-rule="evenodd"`, not a pile of shapes**: the silhouette and the bow's
+  hole are subpaths of the same `d`, so a single stroke draws the outer outline and the ring around
+  the hole with no seam where the shaft meets the bow - and the hole is a real hole, so it works on
+  the dark lane and on the gallery's white card without a mask or an id two copies on one page
+  would fight over. Teeth point LEFT, bow sits RIGHT, because the gallery's key drives in from the
+  right. Aspect is 106:58 - size it by width and let the height follow, or it shears.
+- **`_slideState(b, sk, devAll)` is now the single answer to "what is this slide"** - testing /
+  earned / released / pending / open. `_renderSetup` read those three sources in three separate
+  places before, and the picture-painting loop's copy had already drifted from the markup's.
+- **The ceremony can fire on ball 3; the unlock is banked at ball 9.** Quitting in between leaves
+  the flag armed against a machine not yet earned, which the gallery reads as still locked
+  (`pending` requires `earned`). The next finished rack banks it and the lock is waiting. Nothing
+  is lost on either path.
+- **Silent under reduced motion**, exactly like the fireworks: `_unlockCeremony` returns before
+  building anything, `_popLock` re-renders with no animation, and the game-over card still says
+  UNLOCKED. Nobody is gated behind an animation they cannot see.
+- **IT ENDS ON A TAP, NOT A TIMER.** The key, the machine's name and an OK button hold on screen
+  until the player dismisses them (Matt: *"make them have to click to get rid of it"*), so
+  `_showWhenQuiet` holds the game-over card for as long as `_ceremony` is true and is deliberately
+  **not** bounded by its own 4s while it is - that bound is there for a stuck score counter, not
+  for something waiting on a person. A 60s auto-dismiss in `_unlockCeremony` is what makes that
+  safe: a player who puts the phone down still gets their card.
+- **It is deliberately slow, and every swap is a cross-fade or a morph.** The first cut ran the
+  whole thing in 5.2s; Matt: *"you're rushing it... you just instantly swap what they are."* So the
+  boxes FADE to gold rather than starting gold, their labels go mid-flight so three blank gold
+  pills converge, the tiles are still on screen while the blob swells up out of them, and the key
+  GROWS OUT OF the point the blob collapsed into rather than replacing it.
+  **Three traps are commented in place and all three were real.** An expo-out on the key was 65%
+  done in the first eighth of its run and read as an instant swap again. Three comma-separated
+  `transform` animations on the blob let the last one's `both` fill erase the two before it - which
+  is why the merge, the beats and the collapse are ONE keyframe block. And the key was once
+  unmasked through a widening `clip-path` circle, which is a WIPE, not growth - Matt: *"make sure
+  the key actually begins small and grows. Not just the visibility of the key."* It is pure scale
+  now, `linear` with the pace stepped by hand in the keyframes, because every eased curve tried
+  dumped most of the growth into a third of the run (measured: 3px to 185px in 0.65s of a 1.8s
+  animation). **Measure it, don't eyeball it** - the preview generator reads the key's rendered
+  width at each beat, and 2 / 9 / 21 / 59 / 133 / 234 px is what "watchable" looks like as numbers.
+- **The CSS timeline lives in one comment** above `.sk-cer` in `skeeball.css`. Eight
+  `animation-delay`s spread across six rules are unreadable otherwise; change a beat there and
+  update that block.
+
+`ui.js` measures the three real boxes and hands each gold tile its own `--tx`/`--ty`, so the
+stylesheet never has to know where a rail is - which is what keeps this working on a machine whose
+rails sit somewhere else.
+
 ## The records panel (the four numbers every machine shows)
 
 Per Matt's spec, each machine displays: the **top score by ANY player**, the current player's
@@ -913,6 +1012,10 @@ they now point here instead.)
 
 RUNAWAY was added on the END on 2026-08-25, which moved nobody's unlock and could not have: a
 machine appended to the chain changes no existing entry's `unlock`.
+
+Since 2026-08-25 a step in this chain is CELEBRATED as well as applied - see "The unlock ceremony"
+above. That is theatre only: `_earnedUnlocks` / `_ensureGoalUnlocks` are still the only writers of
+`sk.unlocked`, and the ceremony's own flag lives in its own local key.
 
 BRICK CITY was inserted between HOT SHOT and POPONGO on 2026-08-24, which moved POPONGO's unlock
 one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.unlocked` is an

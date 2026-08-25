@@ -56,6 +56,30 @@ function ensureCSS() {
   document.head.appendChild(link);
 }
 
+/** THE KEY, drawn once and used twice - the one that grows out of the ceremony's point, and the
+ *  one that flies into the lock in the gallery. Matt, 2026-08-25, with a reference picture:
+ *  "just make the key look a bit more like a key". So it is a chunky outlined cartoon key rather
+ *  than a stroked outline: a round bow with a real hole in it, a collar, a shaft, and two stepped
+ *  teeth at the business end.
+ *
+ *  GUARD: ONE PATH WITH fill-rule="evenodd", NOT A PILE OF SHAPES. The silhouette and the bow's
+ *  hole are subpaths of the same `d`, so a single stroke draws the outer outline AND the ring
+ *  around the hole with no internal seams where a shaft meets a circle - and the hole is a real
+ *  hole, so it works on the dark lane and on the gallery's white card without a mask or an id
+ *  that two copies on one page would fight over. Teeth point LEFT, bow sits RIGHT: the gallery's
+ *  key drives in from the right, so that is the direction it has to face.
+ *  Aspect is 106:58 - size it by width and let height follow, or it shears. */
+const KEY_SVG = `<svg viewBox="5 -1 106 58" fill="none" aria-hidden="true">
+  <path d="M14 20H62.83A22 22 0 1 1 62.83 32H40V40H30V32H24V44H14Z M93.5 26a9.5 9.5 0 1 0-19 0 9.5 9.5 0 1 0 19 0Z" fill-rule="evenodd" stroke="#2a1608" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M14 20H62.83A22 22 0 1 1 62.83 32H40V40H30V32H24V44H14Z M93.5 26a9.5 9.5 0 1 0-19 0 9.5 9.5 0 1 0 19 0Z" fill-rule="evenodd" fill="#f5b32e"/>
+  <rect x="54" y="15" width="12" height="22" rx="4" fill="#e8791a" stroke="#2a1608" stroke-width="4"/>
+  <path d="M22 24.5H48" stroke="#fff6d8" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+  <path d="M68.97 20.53A16 16 0 0 1 81.22 10.24" stroke="#fff6d8" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+</svg>`;
+
+/** The padlock, with a KEYHOLE - the gallery's key has to go into something. */
+const LOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path class="sk-lock-shackle" d="M8 11V7a4 4 0 0 1 8 0v4"/><g class="sk-lock-hole"><circle cx="12" cy="15" r="1.35"/><path d="M12 16.4v1.6"/></g></svg>`;
+
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -84,6 +108,34 @@ function writeSave(snap) {
 function clearSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to lose - the rack is recorded */ }
 }
+
+/* THE LOCK POP (2026-08-25). "This machine was just unlocked and the player has not popped its
+   lock yet." PURE THEATRE, and deliberately its own key rather than a field on anything that
+   records an earn: the unlock itself is banked the instant it is earned (_rackOver ->
+   unlockSkeeballBoard, additive, THE LAW rule 2), so a player who earns a machine and force-quits
+   before the ceremony still owns it. This flag only decides whether the gallery shows the golden
+   lock first.
+
+   GUARD: IT IS ARMED, NEVER BACKFILLED. An absent entry means "no ceremony owed", so every
+   machine already unlocked before this shipped stays open exactly as it was, and a wiped key can
+   only ever skip a ceremony - it can never put a lock back on a machine somebody earned. */
+const LOCKPOP_KEY = 'gamehub.skeeball.lockpop.v1';   // { [boardId]: true } - cosmetic, per device
+function lockPops() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LOCKPOP_KEY) || '{}');
+    return o && typeof o === 'object' ? o : {};
+  } catch { return {}; }
+}
+function armLockPop(id) {
+  try { localStorage.setItem(LOCKPOP_KEY, JSON.stringify({ ...lockPops(), [id]: true })); }
+  catch { /* the unlock is already banked; only the ceremony is lost */ }
+}
+function clearLockPop(id) {
+  const o = lockPops();
+  delete o[id];
+  try { localStorage.setItem(LOCKPOP_KEY, JSON.stringify(o)); } catch { /* it pops again next time */ }
+}
+const isLockPending = (id) => !!lockPops()[id];
 
 /** One throwaway Renderer draws the machine (no ball) to an off-DOM canvas we read back as a
  *  JPEG - render.js sets preserveDrawingBuffer, so the canvas is readable, and the WebGL context
@@ -240,6 +292,41 @@ export class SkeeballUI {
     }
   }
 
+  /** WHAT ONE MACHINE'S SLIDE IS, in one place. Three sources decide it and they used to be read
+   *  in three places in _renderSetup: the admin config's TESTING/OPEN states over boards.js's
+   *  `adminOnly` default (js/admin-config.js), the player's own earned unlock, and - since
+   *  2026-08-25 - whether an earned machine still owes the player its lock ceremony.
+   *  PENDING can only be true for a machine the player has ALREADY earned; it is never a gate on
+   *  anything they own, only on the tap that shows it off. A machine open to everyone by admin
+   *  release never waits on a lock, and neither does a dev profile. */
+  _slideState(b, sk, devAll) {
+    const testing = isBoardTesting(b.id, !!b.adminOnly);
+    const earned = !testing && isUnlocked(sk, b.id, DEFAULT_BOARD);
+    const released = !testing && isBoardReleased(b.id);
+    const pending = earned && !released && !devAll && isLockPending(b.id);
+    return { testing, earned, released, pending, open: devAll || released || (earned && !pending) };
+  }
+
+  /** The lock falls off. Cosmetic from end to end: clearLockPop only forgets that a ceremony was
+   *  owed, and the machine was unlocked before this screen was ever drawn. Selects the machine it
+   *  just opened, so the player lands on it rather than having to find it again. */
+  _popLock(id) {
+    const slide = this.root.querySelector(`.sk-slide-pop[data-board="${id}"]`);
+    const btn = slide && slide.querySelector('[data-pop]');
+    if (!slide || !btn || btn.disabled) return;
+    btn.disabled = true;
+    clearLockPop(id);
+    const done = () => {
+      if (this.disposed || this.screen !== 'setup') return;
+      this.settings = saveSettings({ board: id });
+      this._renderSetup();
+    };
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { done(); return; }
+    slide.classList.add('is-popping');
+    setTimeout(done, 3700);   // keep in step with the sk-lock-* timeline in skeeball.css
+  }
+
   // --- records ---------------------------------------------------------------------------------
 
   /** The app-wide best on each machine: derived from the synced player records (js/arcade-scores
@@ -375,9 +462,19 @@ export class SkeeballUI {
       // OPEN (everyone, no unlock needed). A machine in testing is open ONLY to a dev profile and
       // declines to honor an earned unlock while it is set - it honors it again the moment it is
       // not, because the unlock itself is never touched (THE LAW rule 2).
-      const testing = isBoardTesting(b.id, !!b.adminOnly);
-      const earned = !testing && isUnlocked(sk, b.id, DEFAULT_BOARD);
-      const open = devAll || earned || (!testing && isBoardReleased(b.id));
+      const { testing, earned, pending, open } = this._slideState(b, sk, devAll);
+      // EARNED, BUT THE LOCK HAS NOT BEEN POPPED YET (2026-08-25). The machine is already the
+      // player's - sk.unlocked says so and nothing here can take it back - it just has one tap of
+      // theatre left on it. Its slide is the locked one with a GOLDEN, pulsing lock and no hint
+      // text about earning it, because there is nothing left to earn.
+      if (pending) {
+        return `<div class="sk-slide sk-slide-locked sk-slide-pop" data-board="${b.id}">
+          <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
+          <button type="button" class="sk-lock sk-lock--pop" data-pop="${b.id}" aria-label="${esc(t('pop_aria', { name: b.name }))}">${LOCK_SVG}<span class="sk-lock-key">${KEY_SVG}</span></button>
+          <p class="sk-slide-name">${esc(b.name)}</p>
+          <p class="sk-slide-locktext sk-slide-poptext">${esc(t('pop_hint'))}</p>
+        </div>`;
+      }
       if (!open) {
         // The locked slide (MACHINE-SPEC section 17): the machine greyed out behind a large
         // lock, with only a SLIVER of the board visible - the picture is the real render, but
@@ -441,11 +538,17 @@ export class SkeeballUI {
     // Paint each machine's actual board (cached), deferred so the setup shows first. A locked
     // machine gets one too - its slide's CSS reduces it to the greyed sliver behind the lock.
     for (const b of BOARDS) {
-      const bTesting = isBoardTesting(b.id, !!b.adminOnly);
-      const open = devAll || (!bTesting && (isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id)));
-      const imgEl = this.root.querySelector(open
+      // GUARD: the SAME answer the slide was built from (_slideState). Two copies of this test
+      // drifted once already, and a mismatch paints the machine into a picture element that the
+      // other branch never rendered - a blank slide.
+      const imgEl = this.root.querySelector(this._slideState(b, sk, devAll).open
         ? `img[data-machine="${b.id}"]` : `img[data-machine-locked="${b.id}"]`);
       if (imgEl) this._ensureMachineImg(b, imgEl);
+    }
+
+    // The golden lock. One tap, one animation, then the machine is just a machine.
+    for (const btn of this.root.querySelectorAll('[data-pop]')) {
+      btn.addEventListener('click', () => this._popLock(btn.getAttribute('data-pop')));
     }
 
     // The centred slide IS the selected machine. Scroll-snap does the swipe; this settle listener
@@ -461,8 +564,7 @@ export class SkeeballUI {
           const w = car.clientWidth || 1;
           const i = Math.max(0, Math.min(BOARDS.length - 1, Math.round(car.scrollLeft / w)));
           const b = BOARDS[i];
-          const bOpen = !!b && (devAll || (!isBoardTesting(b.id, !!b.adminOnly)
-            && (isUnlocked(sk, b.id, DEFAULT_BOARD) || isBoardReleased(b.id))));
+          const bOpen = !!b && this._slideState(b, sk, devAll).open;
           if (bOpen && b.id !== this.settings.board) {
             this.settings = saveSettings({ board: b.id });
             // The selection moved, so Resume/Play have to move with it. This screen is not
@@ -686,6 +788,12 @@ export class SkeeballUI {
     this.game = snap ? SkeeballGame.restore(snap) : new SkeeballGame(board.id);
     // What was already met before this rack. Anything that turns met from here is fresh.
     this._goalsMet = new Set(readGoalsLive(this.game.board.id, null).filter((g) => g.met).map((g) => g.id));
+    this._ceremony = false;
+    // THE OBJECTIVES VANISH once this machine has nothing left to ask for (Matt, 2026-08-25).
+    // Decided ONCE, here, on purpose: the rack that completes the last one must KEEP its rails on
+    // screen, because the ceremony flies those very boxes to the middle of the screen. Hiding
+    // them the instant the third one landed would leave it nothing to animate.
+    this._goalsHidden = this._goalsSpent();
 
     const pips = Array.from({ length: BALLS_PER_GAME }, (_, i) =>
       `<i class="${i < this.game.ballsUsed ? 'is-used' : ''}"></i>`).join('');
@@ -1053,7 +1161,25 @@ export class SkeeballUI {
   /** The two goals that ride the gutters: the signature goal - the one that names a shot rather
    *  than a number - on the left, the single-game score on the right. ONE BOX PER RAIL. The
    *  third used to stack under this one; it is the wide bar above the machine now. */
+  /** True when this machine's three objectives have nothing left to say: all three met, AND
+   *  whatever they open is already in the player's hands with its lock popped. A TERMINAL machine
+   *  (POPONGO opens nothing) is spent on all-three-met alone - waiting for an unlock that can
+   *  never happen would leave its rails up forever. Anything unreadable here answers NO, so the
+   *  failure mode is showing the objectives, never hiding something still owed. */
+  _goalsSpent() {
+    try {
+      const boardId = this.game ? this.game.board.id : this.settings.board;
+      if (!readGoalsLive(boardId, null).every((g) => g.met)) return false;
+      const opens = BOARDS.filter((b) => b.unlock && b.unlock.goals && b.unlock.board === boardId
+        && !isBoardTesting(b.id, !!b.adminOnly));
+      if (!opens.length) return true;
+      const sk = (loadStats().games.skeeball || {}).sk || {};
+      return opens.every((b) => isUnlocked(sk, b.id, DEFAULT_BOARD) && !isLockPending(b.id));
+    } catch { return false; }
+  }
+
   _goalRailsMarkup() {
+    if (this._goalsHidden) return '';
     const [g1, g2] = this._liveGoals();
     const box = (g) => `
       <div class="sk-goal${g.met ? ' is-done' : ''}" data-goal="${g.id}">
@@ -1075,6 +1201,7 @@ export class SkeeballUI {
    *  machine. GUARD: it carries data-goal like the rail boxes do, because _checkGoalsNow finds
    *  the box to pop by that attribute; drop it and completing this goal stops being celebrated. */
   _goalTotalMarkup() {
+    if (this._goalsHidden) return '';
     const g = this._liveGoals()[2];
     if (!g) return '';
     return `
@@ -1130,7 +1257,107 @@ export class SkeeballUI {
       const box = this.root.querySelector(`[data-goal="${g.id}"]`);
       if (box) box.classList.add('is-fresh');
     }
-    this._fireworks(fresh.length, live.every((g) => g.met));
+    const all = live.every((g) => g.met);
+    this._fireworks(fresh.length, all);
+    // ALL THREE, JUST NOW. _goalsMet makes each goal fire exactly once, so this can only be the
+    // rack that completed the set - never a later one on a finished machine.
+    if (all) this._unlockCeremony();
+  }
+
+  /** THE UNLOCK CEREMONY (Matt, 2026-08-25). The three objective boxes turn gold, fly together to
+   *  the middle of the screen, merge into one pulsing blob, shrink to a point, and a golden key
+   *  pops out of it - all on the lane, ahead of the game-over card, which waits on _fwUntil.
+   *
+   *  GUARD: THIS IS THEATRE OVER AN UNLOCK THAT IS ALREADY BANKED. _rackOver writes sk.unlocked
+   *  the moment the rack lands (additive, THE LAW rule 2) and _ensureGoalUnlocks catches anything
+   *  earned on another device. NOTHING HERE GRANTS ANYTHING - it only arms the gallery's golden
+   *  lock, so a player who skips it, misses it, or force-quits mid-ceremony still owns the
+   *  machine. Silent under reduced motion, exactly like _fireworks; the game-over card still says
+   *  UNLOCKED and the gallery still opens the machine.
+   *
+   *  IT WAITS FOR A TAP. The key, the machine's name and an OK button hold on screen until the
+   *  player dismisses them; the game-over card is behind that, not behind a timer.
+   *
+   *  It fires the moment the third objective lands, which can be ball 3 - the unlock itself is
+   *  banked at ball 9. Quitting in between leaves the flag armed against a machine not yet
+   *  earned, which the gallery reads as still locked (pending requires `earned`); the next
+   *  finished rack banks it and the lock is waiting. Nothing is lost either way. */
+  _unlockCeremony() {
+    if (!this.game || !this.root || this._ceremony) return;
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+    const boardId = this.game.board.id;
+    let sk = {};
+    try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
+    // The machine this opens, if it opens one and the player does not already have it. A terminal
+    // machine (POPONGO) opens nothing, and gets fireworks without a key rather than a lie.
+    const next = BOARDS.find((b) => b.unlock && b.unlock.goals && b.unlock.board === boardId
+      && !isBoardTesting(b.id, !!b.adminOnly) && !isUnlocked(sk, b.id, DEFAULT_BOARD));
+    if (!next) return;
+    const wrap = this.root.querySelector('.sk-play-wrap');
+    const boxes = Array.from(this.root.querySelectorAll('[data-goal]'));
+    if (!wrap || !boxes.length) return;
+
+    this._ceremony = true;
+    armLockPop(next.id);
+
+    const host = wrap.getBoundingClientRect();
+    // Where the three meet: mid-width, a little above centre, so the key ends up clear of the
+    // machine's own marquee and of the game-over card that follows it.
+    const cx = host.width / 2;
+    const cy = host.height * 0.44;
+    const tiles = boxes.map((el, i) => {
+      const r = el.getBoundingClientRect();
+      const left = r.left - host.left;
+      const top = r.top - host.top;
+      const label = (el.querySelector('em') || {}).textContent || '';
+      const tx = Math.round(cx - (left + r.width / 2));
+      const ty = Math.round(cy - (top + r.height / 2));
+      return `<span class="sk-cer-tile" style="left:${Math.round(left)}px;top:${Math.round(top)}px;`
+        + `width:${Math.round(r.width)}px;height:${Math.round(r.height)}px;`
+        + `--tx:${tx}px;--ty:${ty}px;--d:${(i * 0.07).toFixed(2)}s">`
+        + `<b>${esc(label)}</b></span>`;
+    }).join('');
+
+    const el = document.createElement('div');
+    el.className = 'sk-cer';
+    el.innerHTML = `${tiles}
+      <span class="sk-cer-blob" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
+      <span class="sk-cer-point" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
+      <span class="sk-cer-key" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true">${KEY_SVG}</span>
+      <span class="sk-cer-say" style="top:${Math.round(cy + host.height * 0.17)}px">
+        <em>${esc(t('cer_unlocked'))}</em><b>${esc(next.name)}</b>
+      </span>
+      <button type="button" class="sk-cer-ok" style="top:${Math.round(cy + host.height * 0.30)}px">${esc(t('cer_ok'))}</button>`;
+    wrap.classList.add('sk-cer-on');
+    wrap.appendChild(el);
+
+    // IT ENDS ON THE PLAYER'S TAP, not on a timer (Matt, 2026-08-25: "make them have to click to
+    // get rid of it"). _showWhenQuiet holds the game-over card for as long as _ceremony is true
+    // and is NOT bounded by its own 4s while it is - that bound is there for a stuck score
+    // counter, not for something deliberately waiting on a person. The 60s backstop below is what
+    // makes that safe: a player who puts the phone down still gets their card.
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      clearTimeout(bail);
+      el.classList.add('is-out');
+      setTimeout(() => {
+        el.remove();
+        if (this.disposed) return;
+        wrap.classList.remove('sk-cer-on');
+        // The objectives are spent now, so they do not come back for the rest of this rack -
+        // which is the other half of what Matt asked for.
+        this._ceremony = false;
+        this._goalsHidden = true;
+        this._paintGoalRails();
+      }, 460);
+    };
+    const bail = setTimeout(close, 60000);
+    el.querySelector('.sk-cer-ok').addEventListener('click', close);
+    // The fireworks' own hold still covers the opening beats, in case anything below it changes.
+    this._fwUntil = Math.max(this._fwUntil || 0, Date.now() + 3200);
   }
 
   /** Repaint all three objectives. Called wherever the ball count is repainted, which is the
@@ -1138,6 +1365,9 @@ export class SkeeballUI {
    *  of the right rail: repaint one and the other silently stops updating mid-rack. */
   _paintGoalRails() {
     if (!this.el) return;
+    // The ceremony owns those boxes while it runs - repainting them mid-flight would put the
+    // originals back underneath the gold ones it is animating.
+    if (this._ceremony) return;
     if (this.el.grails) this.el.grails.innerHTML = this._goalRailsMarkup();
     if (this.el.gtotal) this.el.gtotal.innerHTML = this._goalTotalMarkup();
   }
@@ -1283,7 +1513,11 @@ export class SkeeballUI {
   _showWhenQuiet(el, waited = 0) {
     const fwLeft = Math.max(0, (this._fwUntil || 0) - Date.now());
     const counting = this.game && this._shownScore !== this.game.score;
-    if ((fwLeft > 0 || counting) && waited < 4000) {
+    // GUARD: THE CEREMONY IS NOT BOUNDED BY THE 4s. It ends when the player taps its OK button,
+    // and 4s in it has not even produced the key yet - the bound below exists for a stuck score
+    // counter, not for something waiting on a person. _unlockCeremony carries its own 60s
+    // backstop, so this can still never strand anyone on the lane.
+    if ((fwLeft > 0 || counting) && waited < 4000 || this._ceremony) {
       setTimeout(() => { if (!this.disposed && this.screen === 'play') this._showWhenQuiet(el, waited + 120); }, 120);
       return;
     }

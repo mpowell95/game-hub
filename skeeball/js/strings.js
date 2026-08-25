@@ -21,6 +21,12 @@ const STRINGS = {
     paused: 'Paused',
     locked: 'Locked',
     lock_testing: 'Coming soon',
+    // The lock ceremony (2026-08-25). The machine is ALREADY unlocked by the time any of these
+    // are on screen - none of this copy may suggest there is anything left to earn.
+    pop_hint: 'Tap the lock',
+    pop_aria: 'Open {name}',
+    cer_unlocked: 'MACHINE UNLOCKED',
+    cer_ok: 'OK',
     unlock_hint: 'Score {score} on {name} to unlock',
     unlock_goals_hint: 'Complete all three goals on {name} to unlock',
     prev_machine: 'Previous machine',
@@ -123,6 +129,10 @@ const STRINGS = {
     paused: 'En pausa',
     locked: 'Bloqueada',
     lock_testing: 'Muy pronto',
+    pop_hint: 'Toca el candado',
+    pop_aria: 'Abrir {name}',
+    cer_unlocked: 'MAQUINA DESBLOQUEADA',
+    cer_ok: 'OK',
     unlock_hint: 'Consigue {score} en {name} para desbloquearla',
     unlock_goals_hint: 'Completa los tres objetivos de {name} para desbloquearla',
     prev_machine: 'Máquina anterior',
