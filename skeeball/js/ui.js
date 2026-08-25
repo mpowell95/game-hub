@@ -56,6 +56,30 @@ function ensureCSS() {
   document.head.appendChild(link);
 }
 
+/** THE KEY, drawn once and used twice - the one that grows out of the ceremony's point, and the
+ *  one that flies into the lock in the gallery. Matt, 2026-08-25, with a reference picture:
+ *  "just make the key look a bit more like a key". So it is a chunky outlined cartoon key rather
+ *  than a stroked outline: a round bow with a real hole in it, a collar, a shaft, and two stepped
+ *  teeth at the business end.
+ *
+ *  GUARD: ONE PATH WITH fill-rule="evenodd", NOT A PILE OF SHAPES. The silhouette and the bow's
+ *  hole are subpaths of the same `d`, so a single stroke draws the outer outline AND the ring
+ *  around the hole with no internal seams where a shaft meets a circle - and the hole is a real
+ *  hole, so it works on the dark lane and on the gallery's white card without a mask or an id
+ *  that two copies on one page would fight over. Teeth point LEFT, bow sits RIGHT: the gallery's
+ *  key drives in from the right, so that is the direction it has to face.
+ *  Aspect is 106:58 - size it by width and let height follow, or it shears. */
+const KEY_SVG = `<svg viewBox="5 -1 106 58" fill="none" aria-hidden="true">
+  <path d="M14 20H62.83A22 22 0 1 1 62.83 32H40V40H30V32H24V44H14Z M93.5 26a9.5 9.5 0 1 0-19 0 9.5 9.5 0 1 0 19 0Z" fill-rule="evenodd" stroke="#2a1608" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M14 20H62.83A22 22 0 1 1 62.83 32H40V40H30V32H24V44H14Z M93.5 26a9.5 9.5 0 1 0-19 0 9.5 9.5 0 1 0 19 0Z" fill-rule="evenodd" fill="#f5b32e"/>
+  <rect x="54" y="15" width="12" height="22" rx="4" fill="#e8791a" stroke="#2a1608" stroke-width="4"/>
+  <path d="M22 24.5H48" stroke="#fff6d8" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+  <path d="M68.97 20.53A16 16 0 0 1 81.22 10.24" stroke="#fff6d8" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+</svg>`;
+
+/** The padlock, with a KEYHOLE - the gallery's key has to go into something. */
+const LOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path class="sk-lock-shackle" d="M8 11V7a4 4 0 0 1 8 0v4"/><g class="sk-lock-hole"><circle cx="12" cy="15" r="1.35"/><path d="M12 16.4v1.6"/></g></svg>`;
+
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -300,7 +324,7 @@ export class SkeeballUI {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) { done(); return; }
     slide.classList.add('is-popping');
-    setTimeout(done, 2400);   // keep in step with the sk-lock-* timeline in skeeball.css
+    setTimeout(done, 3700);   // keep in step with the sk-lock-* timeline in skeeball.css
   }
 
   // --- records ---------------------------------------------------------------------------------
@@ -446,7 +470,7 @@ export class SkeeballUI {
       if (pending) {
         return `<div class="sk-slide sk-slide-locked sk-slide-pop" data-board="${b.id}">
           <div class="sk-lock-peek" aria-hidden="true"><img class="sk-lock-img" data-machine-locked="${b.id}" alt="" /></div>
-          <button type="button" class="sk-lock sk-lock--pop" data-pop="${b.id}" aria-label="${esc(t('pop_aria', { name: b.name }))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path class="sk-lock-shackle" d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
+          <button type="button" class="sk-lock sk-lock--pop" data-pop="${b.id}" aria-label="${esc(t('pop_aria', { name: b.name }))}">${LOCK_SVG}<span class="sk-lock-key">${KEY_SVG}</span></button>
           <p class="sk-slide-name">${esc(b.name)}</p>
           <p class="sk-slide-locktext sk-slide-poptext">${esc(t('pop_hint'))}</p>
         </div>`;
@@ -1300,11 +1324,7 @@ export class SkeeballUI {
     el.innerHTML = `${tiles}
       <span class="sk-cer-blob" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
       <span class="sk-cer-point" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true"></span>
-      <span class="sk-cer-key" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true">
-        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="16" cy="16" r="9"/><path d="M22.4 22.4 38 38"/><path d="M31 31l-4.5 4.5"/><path d="M36 36l-4 4"/>
-        </svg>
-      </span>
+      <span class="sk-cer-key" style="left:${Math.round(cx)}px;top:${Math.round(cy)}px" aria-hidden="true">${KEY_SVG}</span>
       <span class="sk-cer-say" style="top:${Math.round(cy + host.height * 0.17)}px">
         <em>${esc(t('cer_unlocked'))}</em><b>${esc(next.name)}</b>
       </span>

@@ -257,23 +257,61 @@
   50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255, 206, 58, 0); }
 }
 
-/* THE LOCK FALLS OFF, AND IT TAKES ITS TIME. The first cut ran in 1s against a 54px lock and
-   Matt's read was "there's no animation at all that's visible" - the slide re-rendered before
-   anything registered. It is a five-beat sequence now, and the REVEAL is the point: the greyed
-   sliver un-greys and opens up into the machine while the lock is still falling, so the screen
-   is visibly becoming the unlocked card rather than being replaced by it.
+/* THE KEY GOES INTO THE LOCK. Matt, 2026-08-25: "The actual unlock could still be better. The
+   key doesn't even float in and go into the lock." Before this the lock simply fell off on its
+   own - the key the player had just been handed on the lane never appeared again.
 
-     0.00  the lock rattles                                (ends 0.45)
-     0.45  the shackle snaps open, a gold ring rings out   (ends 0.85)
-     0.80  the lock tumbles off the card and falls away    (ends 1.80)
-     0.70  the sliver un-greys and grows into the machine  (ends 2.00)
-     2.40  ui.js re-renders the slide as an ordinary one
+   And it takes its time. The cut before that ran in 1s against a 54px lock: "there's no animation
+   at all that's visible" - the slide re-rendered before anything registered.
 
-   Keep this in step with the 2400ms in _popLock. */
+     0.00  the key floats in from off the card, lower right, levelling out   (ends 1.10)
+     1.10  it drives into the keyhole                                        (ends 1.55)
+     1.55  it TURNS, and the keyhole flares gold                             (ends 2.00)
+     2.00  the lock jolts, the shackle snaps open, a ring rings out          (ends 2.35)
+     2.35  lock and key tumble off the card together                         (ends 3.25)
+     2.10  the greyed sliver un-greys and GROWS into the machine             (ends 3.40)
+     3.70  ui.js re-renders the slide as an ordinary one
+
+   Keep this in step with the 3700ms in _popLock. The REVEAL is the point of the back half: the
+   screen has to visibly become the unlocked card, not be replaced by it. */
+.sk-root .sk-lock--pop > svg,
+.sk-root .sk-lock-key { grid-area: 1 / 1; }
+.sk-root .sk-lock-key {
+  width: 78px;
+  opacity: 0;
+  pointer-events: none;
+  /* The teeth end. Everything - the flight, the drive-in, the turn - pivots on the point that
+     goes into the keyhole, which is what makes the turn read as a key turning. */
+  transform-origin: 10% 50%;
+}
+.sk-root .sk-lock-key svg { display: block; width: 100%; height: auto; }
+.sk-root .sk-slide-pop.is-popping .sk-lock-key { animation: sk-lock-key 3.25s ease-in-out both; }
+/* GUARD: ONE KEYFRAME BLOCK, like the ceremony's blob. Splitting the flight, the drive-in, the
+   turn and the fall into four comma-separated animations lets the last one's fill mode erase the
+   three before it. Percentages of a 3.25s run: 34% = 1.10s, 48% = 1.56s, 62% = 2.02s,
+   72% = 2.34s. */
+@keyframes sk-lock-key {
+  0% { transform: translate(150px, 74px) rotate(38deg) scale(0.78); opacity: 0; }
+  6% { opacity: 1; }
+  34% { transform: translate(56px, 0) rotate(0deg) scale(1); opacity: 1; }
+  48% { transform: translate(26px, 0) rotate(0deg) scale(1); opacity: 1; }
+  62% { transform: translate(26px, 0) rotate(74deg) scale(1); opacity: 1; }
+  72% { transform: translate(26px, 0) rotate(74deg) scale(1); opacity: 1; }
+  100% { transform: translate(52px, 220px) rotate(150deg) scale(0.9); opacity: 0; }
+}
+/* The keyhole answers the key. */
+.sk-root .sk-slide-pop.is-popping .sk-lock-hole {
+  animation: sk-lock-hole 0.75s ease-out 1.55s both;
+}
+@keyframes sk-lock-hole {
+  0% { stroke: currentColor; }
+  30% { stroke: #fff3cf; stroke-width: 3; }
+  100% { stroke: #ffb020; stroke-width: 2; }
+}
 .sk-root .sk-slide-pop.is-popping .sk-lock--pop {
   animation:
-    sk-lock-rattle 0.45s ease-in-out both,
-    sk-lock-fall 1s cubic-bezier(0.35, 0, 0.75, 1) 0.8s both;
+    sk-lock-rattle 0.35s ease-in-out 2s both,
+    sk-lock-fall 0.9s cubic-bezier(0.35, 0, 0.75, 1) 2.35s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-lock--pop::after {
   content: '';
@@ -281,37 +319,35 @@
   inset: 0;
   border-radius: 50%;
   border: 2px solid rgba(242, 183, 5, 0.9);
-  animation: sk-lock-ring 0.5s ease-out 0.45s both;
+  animation: sk-lock-ring 0.55s ease-out 2s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-lock-shackle {
   transform-origin: 8px 11px;
-  animation: sk-lock-shackle 0.3s cubic-bezier(0.3, 1.6, 0.5, 1) 0.45s both;
+  animation: sk-lock-shackle 0.3s cubic-bezier(0.3, 1.6, 0.5, 1) 2.05s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-lock-peek {
-  animation: sk-lock-open 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.7s both;
+  animation: sk-lock-open 1.3s cubic-bezier(0.22, 1, 0.36, 1) 2.1s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-lock-img {
-  animation: sk-lock-reveal 1.3s ease-out 0.7s both;
+  animation: sk-lock-reveal 1.3s ease-out 2.1s both;
 }
 .sk-root .sk-slide-pop.is-popping .sk-slide-poptext { animation: sk-lock-fade 0.35s ease-out both; }
 @keyframes sk-lock-rattle {
   0%, 100% { transform: translateX(0) rotate(0); }
-  15% { transform: translateX(-4px) rotate(-6deg); }
-  32% { transform: translateX(4px) rotate(6deg); }
-  50% { transform: translateX(-4px) rotate(-5deg); }
-  68% { transform: translateX(3px) rotate(4deg); }
-  84% { transform: translateX(-2px) rotate(-2deg); }
+  20% { transform: translateX(-4px) rotate(-6deg); }
+  45% { transform: translateX(4px) rotate(6deg); }
+  70% { transform: translateX(-3px) rotate(-4deg); }
 }
 @keyframes sk-lock-ring {
   from { transform: scale(1); opacity: 0.95; }
-  to { transform: scale(2.4); opacity: 0; }
+  to { transform: scale(2.5); opacity: 0; }
 }
 @keyframes sk-lock-shackle {
   to { transform: rotate(-52deg) translateY(-3px); }
 }
 @keyframes sk-lock-fall {
   0% { transform: translate(0, 0) rotate(0); opacity: 1; }
-  22% { transform: translate(2px, -20px) rotate(-12deg); opacity: 1; }
+  22% { transform: translate(2px, -18px) rotate(-12deg); opacity: 1; }
   100% { transform: translate(34px, 210px) rotate(96deg); opacity: 0; }
 }
 /* The tease window opening up. Height, not scale: the sliver is a CROP, and growing the crop is
@@ -327,6 +363,8 @@
 @keyframes sk-lock-fade { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .sk-root .sk-lock--pop { animation: none; }
+  .sk-root .sk-slide-pop.is-popping .sk-lock-key,
+  .sk-root .sk-slide-pop.is-popping .sk-lock-hole,
   .sk-root .sk-slide-pop.is-popping .sk-lock--pop,
   .sk-root .sk-slide-pop.is-popping .sk-lock--pop::after,
   .sk-root .sk-slide-pop.is-popping .sk-lock-shackle,
@@ -1108,22 +1146,22 @@
    rather than being swapped in: at the start there is a pinhole of key, and it widens. */
 .sk-root .sk-cer-key {
   position: absolute;
-  width: 150px;
-  height: 150px;
-  margin: -75px 0 0 -75px;
-  color: #ffd977;
-  filter: drop-shadow(0 0 20px rgba(255, 190, 60, 0.9));
+  /* The key art is 106:58, so it is sized by WIDTH and the height follows. Squaring it shears it. */
+  width: 208px;
+  height: 114px;
+  margin: -57px 0 0 -104px;
+  filter: drop-shadow(0 0 22px rgba(255, 190, 60, 0.85));
   /* GUARD: NOT AN EXPO-OUT. cubic-bezier(0.16, 1, 0.3, 1) is 65% done in the first eighth of its
      run, which turned "grows out of a point" back into the instant swap this rebuild exists to
      remove. This curve keeps the early growth visible. */
   animation: sk-cer-grow 1.6s cubic-bezier(0.42, 0.12, 0.3, 1) 8.7s both;
 }
-.sk-root .sk-cer-key svg { width: 100%; height: 100%; }
+.sk-root .sk-cer-key svg { display: block; width: 100%; height: 100%; }
 @keyframes sk-cer-grow {
-  0% { transform: scale(0.06) rotate(-34deg); opacity: 0; clip-path: circle(4% at 50% 50%); }
+  0% { transform: scale(0.06) rotate(-70deg); opacity: 0; clip-path: circle(4% at 50% 50%); }
   14% { opacity: 1; }
-  70% { transform: scale(1.06) rotate(5deg); }
-  100% { transform: scale(1) rotate(0); opacity: 1; clip-path: circle(75% at 50% 50%); }
+  70% { transform: scale(1.06) rotate(-20deg); }
+  100% { transform: scale(1) rotate(-28deg); opacity: 1; clip-path: circle(75% at 50% 50%); }
 }
 
 .sk-root .sk-cer-say {

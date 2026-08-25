@@ -822,12 +822,26 @@ the shape of THE LAW's founding incident.
 - **`pending` requires `earned`** (`_slideState`). The gallery shows the golden lock only for a
   machine the player already owns. A machine open to everyone by admin release never waits on a
   lock, and neither does a dev profile.
-- **The lock takes 2.4 seconds and the REVEAL is the point.** The first cut ran in 1s against a
-  54px lock: *"there's no animation at all that's visible"* - the slide re-rendered before anything
-  registered. It is five beats now (rattle, the shackle snapping open with a ring, the tumble, the
-  greyed sliver un-greying and GROWING into the machine, then the re-render), so the screen is
-  visibly becoming the unlocked card rather than being replaced by it. The 2400ms in `_popLock` and
-  the `sk-lock-*` timeline in the stylesheet have to stay in step.
+- **THE KEY GOES INTO THE LOCK.** Matt: *"The actual unlock could still be better. The key doesn't
+  even float in and go into the lock."* Before that the lock simply fell off on its own and the key
+  the player had just been handed on the lane never appeared again. It floats in from off the card,
+  levels out, drives into the keyhole (the padlock has one now), turns, and only THEN does the lock
+  react. 3.7 seconds over seven beats - the cut before it ran in 1s against a 54px lock (*"there's
+  no animation at all that's visible"*: the slide re-rendered before anything registered).
+- **The REVEAL is the point of the back half.** While the lock and key tumble off, the greyed
+  sliver un-greys and GROWS into the machine, so the screen visibly becomes the unlocked card
+  rather than being replaced by it. The 3700ms in `_popLock` and the `sk-lock-*` timeline in the
+  stylesheet have to stay in step, and the flight/drive-in/turn/fall are ONE keyframe block for
+  the same fill-mode reason the blob is.
+- **`KEY_SVG` and `LOCK_SVG` in `ui.js` are the art, used by both halves.** Matt, with a reference
+  picture: *"just make the key look a bit more like a key"* - so it is a chunky outlined cartoon
+  key (round bow with a real hole, collar, shaft, two stepped teeth), not a stroked outline.
+  **It is ONE path with `fill-rule="evenodd"`, not a pile of shapes**: the silhouette and the bow's
+  hole are subpaths of the same `d`, so a single stroke draws the outer outline and the ring around
+  the hole with no seam where the shaft meets the bow - and the hole is a real hole, so it works on
+  the dark lane and on the gallery's white card without a mask or an id two copies on one page
+  would fight over. Teeth point LEFT, bow sits RIGHT, because the gallery's key drives in from the
+  right. Aspect is 106:58 - size it by width and let the height follow, or it shears.
 - **`_slideState(b, sk, devAll)` is now the single answer to "what is this slide"** - testing /
   earned / released / pending / open. `_renderSetup` read those three sources in three separate
   places before, and the picture-painting loop's copy had already drifted from the markup's.
