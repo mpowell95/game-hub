@@ -18,8 +18,28 @@ const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
 // === Classic ================================================================
 
+// Easy is meant to be BEATABLE, not free (Matt, 2026-08-24: "it's an auto win
+// right now"). It used to take an immediate win and otherwise move at RANDOM,
+// so it never once blocked three-in-a-row and any human who could count won
+// every game. It now plays like a careless casual: it always takes its own
+// win, sees the block most of the time, and prefers a sane square when it has
+// nothing forced -- still losable to a fork or to one of its missed blocks,
+// which is where Easy's losses should come from. Keep both chances well below
+// 1: at 1 this becomes the intermediate tier.
+const BEGINNER_BLOCK_CHANCE = 0.6;
+const BEGINNER_GOOD_CELL_CHANCE = 0.3;
+
 function beginnerClassic(s, moves, rng) {
-  for (const m of moves) if (wouldWin(s.board, m, s.turn)) return m;
+  const me = s.turn, opp = otherMark(me);
+  for (const m of moves) if (wouldWin(s.board, m, me)) return m;
+  if (rng() < BEGINNER_BLOCK_CHANCE) {
+    for (const m of moves) if (wouldWin(s.board, m, opp)) return m;
+  }
+  if (rng() < BEGINNER_GOOD_CELL_CHANCE) {
+    if (moves.includes(CENTER)) return CENTER;
+    const corners = moves.filter((m) => CORNERS.includes(m));
+    if (corners.length) return pick(corners, rng);
+  }
   return pick(moves, rng);
 }
 
@@ -233,8 +253,22 @@ const INTERMEDIATE_DEPTH = 3;
 const INTERMEDIATE_MS = 150;    // soft safety deadline, same role as Mancala's level-2 tier
 const PRO_MS = 380;             // matches Mancala's Pro budget (CLAUDE.md precedent)
 
+// Same three steps as beginnerClassic, in Ultimate's vocabulary: take the small
+// board when it is there, usually deny the opponent theirs, and otherwise
+// mostly avoid sending them to a resolved board (a free move across the whole
+// meta-board -- the one Ultimate-specific blunder a random mover makes
+// constantly).
 function beginnerUltimate(state, moves, rng) {
-  for (const m of moves) if (wouldWin(state.boards[m.board], m.cell, state.turn)) return m;
+  const me = state.turn, opp = otherMark(me);
+  for (const m of moves) if (wouldWin(state.boards[m.board], m.cell, me)) return m;
+  if (rng() < BEGINNER_BLOCK_CHANCE) {
+    const blocks = moves.filter((m) => wouldWin(state.boards[m.board], m.cell, opp));
+    if (blocks.length) return pick(blocks, rng);
+  }
+  if (rng() < BEGINNER_GOOD_CELL_CHANCE) {
+    const contained = moves.filter((m) => state.meta[m.cell] === null);
+    if (contained.length) return pick(contained, rng);
+  }
   return pick(moves, rng);
 }
 
