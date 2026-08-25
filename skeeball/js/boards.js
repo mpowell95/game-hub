@@ -1061,19 +1061,31 @@ export const BOARDS = [
       // drives the collision bodies with it, render.js draws with it, and the spec test measures
       // the travel envelope with it.
       //
-      // AMPLITUDE 2.07X is not a taste call, it is the largest number that clears two rules at
-      // once, and BOTH have to keep holding if it is ever changed:
+      // AMPLITUDE 2.07X is not a taste call. It is bounded by two rules, and BOTH have to be
+      // re-derived if the amplitude, the mouth or the collar thickness ever change - THE MOUTH
+      // IS AN INPUT TO THIS ARITHMETIC, which is exactly what the 4in change below proved:
       //
       //   1. MACHINE-SPEC.md section 12's collar-near-a-wall rule. A curved collar converging on
       //      a flat rail makes a pinch that three-contact-locks the solver; the measured cost on
       //      POPONGO's first draft was 12% of ALL throws walked out by the watchdog. The rule is
       //      a wall gap wider than 0.78X. At the ends of this travel the gap is
-      //      0.500 - 2.07X - (0.4375X + 0.0825X) = 0.8475X (3.39 in against the 3.00 in ball).
-      //      It clears, with 0.07X to spare, and A MOVING COLLAR IS THE WORST POSSIBLE CASE FOR
-      //      THAT RULE - a static one merely sits in a pinch, this one can drive a ball into it.
+      //      0.500 - 2.07X - (0.5X + 0.0825X) = 0.7850X (3.14 in against the 3.00 in ball).
+      //      A MOVING COLLAR IS THE WORST POSSIBLE CASE FOR THAT RULE - a static one merely sits
+      //      in a pinch, this one can drive a ball into it.
+      //
+      //      GUARD: THAT MARGIN IS NOW 0.005X, essentially nothing. It was 0.0675X at the 3.5in
+      //      mouth this machine shipped with; widening the 100 to 4in (Matt, 2026-08-25) spent
+      //      almost all of it, because a wider mouth grows the collar's OUTER diameter against a
+      //      rail that did not move. It was kept at 2.07X only because the sweep MEASURED zero
+      //      watchdog walkouts at the new size - the rule is a threshold, the sweep is the
+      //      evidence. ANY further widening of this mouth, or any increase in collarThick, goes
+      //      under the rule and MUST be paid for by shrinking the amplitude:
+      //          amp <= 0.500 - (r + collarThick) - 0.78X
+      //      Do not simply raise the mouth and re-run; work out the amplitude first.
       //   2. holes.inside: |u| + holeR at the extreme is 2.07X + 0.75X = 2.82X, inside the
       //      3.4375X half-width. test-skeeball-machine-spec.mjs tests the ENVELOPE, not the
-      //      resting u, precisely so this cannot be got wrong quietly.
+      //      resting u, precisely so this cannot be got wrong quietly. Unaffected by the mouth,
+      //      because it is measured against the board's nominal holeR, not this basket's rim.
       //
       // It also lands somewhere useful by luck: +/-2.07X is exactly where HOT SHOT's topL and
       // topR sit. The 100 sweeps between the two positions that machine already proves are
@@ -1092,9 +1104,16 @@ export const BOARDS = [
 
       // THE FACE. Rows 1 and 2 are HOT SHOT's, unchanged down to the last digit: same columns
       // (u = -2.07X / 0 / +2.07X), same rows (v = 1.3125X / 5.3X unrolled), same 4.25in mouths,
-      // same per-row depths. Row 3 is ONE basket, HOT SHOT's 100 exactly - mouth 0.875X (3.50 in
-      // against the 3.00 in ball, the tightest opening on the machine) at the top row's 0.875X
-      // depth - and it is the one that moves.
+      // same per-row depths. Row 3 is ONE basket - the moving 100 - and it is the only thing on
+      // this face that is not HOT SHOT's.
+      //
+      // THE 100 IS 4.00 in ACROSS (r = 0.5X), MATT'S NUMBER, 2026-08-25: "increase the diameter
+      // of the 100 to 4"". It shipped at 3.50 in (0.4375X), HOT SHOT's 100 exactly, and 4in is
+      // its own size now - HOT SHOT's and BRICK CITY's 100s were deliberately NOT touched. Still
+      // the tightest opening on this machine (rows 1 and 2 are 4.25in) and 1.33x the 3.00 in
+      // ball. See the amplitude note above for what this cost at the ends of the travel; the
+      // depth is unchanged at the top row's 0.875X, per Matt's rule that a row runs one depth
+      // across whatever diameters are on it.
       //
       // `topC`'s `u` here is the CENTRE OF THE SWEEP, not a fixed position. Everything that reads
       // a hole's u at simulation time goes through machine.js's holeU(); everything that reads it
@@ -1113,7 +1132,7 @@ export const BOARDS = [
         midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
         midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
         midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
-        topC: { u: 0, v: X * 9.2875, r: X * 0.4375, collarH: X * 0.875 },
+        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
       },
 
       minSpeed: 2.60,
@@ -1152,7 +1171,7 @@ export const BOARDS = [
         + 'treads plus three risers (11.9625X), which necessarily exceeds the flat-board 10.5X '
         + 'ceiling, and boardTilt is nominal because `steps` replaces the single face.',
       'holes.uniform': 'HOT SHOT\'s mouth ladder, carried over: the six baskets on rows 1 and 2 '
-        + 'are 4.25in and the moving 100 on row 3 is 3.5in, which are Matt\'s numbers for those '
+        + 'are 4.25in and the moving 100 on row 3 is 4in, which are Matt\'s numbers for those '
         + 'baskets on that cabinet (2026-08-24, second pass). A uniform holeR cannot express a '
         + 'face where mouth size IS the difficulty marker, and this machine changes what is on '
         + 'the top row, not how big any basket is.',
