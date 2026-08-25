@@ -913,6 +913,7 @@
    THE TIMELINE, one place, because six animation-delays are otherwise unreadable:
      0.00  the boxes are covered by gold copies of themselves and swell
      0.55  the three fly to the centre and shrink                      (ends 1.80)
+     1.15  the veil darkens the lane behind them                       (ends 1.60)
      1.65  the blob fades up and beats twice                           (ends 2.75)
      2.75  the blob collapses to a point                               (ends 3.05)
      3.00  the key springs out and holds
@@ -924,6 +925,22 @@
   z-index: 9;
   pointer-events: none;
 }
+/* THE VEIL. GUARD: WITHOUT THIS THE CEREMONY IS ILLEGIBLE ON A LIT MACHINE. Gold on the warm
+   dark lane reads fine; gold on HOT SHOT's blue backboard, over a lit scoreboard, does not - the
+   key vanished into the numbers and "Pop its lock in the gallery" could not be read at all
+   (caught in preview, 2026-08-25, against the real render rather than a stand-in). It comes in
+   AFTER the tiles have flown, so the flight still happens over the machine the player was
+   looking at, and it leaves with the key. */
+.sk-root .sk-cer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 130% 72% at 50% 44%, rgba(10, 6, 3, 0.9), rgba(10, 6, 3, 0.95) 58%, rgba(10, 6, 3, 0.84));
+  animation: sk-cer-veil 0.45s ease-out 1.15s both, sk-cer-veil-out 0.5s ease-in 4.7s both;
+}
+@keyframes sk-cer-veil { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sk-cer-veil-out { to { opacity: 0; } }
+
 /* The originals go while their gold copies fly. They do not come back: by the time the ceremony
    ends the objectives are spent, and ui.js paints them empty for the rest of the rack. */
 .sk-root .sk-cer-on .sk-grails,

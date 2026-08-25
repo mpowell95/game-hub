@@ -513,7 +513,7 @@ const REST_MANIFEST = {
   './skeeball/': '0a8f7a9c7c',
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
-  './skeeball/css/skeeball.css': 'c5ac2a16af',
+  './skeeball/css/skeeball.css': 'd542feca3a',
   './skeeball/js/ui.js': '6f7695e649',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': 'a9f7dfa433',
