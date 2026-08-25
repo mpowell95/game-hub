@@ -31,7 +31,7 @@ basket:
 The 100 sweeps left and right across tread 3 for the whole rack, on a sine:
 
 ```
-u(t) = amp * sin(2*PI*t / period)        amp 2.07X,  period 7.0s
+u(t) = amp * sin(2*PI*t / period)        amp 2.07X,  period 6.0s
 ```
 
 `t` is the **rack clock** (`js/game.js`'s `machineT`) — seconds since this rack started, not
@@ -40,7 +40,7 @@ basket dead centre.
 
 The whole game is that you throw at where the basket is **going to be**, not where it is. A
 top-row throw is in the air about **0.45 s** from release (measured), and at peak the basket
-covers about **20% of its stroke** in that time.
+covers about **24% of its stroke** in that time.
 
 ## Why the top row is one basket
 
@@ -98,10 +98,42 @@ change.** `test-skeeball-machine-spec.mjs` now tests `holes.inside` and `holes.s
 whole travel rather than at the resting `u`, so getting it wrong fails loudly — but the 0.78X
 rail rule is a *sweep* result, not a spec assertion, and only `sweep-mover.mjs` will catch it.
 
-## Why 7 seconds, and why a sine
+## Why 6 seconds, and why a sine
 
-7 s is Matt's number. Peak speed is `2*PI*amp/7 = 0.270 m/s`; against the 0.45 s flight that is
-about 20% of the stroke, which is the band where a lead is a skill rather than a coin flip.
+Matt's number, 2026-08-25 ("instead of 7s, make it 6s"). It shipped at 7 s, also his number.
+
+| | 7 s | **6 s (now)** |
+|---|---|---|
+| peak speed `2*PI*amp/period` | 0.270 m/s | **0.315 m/s** |
+| stroke covered during a 0.45 s flight | ~20% | **~24%** |
+| stroke | unchanged | unchanged |
+| catching cells, dense probe (2583) | 27 | **46** |
+| phases of 8 that score it at all | 4 | **6** |
+| slowest settle | 6.55 s | 7.54 s (cap 12 s) |
+| watchdog walkouts | 0 | **0** |
+
+That percentage is how far the basket moves between the moment you let go and the moment the ball
+arrives, so it is how much lead the shot demands.
+
+**A FASTER SWEEP MAKES THE SHOT MORE AVAILABLE, NOT LESS - and that is not the intuition.** The
+obvious reasoning ("faster target, more lead needed, therefore harder") is wrong about what the
+sweep measures, and this build is the counter-example: 6 s measured **70% more catching cells**
+than 7 s (46/2583 against 27/2583, both at the 4.00in mouth), and lifted the phases that score it
+at all from 4 of 8 to 6 of 8.
+
+The mechanism: during the ball's ~0.45 s flight a faster basket sweeps through **more positions**,
+so a wider set of `(power, aim)` combinations coincide with it on arrival. **A faster mover is a
+bigger target in time even though it is the same target in space.**
+
+The two effects pull opposite ways for a human and only one of them is measured here: the shot is
+mechanically more forgiving, while deliberately *timing* a release against the phase gets harder.
+The sweep sees the first and cannot see the second. Do not quote a lead percentage as if it
+settled the difficulty - measure it.
+
+**The period does not touch the rail-gap arithmetic** — only amplitude, mouth and `collarThick`
+feed that, and a faster sweep covers the same ground in less time. It does need a **re-sweep**,
+because reachability is a function of phase and a faster kinematic wall meets the ball
+differently.
 
 **A sine, not a triangle.** A triangle wave reverses instantaneously at each end, handing any
 ball touching the rim a step change in wall velocity out of nowhere. The sine eases through both

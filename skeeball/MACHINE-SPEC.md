@@ -602,12 +602,31 @@ respect as it did before this section existed.
 
 ```js
 geom: {
-  mover: { hole: 'topC', amp: X * 2.07, period: 7.0 },
+  mover: { hole: 'topC', amp: X * 2.07, period: 6.0 },
 }
 ```
 
 One hole, an amplitude in face-u, and a period in seconds. The hole's own `u` stays the CENTRE of
 the sweep. `u(t) = amp * sin(2*PI*t / period)`, so phase 0 is the centre moving right.
+
+**Pick the period from how much of the stroke the basket covers during a throw's flight**, not
+from how it looks standing still. That fraction is `2*PI*amp/period * flightTime / (2*amp)`, and
+it is how much lead the shot demands. RUNAWAY runs ~24% (6 s against a measured 0.45 s flight).
+Under ~10% the mover is decoration.
+
+**GUARD: A SHORTER PERIOD MAKES A MOVING HOLE EASIER TO HIT, NOT HARDER.** The intuition runs the
+other way and it is wrong. During the ball's flight a faster basket sweeps through MORE positions,
+so a wider set of `(power, aim)` combinations coincide with it on arrival - a faster mover is a
+bigger target in TIME even though it is the same target in space. Measured on RUNAWAY going 7 s ->
+6 s: **70% more catching cells** (46/2583 against 27/2583 on the dense probe) and the phases that
+score it at all went 4 of 8 -> 6 of 8. What does get harder is deliberately TIMING a release
+against the phase, and no sweep measures that. **Never state which way a period change moved the
+difficulty without measuring it.**
+
+**The period does NOT feed the rail-gap arithmetic in section 27** - only the amplitude, the mouth
+and `collarThick` do - but changing it still requires a re-sweep, because reachability is a
+function of phase and a faster kinematic wall meets the ball differently (RUNAWAY's slowest settle
+went 6.55 s -> 7.54 s against the 12 s cap on that change, with walkouts still at zero).
 
 **Use a sine, not a triangle.** A triangle reverses instantaneously at each end and hands any ball
 touching the rim a step change in wall velocity out of nowhere.
