@@ -45,7 +45,7 @@ export const PG_TOTAL = 1000;    // POPONGO: 1,000 points in total across games
 // Same shape as BRICK CITY's, and it reuses the same per-board `slots` set - no new counter.
 export const BB_BASKETS = 9;     // HOT SHOT: land in every basket at least once
 export const BB_BEST = 700;      // HOT SHOT: score 700+ in a single game (was 300)
-export const BB_TOTAL = 10000;   // HOT SHOT: 10,000 points in total on the machine (was 3,000)
+export const BB_TOTAL = 30000;   // HOT SHOT: 30,000 points in total on the machine (3,000 -> 10,000 -> 30,000)
 
 // HOT SHOT: BRICK CITY. Its three are about its FACE, not about a number - Matt, 2026-08-24,
 // replacing the first draft's "sink a 100" and "score 240 in a game":
