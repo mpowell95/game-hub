@@ -1092,12 +1092,20 @@ export const BOARDS = [
       // clean-capturable, which is why this face needed no reachability fight.
       //
       // PERIOD 6 s is Matt's number (2026-08-25, "instead of 7s, make it 6s"). It shipped at 7 s,
-      // also his number ("~7s round trip", 2026-08-24). What it means in play: peak speed goes
-      // 0.270 -> 0.315 m/s (2*PI*amp/period), and a top-row throw is in the air about 0.45 s from
-      // release (measured, sweep-mover.mjs), so the basket now travels up to ~24% of its stroke
-      // while the ball is flying, against ~20% at 7 s. That is the whole skill of the machine -
-      // you are throwing at where it is going to be, not at where it is - and it is a LEAD, not a
-      // lottery.
+      // also his number ("~7s round trip", 2026-08-24). Peak speed goes 0.270 -> 0.315 m/s
+      // (2*PI*amp/period), and a top-row throw is in the air about 0.45 s from release (measured,
+      // sweep-mover.mjs), so the basket now travels ~24% of its stroke while the ball is flying,
+      // against ~20% at 7 s. You are throwing at where it is going to be, not where it is.
+      //
+      // GUARD: A SHORTER PERIOD MADE THIS SHOT EASIER, NOT HARDER, AND THE INTUITION SAYS
+      // OTHERWISE. Measured on this exact change: 70% MORE catching cells (46/2583 against
+      // 27/2583 on the dense probe) and the phases that score it at all went 4 of 8 to 6 of 8.
+      // During the ball's flight a faster basket sweeps through MORE positions, so a wider set of
+      // (power, aim) pairs coincide with it on arrival - it is a bigger target in TIME while
+      // being the same target in space. What does get harder is deliberately TIMING a release
+      // against the phase, and no sweep measures that. Do not state which way a period change
+      // moved the difficulty without measuring it; the first draft of this comment got it
+      // backwards from the lead percentage alone.
       //
       // GUARD: THE PERIOD DOES NOT TOUCH THE RAIL-GAP ARITHMETIC ABOVE. Only the amplitude, the
       // mouth and collarThick feed that; a faster sweep covers the same ground in less time. It

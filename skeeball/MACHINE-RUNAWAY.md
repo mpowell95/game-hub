@@ -102,15 +102,33 @@ rail rule is a *sweep* result, not a spec assertion, and only `sweep-mover.mjs` 
 
 Matt's number, 2026-08-25 ("instead of 7s, make it 6s"). It shipped at 7 s, also his number.
 
-| | 7 s (shipped) | **6 s (now)** |
+| | 7 s | **6 s (now)** |
 |---|---|---|
 | peak speed `2*PI*amp/period` | 0.270 m/s | **0.315 m/s** |
 | stroke covered during a 0.45 s flight | ~20% | **~24%** |
-| stroke | | unchanged |
+| stroke | unchanged | unchanged |
+| catching cells, dense probe (2583) | 27 | **46** |
+| phases of 8 that score it at all | 4 | **6** |
+| slowest settle | 6.55 s | 7.54 s (cap 12 s) |
+| watchdog walkouts | 0 | **0** |
 
-That percentage is the whole dial: it is how far the basket moves between the moment you let go
-and the moment the ball arrives, so it is how much lead the shot demands. Under ~10% the mover
-is decoration; far above ~30% the lead stops being readable and starts being a guess.
+That percentage is how far the basket moves between the moment you let go and the moment the ball
+arrives, so it is how much lead the shot demands.
+
+**A FASTER SWEEP MAKES THE SHOT MORE AVAILABLE, NOT LESS - and that is not the intuition.** The
+obvious reasoning ("faster target, more lead needed, therefore harder") is wrong about what the
+sweep measures, and this build is the counter-example: 6 s measured **70% more catching cells**
+than 7 s (46/2583 against 27/2583, both at the 4.00in mouth), and lifted the phases that score it
+at all from 4 of 8 to 6 of 8.
+
+The mechanism: during the ball's ~0.45 s flight a faster basket sweeps through **more positions**,
+so a wider set of `(power, aim)` combinations coincide with it on arrival. **A faster mover is a
+bigger target in time even though it is the same target in space.**
+
+The two effects pull opposite ways for a human and only one of them is measured here: the shot is
+mechanically more forgiving, while deliberately *timing* a release against the phase gets harder.
+The sweep sees the first and cannot see the second. Do not quote a lead percentage as if it
+settled the difficulty - measure it.
 
 **The period does not touch the rail-gap arithmetic** — only amplitude, mouth and `collarThick`
 feed that, and a faster sweep covers the same ground in less time. It does need a **re-sweep**,
