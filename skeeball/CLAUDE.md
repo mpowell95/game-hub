@@ -600,8 +600,8 @@ ball dropping in out of the air - no new physics, no new capture rule.
   rack would otherwise count a "color sweep" into the GLOBAL `sk.colorSweeps` and falsely
   complete POPONGO's colors goal. A sweep of one color is not a sweep.
 - **Goals** (`goals.js`, no new counters), RE-SET 2026-08-25 by Matt ahead of the machine going
-  live: **land in every basket** at least once, **700+ in a single game** (was 300), **10,000
-  points in total** on the machine (was 3,000). The first replaces "sink the 100 hoop", which read
+  live: **land in every basket** at least once, **700+ in a single game** (was 300), **30,000
+  points in total** on the machine (3,000 -> 10,000 -> 30,000, all on 2026-08-25). The first replaces "sink the 100 hoop", which read
   the per-board `bestThrow`; it now reads the per-board `slots` set the same way BRICK CITY's does,
   so no new counter was needed. `bestThrow` is still recorded and still shown on the machine's own
   records - the goal simply stopped reading it. All three read `sk.boards.basketball`, synced and
