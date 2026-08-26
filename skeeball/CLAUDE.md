@@ -1243,11 +1243,23 @@ five times. Check all five whenever you touch one.
   Both are fixed in all five. **Dispose the map explicitly whenever you dispose a material here.**
   (`setScoreboard()` was already correct and is the pattern to copy.)
 
+- **The pause sheet FREEZES the game, and `_startLoop()` is the only way the loop is ever started.**
+  The sheet said "Paused" and stopped nothing: a ball still in the air when you tapped the machines
+  button went on flying, scored, popped up and autosaved while you read the menu, so you came back
+  to a number you never watched happen. `_showPause` now calls `_stopLoop()` and its `close()` calls
+  `_startLoop()`. **`_startLoop()` is idempotent (`if (this.raf) return`) and that guard is
+  load-bearing**: the sheet's New game and Quit buttons both run `close()` and then
+  `_startGame`/`_renderSetup` in the SAME tick, so without it "New game" would leave two rAF chains
+  stepping the same scene on separate dts. It also resets `last = 0`, so the frame after a pause
+  can never arrive as one giant dt. The canvas keeps showing its last frame while frozen because
+  `preserveDrawingBuffer` is set - which is a second reason not to remove that flag.
+  A ball frozen in flight and then abandoned via Quit is HANDED BACK: the autosave is written at
+  the last SETTLED ball, so the rack resumes with that throw still owed. Nothing decrements.
+  **The game-over card and the how-to sheet deliberately do NOT freeze** - the marquee celebrates a
+  personal best behind the first (`_rackOver`), and the second runs a live demo throw on its own
+  canvas.
+
 **Known and NOT changed, deliberately:**
-- **The render loop keeps running behind the pause sheet and the rack-over screen.** `_stopLoop()`
-  is only called on the way to the gallery and at destroy. Freezing it would stop a ball in mid-air
-  when somebody opens the menu mid-throw, which is a gameplay change, not a performance fix. The
-  shadow-pass gate above already removes most of the cost of a still scene sitting behind a modal.
 - **`writeSave()` still runs synchronously on the `ballDone` frame.** It is a `localStorage.setItem`
   on the frame the ball lands, so it is a real part of that spike - but deferring it opens a window
   where a rack in progress is not on disk, and a mid-rack save is player state. THE LAW outranks a

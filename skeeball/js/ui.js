@@ -717,9 +717,28 @@ export class SkeeballUI {
     this._closeOverlay();
     this.root.appendChild(el);
     this.overlay = el;
+    // PAUSED MEANS PAUSED (2026-08-26). This sheet said "Paused" and stopped nothing: the loop
+    // kept stepping physics behind it, so a ball still in the air when you tapped the machines
+    // button went on flying, dropped into a cup, scored, painted its popup and autosaved while
+    // you sat reading the menu - and you came back to a number you never watched happen.
+    // Matt: "does it make sense to freeze the game?" It does, and not mainly for the frame rate.
+    //
+    // Stopping the loop also stops the 3D scene rendering under the scrim, which is the whole
+    // saving. The canvas keeps showing its last frame because render.js sets preserveDrawingBuffer,
+    // so the machine sits there frozen rather than going black.
+    //
+    // NOT DONE for the other two overlays, deliberately: the game-over card has the marquee
+    // celebrating a personal best behind it (_rackOver), and the how-to sheet runs a live demo
+    // throw on its own canvas. Both have to keep rendering.
+    //
+    // A ball frozen in flight and then abandoned via Quit is HANDED BACK, not lost: the autosave
+    // is written at the last SETTLED ball, so the rack resumes with that throw still owed. Nothing
+    // decrements and no history moves (THE LAW rule 2); you simply keep a throw you paused during.
+    this._stopLoop();
     const close = () => {
       if (el.parentNode) el.parentNode.removeChild(el);
       if (this.overlay === el) this.overlay = null;
+      this._startLoop();
     };
     el.querySelector('[data-role="close"]').addEventListener('click', close);
     el.querySelector('[data-role="resume"]').addEventListener('click', close);
@@ -962,8 +981,7 @@ export class SkeeballUI {
       });
       this._ro.observe(this.el.stage);
     }
-    this.last = 0;
-    this.raf = requestAnimationFrame(this._loop);
+    this._startLoop();
   }
 
   _bindPlay() {
@@ -1080,6 +1098,21 @@ export class SkeeballUI {
         this.el.msg.textContent = '';
       }
     }
+  }
+
+  /** THE ONLY WAY THE RENDER LOOP IS STARTED, and it is idempotent on purpose (2026-08-26).
+   *  The pause sheet stops the loop and its close path starts it again, and two of that sheet's
+   *  buttons (New game, Quit) go on to call _startGame/_renderSetup in the SAME tick - so without
+   *  the `this.raf` guard, "New game" would leave two rAF chains running the same scene forever,
+   *  each stepping physics on its own dt. `_frame` re-reads this.game and this.renderer every
+   *  frame, so a loop that is already running picks up a brand new rack with nothing to do here.
+   *
+   *  `last = 0` is what makes the frame AFTER a pause safe: `_frame` reads `this.last ? ... : 1/60`,
+   *  so a stale timestamp from before the sheet opened can never arrive as one giant dt. */
+  _startLoop() {
+    if (this.raf) return;
+    this.last = 0;
+    this.raf = requestAnimationFrame(this._loop);
   }
 
   _stopLoop() {
