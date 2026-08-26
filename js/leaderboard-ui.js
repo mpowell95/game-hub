@@ -818,8 +818,25 @@ function playerListHTML(list) {
   }
   return `<div class="lb-plist">${rows.map((g) => {
     const played = playedOf(g, null);
-    const big = { val: value(g), unit: catUnit(_cat) };
-    const subText = t('lb_played_count', { n: played });
+    // THE HEADLINE NUMBER IS WHAT YOU SORTED BY. Matt, 2026-08-26: "Before you touched the
+    // leaderboard tonight, it showed the played number when I clicked on played and the wins
+    // number when I clicked on wins. Now it doesn't do that."
+    //
+    // He is right that it used to, and this is where it went: the 2026-08-25 redesign (1a789aa)
+    // replaced this pair of lines with a flat `value(g)`, so the card kept its wins headline no
+    // matter which pill was lit. Sorted by Played the big numbers then ran 3103, 269, 100, 23, 36,
+    // 54 - out of order, because they were not the thing the list was ordered by, which reads as a
+    // broken board however correct the ordering underneath is.
+    //
+    // gameDetail below never lost this (see its own `big`), so the two screens had drifted apart.
+    // Restored here in the redesign's category vocabulary: the category value is still what the
+    // Wins and Name sorts lead with, and the OTHER number moves to the subline either way.
+    const big = _sort === 'played'
+      ? { val: played, unit: unitWord('lb_played_count') }
+      : { val: value(g), unit: catUnit(_cat) };
+    const subText = _sort === 'played'
+      ? `${value(g)} ${catUnit(_cat)}`
+      : t('lb_played_count', { n: played });
     return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, subText, catStripHTML(g));
   }).join('')}</div>`;
 }
