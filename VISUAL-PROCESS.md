@@ -34,6 +34,14 @@ Your session ends and your eyes go with it. Convert the picture into something d
   width", "barrel = 0.48 x base diameter", "black rim = 0.10 x ball diameter". Screens differ;
   ratios port. `reference/battleship/SPEC.md` is the worked example.
 - **Sample the actual colours** and write the hex down.
+- **The picture is an INPUT; `SPEC.md` is the artifact. Delete the media when the work closes.**
+  Battleship and Pool turned their screenshots into 5 KB of fractions and kept nothing else.
+  Yahtzee's six how-to `.MOV`s (17 MB) and Mancala's seven (20 MB) sat in `reference/` for weeks
+  after both games shipped, because nobody did the converting step or the deleting one. Matt,
+  2026-08-26: *"They were references for you that were one time use... they can be deleted."*
+  Removing them loses nothing - this repo does not rewrite history, so anything ever committed is
+  recoverable from the commit that removed it. Full rule and the recovery command:
+  `reference/README.md`, "Retention".
 - **Say explicitly what the reference does NOT show.** Battleship's four screenshots were all the
   battle screen; the mode screen, the deploy screen and the win overlay have never been seen, so
   nothing may claim those "match the reference".
