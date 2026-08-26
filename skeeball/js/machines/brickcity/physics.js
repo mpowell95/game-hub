@@ -221,9 +221,9 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     nContacts: 0,             // contact events emitted so far, so the cap below can bite
     airborne: false,
     // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
-    // lesson survives the engine swap).
+    // lesson survives the engine swap). `nudges` lived here until 2026-08-26; this machine no
+    // longer pops a parked ball, it ends it - see section 6.
     anchor: { x: 0, y: 0, z: 0, t: 0 },
-    nudges: 0,
     emergencyUsed: false,
     troughAt: -1,
     // `restAt` lived here until batch 3f removed the resting-position rule that read it.
@@ -429,31 +429,51 @@ function substep(st) {
   //    power band needs widening, widen it in the GEOMETRY, never by moving the ball. See
   //    DECISIONS.md#removed-features-and-why-they-stay-removed.
 
-  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A parked ball
-  //    gets popped off the face like the chatter that frees a real ball; a ball a pop cannot
-  //    move is JAMMED (three contact normals can lock the solver completely - measured, not
-  //    theory), and jams get walked out: a slow positional roll toward the nearest mouth until
-  //    physics takes back over or the mouth captures it.
+  // 6. The watchdog: anchored displacement, never speed (jitter fools speed). A ball that has
+  //    not moved 3cm in 0.6s is PARKED, and on this machine parked means over: it scores nothing
+  //    and it vanishes. Matt's rule, 2026-08-22: "Stuck balls should score ZERO. and not be
+  //    moved. It should vanish."
+  //
+  //    THE PERCH, and why the two "nudges" that used to sit here are gone (2026-08-26). Matt,
+  //    playing the fixed build: "the ball sometimes gets stuck IN the negative baskets. Like
+  //    instead of falling in, it's just stuck there."
+  //
+  //    Measured, and it is geometry. Every stall in a 41x21 sweep landed at the SAME PLACE -
+  //    world z -2.289, y 0.579 or 0.627 - which is the back rim of the -20/-10/-20 cups where
+  //    they stand against the riser behind them (cup centre z -2.235, rim top y 0.585; riser
+  //    front face z -2.234, top y 0.620). The bottom row's cups are the widest on the machine
+  //    (r 0.109 against the mid row's 0.070) and sit 3in back against their riser, so rim and
+  //    riser form a cradle a ball can balance in. THE CLASSIC never needed a rule for this: one
+  //    continuous slope, so a resting ball always rolls back down. A STAIRCASE removed that
+  //    guarantee and nothing replaced it - see section 3b, which still assumes a resting ball
+  //    rolls home on its own.
+  //
+  //    Capture cannot save it either, and should not: the guard needs `f.h < ballR * 1.9`
+  //    (0.104), and a ball perched on top of a 0.146 collar is at f.h ~ 0.20. It is not in the
+  //    mouth. It is on the wall.
+  //
+  //    So the ball parks, and the OLD watchdog then took 0.9s + 0.9s + 0.9s to give up on it -
+  //    two pops that visibly twitched it and 2.7s of a dead ball on screen. Measured over the
+  //    same 861 throws: the watchdog fired on 65 (7.5% - about one ball every other rack), 57 of
+  //    those went all the way to jammed, and the pops rescued ONE ball in 861 - into a -20. They
+  //    bought nothing and cost the player a second and a half of staring at a stuck ball.
+  //
+  //    Straight to jammed at 0.6s. Effect on the same grid: worst dead-still stretch 2.62s ->
+  //    0.57s, median settle 2.42s -> 2.12s, and exactly TWO of 861 outcomes move, both a -20
+  //    becoming a 0 (a ball that was perched on a penalty rim now dies there instead of being
+  //    poked in). GUARD: 0.6 is measured, not chosen. At 0.45s the sweep starts killing real
+  //    throws - a 100 became a 0 - and shortening the window while KEEPING the pops is worse
+  //    still: 63 outcomes move and 44 of them go against the player, because a pop near the
+  //    bottom row mostly knocks the ball into a penalty cup. test-brickcity-stall.mjs pins it.
+  //
+  //    BRICK CITY ONLY, per the HARD RULE in skeeball/CLAUDE.md. The other four machines keep
+  //    their pops; THE CLASSIC in particular has the slope that makes them harmless.
   const moved = Math.hypot(p.x - st.anchor.x, p.y - st.anchor.y, p.z - st.anchor.z);
   if (moved > 0.03) st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
-  else if (st.t - st.anchor.t > 0.9) {
-    st.anchor = { x: p.x, y: p.y, z: p.z, t: st.t };
-    st.nudges += 1;
-    if (st.nudges <= 2) {
-      const side = p.x >= 0 ? -1 : 1;
-      const tLoc = typeof f.tilt === 'number' ? f.tilt : M.tilt;
-      ball.velocity.x += side * 0.3;
-      ball.velocity.y += 0.55 * Math.cos(tLoc);
-      ball.velocity.z += 0.3 * Math.sin(tLoc) + 0.15;
-    } else {
-      // Two pops did nothing: it is JAMMED, on every machine. It scores nothing and it is over.
-      // It is NOT walked toward a mouth - that was a scripted score, and it paid a player for
-      // touching a cup rather than falling through one (Matt, 2026-08-22: "Stuck balls should
-      // score ZERO. and not be moved. It should vanish.").
-      st.emergencyUsed = true;
-      finishAt(st, 'corner0', 0, 'gutter');
-      return;
-    }
+  else if (st.t - st.anchor.t > 0.6) {
+    st.emergencyUsed = true;
+    finishAt(st, 'corner0', 0, 'gutter');
+    return;
   }
 
   // 7. The cap. Should be unreachable (tests assert it): score the ball where it stands - except

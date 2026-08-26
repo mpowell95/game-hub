@@ -30,6 +30,58 @@ brick marquee and a different face. Nine baskets on three treads. The row neares
 | Tagline | `board_brickcity_tag`, EN and ES in `skeeball/js/strings.js`. Taglines ARE translated; the name is not. |
 | Ships as | `adminOnly: true` — Matt's call, 2026-08-24, the same as its two neighbours while he plays it. That is only the CODE DEFAULT: the in-app **Admin** page moves it between Testing / Unlockable / Open with no commit and no deploy. |
 
+## The perch, and why this machine no longer pops a parked ball (2026-08-26)
+
+Matt, on the build that had just been made smooth: *"the ball sometimes gets stuck IN the negative
+baskets. Like instead of falling in, it's just stuck there."*
+
+It was real, it is this machine's own geometry, and it had never been tested - `skeeball/js/test.js`
+sweeps `DEFAULT_BOARD`, so BRICK CITY had no engine suite at all.
+
+**Every stall in a 41x21 sweep landed at the same place**: world `z -2.289`, `y 0.579` or `0.627`.
+That is the back rim of the bottom row's cups where they stand against the riser behind them.
+
+```
+bottom cup centre   y 0.439   z -2.235      rim top y 0.585   r 0.109  collar 0.146
+riser behind it     top y 0.620   front face z -2.234
+ball                r 0.0545                 rests at y 0.579 / 0.627, z -2.289
+```
+
+The bottom cups are the widest on the machine (`r 0.109` against the middle row's `0.070`) and sit
+3in back against their riser, exactly as the face spec calls for. Rim and riser therefore form a
+cradle, and a slow ball can balance in it. **Capture cannot save it and should not**: the guard
+needs `f.h < ballR * 1.9` (0.104) and a ball perched on top of a 0.146 collar is at `f.h ~ 0.20`.
+It is not in the mouth, it is on the wall.
+
+**THE CLASSIC never needed a rule for this.** One continuous slope means a resting ball always rolls
+back down, which is what `physics.js` section 3b still assumes when it says a ball at rest is "left
+alone" and "rolls back down into the trough like a real machine". A staircase removed that
+guarantee and nothing replaced it.
+
+**What was actually wrong was the watchdog's timing.** It waited 0.9s, popped the ball, waited 0.9s,
+popped again, waited 0.9s, then gave up - 2.7s of a dead ball, with two visible twitches. Measured
+over 861 throws: it fired on **65 (7.5%, about one ball every other rack)**, 57 went all the way to
+jammed, and the two pops rescued **one ball in 861 - into a -20**. They bought nothing and cost the
+player the wait.
+
+**Now: parked for 0.6s = jammed, scores zero, vanishes.** Which is Matt's own standing rule from
+2026-08-22: *"Stuck balls should score ZERO. and not be moved. It should vanish."* The pops were the
+thing that moved it.
+
+| | before | after |
+|---|---|---|
+| worst dead-still stretch | 2.62s | **0.57s** |
+| median settle | 2.42s | 2.12s |
+| outcomes changed (of 861) | - | **2, both a -20 becoming a 0** |
+
+**GUARD: 0.6s is measured, not chosen.** At 0.45s the sweep starts killing real throws (a 100 became
+a 0). Shortening the window while KEEPING the pops is worse still: 63 outcomes move and 44 go
+against the player, because a pop near the bottom row mostly knocks the ball into a penalty cup.
+
+`test-brickcity-stall.mjs` pins all of it and was born red against the pre-fix engine. **BRICK CITY
+only** - the other four machines keep their pops, and THE CLASSIC has the slope that makes them
+harmless.
+
 ## Where it sits in the unlock chain
 
 ```
