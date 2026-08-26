@@ -79,7 +79,9 @@ export class Renderer {
    */
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    // 2, not 2.5 (2026-08-26): 2.5 is 56% more pixels to fill every frame than 2, and the repo's
+    // other canvases all cap at 2 with nobody able to tell them apart on a phone.
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
     if (w < 8 || h < 8) return false;

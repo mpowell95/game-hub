@@ -357,9 +357,11 @@
   display: grid;
   place-items: center;
   padding: var(--gh-sp-4);
-  background: rgba(9, 16, 28, .55);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  /* NO backdrop-filter (2026-08-26). Every game's how-to-play and win/lose modal uses this
+     scrim, and the immersive games DO NOT STOP RENDERING behind it - so the blur was re-computed
+     against a fresh 60fps frame the whole time the player sat reading. The scrim is darkened from
+     .55 to .66 to carry the separation the blur used to, which costs nothing. */
+  background: rgba(9, 16, 28, .66);
   /* A drag on the scrim must not scroll the game/launcher underneath the overlay. */
   overscroll-behavior: contain;
 }
