@@ -1,201 +1,234 @@
-# HANDOFF — BRICK CITY: the ball that sits half-in the negative baskets
+# HANDOFF — BRICK CITY: find the stuck ball
 
-**Written 2026-08-26. ROOT CAUSE FOUND — this is a fix spec, not an investigation.**
+**Your job: run tests, find the bug, report what you find to Matt before changing anything.**
 
-Matt:
+This is an investigation brief, not a fix spec. A previous session reached two confident
+conclusions about this bug and **both were wrong**, so nothing below tells you what the answer is.
+What it gives you is the symptom, how to reproduce it, the tools, and the experiments already run so
+you don't repeat a day of them.
+
+---
+
+## 1. The symptom, in Matt's words
 
 > "the ball sometimes gets stuck IN the negative baskets. Like instead of falling in, it's just
-> stuck there... It was IN the basket. Half of the ball out and half completely in. I've even seen a
-> second ball fall into the same negative basket while one is stuck/frozen."
+> stuck there."
 
-and, on the first attempt at a fix:
+> "the ball was NOT perched on the back of the rim against the backboard. It was IN the basket. Half
+> of the ball out and half completely in. I've even seen a second ball fall into the same negative
+> basket while one is stuck/frozen."
 
 > "I don't want the balls that get stuck to vanish. I want them to not get stuck midway through the
 > basket. There's nothing for them to get stuck on."
 
-**He is right, and the first fix (v495) was a band-aid.** It shortened how long the stuck ball sits
-before being deleted (2.62s → 0.57s). It did nothing about why the ball is stuck. Do not treat "it
-vanishes quickly now" as success — that is the thing Matt explicitly rejected.
+Machine: **HOT SHOT: BRICK CITY** (`brickcity`). It happens on the bottom row — the −20 / −10 / −20
+penalty cups — and Matt has never reported it on the middle or top rows.
+
+**What "fixed" means:** the ball falls into the basket. Not "the ball is deleted faster."
 
 ---
 
-## 1. The bug, in one paragraph
+## 2. What is NOT the answer
 
-**Capture is blind to a ball resting in the mouth of a bottom-row cup, because `worldToFace()` hands
-that ball RISER coordinates instead of the tread the cup lives on.**
+**v495 (`137eaef`) shipped a band-aid and Matt rejected it.** It shortened the stall watchdog from
+0.9s×3 to a single 0.6s window, so a stuck ball is declared jammed and vanishes after 0.57s instead
+of 2.62s. It never addressed why the ball is stuck.
 
-`machine.js`'s `worldToFace` chooses among the staircase's six frames by **proximity** — it scores
-each frame `(inSeg ? 0 : 1000) + |lh|` and takes the lowest. A ball sitting high inside a 0.1455 m
-deep collar is **closer to the riser wall behind it than to the tread beneath it**, so the riser
-wins. Everything downstream then measures in the wrong frame.
+Do not measure how fast the ball disappears. Do not treat a short disappearance as success. If your
+fix ends with the ball being removed rather than falling in, it is the same mistake again.
 
-Measured, for the position every stall in an 861-throw sweep lands on:
-
-```
-ball centre (world)      0.0048, 0.579, -2.289
-lowC cup axis (world)    0.000,  0.439, -2.235      mouth radius 0.109   collar 0.1455
-horizontal distance to the cup axis   0.0543        <-- HALF the mouth radius. It is IN the cup.
-ball bottom y 0.524 · cup floor y 0.439 · rim top y 0.585 · ball top y 0.634
-                                                    <-- equator at the rim: "half in, half out"
-
-frame chosen by worldToFace   RISER (v 0.300..0.580), because:
-    tread below it   0.140 away  -> score 0.140
-    riser behind it  0.054 away  -> score 0.054   WINS
-
-distance to lowC in the chosen (riser) frame:  0.238   vs mouth radius 0.109
-=> physics.js section 2 runs `if (d >= rEff) continue;` and SKIPS THE CUP THE BALL IS SITTING IN.
-```
-
-**Why only the bottom row.** Those cups are the widest on the machine (`r 0.109` against the middle
-row's `0.070`). The cup sits at `v 0.191` on a tread that ends at `v 0.300`, so its mouth spans
-`v 0.082 → 0.300` — the back edge of the mouth lands exactly on the frame boundary. The mid and top
-rows' mouths never reach theirs, which is why Matt only ever sees this in the negative baskets.
-
-**Why a second ball joins it.** `game.canThrow()` releases the next ball once the previous one has
-`arrived`, and every throw gets its OWN cannon world (`buildWorld` per throw), so two live balls
-cannot collide. The second drops straight past the first into the same cup. By design; do not
-"fix" it.
+The same commit removed two "pops" that used to nudge a parked ball. Data behind that: over 861
+throws the watchdog fired on 65, and the pops rescued **1 ball into a scoring hole — a −20**. They
+are gone for good; don't bring them back.
 
 ---
 
-## 2. The fix
+## 3. Reproduce it first
 
-**Measure the holes in WORLD space, not in whatever frame `worldToFace` happened to pick.**
+Nothing below is worth doing until you have seen it yourself.
 
-In `skeeball/js/machines/brickcity/physics.js`, section 2 (the mouths), the hole loop currently does:
+1. `node server.mjs`, open `http://localhost:8123/skeeball/`, pick BRICK CITY, play racks and watch
+   the bottom row. Matt sees it often enough to have caught it repeatedly, including twice at once.
+2. If you can get Matt to play a few racks while you watch, do that — he knows what it looks like
+   and you don't.
+3. On the deployed site the version pill must read **v495** or later (`v494 → v495` with an arrow
+   means the worker hasn't installed; reload).
+
+**When you catch one, the first question is whether the frozen ball is a real physics body or just a
+mesh left drawn.** Everything else forks off that answer:
 
 ```js
-const d = Math.hypot(f.u - hDef.u, f.v - hDef.v);
+// browser console, on the play screen
+const ui = window.__skTest.ui, R = ui.renderer;
+setInterval(() => {
+  const live = ui.game ? ui.game.balls : [];
+  console.log('live', live.length, live.map(s => ({
+    y: +s.ball.position.y.toFixed(3), z: +s.ball.position.z.toFixed(3),
+    sp: +Math.hypot(s.ball.velocity.x, s.ball.velocity.y, s.ball.velocity.z).toFixed(3),
+    cap: s.captured || null })), 'meshes drawn', R._balls.filter(m => m.visible).length);
+}, 250);
 ```
 
-`f.u`/`f.v` are only meaningful if `f` resolved to the frame that hole is on. Replace the distance
-and height tests with frame-independent ones built off each hole's world position and axis:
-
-- Cache each hole's world centre once per board: `M.faceToWorld(hDef.u, hDef.v, 0)`.
-- Its axis is the tread's normal — derive it from that frame's tilt, not from `f.tilt`.
-- `d` becomes the ball's distance from that axis; the height term becomes its distance along it.
-
-Everything else in section 2 — `rEff`, the kinematic `vFace * tDrop > cross` test, the
-`lip > 0 && f.h < lip` collar branch — keeps its meaning once `d` and the height are measured
-against the right cup.
-
-**This is a scoring change and it needs Matt's sign-off before it ships.** A ball that today freezes
-and then vanishes for 0 will, after the fix, fall into the cup it is sitting in and score it —
-usually **−20 or −10**, because that is the row this happens on. That is the correct behaviour and
-it is what he asked for ("I want them to not get stuck midway through the basket"), but he should
-see the number before it goes live, not after.
-
-**Then reconsider the v495 watchdog.** With capture fixed, the 0.6s jam window may be doing nothing
-useful, or may be firing before capture gets its chance. Re-measure; do not assume. The window
-before v495 was 0.9s with two "pops", and the pops are gone for good (they rescued 1 ball in 861,
-into a −20).
+Write down the ball's **world position** while it is stuck. That single number is the anchor for
+everything else, and it is where the previous session's reasoning went wrong — see §6.
 
 ---
 
-## 3. How to verify — the exact numbers to reproduce
+## 4. The tools
 
-**Before you change anything**, confirm you can see the bug. Park a ball at the measured position
-and check what capture thinks:
+Physics needs no browser. Everything is pure and deterministic (no rng):
 
 ```js
-// node, from the repo root
 import { boardById } from './skeeball/js/boards.js';
-import { buildMachine } from './skeeball/js/machines/brickcity/machine.js';
-const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
-const p = { x: 0.0048, y: 0.579, z: -2.289 };
-const f = M.worldToFace(p);
-const low = G.holes.lowC, cw = M.faceToWorld(low.u, low.v, 0);
-console.log({ faceFrameV: f.v, faceH: f.h,
-  dInFaceCoords: Math.hypot(f.u - low.u, f.v - low.v),      // 0.238 - "outside"
-  dInWorld:      Math.hypot(p.x - cw[0], p.z - cw[2]),      // 0.054 - INSIDE
-  mouthRadius:   low.r });                                  // 0.109
+import { engineFor } from './skeeball/js/engines.js';
+const b = boardById('brickcity'), P = engineFor('brickcity').physics;
+
+// a whole throw, no clock:
+P.simulateThrow(b, { power, aim });   // { outcome, time, bounces, touchedBoard, emergencyUsed, events }
+
+// or step it and watch:
+const st = P.startThrow(b, { power, aim });
+while (!st.done) { P.step(b, st, 1/60); /* st.ball.position, .velocity, st.captured, st.t */ }
 ```
 
-**And look at it**, so nobody re-argues what "half in" means. This renders the exact position through
-the real play camera — it puts the ball visibly half-sunk in the −10:
+A 41×21 power/aim grid is ~100s. **`power` is deliberately NOT clamped to 0..1** — a hard swipe goes
+past 1.
+
+Geometry:
 
 ```js
-// in the browser, play screen, brickcity loaded
+import { buildMachine } from './skeeball/js/machines/brickcity/machine.js';
+const M = buildMachine(b.geom);
+M.faceToWorld(u, v, h)   // face -> world
+M.worldToFace(pos)       // world -> { u, v, h, tilt }
+M.frames                 // the six staircase segments; tilt 0.1 = tread, 1.5708 = riser
+M.solids                 // every collision body: part, pos, half
+b.geom.holes             // per cup: u, v, r (mouth radius), collarH, value
+```
+
+**Read `machines/brickcity/physics.js` before you theorise.** The relevant parts are numbered:
+section 1 is the captured branch, section 2 is hole capture (the mouths), section 3 the trough,
+3b the deliberate absence of a resting-position rule, 4 the rollback, 6 the stall watchdog,
+7 the 12s cap.
+
+Browser hook: `window.__skTest.ui` gives `.game` and `.renderer` (`.renderer._balls` is the mesh
+pool, `.renderer.scene`/`.camera` the three.js scene).
+
+To see a specific position through the real play camera:
+
+```js
 const R = window.__skTest.ui.renderer;
-R.render = () => {};
+R.render = () => {};                                   // stop the loop overwriting it
 const m = R._balls[0];
-m.visible = true; m.position.set(0.0048, 0.579, -2.289); m.quaternion.set(0,0,0,1);
+m.visible = true; m.position.set(X, Y, Z); m.quaternion.set(0,0,0,1);
 for (let i = 1; i < R._balls.length; i++) R._balls[i].visible = false;
 R.renderer.shadowMap.needsUpdate = true;
 R.renderer.render(R.scene, R.camera);
 ```
 
-**After the fix**, all of these must hold:
-
-1. A ball placed at that position is **captured** and falls through — no jam, no vanish.
-2. `node test-brickcity-stall.mjs` is green (nothing sits dead still past 0.75s).
-3. `node skeeball/js/test.js --full` — THE CLASSIC must be **untouched**. Expect 78 passed / 1
-   failed; that one failure (*missing the corner costs the ball*) is pre-existing and fails
-   identically on a clean `origin/main`. Do not chase it.
-4. `node test-skeeball-machine-spec.mjs` — 86 passed, 0 failed, **11 waivers**. That waiver count
-   matches `origin/main`; do not chase it either.
-5. Re-run the 41×21 outcome grid old vs new and **report the diff to Matt**: how many of 861
-   outcomes move, and in which direction. He needs that number before it ships.
-6. `node test-visual.mjs skeeball`, `node test-game-conventions.mjs`, `node validate-sw-assets.mjs`.
-
-Add a probe to `test-brickcity-stall.mjs` for the real bug, born red against today's engine:
-**a ball whose centre is within a cup's mouth in WORLD space must be captured, from every frame the
-staircase can assign it.**
-
 ---
 
-## 4. Already ruled out — do NOT repeat these
+## 5. Experiments already run — results, so you don't repeat them
 
-Each was run to completion and came back negative. Re-running them is a wasted afternoon.
+These are test outcomes, not conclusions. Each was run to completion.
 
-| Hypothesis | How it was tested | Result |
+| Experiment | Method | Result |
 |---|---|---|
-| Frame rate / dt pattern causes it | 41×21 grid at 60 / 30 / 20 / clamped-10 fps, plus two jittery-phone patterns | **Identical to 2 dp in every regime.** The accumulator makes physics frame-rate independent |
-| Hard swipes (power > 1.0) | 1,281 throws, power 1.0 → 2.5 (power is deliberately unclamped in `startThrow`) | **0 hangs** |
-| A ghost mesh — a ball drawn with no physics ball behind it | Real Chromium, 28 balls, up to 5 live at once, 414 frames, comparing `R._balls` against `game.balls` every frame | **0 ghosts, 0 frozen meshes.** The renderer is faithful — the frozen ball you see is a real physics body |
-| A captured ball hanging inside the cup | 861 throws, time in the captured state | Worst **0.48s**. The problem is upstream: capture never fires |
-| The v493 broadphase change altered physics | 861-throw grid, this engine vs `origin/main`'s, comparing hole, value, settle time to 6 dp, bounce count, board contact, full event sequence | **861 of 861 identical.** Pure speedup |
-| The 12s emergency cap | `simulateThrow().emergencyUsed` across the grid | Fires, but worst total settle is 6.24s |
+| Does frame rate cause it? | 41×21 grid at 60 / 30 / 20 / clamped-10 fps and two jittery-phone dt patterns | **Identical to 2 dp in every regime.** The accumulator makes physics frame-rate independent |
+| Do hard swipes cause it? | 1,281 throws, power 1.0 → 2.5 | 0 hangs |
+| Is the frozen ball a leftover mesh? | Real Chromium, 28 balls, up to 5 live at once, 414 frames, comparing `renderer._balls` against `game.balls` every frame | **0 ghosts, 0 frozen meshes.** Worth re-testing when you have a live repro — this run never landed a ball in a cup |
+| Does a *captured* ball hang inside the cup? | 861 throws, time spent in the captured state | worst **0.48s** |
+| Did the v493 broadphase change alter physics? | 861-throw grid, this engine vs `origin/main`'s: hole, value, settle time to 6 dp, bounce count, board contact, full event sequence | **861 of 861 identical.** Pure speedup, not a suspect |
+| Does the 12s emergency cap fire? | `simulateThrow().emergencyUsed` across the grid | Fires, but worst total settle is 6.24s |
 
-**The one thing that misled the session that wrote this**: it trusted `worldToFace`'s `d` (0.238,
-"outside the mouth") over the world geometry (0.054, inside), and concluded the ball was resting on
-a tread 32 cm from any cup. It is not. **When a number disagrees with what Matt is looking at, check
-the number.**
+**Nothing in a 41×21 sweep ever reproduced a ball freezing inside a cup.** Either the grid misses the
+conditions, or the sweep's own measurement is misleading (see §6). Treat "the sweep says it can't
+happen" as a lead, not a fact — Matt watches it happen.
+
+**Not testable from a cloud container, and still open:** anything specific to iOS Safari. Matt plays
+on an iPhone 16 Pro. If desktop comes back clean and he still sees it, the route is a dev-only probe
+that records ball state into the existing `js/bug-report.js` payload; he plays two minutes, files one
+report, `node read-bug-reports.mjs` reads it back.
 
 ---
 
-## 5. Landmines
+## 6. The trap that got the last session twice
+
+Both wrong conclusions came from the same habit: **trusting a derived number over what Matt was
+looking at.**
+
+The sweep reported the stalled ball as `h = 0.0545`, `d = 0.32` from the nearest cup in face
+coordinates, and the session concluded "it's resting on a tread, 32 cm from any basket, and Matt is
+misreading perspective." Matt said no, it's in the basket. **Matt was right.** The same ball's
+distance to that cup measured in plain world coordinates is `0.054` — half the mouth radius.
+
+So: **`worldToFace()` and world space can disagree about where a ball is**, and on a staircase they
+do. Whenever you use `f.u` / `f.v` / `f.h`, check which of `M.frames` that point resolved to and
+whether it is the frame you meant. Cross-check anything important in world coordinates.
+
+And: when a measurement contradicts what Matt is describing, the measurement is the thing to
+re-examine.
+
+---
+
+## 7. Rules you cannot break
 
 - **BRICK CITY owns its own engine** — `machines/brickcity/{physics,machine,render}.js`. A fix here
   must NOT be copied into the other four "to keep them in sync" (HARD RULE, `skeeball/CLAUDE.md`).
-  It was paid for: a change for one machine silently re-scored THE CLASSIC overnight and Matt pulled
-  the game. **The other four may well have this same blind spot — HOT SHOT is the same cabinet.
-  Raise it with Matt as its own job; do not fix it here.**
+  It was paid for: a change written for one machine silently re-scored THE CLASSIC overnight and
+  Matt pulled the game. HOT SHOT is the same cabinet and may share whatever you find — that is its
+  own job, raise it with Matt.
 - **NEVER change the width or diameter of a basket** unless Matt specifically says so. Also frozen:
-  the bottom row's 3in set-back against the riser (Matt, 2026-08-23: "do not move them forward
-  again"). The fix above needs neither.
-- **Do not add a resting-position scoring rule** (section 3b says why; it has been removed once).
-  The only way to score a hole is to fall through its mouth. The fix above does not add one — it
-  makes capture see a mouth it was already supposed to see.
-- **A captured ball never reaches the stall watchdog.** `if (st.captured) { … return; }` returns
-  before section 6 and before the trough check; its only escape is `st.t > MAX_T` = 12s. Nothing has
-  been seen using it, but it is worth closing while you are in this file.
-- `node run-all-tests.mjs` is ~4.5 min and Matt has asked sessions not to run it unprompted.
-- **Bump `CACHE` in `sw.js` past what is on `main` right now** and re-run `validate-sw-assets.mjs`.
+  the bottom row's 3in set-back against the riser ("do not move them forward again", 2026-08-23).
+- **No resting-position scoring rule.** Section 3b explains; it has been removed once already. The
+  only way to score a hole is to fall through its mouth.
+- **Anything that changes what a throw scores needs Matt's sign-off with the number in hand** — run
+  the 41×21 grid before and after and tell him how many of 861 outcomes move and in which direction.
+- `node run-all-tests.mjs` is ~4.5 min; Matt has asked sessions not to run it unprompted. Run what
+  you touched: `test-brickcity-stall.mjs`, `skeeball/js/test.js` (expect 78/1 — that one failure is
+  THE CLASSIC's and pre-existing on `origin/main`), `test-skeeball-machine-spec.mjs` (86 passed,
+  0 failed, 11 waivers — the same count as `origin/main`, don't chase it), `test-visual.mjs skeeball`,
+  `test-game-conventions.mjs`, `validate-sw-assets.mjs`.
+- **Bump `CACHE` in `sw.js`** past what is on `main` right now, then re-run `validate-sw-assets.mjs`.
 - "Commit / push / deploy" means **live on the site**: merge to `main` and verify the
-  `pages build and deployment` run for that merge commit succeeds. A pushed branch is not done.
+  `pages build and deployment` run for that merge commit succeeds.
 
 ---
 
-## 6. Tools
+## 8. What to hand back
 
-`M.worldToFace(pos)` → `{u, v, h, tilt}`, and `M.faceToWorld(u, v, h)` back. `M.frames` lists the
-six staircase segments (`tilt 0.1` = tread, `1.5708` = riser). Physics needs no browser:
+Before touching code, tell Matt:
 
-```js
-const st = P.startThrow(b, { power, aim });
-while (!st.done) { P.step(b, st, 1/60); /* sample st.ball.position, .velocity, st.captured, st.t */ }
+1. Did you reproduce it, and how (power/aim, or the swipe).
+2. The ball's **world position** while stuck, and whether it is a live physics body or a drawn mesh.
+3. What is holding it up — which body in `M.solids` it is in contact with, or whether it is resting
+   on nothing and the state machine simply is not resolving it.
+4. Why capture does not take it.
+5. Your proposed fix, and the before/after outcome diff over the 41×21 grid.
+
+---
+
+## Appendix — one session's unverified hypothesis
+
+**Do not read this until you have formed your own conclusion.** It is recorded because the raw
+measurements behind it are real, not because it is right — the same session was confidently wrong
+twice before producing it, and it never reproduced the bug in a sweep.
+
+Raw measurements, reproducible with §4's tools:
+
+```
+a stalled ball's world position       0.0048, 0.579, -2.289   (every stall in an 861-throw sweep)
+lowC cup axis (world)                 0.000,  0.439, -2.235    mouth r 0.109   collar 0.1455
+horizontal distance, ball to cup axis 0.0543
+ball bottom y 0.524 · cup floor y 0.439 · rim top y 0.585 · ball top y 0.634
+worldToFace resolves that ball to     the RISER frame (v 0.429, band 0.300..0.580)
+   tread below it   0.140 away -> frame score 0.140
+   riser behind it  0.054 away -> frame score 0.054  (lowest wins)
+distance to lowC in that frame        0.238   vs mouth radius 0.109
+bottom-row mouth spans                v 0.082 .. 0.300; the tread ends at v 0.300
 ```
 
-`P.simulateThrow(b, {power, aim})` returns `{ outcome, time, bounces, touchedBoard, emergencyUsed,
-events }`. A 41×21 grid is ~100s.
+The hypothesis drawn from those numbers was that `physics.js` section 2 measures hole distance in
+whatever frame `worldToFace` picked, so a ball sitting high in a deep cup gets riser coordinates,
+computes 0.238 against a 0.109 mouth, hits `if (d >= rEff) continue;` and skips the cup it is in.
+**Verify or kill it with your own repro before acting on it.**
