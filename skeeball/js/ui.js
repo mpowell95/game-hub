@@ -717,9 +717,26 @@ export class SkeeballUI {
     this._closeOverlay();
     this.root.appendChild(el);
     this.overlay = el;
+    // PAUSED MEANS PAUSED (2026-08-26). This sheet said "Paused" and stopped nothing: the loop
+    // kept stepping physics behind it, so a ball still in the air when you tapped the machines
+    // button went on flying, dropped into a cup, scored, painted its popup and autosaved while
+    // you sat reading the menu - and you came back to a number you never watched happen.
+    // Stopping the loop also stops the scene rendering under the scrim, which is the performance
+    // half. The canvas keeps showing its last frame because render.js sets preserveDrawingBuffer,
+    // so the machine sits frozen rather than going black.
+    //
+    // NOT done for the other two overlays, deliberately: the game-over card has the marquee
+    // celebrating a personal best behind it (_rackOver), and the how-to sheet runs a live demo
+    // throw on its own canvas. Both have to keep rendering.
+    //
+    // A ball frozen in flight and then abandoned via Quit is HANDED BACK, not lost: the autosave
+    // is written at the last SETTLED ball, so the rack resumes with that throw still owed. Nothing
+    // decrements and no history moves (THE LAW rule 2).
+    this._stopLoop();
     const close = () => {
       if (el.parentNode) el.parentNode.removeChild(el);
       if (this.overlay === el) this.overlay = null;
+      this._startLoop();
     };
     el.querySelector('[data-role="close"]').addEventListener('click', close);
     el.querySelector('[data-role="resume"]').addEventListener('click', close);
@@ -962,8 +979,7 @@ export class SkeeballUI {
       });
       this._ro.observe(this.el.stage);
     }
-    this.last = 0;
-    this.raf = requestAnimationFrame(this._loop);
+    this._startLoop();
   }
 
   _bindPlay() {
@@ -1062,6 +1078,10 @@ export class SkeeballUI {
   // --- the frame -------------------------------------------------------------------------------
 
   _frame(ts) {
+    // A destroyed UI's chain ENDS here. `_frame` used to reschedule itself before looking at
+    // anything, so a loop left running past destroy() re-armed itself for the life of the page -
+    // doing nothing, forever, once per frame, one chain per rack ever played.
+    if (this.disposed) { this.raf = 0; return; }
     this.raf = requestAnimationFrame(this._loop);
     if (!this.game || !this.renderer) return;
     const now = ts / 1000;
@@ -1080,6 +1100,29 @@ export class SkeeballUI {
         this.el.msg.textContent = '';
       }
     }
+  }
+
+  /** THE ONLY WAY THE RENDER LOOP IS STARTED, and idempotent on purpose (2026-08-26).
+   *
+   *  THE BUG THIS FIXES, measured in a browser: `_startGame` used to arm a rAF chain
+   *  unconditionally, and two buttons reach it with a chain ALREADY RUNNING - the pause sheet's
+   *  New game and the game-over card's Play again. Each one therefore left an extra chain behind,
+   *  and they accumulate: one rack -> 1 loop, then 2, then 3, then 4, every one of them stepping
+   *  physics and rendering the same scene on every frame. Counted directly (a rAF ticker beside
+   *  a counter inside `_frame`): 1.00, then 2.00, 3.00, 4.00 `_frame` calls per animation frame
+   *  after three New games, with the browser's own frame rate falling from 22fps to 7.5fps as it
+   *  went. That is Matt's "slow and choppy", and it is why it gets WORSE the longer you play.
+   *
+   *  `_stopLoop()` could never clean it up either: `this.raf` only ever holds the LAST chain's id,
+   *  so quitting to the gallery cancelled one and left the rest running behind the carousel.
+   *
+   *  `last = 0` is what makes the frame after a pause safe: `_frame` reads `this.last ? ... : 1/60`,
+   *  so a stale timestamp from before the sheet opened can never arrive as one giant dt and bunch
+   *  a rack's worth of 240Hz substeps into a single frame. */
+  _startLoop() {
+    if (this.raf) return;
+    this.last = 0;
+    this.raf = requestAnimationFrame(this._loop);
   }
 
   _stopLoop() {
