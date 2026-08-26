@@ -98,22 +98,10 @@ export class Renderer {
     // preserveDrawingBuffer: the canvas must be READABLE after a frame (drawImage/toDataURL) -
     // test-visual.mjs's play probe samples it, and Report a bug's screenshot captures it. A
     // WebGL canvas without this reads blank the moment the frame is composited.
-    // ANTIALIAS ONLY WHEN THE BUFFER IS NOT ALREADY OVERSAMPLED (2026-08-26). At dpr >= 2 the
-    // drawing buffer is twice the CSS pixels in each axis and the downsample to the screen IS an
-    // antialias - MSAA on top of that is a second full-buffer resolve per frame for an edge
-    // difference you cannot see on a phone. Below 2 (most desktops) MSAA still earns its place.
-    const dpr = soft ? 0.5 : Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1));
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !soft && dpr < 2, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(dpr);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !soft, preserveDrawingBuffer: true });
+    this.renderer.setPixelRatio(soft ? 0.5 : Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)));
     this.renderer.shadowMap.enabled = !soft;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    // ON DEMAND, NOT EVERY FRAME (2026-08-26). three.js re-renders the whole 1024x1024 shadow map
-    // on every frame by default, which draws every caster in the scene a SECOND time - and the
-    // machine is a still life whenever no ball is moving. render() sets needsUpdate for exactly
-    // the frames something that casts a shadow has moved (see the bottom of render()). Between
-    // throws, while a popup floats, and on the whole game-over screen, the shadow pass is skipped.
-    this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;   // paint it once for the opening still frame
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
@@ -2307,10 +2295,7 @@ export class Renderer {
       s.userData.t += dt;
       s.position.y += step * 0.22;
       s.material.opacity = Math.max(0, 1 - s.userData.t / 1.1);
-      // .map FIRST: Material.dispose() does NOT dispose its textures, so every scoring ball used
-      // to leave its 256x128 popup texture on the GPU for the life of the page - about 1 MB a
-      // rack, never freed, which is why a long session got choppier than a fresh one (2026-08-26).
-      if (s.userData.t > 1.1) { this.scene.remove(s); if (s.material.map) s.material.map.dispose(); s.material.dispose(); this._popups.splice(i, 1); }
+      if (s.userData.t > 1.1) { this.scene.remove(s); s.material.dispose(); this._popups.splice(i, 1); }
     }
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const pt = this._particles[i];
@@ -2318,7 +2303,7 @@ export class Renderer {
       pt.userData.vel.y -= dt * 2.2;
       pt.position.addScaledVector(pt.userData.vel, dt);
       pt.material.opacity = Math.max(0, 0.9 - pt.userData.t);
-      if (pt.userData.t > 1) { this.scene.remove(pt); pt.material.dispose(); this._particles.splice(i, 1); }
+      if (pt.userData.t > 1) { this.scene.remove(pt); this._particles.splice(i, 1); }
     }
     if (this._celebrateT > 0) {
       this._celebrateT -= dt;
@@ -2326,11 +2311,6 @@ export class Renderer {
       for (const b of this._marqueeBulbs) b.material.emissiveIntensity = on;
       if (this._celebrateT <= 0) for (const b of this._marqueeBulbs) b.material.emissiveIntensity = 0.55;
     }
-    // THE SHADOW PASS, ONLY WHEN SOMETHING THAT CASTS ONE HAS MOVED. A ball in the air or on the
-    // serve spot, a live popup or particle, a celebrating marquee - or, on HOT SHOT, the basket,
-    // which slides all rack long and whose shadow must never freeze under it.
-    this.renderer.shadowMap.needsUpdate = used > 0 || this._popups.length > 0
-      || this._particles.length > 0 || this._celebrateT > 0 || !!this._moverGroup;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2381,8 +2361,8 @@ export class Renderer {
   // --- teardown --------------------------------------------------------------------------------
 
   dispose() {
-    for (const p of this._popups) { this.scene.remove(p); if (p.material.map) p.material.map.dispose(); p.material.dispose(); }
-    for (const p of this._particles) { this.scene.remove(p); p.material.dispose(); }
+    for (const p of this._popups) { this.scene.remove(p); p.material.dispose(); }
+    for (const p of this._particles) this.scene.remove(p);
     this._popups = [];
     this._particles = [];
     for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }

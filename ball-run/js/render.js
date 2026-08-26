@@ -144,13 +144,9 @@ export class Renderer {
   constructor(canvas, mapKey) {
     this.canvas = canvas;
     this.colors = mapConfig(mapKey).colors;
-    // ANTIALIAS ONLY WHEN THE BUFFER IS NOT ALREADY OVERSAMPLED (2026-08-26): at dpr >= 2 the
-    // downsample to the screen is already an antialias, so MSAA on top is a second full-buffer
-    // resolve per frame for no visible difference on a phone. Same change as Skeeball's five.
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 2, alpha: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setClearColor(this.colors.void, 1);
-    this.renderer.setPixelRatio(dpr);
+    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(CAMERA_BASE_FOV, 1, 0.1, 200);
