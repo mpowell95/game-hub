@@ -1,9 +1,12 @@
 # `reference/` — the pictures a session builds against
 
-**Put the screenshots here. That is the whole point of this folder.**
+**Put the screenshots here while the work is open. That is the whole point of this folder.**
 
 When Matt says "clone this game" or "make it look like this" and sends screenshots, they belong in
 `reference/<game>/` as real committed image files, not described in prose in a handoff document.
+
+**And they come back OUT when that work closes** - see "Retention" below. A picture is an INPUT.
+`SPEC.md` is the artifact.
 
 ## Why this folder exists
 
@@ -13,10 +16,11 @@ never seen the thing it was cloning. `HANDOFF-BATTLESHIP-REDESIGN.md` said, in w
 > Matt supplied a screenshot grid of a polished mobile Battleship. **You will not have the image.**
 > Everything you need is described below; build to this description.
 
-That sentence was not true. `yahtzee.png` and `yahtzee_ref_409x729.png` were sitting in the repo
-root the entire time, committed, and the Yahtzee brief tells its reader to open them. A session can
-read a PNG. Nobody looked, because nothing said where to look, and one document actively said not
-to bother.
+That sentence was not true. Yahtzee's two reference images (`yahtzee.png`, `yahtzee_ref_409x729.png`)
+were sitting in the repo root the entire time, committed, and the Yahtzee brief tells its reader to
+open them. A session can read a PNG. Nobody looked, because nothing said where to look, and one
+document actively said not to bother. (Those two are retired now, per Retention below; the lesson
+is not.)
 
 The description that replaced the image said "a large black cannon barrel on a dark ring base."
 That is a true description of a top-down gun turret. It is also a true description of a wheeled
@@ -33,11 +37,11 @@ reference/<game>/SPEC.md   measurements taken off them, in fractions, not pixels
 Name files for the state they show, not the order they arrived: `battle-shot-in-flight.png`,
 not `IMG_4821.png`. A session skimming filenames should be able to tell which screen is which.
 
-**Two `SPEC.md` files exist so far and neither has its images yet** (`battleship/`, `pool/`) —
-both sets arrived as chat attachments, which a session receives as content, not as files it can
-write to disk. Both were converted to measurements the same session they were seen, which is the
-fallback the last paragraph of this file describes. Dropping the PNGs in beside them is a
-one-command job for Matt and closes the loop permanently.
+**Two `SPEC.md` files exist so far and neither has its images any more** (`battleship/`, `pool/`).
+Both sets arrived as chat attachments, which a session receives as content, not as files it can
+write to disk, and both were converted to measurements the same session they were seen. That is the
+whole shape this folder is for, and it is why those two are 5 KB each while Yahtzee's and Mancala's
+un-converted recordings were 17 MB and 20 MB.
 
 **A `SPEC.md` is not a style opinion, it is a citation.** Pool's palette was rebuilt off
 `pool/SPEC.md`; a later session that dislikes salmon and quietly darkens it has not made a design
@@ -80,6 +84,40 @@ loads `yahtzee/CLAUDE.md` — the same reason the root file carries the "USE WHA
    sheet to `.visual-out/`. Comparing two pictures takes ten seconds; guessing takes four rounds.
 
 Full process: `VISUAL-PROCESS.md`.
+
+## Retention: the media is an INPUT, the `SPEC.md` is the artifact
+
+Matt, 2026-08-26, on 86 MB of committed reference media: *"They were references for you that were
+one time use... they can be deleted."* He is right, and the folder already proved it - Battleship
+and Pool turned their screenshots into **5 KB of fractions** and kept nothing else, while Yahtzee's
+six how-to `.MOV`s (17 MB) and Mancala's seven (20 MB) sat here for weeks after both games shipped,
+because nobody ever did the converting step or the deleting one.
+
+**The rule:**
+
+1. While a game's visual work is OPEN, its media lives in `reference/<game>/`, committed, so any
+   session can open it.
+2. **While you can still see it**, convert it: `SPEC.md` in fractions, plus whatever belongs in that
+   game's own `CLAUDE.md`.
+3. When the work CLOSES, **delete the media in the same commit that closes it.** The `SPEC.md`
+   stays. So does the game's `CLAUDE.md`.
+
+**Nothing is lost by deleting.** This repo does not rewrite history, so every file ever committed
+here stays permanently recoverable from the commit that removed it:
+
+```
+git log --oneline --diff-filter=D -- 'reference/yahtzee/*'     # find the removing commit
+git checkout <sha>^ -- 'reference/yahtzee/'                    # get them all back
+```
+
+Removed 2026-08-26 and recoverable that way: `reference/{Skeeball,mancala,yahtzee,ball-run}/`
+(48 MB of recordings), `filler/`'s ~30 playtest screenshots (14 MB), `3am 7.22/`'s 22 annotated
+screenshots (its `.md` notes stayed), the root's `dpad*`/`yahtzee*`/`Leaderboard` images, and
+`skeeball/ScreenRecording_08-26-2026...mp4` (the 10 fps clip, already read - see
+`skeeball/CLAUDE.md`, "Frame rate"). Tracked repo: **100.7 MB -> 34.4 MB**.
+
+`js/challenge/assets/` (19 MB) is NOT reference material and is not covered by this rule - it is the
+retired challenge system's own celebration artwork, a gift, and it stays.
 
 ## Licensing / privacy
 
