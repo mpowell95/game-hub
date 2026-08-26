@@ -357,9 +357,14 @@
   display: grid;
   place-items: center;
   padding: var(--gh-sp-4);
-  background: rgba(9, 16, 28, .55);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  /* NO backdrop-filter (2026-08-26). A backdrop blur is re-computed every time what sits behind
+     it changes, and Skeeball's pause sheet and game-over card sit on this scrim over a canvas
+     that keeps rendering, so the blur never settled. The other users are hub screens over the
+     static launcher (the bug-report form, the announcement popup, the admin page). An earlier
+     version of this comment said every game's modal used this scrim: it does not, most games
+     carry their own. Darkened .55 -> .66 to hold the separation the blur used to, which costs
+     nothing. Skeeball's pause sheet now stops its render loop as well - see _showPause. */
+  background: rgba(9, 16, 28, .66);
   /* A drag on the scrim must not scroll the game/launcher underneath the overlay. */
   overscroll-behavior: contain;
 }

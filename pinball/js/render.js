@@ -81,7 +81,9 @@ export class Renderer {
 
   /** Fit the table into a CSS box. Keeps the aspect ratio; the table never stretches. */
   resize(cssW, cssH) {
-    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    // 2, not 2.5 (2026-08-26): 2.5 is 56% more pixels to fill every frame than 2, and the repo's
+    // other canvases all cap at 2 with nobody able to tell them apart on a phone.
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.dpr = dpr;
     this.canvas.width = Math.max(1, Math.round(cssW * dpr));
     this.canvas.height = Math.max(1, Math.round(cssH * dpr));

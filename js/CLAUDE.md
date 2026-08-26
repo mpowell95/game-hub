@@ -1312,6 +1312,33 @@ free-form gray metric text made the column ragged. "Who leads what" chips (`text
 maths) are now tinted (amber/teal/blue rotation, `.lb-chip-a/b/c`) rather than plain cards, and are
 filter-INDEPENDENT (several — Chinchón closes, Boggle words — have no per-tier storage at all).
 
+**Those chips are the "Standing records" grid since 2026-08-25, and filter-independence now has one
+exception: SKEEBALL.** Matt, on the board filtered to BRICKCITY: *"none of these stats on the bottom
+are specific to brickcity. They're all skeeball combined. That shouldn't be the case."* Skeeball's
+filter is a MACHINE, not a difficulty, and `sk.boards[<machine>]` really does store `plays`,
+`points`, `best` and `bestThrow` per machine — every other number on that screen (the header's games
+count, each card's best and plays) already read from it, so the records were the one block answering
+a different question. A `TEXTURE` spec may now carry a `machine: (g, mid) => number` getter beside
+its lifetime `get`; while a machine is selected, `recordsHTML` reads the machine getter and **drops
+any spec that has none**, rather than printing a lifetime figure under a machine's heading. The
+heading itself names the machine, since the block sits far below the filter button.
+
+The one spec dropped that way is **`lb_tex_sk_hundreds`**: `sk.hundreds` is a lifetime counter with
+no per-machine breakdown anywhere in the store (the per-board record keeps `slotHits` keyed by each
+machine's own hole ids, and turning those into "how many 100s" would mean importing that board's
+geometry into the hub shell to learn which hole is worth 100). Deriving it would be rule 4; it is
+still shown in full under All machines and on My Stats. **Add the counter to the writer before
+showing a number per machine — never derive one here.** The tier-filtered boards are unchanged: a
+difficulty filter still never touches their records, for the original reason.
+
+**`lb_tex_sk_sweeps` ("All 4 colors", `sk.colorSweeps`) was removed from this grid the same day** —
+Matt: *"I have no idea what color sweep is. Delete that."* It was POPONGO's all-four-colors
+objective wearing a label that meant nothing on a board showing every machine. **The counter is
+untouched**: `recordSkeeball` still writes it, `players-agg.js` still merges it, `skeeball/js/goals.js`
+still reads it for POPONGO's rail, and My Stats still shows it as "Color sweeps" in the lifetime
+block where the machine context makes it legible. Only the leaderboard record and its two i18n
+strings are gone.
+
 ### My Stats and the leaderboard's player page — the shared game-list drill-down (2026-07-24)
 
 HANDOFF-FB2-STATS-NAV.md. Matt: the old My Stats 13-tab strip was "useless… difficult

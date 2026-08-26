@@ -355,6 +355,13 @@ that only lives in prose is advice, and advice loses to a session that never rea
   mounted. A `touchmove` is dispatched at the element the touch started on and bubbles, so
   root-scoping loses no coverage.
 - **A swipe surface gets `touch-action: none`; a tappable control gets `touch-action: manipulation`.**
+- **Never put `backdrop-filter` on anything sticky, fixed or floating (2026-08-26).** The compositor
+  re-reads and re-blurs the region behind it every time what is behind it changes - so on a sticky
+  header that is every scroll frame, and on the hub's floating immersive back button it was every
+  frame of a 60fps game canvas, in all nine immersive games at once. Every offender in this repo was
+  also 0.92-0.94 opaque, so the blur it paid for was not visible at all. Use an opaque background.
+  The scrim under a modal (`.gh-overlay`) is the same story for a different reason: the immersive
+  games keep rendering behind it, so the blur never settles - it is darkened instead.
 
 **When you bump `CACHE` in `sw.js`, bump it past what is on `main` RIGHT NOW, not past what is in
 your working copy.** Two branches open at once will both compute the same next number — that
