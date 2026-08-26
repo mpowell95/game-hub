@@ -702,6 +702,13 @@ export class SkeeballUI {
    *  button it read as though a live game had been binned (Matt, 2026-08-21). Hub-standard
    *  card, the same .gh-overlay/.gh-modal primitives the game-over one uses. */
   _showPause() {
+    // NOT ONCE THE RACK IS OVER. Between the ninth ball settling and the game-over card landing,
+    // _showWhenQuiet is holding the card back for the fireworks and the score count-up - and the
+    // machines button is still there to tap. Opening the sheet in that gap put a pause card on
+    // screen with the game-over card about to append on top of it, and freezing the loop (below)
+    // stops _tickScore, so the count-up would never finish and the gap would stretch to
+    // _showWhenQuiet's full 4s bound. The card is already coming and carries its own Quit.
+    if (!this.game || this.game.over) return;
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
