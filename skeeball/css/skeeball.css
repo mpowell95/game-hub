@@ -985,6 +985,19 @@
 .sk-root .sk-pause { text-align: center; }
 .sk-root .sk-pause-title { margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
 
+/* NO BACKDROP BLUR ON THIS ONE SCRIM (2026-08-26). css/ui.css's .gh-overlay carries a 3px
+   backdrop-filter, which is free over the static hub screens it was written for and is not free
+   here: the game-over card deliberately keeps the render loop running behind it so the marquee can
+   celebrate a personal best, so the blur is re-computed against a fresh frame for as long as the
+   player sits reading their score. Darkened to carry the separation the blur used to. Scoped to
+   this card on purpose - the pause sheet keeps the blur, because it now FREEZES the loop (ui.js's
+   _showPause) and a still frame costs nothing to blur. */
+.sk-root .sk-over-veil {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(9, 16, 28, .72);
+}
+
 .sk-root .sk-over { text-align: center; }
 .sk-root .sk-over-title { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: var(--gh-ink); }
 .sk-root .sk-over-machine {

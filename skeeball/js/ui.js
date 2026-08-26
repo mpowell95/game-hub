@@ -170,6 +170,39 @@ function clearCeremonyOwed(id) {
 }
 const isCeremonyOwed = (id) => !!ceremoniesOwed()[id];
 
+/** GIVE THE WEBGL CONTEXT BACK, not just the GPU objects (2026-08-26).
+ *
+ *  THE BUG THIS FIXES. `WebGLRenderer.dispose()` frees three.js's buffers and programs and
+ *  LEAVES THE CONTEXT ALIVE - only `forceContextLoss()` hands it back. Every throwaway Renderer
+ *  in this file therefore leaked one: five for the gallery's machine pictures, one per how-to
+ *  demo, and one more for every rack, because `_startGame` rebuilds the DOM and so needs a new
+ *  canvas each time. Counted in a browser: 12 live contexts before the first ball, +2 a rack,
+ *  and from rack 4 on the console reads "Too many active WebGL contexts. Oldest context will be
+ *  lost." over and over while the browser evicts them.
+ *
+ *  A browser holds a small global budget (16 in Chromium, fewer on iOS) and throttles hard once
+ *  it is over. That is what a screen recording of BRICK CITY caught: the canvas repainting on a
+ *  dead-flat 100ms metronome - 10.0 fps in every five-second window of a 68-second clip,
+ *  unchanged by what was on screen - while the phone's own UI animated beside it at 60. A
+ *  renderer starved of CPU or GPU does not keep time like that. An evicted, re-created context
+ *  does.
+ *
+ *  CALLED FROM ui.js, NOT ADDED TO EACH MACHINE'S `dispose()`, on purpose: the context budget is
+ *  the PAGE's, and the gallery builds a picture with every machine's own engine, so a fix that
+ *  lived in one machine's file would not fix the screen it is needed on. This keeps every
+ *  machines/<id>/render.js untouched (skeeball/CLAUDE.md's HARD RULE) and works for all five.
+ *
+ *  Guarded end to end: a machine whose renderer is shaped differently just does not get the
+ *  release, and nothing here can throw into a teardown path. */
+function releaseRenderer(r) {
+  if (!r) return;
+  try { r.dispose(); } catch (err) { console.error('[skeeball] renderer dispose failed', err); }
+  try {
+    const gl = r.renderer;
+    if (gl && typeof gl.forceContextLoss === 'function') gl.forceContextLoss();
+  } catch { /* the context is going away with the page anyway; never throw out of a teardown */ }
+}
+
 /** One throwaway Renderer draws the machine (no ball) to an off-DOM canvas we read back as a
  *  JPEG - render.js sets preserveDrawingBuffer, so the canvas is readable, and the WebGL context
  *  is disposed immediately after. This is how the setup carousel (and later the how-to card) show
@@ -189,7 +222,7 @@ function renderMachineImage(board, sb) {
     r.framePreview(600, 800);
     r.render(null, 0);
     const url = c.toDataURL('image/jpeg', 0.85);
-    r.dispose();
+    releaseRenderer(r);
     return url;
   } catch (err) {
     console.error('[skeeball] machine preview render failed', err);
@@ -483,7 +516,7 @@ export class SkeeballUI {
     this._stopLoop();
     this._closeOverlay();
     this.game = null;
-    if (this.renderer) this.renderer.dispose();
+    releaseRenderer(this.renderer);
     this.renderer = null;
 
     let sk = {};
@@ -702,6 +735,13 @@ export class SkeeballUI {
    *  button it read as though a live game had been binned (Matt, 2026-08-21). Hub-standard
    *  card, the same .gh-overlay/.gh-modal primitives the game-over one uses. */
   _showPause() {
+    // NOT ONCE THE RACK IS OVER. Between the ninth ball settling and the game-over card landing,
+    // _showWhenQuiet is holding the card back for the fireworks and the score count-up - and the
+    // machines button is still there to tap. Opening the sheet in that gap put a pause card on
+    // screen with the game-over card about to append on top of it, and freezing the loop (below)
+    // stops _tickScore, so the count-up would never finish and the gap would stretch to
+    // _showWhenQuiet's full 4s bound. The card is already coming and carries its own Quit.
+    if (!this.game || this.game.over) return;
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
@@ -717,9 +757,26 @@ export class SkeeballUI {
     this._closeOverlay();
     this.root.appendChild(el);
     this.overlay = el;
+    // PAUSED MEANS PAUSED (2026-08-26). This sheet said "Paused" and stopped nothing: the loop
+    // kept stepping physics behind it, so a ball still in the air when you tapped the machines
+    // button went on flying, dropped into a cup, scored, painted its popup and autosaved while
+    // you sat reading the menu - and you came back to a number you never watched happen.
+    // Stopping the loop also stops the scene rendering under the scrim, which is the performance
+    // half. The canvas keeps showing its last frame because render.js sets preserveDrawingBuffer,
+    // so the machine sits frozen rather than going black.
+    //
+    // NOT done for the other two overlays, deliberately: the game-over card has the marquee
+    // celebrating a personal best behind it (_rackOver), and the how-to sheet runs a live demo
+    // throw on its own canvas. Both have to keep rendering.
+    //
+    // A ball frozen in flight and then abandoned via Quit is HANDED BACK, not lost: the autosave
+    // is written at the last SETTLED ball, so the rack resumes with that throw still owed. Nothing
+    // decrements and no history moves (THE LAW rule 2).
+    this._stopLoop();
     const close = () => {
       if (el.parentNode) el.parentNode.removeChild(el);
       if (this.overlay === el) this.overlay = null;
+      this._startLoop();
     };
     el.querySelector('[data-role="close"]').addEventListener('click', close);
     el.querySelector('[data-role="resume"]').addEventListener('click', close);
@@ -873,7 +930,7 @@ export class SkeeballUI {
 
   _stopHpDemo() {
     if (this._hpRaf) { cancelAnimationFrame(this._hpRaf); this._hpRaf = 0; }
-    if (this._hpRenderer) { this._hpRenderer.dispose(); this._hpRenderer = null; }
+    if (this._hpRenderer) { releaseRenderer(this._hpRenderer); this._hpRenderer = null; }
     this._hpGame = null;
     this._hpPending = null;
   }
@@ -942,7 +999,9 @@ export class SkeeballUI {
     };
     this._shownScore = this.game.score;   // what the counter is currently showing; see _paintHud
 
-    if (this.renderer) this.renderer.dispose();
+    // The DOM was just rebuilt, so this.el.canvas is a NEW element and the old renderer's
+    // context is orphaned - hand it back rather than waiting for a GC that may never come.
+    releaseRenderer(this.renderer);
     this.renderer = new (engineFor(this.game.board.id).Renderer)(this.el.canvas, this.game.board);
     this._pushScoreboard();
     this._pushOwedSlots();
@@ -962,8 +1021,7 @@ export class SkeeballUI {
       });
       this._ro.observe(this.el.stage);
     }
-    this.last = 0;
-    this.raf = requestAnimationFrame(this._loop);
+    this._startLoop();
   }
 
   _bindPlay() {
@@ -1062,6 +1120,10 @@ export class SkeeballUI {
   // --- the frame -------------------------------------------------------------------------------
 
   _frame(ts) {
+    // A destroyed UI's chain ENDS here. `_frame` used to reschedule itself before looking at
+    // anything, so a loop left running past destroy() re-armed itself for the life of the page -
+    // doing nothing, forever, once per frame, one chain per rack ever played.
+    if (this.disposed) { this.raf = 0; return; }
     this.raf = requestAnimationFrame(this._loop);
     if (!this.game || !this.renderer) return;
     const now = ts / 1000;
@@ -1080,6 +1142,29 @@ export class SkeeballUI {
         this.el.msg.textContent = '';
       }
     }
+  }
+
+  /** THE ONLY WAY THE RENDER LOOP IS STARTED, and idempotent on purpose (2026-08-26).
+   *
+   *  THE BUG THIS FIXES, measured in a browser: `_startGame` used to arm a rAF chain
+   *  unconditionally, and two buttons reach it with a chain ALREADY RUNNING - the pause sheet's
+   *  New game and the game-over card's Play again. Each one therefore left an extra chain behind,
+   *  and they accumulate: one rack -> 1 loop, then 2, then 3, then 4, every one of them stepping
+   *  physics and rendering the same scene on every frame. Counted directly (a rAF ticker beside
+   *  a counter inside `_frame`): 1.00, then 2.00, 3.00, 4.00 `_frame` calls per animation frame
+   *  after three New games, with the browser's own frame rate falling from 22fps to 7.5fps as it
+   *  went. That is Matt's "slow and choppy", and it is why it gets WORSE the longer you play.
+   *
+   *  `_stopLoop()` could never clean it up either: `this.raf` only ever holds the LAST chain's id,
+   *  so quitting to the gallery cancelled one and left the rest running behind the carousel.
+   *
+   *  `last = 0` is what makes the frame after a pause safe: `_frame` reads `this.last ? ... : 1/60`,
+   *  so a stale timestamp from before the sheet opened can never arrive as one giant dt and bunch
+   *  a rack's worth of 240Hz substeps into a single frame. */
+  _startLoop() {
+    if (this.raf) return;
+    this.last = 0;
+    this.raf = requestAnimationFrame(this._loop);
   }
 
   _stopLoop() {
@@ -1719,7 +1804,7 @@ export class SkeeballUI {
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     if (this._roRaf) { cancelAnimationFrame(this._roRaf); this._roRaf = 0; }
     this.game = null;
-    if (this.renderer) this.renderer.dispose();   // WebGL contexts leak if not released
+    releaseRenderer(this.renderer);   // dispose() alone does NOT release the context - see releaseRenderer
     this.renderer = null;
     this.root.classList.remove('sk-root');
     this.root.innerHTML = '';

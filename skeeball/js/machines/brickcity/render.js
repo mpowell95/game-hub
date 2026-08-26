@@ -62,6 +62,38 @@ function platedHoles(G) {
 // a nearly-overhead key light. Raising it flattens the rings; lowering it greys them.
 const RING_GLOW = 0.60;
 
+/** IS THIS SOFTWARE GL? Asked ONCE per page, and the probe context is HANDED BACK (2026-08-26).
+ *
+ *  This used to run inside the Renderer constructor and leak a whole WebGL context every time:
+ *  `getContext('webgl')` on a throwaway canvas takes one out of the browser's small global budget
+ *  (16 in Chromium, fewer on iOS) and nothing ever gave it back. Every machine picture on the
+ *  gallery took one, every how-to demo took one, every rack took one - counted in a browser, half
+ *  of a leak that had the console repeating "Too many active WebGL contexts. Oldest context will
+ *  be lost." from the fourth rack on. See `releaseRenderer` in skeeball/js/ui.js for the other
+ *  half and for what an evicted context looks like on a phone.
+ *
+ *  Two fixes in one: the answer is memoised, so the probe happens once per page rather than once
+ *  per Renderer, and `WEBGL_lose_context` releases it immediately either way. Never throws - an
+ *  unanswerable probe means "not software", which is the behaviour this has always had. */
+let SOFT_GL = null;
+function isSoftGL() {
+  if (SOFT_GL !== null) return SOFT_GL;
+  let soft = false;
+  let probe = null;
+  try {
+    probe = document.createElement('canvas').getContext('webgl');
+    const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
+    const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+    soft = /swiftshader|software|llvmpipe/i.test(String(name));
+  } catch { soft = false; }
+  try {
+    const lose = probe && probe.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch { /* nothing to give back */ }
+  SOFT_GL = soft;
+  return soft;
+}
+
 export class Renderer {
   constructor(canvas, board) {
     this.board = board;
@@ -87,21 +119,32 @@ export class Renderer {
     // Software GL (SwiftShader - headless test runs, GPU-less desktops) cannot afford shadows,
     // antialiasing or a retina buffer; a real phone GPU takes all three without noticing.
     // Detect before constructing the renderer, don't assume.
-    let soft = false;
-    try {
-      const probe = document.createElement('canvas').getContext('webgl');
-      const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
-      const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
-      soft = /swiftshader|software|llvmpipe/i.test(String(name));
-    } catch { soft = false; }
+    const soft = isSoftGL();
     this.softGL = soft;
     // preserveDrawingBuffer: the canvas must be READABLE after a frame (drawImage/toDataURL) -
     // test-visual.mjs's play probe samples it, and Report a bug's screenshot captures it. A
     // WebGL canvas without this reads blank the moment the frame is composited.
+    // MSAA STAYS ON, and a note so it is not "optimised" away again (2026-08-26). Turning
+    // antialias off at dpr >= 2 looks like free money and is not: at dpr 2 the drawing buffer maps
+    // 1:1 onto the phone's physical pixels, so there is no downsample doing the job instead, and
+    // the machine is all high-contrast diagonals (the rails, the marquee, the rims). Mobile GPUs
+    // are tile-based and resolve MSAA in tile memory, which is where it is cheapest. Measured by
+    // rendering this machine both ways at 393x852 dpr2 and differencing the two frames: 1.5% of
+    // the screen changes by a visible amount, and it is all outline - the rails, the marquee edge
+    // and the nine rims. That is the machine's drawing. Not worth trading for it.
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !soft, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(soft ? 0.5 : Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)));
     this.renderer.shadowMap.enabled = !soft;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // THE SHADOW PASS RUNS ON DEMAND, NOT EVERY FRAME (2026-08-26). three.js re-renders the whole
+    // 1024x1024 shadow map on every frame by default, which draws every caster in the scene a
+    // SECOND time - and this machine is a still life whenever nothing is moving. Measured on the
+    // shipped scene: 172 draw calls / 37,206 triangles per frame with the pass on, 138 / 26,026
+    // with it off. render() sets needsUpdate for exactly the frames something that casts a shadow
+    // has moved (see the bottom of render()). Between throws, behind a popup and on the whole
+    // game-over screen, the pass is skipped.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;   // paint it once for the opening still frame
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
@@ -116,6 +159,7 @@ export class Renderer {
     this._backMat = null;
     this._sbArcade = true;   // LED scoreboard; false falls back to the painted-sign version
     this._celebrateT = 0;
+    this._shadowUsed = -1;        // how many balls the last frame drew; see the bottom of render()
 
     this._lights();
     this._buildMachine();
@@ -2295,7 +2339,10 @@ export class Renderer {
       s.userData.t += dt;
       s.position.y += step * 0.22;
       s.material.opacity = Math.max(0, 1 - s.userData.t / 1.1);
-      if (s.userData.t > 1.1) { this.scene.remove(s); s.material.dispose(); this._popups.splice(i, 1); }
+      // .map FIRST: Material.dispose() does NOT dispose its textures, so every scoring ball used
+      // to leave its 256x128 popup texture on the GPU for the life of the page - about a megabyte
+      // a rack, never freed, which is why a long session got choppier than a fresh one (2026-08-26).
+      if (s.userData.t > 1.1) { this.scene.remove(s); if (s.material.map) s.material.map.dispose(); s.material.dispose(); this._popups.splice(i, 1); }
     }
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const pt = this._particles[i];
@@ -2303,7 +2350,7 @@ export class Renderer {
       pt.userData.vel.y -= dt * 2.2;
       pt.position.addScaledVector(pt.userData.vel, dt);
       pt.material.opacity = Math.max(0, 0.9 - pt.userData.t);
-      if (pt.userData.t > 1) { this.scene.remove(pt); this._particles.splice(i, 1); }
+      if (pt.userData.t > 1) { this.scene.remove(pt); pt.material.dispose(); this._particles.splice(i, 1); }
     }
     if (this._celebrateT > 0) {
       this._celebrateT -= dt;
@@ -2311,6 +2358,17 @@ export class Renderer {
       for (const b of this._marqueeBulbs) b.material.emissiveIntensity = on;
       if (this._celebrateT <= 0) for (const b of this._marqueeBulbs) b.material.emissiveIntensity = 0.55;
     }
+    // THE SHADOW PASS, ONLY WHEN SOMETHING THAT CASTS ONE HAS MOVED: a ball actually IN PLAY, a
+    // live popup or particle, or a celebrating marquee.
+    //
+    // `live.length`, NOT `used`: `used` counts the ball parked on the serve spot as well, and that
+    // one does not move - gating on it left the pass running on every frame of the wait between
+    // throws, which is most of a rack and exactly the still life this gate exists for. `used`
+    // CHANGING still counts, because the frame a ball stops being drawn has to repaint the map or
+    // its shadow is left lying on the lane under nothing.
+    this.renderer.shadowMap.needsUpdate = live.length > 0 || used !== this._shadowUsed
+      || this._popups.length > 0 || this._particles.length > 0 || this._celebrateT > 0;
+    this._shadowUsed = used;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2361,8 +2419,8 @@ export class Renderer {
   // --- teardown --------------------------------------------------------------------------------
 
   dispose() {
-    for (const p of this._popups) { this.scene.remove(p); p.material.dispose(); }
-    for (const p of this._particles) this.scene.remove(p);
+    for (const p of this._popups) { this.scene.remove(p); if (p.material.map) p.material.map.dispose(); p.material.dispose(); }
+    for (const p of this._particles) { this.scene.remove(p); p.material.dispose(); }
     this._popups = [];
     this._particles = [];
     for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }
