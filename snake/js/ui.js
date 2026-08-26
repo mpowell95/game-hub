@@ -307,10 +307,7 @@ class SnakeUI {
   _applyBoardSize(cell) {
     this.cell = cell;
     const w = this.cell * COLS, h = this.cell * ROWS;
-    // CAPPED AT 2 (2026-08-26). This was the only uncapped canvas left in the repo: on a dpr-3
-    // phone it allocated and filled 2.25x the pixels of a capped one, every frame, for a
-    // difference no eye resolves. Every other canvas here (Pool, Ball Run, Skeeball) caps at 2.
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = window.devicePixelRatio || 1;
     this.canvas.width = w * dpr; this.canvas.height = h * dpr;
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
     this.ctx = this.canvas.getContext('2d');

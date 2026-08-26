@@ -49,12 +49,8 @@ body {
      which let "Game Hub" collide with the clock. Guarantee a 54px minimum (≈ a
      Dynamic Island status bar); the notch/standalone case still wins via env(). */
   padding-top: max(env(safe-area-inset-top, 0px), 54px);
-  /* OPAQUE, AND NO backdrop-filter (2026-08-26). This is a STICKY bar over the scrolling
-     launcher, so a backdrop blur is re-blurred by the compositor on every scroll frame - and at
-     0.92 alpha there was almost nothing showing through to blur. It cost a full-width blur pass
-     per scrolled frame and looked identical without it. Same reasoning as .lb-top, which has
-     always been opaque. */
-  background: var(--hub-surface, #fff);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(1.2) blur(6px);
   border-bottom: 1px solid var(--hub-surface-2);
 }
 
@@ -79,12 +75,8 @@ body {
 .hub-top.hub-top-immersive .hub-top-info { display: block; }
 .hub-top.hub-top-immersive .hub-back {
   pointer-events: auto;
-  /* NO backdrop-filter here, and this is the one that mattered most (2026-08-26). In immersive
-     mode this button floats OVER A LIVE 60fps CANVAS - Skeeball, Ball Run, Pool, Hill Climb,
-     Escoba, Mancala, Yahtzee, Pinball, Battleship - so the compositor re-read and re-blurred the
-     region behind it on EVERY GAME FRAME, for a frosted edge nobody can see through 0.92 alpha.
-     It was a per-frame GPU cost in all nine immersive games at once. */
-  background: var(--hub-surface, #fff);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(1.2) blur(6px);
   box-shadow: 0 2px 10px rgba(20, 40, 80, 0.18);
 }
 /* Unified chrome spec: 17px/600 everywhere a title band shows a title (hub / Leaderboard /
@@ -541,17 +533,15 @@ body {
    as every immersive game was itself dark; Pool's bright green surround is what finally showed it
    (Matt: "The top left is weird"). The back button below keeps its own dark treatment - that one
    is a real button and is meant to read on a dark game. */
-:root.gh-dark .hub-top:not(.hub-top-immersive) { background: #0E1420; }
-:root.gh-dark .hub-top.hub-top-immersive .hub-back { background: #1B2333; }
+:root.gh-dark .hub-top:not(.hub-top-immersive) { background: rgba(14, 20, 32, 0.92); }
+:root.gh-dark .hub-top.hub-top-immersive .hub-back { background: rgba(27, 35, 51, 0.92); }
 :root.gh-dark .hub-cbtn-ghost { background: var(--hub-surface-2); }
 /* The Leaderboard/My Stats overlays' own injected CSS hardcodes a couple of literal
    colors instead of --hub-* vars (a light-mode-only top-band tint and two segmented/
    pill "selected" states built on --hub-ink, which flips to a pale color in dark mode
    and would otherwise render near-invisible white-on-pale text). */
-/* Opaque since 2026-08-26: their light-mode twins dropped backdrop-filter, and a translucent
-   band with no blur behind it is just a band you can faintly read through. */
 :root.gh-dark .lb-top,
-:root.gh-dark .gs-top { background: #0E1420; }
+:root.gh-dark .gs-top { background: rgba(14, 20, 32, 0.94); }
 :root.gh-dark .lb-seg.is-active { background: var(--hub-accent); border-color: var(--hub-accent); }
 /* 2026-07-29 (HANDOFF-LB-FILTER-SORT.md): the old pill row (.lb-pill, [data-tier] on a pill
    button) was replaced by the filter/sort dropdown control row. .lb-tile2.is-sel (the tier

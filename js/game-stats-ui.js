@@ -1014,10 +1014,7 @@ function ensureCss() {
     '.gs-overlay.is-in{opacity:1}',
     '.gs-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.gs-panel{position:relative;width:100%;max-width:560px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
-    // STICKY over a scrolling game list, so a backdrop blur is re-blurred every scroll frame - at
-    // .94 alpha, for an effect that was not visible. The Leaderboard's own .lb-top has always been
-    // opaque; this is the same band and now behaves the same way (2026-08-26).
-    '.gs-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:var(--hub-surface,#fff);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
+    '.gs-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
     '.gs-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--gh-band-title,44px)}',
     '.gs-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
     '.gs-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
