@@ -1084,6 +1084,15 @@ shared leaderboard omits the row.
   supersedes the 2026-07-30 entry in "Sync health". This is only safe because `js/name-gate.js`
   now makes a nameless device impossible to create; do not carry one change without the other.
 
+**Only test1, test2 and MattyIce ever run test rounds (Matt, 2026-08-26).** He said it after a
+session looked at `*TP*` - the board's most-played account, a REAL player - and called it a test
+account because of the initials. (An older line in the root CLAUDE.md lists a `TP` record found on
+2026-07-29; that was a different, device-id-matched record and is NOT this person.) Never infer
+"test" from a name's shape, its initials, an odd play count, or unfamiliarity. Every name in this
+family is a real person until Matt says otherwise, and hiding one makes their entire history vanish
+from the board - rule 1, against somebody who did nothing but play. A name joins `HIDDEN_NAMES`
+only when he names it.
+
 If a new stray test/debug record turns up by device id instead (e.g. found via
 `node backups/rtdb-backup.mjs` + a manual grep, the way "Zed99" and the `TestPlayer`/`Tester`/`TP`/
 `You` records were found on 2026-07-29), add its id to `HIDDEN_PREFIX` rather than guessing a name

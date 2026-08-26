@@ -84,6 +84,12 @@ const HIDDEN_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev'];   // "Tester", "test
 // a real player is not called "Testxyz", and the cost of a miss is a test row on the family board.
 // Hidden here only: those plays stay recorded, stay synced, and stay visible on My Stats on the
 // device that made them, same as every other hidden record. Case-insensitive, trimmed.
+// WHO ACTUALLY RUNS TEST ROUNDS, from Matt, 2026-08-26: test1, test2 and MattyIce. NOBODY ELSE.
+// He said it after a session called *TP* - a real player, and the board's most-played account - a
+// test account on the strength of its initials. Do not infer "test" from a name's shape, from
+// initials, from an odd play count, or from a name you do not recognise: every name in this family
+// is a real person until Matt says otherwise, and hiding one makes their whole history vanish from
+// the board (THE LAW rule 1). Adding a name here needs him to name it.
 const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);
 const HIDDEN_NAME_PREFIX = ['test', 'zzz'];
 
@@ -777,7 +783,14 @@ function playerListHTML(list) {
   const rows = list.filter((g) => playedOf(g, null) > 0);
   if (!rows.length) return emptyState(t('lb_empty_all'));
   const value = (g) => catValueOf(g, _cat);
-  const { rankOf, tiedAt } = rankMap(rows, value);
+  // THE BADGE RANKS BY WHATEVER THE LIST IS SORTED BY, when that sort is a MEASURE (2026-08-26).
+  // rankMap's own comment says the chip must not depend on the list's order, so that re-sorting
+  // by name cannot renumber the podium - which is right for NAME, and was applied to all three
+  // sorts without anyone checking the middle one. Sorting by Played DOES produce a ranking (the
+  // list is literally in order of most played), so a badge frozen to the wins order sat beside it
+  // reading 1, 2, 6, 3, 5, 4. Matt, from the live board: "Why did that break?"
+  // Alphabetical is not a ranking, so it keeps the wins podium exactly as before.
+  const { rankOf, tiedAt } = rankMap(rows, _sort === 'played' ? (g) => playedOf(g, null) : value);
   if (_sort === 'alpha') {
     rows.sort((a, b) => {
       const n = (a.name || '').localeCompare(b.name || '');
@@ -1093,7 +1106,11 @@ function gameDetail(list, id) {
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
   const showMp = anyMpPlays(list, id);
   const rows = list.filter((g) => boardPlaysOf(g, id) > 0);
-  const { rankOf, tiedAt } = rankMap(rows, (g) => gameMetricAt(g, id, _tier));
+  // Same rule as By Player above: the badge follows the sort when the sort is a measure. This
+  // board scrambled identically under "Games Played" - the badge stayed on the game's own metric.
+  const { rankOf, tiedAt } = rankMap(rows, _sort === 'played'
+    ? (g) => boardPlaysOf(g, id)
+    : (g) => gameMetricAt(g, id, _tier));
   sortRows(rows, id, _sort);
   const cardsHtml = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
