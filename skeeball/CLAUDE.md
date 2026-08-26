@@ -1149,10 +1149,79 @@ so the machine's app-wide record honors a void too.
 ## Frame rate: why it got slower the longer you played (2026-08-26)
 
 Matt, with a screen recording of BRICK CITY: *"I did not slow it down at all. This is how slow and
-choppy actual gameplay gets."* Four separate things, measured in a real browser rather than reasoned
-about. The first one is the answer; the rest are the reason the machine has no headroom to absorb it.
+choppy actual gameplay gets."*
 
-### 1. The render loop was running two, three and four times over (`js/ui.js`)
+### What the recording actually measured
+
+The clip is 68 seconds, 1206x2622 at 60fps (an iPhone 16 Pro), and it is worth knowing what came out
+of it, because the numbers ruled things OUT as much as in. Decoding it to greyscale and diffing
+consecutive frames:
+
+```
+the canvas repainted 10.0 fps, every five-second window of the clip, start to finish
+gap between new canvas frames    6 capture frames = 100.0 ms, 391 times out of 514
+the phone's own UI beside it     60 fps (the score's sk-score-hit animation, 22 distinct
+                                 frames in 367ms, while the canvas changed on 4 of the 22)
+```
+
+**A dead-flat 100.0 ms metronome is not a machine running out of CPU or GPU.** A loaded renderer
+wobbles with what is on screen - a ball near the board costs more than an empty lane - and this did
+not move at all, not between throws, not across the rack boundary at 27.5s, not once in 68 seconds.
+Flat is what a THROTTLE looks like. That is what sent this at the WebGL context budget rather than
+at triangle counts, and the budget is where the bug was.
+
+Four causes, all measured in a real browser rather than reasoned about. The first is the answer.
+
+### 1. Every Renderer leaked its WebGL context, and the browser started evicting (`js/ui.js`, all five `render.js`)
+
+A browser holds a small GLOBAL budget of WebGL contexts - 16 in Chromium, fewer on iOS - and
+throttles hard once it is over. Skeeball leaked **two per rack and ten before the first ball**:
+
+- `WebGLRenderer.dispose()` frees three.js's buffers and programs and **leaves the context alive**.
+  Only `forceContextLoss()` hands it back, and nothing called it. Every gallery machine picture
+  (`renderMachineImage`), every how-to demo, and every rack (`_startGame` rebuilds the DOM, so the
+  canvas is a new element and the old context is orphaned) took one and kept it.
+- The software-GL probe in each `render.js` constructor took a SECOND one:
+  `document.createElement('canvas').getContext('webgl')`, read once, never released, once per
+  Renderer ever constructed.
+
+Counted in a browser, live contexts:
+
+```
+                        origin/main              fixed
+on the gallery            12                       0
+rack 1                    12                       1
+rack 4                    16  <- cap reached,      1
+rack 6                    16     console repeating 1
+                                 "Too many active WebGL contexts.
+                                  Oldest context will be lost."
+```
+
+And what that does to the frame rate, same six racks, same swipe, same browser:
+
+```
+              origin/main        this branch
+rack 1        33.6 rAF/s         35.1 rAF/s
+rack 2        19.8               36.0
+rack 3        13.7               40.3
+rack 4        10.4               40.7
+rack 5         8.1               39.8
+rack 6         5.9               40.6
+```
+
+`releaseRenderer(r)` in `ui.js` is the fix for the first half: `dispose()` then `forceContextLoss()`,
+guarded end to end, at every one of the five teardown sites. **It lives in `ui.js`, NOT in each
+machine's `dispose()`, and that is deliberate**: the context budget belongs to the PAGE, and the
+gallery builds a picture with every machine's own engine before you ever reach BRICK CITY, so a fix
+inside one machine's file could not fix the screen it is needed on.
+
+The probe is the second half, and it IS the same edit in all five `render.js` files - `isSoftGL()`,
+memoised per page and releasing the probe through `WEBGL_lose_context`. That is not "keeping the
+machines in sync" in the sense the HARD RULE forbids: it moves no geometry, no material and no
+contact number, and leaving four copies of it in place would have left the leak that makes BRICK
+CITY slow. A resource bug with five copies of its source line is one bug.
+
+### 2. The render loop was running two, three and four times over (`js/ui.js`)
 
 `_startGame` armed a rAF chain unconditionally, and two buttons reach it with a chain ALREADY
 running: the pause sheet's **New game** and the game-over card's **Play again**. Each one left the
@@ -1183,7 +1252,7 @@ celebrates behind the first, the second runs a live demo throw). Nothing is lost
 autosave lands at the last SETTLED ball, so a ball frozen in flight and abandoned via Quit is handed
 back with the rack resuming, still owed (THE LAW rule 2).
 
-### 2. The shadow map was re-rendered on every frame (`machines/brickcity/render.js`)
+### 3. The shadow map was re-rendered on every frame (`machines/brickcity/render.js`)
 
 three.js re-renders the whole 1024x1024 shadow map every frame by default, drawing every caster in
 the scene a second time - and the machine is a STILL LIFE for most of a rack, while the player is
@@ -1200,7 +1269,7 @@ the serve spot, which does not move, and gating on that left the pass running th
 between throws - which is the still life the gate exists for. `used` CHANGING still counts, or the
 frame a ball stops being drawn leaves its shadow lying on the lane under nothing.
 
-### 3. Every scoring popup leaked its texture (`machines/brickcity/render.js`)
+### 4. Every scoring popup leaked its texture (`machines/brickcity/render.js`)
 
 `Material.dispose()` does NOT dispose the material's textures. Each score popup builds a 256x128
 `CanvasTexture` and the sprite's `dispose()` left it on the GPU forever - about 1 MB a rack, never
@@ -1215,7 +1284,7 @@ fixed         17                  -> 44                    -> 17
 Burst particles had the same shape of bug (removed from the scene, material never disposed).
 **Dispose `.map` whenever you dispose a material here.**
 
-### 4. The broadphase tested 20,100 pairs to find 200 (`machines/brickcity/physics.js`)
+### 5. The broadphase tested 20,100 pairs to find 200 (`machines/brickcity/physics.js`)
 
 A throw's world holds ONE dynamic body - the ball - among ~200 static ones. `NaiveBroadphase` tests
 every pair and throws all but the ball's away, because `needBroadphaseCollision` rejects
@@ -1238,14 +1307,15 @@ frames, 1.5% of the screen changes by a visible amount and all of it is outline 
 marquee edge, the nine rims. The comment in `render.js` says so, so the next session does not
 re-derive it.
 
-### Scope: BRICK CITY only, per the HARD RULE
+### Scope, against the HARD RULE
 
-2, 3 and 4 are in `machines/brickcity/` and **are not to be carried into the other four machines "to
-keep them in sync"** - that is the rule this repo paid for. Known and still true elsewhere: the
-other four all leak popup textures the same way, and all four run the naive broadphase. Each is a
-machine's own work, on its own day.
-
-1 is in `js/ui.js`, which every machine shares, so every machine got that one.
+- **1** is `js/ui.js` plus the probe helper in all five `render.js` - a page-global resource bug, and
+  the reasoning for touching all five is written out above.
+- **2** is `js/ui.js`, which every machine shares, so every machine got it.
+- **3, 4 and 5** are `machines/brickcity/` only, and **are not to be carried into the other four "to
+  keep them in sync"** - that is the rule this repo paid for. Known and still true elsewhere: the
+  other four all leak popup textures the same way, and all four run the naive broadphase. Each is a
+  machine's own work, on its own day.
 
 ### The one red test, and it is not this
 

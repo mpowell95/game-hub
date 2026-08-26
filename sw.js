@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v493';
+const CACHE = 'game-hub-v494';
 
 const ASSETS = [
   './',
@@ -531,7 +531,7 @@ const REST_MANIFEST = {
   './skeeball/index.html': '0a8f7a9c7c',
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/css/skeeball.css': 'e0520de91a',
-  './skeeball/js/ui.js': 'a3f22e62a2',
+  './skeeball/js/ui.js': '0c96385e06',
   './skeeball/js/swipe.js': 'c596f565de',
   './skeeball/js/game.js': '84330404d6',
   './skeeball/js/goals.js': '5c93b4dabc',
@@ -539,19 +539,19 @@ const REST_MANIFEST = {
   './skeeball/js/engines.js': '202b6fe4cc',
   './skeeball/js/machines/classic/physics.js': 'a4a15b7180',
   './skeeball/js/machines/classic/machine.js': 'b54a000e56',
-  './skeeball/js/machines/classic/render.js': '98dd7bf15b',
+  './skeeball/js/machines/classic/render.js': 'fb5a5a4ac8',
   './skeeball/js/machines/popongo/physics.js': '934f17e2ee',
   './skeeball/js/machines/popongo/machine.js': '8d92102fe5',
-  './skeeball/js/machines/popongo/render.js': 'cc46cacf6d',
+  './skeeball/js/machines/popongo/render.js': '70c48fe915',
   './skeeball/js/machines/basketball/physics.js': 'f34b1cd4a5',
   './skeeball/js/machines/basketball/machine.js': '8d92102fe5',
-  './skeeball/js/machines/basketball/render.js': '99d3d32e4d',
+  './skeeball/js/machines/basketball/render.js': '7ce42c1886',
   './skeeball/js/machines/brickcity/physics.js': 'cc2ce4365d',
   './skeeball/js/machines/brickcity/machine.js': 'c16f097795',
-  './skeeball/js/machines/brickcity/render.js': 'd4cff0670f',
+  './skeeball/js/machines/brickcity/render.js': '5a51a0abb3',
   './skeeball/js/machines/runaway/physics.js': '7b9b85e7e8',
   './skeeball/js/machines/runaway/machine.js': '1088294ad1',
-  './skeeball/js/machines/runaway/render.js': '85d0564339',
+  './skeeball/js/machines/runaway/render.js': '99b2142daf',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',

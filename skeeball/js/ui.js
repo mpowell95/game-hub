@@ -170,6 +170,39 @@ function clearCeremonyOwed(id) {
 }
 const isCeremonyOwed = (id) => !!ceremoniesOwed()[id];
 
+/** GIVE THE WEBGL CONTEXT BACK, not just the GPU objects (2026-08-26).
+ *
+ *  THE BUG THIS FIXES. `WebGLRenderer.dispose()` frees three.js's buffers and programs and
+ *  LEAVES THE CONTEXT ALIVE - only `forceContextLoss()` hands it back. Every throwaway Renderer
+ *  in this file therefore leaked one: five for the gallery's machine pictures, one per how-to
+ *  demo, and one more for every rack, because `_startGame` rebuilds the DOM and so needs a new
+ *  canvas each time. Counted in a browser: 12 live contexts before the first ball, +2 a rack,
+ *  and from rack 4 on the console reads "Too many active WebGL contexts. Oldest context will be
+ *  lost." over and over while the browser evicts them.
+ *
+ *  A browser holds a small global budget (16 in Chromium, fewer on iOS) and throttles hard once
+ *  it is over. That is what a screen recording of BRICK CITY caught: the canvas repainting on a
+ *  dead-flat 100ms metronome - 10.0 fps in every five-second window of a 68-second clip,
+ *  unchanged by what was on screen - while the phone's own UI animated beside it at 60. A
+ *  renderer starved of CPU or GPU does not keep time like that. An evicted, re-created context
+ *  does.
+ *
+ *  CALLED FROM ui.js, NOT ADDED TO EACH MACHINE'S `dispose()`, on purpose: the context budget is
+ *  the PAGE's, and the gallery builds a picture with every machine's own engine, so a fix that
+ *  lived in one machine's file would not fix the screen it is needed on. This keeps every
+ *  machines/<id>/render.js untouched (skeeball/CLAUDE.md's HARD RULE) and works for all five.
+ *
+ *  Guarded end to end: a machine whose renderer is shaped differently just does not get the
+ *  release, and nothing here can throw into a teardown path. */
+function releaseRenderer(r) {
+  if (!r) return;
+  try { r.dispose(); } catch (err) { console.error('[skeeball] renderer dispose failed', err); }
+  try {
+    const gl = r.renderer;
+    if (gl && typeof gl.forceContextLoss === 'function') gl.forceContextLoss();
+  } catch { /* the context is going away with the page anyway; never throw out of a teardown */ }
+}
+
 /** One throwaway Renderer draws the machine (no ball) to an off-DOM canvas we read back as a
  *  JPEG - render.js sets preserveDrawingBuffer, so the canvas is readable, and the WebGL context
  *  is disposed immediately after. This is how the setup carousel (and later the how-to card) show
@@ -189,7 +222,7 @@ function renderMachineImage(board, sb) {
     r.framePreview(600, 800);
     r.render(null, 0);
     const url = c.toDataURL('image/jpeg', 0.85);
-    r.dispose();
+    releaseRenderer(r);
     return url;
   } catch (err) {
     console.error('[skeeball] machine preview render failed', err);
@@ -483,7 +516,7 @@ export class SkeeballUI {
     this._stopLoop();
     this._closeOverlay();
     this.game = null;
-    if (this.renderer) this.renderer.dispose();
+    releaseRenderer(this.renderer);
     this.renderer = null;
 
     let sk = {};
@@ -897,7 +930,7 @@ export class SkeeballUI {
 
   _stopHpDemo() {
     if (this._hpRaf) { cancelAnimationFrame(this._hpRaf); this._hpRaf = 0; }
-    if (this._hpRenderer) { this._hpRenderer.dispose(); this._hpRenderer = null; }
+    if (this._hpRenderer) { releaseRenderer(this._hpRenderer); this._hpRenderer = null; }
     this._hpGame = null;
     this._hpPending = null;
   }
@@ -966,7 +999,9 @@ export class SkeeballUI {
     };
     this._shownScore = this.game.score;   // what the counter is currently showing; see _paintHud
 
-    if (this.renderer) this.renderer.dispose();
+    // The DOM was just rebuilt, so this.el.canvas is a NEW element and the old renderer's
+    // context is orphaned - hand it back rather than waiting for a GC that may never come.
+    releaseRenderer(this.renderer);
     this.renderer = new (engineFor(this.game.board.id).Renderer)(this.el.canvas, this.game.board);
     this._pushScoreboard();
     this._pushOwedSlots();
@@ -1769,7 +1804,7 @@ export class SkeeballUI {
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     if (this._roRaf) { cancelAnimationFrame(this._roRaf); this._roRaf = 0; }
     this.game = null;
-    if (this.renderer) this.renderer.dispose();   // WebGL contexts leak if not released
+    releaseRenderer(this.renderer);   // dispose() alone does NOT release the context - see releaseRenderer
     this.renderer = null;
     this.root.classList.remove('sk-root');
     this.root.innerHTML = '';

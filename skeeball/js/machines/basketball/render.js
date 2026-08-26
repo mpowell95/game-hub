@@ -60,6 +60,38 @@ const RING_GLOW = 0.60;
 const CARD_OWED = 1.35;   // still to be hit - burns
 const CARD_DONE = 0.22;   // already hit - knocked back
 
+/** IS THIS SOFTWARE GL? Asked ONCE per page, and the probe context is HANDED BACK (2026-08-26).
+ *
+ *  This used to run inside the Renderer constructor and leak a whole WebGL context every time:
+ *  `getContext('webgl')` on a throwaway canvas takes one out of the browser's small global budget
+ *  (16 in Chromium, fewer on iOS) and nothing ever gave it back. Every machine picture on the
+ *  gallery took one, every how-to demo took one, every rack took one - counted in a browser, half
+ *  of a leak that had the console repeating "Too many active WebGL contexts. Oldest context will
+ *  be lost." from the fourth rack on. See `releaseRenderer` in skeeball/js/ui.js for the other
+ *  half and for what an evicted context looks like on a phone.
+ *
+ *  Two fixes in one: the answer is memoised, so the probe happens once per page rather than once
+ *  per Renderer, and `WEBGL_lose_context` releases it immediately either way. Never throws - an
+ *  unanswerable probe means "not software", which is the behaviour this has always had. */
+let SOFT_GL = null;
+function isSoftGL() {
+  if (SOFT_GL !== null) return SOFT_GL;
+  let soft = false;
+  let probe = null;
+  try {
+    probe = document.createElement('canvas').getContext('webgl');
+    const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
+    const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+    soft = /swiftshader|software|llvmpipe/i.test(String(name));
+  } catch { soft = false; }
+  try {
+    const lose = probe && probe.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch { /* nothing to give back */ }
+  SOFT_GL = soft;
+  return soft;
+}
+
 export class Renderer {
   constructor(canvas, board) {
     this.board = board;
@@ -85,13 +117,7 @@ export class Renderer {
     // Software GL (SwiftShader - headless test runs, GPU-less desktops) cannot afford shadows,
     // antialiasing or a retina buffer; a real phone GPU takes all three without noticing.
     // Detect before constructing the renderer, don't assume.
-    let soft = false;
-    try {
-      const probe = document.createElement('canvas').getContext('webgl');
-      const info = probe && probe.getExtension('WEBGL_debug_renderer_info');
-      const name = info ? probe.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
-      soft = /swiftshader|software|llvmpipe/i.test(String(name));
-    } catch { soft = false; }
+    const soft = isSoftGL();
     this.softGL = soft;
     // preserveDrawingBuffer: the canvas must be READABLE after a frame (drawImage/toDataURL) -
     // test-visual.mjs's play probe samples it, and Report a bug's screenshot captures it. A
