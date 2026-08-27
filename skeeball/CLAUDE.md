@@ -1088,9 +1088,9 @@ writers skip a machine in testing, that nothing reads `b.adminOnly` directly any
 ## The unlock chain
 
 ```
-THE CLASSIC -> HOT SHOT -> HOT SHOT: BRICK CITY -> POPONGO -> HOT SHOT: RUNAWAY
-(always open)  (classic's   (hot shot's            (brick      (popongo's
-                objectives)  objectives)            city's)      objectives)
+THE CLASSIC -> HOT SHOT -> HOT SHOT: BRICK CITY -> HOT SHOT: RUNAWAY -> POPONGO
+(always open)  (classic's   (hot shot's            (brick city's         (runaway's
+                objectives)  objectives)            objectives)           objectives)
 ```
 
 Every step is a goals unlock (`{ board, goals: true }`), applied by `ui.js`'s `_earnedUnlocks`
@@ -1102,6 +1102,20 @@ they now point here instead.)
 
 RUNAWAY was added on the END on 2026-08-25, which moved nobody's unlock and could not have: a
 machine appended to the chain changes no existing entry's `unlock`.
+
+**RUNAWAY AND POPONGO SWAPPED on 2026-08-27** (Matt: *"Make runaway before popongo, duh"*), so the
+newest machine is now fourth and POPONGO is terminal. Hanging RUNAWAY off POPONGO had made it
+unreachable in practice: POPONGO's third objective is 1,000 points on a face whose baskets are
+worth 1 to 6, and the player furthest along the chain had 122 of them - so nobody was going to see
+the new machine. Unlike the append, this DOES re-point two existing entries, and it still takes
+nothing from anyone for the usual reason (rule 2, an additive set nothing removes from).
+`test-stats-replay.mjs` scenario G carries the chain as data and proves it against the real
+records.
+
+**POPONGO is the TERMINAL machine now, and RUNAWAY is not.** Nothing in the code needed changing
+for that - `_goalsSpent()` asks whether a machine opens anything rather than naming a last machine -
+but two things that were written when RUNAWAY was last are no longer true of it: its objectives now
+GATE POPONGO, and its rails no longer vanish on all-three-met alone.
 
 Since 2026-08-25 a step in this chain is CELEBRATED as well as applied - see "The unlock ceremony"
 above. That is theatre only: `_earnedUnlocks` / `_ensureGoalUnlocks` are still the only writers of

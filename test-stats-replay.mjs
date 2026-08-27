@@ -302,15 +302,17 @@ const FIXTURE_PRE_UNIFIED = {
   const { readGoals } = await import(pathToFileURL(join(ROOT, 'skeeball', 'js', 'goals.js')).href);
 
   // The chain itself, as data - so this test fails loudly if a future session re-points an unlock
-  // without thinking about the players standing on it. It did exactly that when HOT SHOT:
-  // RUNAWAY landed (2026-08-25); the answer that time was that RUNAWAY was APPENDED to the end
-  // rather than inserted, so unlike BRICK CITY's insertion it re-points NO existing entry's
-  // unlock and no player can be standing on a link that moved. The assertions below still prove
-  // that against the real records rather than taking the reasoning for it.
-  eq('G: the chain is classic -> basketball -> brickcity -> popongo -> runaway',
+  // without thinking about the players standing on it. It has fired twice already. RUNAWAY was
+  // APPENDED to the end when it landed (2026-08-25), which re-points no existing entry and leaves
+  // nobody standing on a link that moved; then on 2026-08-27 RUNAWAY and POPONGO SWAPPED (Matt:
+  // "Make runaway before popongo, duh"), which does re-point both. The assertions below prove the
+  // safety against the real records rather than taking the reasoning for it: an unlock is an
+  // additive set entry and nothing anywhere removes one, so a player standing on either link keeps
+  // every machine they had.
+  eq('G: the chain is classic -> basketball -> brickcity -> runaway -> popongo',
     BOARDS.map((b) => `${b.id}<-${b.unlock ? b.unlock.board : 'open'}`),
-    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-brickcity',
-      'runaway<-popongo']);
+    ['classic<-open', 'basketball<-classic', 'brickcity<-basketball', 'popongo<-runaway',
+      'runaway<-brickcity']);
 
   for (const [tag, SK] of [['A', REAL_SK_A], ['B', REAL_SK_B]]) {
     // Load the real record through the CURRENT writer, exactly as a device does on its next hub
