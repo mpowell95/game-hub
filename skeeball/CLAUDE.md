@@ -1395,6 +1395,60 @@ engine: a STRUCTURAL one that rebuilds every collar segment in its hole's own fr
 sweep at all (it would have caught this the day the staircase shipped), and a behavioural one that
 asks, in world coordinates only, whether any parked ball is inside a basket's cylinder.
 
+## The capture blind spot, and closing it on HOT SHOT (2026-08-26)
+
+The second half of BRICK CITY's stuck ball (the section above) turned out not to be BRICK CITY's
+at all. **Every stepped machine had it**, and `node test-skeeball-capture-frame.mjs` now says so
+out loud.
+
+`worldToFace(p)` returns the **nearest** staircase segment's coordinates. A ball deep in a
+bottom-row basket is nearer the RISER plane standing behind the mouth (0.1085 m) than the tread
+the basket is sunk into (the cup is 0.1455 m deep). So **above h 0.121 every basket on a stepped
+machine resolved to a riser frame**, and `physics.js` section 2 then measured that hole's distance
+as 0.22 against a 0.09 mouth and skipped the cup the ball was in.
+
+Say the consequence plainly, because the symptom hides it: the *"a ball whose CENTRE is below the
+rim while inside the mouth is captured"* rule, added 2026-08-22 for exactly this class of bug,
+**could not fire on the deepest part of any basket on a staircase.**
+
+**HOT SHOT is fixed as of this commit; RUNAWAY is not, on purpose.** RUNAWAY's engine was being
+rewritten by another session the same evening (its single moving 100 becoming twin 100s), and a
+machine belongs to one session at a time - that is the HARD RULE working, not an oversight.
+`test-skeeball-capture-frame.mjs` carries it as a named waiver, and the suite **fails if that
+waiver goes stale**, so it cannot be quietly forgotten.
+
+**Measured on HOT SHOT, full 41x21 grid, before -> after:**
+
+| | |
+|---|---|
+| outcomes moved | **0 of 861** |
+| settle time changed | **0 of 861**, to four decimal places |
+| grid total | 5510 -> 5510 (unchanged) |
+| worst settle | 6.48 s, unchanged |
+| event sequence changed | 100 of 861 |
+
+Those last two rows are the whole story. **The engine now SEES baskets it was blind to** - 62
+throws gain a `capture` + `rimout` pair (the ball enters the mouth, is recognised, and then
+honestly bounces out and plays on), 35 capture earlier, 3 lose a pair - **while not one score and
+not one trajectory moves.** That is what a latent bug looks like when it is closed: capture only
+takes the tread slab out from under a ball, and in these frames the ball was airborne inside the
+mouth and not resting on the slab, so nothing downstream changed.
+
+It is worth shipping anyway, and cheaply, because it is the safety net. On BRICK CITY this same
+blind spot is what turned a parked ball into an unrescuable one.
+
+**Also carried over, and proven inert:** the collar loop is now frame-locked
+(`faceToWorldIn(cupFrame, ...)`), the same guard BRICK CITY needed. HOT SHOT's mouths are narrow
+enough that no segment currently crosses its tread's back edge - verified by hashing all 126
+`cupSeg` positions before and after the change, **byte-identical** - so this buys a future wider
+mouth, and costs nothing today.
+
+**The probe is geometric, not a sweep, and that is deliberate.** It walks each hole's own axis
+from cup floor to rim and asks the one question `physics.js` asks. The 41x21 grid reproduced
+BRICK CITY's parked ball only 4 times in 861; a geometric check cannot be fooled by a grid that
+misses the conditions, costs nothing to run, and discovers machines from `BOARDS`, so the next
+one is covered the day it ships.
+
 ## Adding the next machine
 
 1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,
