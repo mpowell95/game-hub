@@ -338,7 +338,8 @@ function substep(st) {
       if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) finishAt(st, st.captured, hDef.value, 'hole');
       return;
     }
-    const fc = worldToFace(M, G, p);
+    // In the CAPTURED HOLE'S OWN frame, never the nearest one - see machine.js worldToFaceIn.
+    const fc = M.worldToFaceIn(M.frameAt(hDef.v), p);
     // MOVER: measured against the LATCHED mouth-u, not a live one. The ball is inside this
     // basket now and rides with it; asking about the mouth's current position would let a
     // basket that has slid on since capture turn a clean 100 into a `corner0` gutter ball
@@ -400,7 +401,13 @@ function substep(st) {
       const hu = holeU(G, id, st.t0 + st.t);
       const isMover = G.mover && G.mover.hole === id;
       const vCross = isMover ? vFaceMover : vFace;
-      const d = Math.hypot(f.u - hu, f.v - hDef.v);
+      // GUARD: THIS HOLE'S OWN FRAME. f above is the NEAREST segment's, which on a staircase is
+      // the riser once the ball is deep in a basket - and a riser-frame d comes out about 0.22
+      // against a 0.09 mouth, so the basket the ball is in gets skipped. Ask each hole where the
+      // ball is relative to IT. The mover's LIVE u (hu) is unchanged; only the frame the two are
+      // compared in moves. See machine.js worldToFaceIn.
+      const fh = M.worldToFaceIn(M.frameAt(hDef.v), p);
+      const d = Math.hypot(fh.u - hu, fh.v - hDef.v);
       const rEff = hDef.r - G.ballR * 0.28;
       if (d >= rEff) continue;
       // how much mouth is left in front of it, along its own line
@@ -418,7 +425,7 @@ function substep(st) {
       // collar - visibly "in the basket" - and could hop back out over the rim (Matt's clip,
       // 2026-08-22 23:42). Capture releases the slab; the pass-through commit at the top of
       // this function still decides the score, so nothing pays without falling through.
-      if (lip > 0 && f.h < lip) {
+      if (lip > 0 && fh.h < lip) {
         st.captured = id;
         st.capturedFaceY = p.y;
         st.capturedU = hu;                       // MOVER: latch the mouth (see the branch above)
@@ -426,7 +433,7 @@ function substep(st) {
         st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
         return;
       }
-      const needH = lip > 0 ? need + Math.max(0, f.h - lip) : need;
+      const needH = lip > 0 ? need + Math.max(0, fh.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
       if (vCross * tDrop > cross) continue;           // too fast for this mouth: it rolls on

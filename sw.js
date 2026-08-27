@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v497';
+const CACHE = 'game-hub-v498';
 
 const ASSETS = [
   './',
@@ -549,8 +549,8 @@ const REST_MANIFEST = {
   './skeeball/js/machines/brickcity/physics.js': 'a12ba21920',
   './skeeball/js/machines/brickcity/machine.js': 'd65b93f6c8',
   './skeeball/js/machines/brickcity/render.js': '5a51a0abb3',
-  './skeeball/js/machines/runaway/physics.js': '7b9b85e7e8',
-  './skeeball/js/machines/runaway/machine.js': '1088294ad1',
+  './skeeball/js/machines/runaway/physics.js': 'b96d2a758a',
+  './skeeball/js/machines/runaway/machine.js': '281390beb7',
   './skeeball/js/machines/runaway/render.js': '99b2142daf',
   './skeeball/js/vendor/cannon-es.js': 'f0700cbd3a',
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
