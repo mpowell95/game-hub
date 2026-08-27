@@ -117,7 +117,7 @@ export const BC_NET = 30000;      // BRICK CITY: 30,000 NET points in total (was
 // changed with them: this machine's objectives are about its face, not about a score.
 export const RA_RUNAWAYS = 10;   // RUNAWAY: catch a moving basket 10 times, on ANY row
 export const RA_FULL = 1;        // RUNAWAY: land in EVERY basket in one round
-export const RA_BEST = 600;      // RUNAWAY: score 600+ in a single round
+export const RA_BEST = 750;      // RUNAWAY: score 750+ in a single round
 //
 // WHERE 600 COMES FROM, AND WHY A LOWER BAR WOULD HAVE SAID NOTHING. Matt, 2026-08-27, replacing
 // a 10,000-point lifetime total: "let's do a crazy good single round... the king of games keeps
@@ -137,8 +137,25 @@ export const RA_BEST = 600;      // RUNAWAY: score 600+ in a single round
 // it would be won by the very same rack that wins goal 2 ("every basket in one round") - two
 // objectives paying for one achievement. Above 460 the ONLY way up is to SKIP cheap baskets and
 // farm the runaway instead, which is the machine's hard shot and the thing worth asking for.
-// 600 needs roughly three runaway catches on top of most of the face. Move it if it plays wrong,
-// but do not move it under 460 - it stops meaning anything there.
+// Do not move it under 460 - it stops meaning anything there.
+//
+// WHY 750 AND NOT THE 600 THIS FIRST SHIPPED AT: because King of Games' record on the SIBLING
+// machine was read before guessing again (2026-08-27). On HOT SHOT - same cabinet, same ramp,
+// same ball, same rows 1 and 2 - he has 286 racks, averages 481 a rack, and has scored 900, which
+// is that machine's THEORETICAL MAXIMUM: nine balls, nine 100s. Of his scored balls two thirds
+// were the 100, which works out to landing a STATIC 100 on roughly 43% of every throw.
+//
+// So the ceiling is not his barrier; only the MOVEMENT is. Blind sweeps put the moving 100 at
+// about two thirds the availability of HOT SHOT's static one, which projects him to ~2.6 runaway
+// catches a rack, a typical rack near 450-500, and a best of 700-800 once he has a few hundred
+// racks on it. 600 was a good rack for him, not a crazy one - he plays ~200 racks a DAY and would
+// have taken it the first afternoon. 750 is 83% of ceiling against the 100% he already managed on
+// the easier static face.
+//
+// THE ONE NUMBER NOBODY HAS YET is his hit rate on a MOVING basket; everything above is projected
+// from a static one. When he has 50-100 racks on this machine, re-read them (the per-board record
+// carries best/points/plays, and sk.runaways carries the catches) and re-derive rather than
+// nudging this by feel. Matt's standing note: his bars fall faster than he expects.
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
