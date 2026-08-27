@@ -429,7 +429,29 @@ machine's objectives are about its FACE, not about a score.
    objective on the machine. Each basket closes when you hit it, so covering the face means eight
    scoring balls of nine into eight different baskets, three of which are sweeping by the time you
    reach them.
-3. **10,000 points in total** (`RA_TOTAL`, up from 2,500).
+3. **600 in a single round** (`RA_BEST`). Matt, replacing a 10,000-point lifetime total:
+   *"let's do a crazy good single round... the king of games keeps beating everything i set way
+   faster than i expect."*
+
+**WHERE 600 COMES FROM, AND WHY A LOWER BAR WOULD HAVE SAID NOTHING.** The eight baskets are worth
+360 between them and every one CLOSES when you hit it, so the only repeatable score on this machine
+is the runaway at 100. That makes the arithmetic unusually rigid:
+
+| score | what it takes |
+|---|---|
+| 360 | every basket once (8 balls, no misses) |
+| **460** | **a PERFECT ROUND** - the above plus a 9th ball into the runaway |
+| 550 | + skip a 10, catch a 2nd runaway |
+| 640 | + skip both 10s, catch a 3rd |
+| 900 | all nine balls into a 100 (theoretical ceiling) |
+
+**460 is a FLOOR, not a target.** A perfect round scores exactly 460, so any bar at or below it
+would be won by the very same rack that wins objective 2 - two objectives paying for one
+achievement. Above 460 the ONLY way up is to SKIP cheap baskets and farm the runaway instead,
+which is this machine's hard shot and the thing worth asking for. Verified: a perfect round reads
+`full 1/1 MET` and `best 460/600`.
+
+**Do not move this bar under 460.** It stops meaning anything there.
 
 **`fullRacks` is a PER-BOARD counter, not a global one**, and that saved the three-edit rule
 entirely: `js/arcade-scores.js` already owns the per-board record's shape and its cross-device
