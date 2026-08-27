@@ -561,7 +561,7 @@ if (G.mat) {
   const res = overEv.result;
   eq('result() carries exactly the recorder extras',
     Object.keys(res).sort(),
-    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'hundreds', 'perfectRack', 'runaways', 'score', 'slotCounts', 'slotsHit', 'tens', 'thirties', 'twenties']);
+    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'fullRack', 'hundreds', 'perfectRack', 'runaways', 'score', 'slotCounts', 'slotsHit', 'tens', 'thirties', 'twenties']);
   const countOf = (v) => g.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
   // GUARD: key ORDER matters - eq() compares JSON.stringify, so this must list them in the
   // same order result() builds them. colorsHit/colorSweep are the cup-board extras (POPONGO,
@@ -573,7 +573,10 @@ if (G.mat) {
   // machine - so it reads what this rack actually did. `runaways` is HOT SHOT: RUNAWAY's
   // (2026-08-26): balls caught in the top-row basket WHILE IT WAS SWEEPING, feeding the lifetime
   // sk.runaways counter that machine's first objective reads. It stays 0 on every other machine,
-  // which has nothing that moves.
+  // which has nothing that moves. `fullRack` is RUNAWAY's second objective (2026-08-27): one
+  // scoring ball into EVERY basket the machine has, in a single round. It is honest on any board
+  // - it is just "did this rack cover the face" - and it is counted into the PER-BOARD record,
+  // never a global counter, because "every basket" means a different thing on every machine.
   const slots = [...new Set(g.throws.map((t) => t.hole).filter((h) => g.board.geom.holes[h]))];
   const counts = {};
   for (const t of g.throws) if (g.board.geom.holes[t.hole]) counts[t.hole] = (counts[t.hole] | 0) + 1;
@@ -583,7 +586,8 @@ if (G.mat) {
       slotsHit: slots, slotCounts: counts, cleanRack: 0, perfectRack: perfect,
       tens: countOf(10), twenties: countOf(20), thirties: countOf(30), forties: countOf(40),
       hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow,
-      colorsHit: 0, colorSweep: 0, runaways: 0 });
+      colorsHit: 0, colorSweep: 0, runaways: 0,
+      fullRack: slots.length >= Object.keys(g.board.geom.holes).length ? 1 : 0 });
 }
 
 // --- 6b. POPONGO: the arrangement layer and the equalizer (pure rules, no physics) --------------

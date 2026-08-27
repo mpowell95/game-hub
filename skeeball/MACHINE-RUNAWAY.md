@@ -38,25 +38,30 @@ face is a sequence, not a layout.**
 
 Three rules, and together they are the whole game:
 
-1. **The rack opens with two STILL 100s.** Nothing on the machine is moving on ball 1.
-2. **Land in one and it CLOSES — and its twin becomes THE RUNAWAY.** The survivor comes off its
-   mark and sweeps the full width for the rest of the rack.
-3. **Every basket is a ONE-SHOT, except the runaway.** Land in it and it closes for good. The
-   runaway never closes; catching it makes it **faster** instead.
+1. **Nothing is moving on ball 1.** Eight baskets, all standing still.
+2. **Every basket is a ONE-SHOT.** Land in it and it closes for the rest of the rack.
+3. **EVERY ROW PLAYS "LAST ONE STANDING".** Close the others and the survivor comes off its mark
+   and sweeps the full width of its row. The top row is two, so it takes one ball; rows 1 and 2
+   are three, so they take two. **Up to three baskets can be moving at once.** The top row's
+   survivor is the one basket that never closes — catching it makes it **faster** instead.
 
-So a rack funnels. Six easy baskets shut one by one, and what is left standing at the end is a
-100 moving faster than it was at the start. Nine balls against seven baskets, and only one of
-them refills.
+Matt asked for the lower rows on 2026-08-27: *"when there's 1 basket left, regardless of which one
+it is, it starts moving."* One rule covers all three rows, and the top row's twin 100s are just
+that rule with a group of two.
+
+So a rack funnels, and it funnels on three shelves at once. What is left standing at the end is a
+face of moving targets — and only one of them refills.
 
 **The maximum a rack can score is unbounded in principle and brutal in practice**: 160 from rows
-1 and 2, 100 for the first top-row basket, and then every remaining ball has nothing to aim at
-but a basket that has already sped up.
+1 and 2, 100 for the first top-row basket, and then every remaining ball has nothing to aim at but
+a basket that has already sped up. Covering the whole face takes eight balls of nine with no
+misses, which is what the second objective asks for.
 
-## The handoff is free, and that is why the top row sits where it does
+## The handoff is free — for an OUTER survivor. A CENTRE one needs a second mode.
 
-`topL` / `topR` are at **-/+2.07X, which is exactly the amplitude** — so the survivor is already
-standing at a *turnaround* of the travel it is about to run. `machine.js` anchors a **cosine**
-there:
+Every outer basket on this machine (`topL`/`topR`, and each lower row's two outside baskets) rests
+at **-/+2.07X, which is exactly the amplitude** — so an outer survivor is already standing at a
+*turnaround* of the travel it is about to run. `machine.js` anchors a **cosine** there:
 
 ```
 u(t) = dir * amp * cos(2*PI*(t - t0) / period)        t0 = the rack clock at the handoff
@@ -74,6 +79,23 @@ two 100s you cap first.
 (-/+2.07X is also exactly where HOT SHOT's `topL` and `topR` sit, so both marks are positions that
 machine already proves are cleanly capturable. The static half of this face needed no
 reachability fight.)
+
+**A CENTRE survivor (u = 0) cannot use a cosine at all**, and a plain sine is the trap: it is at
+its own mark at t0 but at **maximum speed** there, which is exactly the step change in wall
+velocity the whole design exists to avoid. So it gets a **ramped sine** instead —
+
+```
+u(t) = dir * amp * r(t) * sin(w * (t - t0))      r ramping 0 -> 1 over one period
+```
+
+— which is at 0 (its mark) AND at zero velocity at t0, because `r(0) = 0` kills one term and
+`sin(0) = 0` kills the other. It winds up to the full travel over its first period, which also
+reads as a machine part spooling up. **Both modes exist for one reason: a basket must come off its
+mark AT its mark and at ZERO SPEED.** `game.js`'s `_checkRows` picks by whether `|u| > 0`; a tool
+that picked differently would be measuring a machine nobody plays.
+
+**Verified**: every survivor starts at its own resting u to machine precision, with velocity 0 —
+`lowC` (ramp) at 0.000000, `midR` and `topR` (cos) at 0.301091 against a resting 0.301091.
 
 ## Why the top row is two baskets and not three
 
@@ -105,7 +127,16 @@ clears two hard rules at once:
    pinch; this one can drive a ball into it. That fear has not materialised at this amplitude: **0
    walkouts across every grid run, at every rung of the ladder** (see the measurements below).
 
-   **The margin is 0.005X, and that is the number to watch.** It was `0.0675X` at the 3.50in mouth
+   **AND THE LOWER ROWS ARE ALREADY UNDER IT.** Their mouths are wider (0.53125X against the top
+   row's 0.5X), so at the ends of the same travel their wall gap is **0.7538X**, against the top
+   row's 0.7850X. Those baskets have always sat there and swept clean as STATIC furniture; making
+   one MOVE is the worst case the rule describes. **Measured, and it is clean**: a moving `lowC`
+   over 924 throws gives **0 walkouts**, and so does the three-mover endgame (`lowC` + `midC` +
+   `topR` at its fastest rung) over another 924. The rule is a threshold; the sweep is the
+   evidence, and `node sweep-mover.mjs runaway --stage rows` is what re-measures it. Check it
+   before touching any of the three inputs: the mouths, `collarThick`, or the amplitude.
+
+   **The top row's margin is 0.005X, and that is the number to watch.** It was `0.0675X` at the 3.50in mouth
    this machine shipped with; widening the 100 to 4.00in on 2026-08-25 spent almost all of it,
    because a wider mouth grows the collar's OUTER diameter against a rail that did not move. Any
    further widening of this mouth, or any increase in `collarThick`, goes under the rule and has to
@@ -242,23 +273,28 @@ and fails on a parked ball. A raised cap has a flat apex, and a tread is tilted 
 degrees) against a board friction angle of `atan(0.12)` = 6.8 degrees — a ball balanced exactly on
 an apex has less slope than grip.
 
-### A closed basket keeps its BACKBOARD and loses its hoop
+### A closed basket vanishes WHOLE — and two earlier answers were wrong
 
-This is the readability of the whole mechanic, and the first build got it wrong.
+The empty shelf is the signal. `render.js` builds each basket as ONE group: `position.x` slides it
+(a basket that is sweeping) and `visible` hides all of it (a basket that has closed).
 
-That build hid the entire basket and drew a flat plate flush in the face where it had been. The
-plate was correctly placed and **completely invisible** — the same finding `_moverTrack` already
-records for the mover's painted groove, and for the same reason: the camera stands behind the
-ball, so every tread is foreshortened almost to nothing and occluded by the riser in front of it.
-**Nothing lying flat on this face can be seen from where the game is played.** A closed basket
-read as a basket that had never existed.
+**Two things were tried first and both failed, in opposite ways.**
 
-Backboards stand vertical, face the player, and are the most legible things on the machine. So the
-signal is **a backboard with its number still on it and no hoop underneath**, which costs no new
-geometry at all. `render.js` builds each basket as two nested groups for exactly this: an outer
-group whose `position.x` slides (the runaway) and an inner cup group whose `visible` goes false
-(the mouth, the capture flash, the rim and the net). **Do not "restore" the plate; it cannot be
-seen.**
+The first build hid the basket and drew a flat plate flush in the face where the mouth had been.
+The plate was correctly placed and **completely invisible** — the same finding `_moverTrack`
+already records for the mover's painted groove, and for the same reason: the camera stands behind
+the ball, so every tread is foreshortened almost to nothing and occluded by the riser in front of
+it. **Nothing lying flat on this face can be seen from where the game is played.** A closed basket
+read as one that had never existed.
+
+The second kept the **backboard** standing — a numbered card with no hoop under it — which reads
+perfectly and is what shipped on 2026-08-26. Matt, next morning: *"make the backboards vanish with
+the baskets."* It had also stopped working once every row could move: a survivor sweeps through
+its dead neighbours' marks, so the shelf filled with numbered cards that the one live basket kept
+sliding behind.
+
+**Do not restore either.** An empty shelf with one basket moving across it is unmistakable, and it
+is the picture the machine is about.
 
 ---
 
@@ -364,8 +400,9 @@ of 100 proves the moving basket was caught" — true while the machine had exact
 `bestThrow` of 100 can now be earned on ball 1 against a parked target and proves nothing about
 the sweep.
 
-`sk.runaways` counts balls landed in the basket **while it was running**. It is a lifetime counter
-in `js/game-stats.js`, fed from `result().runaways`, and it took the full three-edit rule:
+`sk.runaways` counts balls landed in ANY basket **while it was running** — the top row's 100 or a
+lower row's last one standing. It is a lifetime counter in `js/game-stats.js`, fed from
+`result().runaways`, and it took the full three-edit rule:
 `game-stats.js` (the counter), `js/players-agg.js` (the cross-device branch — without it, a
 person's second device syncing would zero it, THE LAW rule 1), and `js/game-stats-ui.js` (the My
 Stats row). `players-agg.test.mjs`'s structural probe enforces exactly that.
@@ -378,12 +415,32 @@ own records. The goal simply stops reading it. The goal **id stays `runaway`**, 
 completed the old version keeps every unlock it earned (`sk.unlocked` is additive and nothing
 anywhere removes an id — THE LAW rule 2).
 
-The three objectives are now:
+### The objectives, re-set 2026-08-27
 
-1. **Catch the runaway** once (`RA_RUNAWAYS`).
-2. **260 in a single game** (`RA_BEST`, raised from 240 — the one-shot face closes the cheap
-   baskets, so a big rack now has to come off the top row).
-3. **2,500 points in total** (`RA_TOTAL`).
+Matt cleared two of the first three in his **first rack** — 260 exactly against a 260 bar, and one
+runaway caught against a bar of one. All three moved, and the shape changed with them: this
+machine's objectives are about its FACE, not about a score.
+
+1. **Catch a runaway 10 times** (`RA_RUNAWAYS`) — **on ANY row.** Matt asked which it meant and
+   chose any: the machine's identity is baskets that run away, not one basket that does. A row
+   survivor counts exactly as much as the 100, which also makes the counter accumulate at a
+   sane rate (a moving `lowC` is caught on 2.6% of blind throws against the top 100's 0.87%).
+2. **Land in EVERY basket in one round** (`RA_FULL`) — Matt's own suggestion, and the best
+   objective on the machine. Each basket closes when you hit it, so covering the face means eight
+   scoring balls of nine into eight different baskets, three of which are sweeping by the time you
+   reach them.
+3. **10,000 points in total** (`RA_TOTAL`, up from 2,500).
+
+**`fullRacks` is a PER-BOARD counter, not a global one**, and that saved the three-edit rule
+entirely: `js/arcade-scores.js` already owns the per-board record's shape and its cross-device
+merge, so ensure + record + merge are three edits in ONE file and `js/players-agg.js` needs
+nothing. It is also the correct scope — "every basket" means a different thing on every machine,
+and a global counter would let one machine satisfy another's objective (Matt's "completely
+distinct" rule, 2026-08-22). Measured against the board's OWN holes and fed from `slotsHit`, which
+excludes the trough, so it cannot be completed by missing.
+
+**The single-game score objective is gone.** Two of the three now say something about the face,
+which is the same shape BRICK CITY uses (baskets x3 + perfect rounds + net total).
 
 ---
 

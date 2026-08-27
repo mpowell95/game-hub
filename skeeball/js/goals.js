@@ -112,9 +112,12 @@ export const BC_NET = 30000;      // BRICK CITY: 30,000 NET points in total (was
 // the goal simply stops reading it (the same swap HOT SHOT made, 2026-08-25). The goal id stays
 // 'runaway', so anyone who completed the old version keeps every unlock it earned - sk.unlocked
 // is additive and nothing anywhere removes an id (THE LAW rule 2).
-export const RA_RUNAWAYS = 1;    // RUNAWAY: catch the sweeping 100 once
-export const RA_BEST = 260;      // RUNAWAY: score 260+ in a single game
-export const RA_TOTAL = 2500;    // RUNAWAY: 2,500 points in total on the machine
+// RE-SET 2026-08-27, by Matt, after he cleared two of the three in his FIRST rack (260 exactly,
+// against a 260 bar, with one runaway caught against a bar of one). All three moved, and the shape
+// changed with them: this machine's objectives are about its face, not about a score.
+export const RA_RUNAWAYS = 10;   // RUNAWAY: catch a moving basket 10 times, on ANY row
+export const RA_FULL = 1;        // RUNAWAY: land in EVERY basket in one round
+export const RA_TOTAL = 10000;   // RUNAWAY: 10,000 points in total on the machine
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
@@ -179,17 +182,25 @@ const GOALS = {
   },
   runaway(s, r) {
     const b = (s.boards || {}).runaway || {};
-    // CATCH THE RUNAWAY: the recorded lifetime count, plus whatever the live rack has added, so
-    // the rail moves the moment it happens rather than at the end of the round. sk.runaways is a
-    // GLOBAL counter, and that is safe here in a way it would not be for most objectives -
-    // RUNAWAY is the only machine in the repo with a moving basket, so it is the only machine
-    // that can ever write to it. game.js sets result().runaways to 0 everywhere else.
+    // CATCH A RUNAWAY: the recorded lifetime count plus whatever the live rack has added, so the
+    // rail moves the moment it happens rather than at the end of the round.
+    //
+    // ANY ROW, not just the top one - Matt asked which it meant and chose any (2026-08-27). This
+    // machine's identity is baskets that run away, and every row's last one standing does.
+    //
+    // sk.runaways is a GLOBAL counter, and that is safe here in a way it would not be for most
+    // objectives: RUNAWAY is the only machine in the repo with a moving basket, so it is the only
+    // machine that can ever write to it. game.js sets result().runaways to 0 everywhere else.
     const caught = (s.runaways | 0) + (r ? r.runaways | 0 : 0);
-    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
+    // EVERY BASKET IN ONE ROUND. A PER-BOARD counter (js/arcade-scores.js), summed across devices,
+    // fed by game.js's result().fullRack - which is measured against this board's own holes, so no
+    // other machine can satisfy it and it cannot be completed by missing (the trough is not a
+    // basket). The live rack counts too, but only when it has ACTUALLY covered the face.
+    const fullEver = (b.fullRacks | 0) + (r ? r.fullRack | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
       { id: 'runaway', labelKey: 'g_runaway', defKey: 'd_ra_hoop', now: Math.min(caught, RA_RUNAWAYS), target: RA_RUNAWAYS, met: caught >= RA_RUNAWAYS },
-      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
+      { id: 'full', labelKey: 'g_ra_full', defKey: 'd_ra_full', now: Math.min(fullEver, RA_FULL), target: RA_FULL, met: fullEver >= RA_FULL },
       { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
     ];
   },

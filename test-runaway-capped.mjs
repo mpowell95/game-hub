@@ -52,12 +52,13 @@ const { simulateThrow } = engineFor(board.id).physics;
 const [, runner] = G.mover.holes;
 
 /** Sweep power x aim (x phase, when something is sweeping) and collect settle times. */
-function sweep(closed, sw, phases) {
-  const period = sw ? sw.period : 1;
+function sweep(closed, sws, phases) {
+  const moving = Object.keys(sws || {});
+  const period = moving.length ? sws[moving[0]].period : 1;
   const times = [];
   const paidWhileClosed = [];
   let walkouts = 0;
-  let runnerHits = 0;
+  const hits = {};
   let thrown = 0;
   for (let ph = 0; ph < phases; ph++) {
     for (let p = 0; p < POWERS; p++) {
@@ -65,14 +66,14 @@ function sweep(closed, sw, phases) {
         const power = p / (POWERS - 1);
         const aim = AIMS === 1 ? 0 : -1 + (2 * a) / (AIMS - 1);
         const r = simulateThrow(board, {
-          power, aim, t0: (ph / phases) * period, closed, sweep: sw,
+          power, aim, t0: (ph / phases) * period, closed, sweeps: sws,
         });
         thrown++;
         times.push(r.time);
         if (r.emergencyUsed) walkouts++;
         const id = r.outcome && r.outcome.hole;
         if (id && closed.has(id)) paidWhileClosed.push(`${id} @ power ${power.toFixed(2)} aim ${aim.toFixed(2)}`);
-        if (id === runner) runnerHits++;
+        if (id) hits[id] = (hits[id] | 0) + 1;
       }
     }
     process.stderr.write(`  ${thrown} throws\r`);
@@ -80,24 +81,57 @@ function sweep(closed, sw, phases) {
   times.sort((x, y) => x - y);
   const at = (q) => times[Math.min(times.length - 1, Math.floor(times.length * q))];
   return {
-    thrown, walkouts, runnerHits, paidWhileClosed,
+    thrown, walkouts, hits, paidWhileClosed,
     median: at(0.5), p90: at(0.9), max: times[times.length - 1],
   };
 }
 
 const t0 = Date.now();
 
-// THE ENDGAME FACE: everything closed except the runaway, at the LAST rung of the ladder - the
-// fastest it ever gets, and the hardest case for both the pinch and the settle.
-const closed = new Set(Object.keys(G.holes).filter((h) => h !== runner));
-const period = G.mover.periods[G.mover.periods.length - 1];
-const shut = sweep(closed, {
-  hole: runner, t0: 0, dir: G.holes[runner].u < 0 ? -1 : 1, period, catches: G.mover.periods.length - 1,
-}, PHASES);
+// THE ENDGAME FACE: EVERY row down to its last basket, so all THREE survivors are moving at
+// once, with the top row's runaway at the LAST rung of its ladder - the fastest it ever gets.
+// This is the real shape of the last balls of a good rack, and the only configuration that puts
+// more than one moving collar in the same world.
+//
+// GUARD: THE LOWER ROWS' SURVIVOR IS THE CENTRE ONE, DELIBERATELY. It is the ramped mode, it is
+// the wider mouth (0.53125X against the top row's 0.5X), and it sweeps the full width past BOTH
+// of its dead neighbours' marks - so at the ends of its travel the wall gap is 0.7538X, UNDER
+// MACHINE-SPEC.md section 12's 0.78X collar-near-a-flat-wall rule that the top row clears. A
+// moving collar is the worst case for that rule. It measures clean, and this is what keeps
+// measuring it.
+const rows = G.mover.rows || [];
+const survivors = [runner];
+const closed = new Set([G.mover.holes.find((h) => h !== runner)]);
+const sweeps = {
+  [runner]: {
+    hole: runner,
+    t0: 0,
+    dir: G.holes[runner].u < 0 ? -1 : 1,
+    amp: G.mover.amp,
+    period: G.mover.periods[G.mover.periods.length - 1],
+    mode: 'cos',
+    catches: G.mover.periods.length - 1,
+  },
+};
+for (const row of rows) {
+  const mid = row.find((h) => Math.abs(G.holes[h].u) < 1e-6) || row[0];
+  survivors.push(mid);
+  for (const h of row) if (h !== mid) closed.add(h);
+  sweeps[mid] = {
+    hole: mid,
+    t0: 0,
+    dir: 1,
+    amp: G.mover.amp,
+    period: G.mover.rowPeriod || G.mover.periods[0],
+    mode: Math.abs(G.holes[mid].u) < 1e-6 ? 'ramp' : 'cos',
+    catches: 0,
+  };
+}
+const shut = sweep(closed, sweeps, PHASES);
 
 // THE OPENING FACE: the baseline. Nothing closed, nothing moving - the machine exactly as ball 1
 // of every rack meets it, and the settle times this change has to be judged against.
-const open = sweep(new Set(), null, 1);
+const open = sweep(new Set(), {}, 1);
 
 process.stderr.write(`${' '.repeat(50)}\r`);
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
@@ -110,7 +144,10 @@ const row = (label, r) => console.log(`  ${label.padEnd(18)} ${r.median.toFixed(
 row('open (baseline)', open);
 row(`all shut but ${runner}`, shut);
 console.log(`\n  closed baskets paid  ${shut.paidWhileClosed.length}`);
-console.log(`  ${runner} caught          ${shut.runnerHits}  (${((shut.runnerHits / shut.thrown) * 100).toFixed(2)}%)`);
+for (const id of survivors) {
+  const n = shut.hits[id] | 0;
+  console.log(`  ${id.padEnd(6)} caught       ${String(n).padStart(4)}  (${((n / shut.thrown) * 100).toFixed(2)}%)`);
+}
 
 // The closed face may be a little slower - there are no cups left to swallow a ball, so more of
 // them roll the whole way back. It may not be a DIFFERENT REGIME, which is what a ball resting on
@@ -130,7 +167,11 @@ if (shut.paidWhileClosed.length) {
   fails.push(`a CLOSED basket captured ${shut.paidWhileClosed.length} ball(s): `
     + shut.paidWhileClosed.slice(0, 4).join('; '));
 }
-if (!shut.runnerHits) fails.push('the runaway is UNREACHABLE with the rest of the face closed');
+// EVERY survivor has to still be catchable. A face that closes down to three unreachable
+// baskets is a rack that ends in dead throws, which is the arc working against itself.
+for (const id of survivors) {
+  if (!(shut.hits[id] | 0)) fails.push(`${id} is UNREACHABLE with the rest of the face closed`);
+}
 
 console.log('');
 if (fails.length) { for (const f of fails) console.log(`FAIL  ${f}`); process.exit(1); }

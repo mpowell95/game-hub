@@ -58,6 +58,16 @@ export function ensureBoard(boards, boardId) {
   //                strictly harder thing than a clean round, which allows misses.
   if (!b.slotHits || typeof b.slotHits !== 'object') b.slotHits = {};
   if (!Number.isFinite(b.perfectRacks)) b.perfectRacks = 0;
+  //   fullRacks    finished rounds that landed in EVERY basket the machine has. Added 2026-08-27
+  //                for HOT SHOT: RUNAWAY, where it is the hardest thing on the face: every basket
+  //                there CLOSES when you hit it, so covering all seven means seven scoring balls
+  //                into seven different baskets, three of which are sweeping by the time you get
+  //                to them. It is a PER-BOARD counter, not a global one, because "every basket"
+  //                means a different thing on every machine and a global one would let one
+  //                machine satisfy another's objective (Matt's "completely distinct" rule).
+  //                ADDITIVE and defaulted here, so a record written before it existed loads with
+  //                everything it had and gains nothing it did not earn.
+  if (!Number.isFinite(b.fullRacks)) b.fullRacks = 0;
   return b;
 }
 
@@ -95,6 +105,7 @@ export function recordBoardGame(sub, boardId, game) {
     }
   }
   if (game?.perfectRack) b.perfectRacks += 1;
+  if (game?.fullRack) b.fullRacks += 1;
   return sub;
 }
 
@@ -151,6 +162,7 @@ export function mergeBoards(dst, src) {
     const sh = s.slotHits || {};
     for (const slot of Object.keys(sh)) d.slotHits[slot] = (d.slotHits[slot] | 0) + (sh[slot] | 0);
     d.perfectRacks += s.perfectRacks | 0;
+    d.fullRacks += s.fullRacks | 0;
   }
   return dst;
 }
