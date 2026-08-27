@@ -1395,7 +1395,7 @@ engine: a STRUCTURAL one that rebuilds every collar segment in its hole's own fr
 sweep at all (it would have caught this the day the staircase shipped), and a behavioural one that
 asks, in world coordinates only, whether any parked ball is inside a basket's cylinder.
 
-## The capture blind spot, and closing it on HOT SHOT (2026-08-26)
+## The capture blind spot, closed on every machine (2026-08-26)
 
 The second half of BRICK CITY's stuck ball (the section above) turned out not to be BRICK CITY's
 at all. **Every stepped machine had it**, and `node test-skeeball-capture-frame.mjs` now says so
@@ -1411,37 +1411,53 @@ Say the consequence plainly, because the symptom hides it: the *"a ball whose CE
 rim while inside the mouth is captured"* rule, added 2026-08-22 for exactly this class of bug,
 **could not fire on the deepest part of any basket on a staircase.**
 
-**HOT SHOT is fixed as of this commit; RUNAWAY is not, on purpose.** RUNAWAY's engine was being
-rewritten by another session the same evening (its single moving 100 becoming twin 100s), and a
-machine belongs to one session at a time - that is the HARD RULE working, not an oversight.
-`test-skeeball-capture-frame.mjs` carries it as a named waiver, and the suite **fails if that
-waiver goes stale**, so it cannot be quietly forgotten.
+**All five machines are clean now.** THE CLASSIC and POPONGO are flat-faced and never had it. HOT
+SHOT and RUNAWAY were fixed the same evening, one machine per commit, per the HARD RULE - HOT SHOT
+first, then RUNAWAY once its numbers were in hand. `test-skeeball-capture-frame.mjs` carries an
+EMPTY `KNOWN_GAPS`, and the suite fails if an entry ever outlives its bug.
 
-**Measured on HOT SHOT, full 41x21 grid, before -> after:**
+**RUNAWAY was done second and separately for a reason worth recording.** Another session was
+rewriting that machine's engine the same evening (its single moving 100 becoming twin 100s), so
+its `machine.js` and `physics.js` were being written while this work was going on. The fix was
+therefore built and measured in a SEPARATE WORKTREE off `origin/main`, never in the shared
+checkout - the two changes touch the same two files, and whoever lands the twin-100s work will
+need to merge across this one. If you are that session: this commit adds `worldToFaceIn` to
+`machine.js` and changes four lines in `physics.js` sections 1 and 2. Nothing else.
 
-| | |
-|---|---|
-| outcomes moved | **0 of 861** |
-| settle time changed | **0 of 861**, to four decimal places |
-| grid total | 5510 -> 5510 (unchanged) |
-| worst settle | 6.48 s, unchanged |
-| event sequence changed | 100 of 861 |
+**Measured, full 41x21 grid per machine, before -> after:**
 
-Those last two rows are the whole story. **The engine now SEES baskets it was blind to** - 62
-throws gain a `capture` + `rimout` pair (the ball enters the mouth, is recognised, and then
-honestly bounces out and plays on), 35 capture earlier, 3 lose a pair - **while not one score and
-not one trajectory moves.** That is what a latent bug looks like when it is closed: capture only
-takes the tread slab out from under a ball, and in these frames the ball was airborne inside the
-mouth and not resting on the slab, so nothing downstream changed.
+| | HOT SHOT | RUNAWAY |
+|---|---|---|
+| outcomes moved | **0 of 861** | **0 of 861** |
+| settle time changed | **0 of 861**, to 4 dp | **0 of 861**, to 4 dp |
+| grid total | 5510 -> 5510 | 6170 -> 6170 |
+| worst settle | 6.48 s, unchanged | 7.13 s, unchanged |
+| event sequence changed | 100 of 861 | 83 of 861 |
+| `capture`+`rimout` pairs gained | 62 | 50 |
+| captured earlier (same counts) | 35 | 31 |
+| pairs lost | 3 | 2 |
+
+The bottom half of that table is the whole story, and the two machines tell it identically.
+**The engine now SEES baskets it was blind to** - a throw gains a `capture` + `rimout` pair when
+the ball enters the mouth, is recognised, and then honestly bounces out and plays on - **while not
+one score and not one trajectory moves on either machine.** That is what a latent bug looks like
+when it is closed: capture only takes the tread slab out from under a ball, and in these frames
+the ball was airborne inside the mouth rather than resting on the slab, so nothing downstream
+changed.
+
+**RUNAWAY's mover is untouched.** Its section 2 still measures against `holeU(G, id, t)` - where
+the runaway basket is RIGHT NOW - and its captured branch still measures against the latched
+`st.capturedU`. Only the FRAME those two are compared in moved. A basket that slides cannot lose
+a ball it already has.
 
 It is worth shipping anyway, and cheaply, because it is the safety net. On BRICK CITY this same
 blind spot is what turned a parked ball into an unrescuable one.
 
-**Also carried over, and proven inert:** the collar loop is now frame-locked
-(`faceToWorldIn(cupFrame, ...)`), the same guard BRICK CITY needed. HOT SHOT's mouths are narrow
-enough that no segment currently crosses its tread's back edge - verified by hashing all 126
-`cupSeg` positions before and after the change, **byte-identical** - so this buys a future wider
-mouth, and costs nothing today.
+**Also carried over, and proven inert on both:** the collar loop is now frame-locked
+(`faceToWorldIn(cupFrame, ...)`), the same guard BRICK CITY needed. Neither machine's mouths are
+wide enough for a segment to cross its tread's back edge - verified by hashing every `cupSeg`
+position before and after (HOT SHOT 126 boxes, RUNAWAY 98), **byte-identical both times** - so this
+buys a future wider mouth and costs nothing today.
 
 **The probe is geometric, not a sweep, and that is deliberate.** It walks each hole's own axis
 from cup floor to rim and asks the one question `physics.js` asks. The 41x21 grid reproduced

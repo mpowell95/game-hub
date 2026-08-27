@@ -35,10 +35,7 @@ import { engineFor } from './skeeball/js/engines.js';
 // entry FAILS this suite, the same way test-game-conventions.mjs's KNOWN_GAPS does - a waiver
 // that outlives its bug is worse than no waiver.
 const KNOWN_GAPS = {
-  runaway: 'HOT SHOT: RUNAWAY - left open deliberately on 2026-08-26. Its engine was being '
-    + 'rewritten by another session at the time (the single moving 100 becoming twin 100s), and '
-    + 'a machine belongs to one session at a time. Latent, as it was on HOT SHOT: the fix there '
-    + 'moved 0 of 861 outcomes. Fix it with that machine, then DELETE this entry.',
+  // Empty, and it should stay that way. RUNAWAY was the last one, closed 2026-08-26.
 };
 
 let passed = 0;
