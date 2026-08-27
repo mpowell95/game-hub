@@ -6,15 +6,16 @@
 //
 // THE TWO THINGS THAT ARE NEW HERE, AND NOWHERE ELSE IN THE REPO:
 //
-//   A MOVING PART. The top row's surviving 100 sweeps across the face for the rest of the rack
-//   (machine.js's moverU/moverVel/holeOffset). Three consequences, each marked MOVER: below.
+//   MOVING PARTS - up to three at once. Every row plays "last one standing": close the others
+//   and the survivor comes off its mark and sweeps the full width of its row (machine.js's
+//   sweepU/sweepVel/holeU/holeOffset). Three consequences, each marked MOVER: below.
 //
 //   A FACE THAT CHANGES SHAPE MID-RACK. Every basket except the runaway is a ONE-SHOT: once it
 //   has been landed in, buildWorld does not build its collar and the capture loop skips it, so
 //   the mouth is a flat plate a later ball rolls over. Both halves are required - a collar with
 //   no capture is a bowl a ball can never leave (BRICK CITY's parked-ball failure rebuilt on
 //   purpose), and capture with no collar swallows a ball through a plate. The rack state comes
-//   in through startThrow as `closed` and `sweep`; this file owns no state of its own.
+//   in through startThrow as `closed` and `sweeps`; this file owns no state of its own.
 //
 // The three MOVER consequences, all load-bearing:
 //
@@ -51,7 +52,7 @@
 // rather than off a clock - same (power, aim, t0) in, same outcome out, every time.
 
 import * as CANNON from '../../vendor/cannon-es.js';
-import { buildMachine, moverVel, holeU, holeOffset } from './machine.js';
+import { buildMachine, holeU, holeVel, holeOffset } from './machine.js';
 
 const H = 1 / 240;               // fixed physics step; flight and thin collars need the rate
 const MAX_T = 12;                // emergency settle cap; the tests assert it never fires
@@ -200,21 +201,23 @@ function worldToFace(M, G, p) {
   return M.worldToFace(p);
 }
 
-export function startThrow(board, { power = 0.5, aim = 0, t0 = 0, closed = null, sweep = null } = {}) {
+export function startThrow(board, { power = 0.5, aim = 0, t0 = 0, closed = null, sweeps = null } = {}) {
   const G = board.geom;
   // THE RACK STATE, straight from game.js. `closed` is the set of baskets already hit this rack;
-  // `sweep` says which top-row 100 (if either) is currently the runaway and how fast.
+  // `sweeps` is an object keyed by hole id holding one record per basket that is CURRENTLY
+  // MOVING - the top row's runaway, and the last basket standing in each lower row.
   //
-  // GUARD: `sweep` IS HELD BY REFERENCE, NOT COPIED, and that is deliberate. It can change while
-  // this ball is still in the air - land the first 100 with a second ball already thrown and the
-  // survivor comes off its mark mid-flight. Every reader (this world, any other ball's world,
-  // and the renderer) calls the same pure function against the same object, so they cannot
-  // disagree about where the basket is. A snapshot here would make the drawn basket and the one
-  // the ball hits two different baskets, which is the exact bug machine.js exists to prevent.
+  // GUARD: `sweeps` IS HELD BY REFERENCE, NOT COPIED, and that is deliberate. It can change while
+  // this ball is still in the air - close a row's second basket with another ball already thrown
+  // and the survivor comes off its mark mid-flight. Every reader (this world, any other ball's
+  // world, and the renderer) calls the same pure functions against the same object, so they
+  // cannot disagree about where a basket is. A snapshot here would make the drawn basket and the
+  // one the ball hits two different baskets, which is the exact bug machine.js exists to prevent.
   //
   // Both default to "nothing closed, nothing moving" - which is a real state (it is ball 1 of
   // every rack) and is what a test throwing one ball at a known phase wants.
   const closedSet = closed instanceof Set ? closed : new Set(Array.isArray(closed) ? closed : []);
+  const sweepMap = sweeps && typeof sweeps === 'object' ? sweeps : {};
   const { world, ball, M, movers } = buildWorld(board, closedSet);
 
   // GUARD: POWER IS NOT CLAMPED TO 0..1. 0 and 1 are the ends of the NATURAL swipe range, not
@@ -250,7 +253,7 @@ export function startThrow(board, { power = 0.5, aim = 0, t0 = 0, closed = null,
     t0: Number.isFinite(t0) ? t0 : 0,
     movers,
     closed: closedSet,
-    sweep,
+    sweeps: sweepMap,
     // MOVER: the mouth's u at the moment of capture, latched. Once the ball is through the rim
     // it is IN the basket and travels with it, so the pass-through test below must keep asking
     // about the mouth it actually fell into - not about where that mouth has slid to since.
@@ -324,15 +327,14 @@ export function startThrow(board, { power = 0.5, aim = 0, t0 = 0, closed = null,
 function driveMovers(st) {
   if (!st.movers || !st.movers.length) return;
   const T = st.t0 + st.t;
-  // PER HOLE, because both top-row 100s carry kinematic collars and at most one of them is the
-  // runaway at any moment. holeOffset() returns 0 for the other one, which parks it exactly on
-  // its own mark with zero velocity - indistinguishable from the static basket it is pretending
-  // to be, and free.
+  // PER HOLE. EVERY basket on this machine carries a kinematic collar, because any of them could
+  // end up the last one standing in its row, and cannon-es cannot change a body's type after the
+  // world is built. holeOffset()/holeVel() return 0 for anything not currently sweeping, which
+  // parks it exactly on its own mark with zero velocity - indistinguishable from the static
+  // basket it is pretending to be, and free.
   for (const m of st.movers) {
-    m.body.position.x = m.baseX + holeOffset(st.G, m.hole, T, st.sweep);
-    m.body.velocity.set(
-      st.sweep && st.sweep.hole === m.hole ? moverVel(st.G, T, st.sweep) : 0, 0, 0,
-    );
+    m.body.position.x = m.baseX + holeOffset(st.G, m.hole, T, st.sweeps);
+    m.body.velocity.set(holeVel(st.G, m.hole, T, st.sweeps), 0, 0);
   }
 }
 
@@ -434,8 +436,11 @@ function substep(st) {
   // never thrown at anything. With it, that same ball is crossing the mouth at the basket's full
   // speed and is treated exactly like a ball rolling across a parked one. MACHINE-SPEC.md
   // section 9, and the no-magnetism ban in section 5 below.
-  const mvx = moverVel(G, st.t0 + st.t, st.sweep);
-  const vFaceMover = Math.hypot(vel.x - mvx, vel.y * sinT - vel.z * cosT);
+  // GUARD: PER HOLE, not once for the frame. More than one basket can be moving now, and they
+  // move at different speeds - a row survivor on its own period and the top row's runaway on
+  // whatever rung of the ladder it has reached. One shared `mvx` would measure every mouth
+  // against the wrong basket's velocity.
+  const vFaceAcross = (mvx) => Math.hypot(vel.x - mvx, vel.y * sinT - vel.z * cosT);
   const hDot = vel.y * cosT + vel.z * sinT;          // + = away from the face, - = into it
   const gPerp = 9.82 * cosT;                          // gravity's pull perpendicular to the face
   const need = G.ballR * (typeof G.captureDrop === 'number' ? G.captureDrop : 0.55);
@@ -452,9 +457,10 @@ function substep(st) {
       // MOVER: where this mouth is RIGHT NOW. `holeU` returns the hole's own resting u on every
       // hole that is not currently the runaway, which is every hole on the machine until the
       // first 100 drops.
-      const hu = holeU(G, id, st.t0 + st.t, st.sweep);
-      const isMover = !!(st.sweep && st.sweep.hole === id);
-      const vCross = isMover ? vFaceMover : vFace;
+      const hu = holeU(G, id, st.t0 + st.t, st.sweeps);
+      // This mouth's OWN speed, and so this mouth's own crossing speed.
+      const hv = holeVel(G, id, st.t0 + st.t, st.sweeps);
+      const vCross = hv ? vFaceAcross(hv) : vFace;
       // THIS HOLE'S OWN FRAME. `f` above is the NEAREST segment's, which once the ball is deep in
       // a basket is the RISER behind it - and a riser-frame distance comes out about 0.22 against
       // a 0.09 mouth, so the basket the ball is actually in gets skipped. That blind spot is why
@@ -588,7 +594,7 @@ function substep(st) {
       // THIS machine - every hole here wears a collar, so `st.cupBoard` is true and the branch
       // above has already resolved a capped ball as the trough's honest zero - but a copy of
       // this file that removes the collars must not silently start measuring to a parked basket.
-      const d = Math.hypot(f.u - holeU(G, id, st.t0 + st.t, st.sweep), f.v - hDef.v);
+      const d = Math.hypot(f.u - holeU(G, id, st.t0 + st.t, st.sweeps), f.v - hDef.v);
       if (!best || d < best.d) best = { id, d, value: hDef.value };
     }
     if (f.v > 0 && best) finishAt(st, best.id, best.value, 'hole');

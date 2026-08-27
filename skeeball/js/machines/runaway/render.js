@@ -145,11 +145,10 @@ export class Renderer {
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
-    // THE ONE-SHOT FACE, drawn. One group per basket (its mouth, flash, wire basket and value
-    // card, so the whole thing slides or hides as a unit) and one cap plate per basket, shown in
-    // its place once it has been closed. render() drives both off game.closed / game.sweep.
-    this._holeGroups = new Map();  // hole id -> THREE.Group, the whole basket (this is what slides)
-    this._cupGroups = new Map();   // hole id -> THREE.Group, mouth + flash + rim + net (this hides)
+    // THE ONE-SHOT FACE, drawn. ONE group per basket - its mouth, capture flash, wire basket and
+    // value backboard - so the whole thing slides as a unit (a basket that is sweeping) or hides
+    // as a unit (one that has closed). render() drives both off game.closed / game.sweeps.
+    this._holeGroups = new Map();  // hole id -> THREE.Group: the whole basket, backboard included
     this._closedSet = new Set();   // reused every frame so render() allocates nothing
     this._popups = [];
     this._particles = [];
@@ -337,19 +336,15 @@ export class Renderer {
       this._onFace(mouth, H.u, H.v, 0.0035, true);
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
-      if (!H.collarH) { this._claimHole(id, sceneBefore, sceneBefore); continue; }
+      if (!H.collarH) { this._claimHole(id, sceneBefore); continue; }
       // HOT SHOT (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
       // basket with a white mini backboard carrying the value - the real cabinet's furniture.
       // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
       // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
       if (this.board.dressing === 'basketball') {
         this._wireBasket(H, cup && cup.color);
-        // EVERYTHING ADDED SO FAR IS THE CUP - the mouth, the capture flash, the rim and the net.
-        // That is exactly the set that disappears when this basket closes. The BACKBOARD comes
-        // next and deliberately STAYS: see _claimHole.
-        const cupEnd = this.scene.children.length;
         if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
-        this._claimHole(id, sceneBefore, cupEnd);
+        this._claimHole(id, sceneBefore);
         continue;
       }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
@@ -357,9 +352,8 @@ export class Renderer {
         cup && cup.color);
       this._onFace(wall, H.u, H.v, 0);
       this.scene.add(wall);
-      const cupEnd = this.scene.children.length;
       if (cup && cup.label) this._cupPlate(H, cup, RING_GLOW);
-      this._claimHole(id, sceneBefore, cupEnd);
+      this._claimHole(id, sceneBefore);
     }
     // MOVER: the TRACK it runs on. Purely cosmetic and deliberately so - it has no physics body,
     // it is drawn flush in the tread, and the ball rolls straight over it. Without it the basket
@@ -526,44 +520,39 @@ export class Renderer {
     if (flat) mesh.rotateX(-Math.PI / 2);
   }
 
-  /** Sweep every scene child added since `from` into this hole's own group, with the ones added
-   *  before `cupEnd` in a NESTED group of their own.
+  /** Sweep every scene child added since `from` into this hole's own group: the mouth, the
+   *  capture flash, the rim, the net and the value backboard.
    *
-   *  Two groups, because a basket has two jobs here:
+   *  ONE group per basket does both of this machine's jobs. `position.x` slides the whole
+   *  assembly (a basket that is currently sweeping), and `visible` hides all of it (a basket that
+   *  has closed for the rest of the rack). No caller anywhere has to know the assembly is more
+   *  than one mesh.
    *
-   *    the OUTER group   is everything this basket is made of. Its `position.x` slides the whole
-   *                      assembly, which is how the runaway moves.
-   *    the CUP group     is the mouth, the capture flash, the rim and the net - the parts that
-   *                      VANISH when this basket closes for the rest of the rack. The BACKBOARD
-   *                      is deliberately left out of it and stays lit and numbered.
+   *  GUARD: THE BACKBOARD GOES WITH IT. An earlier build kept the backboard standing when a
+   *  basket closed - a numbered card with no hoop under it - as the signal that the basket was
+   *  spent. Matt, 2026-08-27: "make the backboards vanish with the baskets." It also stopped
+   *  reading once EVERY row could move: a surviving basket sweeps through its dead neighbours'
+   *  marks, so the shelf filled with numbered cards that the one live basket kept sliding behind.
    *
-   *  GUARD: THE BACKBOARD STAYS, AND THAT IS THE WHOLE READABILITY OF THE ONE-SHOT FACE. The
-   *  first build hid the entire basket and drew a flat plate flush in the face where it had been.
-   *  The plate was correctly placed and COMPLETELY INVISIBLE - the same finding _moverTrack
-   *  records for the mover's groove, and for the same reason: the camera stands behind the ball,
-   *  so every tread is foreshortened almost to nothing and occluded by the riser in front of it,
-   *  and NOTHING LYING FLAT ON THIS FACE CAN BE SEEN FROM WHERE THE GAME IS PLAYED. A closed
-   *  basket therefore read as a basket that had never existed. Backboards stand VERTICAL, face
-   *  the player, and are the most legible things on the machine - so a backboard with its number
-   *  still on it and no hoop underneath is the signal, and it costs no new geometry at all. Do
-   *  not "restore" the plate; it cannot be seen.
+   *  GUARD: AND DO NOT REPLACE IT WITH A PLATE DRAWN IN THE FACE. The build before that one hid
+   *  the basket and drew a flat disc where the mouth had been; it was correctly placed and
+   *  COMPLETELY INVISIBLE - the same finding _moverTrack records for the mover's painted groove,
+   *  and for the same reason: the camera stands behind the ball, so every tread is foreshortened
+   *  almost to nothing and occluded by the riser in front of it. NOTHING LYING FLAT ON THIS FACE
+   *  CAN BE SEEN FROM WHERE THE GAME IS PLAYED. The empty shelf IS the signal.
    *
-   *  The groups sit at the origin, so re-parenting changes nothing about where anything is drawn
+   *  The group sits at the origin, so re-parenting changes nothing about where anything is drawn
    *  (a child's local transform already IS its world transform).
    *
-   *  GUARD: EVERY hole gets a group, not just the two that can move. A basket that closes has to
+   *  GUARD: EVERY hole gets a group, not just the ones that can move. A basket that closes has to
    *  disappear as a unit, and a uniform rule is what stops the next machine's mesh being left
    *  behind in the scene because someone forgot to add it to a list. */
-  _claimHole(id, from, cupEnd) {
-    const outer = new THREE.Group();
-    const cup = new THREE.Group();
-    this.scene.add(outer);
-    const claimed = this.scene.children.slice(from).filter((o) => o !== outer);
-    const cutoff = Math.max(from, cupEnd) - from;
-    claimed.forEach((obj, i) => (i < cutoff ? cup : outer).add(obj));   // Group.add re-parents
-    outer.add(cup);
-    this._holeGroups.set(id, outer);
-    this._cupGroups.set(id, cup);
+  _claimHole(id, from) {
+    const g = new THREE.Group();
+    this.scene.add(g);
+    const claimed = this.scene.children.slice(from).filter((o) => o !== g);
+    for (const obj of claimed) g.add(obj);              // Group.add re-parents
+    this._holeGroups.set(id, g);
   }
 
   /** MOVER: the two END STOPS that mark the limits of the basket's travel - one post at each
@@ -2130,17 +2119,17 @@ export class Renderer {
     // would leave a player aiming at a target the physics is still sliding out from under them.
     {
       const T = game ? game.machineT || 0 : 0;
-      const sweep = (game && game.sweep) || null;
+      const sweeps = (game && game.sweeps) || null;
       const closed = this._closedSet;
       closed.clear();
       for (const h of (game && game.closed) || []) closed.add(h);
       for (const [id, grp] of this._holeGroups) {
-        // The runaway slides; every other basket's offset is 0, which costs one multiply.
-        grp.position.x = holeOffset(this.G, id, T, sweep);
+        // A moving basket slides; every other basket's offset is 0, which costs one multiply.
+        grp.position.x = holeOffset(this.G, id, T, sweeps);
+        // A closed basket vanishes whole - hoop, net and backboard together. The empty shelf is
+        // the signal; see _claimHole for the two things that were tried before it.
+        grp.visible = !closed.has(id);
       }
-      // A closed basket loses its hoop and keeps its backboard - see _claimHole for why that is
-      // the signal rather than a plate drawn where the mouth was.
-      for (const [id, cup] of this._cupGroups) cup.visible = !closed.has(id);
     }
     // Every throw still in the air gets a mesh; whatever is left over is hidden.
     const live = (game && game.balls) || (game && game.ball ? [game.ball] : []);

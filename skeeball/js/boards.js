@@ -1175,9 +1175,38 @@ export const BOARDS = [
       // DOES need a re-sweep (MACHINE-SPEC section 28), because a faster kinematic wall meets the
       // ball differently, and because reachability is a function of phase.
       mover: {
+        // THE TOP ROW: two 100s, and whichever one you do NOT close first becomes the runaway.
         holes: ['topL', 'topR'],
+        // EVERY ROW PLAYS "LAST ONE STANDING" (Matt, 2026-08-27: "when there's 1 basket left,
+        // regardless of which one it is, it starts moving"). Close two of a row's three and the
+        // survivor comes off its mark and sweeps the full width of that row. Up to THREE baskets
+        // can be moving at once, and every one of them is a one-shot - catch it and the row is
+        // empty. Only the top row's survivor refuses to close.
+        //
+        // GUARD: THE OUTER BASKETS OF THESE ROWS REST AT +/-2.07X, WHICH IS THE AMPLITUDE, so an
+        // outer survivor gets the same free cosine handoff the top row does - on its own mark at
+        // zero velocity. A CENTRE survivor cannot: no cosine starts from 0. machine.js gives it a
+        // RAMPED sine instead, which is at its mark AND at zero speed at t0 and winds up to the
+        // full travel over its first period. Both modes exist for that one reason.
+        //
+        // GUARD: THESE MOUTHS ARE WIDER THAN THE TOP ROW'S (0.53125X against 0.5X), so a moving
+        // one runs closer to the rail. At +/-2.07X the wall gap is
+        //     0.50 - 2.07X - (0.53125X + 0.0825X) = 0.7538X
+        // which is UNDER the 0.78X collar-near-a-flat-wall rule (MACHINE-SPEC.md section 12) that
+        // the top row clears at 0.7850X. Those baskets have always sat there and swept clean as
+        // STATIC furniture; a MOVING collar is the worst case for that rule, because it can drive
+        // a ball into the pinch rather than merely sitting in one. The rule is a threshold and the
+        // SWEEP is the evidence - sweep-mover.mjs --stage rows measures the jam
+        // rate at exactly this configuration, and it is the number to check before touching any
+        // of these three: the mouths, collarThick, or the amplitude.
+        rows: [['lowL', 'lowC', 'lowR'], ['midL', 'midC', 'midR']],
         amp: X * 2.07,
+        // The top row's escalation ladder: periods[n] after n catches, last rung holds forever.
         periods: [6.0, 5.0, 4.2, 3.6, 3.1, 2.7],
+        // A row survivor does not escalate - it is a one-shot, so it is only ever caught once.
+        // Slower than the top row's first rung because these are the cheap baskets: the reward
+        // for clearing a row down to one is a shot that is worth taking, not a punishment.
+        rowPeriod: 5.0,
       },
 
       // How high a CLOSED basket's cap stands, in ball-radii. 0 = plated flush with the face,

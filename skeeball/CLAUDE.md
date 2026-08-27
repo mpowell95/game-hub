@@ -1088,9 +1088,9 @@ its twin comes off its mark and sweeps the full width, and every basket you land
 closes too. Full build record, the measured numbers and the open questions:
 `skeeball/MACHINE-RUNAWAY.md`. What a session touching ANY machine needs from here:
 
-- **The motion is pure functions in `js/machines/runaway/machine.js`** - `moverU(G, t, sweep)`,
-  `moverVel`, `holeU`, `holeOffset`. No state, no clock, no `Date.now()`; `sweep` is the rack
-  state, handed in. `physics.js` drives the bodies with them, `render.js` draws with them, the
+- **The motion is pure functions in `js/machines/runaway/machine.js`** - `sweepU`, `sweepVel`,
+  `holeU`, `holeVel`, `holeOffset`. No state, no clock, no `Date.now()`; `sweeps` is the rack
+  state - an object keyed by hole id, one entry per basket currently moving - handed in. `physics.js` drives the bodies with them, `render.js` draws with them, the
   tools measure the travel envelope with them. **Never write a second copy.** One anywhere else is
   a drawn basket drifting off its own collision wall.
 - **A moving collar is a KINEMATIC body, never a static one whose position you rewrite.**
@@ -1134,9 +1134,23 @@ to that face, the amplitude, the ladder or the materials.
 
 **A moving basket needs its shelf to itself - and RUNAWAY threads that rather than breaking it.**
 `holes.spacing`'s 1.30X would be violated at nearly every step of any travel worth having if a
-static basket shared the row. RUNAWAY's two 100s are only ever both present while NEITHER is
-moving; the moment one closes, the survivor has the shelf alone. A third basket up there would
-still be impossible.
+static basket shared the row. On this machine a row's survivor only starts moving once every other
+basket in that row has CLOSED, and a closed basket has no collar in the world at all - so a moving
+collar never has an open neighbour on its own shelf.
+
+**The spec test's spacing rule exempts a pair only when both are in the SAME group**, not merely
+when both CAN move. Once every basket on a machine can move, the looser test exempts every pair
+and silently stops checking travel envelopes altogether. Baskets in DIFFERENT rows can be moving
+at the same time - a good rack on RUNAWAY ends with three - so those pairs still get the full
+envelope.
+
+**AND THE WALL-GAP RULE IS ALREADY BROKEN ON THE LOWER ROWS, MEASURED RATHER THAN ASSUMED.** Those
+mouths are wider than the top row's (0.53125X against 0.5X), so at the ends of the same travel
+their gap to the rail is 0.7538X against MACHINE-SPEC.md section 12's 0.78X. They have always sat
+there as STATIC furniture; making one MOVE is the worst case that rule describes. It measures
+clean - 0 walkouts with one moving, and 0 with all three moving at once - and `node sweep-mover.mjs
+runaway --stage rows` is what re-measures it. **The rule is a threshold; the sweep is the
+evidence.**
 
 **A MOVING BASKET SWEEPS OVER THE ONE YOU CLOSED, so a closed basket must be FLUSH.** The capped
 mark is one end of the travel. Anything standing proud there is a moving collar converging on a

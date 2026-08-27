@@ -124,7 +124,13 @@ for (const board of BOARDS) {
   // A fixed hole contributes its single u, which is what every board with no mover has always
   // been checked against.
   const mover = G.mover || null;
-  const canRun = (id) => !!(mover && Array.isArray(mover.holes) && mover.holes.includes(id));
+  // Every group of baskets that plays "last one standing": the top row, plus each `rows` entry.
+  // Any member can end up the survivor, so any member can move.
+  const groups = mover
+    ? [...(Array.isArray(mover.holes) ? [mover.holes] : []), ...(Array.isArray(mover.rows) ? mover.rows : [])]
+    : [];
+  const groupOf = (id) => groups.find((g) => g.includes(id)) || null;
+  const canRun = (id) => !!groupOf(id);
   const uSpan = (id, h) => (canRun(id) ? [-mover.amp, h.u, mover.amp] : [h.u]);
 
   const odd = holes.filter(([, h]) => Math.abs(h.r - G.holeR) > EPS).map(([id]) => id);
@@ -144,13 +150,20 @@ for (const board of BOARDS) {
     for (let k = i + 1; k < holes.length; k++) {
       const [idA, A] = holes[i];
       const [idB, B] = holes[k];
-      // TWO BASKETS THAT CAN NEVER BE OPEN AT THE SAME TIME ARE NOT A SPACING PROBLEM. On
-      // RUNAWAY the survivor sweeps straight over its twin's mark - but only ever AFTER that twin
-      // has closed, and a closed basket has no collar in the world at all (machine.js's capFor,
-      // physics.js's buildWorld). Measuring the distance between a moving collar and a wall that
-      // no longer exists would fail a face that is correct. They are still checked against each
-      // other on their STATIC marks, below, which is the configuration a rack actually opens in.
-      const pairRuns = canRun(idA) && canRun(idB);
+      // TWO BASKETS IN THE SAME GROUP CAN NEVER BOTH BE OPEN AND MOVING, so their travels are
+      // not a spacing problem. A group plays "last one standing": the survivor only starts
+      // sweeping once every other member has CLOSED, and a closed basket has no collar in the
+      // world at all (machine.js's capFor, physics.js's buildWorld). Measuring the distance
+      // between a moving collar and a wall that no longer exists would fail a face that is
+      // correct. They are still checked against each other on their STATIC marks, below, which is
+      // the configuration a rack actually opens in.
+      //
+      // GUARD: SAME GROUP, NOT "BOTH CAN MOVE". Once every basket on a machine can move, the
+      // looser test exempts every pair and silently stops checking travel envelopes at all.
+      // Baskets in DIFFERENT groups can be moving simultaneously - RUNAWAY ends a good rack with
+      // three of them - so those pairs get the full envelope.
+      const gA = groupOf(idA);
+      const pairRuns = !!gA && gA === groupOf(idB);
       let d = Infinity;
       if (pairRuns) {
         d = Math.hypot(A.u - B.u, A.v - B.v) / X;

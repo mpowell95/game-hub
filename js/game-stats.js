@@ -1372,7 +1372,7 @@ export function recordSkeeball(boardId, extras) {
   // satisfy them. Both are additive there - slots union, cleanRacks climbs.
   recordBoardGame(g.sk, board, {
     score, bestThrow: e.bestThrow | 0, at: e.at, slotsHit: e.slotsHit, cleanRack: e.cleanRack,
-    slotCounts: e.slotCounts, perfectRack: e.perfectRack,
+    slotCounts: e.slotCounts, perfectRack: e.perfectRack, fullRack: e.fullRack,
   });
   unlockBoard(g.sk, board);          // you have played it, so it is yours
   st.updatedAt = new Date().toISOString();
