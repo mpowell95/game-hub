@@ -1324,6 +1324,77 @@ corner costs the ball (a half-aimed slam does not still pay 50)* - is THE CLASSI
 `DEFAULT_BOARD`, and fails identically on a clean `origin/main` checkout. Verified before shipping
 this, so a future session does not spend the afternoon blaming their own diff.
 
+## The ball stuck IN a BRICK CITY penalty basket (2026-08-26) - an invisible ledge, put there by machine.js
+
+Matt: *"the ball sometimes gets stuck IN the negative baskets. Like instead of falling in, it's
+just stuck there... Half of the ball out and half completely in. I've even seen a second ball fall
+into the same negative basket while one is stuck/frozen."* And: *"There's nothing for them to get
+stuck on."*
+
+There was, and he was describing it exactly.
+
+**A collar is 14 boxes on a circle of radius `rr` around its hole at `(H.u, H.v)`**, each one
+placed by `faceToWorld(pu, pv, h/2)`. `faceToWorld` resolves `v` through `frameAt(v)` - which
+STAIRCASE SEGMENT that `v` lands on. The bottom row sits at `v` 0.1909 with `rr` 0.1151, so its
+two rearmost segments carry `pv` 0.3031 - **past the first tread's back edge at 0.3000**. Those
+two were built in the RISER's frame and landed **6.96 cm low and 6.86 cm forward**: a 5 cm-wide
+bar straight across the throat of every -20 / -10 / -20 basket, 60% of the way down. `faceRot`
+already used `tiltAt(H.v)`, so they were mis-oriented for a tread they were no longer standing on
+as well.
+
+**Nothing drew it.** `render.js` skips every `cupSeg` box and draws a smooth wire basket instead,
+so the ledge was invisible - which is why Matt could see nothing to get stuck on, and why looking
+at the screen could never have found it. A ball dropping into the basket came to rest on the bar
+with its centre a hair under the rim: half in, half out, and still there when the next ball
+arrived (`game.js` hands the next ball out on `st.arrived`, not on the ball settling).
+
+**The mid and top rows never had it** - their collars are small enough that no segment reaches
+past its own tread. Bottom row only, on this machine only.
+
+**A second, smaller defect, fixed with it.** `worldToFace` returns the NEAREST segment's
+coordinates, and a ball deep in a bottom-row basket is nearer the riser plane (0.1085 behind the
+mouth) than the tread it is sunk into (the cup is 0.1455 deep). Above `h` 0.121 every basket on
+this machine resolved to a riser frame, so `physics.js` section 2 measured that hole's distance
+as **0.22 against a 0.09 mouth** and skipped the cup the ball was sitting in. Latent on its own -
+it moves 0 of 861 outcomes once the ledge is gone - but it is what stopped capture rescuing the
+parked ball, and it is why the "centre below the rim = captured" rule added on 2026-08-22 never
+fired for this row.
+
+**Both fixes are the same sentence:** ask each hole's question in THAT HOLE'S OWN frame.
+`machine.js` gained `faceToWorldIn(fr, u, v, h)` and `worldToFaceIn(fr, p)`; the collar loop
+resolves `frameAt(H.v)` once per hole, and `physics.js` sections 1 and 2 use the hole's frame
+instead of the free one.
+
+**Measured, full 41x21 grid, before -> after:**
+
+| | before | after |
+|---|---|---|
+| throws parked INSIDE a basket | 4 of 861 | **0** |
+| worst settle | 10.91 s | 5.51 s |
+| watchdog fired | 82 | 75 |
+| outcomes moved | - | 12, **10 of them against the player** |
+| grid total | -530 | -630 |
+
+**The 10-against-the-player number is the fix working, not a regression.** A ball that used to die
+on the ledge and vanish as a 0 now falls in and takes its penalty - which is what Matt asked for:
+*"I want them to not get stuck midway through the basket."* Nothing about a basket's size,
+position or depth changed.
+
+**What was NOT the answer**, so nobody re-derives it: v495 (`137eaef`) shortened the stall
+watchdog from 0.9s x 3 to a single 0.6s window. That only made the stuck ball vanish faster and
+Matt rejected it. **The 0.6s watchdog stays** - it covers a ball parked on a TREAD, which is a
+different thing and still happens (103 of 861 throws). It was never a fix for this.
+
+Two earlier sessions each reached a confident, wrong conclusion here, both the same way: they
+trusted `worldToFace`'s face coordinates over what Matt was looking at. The stalled ball measured
+0.32 m from any basket in face coordinates and 0.054 m from the cup axis in world coordinates -
+half a mouth radius. **On a staircase, cross-check in world coordinates.**
+
+`node test-brickcity-stall.mjs` carries both regression probes, born RED against the unfixed
+engine: a STRUCTURAL one that rebuilds every collar segment in its hole's own frame and needs no
+sweep at all (it would have caught this the day the staircase shipped), and a behavioural one that
+asks, in world coordinates only, whether any parked ball is inside a basket's cylinder.
+
 ## Adding the next machine
 
 1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,

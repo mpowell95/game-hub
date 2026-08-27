@@ -304,7 +304,8 @@ function substep(st) {
       if (p.y < st.capturedFaceY - 0.26 || st.t > MAX_T) finishAt(st, st.captured, hDef.value, 'hole');
       return;
     }
-    const fc = worldToFace(M, G, p);
+    // In the CAPTURED HOLE'S OWN frame, never the nearest one - see machine.js worldToFaceIn.
+    const fc = M.worldToFaceIn(M.frameAt(hDef.v), p);
     const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
     if (st.t > MAX_T) {
       finishAt(st, st.captured, hDef.value, 'hole');
@@ -345,7 +346,12 @@ function substep(st) {
   if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9) {
     for (const id of Object.keys(G.holes)) {
       const hDef = G.holes[id];
-      const d = Math.hypot(f.u - hDef.u, f.v - hDef.v);
+      // GUARD: THIS HOLE'S OWN FRAME. f above is the nearest segment's, which on a staircase is
+      // the RISER once the ball is deep in a bottom-row basket - and a riser-frame d comes out
+      // 0.22 against a 0.09 mouth, so the cup the ball is sitting in gets skipped. Ask each
+      // hole where the ball is relative to IT. See machine.js worldToFaceIn.
+      const fh = M.worldToFaceIn(M.frameAt(hDef.v), p);
+      const d = Math.hypot(fh.u - hDef.u, fh.v - hDef.v);
       const rEff = hDef.r - G.ballR * 0.28;
       if (d >= rEff) continue;
       // how much mouth is left in front of it, along its own line
@@ -363,14 +369,14 @@ function substep(st) {
       // collar - visibly "in the basket" - and could hop back out over the rim (Matt's clip,
       // 2026-08-22 23:42). Capture releases the slab; the pass-through commit at the top of
       // this function still decides the score, so nothing pays without falling through.
-      if (lip > 0 && f.h < lip) {
+      if (lip > 0 && fh.h < lip) {
         st.captured = id;
         st.capturedFaceY = p.y;
         ball.collisionFilterMask = GROUP_REST;
         st.events.push({ type: 'capture', hole: id, value: hDef.value, pos: { x: p.x, y: p.y, z: p.z } });
         return;
       }
-      const needH = lip > 0 ? need + Math.max(0, f.h - lip) : need;
+      const needH = lip > 0 ? need + Math.max(0, fh.h - lip) : need;
       // time to fall `needH` given the current inward speed: 0.5*gPerp*t^2 - hDot*t - needH = 0
       const tDrop = (hDot + Math.sqrt(hDot * hDot + 2 * gPerp * needH)) / gPerp;
       if (vFace * tDrop > cross) continue;            // too fast for this mouth: it rolls on
