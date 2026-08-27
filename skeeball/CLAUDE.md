@@ -475,12 +475,25 @@ and two black **equalizers**.
 - **The arrangement layer** (`boards.js`): SLOTS own the geometry, CUPS own the value and the
   paint. `geom.holes` uses slot-named ids (`top`/`uppL`/`uppR`/`midL`/`midC`/`midR`/`lowL`/
   `lowR`/`bot` - frozen, THE LAW rule 5, they ride the mid-rack autosave); `cups` holds the nine
-  cups (`g6`..`eqB` - each cup's value frozen to its id forever); `arrangement` maps slot to cup,
-  defaulting to the product photo's staging. Hole values are STAMPED from the arrangement at
+  cups (`g6`..`eqB` - each cup's value frozen to its id forever); `arrangement` maps slot to cup.
+  Hole values are STAMPED from the arrangement at
   module load, and `game.js` scores through `cupAt()`, so player-facing rearrangement later is a
   data remap plus a screen - never an engine or physics change (every cup is the same shape).
-  Rearrangement is deliberately deferred: what custom layouts do to records and unlock
-  comparability is Matt's call after he has played it.
+  PLAYER-FACING rearrangement is deliberately deferred: what custom layouts do to records and
+  unlock comparability is Matt's call after he has played it.
+- **The deal was RE-DEALT BY MEASURED DIFFICULTY on 2026-08-27, and the ramp went to 70 degrees
+  with it.** Matt: *"It's not super easy, but it's easiest to get the 6 which is an issue."* A
+  56 x 41 grid said the same thing: `top` owned the only wide straight-throw power band on the
+  machine (5 unbroken steps at .66-.74, scoring again all the way up the dial) and was carrying
+  the 6, while `midL`/`midR` had never been reached by a straight throw at all and both
+  equalizers sat where no straight throw finds them. The 6 is at `midL` now, an equalizer mirrors
+  it at `midR`, the 4s are at uppL/uppR, the 2s at lowL/lowR, the 1s at the two easy slots and
+  the second equalizer at `top`. The ramp change is the same machine's other half: POPONGO was
+  the only cup board still on THE CLASSIC's 64 degrees, and it was hitting the 12s emergency cap
+  about once every three racks (9 of 2,296 throws; 0 at 70 degrees, slowest settle 12.00s ->
+  4.88s). **The open problem neither half fixes: 84% of throws roll back to the trough for
+  nothing, against THE CLASSIC's 71.5% scoring rate.** Full numbers, the control run and the
+  collar-height dead end: `DECISIONS.md#popongo-rearrangement-and-the-70-degree-ramp-2026-08-27`.
 - **The equalizer** (`game.js` `_settle`): landing in a black cup wipes what the previous ball
   EARNED this rack (its `earned` field, so an already-wiped ball or a previous equalizer wipes
   as zero; the score can never go negative). `ballDone` carries `{eq, wiped}`; ui.js shows
