@@ -117,7 +117,28 @@ export const BC_NET = 30000;      // BRICK CITY: 30,000 NET points in total (was
 // changed with them: this machine's objectives are about its face, not about a score.
 export const RA_RUNAWAYS = 10;   // RUNAWAY: catch a moving basket 10 times, on ANY row
 export const RA_FULL = 1;        // RUNAWAY: land in EVERY basket in one round
-export const RA_TOTAL = 10000;   // RUNAWAY: 10,000 points in total on the machine
+export const RA_BEST = 600;      // RUNAWAY: score 600+ in a single round
+//
+// WHERE 600 COMES FROM, AND WHY A LOWER BAR WOULD HAVE SAID NOTHING. Matt, 2026-08-27, replacing
+// a 10,000-point lifetime total: "let's do a crazy good single round... the king of games keeps
+// beating everything i set way faster than i expect."
+//
+// The eight baskets are worth 360 between them, and every one of them CLOSES when you hit it, so
+// the only repeatable score on this machine is the top row's runaway at 100. That makes the
+// arithmetic unusually rigid:
+//
+//     360   every basket once           (8 balls, no misses)
+//     460   a PERFECT ROUND             (the above, plus a 9th ball into the runaway)
+//     550   + skip a 10, catch a 2nd runaway
+//     640   + skip both 10s, catch a 3rd
+//     900   all nine balls into a 100   (theoretical ceiling)
+//
+// GUARD: 460 IS A FLOOR, NOT A TARGET. A perfect round scores exactly 460, so any bar at or below
+// it would be won by the very same rack that wins goal 2 ("every basket in one round") - two
+// objectives paying for one achievement. Above 460 the ONLY way up is to SKIP cheap baskets and
+// farm the runaway instead, which is the machine's hard shot and the thing worth asking for.
+// 600 needs roughly three runaway catches on top of most of the face. Move it if it plays wrong,
+// but do not move it under 460 - it stops meaning anything there.
 
 const sk = () => {
   try { return (loadStats().games.skeeball || {}).sk || {}; } catch { return {}; }
@@ -197,11 +218,13 @@ const GOALS = {
     // other machine can satisfy it and it cannot be completed by missing (the trough is not a
     // basket). The live rack counts too, but only when it has ACTUALLY covered the face.
     const fullEver = (b.fullRacks | 0) + (r ? r.fullRack | 0 : 0);
-    const total = (b.points | 0) + (r ? r.score | 0 : 0);
+    // The best single round on this machine. b.best is Math.max-only, synced and cross-device
+    // merged by js/arcade-scores.js; the live rack's own score counts while it is being played.
+    const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     return [
       { id: 'runaway', labelKey: 'g_runaway', defKey: 'd_ra_hoop', now: Math.min(caught, RA_RUNAWAYS), target: RA_RUNAWAYS, met: caught >= RA_RUNAWAYS },
       { id: 'full', labelKey: 'g_ra_full', defKey: 'd_ra_full', now: Math.min(fullEver, RA_FULL), target: RA_FULL, met: fullEver >= RA_FULL },
-      { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
+      { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
     ];
   },
   brickcity(s, r) {
