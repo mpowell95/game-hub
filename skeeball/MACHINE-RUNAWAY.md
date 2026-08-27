@@ -166,6 +166,21 @@ way is the **relative-velocity capture rule** — a fast rim means a fast crossi
 that cannot fall past the lip in the time it takes to cross the mouth rattles out instead of
 dropping. Across this ladder the two effects evidently cancel.
 
+**And a FINE grid at both ends of the ladder says the same thing, with the resolution to mean
+it.** 21 powers x 41 aims x 4 phases, 3,444 throws per rung:
+
+| rung | period | peak m/s | catching cells | share | walkouts | slowest |
+|---|---|---|---|---|---|---|
+| 0 | 6.0s | 0.315 | 21 / 3444 | 0.61% | 0 | 7.25s |
+| 5 | 2.7s | 0.701 | 24 / 3444 | 0.70% | 0 | 6.68s |
+
+The fastest rung is **not harder than the slowest — if anything it is a shade more available**,
+which is the direction the 7s -> 6s history predicted and the opposite of the intuition. Both rungs
+are catchable at every phase probed, at both ends of the travel and at both centre crossings, so
+the machine is not biased to one side or to one part of the sweep. And **0 walkouts at 0.70 m/s of
+rim speed on a fine grid** is the strongest evidence yet that the 0.005X rail margin holds: the
+pinch a moving collar makes possible has still never appeared.
+
 **So what does the escalation actually do?** It changes what the shot DEMANDS OF A PERSON, which
 no sweep measures: deliberately timing a release against a 2.7s sweep is a different act from
 timing one against a 6s sweep, even when the same fraction of blind `(power, aim)` pairs happen to
@@ -439,10 +454,16 @@ three seconds is simply what a ball costs, and a borrowed constant cannot know t
    person trying to time a release. If it does not feel like an escalation in real racks, the
    number to move is `periods` in `js/boards.js`, not the mouth: the rail margin at 4.00in is down
    to 0.005X and there is nothing left to widen into without shortening the travel.
-3. **`capRise` is 0.** A raised cap on rows 1 and 2 would give a closed basket some physical
+3. **The ladder may want to do something other than change the period.** The fine grid says a
+   faster sweep is not a less available shot, so if the escalation needs to bite in a way a sweep
+   can see, the lever is not `periods`. Candidates, none of them measured yet: shrinking the mouth
+   a rung at a time (blocked today - the rail margin is 0.005X, so the amplitude would have to pay
+   for it), or shortening the travel so the basket spends less time near the reachable centre.
+   Both are real changes to the machine and belong to a playtest, not a guess.
+4. **`capRise` is 0.** A raised cap on rows 1 and 2 would give a closed basket some physical
    feedback (the ball visibly deflects) at the cost of making the top row harder to reach late in
    a rack. Deferred deliberately, and measurable: raise it and run `test-runaway-capped.mjs`.
-4. **The travel does not reach the literal edges** (-/+2.07X of a -/+3.4375X face, so the basket
+5. **The travel does not reach the literal edges** (-/+2.07X of a -/+3.4375X face, so the basket
    covers the middle 60% of the width). The 0.78X rail rule is what stops it, and going wider means
    solving the pinch a different way (a sloped outer collar face, or a recessed rail pocket) rather
    than just raising the number.
