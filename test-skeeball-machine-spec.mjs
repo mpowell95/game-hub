@@ -19,6 +19,21 @@ import { readFileSync } from 'node:fs';
 
 const SRC = readFileSync(new URL('./skeeball/js/boards.js', import.meta.url), 'utf8');
 
+/** A machine's own engine files, read as TEXT. Part 7's rules are about how a machine is WRITTEN,
+ *  not what its numbers are, and every one of them is a defect that shipped on a real machine and
+ *  cost Matt a playable game (2026-08-26). Board id and folder name are the same thing - the
+ *  contract engines.js's "ADDING A MACHINE" note describes. A machine whose folder is missing
+ *  fails loudly rather than silently passing every rule below. */
+function engineSrc(id) {
+  const out = {};
+  for (const f of ['render', 'physics', 'machine']) {
+    try {
+      out[f] = readFileSync(new URL(`./skeeball/js/machines/${id}/${f}.js`, import.meta.url), 'utf8');
+    } catch { out[f] = null; }
+  }
+  return out;
+}
+
 const MIN_REASON = 40;
 const EPS = 1e-6;
 
@@ -269,6 +284,72 @@ for (const board of BOARDS) {
     entryBad.push('unlock must be null, { board, score } or { board, goals: true }');
   }
   rule(board, 'entry.complete', entryBad.length === 0, `missing or wrong: ${entryBad.join(', ')}`);
+
+  // === PART 7 - THE MACHINE MUST NOT MAKE THE HUB SLUGGISH ===================================
+  //
+  // Every rule below is a defect that SHIPPED, on a real machine, and cost Matt a playable game.
+  // A machine can satisfy every other rule in this file - perfect geometry, perfect materials,
+  // perfect colour - and still drag the whole hub down, because each machine owns its own
+  // render.js and physics.js and every new one is a fresh chance to reintroduce all of it.
+  // Full history: skeeball/MACHINE-SPEC.md Part 7.
+  const src = engineSrc(board.id);
+
+  // --- 21 perf.files ---------------------------------------------------------------------
+  const missing = ['render', 'physics', 'machine'].filter((f) => src[f] === null);
+  rule(board, 'perf.files', missing.length === 0,
+    `skeeball/js/machines/${board.id}/ is missing ${missing.join('.js, ')}.js - `
+    + 'board id and engine folder name must match (engines.js, "ADDING A MACHINE")');
+  const R = src.render || '';
+  const PH = src.physics || '';
+
+  // --- 22 perf.context -------------------------------------------------------------------
+  // THE CONTRACT ui.js's releaseRenderer() DEPENDS ON. dispose() frees three.js's buffers and
+  // LEAVES THE WEBGL CONTEXT ALIVE; only forceContextLoss() hands it back, and ui.js reaches in
+  // via `r.renderer.forceContextLoss()` to do it. A machine that keeps its THREE.WebGLRenderer
+  // under a different field name leaks one context per rack, silently, and the browser starts
+  // throttling from about the sixteenth - which is what pinned BRICK CITY at a flat 10fps.
+  rule(board, 'perf.context', /this\.renderer\s*=\s*new THREE\.WebGLRenderer/.test(R),
+    'render.js must keep its THREE.WebGLRenderer as `this.renderer` - ui.js releaseRenderer() '
+    + 'calls this.renderer.forceContextLoss() by that exact name to give the context back');
+
+  // --- 23 perf.probe ---------------------------------------------------------------------
+  // A throwaway getContext('webgl') costs a context out of the same small global budget. The
+  // software-GL check used to take one per Renderer ever constructed and never give it back:
+  // five for the gallery's machine pictures alone, before a ball was thrown.
+  const probes = (R.match(/getContext\(\s*['"]webgl/g) || []).length;
+  rule(board, 'perf.probe', probes === 0 || /WEBGL_lose_context/.test(R),
+    `render.js opens ${probes} throwaway WebGL context(s) and never releases one - memoise the `
+    + 'answer per module and release the probe through WEBGL_lose_context (see isSoftGL)');
+
+  // --- 24 perf.shadow --------------------------------------------------------------------
+  // three.js redraws the whole shadow map EVERY FRAME by default, drawing every caster a second
+  // time - and a skeeball machine is a still life for most of a rack while the player lines up.
+  // Measured on BRICK CITY: 172 draw calls per frame with the pass on, 138 with it on demand.
+  // On THE CLASSIC, whose rings are 192 separate bodies: 2046 against 1246.
+  rule(board, 'perf.shadow',
+    /shadowMap\.autoUpdate\s*=\s*false/.test(R) && /shadowMap\.needsUpdate\s*=/.test(R),
+    'render.js must set shadowMap.autoUpdate = false and assign shadowMap.needsUpdate in '
+    + 'render() only when a caster moved - otherwise the shadow pass runs on every still frame');
+
+  // --- 25 perf.textures ------------------------------------------------------------------
+  // Material.dispose() does NOT dispose the material's textures. Every scoring popup builds a
+  // CanvasTexture, and without an explicit .map.dispose() each one sits on the GPU for the life
+  // of the page - about a megabyte a rack, never freed. This is the one that makes a long
+  // session worse than a fresh one.
+  const popupLine = (R.match(/^.*_popups\.splice.*$/m) || [''])[0];
+  rule(board, 'perf.textures', /map\.dispose|disposeMat/.test(popupLine),
+    'render.js retires a score popup without disposing its texture - dispose .map BEFORE the '
+    + 'material (or route both through a disposeMat helper). Material.dispose() does not do it');
+
+  // --- 26 perf.broadphase ----------------------------------------------------------------
+  // A throw's world holds ONE dynamic body - the ball - among ~200 static ones. NaiveBroadphase
+  // tests every pair and discards all but the ball's, because needBroadphaseCollision rejects
+  // static-against-static: tens of thousands of pointless tests per step, at 240 steps a second.
+  // Replacing it is worth 29-32% of physics time and is provably invisible to play - each
+  // machine that has done it proved 861 of 861 throws identical first.
+  rule(board, 'perf.broadphase', !/new CANNON\.NaiveBroadphase\(\)/.test(PH),
+    'physics.js uses NaiveBroadphase. Its world has one dynamic body among ~200 static ones, so '
+    + 'this is O(n^2) for nothing - port BallBroadphase and PROVE the 41x21 grid is unchanged');
 }
 
 // --- board ids are unique and none is empty -------------------------------------------------

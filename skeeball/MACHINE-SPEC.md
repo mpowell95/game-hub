@@ -553,6 +553,11 @@ node test-skeeball-rings.mjs
 node test-game-conventions.mjs
 ```
 
+`test-skeeball-machine-spec.mjs` also carries **Part 7**, the performance rules, and reads your
+machine's own `render.js` and `physics.js` to do it. It will tell you if the machine you just built
+is going to make the whole hub sluggish. It cannot tell you it is FAST — for that, Part 7 says what
+to measure and how.
+
 `skeeball/js/test.js`'s cheap half (rules, snapshots, unlock chain, the recorder payload) runs
 over every board, so a new machine's DATA is covered the moment it exists — but its heavy
 physics groups (`--reach`, `--dial`, …) throw at `DEFAULT_BOARD` only. **A new board's
@@ -710,3 +715,148 @@ four phases and never at the other four; a dense probe at one of those "never" p
 `skeeball/js/test.js`) — a hole is not unreachable until a FINE sweep says so.
 
 Re-run it after any change to that face, the amplitude, the period or the materials.
+
+---
+
+# PART 7 — THE MACHINE MUST NOT MAKE THE HUB SLUGGISH
+
+New 2026-08-26. **Every rule in this part is a defect that shipped on a real machine and cost Matt
+a playable game**, and none of them was catchable by any other rule in this document.
+
+The reason this part has to exist is the HARD RULE that every machine owns its own `render.js` and
+`physics.js`. That isolation is right and it is not negotiable — but it means each of these defects
+has to be fixed once per machine, and **every new machine is a fresh chance to reintroduce all of
+them**. A board can be perfect on geometry, materials, scoring and colour and still drag the hub
+down.
+
+The incident, in one paragraph, because the numbers are what make the rules stick. Matt sent a
+screen recording of BRICK CITY: *"I did not slow it down at all. This is how slow and choppy actual
+gameplay gets."* Decoded frame by frame it was a dead-flat **10.0 fps, in every five-second window
+of a 68-second clip**, while the phone's own UI animated beside it at 60. A renderer short of CPU or
+GPU wobbles with what is on screen; that did not move at all. Flat is a THROTTLE, and the throttle
+was the browser running out of WebGL contexts — twelve were alive before the first ball was thrown.
+
+## 29 · One context per machine, handed back — `perf.context`, `perf.probe`
+
+A browser holds a small **global** budget of WebGL contexts (16 in Chromium, fewer on iOS) and
+throttles hard once it is over. Two separate leaks put BRICK CITY over it:
+
+- **`WebGLRenderer.dispose()` does not release the context.** It frees three.js's buffers and
+  programs and leaves the context alive; only `forceContextLoss()` hands it back. `js/ui.js`'s
+  `releaseRenderer()` does that for every machine, at every teardown site — **by reaching in for
+  `r.renderer.forceContextLoss()`, by that exact field name.** So:
+
+  > **Keep your `THREE.WebGLRenderer` in `this.renderer`.** It is a contract, not a style
+  > preference. Rename it and every rack leaks a context, silently, until the hub throttles.
+
+- **The software-GL probe took a second one.** `document.createElement('canvas').getContext('webgl')`
+  read once and walked away, once per Renderer ever constructed. Memoise the answer per module and
+  release the probe through `WEBGL_lose_context` — `isSoftGL()` in any machine's `render.js` is the
+  shape to copy.
+
+Counted in a browser, live contexts: **12 on the gallery and +1 a rack before, 0 and 1 after.** From
+the fourth rack the console repeated *"Too many active WebGL contexts. Oldest context will be lost."*
+
+## 30 · The shadow pass runs on demand — `perf.shadow`
+
+three.js re-renders the whole shadow map **every frame** by default, which draws every caster in the
+scene a second time. A skeeball machine is a still life for most of a rack, while the player lines
+up a throw.
+
+```js
+this.renderer.shadowMap.autoUpdate = false;
+this.renderer.shadowMap.needsUpdate = true;   // once, for the opening still frame
+```
+
+and at the bottom of `render()`, set `needsUpdate` for exactly the frames a caster moved:
+
+```js
+this.renderer.shadowMap.needsUpdate = live.length > 0 || used !== this._shadowUsed
+  || this._popups.length > 0 || this._particles.length > 0 || this._celebrateT > 0;
+this._shadowUsed = used;
+```
+
+**`live.length`, not `used`.** `used` counts the ball parked on the serve spot, which does not move;
+gating on it leaves the pass running through the whole wait between throws, which is the still life
+the gate exists for. `used` **changing** still counts, or the frame a ball stops being drawn leaves
+its shadow lying on the lane under nothing.
+
+Measured idle draw calls per frame:
+
+| | with the pass on every frame | on demand |
+|---|---|---|
+| BRICK CITY | 172 | **138** |
+| THE CLASSIC | 2046 | **1246** |
+
+THE CLASSIC gains most because its rings are 192 separate bodies — more casters, more to redraw.
+
+## 31 · A texture made per event is disposed with it — `perf.textures`
+
+**`Material.dispose()` does NOT dispose the material's textures.** Every score popup builds a
+256x128 `CanvasTexture`; without an explicit `.map.dispose()` each one sits on the GPU for the life
+of the page. About **a megabyte a rack, never freed** — this is the defect that makes a long session
+worse than a fresh one, and it is invisible in a short test.
+
+```js
+if (s.material.map) s.material.map.dispose();
+s.material.dispose();
+```
+
+Do it in `render()`'s retire path AND in `dispose()`. Burst particles have the same shape of bug:
+they were removed from the scene with the material left behind. Measured over 27 popups (three
+racks): **17 textures at rest → 44 → 44** before, **17 → 44 → 17** after.
+
+## 32 · The broadphase knows there is one ball — `perf.broadphase`
+
+A throw's world holds **one dynamic body** among ~200 static ones. `NaiveBroadphase` tests every
+pair and throws all but the ball's away, because `needBroadphaseCollision` rejects
+static-against-static. At the 240Hz step that is millions of rejected pair tests a second.
+
+`BallBroadphase` (any machine's `physics.js`) walks the ball's own pairs instead. Measured on the
+41x21 grid, physics time for 861 throws:
+
+| | before | after | |
+|---|---|---|---|
+| THE CLASSIC | 261.8s | 177.5s | **32%** |
+| HOT SHOT | 129.2s | 91.9s | **29%** |
+| POPONGO | 87.5s | 61.7s | **29%** |
+| BRICK CITY | — | — | **26%** |
+
+THE CLASSIC gains most because it has the most bodies (263 against the cup machines' ~200): the
+naive cost goes with the SQUARE of the count, so 1.32x the bodies cost 2.34x the time.
+
+**It emits pairs in NaiveBroadphase's exact order (`for i, for j < i`) and that is not optional** —
+the solver's result depends on the order it is handed its pairs. It falls back to the naive sweep
+whenever the world does not hold exactly one non-static body, so a future mover cannot silently get
+a different pair list than it was tuned against.
+
+> **PROVE IT BEFORE YOU SHIP IT.** Every machine that has done this proved the 41x21 grid
+> **identical first** — hole, value, settle time to six decimal places, bounce count, board contact
+> and the full event sequence, throw for throw against the old engine. 0 of 861 differ, or it does
+> not go in. A physics change you cannot prove invisible is a physics change to the way the machine
+> plays, whatever you meant it to be.
+
+## 33 · What Part 7 cannot check for you
+
+The rules above are read out of your machine's source. They prove the machine is not carrying a
+known defect. They cannot prove it is fast. Two things are worth measuring by hand on a new build,
+in a real browser:
+
+- **Draw calls per frame, idle and in flight** (`renderer.info.render.calls`). THE CLASSIC's 1246
+  idle is high for a phone; a new machine well above that is worth a second look before it ships.
+- **Live WebGL contexts after six racks and a return to the gallery.** Should be 1 while playing and
+  0 on the gallery. Anything that climbs with racks played is a leak, and it will throttle the hub
+  for every game, not just yours.
+
+## 34 · Two things NOT to do for performance
+
+- **Do not turn MSAA off.** At dpr 2 the drawing buffer maps 1:1 onto the phone's physical pixels,
+  so nothing else is doing the job, and these machines are all high-contrast edges — rails, rims,
+  marquee. Differencing the two frames on BRICK CITY, 1.5% of the screen changes visibly and all of
+  it is the machine's outline. Tried, measured, rejected.
+- **Do not coarsen ring or collar segment counts.** THE CLASSIC's rings are one box per 4cm of
+  circumference because its ring diameters span 6.71x (the 100's 0.155m up to the 10's 1.036m arc)
+  and a fixed count would facet the big ones into corners the ball can hit — `DECISIONS.md`,
+  "Ring geometry". A fixed 14 on the 10 arc gives 23cm chords against a 10.9cm ball. Those bodies
+  are the honest price of a ring the ball cannot feel, and section 32 removes the cost of having
+  them without touching one of them.

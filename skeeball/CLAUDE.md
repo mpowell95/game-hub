@@ -1563,6 +1563,17 @@ one is covered the day it ships.
 
 ## Adding the next machine
 
+**Read `MACHINE-SPEC.md` Part 7 before you copy a `render.js` or a `physics.js`.** Every rule in it
+is a defect that shipped on a real machine and made the hub sluggish, and none of them is catchable
+by geometry, materials or colour rules. `test-skeeball-machine-spec.mjs` enforces the five that can
+be read out of your source (`perf.context`, `perf.probe`, `perf.shadow`, `perf.textures`,
+`perf.broadphase`); it runs over every board, so a new machine is covered the day its folder exists.
+The one that is a CONTRACT rather than a preference: keep your `THREE.WebGLRenderer` in
+`this.renderer`, because `js/ui.js`'s `releaseRenderer()` calls `r.renderer.forceContextLoss()` by
+that name to hand the context back, and a machine that renames it leaks one per rack until the
+browser throttles the whole hub.
+
+
 1. Add an entry to `BOARDS` in `js/boards.js`: new frozen `id`, marquee `name` (a proper noun,
    untranslated), `taglineKey` (+ its `{en,es}` strings), `look`, `geom`, and
    `unlock: { board: '<previous id>', score: N }`. Obey `geom`'s spacing rule for every
