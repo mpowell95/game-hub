@@ -439,6 +439,15 @@ function skBestAt(g, machine) {
   if (!machine || machine === 'all') return sk.bestGame | 0;
   return ((sk.boards || {})[machine] || {}).best | 0;   // the per-machine record, exactly as stored
 }
+/** One player's stored record for ONE Skeeball machine, exactly as arcade-scores.js wrote it
+ *  ({plays, points, best, bestThrow, daily, slots, slotHits, cleanRacks, perfectRacks}), already
+ *  carrying any score correction (players-agg.js applies those per source record, before merging).
+ *  Absent machine, absent record: an empty object, so every caller reads a stored 0 rather than
+ *  needing its own guard. */
+function skBoardRec(g, machine) {
+  const sk = (g.games.skeeball || {}).sk;
+  return (sk && (sk.boards || {})[machine]) || {};
+}
 /** Skeeball's plays, machine-filtered. Its byDiff IS keyed by machine, so playsAtTier cannot slice
  *  it (tierOf('classic') is null); the per-board record is the stored answer. */
 function skPlaysAt(g, machine) {
@@ -931,15 +940,30 @@ const TEXTURE = {
     { labelKey: 'lb_tex_hc_coins', get: (g) => (((g.games.hillclimb || {}).hc || {}).coins) | 0 },
     { labelKey: 'lb_tex_hc_flips', get: (g) => (((g.games.hillclimb || {}).hc || {}).flips) | 0 },
   ],
+  // Skeeball is the one board with a MACHINE filter, so three of its four records carry a second,
+  // machine-scoped getter (`machine`) - see recordsHTML. `lb_tex_sk_hundreds` has none because
+  // sk.hundreds is a LIFETIME counter with no per-machine breakdown anywhere in the store
+  // (js/CLAUDE.md, "Score corrections"): the per-board record keeps `slotHits` keyed by each
+  // machine's own hole ids, and turning those into "how many 100s" would mean importing that
+  // board's geometry to learn which hole is worth 100. Add the counter to the writer before
+  // showing it per machine; never derive it here.
   skeeball: [
-    { labelKey: 'lb_tex_sk_best_game', get: (g) => (((g.games.skeeball || {}).sk || {}).bestGame) | 0 },
-    { labelKey: 'lb_tex_sk_best_throw', get: (g) => (((g.games.skeeball || {}).sk || {}).bestThrow) | 0 },
+    {
+      labelKey: 'lb_tex_sk_best_game',
+      get: (g) => (((g.games.skeeball || {}).sk || {}).bestGame) | 0,
+      machine: (g, mid) => skBoardRec(g, mid).best | 0,
+    },
+    {
+      labelKey: 'lb_tex_sk_best_throw',
+      get: (g) => (((g.games.skeeball || {}).sk || {}).bestThrow) | 0,
+      machine: (g, mid) => skBoardRec(g, mid).bestThrow | 0,
+    },
     { labelKey: 'lb_tex_sk_hundreds', get: (g) => (((g.games.skeeball || {}).sk || {}).hundreds) | 0 },
-    { labelKey: 'lb_tex_sk_points', get: (g) => (((g.games.skeeball || {}).sk || {}).points) | 0 },
-    // POPONGO's all-four-colors objective. Recorded since 2026-08-22 and shown nowhere until now.
-    // A record with no positive value is skipped by recordsHTML, so this stays invisible until
-    // somebody actually sweeps.
-    { labelKey: 'lb_tex_sk_sweeps', get: (g) => (((g.games.skeeball || {}).sk || {}).colorSweeps) | 0 },
+    {
+      labelKey: 'lb_tex_sk_points',
+      get: (g) => (((g.games.skeeball || {}).sk || {}).points) | 0,
+      machine: (g, mid) => skBoardRec(g, mid).points | 0,
+    },
   ],
   tictactoe: [
     { labelKey: 'lb_tex_classic_played', get: (g) => (((g.games.tictactoe.tt || {}).classic) || {}).played | 0 },
@@ -963,17 +987,32 @@ function sumGrid(grid, side) {
 /** "Standing records" (2026-08-25; this is the old "who leads what" chip row, re-presented).
  *  Each record is a VALUE, a LABEL and the PERSON who holds it, in a two-column grid with a
  *  hairline between cells; an odd last record spans both columns rather than leaving a hole.
- *  They are LIFETIME figures and are deliberately unaffected by the board's filter - several of
- *  them (Chinchon closes, Boggle words) have no per-tier storage at all, so a filtered version
- *  would have to be invented. */
+ *
+ *  They are LIFETIME figures on every board that filters by DIFFICULTY - several of them
+ *  (Chinchon closes, Boggle words) have no per-tier storage at all, so a filtered version would
+ *  have to be invented.
+ *
+ *  SKEEBALL IS THE EXCEPTION, because its filter is a MACHINE and its store really does keep
+ *  per-machine numbers. Matt, 2026-08-25, looking at the board filtered to BRICKCITY: "none of
+ *  these stats on the bottom are specific to brickcity. They're all skeeball combined. That
+ *  shouldn't be the case." Every other number on that screen (the games count in the header, each
+ *  card's best and plays) already honored the filter, so the records were the one block quietly
+ *  answering a different question. Now: a spec that declares a `machine` getter is re-read from
+ *  the selected machine's own stored record, and a spec that has none is DROPPED while a machine
+ *  is selected rather than printed under a heading that would make it a lie. Nothing is derived,
+ *  apportioned or estimated (THE LAW rule 4), and nothing is hidden that this block is the only
+ *  home for - the lifetime figure is one tap away under All machines, and My Stats shows it
+ *  unfiltered regardless. */
 function recordsHTML(list, id) {
-  const specs = TEXTURE[id];
-  if (!specs) return '';
+  const all = TEXTURE[id];
+  if (!all) return '';
+  const byMachine = id === 'skeeball' && _machine && _machine !== 'all';
+  const specs = byMachine ? all.filter((s) => s.machine) : all;
   const cells = [];
   specs.forEach((spec) => {
     let best = null;
     for (const g of list) {
-      const v = spec.get(g) | 0;
+      const v = (byMachine ? spec.machine(g, _machine) : spec.get(g)) | 0;
       if (v > 0 && (!best || v > best.v)) best = { v, g };
     }
     if (!best) return;
@@ -983,7 +1022,10 @@ function recordsHTML(list, id) {
   });
   if (!cells.length) return '';
   if (cells.length % 2) cells[cells.length - 1] = cells[cells.length - 1].replace('class="lb-rec"', 'class="lb-rec is-wide"');
-  return `<h3 class="lb-h3">${esc(t('lb_records_h'))}</h3><div class="lb-recs">${cells.join('')}</div>`;
+  // The heading names the machine when one is selected: this block sits at the bottom of a long
+  // scroll, well below the filter button that set it.
+  const heading = byMachine ? t('lb_records_h_machine', { name: skMachineMeta(_machine).name }) : t('lb_records_h');
+  return `<h3 class="lb-h3">${esc(heading)}</h3><div class="lb-recs">${cells.join('')}</div>`;
 }
 
 // Tic Tac Toe's game page shows the Ultimate/Classic split instead of one wins number (Matt:
