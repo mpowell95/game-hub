@@ -853,11 +853,12 @@ export const BOARDS = [
     //   `cups`         the nine physical cups: value, color, printed label, ink color for the
     //                  label, and an optional `effect` ('equalizer': landing here wipes the
     //                  points the previous ball earned this rack - game.js applies it).
-    //   `arrangement`  which cup sits in which slot. THE DEFAULT IS THE PRODUCT PHOTO's staging
-    //                  (playpopongo.png), which also follows the rules sheet's own guidance
-    //                  (like colors spaced apart). One arrangement ships; player rearrangement
+    //   `arrangement`  which cup sits in which slot. One arrangement ships; player rearrangement
     //                  is deferred, and when it comes it is a game-level remap over these same
     //                  slots - never a geometry change, because every cup is the same shape.
+    //                  IT SHIPPED as the product photo's staging (playpopongo.png) and was
+    //                  RE-DEALT 2026-08-27 by measured slot difficulty - see the block above
+    //                  `arrangement` below, and DECISIONS.md#popongo-rearrangement-and-the-70-degree-ramp-2026-08-27.
     // Hole VALUES are stamped from the arrangement at the bottom of this file, so physics and
     // the machine-spec test see ordinary valued holes and there is exactly ONE source of truth.
     // THE LAW rule 5: slot ids AND cup ids are storage (slot ids ride the mid-rack autosave;
@@ -874,18 +875,51 @@ export const BOARDS = [
       eqA: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
       eqB: { value: 0, effect: 'equalizer', color: '#17140f', ink: '#ffffff', label: '−' },
     },
+    // RE-DEALT BY MEASURED DIFFICULTY, 2026-08-27. Matt, after playing it: *"It's not super easy,
+    // but it's easiest to get the 6 which is an issue."* He is right, and the grid says so. A
+    // 56 x 41 sweep (power 0..1.10 x aim -1..1, the real engine) asked the only question that
+    // matters for shot selection: on a STRAIGHT throw (|aim| <= 0.10), how wide an unbroken power
+    // band does each slot own? That is what "repeatable" means to a thumb.
+    //
+    //   top   5 steps (.66-.74), AND it keeps catching at .80 .86 .94 .98 1.08
+    //   midC  5 steps (.42-.50)
+    //   bot   5 steps (.18-.26)
+    //   lowL / lowR  2 steps        uppL / uppR  1 step        midL / midR  ZERO
+    //
+    // So exactly three shots on this machine repeat, `top` owns the widest band AND the most
+    // natural swipe speed AND scores again all over the top of the dial - and it was carrying the
+    // 6. The old deal also put both equalizers where no straight throw ever finds them, so the
+    // risk half of the machine never fired at all.
+    //
+    // THE NEW DEAL RUNS THE VALUES DOWN THE MEASURED LADDER, hardest slot paid most:
+    //   midL   the 6      the one slot no straight throw has ever reached; aim is the only way in
+    //   midR   equalizer  the 6's mirror at the same reach - drift the wrong way and you lose
+    //                     what your last ball earned. This is the risk/reward the black cups
+    //                     were built for.
+    //   uppL / uppR  the 4s   1-step flickers, a genuine shot
+    //   lowL / lowR  the 2s   2-step bands
+    //   midC / bot   the 1s   the two easy repeatable shots pay the least
+    //   top    equalizer  BRICK CITY's logic (root CLAUDE.md: the easiest thing on the face is
+    //                     what takes points), and it is the gentlest possible version of it -
+    //                     an equalizer wipes the PREVIOUS ball's earnings, and 78% of straight
+    //                     throws score nothing, so it costs a missing player nothing at all and
+    //                     only bites the one pattern this change exists to kill.
+    //
+    // THE LAW rule 5 is untouched: no cup id moved value, no slot id changed, and a mid-rack
+    // autosave stores each throw's own `value`, so a rack banked under the old deal restores
+    // with the numbers it was actually scored with (`game.js` restore reads `t.value`).
     arrangement: {
-      top: 'g6',
-      uppL: 'eqA', uppR: 'y4a',
-      midL: 'r2a', midC: 'b1a', midR: 'r2b',
-      lowL: 'b1b', lowR: 'eqB',
-      bot: 'y4b',
+      top: 'eqA',
+      uppL: 'y4a', uppR: 'y4b',
+      midL: 'g6', midC: 'b1a', midR: 'eqB',
+      lowL: 'r2a', lowR: 'r2b',
+      bot: 'b1b',
     },
 
-    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane, same ramp,
-    // same throw - the face is the only thing that changes) EXCEPT the ball, under the waiver
-    // below. troughTenHalfW and ringSegments are deliberately absent: both are classic-only
-    // vestiges (see the spec, sections 6 and 12).
+    // Part 1 of MACHINE-SPEC.md, copied from THE CLASSIC (same cabinet, same lane) EXCEPT the
+    // ball, under the waiver below, and THE RAMP, which is HOT SHOT's 70 degrees since
+    // 2026-08-27 (see `humpAngles`). troughTenHalfW and ringSegments are deliberately absent:
+    // both are classic-only vestiges (see the spec, sections 6 and 12).
     geom: {
       // THE PING-PONG BALL (Matt, 2026-08-22): the real Popongo is a ping pong ball thrown into
       // solo cups - mouth about 2.4x the ball - and at the classic's 0.35X ball our cups read
@@ -898,7 +932,25 @@ export const BOARDS = [
       laneW: X * 4.875,
       bedThick: 0.06,
       humpLen: 0.42,
-      humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
+      // HOT SHOT's 70-degree ramp, adopted 2026-08-27. This machine shipped on THE CLASSIC's 64
+      // degrees because it was built the same day HOT SHOT worked out that CUPS NEED A DROP-IN,
+      // and the lesson landed one machine over. It was the only cup board still on 64: the ball
+      // met a 45-degree face at 19 degrees and SKIMMED it, where HOT SHOT's arrives at ~64 to a
+      // near-flat tread and drops in. Measured on the 56 x 41 grid, 64 -> 70 degrees:
+      //
+      //   watchdog walkouts at the 12s emergency cap   9 of 2296  ->  ZERO
+      //   slowest settle                               12.00s     ->  4.88s
+      //
+      // That cap is what skeeball/js/test.js asserts is unreachable, and this machine was
+      // hitting it about once every three racks - twelve seconds of a ball doing nothing.
+      // It also turns the straight-throw ladder into a clean staircase (bot .24-.32, lowL/lowR
+      // .38-.42, midC .48-.58, uppL/uppR .64-.66, top .74-.84) where the 64-degree version had
+      // `top` scoring both above and below `midC`.
+      //
+      // WHAT IT DOES NOT FIX, so nobody re-runs this hoping: the hit rate. 8.9% -> 9.1% of all
+      // throws score, and 84% still roll back to the trough. That is this machine's real open
+      // problem and it is written up in DECISIONS.md#popongo-rearrangement-and-the-70-degree-ramp-2026-08-27.
+      humpAngles: [0.2036, 0.4072, 0.6109, 0.8145, 1.0181, 1.2217],
       troughLen: 0.225,
       troughDepth: 0.15,
       boardLipY: 0.42,

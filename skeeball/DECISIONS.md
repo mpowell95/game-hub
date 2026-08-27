@@ -173,6 +173,90 @@ ball into the nearest mouth, a scripted score. On a cup board a jammed or capped
 resolves as the trough's zero: falling through a mouth is the only way to score, watchdog
 included.
 
+### Popongo rearrangement, and the 70-degree ramp (2026-08-27)
+
+Matt, after playing it: *"It's not super easy, but it's easiest to get the 6 which is an issue."*
+
+**Measured before anything was changed**, on a 56 x 41 grid through the real engine (power 0 to
+1.10 in 0.02 steps, aim -1 to +1 in 0.05; 2,296 throws), plus the same probe run against THE
+CLASSIC as a control. Three numbers came out of it and all three matter.
+
+**1. He is right, and it is a band width, not a hole size.** On a STRAIGHT throw (|aim| <= 0.10)
+the longest unbroken run of power steps each slot owns - which is what "a shot you can repeat"
+means to a thumb:
+
+```
+top   5 steps (.66-.74)  and it scores AGAIN at .80 .86 .94 .98 1.08
+midC  5 steps (.42-.50)
+bot   5 steps (.18-.26)
+lowL / lowR  2 steps       uppL / uppR  1 step       midL / midR  ZERO
+```
+
+Exactly three shots on the machine repeat. `top` owned the widest band, at the most natural swipe
+speed, kept catching all over the top of the dial - and was carrying the 6. Both equalizers sat
+where no straight throw ever finds them, so the risk half of the design never fired.
+
+**2. The machine barely scores at all, and that is the real problem.** 8.9% of all throws score
+(22.5% even throwing straight); **1,929 of 2,296 - 84% - roll back down and die in the trough**.
+THE CLASSIC on the same probe scores **71.5%**, with a clean monotonic ladder (10 at 49.5% of all
+throws, 20 at 15.3%, 30 at 2.3%, 40 at 1.9%, 50 at 1.6%, each 100 at 0.46%). The difference is
+that the classic gives a ball that rolls back somewhere to land and POPONGO gives it 1.4 m of
+45-degree slope home. **This is still open.** It is the reason the 6 *felt* easy: it was not easy,
+it was the only thing that worked.
+
+**3. POPONGO was the only cup board still on THE CLASSIC's 64-degree ramp.** HOT SHOT, BRICK CITY
+and RUNAWAY all run 70; POPONGO was built the same day that lesson was learned and it landed one
+machine over. Its ball met a 45-degree face at **19 degrees** and skimmed it, where HOT SHOT's
+arrives at ~64 to a near-flat tread and drops in.
+
+**What shipped, and what each half bought:**
+
+| | shipped | 70-degree ramp | collars 0.35X -> 0.18X |
+|---|---|---|---|
+| scores, all throws | 8.9% | 9.1% | 10.5% |
+| scores, straight | 22.5% | 23.6% | 19.3% |
+| to the trough | 84.0% | 88% | 82.4% |
+| walkouts at the 12s cap | 9 (0.39%) | **0** | 9 (0.39%) |
+| slowest settle | **12.00s** | **4.88s** | 12.00s |
+
+- **The ramp went to 70 and the arrangement was re-dealt.** The ramp buys the stall fix outright
+  (that 12s cap is what `skeeball/js/test.js` asserts is unreachable, and this machine was hitting
+  it about once every three racks) and tidies the straight ladder into a real staircase: bot
+  .24-.32, lowL/lowR .38-.42, midC .48-.58, uppL/uppR .64-.66, top .74-.84. It does **not** move
+  the hit rate. Do not re-run this hoping it will.
+- **The re-deal runs the values down that measured ladder**: the 6 to `midL` (zero straight
+  captures - aim is the only way in), an equalizer to `midR` at the same reach so drifting the
+  wrong way on a 6 attempt costs what the last ball earned, the 4s to uppL/uppR, the 2s to
+  lowL/lowR, the 1s to the two easy repeatable slots, and the second equalizer to `top`. That
+  last one is BRICK CITY's logic (the easiest thing on the face takes points) in its gentlest
+  form: an equalizer only wipes the PREVIOUS ball's earnings, and 78% of straight throws score
+  nothing, so it costs a missing player nothing and bites only the pattern it exists to kill.
+**What it did to a RACK, which is the number that decides whether this was worth doing.** Nine
+balls at a chosen target with human swipe noise (sd 0.05 of the dial, 0.08 of the aim range),
+4,000 racks per target, scored through game.js's own equalizer rule, over every target on the
+measured grid:
+
+| | best STRAIGHT target | best target overall | best rack seen |
+|---|---|---|---|
+| before | **13.71** (p0.22) | **13.71** (p0.22, straight) | 33 |
+| after | 8.22 (p0.64) | **14.84** (p0.52 / a-0.25) | 48 |
+
+**Before, aiming was worth exactly nothing** - the best play on the machine was a straight throw
+and the best straight throw WAS the best throw. (It was not even the 6: under noise the widest
+band won, which was `bot`.) After, the best play is an aimed ball at the 6 and it beats the best
+straight throw by 81%. The ceiling went UP, not down - so `PG_BEST` (30 in a rack) needs no
+change: it sat right at the old ceiling and now sits comfortably inside the new one.
+
+- **COLLAR HEIGHT IS NOT THE LEVER, measured, so nobody spends a session on it.** Dropping every
+  collar from 0.35X to 0.18X moved the trough share by 1.6 points and made straight throws
+  *worse*. The barrier is not the rim: it is the kinematic capture test rejecting a fast roll,
+  and that test does not care how tall the collar is. A ball riding over a rim of height C sits
+  with its centre at C + R, so `needH` works out to `need + R` whatever C is.
+
+**THE LAW rule 5 through all of it:** no cup id changed value, no slot id changed, and the
+mid-rack autosave stores each throw's own `value` (`game.js` restore reads `t.value`), so a rack
+banked under the old deal resumes with the numbers it was actually scored with.
+
 ### Hot Shot layout
 
 HOT SHOT's nine hoops are a 3x3 sub-lattice of POPONGO's measured lattice, on purpose: rows
