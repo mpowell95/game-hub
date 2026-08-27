@@ -580,6 +580,12 @@ function ensureSk(g) {
   // how many racks have landed every scoring color at least once. ADDITIVE like the block above -
   // absent on any device that has not played since, defaulted to 0 here, only ever incremented.
   if (!Number.isFinite(g.sk.colorSweeps)) g.sk.colorSweeps = 0;
+  // Added 2026-08-26 for HOT SHOT: RUNAWAY's first objective (skeeball/js/goals.js): how many
+  // balls have been landed in that machine's top-row basket WHILE IT WAS SWEEPING. ADDITIVE in
+  // exactly the same way as colorSweeps above - absent on any device that has not played since,
+  // defaulted to 0 here, only ever incremented. It exists because that machine's rack opens with
+  // two STILL 100s, so a bestThrow of 100 no longer proves the moving one was ever caught.
+  if (!Number.isFinite(g.sk.runaways)) g.sk.runaways = 0;
   // Added 2026-08-11 with the boards rework, both ADDITIVE and both still absent on any device
   // that has not played since: `boards` is per-machine records (see js/arcade-scores.js, which
   // owns their shape and the date-keyed daily map), `unlocked` is which machines are open.
@@ -1357,6 +1363,7 @@ export function recordSkeeball(boardId, extras) {
   g.sk.thirties += Math.max(0, e.thirties | 0);
   g.sk.forties += Math.max(0, e.forties | 0);
   if (e.colorSweep) g.sk.colorSweeps += 1;
+  g.sk.runaways += Math.max(0, e.runaways | 0);
   g.sk.bestGame = Math.max(g.sk.bestGame | 0, score);
   g.sk.bestThrow = Math.max(g.sk.bestThrow | 0, Math.max(0, e.bestThrow | 0));
   // slotsHit / slotCounts / cleanRack / perfectRack ride the PER-BOARD record

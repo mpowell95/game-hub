@@ -694,6 +694,7 @@ function skeeballScreen(rec) {
     [skNum(sk.hundreds), t('gs_sk_hundreds')],
     [skNum(sk.fifties), t('gs_sk_fifties')],
     [skNum(sk.colorSweeps), t('gs_sk_sweeps')],
+    [skNum(sk.runaways), t('gs_sk_runaways')],
   ].map(([v, l]) => `<div class="gs-sk-cell"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
 
   const ballRows = [

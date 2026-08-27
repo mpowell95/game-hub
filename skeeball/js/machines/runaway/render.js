@@ -4,11 +4,19 @@
 // an edit made for RUNAWAY must never be carried back into HOT SHOT's copy "to keep them in
 // sync". They are different machines.
 //
-// THE MOVING BASKET, on this side of the wall: the top row's single 100 is drawn into its own
-// THREE.Group and that group's x is set from machine.js's moverU every frame - the SAME function
-// physics.js drives the collision bodies with. GUARD: never re-derive the sine here. One sine,
-// in machine.js, or the basket on screen and the basket the ball hits drift apart, which is the
-// entire class of bug this file's original header promises is impossible.
+// THE ONE-SHOT FACE, on this side of the wall. Every basket is drawn into its OWN THREE.Group,
+// and render() drives two things off the rack state every frame:
+//
+//   position.x   from machine.js's holeOffset() - 0 for every basket except the runaway, which
+//                slides. GUARD: never re-derive the cosine here. One copy, in machine.js, or the
+//                basket on screen and the basket the ball hits drift apart, which is the entire
+//                class of bug this file's original header promises is impossible.
+//   visible      false once that basket has been closed for the rest of the rack, with a flat
+//                cap plate (_capPlate) revealed underneath it. The plate is flush because the
+//                PHYSICS cap is flush - see machine.js's capFor().
+//
+// Neither is gated on prefers-reduced-motion: reduced motion thins garnish, it does not freeze
+// gameplay (see render()'s own guard).
 //
 // skeeball/js/render.js - the machine on screen, drawn by three.js (skeeball/js/vendor/). GUARD:
 // the scene is built from the SAME machine description physics.js simulates (machine.js), so
@@ -17,7 +25,7 @@
 // driven by the physics body's position AND quaternion, so it visibly rolls.
 
 import * as THREE from '../../vendor/three.module.min.js';
-import { buildMachine, moverU } from './machine.js';
+import { buildMachine, holeOffset } from './machine.js';
 import { BALLS_PER_GAME } from '../../boards.js';
 
 const REDUCED = typeof matchMedia === 'function'
@@ -137,6 +145,12 @@ export class Renderer {
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
+    // THE ONE-SHOT FACE, drawn. One group per basket (its mouth, flash, wire basket and value
+    // card, so the whole thing slides or hides as a unit) and one cap plate per basket, shown in
+    // its place once it has been closed. render() drives both off game.closed / game.sweep.
+    this._holeGroups = new Map();  // hole id -> THREE.Group, the whole basket (this is what slides)
+    this._cupGroups = new Map();   // hole id -> THREE.Group, mouth + flash + rim + net (this hides)
+    this._closedSet = new Set();   // reused every frame so render() allocates nothing
     this._popups = [];
     this._particles = [];
     this._marqueeBulbs = [];
@@ -308,13 +322,14 @@ export class Renderer {
       const H = G.holes[id];
       const cup = this.board.cups && this.board.arrangement
         ? this.board.cups[this.board.arrangement[id]] : null;
-      // MOVER: everything this iteration adds to the scene for the MOVING basket - its mouth,
-      // its capture flash, its wire basket and its value card - gets re-parented into one group
-      // below, so the whole assembly slides as a unit. Recording the scene's length here and
-      // sweeping up whatever is new afterwards is deliberate: it cannot miss a mesh that a
-      // future edit adds to this block, the way an explicit list of four meshes would.
-      const isMover = !!(G.mover && G.mover.hole === id);
-      const sceneBefore = isMover ? this.scene.children.length : 0;
+      // EVERY basket gets its own group, not just the moving one. Everything this iteration adds
+      // to the scene for this hole - its mouth, its capture flash, its wire basket and its value
+      // card - is re-parented into that group below, so the whole assembly can be SLID as a unit
+      // (the runaway) or HIDDEN as a unit (a basket that has been closed for the rest of the
+      // rack). Recording the scene's length here and sweeping up whatever is new afterwards is
+      // deliberate: it cannot miss a mesh that a future edit adds to this block, the way an
+      // explicit list of four meshes would.
+      const sceneBefore = this.scene.children.length;
       const mouth = new THREE.Mesh(
         this._track(new THREE.CircleGeometry(H.r, 44)),
         this._mat({ color: 0x0a0705, roughness: 1 }),
@@ -322,15 +337,19 @@ export class Renderer {
       this._onFace(mouth, H.u, H.v, 0.0035, true);
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
-      if (!H.collarH) continue;
+      if (!H.collarH) { this._claimHole(id, sceneBefore, sceneBefore); continue; }
       // HOT SHOT (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
       // basket with a white mini backboard carrying the value - the real cabinet's furniture.
       // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
       // rim is drawn AT the physics rim height, so the rim you see is the rim the ball rattles.
       if (this.board.dressing === 'basketball') {
         this._wireBasket(H, cup && cup.color);
+        // EVERYTHING ADDED SO FAR IS THE CUP - the mouth, the capture flash, the rim and the net.
+        // That is exactly the set that disappears when this basket closes. The BACKBOARD comes
+        // next and deliberately STAYS: see _claimHole.
+        const cupEnd = this.scene.children.length;
         if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
-        if (isMover) this._claimMover(sceneBefore);
+        this._claimHole(id, sceneBefore, cupEnd);
         continue;
       }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
@@ -338,8 +357,9 @@ export class Renderer {
         cup && cup.color);
       this._onFace(wall, H.u, H.v, 0);
       this.scene.add(wall);
+      const cupEnd = this.scene.children.length;
       if (cup && cup.label) this._cupPlate(H, cup, RING_GLOW);
-      if (isMover) this._claimMover(sceneBefore);
+      this._claimHole(id, sceneBefore, cupEnd);
     }
     // MOVER: the TRACK it runs on. Purely cosmetic and deliberately so - it has no physics body,
     // it is drawn flush in the tread, and the ball rolls straight over it. Without it the basket
@@ -506,19 +526,44 @@ export class Renderer {
     if (flat) mesh.rotateX(-Math.PI / 2);
   }
 
-  /** MOVER: sweep every scene child added since `from` into `this._moverGroup`.
+  /** Sweep every scene child added since `from` into this hole's own group, with the ones added
+   *  before `cupEnd` in a NESTED group of their own.
    *
-   *  The group sits at the origin, so re-parenting changes nothing about where anything is drawn
-   *  (a child's local transform already IS its world transform). From then on one `position.x`
-   *  moves the mouth, the flash ring, the wire basket and the value card together, and no caller
-   *  anywhere has to know the assembly is more than one mesh. */
-  _claimMover(from) {
-    if (!this._moverGroup) {
-      this._moverGroup = new THREE.Group();
-      this.scene.add(this._moverGroup);
-    }
-    const claimed = this.scene.children.slice(from).filter((o) => o !== this._moverGroup);
-    for (const obj of claimed) this._moverGroup.add(obj);   // Group.add re-parents
+   *  Two groups, because a basket has two jobs here:
+   *
+   *    the OUTER group   is everything this basket is made of. Its `position.x` slides the whole
+   *                      assembly, which is how the runaway moves.
+   *    the CUP group     is the mouth, the capture flash, the rim and the net - the parts that
+   *                      VANISH when this basket closes for the rest of the rack. The BACKBOARD
+   *                      is deliberately left out of it and stays lit and numbered.
+   *
+   *  GUARD: THE BACKBOARD STAYS, AND THAT IS THE WHOLE READABILITY OF THE ONE-SHOT FACE. The
+   *  first build hid the entire basket and drew a flat plate flush in the face where it had been.
+   *  The plate was correctly placed and COMPLETELY INVISIBLE - the same finding _moverTrack
+   *  records for the mover's groove, and for the same reason: the camera stands behind the ball,
+   *  so every tread is foreshortened almost to nothing and occluded by the riser in front of it,
+   *  and NOTHING LYING FLAT ON THIS FACE CAN BE SEEN FROM WHERE THE GAME IS PLAYED. A closed
+   *  basket therefore read as a basket that had never existed. Backboards stand VERTICAL, face
+   *  the player, and are the most legible things on the machine - so a backboard with its number
+   *  still on it and no hoop underneath is the signal, and it costs no new geometry at all. Do
+   *  not "restore" the plate; it cannot be seen.
+   *
+   *  The groups sit at the origin, so re-parenting changes nothing about where anything is drawn
+   *  (a child's local transform already IS its world transform).
+   *
+   *  GUARD: EVERY hole gets a group, not just the two that can move. A basket that closes has to
+   *  disappear as a unit, and a uniform rule is what stops the next machine's mesh being left
+   *  behind in the scene because someone forgot to add it to a list. */
+  _claimHole(id, from, cupEnd) {
+    const outer = new THREE.Group();
+    const cup = new THREE.Group();
+    this.scene.add(outer);
+    const claimed = this.scene.children.slice(from).filter((o) => o !== outer);
+    const cutoff = Math.max(from, cupEnd) - from;
+    claimed.forEach((obj, i) => (i < cutoff ? cup : outer).add(obj));   // Group.add re-parents
+    outer.add(cup);
+    this._holeGroups.set(id, outer);
+    this._cupGroups.set(id, cup);
   }
 
   /** MOVER: the two END STOPS that mark the limits of the basket's travel - one post at each
@@ -543,7 +588,9 @@ export class Renderer {
   _moverTrack() {
     const G = this.G;
     const m = G.mover;
-    const H = G.holes[m.hole];
+    // Either top-row basket can end up the runaway and both marks are at +/-amp, so the mouth
+    // width is the same whichever one it is. Read it off the first.
+    const H = G.holes[m.holes[0]];
     const steel = new THREE.Color(this.look.ringLip || '#ffd23f');
     const railW = H.r * 1.05;
     for (const side of [-1, 1]) {
@@ -2081,8 +2128,19 @@ export class Renderer {
     // freeze gameplay (docs/BUILDING-A-GAME.md, Part 0, and pinball/CLAUDE.md's "a pinball table
     // that does not move is not a pinball table"). The basket IS this machine - stopping it
     // would leave a player aiming at a target the physics is still sliding out from under them.
-    if (this._moverGroup) {
-      this._moverGroup.position.x = moverU(this.G, game ? game.machineT || 0 : 0);
+    {
+      const T = game ? game.machineT || 0 : 0;
+      const sweep = (game && game.sweep) || null;
+      const closed = this._closedSet;
+      closed.clear();
+      for (const h of (game && game.closed) || []) closed.add(h);
+      for (const [id, grp] of this._holeGroups) {
+        // The runaway slides; every other basket's offset is 0, which costs one multiply.
+        grp.position.x = holeOffset(this.G, id, T, sweep);
+      }
+      // A closed basket loses its hoop and keeps its backboard - see _claimHole for why that is
+      // the signal rather than a plate drawn where the mouth was.
+      for (const [id, cup] of this._cupGroups) cup.visible = !closed.has(id);
     }
     // Every throw still in the air gets a mesh; whatever is left over is hidden.
     const live = (game && game.balls) || (game && game.ball ? [game.ball] : []);
