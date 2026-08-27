@@ -814,12 +814,16 @@ export const BOARDS = [
     // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
     // score unlocks and correctly ignores this entry - no `score` field, so its comparison is
     // always false.
-    // Re-pointed at BRICK CITY 2026-08-24 when machine 3 landed between them: the chain now
-    // reads THE CLASSIC -> HOT SHOT -> BRICK CITY -> POPONGO. THE LAW rule 2 - this takes
-    // NOTHING from anyone who has already earned POPONGO. sk.unlocked is an additive set
-    // (js/arcade-scores.js union-merges it across devices) and nothing anywhere removes an
-    // id from it, so an earned machine stays earned however the chain is rearranged later.
-    unlock: { board: 'brickcity', goals: true },
+    // POPONGO IS THE LAST MACHINE NOW (Matt, 2026-08-27: "Make runaway before popongo, duh").
+    // It has been re-pointed twice: at BRICK CITY on 2026-08-24 when machine 3 landed between
+    // them, and at RUNAWAY today, which swaps the last two links of the chain.
+    //
+    // THE LAW rule 2 - BOTH moves take NOTHING from anyone who has already earned POPONGO.
+    // sk.unlocked is an additive SET (js/arcade-scores.js union-merges it across devices) and
+    // nothing anywhere removes an id from it, so an earned machine stays earned however the chain
+    // is rearranged later. Proved rather than argued: test-stats-replay.mjs scenario G replays the
+    // real synced records of every device holding POPONGO and asserts they still do.
+    unlock: { board: 'runaway', goals: true },
     // ADMIN ONLY right now (Matt, 2026-08-24, testing): same as basketball above - never unlocked
     // by play, shown locked to non-dev profiles, dev bypass still opens it, nothing deleted. Drop
     // this line to release.
@@ -1044,11 +1048,19 @@ export const BOARDS = [
     // HOT SHOT's render dressing - hoops, nets, backboards, a basketball for a ball. This is that
     // cabinet's third sibling. render.js branches on this string; physics never reads it.
     dressing: 'basketball',
-    // Complete POPONGO's three objectives (js/goals.js). The chain is
-    // THE CLASSIC -> HOT SHOT -> BRICK CITY -> POPONGO -> RUNAWAY, so this machine goes on the
-    // end and takes nothing away from anyone: unlocks are an additive set in js/arcade-scores.js
-    // and nothing anywhere removes one (THE LAW rule 2).
-    unlock: { board: 'popongo', goals: true },
+    // Complete BRICK CITY's three objectives (js/goals.js). The chain is
+    // THE CLASSIC -> HOT SHOT -> BRICK CITY -> RUNAWAY -> POPONGO.
+    //
+    // MOVED AHEAD OF POPONGO on 2026-08-27 (Matt: "Make runaway before popongo, duh"). It shipped
+    // on the END of the chain, behind POPONGO, and that made it unreachable in practice: POPONGO's
+    // third objective is 1,000 points on a machine whose baskets are worth 1 to 6, and the one
+    // player near the front of the chain had 122 of them. Hanging the newest machine off the
+    // slowest grind in the game meant nobody was going to see it.
+    //
+    // THE LAW rule 2 - this takes NOTHING from anyone. sk.unlocked is an additive set and nothing
+    // anywhere removes an id from it, so every machine anyone has already earned stays earned,
+    // POPONGO included. test-stats-replay.mjs scenario G proves it against the real records.
+    unlock: { board: 'brickcity', goals: true },
     // ADMIN ONLY at ship, same as its three siblings while Matt plays it. ui.js never unlocks it
     // by play and shows it locked to non-dev profiles; the dev bypass still opens it. NOTHING is
     // deleted by this flag, and it comes off from the in-app Admin page (js/admin-ui.js) with no

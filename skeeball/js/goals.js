@@ -152,6 +152,13 @@ export const RA_BEST = 750;      // RUNAWAY: score 750+ in a single round
 // have taken it the first afternoon. 750 is 83% of ceiling against the 100% he already managed on
 // the easier static face.
 //
+// GUARD: THESE THREE NOW GATE POPONGO. RUNAWAY was the terminal machine when 750 was set, so an
+// ambitious bar cost nobody access to anything. It was moved AHEAD of POPONGO on 2026-08-27, which
+// means the hardest single-round bar in the game now stands between a player and the last machine.
+// That was the deliberate trade - RUNAWAY behind POPONGO's 1,000-point grind was unreachable, and
+// POPONGO is the machine nobody plays - but if the chain ever stalls here, this is the number
+// holding it up.
+//
 // THE ONE NUMBER NOBODY HAS YET is his hit rate on a MOVING basket; everything above is projected
 // from a static one. When he has 50-100 racks on this machine, re-read them (the per-board record
 // carries best/points/plays, and sk.runaways carries the catches) and re-derive rather than
