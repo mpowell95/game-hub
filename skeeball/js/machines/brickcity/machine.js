@@ -54,11 +54,29 @@ export function buildMachine(G) {
   /** The local surface tilt at unrolled v. */
   const tiltAt = (v) => frameAt(v).tilt;
 
-  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
-  const faceToWorld = (u, v, h = 0) => {
-    const fr = frameAt(v);
+  /** Face (u, v, h) -> world [x, y, z] IN ONE NAMED SEGMENT, with v extrapolated past that
+   *  segment's own ends instead of being handed to the next one. This is what a piece of
+   *  furniture BOLTED TO ONE TREAD needs: a basket's collar is a circle around (H.u, H.v), and
+   *  points on that circle can have a v past the tread's back edge without the basket having
+   *  climbed onto the riser. See the collar loop below for the bug this exists to prevent. */
+  const faceToWorldIn = (fr, u, v, h = 0) => {
     const dv = v - fr.v0;
     return [u, fr.y0 + dv * fr.sin + h * fr.cos, fr.z0 - dv * fr.cos + h * fr.sin];
+  };
+
+  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
+  const faceToWorld = (u, v, h = 0) => faceToWorldIn(frameAt(v), u, v, h);
+
+  /** World -> face {u, v, h, tilt} IN ONE NAMED SEGMENT. A hole belongs to exactly one tread,
+   *  so "how far is the ball from this hole" must be asked in THAT tread's frame - never in
+   *  whichever frame the ball happens to be nearest. A ball high in a bottom-row basket is
+   *  nearer the RISER plane than the tread it is sunk into (the cup is 0.1455 deep, the riser
+   *  stands 0.1085 behind the mouth), so the free worldToFace below hands back riser
+   *  coordinates and the hole's own distance comes out 0.22 against a 0.09 mouth. */
+  const worldToFaceIn = (fr, p) => {
+    const dy = p.y - fr.y0;
+    const dz = p.z - fr.z0;
+    return { u: p.x, v: fr.v0 + dy * fr.sin - dz * fr.cos, h: dy * fr.cos + dz * fr.sin, tilt: fr.tilt };
   };
 
   /** World -> face {u, v, h, tilt}: the nearest segment's local coordinates. Physics reads this
@@ -235,6 +253,17 @@ export function buildMachine(G) {
     if (!H.collarH) continue;                   // the 20 is a flush hole, no collar
     const N = G.cupSegments;
     const rr = H.r + G.collarThick / 2;
+    // GUARD: EVERY SEGMENT OF ONE COLLAR IS PLACED IN THAT HOLE'S OWN SEGMENT OF THE STAIRCASE.
+    // A collar is a circle of radius rr around (H.u, H.v), so its rear segments carry a v up to
+    // rr past the hole's own - and on the bottom row (v 0.1909, rr 0.1151) that reaches 0.3031,
+    // past the first tread's back edge at 0.3000. Placed by frameAt(pv) those two segments were
+    // built in the RISER's frame and landed 7 cm low and 7 cm forward of where the basket is
+    // drawn: an invisible bar across the throat of every -20 / -10 / -20 basket, 60% of the way
+    // down, that a ball dropping in came to rest ON. faceRot already used tiltAt(H.v), so the
+    // boxes were mis-oriented for a tread they were no longer standing on, too. (Matt,
+    // 2026-08-26: "the ball sometimes gets stuck IN the negative baskets... There's nothing for
+    // them to get stuck on." There was, and only render.js's smooth basket hid it.)
+    const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
       const pu = H.u + rr * Math.cos(phi);
@@ -249,7 +278,7 @@ export function buildMachine(G) {
       solids.push({
         part: 'cupSeg',
         cup: id,
-        pos: faceToWorld(pu, pv, h / 2),
+        pos: faceToWorldIn(cupFrame, pu, pv, h / 2),
         half: [rr * Math.tan(Math.PI / N), h / 2, G.collarThick / 2],
         faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
         segH: h,
@@ -377,6 +406,8 @@ export function buildMachine(G) {
     solids,
     faceToWorld,
     worldToFace,
+    worldToFaceIn,
+    frameAt,
     tiltAt,
     frames,
     lipY,
