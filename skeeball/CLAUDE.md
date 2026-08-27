@@ -475,12 +475,25 @@ and two black **equalizers**.
 - **The arrangement layer** (`boards.js`): SLOTS own the geometry, CUPS own the value and the
   paint. `geom.holes` uses slot-named ids (`top`/`uppL`/`uppR`/`midL`/`midC`/`midR`/`lowL`/
   `lowR`/`bot` - frozen, THE LAW rule 5, they ride the mid-rack autosave); `cups` holds the nine
-  cups (`g6`..`eqB` - each cup's value frozen to its id forever); `arrangement` maps slot to cup,
-  defaulting to the product photo's staging. Hole values are STAMPED from the arrangement at
+  cups (`g6`..`eqB` - each cup's value frozen to its id forever); `arrangement` maps slot to cup.
+  Hole values are STAMPED from the arrangement at
   module load, and `game.js` scores through `cupAt()`, so player-facing rearrangement later is a
   data remap plus a screen - never an engine or physics change (every cup is the same shape).
-  Rearrangement is deliberately deferred: what custom layouts do to records and unlock
-  comparability is Matt's call after he has played it.
+  PLAYER-FACING rearrangement is deliberately deferred: what custom layouts do to records and
+  unlock comparability is Matt's call after he has played it.
+- **The deal was RE-DEALT BY MEASURED DIFFICULTY on 2026-08-27, and the ramp went to 70 degrees
+  with it.** Matt: *"It's not super easy, but it's easiest to get the 6 which is an issue."* A
+  56 x 41 grid said the same thing: `top` owned the only wide straight-throw power band on the
+  machine (5 unbroken steps at .66-.74, scoring again all the way up the dial) and was carrying
+  the 6, while `midL`/`midR` had never been reached by a straight throw at all and both
+  equalizers sat where no straight throw finds them. The 6 is at `midL` now, an equalizer mirrors
+  it at `midR`, the 4s are at uppL/uppR, the 2s at lowL/lowR, the 1s at the two easy slots and
+  the second equalizer at `top`. The ramp change is the same machine's other half: POPONGO was
+  the only cup board still on THE CLASSIC's 64 degrees, and it was hitting the 12s emergency cap
+  about once every three racks (9 of 2,296 throws; 0 at 70 degrees, slowest settle 12.00s ->
+  4.88s). **The open problem neither half fixes: 84% of throws roll back to the trough for
+  nothing, against THE CLASSIC's 71.5% scoring rate.** Full numbers, the control run and the
+  collar-height dead end: `DECISIONS.md#popongo-rearrangement-and-the-70-degree-ramp-2026-08-27`.
 - **The equalizer** (`game.js` `_settle`): landing in a black cup wipes what the previous ball
   EARNED this rack (its `earned` field, so an already-wiped ball or a previous equalizer wipes
   as zero; the score can never go negative). `ballDone` carries `{eq, wiped}`; ui.js shows
@@ -833,6 +846,26 @@ Two details that are load-bearing:
   `_goalsSpent()` treats "opens nothing" as spent. Anything unreadable answers NO, so the failure
   mode is showing the objectives, never hiding something still owed.
 
+**But they are still REACHABLE, on a tap (2026-08-27).** Matt: they "disappear after they've been
+achieved... add something above the machines that players can click to see the objectives after
+they've already completed them." So the two RAILS still go entirely, and the wide bar becomes a
+small **`Objectives ✓` chip** (`_goalDoneMarkup`, `.sk-gdone`) in the same in-flow row the running
+total used - the one place above the machine that is measured clear on every board. Tapping it
+opens the same `_showGoalDefs` sheet every objective box opens, so a finished machine still says
+what it asked for and what the player did.
+
+- **It carries `data-def` with NO id**, so the sheet opens with nothing singled out - there is no
+  one objective being asked about - and deliberately **no `data-goal`**: `_checkGoalsNow` pops
+  boxes by that attribute, and nothing on a spent machine can turn met.
+- **It is smaller than the bar it replaces** (11px label, ~23px chip against ~30px, row 31px
+  against 40px measured at 375x667 and 393x852), because this row is IN FLOW and every pixel it
+  takes is a pixel of machine. A finished machine still renders bigger than one you are working
+  on - just no longer by the whole bar.
+- The 44px hit area is `.sk-gtotal`'s overhang trick, for the same reason and with the same
+  clearance from `.sk-swipe`.
+- `.sk-gtotal-row:empty` still collapses the row, and now only fires when there are no objectives
+  to show at all. The chip is what gives the row a reason to exist.
+
 ## The unlock ceremony (2026-08-25)
 
 Matt's sequence, in his words: the third objective completes, fireworks, the three objective tiles
@@ -1079,53 +1112,92 @@ one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.un
 additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
 argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
 devices that hold POPONGO and asserts they still do.
-## The moving basket (2026-08-25, HOT SHOT: RUNAWAY)
+## The moving basket, and the one-shot face (2026-08-25, rebuilt 2026-08-26, HOT SHOT: RUNAWAY)
 
-**The first moving part in this repo.** Everything on every earlier machine's face is a static
-rigid body placed once at build time. `runaway`'s top row is one 100 basket that slides across
-tread 3 all rack long. Full build record, the measured numbers and the open questions:
-`skeeball/MACHINE-RUNAWAY.md`. The four things a session touching ANY machine needs from here:
+**The first moving part in this repo, and the first face that CHANGES SHAPE while you play it.**
+Everything on every other machine is a static rigid body placed once at build time and still there
+on the ninth ball. `runaway` opens with two still 100s on tread 3; land in one and it CLOSES while
+its twin comes off its mark and sweeps the full width, and every basket you land in after that
+closes too. Full build record, the measured numbers and the open questions:
+`skeeball/MACHINE-RUNAWAY.md`. What a session touching ANY machine needs from here:
 
-- **The motion is three pure functions in `js/machines/runaway/machine.js`** - `moverU(G, t)`,
-  `moverVel(G, t)`, `holeU(G, id, t)`. No state, no clock, no `Date.now()`. `physics.js` drives
-  the bodies with them, `render.js` draws with them, the spec test measures the travel envelope
-  with them. **Never write a second sine.** A copy anywhere else is a drawn basket drifting off
-  its own collision wall.
+- **The motion is pure functions in `js/machines/runaway/machine.js`** - `sweepU`, `sweepVel`,
+  `holeU`, `holeVel`, `holeOffset`. No state, no clock, no `Date.now()`; `sweeps` is the rack
+  state - an object keyed by hole id, one entry per basket currently moving - handed in. `physics.js` drives the bodies with them, `render.js` draws with them, the
+  tools measure the travel envelope with them. **Never write a second copy.** One anywhere else is
+  a drawn basket drifting off its own collision wall.
 - **A moving collar is a KINEMATIC body, never a static one whose position you rewrite.**
   cannon-es zeroes a kinematic body's inverse solve mass (the ball cannot shove the basket) and
   still feeds its velocity to the contact solver (a struck rim gives a real impulse). A static
   body has velocity 0 by definition, so moving one teleports a wall through the ball with the
   solver believing nothing moved - penetration, then an explosive push-out. Set position AND
   velocity every substep: position is authoritative so drift cannot accumulate, velocity is what
-  the solver reads.
+  the solver reads. **Both baskets that COULD move get kinematic bodies from the first frame** -
+  cannon-es cannot change a body's type after the world is built, and either one can end up being
+  the runaway.
 - **Capture against a moving mouth is measured RELATIVE TO THE MOUTH, and latches on commit.**
   Skip the relative velocity and a ball sitting still on the tread reads zero speed across a
   mouth driving over it and is swallowed on contact - a magnet, which section 9 of the spec bans.
   Skip the latch and a basket that slides on after capture re-scores a clean 100 as a gutter ball
   halfway down its own drop.
-- **`js/game.js`'s `machineT` is the ONE clock and it must stay the one clock.** Every throw
-  builds its own cannon world and two balls can be in the air at once, so two live sims plus the
-  renderer are three independent things that each need to know where the basket is. They agree
-  only because all three are pure functions of that number. It is still a pure file: it
-  accumulates the `dt` its caller hands `update()` and never reads a clock, which is what keeps
-  a machine with a moving part deterministic.
+- **CLOSING A BASKET IS TWO THINGS AND NEEDS BOTH.** `physics.js` does not build a closed basket's
+  collar, AND the capture loop skips it. Do only the second and the cup becomes a BOWL the ball
+  drops into and can never leave - which is BRICK CITY's parked-ball failure rebuilt on purpose.
+  Do only the first and a mouth with no wall swallows a ball through a flat plate.
+- **`js/game.js` carries the rack state, and `sweep` is SHARED BY REFERENCE.** `machineT` (the
+  rack clock), `closed` (slot ids already landed in) and `sweep` (which 100 is running, and how
+  fast). Every throw builds its own cannon world and two balls can be in the air at once, so two
+  live sims plus the renderer are three independent things that each need to know what the face
+  looks like right now. They agree only because all three read the same object through the same
+  pure functions - **mutate `sweep` in place; never swap in a fresh one while a ball is live.**
+  `game.js` is still pure: it accumulates the `dt` its caller hands `update()` and never reads a
+  clock.
+- **All three ride the autosave as ADDITIVE keys** and are inert on every other machine. An old
+  save resumes with a fresh face and nothing moving, which is exactly right for a machine that has
+  neither (THE LAW rule 5). `closed` is read back against the board's own holes, so a save cannot
+  close a basket the machine does not have.
 
-**Reachability on a machine with a mover needs a THIRD AXIS.** The same (power, aim) lands
-somewhere different depending on where the basket was at release, so `skeeball/js/test.js`'s
-41x21 (power x aim) grid measures one arbitrary frozen phase and will call the moving hole
-unreachable or trivial at random. `node sweep-mover.mjs runaway` walks power x aim x phase and is
-the tool to re-run after ANY change to that face, the amplitude, the period or the materials.
+**Reachability on a machine like this needs THREE axes, and the face is different on ball 1 and
+ball 9.** The same (power, aim) lands somewhere different depending on where the basket was at
+release, so `skeeball/js/test.js`'s 41x21 (power x aim) grid measures one arbitrary frozen phase
+of one arbitrary face. `sweep-mover.mjs` walks power x aim x phase at a chosen STAGE of a rack
+(`--stage open|run|endgame`, `--rung N`, or `--ladder` for the whole escalation), and
+`test-runaway-capped.mjs` sweeps the face with every basket closed. Re-run both after ANY change
+to that face, the amplitude, the ladder or the materials.
 
-**A moving basket needs its shelf to itself.** `holes.spacing`'s 1.30X would be violated at
-nearly every step of any travel worth having if a static basket shared the row. That is why
-RUNAWAY's top row is one basket - a constraint, not a preference.
+**A moving basket needs its shelf to itself - and RUNAWAY threads that rather than breaking it.**
+`holes.spacing`'s 1.30X would be violated at nearly every step of any travel worth having if a
+static basket shared the row. On this machine a row's survivor only starts moving once every other
+basket in that row has CLOSED, and a closed basket has no collar in the world at all - so a moving
+collar never has an open neighbour on its own shelf.
 
-**NOTHING LYING FLAT ON THE TOP SHELF CAN BE SEEN.** Found while drawing RUNAWAY's mover rail: the
-camera stands behind the ball, so tread 3 is the furthest surface on the machine and the middle
-row's riser occludes it outright. A painted groove along the travel was correctly placed and
-completely invisible - in near-black AND in a lit accent, so it was geometry, not contrast. Only
-furniture with HEIGHT reads up there (the two end-stop posts do). Applies to any machine on this
-staircase, not just this one: if you are about to paint something on tread 3, don't.
+**The spec test's spacing rule exempts a pair only when both are in the SAME group**, not merely
+when both CAN move. Once every basket on a machine can move, the looser test exempts every pair
+and silently stops checking travel envelopes altogether. Baskets in DIFFERENT rows can be moving
+at the same time - a good rack on RUNAWAY ends with three - so those pairs still get the full
+envelope.
+
+**AND THE WALL-GAP RULE IS ALREADY BROKEN ON THE LOWER ROWS, MEASURED RATHER THAN ASSUMED.** Those
+mouths are wider than the top row's (0.53125X against 0.5X), so at the ends of the same travel
+their gap to the rail is 0.7538X against MACHINE-SPEC.md section 12's 0.78X. They have always sat
+there as STATIC furniture; making one MOVE is the worst case that rule describes. It measures
+clean - 0 walkouts with one moving, and 0 with all three moving at once - and `node sweep-mover.mjs
+runaway --stage rows` is what re-measures it. **The rule is a threshold; the sweep is the
+evidence.**
+
+**A MOVING BASKET SWEEPS OVER THE ONE YOU CLOSED, so a closed basket must be FLUSH.** The capped
+mark is one end of the travel. Anything standing proud there is a moving collar converging on a
+static obstacle - the pinch that cost POPONGO's first draft 12% of all throws.
+
+**NOTHING LYING FLAT ON THIS FACE CAN BE SEEN, and it cost the same mistake twice.** The camera
+stands behind the ball, so every tread is foreshortened almost to nothing and occluded by the
+riser in front of it. First a painted groove along the mover's travel was correctly placed and
+completely invisible - in near-black AND in a lit accent, so geometry, not contrast. Then a flat
+plate drawn where a closed basket had been did exactly the same thing, and a closed basket read as
+one that had never existed. **Only furniture with HEIGHT reads here.** The signal for a closed
+basket is its BACKBOARD left standing with its number on it and no hoop underneath - backboards
+are vertical, face the player, and are the most legible things on the machine. Applies to any
+machine on this staircase: if you are about to paint something flat on a tread, don't.
 
 ## Testing racks, and voided scores (2026-08-24)
 
@@ -1312,10 +1384,34 @@ re-derive it.
 - **1** is `js/ui.js` plus the probe helper in all five `render.js` - a page-global resource bug, and
   the reasoning for touching all five is written out above.
 - **2** is `js/ui.js`, which every machine shares, so every machine got it.
-- **3, 4 and 5** are `machines/brickcity/` only, and **are not to be carried into the other four "to
-  keep them in sync"** - that is the rule this repo paid for. Known and still true elsewhere: the
-  other four all leak popup textures the same way, and all four run the naive broadphase. Each is a
-  machine's own work, on its own day.
+- **3, 4 and 5** are per-machine work, and **are not to be carried across "to keep them in sync"** -
+  that is the rule this repo paid for. Each is a machine's own work, on its own day.
+
+**RUNAWAY got 3, 4 and 5 on 2026-08-27** (Matt: *"any of the tweaks we've made recently to other
+boards like the back wall bounce or the glitchy/choppy rendering?"*). Its back wall was already
+right - it was copied from HOT SHOT after that change - and the capture-frame and collar-frame
+fixes had landed the day before. Still true and still owed elsewhere: **THE CLASSIC, POPONGO and
+HOT SHOT all leak popup textures and all three run the naive broadphase.**
+
+Two things RUNAWAY's copies do differently, and both are about its moving parts:
+
+- **The broadphase guard counts DYNAMIC bodies, not non-static ones.** BRICK CITY's version falls
+  back whenever the world holds more than one non-static body, which is correct there because every
+  one of its solids is static. **Every collar on RUNAWAY is KINEMATIC** - any basket can end up the
+  last one standing in its row - so that world holds 112 kinematic bodies and the stricter guard
+  would fall back to the naive sweep every single step, buying nothing. Counting DYNAMIC bodies is
+  safe because every machine body carries `collisionFilterMask: GROUP_BALL`, so a machine-vs-machine
+  pair fails the FILTER check before its type is ever considered. **Widen any machine body's mask
+  and that stops being true.** Measured: 17,391 -> 186 pair tests per substep (98.9% fewer), and
+  proven equal on a 1,722-throw grid - identical hole, value, settle time to six decimals, bounces,
+  board contact, watchdog and full event sequence.
+- **A SWEEPING BASKET DOES NOT CAST A SHADOW.** The first cut of the shadow gate ignored the movers
+  and was visibly wrong the moment a row went down to one: the map still held the basket where it
+  stood at the last pass, so a DETACHED basket shadow sat on the riser while the basket slid away
+  from it. Found by looking at a screenshot, not by reasoning. Firing the pass every frame something
+  moves would fix it and hand most of the saving back, because on this machine something is moving
+  for most of a rack - so a moving basket turns its shadow off instead, and the pass fires once on
+  each transition to clear what it cast while standing still.
 
 ### The one red test, and it is not this
 
@@ -1323,6 +1419,147 @@ re-derive it.
 corner costs the ball (a half-aimed slam does not still pay 50)* - is THE CLASSIC's, on
 `DEFAULT_BOARD`, and fails identically on a clean `origin/main` checkout. Verified before shipping
 this, so a future session does not spend the afternoon blaming their own diff.
+
+## The ball stuck IN a BRICK CITY penalty basket (2026-08-26) - an invisible ledge, put there by machine.js
+
+Matt: *"the ball sometimes gets stuck IN the negative baskets. Like instead of falling in, it's
+just stuck there... Half of the ball out and half completely in. I've even seen a second ball fall
+into the same negative basket while one is stuck/frozen."* And: *"There's nothing for them to get
+stuck on."*
+
+There was, and he was describing it exactly.
+
+**A collar is 14 boxes on a circle of radius `rr` around its hole at `(H.u, H.v)`**, each one
+placed by `faceToWorld(pu, pv, h/2)`. `faceToWorld` resolves `v` through `frameAt(v)` - which
+STAIRCASE SEGMENT that `v` lands on. The bottom row sits at `v` 0.1909 with `rr` 0.1151, so its
+two rearmost segments carry `pv` 0.3031 - **past the first tread's back edge at 0.3000**. Those
+two were built in the RISER's frame and landed **6.96 cm low and 6.86 cm forward**: a 5 cm-wide
+bar straight across the throat of every -20 / -10 / -20 basket, 60% of the way down. `faceRot`
+already used `tiltAt(H.v)`, so they were mis-oriented for a tread they were no longer standing on
+as well.
+
+**Nothing drew it.** `render.js` skips every `cupSeg` box and draws a smooth wire basket instead,
+so the ledge was invisible - which is why Matt could see nothing to get stuck on, and why looking
+at the screen could never have found it. A ball dropping into the basket came to rest on the bar
+with its centre a hair under the rim: half in, half out, and still there when the next ball
+arrived (`game.js` hands the next ball out on `st.arrived`, not on the ball settling).
+
+**The mid and top rows never had it** - their collars are small enough that no segment reaches
+past its own tread. Bottom row only, on this machine only.
+
+**A second, smaller defect, fixed with it.** `worldToFace` returns the NEAREST segment's
+coordinates, and a ball deep in a bottom-row basket is nearer the riser plane (0.1085 behind the
+mouth) than the tread it is sunk into (the cup is 0.1455 deep). Above `h` 0.121 every basket on
+this machine resolved to a riser frame, so `physics.js` section 2 measured that hole's distance
+as **0.22 against a 0.09 mouth** and skipped the cup the ball was sitting in. Latent on its own -
+it moves 0 of 861 outcomes once the ledge is gone - but it is what stopped capture rescuing the
+parked ball, and it is why the "centre below the rim = captured" rule added on 2026-08-22 never
+fired for this row.
+
+**Both fixes are the same sentence:** ask each hole's question in THAT HOLE'S OWN frame.
+`machine.js` gained `faceToWorldIn(fr, u, v, h)` and `worldToFaceIn(fr, p)`; the collar loop
+resolves `frameAt(H.v)` once per hole, and `physics.js` sections 1 and 2 use the hole's frame
+instead of the free one.
+
+**Measured, full 41x21 grid, before -> after:**
+
+| | before | after |
+|---|---|---|
+| throws parked INSIDE a basket | 4 of 861 | **0** |
+| worst settle | 10.91 s | 5.51 s |
+| watchdog fired | 82 | 75 |
+| outcomes moved | - | 12, **10 of them against the player** |
+| grid total | -530 | -630 |
+
+**The 10-against-the-player number is the fix working, not a regression.** A ball that used to die
+on the ledge and vanish as a 0 now falls in and takes its penalty - which is what Matt asked for:
+*"I want them to not get stuck midway through the basket."* Nothing about a basket's size,
+position or depth changed.
+
+**What was NOT the answer**, so nobody re-derives it: v495 (`137eaef`) shortened the stall
+watchdog from 0.9s x 3 to a single 0.6s window. That only made the stuck ball vanish faster and
+Matt rejected it. **The 0.6s watchdog stays** - it covers a ball parked on a TREAD, which is a
+different thing and still happens (103 of 861 throws). It was never a fix for this.
+
+Two earlier sessions each reached a confident, wrong conclusion here, both the same way: they
+trusted `worldToFace`'s face coordinates over what Matt was looking at. The stalled ball measured
+0.32 m from any basket in face coordinates and 0.054 m from the cup axis in world coordinates -
+half a mouth radius. **On a staircase, cross-check in world coordinates.**
+
+`node test-brickcity-stall.mjs` carries both regression probes, born RED against the unfixed
+engine: a STRUCTURAL one that rebuilds every collar segment in its hole's own frame and needs no
+sweep at all (it would have caught this the day the staircase shipped), and a behavioural one that
+asks, in world coordinates only, whether any parked ball is inside a basket's cylinder.
+
+## The capture blind spot, closed on every machine (2026-08-26)
+
+The second half of BRICK CITY's stuck ball (the section above) turned out not to be BRICK CITY's
+at all. **Every stepped machine had it**, and `node test-skeeball-capture-frame.mjs` now says so
+out loud.
+
+`worldToFace(p)` returns the **nearest** staircase segment's coordinates. A ball deep in a
+bottom-row basket is nearer the RISER plane standing behind the mouth (0.1085 m) than the tread
+the basket is sunk into (the cup is 0.1455 m deep). So **above h 0.121 every basket on a stepped
+machine resolved to a riser frame**, and `physics.js` section 2 then measured that hole's distance
+as 0.22 against a 0.09 mouth and skipped the cup the ball was in.
+
+Say the consequence plainly, because the symptom hides it: the *"a ball whose CENTRE is below the
+rim while inside the mouth is captured"* rule, added 2026-08-22 for exactly this class of bug,
+**could not fire on the deepest part of any basket on a staircase.**
+
+**All five machines are clean now.** THE CLASSIC and POPONGO are flat-faced and never had it. HOT
+SHOT and RUNAWAY were fixed the same evening, one machine per commit, per the HARD RULE - HOT SHOT
+first, then RUNAWAY once its numbers were in hand. `test-skeeball-capture-frame.mjs` carries an
+EMPTY `KNOWN_GAPS`, and the suite fails if an entry ever outlives its bug.
+
+**RUNAWAY was done second and separately for a reason worth recording.** Another session was
+rewriting that machine's engine the same evening (its single moving 100 becoming twin 100s), so
+its `machine.js` and `physics.js` were being written while this work was going on. The fix was
+therefore built and measured in a SEPARATE WORKTREE off `origin/main`, never in the shared
+checkout - the two changes touch the same two files, and whoever lands the twin-100s work will
+need to merge across this one. If you are that session: this commit adds `worldToFaceIn` to
+`machine.js` and changes four lines in `physics.js` sections 1 and 2. Nothing else.
+
+**Measured, full 41x21 grid per machine, before -> after:**
+
+| | HOT SHOT | RUNAWAY |
+|---|---|---|
+| outcomes moved | **0 of 861** | **0 of 861** |
+| settle time changed | **0 of 861**, to 4 dp | **0 of 861**, to 4 dp |
+| grid total | 5510 -> 5510 | 6170 -> 6170 |
+| worst settle | 6.48 s, unchanged | 7.13 s, unchanged |
+| event sequence changed | 100 of 861 | 83 of 861 |
+| `capture`+`rimout` pairs gained | 62 | 50 |
+| captured earlier (same counts) | 35 | 31 |
+| pairs lost | 3 | 2 |
+
+The bottom half of that table is the whole story, and the two machines tell it identically.
+**The engine now SEES baskets it was blind to** - a throw gains a `capture` + `rimout` pair when
+the ball enters the mouth, is recognised, and then honestly bounces out and plays on - **while not
+one score and not one trajectory moves on either machine.** That is what a latent bug looks like
+when it is closed: capture only takes the tread slab out from under a ball, and in these frames
+the ball was airborne inside the mouth rather than resting on the slab, so nothing downstream
+changed.
+
+**RUNAWAY's mover is untouched.** Its section 2 still measures against `holeU(G, id, t)` - where
+the runaway basket is RIGHT NOW - and its captured branch still measures against the latched
+`st.capturedU`. Only the FRAME those two are compared in moved. A basket that slides cannot lose
+a ball it already has.
+
+It is worth shipping anyway, and cheaply, because it is the safety net. On BRICK CITY this same
+blind spot is what turned a parked ball into an unrescuable one.
+
+**Also carried over, and proven inert on both:** the collar loop is now frame-locked
+(`faceToWorldIn(cupFrame, ...)`), the same guard BRICK CITY needed. Neither machine's mouths are
+wide enough for a segment to cross its tread's back edge - verified by hashing every `cupSeg`
+position before and after (HOT SHOT 126 boxes, RUNAWAY 98), **byte-identical both times** - so this
+buys a future wider mouth and costs nothing today.
+
+**The probe is geometric, not a sweep, and that is deliberate.** It walks each hole's own axis
+from cup floor to rim and asks the one question `physics.js` asks. The 41x21 grid reproduced
+BRICK CITY's parked ball only 4 times in 861; a geometric check cannot be fooled by a grid that
+misses the conditions, costs nothing to run, and discovers machines from `BOARDS`, so the next
+one is covered the day it ships.
 
 ## Adding the next machine
 

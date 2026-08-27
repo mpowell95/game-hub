@@ -561,7 +561,7 @@ if (G.mat) {
   const res = overEv.result;
   eq('result() carries exactly the recorder extras',
     Object.keys(res).sort(),
-    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'hundreds', 'perfectRack', 'score', 'slotCounts', 'slotsHit', 'tens', 'thirties', 'twenties']);
+    ['balls', 'bestThrow', 'cleanRack', 'colorSweep', 'colorsHit', 'fifties', 'forties', 'fullRack', 'hundreds', 'perfectRack', 'runaways', 'score', 'slotCounts', 'slotsHit', 'tens', 'thirties', 'twenties']);
   const countOf = (v) => g.throws.reduce((n, t) => n + (t.value === v ? 1 : 0), 0);
   // GUARD: key ORDER matters - eq() compares JSON.stringify, so this must list them in the
   // same order result() builds them. colorsHit/colorSweep are the cup-board extras (POPONGO,
@@ -570,7 +570,13 @@ if (G.mat) {
   // slotsHit and slotCounts are honest everywhere (they are just which holes were hit, and how
   // often); cleanRack stays 0 on any board with no penalty basket, which is every board but that
   // one; perfectRack is NOT gated that way - all nine balls scoring is a true statement about any
-  // machine - so it reads what this rack actually did.
+  // machine - so it reads what this rack actually did. `runaways` is HOT SHOT: RUNAWAY's
+  // (2026-08-26): balls caught in the top-row basket WHILE IT WAS SWEEPING, feeding the lifetime
+  // sk.runaways counter that machine's first objective reads. It stays 0 on every other machine,
+  // which has nothing that moves. `fullRack` is RUNAWAY's second objective (2026-08-27): one
+  // scoring ball into EVERY basket the machine has, in a single round. It is honest on any board
+  // - it is just "did this rack cover the face" - and it is counted into the PER-BOARD record,
+  // never a global counter, because "every basket" means a different thing on every machine.
   const slots = [...new Set(g.throws.map((t) => t.hole).filter((h) => g.board.geom.holes[h]))];
   const counts = {};
   for (const t of g.throws) if (g.board.geom.holes[t.hole]) counts[t.hole] = (counts[t.hole] | 0) + 1;
@@ -580,7 +586,8 @@ if (G.mat) {
       slotsHit: slots, slotCounts: counts, cleanRack: 0, perfectRack: perfect,
       tens: countOf(10), twenties: countOf(20), thirties: countOf(30), forties: countOf(40),
       hundreds: g.hundreds, fifties: g.fifties, bestThrow: g.bestThrow,
-      colorsHit: 0, colorSweep: 0 });
+      colorsHit: 0, colorSweep: 0, runaways: 0,
+      fullRack: slots.length >= Object.keys(g.board.geom.holes).length ? 1 : 0 });
 }
 
 // --- 6b. POPONGO: the arrangement layer and the equalizer (pure rules, no physics) --------------
@@ -591,34 +598,47 @@ if (G.mat) {
   const settle = (g2, hole) => g2._settle(null, { hole, value: g2.board.geom.holes[hole].value | 0 });
   const g = new SkeeballGame('popongo');
   ok('popongo exists and is its own board', g.board.id === 'popongo');
-  eq('hole values are stamped from the arrangement (top holds the green 6)', g.board.geom.holes.top.value, 6);
-  eq('equalizer slots are worth zero on the face', [g.board.geom.holes.uppL.value, g.board.geom.holes.lowR.value], [0, 0]);
 
-  settle(g, 'midC');                       // blue 1
+  // EVERY SLOT BELOW IS LOOKED UP BY CUP ID, NEVER WRITTEN AS A SLOT NAME. This block tests the
+  // RULES of the arrangement layer (stamping, the equalizer, the color sweep), not which cup Matt
+  // has in which slot - and the deal is data he is expected to change. It was hardcoded to the
+  // shipping deal until 2026-08-27, when re-dealing the face by measured difficulty turned eight
+  // of these red without a single rule having moved. `cupSlot` is what makes the block survive
+  // the next re-deal; a cup id IS frozen (THE LAW rule 5), so it is the stable handle.
+  const cupSlot = (board, cupId) => Object.keys(board.arrangement)
+    .find((s) => board.arrangement[s] === cupId);
+  const S = Object.fromEntries(Object.keys(g.board.cups).map((c) => [c, cupSlot(g.board, c)]));
+  ok('every cup is dealt into exactly one slot', Object.values(S).every(Boolean)
+    && new Set(Object.values(S)).size === Object.keys(g.board.cups).length);
+
+  eq('hole values are stamped from the arrangement (the green 6 pays 6)', g.board.geom.holes[S.g6].value, 6);
+  eq('equalizer slots are worth zero on the face', [g.board.geom.holes[S.eqA].value, g.board.geom.holes[S.eqB].value], [0, 0]);
+
+  settle(g, S.b1a);                        // blue 1
   eq('a cup pays its value', g.score, 1);
-  settle(g, 'top');                        // green 6
+  settle(g, S.g6);                         // green 6
   eq('values accumulate', g.score, 7);
   let evs = g.takeEvents();
-  settle(g, 'uppL');                       // black: wipes the 6 the previous ball earned
+  settle(g, S.eqA);                        // black: wipes the 6 the previous ball earned
   evs = g.takeEvents();
   const eqEv = evs.find((e) => e.type === 'ballDone');
   eq('the equalizer wipes the previous ball, not the rack', g.score, 1);
   eq('and says exactly what it took', [eqEv.eq, eqEv.wiped, eqEv.value], [true, 6, 0]);
-  settle(g, 'lowR');                       // black again: previous ball (the equalizer) earned 0
+  settle(g, S.eqB);                        // black again: previous ball (the equalizer) earned 0
   eq('an equalizer after an equalizer takes nothing', g.score, 1);
   ok('the score can never go negative from a wipe', g.score >= 0);
 
   // The color sweep: land every scoring color in one rack (green + yellow + red + blue). This
   // rack deliberately never touches a red cup, so it collects three and no sweep.
-  settle(g, 'bot');                        // yellow 4
+  settle(g, S.y4b);                        // yellow 4
   let r = g.result();
   eq('three colors so far (black is not a color to collect)', r.colorsHit, 3);
   eq('no sweep until all four', r.colorSweep, 0);
-  settle(g, 'uppR');                       // yellow again - still 3 distinct
+  settle(g, S.y4a);                        // yellow again - still 3 distinct
   eq('a repeat color adds nothing', g.result().colorsHit, 3);
-  settle(g, 'lowL');                       // blue again
-  settle(g, 'bot');                        // yellow again
-  settle(g, 'top');                        // ninth ball; green already counted
+  settle(g, S.b1b);                        // blue again
+  settle(g, S.y4b);                        // yellow again
+  settle(g, S.g6);                         // ninth ball; green already counted
   r = g.result();
   eq('still three distinct colors, red never landed', r.colorsHit, 3);
   eq('so no sweep', r.colorSweep, 0);
@@ -626,18 +646,18 @@ if (G.mat) {
 
   // A rack that does land all four sweeps.
   const g2 = new SkeeballGame('popongo');
-  for (const hole of ['top', 'bot', 'midL', 'midC']) settle(g2, hole);
+  for (const cup of ['g6', 'y4b', 'r2a', 'b1a']) settle(g2, cupSlot(g2.board, cup));
   eq('green+yellow+red+blue is a sweep', [g2.result().colorsHit, g2.result().colorSweep], [4, 1]);
 
   // Snapshot round trip carries `earned`, so a restored rack cannot be re-wiped into new money.
   const g3 = new SkeeballGame('popongo');
-  settle(g3, 'top');
-  settle(g3, 'uppL');                      // wiped the 6
+  settle(g3, S.g6);
+  settle(g3, S.eqA);                       // wiped the 6
   const snap = g3.snapshot();
   const g4 = SkeeballGame.restore(snap);
   eq('restore keeps the wiped score', g4.score, g3.score);
   eq('and the wiped ball has nothing left to lose', g4.throws[0].earned, 0);
-  g4._settle(null, { hole: 'lowR', value: 0 });   // another equalizer straight after restore
+  g4._settle(null, { hole: S.eqB, value: 0 });    // another equalizer straight after restore
   eq('a post-restore equalizer still takes nothing from a wiped ball', g4.score, g3.score);
 
   // THE CLASSIC is untouched by all of this: no cups, values ride the holes as ever.

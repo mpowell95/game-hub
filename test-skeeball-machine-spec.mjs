@@ -109,17 +109,29 @@ for (const board of BOARDS) {
 
   // A MOVING HOLE IS TESTED OVER ITS WHOLE TRAVEL, NOT AT ITS RESTING u.
   //
-  // HOT SHOT: RUNAWAY's 100 basket slides across the face all rack long (its `geom.mover`, and
-  // machines/runaway/machine.js's moverU). Its written `u` is the CENTRE of the sweep - a
-  // position it occupies for an instant twice per period. Testing that number would let a
-  // machine pass `holes.inside` and `holes.spacing` at the one place the basket almost never
-  // is, while it spent the rest of the rack hanging over a rail. So a mover contributes its two
-  // EXTREMES to both rules, and a fixed hole contributes its single u to both, which is what
-  // every board that has no mover has always been checked against.
+  // HOT SHOT: RUNAWAY's top row is two 100s (its `geom.mover.holes`). They start still on their
+  // own marks; land in one and it CLOSES, and the survivor sweeps the full width - so a written
+  // `u` up there is a MARK, not a position, and it is a position that basket holds only until the
+  // first 100 of the rack drops. Testing that number would let a machine pass `holes.inside` and
+  // `holes.spacing` at the one place the basket spends the least time, while it spent the rest of
+  // the rack hanging over a rail.
+  //
+  // GUARD: THE TRAVEL IS ABSOLUTE, NOT RELATIVE TO THE MARK. machine.js sweeps the survivor as
+  // `dir * amp * cos(...)`, so it runs between -amp and +amp WHEREVER it started - it does not
+  // run `u +/- amp` around its own mark. Getting that wrong doubles the envelope and the rule
+  // would fail a machine that is fine (or pass one that is not, if the marks ever move inward).
+  //
+  // A fixed hole contributes its single u, which is what every board with no mover has always
+  // been checked against.
   const mover = G.mover || null;
-  const uSpan = (id, h) => (mover && mover.hole === id
-    ? [h.u - mover.amp, h.u + mover.amp]
-    : [h.u]);
+  // Every group of baskets that plays "last one standing": the top row, plus each `rows` entry.
+  // Any member can end up the survivor, so any member can move.
+  const groups = mover
+    ? [...(Array.isArray(mover.holes) ? [mover.holes] : []), ...(Array.isArray(mover.rows) ? mover.rows : [])]
+    : [];
+  const groupOf = (id) => groups.find((g) => g.includes(id)) || null;
+  const canRun = (id) => !!groupOf(id);
+  const uSpan = (id, h) => (canRun(id) ? [-mover.amp, h.u, mover.amp] : [h.u]);
 
   const odd = holes.filter(([, h]) => Math.abs(h.r - G.holeR) > EPS).map(([id]) => id);
   rule(board, 'holes.uniform', odd.length === 0,
@@ -138,13 +150,31 @@ for (const board of BOARDS) {
     for (let k = i + 1; k < holes.length; k++) {
       const [idA, A] = holes[i];
       const [idB, B] = holes[k];
-      // WORST CASE ACROSS BOTH TRAVELS. With a mover in the pair this is the closest the two
-      // centres ever come during a rack, which is the only distance that means anything - a
-      // basket that clears its neighbour at the centre of its sweep and drives through it at the
-      // end is not a spaced face, it is a collision nobody measured.
+      // TWO BASKETS IN THE SAME GROUP CAN NEVER BOTH BE OPEN AND MOVING, so their travels are
+      // not a spacing problem. A group plays "last one standing": the survivor only starts
+      // sweeping once every other member has CLOSED, and a closed basket has no collar in the
+      // world at all (machine.js's capFor, physics.js's buildWorld). Measuring the distance
+      // between a moving collar and a wall that no longer exists would fail a face that is
+      // correct. They are still checked against each other on their STATIC marks, below, which is
+      // the configuration a rack actually opens in.
+      //
+      // GUARD: SAME GROUP, NOT "BOTH CAN MOVE". Once every basket on a machine can move, the
+      // looser test exempts every pair and silently stops checking travel envelopes at all.
+      // Baskets in DIFFERENT groups can be moving simultaneously - RUNAWAY ends a good rack with
+      // three of them - so those pairs get the full envelope.
+      const gA = groupOf(idA);
+      const pairRuns = !!gA && gA === groupOf(idB);
       let d = Infinity;
-      for (const ua of uSpan(idA, A)) {
-        for (const ub of uSpan(idB, B)) d = Math.min(d, Math.hypot(ua - ub, A.v - B.v) / X);
+      if (pairRuns) {
+        d = Math.hypot(A.u - B.u, A.v - B.v) / X;
+      } else {
+        // WORST CASE ACROSS BOTH TRAVELS. With a mover in the pair this is the closest the two
+        // centres ever come during a rack, which is the only distance that means anything - a
+        // basket that clears its neighbour at the centre of its sweep and drives through it at
+        // the end is not a spaced face, it is a collision nobody measured.
+        for (const ua of uSpan(idA, A)) {
+          for (const ub of uSpan(idB, B)) d = Math.min(d, Math.hypot(ua - ub, A.v - B.v) / X);
+        }
       }
       if (d < 1.30 - 1e-3) tooClose.push(`${idA}-${idB} ${d.toFixed(3)}X`);
     }

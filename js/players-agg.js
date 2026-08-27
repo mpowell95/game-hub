@@ -333,13 +333,13 @@ export function aggregatePlayers(all, corrections) {
         // bests take Math.max, NEVER a sum - a summed bestGame would invent a score nobody ever
         // threw, which is rule 4 as well as rule 2.
         if (!dst.sk) {
-          dst.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0, tens: 0, twenties: 0, thirties: 0, forties: 0, colorSweeps: 0 };
+          dst.sk = { played: 0, won: 0, lost: 0, tied: 0, balls: 0, points: 0, bestGame: 0, bestThrow: 0, hundreds: 0, fifties: 0, tens: 0, twenties: 0, thirties: 0, forties: 0, colorSweeps: 0, runaways: 0 };
         }
         // tens..forties added 2026-08-20 (the "every point value" unlock goal); colorSweeps
         // added 2026-08-22 (POPONGO's all-four-colors objective). Counters, so they ADD like
         // the rest; `| 0` covers a device that has not played since they existed.
         for (const k of ['played', 'won', 'lost', 'tied', 'balls', 'points', 'hundreds', 'fifties',
-          'tens', 'twenties', 'thirties', 'forties', 'colorSweeps']) {
+          'tens', 'twenties', 'thirties', 'forties', 'colorSweeps', 'runaways']) {
           dst.sk[k] = (dst.sk[k] | 0) + (src.sk[k] | 0);
         }
         dst.sk.bestGame = Math.max(dst.sk.bestGame | 0, src.sk.bestGame | 0);

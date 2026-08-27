@@ -4,11 +4,19 @@
 // an edit made for RUNAWAY must never be carried back into HOT SHOT's copy "to keep them in
 // sync". They are different machines.
 //
-// THE MOVING BASKET, on this side of the wall: the top row's single 100 is drawn into its own
-// THREE.Group and that group's x is set from machine.js's moverU every frame - the SAME function
-// physics.js drives the collision bodies with. GUARD: never re-derive the sine here. One sine,
-// in machine.js, or the basket on screen and the basket the ball hits drift apart, which is the
-// entire class of bug this file's original header promises is impossible.
+// THE ONE-SHOT FACE, on this side of the wall. Every basket is drawn into its OWN THREE.Group,
+// and render() drives two things off the rack state every frame:
+//
+//   position.x   from machine.js's holeOffset() - 0 for every basket except the runaway, which
+//                slides. GUARD: never re-derive the cosine here. One copy, in machine.js, or the
+//                basket on screen and the basket the ball hits drift apart, which is the entire
+//                class of bug this file's original header promises is impossible.
+//   visible      false once that basket has been closed for the rest of the rack, with a flat
+//                cap plate (_capPlate) revealed underneath it. The plate is flush because the
+//                PHYSICS cap is flush - see machine.js's capFor().
+//
+// Neither is gated on prefers-reduced-motion: reduced motion thins garnish, it does not freeze
+// gameplay (see render()'s own guard).
 //
 // skeeball/js/render.js - the machine on screen, drawn by three.js (skeeball/js/vendor/). GUARD:
 // the scene is built from the SAME machine description physics.js simulates (machine.js), so
@@ -17,7 +25,23 @@
 // driven by the physics body's position AND quaternion, so it visibly rolls.
 
 import * as THREE from '../../vendor/three.module.min.js';
-import { buildMachine, moverU } from './machine.js';
+import { buildMachine, holeOffset } from './machine.js';
+
+/** Dispose a material AND the texture it points at.
+ *
+ *  GUARD: `Material.dispose()` DOES NOT DISPOSE THE MATERIAL'S TEXTURES. Every score popup builds
+ *  its own 256x128 CanvasTexture, and disposing only the material left it on the GPU forever -
+ *  about 1 MB a rack, never freed, which is why a long session gets choppier than a fresh one.
+ *  Burst particles had the same shape of bug with no dispose at all. Measured on BRICK CITY where
+ *  this was found (2026-08-26): 17 textures at rest -> 44 with the popups up -> 44 once they had
+ *  faded, against 17 -> 44 -> 17 once fixed.
+ *
+ *  DISPOSE .map WHENEVER YOU DISPOSE A MATERIAL HERE. */
+function disposeMat(mat) {
+  if (!mat) return;
+  if (mat.map && mat.map.dispose) mat.map.dispose();
+  if (mat.dispose) mat.dispose();
+}
 import { BALLS_PER_GAME } from '../../boards.js';
 
 const REDUCED = typeof matchMedia === 'function'
@@ -134,9 +158,23 @@ export class Renderer {
     this.renderer.setPixelRatio(soft ? 0.5 : Math.min(2, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)));
     this.renderer.shadowMap.enabled = !soft;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // ON DEMAND, NOT EVERY FRAME. three.js re-renders the whole shadow map every frame by default,
+    // drawing every caster in the scene a second time - and this machine is a STILL LIFE for most
+    // of a rack while the player lines up a swipe. render() sets `needsUpdate` for exactly the
+    // frames a caster moved. Ported from machines/brickcity/render.js (2026-08-26), where it
+    // measured 172 draw calls / 37,206 triangles per frame down to 138 / 26,026 while idle.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
+    this._shadowBalls = -1;    // ball count on the last shadow pass; -1 forces the first one
+    this._shadowMovers = -1;   // how many baskets were sweeping on the last shadow pass
 
     this._disposables = [];
     this._flashes = new Map();    // hole id -> mesh to pulse
+    // THE ONE-SHOT FACE, drawn. ONE group per basket - its mouth, capture flash, wire basket and
+    // value backboard - so the whole thing slides as a unit (a basket that is sweeping) or hides
+    // as a unit (one that has closed). render() drives both off game.closed / game.sweeps.
+    this._holeGroups = new Map();  // hole id -> THREE.Group: the whole basket, backboard included
+    this._closedSet = new Set();   // reused every frame so render() allocates nothing
     this._popups = [];
     this._particles = [];
     this._marqueeBulbs = [];
@@ -308,13 +346,14 @@ export class Renderer {
       const H = G.holes[id];
       const cup = this.board.cups && this.board.arrangement
         ? this.board.cups[this.board.arrangement[id]] : null;
-      // MOVER: everything this iteration adds to the scene for the MOVING basket - its mouth,
-      // its capture flash, its wire basket and its value card - gets re-parented into one group
-      // below, so the whole assembly slides as a unit. Recording the scene's length here and
-      // sweeping up whatever is new afterwards is deliberate: it cannot miss a mesh that a
-      // future edit adds to this block, the way an explicit list of four meshes would.
-      const isMover = !!(G.mover && G.mover.hole === id);
-      const sceneBefore = isMover ? this.scene.children.length : 0;
+      // EVERY basket gets its own group, not just the moving one. Everything this iteration adds
+      // to the scene for this hole - its mouth, its capture flash, its wire basket and its value
+      // card - is re-parented into that group below, so the whole assembly can be SLID as a unit
+      // (the runaway) or HIDDEN as a unit (a basket that has been closed for the rest of the
+      // rack). Recording the scene's length here and sweeping up whatever is new afterwards is
+      // deliberate: it cannot miss a mesh that a future edit adds to this block, the way an
+      // explicit list of four meshes would.
+      const sceneBefore = this.scene.children.length;
       const mouth = new THREE.Mesh(
         this._track(new THREE.CircleGeometry(H.r, 44)),
         this._mat({ color: 0x0a0705, roughness: 1 }),
@@ -322,7 +361,7 @@ export class Renderer {
       this._onFace(mouth, H.u, H.v, 0.0035, true);
       this.scene.add(mouth);
       this._flashes.set(id, this._makeFlash(H));
-      if (!H.collarH) continue;
+      if (!H.collarH) { this._claimHole(id, sceneBefore); continue; }
       // HOT SHOT (`board.dressing === 'basketball'`): the collar is DRAWN as an orange wire
       // basket with a white mini backboard carrying the value - the real cabinet's furniture.
       // Cosmetic only: the wall the ball hits is still machine.js's collar boxes, and the wire
@@ -330,7 +369,7 @@ export class Renderer {
       if (this.board.dressing === 'basketball') {
         this._wireBasket(H, cup && cup.color);
         if (cup && cup.label) this._hoopBackboard(H, cup, RING_GLOW);
-        if (isMover) this._claimMover(sceneBefore);
+        this._claimHole(id, sceneBefore);
         continue;
       }
       const wall = this._scallopedRim(H.r + G.collarThick / 2, H.collarH,
@@ -339,7 +378,7 @@ export class Renderer {
       this._onFace(wall, H.u, H.v, 0);
       this.scene.add(wall);
       if (cup && cup.label) this._cupPlate(H, cup, RING_GLOW);
-      if (isMover) this._claimMover(sceneBefore);
+      this._claimHole(id, sceneBefore);
     }
     // MOVER: the TRACK it runs on. Purely cosmetic and deliberately so - it has no physics body,
     // it is drawn flush in the tread, and the ball rolls straight over it. Without it the basket
@@ -506,19 +545,39 @@ export class Renderer {
     if (flat) mesh.rotateX(-Math.PI / 2);
   }
 
-  /** MOVER: sweep every scene child added since `from` into `this._moverGroup`.
+  /** Sweep every scene child added since `from` into this hole's own group: the mouth, the
+   *  capture flash, the rim, the net and the value backboard.
+   *
+   *  ONE group per basket does both of this machine's jobs. `position.x` slides the whole
+   *  assembly (a basket that is currently sweeping), and `visible` hides all of it (a basket that
+   *  has closed for the rest of the rack). No caller anywhere has to know the assembly is more
+   *  than one mesh.
+   *
+   *  GUARD: THE BACKBOARD GOES WITH IT. An earlier build kept the backboard standing when a
+   *  basket closed - a numbered card with no hoop under it - as the signal that the basket was
+   *  spent. Matt, 2026-08-27: "make the backboards vanish with the baskets." It also stopped
+   *  reading once EVERY row could move: a surviving basket sweeps through its dead neighbours'
+   *  marks, so the shelf filled with numbered cards that the one live basket kept sliding behind.
+   *
+   *  GUARD: AND DO NOT REPLACE IT WITH A PLATE DRAWN IN THE FACE. The build before that one hid
+   *  the basket and drew a flat disc where the mouth had been; it was correctly placed and
+   *  COMPLETELY INVISIBLE - the same finding _moverTrack records for the mover's painted groove,
+   *  and for the same reason: the camera stands behind the ball, so every tread is foreshortened
+   *  almost to nothing and occluded by the riser in front of it. NOTHING LYING FLAT ON THIS FACE
+   *  CAN BE SEEN FROM WHERE THE GAME IS PLAYED. The empty shelf IS the signal.
    *
    *  The group sits at the origin, so re-parenting changes nothing about where anything is drawn
-   *  (a child's local transform already IS its world transform). From then on one `position.x`
-   *  moves the mouth, the flash ring, the wire basket and the value card together, and no caller
-   *  anywhere has to know the assembly is more than one mesh. */
-  _claimMover(from) {
-    if (!this._moverGroup) {
-      this._moverGroup = new THREE.Group();
-      this.scene.add(this._moverGroup);
-    }
-    const claimed = this.scene.children.slice(from).filter((o) => o !== this._moverGroup);
-    for (const obj of claimed) this._moverGroup.add(obj);   // Group.add re-parents
+   *  (a child's local transform already IS its world transform).
+   *
+   *  GUARD: EVERY hole gets a group, not just the ones that can move. A basket that closes has to
+   *  disappear as a unit, and a uniform rule is what stops the next machine's mesh being left
+   *  behind in the scene because someone forgot to add it to a list. */
+  _claimHole(id, from) {
+    const g = new THREE.Group();
+    this.scene.add(g);
+    const claimed = this.scene.children.slice(from).filter((o) => o !== g);
+    for (const obj of claimed) g.add(obj);              // Group.add re-parents
+    this._holeGroups.set(id, g);
   }
 
   /** MOVER: the two END STOPS that mark the limits of the basket's travel - one post at each
@@ -543,7 +602,9 @@ export class Renderer {
   _moverTrack() {
     const G = this.G;
     const m = G.mover;
-    const H = G.holes[m.hole];
+    // Either top-row basket can end up the runaway and both marks are at +/-amp, so the mouth
+    // width is the same whichever one it is. Read it off the first.
+    const H = G.holes[m.holes[0]];
     const steel = new THREE.Color(this.look.ringLip || '#ffd23f');
     const railW = H.r * 1.05;
     for (const side of [-1, 1]) {
@@ -2081,8 +2142,21 @@ export class Renderer {
     // freeze gameplay (docs/BUILDING-A-GAME.md, Part 0, and pinball/CLAUDE.md's "a pinball table
     // that does not move is not a pinball table"). The basket IS this machine - stopping it
     // would leave a player aiming at a target the physics is still sliding out from under them.
-    if (this._moverGroup) {
-      this._moverGroup.position.x = moverU(this.G, game ? game.machineT || 0 : 0);
+    // `sweeps` is read again by the shadow gate at the bottom of this method, so it is scoped to
+    // the whole of render() rather than to this block.
+    const sweeps = (game && game.sweeps) || null;
+    {
+      const T = game ? game.machineT || 0 : 0;
+      const closed = this._closedSet;
+      closed.clear();
+      for (const h of (game && game.closed) || []) closed.add(h);
+      for (const [id, grp] of this._holeGroups) {
+        // A moving basket slides; every other basket's offset is 0, which costs one multiply.
+        grp.position.x = holeOffset(this.G, id, T, sweeps);
+        // A closed basket vanishes whole - hoop, net and backboard together. The empty shelf is
+        // the signal; see _claimHole for the two things that were tried before it.
+        grp.visible = !closed.has(id);
+      }
     }
     // Every throw still in the air gets a mesh; whatever is left over is hidden.
     const live = (game && game.balls) || (game && game.ball ? [game.ball] : []);
@@ -2125,7 +2199,7 @@ export class Renderer {
       s.userData.t += dt;
       s.position.y += step * 0.22;
       s.material.opacity = Math.max(0, 1 - s.userData.t / 1.1);
-      if (s.userData.t > 1.1) { this.scene.remove(s); s.material.dispose(); this._popups.splice(i, 1); }
+      if (s.userData.t > 1.1) { this.scene.remove(s); disposeMat(s.material); this._popups.splice(i, 1); }
     }
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const pt = this._particles[i];
@@ -2133,7 +2207,7 @@ export class Renderer {
       pt.userData.vel.y -= dt * 2.2;
       pt.position.addScaledVector(pt.userData.vel, dt);
       pt.material.opacity = Math.max(0, 0.9 - pt.userData.t);
-      if (pt.userData.t > 1) { this.scene.remove(pt); this._particles.splice(i, 1); }
+      if (pt.userData.t > 1) { this.scene.remove(pt); disposeMat(pt.material); this._particles.splice(i, 1); }
     }
     if (this._celebrateT > 0) {
       this._celebrateT -= dt;
@@ -2141,6 +2215,41 @@ export class Renderer {
       for (const b of this._marqueeBulbs) b.material.emissiveIntensity = on;
       if (this._celebrateT <= 0) for (const b of this._marqueeBulbs) b.material.emissiveIntensity = 0.55;
     }
+    // SHADOWS: only re-render the map on a frame where a caster actually moved.
+    //
+    // GUARD: GATE ON `live.length`, NOT ON `used`. `used` counts the ball parked on the serve
+    // spot, which does not move, so gating on it leaves the pass running through the whole wait
+    // between throws - which is exactly the still life the gate exists for. `used` CHANGING still
+    // counts, or the frame a ball stops being drawn leaves its shadow lying on the lane under
+    // nothing.
+    //
+    // GUARD: A SWEEPING BASKET DOES NOT CAST, AND THAT IS WHAT MAKES THE GATE SAFE HERE. The first
+    // cut of this gate ignored the movers, and it was VISIBLY WRONG the moment a row went down to
+    // one: the shadow map still held the basket where it stood at the last pass, so a detached
+    // basket shadow sat on the riser while the basket itself slid away from it. Found by looking
+    // at a screenshot, not by reasoning - see VISUAL-PROCESS.md.
+    //
+    // Firing the pass every frame something moves would fix it and give most of the saving back,
+    // because on this machine something is moving for most of a rack. So a basket that is sweeping
+    // turns its shadow OFF instead: it is the one caster whose shadow nobody is looking at (it
+    // falls on the riser directly behind it), and a basket that is MOVING is already the most
+    // conspicuous thing on the face. The pass fires once on each transition, which is what clears
+    // the shadow it cast while it was still standing.
+    let movers = 0;
+    for (const [id, grp] of this._holeGroups) {
+      const moving = !!(sweeps && sweeps[id]);
+      if (moving) movers += 1;
+      if (grp.userData.casting !== !moving) {
+        grp.userData.casting = !moving;
+        grp.traverse((o) => { if (o.isMesh) o.castShadow = !moving; });
+      }
+    }
+    if (live.length || used !== this._shadowBalls || movers !== this._shadowMovers
+      || this._celebrateT > 0) {
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    this._shadowBalls = used;
+    this._shadowMovers = movers;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2191,8 +2300,8 @@ export class Renderer {
   // --- teardown --------------------------------------------------------------------------------
 
   dispose() {
-    for (const p of this._popups) { this.scene.remove(p); p.material.dispose(); }
-    for (const p of this._particles) this.scene.remove(p);
+    for (const p of this._popups) { this.scene.remove(p); disposeMat(p.material); }
+    for (const p of this._particles) { this.scene.remove(p); disposeMat(p.material); }
     this._popups = [];
     this._particles = [];
     for (const d of this._disposables) { if (d && d.dispose) d.dispose(); }

@@ -946,7 +946,9 @@ export class SkeeballUI {
     // What was already met before this rack. Anything that turns met from here is fresh.
     this._goalsMet = new Set(readGoalsLive(this.game.board.id, null).filter((g) => g.met).map((g) => g.id));
     this._ceremony = false;
-    // THE OBJECTIVES VANISH once this machine has nothing left to ask for (Matt, 2026-08-25).
+    // THE OBJECTIVES VANISH once this machine has nothing left to ask for (Matt, 2026-08-25) -
+    // the two rails go entirely, and the wide bar becomes the small "Objectives ✓" chip that opens
+    // them again on a tap (_goalDoneMarkup, 2026-08-27).
     // Decided ONCE, here, on purpose: the rack that completes the last one must KEEP its rails on
     // screen, because the ceremony flies those very boxes to the middle of the screen. Hiding
     // them the instant the third one landed would leave it nothing to animate.
@@ -1389,12 +1391,39 @@ export class SkeeballUI {
       </div>`;
   }
 
+  /** WHAT STANDS IN THE BAR'S PLACE ONCE THE OBJECTIVES ARE SPENT (2026-08-27). Matt: the
+   *  objectives "disappear after they've been achieved... add something above the machines that
+   *  players can click to see the objectives after they've already completed them."
+   *
+   *  A small chip in the SAME row the running total used, because that row is the one place above
+   *  the machine that is measured clear on every board (it is in flow - see skeeball.css's block
+   *  above .sk-gtotal). Tapping it opens the same `_showGoalDefs` sheet every objective box opens,
+   *  which already shows all three with their progress and their definitions - so a finished
+   *  machine still says what it asked for, and what the player did.
+   *
+   *  It carries `data-def` with NO id, so the sheet opens with nothing singled out: there is no one
+   *  objective being asked about here. It deliberately carries NO `data-goal` - _checkGoalsNow pops
+   *  boxes by that attribute, and nothing on a spent machine can turn met.
+   *
+   *  Measured through the real UI at 375x667 and 393x852: the chip is 111x23 and its row 31px,
+   *  against the full bar's 40px - so a finished machine still renders bigger than one you are
+   *  working on, just no longer by the whole bar. */
+  _goalDoneMarkup() {
+    const goals = this._liveGoals();
+    if (!goals || !goals.length) return '';
+    return `
+      <div class="sk-gdone" data-def="" role="button" tabindex="0"
+        aria-label="${esc(`${t('goals_obj_h')}. ${t('goals_done')}. ${t('obj_def_h')}`)}">
+        <em>${esc(t('goals_obj_h'))}</em><i aria-hidden="true">✓</i>
+      </div>`;
+  }
+
   /** The RUNNING TOTAL - the third goal on every machine, and the slowest-moving of the three,
    *  which is why it is the one that can sit furthest from the eye. One wide row above the
    *  machine. GUARD: it carries data-goal like the rail boxes do, because _checkGoalsNow finds
    *  the box to pop by that attribute; drop it and completing this goal stops being celebrated. */
   _goalTotalMarkup() {
-    if (this._goalsHidden) return '';
+    if (this._goalsHidden) return this._goalDoneMarkup();
     const g = this._liveGoals()[2];
     if (!g) return '';
     return `
