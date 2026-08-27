@@ -1079,53 +1079,78 @@ one step further out. **That took nothing from anyone** (THE LAW rule 2): `sk.un
 additive set, union-merged across devices, and nothing removes an id from it. Proved rather than
 argued - `test-stats-replay.mjs` scenario G replays the real synced records of the only two
 devices that hold POPONGO and asserts they still do.
-## The moving basket (2026-08-25, HOT SHOT: RUNAWAY)
+## The moving basket, and the one-shot face (2026-08-25, rebuilt 2026-08-26, HOT SHOT: RUNAWAY)
 
-**The first moving part in this repo.** Everything on every earlier machine's face is a static
-rigid body placed once at build time. `runaway`'s top row is one 100 basket that slides across
-tread 3 all rack long. Full build record, the measured numbers and the open questions:
-`skeeball/MACHINE-RUNAWAY.md`. The four things a session touching ANY machine needs from here:
+**The first moving part in this repo, and the first face that CHANGES SHAPE while you play it.**
+Everything on every other machine is a static rigid body placed once at build time and still there
+on the ninth ball. `runaway` opens with two still 100s on tread 3; land in one and it CLOSES while
+its twin comes off its mark and sweeps the full width, and every basket you land in after that
+closes too. Full build record, the measured numbers and the open questions:
+`skeeball/MACHINE-RUNAWAY.md`. What a session touching ANY machine needs from here:
 
-- **The motion is three pure functions in `js/machines/runaway/machine.js`** - `moverU(G, t)`,
-  `moverVel(G, t)`, `holeU(G, id, t)`. No state, no clock, no `Date.now()`. `physics.js` drives
-  the bodies with them, `render.js` draws with them, the spec test measures the travel envelope
-  with them. **Never write a second sine.** A copy anywhere else is a drawn basket drifting off
-  its own collision wall.
+- **The motion is pure functions in `js/machines/runaway/machine.js`** - `moverU(G, t, sweep)`,
+  `moverVel`, `holeU`, `holeOffset`. No state, no clock, no `Date.now()`; `sweep` is the rack
+  state, handed in. `physics.js` drives the bodies with them, `render.js` draws with them, the
+  tools measure the travel envelope with them. **Never write a second copy.** One anywhere else is
+  a drawn basket drifting off its own collision wall.
 - **A moving collar is a KINEMATIC body, never a static one whose position you rewrite.**
   cannon-es zeroes a kinematic body's inverse solve mass (the ball cannot shove the basket) and
   still feeds its velocity to the contact solver (a struck rim gives a real impulse). A static
   body has velocity 0 by definition, so moving one teleports a wall through the ball with the
   solver believing nothing moved - penetration, then an explosive push-out. Set position AND
   velocity every substep: position is authoritative so drift cannot accumulate, velocity is what
-  the solver reads.
+  the solver reads. **Both baskets that COULD move get kinematic bodies from the first frame** -
+  cannon-es cannot change a body's type after the world is built, and either one can end up being
+  the runaway.
 - **Capture against a moving mouth is measured RELATIVE TO THE MOUTH, and latches on commit.**
   Skip the relative velocity and a ball sitting still on the tread reads zero speed across a
   mouth driving over it and is swallowed on contact - a magnet, which section 9 of the spec bans.
   Skip the latch and a basket that slides on after capture re-scores a clean 100 as a gutter ball
   halfway down its own drop.
-- **`js/game.js`'s `machineT` is the ONE clock and it must stay the one clock.** Every throw
-  builds its own cannon world and two balls can be in the air at once, so two live sims plus the
-  renderer are three independent things that each need to know where the basket is. They agree
-  only because all three are pure functions of that number. It is still a pure file: it
-  accumulates the `dt` its caller hands `update()` and never reads a clock, which is what keeps
-  a machine with a moving part deterministic.
+- **CLOSING A BASKET IS TWO THINGS AND NEEDS BOTH.** `physics.js` does not build a closed basket's
+  collar, AND the capture loop skips it. Do only the second and the cup becomes a BOWL the ball
+  drops into and can never leave - which is BRICK CITY's parked-ball failure rebuilt on purpose.
+  Do only the first and a mouth with no wall swallows a ball through a flat plate.
+- **`js/game.js` carries the rack state, and `sweep` is SHARED BY REFERENCE.** `machineT` (the
+  rack clock), `closed` (slot ids already landed in) and `sweep` (which 100 is running, and how
+  fast). Every throw builds its own cannon world and two balls can be in the air at once, so two
+  live sims plus the renderer are three independent things that each need to know what the face
+  looks like right now. They agree only because all three read the same object through the same
+  pure functions - **mutate `sweep` in place; never swap in a fresh one while a ball is live.**
+  `game.js` is still pure: it accumulates the `dt` its caller hands `update()` and never reads a
+  clock.
+- **All three ride the autosave as ADDITIVE keys** and are inert on every other machine. An old
+  save resumes with a fresh face and nothing moving, which is exactly right for a machine that has
+  neither (THE LAW rule 5). `closed` is read back against the board's own holes, so a save cannot
+  close a basket the machine does not have.
 
-**Reachability on a machine with a mover needs a THIRD AXIS.** The same (power, aim) lands
-somewhere different depending on where the basket was at release, so `skeeball/js/test.js`'s
-41x21 (power x aim) grid measures one arbitrary frozen phase and will call the moving hole
-unreachable or trivial at random. `node sweep-mover.mjs runaway` walks power x aim x phase and is
-the tool to re-run after ANY change to that face, the amplitude, the period or the materials.
+**Reachability on a machine like this needs THREE axes, and the face is different on ball 1 and
+ball 9.** The same (power, aim) lands somewhere different depending on where the basket was at
+release, so `skeeball/js/test.js`'s 41x21 (power x aim) grid measures one arbitrary frozen phase
+of one arbitrary face. `sweep-mover.mjs` walks power x aim x phase at a chosen STAGE of a rack
+(`--stage open|run|endgame`, `--rung N`, or `--ladder` for the whole escalation), and
+`test-runaway-capped.mjs` sweeps the face with every basket closed. Re-run both after ANY change
+to that face, the amplitude, the ladder or the materials.
 
-**A moving basket needs its shelf to itself.** `holes.spacing`'s 1.30X would be violated at
-nearly every step of any travel worth having if a static basket shared the row. That is why
-RUNAWAY's top row is one basket - a constraint, not a preference.
+**A moving basket needs its shelf to itself - and RUNAWAY threads that rather than breaking it.**
+`holes.spacing`'s 1.30X would be violated at nearly every step of any travel worth having if a
+static basket shared the row. RUNAWAY's two 100s are only ever both present while NEITHER is
+moving; the moment one closes, the survivor has the shelf alone. A third basket up there would
+still be impossible.
 
-**NOTHING LYING FLAT ON THE TOP SHELF CAN BE SEEN.** Found while drawing RUNAWAY's mover rail: the
-camera stands behind the ball, so tread 3 is the furthest surface on the machine and the middle
-row's riser occludes it outright. A painted groove along the travel was correctly placed and
-completely invisible - in near-black AND in a lit accent, so it was geometry, not contrast. Only
-furniture with HEIGHT reads up there (the two end-stop posts do). Applies to any machine on this
-staircase, not just this one: if you are about to paint something on tread 3, don't.
+**A MOVING BASKET SWEEPS OVER THE ONE YOU CLOSED, so a closed basket must be FLUSH.** The capped
+mark is one end of the travel. Anything standing proud there is a moving collar converging on a
+static obstacle - the pinch that cost POPONGO's first draft 12% of all throws.
+
+**NOTHING LYING FLAT ON THIS FACE CAN BE SEEN, and it cost the same mistake twice.** The camera
+stands behind the ball, so every tread is foreshortened almost to nothing and occluded by the
+riser in front of it. First a painted groove along the mover's travel was correctly placed and
+completely invisible - in near-black AND in a lit accent, so geometry, not contrast. Then a flat
+plate drawn where a closed basket had been did exactly the same thing, and a closed basket read as
+one that had never existed. **Only furniture with HEIGHT reads here.** The signal for a closed
+basket is its BACKBOARD left standing with its number on it and no hoop underneath - backboards
+are vertical, face the player, and are the most legible things on the machine. Applies to any
+machine on this staircase: if you are about to paint something flat on a tread, don't.
 
 ## Testing racks, and voided scores (2026-08-24)
 

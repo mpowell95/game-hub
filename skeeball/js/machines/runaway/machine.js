@@ -4,11 +4,18 @@
 // an edit made for RUNAWAY must never be carried back into HOT SHOT's copy "to keep them in
 // sync". They are different machines.
 //
-// WHAT MAKES THIS FILE DIFFERENT FROM ITS THREE SIBLINGS: it is the first machine in the repo
-// with a MOVING PART. The top row is a single 100 basket that slides left and right across the
-// face for the whole rack. Everything about that motion is `moverU`/`moverVel` below, and those
-// two functions are the ONLY source of truth - physics.js, render.js and the spec test all call
-// them rather than each re-deriving a sine. See "The moving basket" in skeeball/CLAUDE.md.
+// WHAT MAKES THIS FILE DIFFERENT FROM ITS THREE SIBLINGS: it is the only machine in the repo
+// with a MOVING PART, and the only one whose FACE CHANGES SHAPE DURING A RACK.
+//
+//   - The top row is TWO 100 baskets, both standing still. Cap one and the survivor comes off its
+//     mark and starts sweeping the whole width; catch the survivor and it only gets faster.
+//   - Every basket on rows 1 and 2 is a ONE-SHOT: hit it and it CAPS OVER for the rest of the
+//     rack. The runaway is the one thing on the face that never closes.
+//
+// Both live below as pure functions of (geometry, rack clock, rack state): `moverU`/`moverVel`/
+// `holeOffset` for the sweep, `capFor` for the cap. They are the ONLY source of truth -
+// physics.js, render.js and the tools all call them rather than each re-deriving the maths. See
+// "The moving basket" in skeeball/CLAUDE.md and MACHINE-RUNAWAY.md.
 //
 // skeeball/js/machine.js - the machine's GEOMETRY, once, in metres. GUARD: both physics.js and
 // render.js build from this one description, so the wall you see IS the wall the ball hits and
@@ -40,15 +47,48 @@
 // ball touching the rim a step change in wall velocity - a kick out of nowhere. The sine eases
 // through both ends for free and costs the same to evaluate.
 
-/** Where the moving basket's centre is, in face-u metres, at rack time `t`. 0 on a board with
- *  no `geom.mover`, which is every other machine. */
-export function moverU(G, t) {
+/** THE RUNAWAY'S SWEEP, as pure maths. `sweep` is game.js's rack state, and it is the ONLY thing
+ *  that says a basket is moving at all:
+ *
+ *      null                                  nothing moves - both 100s stand still (ball 1)
+ *      { hole, t0, dir, period, catches }    `hole` is the survivor, and it is sweeping
+ *
+ *  The survivor's ABSOLUTE face-u is
+ *
+ *      u(t) = dir * amp * cos(2*PI*(t - t0) / period)
+ *
+ *  A COSINE ANCHORED AT THE HANDOFF, NOT A SINE FROM ZERO - and that is the whole trick that
+ *  makes the handoff free. The survivor is standing at its resting u, which is exactly +/-amp,
+ *  which is exactly a TURNAROUND of this travel. So at t = t0 the cosine puts it precisely where
+ *  it already is AND gives it precisely zero velocity: it eases away from a standstill instead of
+ *  teleporting to the centre of the sweep or being kicked off its mark by a step in wall
+ *  velocity. `dir` is the sign of its resting u, so the machine is mirror-symmetric and it makes
+ *  no difference which of the two 100s you cap first.
+ *
+ *  STILL A SINUSOID, NOT A TRIANGLE: a triangle reverses instantaneously at each end and hands
+ *  any ball touching the rim a step change in wall velocity out of nowhere. This eases through
+ *  both ends for free and costs the same to evaluate.
+ *
+ *  GUARD: THESE FUNCTIONS ARE THE ONLY PLACE THE MOTION EXISTS. physics.js moves the collar
+ *  bodies with them, render.js moves the meshes with them, and the tools measure the travel
+ *  envelope with them. A second cosine written anywhere else is a mesh drifting off its own
+ *  collision wall - the exact class of bug machine.js exists to make impossible.
+ *
+ *  GUARD: PURE FUNCTIONS OF (GEOMETRY, TIME, RACK STATE). No internal clock, no Date.now(),
+ *  nothing accumulated. `t` is the rack clock, handed in by every caller. That is what keeps the
+ *  sim deterministic, and what lets two balls in the air at once - running in SEPARATE cannon
+ *  worlds - agree about where the basket is.
+ */
+
+/** The runaway's absolute face-u at rack time `t`. 0 when nothing is sweeping. */
+export function moverU(G, t, sweep) {
   const m = G && G.mover;
-  if (!m) return 0;
-  return m.amp * Math.sin((2 * Math.PI * (t || 0)) / m.period);
+  if (!m || !sweep || !sweep.hole) return 0;
+  const per = sweep.period > 0 ? sweep.period : basePeriod(G);
+  return sweep.dir * m.amp * Math.cos((2 * Math.PI * ((t || 0) - (sweep.t0 || 0))) / per);
 }
 
-/** The same basket's LATERAL SPEED (m/s, + is toward the player's right) at rack time `t`.
+/** The runaway's LATERAL SPEED (m/s, + is toward the player's right) at rack time `t`.
  *
  *  GUARD: physics.js needs this for two separate reasons and both are load-bearing. It is the
  *  velocity given to the KINEMATIC collar bodies, so the contact solver hands a struck ball a
@@ -57,18 +97,85 @@ export function moverU(G, t) {
  *  rather than how fast it is crossing the board. Without the subtraction a ball sitting still
  *  on the tread reads as zero speed across a mouth driving over it and is swallowed on contact -
  *  which is MACHINE-SPEC.md section 9's banned magnetism arriving through the back door. */
-export function moverVel(G, t) {
+export function moverVel(G, t, sweep) {
   const m = G && G.mover;
-  if (!m) return 0;
-  const w = (2 * Math.PI) / m.period;
-  return m.amp * w * Math.cos(w * (t || 0));
+  if (!m || !sweep || !sweep.hole) return 0;
+  const per = sweep.period > 0 ? sweep.period : basePeriod(G);
+  const w = (2 * Math.PI) / per;
+  return -sweep.dir * m.amp * w * Math.sin(w * ((t || 0) - (sweep.t0 || 0)));
 }
 
-/** One hole's centre-u at rack time `t`: its resting `u`, plus the sweep if it is the mover. */
-export function holeU(G, id, t) {
+/** The first rung of the escalation ladder - the period the sweep starts at. */
+export function basePeriod(G) {
+  const m = G && G.mover;
+  return m && Array.isArray(m.periods) && m.periods.length ? m.periods[0] : 6;
+}
+
+/** One hole's centre-u at rack time `t`: its own resting `u`, unless it is the runaway. */
+export function holeU(G, id, t, sweep) {
   const H = G.holes[id];
   if (!H) return 0;
-  return G.mover && G.mover.hole === id ? H.u + moverU(G, t) : H.u;
+  return sweep && sweep.hole === id ? moverU(G, t, sweep) : H.u;
+}
+
+/** How far a hole is DISPLACED from where machine.js built it - what render.js puts on the
+ *  basket's group, and what physics.js adds to a kinematic body's baseX. Zero for every hole
+ *  that is not currently the runaway, which on ball 1 is every hole on the machine. */
+export function holeOffset(G, id, t, sweep) {
+  const H = G.holes[id];
+  if (!H || !sweep || sweep.hole !== id) return 0;
+  return moverU(G, t, sweep) - H.u;
+}
+
+/** Is this hole one the sweep can ever claim? BOTH top-row 100s get KINEMATIC collars from the
+ *  first frame, because either one can become the runaway and cannon-es cannot change a body's
+ *  type after the world is built. The one that never moves is driven to offset 0 forever, which
+ *  costs nothing and keeps the two 100s physically identical until the handoff. */
+export function isMoverHole(G, id) {
+  const m = G && G.mover;
+  return !!(m && Array.isArray(m.holes) && m.holes.indexOf(id) >= 0);
+}
+
+/** THE CAP that closes a basket once it has been hit.
+ *
+ *  GUARD: CLOSING A BASKET IS NOT "CAPTURE TURNED OFF". Leaving the collar standing and refusing
+ *  to capture turns a cup into a BOWL: the ball drops in, cannot be taken, and sits there until
+ *  the watchdog walks it out twelve seconds later. That is precisely BRICK CITY's parked-ball
+ *  failure (test-brickcity-stall.mjs) rebuilt on purpose. So closing a basket REMOVES its collar
+ *  segments, and what is left is the board slab, which was solid under the mouth all along -
+ *  capture is the thing that takes the floor away, and a closed hole never captures. A ball
+ *  rolls over a closed basket exactly the way it rolls over bare tread.
+ *
+ *  GUARD: FLUSH BY DEFAULT (`capRise` 0), AND ON THE TOP ROW IT IS FLUSH ALWAYS. A raised cap
+ *  reads better and deflects a ball with some feel, but it costs two things this machine cannot
+ *  pay on every shelf:
+ *
+ *    1. THE RUNAWAY SWEEPS STRAIGHT OVER THE 100 YOU CAPPED. Its resting mark is one end of the
+ *       travel, so the surviving basket's collar passes through that exact spot twice a period. A
+ *       bump there is a moving collar converging on a static obstacle - the pinch that
+ *       three-contact-locks the solver, which cost POPONGO's first draft 12% of all throws
+ *       (MACHINE-SPEC.md section 12). Non-negotiable: a top-row cap is flush.
+ *    2. On rows 1 and 2 a raised cap deflects balls THROWN PAST IT at the top row. Those rows
+ *       close as the rack goes on, so the face would get progressively more hostile to the 100 -
+ *       exactly when the 100 is the only thing left to throw at. That is the machine's whole arc
+ *       working against itself.
+ *
+ *  So `capRise` is a knob left at 0, not a feature removed. Raise it (in ball-radii, rows 1 and 2
+ *  only) and RE-RUN test-runaway-capped.mjs, which sweeps the face with every basket closed and
+ *  fails on a parked ball. The cap is then a spherical cap of rise h over the collar's outer
+ *  circle a, with R = (a^2 + h^2) / (2h) and its centre (R - h) below the face plane.
+ */
+export function capFor(G, id) {
+  const H = G.holes[id];
+  if (!H) return null;
+  const a = H.r + G.collarThick;                       // base circle: the collar's outer wall
+  // The top row is flush ALWAYS - the runaway drives over it. See guard 1 above.
+  const rise = isMoverHole(G, id)
+    ? 0
+    : G.ballR * (typeof G.capRise === 'number' ? G.capRise : 0);
+  if (!(rise > 1e-6)) return { u: H.u, v: H.v, r: a, rise: 0, R: 0, sink: 0 };
+  const R = (a * a + rise * rise) / (2 * rise);
+  return { u: H.u, v: H.v, r: a, rise, R, sink: R - rise };
 }
 
 export function buildMachine(G) {
@@ -108,38 +215,51 @@ export function buildMachine(G) {
   /** The local surface tilt at unrolled v. */
   const tiltAt = (v) => frameAt(v).tilt;
 
-  /** Face (u, v, h) -> world [x, y, z] IN ONE NAMED SEGMENT, with v extrapolated past that
-   *  segment's own ends instead of being handed to the next one. A piece of furniture BOLTED TO
-   *  ONE TREAD needs this: a basket's collar is a circle around (H.u, H.v), and points on that
-   *  circle can carry a v past the tread's back edge without the basket having climbed onto the
-   *  riser. This machine's mouths are narrow enough that no segment currently crosses (verified:
-   *  its solids are byte-identical either way) - it is here so a WIDER mouth cannot silently
-   *  scatter collar boxes into the riser's frame, which is what happened on BRICK CITY.
-   *  See skeeball/CLAUDE.md, "The ball stuck IN a BRICK CITY penalty basket". */
+  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
+  const faceToWorld = (u, v, h = 0) => {
+    const fr = frameAt(v);
+    const dv = v - fr.v0;
+    return [u, fr.y0 + dv * fr.sin + h * fr.cos, fr.z0 - dv * fr.cos + h * fr.sin];
+  };
+
+  /** Face (u, v, h) -> world, IN A GIVEN SEGMENT'S FRAME. Same maths as faceToWorld, except the
+   *  caller says which staircase segment the point belongs to instead of letting `v` choose.
+   *
+   *  GUARD: A COLLAR MUST BE BUILT IN ITS OWN HOLE'S FRAME, NOT SEGMENT-BY-SEGMENT. A collar is
+   *  14 boxes on a circle of radius rr around (H.u, H.v), so the rearmost segments carry a `pv`
+   *  slightly PAST the hole's own tread. Let faceToWorld resolve those and they are built in the
+   *  RISER's frame - which on BRICK CITY put a 5cm bar straight across the throat of every
+   *  bottom-row basket, 7cm low and 7cm forward, invisible (render.js draws a wire basket, not
+   *  these boxes) and perfectly placed to park a ball half in and half out. Ask each hole's
+   *  question in that hole's own frame. */
   const faceToWorldIn = (fr, u, v, h = 0) => {
     const dv = v - fr.v0;
     return [u, fr.y0 + dv * fr.sin + h * fr.cos, fr.z0 - dv * fr.cos + h * fr.sin];
   };
 
-  /** Face (u, v, h) -> world [x, y, z]. u lateral, v up the (unrolled) surface, h off it. */
-  const faceToWorld = (u, v, h = 0) => faceToWorldIn(frameAt(v), u, v, h);
-
-  /** World -> face {u, v, h, tilt} IN ONE NAMED SEGMENT. A hole belongs to exactly one tread, so
-   *  "how far is the ball from THIS hole" must be asked in THAT tread's frame - never in
-   *  whichever frame the ball happens to be nearest. A ball deep in a bottom-row basket is nearer
-   *  the RISER plane behind it than the tread it is sunk into, so the free worldToFace below
-   *  hands back riser coordinates and the hole's own distance comes out around 0.22 against a
-   *  0.09 mouth: the basket the ball is sitting in gets skipped. See skeeball/CLAUDE.md, "The
-   *  ball stuck IN a BRICK CITY penalty basket", where that turned a parked ball into an
-   *  unrescuable one. */
+  /** World -> face {u, v, h, tilt} IN A GIVEN SEGMENT'S FRAME, with no nearest-segment search.
+   *
+   *  GUARD: THIS IS WHAT LETS THE ENGINE SEE A BASKET IT HAS THE BALL IN. worldToFace below picks
+   *  the NEAREST segment, and a ball deep in a basket is nearer the RISER standing behind the
+   *  mouth than the tread the cup is sunk into - so past a certain depth every basket on a
+   *  staircase resolved to a riser frame, where physics.js measured the hole's distance as ~0.22
+   *  against a ~0.09 mouth and skipped the very cup the ball was sitting in. The 2026-08-22 rule
+   *  that a ball whose centre is below the rim inside the mouth IS captured could therefore never
+   *  fire on the deepest part of any basket here. */
   const worldToFaceIn = (fr, p) => {
     const dy = p.y - fr.y0;
     const dz = p.z - fr.z0;
-    return { u: p.x, v: fr.v0 + dy * fr.sin - dz * fr.cos, h: dy * fr.cos + dz * fr.sin, tilt: fr.tilt };
+    return {
+      u: p.x,
+      v: fr.v0 + (dy * fr.sin - dz * fr.cos),
+      h: dy * fr.cos + dz * fr.sin,
+      tilt: fr.tilt,
+    };
   };
 
   /** World -> face {u, v, h, tilt}: the nearest segment's local coordinates. Physics reads this
-   *  for capture; with one segment it is the exact inverse of faceToWorld. */
+   *  for the FREE position of the ball; with one segment it is the exact inverse of faceToWorld.
+   *  Anything asking about a specific HOLE must use worldToFaceIn with that hole's frame. */
   const worldToFace = (p) => {
     let best = null;
     for (const fr of frames) {
@@ -312,7 +432,8 @@ export function buildMachine(G) {
     if (!H.collarH) continue;                   // the 20 is a flush hole, no collar
     const N = G.cupSegments;
     const rr = H.r + G.collarThick / 2;
-    // GUARD: every segment of one collar is placed in THAT HOLE'S OWN segment of the staircase.
+    // THE HOLE'S OWN FRAME, resolved ONCE - every segment of this collar is built in it, even the
+    // rearmost ones whose `pv` runs past this tread's back edge. See faceToWorldIn's guard.
     const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {
       const phi = (i / N) * Math.PI * 2;
@@ -332,13 +453,18 @@ export function buildMachine(G) {
         half: [rr * Math.tan(Math.PI / N), h / 2, G.collarThick / 2],
         faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
         segH: h,
-        // THE MOVING BASKET's collar segments carry a flag and nothing else. Their `pos` above
-        // is the RESTING position (moverU at t = 0, which is the centre of the sweep); physics.js
-        // turns exactly these into KINEMATIC bodies and drives their x off moverU each substep,
-        // and render.js shifts the drawn basket by the same number. Everything else about them -
-        // radius, height, rotation, material, the collar's whole shape - is identical to a
-        // static basket's, because a moving basket IS a basket that moves and nothing more.
-        mover: G.mover && G.mover.hole === id ? true : undefined,
+        // THE RUNAWAY's collar segments carry the ID OF THE HOLE THEY BELONG TO, and nothing
+        // else. Their `pos` above is the RESTING position; physics.js turns exactly these into
+        // KINEMATIC bodies and drives each one's x off holeOffset() every substep, and render.js
+        // shifts the drawn basket by the same number. Everything else about them - radius,
+        // height, rotation, material, the collar's whole shape - is identical to a static
+        // basket's, because a moving basket IS a basket that moves and nothing more.
+        //
+        // GUARD: BOTH TOP-ROW 100s ARE TAGGED, not only the one that ends up sweeping. Either can
+        // become the runaway (whichever one you do NOT cap first), and cannon-es cannot change a
+        // body's type after the world is built. The one that never moves is driven to offset 0
+        // forever, which costs nothing and keeps the two 100s identical until the handoff.
+        mover: isMoverHole(G, id) ? id : undefined,
       });
     }
   }
@@ -462,6 +588,7 @@ export function buildMachine(G) {
   return {
     solids,
     faceToWorld,
+    faceToWorldIn,
     worldToFace,
     worldToFaceIn,
     frameAt,
@@ -483,4 +610,6 @@ export function buildMachine(G) {
   };
 }
 
-export default { buildMachine, moverU, moverVel, holeU };
+export default {
+  buildMachine, moverU, moverVel, holeU, holeOffset, isMoverHole, capFor, basePeriod,
+};

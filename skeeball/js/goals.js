@@ -102,8 +102,18 @@ export const BC_NET = 30000;      // BRICK CITY: 30,000 NET points in total (was
 // aim x power x phase grid, but a narrow band of it. If any of the three plays wrong once there
 // are real racks behind it, change the NUMBER here; do not widen the mouth or slow the sweep,
 // which are the two things that make this machine what it is.
-export const RA_HOOP = 100;      // RUNAWAY: sink the moving 100 (proved by per-board bestThrow)
-export const RA_BEST = 240;      // RUNAWAY: score 240+ in a single game
+// GUARD: GOAL 1 IS A COUNTER NOW, NOT A BEST THROW, AND IT HAD TO CHANGE. It used to read the
+// per-board `bestThrow` - fine while the machine had exactly one 100 and that 100 was always
+// moving, because a 100 could only have come from the moving basket. The twin-100 rebuild
+// (2026-08-26) makes a rack OPEN with two STILL 100s, so a bestThrow of 100 can now be earned on
+// ball 1 against a parked target and proves nothing about the sweep. sk.runaways counts balls
+// landed in the basket WHILE IT WAS RUNNING, which is the thing the objective is about.
+// b.bestThrow is untouched, still Math.max only and still shown on the machine's own records -
+// the goal simply stops reading it (the same swap HOT SHOT made, 2026-08-25). The goal id stays
+// 'runaway', so anyone who completed the old version keeps every unlock it earned - sk.unlocked
+// is additive and nothing anywhere removes an id (THE LAW rule 2).
+export const RA_RUNAWAYS = 1;    // RUNAWAY: catch the sweeping 100 once
+export const RA_BEST = 260;      // RUNAWAY: score 260+ in a single game
 export const RA_TOTAL = 2500;    // RUNAWAY: 2,500 points in total on the machine
 
 const sk = () => {
@@ -169,14 +179,16 @@ const GOALS = {
   },
   runaway(s, r) {
     const b = (s.boards || {}).runaway || {};
-    // Same shape as HOT SHOT's, and for the same reason: the moving 100 is the only basket on
-    // this face that pays 100, so a per-board bestThrow of 100 is proof it was caught.
-    // b.bestThrow is Math.max-only, synced, and cross-device merged by js/arcade-scores.js.
-    const bt = Math.max(b.bestThrow | 0, r ? r.bestThrow | 0 : 0);
+    // CATCH THE RUNAWAY: the recorded lifetime count, plus whatever the live rack has added, so
+    // the rail moves the moment it happens rather than at the end of the round. sk.runaways is a
+    // GLOBAL counter, and that is safe here in a way it would not be for most objectives -
+    // RUNAWAY is the only machine in the repo with a moving basket, so it is the only machine
+    // that can ever write to it. game.js sets result().runaways to 0 everywhere else.
+    const caught = (s.runaways | 0) + (r ? r.runaways | 0 : 0);
     const best = Math.max(b.best | 0, r ? r.score | 0 : 0);
     const total = (b.points | 0) + (r ? r.score | 0 : 0);
     return [
-      { id: 'runaway', labelKey: 'g_runaway', defKey: 'd_ra_hoop', now: Math.min(bt, RA_HOOP), target: RA_HOOP, met: bt >= RA_HOOP },
+      { id: 'runaway', labelKey: 'g_runaway', defKey: 'd_ra_hoop', now: Math.min(caught, RA_RUNAWAYS), target: RA_RUNAWAYS, met: caught >= RA_RUNAWAYS },
       { id: 'best', labelKey: 'g_single', defKey: 'd_single', now: Math.min(best, RA_BEST), target: RA_BEST, met: best >= RA_BEST },
       { id: 'total', labelKey: 'g_total', defKey: 'd_total', now: Math.min(total, RA_TOTAL), target: RA_TOTAL, met: total >= RA_TOTAL },
     ];

@@ -51,6 +51,27 @@ export class SkeeballGame {
     //
     // Zero on every other machine, which never reads it.
     this.machineT = 0;
+    // THE ONE-SHOT FACE, for HOT SHOT: RUNAWAY (skeeball/js/machines/runaway/). Slot ids that
+    // have already been landed in this rack: their collars are not built and they never capture
+    // again, so a later ball rolls straight over a flat plate. Empty on every other machine,
+    // which never writes to it, and empty at the start of every rack.
+    this.closed = [];
+    // THE RUNAWAY, on the same machine. null until the first 100 drops; from then on
+    //   { hole, t0, dir, period, catches }
+    // says which top-row 100 survived, when it came off its mark, which way it set off, how fast
+    // it is sweeping now, and how many times it has been caught.
+    //
+    // How many balls this rack has landed in the basket WHILE IT WAS THE RUNAWAY. This is the
+    // only honest measure of the machine's headline shot, and it needs its own counter because
+    // nothing else can express it: the two 100s are ordinary static baskets on ball 1, so a
+    // `bestThrow` of 100 no longer proves the sweep was ever beaten.
+    this.runawayCatches = 0;
+    // GUARD: THIS OBJECT IS SHARED BY REFERENCE with every ball in the air (physics.js's
+    // startThrow holds it, it does not copy it) and with the renderer. That is what keeps one
+    // basket on the screen: two balls can be live at once in two separate cannon worlds, and
+    // they agree only because all three readers evaluate the same pure function against this
+    // same object. MUTATE IT IN PLACE, never swap in a fresh object once a ball is live.
+    this.sweep = null;
   }
 
   static restore(snap) {
@@ -75,6 +96,31 @@ export class SkeeballGame {
     // back to the centre of its travel. Absent in every save written before RUNAWAY existed,
     // which reads as 0 - the centre - and is exactly right for a machine that has no mover.
     g.machineT = Number.isFinite(snap.machineT) ? Math.max(0, snap.machineT) : 0;
+    // The one-shot face and the runaway survive a resume, so leaving mid-rack cannot hand back a
+    // machine with its baskets re-opened or its 100 parked. Both are ADDITIVE keys, absent from
+    // every save written before this shipped, and both read back as "fresh face, nothing moving"
+    // - which is exactly right for a machine that has neither. THE LAW rule 5.
+    //
+    // Read back defensively and against the board's OWN holes: a slot id that no longer exists is
+    // dropped rather than trusted, so a save cannot close a basket the machine does not have.
+    {
+      const holes = (g.board && g.board.geom && g.board.geom.holes) || {};
+      g.closed = Array.isArray(snap.closed)
+        ? [...new Set(snap.closed.map(String).filter((h) => holes[h]))] : [];
+      g.runawayCatches = Math.max(0, snap.runawayCatches | 0);
+      const s = snap.sweep;
+      const mv = (g.board && g.board.geom && g.board.geom.mover) || null;
+      g.sweep = s && typeof s === 'object' && mv && Array.isArray(mv.holes)
+        && mv.holes.indexOf(String(s.hole)) >= 0
+        ? {
+          hole: String(s.hole),
+          t0: Number.isFinite(s.t0) ? s.t0 : 0,
+          dir: s.dir < 0 ? -1 : 1,
+          period: Number.isFinite(s.period) && s.period > 0 ? s.period : mv.periods[0],
+          catches: Math.max(0, s.catches | 0),
+        }
+        : null;
+    }
     g.over = g.ballsUsed >= BALLS_PER_GAME;
     // A snapshot is only ever written with nothing in the air (ui.js checks), so every ball that
     // was thrown has also settled.
@@ -95,6 +141,11 @@ export class SkeeballGame {
       // ADDITIVE, and read back defensively (see restore): an old save has no machineT and
       // resumes at 0. THE LAW rule 5 - this adds a key, it repurposes nothing.
       machineT: this.machineT,
+      // Same contract: two more additive keys, absent on every save written before RUNAWAY's
+      // one-shot face existed, and empty/null on every machine that does not have one.
+      closed: this.closed.slice(),
+      sweep: this.sweep ? { ...this.sweep } : null,
+      runawayCatches: this.runawayCatches,
     };
   }
 
@@ -116,8 +167,17 @@ export class SkeeballGame {
     if (!this.canThrow()) return false;
     // `t0` is the rack clock at the instant of release: where a machine with a moving part had
     // its basket when this ball left the ramp. Ignored by every other machine's startThrow.
+    // `t0` is the rack clock at the instant of release; `closed` and `sweep` are the shape of
+    // the face right now. All three are ignored by every other machine's startThrow.
+    //
+    // GUARD: `sweep` GOES BY REFERENCE, ON PURPOSE. It can change while this ball is still in the
+    // air - land the first 100 with a second ball already thrown and the survivor comes off its
+    // mark mid-flight. Sharing the object is what keeps the ball, any other live ball, and the
+    // renderer looking at ONE basket. `closed` is passed as a Set built here, which physics.js
+    // only reads.
     this.balls.push(engineFor(this.board.id).physics.startThrow(
-      this.board, { ...params, t0: this.machineT },
+      this.board,
+      { ...params, t0: this.machineT, closed: new Set(this.closed), sweep: this.sweep },
     ));
     this.thrown += 1;
     this.events.push({ type: 'throw' });
@@ -201,6 +261,9 @@ export class SkeeballGame {
       if (value === 50) this.fifties += 1;
     }
     this.bestThrow = Math.max(this.bestThrow, value);
+    // THE FACE REACTS TO THE BALL. Scored first, reconfigured after: what this ball was worth is
+    // decided by the machine it was thrown at, never by the machine it leaves behind.
+    this._reshape(outcome.hole);
     this.events.push({
       type: 'ballDone',
       value, hole: outcome.hole, eq, wiped,
@@ -209,6 +272,68 @@ export class SkeeballGame {
     if (this.ballsUsed >= BALLS_PER_GAME) {
       this.over = true;
       this.events.push({ type: 'rackOver', result: this.result() });
+    }
+  }
+
+  /** HOT SHOT: RUNAWAY's one-shot face, and nothing else in the repo. A ball has just settled in
+   *  `hole`; decide what that does to the machine.
+   *
+   *    - a basket on rows 1 and 2   CLOSES. It pays once a rack and then plates over.
+   *    - the FIRST top-row 100      CLOSES, and its twin becomes THE RUNAWAY: it comes off its
+   *                                 mark and sweeps, anchored so it starts exactly where it is
+   *                                 standing, at zero velocity (machine.js's cosine).
+   *    - the runaway itself         NEVER closes. It ESCALATES: one rung down the period ladder,
+   *                                 every time it is caught.
+   *
+   *  GUARD: EVERY MACHINE WITHOUT `geom.mover` LEAVES HERE ON THE FIRST LINE. This is a per-board
+   *  rule living in the shared rules file (the same way the equalizer and the negative-score
+   *  floor do), and an engine rule with no gate hits every machine by default.
+   *
+   *  GUARD: A MISS CLOSES NOTHING. `gutter` and `corner0` are outcomes, not baskets, so the
+   *  `holes[hole]` test drops them - otherwise throwing balls away would reshape the face.
+   *
+   *  GUARD: THE ESCALATION RE-ANCHORS WITH THE PHASE PRESERVED. The basket is somewhere in the
+   *  middle of its stroke when you catch it, not at an end, so recomputing `t0` naively would
+   *  teleport it to a turnaround. Solving for the t0 that keeps the current phase angle under the
+   *  NEW period leaves its position exactly where it is and only changes how fast it is going -
+   *  which is the whole point of the rung. */
+  _reshape(hole) {
+    const G = this.board.geom;
+    const cfg = G.mover;
+    if (!cfg || !Array.isArray(cfg.holes)) return;      // not this machine
+    if (!G.holes[hole]) return;                          // a miss is not a basket
+    const isTop = cfg.holes.indexOf(hole) >= 0;
+
+    // The runaway: it does not close, it speeds up.
+    if (this.sweep && this.sweep.hole === hole) {
+      const s = this.sweep;
+      const next = cfg.periods[Math.min(s.catches + 1, cfg.periods.length - 1)];
+      const theta = (2 * Math.PI * (this.machineT - s.t0)) / s.period;   // where it is, in radians
+      s.t0 = this.machineT - (theta * next) / (2 * Math.PI);             // same angle, new period
+      s.period = next;
+      s.catches += 1;
+      this.runawayCatches += 1;
+      this.events.push({ type: 'runaway', hole, period: next, catches: s.catches });
+      return;
+    }
+
+    if (this.closed.indexOf(hole) < 0) this.closed.push(hole);
+    this.events.push({ type: 'closed', hole });
+
+    // The first 100 down sets its twin running. `dir` is the sign of the survivor's own resting
+    // u, so the cosine in machine.js starts it on its mark - see the handoff note there.
+    if (isTop && !this.sweep) {
+      const other = cfg.holes.find((h) => h !== hole && G.holes[h]);
+      if (other) {
+        this.sweep = {
+          hole: other,
+          t0: this.machineT,
+          dir: G.holes[other].u < 0 ? -1 : 1,
+          period: cfg.periods[0],
+          catches: 0,
+        };
+        this.events.push({ type: 'runaway', hole: other, period: this.sweep.period, catches: 0 });
+      }
     }
   }
 
@@ -300,6 +425,15 @@ export class SkeeballGame {
       // every scoring rack would trivially "sweep" and falsely complete that goal. A sweep of
       // one color is not a sweep.
       colorSweep: need > 1 && colors.size >= need ? 1 : 0,
+      // RUNAWAY's headline shot: balls caught in the top-row basket WHILE IT WAS SWEEPING.
+      // recordSkeeball adds it into sk.runaways, a lifetime counter, and skeeball/js/goals.js's
+      // first RUNAWAY objective reads that. 0 on every other machine, which never sets it.
+      //
+      // GUARD: A COUNTER, NOT A FLAG, and not the same thing as landing a 100. The rack opens
+      // with two STILL 100s; the first one you land closes itself and sets its twin running, so
+      // only the SECOND and later top-row landings of a rack are runaway catches. bestThrow
+      // cannot tell those apart and must not be asked to.
+      runaways: this.runawayCatches,
     };
   }
 

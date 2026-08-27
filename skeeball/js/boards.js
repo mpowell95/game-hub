@@ -1038,15 +1038,24 @@ export const BOARDS = [
       r30a: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
       r30b: { value: 30, color: '#e8541f', ink: '#ffffff', label: '30' },
       r60: { value: 60, color: '#e8541f', ink: '#ffffff', label: '60' },
-      // THE RUNAWAY. One colour for the whole face is deliberate and is also the colourblind-safe
-      // answer here: this basket is told apart by MOVING, which is the strongest non-colour
-      // indicator there is, and by being the only thing on its shelf - never by a hue.
-      r100: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
+      // THE TWIN 100s. Both start standing still, at HOT SHOT's proven topL/topR marks. Hit one
+      // and it DOMES OVER; the survivor comes off its mark and sweeps the whole width for the
+      // rest of the rack, faster every time you catch it.
+      //
+      // One colour for the whole face is deliberate and is also the colourblind-safe answer here:
+      // the runaway is told apart by MOVING, which is the strongest non-colour indicator there
+      // is, and a capped basket by being a smooth dome where a cup used to be - never by a hue.
+      //
+      // THE LAW rule 5: two cup ids where there was one. `r100` is NOT reused for either of them.
+      // It was the single moving 100's id and it is retired rather than repointed, because a cup
+      // id is frozen to its value forever and the thing it named no longer exists.
+      r100a: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
+      r100b: { value: 100, color: '#e8541f', ink: '#ffffff', label: '100' },
     },
     arrangement: {
       lowL: 'r10a', lowC: 'r20', lowR: 'r10b',
       midL: 'r30a', midC: 'r60', midR: 'r30b',
-      topC: 'r100',
+      topL: 'r100a', topR: 'r100b',
     },
 
     geom: {
@@ -1085,21 +1094,38 @@ export const BOARDS = [
       captureDrop: 0.35,
 
       // ============================================================================
-      // THE MOVING BASKET - the only reason this machine exists.
+      // THE TWIN 100s, THE RUNAWAY, AND THE ONE-SHOT FACE - the only reason this machine exists.
       // ============================================================================
       //
-      // The top row's 100 slides left and right across tread 3 for the whole rack, on a sine:
+      // THE RACK IS A SEQUENCE, NOT A FIXED FACE. Three rules, all of them driven by js/game.js's
+      // `closed` / `sweep` rack state and evaluated in machines/runaway/machine.js:
       //
-      //     u(t) = amp * sin(2*PI*t / period)
+      //   1. The top row starts as TWO STILL 100s, at topL / topR below.
+      //   2. Cap one and the survivor becomes THE RUNAWAY: it comes off its mark and sweeps the
+      //      full width for the rest of the rack.
+      //   3. Every basket except the runaway is a ONE-SHOT. Land in it and it CLOSES - its collar
+      //      is removed and the mouth is plated flush, so a later ball rolls straight over it.
+      //      The runaway is the one thing on this face that never closes; catching it makes it
+      //      FASTER instead (the ladder below).
       //
-      // `t` is the RACK CLOCK (js/game.js's `machineT`). The maths lives in
-      // machines/runaway/machine.js (moverU / moverVel / holeU) and NOWHERE ELSE - physics.js
-      // drives the collision bodies with it, render.js draws with it, and the spec test measures
-      // the travel envelope with it.
+      // So a rack funnels: six easy baskets shut one by one, and what is left standing at the end
+      // is a 100 moving faster than it was at the start. Nine balls against seven baskets, and
+      // only one of them refills.
+      //
+      // THE HANDOFF IS FREE, AND THAT IS WHY THE TOP ROW SITS WHERE IT DOES. topL / topR are at
+      // -/+2.07X, which is EXACTLY the amplitude below - so the survivor is already standing at a
+      // turnaround of the travel it is about to run. machine.js anchors a COSINE there, which
+      // starts it on its own mark with zero velocity: it eases away from a standstill instead of
+      // teleporting to the centre of the sweep or taking a step change in wall velocity. Move
+      // either mark and that stops being true - the survivor would jump.
+      //
+      // (-/+2.07X is also exactly where HOT SHOT's topL and topR sit, so both marks are positions
+      // that machine already proves are cleanly capturable. The static half of this face needed
+      // no reachability fight.)
       //
       // AMPLITUDE 2.07X is not a taste call. It is bounded by two rules, and BOTH have to be
       // re-derived if the amplitude, the mouth or the collar thickness ever change - THE MOUTH
-      // IS AN INPUT TO THIS ARITHMETIC, which is exactly what the 4in change below proved:
+      // IS AN INPUT TO THIS ARITHMETIC, which is exactly what the 4in change proved:
       //
       //   1. MACHINE-SPEC.md section 12's collar-near-a-wall rule. A curved collar converging on
       //      a flat rail makes a pinch that three-contact-locks the solver; the measured cost on
@@ -1109,10 +1135,10 @@ export const BOARDS = [
       //      A MOVING COLLAR IS THE WORST POSSIBLE CASE FOR THAT RULE - a static one merely sits
       //      in a pinch, this one can drive a ball into it.
       //
-      //      GUARD: THAT MARGIN IS NOW 0.005X, essentially nothing. It was 0.0675X at the 3.5in
-      //      mouth this machine shipped with; widening the 100 to 4in (Matt, 2026-08-25) spent
-      //      almost all of it, because a wider mouth grows the collar's OUTER diameter against a
-      //      rail that did not move. It was kept at 2.07X only because the sweep MEASURED zero
+      //      GUARD: THAT MARGIN IS 0.005X, essentially nothing. It was 0.0675X at the 3.5in mouth
+      //      this machine shipped with; widening the 100 to 4in (Matt, 2026-08-25) spent almost
+      //      all of it, because a wider mouth grows the collar's OUTER diameter against a rail
+      //      that did not move. It was kept at 2.07X only because the sweep MEASURED zero
       //      watchdog walkouts at the new size - the rule is a threshold, the sweep is the
       //      evidence. ANY further widening of this mouth, or any increase in collarThick, goes
       //      under the rule and MUST be paid for by shrinking the amplitude:
@@ -1123,59 +1149,70 @@ export const BOARDS = [
       //      resting u, precisely so this cannot be got wrong quietly. Unaffected by the mouth,
       //      because it is measured against the board's nominal holeR, not this basket's rim.
       //
-      // It also lands somewhere useful by luck: +/-2.07X is exactly where HOT SHOT's topL and
-      // topR sit. The 100 sweeps between the two positions that machine already proves are
-      // clean-capturable, which is why this face needed no reachability fight.
+      // GUARD: THE RUNAWAY SWEEPS STRAIGHT OVER THE 100 YOU CAPPED. The capped mark is one end of
+      // the travel, so the surviving collar passes through it twice a period. That is why a
+      // closed top-row basket is plated FLUSH and never raised - see machine.js's capFor().
       //
-      // PERIOD 6 s is Matt's number (2026-08-25, "instead of 7s, make it 6s"). It shipped at 7 s,
-      // also his number ("~7s round trip", 2026-08-24). Peak speed goes 0.270 -> 0.315 m/s
-      // (2*PI*amp/period), and a top-row throw is in the air about 0.45 s from release (measured,
-      // sweep-mover.mjs), so the basket now travels ~24% of its stroke while the ball is flying,
-      // against ~20% at 7 s. You are throwing at where it is going to be, not where it is.
+      // THE ESCALATION LADDER. `periods[n]` is the sweep's period after n catches of the runaway,
+      // and the last rung holds for every catch after it. 6.0s is Matt's shipped number
+      // (2026-08-25, "instead of 7s, make it 6s"); the rest of the ladder is MEASURED, not
+      // guessed - see MACHINE-RUNAWAY.md's ladder table and sweep-mover.mjs.
       //
-      // GUARD: A SHORTER PERIOD MADE THIS SHOT EASIER, NOT HARDER, AND THE INTUITION SAYS
-      // OTHERWISE. Measured on this exact change: 70% MORE catching cells (46/2583 against
-      // 27/2583 on the dense probe) and the phases that score it at all went 4 of 8 to 6 of 8.
-      // During the ball's flight a faster basket sweeps through MORE positions, so a wider set of
-      // (power, aim) pairs coincide with it on arrival - it is a bigger target in TIME while
-      // being the same target in space. What does get harder is deliberately TIMING a release
-      // against the phase, and no sweep measures that. Do not state which way a period change
-      // moved the difficulty without measuring it; the first draft of this comment got it
-      // backwards from the lead percentage alone.
+      // GUARD: A SHORTER PERIOD DOES NOT SIMPLY MEAN HARDER, AND THE INTUITION SAYS OTHERWISE.
+      // Measured on the 7s -> 6s change: 70% MORE catching cells (46/2583 against 27/2583 on the
+      // dense probe), because during the ball's ~0.45s flight a faster basket sweeps through MORE
+      // positions, so a wider set of (power, aim) pairs coincide with it on arrival. It is a
+      // bigger target in TIME while being the same target in space. What pushes back the other
+      // way, further down the ladder, is the RELATIVE-VELOCITY capture rule: a fast rim means a
+      // fast crossing speed, and a ball that cannot fall past the lip in the time it takes to
+      // cross the mouth rattles out instead of dropping. The ladder is where those two effects
+      // trade off, and only sweep-mover.mjs can say where. NEVER state which way a rung moved the
+      // difficulty without measuring it; the first draft of this comment got it backwards from
+      // the lead percentage alone.
       //
       // GUARD: THE PERIOD DOES NOT TOUCH THE RAIL-GAP ARITHMETIC ABOVE. Only the amplitude, the
       // mouth and collarThick feed that; a faster sweep covers the same ground in less time. It
-      // DOES need a re-sweep though (MACHINE-SPEC section 28), because a faster kinematic wall
-      // meets the ball differently - and because reachability is a function of phase, which is
-      // now sampled over 6 s instead of 7.
-      //
-      // A SINE, NOT A TRIANGLE: a triangle reverses instantaneously at each end, which hands any
-      // ball touching the rim a step change in wall velocity out of nowhere. Phase 0 is the
-      // CENTRE of the travel moving right, so every rack starts with the basket dead centre.
-      mover: { hole: 'topC', amp: X * 2.07, period: 6.0 },
+      // DOES need a re-sweep (MACHINE-SPEC section 28), because a faster kinematic wall meets the
+      // ball differently, and because reachability is a function of phase.
+      mover: {
+        holes: ['topL', 'topR'],
+        amp: X * 2.07,
+        periods: [6.0, 5.0, 4.2, 3.6, 3.1, 2.7],
+      },
+
+      // How high a CLOSED basket's cap stands, in ball-radii. 0 = plated flush with the face,
+      // which is the shipped setting and the safe one. machine.js's capFor() carries both reasons
+      // it is not raised (the runaway drives over the top row's cap; a raised cap on rows 1 and 2
+      // would deflect balls thrown PAST it at the 100, on a face that closes as the rack goes on).
+      // Raise it and re-run test-runaway-capped.mjs, or leave it alone.
+      capRise: 0,
 
       // THE FACE. Rows 1 and 2 are HOT SHOT's, unchanged down to the last digit: same columns
       // (u = -2.07X / 0 / +2.07X), same rows (v = 1.3125X / 5.3X unrolled), same 4.25in mouths,
-      // same per-row depths. Row 3 is ONE basket - the moving 100 - and it is the only thing on
-      // this face that is not HOT SHOT's.
+      // same per-row depths. What is different is that on this machine they are ONE-SHOTS - each
+      // closes for the rest of the rack the moment a ball goes in (see the mover block above).
       //
-      // THE 100 IS 4.00 in ACROSS (r = 0.5X), MATT'S NUMBER, 2026-08-25: "increase the diameter
-      // of the 100 to 4"". It shipped at 3.50 in (0.4375X), HOT SHOT's 100 exactly, and 4in is
-      // its own size now - HOT SHOT's and BRICK CITY's 100s were deliberately NOT touched. Still
-      // the tightest opening on this machine (rows 1 and 2 are 4.25in) and 1.33x the 3.00 in
-      // ball. See the amplitude note above for what this cost at the ends of the travel; the
-      // depth is unchanged at the top row's 0.875X, per Matt's rule that a row runs one depth
-      // across whatever diameters are on it.
+      // ROW 3 IS TWO 100s, AT -/+2.07X. They start still; cap one and the other runs. Their marks
+      // are the amplitude exactly, which is what makes the handoff seamless - see the mover block.
       //
-      // `topC`'s `u` here is the CENTRE OF THE SWEEP, not a fixed position. Everything that reads
-      // a hole's u at simulation time goes through machine.js's holeU(); everything that reads it
-      // as data (the spec test, the tile generator) has to account for `mover` or it is measuring
-      // a basket that is only ever there for an instant twice per period.
+      // EACH 100 IS 4.00 in ACROSS (r = 0.5X), MATT'S NUMBER, 2026-08-25: "increase the diameter
+      // of the 100 to 4"". The single moving 100 shipped at 3.50 in (0.4375X), HOT SHOT's 100
+      // exactly, and 4in is this machine's own size now - HOT SHOT's and BRICK CITY's 100s were
+      // deliberately NOT touched. Still the tightest opening here (rows 1 and 2 are 4.25in) and
+      // 1.33x the 3.00 in ball. See the amplitude note above for what this cost at the ends of the
+      // travel; the depth is unchanged at the top row's 0.875X, per Matt's rule that a row runs
+      // one depth across whatever diameters are on it.
       //
-      // NO topL / topR. That is what makes the amplitude possible: a mover sharing its shelf with
-      // two static baskets would violate holes.spacing (1.30X centre to centre) at every step of
-      // its travel, and there is no amplitude worth having that does not. The top row of this
-      // machine is one basket by construction, not by preference.
+      // A top-row hole's `u` here is its RESTING mark, not a fixed position: whichever one
+      // survives the first catch sweeps away from it. Everything that reads a hole's u at
+      // simulation time goes through machine.js's holeU(); everything that reads it as DATA (the
+      // spec test, the tile generator) has to account for `mover` or it is measuring a basket that
+      // only sits there until the first 100 drops.
+      //
+      // NO topC. Two static baskets 4.14X apart clear holes.spacing (1.30X) comfortably, and once
+      // one closes the survivor has the whole shelf to itself - which is what makes the amplitude
+      // legal. A THIRD basket up here would violate spacing against the sweep at nearly every step
+      // of any travel worth having. The top row of this machine is two baskets by construction.
       holeR: X * 0.75,
       holes: {
         lowL: { u: -X * 2.07, v: X * 1.3125, r: X * 0.53125, collarH: X * 1.0 },
@@ -1184,7 +1221,8 @@ export const BOARDS = [
         midL: { u: -X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
         midC: { u: 0, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
         midR: { u: X * 2.07, v: X * 5.3, r: X * 0.53125, collarH: X * 0.97 },
-        topC: { u: 0, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
+        topL: { u: -X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
+        topR: { u: X * 2.07, v: X * 9.2875, r: X * 0.5, collarH: X * 0.875 },
       },
 
       minSpeed: 2.60,
