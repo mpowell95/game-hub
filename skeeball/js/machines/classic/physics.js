@@ -32,11 +32,54 @@ function machineFor(board) {
 
 /** One throw = one fresh world (cheap: ~150 static boxes) so every throw is a clean determinism
  *  boundary - nothing persists from the previous ball. */
+/** THE BROADPHASE, SPECIALISED FOR THE ONE THING THIS WORLD HOLDS (2026-08-26, ported from BRICK
+ *  CITY on Matt's word: "Make the classic machine less choppy"): a single dynamic body - the ball -
+ *  among 263 static ones.
+ *
+ *  `NaiveBroadphase` tests EVERY PAIR and throws all but the ball's away, because
+ *  `needBroadphaseCollision` rejects static-against-static. THE CLASSIC pays the most for that of
+ *  any machine, and the reason is its rings: it is the only board with flush ringed holes, its ring
+ *  diameters span 6.71x (the 100's 0.155 m up to the 10's 1.036 m arc), and segment count scales
+ *  with radius at one box per 4 cm of circumference so a metre-wide ring is not faceted into
+ *  corners the ball can hit (DECISIONS.md, "Ring geometry"). That is 192 ring segments over 7
+ *  holes - 27.4 each, against the cup machines' flat 14 - and 263 bodies in total against
+ *  BRICK CITY's 200. Naive cost goes with the SQUARE of that: 1.32x the bodies, 1.73x the pairs,
+ *  and a measured 2.34x the physics time per frame (1.94 ms against 0.83).
+ *
+ *  Those bodies are NOT the thing to cut. The 4 cm density is what stops the ball feeling flats on
+ *  a metre-wide ring, and this machine's feel is frozen. What is cuttable is the quadratic: walk
+ *  the ball's own pairs, 263 tests instead of 34,453.
+ *
+ *  DETERMINISM, which is the whole reason it is written this awkwardly. It emits pairs in
+ *  NaiveBroadphase's EXACT order (`for i, for j < i`, so the ball is `bi` against everything before
+ *  it and `bj` against everything after), because the solver's result depends on the order it is
+ *  handed its pairs. Verified rather than assumed - see the commit for the grid. It FALLS BACK to
+ *  the naive sweep whenever the world does not hold exactly one non-static body.
+ *
+ *  THE CLASSIC ONLY, per the HARD RULE in skeeball/CLAUDE.md. BRICK CITY has its own copy of this;
+ *  the other three still run the naive sweep and are not to be "kept in sync" with either. */
+class BallBroadphase extends CANNON.NaiveBroadphase {
+  collisionPairs(world, pairs1, pairs2) {
+    const bodies = world.bodies;
+    const n = bodies.length;
+    let k = -1, dynamic = 0;
+    for (let i = 0; i < n; i++) if (bodies[i].type !== CANNON.Body.STATIC) { k = i; dynamic++; }
+    if (dynamic !== 1) { super.collisionPairs(world, pairs1, pairs2); return; }
+    const ball = bodies[k];
+    for (let j = 0; j < k; j++) {
+      if (this.needBroadphaseCollision(ball, bodies[j])) this.intersectionTest(ball, bodies[j], pairs1, pairs2);
+    }
+    for (let i = k + 1; i < n; i++) {
+      if (this.needBroadphaseCollision(bodies[i], ball)) this.intersectionTest(bodies[i], ball, pairs1, pairs2);
+    }
+  }
+}
+
 function buildWorld(board) {
   const G = board.geom;
   const M = machineFor(board);
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
-  world.broadphase = new CANNON.NaiveBroadphase();
+  world.broadphase = new BallBroadphase();
   world.allowSleep = false;
   world.solver.iterations = 10;
 
